@@ -19,6 +19,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Update Vcpkg (Sync Baseline)
+        shell: bash
+        run: |
+          cd "$VCPKG_INSTALLATION_ROOT"
+          git pull
+
       - name: Configure CMake
         shell: bash
         run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
