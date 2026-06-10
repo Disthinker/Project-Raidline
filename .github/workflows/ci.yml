@@ -23,7 +23,8 @@ jobs:
         shell: bash
         run: |
           cd "$VCPKG_INSTALLATION_ROOT"
-          git pull
+          git fetch
+          git reset --hard origin/master
 
       - name: Configure CMake
         shell: bash
