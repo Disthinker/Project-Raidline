@@ -1,0 +1,50 @@
+name: Project Raidline CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        shell: bash
+        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build C++ Code
+        run: cmake --build build
+
+      - name: Run C++ Tests
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.1"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Check code format (Ruff)
+        run: poetry run ruff check .
+
+      - name: Check static types (Mypy)
+        run: poetry run mypy .
+
+      - name: Run Python Tests (Pytest)
+        run: poetry run pytest

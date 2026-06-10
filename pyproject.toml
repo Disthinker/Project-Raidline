@@ -1,0 +1,39 @@
+[project]
+name = "ProjectRaidline"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Disthinker",email = "2511366326@qq.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.3,<10.0.0)",
+    "ruff (>=0.15.16,<0.16.0)",
+    "mypy (>=2.1.0,<3.0.0)",
+    "pre-commit (>=4.6.0,<5.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodedstyle 错误
+    "F",    # pyflakes 逻辑错误
+    "W",    # 警告
+    "I",    # isort 导入排序
+]

@@ -1,0 +1,21 @@
+# 1. C++ / CMake 编译产物
+build/
+out/
+.vs/
+*.exe
+*.dll
+
+# 2. Vcpkg 依赖与缓存
+vcpkg/
+vcpkg_installed/
+
+# 3. Python / Poetry 环境与缓存
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 4. 操作系统产生的垃圾文件
+.DS_Store
+Thumbs.db
