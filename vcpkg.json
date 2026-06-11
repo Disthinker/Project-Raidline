@@ -1,9 +1,10 @@
 {
   "name": "project-raidline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "dependencies": [
     "fmt",
-    "gtest"
+    "gtest",
+    "sdl3"
   ],
   "builtin-baseline": "40dd49b0c9c7dbd79dc64cad5e82308eae04f67f"
 }
