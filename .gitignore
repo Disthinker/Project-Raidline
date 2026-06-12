@@ -21,4 +21,5 @@ __pycache__/
 Thumbs.db
 
 # vscode
-.vscode/
+.vscode/settings.json
+
