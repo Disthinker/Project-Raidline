@@ -20,5 +20,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# 5. vscode 配置与缓存
-.vscode/
+# vscode
+.vscode/settings.json
+
