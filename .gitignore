@@ -19,3 +19,6 @@ __pycache__/
 # 4. 操作系统产生的垃圾文件
 .DS_Store
 Thumbs.db
+
+# 5. vscode 配置与缓存
+.vscode/
