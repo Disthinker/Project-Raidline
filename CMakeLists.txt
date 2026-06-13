@@ -7,7 +7,11 @@ find_package(GTest CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 
 # 2. 编译游戏主可执行文件
-add_executable(Project_Raidline main.cpp)
+add_executable(Project_Raidline
+    main.cpp
+    app.cpp
+    app.h
+)
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
 # 链接 fmt 和 SDL3 库
