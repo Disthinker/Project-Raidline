@@ -28,6 +28,7 @@ bool App::initialize(){
 void App::processEvents(){
     SDL_Event event;
     while(SDL_PollEvent(&event)){
+        input_.handleEvent(event);
         if(event.type == SDL_EVENT_QUIT){
             running_ = false;
         }
@@ -38,6 +39,24 @@ void App::processEvents(){
 void App::render(){
     SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
     SDL_RenderClear(renderer_);
+
+    SDL_SetRenderDrawColor(renderer_, 220, 220, 220, 255);
+    if (input_.isActionPressed(GameAction::MoveUp)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveUp");
+    } else if (input_.isActionPressed(GameAction::MoveDown)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveDown");
+    } else if (input_.isActionPressed(GameAction::MoveLeft)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveLeft");
+    } else if (input_.isActionPressed(GameAction::MoveRight)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveRight");
+    } else if (input_.isActionPressed(GameAction::Fire)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: Fire");
+    } else if (input_.isActionPressed(GameAction::Dodge)) {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: Dodge");
+    } else {
+        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: None");
+    }
+
     SDL_RenderPresent(renderer_);
 }
 
@@ -48,7 +67,7 @@ void App::shutdown(){
 
     SDL_DestroyWindow(window_);
     window_ = nullptr;
-    
+
     SDL_Quit();
 }
 

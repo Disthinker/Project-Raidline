@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include "input_system.h"
 
 class App{
 public:
@@ -9,6 +10,8 @@ public:
 private:
     SDL_Window* window_ {nullptr};
     SDL_Renderer* renderer_ {nullptr};
+    InputSystem input_;
+
     bool running_ {false};
 
     bool initialize();

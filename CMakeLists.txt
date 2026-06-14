@@ -11,6 +11,8 @@ add_executable(Project_Raidline
     main.cpp
     app.cpp
     app.h
+    input_system.h
+    input_system.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
