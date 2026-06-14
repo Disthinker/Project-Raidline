@@ -5,18 +5,18 @@
 // Init SDL video subsystem and create window
 bool App::initialize(){
     if(!SDL_Init(SDL_INIT_VIDEO)){
-        fmt::print("Init failed: {}\n", SDL_GetError());
+        fmt::print("SDL_Init failed: {}\n", SDL_GetError());
         return false;
     }
     window_ = SDL_CreateWindow("Project Raidline", 1280, 720, 0);
     if(!window_){
-        fmt::print("CreateWindow failed: {}\n", SDL_GetError());
+        fmt::print("SDL_CreateWindow failed: {}\n", SDL_GetError());
         SDL_Quit();
         return false;
     }
     renderer_ = SDL_CreateRenderer(window_, nullptr);
     if(!renderer_){
-        fmt::print("CreateRenderer failed: {}\n", SDL_GetError());
+        fmt::print("SDL_CreateRenderer failed: {}\n", SDL_GetError());
         SDL_DestroyWindow(window_);
         SDL_Quit();
         return false;
@@ -44,7 +44,11 @@ void App::render(){
 // Shutdown SDL and destroy window and renderer
 void App::shutdown(){
     SDL_DestroyRenderer(renderer_);
+    renderer_ = nullptr;
+
     SDL_DestroyWindow(window_);
+    window_ = nullptr;
+    
     SDL_Quit();
 }
 
