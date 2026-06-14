@@ -22,7 +22,10 @@ target_link_libraries(Project_Raidline PRIVATE fmt::fmt SDL3::SDL3)
 
 # 3. 开启测试功能并配置 GTest 可执行文件
 enable_testing()
-add_executable(HealthTest test_health.cpp)
+add_executable(HealthTest
+    test_health.cpp
+)
+
 target_compile_features(HealthTest PRIVATE cxx_std_20)
 set_target_properties(HealthTest PROPERTIES CXX_EXTENSIONS OFF)
 
@@ -32,3 +35,13 @@ target_link_libraries(HealthTest PRIVATE GTest::gtest_main fmt::fmt)
 # 向 CMake 的 CTest 工具注册所有的 Google Test 用例
 include(GoogleTest)
 gtest_discover_tests(HealthTest)
+
+add_executable(InputSystemTest
+    test_input_system.cpp
+    input_system.cpp
+    input_system.h
+)
+target_compile_features(InputSystemTest PRIVATE cxx_std_20)
+set_target_properties(InputSystemTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(InputSystemTest PRIVATE GTest::gtest_main SDL3::SDL3)
+gtest_discover_tests(InputSystemTest)
