@@ -5,7 +5,7 @@ TEST(InputSystemTest, PressMoveUpOnWKeyDown)
 {
     InputSystem input;
     
-    SDL_Event event;
+    SDL_Event event{};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = SDL_SCANCODE_W;
     
@@ -37,11 +37,26 @@ TEST(InputSystemTest, PressFireOnSpaceKeyDown)
 {
     InputSystem input;
     
-    SDL_Event event;
+    SDL_Event event{};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = SDL_SCANCODE_SPACE;
     
     input.handleEvent(event);
 
     EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
+}
+
+TEST(InputSystemTest, IgnoreUnmappedKey)
+{
+    InputSystem input;
+
+    SDL_Event event {};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = SDL_SCANCODE_P;
+
+    input.handleEvent(event);
+
+    EXPECT_FALSE(input.isActionPressed(GameAction::MoveUp));
+    EXPECT_FALSE(input.isActionPressed(GameAction::Fire));
+    EXPECT_FALSE(input.isActionPressed(GameAction::Dodge));
 }
