@@ -19,15 +19,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Linux build tools
+      - name: Install Linux build tools and SDL dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential make g++ pkg-config
+          sudo apt-get install -y \
+            build-essential \
+            make \
+            g++ \
+            pkg-config \
+            autoconf \
+            automake \
+            autoconf-archive \
+            libtool \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxinerama-dev \
+            libxxf86vm-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libibus-1.0-dev \
+            libdbus-1-dev \
+            libudev-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libpipewire-0.3-dev \
+            libdecor-0-dev
+          which make
           which g++
-          which ninja
+          make --version
           g++ --version
-          ninja --version
 
       - name: Update Vcpkg (Sync Baseline)
         shell: bash
@@ -53,6 +83,19 @@ jobs:
         run: |
           cmake -B build -S . \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Print Linux vcpkg logs on failure
+        if: failure() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "===== vcpkg manifest install log ====="
+          cat build/vcpkg-manifest-install.log || true
+
+          echo "===== vcpkg buildtrees logs ====="
+          find "$VCPKG_INSTALLATION_ROOT/buildtrees" build \
+            -type f \( -name "*.log" -o -name "*-out.log" -o -name "*-err.log" \) \
+            -print \
+            -exec tail -n 120 {} \; || true
 
       - name: Build C++ Code
         run: cmake --build build
