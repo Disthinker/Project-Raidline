@@ -35,6 +35,9 @@ void App::processEvents(){
     }
 }
 
+void App::update(float deltaTime){
+}
+
 // Render the window with a clear color
 void App::render(){
     SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
@@ -80,6 +83,7 @@ int App::run(){
 
     while(running_){
         processEvents();
+        update(deltaTime_);
         render();
     }
     shutdown();
