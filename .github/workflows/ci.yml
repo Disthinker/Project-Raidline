@@ -23,7 +23,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential make g++
+          sudo apt-get install -y build-essential make g++ ninja-build pkg-config
+          which g++
+          which ninja
+          g++ --version
+          ninja --version
 
       - name: Update Vcpkg (Sync Baseline)
         shell: bash
@@ -32,9 +36,22 @@ jobs:
           git fetch
           git reset --hard origin/master
 
-      - name: Configure CMake
+      - name: Configure CMake on Linux
+        if: runner.os == 'Linux'
         shell: bash
-        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+        run: |
+          cmake -B build -S . \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure CMake on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build C++ Code
         run: cmake --build build
