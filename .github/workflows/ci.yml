@@ -85,18 +85,35 @@ jobs:
           cmake -B build -S . \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
-      - name: Print Linux vcpkg logs on failure
+      - name: Print compact Linux vcpkg failure summary
         if: failure() && runner.os == 'Linux'
         shell: bash
         run: |
-          echo "===== vcpkg manifest install log ====="
-          cat build/vcpkg-manifest-install.log || true
+          echo "===== vcpkg manifest install log: key lines ====="
+          if [ -f build/vcpkg-manifest-install.log ]; then
+            grep -nE "error:|failed|FAILED|CMake Error|depends on|sudo apt|BUILD_FAILED" \
+              build/vcpkg-manifest-install.log | head -n 120 || true
+          else
+            echo "build/vcpkg-manifest-install.log not found"
+          fi
 
-          echo "===== vcpkg buildtrees logs ====="
+          echo "===== recent vcpkg log files ====="
           find "$VCPKG_INSTALLATION_ROOT/buildtrees" build \
             -type f \( -name "*.log" -o -name "*-out.log" -o -name "*-err.log" \) \
-            -print \
-            -exec tail -n 120 {} \; || true
+            -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -n 20 || true
+
+      - name: Upload Linux vcpkg logs
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-vcpkg-logs
+          path: |
+            build/vcpkg-manifest-install.log
+            build/vcpkg_installed/vcpkg/issue_body.md
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/buildtrees/**/*.log
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/buildtrees/**/*-out.log
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/buildtrees/**/*-err.log
+          if-no-files-found: ignore
 
       - name: Build C++ Code
         run: cmake --build build
