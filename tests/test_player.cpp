@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "player.h"
 
-// 向上移动
+// 向右移动
 TEST(PlayerTest, MoveRightChangesXPosition)
 {
     InputSystem input;
@@ -18,7 +18,7 @@ TEST(PlayerTest, MoveRightChangesXPosition)
     EXPECT_FLOAT_EQ(player.position().y, 100.0f);
 }
 
-// 向下移动
+// 向上移动
 TEST(PlayerTest, MoveUpChangesYPosition)
 {
     InputSystem input;
