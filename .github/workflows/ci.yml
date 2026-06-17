@@ -65,20 +65,44 @@ jobs:
       - name: Install vcpkg packages
         shell: bash
         run: |
+          mkdir -p ci-logs
+          set +e
+
           "$VCPKG_INSTALLATION_ROOT/vcpkg" install \
             --triplet x64-linux \
-            --clean-after-build
+            --clean-after-build \
+            > ci-logs/vcpkg-install.log 2>&1
+
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error::vcpkg install failed with exit code $rc"
+            echo "----- last 120 lines of ci-logs/vcpkg-install.log -----"
+            tail -n 120 ci-logs/vcpkg-install.log
+            exit $rc
+          fi
 
       - name: Configure CMake
         shell: bash
         run: |
+          mkdir -p ci-logs
+          set +e
+
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
             -DVCPKG_TARGET_TRIPLET=x64-linux \
             -DVCPKG_MANIFEST_INSTALL=OFF \
             -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            > ci-logs/cmake-configure.log 2>&1
+
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error::CMake configure failed with exit code $rc"
+            echo "----- last 120 lines of ci-logs/cmake-configure.log -----"
+            tail -n 120 ci-logs/cmake-configure.log
+            exit $rc
+          fi
 
       - name: Build C++ targets
         shell: bash
@@ -93,9 +117,19 @@ jobs:
         shell: bash
         run: |
           mkdir -p ci-logs
-          find "$VCPKG_INSTALLATION_ROOT/buildtrees" -name "*.log" -type f -exec cp --parents {} ci-logs/ \; 2>/dev/null || true
-          find build -name "*.log" -type f -exec cp --parents {} ci-logs/ \; 2>/dev/null || true
-          grep -RniE "error:|CMake Error|fatal:" ci-logs | tail -n 80 || true
+
+          if [ -d "$VCPKG_INSTALLATION_ROOT/buildtrees" ]; then
+            find "$VCPKG_INSTALLATION_ROOT/buildtrees" \
+              \( -name "*-err.log" -o -name "stdout-*.log" \) \
+              -type f -size +0 \
+              -exec cp --parents {} ci-logs/ \; 2>/dev/null || true
+          fi
+
+          echo "----- collected log files -----"
+          find ci-logs -type f | sort | sed -n '1,120p'
+
+          echo "----- largest collected logs -----"
+          du -ah ci-logs | sort -h | tail -n 30
 
       - name: Upload diagnostic logs
         if: failure()
