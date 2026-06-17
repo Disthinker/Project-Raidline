@@ -25,7 +25,8 @@ bool App::initialize(){
 }
 
 // Process SDL events, set running_ to false if quit event is received
-void App::processEvents(){
+void App::processEvents()
+{
     SDL_Event event;
     while(SDL_PollEvent(&event)){
         input_.handleEvent(event);
@@ -35,11 +36,14 @@ void App::processEvents(){
     }
 }
 
-void App::update(float deltaTime){
+void App::update(float deltaTime)
+{
+    player_.update(input_, deltaTime);
 }
 
 // Render the window with a clear color
-void App::render(){
+void App::render()
+{
     SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
     SDL_RenderClear(renderer_);
 
@@ -60,11 +64,23 @@ void App::render(){
         SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: None");
     }
 
+    // 绘制玩家操控角色
+    const Vec2 pos = player_.position();
+    SDL_FRect playerRect {
+        pos.x,
+        pos.y,
+        player_.size(),
+        player_.size()
+    };
+    SDL_SetRenderDrawColor(renderer_, 80, 180, 120, 255);
+    SDL_RenderFillRect(renderer_, &playerRect);
+
     SDL_RenderPresent(renderer_);
 }
 
 // Shutdown SDL and destroy window and renderer
-void App::shutdown(){
+void App::shutdown()
+{
     SDL_DestroyRenderer(renderer_);
     renderer_ = nullptr;
 
@@ -80,11 +96,22 @@ int App::run(){
     }
 
     running_ = true;
+    lastCounter_ = SDL_GetPerformanceCounter();
 
     while(running_){
+        const Uint64 currentCounter = SDL_GetPerformanceCounter();
+        const Uint64 frequency = SDL_GetPerformanceFrequency();
+
+        const float deltaTime =
+            static_cast<float>(currentCounter - lastCounter_) /
+            static_cast<float>(frequency);
+        lastCounter_ = currentCounter;
+
         processEvents();
-        update(deltaTime_);
+        update(deltaTime);
         render();
+        
+
     }
     shutdown();
     return 0;
