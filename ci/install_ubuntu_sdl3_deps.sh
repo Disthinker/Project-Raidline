@@ -16,6 +16,7 @@ sudo apt-get install -y \
   libxrender-dev \
   libxfixes-dev \
   libxi-dev \
+  libxtst-dev \
   libxcursor-dev \
   libxinerama-dev \
   libxss-dev \
