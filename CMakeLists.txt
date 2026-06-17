@@ -13,6 +13,8 @@ add_executable(Project_Raidline
     src/app.h
     src/input_system.h
     src/input_system.cpp
+    src/player.h
+    src/player.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -21,7 +23,7 @@ target_link_libraries(Project_Raidline PRIVATE fmt::fmt SDL3::SDL3)
 target_include_directories(Project_Raidline PRIVATE src)
 
 
-# 3. 开启测试功能并配置 GTest 可执行文件
+# 3. 开启测试功能并配置 GTest 可执行文件, test health_system
 enable_testing()
 add_executable(HealthTest
     tests/test_health.cpp
@@ -38,6 +40,7 @@ target_include_directories(HealthTest PRIVATE src)
 include(GoogleTest)
 gtest_discover_tests(HealthTest)
 
+# test input_system
 add_executable(InputSystemTest
     tests/test_input_system.cpp
     src/input_system.cpp
@@ -49,3 +52,19 @@ target_link_libraries(InputSystemTest PRIVATE GTest::gtest_main SDL3::SDL3)
 target_include_directories(InputSystemTest PRIVATE src)
 
 gtest_discover_tests(InputSystemTest)
+
+# test player
+add_executable(PlayerTest
+    tests/test_player.cpp
+    src/player.cpp
+    src/player.h
+    src/input_system.cpp
+    src/input_system.h
+)
+
+target_compile_features(PlayerTest PRIVATE cxx_std_20)
+set_target_properties(PlayerTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(PlayerTest PRIVATE GTest::gtest_main SDL3::SDL3)
+target_include_directories(PlayerTest PRIVATE src)
+
+gtest_discover_tests(PlayerTest)
