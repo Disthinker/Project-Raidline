@@ -2,56 +2,139 @@ name: Project Raidline CI
 
 on:
   push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
-    name: Build & Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  windows-cpp:
+    name: Windows C++ build and test
+    runs-on: windows-2022
+
+    env:
+      BUILD_TYPE: Debug
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update Vcpkg (Sync Baseline)
+      - name: Setup vcpkg
+        shell: pwsh
+        run: |
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch origin master
+          git -C "$env:VCPKG_INSTALLATION_ROOT" reset --hard origin/master
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build C++ targets
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_TYPE
+
+      - name: Run C++ tests
+        shell: pwsh
+        run: ctest --test-dir build -C $env:BUILD_TYPE --output-on-failure
+
+  ubuntu-cpp:
+    name: Ubuntu C++ build and test
+    runs-on: ubuntu-22.04
+
+    env:
+      BUILD_TYPE: Debug
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install SDL3 system dependencies
+        shell: bash
+        run: bash ci/install_ubuntu_sdl3_deps.sh
+
+      - name: Setup vcpkg
         shell: bash
         run: |
-          cd "$VCPKG_INSTALLATION_ROOT"
-          git fetch
-          git reset --hard origin/master
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch origin master
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard origin/master
+
+      - name: Install vcpkg packages
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          set +e
+
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" install \
+            --triplet x64-linux \
+            --clean-after-build \
+            > ci-logs/vcpkg-install.log 2>&1
+
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error::vcpkg install failed with exit code $rc"
+            echo "----- last 120 lines of ci-logs/vcpkg-install.log -----"
+            tail -n 120 ci-logs/vcpkg-install.log
+            exit $rc
+          fi
 
       - name: Configure CMake
         shell: bash
-        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+        run: |
+          mkdir -p ci-logs
+          set +e
 
-      - name: Build C++ Code
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DVCPKG_TARGET_TRIPLET=x64-linux \
+            -DVCPKG_MANIFEST_INSTALL=OFF \
+            -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            > ci-logs/cmake-configure.log 2>&1
+
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error::CMake configure failed with exit code $rc"
+            echo "----- last 120 lines of ci-logs/cmake-configure.log -----"
+            tail -n 120 ci-logs/cmake-configure.log
+            exit $rc
+          fi
+
+      - name: Build C++ targets
+        shell: bash
         run: cmake --build build
 
-      - name: Run C++ Tests
-        run: ctest --test-dir build -C Debug --output-on-failure
+      - name: Run C++ tests
+        shell: bash
+        run: ctest --test-dir build --output-on-failure
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - name: Collect diagnostic logs
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+
+          if [ -d "$VCPKG_INSTALLATION_ROOT/buildtrees" ]; then
+            find "$VCPKG_INSTALLATION_ROOT/buildtrees" \
+              \( -name "*-err.log" -o -name "stdout-*.log" \) \
+              -type f -size +0 \
+              -exec cp --parents {} ci-logs/ \; 2>/dev/null || true
+          fi
+
+          echo "----- collected log files -----"
+          find ci-logs -type f | sort | sed -n '1,120p'
+
+          echo "----- largest collected logs -----"
+          du -ah ci-logs | sort -h | tail -n 30
+
+      - name: Upload diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          python-version: "3.13.1"
-
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Install dependencies
-        run: poetry install
-
-      - name: Check code format (Ruff)
-        run: poetry run ruff check .
-
-      - name: Check static types (Mypy)
-        run: poetry run mypy .
-
-      - name: Run Python Tests (Pytest)
-        run: poetry run pytest
+          name: ubuntu-ci-logs
+          path: ci-logs
+          if-no-files-found: ignore

@@ -1,11 +1,11 @@
 #pragma once
 #include <fmt/core.h>
 
-class Player{
+class Health{
 private:
     int health;
 public:
-    Player(int initial_health): health(initial_health) {}
+    Health(int initial_health): health(initial_health) {}
 
     void takeDamage(int damage) {
         if (damage < 0) return; // 异常处理：防止负数伤害变成加血
