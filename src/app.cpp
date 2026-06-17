@@ -96,11 +96,22 @@ int App::run(){
     }
 
     running_ = true;
+    lastCounter_ = SDL_GetPerformanceCounter();
 
     while(running_){
+        const Uint64 currentCounter = SDL_GetPerformanceCounter();
+        const Uint64 frequency = SDL_GetPerformanceFrequency();
+
+        const float deltaTime =
+            static_cast<float>(currentCounter - lastCounter_) /
+            static_cast<float>(frequency);
+        lastCounter_ = currentCounter;
+
         processEvents();
-        update(1.0f / 60.0f);
+        update(deltaTime);
         render();
+        
+
     }
     shutdown();
     return 0;

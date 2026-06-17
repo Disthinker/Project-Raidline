@@ -1,6 +1,7 @@
 #include "player.h"
 
-Player::Player(float x, float y) : position_{x, y}
+Player::Player(float x, float y) 
+    : position_{x, y}
 {
 
 }

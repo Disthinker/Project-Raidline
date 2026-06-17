@@ -12,7 +12,7 @@ private:
     SDL_Window* window_ {nullptr};
     SDL_Renderer* renderer_ {nullptr};
     InputSystem input_;
-    float deltaTime_ {};
+    Uint64 lastCounter_ {};
 
     bool running_ {false};
     Player player_ {640.0f, 360.0f};
