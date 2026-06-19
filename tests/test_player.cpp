@@ -110,7 +110,7 @@ TEST(PlayerTest, MoveLeftStopsAtZero)
 }
 
 // 测试左边界x
-TEST(PlayerTest, MoveRightStopsAtZero)
+TEST(PlayerTest, MoveRightStopsAtWorldRightEdge)
 {
     InputSystem rightInput;
     SDL_Event event{};
@@ -122,4 +122,34 @@ TEST(PlayerTest, MoveRightStopsAtZero)
     rightPlayer.update(rightInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(rightPlayer.position().x, 1280.0f - rightPlayer.size());
+}
+
+// 测试上边界x
+TEST(PlayerTest, MoveUpStopsAtZero)
+{
+    InputSystem upInput;
+    SDL_Event event{};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = SDL_SCANCODE_W;
+    upInput.handleEvent(event);
+
+    Player upPlayer(1.0f, 1.0f); // 初始化玩家在左侧边界
+    upPlayer.update(upInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(upPlayer.position().y, 0.0f);
+}
+
+// 测试下边界x
+TEST(PlayerTest, MoveDownStopsAtWorldBottomEdge)
+{
+    InputSystem downInput;
+    SDL_Event event{};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = SDL_SCANCODE_S;
+    downInput.handleEvent(event);
+
+    Player downPlayer(1.0f, 710.0f); // 初始化玩家在左侧边界
+    downPlayer.update(downInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(downPlayer.position().y, 720.0f - downPlayer.size());
 }
