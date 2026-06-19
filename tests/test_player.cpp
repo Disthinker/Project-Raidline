@@ -109,7 +109,7 @@ TEST(PlayerTest, MoveLeftStopsAtZero)
     EXPECT_FLOAT_EQ(leftPlayer.position().x, 0.0f);  
 }
 
-// 测试左边界x
+// 测试右边界x
 TEST(PlayerTest, MoveRightStopsAtWorldRightEdge)
 {
     InputSystem rightInput;
@@ -124,7 +124,7 @@ TEST(PlayerTest, MoveRightStopsAtWorldRightEdge)
     EXPECT_FLOAT_EQ(rightPlayer.position().x, 1280.0f - rightPlayer.size());
 }
 
-// 测试上边界x
+// 测试上边界y
 TEST(PlayerTest, MoveUpStopsAtZero)
 {
     InputSystem upInput;
@@ -139,7 +139,7 @@ TEST(PlayerTest, MoveUpStopsAtZero)
     EXPECT_FLOAT_EQ(upPlayer.position().y, 0.0f);
 }
 
-// 测试下边界x
+// 测试下边界y
 TEST(PlayerTest, MoveDownStopsAtWorldBottomEdge)
 {
     InputSystem downInput;
