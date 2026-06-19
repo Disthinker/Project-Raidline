@@ -36,9 +36,9 @@ void App::processEvents()
     }
 }
 
-void App::update(float deltaTime)
+void App::update(float deltaTime, float worldWidth, float worldHeight)
 {
-    player_.update(input_, deltaTime);
+    player_.update(input_, deltaTime, worldWidth, worldHeight);
 }
 
 // Render the window with a clear color
@@ -108,7 +108,7 @@ int App::run(){
         lastCounter_ = currentCounter;
 
         processEvents();
-        update(deltaTime);
+        update(deltaTime, 1280.0f, 720.0f);
         render();
         
 

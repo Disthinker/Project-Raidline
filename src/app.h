@@ -19,7 +19,7 @@ private:
 
     bool initialize();
     void processEvents();
-    void update(float deltaTime);
+    void update(float deltaTime, float worldWidth, float worldHeight);
     void render();
     void shutdown();
 };
