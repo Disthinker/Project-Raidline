@@ -17,10 +17,15 @@ private:
     bool running_ {false};
     Player player_ {640.0f, 360.0f};
 
+    SDL_Texture* backgroundTexture_{};
+    SDL_Texture* playerTexture_{};
+
+    bool loadTextures();
     bool initialize();
     void processEvents();
     void update(float deltaTime);
     void render();
+    void renderBackground();
     void renderDebugText();
     void renderPlayer();
     void shutdown();

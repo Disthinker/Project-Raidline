@@ -4,7 +4,13 @@
   "dependencies": [
     "fmt",
     "gtest",
-    "sdl3"
+    "sdl3",
+    {
+      "name": "sdl3-image",
+      "features": [
+        "png"
+      ]
+    }
   ],
   "builtin-baseline": "40dd49b0c9c7dbd79dc64cad5e82308eae04f67f"
 }
