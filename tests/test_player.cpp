@@ -112,14 +112,14 @@ TEST(PlayerTest, MoveLeftStopsAtZero)
 // 测试左边界x
 TEST(PlayerTest, MoveRightStopsAtZero)
 {
-    InputSystem RightInput;
+    InputSystem rightInput;
     SDL_Event event{};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = SDL_SCANCODE_D;
-    RightInput.handleEvent(event);
+    rightInput.handleEvent(event);
 
-    Player RightPlayer(1270.0f, 100.0f); // 初始化玩家在左侧边界
-    RightPlayer.update(RightInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+    Player rightPlayer(1270.0f, 100.0f); // 初始化玩家在左侧边界
+    rightPlayer.update(rightInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
-    EXPECT_FLOAT_EQ(RightPlayer.position().x, 1280.0f - RightPlayer.size());
+    EXPECT_FLOAT_EQ(rightPlayer.position().x, 1280.0f - rightPlayer.size());
 }
