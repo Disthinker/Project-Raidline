@@ -11,7 +11,7 @@ class Player{
 public:
     Player(float x, float y);
 
-    void update(const InputSystem& input, float deltaTime);
+    void update(const InputSystem& input, float deltaTime, float worldWidth, float worldHeight);
 
     Vec2 position() const;
     float size() const;

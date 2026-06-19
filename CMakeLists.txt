@@ -68,3 +68,10 @@ target_link_libraries(PlayerTest PRIVATE GTest::gtest_main SDL3::SDL3)
 target_include_directories(PlayerTest PRIVATE src)
 
 gtest_discover_tests(PlayerTest)
+
+if(MSVC)
+    target_compile_options(Project_Raidline PRIVATE /utf-8)
+    target_compile_options(HealthTest PRIVATE /utf-8)
+    target_compile_options(InputSystemTest PRIVATE /utf-8)
+    target_compile_options(PlayerTest PRIVATE /utf-8)
+endif()
