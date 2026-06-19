@@ -18,6 +18,7 @@ bool App::loadTextures()
         fmt::print("SDL_GetBasePath failed: {}\n", SDL_GetError());
         return false;
     }
+    fmt::print("basePath: {}\n", basePath);
     const std::string assetRoot = std::string(basePath) + "assets/";
     const std::string backgroundPath =
     assetRoot + "backgrounds/project_raidline_test_map_1280x720.png";
@@ -25,7 +26,18 @@ bool App::loadTextures()
     assetRoot + "characters/protagonist_left_minimal_256x320.png";
 
     backgroundTexture_ = IMG_LoadTexture(renderer_, backgroundPath.c_str());
+    if (!backgroundTexture_)
+    {
+        fmt::print("IMG_LoadTexture failed for background: {}\n", SDL_GetError());
+        return false;
+    }
+
     playerTexture_ = IMG_LoadTexture(renderer_, playerPath.c_str());
+    if (!playerTexture_)
+    {
+        fmt::print("IMG_LoadTexture failed for player: {}\n", SDL_GetError());
+        return false;
+    }
 
     return true;
 }
@@ -36,12 +48,14 @@ bool App::initialize(){
         fmt::print("SDL_Init failed: {}\n", SDL_GetError());
         return false;
     }
+
     window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
     if(!window_){
         fmt::print("SDL_CreateWindow failed: {}\n", SDL_GetError());
         SDL_Quit();
         return false;
     }
+
     renderer_ = SDL_CreateRenderer(window_, nullptr);
     if(!renderer_){
         fmt::print("SDL_CreateRenderer failed: {}\n", SDL_GetError());
@@ -49,7 +63,12 @@ bool App::initialize(){
         SDL_Quit();
         return false;
     }
-    loadTextures();
+
+    if(!loadTextures())
+    {
+        fmt::print("loadTextures failed: {}\n", SDL_GetError());
+        return false;
+    }
 
     return true;
 }
@@ -111,6 +130,9 @@ void App::renderPlayer()
 // Renderer
 void App::render()
 {
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // 黑色背景
+    SDL_RenderClear(renderer_);
+
     renderBackground();
 
     // 绘制调试文本
