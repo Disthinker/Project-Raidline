@@ -42,9 +42,9 @@ void App::processEvents()
     }
 }
 
-void App::update(float deltaTime, float worldWidth, float worldHeight)
-{
-    player_.update(input_, deltaTime, worldWidth, worldHeight);
+void App::update(float deltaTime)
+{   
+    player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
 }
 
 // Render the window with a clear color
@@ -114,7 +114,7 @@ int App::run(){
         lastCounter_ = currentCounter;
 
         processEvents();
-        update(deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
+        update(deltaTime);
         render();
         
 
