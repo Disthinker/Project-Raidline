@@ -47,12 +47,8 @@ void App::update(float deltaTime)
     player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
 }
 
-// Render the window with a clear color
-void App::render()
+void App::renderDebugText()
 {
-    SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
-    SDL_RenderClear(renderer_);
-
     SDL_SetRenderDrawColor(renderer_, 220, 220, 220, 255);
     if (input_.isActionPressed(GameAction::MoveUp)) {
         SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveUp");
@@ -69,8 +65,10 @@ void App::render()
     } else {
         SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: None");
     }
+}
 
-    // 绘制玩家操控角色
+void App::renderPlayer()
+{
     const Vec2 pos = player_.position();
     SDL_FRect playerRect {
         pos.x,
@@ -80,6 +78,19 @@ void App::render()
     };
     SDL_SetRenderDrawColor(renderer_, 80, 180, 120, 255);
     SDL_RenderFillRect(renderer_, &playerRect);
+}
+
+// Renderer
+void App::render()
+{
+    SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
+    SDL_RenderClear(renderer_);
+
+    // 绘制调试文本
+    renderDebugText();
+
+    // 绘制玩家操控角色
+    renderPlayer();
 
     SDL_RenderPresent(renderer_);
 }

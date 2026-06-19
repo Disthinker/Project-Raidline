@@ -21,5 +21,7 @@ private:
     void processEvents();
     void update(float deltaTime);
     void render();
+    void renderDebugText();
+    void renderPlayer();
     void shutdown();
 };
