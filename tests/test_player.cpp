@@ -2,6 +2,14 @@
 #include <cmath>
 #include "player.h"
 
+void pressKey(InputSystem& input, SDL_Scancode scancode)
+{
+    SDL_Event event {};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = scancode;
+    input.handleEvent(event);
+}
+
 // 向右移动
 TEST(PlayerTest, MoveRightChangesXPosition)
 {
@@ -152,4 +160,44 @@ TEST(PlayerTest, MoveDownStopsAtWorldBottomEdge)
     downPlayer.update(downInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(downPlayer.position().y, 720.0f - downPlayer.size());
+}
+
+// 无输入不移动
+TEST(PlayerTest, NoInputDoesNotMoveInsideBounds)
+{
+    SDL_Event event{};
+    InputSystem noInput;
+    noInput.handleEvent(event);
+
+    Player noInputPlayer(640.0f, 360.0f); // 初始化玩家在中心位置
+    noInputPlayer.update(noInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(noInputPlayer.position().y, 360.0f);
+    EXPECT_FLOAT_EQ(noInputPlayer.position().x, 640.0f);
+}
+
+// 同时按A、D，不移动
+TEST(PlayerTest, OppositeHorizontalInputsCancelMovement)
+{
+    SDL_Event event{};
+    InputSystem oppositeInputs;
+    pressKey(oppositeInputs, SDL_SCANCODE_A); // 按下A键
+    pressKey(oppositeInputs, SDL_SCANCODE_D); // 同时按下D键
+    Player oppositeInputPlayer(640.0f, 360.0f); // 初始化玩家在中心位置
+    oppositeInputPlayer.update(oppositeInputs, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+    // 验证玩家没有移动
+    EXPECT_FLOAT_EQ(oppositeInputPlayer.position().y, 360.0f);
+    EXPECT_FLOAT_EQ(oppositeInputPlayer.position().x, 640.0f);
+}
+
+// 初始化位置超出边界时，不按键即可修复位置
+TEST(PlayerTest, ClampsPositionEvenWithoutInput)
+{
+    SDL_Event event{};
+    InputSystem inputs;
+    Player player(1300.0f, 750.0f); // 初始化玩家在右下角外的位置
+    player.update(inputs, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+    // 验证玩家被限制在边界内
+    EXPECT_FLOAT_EQ(player.position().y, 720.0f - player.size());
+    EXPECT_FLOAT_EQ(player.position().x, 1280.0f - player.size());
 }
