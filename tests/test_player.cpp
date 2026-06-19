@@ -118,7 +118,7 @@ TEST(PlayerTest, MoveRightStopsAtWorldRightEdge)
     event.key.scancode = SDL_SCANCODE_D;
     rightInput.handleEvent(event);
 
-    Player rightPlayer(1270.0f, 100.0f); // 初始化玩家在左侧边界
+    Player rightPlayer(1270.0f, 100.0f); // 初始化玩家在右侧边界
     rightPlayer.update(rightInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(rightPlayer.position().x, 1280.0f - rightPlayer.size());
@@ -133,7 +133,7 @@ TEST(PlayerTest, MoveUpStopsAtZero)
     event.key.scancode = SDL_SCANCODE_W;
     upInput.handleEvent(event);
 
-    Player upPlayer(1.0f, 1.0f); // 初始化玩家在左侧边界
+    Player upPlayer(1.0f, 1.0f); // 初始化玩家在上边界
     upPlayer.update(upInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(upPlayer.position().y, 0.0f);
@@ -148,7 +148,7 @@ TEST(PlayerTest, MoveDownStopsAtWorldBottomEdge)
     event.key.scancode = SDL_SCANCODE_S;
     downInput.handleEvent(event);
 
-    Player downPlayer(1.0f, 710.0f); // 初始化玩家在左侧边界
+    Player downPlayer(1.0f, 710.0f); // 初始化玩家在下边界
     downPlayer.update(downInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(downPlayer.position().y, 720.0f - downPlayer.size());
