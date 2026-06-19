@@ -22,4 +22,7 @@ private:
     void update(float deltaTime);
     void render();
     void shutdown();
+
+    void renderDebugText();
+    void renderPlayer();
 };
