@@ -2,13 +2,19 @@
 #include <fmt/core.h>
 #include "app.h"
 
+namespace
+{
+    constexpr int kWindowWidth {1280};
+    constexpr int kWindowHeight {720};
+}
+
 // Init SDL video subsystem and create window
 bool App::initialize(){
     if(!SDL_Init(SDL_INIT_VIDEO)){
         fmt::print("SDL_Init failed: {}\n", SDL_GetError());
         return false;
     }
-    window_ = SDL_CreateWindow("Project Raidline", 1280, 720, 0);
+    window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
     if(!window_){
         fmt::print("SDL_CreateWindow failed: {}\n", SDL_GetError());
         SDL_Quit();
@@ -36,9 +42,9 @@ void App::processEvents()
     }
 }
 
-void App::update(float deltaTime, float worldWidth, float worldHeight)
-{
-    player_.update(input_, deltaTime, worldWidth, worldHeight);
+void App::update(float deltaTime)
+{   
+    player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
 }
 
 // Render the window with a clear color
@@ -108,7 +114,7 @@ int App::run(){
         lastCounter_ = currentCounter;
 
         processEvents();
-        update(deltaTime, 1280.0f, 720.0f);
+        update(deltaTime);
         render();
         
 

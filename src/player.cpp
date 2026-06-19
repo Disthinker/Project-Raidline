@@ -34,12 +34,12 @@ void Player::update(const InputSystem& input, float deltaTime, float worldWidth,
         // 归一化方向更新
         position_.x += direction.x * speed_ * deltaTime;
         position_.y += direction.y * speed_ * deltaTime;
-        // 检查边界
-        if(position_.x <= 0) position_.x = 0;
-        if(position_.y <= 0) position_.y = 0;
-        if(position_.x + size_ >= worldWidth) position_.x = worldWidth - size_;
-        if(position_.y + size_ >= worldHeight) position_.y = worldHeight - size_;
     }
+    // 检查边界
+    if(position_.x <= 0) position_.x = 0;
+    if(position_.y <= 0) position_.y = 0;
+    if(position_.x + size_ >= worldWidth) position_.x = worldWidth - size_;
+    if(position_.y + size_ >= worldHeight) position_.y = worldHeight - size_;
 }
 
 Vec2 Player::position() const

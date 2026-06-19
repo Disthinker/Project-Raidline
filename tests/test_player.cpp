@@ -2,15 +2,20 @@
 #include <cmath>
 #include "player.h"
 
+void pressKey(InputSystem& input, SDL_Scancode scancode)
+{
+    SDL_Event event {};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = scancode;
+    input.handleEvent(event);
+}
+
 // 向右移动
 TEST(PlayerTest, MoveRightChangesXPosition)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_D;
-    input.handleEvent(event);
+    pressKey(input, SDL_SCANCODE_D);
 
     Player player(100.0f, 100.0f);
     player.update(input, 1.0f, 1280.0f, 720.0f);
@@ -24,10 +29,7 @@ TEST(PlayerTest, MoveUpChangesYPosition)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_W;
-    input.handleEvent(event);
+    pressKey(input, SDL_SCANCODE_W);
 
     Player player(100.0f, 100.0f);
     player.update(input, 1.0f, 1280.0f, 720.0f);
@@ -41,10 +43,7 @@ TEST(PlayerTest, MovementScalesWithDeltaTime)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_D;
-    input.handleEvent(event);
+    pressKey(input, SDL_SCANCODE_D);
 
     Player shortFramePlayer(100.0f, 100.0f);
     Player longFramePlayer(100.0f, 100.0f);
@@ -60,22 +59,13 @@ TEST(PlayerTest, DiagonalMovementHasSameSpeedAsStraightMovement)
 {
     InputSystem rightInput;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_D;
-    rightInput.handleEvent(event);
+    pressKey(rightInput, SDL_SCANCODE_D);
 
     InputSystem diagonalInput;
 
-    event = {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_D;
-    diagonalInput.handleEvent(event);
+    pressKey(diagonalInput, SDL_SCANCODE_D);
 
-    event = {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_W;
-    diagonalInput.handleEvent(event);
+    pressKey(diagonalInput, SDL_SCANCODE_W);
 
     Player rightPlayer(500.0f, 300.0f);
     Player diagonalPlayer(500.0f, 300.0f);
@@ -98,10 +88,7 @@ TEST(PlayerTest, DiagonalMovementHasSameSpeedAsStraightMovement)
 TEST(PlayerTest, MoveLeftStopsAtZero)
 {
     InputSystem leftInput;
-    SDL_Event event{};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_A;
-    leftInput.handleEvent(event);
+    pressKey(leftInput, SDL_SCANCODE_A);
 
     Player leftPlayer(1.0f, 100.0f); // 初始化玩家在左侧边界
     leftPlayer.update(leftInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
@@ -109,17 +96,74 @@ TEST(PlayerTest, MoveLeftStopsAtZero)
     EXPECT_FLOAT_EQ(leftPlayer.position().x, 0.0f);  
 }
 
-// 测试左边界x
-TEST(PlayerTest, MoveRightStopsAtZero)
+// 测试右边界x
+TEST(PlayerTest, MoveRightStopsAtWorldRightEdge)
 {
     InputSystem rightInput;
-    SDL_Event event{};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_D;
-    rightInput.handleEvent(event);
+    pressKey(rightInput, SDL_SCANCODE_D);
 
-    Player rightPlayer(1270.0f, 100.0f); // 初始化玩家在左侧边界
+    Player rightPlayer(1270.0f, 100.0f); // 初始化玩家在右侧边界
     rightPlayer.update(rightInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
 
     EXPECT_FLOAT_EQ(rightPlayer.position().x, 1280.0f - rightPlayer.size());
+}
+
+// 测试上边界y
+TEST(PlayerTest, MoveUpStopsAtZero)
+{
+    InputSystem upInput;
+    pressKey(upInput, SDL_SCANCODE_W);
+
+
+    Player upPlayer(1.0f, 1.0f); // 初始化玩家在上边界
+    upPlayer.update(upInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(upPlayer.position().y, 0.0f);
+}
+
+// 测试下边界y
+TEST(PlayerTest, MoveDownStopsAtWorldBottomEdge)
+{
+    InputSystem downInput;
+    pressKey(downInput, SDL_SCANCODE_S);
+
+    Player downPlayer(1.0f, 710.0f); // 初始化玩家在下边界
+    downPlayer.update(downInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(downPlayer.position().y, 720.0f - downPlayer.size());
+}
+
+// 无输入不移动
+TEST(PlayerTest, NoInputDoesNotMoveInsideBounds)
+{
+    InputSystem noInput;
+    Player noInputPlayer(640.0f, 360.0f); // 初始化玩家在中心位置
+    noInputPlayer.update(noInput, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+
+    EXPECT_FLOAT_EQ(noInputPlayer.position().y, 360.0f);
+    EXPECT_FLOAT_EQ(noInputPlayer.position().x, 640.0f);
+}
+
+// 同时按A、D，不移动
+TEST(PlayerTest, OppositeHorizontalInputsCancelMovement)
+{
+    InputSystem oppositeInputs;
+    pressKey(oppositeInputs, SDL_SCANCODE_A); // 按下A键
+    pressKey(oppositeInputs, SDL_SCANCODE_D); // 同时按下D键
+    Player oppositeInputPlayer(640.0f, 360.0f); // 初始化玩家在中心位置
+    oppositeInputPlayer.update(oppositeInputs, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+    // 验证玩家没有移动
+    EXPECT_FLOAT_EQ(oppositeInputPlayer.position().y, 360.0f);
+    EXPECT_FLOAT_EQ(oppositeInputPlayer.position().x, 640.0f);
+}
+
+// 初始化位置超出边界时，不按键即可修复位置
+TEST(PlayerTest, ClampsBottomRightPositionEvenWithoutInput)
+{
+    InputSystem inputs;
+    Player player(1300.0f, 750.0f); // 初始化玩家在右下角外的位置
+    player.update(inputs, 1.0f, 1280.0f, 720.0f); // 更新玩家位置
+    // 验证玩家被限制在边界内
+    EXPECT_FLOAT_EQ(player.position().y, 720.0f - player.size());
+    EXPECT_FLOAT_EQ(player.position().x, 1280.0f - player.size());
 }
