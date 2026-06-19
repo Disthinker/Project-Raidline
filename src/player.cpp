@@ -1,3 +1,4 @@
+#include <cmath>
 #include "player.h"
 
 Player::Player(float x, float y) 
@@ -8,17 +9,31 @@ Player::Player(float x, float y)
 
 void Player::update(const InputSystem& input, float deltaTime)
 {
+    Vec2 direction {};
+
     if (input.isActionPressed(GameAction::MoveUp)) {
-        position_.y -= speed_ * deltaTime;
+        direction.y -= 1.0f;
     }
     if (input.isActionPressed(GameAction::MoveDown)) {
-        position_.y += speed_ * deltaTime;
+        direction.y += 1.0f;
     }
     if (input.isActionPressed(GameAction::MoveLeft)) {
-        position_.x -= speed_ * deltaTime;
+        direction.x -= 1.0f;
     }
     if (input.isActionPressed(GameAction::MoveRight)) {
-        position_.x += speed_ * deltaTime;
+        direction.x += 1.0f;
+    }
+
+    const float length = std::sqrt(
+        direction.x * direction.x + direction.y * direction.y
+    );
+
+    if (length > 0.0f) {
+        direction.x /= length;
+        direction.y /= length;
+
+        position_.x += direction.x * speed_ * deltaTime;
+        position_.y += direction.y * speed_ * deltaTime;
     }
 }
 
