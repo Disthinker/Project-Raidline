@@ -1,11 +1,33 @@
 // Implementation of the App class
 #include <fmt/core.h>
+#include <SDL3_image/SDL_image.h>
+#include <string>
 #include "app.h"
 
 namespace
 {
     constexpr int kWindowWidth {1280};
     constexpr int kWindowHeight {720};
+}
+
+bool App::loadTextures()
+{
+    const char* basePath = SDL_GetBasePath();
+    if (basePath == nullptr)
+    {
+        fmt::print("SDL_GetBasePath failed: {}\n", SDL_GetError());
+        return false;
+    }
+    const std::string assetRoot = std::string(basePath) + "assets/";
+    const std::string backgroundPath =
+    assetRoot + "backgrounds/project_raidline_test_map_1280x720.png";
+    const std::string playerPath =
+    assetRoot + "characters/protagonist_left_minimal_256x320.png";
+
+    backgroundTexture_ = IMG_LoadTexture(renderer_, backgroundPath.c_str());
+    playerTexture_ = IMG_LoadTexture(renderer_, playerPath.c_str());
+
+    return true;
 }
 
 // Init SDL video subsystem and create window
@@ -27,6 +49,8 @@ bool App::initialize(){
         SDL_Quit();
         return false;
     }
+    loadTextures();
+
     return true;
 }
 
@@ -67,6 +91,11 @@ void App::renderDebugText()
     }
 }
 
+void App::renderBackground()
+{
+    SDL_RenderTexture(renderer_, backgroundTexture_, nullptr, nullptr);
+}
+
 void App::renderPlayer()
 {
     const Vec2 pos = player_.position();
@@ -76,15 +105,13 @@ void App::renderPlayer()
         player_.size(),
         player_.size()
     };
-    SDL_SetRenderDrawColor(renderer_, 80, 180, 120, 255);
-    SDL_RenderFillRect(renderer_, &playerRect);
+    SDL_RenderTexture(renderer_, playerTexture_, nullptr, &playerRect);
 }
 
 // Renderer
 void App::render()
 {
-    SDL_SetRenderDrawColor(renderer_, 18, 18, 24, 255);
-    SDL_RenderClear(renderer_);
+    renderBackground();
 
     // 绘制调试文本
     renderDebugText();
@@ -98,6 +125,12 @@ void App::render()
 // Shutdown SDL and destroy window and renderer
 void App::shutdown()
 {
+    SDL_DestroyTexture(backgroundTexture_);
+    backgroundTexture_ = nullptr;
+
+    SDL_DestroyTexture(playerTexture_);
+    playerTexture_ = nullptr;
+
     SDL_DestroyRenderer(renderer_);
     renderer_ = nullptr;
 

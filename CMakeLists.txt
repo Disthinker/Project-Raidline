@@ -5,6 +5,7 @@ project(Project_Raidline CXX)
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_image CONFIG REQUIRED)
 
 # 2. 编译游戏主可执行文件
 add_executable(Project_Raidline
@@ -18,10 +19,15 @@ add_executable(Project_Raidline
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
-# 链接 fmt 和 SDL3 库
-target_link_libraries(Project_Raidline PRIVATE fmt::fmt SDL3::SDL3)
+# 链接 第三方依赖的 库
+target_link_libraries(Project_Raidline PRIVATE fmt::fmt SDL3::SDL3 SDL3_image::SDL3_image)
 target_include_directories(Project_Raidline PRIVATE src)
 
+add_custom_command(TARGET Project_Raidline POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:Project_Raidline>/assets
+)
 
 # 3. 开启测试功能并配置 GTest 可执行文件, test health_system
 enable_testing()
