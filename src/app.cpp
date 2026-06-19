@@ -2,10 +2,10 @@
 #include <fmt/core.h>
 #include "app.h"
 
-namespace window
+namespace
 {
-    constexpr int windowWidth {1280};
-    constexpr int windowHeight {720};
+    constexpr int kWindowWidth {1280};
+    constexpr int kWindowHeight {720};
 }
 
 // Init SDL video subsystem and create window
@@ -14,8 +14,7 @@ bool App::initialize(){
         fmt::print("SDL_Init failed: {}\n", SDL_GetError());
         return false;
     }
-    window_ = SDL_CreateWindow("Project Raidline", 
-        static_cast<float>(window::windowWidth), static_cast<float>(window::windowHeight), 0);
+    window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
     if(!window_){
         fmt::print("SDL_CreateWindow failed: {}\n", SDL_GetError());
         SDL_Quit();
@@ -115,7 +114,7 @@ int App::run(){
         lastCounter_ = currentCounter;
 
         processEvents();
-        update(deltaTime, static_cast<float>(window::windowWidth), static_cast<float>(window::windowHeight));
+        update(deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
         render();
         
 
