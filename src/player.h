@@ -1,7 +1,7 @@
 #pragma once
 
 #include "input_system.h"
-#include "Vec2.h"
+#include "vec2.h"
 
 class Player{
 public:

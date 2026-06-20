@@ -1,5 +1,5 @@
 #pragma once
-#include "Vec2.h"
+#include "vec2.h"
 
 class Projectile
 {
