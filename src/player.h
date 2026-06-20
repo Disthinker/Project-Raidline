@@ -19,4 +19,5 @@ private:
     Vec2 position_;
     float speed_ {240.0f};
     float size_ {32.0f};
+
 };

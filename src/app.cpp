@@ -6,8 +6,11 @@
 
 namespace
 {
-    constexpr int kWindowWidth {1280};
-    constexpr int kWindowHeight {720};
+    constexpr int kWindowWidth { 1280 };
+    constexpr int kWindowHeight { 720 };
+
+    constexpr int kPlayerSpriteWidth { 64 };
+    constexpr int kPlayerSpriteHeight { 80 };
 }
 
 bool App::loadTextures()
@@ -117,12 +120,20 @@ void App::renderBackground()
 
 void App::renderPlayer()
 {
-    const Vec2 pos = player_.position();
+    const Vec2 logicPos = player_.position();
+    const float logicSize = player_.size();
+
+    const float spriteW = kPlayerSpriteWidth;
+    const float spriteH = kPlayerSpriteHeight;
+
+    float spriteX = logicPos.x + (logicSize - spriteW) / 2;
+    float spriteY = logicPos.y + (logicSize - spriteH) / 2;
+
     SDL_FRect playerRect {
-        pos.x,
-        pos.y,
-        player_.size(),
-        player_.size()
+        spriteX,
+        spriteY,
+        spriteW,
+        spriteH
     };
     SDL_RenderTexture(renderer_, playerTexture_, nullptr, &playerRect);
 }
