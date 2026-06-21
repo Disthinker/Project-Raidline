@@ -21,7 +21,7 @@ private:
 
     SDL_Texture* backgroundTexture_{};
     SDL_Texture* playerTexture_{};
-    
+
     std::vector<Projectile> projectiles_;
 
     bool loadTextures();
@@ -32,5 +32,6 @@ private:
     void renderBackground();
     void renderDebugText();
     void renderPlayer();
+    void renderProjectiles();
     void shutdown();
 };

@@ -13,9 +13,9 @@ namespace
     constexpr int kPlayerSpriteWidth { 64 };
     constexpr int kPlayerSpriteHeight { 80 };
 
-    constexpr Vec2 projectileVelocity = {0.0f, -100.0f};
-    constexpr float projectileWidth {8.0f};
-    constexpr float projectileHeight {20.0f};
+    constexpr Vec2 kProjectileVelocity = {0.0f, -100.0f};
+    constexpr float kProjectileWidth {8.0f};
+    constexpr float kProjectileHeight {20.0f};
 }
 
 bool App::loadTextures()
@@ -100,9 +100,9 @@ void App::update(float deltaTime)
     // 仅本帧按下开火
     if(input_.wasActionJustPressed(GameAction::Fire))
     {
-        float projectileX = player_.position().x + player_.size() / 2 - projectileWidth / 2;
-        float projectileY = player_.position().y;
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileVelocity, projectileWidth, projectileHeight);
+        float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
+        float projectileY = player_.position().y - kProjectileHeight / 2;
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
     }
     // Update all projectiles
     for(auto& projectile : projectiles_)
@@ -150,6 +150,23 @@ void App::renderBackground()
     SDL_RenderTexture(renderer_, backgroundTexture_, nullptr, nullptr);
 }
 
+void App::renderProjectiles()
+{
+    for (const auto& projectile : projectiles_) 
+    {
+        const Vec2 pos = projectile.position();
+
+        SDL_FRect rect {
+            pos.x,
+            pos.y,
+            projectile.width(),
+            projectile.height()
+        };
+
+        SDL_RenderFillRect(renderer_, &rect);
+    }
+}
+
 void App::renderPlayer()
 {
     const Vec2 logicPos = player_.position();
@@ -177,6 +194,9 @@ void App::render()
     SDL_RenderClear(renderer_);
 
     renderBackground();
+
+    // 绘制投射物
+    renderProjectiles();
 
     // 绘制调试文本
     renderDebugText();
