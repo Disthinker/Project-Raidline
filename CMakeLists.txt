@@ -16,6 +16,9 @@ add_executable(Project_Raidline
     src/input_system.cpp
     src/player.h
     src/player.cpp
+    src/projectile.h
+    src/projectile.cpp
+    src/vec2.h
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)

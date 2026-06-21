@@ -11,6 +11,10 @@ namespace
 
     constexpr int kPlayerSpriteWidth { 64 };
     constexpr int kPlayerSpriteHeight { 80 };
+
+    constexpr Vec2 projectileDirection = {0.0f, -100.0f};
+    constexpr float projectileWidth {8.0f};
+    constexpr float projectileHeight {20.0f};
 }
 
 bool App::loadTextures()
@@ -90,7 +94,34 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {   
+    // 更新玩家
     player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
+    // 仅本帧按下开火
+    if(input_.wasActionJustPressed(GameAction::Fire))
+    {
+        float projectileX = player_.position().x + player_.size() / 2;
+        float projectileY = player_.position().y;
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileDirection, projectileWidth, projectileHeight);
+    }
+    // Update all projectiles
+    for(auto& projectile : projectiles_)
+    {
+        projectile.update(deltaTime);
+    }
+    // Remove projectiles that are outside the world
+    projectiles_.erase(
+        std::remove_if(
+            projectiles_.begin(),
+            projectiles_.end(),
+            [](const Projectile& projectile){
+                return projectile.isOutside(
+                    static_cast<float>(kWindowWidth),
+                    static_cast<float>(kWindowHeight)
+                );
+            }
+        ),
+        projectiles_.end()
+    );
 }
 
 void App::renderDebugText()
