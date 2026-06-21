@@ -11,6 +11,10 @@ void InputSystem::handleEvent(const SDL_Event& event) {
     }
 
     if (event.type == SDL_EVENT_KEY_DOWN) {
+        if (!isActionPressed(*actionOpt))
+        {
+            justPressedActions_.insert(*actionOpt);
+        }
         pressedActions_.insert(*actionOpt);
     } else if (event.type == SDL_EVENT_KEY_UP) {
         pressedActions_.erase(*actionOpt);
@@ -19,6 +23,14 @@ void InputSystem::handleEvent(const SDL_Event& event) {
 
 bool InputSystem::isActionPressed(GameAction action) const{
     return pressedActions_.find(action) != pressedActions_.end();
+}
+
+bool InputSystem::wasActionJustPressed(GameAction action) const
+{
+    return justPressedActions_.find(action) != justPressedActions_.end();
+}
+void InputSystem::endFrame() {
+    justPressedActions_.clear();
 }
 
 std::optional<GameAction> InputSystem::mapScancodeToAction(SDL_Scancode scancode) const{
