@@ -2,6 +2,7 @@
 #include <fmt/core.h>
 #include <SDL3_image/SDL_image.h>
 #include <string>
+#include <algorithm>
 #include "app.h"
 
 namespace
@@ -12,7 +13,7 @@ namespace
     constexpr int kPlayerSpriteWidth { 64 };
     constexpr int kPlayerSpriteHeight { 80 };
 
-    constexpr Vec2 projectileDirection = {0.0f, -100.0f};
+    constexpr Vec2 projectileVelocity = {0.0f, -100.0f};
     constexpr float projectileWidth {8.0f};
     constexpr float projectileHeight {20.0f};
 }
@@ -99,9 +100,9 @@ void App::update(float deltaTime)
     // 仅本帧按下开火
     if(input_.wasActionJustPressed(GameAction::Fire))
     {
-        float projectileX = player_.position().x + player_.size() / 2;
+        float projectileX = player_.position().x + player_.size() / 2 - projectileWidth / 2;
         float projectileY = player_.position().y;
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileDirection, projectileWidth, projectileHeight);
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileVelocity, projectileWidth, projectileHeight);
     }
     // Update all projectiles
     for(auto& projectile : projectiles_)
@@ -224,8 +225,8 @@ int App::run(){
         processEvents();
         update(deltaTime);
         render();
+        input_.endFrame();
         
-
     }
     shutdown();
     return 0;
