@@ -13,7 +13,7 @@ namespace
     constexpr int kPlayerSpriteWidth { 64 };
     constexpr int kPlayerSpriteHeight { 80 };
 
-    constexpr Vec2 kProjectileVelocity = {0.0f, -100.0f};
+    constexpr Vec2 kProjectileVelocity = {0.0f, -600.0f};
     constexpr float kProjectileWidth {8.0f};
     constexpr float kProjectileHeight {20.0f};
 }
@@ -101,7 +101,7 @@ void App::update(float deltaTime)
     if(input_.wasActionJustPressed(GameAction::Fire))
     {
         float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
-        float projectileY = player_.position().y - kProjectileHeight / 2;
+        float projectileY = player_.position().y - kProjectileHeight;
         projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
     }
     // Update all projectiles
@@ -152,6 +152,7 @@ void App::renderBackground()
 
 void App::renderProjectiles()
 {
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
     for (const auto& projectile : projectiles_) 
     {
         const Vec2 pos = projectile.position();
