@@ -17,7 +17,6 @@ class InputSystem{
 public:
     void handleEvent(const SDL_Event& event);
     bool isActionPressed(GameAction action) const;
-    bool heldPressed(GameAction action) const;
     bool wasActionJustPressed(GameAction action) const;
     void endFrame();
 

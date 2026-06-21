@@ -63,7 +63,7 @@ TEST(InputSystemTest, IgnoreUnmappedKey)
 
 
 // Space KeyDown 产生 justPressed
-TEST(ProjectileTest, SpaceKeyDownJustPressed)
+TEST(InputSystemTest, SpaceKeyDownSetsFireJustPressed)
 {
     InputSystem input;
 
@@ -78,7 +78,7 @@ TEST(ProjectileTest, SpaceKeyDownJustPressed)
 }
 
 // endFrame 后 justPressed 消失，但 pressed 仍保留
-TEST(ProjectileTest, SpaceKeyDownJustPressed)
+TEST(InputSystemTest, EndFrameClearsJustPressedButKeepsPressed)
 {
     InputSystem input;
 
@@ -98,7 +98,7 @@ TEST(ProjectileTest, SpaceKeyDownJustPressed)
 }
 
 // 持续按住时重复 KeyDown 不再次 justPressed
-TEST(ProjectileTest, SpaceKeyDownJustPressed)
+TEST(InputSystemTest, RepeatedKeyDownWhileHeldDoesNotSetJustPressedAgain)
 {
     InputSystem input;
 
@@ -112,7 +112,7 @@ TEST(ProjectileTest, SpaceKeyDownJustPressed)
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
 
     input.endFrame();
-    
+
     input.handleEvent(event); // 按住时重复 KeyDown 不再次 justPressed
 
     EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
