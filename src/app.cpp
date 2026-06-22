@@ -196,14 +196,14 @@ void App::render()
 
     renderBackground();
 
+    // 绘制玩家操控角色
+    renderPlayer();
+
     // 绘制投射物
     renderProjectiles();
 
     // 绘制调试文本
     renderDebugText();
-
-    // 绘制玩家操控角色
-    renderPlayer();
 
     SDL_RenderPresent(renderer_);
 }
