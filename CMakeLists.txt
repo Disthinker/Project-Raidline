@@ -16,6 +16,9 @@ add_executable(Project_Raidline
     src/input_system.cpp
     src/player.h
     src/player.cpp
+    src/projectile.h
+    src/projectile.cpp
+    src/vec2.h
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -75,9 +78,26 @@ target_include_directories(PlayerTest PRIVATE src)
 
 gtest_discover_tests(PlayerTest)
 
+# test projectile
+add_executable(ProjectileTest
+    tests/test_projectile.cpp
+    src/projectile.cpp
+    src/projectile.h
+    src/vec2.h
+)
+
+target_compile_features(ProjectileTest PRIVATE cxx_std_20)
+set_target_properties(ProjectileTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ProjectileTest PRIVATE GTest::gtest_main)
+target_include_directories(ProjectileTest PRIVATE src)
+
+gtest_discover_tests(ProjectileTest)
+
+# utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
     target_compile_options(HealthTest PRIVATE /utf-8)
     target_compile_options(InputSystemTest PRIVATE /utf-8)
     target_compile_options(PlayerTest PRIVATE /utf-8)
+    target_compile_options(ProjectileTest PRIVATE /utf-8)
 endif()

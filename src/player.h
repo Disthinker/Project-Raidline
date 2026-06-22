@@ -1,11 +1,7 @@
 #pragma once
 
 #include "input_system.h"
-
-struct Vec2{
-    float x {};
-    float y {};
-};
+#include "vec2.h"
 
 class Player{
 public:

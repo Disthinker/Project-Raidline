@@ -2,6 +2,7 @@
 #include <fmt/core.h>
 #include <SDL3_image/SDL_image.h>
 #include <string>
+#include <algorithm>
 #include "app.h"
 
 namespace
@@ -11,6 +12,10 @@ namespace
 
     constexpr int kPlayerSpriteWidth { 64 };
     constexpr int kPlayerSpriteHeight { 80 };
+
+    constexpr Vec2 kProjectileVelocity = {0.0f, -600.0f};
+    constexpr float kProjectileWidth {8.0f};
+    constexpr float kProjectileHeight {20.0f};
 }
 
 bool App::loadTextures()
@@ -90,7 +95,34 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {   
+    // 更新玩家
     player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
+    // 仅本帧按下开火
+    if(input_.wasActionJustPressed(GameAction::Fire))
+    {
+        float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
+        float projectileY = player_.position().y - kProjectileHeight;
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
+    }
+    // Update all projectiles
+    for(auto& projectile : projectiles_)
+    {
+        projectile.update(deltaTime);
+    }
+    // Remove projectiles that are outside the world
+    projectiles_.erase(
+        std::remove_if(
+            projectiles_.begin(),
+            projectiles_.end(),
+            [](const Projectile& projectile){
+                return projectile.isOutside(
+                    static_cast<float>(kWindowWidth),
+                    static_cast<float>(kWindowHeight)
+                );
+            }
+        ),
+        projectiles_.end()
+    );
 }
 
 void App::renderDebugText()
@@ -116,6 +148,24 @@ void App::renderDebugText()
 void App::renderBackground()
 {
     SDL_RenderTexture(renderer_, backgroundTexture_, nullptr, nullptr);
+}
+
+void App::renderProjectiles()
+{
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+    for (const auto& projectile : projectiles_) 
+    {
+        const Vec2 pos = projectile.position();
+
+        SDL_FRect rect {
+            pos.x,
+            pos.y,
+            projectile.width(),
+            projectile.height()
+        };
+
+        SDL_RenderFillRect(renderer_, &rect);
+    }
 }
 
 void App::renderPlayer()
@@ -146,11 +196,14 @@ void App::render()
 
     renderBackground();
 
-    // 绘制调试文本
-    renderDebugText();
-
     // 绘制玩家操控角色
     renderPlayer();
+
+    // 绘制投射物
+    renderProjectiles();
+
+    // 绘制调试文本
+    renderDebugText();
 
     SDL_RenderPresent(renderer_);
 }
@@ -193,8 +246,8 @@ int App::run(){
         processEvents();
         update(deltaTime);
         render();
+        input_.endFrame();
         
-
     }
     shutdown();
     return 0;
