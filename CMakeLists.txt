@@ -22,6 +22,8 @@ add_executable(Project_Raidline
     src/rect.h
     src/collision.cpp
     src/collision.h
+    src/enemy.h
+    src/enemy.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
