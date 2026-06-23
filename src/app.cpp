@@ -13,9 +13,11 @@ namespace
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
 
-    constexpr Vec2 kProjectileVelocity = {0.0f, -600.0f};
+    constexpr Vec2 kProjectileVelocity{0.0f, -600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
+
+    constexpr Vec2 kEnemySize{48.0f, 48.0f};
 }
 
 bool App::loadTextures()
@@ -81,6 +83,8 @@ bool App::initialize()
         fmt::print("loadTextures failed: {}\n", SDL_GetError());
         return false;
     }
+
+    enemies_.emplace_back(Vec2(200.0f, 100.0f), Vec2(50.0f, 50.0f)); // 创建1个敌人并添加到敌人列表中
 
     return true;
 }
@@ -201,6 +205,22 @@ void App::renderPlayer()
         spriteW,
         spriteH};
     SDL_RenderTexture(renderer_, playerTexture_, nullptr, &playerRect);
+}
+
+void App::renderEnemies()
+{
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+    for (const auto &enemy : enemies_)
+    {
+        const Rect bounds = enemy.bounds();
+
+        SDL_FRect rect{
+            bounds.position.x,
+            bounds.position.y,
+            bounds.size.x,
+            bounds.size.y};
+        SDL_RenderFillRect(renderer_, &rect);
+    }
 }
 
 // Renderer

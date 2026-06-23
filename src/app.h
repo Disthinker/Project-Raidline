@@ -5,6 +5,7 @@
 #include "input_system.h"
 #include "player.h"
 #include "projectile.h"
+#include "enemy.h"
 
 class App
 {
@@ -25,14 +26,19 @@ private:
 
     std::vector<Projectile> projectiles_;
 
+    std::vector<Enemy> enemies_;
+
     bool loadTextures();
     bool initialize();
     void processEvents();
     void update(float deltaTime);
+
     void render();
     void renderBackground();
     void renderDebugText();
     void renderPlayer();
     void renderProjectiles();
+    void renderEnemies();
+
     void shutdown();
 };
