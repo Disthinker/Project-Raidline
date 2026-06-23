@@ -27,6 +27,10 @@ float Projectile::height() const
 {
     return height_;
 }
+Rect Projectile::bounds() const
+{
+    return Rect{position_, Vec2{width_, height_}};
+}
 
 bool Projectile::isOutside(float worldWidth, float worldHeight) const
 {

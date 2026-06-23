@@ -231,11 +231,11 @@ void App::render()
 
     renderBackground();
 
-    // 绘制玩家操控角色
-    renderPlayer();
-
     // 绘制敌人
     renderEnemies();
+
+    // 绘制玩家操控角色
+    renderPlayer();
 
     // 绘制投射物
     renderProjectiles();
