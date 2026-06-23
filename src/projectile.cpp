@@ -1,13 +1,12 @@
 #include <cmath>
 #include "projectile.h"
 
-Projectile::Projectile(Vec2 position, Vec2 velocity, float width, float height):
-    position_(position),
-    velocity_(velocity),
-    width_(width),
-    height_(height)
+Projectile::Projectile(Vec2 position, Vec2 velocity, float width, float height)
+    : position_(position),
+      velocity_(velocity),
+      width_(width),
+      height_(height)
 {
-
 }
 
 void Projectile::update(float deltaTime)
@@ -31,6 +30,6 @@ float Projectile::height() const
 
 bool Projectile::isOutside(float worldWidth, float worldHeight) const
 {
-    return (position_.x + width_ < 0.0f || position_.x > worldWidth) || 
+    return (position_.x + width_ < 0.0f || position_.x > worldWidth) ||
            (position_.y + height_ < 0.0f || position_.y > worldHeight);
 }

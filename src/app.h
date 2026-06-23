@@ -6,21 +6,22 @@
 #include "player.h"
 #include "projectile.h"
 
-class App{
+class App
+{
 public:
     int run();
 
 private:
-    SDL_Window* window_ {nullptr};
-    SDL_Renderer* renderer_ {nullptr};
+    SDL_Window *window_{nullptr};
+    SDL_Renderer *renderer_{nullptr};
     InputSystem input_;
-    Uint64 lastCounter_ {};
+    Uint64 lastCounter_{};
 
-    bool running_ {false};
-    Player player_ {640.0f, 360.0f};
+    bool running_{false};
+    Player player_{640.0f, 360.0f};
 
-    SDL_Texture* backgroundTexture_{};
-    SDL_Texture* playerTexture_{};
+    SDL_Texture *backgroundTexture_{};
+    SDL_Texture *playerTexture_{};
 
     std::vector<Projectile> projectiles_;
 
