@@ -111,6 +111,20 @@ target_include_directories(CollisionTest PRIVATE src)
 
 gtest_discover_tests(CollisionTest)
 
+# test enemy
+add_executable(EnemyTest
+    tests/test_enemy.cpp
+    src/enemy.cpp
+    src/enemy.h
+)
+
+target_compile_features(EnemyTest PRIVATE cxx_std_20)
+set_target_properties(EnemyTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(EnemyTest PRIVATE GTest::gtest_main)
+target_include_directories(EnemyTest PRIVATE src)
+
+gtest_discover_tests(EnemyTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -119,4 +133,5 @@ if(MSVC)
     target_compile_options(PlayerTest PRIVATE /utf-8)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
+    target_compile_options(EnemyTest PRIVATE /utf-8)
 endif()
