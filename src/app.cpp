@@ -209,7 +209,7 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
-    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer_, 180, 40, 40, 255);
     for (const auto &enemy : enemies_)
     {
         const Rect bounds = enemy.bounds();
@@ -233,6 +233,9 @@ void App::render()
 
     // 绘制玩家操控角色
     renderPlayer();
+
+    // 绘制敌人
+    renderEnemies();
 
     // 绘制投射物
     renderProjectiles();
