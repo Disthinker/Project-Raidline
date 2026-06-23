@@ -19,6 +19,9 @@ add_executable(Project_Raidline
     src/projectile.h
     src/projectile.cpp
     src/vec2.h
+    src/rect.h
+    src/collision.cpp
+    src/collision.h
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -92,6 +95,21 @@ target_link_libraries(ProjectileTest PRIVATE GTest::gtest_main)
 target_include_directories(ProjectileTest PRIVATE src)
 
 gtest_discover_tests(ProjectileTest)
+
+# test collision
+add_executable(CollisionTest
+    tests/test_collision.cpp
+    src/collision.cpp
+    src/collision.h
+    src/rect.h
+)
+
+target_compile_features(CollisionTest PRIVATE cxx_std_20)
+set_target_properties(CollisionTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(CollisionTest PRIVATE GTest::gtest_main)
+target_include_directories(CollisionTest PRIVATE src)
+
+gtest_discover_tests(CollisionTest)
 
 # utf-8
 if(MSVC)
