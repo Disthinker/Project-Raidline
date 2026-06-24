@@ -44,8 +44,9 @@ TEST(HitResolutionTest, OneProjectileHitsTwoEnemies)
         Enemy(Vec2{18.0f, 18.0f}, Vec2{5.0f, 5.0f})};
 
     resolveProjectileEnemyHits(projectiles, enemies);
-    EXPECT_EQ(enemies.size(), 0u);
-    EXPECT_EQ(enemies[0].position().x, 1u); // The enemy that was not hit should remain unchanged
+
+    EXPECT_EQ(projectiles.size(), 0u);
+    EXPECT_EQ(enemies.size(), 1u);
 }
 
 // 两枚 Projectile 同时重叠同一个 Enemy 时，只移除一个 Enemy，并且不要重复处理同一个 Enemy
