@@ -4,4 +4,4 @@
 #include "enemy.h"
 #include "projectile.h"
 
-void resolveProjectileEnemyHits(std::vector<Enemy> &enemies_, std::vector<Projectile> &projectiles_);
+void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_);

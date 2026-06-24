@@ -134,6 +134,14 @@ add_executable(HitResolutionTest
     tests/test_hit_resolution.cpp
     src/hit_resolution.h
     src/hit_resolution.cpp
+    src/collision.cpp
+    src/collision.h
+    src/enemy.cpp
+    src/enemy.h
+    src/projectile.cpp
+    src/projectile.h
+    src/rect.h
+    src/vec2.h
 )
 
 target_compile_features(HitResolutionTest PRIVATE cxx_std_20)

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include "collision.h"
 
-void resolveProjectileEnemyHits(std::vector<Enemy> &enemies_, std::vector<Projectile> &projectiles_)
+void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
 {
     std::vector<bool> projectileHit{};
     std::vector<bool> enemiesHit{};
@@ -33,11 +33,11 @@ void resolveProjectileEnemyHits(std::vector<Enemy> &enemies_, std::vector<Projec
             }
         }
     }
-    std::size_t projectileIndex = 0;
+    std::size_t projectileEraseIndex = 0;
     std::erase_if(projectiles_, [&](const Projectile &)
-                  { return projectileHit[projectileIndex++] != 0; });
+                  { return projectileHit[projectileEraseIndex++] != 0; });
 
-    std::size_t enemyIndex = 0;
+    std::size_t enemyEraseIndex = 0;
     std::erase_if(enemies_, [&](const Enemy &)
-                  { return enemiesHit[enemyIndex++] != 0; });
+                  { return enemiesHit[enemyEraseIndex++] != 0; });
 }
