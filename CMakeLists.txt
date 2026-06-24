@@ -19,6 +19,13 @@ add_executable(Project_Raidline
     src/projectile.h
     src/projectile.cpp
     src/vec2.h
+    src/rect.h
+    src/collision.cpp
+    src/collision.h
+    src/enemy.h
+    src/enemy.cpp
+    src/hit_resolution.h
+    src/hit_resolution.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -93,6 +100,57 @@ target_include_directories(ProjectileTest PRIVATE src)
 
 gtest_discover_tests(ProjectileTest)
 
+# test collision
+add_executable(CollisionTest
+    tests/test_collision.cpp
+    src/collision.cpp
+    src/collision.h
+    src/rect.h
+)
+
+target_compile_features(CollisionTest PRIVATE cxx_std_20)
+set_target_properties(CollisionTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(CollisionTest PRIVATE GTest::gtest_main)
+target_include_directories(CollisionTest PRIVATE src)
+
+gtest_discover_tests(CollisionTest)
+
+# test enemy
+add_executable(EnemyTest
+    tests/test_enemy.cpp
+    src/enemy.cpp
+    src/enemy.h
+)
+
+target_compile_features(EnemyTest PRIVATE cxx_std_20)
+set_target_properties(EnemyTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(EnemyTest PRIVATE GTest::gtest_main)
+target_include_directories(EnemyTest PRIVATE src)
+
+gtest_discover_tests(EnemyTest)
+
+# test hit_resolution
+add_executable(HitResolutionTest
+    tests/test_hit_resolution.cpp
+    src/hit_resolution.h
+    src/hit_resolution.cpp
+    src/collision.cpp
+    src/collision.h
+    src/enemy.cpp
+    src/enemy.h
+    src/projectile.cpp
+    src/projectile.h
+    src/rect.h
+    src/vec2.h
+)
+
+target_compile_features(HitResolutionTest PRIVATE cxx_std_20)
+set_target_properties(HitResolutionTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(HitResolutionTest PRIVATE GTest::gtest_main)
+target_include_directories(HitResolutionTest PRIVATE src)
+
+gtest_discover_tests(HitResolutionTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -100,4 +158,7 @@ if(MSVC)
     target_compile_options(InputSystemTest PRIVATE /utf-8)
     target_compile_options(PlayerTest PRIVATE /utf-8)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
+    target_compile_options(CollisionTest PRIVATE /utf-8)
+    target_compile_options(EnemyTest PRIVATE /utf-8)
+    target_compile_options(HitResolutionTest PRIVATE /utf-8)
 endif()

@@ -1,5 +1,6 @@
 #pragma once
 #include "vec2.h"
+#include "rect.h"
 
 class Projectile
 {
@@ -11,6 +12,7 @@ public:
     Vec2 position() const;
     float width() const;
     float height() const;
+    Rect bounds() const;
 
     bool isOutside(float worldWidth, float worldHeight) const;
 

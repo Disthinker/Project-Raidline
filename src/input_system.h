@@ -1,10 +1,11 @@
 #pragma once
 
-#include<SDL3/SDL.h>
+#include <SDL3/SDL.h>
 #include <unordered_set>
 #include <optional>
 
-enum class GameAction{
+enum class GameAction
+{
     MoveUp,
     MoveDown,
     MoveLeft,
@@ -13,13 +14,13 @@ enum class GameAction{
     Dodge
 };
 
-class InputSystem{
+class InputSystem
+{
 public:
-    void handleEvent(const SDL_Event& event);
+    void handleEvent(const SDL_Event &event);
     bool isActionPressed(GameAction action) const;
     bool wasActionJustPressed(GameAction action) const;
     void endFrame();
-
 
 private:
     std::unordered_set<GameAction> pressedActions_;
