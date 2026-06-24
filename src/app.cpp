@@ -4,6 +4,7 @@
 #include <string>
 #include <algorithm>
 #include "app.h"
+#include "hit_resolution.h"
 
 namespace
 {
@@ -84,7 +85,7 @@ bool App::initialize()
         return false;
     }
 
-    enemies_.emplace_back(Vec2(200.0f, 100.0f), Vec2(50.0f, 50.0f)); // 创建1个敌人并添加到敌人列表中
+    enemies_.emplace_back(Vec2(600.0f, 100.0f), Vec2(50.0f, 50.0f)); // 创建1个敌人并添加到敌人列表中
 
     return true;
 }
@@ -119,6 +120,8 @@ void App::update(float deltaTime)
     {
         projectile.update(deltaTime);
     }
+    //
+    resolveProjectileEnemyHits(projectiles_, enemies_);
     // Remove projectiles that are outside the world
     projectiles_.erase(
         std::remove_if(
