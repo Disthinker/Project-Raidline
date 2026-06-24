@@ -24,6 +24,8 @@ add_executable(Project_Raidline
     src/collision.h
     src/enemy.h
     src/enemy.cpp
+    src/hit_resolution.h
+    src/hit_resolution.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -127,6 +129,20 @@ target_include_directories(EnemyTest PRIVATE src)
 
 gtest_discover_tests(EnemyTest)
 
+# test hit_resolution
+add_executable(HitResolutionTest
+    tests/test_hit_resolution.cpp
+    src/hit_resolution.h
+    src/hit_resolution.cpp
+)
+
+target_compile_features(HitResolutionTest PRIVATE cxx_std_20)
+set_target_properties(HitResolutionTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(HitResolutionTest PRIVATE GTest::gtest_main)
+target_include_directories(HitResolutionTest PRIVATE src)
+
+gtest_discover_tests(HitResolutionTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -136,4 +152,5 @@ if(MSVC)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)
+    target_compile_options(HitResolutionTest PRIVATE /utf-8)
 endif()

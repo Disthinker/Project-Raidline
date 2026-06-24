@@ -1,32 +1,34 @@
 #include "hit_resolution.h"
+#include <cstddef>
+#include <algorithm>
 #include "collision.h"
 
-void hitResolution(std::vector<Enemy> &enemies_, std::vector<Projectile> &projectiles_)
+void resolveProjectileEnemyHits(std::vector<Enemy> &enemies_, std::vector<Projectile> &projectiles_)
 {
     std::vector<bool> projectileHit{};
     std::vector<bool> enemiesHit{};
     projectileHit.resize(projectiles_.size(), false);
     enemiesHit.resize(enemies_.size(), false);
-    int iii{0};
-    int jjj{0};
+    std::size_t projectileIndex{0};
+    std::size_t enemyIndex{0};
 
-    for (iii = 0; iii < projectiles_.size(); ++iii)
+    for (projectileIndex = 0; projectileIndex < projectiles_.size(); ++projectileIndex)
     {
-        if (projectileHit[iii])
+        if (projectileHit[projectileIndex])
         {
             continue;
         }
-        for (jjj = 0; jjj < enemies_.size(); ++jjj)
+        for (enemyIndex = 0; enemyIndex < enemies_.size(); ++enemyIndex)
         {
-            if (enemiesHit[jjj])
+            if (enemiesHit[enemyIndex])
             {
                 continue;
             }
 
-            if (isCollision(projectiles_[iii].bounds(), enemies_[jjj].bounds()))
+            if (isCollision(projectiles_[projectileIndex].bounds(), enemies_[enemyIndex].bounds()))
             {
-                projectileHit[iii] = true;
-                enemiesHit[jjj] = true;
+                projectileHit[projectileIndex] = true;
+                enemiesHit[enemyIndex] = true;
                 // Handle the hit, e.g., reduce enemy health or destroy projectile
                 break;
             }
@@ -34,21 +36,21 @@ void hitResolution(std::vector<Enemy> &enemies_, std::vector<Projectile> &projec
     }
     // Remove projectiles that have been hit
     std::vector<Projectile> newProjectiles{};
-    for (iii = 0; iii < projectiles_.size(); ++iii)
+    for (projectileIndex = 0; projectileIndex < projectiles_.size(); ++projectileIndex)
     {
-        if (!projectileHit[iii])
+        if (!projectileHit[projectileIndex])
         {
-            newProjectiles.push_back(projectiles_[iii]);
+            newProjectiles.push_back(projectiles_[projectileIndex]);
         }
     }
     projectiles_ = newProjectiles;
     // Remove enemies that have been hit
     std::vector<Enemy> newEnemies{};
-    for (jjj = 0; jjj < enemies_.size(); ++jjj)
+    for (enemyIndex = 0; enemyIndex < enemies_.size(); ++enemyIndex)
     {
-        if (!enemiesHit[jjj])
+        if (!enemiesHit[enemyIndex])
         {
-            newEnemies.push_back(enemies_[jjj]);
+            newEnemies.push_back(enemies_[enemyIndex]);
         }
     }
     enemies_ = newEnemies;

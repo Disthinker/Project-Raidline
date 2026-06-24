@@ -1,0 +1,66 @@
+#include <gtest/gtest.h>
+#include "hit_resolution.h"
+
+// Projectile 命中 Enemy 后，两个集合数量都减少
+TEST(HitResolutionTest, bothDecreaseAfterHit)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{15.0f, 15.0f}, Vec2{10.0f, 10.0f})};
+
+    resolveProjectileEnemyHits(enemies, projectiles);
+
+    EXPECT_EQ(projectiles.size(), 0);
+    EXPECT_EQ(enemies.size(), 0);
+}
+
+// Projectile 未命中 Enemy 时，两个集合都保留
+TEST(HitResolutionTest, bothKeepAfterNoHit)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f),
+        Projectile(Vec2{20.0f, 20.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{15.0f, 15.0f}, Vec2{10.0f, 10.0f}),
+        Enemy(Vec2{30.0f, 30.0f}, Vec2{10.0f, 10.0f})};
+
+    resolveProjectileEnemyHits(enemies, projectiles);
+
+    EXPECT_EQ(projectiles.size(), 2);
+    EXPECT_EQ(enemies.size(), 2);
+}
+
+// 一枚 Projectile 与两个 Enemy 重叠时，只移除一个 Enemy
+TEST(HitResolutionTest, OneProjectileHitsTwoEnemies)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{10.0f, 15.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f),
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{5.0f, 5.0f}, Vec2{10.0f, 10.0f}),
+        Enemy(Vec2{30.0f, 30.0f}, Vec2{10.0f, 10.0f})};
+
+    resolveProjectileEnemyHits(enemies, projectiles);
+    EXPECT_EQ(enemies.size(), 1);
+    EXPECT_EQ(enemies[0].position().x, 5.0f); // The enemy that was not hit should remain unchanged
+}
+
+// 两枚 Projectile 同时重叠同一个 Enemy 时，只移除一个 Enemy，并且不要重复处理同一个 Enemy
+TEST(HitResolutionTest, TwoProjectilesHitOneEnemy)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{10.0f, 15.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f),
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{5.0f, 5.0f}, Vec2{30.0f, 30.0f})};
+
+    resolveProjectileEnemyHits(enemies, projectiles);
+
+    EXPECT_EQ(enemies.size(), 0);
+    EXPECT_EQ(projectiles.size(), 1);
+}
