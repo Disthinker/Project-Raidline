@@ -29,29 +29,15 @@ void resolveProjectileEnemyHits(std::vector<Enemy> &enemies_, std::vector<Projec
             {
                 projectileHit[projectileIndex] = true;
                 enemiesHit[enemyIndex] = true;
-                // Handle the hit, e.g., reduce enemy health or destroy projectile
                 break;
             }
         }
     }
-    // Remove projectiles that have been hit
-    std::vector<Projectile> newProjectiles{};
-    for (projectileIndex = 0; projectileIndex < projectiles_.size(); ++projectileIndex)
-    {
-        if (!projectileHit[projectileIndex])
-        {
-            newProjectiles.push_back(projectiles_[projectileIndex]);
-        }
-    }
-    projectiles_ = newProjectiles;
-    // Remove enemies that have been hit
-    std::vector<Enemy> newEnemies{};
-    for (enemyIndex = 0; enemyIndex < enemies_.size(); ++enemyIndex)
-    {
-        if (!enemiesHit[enemyIndex])
-        {
-            newEnemies.push_back(enemies_[enemyIndex]);
-        }
-    }
-    enemies_ = newEnemies;
+    std::size_t projectileIndex = 0;
+    std::erase_if(projectiles_, [&](const Projectile &)
+                  { return projectileHit[projectileIndex++] != 0; });
+
+    std::size_t enemyIndex = 0;
+    std::erase_if(enemies_, [&](const Enemy &)
+                  { return enemiesHit[enemyIndex++] != 0; });
 }
