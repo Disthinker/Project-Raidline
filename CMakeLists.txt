@@ -26,6 +26,7 @@ add_executable(Project_Raidline
     src/enemy.cpp
     src/hit_resolution.h
     src/hit_resolution.cpp
+    src/gameplay_input.h
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -74,13 +75,12 @@ add_executable(PlayerTest
     tests/test_player.cpp
     src/player.cpp
     src/player.h
-    src/input_system.cpp
-    src/input_system.h
+    src/gameplay_input.h
 )
 
 target_compile_features(PlayerTest PRIVATE cxx_std_20)
 set_target_properties(PlayerTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(PlayerTest PRIVATE GTest::gtest_main SDL3::SDL3)
+target_link_libraries(PlayerTest PRIVATE GTest::gtest_main)
 target_include_directories(PlayerTest PRIVATE src)
 
 gtest_discover_tests(PlayerTest)

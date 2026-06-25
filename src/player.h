@@ -1,6 +1,6 @@
 #pragma once
 
-#include "input_system.h"
+#include "gameplay_input.h"
 #include "vec2.h"
 
 class Player
@@ -8,7 +8,7 @@ class Player
 public:
     Player(float x, float y);
 
-    void update(const InputSystem &input, float deltaTime, float worldWidth, float worldHeight);
+    void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight);
 
     Vec2 position() const;
     float size() const;

@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <vector>
 #include "input_system.h"
+#include "gameplay_input.h"
 #include "player.h"
 #include "projectile.h"
 #include "enemy.h"
@@ -30,6 +31,7 @@ private:
 
     bool loadTextures();
     bool initialize();
+    GameplayInput makeGameplayInput() const;
     void processEvents();
     void update(float deltaTime);
 

@@ -90,6 +90,18 @@ bool App::initialize()
     return true;
 }
 
+// 把输入状态翻译成 gameplay 输入
+GameplayInput App::makeGameplayInput() const
+{
+    GameplayInput input{};
+    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
+    input.fireJustPressed = input_.wasActionJustPressed(GameAction::Fire);
+    return input;
+}
+
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
@@ -106,10 +118,11 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
+    const GameplayInput gameplayInput = makeGameplayInput();
     // 更新玩家
-    player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
+    player_.update(gameplayInput, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
     // 仅本帧按下开火
-    if (input_.wasActionJustPressed(GameAction::Fire))
+    if (gameplayInput.fireJustPressed)
     {
         float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
         float projectileY = player_.position().y - kProjectileHeight;
