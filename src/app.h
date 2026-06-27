@@ -1,12 +1,9 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include <vector>
 #include "input_system.h"
 #include "gameplay_input.h"
 #include "gameplay_world.h"
-#include "projectile.h"
-#include "enemy.h"
 
 class App
 {
@@ -24,10 +21,6 @@ private:
 
     SDL_Texture *backgroundTexture_{};
     SDL_Texture *playerTexture_{};
-
-    std::vector<Projectile> projectiles_;
-
-    std::vector<Enemy> enemies_;
 
     bool loadTextures();
     bool initialize();

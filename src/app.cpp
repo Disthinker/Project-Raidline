@@ -2,9 +2,7 @@
 #include <fmt/core.h>
 #include <SDL3_image/SDL_image.h>
 #include <string>
-#include <algorithm>
 #include "app.h"
-#include "hit_resolution.h"
 
 namespace
 {
@@ -85,8 +83,6 @@ bool App::initialize()
         return false;
     }
 
-    enemies_.emplace_back(Vec2(600.0f, 100.0f), Vec2(50.0f, 50.0f)); // 创建1个敌人并添加到敌人列表中
-
     return true;
 }
 
@@ -119,35 +115,7 @@ void App::processEvents()
 void App::update(float deltaTime)
 {
     const GameplayInput gameplayInput = makeGameplayInput();
-    // 更新玩家
     world_.update(gameplayInput, deltaTime);
-    // 仅本帧按下开火
-    if (gameplayInput.fireJustPressed)
-    {
-        const Player &player = world_.player();
-        float projectileX = player.position().x + player.size() / 2 - kProjectileWidth / 2;
-        float projectileY = player.position().y - kProjectileHeight;
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
-    }
-    // Update all projectiles
-    for (auto &projectile : projectiles_)
-    {
-        projectile.update(deltaTime);
-    }
-    //
-    resolveProjectileEnemyHits(projectiles_, enemies_);
-    // Remove projectiles that are outside the world
-    projectiles_.erase(
-        std::remove_if(
-            projectiles_.begin(),
-            projectiles_.end(),
-            [](const Projectile &projectile)
-            {
-                return projectile.isOutside(
-                    static_cast<float>(kWindowWidth),
-                    static_cast<float>(kWindowHeight));
-            }),
-        projectiles_.end());
 }
 
 void App::renderDebugText()
@@ -191,7 +159,7 @@ void App::renderBackground()
 void App::renderProjectiles()
 {
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-    for (const auto &projectile : projectiles_)
+    for (const auto &projectile : world_.projectiles())
     {
         const Vec2 pos = projectile.position();
 
@@ -228,7 +196,7 @@ void App::renderPlayer()
 void App::renderEnemies()
 {
     SDL_SetRenderDrawColor(renderer_, 180, 40, 40, 255);
-    for (const auto &enemy : enemies_)
+    for (const auto &enemy : world_.enemies())
     {
         const Rect bounds = enemy.bounds();
 

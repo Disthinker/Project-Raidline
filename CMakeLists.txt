@@ -167,6 +167,10 @@ add_executable(GameplayWorldTest
     src/enemy.h
     src/rect.h
     src/vec2.h
+    src/hit_resolution.cpp
+    src/hit_resolution.h
+    src/collision.cpp
+    src/collision.h
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
