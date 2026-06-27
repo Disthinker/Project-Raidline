@@ -36,7 +36,7 @@ TEST(Gameplay_WorldTest, InitialEnemiesState)
 }
 
 // MoveRight input 更新后，world.player().position().x 变大
-TEST(Gameplay_WorldTest, InitialEnemiesState)
+TEST(GameplayWorldTest, MoveRightUpdatesPlayerPosition)
 {
     GameplayWorld world;
     GameplayInput input{};
