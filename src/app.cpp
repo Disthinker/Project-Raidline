@@ -11,12 +11,6 @@ namespace
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
-
-    constexpr Vec2 kProjectileVelocity{0.0f, -600.0f};
-    constexpr float kProjectileWidth{8.0f};
-    constexpr float kProjectileHeight{20.0f};
-
-    constexpr Vec2 kEnemySize{48.0f, 48.0f};
 }
 
 bool App::loadTextures()
