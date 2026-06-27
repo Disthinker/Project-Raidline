@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "gameplay_world.h"
+#include "gameplay_input.h"
 
 // 初始 Player 位置是 (640, 360)
 TEST(GameplayWorldTest, InitialPlayerPosition)
@@ -32,4 +33,16 @@ TEST(Gameplay_WorldTest, InitialEnemiesState)
     EXPECT_FLOAT_EQ(enemyPosition.y, 100.0f);
     EXPECT_FLOAT_EQ(enemySize.x, 50.0f);
     EXPECT_FLOAT_EQ(enemySize.y, 50.0f);
+}
+
+// MoveRight input 更新后，world.player().position().x 变大
+TEST(Gameplay_WorldTest, InitialEnemiesState)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+    input.moveRight = true;
+
+    world.update(input, 1.0f);
+
+    EXPECT_GT(world.player().position().x, 640.0f);
 }

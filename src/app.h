@@ -4,7 +4,7 @@
 #include <vector>
 #include "input_system.h"
 #include "gameplay_input.h"
-#include "player.h"
+#include "gameplay_world.h"
 #include "projectile.h"
 #include "enemy.h"
 
@@ -20,7 +20,7 @@ private:
     Uint64 lastCounter_{};
 
     bool running_{false};
-    Player player_{640.0f, 360.0f};
+    GameplayWorld world_;
 
     SDL_Texture *backgroundTexture_{};
     SDL_Texture *playerTexture_{};

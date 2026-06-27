@@ -120,12 +120,13 @@ void App::update(float deltaTime)
 {
     const GameplayInput gameplayInput = makeGameplayInput();
     // 更新玩家
-    player_.update(gameplayInput, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
+    world_.update(gameplayInput, deltaTime);
     // 仅本帧按下开火
     if (gameplayInput.fireJustPressed)
     {
-        float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
-        float projectileY = player_.position().y - kProjectileHeight;
+        const Player &player = world_.player();
+        float projectileX = player.position().x + player.size() / 2 - kProjectileWidth / 2;
+        float projectileY = player.position().y - kProjectileHeight;
         projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
     }
     // Update all projectiles
@@ -206,8 +207,9 @@ void App::renderProjectiles()
 
 void App::renderPlayer()
 {
-    const Vec2 logicPos = player_.position();
-    const float logicSize = player_.size();
+    const Player &player = world_.player();
+    const Vec2 logicPos = player.position();
+    const float logicSize = player.size();
 
     const float spriteW = kPlayerSpriteWidth;
     const float spriteH = kPlayerSpriteHeight;
