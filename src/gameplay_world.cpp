@@ -7,6 +7,8 @@ GameplayWorld::GameplayWorld()
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
+    (void)input;
+    (void)deltaTime;
 }
 
 const Player &GameplayWorld::player() const
