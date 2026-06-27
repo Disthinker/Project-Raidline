@@ -27,6 +27,8 @@ add_executable(Project_Raidline
     src/hit_resolution.h
     src/hit_resolution.cpp
     src/gameplay_input.h
+    src/gameplay_world.h
+    src/gameplay_world.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
