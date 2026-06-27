@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL.h>
 #include "input_system.h"
-#include "gameplay_input.h"
 #include "gameplay_world.h"
 
 class App
