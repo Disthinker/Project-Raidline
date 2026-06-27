@@ -151,6 +151,30 @@ target_include_directories(HitResolutionTest PRIVATE src)
 
 gtest_discover_tests(HitResolutionTest)
 
+# test gameplay_world
+add_executable(GameplayWorldTest
+    tests/test_gameplay_world.cpp
+    src/gameplay_world.cpp
+    src/gameplay_world.h
+    src/gameplay_input.h
+    src/player.cpp
+    src/player.h
+    src/projectile.cpp
+    src/projectile.h
+    src/enemy.cpp
+    src/enemy.h
+    src/rect.h
+    src/vec2.h
+)
+
+target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
+set_target_properties(GameplayWorldTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(GameplayWorldTest PRIVATE GTest::gtest_main)
+target_include_directories(GameplayWorldTest PRIVATE src)
+
+gtest_discover_tests(GameplayWorldTest)
+
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -161,4 +185,5 @@ if(MSVC)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
+    target_compile_options(GameplayWorldTest PRIVATE /utf-8)
 endif()
