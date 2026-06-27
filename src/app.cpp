@@ -2,9 +2,7 @@
 #include <fmt/core.h>
 #include <SDL3_image/SDL_image.h>
 #include <string>
-#include <algorithm>
 #include "app.h"
-#include "hit_resolution.h"
 
 namespace
 {
@@ -13,12 +11,6 @@ namespace
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
-
-    constexpr Vec2 kProjectileVelocity{0.0f, -600.0f};
-    constexpr float kProjectileWidth{8.0f};
-    constexpr float kProjectileHeight{20.0f};
-
-    constexpr Vec2 kEnemySize{48.0f, 48.0f};
 }
 
 bool App::loadTextures()
@@ -85,9 +77,19 @@ bool App::initialize()
         return false;
     }
 
-    enemies_.emplace_back(Vec2(600.0f, 100.0f), Vec2(50.0f, 50.0f)); // 创建1个敌人并添加到敌人列表中
-
     return true;
+}
+
+// 把输入状态翻译成 gameplay 输入
+GameplayInput App::makeGameplayInput() const
+{
+    GameplayInput input{};
+    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
+    input.fireJustPressed = input_.wasActionJustPressed(GameAction::Fire);
+    return input;
 }
 
 // Process SDL events, set running_ to false if quit event is received
@@ -106,34 +108,8 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
-    // 更新玩家
-    player_.update(input_, deltaTime, static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight));
-    // 仅本帧按下开火
-    if (input_.wasActionJustPressed(GameAction::Fire))
-    {
-        float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
-        float projectileY = player_.position().y - kProjectileHeight;
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
-    }
-    // Update all projectiles
-    for (auto &projectile : projectiles_)
-    {
-        projectile.update(deltaTime);
-    }
-    //
-    resolveProjectileEnemyHits(projectiles_, enemies_);
-    // Remove projectiles that are outside the world
-    projectiles_.erase(
-        std::remove_if(
-            projectiles_.begin(),
-            projectiles_.end(),
-            [](const Projectile &projectile)
-            {
-                return projectile.isOutside(
-                    static_cast<float>(kWindowWidth),
-                    static_cast<float>(kWindowHeight));
-            }),
-        projectiles_.end());
+    const GameplayInput gameplayInput = makeGameplayInput();
+    world_.update(gameplayInput, deltaTime);
 }
 
 void App::renderDebugText()
@@ -177,7 +153,7 @@ void App::renderBackground()
 void App::renderProjectiles()
 {
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-    for (const auto &projectile : projectiles_)
+    for (const auto &projectile : world_.projectiles())
     {
         const Vec2 pos = projectile.position();
 
@@ -193,8 +169,9 @@ void App::renderProjectiles()
 
 void App::renderPlayer()
 {
-    const Vec2 logicPos = player_.position();
-    const float logicSize = player_.size();
+    const Player &player = world_.player();
+    const Vec2 logicPos = player.position();
+    const float logicSize = player.size();
 
     const float spriteW = kPlayerSpriteWidth;
     const float spriteH = kPlayerSpriteHeight;
@@ -213,7 +190,7 @@ void App::renderPlayer()
 void App::renderEnemies()
 {
     SDL_SetRenderDrawColor(renderer_, 180, 40, 40, 255);
-    for (const auto &enemy : enemies_)
+    for (const auto &enemy : world_.enemies())
     {
         const Rect bounds = enemy.bounds();
 

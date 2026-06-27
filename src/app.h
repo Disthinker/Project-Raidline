@@ -1,11 +1,9 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include <vector>
+#include "gameplay_input.h"
+#include "gameplay_world.h"
 #include "input_system.h"
-#include "player.h"
-#include "projectile.h"
-#include "enemy.h"
 
 class App
 {
@@ -19,17 +17,14 @@ private:
     Uint64 lastCounter_{};
 
     bool running_{false};
-    Player player_{640.0f, 360.0f};
+    GameplayWorld world_;
 
     SDL_Texture *backgroundTexture_{};
     SDL_Texture *playerTexture_{};
 
-    std::vector<Projectile> projectiles_;
-
-    std::vector<Enemy> enemies_;
-
     bool loadTextures();
     bool initialize();
+    GameplayInput makeGameplayInput() const;
     void processEvents();
     void update(float deltaTime);
 
