@@ -1,8 +1,9 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include "input_system.h"
+#include "gameplay_input.h"
 #include "gameplay_world.h"
+#include "input_system.h"
 
 class App
 {

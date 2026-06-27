@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "gameplay_input.h"
 #include "gameplay_world.h"
 
 // 初始 Player 位置是 (640, 360)
