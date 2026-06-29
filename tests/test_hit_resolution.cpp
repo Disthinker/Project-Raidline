@@ -8,7 +8,7 @@ TEST(HitResolutionTest, bothDecreaseAfterHit)
         Projectile(Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
 
     std::vector<Enemy> enemies{
-        Enemy(Vec2{15.0f, 15.0f}, Vec2{10.0f, 10.0f})};
+        Enemy(Vec2{15.0f, 15.0f}, Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f})};
 
     resolveProjectileEnemyHits(projectiles, enemies);
 
@@ -24,8 +24,8 @@ TEST(HitResolutionTest, bothKeepAfterNoHit)
         Projectile(Vec2{20.0f, 20.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
 
     std::vector<Enemy> enemies{
-        Enemy(Vec2{100.0f, 100.0f}, Vec2{10.0f, 10.0f}),
-        Enemy(Vec2{30.0f, 30.0f}, Vec2{10.0f, 10.0f})};
+        Enemy(Vec2{100.0f, 100.0f}, Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f}),
+        Enemy(Vec2{30.0f, 30.0f}, Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f})};
 
     resolveProjectileEnemyHits(projectiles, enemies);
 
@@ -40,8 +40,8 @@ TEST(HitResolutionTest, OneProjectileHitsTwoEnemies)
         Projectile(Vec2{10.0f, 10.0f}, Vec2{0.0f, 0.0f}, 20.0f, 20.0f)};
 
     std::vector<Enemy> enemies{
-        Enemy(Vec2{12.0f, 12.0f}, Vec2{5.0f, 5.0f}),
-        Enemy(Vec2{18.0f, 18.0f}, Vec2{5.0f, 5.0f})};
+        Enemy(Vec2{12.0f, 12.0f}, Vec2{5.0f, 5.0f}, Vec2{0.0f, 0.0f}),
+        Enemy(Vec2{18.0f, 18.0f}, Vec2{5.0f, 5.0f}, Vec2{0.0f, 0.0f})};
 
     resolveProjectileEnemyHits(projectiles, enemies);
 
@@ -57,7 +57,7 @@ TEST(HitResolutionTest, TwoProjectilesHitOneEnemy)
         Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 10.0f, 10.0f)};
 
     std::vector<Enemy> enemies{
-        Enemy(Vec2{5.0f, 5.0f}, Vec2{30.0f, 30.0f})};
+        Enemy(Vec2{5.0f, 5.0f}, Vec2{30.0f, 30.0f}, Vec2{0.0f, 0.0f})};
 
     resolveProjectileEnemyHits(projectiles, enemies);
 

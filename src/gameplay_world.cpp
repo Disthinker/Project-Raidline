@@ -14,7 +14,7 @@ namespace
 
 GameplayWorld::GameplayWorld()
 {
-    enemies_.emplace_back(Vec2{600.0f, 100.0f}, Vec2{50.0f, 50.0f});
+    enemies_.emplace_back(Vec2{600.0f, 100.0f}, Vec2{50.0f, 50.0f}, Vec2{150.0f, 0.0f});
 }
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
