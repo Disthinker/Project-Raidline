@@ -1,7 +1,7 @@
 #include <cmath>
 #include "enemy.h"
 
-Enemy::Enemy(Vec2 position, Vec2 size, Vec2 velocity)
+Enemy::Enemy(Vec2 position, Vec2 size, Vec2 velocity = Vec2{})
     : position_(position),
       size_(size),
       velocity_(velocity) // Initialize velocity to zero
@@ -36,11 +36,11 @@ void Enemy::update(float deltaTime, float worldWidth)
   if (position_.x + size_.x > worldWidth)
   {
     position_.x = worldWidth - size_.x;
-    velocity_.x = -abs(velocity_.x); // Reverse the direction of movement  }
+    velocity_.x = -std::abs(velocity_.x); // Reverse the direction of movement  }
   }
   if (position_.x < 0)
   {
     position_.x = 0;
-    velocity_.x = abs(velocity_.x); // Reverse the direction of movement  }
+    velocity_.x = std::abs(velocity_.x); // Reverse the direction of movement  }
   }
 }

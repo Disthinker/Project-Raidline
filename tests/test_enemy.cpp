@@ -85,7 +85,7 @@ TEST(EnemyTest, rightBoundaryBounce)
 {
     Vec2 pos{1200, 20};
     Vec2 size{50, 60};
-    Vec2 velocity{200.0f, 0.0f};
+    Vec2 velocity{2000.0f, 0.0f};
 
     Enemy enemy(pos, size, velocity);
     const Vec2 initialVelocity = enemy.velocity();
@@ -93,7 +93,7 @@ TEST(EnemyTest, rightBoundaryBounce)
     enemy.update(0.1f, 1280.0f);
     const Vec2 updatedVelocity = enemy.velocity();
     const Vec2 updatedPos = enemy.position();
-    EXPECT_FLOAT_EQ(updatedVelocity.x, -1 * abs(initialVelocity.x));
+    EXPECT_FLOAT_EQ(updatedVelocity.x, -1 * std::abs(initialVelocity.x));
     EXPECT_FLOAT_EQ(updatedVelocity.y, initialVelocity.y);
     EXPECT_FLOAT_EQ(updatedPos.x, 1280.0f - size.x);
     EXPECT_FLOAT_EQ(updatedPos.y, initialPos.y);
@@ -103,7 +103,7 @@ TEST(EnemyTest, leftBoundaryBounce)
 {
     Vec2 pos{50, 20};
     Vec2 size{50, 60};
-    Vec2 velocity{-200.0f, 0.0f};
+    Vec2 velocity{-2000.0f, 0.0f};
 
     Enemy enemy(pos, size, velocity);
     const Vec2 initialVelocity = enemy.velocity();
@@ -111,7 +111,7 @@ TEST(EnemyTest, leftBoundaryBounce)
     enemy.update(0.1f, 1280.0f);
     const Vec2 updatedVelocity = enemy.velocity();
     const Vec2 updatedPos = enemy.position();
-    EXPECT_FLOAT_EQ(updatedVelocity.x, abs(initialVelocity.x));
+    EXPECT_FLOAT_EQ(updatedVelocity.x, std::abs(initialVelocity.x));
     EXPECT_FLOAT_EQ(updatedVelocity.y, initialVelocity.y);
     EXPECT_FLOAT_EQ(updatedPos.x, 0.0f);
     EXPECT_FLOAT_EQ(updatedPos.y, initialPos.y);
