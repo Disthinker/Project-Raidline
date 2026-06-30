@@ -118,10 +118,12 @@ TEST(GameplayWorldTest, EnemyMovesAfterWorldUpdate)
     GameplayWorld world;
     GameplayInput input{};
 
+    ASSERT_EQ(world.enemies().size(), 1u);
     const Vec2 initialPosition = world.enemies()[0].position();
 
     world.update(input, 1.0f);
 
+    ASSERT_EQ(world.enemies().size(), 1u);
     const Vec2 updatedPosition = world.enemies()[0].position();
 
     EXPECT_GT(updatedPosition.x, initialPosition.x);
