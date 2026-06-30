@@ -4,7 +4,7 @@
 Enemy::Enemy(Vec2 position, Vec2 size, Vec2 velocity)
     : position_(position),
       size_(size),
-      velocity_(velocity) // Initialize velocity to zero
+      velocity_(velocity)
 
 {
 }
