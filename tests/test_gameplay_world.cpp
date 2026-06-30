@@ -94,19 +94,14 @@ TEST(GameplayWorldTest, ProjectileMovesAfterSpawn)
     EXPECT_LT(world.projectiles()[0].position().y, initialY);
 }
 
-// Projectile 可以命中初始 Enemy
-TEST(GameplayWorldTest, ProjectileCanHitInitialEnemy)
+// Projectile 可以命中移动的 Enemy
+TEST(GameplayWorldTest, ProjectileCanHitMovingEnemy)
 {
     GameplayWorld world;
-
-    GameplayInput moveLeft{};
-    moveLeft.moveLeft = true;
-    world.update(moveLeft, 0.1f);
 
     GameplayInput fire{};
     fire.fireJustPressed = true;
     world.update(fire, 0.0f);
-
     ASSERT_EQ(world.projectiles().size(), 1u);
     ASSERT_EQ(world.enemies().size(), 1u);
 
@@ -115,4 +110,38 @@ TEST(GameplayWorldTest, ProjectileCanHitInitialEnemy)
 
     EXPECT_TRUE(world.projectiles().empty());
     EXPECT_TRUE(world.enemies().empty());
+}
+
+// GameplayWorld 持有的 Enemy 不再是静态实体
+TEST(GameplayWorldTest, EnemyMovesAfterWorldUpdate)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+    const Vec2 initialPosition = world.enemies()[0].position();
+
+    world.update(input, 1.0f);
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+    const Vec2 updatedPosition = world.enemies()[0].position();
+
+    EXPECT_GT(updatedPosition.x, initialPosition.x);
+    EXPECT_FLOAT_EQ(updatedPosition.y, initialPosition.y);
+}
+
+// World 中的 Enemy 会在右边界反弹
+TEST(GameplayWorldTest, EnemyBouncesAtRightBoundary)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    world.update(input, 10.0f);
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+
+    const Enemy &enemy = world.enemies()[0];
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
+    EXPECT_LT(enemy.velocity().x, 0.0f);
 }
