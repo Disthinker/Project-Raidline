@@ -21,6 +21,11 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
     player_.update(input, deltaTime, kWorldWidth, kWorldHeight);
 
+    for (auto &enemy : enemies_)
+    {
+        enemy.update(deltaTime, kWorldWidth);
+    }
+
     if (input.fireJustPressed)
     {
         const float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
