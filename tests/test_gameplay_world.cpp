@@ -246,3 +246,65 @@ TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
     EXPECT_GT(finalPosition.x, initialPosition.x);
     EXPECT_LT(finalPosition.y, initialPosition.y);
 }
+
+// 连续射击时立即射击
+TEST(GameplayWorldTest, HoldingFireCreatesFirstProjectileImmediately)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.fireJustPressed = true;
+    input.firePressed = true;
+    world.update(input, 0.0f);
+    input.fireJustPressed = false;
+    EXPECT_EQ(world.projectiles().size(), 1);
+}
+// 连续射击时立即射击后停止射击时停止创建新弹丸
+TEST(GameplayWorldTest, HoldingFireDoesNotCreateProjectileBeforeCooldownEnds)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.firePressed = true;
+    input.fireJustPressed = true;
+    world.update(input, 0.1f);
+    input.fireJustPressed = false;
+    EXPECT_EQ(world.projectiles().size(), 1);
+
+    input.firePressed = false;
+    world.update(input, 0.1f);
+    EXPECT_EQ(world.projectiles().size(), 1);
+}
+// 冷却结束后可以再生成
+TEST(GameplayWorldTest, HoldingFireCreatesAnotherProjectileAfterCooldownEnds)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.fireJustPressed = true;
+    input.firePressed = true;
+    world.update(input, 0.1f);
+    input.fireJustPressed = false;
+
+    EXPECT_EQ(world.projectiles().size(), 1);
+
+    world.update(input, 0.5f); // 等待冷却时间结束
+    EXPECT_EQ(world.projectiles().size(), 2);
+}
+// 冷却后停止射击
+TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.fireJustPressed = true;
+    input.firePressed = true;
+    world.update(input, 0.1f);
+    input.fireJustPressed = false;
+
+    EXPECT_EQ(world.projectiles().size(), 1);
+
+    input.firePressed = false;
+    world.update(input, 0.5f); // 等待冷却时间结束
+    EXPECT_EQ(world.projectiles().size(), 1);
+}

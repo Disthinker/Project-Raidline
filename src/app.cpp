@@ -89,6 +89,7 @@ GameplayInput App::makeGameplayInput() const
     input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
     input.moveRight = input_.isActionPressed(GameAction::MoveRight);
     input.fireJustPressed = input_.wasActionJustPressed(GameAction::Fire);
+    input.firePressed = input_.isActionPressed(GameAction::Fire);
     return input;
 }
 
