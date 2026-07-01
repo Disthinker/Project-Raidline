@@ -12,9 +12,11 @@ public:
 
     Vec2 position() const;
     float size() const;
+    Vec2 facingDirection() const;
 
 private:
     Vec2 position_;
     float speed_{240.0f};
     float size_{32.0f};
+    Vec2 facingDirection_{0.0f, -1.0f};
 };

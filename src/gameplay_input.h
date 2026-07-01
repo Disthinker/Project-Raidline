@@ -7,4 +7,5 @@ struct GameplayInput
     bool moveLeft{};
     bool moveRight{};
     bool fireJustPressed{};
+    bool firePressed{};
 };

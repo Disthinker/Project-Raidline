@@ -34,6 +34,7 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
     {
         direction.x /= length;
         direction.y /= length;
+        facingDirection_ = direction;
         // 归一化方向更新
         position_.x += direction.x * speed_ * deltaTime;
         position_.y += direction.y * speed_ * deltaTime;
@@ -57,4 +58,9 @@ Vec2 Player::position() const
 float Player::size() const
 {
     return size_;
+}
+
+Vec2 Player::facingDirection() const
+{
+    return facingDirection_;
 }

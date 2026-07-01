@@ -7,7 +7,7 @@ namespace
     constexpr float kWorldWidth{1280.0f};
     constexpr float kWorldHeight{720.0f};
 
-    constexpr Vec2 kProjectileVelocity{0.0f, -600.0f};
+    constexpr float kProjectileSpeed{600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
 }
@@ -25,12 +25,14 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
     {
         enemy.update(deltaTime, kWorldWidth);
     }
-
-    if (input.fireJustPressed)
+    cooldownRemaining_ -= deltaTime;
+    if (input.firePressed && cooldownRemaining_ <= 0.0f)
     {
         const float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
         const float projectileY = player_.position().y - kProjectileHeight;
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, kProjectileVelocity, kProjectileWidth, kProjectileHeight);
+        Vec2 projectileVelocity = {player_.facingDirection().x * kProjectileSpeed, player_.facingDirection().y * kProjectileSpeed};
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileVelocity, kProjectileWidth, kProjectileHeight);
+        cooldownRemaining_ = fireCooldown_; // Reset cooldown after firing
     }
 
     for (auto &projectile : projectiles_)
