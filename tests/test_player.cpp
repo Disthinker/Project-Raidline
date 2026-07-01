@@ -208,6 +208,7 @@ TEST(PlayerTest, NoInputKeepsPreviousFacingDirection)
     inputs.moveRight = true;
     player.update(inputs, 1.0f, 1280.0f, 720.0f);
     inputs.moveRight = false;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
     EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0f);
     EXPECT_FLOAT_EQ(player.facingDirection().y, 0.0f);
 }
