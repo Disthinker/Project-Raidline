@@ -145,3 +145,82 @@ TEST(GameplayWorldTest, EnemyBouncesAtRightBoundary)
     EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
     EXPECT_LT(enemy.velocity().x, 0.0f);
 }
+
+// 右朝向射击
+TEST(GameplayWorldTest, FireAfterFacingRightMovesProjectileRight)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.moveRight = true;
+    input.fireJustPressed = true;
+    world.update(input, 0.0f);
+    const Vec2 initialPosition = world.projectiles()[0].position();
+
+    input.moveRight = false;
+    input.fireJustPressed = false;
+    world.update(input, 0.1f);
+    const Vec2 finalPosition = world.projectiles()[0].position();
+
+    EXPECT_GT(finalPosition.x, initialPosition.x);
+    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+}
+// 左朝向射击
+TEST(GameplayWorldTest, FireAfterFacingLeftMovesProjectileLeft)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.moveLeft = true;
+    input.fireJustPressed = true;
+    world.update(input, 0.0f);
+    const Vec2 initialPosition = world.projectiles()[0].position();
+
+    input.moveLeft = false;
+    input.fireJustPressed = false;
+    world.update(input, 0.1f);
+    const Vec2 finalPosition = world.projectiles()[0].position();
+
+    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+    EXPECT_LT(finalPosition.x, initialPosition.x);
+}
+// 下朝向射击
+TEST(GameplayWorldTest, FireAfterFacingDownMovesProjectileDown)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.moveDown = true;
+    input.fireJustPressed = true;
+    world.update(input, 0.0f);
+    const Vec2 initialPosition = world.projectiles()[0].position();
+
+    input.moveDown = false;
+    input.fireJustPressed = false;
+    world.update(input, 0.1f);
+    const Vec2 finalPosition = world.projectiles()[0].position();
+
+    EXPECT_FLOAT_EQ(finalPosition.x, initialPosition.x);
+    EXPECT_GT(finalPosition.y, initialPosition.y);
+}
+// 旧朝向射击
+TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.moveRight = true;
+    world.update(input, 1.0f);
+
+    input.moveRight = false;
+    input.fireJustPressed = true;
+    world.update(input, 0.0f);
+    const Vec2 initialPosition = world.projectiles()[0].position();
+
+    input.fireJustPressed = false;
+    world.update(input, 0.1f);
+    const Vec2 finalPosition = world.projectiles()[0].position();
+
+    EXPECT_GT(finalPosition.x, initialPosition.x);
+    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+}
