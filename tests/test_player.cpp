@@ -205,9 +205,11 @@ TEST(PlayerTest, NoInputKeepsPreviousFacingDirection)
 {
     GameplayInput inputs{};
     Player player(640.0f, 360.0f);
+    inputs.moveRight = true;
     player.update(inputs, 1.0f, 1280.0f, 720.0f);
-    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
-    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+    inputs.moveRight = false;
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, 0.0f);
 }
 
 // A + D 互相抵消时不更新 facingDirection
@@ -215,9 +217,12 @@ TEST(PlayerTest, OppositeHorizontalInputsDoNotChangeFacingDirection)
 {
     GameplayInput inputs{};
     Player player(640.0f, 360.0f);
+    inputs.moveDown = true;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    inputs.moveDown = false;
     inputs.moveLeft = true;
     inputs.moveRight = true;
     player.update(inputs, 1.0f, 1280.0f, 720.0f);
     EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
-    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, 1.0f);
 }

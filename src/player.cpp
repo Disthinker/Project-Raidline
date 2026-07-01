@@ -34,7 +34,7 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
     {
         direction.x /= length;
         direction.y /= length;
-        facingDirection_ = {direction.x, direction.y};
+        facingDirection_ = direction;
         // 归一化方向更新
         position_.x += direction.x * speed_ * deltaTime;
         position_.y += direction.y * speed_ * deltaTime;
