@@ -204,7 +204,7 @@ TEST(GameplayWorldTest, FireAfterFacingDownMovesProjectileDown)
     EXPECT_GT(finalPosition.y, initialPosition.y);
 }
 // 旧朝向射击
-TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
+TEST(GameplayWorldTest, FireWithoutMovementUsesPreviousFacingDirection)
 {
     GameplayWorld world;
     GameplayInput input{};
@@ -223,4 +223,26 @@ TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
     EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+}
+
+// 斜向射击
+TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    input.moveUp = true;
+    input.moveRight = true;
+    world.update(input, 1.0f);
+
+    input.fireJustPressed = true;
+    world.update(input, 0.0f);
+    const Vec2 initialPosition = world.projectiles()[0].position();
+
+    input.fireJustPressed = false;
+    world.update(input, 0.1f);
+    const Vec2 finalPosition = world.projectiles()[0].position();
+
+    EXPECT_GT(finalPosition.x, initialPosition.x);
+    EXPECT_LT(finalPosition.y, initialPosition.y);
 }
