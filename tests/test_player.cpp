@@ -156,3 +156,68 @@ TEST(PlayerTest, ClampsBottomRightPositionEvenWithoutInput)
     EXPECT_FLOAT_EQ(player.position().y, 720.0f - player.size());
     EXPECT_FLOAT_EQ(player.position().x, 1280.0f - player.size());
 }
+
+// 初始 facingDirection 是 (0, -1)
+TEST(PlayerTest, InitialFacingDirectionIsUp)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+}
+
+// 向右移动后 facingDirection 是 (1, 0)
+TEST(PlayerTest, MoveRightUpdatesFacingDirection)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    inputs.moveRight = true;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, 0.0f);
+}
+
+// 向上移动后 facingDirection 是 (0, -1)
+TEST(PlayerTest, MoveUpUpdatesFacingDirection)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    inputs.moveUp = true;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+}
+
+// W + D 后 facingDirection 长度约为 1
+TEST(PlayerTest, DiagonalMovementUpdatesFacingDirectionToNormalizedDirection)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    inputs.moveUp = true;
+    inputs.moveRight = true;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0f / std::sqrt(2));
+    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f / std::sqrt(2));
+}
+
+// 无输入 update 后 facingDirection 保持不变
+TEST(PlayerTest, NoInputKeepsPreviousFacingDirection)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+}
+
+// A + D 互相抵消时不更新 facingDirection
+TEST(PlayerTest, OppositeHorizontalInputsDoNotChangeFacingDirection)
+{
+    GameplayInput inputs{};
+    Player player(640.0f, 360.0f);
+    inputs.moveLeft = true;
+    inputs.moveRight = true;
+    player.update(inputs, 1.0f, 1280.0f, 720.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, -1.0f);
+}
