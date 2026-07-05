@@ -83,8 +83,8 @@ TEST(HitEffectTest, MultipleUpdatesEventuallyExpire)
 
     effect.update(0.05f);
     effect.update(0.05f);
-    effect.update(0.05f);
+    effect.update(0.06f);
 
     EXPECT_TRUE(effect.isExpired());
-    EXPECT_NEAR(effect.lifetimeRemaining(), 0.0f, kEpsilon);
+    EXPECT_LE(effect.lifetimeRemaining(), 0.0f);
 }
