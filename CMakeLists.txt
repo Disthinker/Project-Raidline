@@ -29,6 +29,8 @@ add_executable(Project_Raidline
     src/gameplay_input.h
     src/gameplay_world.h
     src/gameplay_world.cpp
+    src/hit_effect.h
+    src/hit_effect.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -180,6 +182,19 @@ target_include_directories(GameplayWorldTest PRIVATE src)
 
 gtest_discover_tests(GameplayWorldTest)
 
+# test hit_effect
+add_executable(hit_effect_test
+    tests/test_hit_effect.cpp
+    src/hit_effect.h
+    src/hit_effect.cpp)
+target_compile_features(hit_effect_test PRIVATE cxx_std_20)
+set_target_properties(hit_effect_test PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(hit_effect_test PRIVATE GTest::gtest_main)
+target_include_directories(hit_effect_test PRIVATE src)
+
+gtest_discover_tests(hit_effect_test)
+
+
 
 # utf-8
 if(MSVC)
@@ -192,4 +207,5 @@ if(MSVC)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
+    target_compile_options(hit_effect_test PRIVATE /utf-8)
 endif()
