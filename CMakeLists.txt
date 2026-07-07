@@ -146,6 +146,8 @@ add_executable(HitResolutionTest
     src/projectile.h
     src/rect.h
     src/vec2.h
+    src/hit_effect.cpp
+    src/hit_effect.h
 )
 
 target_compile_features(HitResolutionTest PRIVATE cxx_std_20)
@@ -173,6 +175,8 @@ add_executable(GameplayWorldTest
     src/hit_resolution.h
     src/collision.cpp
     src/collision.h
+    src/hit_effect.cpp
+    src/hit_effect.h
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
