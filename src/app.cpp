@@ -204,6 +204,26 @@ void App::renderEnemies()
     }
 }
 
+void App::renderHitEffects()
+{
+    SDL_SetRenderDrawColor(renderer_, 255, 220, 80, 255);
+
+    for (const auto &effect : world_.hitEffects())
+    {
+        const Vec2 center = effect.position();
+        const float size = effect.size();
+        const float halfSize = size / 2.0f;
+
+        SDL_FRect rect{
+            center.x - halfSize,
+            center.y - halfSize,
+            size,
+            size};
+
+        SDL_RenderFillRect(renderer_, &rect);
+    }
+}
+
 // Renderer
 void App::render()
 {
@@ -220,6 +240,9 @@ void App::render()
 
     // 绘制投射物
     renderProjectiles();
+
+    // 绘制击中效果
+    renderHitEffects();
 
     // 绘制调试文本
     renderDebugText();

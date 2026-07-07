@@ -10,6 +10,9 @@ namespace
     constexpr float kProjectileSpeed{600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
+
+    constexpr float kHitEffectLifetime{0.15f};
+    constexpr float kHitEffectSize{16.0f};
 }
 
 GameplayWorld::GameplayWorld()
@@ -19,6 +22,16 @@ GameplayWorld::GameplayWorld()
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
+    // 更新命中反馈
+    for (auto &hitEffect : hitEffects_)
+    {
+        hitEffect.update(deltaTime);
+    }
+    hitEffects_.erase(std::remove_if(hitEffects_.begin(), hitEffects_.end(),
+                                     [](const HitEffect &effect)
+                                     { return effect.isExpired(); }),
+                      hitEffects_.end());
+
     player_.update(input, deltaTime, kWorldWidth, kWorldHeight);
 
     for (auto &enemy : enemies_)
@@ -40,7 +53,12 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
         projectile.update(deltaTime);
     }
 
-    resolveProjectileEnemyHits(projectiles_, enemies_);
+    const HitResolutionResult hitResult = resolveProjectileEnemyHits(projectiles_, enemies_);
+
+    for (auto &position : hitResult.hitPositions)
+    {
+        hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
+    }
 
     projectiles_.erase(
         std::remove_if(
@@ -66,4 +84,9 @@ const std::vector<Projectile> &GameplayWorld::projectiles() const
 const std::vector<Enemy> &GameplayWorld::enemies() const
 {
     return enemies_;
+}
+
+const std::vector<HitEffect> &GameplayWorld::hitEffects() const
+{
+    return hitEffects_;
 }

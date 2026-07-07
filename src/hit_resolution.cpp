@@ -3,8 +3,9 @@
 #include <algorithm>
 #include "collision.h"
 
-void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
+HitResolutionResult resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
 {
+    HitResolutionResult result{};
     std::vector<bool> projectileHit{};
     std::vector<bool> enemiesHit{};
     projectileHit.resize(projectiles_.size(), false);
@@ -29,6 +30,10 @@ void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vect
             {
                 projectileHit[projectileIndex] = true;
                 enemiesHit[enemyIndex] = true;
+                const Projectile &projectile = projectiles_[projectileIndex];
+                result.hitPositions.push_back(Vec2{
+                    projectile.position().x + projectile.width() / 2.0f,
+                    projectile.position().y + projectile.height() / 2.0f});
                 break;
             }
         }
@@ -40,4 +45,5 @@ void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vect
     std::size_t enemyEraseIndex = 0;
     std::erase_if(enemies_, [&](const Enemy &)
                   { return enemiesHit[enemyEraseIndex++] != 0; });
+    return result;
 }
