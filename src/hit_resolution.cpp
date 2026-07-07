@@ -3,7 +3,7 @@
 #include <algorithm>
 #include "collision.h"
 
-void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
+HitResolutionResult resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
 {
     std::vector<bool> projectileHit{};
     std::vector<bool> enemiesHit{};
@@ -29,6 +29,7 @@ void resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vect
             {
                 projectileHit[projectileIndex] = true;
                 enemiesHit[enemyIndex] = true;
+
                 break;
             }
         }

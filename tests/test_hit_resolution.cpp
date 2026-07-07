@@ -10,7 +10,7 @@ TEST(HitResolutionTest, bothDecreaseAfterHit)
     std::vector<Enemy> enemies{
         Enemy(Vec2{15.0f, 15.0f}, Vec2{10.0f, 10.0f})};
 
-    resolveProjectileEnemyHits(projectiles, enemies);
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
 
     EXPECT_EQ(projectiles.size(), 0u);
     EXPECT_EQ(enemies.size(), 0u);
@@ -27,7 +27,7 @@ TEST(HitResolutionTest, bothKeepAfterNoHit)
         Enemy(Vec2{100.0f, 100.0f}, Vec2{10.0f, 10.0f}),
         Enemy(Vec2{30.0f, 30.0f}, Vec2{10.0f, 10.0f})};
 
-    resolveProjectileEnemyHits(projectiles, enemies);
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
 
     EXPECT_EQ(projectiles.size(), 2u);
     EXPECT_EQ(enemies.size(), 2u);
@@ -43,7 +43,7 @@ TEST(HitResolutionTest, OneProjectileHitsTwoEnemies)
         Enemy(Vec2{12.0f, 12.0f}, Vec2{5.0f, 5.0f}),
         Enemy(Vec2{18.0f, 18.0f}, Vec2{5.0f, 5.0f})};
 
-    resolveProjectileEnemyHits(projectiles, enemies);
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
 
     EXPECT_EQ(projectiles.size(), 0u);
     EXPECT_EQ(enemies.size(), 1u);
@@ -59,8 +59,79 @@ TEST(HitResolutionTest, TwoProjectilesHitOneEnemy)
     std::vector<Enemy> enemies{
         Enemy(Vec2{5.0f, 5.0f}, Vec2{30.0f, 30.0f})};
 
-    resolveProjectileEnemyHits(projectiles, enemies);
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
 
     EXPECT_EQ(enemies.size(), 0u);
     EXPECT_EQ(projectiles.size(), 1u);
+}
+
+// hit position 等于 Projectile center
+TEST(HitResolutionTest, HitReturnsProjectileCenter)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
+
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
+
+    EXPECT_FLOAT_EQ(result.hitPositions[0].x, 24.0f);
+    EXPECT_FLOAT_EQ(result.hitPositions[0].y, 40.0f);
+}
+// 未命中时 hitPositions 为空
+TEST(HitResolutionTest, NoHitReturnsNoHitPositions)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{100.0f, 100.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
+
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
+
+    EXPECT_EQ(result.hitPositions.size(), 0u);
+}
+// 一发重叠两个 Enemy 时只返回 1 个 hit position
+TEST(HitResolutionTest, OneProjectileOverlappingTwoEnemiesReturnsOneHitPosition)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f}),
+        Enemy(Vec2{20.0f, 35.0f}, Vec2{20.0f, 20.0f})};
+
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
+
+    EXPECT_EQ(result.hitPositions.size(), 1u);
+}
+// 两发重叠同一个 Enemy 时只返回 1 个 hit position
+TEST(HitResolutionTest, TwoProjectilesOverlappingOneEnemyReturnsOneHitPosition)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f),
+        Projectile(Vec2{23.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f)};
+
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
+
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
+
+    EXPECT_EQ(result.hitPositions.size(), 1u);
+}
+// 原有 projectiles / enemies 清理规则不回归
+TEST(HitResolutionTest, ExistingCleanupRulesStillHoldAfterReturningHitPositions)
+{
+    std::vector<Projectile> projectiles{
+        Projectile(Vec2{20.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f),
+        Projectile(Vec2{23.0f, 30.0f}, Vec2{0.0f, 0.0f}, 8.0f, 20.0f)};
+    std::vector<Enemy> enemies{
+        Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
+    const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
+
+    // projectiles / enemies 清理规则不回归
+    EXPECT_EQ(result.hitPositions.size(), 1u);
+    EXPECT_NEAR(result.hitPositions[0].x, 24.0f, 0.01f);
+    EXPECT_NEAR(result.hitPositions[0].y, 35.0f, 0.01f);
 }
