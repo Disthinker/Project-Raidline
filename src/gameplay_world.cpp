@@ -53,7 +53,12 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
         projectile.update(deltaTime);
     }
 
-    resolveProjectileEnemyHits(projectiles_, enemies_);
+    const HitResolutionResult hitResult = resolveProjectileEnemyHits(projectiles_, enemies_);
+
+    for (auto &position : hitResult.hitPositions)
+    {
+        hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
+    }
 
     projectiles_.erase(
         std::remove_if(
@@ -64,13 +69,6 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
                 return projectile.isOutside(kWorldWidth, kWorldHeight);
             }),
         projectiles_.end());
-    const HitResolutionResult hitResult =
-        resolveProjectileEnemyHits(projectiles_, enemies_);
-
-    for (auto &position : hitResult.hitPositions)
-    {
-        hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
-    }
 }
 
 const Player &GameplayWorld::player() const
@@ -86,4 +84,9 @@ const std::vector<Projectile> &GameplayWorld::projectiles() const
 const std::vector<Enemy> &GameplayWorld::enemies() const
 {
     return enemies_;
+}
+
+const std::vector<HitEffect> &GameplayWorld::hitEffects() const
+{
+    return hitEffects_;
 }
