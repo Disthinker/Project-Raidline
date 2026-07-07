@@ -34,6 +34,7 @@ private:
     void renderPlayer();
     void renderProjectiles();
     void renderEnemies();
+    void renderHitEffects();
 
     void shutdown();
 };
