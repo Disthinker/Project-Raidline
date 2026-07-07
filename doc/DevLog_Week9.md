@@ -598,8 +598,8 @@ ctest --preset windows-debug --output-on-failure
 验证结果：
 
 ```text
-cmake --build --preset windows-debug: 待填写
-ctest --preset windows-debug --output-on-failure: 待填写
+cmake --build --preset windows-debug: PASS
+ctest --preset windows-debug --output-on-failure: PASS
 ```
 
 需要确认的测试 target 包括：
@@ -623,15 +623,15 @@ HitEffectTest
 人工运行需要确认以下内容：
 
 ```text
-Projectile 命中 Enemy 时是否出现黄色 HitEffect：待填写
-HitEffect 位置是否接近 Projectile impact：待填写
-HitEffect 是否约 0.15 秒后消失：待填写
-Player movement 是否正常：待填写
-Enemy movement 是否正常：待填写
-多方向射击是否正常：待填写
-fire cooldown 是否正常：待填写
-DebugText 是否正常：待填写
-背景、Player、Enemy、Projectile 是否正常显示：待填写
+Projectile 命中 Enemy 时是否出现黄色 HitEffect：PASS，命中时可见黄色小方块
+HitEffect 位置是否接近 Projectile impact：PASS，位置接近 Projectile 命中点
+HitEffect 是否约 0.15 秒后消失：PASS，短暂显示后自动消失
+Player movement 是否正常：PASS
+Enemy movement 是否正常：PASS
+多方向射击是否正常：PASS
+fire cooldown 是否正常：PASS
+DebugText 是否正常：PASS
+背景、Player、Enemy、Projectile 是否正常显示：PASS
 ```
 
 人工验证重点不是视觉华丽程度，而是确认：
