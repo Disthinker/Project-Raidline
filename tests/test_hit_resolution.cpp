@@ -75,7 +75,7 @@ TEST(HitResolutionTest, HitReturnsProjectileCenter)
         Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
 
     const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
-
+    ASSERT_EQ(result.hitPositions.size(), 1u);
     EXPECT_FLOAT_EQ(result.hitPositions[0].x, 24.0f);
     EXPECT_FLOAT_EQ(result.hitPositions[0].y, 40.0f);
 }
@@ -130,8 +130,10 @@ TEST(HitResolutionTest, ExistingCleanupRulesStillHoldAfterReturningHitPositions)
         Enemy(Vec2{24.0f, 35.0f}, Vec2{20.0f, 20.0f})};
     const HitResolutionResult result = resolveProjectileEnemyHits(projectiles, enemies);
 
-    // projectiles / enemies 清理规则不回归
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_NEAR(result.hitPositions[0].x, 24.0f, 0.01f);
-    EXPECT_NEAR(result.hitPositions[0].y, 35.0f, 0.01f);
+    EXPECT_EQ(projectiles.size(), 1u);
+    EXPECT_EQ(enemies.size(), 0u);
+
+    ASSERT_EQ(result.hitPositions.size(), 1u);
+    EXPECT_FLOAT_EQ(result.hitPositions[0].x, 24.0f);
+    EXPECT_FLOAT_EQ(result.hitPositions[0].y, 40.0f);
 }
