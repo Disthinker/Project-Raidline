@@ -6,7 +6,7 @@ struct SDL_Texture;
 
 struct SDLTextureDeleter
 {
-    void operator()(SDL_Texture *texture) const;
+    void operator()(SDL_Texture *texture) const noexcept;
 };
 
 class Texture
