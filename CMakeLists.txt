@@ -31,6 +31,8 @@ add_executable(Project_Raidline
     src/gameplay_world.cpp
     src/hit_effect.h
     src/hit_effect.cpp
+    src/texture.h
+    src/texture.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -198,6 +200,19 @@ target_include_directories(HitEffectTest PRIVATE src)
 
 gtest_discover_tests(HitEffectTest)
 
+# test texture
+add_executable(TextureTest
+    tests/test_texture.cpp
+    src/texture.h
+    src/texture.cpp
+)
+
+target_compile_features(TextureTest PRIVATE cxx_std_20)
+set_target_properties(TextureTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(TextureTest PRIVATE GTest::gtest_main SDL3::SDL3)
+target_include_directories(TextureTest PRIVATE src)
+
+gtest_discover_tests(TextureTest)
 
 
 # utf-8
@@ -212,4 +227,5 @@ if(MSVC)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(HitEffectTest PRIVATE /utf-8)
+    target_compile_options(TextureTest PRIVATE /utf-8)
 endif()
