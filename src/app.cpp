@@ -1,8 +1,10 @@
 // Implementation of the App class
+#include "app.h"
+
 #include <fmt/core.h>
 #include <SDL3_image/SDL_image.h>
 #include <string>
-#include "app.h"
+#include <utility>
 
 namespace
 {
@@ -28,19 +30,22 @@ bool App::loadTextures()
     const std::string playerPath =
         assetRoot + "characters/protagonist_left_minimal_256x320.png";
 
-    backgroundTexture_ = IMG_LoadTexture(renderer_, backgroundPath.c_str());
-    if (!backgroundTexture_)
+    Texture backgroundTexture{IMG_LoadTexture(renderer_, backgroundPath.c_str())};
+    if (!backgroundTexture.valid())
     {
         fmt::print("IMG_LoadTexture failed for background: {}\n", SDL_GetError());
         return false;
     }
 
-    playerTexture_ = IMG_LoadTexture(renderer_, playerPath.c_str());
-    if (!playerTexture_)
+    Texture playerTexture{IMG_LoadTexture(renderer_, playerPath.c_str())};
+    if (!playerTexture.valid())
     {
         fmt::print("IMG_LoadTexture failed for player: {}\n", SDL_GetError());
         return false;
     }
+
+    backgroundTexture_ = std::move(backgroundTexture);
+    playerTexture_ = std::move(playerTexture);
 
     return true;
 }
@@ -148,7 +153,7 @@ void App::renderDebugText()
 
 void App::renderBackground()
 {
-    SDL_RenderTexture(renderer_, backgroundTexture_, nullptr, nullptr);
+    SDL_RenderTexture(renderer_, backgroundTexture_.get(), nullptr, nullptr);
 }
 
 void App::renderProjectiles()
@@ -185,7 +190,7 @@ void App::renderPlayer()
         spriteY,
         spriteW,
         spriteH};
-    SDL_RenderTexture(renderer_, playerTexture_, nullptr, &playerRect);
+    SDL_RenderTexture(renderer_, playerTexture_.get(), nullptr, &playerRect);
 }
 
 void App::renderEnemies()
@@ -253,11 +258,8 @@ void App::render()
 // Shutdown SDL and destroy window and renderer
 void App::shutdown()
 {
-    SDL_DestroyTexture(backgroundTexture_);
-    backgroundTexture_ = nullptr;
-
-    SDL_DestroyTexture(playerTexture_);
-    playerTexture_ = nullptr;
+    backgroundTexture_.reset();
+    playerTexture_.reset();
 
     SDL_DestroyRenderer(renderer_);
     renderer_ = nullptr;

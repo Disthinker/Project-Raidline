@@ -1,9 +1,10 @@
 #pragma once
 
-#include <SDL3/SDL.h>
 #include "gameplay_input.h"
 #include "gameplay_world.h"
 #include "input_system.h"
+#include "texture.h"
+#include <SDL3/SDL.h>
 
 class App
 {
@@ -19,8 +20,8 @@ private:
     bool running_{false};
     GameplayWorld world_;
 
-    SDL_Texture *backgroundTexture_{};
-    SDL_Texture *playerTexture_{};
+    Texture backgroundTexture_;
+    Texture playerTexture_;
 
     bool loadTextures();
     bool initialize();

@@ -1,5 +1,5 @@
-#include <SDL3/SDL.h>
 #include "texture.h"
+#include <SDL3/SDL.h>
 
 void SDLTextureDeleter::operator()(SDL_Texture *texture) const noexcept
 {
