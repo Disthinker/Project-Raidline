@@ -79,6 +79,7 @@ bool App::initialize()
     if (!loadTextures())
     {
         fmt::print("loadTextures failed: {}\n", SDL_GetError());
+        shutdown();
         return false;
     }
 
