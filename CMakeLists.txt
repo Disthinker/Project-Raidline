@@ -33,6 +33,8 @@ add_executable(Project_Raidline
     src/hit_effect.cpp
     src/texture.h
     src/texture.cpp
+    src/animation.h
+    src/animation.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -214,6 +216,19 @@ target_include_directories(TextureTest PRIVATE src)
 
 gtest_discover_tests(TextureTest)
 
+# test animation
+add_executable(AnimationTest
+    tests/test_animation.cpp
+    src/animation.h
+    src/animation.cpp
+)
+
+target_compile_features(AnimationTest PRIVATE cxx_std_20)
+set_target_properties(AnimationTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(AnimationTest PRIVATE GTest::gtest_main)
+target_include_directories(AnimationTest PRIVATE src)
+
+gtest_discover_tests(AnimationTest)
 
 # utf-8
 if(MSVC)
@@ -228,4 +243,5 @@ if(MSVC)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(HitEffectTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
+    target_compile_options(AnimationTest PRIVATE /utf-8)
 endif()
