@@ -57,7 +57,7 @@ void Animator::update(float deltaTime)
         }
         if (playMode_ == AnimationPlayMode::Loop)
         {
-            currentFrameIndex_ = 1;
+            currentFrameIndex_ = 0;
             continue;
         }
         currentFrameIndex_ = clip_.frameCount() - 1;
