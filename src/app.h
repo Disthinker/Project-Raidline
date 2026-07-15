@@ -22,6 +22,7 @@ private:
 
     Texture backgroundTexture_;
     Texture playerTexture_;
+    Texture playerMoveHorizontalTexture_;
 
     bool loadTextures();
     bool initialize();

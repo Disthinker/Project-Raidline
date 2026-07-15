@@ -395,3 +395,23 @@ TEST(PlayerTest, MovementAnimationLoopsAcrossSixFrames)
     EXPECT_TRUE(player.isMoving());
     EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
 }
+
+// Player 顶着边界继续按移动键时，位置虽然不再变化，
+// 但仍存在移动意图，因此移动动画应该继续推进。
+TEST(PlayerTest, MovementIntentAtBoundaryStillAdvancesAnimation)
+{
+    GameplayInput input{};
+    input.moveLeft = true;
+
+    Player player(0.0f, 100.0f);
+
+    player.update(
+        input,
+        0.10f,
+        1280.0f,
+        720.0f);
+
+    EXPECT_FLOAT_EQ(player.position().x, 0.0f);
+    EXPECT_TRUE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
+}
