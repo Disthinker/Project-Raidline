@@ -352,7 +352,6 @@ void App::shutdown()
     backgroundTexture_.reset();
 
     SDL_DestroyRenderer(renderer_);
-    SDL_DestroyRenderer(renderer_);
     renderer_ = nullptr;
 
     SDL_DestroyWindow(window_);
