@@ -84,6 +84,8 @@ add_executable(PlayerTest
     src/player.cpp
     src/player.h
     src/gameplay_input.h
+    src/animation.h
+    src/animation.cpp
 )
 
 target_compile_features(PlayerTest PRIVATE cxx_std_20)
@@ -181,6 +183,8 @@ add_executable(GameplayWorldTest
     src/collision.h
     src/hit_effect.cpp
     src/hit_effect.h
+    src/animation.h
+    src/animation.cpp
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
