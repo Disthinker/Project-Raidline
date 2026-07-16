@@ -22,6 +22,17 @@ namespace
     constexpr float kPlayerMoveRightRowY{320.0f};
 
     constexpr std::size_t kPlayerMoveFrameCount{6};
+
+    constexpr float kEnemySpriteWidth{64.0f};
+    constexpr float kEnemySpriteHeight{80.0f};
+
+    constexpr float kEnemyMoveSourceFrameWidth{256.0f};
+    constexpr float kEnemyMoveSourceFrameHeight{320.0f};
+
+    constexpr float kEnemyMoveLeftRowY{0.0f};
+    constexpr float kEnemyMoveRightRowY{320.0f};
+
+    constexpr std::size_t kEnemyMoveFrameCount{6};
 }
 
 bool App::loadTextures()
@@ -42,6 +53,10 @@ bool App::loadTextures()
         assetRoot +
         "characters/player/default/"
         "player_default_move_horizontal_6f_1536x640.png";
+    const std::string enemyMoveHorizontalPath =
+        assetRoot +
+        "characters/enemy/default/"
+        "enemy_default_move_horizontal_6f_1536x640.png";
 
     Texture backgroundTexture{IMG_LoadTexture(renderer_, backgroundPath.c_str())};
     if (!backgroundTexture.valid())
@@ -69,6 +84,27 @@ bool App::loadTextures()
         return false;
     }
 
+    Texture enemyMoveHorizontalTexture{
+        IMG_LoadTexture(
+            renderer_,
+            enemyMoveHorizontalPath.c_str())};
+    if (!enemyMoveHorizontalTexture.valid())
+    {
+        fmt::print(
+            "IMG_LoadTexture failed for horizontal enemy movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
+
+    if (!SDL_SetTextureScaleMode(
+            enemyMoveHorizontalTexture.get(),
+            SDL_SCALEMODE_NEAREST))
+    {
+        fmt::print(
+            "SDL_SetTextureScaleMode failed for enemy movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
     if (!SDL_SetTextureScaleMode(
             playerTexture.get(),
             SDL_SCALEMODE_NEAREST))
@@ -92,6 +128,8 @@ bool App::loadTextures()
     playerTexture_ = std::move(playerTexture);
     playerMoveHorizontalTexture_ =
         std::move(playerMoveHorizontalTexture);
+    enemyMoveHorizontalTexture_ =
+        std::move(enemyMoveHorizontalTexture);
 
     return true;
 }
@@ -288,13 +326,43 @@ void App::renderEnemies()
     for (const auto &enemy : world_.enemies())
     {
         const Rect bounds = enemy.bounds();
+        const float spriteX =
+            bounds.position.x +
+            (bounds.size.x - kEnemySpriteWidth) / 2.0f;
 
-        SDL_FRect rect{
-            bounds.position.x,
-            bounds.position.y,
-            bounds.size.x,
-            bounds.size.y};
-        SDL_RenderFillRect(renderer_, &rect);
+        const float spriteY =
+            bounds.position.y +
+            (bounds.size.y - kEnemySpriteHeight) / 2.0f;
+
+        SDL_FRect enemyRect{
+            spriteX,
+            spriteY,
+            kEnemySpriteWidth,
+            kEnemySpriteHeight};
+        std::size_t frameIndex =
+            enemy.currentAnimationFrameIndex();
+        if (frameIndex >= kEnemyMoveFrameCount)
+        {
+            frameIndex = 0;
+        }
+        const float sourceY =
+            enemy.facingDirection() ==
+                    EnemyFacingDirection::Left
+                ? kEnemyMoveLeftRowY
+                : kEnemyMoveRightRowY;
+        const float sourceX =
+            static_cast<float>(frameIndex) *
+            kEnemyMoveSourceFrameWidth;
+        SDL_FRect sourceRect{
+            sourceX,
+            sourceY,
+            kEnemyMoveSourceFrameWidth,
+            kEnemyMoveSourceFrameHeight};
+        SDL_RenderTexture(
+            renderer_,
+            enemyMoveHorizontalTexture_.get(),
+            &sourceRect,
+            &enemyRect);
     }
 }
 
@@ -347,6 +415,7 @@ void App::render()
 // Shutdown SDL and destroy window and renderer
 void App::shutdown()
 {
+    enemyMoveHorizontalTexture_.reset();
     playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
     backgroundTexture_.reset();
