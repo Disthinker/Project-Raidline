@@ -130,6 +130,8 @@ add_executable(EnemyTest
     tests/test_enemy.cpp
     src/enemy.cpp
     src/enemy.h
+    src/animation.h
+    src/animation.cpp
 )
 
 target_compile_features(EnemyTest PRIVATE cxx_std_20)
@@ -154,6 +156,8 @@ add_executable(HitResolutionTest
     src/vec2.h
     src/hit_effect.cpp
     src/hit_effect.h
+    src/animation.h
+    src/animation.cpp
 )
 
 target_compile_features(HitResolutionTest PRIVATE cxx_std_20)

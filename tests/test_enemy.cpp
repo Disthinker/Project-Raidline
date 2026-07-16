@@ -116,3 +116,170 @@ TEST(EnemyTest, leftBoundaryBounce)
     EXPECT_FLOAT_EQ(updatedPos.x, 0.0f);
     EXPECT_FLOAT_EQ(updatedPos.y, initialPos.y);
 }
+
+namespace
+{
+    constexpr float kEnemyAnimationTestWorldWidth{1280.0f};
+
+    // Enemy 移动动画每帧持续 0.125 秒。
+    constexpr float kEnemyMoveFrameDuration{0.125f};
+    constexpr float kHalfEnemyMoveFrameDuration{0.0625f};
+}
+
+// 正水平速度应让 Enemy 初始朝右。
+TEST(EnemyTest, PositiveVelocityInitiallyFacesRight)
+{
+    Enemy enemy(
+        Vec2{100.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{100.0f, 0.0f});
+
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Right);
+    EXPECT_TRUE(enemy.isMoving());
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
+}
+
+// 负水平速度应让 Enemy 初始朝左。
+TEST(EnemyTest, NegativeVelocityInitiallyFacesLeft)
+{
+    Enemy enemy(
+        Vec2{100.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{-100.0f, 0.0f});
+
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Left);
+    EXPECT_TRUE(enemy.isMoving());
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
+}
+
+// 零水平速度的 Enemy 不应推进移动动画。
+// 当前确定性默认方向为 Right。
+TEST(EnemyTest, StationaryEnemyDoesNotAdvanceMovementAnimation)
+{
+    Enemy enemy(
+        Vec2{100.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{0.0f, 0.0f});
+
+    enemy.update(
+        10.0f,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_FALSE(enemy.isMoving());
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Right);
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
+}
+
+// 多次 update 的时间应在 Enemy Animator 中持续累积。
+TEST(EnemyTest, MovementTimeAccumulatesAndAdvancesAnimation)
+{
+    Enemy enemy(
+        Vec2{100.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{10.0f, 0.0f});
+
+    enemy.update(
+        kHalfEnemyMoveFrameDuration,
+        kEnemyAnimationTestWorldWidth);
+
+    ASSERT_TRUE(enemy.isMoving());
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
+
+    enemy.update(
+        kHalfEnemyMoveFrameDuration,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 1u);
+}
+
+// 撞到右边界后，速度和视觉方向都应切换为向左。
+TEST(EnemyTest, RightBoundaryBounceChangesFacingToLeft)
+{
+    Enemy enemy(
+        Vec2{1229.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{100.0f, 0.0f});
+
+    enemy.update(
+        0.02f,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
+    EXPECT_LT(enemy.velocity().x, 0.0f);
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Left);
+}
+
+// 撞到左边界后，速度和视觉方向都应切换为向右。
+TEST(EnemyTest, LeftBoundaryBounceChangesFacingToRight)
+{
+    Enemy enemy(
+        Vec2{1.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{-100.0f, 0.0f});
+
+    enemy.update(
+        0.02f,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 0.0f);
+    EXPECT_GT(enemy.velocity().x, 0.0f);
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Right);
+}
+
+// 反弹只改变方向，不应重置当前动画步态。
+TEST(EnemyTest, BouncePreservesAnimationProgress)
+{
+    Enemy enemy(
+        Vec2{1220.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{100.0f, 0.0f});
+
+    // 0.1875 = 1.5 个动画帧。
+    // 本次更新同时发生右边界反弹。
+    enemy.update(
+        0.1875f,
+        kEnemyAnimationTestWorldWidth);
+
+    ASSERT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Left);
+    ASSERT_EQ(enemy.currentAnimationFrameIndex(), 1u);
+
+    // 上一次保留了半帧时间；
+    // 再增加半帧，应进入 frame 2。
+    enemy.update(
+        kHalfEnemyMoveFrameDuration,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Left);
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 2u);
+}
+
+// 6 帧 Enemy 移动动画应能完整循环回 frame 0。
+TEST(EnemyTest, MovementAnimationLoopsAcrossSixFrames)
+{
+    Enemy enemy(
+        Vec2{100.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{10.0f, 0.0f});
+
+    // 6 × 0.125 = 0.75 秒。
+    enemy.update(
+        0.75f,
+        kEnemyAnimationTestWorldWidth);
+
+    EXPECT_TRUE(enemy.isMoving());
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
+}
