@@ -415,3 +415,52 @@ TEST(PlayerTest, MovementIntentAtBoundaryStillAdvancesAnimation)
     EXPECT_TRUE(player.isMoving());
     EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
 }
+
+// Player 向右移动后停止时，应回到 Idle 和 frame 0，
+// 同时保留最后一次有效的向右朝向。
+// App 依靠这组状态选择右向 sprite-sheet 的第 0 帧。
+TEST(
+    PlayerTest,
+    StoppingAfterRightMovementKeepsRightFacingAtFirstFrame)
+{
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        moveRight,
+        0.10f,
+        1280.0f,
+        720.0f);
+
+    ASSERT_TRUE(player.isMoving());
+    ASSERT_EQ(
+        player.currentAnimationFrameIndex(),
+        1u);
+    ASSERT_FLOAT_EQ(
+        player.facingDirection().x,
+        1.0f);
+    ASSERT_FLOAT_EQ(
+        player.facingDirection().y,
+        0.0f);
+
+    GameplayInput noInput{};
+
+    player.update(
+        noInput,
+        0.01f,
+        1280.0f,
+        720.0f);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(
+        player.currentAnimationFrameIndex(),
+        0u);
+    EXPECT_FLOAT_EQ(
+        player.facingDirection().x,
+        1.0f);
+    EXPECT_FLOAT_EQ(
+        player.facingDirection().y,
+        0.0f);
+}

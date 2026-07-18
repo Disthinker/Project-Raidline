@@ -275,13 +275,10 @@ void App::renderPlayer()
         spriteY,
         spriteW,
         spriteH};
-    const bool hasHorizontalMovementDirection =
+    const bool hasHorizontalFacingDirection =
         player.facingDirection().x != 0.0f;
 
-    const bool shouldRenderHorizontalMovement =
-        player.isMoving() &&
-        hasHorizontalMovementDirection;
-    if (!shouldRenderHorizontalMovement)
+    if (!hasHorizontalFacingDirection)
     {
         SDL_RenderTexture(
             renderer_,
@@ -290,16 +287,18 @@ void App::renderPlayer()
             &playerRect);
         return;
     }
-    const std::size_t frameIndex =
-        player.currentAnimationFrameIndex();
+
+    std::size_t frameIndex{0};
+
+    if (player.isMoving())
+    {
+        frameIndex =
+            player.currentAnimationFrameIndex();
+    }
+
     if (frameIndex >= kPlayerMoveFrameCount)
     {
-        SDL_RenderTexture(
-            renderer_,
-            playerTexture_.get(),
-            nullptr,
-            &playerRect);
-        return;
+        frameIndex = 0;
     }
     const float sourceX =
         static_cast<float>(frameIndex) *
@@ -322,7 +321,6 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
-    SDL_SetRenderDrawColor(renderer_, 180, 40, 40, 255);
     for (const auto &enemy : world_.enemies())
     {
         const Rect bounds = enemy.bounds();
