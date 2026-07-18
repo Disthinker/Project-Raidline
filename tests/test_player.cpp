@@ -227,3 +227,240 @@ TEST(PlayerTest, OppositeHorizontalInputsDoNotChangeFacingDirection)
     EXPECT_FLOAT_EQ(player.facingDirection().x, 0.0f);
     EXPECT_FLOAT_EQ(player.facingDirection().y, 1.0f);
 }
+
+namespace
+{
+    constexpr float kPlayerAnimationTestWorldWidth{1280.0f};
+    constexpr float kPlayerAnimationTestWorldHeight{720.0f};
+
+    // Player 当前移动动画每帧持续 0.09 秒。
+    constexpr float kBelowPlayerMoveFrameDuration{0.05f};
+    constexpr float kPastPlayerMoveFrameDuration{0.10f};
+}
+
+// Player 初始时应为 Idle，移动动画停在第 0 帧。
+TEST(PlayerTest, InitialAnimationStateIsIdle)
+{
+    Player player(640.0f, 360.0f);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 有效的向右输入应让 Player 进入 Moving。
+TEST(PlayerTest, MoveRightSetsMovingState)
+{
+    GameplayInput input{};
+    input.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        input,
+        0.01f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_TRUE(player.isMoving());
+
+    // 0.01 秒小于单帧 0.09 秒，因此仍处于 frame 0。
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 多次 update 的时间应在 Player 内部 Animator 中持续累积。
+TEST(PlayerTest, MovementTimeAccumulatesAndAdvancesAnimationFrame)
+{
+    GameplayInput input{};
+    input.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        input,
+        kBelowPlayerMoveFrameDuration,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    ASSERT_TRUE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+
+    player.update(
+        input,
+        kBelowPlayerMoveFrameDuration,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    // 0.05 + 0.05 = 0.10，已超过一帧的 0.09 秒。
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
+}
+
+// 一直没有移动输入时，Player 保持 Idle，动画不应自行推进。
+TEST(PlayerTest, NoInputKeepsIdleAnimationAtFirstFrame)
+{
+    GameplayInput noInput{};
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        noInput,
+        1.0f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 从 Moving 变为 Idle 时，移动动画应重置到第 0 帧。
+TEST(PlayerTest, StoppingMovementResetsAnimation)
+{
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        moveRight,
+        kPastPlayerMoveFrameDuration,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    ASSERT_TRUE(player.isMoving());
+    ASSERT_EQ(player.currentAnimationFrameIndex(), 1u);
+
+    GameplayInput noInput{};
+
+    player.update(
+        noInput,
+        0.01f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 左右输入互相抵消后，没有有效移动方向，不应启动移动动画。
+TEST(PlayerTest, OppositeHorizontalInputsDoNotStartMovementAnimation)
+{
+    GameplayInput input{};
+    input.moveLeft = true;
+    input.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        input,
+        1.0f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 垂直移动同样属于 Moving；是否有对应美术资源由 App 渲染层决定。
+TEST(PlayerTest, VerticalInputSetsMovingState)
+{
+    GameplayInput input{};
+    input.moveUp = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        input,
+        0.01f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_TRUE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// 当前 Player 移动 Clip 有 6 帧，应能完整循环回到 frame 0。
+TEST(PlayerTest, MovementAnimationLoopsAcrossSixFrames)
+{
+    GameplayInput input{};
+    input.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    // 一轮时长为 6 × 0.09 = 0.54 秒。
+    // 使用 0.55 秒可完整跨过一轮，并在 frame 0 中保留少量时间。
+    player.update(
+        input,
+        0.55f,
+        kPlayerAnimationTestWorldWidth,
+        kPlayerAnimationTestWorldHeight);
+
+    EXPECT_TRUE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
+}
+
+// Player 顶着边界继续按移动键时，位置虽然不再变化，
+// 但仍存在移动意图，因此移动动画应该继续推进。
+TEST(PlayerTest, MovementIntentAtBoundaryStillAdvancesAnimation)
+{
+    GameplayInput input{};
+    input.moveLeft = true;
+
+    Player player(0.0f, 100.0f);
+
+    player.update(
+        input,
+        0.10f,
+        1280.0f,
+        720.0f);
+
+    EXPECT_FLOAT_EQ(player.position().x, 0.0f);
+    EXPECT_TRUE(player.isMoving());
+    EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
+}
+
+// Player 向右移动后停止时，应回到 Idle 和 frame 0，
+// 同时保留最后一次有效的向右朝向。
+// App 依靠这组状态选择右向 sprite-sheet 的第 0 帧。
+TEST(
+    PlayerTest,
+    StoppingAfterRightMovementKeepsRightFacingAtFirstFrame)
+{
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+
+    Player player(640.0f, 360.0f);
+
+    player.update(
+        moveRight,
+        0.10f,
+        1280.0f,
+        720.0f);
+
+    ASSERT_TRUE(player.isMoving());
+    ASSERT_EQ(
+        player.currentAnimationFrameIndex(),
+        1u);
+    ASSERT_FLOAT_EQ(
+        player.facingDirection().x,
+        1.0f);
+    ASSERT_FLOAT_EQ(
+        player.facingDirection().y,
+        0.0f);
+
+    GameplayInput noInput{};
+
+    player.update(
+        noInput,
+        0.01f,
+        1280.0f,
+        720.0f);
+
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(
+        player.currentAnimationFrameIndex(),
+        0u);
+    EXPECT_FLOAT_EQ(
+        player.facingDirection().x,
+        1.0f);
+    EXPECT_FLOAT_EQ(
+        player.facingDirection().y,
+        0.0f);
+}

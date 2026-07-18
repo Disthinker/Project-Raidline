@@ -5,6 +5,7 @@
 #include <SDL3_image/SDL_image.h>
 #include <string>
 #include <utility>
+#include <cstddef>
 
 namespace
 {
@@ -13,6 +14,25 @@ namespace
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
+
+    constexpr float kPlayerMoveSourceFrameWidth{256.0f};
+    constexpr float kPlayerMoveSourceFrameHeight{320.0f};
+
+    constexpr float kPlayerMoveLeftRowY{0.0f};
+    constexpr float kPlayerMoveRightRowY{320.0f};
+
+    constexpr std::size_t kPlayerMoveFrameCount{6};
+
+    constexpr float kEnemySpriteWidth{64.0f};
+    constexpr float kEnemySpriteHeight{80.0f};
+
+    constexpr float kEnemyMoveSourceFrameWidth{256.0f};
+    constexpr float kEnemyMoveSourceFrameHeight{320.0f};
+
+    constexpr float kEnemyMoveLeftRowY{0.0f};
+    constexpr float kEnemyMoveRightRowY{320.0f};
+
+    constexpr std::size_t kEnemyMoveFrameCount{6};
 }
 
 bool App::loadTextures()
@@ -29,6 +49,14 @@ bool App::loadTextures()
         assetRoot + "backgrounds/project_raidline_test_map_1280x720.png";
     const std::string playerPath =
         assetRoot + "characters/protagonist_left_minimal_256x320.png";
+    const std::string playerMoveHorizontalPath =
+        assetRoot +
+        "characters/player/default/"
+        "player_default_move_horizontal_6f_1536x640.png";
+    const std::string enemyMoveHorizontalPath =
+        assetRoot +
+        "characters/enemy/default/"
+        "enemy_default_move_horizontal_6f_1536x640.png";
 
     Texture backgroundTexture{IMG_LoadTexture(renderer_, backgroundPath.c_str())};
     if (!backgroundTexture.valid())
@@ -44,8 +72,64 @@ bool App::loadTextures()
         return false;
     }
 
+    Texture playerMoveHorizontalTexture{
+        IMG_LoadTexture(
+            renderer_,
+            playerMoveHorizontalPath.c_str())};
+    if (!playerMoveHorizontalTexture.valid())
+    {
+        fmt::print(
+            "IMG_LoadTexture failed for horizontal player movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
+
+    Texture enemyMoveHorizontalTexture{
+        IMG_LoadTexture(
+            renderer_,
+            enemyMoveHorizontalPath.c_str())};
+    if (!enemyMoveHorizontalTexture.valid())
+    {
+        fmt::print(
+            "IMG_LoadTexture failed for horizontal enemy movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
+
+    if (!SDL_SetTextureScaleMode(
+            enemyMoveHorizontalTexture.get(),
+            SDL_SCALEMODE_NEAREST))
+    {
+        fmt::print(
+            "SDL_SetTextureScaleMode failed for enemy movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
+    if (!SDL_SetTextureScaleMode(
+            playerTexture.get(),
+            SDL_SCALEMODE_NEAREST))
+    {
+        fmt::print(
+            "SDL_SetTextureScaleMode failed for player: {}\n",
+            SDL_GetError());
+        return false;
+    }
+    if (!SDL_SetTextureScaleMode(
+            playerMoveHorizontalTexture.get(),
+            SDL_SCALEMODE_NEAREST))
+    {
+        fmt::print(
+            "SDL_SetTextureScaleMode failed for player movement: {}\n",
+            SDL_GetError());
+        return false;
+    }
+
     backgroundTexture_ = std::move(backgroundTexture);
     playerTexture_ = std::move(playerTexture);
+    playerMoveHorizontalTexture_ =
+        std::move(playerMoveHorizontalTexture);
+    enemyMoveHorizontalTexture_ =
+        std::move(enemyMoveHorizontalTexture);
 
     return true;
 }
@@ -191,22 +275,92 @@ void App::renderPlayer()
         spriteY,
         spriteW,
         spriteH};
-    SDL_RenderTexture(renderer_, playerTexture_.get(), nullptr, &playerRect);
+    const bool hasHorizontalFacingDirection =
+        player.facingDirection().x != 0.0f;
+
+    if (!hasHorizontalFacingDirection)
+    {
+        SDL_RenderTexture(
+            renderer_,
+            playerTexture_.get(),
+            nullptr,
+            &playerRect);
+        return;
+    }
+
+    std::size_t frameIndex{0};
+
+    if (player.isMoving())
+    {
+        frameIndex =
+            player.currentAnimationFrameIndex();
+    }
+
+    if (frameIndex >= kPlayerMoveFrameCount)
+    {
+        frameIndex = 0;
+    }
+    const float sourceX =
+        static_cast<float>(frameIndex) *
+        kPlayerMoveSourceFrameWidth;
+    const float sourceY =
+        player.facingDirection().x < 0.0f
+            ? kPlayerMoveLeftRowY
+            : kPlayerMoveRightRowY;
+    SDL_FRect sourceRect{
+        sourceX,
+        sourceY,
+        kPlayerMoveSourceFrameWidth,
+        kPlayerMoveSourceFrameHeight};
+    SDL_RenderTexture(
+        renderer_,
+        playerMoveHorizontalTexture_.get(),
+        &sourceRect,
+        &playerRect);
 }
 
 void App::renderEnemies()
 {
-    SDL_SetRenderDrawColor(renderer_, 180, 40, 40, 255);
     for (const auto &enemy : world_.enemies())
     {
         const Rect bounds = enemy.bounds();
+        const float spriteX =
+            bounds.position.x +
+            (bounds.size.x - kEnemySpriteWidth) / 2.0f;
 
-        SDL_FRect rect{
-            bounds.position.x,
-            bounds.position.y,
-            bounds.size.x,
-            bounds.size.y};
-        SDL_RenderFillRect(renderer_, &rect);
+        const float spriteY =
+            bounds.position.y +
+            (bounds.size.y - kEnemySpriteHeight) / 2.0f;
+
+        SDL_FRect enemyRect{
+            spriteX,
+            spriteY,
+            kEnemySpriteWidth,
+            kEnemySpriteHeight};
+        std::size_t frameIndex =
+            enemy.currentAnimationFrameIndex();
+        if (frameIndex >= kEnemyMoveFrameCount)
+        {
+            frameIndex = 0;
+        }
+        const float sourceY =
+            enemy.facingDirection() ==
+                    EnemyFacingDirection::Left
+                ? kEnemyMoveLeftRowY
+                : kEnemyMoveRightRowY;
+        const float sourceX =
+            static_cast<float>(frameIndex) *
+            kEnemyMoveSourceFrameWidth;
+        SDL_FRect sourceRect{
+            sourceX,
+            sourceY,
+            kEnemyMoveSourceFrameWidth,
+            kEnemyMoveSourceFrameHeight};
+        SDL_RenderTexture(
+            renderer_,
+            enemyMoveHorizontalTexture_.get(),
+            &sourceRect,
+            &enemyRect);
     }
 }
 
@@ -259,8 +413,10 @@ void App::render()
 // Shutdown SDL and destroy window and renderer
 void App::shutdown()
 {
-    backgroundTexture_.reset();
+    enemyMoveHorizontalTexture_.reset();
+    playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
+    backgroundTexture_.reset();
 
     SDL_DestroyRenderer(renderer_);
     renderer_ = nullptr;

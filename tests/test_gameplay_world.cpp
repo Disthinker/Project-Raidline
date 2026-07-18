@@ -441,3 +441,65 @@ TEST(GameplayWorldTest, NoHitDoesNotCreateHitEffect)
 
     EXPECT_TRUE(world.hitEffects().empty());
 }
+
+// GameplayWorld 更新 Enemy 时，也应推进其移动动画。
+// 这保证 App 能从 world.enemies() 读取有效 frame index。
+TEST(
+    GameplayWorldTest,
+    EnemyAnimationAdvancesThroughWorldUpdate)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+
+    const Enemy &initialEnemy = world.enemies()[0];
+
+    EXPECT_EQ(
+        initialEnemy.facingDirection(),
+        EnemyFacingDirection::Right);
+    EXPECT_EQ(
+        initialEnemy.currentAnimationFrameIndex(),
+        0u);
+
+    // Enemy 每帧动画持续 0.125 秒。
+    world.update(input, 0.125f);
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+
+    const Enemy &updatedEnemy = world.enemies()[0];
+
+    EXPECT_EQ(
+        updatedEnemy.facingDirection(),
+        EnemyFacingDirection::Right);
+    EXPECT_EQ(
+        updatedEnemy.currentAnimationFrameIndex(),
+        1u);
+}
+
+// Enemy 在 GameplayWorld 中撞到右边界后，
+// App 应能读取到 Left 方向用于选择 sprite-sheet 行。
+TEST(
+    GameplayWorldTest,
+    EnemyBounceExposesLeftFacingDirectionForRendering)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+
+    world.update(input, 10.0f);
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+
+    const Enemy &enemy = world.enemies()[0];
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
+    EXPECT_LT(enemy.velocity().x, 0.0f);
+    EXPECT_EQ(
+        enemy.facingDirection(),
+        EnemyFacingDirection::Left);
+
+    // 防止渲染层得到非法 source frame。
+    EXPECT_LT(
+        enemy.currentAnimationFrameIndex(),
+        6u);
+}
