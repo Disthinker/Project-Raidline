@@ -48,3 +48,15 @@ float Particle::size() const
 {
     return size_;
 }
+
+void Particle::update(float deltaTime)
+{
+    if (deltaTime <= 0.0f)
+    {
+        throw std::invalid_argument("Delta time must be greater than zero");
+    }
+
+    position_.x += velocity_.x * deltaTime;
+    position_.y += velocity_.y * deltaTime;
+    remainingLifetime_ -= deltaTime;
+}
