@@ -893,52 +893,25 @@ HitEffect cleanup
 
 ## 十六、本地验证与 Git 状态
 
-当前开发分支：
+本周已完成人工运行验收。
+
+确认结果包括：
 
 ```text
-week11-basic-animation-system
-```
-
-截至 DevLog 生成时，分支相对 `main`：
-
-```text
-ahead 11
-behind 0
-```
-
-人工运行：
-
-```text
-PASS
-```
-
-最终提交或创建 PR 前仍需再次记录：
-
-```text
-cmake --build --preset windows-debug
-ctest --preset windows-debug -R Animation --output-on-failure
-ctest --preset windows-debug -R PlayerTest --output-on-failure
-ctest --preset windows-debug -R EnemyTest --output-on-failure
-ctest --preset windows-debug -R GameplayWorldTest --output-on-failure
-ctest --preset windows-debug --output-on-failure
-git diff --check
-git status
-```
-
-最终结果填写：
-
-```text
-Build：待最终收口确认
-AnimationTest：待最终收口确认
-PlayerTest：待最终收口确认
-EnemyTest：待最终收口确认
-GameplayWorldTest：待最终收口确认
-全量 CTest：待最终收口确认
-Windows Actions：待 PR 后确认
-Ubuntu Actions：待 PR 后确认
-PR 编号：待创建
-main 合并状态：待完成
-最终工作区：待合并后确认 clean
+背景正常显示
+Player 静止显示正常
+Player 向左移动动画正常
+Player 向右移动动画正常
+Player 停止水平移动后保持最后朝向
+Player 动画能够循环
+Enemy 水平移动动画正常
+Enemy 左右边界反弹后视觉方向正确切换
+Enemy 反弹时动画步态连续
+Projectile 正常移动
+Projectile 可以命中 Enemy
+HitEffect 仍为 Week 9 的黄色 impact marker
+HitEffect 能够按生命周期自动清理
+程序可以正常退出
 ```
 
 ---
