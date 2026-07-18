@@ -53,10 +53,15 @@ void Particle::update(float deltaTime)
 {
     if (deltaTime <= 0.0f)
     {
-        throw std::invalid_argument("Delta time must be greater than zero");
+        return;
     }
 
     position_.x += velocity_.x * deltaTime;
     position_.y += velocity_.y * deltaTime;
+
     remainingLifetime_ -= deltaTime;
+    if (remainingLifetime_ < 0.0f)
+    {
+        remainingLifetime_ = 0.0f;
+    }
 }
