@@ -1,5 +1,6 @@
 #include "particle.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 Particle::Particle(
@@ -64,4 +65,14 @@ void Particle::update(float deltaTime)
     {
         remainingLifetime_ = 0.0f;
     }
+}
+
+bool Particle::isExpired() const
+{
+    return remainingLifetime_ <= 0.0f;
+}
+
+float Particle::normalizedLifetime() const
+{
+    return std::clamp(remainingLifetime_ / duration_, 0.0f, 1.0f);
 }
