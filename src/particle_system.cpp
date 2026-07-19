@@ -1,6 +1,5 @@
 #include "particle_system.h"
 #include <cmath>
-#include <numbers>
 #include <random>
 
 #include <stdexcept>
@@ -40,9 +39,10 @@ const std::vector<Particle> &ParticleSystem::particles() const
 
 void ParticleSystem::emitImpact(Vec2 position)
 {
+    constexpr float kTwoPi{6.28318530718f};
     std::uniform_real_distribution<float> angleDistribution{
         0.0f,
-        2.0f * std::numbers::pi_v<float>};
+        kTwoPi};
     std::uniform_real_distribution<float> speedDistribution{
         config_.minSpeed,
         config_.maxSpeed};
