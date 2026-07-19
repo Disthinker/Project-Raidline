@@ -40,23 +40,30 @@ const std::vector<Particle> &ParticleSystem::particles() const
 
 void ParticleSystem::emitImpact(Vec2 position)
 {
-    float angle{};
-    float speed{};
-    float lifetime{};
-    float size{};
-    for (int i{0}; i < config_.particleCount; i++)
+    std::uniform_real_distribution<float> angleDistribution{
+        0.0f,
+        2.0f * std::numbers::pi_v<float>};
+    std::uniform_real_distribution<float> speedDistribution{
+        config_.minSpeed,
+        config_.maxSpeed};
+    std::uniform_real_distribution<float> lifetimeDistribution{
+        config_.minLifetime,
+        config_.maxLifetime};
+    std::uniform_real_distribution<float> sizeDistribution{
+        config_.minSize,
+        config_.maxSize};
+
+    for (std::size_t i{0}; i < config_.particleCount; ++i)
     {
-        angle = static_cast<float>(rand()) / RAND_MAX * 360.0f;
-        speed = config_.minSpeed + static_cast<float>(rand()) / RAND_MAX *
-                                       (config_.maxSpeed - config_.minSpeed);
-        lifetime = config_.minLifetime + static_cast<float>(rand()) / RAND_MAX *
-                                             (config_.maxLifetime - config_.minLifetime);
-        size = config_.minSize + static_cast<float>(rand()) / RAND_MAX *
-                                     (config_.maxSize - config_.minSize);
-        particles_.emplace_back(Particle{
-            position,
-            Vec2{speed * cos(angle), speed * sin(angle)},
-            lifetime,
-            size});
+        const float angle = angleDistribution(rng_);
+        const float speed = speedDistribution(rng_);
+        const float lifetime = lifetimeDistribution(rng_);
+        const float size = sizeDistribution(rng_);
+
+        const Vec2 velocity{
+            std::cos(angle) * speed,
+            std::sin(angle) * speed};
+
+        particles_.emplace_back(position, velocity, lifetime, size);
     }
 }
