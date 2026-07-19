@@ -10,9 +10,6 @@ namespace
     constexpr float kProjectileSpeed{600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
-
-    constexpr float kHitEffectLifetime{0.15f};
-    constexpr float kHitEffectSize{16.0f};
 }
 
 GameplayWorld::GameplayWorld()
@@ -61,7 +58,6 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
     for (auto &position : hitResult.hitPositions)
     {
         particleSystem_.emitImpact(position);
-        hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
     }
 
     projectiles_.erase(
