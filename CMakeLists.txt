@@ -252,6 +252,22 @@ target_include_directories(ParticleTest PRIVATE src)
 
 gtest_discover_tests(ParticleTest)
 
+# test particle_system
+add_executable(ParticleSystemTest
+    tests/test_particle_system.cpp
+    src/particle_system.h
+    src/particle_system.cpp
+    src/particle.h
+    src/particle.cpp
+)
+
+target_compile_features(ParticleSystemTest PRIVATE cxx_std_20)
+set_target_properties(ParticleSystemTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ParticleSystemTest PRIVATE GTest::gtest_main)
+target_include_directories(ParticleSystemTest PRIVATE src)
+
+gtest_discover_tests(ParticleSystemTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -267,4 +283,5 @@ if(MSVC)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
+    target_compile_options(ParticleSystemTest PRIVATE /utf-8)
 endif()
