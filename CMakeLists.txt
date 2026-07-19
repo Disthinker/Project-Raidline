@@ -238,6 +238,20 @@ target_include_directories(AnimationTest PRIVATE src)
 
 gtest_discover_tests(AnimationTest)
 
+# test particle
+add_executable(ParticleTest
+    tests/test_particle.cpp
+    src/particle.h
+    src/particle.cpp
+)
+
+target_compile_features(ParticleTest PRIVATE cxx_std_20)
+set_target_properties(ParticleTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ParticleTest PRIVATE GTest::gtest_main)
+target_include_directories(ParticleTest PRIVATE src)
+
+gtest_discover_tests(ParticleTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -252,4 +266,5 @@ if(MSVC)
     target_compile_options(HitEffectTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
+    target_compile_options(ParticleTest PRIVATE /utf-8)
 endif()
