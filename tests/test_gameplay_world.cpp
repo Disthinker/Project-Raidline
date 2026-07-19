@@ -331,8 +331,8 @@ TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
 
 namespace
 {
-    constexpr float kExpectedHitEffectX{656.0f};
-    constexpr float kExpectedHitEffectY{140.0f};
+    constexpr float kExpectedImpactX{656.0f};
+    constexpr float kExpectedImpactY{140.0f};
     constexpr float kExpectedHitEffectLifetime{0.15f};
     constexpr float kExpectedHitEffectSize{16.0f};
     constexpr float kFloatEpsilon{0.0001f};
@@ -345,34 +345,6 @@ namespace
         GameplayInput noInput{};
         world.update(noInput, 0.35f);
     }
-}
-
-// 初始 HitEffect 集合为空
-TEST(GameplayWorldTest, InitialHitEffectsEmpty)
-{
-    GameplayWorld world;
-
-    EXPECT_TRUE(world.hitEffects().empty());
-}
-
-// 没有 Projectile 命中时，不生成 HitEffect
-TEST(GameplayWorldTest, NoHitDoesNotCreateHitEffect)
-{
-    GameplayWorld world;
-
-    GameplayInput noInput{};
-    world.update(noInput, 0.10f);
-
-    EXPECT_TRUE(world.hitEffects().empty());
-}
-
-TEST(GameplayWorldTest, ProjectileHitDoesNotCreateLegacyHitEffect)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    EXPECT_TRUE(world.hitEffects().empty());
 }
 
 // GameplayWorld 更新 Enemy 时，也应推进其移动动画。
@@ -447,8 +419,8 @@ TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
 
     for (const Particle &particle : world.particles())
     {
-        EXPECT_FLOAT_EQ(particle.position().x, kExpectedHitEffectX);
-        EXPECT_FLOAT_EQ(particle.position().y, kExpectedHitEffectY);
+        EXPECT_FLOAT_EQ(particle.position().x, kExpectedImpactX);
+        EXPECT_FLOAT_EQ(particle.position().y, kExpectedImpactY);
         EXPECT_FLOAT_EQ(
             particle.remainingLifetime(),
             particle.duration());

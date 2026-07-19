@@ -22,15 +22,6 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
     // 更新粒子
     particleSystem_.update(deltaTime);
-    // 更新命中反馈
-    for (auto &hitEffect : hitEffects_)
-    {
-        hitEffect.update(deltaTime);
-    }
-    hitEffects_.erase(std::remove_if(hitEffects_.begin(), hitEffects_.end(),
-                                     [](const HitEffect &effect)
-                                     { return effect.isExpired(); }),
-                      hitEffects_.end());
 
     player_.update(input, deltaTime, kWorldWidth, kWorldHeight);
 
@@ -84,11 +75,6 @@ const std::vector<Projectile> &GameplayWorld::projectiles() const
 const std::vector<Enemy> &GameplayWorld::enemies() const
 {
     return enemies_;
-}
-
-const std::vector<HitEffect> &GameplayWorld::hitEffects() const
-{
-    return hitEffects_;
 }
 
 const std::vector<Particle> &GameplayWorld::particles() const
