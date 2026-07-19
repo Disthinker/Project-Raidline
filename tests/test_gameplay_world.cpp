@@ -423,3 +423,17 @@ TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
             particle.duration());
     }
 }
+
+TEST(GameplayWorldTest, ExpiredParticlesAreRemovedByWorldUpdate)
+{
+    GameplayWorld world;
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_EQ(world.particles().size(), 12u);
+
+    GameplayInput noInput{};
+    world.update(noInput, 0.50f);
+
+    EXPECT_TRUE(world.particles().empty());
+}
