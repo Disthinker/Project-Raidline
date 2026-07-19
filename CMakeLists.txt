@@ -29,8 +29,6 @@ add_executable(Project_Raidline
     src/gameplay_input.h
     src/gameplay_world.h
     src/gameplay_world.cpp
-    src/hit_effect.h
-    src/hit_effect.cpp
     src/texture.h
     src/texture.cpp
     src/animation.h
@@ -158,8 +156,6 @@ add_executable(HitResolutionTest
     src/projectile.h
     src/rect.h
     src/vec2.h
-    src/hit_effect.cpp
-    src/hit_effect.h
     src/animation.h
     src/animation.cpp
 )
@@ -189,8 +185,6 @@ add_executable(GameplayWorldTest
     src/hit_resolution.h
     src/collision.cpp
     src/collision.h
-    src/hit_effect.cpp
-    src/hit_effect.h
     src/animation.h
     src/animation.cpp
     src/particle.h
@@ -205,18 +199,6 @@ target_link_libraries(GameplayWorldTest PRIVATE GTest::gtest_main)
 target_include_directories(GameplayWorldTest PRIVATE src)
 
 gtest_discover_tests(GameplayWorldTest)
-
-# test hit_effect
-add_executable(HitEffectTest
-    tests/test_hit_effect.cpp
-    src/hit_effect.h
-    src/hit_effect.cpp)
-target_compile_features(HitEffectTest PRIVATE cxx_std_20)
-set_target_properties(HitEffectTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(HitEffectTest PRIVATE GTest::gtest_main)
-target_include_directories(HitEffectTest PRIVATE src)
-
-gtest_discover_tests(HitEffectTest)
 
 # test texture
 add_executable(TextureTest
@@ -287,7 +269,6 @@ if(MSVC)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
-    target_compile_options(HitEffectTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
