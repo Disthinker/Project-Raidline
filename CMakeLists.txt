@@ -35,6 +35,10 @@ add_executable(Project_Raidline
     src/texture.cpp
     src/animation.h
     src/animation.cpp
+    src/particle.h
+    src/particle.cpp
+    src/particle_system.h
+    src/particle_system.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -189,6 +193,10 @@ add_executable(GameplayWorldTest
     src/hit_effect.h
     src/animation.h
     src/animation.cpp
+    src/particle.h
+    src/particle.cpp
+    src/particle_system.h
+    src/particle_system.cpp
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)

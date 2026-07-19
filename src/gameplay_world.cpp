@@ -16,6 +16,7 @@ namespace
 }
 
 GameplayWorld::GameplayWorld()
+    : particleSystem_{0xC0FFEEu, ParticleBurstConfig{}}
 {
     enemies_.emplace_back(Vec2{600.0f, 100.0f}, Vec2{50.0f, 50.0f}, Vec2{150.0f, 0.0f});
 }
@@ -89,4 +90,9 @@ const std::vector<Enemy> &GameplayWorld::enemies() const
 const std::vector<HitEffect> &GameplayWorld::hitEffects() const
 {
     return hitEffects_;
+}
+
+const std::vector<Particle> &GameplayWorld::particles() const
+{
+    return particleSystem_.particles();
 }
