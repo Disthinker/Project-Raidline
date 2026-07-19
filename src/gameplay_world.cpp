@@ -60,6 +60,7 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 
     for (auto &position : hitResult.hitPositions)
     {
+        particleSystem_.emitImpact(position);
         hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
     }
 
