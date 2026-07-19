@@ -503,3 +503,21 @@ TEST(
         enemy.currentAnimationFrameIndex(),
         6u);
 }
+
+TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
+{
+    GameplayWorld world;
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_EQ(world.particles().size(), 12u);
+
+    for (const Particle &particle : world.particles())
+    {
+        EXPECT_FLOAT_EQ(particle.position().x, kExpectedHitEffectX);
+        EXPECT_FLOAT_EQ(particle.position().y, kExpectedHitEffectY);
+        EXPECT_FLOAT_EQ(
+            particle.remainingLifetime(),
+            particle.duration());
+    }
+}
