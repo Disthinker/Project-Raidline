@@ -23,6 +23,8 @@ GameplayWorld::GameplayWorld()
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
+    // 更新粒子
+    particleSystem_.update(deltaTime);
     // 更新命中反馈
     for (auto &hitEffect : hitEffects_)
     {
