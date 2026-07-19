@@ -29,3 +29,8 @@ ParticleSystem::ParticleSystem(
         throw std::invalid_argument("Particle size range is invalid");
     }
 }
+
+const std::vector<Particle> &ParticleSystem::particles() const
+{
+    return particles_;
+}
