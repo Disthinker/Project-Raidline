@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 #include <cstddef>
+#include <algorithm>
 
 namespace
 {
@@ -364,6 +365,32 @@ void App::renderEnemies()
     }
 }
 
+void App::renderParticles()
+{
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    for (const Particle &particle : world_.particles())
+    {
+        const float life = particle.normalizedLifetime();
+        const float renderSize = std::max(1.0f, particle.size() * life);
+        const float halfSize = renderSize / 2.0f;
+
+        const Uint8 alpha = static_cast<Uint8>(
+            std::clamp(life, 0.0f, 1.0f) * 220.0f);
+
+        SDL_SetRenderDrawColor(renderer_, 210, 210, 210, alpha);
+
+        const Vec2 center = particle.position();
+        SDL_FRect rect{
+            center.x - halfSize,
+            center.y - halfSize,
+            renderSize,
+            renderSize};
+
+        SDL_RenderFillRect(renderer_, &rect);
+    }
+}
+
 void App::renderHitEffects()
 {
     SDL_SetRenderDrawColor(renderer_, 255, 220, 80, 255);
@@ -402,7 +429,7 @@ void App::render()
     renderProjectiles();
 
     // 绘制击中效果
-    renderHitEffects();
+    renderParticles();
 
     // 绘制调试文本
     renderDebugText();
