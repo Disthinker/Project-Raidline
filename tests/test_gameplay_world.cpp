@@ -333,9 +333,6 @@ namespace
 {
     constexpr float kExpectedImpactX{656.0f};
     constexpr float kExpectedImpactY{140.0f};
-    constexpr float kExpectedHitEffectLifetime{0.15f};
-    constexpr float kExpectedHitEffectSize{16.0f};
-    constexpr float kFloatEpsilon{0.0001f};
 
     void createDefaultProjectileHit(GameplayWorld &world)
     {
