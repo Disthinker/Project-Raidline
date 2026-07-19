@@ -1,7 +1,8 @@
 #include "particle_system.h"
+
 #include <cmath>
 #include <random>
-
+#include <algorithm>
 #include <stdexcept>
 
 ParticleSystem::ParticleSystem(
@@ -66,4 +67,19 @@ void ParticleSystem::emitImpact(Vec2 position)
 
         particles_.emplace_back(position, velocity, lifetime, size);
     }
+}
+
+void ParticleSystem::update(float deltaTime)
+{
+    for (auto &particle : particles_)
+    {
+        particle.update(deltaTime);
+    }
+
+    std::erase_if(
+        particles_,
+        [](const Particle &particle)
+        {
+            return particle.isExpired();
+        });
 }
