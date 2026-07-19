@@ -408,7 +408,7 @@ void App::render()
     // 绘制投射物
     renderProjectiles();
 
-    // 绘制击中效果
+    // 绘制命中粒子
     renderParticles();
 
     // 绘制调试文本
