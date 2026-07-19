@@ -29,12 +29,14 @@ add_executable(Project_Raidline
     src/gameplay_input.h
     src/gameplay_world.h
     src/gameplay_world.cpp
-    src/hit_effect.h
-    src/hit_effect.cpp
     src/texture.h
     src/texture.cpp
     src/animation.h
     src/animation.cpp
+    src/particle.h
+    src/particle.cpp
+    src/particle_system.h
+    src/particle_system.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -154,8 +156,6 @@ add_executable(HitResolutionTest
     src/projectile.h
     src/rect.h
     src/vec2.h
-    src/hit_effect.cpp
-    src/hit_effect.h
     src/animation.h
     src/animation.cpp
 )
@@ -185,10 +185,12 @@ add_executable(GameplayWorldTest
     src/hit_resolution.h
     src/collision.cpp
     src/collision.h
-    src/hit_effect.cpp
-    src/hit_effect.h
     src/animation.h
     src/animation.cpp
+    src/particle.h
+    src/particle.cpp
+    src/particle_system.h
+    src/particle_system.cpp
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
@@ -197,18 +199,6 @@ target_link_libraries(GameplayWorldTest PRIVATE GTest::gtest_main)
 target_include_directories(GameplayWorldTest PRIVATE src)
 
 gtest_discover_tests(GameplayWorldTest)
-
-# test hit_effect
-add_executable(HitEffectTest
-    tests/test_hit_effect.cpp
-    src/hit_effect.h
-    src/hit_effect.cpp)
-target_compile_features(HitEffectTest PRIVATE cxx_std_20)
-set_target_properties(HitEffectTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(HitEffectTest PRIVATE GTest::gtest_main)
-target_include_directories(HitEffectTest PRIVATE src)
-
-gtest_discover_tests(HitEffectTest)
 
 # test texture
 add_executable(TextureTest
@@ -238,6 +228,36 @@ target_include_directories(AnimationTest PRIVATE src)
 
 gtest_discover_tests(AnimationTest)
 
+# test particle
+add_executable(ParticleTest
+    tests/test_particle.cpp
+    src/particle.h
+    src/particle.cpp
+)
+
+target_compile_features(ParticleTest PRIVATE cxx_std_20)
+set_target_properties(ParticleTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ParticleTest PRIVATE GTest::gtest_main)
+target_include_directories(ParticleTest PRIVATE src)
+
+gtest_discover_tests(ParticleTest)
+
+# test particle_system
+add_executable(ParticleSystemTest
+    tests/test_particle_system.cpp
+    src/particle_system.h
+    src/particle_system.cpp
+    src/particle.h
+    src/particle.cpp
+)
+
+target_compile_features(ParticleSystemTest PRIVATE cxx_std_20)
+set_target_properties(ParticleSystemTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ParticleSystemTest PRIVATE GTest::gtest_main)
+target_include_directories(ParticleSystemTest PRIVATE src)
+
+gtest_discover_tests(ParticleSystemTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -249,7 +269,8 @@ if(MSVC)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
-    target_compile_options(HitEffectTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
+    target_compile_options(ParticleTest PRIVATE /utf-8)
+    target_compile_options(ParticleSystemTest PRIVATE /utf-8)
 endif()

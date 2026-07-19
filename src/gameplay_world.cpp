@@ -10,27 +10,18 @@ namespace
     constexpr float kProjectileSpeed{600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
-
-    constexpr float kHitEffectLifetime{0.15f};
-    constexpr float kHitEffectSize{16.0f};
 }
 
 GameplayWorld::GameplayWorld()
+    : particleSystem_{0xC0FFEEu, ParticleBurstConfig{}}
 {
     enemies_.emplace_back(Vec2{600.0f, 100.0f}, Vec2{50.0f, 50.0f}, Vec2{150.0f, 0.0f});
 }
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 {
-    // 更新命中反馈
-    for (auto &hitEffect : hitEffects_)
-    {
-        hitEffect.update(deltaTime);
-    }
-    hitEffects_.erase(std::remove_if(hitEffects_.begin(), hitEffects_.end(),
-                                     [](const HitEffect &effect)
-                                     { return effect.isExpired(); }),
-                      hitEffects_.end());
+    // 更新粒子
+    particleSystem_.update(deltaTime);
 
     player_.update(input, deltaTime, kWorldWidth, kWorldHeight);
 
@@ -57,7 +48,7 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
 
     for (auto &position : hitResult.hitPositions)
     {
-        hitEffects_.emplace_back(position, kHitEffectLifetime, kHitEffectSize);
+        particleSystem_.emitImpact(position);
     }
 
     projectiles_.erase(
@@ -86,7 +77,7 @@ const std::vector<Enemy> &GameplayWorld::enemies() const
     return enemies_;
 }
 
-const std::vector<HitEffect> &GameplayWorld::hitEffects() const
+const std::vector<Particle> &GameplayWorld::particles() const
 {
-    return hitEffects_;
+    return particleSystem_.particles();
 }

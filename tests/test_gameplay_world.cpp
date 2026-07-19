@@ -331,11 +331,8 @@ TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
 
 namespace
 {
-    constexpr float kExpectedHitEffectX{656.0f};
-    constexpr float kExpectedHitEffectY{140.0f};
-    constexpr float kExpectedHitEffectLifetime{0.15f};
-    constexpr float kExpectedHitEffectSize{16.0f};
-    constexpr float kFloatEpsilon{0.0001f};
+    constexpr float kExpectedImpactX{656.0f};
+    constexpr float kExpectedImpactY{140.0f};
 
     void createDefaultProjectileHit(GameplayWorld &world)
     {
@@ -345,101 +342,6 @@ namespace
         GameplayInput noInput{};
         world.update(noInput, 0.35f);
     }
-}
-
-// 初始 HitEffect 集合为空
-TEST(GameplayWorldTest, InitialHitEffectsEmpty)
-{
-    GameplayWorld world;
-
-    EXPECT_TRUE(world.hitEffects().empty());
-}
-
-// Projectile 命中 Enemy 后生成 HitEffect
-TEST(GameplayWorldTest, ProjectileHitCreatesHitEffect)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    EXPECT_TRUE(world.projectiles().empty());
-    EXPECT_TRUE(world.enemies().empty());
-    EXPECT_EQ(world.hitEffects().size(), 1u);
-}
-
-// Projectile 命中 Enemy 后，HitEffect 位置使用 Projectile center
-TEST(GameplayWorldTest, ProjectileHitCreatesHitEffectAtProjectileCenter)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.hitEffects().size(), 1u);
-
-    const Vec2 position = world.hitEffects()[0].position();
-
-    EXPECT_FLOAT_EQ(position.x, kExpectedHitEffectX);
-    EXPECT_FLOAT_EQ(position.y, kExpectedHitEffectY);
-}
-
-// 新生成的 HitEffect 在创建帧保留完整 lifetime 和 size
-TEST(GameplayWorldTest, NewHitEffectKeepsFullLifetimeOnCreationFrame)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.hitEffects().size(), 1u);
-
-    EXPECT_FLOAT_EQ(
-        world.hitEffects()[0].lifetimeRemaining(),
-        kExpectedHitEffectLifetime);
-    EXPECT_FLOAT_EQ(
-        world.hitEffects()[0].size(),
-        kExpectedHitEffectSize);
-}
-
-// lifetime 未结束前，HitEffect 保留
-TEST(GameplayWorldTest, HitEffectRemainsBeforeLifetimeExpires)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.hitEffects().size(), 1u);
-
-    GameplayInput noInput{};
-    world.update(noInput, 0.10f);
-
-    ASSERT_EQ(world.hitEffects().size(), 1u);
-    EXPECT_GT(world.hitEffects()[0].lifetimeRemaining(), 0.0f);
-    EXPECT_FALSE(world.hitEffects()[0].isExpired());
-}
-
-// lifetime 结束后，HitEffect 会被 GameplayWorld 清理
-TEST(GameplayWorldTest, ExpiredHitEffectIsRemovedByWorldUpdate)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.hitEffects().size(), 1u);
-
-    GameplayInput noInput{};
-    world.update(noInput, 0.16f);
-
-    EXPECT_TRUE(world.hitEffects().empty());
-}
-
-// 没有 Projectile 命中时，不生成 HitEffect
-TEST(GameplayWorldTest, NoHitDoesNotCreateHitEffect)
-{
-    GameplayWorld world;
-
-    GameplayInput noInput{};
-    world.update(noInput, 0.10f);
-
-    EXPECT_TRUE(world.hitEffects().empty());
 }
 
 // GameplayWorld 更新 Enemy 时，也应推进其移动动画。
@@ -502,4 +404,36 @@ TEST(
     EXPECT_LT(
         enemy.currentAnimationFrameIndex(),
         6u);
+}
+
+TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
+{
+    GameplayWorld world;
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_EQ(world.particles().size(), 12u);
+
+    for (const Particle &particle : world.particles())
+    {
+        EXPECT_FLOAT_EQ(particle.position().x, kExpectedImpactX);
+        EXPECT_FLOAT_EQ(particle.position().y, kExpectedImpactY);
+        EXPECT_FLOAT_EQ(
+            particle.remainingLifetime(),
+            particle.duration());
+    }
+}
+
+TEST(GameplayWorldTest, ExpiredParticlesAreRemovedByWorldUpdate)
+{
+    GameplayWorld world;
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_EQ(world.particles().size(), 12u);
+
+    GameplayInput noInput{};
+    world.update(noInput, 0.50f);
+
+    EXPECT_TRUE(world.particles().empty());
 }
