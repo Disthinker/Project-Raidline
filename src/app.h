@@ -38,7 +38,6 @@ private:
     void renderProjectiles();
     void renderParticles();
     void renderEnemies();
-    void renderHitEffects();
 
     void shutdown();
 };
