@@ -109,8 +109,11 @@ TEST(GameplayWorldTest, ProjectileMovesAfterSpawn)
     EXPECT_LT(world.projectiles()[0].position().y, initialY);
 }
 
-// Projectile 可以命中移动的 Enemy
-TEST(GameplayWorldTest, ProjectileCanHitMovingEnemy)
+// Projectile 命中 3 HP Enemy 后，Projectile 被消耗，
+// Enemy 扣除 1 HP 但仍然保留。
+TEST(
+    GameplayWorldTest,
+    ProjectileCanDamageMovingEnemyWithoutKillingIt)
 {
     GameplayWorld world;
 
@@ -119,12 +122,16 @@ TEST(GameplayWorldTest, ProjectileCanHitMovingEnemy)
 
     ASSERT_EQ(world.projectiles().size(), 1u);
     ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 3);
 
     GameplayInput noInput{};
     world.update(noInput, 0.35f);
 
     EXPECT_TRUE(world.projectiles().empty());
-    EXPECT_TRUE(world.enemies().empty());
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 2);
+    EXPECT_FALSE(world.enemies()[0].isDead());
 }
 
 // GameplayWorld 持有的 Enemy 不再是静态实体
