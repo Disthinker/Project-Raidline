@@ -283,3 +283,46 @@ TEST(EnemyTest, MovementAnimationLoopsAcrossSixFrames)
     EXPECT_TRUE(enemy.isMoving());
     EXPECT_EQ(enemy.currentAnimationFrameIndex(), 0u);
 }
+
+TEST(EnemyTest, StoresInitialHealth)
+{
+    Enemy enemy{
+        Vec2{10.0f, 20.0f},
+        Vec2{50.0f, 60.0f},
+        Vec2{},
+        3};
+
+    EXPECT_EQ(enemy.health(), 3);
+    EXPECT_EQ(enemy.maxHealth(), 3);
+    EXPECT_FALSE(enemy.isDead());
+}
+
+TEST(EnemyTest, NonLethalDamageKeepsEnemyAlive)
+{
+    Enemy enemy{
+        Vec2{},
+        Vec2{50.0f, 50.0f},
+        Vec2{},
+        3};
+
+    const bool killed = enemy.takeDamage(1);
+
+    EXPECT_FALSE(killed);
+    EXPECT_EQ(enemy.health(), 2);
+    EXPECT_FALSE(enemy.isDead());
+}
+
+TEST(EnemyTest, LethalDamageReportsDeathTransition)
+{
+    Enemy enemy{
+        Vec2{},
+        Vec2{50.0f, 50.0f},
+        Vec2{},
+        3};
+
+    EXPECT_TRUE(enemy.takeDamage(3));
+    EXPECT_TRUE(enemy.isDead());
+    EXPECT_EQ(enemy.health(), 0);
+
+    EXPECT_FALSE(enemy.takeDamage(1));
+}

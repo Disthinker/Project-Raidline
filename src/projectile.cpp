@@ -1,12 +1,19 @@
 #include <cmath>
 #include "projectile.h"
+#include <stdexcept>
 
-Projectile::Projectile(Vec2 position, Vec2 velocity, float width, float height)
+Projectile::Projectile(Vec2 position, Vec2 velocity, float width, float height, int damage)
     : position_(position),
       velocity_(velocity),
       width_(width),
-      height_(height)
+      height_(height),
+      damage_{damage}
 {
+    if (damage <= 0)
+    {
+        throw std::invalid_argument(
+            "Projectile damage must be greater than zero");
+    }
 }
 
 void Projectile::update(float deltaTime)
@@ -36,4 +43,9 @@ bool Projectile::isOutside(float worldWidth, float worldHeight) const
 {
     return (position_.x + width_ < 0.0f || position_.x > worldWidth) ||
            (position_.y + height_ < 0.0f || position_.y > worldHeight);
+}
+
+int Projectile::damage() const noexcept
+{
+    return damage_;
 }

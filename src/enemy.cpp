@@ -33,7 +33,8 @@ namespace
 Enemy::Enemy(
     Vec2 position,
     Vec2 size,
-    Vec2 velocity)
+    Vec2 velocity,
+    int maxHealth)
     : position_(position),
       size_(size),
       velocity_(velocity),
@@ -41,7 +42,8 @@ Enemy::Enemy(
           facingDirectionFromVelocity(velocity.x)},
       movementAnimator_{
           makeEnemyMoveClip(),
-          AnimationPlayMode::Loop}
+          AnimationPlayMode::Loop},
+      health_{maxHealth}
 {
 }
 
@@ -115,4 +117,24 @@ bool Enemy::isMoving() const
 std::size_t Enemy::currentAnimationFrameIndex() const
 {
   return movementAnimator_.currentFrameIndex();
+}
+
+bool Enemy::takeDamage(int damage)
+{
+  return health_.takeDamage(damage);
+}
+
+int Enemy::health() const noexcept
+{
+  return health_.current();
+}
+
+int Enemy::maxHealth() const noexcept
+{
+  return health_.maximum();
+}
+
+bool Enemy::isDead() const noexcept
+{
+  return health_.isDead();
 }

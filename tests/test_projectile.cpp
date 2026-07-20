@@ -88,3 +88,28 @@ TEST(ProjectileTest, BoundsUsesPositionAndSize)
     EXPECT_FLOAT_EQ(bounds.size.x, 8.0f);
     EXPECT_FLOAT_EQ(bounds.size.y, 20.0f);
 }
+
+TEST(ProjectileTest, StoresDamage)
+{
+    const Projectile projectile{
+        Vec2{},
+        Vec2{100.0f, 0.0f},
+        8.0f,
+        20.0f,
+        2};
+
+    EXPECT_EQ(projectile.damage(), 2);
+}
+
+TEST(ProjectileTest, RejectsNonPositiveDamage)
+{
+    EXPECT_THROW(
+        static_cast<void>(
+            Projectile{Vec2{}, Vec2{}, 8.0f, 20.0f, 0}),
+        std::invalid_argument);
+
+    EXPECT_THROW(
+        static_cast<void>(
+            Projectile{Vec2{}, Vec2{}, 8.0f, 20.0f, -1}),
+        std::invalid_argument);
+}

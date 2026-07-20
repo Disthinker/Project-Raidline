@@ -10,12 +10,19 @@ namespace
     constexpr float kProjectileSpeed{600.0f};
     constexpr float kProjectileWidth{8.0f};
     constexpr float kProjectileHeight{20.0f};
+
+    constexpr int kEnemyMaxHealth{3};
+    constexpr int kProjectileDamage{1};
 }
 
 GameplayWorld::GameplayWorld()
     : particleSystem_{0xC0FFEEu, ParticleBurstConfig{}}
 {
-    enemies_.emplace_back(Vec2{600.0f, 100.0f}, Vec2{50.0f, 50.0f}, Vec2{150.0f, 0.0f});
+    enemies_.emplace_back(
+        Vec2{600.0f, 100.0f},
+        Vec2{50.0f, 50.0f},
+        Vec2{150.0f, 0.0f},
+        kEnemyMaxHealth);
 }
 
 void GameplayWorld::update(const GameplayInput &input, float deltaTime)
@@ -35,7 +42,7 @@ void GameplayWorld::update(const GameplayInput &input, float deltaTime)
         const float projectileX = player_.position().x + player_.size() / 2 - kProjectileWidth / 2;
         const float projectileY = player_.position().y - kProjectileHeight;
         Vec2 projectileVelocity = {player_.facingDirection().x * kProjectileSpeed, player_.facingDirection().y * kProjectileSpeed};
-        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileVelocity, kProjectileWidth, kProjectileHeight);
+        projectiles_.emplace_back(Vec2{projectileX, projectileY}, projectileVelocity, kProjectileWidth, kProjectileHeight, kProjectileDamage);
         cooldownRemaining_ = fireCooldown_; // Reset cooldown after firing
     }
 

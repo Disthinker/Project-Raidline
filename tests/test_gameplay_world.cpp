@@ -45,6 +45,9 @@ TEST(GameplayWorldTest, InitialEnemiesState)
     EXPECT_FLOAT_EQ(enemyPosition.y, 100.0f);
     EXPECT_FLOAT_EQ(enemySize.x, 50.0f);
     EXPECT_FLOAT_EQ(enemySize.y, 50.0f);
+    EXPECT_EQ(enemy.health(), 3);
+    EXPECT_EQ(enemy.maxHealth(), 3);
+    EXPECT_FALSE(enemy.isDead());
 }
 
 // MoveRight input 更新后，world.player().position().x 变大
@@ -74,6 +77,7 @@ TEST(GameplayWorldTest, FireCreatesProjectile)
     EXPECT_FLOAT_EQ(projectile.position().y, 340.0f);
     EXPECT_FLOAT_EQ(projectile.width(), 8.0f);
     EXPECT_FLOAT_EQ(projectile.height(), 20.0f);
+    EXPECT_EQ(projectile.damage(), 1);
 }
 
 // 不按 Fire 不生成 Projectile
