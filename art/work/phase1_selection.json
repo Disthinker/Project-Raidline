@@ -1,0 +1,10 @@
+{
+  "batch_id": "phase1_week13_16",
+  "selection_basis": "combined contact sheet review",
+  "selected_candidates": {
+    "item_cola_basic_v1": "art/work/consumables_pack_v1/item_cola_basic_v1/candidates/candidate_a_rgba.png",
+    "item_pistol_basic_v1": "art/work/basic_weapons_pack_v1/candidates/item_pistol_basic_v1/candidate_02_rgba.png",
+    "item_rifle_basic_v1": "art/work/basic_weapons_pack_v1/candidates/item_rifle_basic_v1/candidate_02_rgba.png",
+    "item_medkit_basic_v1": "art/work/consumables_pack_v1/item_medkit_basic_v1/candidates/candidate_b_rgba.png"
+  }
+}

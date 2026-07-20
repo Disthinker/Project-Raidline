@@ -1,0 +1,10 @@
+Use case: stylized-concept
+Asset type: Project Raidline game item identity candidate, item_cola_basic_v1, candidate A
+Input images: Image 1 player and Image 2 enemy are style anchors only for readable outlined pixel-art rendering; Image 3 test map is a palette and atmosphere anchor only. Do not copy or include any character, zombie, road, blood, or scene element.
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal; one uniform color only, with no gradient, texture, floor plane, lighting variation, reflection, cast shadow, or contact shadow.
+Subject: exactly one original unbranded sealed aluminum cola can, compact standard can proportions, slightly worn survival-loot condition, dark muted burgundy body with charcoal and small khaki design blocks, blank abstract decoration only. No label text, no letters, no numbers, no logos, no trademarks, no separate objects.
+Style/medium: polished production-ready readable pixel art matching the supplied references; chunky deliberate pixels, crisp dark outline, restrained highlights, realistic material cues without photorealism.
+Composition/framing: single isolated object centered, slight three-quarter top-down view suitable both for inventory and ground pickup, fully visible, generous even padding, clean compact silhouette. Keep the can large enough to remain recognizable at 32x32.
+Lighting/mood: subdued neutral upper-left light consistent with the references; utilitarian post-apocalyptic game loot.
+Color palette: low-saturation charcoal, black-gray, muted burgundy, khaki; do not use #ff00ff or near-magenta anywhere in the subject.
+Constraints: crisp non-glowing edges; no shadow of any kind; no text; no brand; no watermark; no border; no UI frame; no hand; no person; no environment; no additional prop. The background must remain exact flat #ff00ff to every image edge.

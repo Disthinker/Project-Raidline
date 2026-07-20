@@ -17,7 +17,6 @@ public:
 
     [[nodiscard]] bool takeDamage(int damage)
     {
-        // TODO 1：damage <= 0 时抛出 std::invalid_argument
         if (damage <= 0)
         {
             throw std::invalid_argument("Damage must be greater than zero");
@@ -26,12 +25,14 @@ public:
         {
             return false;
         }
-        currentHealth_ -= damage;
-        if (currentHealth_ < 0)
+        if (damage >= currentHealth_)
         {
             currentHealth_ = 0;
+            return true;
         }
-        return currentHealth_ == 0;
+
+        currentHealth_ -= damage;
+        return false;
     }
 
     int current() const noexcept

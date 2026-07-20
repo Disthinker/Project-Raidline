@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "inventory_cell_size": 64,
+  "source_scale": 4,
+  "inventory_safe_padding": 6,
+  "assets": {
+    "item_cola_basic_v1": {
+      "grid_footprint": [1, 1],
+      "can_rotate": false,
+      "master_size": [256, 256],
+      "inventory_size": [64, 64],
+      "world_size": [32, 32]
+    },
+    "item_pistol_basic_v1": {
+      "grid_footprint": [2, 1],
+      "can_rotate": true,
+      "master_size": [512, 256],
+      "inventory_size": [128, 64],
+      "world_size": [64, 32]
+    },
+    "item_rifle_basic_v1": {
+      "grid_footprint": [4, 2],
+      "can_rotate": true,
+      "master_size": [1024, 512],
+      "inventory_size": [256, 128],
+      "world_size": [128, 64]
+    },
+    "item_medkit_basic_v1": {
+      "grid_footprint": [2, 2],
+      "can_rotate": false,
+      "master_size": [512, 512],
+      "inventory_size": [128, 128],
+      "world_size": [64, 64]
+    }
+  }
+}
+

@@ -1,0 +1,13 @@
+Use case: stylized-concept
+Asset type: production-ready 2D pixel-art game item identity master for inventory and world pickup
+Primary request: create one original generic compact semiautomatic pistol, designed for a post-collapse extraction game; this is a fictional unbranded weapon rather than any identifiable real model
+Input images: Image 1 is the immutable player style and pixel-density reference; Image 2 is the enemy style and outline reference; Image 3 is the test-map palette and environmental contrast reference
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: a single complete pistol with a compact squared slide, clearly readable trigger guard, textured dark grip, short barrel and simple iron sights; no ammunition, holster, hands, accessories or extra objects
+Style/medium: crisp hand-authored pixel art with stylized realism; chunky deliberate pixel clusters; strong dark outline; limited tonal steps; high readability at very small game scale; match the references' pixel language without copying any character or scene
+Composition/framing: horizontal left-to-right side presentation with a subtle three-quarter top-down view; muzzle points exactly right and grip angles down; centered; generous empty padding on every side; the entire silhouette is visible and separated from the canvas edges
+Lighting/mood: restrained soft light from upper left, expressed with only a few pixel-value bands; no cast shadow or contact shadow
+Color palette: low-saturation charcoal, gunmetal, dark olive and muted khaki accents; do not use #ff00ff or near-magenta anywhere on the weapon
+Materials/textures: matte worn metal and practical polymer grip, simplified into readable pixel clusters; understated edge wear only
+Constraints: exactly one weapon; original generic design; flat 2D game sprite; crisp silhouette; no floor plane; no background scene; no shadow; no gradient, texture, reflection or lighting variation in the background; no text; no letters; no numbers; no emblems; no brand; no logo; no trademark; no identifiable real firearm model; no watermark
+Avoid: photorealism, 3D render, painterly concept art, smooth vector art, excessive tiny detail, neon colors, decorative engraving, muzzle flash, smoke, blood, hands, duplicate weapons, exploded view, parts diagram, border or UI frame

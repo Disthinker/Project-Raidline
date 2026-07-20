@@ -1,0 +1,13 @@
+Use case: stylized-concept
+Asset type: production-ready 2D pixel-art game item identity master for inventory, world pickup and later modular-attachment views
+Primary request: create one original generic modular patrol rifle for a post-collapse extraction game; the design must be fictional and unbranded rather than a depiction of a specific real-world model
+Input images: Image 1 is the immutable player style and pixel-density reference; Image 2 is the enemy style and outline reference; Image 3 is the test-map palette and environmental contrast reference
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: a single complete rifle with a medium-length barrel and simple muzzle device, clearly continuous top rail, ventilated handguard, compact receiver, distinct box magazine, practical grip and fixed skeletal-style stock; preserve clear visual zones for later muzzle, sight, magazine and stock attachments without separating any piece now
+Style/medium: stylized-realism pixel art with strong dark outline, slightly blockier proportions, disciplined pixel clusters and a restrained value ramp matching the game references; designed to survive reduction to a small inventory sprite
+Composition/framing: wide horizontal silhouette with stock at left and muzzle pointing exactly right; subtle elevated three-quarter view showing the top plane and rail; centered with even generous padding; no cropping
+Lighting/mood: dim neutral upper-left light, simplified into discrete pixel highlights; no cast shadow or contact shadow
+Color palette: desaturated dark gray metal, olive-drab handguard, muted tan magazine and near-black outline; do not use #ff00ff or near-magenta within the subject
+Materials/textures: worn matte metal and rugged polymer indicated with sparse readable pixels, never photographic
+Constraints: exactly one assembled weapon; original generic fictional design; top rail, muzzle, magazine and stock clearly readable; no optic or other attachment installed; background is a single uniform #ff00ff color with no texture, gradient, shadow, reflection, floor plane or lighting variation; clean crisp edges; no text; no letters; no numbers; no labels; no emblem; no logo; no brand; no trademark; no specific real rifle model; no watermark
+Avoid: direct military-rifle replica, photoreal product photography, 3D rendering, painterly blur, smooth vector finish, neon sci-fi shapes, bayonet, sling, bipod, suppressor, bullets, hands, duplicated weapons, dismantled pieces, exploded view, annotations, muzzle flash, smoke or decorative border

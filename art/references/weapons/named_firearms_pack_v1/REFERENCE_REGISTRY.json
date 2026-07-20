@@ -1,0 +1,30 @@
+{
+  "package_id": "named_firearms_pack_v1",
+  "source": "user_supplied",
+  "references": [
+    {
+      "asset_id": "item_pistol_qsz92g_v1",
+      "file": "art/references/weapons/named_firearms_pack_v1/QSZ92G_reference.png",
+      "original_file": "C:/Users/Administrator/Desktop/QSZ92G.png",
+      "sha256": "011841D8B0FEA92E474E8EA6155244F35C363AEAC98DE608F258893B9247FE96",
+      "size": [1200, 600],
+      "mode": "RGBA"
+    },
+    {
+      "asset_id": "item_rifle_qbz95_1_v1",
+      "file": "art/references/weapons/named_firearms_pack_v1/QBZ95-1_reference.png",
+      "original_file": "C:/Users/Administrator/Desktop/QBZ95-1.png",
+      "sha256": "447B766D3FD539876B101694AAEC57AFEB59C760C3376D967F6CA4E613E8AE4A",
+      "size": [1200, 600],
+      "mode": "RGBA"
+    },
+    {
+      "asset_id": "item_shotgun_m870_v1",
+      "file": "art/references/weapons/named_firearms_pack_v1/M870_reference.png",
+      "original_file": "C:/Users/Administrator/Desktop/M870.png",
+      "sha256": "41493E7FB01B41154F7E0BCB5DFC80EC16E917F341740611110A5665FA55CE3E",
+      "size": [1200, 600],
+      "mode": "RGBA"
+    }
+  ]
+}

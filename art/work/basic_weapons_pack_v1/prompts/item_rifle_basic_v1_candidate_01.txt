@@ -1,0 +1,13 @@
+Use case: stylized-concept
+Asset type: production-ready 2D pixel-art game item identity master for inventory, world pickup and later modular-attachment views
+Primary request: create one original generic modular carbine for a post-collapse extraction game; it is a fictional unbranded weapon and must not replicate any identifiable real rifle model
+Input images: Image 1 is the immutable player style and pixel-density reference; Image 2 is the enemy style and outline reference; Image 3 is the test-map palette and environmental contrast reference
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: one complete assembled rifle with a clearly readable short muzzle device, long unobstructed top accessory rail, simple handguard, distinct receiver, curved detachable magazine, practical pistol grip and adjustable-looking shoulder stock; these zones must be visually separable for future attachment art, but do not split, label or explode the parts in this asset
+Style/medium: crisp hand-authored pixel art with stylized realism; bold dark contour; chunky intentional pixel clusters; limited value steps; strong small-scale readability; match the supplied game's sprite language without copying any existing object
+Composition/framing: wide horizontal left-to-right presentation, mild three-quarter top-down angle that reveals the top rail while keeping a clean side silhouette; muzzle points exactly right and stock is on the left; centered; generous empty padding; complete rifle fully visible
+Lighting/mood: restrained upper-left illumination translated into a few pixel bands; no cast shadow or contact shadow
+Color palette: low-saturation gunmetal, charcoal, dark military olive and muted khaki; do not use #ff00ff or near-magenta anywhere on the rifle
+Materials/textures: matte utilitarian metal and polymer with sparse pixel-scale wear; no reflective gloss
+Constraints: exactly one assembled rifle; original generic fictional design; top rail, muzzle, magazine and stock clearly identifiable; no scope or other installed accessory; flat solid #ff00ff background with no shadow, gradient, texture, floor, reflection or lighting variation; crisp isolated silhouette; no text; no letters; no numbers; no labels; no logos; no trademarks; no identifiable real firearm model; no watermark
+Avoid: AR-15 or AK copy, branded geometry, photorealism, 3D render, smooth illustration, excessive mechanical microdetail, futuristic energy weapon, bipod, sling, loose ammunition, hands, extra magazines, duplicate rifles, exploded parts, callout diagram, muzzle flash, smoke, blood or UI frame

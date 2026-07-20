@@ -1,0 +1,13 @@
+Use case: stylized-concept
+Asset type: production-ready 2D pixel-art game item identity master for inventory and world pickup
+Primary request: create one original generic full-size semiautomatic service pistol for a post-collapse extraction game; it must remain fictional, unbranded and visually distinct from a specific real model
+Input images: Image 1 is the immutable player style and pixel-density reference; Image 2 is the enemy style and outline reference; Image 3 is the test-map palette and environmental contrast reference
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: a single complete pistol with a sturdy low-profile slide, clear ejection-port suggestion without lettering, broad trigger guard, straight practical grip and simple sights; no ammunition, holster, hands, attachments or extra objects
+Style/medium: readable stylized-realism pixel art matching the references' bold outline, restrained texture and limited value ramps; hand-placed pixel-cluster appearance; optimized to remain recognizable after heavy downscaling
+Composition/framing: long horizontal silhouette, mild elevated three-quarter view showing a small amount of the top plane while retaining an almost side-on read; muzzle points exactly right; centered with generous uniform padding; weapon fully inside frame
+Lighting/mood: subdued neutral light from upper left with compact highlights and deep outline separation; no cast shadow or contact shadow
+Color palette: desaturated black, graphite gray, muted olive-gray and a very small khaki-brown grip accent; do not use #ff00ff or near-magenta anywhere on the subject
+Materials/textures: matte utilitarian steel and polymer, slightly used but clean enough for icon readability; no glossy reflections
+Constraints: exactly one weapon; original generic design; one coherent assembled pistol; pure flat #ff00ff background; background has no shadows, gradients, texture, reflections, floor plane or lighting variation; crisp clean boundary; no text; no letters; no numbers; no symbols; no insignia; no brand; no logo; no trademark; no real model; no watermark
+Avoid: recognizable commercial firearm silhouette, photoreal product shot, 3D render, anti-aliased vector aesthetic, soft painterly edges, exaggerated sci-fi form, laser, suppressor, magazine beside the weapon, bullets, hands, duplicate weapon, disassembly, smoke or UI decoration

@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline production-ready pixel-art weapon identity master for inventory and world pickup
+Input images: Image 1 is the user-supplied QBZ95-1 edit target and exact geometry identity; Image 2 is the approved Project Raidline rifle pixel-style reference; Image 3 is the immutable Player pixel-density and palette anchor; Image 4 is the test-map contrast reference
+Primary request: convert only the QBZ95-1 from Image 1 into the established Project Raidline pixel-art style while preserving its distinctive bullpup identity
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: exactly one complete QBZ95-1; preserve the integrated carry-handle silhouette, rear receiver and butt profile, magazine behind the pistol grip, curved magazine, compact fore-end, front sight, and short exposed barrel; horizontally mirror the source so the muzzle points exactly right
+Style/medium: crisp hand-authored 2D pixel art with stylized realism, strong dark outline, deliberate chunky clusters, limited tonal bands, matching the approved rifle style without copying its geometry
+Composition/framing: horizontal muzzle-right presentation, subtle three-quarter top-down view, centered, complete silhouette visible, generous padding
+Lighting/mood: restrained upper-left illumination, simplified internal shading, no cast or contact shadow
+Color palette: muted black, charcoal, dark polymer gray, restrained worn-steel highlights
+Materials/textures: practical matte polymer shell and metal barrel simplified for small-scale readability
+Constraints: preserve the QBZ95-1 bullpup layout and model-defining proportions; exactly one weapon; perfectly uniform #ff00ff background; no magenta in subject; no text, serials, proof marks, logos, model labels, trademarks, watermark, optics, attachments, sling, hands, ammunition, flash, smoke, blood, or extra objects
+Avoid: converting it into a conventional magazine-forward rifle, changing the carry handle, inventing rails or accessories, photorealism, smooth vector art, painterly concept art, 3D render, excessive tiny details, duplicate weapon, cropped stock or muzzle, diagram or UI border
