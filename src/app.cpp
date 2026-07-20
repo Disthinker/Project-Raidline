@@ -206,35 +206,92 @@ void App::update(float deltaTime)
 
 void App::renderDebugText()
 {
-    SDL_SetRenderDrawColor(renderer_, 220, 220, 220, 255);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        220,
+        220,
+        220,
+        255);
+
+    const char *actionText{"Action: None"};
+
     if (input_.isActionPressed(GameAction::MoveUp))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveUp");
+        actionText = "Action: MoveUp";
     }
-    else if (input_.isActionPressed(GameAction::MoveDown))
+    else if (
+        input_.isActionPressed(
+            GameAction::MoveDown))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveDown");
+        actionText = "Action: MoveDown";
     }
-    else if (input_.isActionPressed(GameAction::MoveLeft))
+    else if (
+        input_.isActionPressed(
+            GameAction::MoveLeft))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveLeft");
+        actionText = "Action: MoveLeft";
     }
-    else if (input_.isActionPressed(GameAction::MoveRight))
+    else if (
+        input_.isActionPressed(
+            GameAction::MoveRight))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: MoveRight");
+        actionText = "Action: MoveRight";
     }
-    else if (input_.isActionPressed(GameAction::Fire))
+    else if (
+        input_.isActionPressed(
+            GameAction::Fire))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: Fire");
+        actionText = "Action: Fire";
     }
-    else if (input_.isActionPressed(GameAction::Dodge))
+    else if (
+        input_.isActionPressed(
+            GameAction::Dodge))
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: Dodge");
+        actionText = "Action: Dodge";
     }
-    else
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        20.0f,
+        actionText);
+
+    const std::string scoreText =
+        fmt::format(
+            "Score: {}",
+            world_.score());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        36.0f,
+        scoreText.c_str());
+
+    if (world_.enemies().empty())
     {
-        SDL_RenderDebugText(renderer_, 20.0f, 20.0f, "Action: None");
+        SDL_RenderDebugText(
+            renderer_,
+            20.0f,
+            52.0f,
+            "Enemy HP: defeated");
+
+        return;
     }
+
+    const Enemy &enemy =
+        world_.enemies().front();
+
+    const std::string healthText =
+        fmt::format(
+            "Enemy HP: {}/{}",
+            enemy.health(),
+            enemy.maxHealth());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        52.0f,
+        healthText.c_str());
 }
 
 void App::renderBackground()

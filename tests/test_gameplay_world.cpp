@@ -50,6 +50,13 @@ TEST(GameplayWorldTest, InitialEnemiesState)
     EXPECT_FALSE(enemy.isDead());
 }
 
+TEST(GameplayWorldTest, InitialScoreIsZero)
+{
+    const GameplayWorld world;
+
+    EXPECT_EQ(world.score(), 0);
+}
+
 // MoveRight input 更新后，world.player().position().x 变大
 TEST(GameplayWorldTest, MoveRightUpdatesPlayerPosition)
 {
@@ -132,6 +139,7 @@ TEST(
     ASSERT_EQ(world.enemies().size(), 1u);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_FALSE(world.enemies()[0].isDead());
+    EXPECT_EQ(world.score(), 0);
 }
 
 // GameplayWorld 持有的 Enemy 不再是静态实体
@@ -423,6 +431,10 @@ TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
 
     createDefaultProjectileHit(world);
 
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 2);
+    EXPECT_EQ(world.score(), 0);
+
     ASSERT_EQ(world.particles().size(), 12u);
 
     for (const Particle &particle : world.particles())
@@ -447,4 +459,48 @@ TEST(GameplayWorldTest, ExpiredParticlesAreRemovedByWorldUpdate)
     world.update(noInput, 0.50f);
 
     EXPECT_TRUE(world.particles().empty());
+}
+
+TEST(
+    GameplayWorldTest,
+    LethalHitAwardsScoreAndRemovesEnemy)
+{
+    // 使用 1 HP Enemy，让默认 1 damage Projectile
+    // 通过一次真实命中完成死亡结算。
+    GameplayWorld world{1};
+
+    EXPECT_EQ(world.score(), 0);
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 1);
+
+    createDefaultProjectileHit(world);
+
+    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.enemies().empty());
+
+    EXPECT_EQ(world.score(), 100);
+
+    // 致命命中也必须产生 impact particles。
+    EXPECT_EQ(world.particles().size(), 12u);
+}
+
+TEST(
+    GameplayWorldTest,
+    RemovedEnemyCannotAwardScoreAgain)
+{
+    GameplayWorld world{1};
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_TRUE(world.enemies().empty());
+    ASSERT_EQ(world.score(), 100);
+
+    GameplayInput noInput{};
+
+    // Enemy 已经被删除。
+    // 后续更新不能再次增加 Score。
+    world.update(noInput, 1.0f);
+
+    EXPECT_TRUE(world.enemies().empty());
+    EXPECT_EQ(world.score(), 100);
 }
