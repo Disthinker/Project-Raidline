@@ -5,7 +5,12 @@
 class Projectile
 {
 public:
-    Projectile(Vec2 position, Vec2 velocity, float width, float height);
+    Projectile(
+        Vec2 position,
+        Vec2 velocity,
+        float width,
+        float height,
+        int damage = 1);
 
     void update(float deltaTime);
 
@@ -16,9 +21,12 @@ public:
 
     bool isOutside(float worldWidth, float worldHeight) const;
 
+    int damage() const noexcept;
+
 private:
     Vec2 position_;
     Vec2 velocity_;
     float width_;
     float height_;
+    int damage_;
 };

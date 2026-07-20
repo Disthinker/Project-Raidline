@@ -1,49 +1,86 @@
 #include "hit_resolution.h"
-#include <cstddef>
+
 #include <algorithm>
+#include <cstddef>
+#include <vector>
+
 #include "collision.h"
 
-HitResolutionResult resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_)
+HitResolutionResult resolveProjectileEnemyHits(
+    std::vector<Projectile> &projectiles,
+    std::vector<Enemy> &enemies)
 {
     HitResolutionResult result{};
-    std::vector<bool> projectileHit{};
-    std::vector<bool> enemiesHit{};
-    projectileHit.resize(projectiles_.size(), false);
-    enemiesHit.resize(enemies_.size(), false);
-    std::size_t projectileIndex{0};
-    std::size_t enemyIndex{0};
 
-    for (projectileIndex = 0; projectileIndex < projectiles_.size(); ++projectileIndex)
+    std::vector<bool> projectileConsumed(
+        projectiles.size(),
+        false);
+
+    for (
+        std::size_t projectileIndex{0};
+        projectileIndex < projectiles.size();
+        ++projectileIndex)
     {
-        if (projectileHit[projectileIndex])
+        const Projectile &projectile =
+            projectiles[projectileIndex];
+
+        for (Enemy &enemy : enemies)
         {
-            continue;
-        }
-        for (enemyIndex = 0; enemyIndex < enemies_.size(); ++enemyIndex)
-        {
-            if (enemiesHit[enemyIndex])
+            // Enemy 可能已被同一帧内更早的 Projectile 击杀。
+            // 在统一删除前，它仍暂时留在容器中，因此必须跳过。
+            if (enemy.isDead())
             {
                 continue;
             }
 
-            if (isCollision(projectiles_[projectileIndex].bounds(), enemies_[enemyIndex].bounds()))
+            if (!isCollision(
+                    projectile.bounds(),
+                    enemy.bounds()))
             {
-                projectileHit[projectileIndex] = true;
-                enemiesHit[enemyIndex] = true;
-                const Projectile &projectile = projectiles_[projectileIndex];
-                result.hitPositions.push_back(Vec2{
-                    projectile.position().x + projectile.width() / 2.0f,
-                    projectile.position().y + projectile.height() / 2.0f});
-                break;
+                continue;
             }
+
+            // 一枚 Projectile 一次最多命中一个 Enemy。
+            projectileConsumed[projectileIndex] = true;
+
+            result.hitPositions.push_back(
+                Vec2{
+                    projectile.position().x +
+                        projectile.width() / 2.0f,
+                    projectile.position().y +
+                        projectile.height() / 2.0f});
+
+            const bool killed =
+                enemy.takeDamage(projectile.damage());
+
+            if (killed)
+            {
+                ++result.enemiesKilled;
+            }
+
+            break;
         }
     }
-    std::size_t projectileEraseIndex = 0;
-    std::erase_if(projectiles_, [&](const Projectile &)
-                  { return projectileHit[projectileEraseIndex++] != 0; });
 
-    std::size_t enemyEraseIndex = 0;
-    std::erase_if(enemies_, [&](const Enemy &)
-                  { return enemiesHit[enemyEraseIndex++] != 0; });
+    std::size_t projectileEraseIndex{0};
+
+    std::erase_if(
+        projectiles,
+        [&](const Projectile &)
+        {
+            const bool shouldErase =
+                projectileConsumed[projectileEraseIndex];
+
+            ++projectileEraseIndex;
+            return shouldErase;
+        });
+
+    std::erase_if(
+        enemies,
+        [](const Enemy &enemy)
+        {
+            return enemy.isDead();
+        });
+
     return result;
 }

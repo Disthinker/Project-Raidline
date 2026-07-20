@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline production-ready pixel-art shotgun identity master for inventory and world pickup
+Input images: Image 1 is the user-supplied M870 edit target and geometry identity; Image 2 is the approved Project Raidline rifle pixel-style and outline reference; Image 3 is the immutable Player pixel-density and palette anchor; Image 4 is the test-map contrast reference
+Primary request: convert only the pump-action shotgun from Image 1 into the established Project Raidline pixel-art style while preserving its long M870 gameplay identity
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: exactly one complete long pump-action M870 shotgun; preserve the long barrel, parallel magazine tube, compact receiver, trigger guard, wooden fore-end pump, wooden shoulder stock, and rubber butt pad; horizontally mirror the source so the muzzle points exactly right
+Style/medium: crisp hand-authored 2D pixel art with stylized realism, deliberate chunky clusters, strong dark contour, limited tonal steps, consistent with approved Project Raidline weapons
+Composition/framing: long horizontal muzzle-right presentation with subtle three-quarter top-down view; centered; complete butt-to-muzzle silhouette visible; generous padding
+Lighting/mood: restrained upper-left light, compact internal shading only, no cast shadow or contact shadow
+Color palette: blackened steel, charcoal, dark walnut brown, muted khaki-brown, small worn-metal highlights
+Materials/textures: matte barrel and receiver; warm but low-saturation wooden pump and stock simplified into readable grain clusters
+Constraints: preserve the pump-action structure and long proportions; exactly one shotgun; perfectly uniform #ff00ff background; no magenta on subject; remove all receiver labels and markings; no text, letters, numbers, serials, brand, logo, trademark, watermark, shells, sling, attachments, hands, muzzle effects, smoke, blood, or extra objects
+Avoid: shortening into a tactical compact shotgun, adding pistol grips or optics, changing wood to synthetic furniture, photorealism, smooth vector art, painterly rendering, 3D render, ornate wood grain, duplicate weapon, crop, UI border

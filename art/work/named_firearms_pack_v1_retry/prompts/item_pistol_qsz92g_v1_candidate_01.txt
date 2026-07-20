@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline production-ready pixel-art weapon identity master for inventory and world pickup
+Input images: Image 1 is the user-supplied QSZ92G edit target and geometry identity; Image 2 is the approved Project Raidline pistol pixel-style reference; Image 3 is the immutable Player pixel-density and palette anchor; Image 4 is the test-map contrast reference
+Primary request: convert only the handgun from Image 1 into the established Project Raidline pixel-art style while preserving the QSZ92G-recognizable proportions and major geometry
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: exactly one complete QSZ92G handgun; preserve the compact squared slide, front profile, trigger guard, curved textured grip, exposed rear control shapes, and short under-barrel rail; horizontally mirror the source presentation so the muzzle points exactly right
+Style/medium: crisp hand-authored 2D pixel art with stylized realism, chunky deliberate pixel clusters, strong dark outline, limited tonal steps, and the same visual language as Image 2
+Composition/framing: horizontal muzzle-right presentation with a subtle three-quarter top-down view; centered; full silhouette visible; generous empty padding on every side
+Lighting/mood: restrained upper-left light expressed with a few pixel-value bands; no cast shadow or contact shadow
+Color palette: muted charcoal, blackened steel, dark gray, and restrained olive-gray accents consistent with the approved Project Raidline items
+Materials/textures: matte metal slide and practical polymer grip simplified into readable pixel clusters
+Constraints: change the rendering style and orientation only; preserve the model-defining silhouette; exactly one weapon; background must be one uniform color with no gradient, texture, floor, reflection, or lighting variation; crisp isolated edges; do not use #ff00ff on the weapon; no text, letters, numbers, serial marks, model engraving, brand, logo, trademark, watermark, hands, ammunition, accessories, muzzle flash, smoke, or blood
+Avoid: redesigning into a generic western pistol, changing barrel or grip proportions, photorealism, smooth vector art, painterly rendering, 3D product render, excessive micro-detail, duplicate weapons, exploded view, border, or UI frame

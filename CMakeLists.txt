@@ -60,7 +60,7 @@ target_compile_features(HealthTest PRIVATE cxx_std_20)
 set_target_properties(HealthTest PROPERTIES CXX_EXTENSIONS OFF)
 
 # 将 GTest 主程序与 fmt 库链接到我们的测试目标上
-target_link_libraries(HealthTest PRIVATE GTest::gtest_main fmt::fmt)
+target_link_libraries(HealthTest PRIVATE GTest::gtest_main)
 target_include_directories(HealthTest PRIVATE src)
 
 # 向 CMake 的 CTest 工具注册所有的 Google Test 用例

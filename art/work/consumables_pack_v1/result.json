@@ -1,0 +1,198 @@
+{
+  "pack_id": "consumables_pack_v1",
+  "status": "generated_pending_batch_review",
+  "generator": {
+    "mode": "built-in image_gen",
+    "calls_completed": 4,
+    "chroma_key_workflow": {
+      "requested_color": "#ff00ff",
+      "removal_helper": "C:/Users/Administrator/.codex/skills/.system/imagegen/scripts/remove_chroma_key.py",
+      "arguments": [
+        "--auto-key",
+        "border",
+        "--soft-matte",
+        "--transparent-threshold",
+        "12",
+        "--opaque-threshold",
+        "220",
+        "--despill"
+      ]
+    }
+  },
+  "reference_images": [
+    {
+      "path": "assets/characters/protagonist_left_minimal_256x320.png",
+      "role": "primary pixel-art rendering and palette anchor"
+    },
+    {
+      "path": "assets/characters/player/default/player_default_move_horizontal_6f_1536x640.png",
+      "role": "visually inspected character consistency anchor; not submitted because the static player image already represents the same design"
+    },
+    {
+      "path": "assets/characters/enemy/default/enemy_default_move_horizontal_6f_1536x640.png",
+      "role": "secondary outline, texture, and survival-wear anchor"
+    },
+    {
+      "path": "assets/backgrounds/project_raidline_test_map_1280x720.png",
+      "role": "low-saturation world palette and ground-contrast anchor"
+    }
+  ],
+  "reference_observations": [
+    "Character art uses chunky readable pixels, strong dark outlines, restrained highlights, and black-gray, olive, khaki, brown, and muted red accents.",
+    "The map is low-contrast gray-green asphalt with sparse khaki and dark-red details, so pickup identities need a clean silhouette and selective light accents.",
+    "All generated references were used only for style and palette; no character, enemy, map, road, or blood element appears in the candidates."
+  ],
+  "assets": [
+    {
+      "id": "item_cola_basic_v1",
+      "target_footprint": [
+        1,
+        1
+      ],
+      "candidates": [
+        {
+          "id": "candidate_a",
+          "prompt_file": "item_cola_basic_v1/prompts/candidate_a.txt",
+          "chromakey_file": "item_cola_basic_v1/candidates/candidate_a_chromakey.png",
+          "rgba_file": "item_cola_basic_v1/candidates/candidate_a_rgba.png",
+          "rgba_validation": {
+            "size": [
+              1254,
+              1254
+            ],
+            "mode": "RGBA",
+            "alpha_bbox": [
+              351,
+              131,
+              878,
+              1099
+            ],
+            "nonzero_alpha_coverage": 0.2950,
+            "transparent_corner_alpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "opaque_magenta_pixels": 0
+          },
+          "visual_review": "Strong standard-can silhouette, clear open-top cue, restrained wear, and stable burgundy-charcoal-khaki identity. It matches the reference outline weight and remains the more distinctive small icon candidate."
+        },
+        {
+          "id": "candidate_b",
+          "prompt_file": "item_cola_basic_v1/prompts/candidate_b.txt",
+          "chromakey_file": "item_cola_basic_v1/candidates/candidate_b_chromakey.png",
+          "rgba_file": "item_cola_basic_v1/candidates/candidate_b_rgba.png",
+          "rgba_validation": {
+            "size": [
+              1254,
+              1254
+            ],
+            "mode": "RGBA",
+            "alpha_bbox": [
+              378,
+              157,
+              876,
+              1059
+            ],
+            "nonzero_alpha_coverage": 0.2583,
+            "transparent_corner_alpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "opaque_magenta_pixels": 0
+          },
+          "visual_review": "Clean slimmer alternative with a restrained abstract panel, but the left contour has more abrupt stepped protrusions and the body is less distinctive than candidate A at small size."
+        }
+      ],
+      "recommended_candidate": "candidate_a",
+      "recommendation_reason": "Candidate A has the stronger compact silhouette, clearer material separation, and more robust survival-loot identity while remaining text-free and brand-free.",
+      "risks": [
+        "The generated source is 1254x1254 rather than the later 256x256 master canvas; crop, padding, and nearest-neighbor reduction must be handled only after batch approval.",
+        "At 32x32 the top opening and khaki accents may need deterministic pixel cleanup; no such derived or final asset was produced in this work package.",
+        "The dark body must be checked against the actual map at world scale before publication."
+      ]
+    },
+    {
+      "id": "item_medkit_basic_v1",
+      "target_footprint": [
+        2,
+        2
+      ],
+      "candidates": [
+        {
+          "id": "candidate_a",
+          "prompt_file": "item_medkit_basic_v1/prompts/candidate_a.txt",
+          "chromakey_file": "item_medkit_basic_v1/candidates/candidate_a_chromakey.png",
+          "rgba_file": "item_medkit_basic_v1/candidates/candidate_a_rgba.png",
+          "rgba_validation": {
+            "size": [
+              1254,
+              1254
+            ],
+            "mode": "RGBA",
+            "alpha_bbox": [
+              173,
+              175,
+              1078,
+              1069
+            ],
+            "nonzero_alpha_coverage": 0.3760,
+            "transparent_corner_alpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "opaque_magenta_pixels": 0
+          },
+          "visual_review": "Detailed olive field pouch with excellent zipper and handle readability. The nested off-white and green plus treatment is visually busier and less direct than candidate B."
+        },
+        {
+          "id": "candidate_b",
+          "prompt_file": "item_medkit_basic_v1/prompts/candidate_b.txt",
+          "chromakey_file": "item_medkit_basic_v1/candidates/candidate_b_chromakey.png",
+          "rgba_file": "item_medkit_basic_v1/candidates/candidate_b_rgba.png",
+          "rgba_validation": {
+            "size": [
+              1254,
+              1254
+            ],
+            "mode": "RGBA",
+            "alpha_bbox": [
+              95,
+              154,
+              1148,
+              1067
+            ],
+            "nonzero_alpha_coverage": 0.4288,
+            "transparent_corner_alpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "opaque_magenta_pixels": 0
+          },
+          "visual_review": "Broad, readable 2x2 silhouette with a single unambiguous muted-green plus on an off-white patch, strong khaki-olive separation, and no red medical emblem."
+        }
+      ],
+      "recommended_candidate": "candidate_b",
+      "recommendation_reason": "Candidate B communicates the medical identity most directly at small size and better matches the requested white-and-green ordinary medical mark without invoking a red-cross emblem.",
+      "risks": [
+        "The left fabric loop and lower-right zipper pull widen the silhouette; final 512x512 master framing must preserve the required safety margin.",
+        "The generated source is 1254x1254 rather than the later 512x512 master canvas; deterministic crop and reduction remain pending batch approval.",
+        "The khaki body needs a world-scale map preview to confirm contrast on gray-green ground."
+      ]
+    }
+  ],
+  "scope_confirmation": {
+    "inventory_or_world_derivatives_created": false,
+    "published_assets_created": false,
+    "manifest_modified": false,
+    "source_code_modified": false,
+    "written_root": "art/work/consumables_pack_v1/"
+  }
+}

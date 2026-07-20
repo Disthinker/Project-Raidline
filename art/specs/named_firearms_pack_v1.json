@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "package_id": "named_firearms_pack_v1",
+  "candidate_count_per_asset": 2,
+  "maximum_repair_rounds": 1,
+  "chroma_key": "#ff00ff",
+  "inventory_cell_size": 64,
+  "inventory_safe_padding": 6,
+  "source_scale": 4,
+  "assets": {
+    "item_pistol_qsz92g_v1": {
+      "display_name": "QSZ92G",
+      "reference": "art/references/weapons/named_firearms_pack_v1/QSZ92G_reference.png",
+      "grid_footprint": [2, 1],
+      "can_rotate": true,
+      "master_size": [512, 256],
+      "inventory_size": [128, 64],
+      "world_size": [64, 32],
+      "orientation": "muzzle_right"
+    },
+    "item_rifle_qbz95_1_v1": {
+      "display_name": "QBZ95-1",
+      "reference": "art/references/weapons/named_firearms_pack_v1/QBZ95-1_reference.png",
+      "grid_footprint": [4, 2],
+      "can_rotate": true,
+      "master_size": [1024, 512],
+      "inventory_size": [256, 128],
+      "world_size": [128, 64],
+      "orientation": "muzzle_right"
+    },
+    "item_shotgun_m870_v1": {
+      "display_name": "M870",
+      "reference": "art/references/weapons/named_firearms_pack_v1/M870_reference.png",
+      "grid_footprint": [5, 2],
+      "can_rotate": true,
+      "master_size": [1280, 512],
+      "inventory_size": [320, 128],
+      "world_size": [160, 64],
+      "orientation": "muzzle_right"
+    }
+  }
+}

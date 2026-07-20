@@ -45,6 +45,16 @@ TEST(GameplayWorldTest, InitialEnemiesState)
     EXPECT_FLOAT_EQ(enemyPosition.y, 100.0f);
     EXPECT_FLOAT_EQ(enemySize.x, 50.0f);
     EXPECT_FLOAT_EQ(enemySize.y, 50.0f);
+    EXPECT_EQ(enemy.health(), 3);
+    EXPECT_EQ(enemy.maxHealth(), 3);
+    EXPECT_FALSE(enemy.isDead());
+}
+
+TEST(GameplayWorldTest, InitialScoreIsZero)
+{
+    const GameplayWorld world;
+
+    EXPECT_EQ(world.score(), 0);
 }
 
 // MoveRight input 更新后，world.player().position().x 变大
@@ -74,6 +84,7 @@ TEST(GameplayWorldTest, FireCreatesProjectile)
     EXPECT_FLOAT_EQ(projectile.position().y, 340.0f);
     EXPECT_FLOAT_EQ(projectile.width(), 8.0f);
     EXPECT_FLOAT_EQ(projectile.height(), 20.0f);
+    EXPECT_EQ(projectile.damage(), 1);
 }
 
 // 不按 Fire 不生成 Projectile
@@ -105,8 +116,11 @@ TEST(GameplayWorldTest, ProjectileMovesAfterSpawn)
     EXPECT_LT(world.projectiles()[0].position().y, initialY);
 }
 
-// Projectile 可以命中移动的 Enemy
-TEST(GameplayWorldTest, ProjectileCanHitMovingEnemy)
+// Projectile 命中 3 HP Enemy 后，Projectile 被消耗，
+// Enemy 扣除 1 HP 但仍然保留。
+TEST(
+    GameplayWorldTest,
+    ProjectileCanDamageMovingEnemyWithoutKillingIt)
 {
     GameplayWorld world;
 
@@ -115,12 +129,17 @@ TEST(GameplayWorldTest, ProjectileCanHitMovingEnemy)
 
     ASSERT_EQ(world.projectiles().size(), 1u);
     ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 3);
 
     GameplayInput noInput{};
     world.update(noInput, 0.35f);
 
     EXPECT_TRUE(world.projectiles().empty());
-    EXPECT_TRUE(world.enemies().empty());
+
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 2);
+    EXPECT_FALSE(world.enemies()[0].isDead());
+    EXPECT_EQ(world.score(), 0);
 }
 
 // GameplayWorld 持有的 Enemy 不再是静态实体
@@ -412,6 +431,10 @@ TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
 
     createDefaultProjectileHit(world);
 
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 2);
+    EXPECT_EQ(world.score(), 0);
+
     ASSERT_EQ(world.particles().size(), 12u);
 
     for (const Particle &particle : world.particles())
@@ -436,4 +459,48 @@ TEST(GameplayWorldTest, ExpiredParticlesAreRemovedByWorldUpdate)
     world.update(noInput, 0.50f);
 
     EXPECT_TRUE(world.particles().empty());
+}
+
+TEST(
+    GameplayWorldTest,
+    LethalHitAwardsScoreAndRemovesEnemy)
+{
+    // 使用 1 HP Enemy，让默认 1 damage Projectile
+    // 通过一次真实命中完成死亡结算。
+    GameplayWorld world{1};
+
+    EXPECT_EQ(world.score(), 0);
+    ASSERT_EQ(world.enemies().size(), 1u);
+    EXPECT_EQ(world.enemies()[0].health(), 1);
+
+    createDefaultProjectileHit(world);
+
+    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.enemies().empty());
+
+    EXPECT_EQ(world.score(), 100);
+
+    // 致命命中也必须产生 impact particles。
+    EXPECT_EQ(world.particles().size(), 12u);
+}
+
+TEST(
+    GameplayWorldTest,
+    RemovedEnemyCannotAwardScoreAgain)
+{
+    GameplayWorld world{1};
+
+    createDefaultProjectileHit(world);
+
+    ASSERT_TRUE(world.enemies().empty());
+    ASSERT_EQ(world.score(), 100);
+
+    GameplayInput noInput{};
+
+    // Enemy 已经被删除。
+    // 后续更新不能再次增加 Score。
+    world.update(noInput, 1.0f);
+
+    EXPECT_TRUE(world.enemies().empty());
+    EXPECT_EQ(world.score(), 100);
 }

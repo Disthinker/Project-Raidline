@@ -1,0 +1,221 @@
+version: 1
+
+project:
+  name: Project Raidline
+  phase: phase1_week13_16
+  art_bible: art/ART_BIBLE.md
+
+pipeline:
+  state: phase1_complete
+  main_task_is_manifest_writer: true
+  max_parallel_generation_packages: 2
+  candidates_per_asset: 2
+  max_repair_rounds: 1
+  approved_assets_immutable: true
+  selection: art/work/phase1_selection.json
+  contact_sheet: art/reviews/contact_sheets/phase1_item_candidates.png
+  technical_qa: art/reviews/batch_reports/phase1_week13_16_qa.json
+  acceptance_report: art/reviews/batch_reports/phase1_week13_16_acceptance.md
+
+production_packages:
+  - id: named_firearms_pack_v1
+    status: failed_archived
+    production_thread_id: 019f7eb5-1aa3-7891-8ae3-af7541956e36
+    production_thread_host: local
+    brief: .prompts/art/named_firearms_pack_v1/PRODUCTION_BRIEF.md
+    contract: art/specs/named_firearms_pack_v1.json
+    work_root: art/work/named_firearms_pack_v1/
+    candidates_per_asset: 2
+    maximum_repair_rounds: 1
+    failure: stalled_after_view_image_tool_failure
+
+  - id: named_firearms_pack_v1_retry
+    status: completed_accepted
+    production_thread_id: 019f7ec2-9935-7a30-b20f-715e8d57947a
+    production_thread_host: local
+    brief: .prompts/art/named_firearms_pack_v1/PRODUCTION_BRIEF.md
+    contract: art/specs/named_firearms_pack_v1.json
+    work_root: art/work/named_firearms_pack_v1_retry/
+    candidates_per_asset: 2
+    maximum_repair_rounds: 1
+    result: art/work/named_firearms_pack_v1_retry/result.json
+    selection: art/work/named_firearms_pack_v1_retry/selection.json
+    contact_sheet: art/reviews/named_firearms_pack_v1/contact_sheet.png
+    technical_qa: art/reviews/named_firearms_pack_v1/qa.json
+    acceptance_report: art/reviews/named_firearms_pack_v1/acceptance.md
+    repair_rounds_used: 0
+
+anchors:
+  - id: player_static_existing_v1
+    status: approved
+    immutable: true
+    role: character_style_anchor
+    path: assets/characters/protagonist_left_minimal_256x320.png
+    canvas: [256, 320]
+    source_pivot: [128, 300]
+
+  - id: player_walk_horizontal_existing_v1
+    status: approved
+    immutable: true
+    role: character_style_anchor
+    path: assets/characters/player/default/player_default_move_horizontal_6f_1536x640.png
+    canvas: [1536, 640]
+    frame_size: [256, 320]
+    grid: [6, 2]
+    source_pivot: [128, 300]
+
+  - id: enemy_default_existing_v1
+    status: generated
+    immutable: false
+    role: auxiliary_style_reference
+    path: assets/characters/enemy/default/enemy_default_move_horizontal_6f_1536x640.png
+
+  - id: test_map_existing_v1
+    status: generated
+    immutable: false
+    role: auxiliary_palette_reference
+    path: assets/backgrounds/project_raidline_test_map_1280x720.png
+
+assets:
+  - id: item_cola_basic_v1
+    family: consumable
+    type: item_identity
+    status: approved
+    priority: P0
+    grid_footprint: [1, 1]
+    can_rotate: false
+    master_size: [256, 256]
+    inventory_size: [64, 64]
+    world_draw_size: [32, 32]
+    work_package: consumables_pack_v1
+    selected_candidate: art/work/consumables_pack_v1/item_cola_basic_v1/candidates/candidate_a_rgba.png
+    approved_in_batch: phase1_week13_16
+    final:
+      source_master: assets/items/source/item_cola_basic_v1.png
+      inventory_texture: assets/items/inventory/item_cola_basic_v1_64x64.png
+      world_texture: assets/items/world/item_cola_basic_v1_32x32.png
+
+  - id: item_pistol_basic_v1
+    family: weapon
+    type: item_identity
+    status: approved
+    priority: P0
+    grid_footprint: [2, 1]
+    can_rotate: true
+    master_size: [512, 256]
+    inventory_size: [128, 64]
+    world_draw_size: [64, 32]
+    work_package: basic_weapons_pack_v1
+    selected_candidate: art/work/basic_weapons_pack_v1/candidates/item_pistol_basic_v1/candidate_02_rgba.png
+    approved_in_batch: phase1_week13_16
+    final:
+      source_master: assets/items/source/item_pistol_basic_v1.png
+      inventory_texture: assets/items/inventory/item_pistol_basic_v1_128x64.png
+      world_texture: assets/items/world/item_pistol_basic_v1_64x32.png
+
+  - id: item_rifle_basic_v1
+    family: weapon
+    type: item_identity
+    status: approved
+    priority: P0
+    grid_footprint: [4, 2]
+    can_rotate: true
+    master_size: [1024, 512]
+    inventory_size: [256, 128]
+    world_draw_size: [128, 64]
+    work_package: basic_weapons_pack_v1
+    selected_candidate: art/work/basic_weapons_pack_v1/candidates/item_rifle_basic_v1/candidate_02_rgba.png
+    approved_in_batch: phase1_week13_16
+    final:
+      source_master: assets/items/source/item_rifle_basic_v1.png
+      inventory_texture: assets/items/inventory/item_rifle_basic_v1_256x128.png
+      world_texture: assets/items/world/item_rifle_basic_v1_128x64.png
+
+  - id: item_medkit_basic_v1
+    family: medical
+    type: item_identity
+    status: approved
+    priority: P0
+    grid_footprint: [2, 2]
+    can_rotate: false
+    master_size: [512, 512]
+    inventory_size: [128, 128]
+    world_draw_size: [64, 64]
+    work_package: consumables_pack_v1
+    selected_candidate: art/work/consumables_pack_v1/item_medkit_basic_v1/candidates/candidate_b_rgba.png
+    approved_in_batch: phase1_week13_16
+    final:
+      source_master: assets/items/source/item_medkit_basic_v1.png
+      inventory_texture: assets/items/inventory/item_medkit_basic_v1_128x128.png
+      world_texture: assets/items/world/item_medkit_basic_v1_64x64.png
+
+  - id: item_pistol_qsz92g_v1
+    family: weapon
+    subtype: pistol
+    type: named_item_identity
+    status: approved
+    priority: P0
+    identity_reference: art/references/weapons/named_firearms_pack_v1/QSZ92G_reference.png
+    grid_footprint: [2, 1]
+    can_rotate: true
+    master_size: [512, 256]
+    inventory_size: [128, 64]
+    world_draw_size: [64, 32]
+    work_package: named_firearms_pack_v1_retry
+    selected_candidate: art/work/named_firearms_pack_v1_retry/candidates/item_pistol_qsz92g_v1/candidate_01_rgba.png
+    approved_in_batch: named_firearms_pack_v1_retry
+    final:
+      source_master: assets/items/source/item_pistol_qsz92g_v1.png
+      inventory_texture: assets/items/inventory/item_pistol_qsz92g_v1_128x64.png
+      world_texture: assets/items/world/item_pistol_qsz92g_v1_64x32.png
+
+  - id: item_rifle_qbz95_1_v1
+    family: weapon
+    subtype: rifle
+    type: named_item_identity
+    status: approved
+    priority: P0
+    identity_reference: art/references/weapons/named_firearms_pack_v1/QBZ95-1_reference.png
+    grid_footprint: [4, 2]
+    can_rotate: true
+    master_size: [1024, 512]
+    inventory_size: [256, 128]
+    world_draw_size: [128, 64]
+    work_package: named_firearms_pack_v1_retry
+    selected_candidate: art/work/named_firearms_pack_v1_retry/candidates/item_rifle_qbz95_1_v1/candidate_01_rgba.png
+    approved_in_batch: named_firearms_pack_v1_retry
+    final:
+      source_master: assets/items/source/item_rifle_qbz95_1_v1.png
+      inventory_texture: assets/items/inventory/item_rifle_qbz95_1_v1_256x128.png
+      world_texture: assets/items/world/item_rifle_qbz95_1_v1_128x64.png
+
+  - id: item_shotgun_m870_v1
+    family: weapon
+    subtype: shotgun
+    type: named_item_identity
+    status: approved
+    priority: P0
+    identity_reference: art/references/weapons/named_firearms_pack_v1/M870_reference.png
+    grid_footprint: [5, 2]
+    can_rotate: true
+    master_size: [1280, 512]
+    inventory_size: [320, 128]
+    world_draw_size: [160, 64]
+    work_package: named_firearms_pack_v1_retry
+    selected_candidate: art/work/named_firearms_pack_v1_retry/candidates/item_shotgun_m870_v1/candidate_02_rgba.png
+    approved_in_batch: named_firearms_pack_v1_retry
+    final:
+      source_master: assets/items/source/item_shotgun_m870_v1.png
+      inventory_texture: assets/items/inventory/item_shotgun_m870_v1_320x128.png
+      world_texture: assets/items/world/item_shotgun_m870_v1_160x64.png
+
+deferred_families:
+  - character_layers
+  - weapon_attachments
+  - projectile_and_muzzle_vfx
+  - procedural_map_tiles
+  - poi_buildings
+  - damage_overlays
+  - limb_fragments
+  - corpses
+  - raster_inventory_chrome

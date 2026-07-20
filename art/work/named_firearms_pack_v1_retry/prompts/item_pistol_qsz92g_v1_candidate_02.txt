@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline small-scale-readable pixel-art weapon identity master
+Input images: Image 1 is the user-supplied QSZ92G edit target and geometry identity; Image 2 is the approved Project Raidline pistol pixel-style reference; Image 3 is the immutable Player style anchor; Image 4 is the test-map contrast reference
+Primary request: re-render the QSZ92G from Image 1 as a gameplay-readable Project Raidline pixel-art sprite, preserving identity while simplifying only details that disappear at 128x64 inventory size
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: exactly one QSZ92G handgun with its recognizable short slide, compact front, rounded trigger guard, curved grip, grip texture block, rear hammer/control silhouette, and short lower rail; mirror it to muzzle-right orientation
+Style/medium: readable stylized-realism pixel art, slightly bolder silhouette than Image 1, controlled 2-4 tone material ramps, deliberate pixel clusters, no smooth airbrushing
+Composition/framing: horizontal muzzle-right, lightly top-down three-quarter presentation, centered with balanced negative space and the complete weapon separated from all canvas edges
+Lighting/mood: consistent upper-left highlight and compact internal shading only; no external shadow
+Color palette: charcoal, near-black, worn gunmetal, subtle muted khaki-gray grip highlights
+Materials/textures: simplified matte metal and polymer; keep grip texture as one coherent readable region
+Constraints: preserve QSZ92G identity and proportions; optimize silhouette for nearest-neighbor reduction; exactly one weapon; uniform #ff00ff background with no gradients or shadows; no magenta in subject; no writing, markings, symbols, logos, serial numbers, trademark, watermark, attachments, hands, ammunition, effects, or extra objects
+Avoid: genericizing the weapon, inventing optics or suppressors, enlarging the rail, cartoon exaggeration, photorealism, anti-aliased vector look, noisy scratches, duplicate objects, cropped muzzle or grip, UI framing

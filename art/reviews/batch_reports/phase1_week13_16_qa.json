@@ -1,0 +1,295 @@
+{
+  "status": "passed",
+  "assets": {
+    "item_cola_basic_v1": {
+      "master": {
+        "path": "assets\\items\\source\\item_cola_basic_v1.png",
+        "size": [
+          256,
+          256
+        ],
+        "expected_size": [
+          256,
+          256
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          71,
+          24,
+          184,
+          232
+        ],
+        "transparent_corners_ok": true
+      },
+      "inventory": {
+        "path": "assets\\items\\inventory\\item_cola_basic_v1_64x64.png",
+        "size": [
+          64,
+          64
+        ],
+        "expected_size": [
+          64,
+          64
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          18,
+          6,
+          46,
+          58
+        ],
+        "transparent_corners_ok": true,
+        "safe_padding_ok": true
+      },
+      "world": {
+        "path": "assets\\items\\world\\item_cola_basic_v1_32x32.png",
+        "size": [
+          32,
+          32
+        ],
+        "expected_size": [
+          32,
+          32
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          9,
+          3,
+          23,
+          29
+        ],
+        "transparent_corners_ok": true
+      },
+      "grid_footprint_matches_inventory": true,
+      "rotation": {
+        "enabled": false,
+        "rotated_footprint": null,
+        "size_ok": true
+      },
+      "deterministic_identity_ok": true
+    },
+    "item_pistol_basic_v1": {
+      "master": {
+        "path": "assets\\items\\source\\item_pistol_basic_v1.png",
+        "size": [
+          512,
+          256
+        ],
+        "expected_size": [
+          512,
+          256
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          103,
+          24,
+          409,
+          232
+        ],
+        "transparent_corners_ok": true
+      },
+      "inventory": {
+        "path": "assets\\items\\inventory\\item_pistol_basic_v1_128x64.png",
+        "size": [
+          128,
+          64
+        ],
+        "expected_size": [
+          128,
+          64
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          26,
+          6,
+          102,
+          58
+        ],
+        "transparent_corners_ok": true,
+        "safe_padding_ok": true
+      },
+      "world": {
+        "path": "assets\\items\\world\\item_pistol_basic_v1_64x32.png",
+        "size": [
+          64,
+          32
+        ],
+        "expected_size": [
+          64,
+          32
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          13,
+          3,
+          51,
+          29
+        ],
+        "transparent_corners_ok": true
+      },
+      "grid_footprint_matches_inventory": true,
+      "rotation": {
+        "enabled": true,
+        "rotated_footprint": [
+          1,
+          2
+        ],
+        "rotated_size": [
+          64,
+          128
+        ],
+        "expected_size": [
+          64,
+          128
+        ],
+        "size_ok": true
+      },
+      "deterministic_identity_ok": true
+    },
+    "item_rifle_basic_v1": {
+      "master": {
+        "path": "assets\\items\\source\\item_rifle_basic_v1.png",
+        "size": [
+          1024,
+          512
+        ],
+        "expected_size": [
+          1024,
+          512
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          24,
+          110,
+          1000,
+          401
+        ],
+        "transparent_corners_ok": true
+      },
+      "inventory": {
+        "path": "assets\\items\\inventory\\item_rifle_basic_v1_256x128.png",
+        "size": [
+          256,
+          128
+        ],
+        "expected_size": [
+          256,
+          128
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          6,
+          27,
+          250,
+          100
+        ],
+        "transparent_corners_ok": true,
+        "safe_padding_ok": true
+      },
+      "world": {
+        "path": "assets\\items\\world\\item_rifle_basic_v1_128x64.png",
+        "size": [
+          128,
+          64
+        ],
+        "expected_size": [
+          128,
+          64
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          3,
+          14,
+          125,
+          50
+        ],
+        "transparent_corners_ok": true
+      },
+      "grid_footprint_matches_inventory": true,
+      "rotation": {
+        "enabled": true,
+        "rotated_footprint": [
+          2,
+          4
+        ],
+        "rotated_size": [
+          128,
+          256
+        ],
+        "expected_size": [
+          128,
+          256
+        ],
+        "size_ok": true
+      },
+      "deterministic_identity_ok": true
+    },
+    "item_medkit_basic_v1": {
+      "master": {
+        "path": "assets\\items\\source\\item_medkit_basic_v1.png",
+        "size": [
+          512,
+          512
+        ],
+        "expected_size": [
+          512,
+          512
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          24,
+          55,
+          488,
+          457
+        ],
+        "transparent_corners_ok": true
+      },
+      "inventory": {
+        "path": "assets\\items\\inventory\\item_medkit_basic_v1_128x128.png",
+        "size": [
+          128,
+          128
+        ],
+        "expected_size": [
+          128,
+          128
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          6,
+          14,
+          122,
+          114
+        ],
+        "transparent_corners_ok": true,
+        "safe_padding_ok": true
+      },
+      "world": {
+        "path": "assets\\items\\world\\item_medkit_basic_v1_64x64.png",
+        "size": [
+          64,
+          64
+        ],
+        "expected_size": [
+          64,
+          64
+        ],
+        "size_ok": true,
+        "alpha_bbox": [
+          3,
+          7,
+          61,
+          57
+        ],
+        "transparent_corners_ok": true
+      },
+      "grid_footprint_matches_inventory": true,
+      "rotation": {
+        "enabled": false,
+        "rotated_footprint": null,
+        "size_ok": true
+      },
+      "deterministic_identity_ok": true
+    }
+  }
+}

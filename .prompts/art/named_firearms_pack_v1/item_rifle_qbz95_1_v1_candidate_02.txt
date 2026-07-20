@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline small-scale-readable pixel-art weapon identity master
+Input images: Image 1 is the user-supplied QBZ95-1 edit target and geometry identity; Image 2 is the approved Project Raidline rifle pixel-style reference; Image 3 is the immutable Player style anchor; Image 4 is the test-map contrast reference
+Primary request: re-render the QBZ95-1 as a gameplay-readable Project Raidline pixel sprite, retaining its exact bullpup visual identity while simplifying micro-details for a 256x128 inventory profile
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: one QBZ95-1 with a clean integrated carry-handle opening, rear magazine well, curved magazine behind the grip, compact stock/receiver body, front handguard, front sight, and barrel; mirror to muzzle-right
+Style/medium: stylized-realism pixel art with a bold recognizable silhouette, carefully stepped curves, 2-4 tone ramps, and controlled highlights consistent with the existing weapon assets
+Composition/framing: horizontal muzzle-right, lightly top-down three-quarter view, centered, uncropped, broad safe margins
+Lighting/mood: upper-left light, restrained highlights, no external shadow or floor plane
+Color palette: low-saturation black, graphite, charcoal, dark olive-gray, minimal steel highlights
+Materials/textures: broad matte polymer regions with sparse wear; magazine and barrel remain visually distinct
+Constraints: preserve QBZ95-1 carry handle and rear-magazine bullpup structure; exactly one complete weapon; solid uniform #ff00ff backdrop; no magenta subject pixels; no letters, numbers, serial marks, logos, trademarks, watermark, attachments, hands, ammo, effects, or extra objects
+Avoid: generic assault-rifle redesign, forward magazine, accessory rails, optics, over-detailed scratches, photoreal rendering, smooth vector edges, cartoon distortion, duplication, cropping, exploded view, UI frame

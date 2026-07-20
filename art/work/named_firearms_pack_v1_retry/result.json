@@ -1,0 +1,335 @@
+{
+  "package_id": "named_firearms_pack_v1_retry",
+  "status": "generated_pending_control_review",
+  "approved": false,
+  "published": false,
+  "generation_mode": "built-in image_gen",
+  "calls_completed": 6,
+  "failed_generation_attempts": [],
+  "reference_inspection": {
+    "method": "view_image, one image per call",
+    "failures": [],
+    "images": [
+      {
+        "path": "art/references/weapons/named_firearms_pack_v1/QSZ92G_reference.png",
+        "role": "QSZ92G edit target and identity reference",
+        "status": "inspected"
+      },
+      {
+        "path": "art/references/weapons/named_firearms_pack_v1/QBZ95-1_reference.png",
+        "role": "QBZ95-1 edit target and identity reference",
+        "status": "inspected"
+      },
+      {
+        "path": "art/references/weapons/named_firearms_pack_v1/M870_reference.png",
+        "role": "M870 edit target and identity reference",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/items/source/item_pistol_basic_v1.png",
+        "role": "approved pistol pixel-style reference",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/items/source/item_rifle_basic_v1.png",
+        "role": "approved rifle and shotgun pixel-style reference",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/characters/protagonist_left_minimal_256x320.png",
+        "role": "immutable Player pixel-density and palette anchor",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/backgrounds/project_raidline_test_map_1280x720.png",
+        "role": "test-map contrast and palette reference",
+        "status": "inspected"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "asset_id": "item_pistol_qsz92g_v1",
+      "recommended_candidate": "candidate_02",
+      "recommendation_reason": "Candidate 02 has the cleanest compact muzzle-right silhouette, the strongest slide-frame-trigger-grip separation, and the bolder value grouping for later 128x64 evaluation while retaining the QSZ92G curved grip, rear control silhouette, and short lower rail.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_pistol_qsz92g_v1_candidate_01.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "ad74042c13199a6946fc115e59bd163546ebe0fe95c2ba660bd798b7d7fbe7aa"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_HZIsv5ZEAnXs0WLh6DYeQd0C.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_pistol_qsz92g_v1/candidate_01_chroma.png",
+              "sha256": "8233d43d270d54e06cba93f1ccd70fa0aadcd5804df5de3f715bc75ef6daadee",
+              "sampled_key": "#fb03f9",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_pistol_qsz92g_v1/candidate_01_rgba.png",
+              "sha256": "352ebebf533074fc9d767f5bd307184cb658cb573389f6b6dff1fdce1be36791"
+            }
+          },
+          "visual_review": "Pass. One complete QSZ92G-like handgun, muzzle right, uncropped, strong pixel contour, readable sights, trigger guard, textured curved grip, rear control shapes and short lower rail; no text, logo, hand, ammunition, attachment, effect or extra object. This candidate carries more receiver and control detail than candidate 02.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1718, 916],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 294963,
+            "alpha_opaque_pixels": 289235,
+            "alpha_partial_pixels": 5728,
+            "alpha_bbox_px": [409, 115, 1327, 770],
+            "transparent_margins_px": [409, 115, 391, 146],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_pistol_qsz92g_v1_candidate_02.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "5a61de69661dd9f05acf369b702077e66a59ed3bf62948b68c61870f3124ebd0"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_O2tmRXAQUcXBDncEnyey02GS.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_pistol_qsz92g_v1/candidate_02_chroma.png",
+              "sha256": "b25cfc0df602862809cef0fa82dad7fac879531c52b8dffd05c4f26094323ede",
+              "sampled_key": "#fb03f9",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_pistol_qsz92g_v1/candidate_02_rgba.png",
+              "sha256": "9cf6f2a78c8b0ea7cce0ed3053f7b522e3b3e1fe33af20f945318dfc8bfc407b"
+            }
+          },
+          "visual_review": "Pass and production-task recommendation. One complete QSZ92G-like handgun, muzzle right, uncropped, with a bold slide, rounded trigger guard, coherent khaki-gray grip-texture block, rear hammer-control silhouette and lower rail; no text, logo, hand, ammunition, attachment, effect or extra object.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1746, 901],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 352966,
+            "alpha_opaque_pixels": 346915,
+            "alpha_partial_pixels": 6051,
+            "alpha_bbox_px": [380, 78, 1367, 796],
+            "transparent_margins_px": [380, 78, 379, 105],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        }
+      ],
+      "risks": [
+        "Both candidates simplify fine QSZ92G control geometry and should receive human identity review against the supplied reference before approval.",
+        "Candidate 01 includes a small red control indicator and denser top-slide detail; art control should decide whether these details remain acceptable at Project Raidline item scale.",
+        "Small-size readability has not been tested in a 128x64 derivative because inventory and world derivation is outside this production package."
+      ]
+    },
+    {
+      "asset_id": "item_rifle_qbz95_1_v1",
+      "recommended_candidate": "candidate_02",
+      "recommendation_reason": "Candidate 02 gives the clearest integrated carry-handle opening, compact receiver, rear curved magazine, pistol grip, fore-end and isolated barrel zones while retaining a clean muzzle-right silhouette suitable for later 256x128 evaluation.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_rifle_qbz95_1_v1_candidate_01.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "bd1e11253378459e031d167324d0111839b449114739cb2c0678c5c3a3cf40a1"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_RJjhbPUr7nXqcZZMXUesuhr7.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_rifle_qbz95_1_v1/candidate_01_chroma.png",
+              "sha256": "37f0ee2c84030d9be054c5aae21544d27e6203f32681b93edec44cd118e97b12",
+              "sampled_key": "#fb03f8",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_rifle_qbz95_1_v1/candidate_01_rgba.png",
+              "sha256": "d7e1d48a001f80b174f3543d11549815ad9f0652de9814c9c666c930efe8f613"
+            }
+          },
+          "visual_review": "Pass. One complete QBZ95-1-like bullpup rifle, muzzle right, uncropped, with a large integrated carry-handle opening, rear curved magazine behind the pistol grip, compact fore-end, front sight and short exposed barrel; no text, logo, optic, sling, hand, ammunition, effect or extra object.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1774, 887],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 393627,
+            "alpha_opaque_pixels": 383544,
+            "alpha_partial_pixels": 10083,
+            "alpha_bbox_px": [78, 116, 1709, 784],
+            "transparent_margins_px": [78, 116, 65, 103],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_rifle_qbz95_1_v1_candidate_02.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "12849d32c9b4cfdd1e85d12de588244c619f08fbaebc3a7ccb8fb78bc233111f"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_HpvyF2GuZ4KFEhQq19y9Fr3M.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_rifle_qbz95_1_v1/candidate_02_chroma.png",
+              "sha256": "71f580998bc1aa3ae3f8eacec081a3971dbbf6e81d532b3421ceb701df6f89c2",
+              "sampled_key": "#fa03f9",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_rifle_qbz95_1_v1/candidate_02_rgba.png",
+              "sha256": "64e37eb46082511dc4d43f53ff49715bd33642ab030841a323b73b5ee83f201c"
+            }
+          },
+          "visual_review": "Pass and production-task recommendation. One complete QBZ95-1-like bullpup rifle, muzzle right, uncropped, with a clean carry-handle opening, rear magazine behind the grip, compact stock-receiver body, distinct handguard, front sight and barrel; no text, logo, optic, sling, hand, ammunition, effect or extra object.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1774, 887],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 389866,
+            "alpha_opaque_pixels": 365867,
+            "alpha_partial_pixels": 23999,
+            "alpha_bbox_px": [74, 132, 1713, 765],
+            "transparent_margins_px": [74, 132, 61, 122],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        }
+      ],
+      "risks": [
+        "Both candidates preserve the bullpup layout but simplify receiver panels, carry-handle geometry and the exact curved-magazine profile; human identity review is required before approval.",
+        "Candidate 02 has more partially transparent edge pixels than candidate 01, although visual inspection found no obvious magenta fringe.",
+        "Small-size readability has not been tested in a 256x128 derivative because inventory and world derivation is outside this production package."
+      ]
+    },
+    {
+      "asset_id": "item_shotgun_m870_v1",
+      "recommended_candidate": "candidate_02",
+      "recommendation_reason": "Candidate 02 has the cleanest long pump-shotgun silhouette, the clearest barrel and magazine-tube separation, restrained wood treatment, and the most readable stock-receiver-pump sequence for later 320x128 evaluation.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_shotgun_m870_v1_candidate_01.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "13cdb0d8d21dee9281ec3bc948f314498a4473355a6285bc0a6655ef55a0e672"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_09pvaECC6ZuKvjN4eHhWoNIL.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_shotgun_m870_v1/candidate_01_chroma.png",
+              "sha256": "8232b1ad7a3e8d23944598e448ef6a8a5e72cceafff990ec1cb0dac080ca408c",
+              "sampled_key": "#f803f6",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_shotgun_m870_v1/candidate_01_rgba.png",
+              "sha256": "3e812d03ae93767f8bd9b5aa564d9f62e262796f0d2921b57b82aafec99bd139"
+            }
+          },
+          "visual_review": "Pass. One complete long M870-like pump shotgun, muzzle right, uncropped, with a wooden shoulder stock and pump, compact receiver, trigger guard, long barrel, parallel magazine tube and butt pad; no text, logo, shell, sling, hand, muzzle effect or extra object.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1774, 887],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 184198,
+            "alpha_opaque_pixels": 176466,
+            "alpha_partial_pixels": 7732,
+            "alpha_bbox_px": [61, 278, 1717, 596],
+            "transparent_margins_px": [61, 278, 57, 291],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_shotgun_m870_v1_candidate_02.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "6d066e6a4bcb4c034ea676d239a48a5a482188da1138fddec71f99f22f7aa605"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7ec2-9935-7a30-b20f-715e8d57947a/call_lMPE9nlSsN7biZ9aI9pWBXIi.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_shotgun_m870_v1/candidate_02_chroma.png",
+              "sha256": "768553f10dab7a227c75407bec5821103cb5561f82f71b60341b15b90524a668",
+              "sampled_key": "#fb03f9",
+              "exact_ff00ff_border_fraction": 0.0
+            },
+            "rgba": {
+              "path": "candidates/item_shotgun_m870_v1/candidate_02_rgba.png",
+              "sha256": "97a04a72ed607adf4b0fcad7ee6b610cde8e495ec9273f8bae962862b6dd1e6d"
+            }
+          },
+          "visual_review": "Pass and production-task recommendation. One complete long M870-like pump shotgun, muzzle right, uncropped, with clearly separated barrel and magazine tube, readable pump, receiver, trigger guard, full wooden stock and butt pad; no text, logo, shell, sling, hand, muzzle effect or extra object.",
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1983, 793],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 204412,
+            "alpha_opaque_pixels": 197765,
+            "alpha_partial_pixels": 6647,
+            "alpha_bbox_px": [69, 233, 1903, 565],
+            "transparent_margins_px": [69, 233, 80, 228],
+            "corner_alpha": [0, 0, 0, 0],
+            "exact_opaque_ff00ff_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_muzzle_right_silhouette": true,
+            "result": "pass"
+          }
+        }
+      ],
+      "risks": [
+        "Both candidates include a short raised receiver-top rib that could be read as an integral sight base or as an unrequested rail-like attachment; art control should make that call against the supplied reference and no-attachments rule.",
+        "The wooden furniture and receiver geometry are simplified and require human identity review before approval.",
+        "Small-size readability has not been tested in a 320x128 derivative because inventory and world derivation is outside this production package."
+      ]
+    }
+  ],
+  "recommended_candidates": {
+    "item_pistol_qsz92g_v1": "candidates/item_pistol_qsz92g_v1/candidate_02_rgba.png",
+    "item_rifle_qbz95_1_v1": "candidates/item_rifle_qbz95_1_v1/candidate_02_rgba.png",
+    "item_shotgun_m870_v1": "candidates/item_shotgun_m870_v1/candidate_02_rgba.png"
+  },
+  "chroma_key_processing": {
+    "requested_key": "#ff00ff",
+    "method": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+    "raw_chroma_exact_requested_key": false,
+    "note": "The built-in generator produced visually flat near-magenta backgrounds rather than mathematically exact #ff00ff pixels; no sampled image border contained exact #ff00ff. Raw generated chroma images were preserved unchanged. Border auto-key sampling removed the observed keys successfully, all RGBA corners are fully transparent, and no exact or near-opaque magenta pixels remain."
+  },
+  "known_risks": [
+    "The six raw chroma renders miss the exact requested #ff00ff value and contain small near-magenta border variation. The transparent deliverables pass Alpha and magenta-remnant QA, but the raw-background deviation is retained for art-control review.",
+    "Identity fidelity is based on one supplied image per firearm; model-specific geometry must receive human art-control review before acceptance.",
+    "No inventory or world derivatives were produced, so final small-scale readability remains untested in this package."
+  ],
+  "scope_confirmation": {
+    "written_only_inside_assigned_work_root": true,
+    "inventory_derivatives_created": false,
+    "world_derivatives_created": false,
+    "manifest_modified": false,
+    "formal_assets_modified": false,
+    "source_code_modified": false
+  },
+  "written_root": "art/work/named_firearms_pack_v1_retry/"
+}

@@ -1,0 +1,13 @@
+Use case: style-transfer
+Asset type: Project Raidline small-scale-readable pixel-art shotgun identity master
+Input images: Image 1 is the user-supplied M870 edit target and geometry identity; Image 2 is the approved Project Raidline rifle pixel-style reference; Image 3 is the immutable Player style anchor; Image 4 is the test-map contrast reference
+Primary request: re-render the M870 pump shotgun from Image 1 as a clear Project Raidline pixel-art gameplay sprite, preserving identity and simplifying only details lost at a 320x128 inventory profile
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal
+Subject: one complete long M870 pump-action shotgun with clearly separated barrel and magazine tube, readable pump fore-end, receiver and trigger guard, full wooden stock, and butt pad; mirror it to muzzle-right orientation
+Style/medium: readable stylized-realism pixel art, slightly stronger silhouette and material separation, deliberate stepped contours, compact 2-4 tone ramps, no smooth airbrushing
+Composition/framing: long horizontal muzzle-right, lightly top-down three-quarter presentation, centered with complete silhouette and wide safe margins
+Lighting/mood: subdued upper-left highlights; no cast shadow, contact shadow, reflection, or floor
+Color palette: low-saturation black, gunmetal, dark brown walnut, khaki-brown wear accents
+Materials/textures: simplified steel and restrained wood-grain pixel clusters; keep pump and stock visibly related
+Constraints: preserve long pump-shotgun proportions; exactly one weapon; uniform #ff00ff backdrop without gradient or texture; no magenta in the weapon; no markings, writing, logos, serials, trademark, watermark, shells, hands, attachments, effects, or extra props
+Avoid: generic tactical shotgun redesign, shortened barrel, synthetic stock, exaggerated wood color, photorealism, vector smoothness, excessive tiny texture, duplicate objects, cropping, exploded diagram, UI frame

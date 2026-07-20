@@ -1,0 +1,9 @@
+{
+  "package_id": "named_firearms_pack_v1_retry",
+  "selection_basis": "art-control combined contact sheet review",
+  "selected_candidates": {
+    "item_pistol_qsz92g_v1": "art/work/named_firearms_pack_v1_retry/candidates/item_pistol_qsz92g_v1/candidate_01_rgba.png",
+    "item_rifle_qbz95_1_v1": "art/work/named_firearms_pack_v1_retry/candidates/item_rifle_qbz95_1_v1/candidate_01_rgba.png",
+    "item_shotgun_m870_v1": "art/work/named_firearms_pack_v1_retry/candidates/item_shotgun_m870_v1/candidate_02_rgba.png"
+  }
+}

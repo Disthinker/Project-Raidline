@@ -1,21 +1,56 @@
 #pragma once
-#include <fmt/core.h>
 
-class Health{
-private:
-    int health;
+#include <stdexcept>
+
+class Health
+{
 public:
-    Health(int initial_health): health(initial_health) {}
-
-    void takeDamage(int damage) {
-        if (damage < 0) return; // 异常处理：防止负数伤害变成加血
-        health -= damage;
-        if (health < 0) health = 0; // 边界处理：血量不能为负
-
-        // 使用引入的 fmt 库进行现代化的日志输出
-        fmt::print("[DAMAGE] Player took {} damage. Current Health: {}\n", damage, health);
+    explicit Health(int maxHealth)
+        : maxHealth_(maxHealth),
+          currentHealth_(maxHealth)
+    {
+        if (maxHealth <= 0)
+        {
+            throw std::invalid_argument("Max health must be greater than zero");
+        }
     }
 
-    int getHealth() const { return health; }
-    bool isDead() const { return health == 0; }
+    [[nodiscard]] bool takeDamage(int damage)
+    {
+        if (damage <= 0)
+        {
+            throw std::invalid_argument("Damage must be greater than zero");
+        }
+        if (isDead())
+        {
+            return false;
+        }
+        if (damage >= currentHealth_)
+        {
+            currentHealth_ = 0;
+            return true;
+        }
+
+        currentHealth_ -= damage;
+        return false;
+    }
+
+    int current() const noexcept
+    {
+        return currentHealth_;
+    }
+
+    int maximum() const noexcept
+    {
+        return maxHealth_;
+    }
+
+    bool isDead() const noexcept
+    {
+        return currentHealth_ == 0;
+    }
+
+private:
+    int maxHealth_;
+    int currentHealth_;
 };

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "coordinate_space": "source_frame_256x320",
+  "pivot": [128, 300],
+  "baseline_y": 300,
+  "directions": ["left", "right"],
+  "fields": [
+    "socket_id",
+    "animation_id",
+    "frame_index",
+    "facing",
+    "x",
+    "y",
+    "z_layer"
+  ],
+  "phase1_coordinates_status": "pending_week17_layered_character_pilot"
+}
+

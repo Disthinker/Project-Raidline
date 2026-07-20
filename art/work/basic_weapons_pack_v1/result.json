@@ -1,0 +1,173 @@
+{
+  "pack_id": "basic_weapons_pack_v1",
+  "status": "ready_for_human_review",
+  "approved": false,
+  "published": false,
+  "generation_mode": "built-in image_gen",
+  "generation_summary": {
+    "successful_calls": 4,
+    "failed_transport_attempts": 1,
+    "failed_transport_note": "The first request for item_rifle_basic_v1 candidate_02 failed with a network send error and produced no image. The identical frozen prompt was retried successfully.",
+    "targeted_repairs_performed": 0
+  },
+  "style_references": [
+    {
+      "path": "E:/WorkPlace/Projects/C/Project Raidline/assets/characters/protagonist_left_minimal_256x320.png",
+      "role": "immutable player style and pixel-density reference"
+    },
+    {
+      "path": "E:/WorkPlace/Projects/C/Project Raidline/assets/characters/enemy/default/enemy_default_move_horizontal_6f_1536x640.png",
+      "role": "enemy outline, palette and wear reference"
+    },
+    {
+      "path": "E:/WorkPlace/Projects/C/Project Raidline/assets/backgrounds/project_raidline_test_map_1280x720.png",
+      "role": "environment palette and contrast reference"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "item_pistol_basic_v1",
+      "recommended_candidate": "candidate_02",
+      "recommendation_reason": "Candidate 02 has the cleaner almost-side-on silhouette, the most readable separation between slide, frame, trigger guard and grip, and a compact neutral value structure that should survive reduction better. Its khaki grip accent also remains consistent with the player and map palette without weakening the dark outline.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_pistol_basic_v1_candidate_01.txt",
+            "sha256": "2f95de7e60f106e323aa97059b17fef3d9253bdb8aa853668f2e7400100c1b86"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7e8e-ba07-79b3-8443-be93ed3c102e/call_xfxMOaXX44lXPIaI04DOi6rZ.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_pistol_basic_v1/candidate_01_chroma.png",
+              "sha256": "b4b69c6217a6f204919d605ca4d44d247721ab02498888f53d9137a3d2d90ab6"
+            },
+            "rgba": {
+              "path": "candidates/item_pistol_basic_v1/candidate_01_rgba.png",
+              "sha256": "1f00f746ed63eb09d6942562b75300ff4659427c56a4cd4ae9b8e99f3c9d9b10"
+            }
+          },
+          "visual_review": "Pass. Single complete pistol, muzzle right, strong pixel outline, no text or extra object. The olive frame is useful for palette continuity, but the rear grip-to-slide transition is slightly busier and the top-heavy proportions are less neutral than candidate 02.",
+          "technical_qa": {
+            "size_px": [1448, 1086],
+            "alpha_bbox_px": [298, 209, 1176, 864],
+            "transparent_margins_px": [298, 209, 272, 222],
+            "corner_alpha": [0, 0, 0, 0],
+            "visible_magenta_like_pixels": 0,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_pistol_basic_v1_candidate_02.txt",
+            "sha256": "60aa1a4715eabab5e1ffab696e8b25cd2982f97601249343f9adfa77347b75db"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7e8e-ba07-79b3-8443-be93ed3c102e/call_Kz9KTLuoKdmoe31Fx5xYlVJL.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_pistol_basic_v1/candidate_02_chroma.png",
+              "sha256": "d826a74abe4fd8f8be935adf94c6d70888837fecc306a53383ec28c3d0933587"
+            },
+            "rgba": {
+              "path": "candidates/item_pistol_basic_v1/candidate_02_rgba.png",
+              "sha256": "695585b7b79605f740ce921a4227a3d7163db51c3f398e0cb3dedd2c037f0cd4"
+            }
+          },
+          "visual_review": "Pass and recommended. Single complete pistol, muzzle right, no text or accessory, clean side silhouette, bold pixel clusters, readable sights and trigger guard, and a restrained black-gray-khaki palette.",
+          "technical_qa": {
+            "size_px": [1536, 1024],
+            "alpha_bbox_px": [264, 136, 1326, 857],
+            "transparent_margins_px": [264, 136, 210, 167],
+            "corner_alpha": [0, 0, 0, 0],
+            "visible_magenta_like_pixels": 0,
+            "result": "pass"
+          }
+        }
+      ],
+      "risks": [
+        "Both pistol candidates use familiar utilitarian semiautomatic proportions. They are unbranded and contain no model markings, but final legal and art-direction review should still confirm that the selected silhouette is sufficiently fictional.",
+        "Small-size readability is visually promising but has not been tested in the 128x64 inventory derivative because derivative generation is explicitly outside this pack."
+      ]
+    },
+    {
+      "asset_id": "item_rifle_basic_v1",
+      "recommended_candidate": "candidate_02",
+      "recommendation_reason": "Candidate 02 provides the clearest continuous top rail and the best separated muzzle, handguard, receiver, magazine and skeletal stock zones for Week 18 attachment work. Its flatter silhouette and less cluttered receiver should also be easier to scale into the planned 4x2 inventory footprint.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_rifle_basic_v1_candidate_01.txt",
+            "sha256": "3bb387c52a2b9ecd1783e0147252c91584cb818f4297cd224391b5fb8751ffe6"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7e8e-ba07-79b3-8443-be93ed3c102e/call_xBIMVNIeBNpu6j6Bd8qXrTkX.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_rifle_basic_v1/candidate_01_chroma.png",
+              "sha256": "93e2f00f23208c2b4c941fd23cbcc5d7e4499994148607374a884c3ecfd30c71"
+            },
+            "rgba": {
+              "path": "candidates/item_rifle_basic_v1/candidate_01_rgba.png",
+              "sha256": "a5479f820cdc75ab5804bef310f204330e5a1f0ecc22835c079caad1d24397cf"
+            }
+          },
+          "visual_review": "Pass. Single assembled rifle, muzzle right, readable rail, muzzle device, curved magazine and stock, no scope or extra object. The tan stock and magazine create strong category readability, but the receiver area is busier and the silhouette is closer to a familiar modular carbine family.",
+          "technical_qa": {
+            "size_px": [1774, 887],
+            "alpha_bbox_px": [87, 227, 1701, 771],
+            "transparent_margins_px": [87, 227, 73, 116],
+            "corner_alpha": [0, 0, 0, 0],
+            "visible_magenta_like_pixels": 0,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_rifle_basic_v1_candidate_02.txt",
+            "sha256": "e69a76f55e35a1146b77b6fe021ebeddbb1a93f35958bca7d8e593220fa96aaf"
+          },
+          "generated_source": "C:/Users/Administrator/.codex/generated_images/019f7e8e-ba07-79b3-8443-be93ed3c102e/call_i9THiV04T4FJHpUinNzoZb9t.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_rifle_basic_v1/candidate_02_chroma.png",
+              "sha256": "613831a4e921b88411d74c1b0d17fc4b93bbd4867a8542b0bf9725f5bc2ba7a8"
+            },
+            "rgba": {
+              "path": "candidates/item_rifle_basic_v1/candidate_02_rgba.png",
+              "sha256": "6132f5949d54d3254153291db376064ca661d5737127493e0689ec61a3b1cddf"
+            }
+          },
+          "visual_review": "Pass and recommended. Single assembled rifle, muzzle right, clear continuous top rail, isolated muzzle device, olive ventilated handguard, distinct box magazine and skeletal stock, no installed optic, text or loose parts. The flatter layout provides a strong inventory silhouette.",
+          "technical_qa": {
+            "size_px": [1774, 887],
+            "alpha_bbox_px": [90, 212, 1724, 700],
+            "transparent_margins_px": [90, 212, 50, 187],
+            "corner_alpha": [0, 0, 0, 0],
+            "visible_magenta_like_pixels": 0,
+            "result": "pass"
+          }
+        }
+      ],
+      "risks": [
+        "Both rifle candidates remain visually adjacent to common modular carbine conventions despite being generated without brands, markings or a named model. The recommended candidate should receive human silhouette review before approval.",
+        "The selected candidate has only 50 source pixels of transparent right margin. This is sufficient at source scale but publishing should crop and then apply the planned deterministic safe padding rather than scaling the full raw canvas directly.",
+        "Attachment sockets and exact separable component boundaries are not authored in this phase; the clear visual zones are only preparation for Week 18.",
+        "Small-size readability has not been tested in the 256x128 inventory derivative because derivative generation is explicitly outside this pack."
+      ]
+    }
+  ],
+  "chroma_key_processing": {
+    "requested_key": "#ff00ff",
+    "method": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+    "note": "The built-in generator produced visually uniform near-magenta border samples (#fb03fa, #f903f7 or #fa03f7) rather than mathematically exact #ff00ff pixels. Raw generated chroma images were preserved unchanged. Auto-key sampling removed those backgrounds successfully; all RGBA corners are fully transparent and no visible magenta-like pixels remain."
+  },
+  "scope_confirmation": {
+    "inventory_derivatives_created": false,
+    "world_derivatives_created": false,
+    "final_assets_published": false,
+    "manifest_modified": false,
+    "source_code_modified": false
+  }
+}
