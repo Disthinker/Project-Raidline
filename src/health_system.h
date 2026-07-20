@@ -9,16 +9,29 @@ public:
         : maxHealth_(maxHealth),
           currentHealth_(maxHealth)
     {
-        // TODO：maxHealth <= 0 时抛出 std::invalid_argument
+        if (maxHealth <= 0)
+        {
+            throw std::invalid_argument("Max health must be greater than zero");
+        }
     }
 
     [[nodiscard]] bool takeDamage(int damage)
     {
         // TODO 1：damage <= 0 时抛出 std::invalid_argument
-        // TODO 2：如果已经死亡，返回 false
-        // TODO 3：判断本次伤害是否导致死亡
-        // TODO 4：生命值最低为 0
-        // TODO 5：只在 alive -> dead 时返回 true
+        if (damage <= 0)
+        {
+            throw std::invalid_argument("Damage must be greater than zero");
+        }
+        if (isDead())
+        {
+            return false;
+        }
+        currentHealth_ -= damage;
+        if (currentHealth_ < 0)
+        {
+            currentHealth_ = 0;
+        }
+        return currentHealth_ == 0;
     }
 
     int current() const noexcept
