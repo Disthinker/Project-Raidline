@@ -21,6 +21,10 @@ add_executable(Project_Raidline
     src/vec2.h
     src/item_definition.h
     src/item_definition.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/ground_item.h
+    src/ground_item.cpp
     src/rect.h
     src/collision.cpp
     src/collision.h
@@ -294,6 +298,81 @@ target_include_directories(
 
 gtest_discover_tests(ItemDefinitionTest)
 
+# test item_instance
+add_executable(ItemInstanceTest
+    tests/test_item_instance.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    ItemInstanceTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    ItemInstanceTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    ItemInstanceTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    ItemInstanceTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(ItemInstanceTest)
+
+# test ground_item
+add_executable(GroundItemTest
+    tests/test_ground_item.cpp
+    src/ground_item.h
+    src/ground_item.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/rect.h
+    src/vec2.h
+)
+
+target_compile_features(
+    GroundItemTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GroundItemTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GroundItemTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GroundItemTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(GroundItemTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -311,6 +390,17 @@ if(MSVC)
     target_compile_options(ParticleSystemTest PRIVATE /utf-8)
     target_compile_options(
         ItemDefinitionTest
+        PRIVATE
+        /utf-8
+    )
+    target_compile_options(
+        ItemInstanceTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        GroundItemTest
         PRIVATE
         /utf-8
     )
