@@ -179,24 +179,39 @@ add_executable(GameplayWorldTest
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
+
     src/player.cpp
     src/player.h
+
     src/projectile.cpp
     src/projectile.h
+
     src/enemy.cpp
     src/enemy.h
+
     src/rect.h
     src/vec2.h
+
     src/hit_resolution.cpp
     src/hit_resolution.h
+
     src/collision.cpp
     src/collision.h
+
     src/animation.h
     src/animation.cpp
+
     src/particle.h
     src/particle.cpp
     src/particle_system.h
     src/particle_system.cpp
+
+    src/item_definition.h
+    src/item_definition.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/ground_item.h
+    src/ground_item.cpp
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
