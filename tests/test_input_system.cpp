@@ -1,120 +1,266 @@
 #include <gtest/gtest.h>
+
 #include "input_system.h"
 
-TEST(InputSystemTest, PressMoveUpOnWKeyDown)
+namespace
 {
-    InputSystem input;
-    
-    SDL_Event event{};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_W;
-    
-    input.handleEvent(event);
-
-    EXPECT_TRUE(input.isActionPressed(GameAction::MoveUp));
+    SDL_Event makeKeyEvent(
+        Uint32 eventType,
+        SDL_Scancode scancode)
+    {
+        SDL_Event event{};
+        event.type = eventType;
+        event.key.scancode = scancode;
+        return event;
+    }
 }
 
-TEST(InputSystemTest, PressMoveUpOnWKeyUp)
+TEST(
+    InputSystemTest,
+    WKeyDownPressesMoveUp)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_W;
-    input.handleEvent(event);
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_W));
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::MoveUp));
-
-    event = {};
-    event.type = SDL_EVENT_KEY_UP;
-    event.key.scancode = SDL_SCANCODE_W;
-    input.handleEvent(event);
-
-    EXPECT_FALSE(input.isActionPressed(GameAction::MoveUp));
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::MoveUp));
 }
 
-TEST(InputSystemTest, PressFireOnSpaceKeyDown)
+TEST(
+    InputSystemTest,
+    WKeyUpReleasesMoveUp)
 {
     InputSystem input;
-    
-    SDL_Event event{};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_SPACE;
-    
-    input.handleEvent(event);
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_W));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_W));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::MoveUp));
 }
 
-TEST(InputSystemTest, IgnoreUnmappedKey)
+TEST(
+    InputSystemTest,
+    SpaceKeyDownPressesFire)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_P;
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_SPACE));
 
-    input.handleEvent(event);
-
-    EXPECT_FALSE(input.isActionPressed(GameAction::MoveUp));
-    EXPECT_FALSE(input.isActionPressed(GameAction::Fire));
-    EXPECT_FALSE(input.isActionPressed(GameAction::Dodge));
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Fire));
 }
 
-
-// Space KeyDown 产生 justPressed
-TEST(InputSystemTest, SpaceKeyDownSetsFireJustPressed)
+TEST(
+    InputSystemTest,
+    IgnoresUnmappedKey)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_SPACE;
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_P));
 
-    input.handleEvent(event);
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::MoveUp));
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
-    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::Fire));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::Dodge));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::Interact));
 }
 
-// endFrame 后 justPressed 消失，但 pressed 仍保留
-TEST(InputSystemTest, EndFrameClearsJustPressedButKeepsPressed)
+TEST(
+    InputSystemTest,
+    SpaceKeyDownSetsFireJustPressed)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_SPACE;
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_SPACE));
 
-    input.handleEvent(event);
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Fire));
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
-    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::Fire));
+}
+
+TEST(
+    InputSystemTest,
+    EndFrameClearsJustPressedButKeepsPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_SPACE));
 
     input.endFrame();
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
-    EXPECT_FALSE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Fire));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::Fire));
 }
 
-// 持续按住时重复 KeyDown 不再次 justPressed
-TEST(InputSystemTest, RepeatedKeyDownWhileHeldDoesNotSetJustPressedAgain)
+TEST(
+    InputSystemTest,
+    RepeatedFireKeyDownWhileHeldDoesNotRetrigger)
 {
     InputSystem input;
 
-    SDL_Event event {};
-    event.type = SDL_EVENT_KEY_DOWN;
-    event.key.scancode = SDL_SCANCODE_SPACE;
+    const SDL_Event keyDown =
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_SPACE);
 
-    input.handleEvent(event);
+    input.handleEvent(keyDown);
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
-    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::Fire));
+
+    input.endFrame();
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Fire));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::Fire));
+}
+
+TEST(
+    InputSystemTest,
+    FKeyDownSetsInteractJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_F));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Interact));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::Interact));
+}
+
+TEST(
+    InputSystemTest,
+    EndFrameClearsInteractJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_F));
 
     input.endFrame();
 
-    input.handleEvent(event); // 按住时重复 KeyDown 不再次 justPressed
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Interact));
 
-    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
-    EXPECT_FALSE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::Interact));
+}
+
+TEST(
+    InputSystemTest,
+    HoldingFDoesNotRetriggerInteract)
+{
+    InputSystem input;
+
+    const SDL_Event keyDown =
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_F);
+
+    input.handleEvent(keyDown);
+    input.endFrame();
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Interact));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::Interact));
+}
+
+TEST(
+    InputSystemTest,
+    ReleasingAndPressingFAgainRetriggersInteract)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_F));
+
+    input.endFrame();
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_F));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::Interact));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_F));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::Interact));
 }

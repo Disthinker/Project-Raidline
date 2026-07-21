@@ -175,12 +175,35 @@ bool App::initialize()
 GameplayInput App::makeGameplayInput() const
 {
     GameplayInput input{};
-    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
-    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
-    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
-    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
-    input.fireJustPressed = input_.wasActionJustPressed(GameAction::Fire);
-    input.firePressed = input_.isActionPressed(GameAction::Fire);
+
+    input.moveUp =
+        input_.isActionPressed(
+            GameAction::MoveUp);
+
+    input.moveDown =
+        input_.isActionPressed(
+            GameAction::MoveDown);
+
+    input.moveLeft =
+        input_.isActionPressed(
+            GameAction::MoveLeft);
+
+    input.moveRight =
+        input_.isActionPressed(
+            GameAction::MoveRight);
+
+    input.fireJustPressed =
+        input_.wasActionJustPressed(
+            GameAction::Fire);
+
+    input.firePressed =
+        input_.isActionPressed(
+            GameAction::Fire);
+
+    input.interactJustPressed =
+        input_.wasActionJustPressed(
+            GameAction::Interact);
+
     return input;
 }
 
@@ -213,9 +236,12 @@ void App::renderDebugText()
         220,
         255);
 
-    const char *actionText{"Action: None"};
+    const char *actionText{
+        "Action: None"};
 
-    if (input_.isActionPressed(GameAction::MoveUp))
+    if (
+        input_.isActionPressed(
+            GameAction::MoveUp))
     {
         actionText = "Action: MoveUp";
     }
@@ -242,6 +268,12 @@ void App::renderDebugText()
             GameAction::Fire))
     {
         actionText = "Action: Fire";
+    }
+    else if (
+        input_.isActionPressed(
+            GameAction::Interact))
+    {
+        actionText = "Action: Interact";
     }
     else if (
         input_.isActionPressed(
