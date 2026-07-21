@@ -19,6 +19,8 @@ add_executable(Project_Raidline
     src/projectile.h
     src/projectile.cpp
     src/vec2.h
+    src/item_definition.h
+    src/item_definition.cpp
     src/rect.h
     src/collision.cpp
     src/collision.h
@@ -258,6 +260,40 @@ target_include_directories(ParticleSystemTest PRIVATE src)
 
 gtest_discover_tests(ParticleSystemTest)
 
+# test item_definition
+add_executable(ItemDefinitionTest
+    tests/test_item_definition.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    ItemDefinitionTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    ItemDefinitionTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    ItemDefinitionTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    ItemDefinitionTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(ItemDefinitionTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -273,4 +309,9 @@ if(MSVC)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
     target_compile_options(ParticleSystemTest PRIVATE /utf-8)
+    target_compile_options(
+        ItemDefinitionTest
+        PRIVATE
+        /utf-8
+    )
 endif()
