@@ -19,6 +19,12 @@ add_executable(Project_Raidline
     src/projectile.h
     src/projectile.cpp
     src/vec2.h
+    src/item_definition.h
+    src/item_definition.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/ground_item.h
+    src/ground_item.cpp
     src/rect.h
     src/collision.cpp
     src/collision.h
@@ -173,24 +179,39 @@ add_executable(GameplayWorldTest
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
+
     src/player.cpp
     src/player.h
+
     src/projectile.cpp
     src/projectile.h
+
     src/enemy.cpp
     src/enemy.h
+
     src/rect.h
     src/vec2.h
+
     src/hit_resolution.cpp
     src/hit_resolution.h
+
     src/collision.cpp
     src/collision.h
+
     src/animation.h
     src/animation.cpp
+
     src/particle.h
     src/particle.cpp
     src/particle_system.h
     src/particle_system.cpp
+
+    src/item_definition.h
+    src/item_definition.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/ground_item.h
+    src/ground_item.cpp
 )
 
 target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
@@ -258,6 +279,115 @@ target_include_directories(ParticleSystemTest PRIVATE src)
 
 gtest_discover_tests(ParticleSystemTest)
 
+# test item_definition
+add_executable(ItemDefinitionTest
+    tests/test_item_definition.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    ItemDefinitionTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    ItemDefinitionTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    ItemDefinitionTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    ItemDefinitionTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(ItemDefinitionTest)
+
+# test item_instance
+add_executable(ItemInstanceTest
+    tests/test_item_instance.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    ItemInstanceTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    ItemInstanceTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    ItemInstanceTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    ItemInstanceTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(ItemInstanceTest)
+
+# test ground_item
+add_executable(GroundItemTest
+    tests/test_ground_item.cpp
+    src/ground_item.h
+    src/ground_item.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/rect.h
+    src/vec2.h
+)
+
+target_compile_features(
+    GroundItemTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GroundItemTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GroundItemTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GroundItemTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(GroundItemTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -273,4 +403,20 @@ if(MSVC)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
     target_compile_options(ParticleSystemTest PRIVATE /utf-8)
+    target_compile_options(
+        ItemDefinitionTest
+        PRIVATE
+        /utf-8
+    )
+    target_compile_options(
+        ItemInstanceTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        GroundItemTest
+        PRIVATE
+        /utf-8
+    )
 endif()

@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+#include <vector>
+#include <utility>
 
 #include "gameplay_input.h"
 #include "gameplay_world.h"
@@ -503,4 +505,330 @@ TEST(
 
     EXPECT_TRUE(world.enemies().empty());
     EXPECT_EQ(world.score(), 100);
+}
+
+namespace
+{
+    constexpr Vec2 kInitialPlayerCenter{
+        656.0f,
+        376.0f};
+
+    GameplayInput makeInteractInput()
+    {
+        GameplayInput input{};
+        input.interactJustPressed = true;
+        return input;
+    }
+
+    GameplayWorld makeItemTestWorld(
+        std::vector<GroundItemSpawn> spawns)
+    {
+        return GameplayWorld{
+            3,
+            std::move(spawns)};
+    }
+}
+
+TEST(
+    GameplayWorldTest,
+    InitialGroundItemsHaveStableIds)
+{
+    const GameplayWorld world;
+
+    ASSERT_EQ(
+        world.groundItems().size(),
+        4u);
+
+    EXPECT_TRUE(
+        world.carriedItems().empty());
+
+    EXPECT_EQ(
+        world.groundItems()[0]
+            .item()
+            .instanceId(),
+        1u);
+
+    EXPECT_EQ(
+        world.groundItems()[0]
+            .item()
+            .definitionId(),
+        ItemId::Cola);
+
+    EXPECT_EQ(
+        world.groundItems()[1]
+            .item()
+            .instanceId(),
+        2u);
+
+    EXPECT_EQ(
+        world.groundItems()[1]
+            .item()
+            .definitionId(),
+        ItemId::Medkit);
+
+    EXPECT_EQ(
+        world.groundItems()[2]
+            .item()
+            .instanceId(),
+        3u);
+
+    EXPECT_EQ(
+        world.groundItems()[2]
+            .item()
+            .definitionId(),
+        ItemId::Pistol);
+
+    EXPECT_EQ(
+        world.groundItems()[3]
+            .item()
+            .instanceId(),
+        4u);
+
+    EXPECT_EQ(
+        world.groundItems()[3]
+            .item()
+            .definitionId(),
+        ItemId::Rifle);
+}
+
+TEST(
+    GameplayWorldTest,
+    NoInteractDoesNotPickUpItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Cola,
+                kInitialPlayerCenter,
+            },
+        });
+
+    world.update(
+        GameplayInput{},
+        0.0f);
+
+    EXPECT_EQ(
+        world.groundItems().size(),
+        1u);
+
+    EXPECT_TRUE(
+        world.carriedItems().empty());
+}
+
+TEST(
+    GameplayWorldTest,
+    InteractOutsideRangeDoesNotPickUpItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Cola,
+                Vec2{100.0f, 100.0f},
+            },
+        });
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    EXPECT_EQ(
+        world.groundItems().size(),
+        1u);
+
+    EXPECT_TRUE(
+        world.carriedItems().empty());
+}
+
+TEST(
+    GameplayWorldTest,
+    InteractInRangeTransfersOneItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Pistol,
+                kInitialPlayerCenter,
+            },
+        });
+
+    ASSERT_EQ(
+        world.groundItems().size(),
+        1u);
+
+    const ItemInstanceId originalId =
+        world.groundItems()[0]
+            .item()
+            .instanceId();
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    EXPECT_TRUE(
+        world.groundItems().empty());
+
+    ASSERT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.carriedItems()[0]
+            .instanceId(),
+        originalId);
+
+    EXPECT_EQ(
+        world.carriedItems()[0]
+            .definitionId(),
+        ItemId::Pistol);
+}
+
+TEST(
+    GameplayWorldTest,
+    MultipleCandidatesPickNearestItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            // 先放入较远的 Medkit，
+            // 证明算法不是简单拾取第一个。
+            {
+                ItemId::Medkit,
+                Vec2{680.0f, 376.0f},
+            },
+            {
+                ItemId::Cola,
+                Vec2{650.0f, 376.0f},
+            },
+        });
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    ASSERT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.carriedItems()[0]
+            .definitionId(),
+        ItemId::Cola);
+
+    ASSERT_EQ(
+        world.groundItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.groundItems()[0]
+            .item()
+            .definitionId(),
+        ItemId::Medkit);
+}
+
+TEST(
+    GameplayWorldTest,
+    EqualDistanceKeepsEarlierVectorItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Cola,
+                Vec2{644.0f, 376.0f},
+            },
+            {
+                ItemId::Medkit,
+                Vec2{668.0f, 376.0f},
+            },
+        });
+
+    // 两件物品距离 Player 中心均为 12。
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    ASSERT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.carriedItems()[0]
+            .definitionId(),
+        ItemId::Cola);
+
+    ASSERT_EQ(
+        world.groundItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.groundItems()[0]
+            .item()
+            .definitionId(),
+        ItemId::Medkit);
+}
+
+TEST(
+    GameplayWorldTest,
+    OneInteractPicksAtMostOneItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Cola,
+                kInitialPlayerCenter,
+            },
+            {
+                ItemId::Medkit,
+                kInitialPlayerCenter,
+            },
+        });
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    EXPECT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.groundItems().size(),
+        1u);
+}
+
+TEST(
+    GameplayWorldTest,
+    NoNewInteractDoesNotPickNextItem)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Cola,
+                kInitialPlayerCenter,
+            },
+            {
+                ItemId::Medkit,
+                kInitialPlayerCenter,
+            },
+        });
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    ASSERT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    // 模拟继续按住 F 的下一帧：
+    // InputSystem 不会再次产生 interactJustPressed。
+    world.update(
+        GameplayInput{},
+        0.0f);
+
+    EXPECT_EQ(
+        world.carriedItems().size(),
+        1u);
+
+    EXPECT_EQ(
+        world.groundItems().size(),
+        1u);
 }
