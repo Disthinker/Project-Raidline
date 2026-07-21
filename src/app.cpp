@@ -1,12 +1,14 @@
 // Implementation of the App class
 #include "app.h"
 
-#include <fmt/core.h>
-#include <SDL3_image/SDL_image.h>
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <string>
 #include <utility>
-#include <cstddef>
-#include <algorithm>
+
+#include <SDL3_image/SDL_image.h>
+#include <fmt/core.h>
 
 namespace
 {
@@ -38,38 +40,73 @@ namespace
 
 bool App::loadTextures()
 {
-    const char *basePath = SDL_GetBasePath();
+    const char *basePath =
+        SDL_GetBasePath();
+
     if (basePath == nullptr)
     {
-        fmt::print("SDL_GetBasePath failed: {}\n", SDL_GetError());
+        fmt::print(
+            "SDL_GetBasePath failed: {}\n",
+            SDL_GetError());
+
         return false;
     }
-    fmt::print("basePath: {}\n", basePath);
-    const std::string assetRoot = std::string(basePath) + "assets/";
+
+    fmt::print(
+        "basePath: {}\n",
+        basePath);
+
+    const std::string assetRoot =
+        std::string{basePath} +
+        "assets/";
+
     const std::string backgroundPath =
-        assetRoot + "backgrounds/project_raidline_test_map_1280x720.png";
+        assetRoot +
+        "backgrounds/"
+        "project_raidline_test_map_1280x720.png";
+
     const std::string playerPath =
-        assetRoot + "characters/protagonist_left_minimal_256x320.png";
+        assetRoot +
+        "characters/"
+        "protagonist_left_minimal_256x320.png";
+
     const std::string playerMoveHorizontalPath =
         assetRoot +
         "characters/player/default/"
         "player_default_move_horizontal_6f_1536x640.png";
+
     const std::string enemyMoveHorizontalPath =
         assetRoot +
         "characters/enemy/default/"
         "enemy_default_move_horizontal_6f_1536x640.png";
 
-    Texture backgroundTexture{IMG_LoadTexture(renderer_, backgroundPath.c_str())};
+    // 使用局部 RAII 对象加载。
+    // 任意一步失败时，已经成功加载的 Texture 会自动释放。
+    Texture backgroundTexture{
+        IMG_LoadTexture(
+            renderer_,
+            backgroundPath.c_str())};
+
     if (!backgroundTexture.valid())
     {
-        fmt::print("IMG_LoadTexture failed for background: {}\n", SDL_GetError());
+        fmt::print(
+            "IMG_LoadTexture failed for background: {}\n",
+            SDL_GetError());
+
         return false;
     }
 
-    Texture playerTexture{IMG_LoadTexture(renderer_, playerPath.c_str())};
+    Texture playerTexture{
+        IMG_LoadTexture(
+            renderer_,
+            playerPath.c_str())};
+
     if (!playerTexture.valid())
     {
-        fmt::print("IMG_LoadTexture failed for player: {}\n", SDL_GetError());
+        fmt::print(
+            "IMG_LoadTexture failed for player: {}\n",
+            SDL_GetError());
+
         return false;
     }
 
@@ -77,11 +114,14 @@ bool App::loadTextures()
         IMG_LoadTexture(
             renderer_,
             playerMoveHorizontalPath.c_str())};
+
     if (!playerMoveHorizontalTexture.valid())
     {
         fmt::print(
-            "IMG_LoadTexture failed for horizontal player movement: {}\n",
+            "IMG_LoadTexture failed for "
+            "horizontal player movement: {}\n",
             SDL_GetError());
+
         return false;
     }
 
@@ -89,12 +129,68 @@ bool App::loadTextures()
         IMG_LoadTexture(
             renderer_,
             enemyMoveHorizontalPath.c_str())};
+
     if (!enemyMoveHorizontalTexture.valid())
     {
         fmt::print(
-            "IMG_LoadTexture failed for horizontal enemy movement: {}\n",
+            "IMG_LoadTexture failed for "
+            "horizontal enemy movement: {}\n",
             SDL_GetError());
+
         return false;
+    }
+
+    std::array<Texture, itemCount()>
+        itemTextures{};
+
+    const ItemDefinitionCatalog &definitions =
+        itemDefinitions();
+
+    for (
+        std::size_t index = 0;
+        index < definitions.size();
+        ++index)
+    {
+        const ItemDefinition &definition =
+            definitions[index];
+
+        const std::string itemPath =
+            assetRoot +
+            std::string{
+                definition.worldTexturePath};
+
+        Texture itemTexture{
+            IMG_LoadTexture(
+                renderer_,
+                itemPath.c_str())};
+
+        if (!itemTexture.valid())
+        {
+            fmt::print(
+                "IMG_LoadTexture failed for item "
+                "'{}' at '{}': {}\n",
+                definition.displayName,
+                itemPath,
+                SDL_GetError());
+
+            return false;
+        }
+
+        if (!SDL_SetTextureScaleMode(
+                itemTexture.get(),
+                SDL_SCALEMODE_NEAREST))
+        {
+            fmt::print(
+                "SDL_SetTextureScaleMode failed "
+                "for item '{}': {}\n",
+                definition.displayName,
+                SDL_GetError());
+
+            return false;
+        }
+
+        itemTextures[index] =
+            std::move(itemTexture);
     }
 
     if (!SDL_SetTextureScaleMode(
@@ -102,35 +198,53 @@ bool App::loadTextures()
             SDL_SCALEMODE_NEAREST))
     {
         fmt::print(
-            "SDL_SetTextureScaleMode failed for enemy movement: {}\n",
+            "SDL_SetTextureScaleMode failed "
+            "for enemy movement: {}\n",
             SDL_GetError());
+
         return false;
     }
+
     if (!SDL_SetTextureScaleMode(
             playerTexture.get(),
             SDL_SCALEMODE_NEAREST))
     {
         fmt::print(
-            "SDL_SetTextureScaleMode failed for player: {}\n",
+            "SDL_SetTextureScaleMode failed "
+            "for player: {}\n",
             SDL_GetError());
+
         return false;
     }
+
     if (!SDL_SetTextureScaleMode(
             playerMoveHorizontalTexture.get(),
             SDL_SCALEMODE_NEAREST))
     {
         fmt::print(
-            "SDL_SetTextureScaleMode failed for player movement: {}\n",
+            "SDL_SetTextureScaleMode failed "
+            "for player movement: {}\n",
             SDL_GetError());
+
         return false;
     }
 
-    backgroundTexture_ = std::move(backgroundTexture);
-    playerTexture_ = std::move(playerTexture);
+    backgroundTexture_ =
+        std::move(backgroundTexture);
+
+    playerTexture_ =
+        std::move(playerTexture);
+
     playerMoveHorizontalTexture_ =
-        std::move(playerMoveHorizontalTexture);
+        std::move(
+            playerMoveHorizontalTexture);
+
     enemyMoveHorizontalTexture_ =
-        std::move(enemyMoveHorizontalTexture);
+        std::move(
+            enemyMoveHorizontalTexture);
+
+    itemTextures_ =
+        std::move(itemTextures);
 
     return true;
 }
@@ -243,43 +357,50 @@ void App::renderDebugText()
         input_.isActionPressed(
             GameAction::MoveUp))
     {
-        actionText = "Action: MoveUp";
+        actionText =
+            "Action: MoveUp";
     }
     else if (
         input_.isActionPressed(
             GameAction::MoveDown))
     {
-        actionText = "Action: MoveDown";
+        actionText =
+            "Action: MoveDown";
     }
     else if (
         input_.isActionPressed(
             GameAction::MoveLeft))
     {
-        actionText = "Action: MoveLeft";
+        actionText =
+            "Action: MoveLeft";
     }
     else if (
         input_.isActionPressed(
             GameAction::MoveRight))
     {
-        actionText = "Action: MoveRight";
+        actionText =
+            "Action: MoveRight";
     }
     else if (
         input_.isActionPressed(
             GameAction::Fire))
     {
-        actionText = "Action: Fire";
+        actionText =
+            "Action: Fire";
     }
     else if (
         input_.isActionPressed(
             GameAction::Interact))
     {
-        actionText = "Action: Interact";
+        actionText =
+            "Action: Interact";
     }
     else if (
         input_.isActionPressed(
             GameAction::Dodge))
     {
-        actionText = "Action: Dodge";
+        actionText =
+            "Action: Dodge";
     }
 
     SDL_RenderDebugText(
@@ -299,31 +420,58 @@ void App::renderDebugText()
         36.0f,
         scoreText.c_str());
 
+    std::string healthText;
+
     if (world_.enemies().empty())
     {
-        SDL_RenderDebugText(
-            renderer_,
-            20.0f,
-            52.0f,
-            "Enemy HP: defeated");
-
-        return;
+        healthText =
+            "Enemy HP: defeated";
     }
+    else
+    {
+        const Enemy &enemy =
+            world_.enemies().front();
 
-    const Enemy &enemy =
-        world_.enemies().front();
-
-    const std::string healthText =
-        fmt::format(
-            "Enemy HP: {}/{}",
-            enemy.health(),
-            enemy.maxHealth());
+        healthText =
+            fmt::format(
+                "Enemy HP: {}/{}",
+                enemy.health(),
+                enemy.maxHealth());
+    }
 
     SDL_RenderDebugText(
         renderer_,
         20.0f,
         52.0f,
         healthText.c_str());
+
+    const std::string groundItemText =
+        fmt::format(
+            "Ground Items: {}",
+            world_.groundItems().size());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        68.0f,
+        groundItemText.c_str());
+
+    const std::string carriedItemText =
+        fmt::format(
+            "Carried Items: {}",
+            world_.carriedItems().size());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        84.0f,
+        carriedItemText.c_str());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        100.0f,
+        "Interact: F");
 }
 
 void App::renderBackground()
@@ -345,6 +493,62 @@ void App::renderProjectiles()
             projectile.height()};
 
         SDL_RenderFillRect(renderer_, &rect);
+    }
+}
+
+void App::renderGroundItems()
+{
+    for (
+        const GroundItem &groundItem :
+        world_.groundItems())
+    {
+        const ItemInstance &item =
+            groundItem.item();
+
+        // 正常世界状态中不会存在失效 GroundItem。
+        // 这里保留防御性检查，避免渲染无效 ID。
+        if (!item.valid())
+        {
+            continue;
+        }
+
+        const ItemDefinition &definition =
+            itemDefinition(
+                item.definitionId());
+
+        const std::size_t textureIndex =
+            static_cast<std::size_t>(
+                definition.id);
+
+        const Texture &texture =
+            itemTextures_[textureIndex];
+
+        if (!texture.valid())
+        {
+            continue;
+        }
+
+        const Vec2 center =
+            groundItem.position();
+
+        const Vec2 renderSize =
+            definition.worldRenderSize;
+
+        // GroundItem position 是世界中心点；
+        // SDL_FRect 要求左上角坐标。
+        SDL_FRect destination{
+            center.x -
+                renderSize.x / 2.0f,
+            center.y -
+                renderSize.y / 2.0f,
+            renderSize.x,
+            renderSize.y};
+
+        SDL_RenderTexture(
+            renderer_,
+            texture.get(),
+            nullptr,
+            &destination);
     }
 }
 
@@ -480,44 +684,56 @@ void App::renderParticles()
     }
 }
 
-// Renderer
 void App::render()
 {
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // 黑色背景
-    SDL_RenderClear(renderer_);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        0,
+        0,
+        0,
+        255);
+
+    SDL_RenderClear(
+        renderer_);
 
     renderBackground();
 
-    // 绘制敌人
+    // 地面物品位于角色与敌人下层。
+    renderGroundItems();
+
     renderEnemies();
-
-    // 绘制玩家操控角色
     renderPlayer();
-
-    // 绘制投射物
     renderProjectiles();
-
-    // 绘制命中粒子
     renderParticles();
-
-    // 绘制调试文本
     renderDebugText();
 
-    SDL_RenderPresent(renderer_);
+    SDL_RenderPresent(
+        renderer_);
 }
 
-// Shutdown SDL and destroy window and renderer
 void App::shutdown()
 {
+    // 所有 SDL_Texture 必须在 Renderer 之前释放。
+    for (
+        Texture &itemTexture :
+        itemTextures_)
+    {
+        itemTexture.reset();
+    }
+
     enemyMoveHorizontalTexture_.reset();
     playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
     backgroundTexture_.reset();
 
-    SDL_DestroyRenderer(renderer_);
+    SDL_DestroyRenderer(
+        renderer_);
+
     renderer_ = nullptr;
 
-    SDL_DestroyWindow(window_);
+    SDL_DestroyWindow(
+        window_);
+
     window_ = nullptr;
 
     SDL_Quit();
