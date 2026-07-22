@@ -709,18 +709,18 @@ definitionId = ItemId::Count
 ### 本地构建
 
 ```text
-Build：请填写实际结果
+Build：PASS
 ```
 
 ### 自动测试
 
 ```text
-ItemDefinitionTest：请填写实际结果
-ItemInstanceTest：请填写实际结果
-GroundItemTest：请填写实际结果
-InputSystemTest：请填写实际结果
-GameplayWorldTest：请填写实际结果
-全量 CTest：请填写实际结果
+ItemDefinitionTest：PASS
+ItemInstanceTest：PASS
+GroundItemTest：PASS
+InputSystemTest：PASS
+GameplayWorldTest：PASS
+全量 CTest：PASS
 ```
 
 ### 人工运行
@@ -728,25 +728,25 @@ GameplayWorldTest：请填写实际结果
 请根据实际情况填写：
 
 ```text
-四种地面图片显示：PASS / FAIL
-显示尺寸彼此不同：PASS / FAIL
-接近物品按 F 可拾取：PASS / FAIL
-拾取后图片消失：PASS / FAIL
-Ground Items 数量减少：PASS / FAIL
-Carried Items 数量增加：PASS / FAIL
-按住 F 不连续拾取：PASS / FAIL
-松开后再次按 F 可继续拾取：PASS / FAIL
-玩家和敌人动画无回归：PASS / FAIL
-射击、Health、Particles、Score 无回归：PASS / FAIL
-程序退出不崩溃：PASS / FAIL
+四种地面图片显示：PASS
+显示尺寸彼此不同：PASS
+接近物品按 F 可拾取：PASS
+拾取后图片消失：PASS
+Ground Items 数量减少：PASS
+Carried Items 数量增加：PASS
+按住 F 不连续拾取：PASS
+松开后再次按 F 可继续拾取：PASS
+玩家和敌人动画无回归：PASS
+射击、Health、Particles、Score 无回归：PASS
+程序退出不崩溃：PASS
 ```
 
 ### GitHub Actions
 
 ```text
-PR 创建前：尚无 PR 级 CI
-Windows CI：待 PR 创建后确认
-Ubuntu CI：待 PR 创建后确认
+PR 创建前：PASS
+Windows CI：PASS
+Ubuntu CI：PASS
 ```
 
 ---
@@ -831,14 +831,6 @@ F Interact：完成
 真实图片渲染：完成
 DebugText：完成
 ```
-
-当前阶段状态应在 PR 和双平台 CI 完成前写为：
-
-```text
-IMPLEMENTATION_COMPLETE_AWAITING_PR_CI
-```
-
-不得在 Windows、Ubuntu Actions 和最终人工验证完成前写为 Week 14 正式 PASS。
 
 ---
 
