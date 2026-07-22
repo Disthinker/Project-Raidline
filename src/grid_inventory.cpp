@@ -1,6 +1,16 @@
 #include "grid_inventory.h"
 
+#include <algorithm>
 #include <stdexcept>
+#include <utility>
+
+PlacedItem::PlacedItem(
+    ItemInstance &&itemValue,
+    GridPosition originValue) noexcept
+    : item{std::move(itemValue)},
+      origin{originValue}
+{
+}
 
 GridInventory::GridInventory(InventoryGridSize size)
     : size_{size}
@@ -17,13 +27,11 @@ GridInventory::GridInventory(InventoryGridSize size)
             "GridInventory height must be positive");
     }
 
-    // 先验证有符号整数为正，再转换为无符号类型。
     const auto width =
         static_cast<std::size_t>(size_.width);
     const auto height =
         static_cast<std::size_t>(size_.height);
 
-    // optional 默认构造为 nullopt，因此所有格子初始为空。
     cells_.resize(width * height);
 }
 
@@ -55,13 +63,9 @@ bool GridInventory::canPlace(
 std::optional<GridPosition> GridInventory::findFirstFit(
     ItemId definitionId) const
 {
-    // 在开始搜索前只查询一次定义。
-    // definitionId 非法时会立即抛出 out_of_range。
     const ItemDefinition &definition =
         itemDefinition(definitionId);
 
-    // row-major：
-    // 先遍历第一行的所有 x，再进入下一行。
     for (int y = 0; y < size_.height; ++y)
     {
         for (int x = 0; x < size_.width; ++x)
@@ -76,6 +80,101 @@ std::optional<GridPosition> GridInventory::findFirstFit(
     }
 
     return std::nullopt;
+}
+
+bool GridInventory::tryPlace(
+    ItemInstance &&item,
+    GridPosition origin)
+{
+    // moved-from ItemInstance 不能再次进入背包。
+    if (!item.valid())
+    {
+        return false;
+    }
+
+    const ItemInstanceId instanceId =
+        item.instanceId();
+    const ItemId definitionId =
+        item.definitionId();
+
+    // 同一个稳定 ID 不能在背包中出现两次。
+    if (containsInstanceId(instanceId))
+    {
+        return false;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(definitionId);
+
+    // 先完成全部验证。
+    // canPlaceDefinition 不修改任何状态。
+    if (!canPlaceDefinition(definition, origin))
+    {
+        return false;
+    }
+
+    // emplace_back 调用前的 std::move 只做类型转换。
+    // 真正的移动发生在 PlacedItem 构造时。
+    //
+    // 如果 vector 分配内存失败，构造尚未发生，
+    // 输入 item 仍保持有效。
+    placedItems_.emplace_back(
+        std::move(item),
+        origin);
+
+    // emplace_back 成功后才写 cells_。
+    // 此处只有 optional<uint64_t> 赋值，不会抛出异常。
+    setFootprintOccupant(
+        definition,
+        origin,
+        std::optional<ItemInstanceId>{instanceId});
+
+    return true;
+}
+
+std::optional<ItemInstance> GridInventory::remove(
+    ItemInstanceId instanceId)
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return std::nullopt;
+    }
+
+    // erase 会使当前元素及其后的引用、指针和迭代器失效。
+    // 因此必须先读取 origin 和 definition。
+    const GridPosition origin =
+        placedIt->origin;
+    const ItemId definitionId =
+        placedIt->item.definitionId();
+
+    const ItemDefinition &definition =
+        itemDefinition(definitionId);
+
+    // 先清除该物品占用的全部格子。
+    setFootprintOccupant(
+        definition,
+        origin,
+        std::nullopt);
+
+    // 在 erase 前移出真正的 ItemInstance。
+    ItemInstance removedItem{
+        std::move(placedIt->item)};
+
+    // erase 后不再访问 placedIt。
+    placedItems_.erase(placedIt);
+
+    return std::optional<ItemInstance>{
+        std::move(removedItem)};
 }
 
 std::optional<ItemInstanceId> GridInventory::occupantAt(
@@ -118,22 +217,17 @@ bool GridInventory::canPlaceDefinition(
     const int itemHeight =
         definition.inventoryHeightCells;
 
-    // ItemDefinition 目录正常情况下不会包含非正尺寸。
-    // 这里仍采用 fail-closed：异常定义不可放置。
     if (itemWidth <= 0 || itemHeight <= 0)
     {
         return false;
     }
 
-    // 物品本身比背包更大，任何 origin 都不合法。
     if (itemWidth > size_.width ||
         itemHeight > size_.height)
     {
         return false;
     }
 
-    // 使用减法检查右边界和下边界，
-    // 避免 origin + itemSize 的潜在整数溢出。
     if (origin.x > size_.width - itemWidth)
     {
         return false;
@@ -144,7 +238,6 @@ bool GridInventory::canPlaceDefinition(
         return false;
     }
 
-    // 检查物品 footprint 覆盖的每一个格子。
     for (int offsetY = 0;
          offsetY < itemHeight;
          ++offsetY)
@@ -165,6 +258,42 @@ bool GridInventory::canPlaceDefinition(
     }
 
     return true;
+}
+
+bool GridInventory::containsInstanceId(
+    ItemInstanceId instanceId) const noexcept
+{
+    return std::any_of(
+        placedItems_.begin(),
+        placedItems_.end(),
+        [instanceId](const PlacedItem &placed)
+        {
+            return placed.item.instanceId() ==
+                   instanceId;
+        });
+}
+
+void GridInventory::setFootprintOccupant(
+    const ItemDefinition &definition,
+    GridPosition origin,
+    std::optional<ItemInstanceId> occupant) noexcept
+{
+    for (int offsetY = 0;
+         offsetY < definition.inventoryHeightCells;
+         ++offsetY)
+    {
+        for (int offsetX = 0;
+             offsetX < definition.inventoryWidthCells;
+             ++offsetX)
+        {
+            const GridPosition coveredPosition{
+                origin.x + offsetX,
+                origin.y + offsetY};
+
+            cells_[indexOf(coveredPosition)] =
+                occupant;
+        }
+    }
 }
 
 std::size_t GridInventory::indexOf(

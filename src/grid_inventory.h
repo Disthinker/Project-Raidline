@@ -32,6 +32,18 @@ struct InventoryGridSize
 // item 拥有真实 ItemInstance，origin 是物品左上角格子。
 struct PlacedItem
 {
+    PlacedItem(
+        ItemInstance &&itemValue,
+        GridPosition originValue) noexcept;
+
+    ~PlacedItem() = default;
+
+    PlacedItem(const PlacedItem &) = delete;
+    PlacedItem &operator=(const PlacedItem &) = delete;
+
+    PlacedItem(PlacedItem &&) noexcept = default;
+    PlacedItem &operator=(PlacedItem &&) noexcept = default;
+
     ItemInstance item;
     GridPosition origin;
 };
@@ -50,32 +62,36 @@ public:
     [[nodiscard]]
     std::size_t cellCount() const noexcept;
 
-    // 检查指定物品是否能够以 origin 为左上角放置。
-    //
-    // 检查内容：
-    // 1. origin 是否越界；
-    // 2. 物品矩形是否完全位于背包内；
-    // 3. 物品覆盖的所有格子是否为空。
-    //
-    // 非法 ItemId 会由 itemDefinition() 抛出 std::out_of_range。
     [[nodiscard]]
     bool canPlace(
         ItemId definitionId,
         GridPosition origin) const;
 
-    // 按 row-major 顺序寻找第一个合法位置：
-    // y 从上到下，x 从左到右。
-    //
-    // 找不到位置时返回 nullopt。
     [[nodiscard]]
     std::optional<GridPosition> findFirstFit(
         ItemId definitionId) const;
 
-    // 返回指定格子的占用者 ID。
+    // 成功时把 item 的所有权转入背包。
     //
-    // nullopt 可能表示：
-    // 1. 坐标越界；
-    // 2. 格子合法但当前为空。
+    // 失败时：
+    // - cells_ 不变；
+    // - placedItems_ 不变；
+    // - 输入 item 不被移动。
+    [[nodiscard]]
+    bool tryPlace(
+        ItemInstance &&item,
+        GridPosition origin);
+
+    // 找到物品时：
+    // - 清除其全部占用格；
+    // - 将原 ItemInstance 移出；
+    // - 从 placedItems_ 删除记录。
+    //
+    // 找不到时返回 nullopt。
+    [[nodiscard]]
+    std::optional<ItemInstance> remove(
+        ItemInstanceId instanceId);
+
     [[nodiscard]]
     std::optional<ItemInstanceId> occupantAt(
         GridPosition position) const noexcept;
@@ -87,12 +103,22 @@ private:
     [[nodiscard]]
     bool isWithinBounds(GridPosition position) const noexcept;
 
-    // 内部版本接收已经验证过的物品定义，
-    // 避免 findFirstFit 每个位置都重复查询定义目录。
     [[nodiscard]]
     bool canPlaceDefinition(
         const ItemDefinition &definition,
         GridPosition origin) const noexcept;
+
+    [[nodiscard]]
+    bool containsInstanceId(
+        ItemInstanceId instanceId) const noexcept;
+
+    // 将一个物品 footprint 中的所有格子统一设置为：
+    // - instanceId：被物品占用；
+    // - nullopt：清空占用。
+    void setFootprintOccupant(
+        const ItemDefinition &definition,
+        GridPosition origin,
+        std::optional<ItemInstanceId> occupant) noexcept;
 
     // 只能对已经确认合法的坐标调用。
     [[nodiscard]]
