@@ -43,6 +43,8 @@ add_executable(Project_Raidline
     src/particle.cpp
     src/particle_system.h
     src/particle_system.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
 )
 target_compile_features(Project_Raidline PRIVATE cxx_std_20)
 set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
@@ -388,6 +390,44 @@ target_include_directories(
 
 gtest_discover_tests(GroundItemTest)
 
+# test grid_inventory
+add_executable(GridInventoryTest
+    tests/test_grid_inventory.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    GridInventoryTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GridInventoryTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GridInventoryTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GridInventoryTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(GridInventoryTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -418,5 +458,10 @@ if(MSVC)
         GroundItemTest
         PRIVATE
         /utf-8
+    )
+    target_compile_options(
+    GridInventoryTest
+    PRIVATE
+    /utf-8
     )
 endif()
