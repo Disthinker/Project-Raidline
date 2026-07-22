@@ -5,11 +5,27 @@
 GridInventory::GridInventory(InventoryGridSize size)
     : size_{size}
 {
-    // TODO 1：
-    // width 和 height 必须都大于 0。
-    // 非法时抛出 std::invalid_argument。
-    //
-    // 验证通过后，将 cells_ 调整为 width * height 个空格子。
+    if (size_.width <= 0)
+    {
+        throw std::invalid_argument(
+            "GridInventory width must be positive");
+    }
+
+    if (size_.height <= 0)
+    {
+        throw std::invalid_argument(
+            "GridInventory height must be positive");
+    }
+
+    // 必须先验证有符号整数为正，再转换为 size_t。
+    const auto width =
+        static_cast<std::size_t>(size_.width);
+    const auto height =
+        static_cast<std::size_t>(size_.height);
+
+    // std::optional 默认构造后为 nullopt，
+    // 因此所有格子初始都是空的。
+    cells_.resize(width * height);
 }
 
 int GridInventory::width() const noexcept
@@ -30,10 +46,12 @@ std::size_t GridInventory::cellCount() const noexcept
 std::optional<ItemInstanceId> GridInventory::occupantAt(
     GridPosition position) const noexcept
 {
-    // TODO 2：
-    // 越界返回 std::nullopt。
-    // 合法时返回对应 cells_ 元素。
-    return std::nullopt;
+    if (!isWithinBounds(position))
+    {
+        return std::nullopt;
+    }
+
+    return cells_[indexOf(position)];
 }
 
 const std::vector<PlacedItem> &
@@ -45,16 +63,21 @@ GridInventory::placedItems() const noexcept
 bool GridInventory::isWithinBounds(
     GridPosition position) const noexcept
 {
-    // TODO 3：
-    // 同时检查负坐标、右边界和下边界。
-    return false;
+    return position.x >= 0 &&
+           position.y >= 0 &&
+           position.x < size_.width &&
+           position.y < size_.height;
 }
 
 std::size_t GridInventory::indexOf(
     GridPosition position) const noexcept
 {
-    // TODO 4：
-    // 使用 row-major 的二维转一维公式。
-    // 只有坐标合法后才能转换为 size_t。
-    return 0;
+    const auto x =
+        static_cast<std::size_t>(position.x);
+    const auto y =
+        static_cast<std::size_t>(position.y);
+    const auto width =
+        static_cast<std::size_t>(size_.width);
+
+    return y * width + x;
 }
