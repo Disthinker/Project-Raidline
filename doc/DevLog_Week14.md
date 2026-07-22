@@ -725,7 +725,7 @@ GameplayWorldTest：PASS
 
 ### 人工运行
 
-请根据实际情况填写：
+人工验收结果：
 
 ```text
 四种地面图片显示：PASS
