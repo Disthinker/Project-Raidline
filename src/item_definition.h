@@ -39,12 +39,14 @@ struct ItemDefinition
     Vec2 pickupSize{};
 
     // 相对于运行时 assets/ 目录的路径。
+    std::string_view inventoryTexturePath{};
     std::string_view worldTexturePath{};
 };
 
 constexpr std::size_t itemCount() noexcept
 {
-    return static_cast<std::size_t>(ItemId::Count);
+    return static_cast<std::size_t>(
+        ItemId::Count);
 }
 
 using ItemDefinitionCatalog =
@@ -52,9 +54,11 @@ using ItemDefinitionCatalog =
 
 // 返回完整静态目录，不复制数据。
 [[nodiscard]]
-const ItemDefinitionCatalog &itemDefinitions() noexcept;
+const ItemDefinitionCatalog &
+itemDefinitions() noexcept;
 
 // 根据稳定 ItemId 查询定义。
 // ItemId::Count 或其他非法枚举值会抛出 std::out_of_range。
 [[nodiscard]]
-const ItemDefinition &itemDefinition(ItemId id);
+const ItemDefinition &
+itemDefinition(ItemId id);

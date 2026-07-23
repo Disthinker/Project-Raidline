@@ -203,3 +203,48 @@ TEST(
         itemDefinition(invalidId),
         std::out_of_range);
 }
+
+TEST(
+    ItemDefinitionTest,
+    DefinitionsProvideSeparateInventoryTextures)
+{
+    EXPECT_EQ(
+        itemDefinition(ItemId::Cola)
+            .inventoryTexturePath,
+        std::string_view{
+            "items/inventory/"
+            "item_cola_basic_v1_64x64.png"});
+
+    EXPECT_EQ(
+        itemDefinition(ItemId::Medkit)
+            .inventoryTexturePath,
+        std::string_view{
+            "items/inventory/"
+            "item_medkit_basic_v1_128x128.png"});
+
+    EXPECT_EQ(
+        itemDefinition(ItemId::Pistol)
+            .inventoryTexturePath,
+        std::string_view{
+            "items/inventory/"
+            "item_pistol_basic_v1_128x64.png"});
+
+    EXPECT_EQ(
+        itemDefinition(ItemId::Rifle)
+            .inventoryTexturePath,
+        std::string_view{
+            "items/inventory/"
+            "item_rifle_basic_v1_256x128.png"});
+}
+
+TEST(
+    ItemDefinitionTest,
+    InventoryAndWorldTexturePathsAreIndependent)
+{
+    const ItemDefinition &rifle =
+        itemDefinition(ItemId::Rifle);
+
+    EXPECT_NE(
+        rifle.inventoryTexturePath,
+        rifle.worldTexturePath);
+}

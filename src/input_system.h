@@ -13,27 +13,35 @@ enum class GameAction
     MoveRight,
     Fire,
     Dodge,
-    Interact
+    Interact,
+    ToggleInventory
 };
 
 class InputSystem
 {
 public:
-    void handleEvent(const SDL_Event &event);
+    void handleEvent(
+        const SDL_Event &event);
 
     [[nodiscard]]
-    bool isActionPressed(GameAction action) const;
+    bool isActionPressed(
+        GameAction action) const;
 
     [[nodiscard]]
-    bool wasActionJustPressed(GameAction action) const;
+    bool wasActionJustPressed(
+        GameAction action) const;
 
     void endFrame();
 
 private:
-    std::unordered_set<GameAction> pressedActions_;
-    std::unordered_set<GameAction> justPressedActions_;
+    std::unordered_set<GameAction>
+        pressedActions_;
+
+    std::unordered_set<GameAction>
+        justPressedActions_;
 
     [[nodiscard]]
     std::optional<GameAction>
-    mapScancodeToAction(SDL_Scancode scancode) const;
+    mapScancodeToAction(
+        SDL_Scancode scancode) const;
 };

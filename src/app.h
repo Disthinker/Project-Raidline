@@ -23,6 +23,8 @@ private:
     Uint64 lastCounter_{};
 
     bool running_{false};
+    bool inventoryOpen_{false};
+
     GameplayWorld world_;
 
     Texture backgroundTexture_;
@@ -30,10 +32,12 @@ private:
     Texture playerMoveHorizontalTexture_;
     Texture enemyMoveHorizontalTexture_;
 
-    // 每种 ItemId 对应一个由 App 独占的世界 Texture。
-    // ItemDefinition 只保存资源路径，不拥有渲染资源。
+    // 世界物品与背包物品使用不同分辨率的纹理。
     std::array<Texture, itemCount()>
-        itemTextures_{};
+        worldItemTextures_{};
+
+    std::array<Texture, itemCount()>
+        inventoryItemTextures_{};
 
     bool loadTextures();
     bool initialize();
@@ -50,6 +54,7 @@ private:
     void renderPlayer();
     void renderProjectiles();
     void renderParticles();
+    void renderInventoryOverlay();
     void renderDebugText();
 
     void shutdown();
