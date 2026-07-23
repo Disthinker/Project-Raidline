@@ -25,7 +25,8 @@ void InputSystem::handleEvent(
         // 才产生一次 justPressed。
         if (!isActionPressed(*action))
         {
-            justPressedActions_.insert(*action);
+            justPressedActions_.insert(
+                *action);
         }
 
         pressedActions_.insert(*action);
@@ -52,7 +53,7 @@ bool InputSystem::wasActionJustPressed(
 void InputSystem::endFrame()
 {
     // justPressed 只保留一帧。
-    // pressed 状态必须等到对应的 KeyUp 才清除。
+    // pressed 状态等到对应 KeyUp 才清除。
     justPressedActions_.clear();
 }
 
@@ -82,6 +83,9 @@ InputSystem::mapScancodeToAction(
 
     case SDL_SCANCODE_F:
         return GameAction::Interact;
+
+    case SDL_SCANCODE_TAB:
+        return GameAction::ToggleInventory;
 
     default:
         return std::nullopt;

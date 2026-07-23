@@ -12,45 +12,82 @@ add_executable(Project_Raidline
     src/main.cpp
     src/app.cpp
     src/app.h
+
     src/input_system.h
     src/input_system.cpp
+
     src/player.h
     src/player.cpp
+
     src/projectile.h
     src/projectile.cpp
+
     src/vec2.h
+    src/rect.h
+
     src/item_definition.h
     src/item_definition.cpp
     src/item_instance.h
     src/item_instance.cpp
     src/ground_item.h
     src/ground_item.cpp
-    src/rect.h
-    src/collision.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
+
     src/collision.h
+    src/collision.cpp
+
     src/enemy.h
     src/enemy.cpp
+
     src/hit_resolution.h
     src/hit_resolution.cpp
+
     src/gameplay_input.h
     src/gameplay_world.h
     src/gameplay_world.cpp
+
     src/texture.h
     src/texture.cpp
+
     src/animation.h
     src/animation.cpp
+
     src/particle.h
     src/particle.cpp
     src/particle_system.h
     src/particle_system.cpp
 )
-target_compile_features(Project_Raidline PRIVATE cxx_std_20)
-set_target_properties(Project_Raidline PROPERTIES CXX_EXTENSIONS OFF)
-# 链接 第三方依赖的 库
-target_link_libraries(Project_Raidline PRIVATE fmt::fmt SDL3::SDL3 SDL3_image::SDL3_image)
-target_include_directories(Project_Raidline PRIVATE src)
 
-add_custom_command(TARGET Project_Raidline POST_BUILD
+target_compile_features(
+    Project_Raidline
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    Project_Raidline
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    Project_Raidline
+    PRIVATE
+    fmt::fmt
+    SDL3::SDL3
+    SDL3_image::SDL3_image
+)
+
+target_include_directories(
+    Project_Raidline
+    PRIVATE
+    src
+)
+
+add_custom_command(
+    TARGET Project_Raidline
+    POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:Project_Raidline>/assets
@@ -176,6 +213,7 @@ gtest_discover_tests(HitResolutionTest)
 # test gameplay_world
 add_executable(GameplayWorldTest
     tests/test_gameplay_world.cpp
+
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
@@ -208,16 +246,40 @@ add_executable(GameplayWorldTest
 
     src/item_definition.h
     src/item_definition.cpp
+
     src/item_instance.h
     src/item_instance.cpp
+
     src/ground_item.h
     src/ground_item.cpp
+
+    src/grid_inventory.h
+    src/grid_inventory.cpp
 )
 
-target_compile_features(GameplayWorldTest PRIVATE cxx_std_20)
-set_target_properties(GameplayWorldTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(GameplayWorldTest PRIVATE GTest::gtest_main)
-target_include_directories(GameplayWorldTest PRIVATE src)
+target_compile_features(
+    GameplayWorldTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GameplayWorldTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GameplayWorldTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GameplayWorldTest
+    PRIVATE
+    src
+)
 
 gtest_discover_tests(GameplayWorldTest)
 
@@ -228,10 +290,30 @@ add_executable(TextureTest
     src/texture.cpp
 )
 
-target_compile_features(TextureTest PRIVATE cxx_std_20)
-set_target_properties(TextureTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(TextureTest PRIVATE GTest::gtest_main SDL3::SDL3)
-target_include_directories(TextureTest PRIVATE src)
+target_compile_features(
+    TextureTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    TextureTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    TextureTest
+    PRIVATE
+    GTest::gtest_main
+    SDL3::SDL3
+)
+
+target_include_directories(
+    TextureTest
+    PRIVATE
+    src
+)
 
 gtest_discover_tests(TextureTest)
 
@@ -388,6 +470,44 @@ target_include_directories(
 
 gtest_discover_tests(GroundItemTest)
 
+# test grid_inventory
+add_executable(GridInventoryTest
+    tests/test_grid_inventory.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    GridInventoryTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GridInventoryTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GridInventoryTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GridInventoryTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(GridInventoryTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -403,11 +523,13 @@ if(MSVC)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
     target_compile_options(ParticleSystemTest PRIVATE /utf-8)
+
     target_compile_options(
         ItemDefinitionTest
         PRIVATE
         /utf-8
     )
+
     target_compile_options(
         ItemInstanceTest
         PRIVATE
@@ -416,6 +538,12 @@ if(MSVC)
 
     target_compile_options(
         GroundItemTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        GridInventoryTest
         PRIVATE
         /utf-8
     )

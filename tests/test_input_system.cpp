@@ -264,3 +264,84 @@ TEST(
         input.wasActionJustPressed(
             GameAction::Interact));
 }
+
+TEST(
+    InputSystemTest,
+    TabKeyDownSetsToggleInventoryJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_TAB));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::ToggleInventory));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::ToggleInventory));
+}
+
+TEST(
+    InputSystemTest,
+    HoldingTabDoesNotRetriggerToggleInventory)
+{
+    InputSystem input;
+
+    const SDL_Event keyDown =
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_TAB);
+
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::ToggleInventory));
+
+    input.endFrame();
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::ToggleInventory));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::ToggleInventory));
+}
+
+TEST(
+    InputSystemTest,
+    ReleasingAndPressingTabAgainRetriggersToggle)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_TAB));
+
+    input.endFrame();
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_TAB));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::ToggleInventory));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_TAB));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::ToggleInventory));
+}

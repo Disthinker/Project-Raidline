@@ -36,6 +36,51 @@ namespace
     constexpr float kEnemyMoveRightRowY{320.0f};
 
     constexpr std::size_t kEnemyMoveFrameCount{6};
+    constexpr float kInventoryCellSize{64.0f};
+    constexpr float kInventoryPanelPadding{16.0f};
+    constexpr float kInventoryHeaderHeight{32.0f};
+
+    bool loadTexture(
+        SDL_Renderer *renderer,
+        const std::string &path,
+        bool useNearestScaling,
+        Texture &destination)
+    {
+        Texture loaded{
+            IMG_LoadTexture(
+                renderer,
+                path.c_str())};
+
+        if (!loaded.valid())
+        {
+            fmt::print(
+                "IMG_LoadTexture failed for '{}': {}\n",
+                path,
+                SDL_GetError());
+
+            return false;
+        }
+
+        if (
+            useNearestScaling &&
+            !SDL_SetTextureScaleMode(
+                loaded.get(),
+                SDL_SCALEMODE_NEAREST))
+        {
+            fmt::print(
+                "SDL_SetTextureScaleMode failed "
+                "for '{}': {}\n",
+                path,
+                SDL_GetError());
+
+            return false;
+        }
+
+        destination =
+            std::move(loaded);
+
+        return true;
+    }
 }
 
 bool App::loadTextures()
@@ -80,68 +125,54 @@ bool App::loadTextures()
         "characters/enemy/default/"
         "enemy_default_move_horizontal_6f_1536x640.png";
 
-    // 使用局部 RAII 对象加载。
-    // 任意一步失败时，已经成功加载的 Texture 会自动释放。
-    Texture backgroundTexture{
-        IMG_LoadTexture(
-            renderer_,
-            backgroundPath.c_str())};
-
-    if (!backgroundTexture.valid())
-    {
-        fmt::print(
-            "IMG_LoadTexture failed for background: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
-    Texture playerTexture{
-        IMG_LoadTexture(
-            renderer_,
-            playerPath.c_str())};
-
-    if (!playerTexture.valid())
-    {
-        fmt::print(
-            "IMG_LoadTexture failed for player: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
-    Texture playerMoveHorizontalTexture{
-        IMG_LoadTexture(
-            renderer_,
-            playerMoveHorizontalPath.c_str())};
-
-    if (!playerMoveHorizontalTexture.valid())
-    {
-        fmt::print(
-            "IMG_LoadTexture failed for "
-            "horizontal player movement: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
-    Texture enemyMoveHorizontalTexture{
-        IMG_LoadTexture(
-            renderer_,
-            enemyMoveHorizontalPath.c_str())};
-
-    if (!enemyMoveHorizontalTexture.valid())
-    {
-        fmt::print(
-            "IMG_LoadTexture failed for "
-            "horizontal enemy movement: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
+    // 所有资源先加载到局部 RAII 对象。
+    // 任意一步失败时，不会留下半完成的 App 状态。
+    Texture backgroundTexture;
+    Texture playerTexture;
+    Texture playerMoveHorizontalTexture;
+    Texture enemyMoveHorizontalTexture;
 
     std::array<Texture, itemCount()>
-        itemTextures{};
+        worldItemTextures{};
+
+    std::array<Texture, itemCount()>
+        inventoryItemTextures{};
+
+    if (!loadTexture(
+            renderer_,
+            backgroundPath,
+            false,
+            backgroundTexture))
+    {
+        return false;
+    }
+
+    if (!loadTexture(
+            renderer_,
+            playerPath,
+            true,
+            playerTexture))
+    {
+        return false;
+    }
+
+    if (!loadTexture(
+            renderer_,
+            playerMoveHorizontalPath,
+            true,
+            playerMoveHorizontalTexture))
+    {
+        return false;
+    }
+
+    if (!loadTexture(
+            renderer_,
+            enemyMoveHorizontalPath,
+            true,
+            enemyMoveHorizontalTexture))
+    {
+        return false;
+    }
 
     const ItemDefinitionCatalog &definitions =
         itemDefinitions();
@@ -154,81 +185,36 @@ bool App::loadTextures()
         const ItemDefinition &definition =
             definitions[index];
 
-        const std::string itemPath =
+        const std::string worldPath =
             assetRoot +
             std::string{
                 definition.worldTexturePath};
 
-        Texture itemTexture{
-            IMG_LoadTexture(
+        const std::string inventoryPath =
+            assetRoot +
+            std::string{
+                definition.inventoryTexturePath};
+
+        if (!loadTexture(
                 renderer_,
-                itemPath.c_str())};
-
-        if (!itemTexture.valid())
+                worldPath,
+                true,
+                worldItemTextures[index]))
         {
-            fmt::print(
-                "IMG_LoadTexture failed for item "
-                "'{}' at '{}': {}\n",
-                definition.displayName,
-                itemPath,
-                SDL_GetError());
-
             return false;
         }
 
-        if (!SDL_SetTextureScaleMode(
-                itemTexture.get(),
-                SDL_SCALEMODE_NEAREST))
+        if (!loadTexture(
+                renderer_,
+                inventoryPath,
+                true,
+                inventoryItemTextures[index]))
         {
-            fmt::print(
-                "SDL_SetTextureScaleMode failed "
-                "for item '{}': {}\n",
-                definition.displayName,
-                SDL_GetError());
-
             return false;
         }
-
-        itemTextures[index] =
-            std::move(itemTexture);
     }
 
-    if (!SDL_SetTextureScaleMode(
-            enemyMoveHorizontalTexture.get(),
-            SDL_SCALEMODE_NEAREST))
-    {
-        fmt::print(
-            "SDL_SetTextureScaleMode failed "
-            "for enemy movement: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
-    if (!SDL_SetTextureScaleMode(
-            playerTexture.get(),
-            SDL_SCALEMODE_NEAREST))
-    {
-        fmt::print(
-            "SDL_SetTextureScaleMode failed "
-            "for player: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
-    if (!SDL_SetTextureScaleMode(
-            playerMoveHorizontalTexture.get(),
-            SDL_SCALEMODE_NEAREST))
-    {
-        fmt::print(
-            "SDL_SetTextureScaleMode failed "
-            "for player movement: {}\n",
-            SDL_GetError());
-
-        return false;
-    }
-
+    // 所有资源全部成功后，统一提交到 App 成员。
     backgroundTexture_ =
         std::move(backgroundTexture);
 
@@ -243,8 +229,11 @@ bool App::loadTextures()
         std::move(
             enemyMoveHorizontalTexture);
 
-    itemTextures_ =
-        std::move(itemTextures);
+    worldItemTextures_ =
+        std::move(worldItemTextures);
+
+    inventoryItemTextures_ =
+        std::move(inventoryItemTextures);
 
     return true;
 }
@@ -337,8 +326,21 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
-    const GameplayInput gameplayInput = makeGameplayInput();
-    world_.update(gameplayInput, deltaTime);
+    if (
+        input_.wasActionJustPressed(
+            GameAction::ToggleInventory))
+    {
+        inventoryOpen_ =
+            !inventoryOpen_;
+    }
+
+    const GameplayInput gameplayInput =
+        makeGameplayInput();
+
+    // Week 15 的背包面板不暂停游戏。
+    world_.update(
+        gameplayInput,
+        deltaTime);
 }
 
 void App::renderDebugText()
@@ -394,6 +396,13 @@ void App::renderDebugText()
     {
         actionText =
             "Action: Interact";
+    }
+    else if (
+        input_.isActionPressed(
+            GameAction::ToggleInventory))
+    {
+        actionText =
+            "Action: ToggleInventory";
     }
     else if (
         input_.isActionPressed(
@@ -456,22 +465,250 @@ void App::renderDebugText()
         68.0f,
         groundItemText.c_str());
 
-    const std::string carriedItemText =
+    const std::string inventoryItemText =
         fmt::format(
-            "Carried Items: {}",
-            world_.carriedItems().size());
+            "Inventory Items: {}",
+            world_.inventory()
+                .placedItems()
+                .size());
 
     SDL_RenderDebugText(
         renderer_,
         20.0f,
         84.0f,
-        carriedItemText.c_str());
+        inventoryItemText.c_str());
 
     SDL_RenderDebugText(
         renderer_,
         20.0f,
         100.0f,
         "Interact: F");
+    const char *inventoryStateText =
+        inventoryOpen_
+            ? "Inventory: Tab [Open]"
+            : "Inventory: Tab [Closed]";
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        116.0f,
+        inventoryStateText);
+}
+
+void App::renderInventoryOverlay()
+{
+    if (!inventoryOpen_)
+    {
+        return;
+    }
+
+    const GridInventory &inventory =
+        world_.inventory();
+
+    const float gridWidth =
+        static_cast<float>(
+            inventory.width()) *
+        kInventoryCellSize;
+
+    const float gridHeight =
+        static_cast<float>(
+            inventory.height()) *
+        kInventoryCellSize;
+
+    const float panelWidth =
+        gridWidth +
+        kInventoryPanelPadding * 2.0f;
+
+    const float panelHeight =
+        gridHeight +
+        kInventoryPanelPadding * 2.0f +
+        kInventoryHeaderHeight;
+
+    const float panelX =
+        (static_cast<float>(kWindowWidth) -
+         panelWidth) /
+        2.0f;
+
+    const float panelY =
+        (static_cast<float>(kWindowHeight) -
+         panelHeight) /
+        2.0f;
+
+    const float gridX =
+        panelX +
+        kInventoryPanelPadding;
+
+    const float gridY =
+        panelY +
+        kInventoryPanelPadding +
+        kInventoryHeaderHeight;
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+
+    // 半透明面板背景。
+    SDL_SetRenderDrawColor(
+        renderer_,
+        12,
+        16,
+        20,
+        225);
+
+    const SDL_FRect panelRect{
+        panelX,
+        panelY,
+        panelWidth,
+        panelHeight};
+
+    SDL_RenderFillRect(
+        renderer_,
+        &panelRect);
+
+    // 网格底色。
+    SDL_SetRenderDrawColor(
+        renderer_,
+        28,
+        34,
+        40,
+        245);
+
+    const SDL_FRect gridRect{
+        gridX,
+        gridY,
+        gridWidth,
+        gridHeight};
+
+    SDL_RenderFillRect(
+        renderer_,
+        &gridRect);
+
+    // 先渲染物品，再把网格线覆盖在物品上，
+    // 让不同 footprint 清晰可见。
+    for (
+        const PlacedItem &placed :
+        inventory.placedItems())
+    {
+        const ItemDefinition &definition =
+            itemDefinition(
+                placed.item.definitionId());
+
+        const std::size_t textureIndex =
+            static_cast<std::size_t>(
+                definition.id);
+
+        const Texture &texture =
+            inventoryItemTextures_[textureIndex];
+
+        if (!texture.valid())
+        {
+            continue;
+        }
+
+        const SDL_FRect destination{
+            gridX +
+                static_cast<float>(
+                    placed.origin.x) *
+                    kInventoryCellSize,
+            gridY +
+                static_cast<float>(
+                    placed.origin.y) *
+                    kInventoryCellSize,
+            static_cast<float>(
+                definition.inventoryWidthCells) *
+                kInventoryCellSize,
+            static_cast<float>(
+                definition.inventoryHeightCells) *
+                kInventoryCellSize};
+
+        SDL_RenderTexture(
+            renderer_,
+            texture.get(),
+            nullptr,
+            &destination);
+    }
+
+    // 格子线。
+    SDL_SetRenderDrawColor(
+        renderer_,
+        105,
+        116,
+        126,
+        220);
+
+    for (
+        int column = 0;
+        column <= inventory.width();
+        ++column)
+    {
+        const float x =
+            gridX +
+            static_cast<float>(column) *
+                kInventoryCellSize;
+
+        SDL_RenderLine(
+            renderer_,
+            x,
+            gridY,
+            x,
+            gridY + gridHeight);
+    }
+
+    for (
+        int row = 0;
+        row <= inventory.height();
+        ++row)
+    {
+        const float y =
+            gridY +
+            static_cast<float>(row) *
+                kInventoryCellSize;
+
+        SDL_RenderLine(
+            renderer_,
+            gridX,
+            y,
+            gridX + gridWidth,
+            y);
+    }
+
+    // 面板外框。
+    SDL_SetRenderDrawColor(
+        renderer_,
+        180,
+        190,
+        200,
+        255);
+
+    SDL_RenderRect(
+        renderer_,
+        &panelRect);
+
+    SDL_RenderDebugText(
+        renderer_,
+        panelX +
+            kInventoryPanelPadding,
+        panelY +
+            kInventoryPanelPadding,
+        "Inventory - Tab to close");
+
+    const std::string itemCountText =
+        fmt::format(
+            "{} item(s)",
+            inventory.placedItems().size());
+
+    SDL_RenderDebugText(
+        renderer_,
+        panelX +
+            panelWidth -
+            100.0f,
+        panelY +
+            kInventoryPanelPadding,
+        itemCountText.c_str());
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_NONE);
 }
 
 void App::renderBackground()
@@ -505,8 +742,6 @@ void App::renderGroundItems()
         const ItemInstance &item =
             groundItem.item();
 
-        // 正常世界状态中不会存在失效 GroundItem。
-        // 这里保留防御性检查，避免渲染无效 ID。
         if (!item.valid())
         {
             continue;
@@ -521,7 +756,7 @@ void App::renderGroundItems()
                 definition.id);
 
         const Texture &texture =
-            itemTextures_[textureIndex];
+            worldItemTextures_[textureIndex];
 
         if (!texture.valid())
         {
@@ -534,8 +769,6 @@ void App::renderGroundItems()
         const Vec2 renderSize =
             definition.worldRenderSize;
 
-        // GroundItem position 是世界中心点；
-        // SDL_FRect 要求左上角坐标。
         SDL_FRect destination{
             center.x -
                 renderSize.x / 2.0f,
@@ -705,6 +938,11 @@ void App::render()
     renderPlayer();
     renderProjectiles();
     renderParticles();
+
+    // 背包覆盖层显示在游戏世界上方。
+    renderInventoryOverlay();
+
+    // 调试信息保持在最上层。
     renderDebugText();
 
     SDL_RenderPresent(
@@ -715,10 +953,17 @@ void App::shutdown()
 {
     // 所有 SDL_Texture 必须在 Renderer 之前释放。
     for (
-        Texture &itemTexture :
-        itemTextures_)
+        Texture &texture :
+        inventoryItemTextures_)
     {
-        itemTexture.reset();
+        texture.reset();
+    }
+
+    for (
+        Texture &texture :
+        worldItemTextures_)
+    {
+        texture.reset();
     }
 
     enemyMoveHorizontalTexture_.reset();

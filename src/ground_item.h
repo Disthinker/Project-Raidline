@@ -24,6 +24,13 @@ public:
     [[nodiscard]]
     const ItemInstance &item() const noexcept;
 
+    // 仅供事务式所有权转移使用。
+    //
+    // std::move(itemForTransfer()) 本身不会立即移动；
+    // 只有接收方真正执行移动构造时，item_ 才会失效。
+    [[nodiscard]]
+    ItemInstance &itemForTransfer() noexcept;
+
     // 返回世界中心位置，而不是左上角。
     [[nodiscard]]
     Vec2 position() const noexcept;
@@ -32,7 +39,7 @@ public:
     [[nodiscard]]
     Rect pickupBounds() const;
 
-    // 把内部 ItemInstance 的所有权移交给调用方。
+    // 保留 Week 14 接口。
     // 调用后 GroundItem 应立即从容器中删除。
     [[nodiscard]]
     ItemInstance takeItem() noexcept;

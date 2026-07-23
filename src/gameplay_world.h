@@ -6,8 +6,8 @@
 
 #include "enemy.h"
 #include "gameplay_input.h"
+#include "grid_inventory.h"
 #include "ground_item.h"
-#include "item_instance.h"
 #include "particle_system.h"
 #include "player.h"
 #include "projectile.h"
@@ -29,11 +29,16 @@ public:
     // 正常游戏仍使用默认的 3 HP Enemy。
     explicit GameplayWorld(int enemyMaxHealth);
 
-    // 允许测试或未来地图系统配置初始地面物品，
-    // 但 instanceId 始终由 GameplayWorld 生成。
+    // 使用默认 10×6 背包。
     GameplayWorld(
         int enemyMaxHealth,
         std::vector<GroundItemSpawn> initialGroundItems);
+
+    // 允许测试使用较小背包快速验证容量边界。
+    GameplayWorld(
+        int enemyMaxHealth,
+        std::vector<GroundItemSpawn> initialGroundItems,
+        InventoryGridSize inventorySize);
 
     void update(
         const GameplayInput &input,
@@ -59,8 +64,8 @@ public:
     groundItems() const noexcept;
 
     [[nodiscard]]
-    const std::vector<ItemInstance> &
-    carriedItems() const noexcept;
+    const GridInventory &
+    inventory() const noexcept;
 
     [[nodiscard]]
     int score() const noexcept;
@@ -72,7 +77,7 @@ private:
     std::vector<Enemy> enemies_;
 
     std::vector<GroundItem> groundItems_;
-    std::vector<ItemInstance> carriedItems_;
+    GridInventory inventory_{{10, 6}};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
