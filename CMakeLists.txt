@@ -25,6 +25,8 @@ add_executable(Project_Raidline
     src/item_instance.cpp
     src/ground_item.h
     src/ground_item.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
     src/rect.h
     src/collision.cpp
     src/collision.h

@@ -21,6 +21,10 @@ namespace
 
     constexpr int kScorePerEnemy{100};
 
+    constexpr InventoryGridSize kDefaultInventorySize{
+        10,
+        6};
+
     std::vector<GroundItemSpawn>
     makeDefaultGroundItemSpawns()
     {
@@ -87,7 +91,8 @@ namespace
 GameplayWorld::GameplayWorld()
     : GameplayWorld{
           kDefaultEnemyMaxHealth,
-          makeDefaultGroundItemSpawns()}
+          makeDefaultGroundItemSpawns(),
+          kDefaultInventorySize}
 {
 }
 
@@ -95,14 +100,27 @@ GameplayWorld::GameplayWorld(
     int enemyMaxHealth)
     : GameplayWorld{
           enemyMaxHealth,
-          makeDefaultGroundItemSpawns()}
+          makeDefaultGroundItemSpawns(),
+          kDefaultInventorySize}
 {
 }
 
 GameplayWorld::GameplayWorld(
     int enemyMaxHealth,
     std::vector<GroundItemSpawn> initialGroundItems)
-    : particleSystem_{
+    : GameplayWorld{
+          enemyMaxHealth,
+          std::move(initialGroundItems),
+          kDefaultInventorySize}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    int enemyMaxHealth,
+    std::vector<GroundItemSpawn> initialGroundItems,
+    InventoryGridSize inventorySize)
+    : inventory_{inventorySize},
+      particleSystem_{
           0xC0FFEEu,
           ParticleBurstConfig{}}
 {
@@ -213,11 +231,47 @@ void GameplayWorld::tryPickupOne()
     const std::size_t index =
         *candidate;
 
-    // 先把唯一 ItemInstance 移入 carriedItems_，
-    // 再删除失去所有权的 GroundItem。
-    carriedItems_.push_back(
-        groundItems_[index].takeItem());
+    GroundItem &groundItem =
+        groundItems_[index];
 
+    const ItemInstance &candidateItem =
+        groundItem.item();
+
+    // 必须先确认背包有合法位置。
+    //
+    // 背包满时不会调用任何移动操作，因此：
+    // - GroundItem 保留；
+    // - ItemInstance ID 保留；
+    // - 背包保持不变。
+    const std::optional<GridPosition> placement =
+        inventory_.findFirstFit(
+            candidateItem.definitionId());
+
+    if (!placement.has_value())
+    {
+        return;
+    }
+
+    // itemForTransfer() 返回原 ItemInstance 引用。
+    // std::move 只把它转换为右值引用。
+    //
+    // tryPlace 失败时不会真正移动，因此 GroundItem
+    // 仍持有有效 ItemInstance。
+    const bool placed =
+        inventory_.tryPlace(
+            std::move(
+                groundItem.itemForTransfer()),
+            *placement);
+
+    if (!placed)
+    {
+        // 理论上 findFirstFit 成功后这里应当成功。
+        // 仍采用 fail-safe：不删除 GroundItem。
+        return;
+    }
+
+    // 只有所有权已经成功进入 Inventory 后，
+    // 才删除 moved-from GroundItem。
     const auto erasePosition =
         groundItems_.begin() +
         static_cast<
@@ -367,10 +421,10 @@ GameplayWorld::groundItems() const noexcept
     return groundItems_;
 }
 
-const std::vector<ItemInstance> &
-GameplayWorld::carriedItems() const noexcept
+const GridInventory &
+GameplayWorld::inventory() const noexcept
 {
-    return carriedItems_;
+    return inventory_;
 }
 
 int GameplayWorld::score() const noexcept

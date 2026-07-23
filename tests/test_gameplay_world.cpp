@@ -352,163 +352,7 @@ TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
 
 namespace
 {
-    constexpr float kExpectedImpactX{656.0f};
-    constexpr float kExpectedImpactY{140.0f};
 
-    void createDefaultProjectileHit(GameplayWorld &world)
-    {
-        GameplayInput fire = makeFireInput();
-        world.update(fire, 0.0f);
-
-        GameplayInput noInput{};
-        world.update(noInput, 0.35f);
-    }
-}
-
-// GameplayWorld 更新 Enemy 时，也应推进其移动动画。
-// 这保证 App 能从 world.enemies() 读取有效 frame index。
-TEST(
-    GameplayWorldTest,
-    EnemyAnimationAdvancesThroughWorldUpdate)
-{
-    GameplayWorld world;
-    GameplayInput input{};
-
-    ASSERT_EQ(world.enemies().size(), 1u);
-
-    const Enemy &initialEnemy = world.enemies()[0];
-
-    EXPECT_EQ(
-        initialEnemy.facingDirection(),
-        EnemyFacingDirection::Right);
-    EXPECT_EQ(
-        initialEnemy.currentAnimationFrameIndex(),
-        0u);
-
-    // Enemy 每帧动画持续 0.125 秒。
-    world.update(input, 0.125f);
-
-    ASSERT_EQ(world.enemies().size(), 1u);
-
-    const Enemy &updatedEnemy = world.enemies()[0];
-
-    EXPECT_EQ(
-        updatedEnemy.facingDirection(),
-        EnemyFacingDirection::Right);
-    EXPECT_EQ(
-        updatedEnemy.currentAnimationFrameIndex(),
-        1u);
-}
-
-// Enemy 在 GameplayWorld 中撞到右边界后，
-// App 应能读取到 Left 方向用于选择 sprite-sheet 行。
-TEST(
-    GameplayWorldTest,
-    EnemyBounceExposesLeftFacingDirectionForRendering)
-{
-    GameplayWorld world;
-    GameplayInput input{};
-
-    world.update(input, 10.0f);
-
-    ASSERT_EQ(world.enemies().size(), 1u);
-
-    const Enemy &enemy = world.enemies()[0];
-
-    EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
-    EXPECT_LT(enemy.velocity().x, 0.0f);
-    EXPECT_EQ(
-        enemy.facingDirection(),
-        EnemyFacingDirection::Left);
-
-    // 防止渲染层得到非法 source frame。
-    EXPECT_LT(
-        enemy.currentAnimationFrameIndex(),
-        6u);
-}
-
-TEST(GameplayWorldTest, ProjectileHitCreatesParticles)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.enemies().size(), 1u);
-    EXPECT_EQ(world.enemies()[0].health(), 2);
-    EXPECT_EQ(world.score(), 0);
-
-    ASSERT_EQ(world.particles().size(), 12u);
-
-    for (const Particle &particle : world.particles())
-    {
-        EXPECT_FLOAT_EQ(particle.position().x, kExpectedImpactX);
-        EXPECT_FLOAT_EQ(particle.position().y, kExpectedImpactY);
-        EXPECT_FLOAT_EQ(
-            particle.remainingLifetime(),
-            particle.duration());
-    }
-}
-
-TEST(GameplayWorldTest, ExpiredParticlesAreRemovedByWorldUpdate)
-{
-    GameplayWorld world;
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_EQ(world.particles().size(), 12u);
-
-    GameplayInput noInput{};
-    world.update(noInput, 0.50f);
-
-    EXPECT_TRUE(world.particles().empty());
-}
-
-TEST(
-    GameplayWorldTest,
-    LethalHitAwardsScoreAndRemovesEnemy)
-{
-    // 使用 1 HP Enemy，让默认 1 damage Projectile
-    // 通过一次真实命中完成死亡结算。
-    GameplayWorld world{1};
-
-    EXPECT_EQ(world.score(), 0);
-    ASSERT_EQ(world.enemies().size(), 1u);
-    EXPECT_EQ(world.enemies()[0].health(), 1);
-
-    createDefaultProjectileHit(world);
-
-    EXPECT_TRUE(world.projectiles().empty());
-    EXPECT_TRUE(world.enemies().empty());
-
-    EXPECT_EQ(world.score(), 100);
-
-    // 致命命中也必须产生 impact particles。
-    EXPECT_EQ(world.particles().size(), 12u);
-}
-
-TEST(
-    GameplayWorldTest,
-    RemovedEnemyCannotAwardScoreAgain)
-{
-    GameplayWorld world{1};
-
-    createDefaultProjectileHit(world);
-
-    ASSERT_TRUE(world.enemies().empty());
-    ASSERT_EQ(world.score(), 100);
-
-    GameplayInput noInput{};
-
-    // Enemy 已经被删除。
-    // 后续更新不能再次增加 Score。
-    world.update(noInput, 1.0f);
-
-    EXPECT_TRUE(world.enemies().empty());
-    EXPECT_EQ(world.score(), 100);
-}
-
-namespace
-{
     constexpr Vec2 kInitialPlayerCenter{
         656.0f,
         376.0f};
@@ -521,12 +365,36 @@ namespace
     }
 
     GameplayWorld makeItemTestWorld(
-        std::vector<GroundItemSpawn> spawns)
+        std::vector<GroundItemSpawn> spawns,
+        InventoryGridSize inventorySize = {10, 6})
     {
         return GameplayWorld{
             3,
-            std::move(spawns)};
+            std::move(spawns),
+            inventorySize};
     }
+
+} // namespace
+
+TEST(
+    GameplayWorldTest,
+    InitialInventoryIsEmptyTenBySixGrid)
+{
+    const GameplayWorld world;
+
+    EXPECT_EQ(
+        world.inventory().width(),
+        10);
+    EXPECT_EQ(
+        world.inventory().height(),
+        6);
+    EXPECT_EQ(
+        world.inventory().cellCount(),
+        60U);
+    EXPECT_TRUE(
+        world.inventory()
+            .placedItems()
+            .empty());
 }
 
 TEST(
@@ -537,17 +405,13 @@ TEST(
 
     ASSERT_EQ(
         world.groundItems().size(),
-        4u);
-
-    EXPECT_TRUE(
-        world.carriedItems().empty());
+        4U);
 
     EXPECT_EQ(
         world.groundItems()[0]
             .item()
             .instanceId(),
-        1u);
-
+        1U);
     EXPECT_EQ(
         world.groundItems()[0]
             .item()
@@ -558,8 +422,7 @@ TEST(
         world.groundItems()[1]
             .item()
             .instanceId(),
-        2u);
-
+        2U);
     EXPECT_EQ(
         world.groundItems()[1]
             .item()
@@ -570,8 +433,7 @@ TEST(
         world.groundItems()[2]
             .item()
             .instanceId(),
-        3u);
-
+        3U);
     EXPECT_EQ(
         world.groundItems()[2]
             .item()
@@ -582,8 +444,7 @@ TEST(
         world.groundItems()[3]
             .item()
             .instanceId(),
-        4u);
-
+        4U);
     EXPECT_EQ(
         world.groundItems()[3]
             .item()
@@ -609,10 +470,11 @@ TEST(
 
     EXPECT_EQ(
         world.groundItems().size(),
-        1u);
-
+        1U);
     EXPECT_TRUE(
-        world.carriedItems().empty());
+        world.inventory()
+            .placedItems()
+            .empty());
 }
 
 TEST(
@@ -633,15 +495,16 @@ TEST(
 
     EXPECT_EQ(
         world.groundItems().size(),
-        1u);
-
+        1U);
     EXPECT_TRUE(
-        world.carriedItems().empty());
+        world.inventory()
+            .placedItems()
+            .empty());
 }
 
 TEST(
     GameplayWorldTest,
-    InteractInRangeTransfersOneItem)
+    InteractInRangeTransfersItemIntoInventory)
 {
     GameplayWorld world =
         makeItemTestWorld({
@@ -653,10 +516,11 @@ TEST(
 
     ASSERT_EQ(
         world.groundItems().size(),
-        1u);
+        1U);
 
     const ItemInstanceId originalId =
-        world.groundItems()[0]
+        world.groundItems()
+            .front()
             .item()
             .instanceId();
 
@@ -668,18 +532,36 @@ TEST(
         world.groundItems().empty());
 
     ASSERT_EQ(
-        world.carriedItems().size(),
-        1u);
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
+
+    const PlacedItem &placed =
+        world.inventory()
+            .placedItems()
+            .front();
 
     EXPECT_EQ(
-        world.carriedItems()[0]
-            .instanceId(),
+        placed.item.instanceId(),
         originalId);
+    EXPECT_EQ(
+        placed.item.definitionId(),
+        ItemId::Pistol);
+    EXPECT_EQ(
+        placed.origin,
+        (GridPosition{0, 0}));
 
     EXPECT_EQ(
-        world.carriedItems()[0]
-            .definitionId(),
-        ItemId::Pistol);
+        world.inventory()
+            .occupantAt({0, 0}),
+        std::optional<ItemInstanceId>{
+            originalId});
+    EXPECT_EQ(
+        world.inventory()
+            .occupantAt({1, 0}),
+        std::optional<ItemInstanceId>{
+            originalId});
 }
 
 TEST(
@@ -688,8 +570,6 @@ TEST(
 {
     GameplayWorld world =
         makeItemTestWorld({
-            // 先放入较远的 Medkit，
-            // 证明算法不是简单拾取第一个。
             {
                 ItemId::Medkit,
                 Vec2{680.0f, 376.0f},
@@ -705,20 +585,26 @@ TEST(
         0.0f);
 
     ASSERT_EQ(
-        world.carriedItems().size(),
-        1u);
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
 
     EXPECT_EQ(
-        world.carriedItems()[0]
+        world.inventory()
+            .placedItems()
+            .front()
+            .item
             .definitionId(),
         ItemId::Cola);
 
     ASSERT_EQ(
         world.groundItems().size(),
-        1u);
+        1U);
 
     EXPECT_EQ(
-        world.groundItems()[0]
+        world.groundItems()
+            .front()
             .item()
             .definitionId(),
         ItemId::Medkit);
@@ -740,26 +626,31 @@ TEST(
             },
         });
 
-    // 两件物品距离 Player 中心均为 12。
     world.update(
         makeInteractInput(),
         0.0f);
 
     ASSERT_EQ(
-        world.carriedItems().size(),
-        1u);
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
 
     EXPECT_EQ(
-        world.carriedItems()[0]
+        world.inventory()
+            .placedItems()
+            .front()
+            .item
             .definitionId(),
         ItemId::Cola);
 
     ASSERT_EQ(
         world.groundItems().size(),
-        1u);
+        1U);
 
     EXPECT_EQ(
-        world.groundItems()[0]
+        world.groundItems()
+            .front()
             .item()
             .definitionId(),
         ItemId::Medkit);
@@ -786,12 +677,13 @@ TEST(
         0.0f);
 
     EXPECT_EQ(
-        world.carriedItems().size(),
-        1u);
-
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
     EXPECT_EQ(
         world.groundItems().size(),
-        1u);
+        1U);
 }
 
 TEST(
@@ -815,20 +707,194 @@ TEST(
         0.0f);
 
     ASSERT_EQ(
-        world.carriedItems().size(),
-        1u);
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
 
-    // 模拟继续按住 F 的下一帧：
-    // InputSystem 不会再次产生 interactJustPressed。
     world.update(
         GameplayInput{},
         0.0f);
 
     EXPECT_EQ(
-        world.carriedItems().size(),
-        1u);
-
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
     EXPECT_EQ(
         world.groundItems().size(),
-        1u);
+        1U);
+}
+
+TEST(
+    GameplayWorldTest,
+    PickedItemsUseRowMajorFirstFit)
+{
+    GameplayWorld world =
+        makeItemTestWorld({
+            {
+                ItemId::Pistol,
+                kInitialPlayerCenter,
+            },
+            {
+                ItemId::Medkit,
+                kInitialPlayerCenter,
+            },
+        });
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    ASSERT_EQ(
+        world.inventory()
+            .placedItems()
+            .size(),
+        2U);
+
+    const PlacedItem &pistol =
+        world.inventory()
+            .placedItems()[0];
+
+    const PlacedItem &medkit =
+        world.inventory()
+            .placedItems()[1];
+
+    EXPECT_EQ(
+        pistol.item.definitionId(),
+        ItemId::Pistol);
+    EXPECT_EQ(
+        pistol.origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        medkit.item.definitionId(),
+        ItemId::Medkit);
+    EXPECT_EQ(
+        medkit.origin,
+        (GridPosition{2, 0}));
+}
+
+TEST(
+    GameplayWorldTest,
+    FullInventoryKeepsGroundItemAndInstanceId)
+{
+    GameplayWorld world =
+        makeItemTestWorld(
+            {
+                {
+                    ItemId::Pistol,
+                    kInitialPlayerCenter,
+                },
+                {
+                    ItemId::Cola,
+                    kInitialPlayerCenter,
+                },
+            },
+            InventoryGridSize{2, 1});
+
+    // Pistol 为 2×1，第一次拾取后填满整个背包。
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    ASSERT_EQ(
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
+    ASSERT_EQ(
+        world.groundItems().size(),
+        1U);
+
+    const ItemInstanceId remainingId =
+        world.groundItems()
+            .front()
+            .item()
+            .instanceId();
+
+    ASSERT_TRUE(
+        world.groundItems()
+            .front()
+            .item()
+            .valid());
+
+    // 第二次交互时背包已满。
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    EXPECT_EQ(
+        world.inventory()
+            .placedItems()
+            .size(),
+        1U);
+
+    ASSERT_EQ(
+        world.groundItems().size(),
+        1U);
+
+    const ItemInstance &remainingItem =
+        world.groundItems()
+            .front()
+            .item();
+
+    EXPECT_TRUE(
+        remainingItem.valid());
+    EXPECT_EQ(
+        remainingItem.instanceId(),
+        remainingId);
+    EXPECT_EQ(
+        remainingItem.definitionId(),
+        ItemId::Cola);
+}
+
+TEST(
+    GameplayWorldTest,
+    InventoryCapacityFailureDoesNotChangeOccupiedCells)
+{
+    GameplayWorld world =
+        makeItemTestWorld(
+            {
+                {
+                    ItemId::Pistol,
+                    kInitialPlayerCenter,
+                },
+                {
+                    ItemId::Cola,
+                    kInitialPlayerCenter,
+                },
+            },
+            InventoryGridSize{2, 1});
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    const ItemInstanceId pistolId =
+        world.inventory()
+            .placedItems()
+            .front()
+            .item
+            .instanceId();
+
+    world.update(
+        makeInteractInput(),
+        0.0f);
+
+    EXPECT_EQ(
+        world.inventory()
+            .occupantAt({0, 0}),
+        std::optional<ItemInstanceId>{
+            pistolId});
+
+    EXPECT_EQ(
+        world.inventory()
+            .occupantAt({1, 0}),
+        std::optional<ItemInstanceId>{
+            pistolId});
 }

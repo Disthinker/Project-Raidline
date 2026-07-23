@@ -456,16 +456,18 @@ void App::renderDebugText()
         68.0f,
         groundItemText.c_str());
 
-    const std::string carriedItemText =
+    const std::string inventoryItemText =
         fmt::format(
-            "Carried Items: {}",
-            world_.carriedItems().size());
+            "Inventory Items: {}",
+            world_.inventory()
+                .placedItems()
+                .size());
 
     SDL_RenderDebugText(
         renderer_,
         20.0f,
         84.0f,
-        carriedItemText.c_str());
+        inventoryItemText.c_str());
 
     SDL_RenderDebugText(
         renderer_,

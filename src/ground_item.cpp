@@ -16,6 +16,12 @@ GroundItem::item() const noexcept
     return item_;
 }
 
+ItemInstance &
+GroundItem::itemForTransfer() noexcept
+{
+    return item_;
+}
+
 Vec2 GroundItem::position() const noexcept
 {
     return position_;
