@@ -23,17 +23,23 @@ void InputSystem::handleEvent(
     {
         // 只有从“未按下”变为“按下”时，
         // 才产生一次 justPressed。
+        //
+        // 因此方向键长按期间收到重复 KEY_DOWN，
+        // 也不会让背包焦点每帧连续移动。
         if (!isActionPressed(*action))
         {
             justPressedActions_.insert(
                 *action);
         }
 
-        pressedActions_.insert(*action);
+        pressedActions_.insert(
+            *action);
+
         return;
     }
 
-    pressedActions_.erase(*action);
+    pressedActions_.erase(
+        *action);
 }
 
 bool InputSystem::isActionPressed(
@@ -86,6 +92,25 @@ InputSystem::mapScancodeToAction(
 
     case SDL_SCANCODE_TAB:
         return GameAction::ToggleInventory;
+
+    case SDL_SCANCODE_UP:
+        return GameAction::InventoryUp;
+
+    case SDL_SCANCODE_DOWN:
+        return GameAction::InventoryDown;
+
+    case SDL_SCANCODE_LEFT:
+        return GameAction::InventoryLeft;
+
+    case SDL_SCANCODE_RIGHT:
+        return GameAction::InventoryRight;
+
+    case SDL_SCANCODE_RETURN:
+    case SDL_SCANCODE_KP_ENTER:
+        return GameAction::InventoryConfirm;
+
+    case SDL_SCANCODE_ESCAPE:
+        return GameAction::InventoryCancel;
 
     default:
         return std::nullopt;
