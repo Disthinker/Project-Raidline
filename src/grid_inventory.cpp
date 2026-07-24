@@ -125,6 +125,78 @@ bool GridInventory::canMove(
             instanceId});
 }
 
+bool GridInventory::tryMove(
+    ItemInstanceId instanceId,
+    GridPosition newOrigin)
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return false;
+    }
+
+    // 在修改任何数据之前完成全部验证。
+    //
+    // canMove 是 const 查询：
+    // - 不清除旧格；
+    // - 不写入新格；
+    // - 不修改 origin。
+    if (!canMove(instanceId, newOrigin))
+    {
+        return false;
+    }
+
+    // 移动到相同 origin 是成功的 no-op。
+    //
+    // 不需要清除并重新写入相同 footprint，
+    // 也不会改变 ItemInstance 或稳定 ID。
+    if (placedIt->origin == newOrigin)
+    {
+        return true;
+    }
+
+    const GridPosition oldOrigin =
+        placedIt->origin;
+
+    const ItemDefinition &definition =
+        itemDefinition(
+            placedIt->item.definitionId());
+
+    // 从这里开始的操作均为 noexcept：
+    // optional<ItemInstanceId> 赋值和 GridPosition 赋值
+    // 都不会抛出异常。
+    //
+    // 因此在验证成功后可以安全提交整个事务。
+
+    // 1. 清除旧 footprint。
+    setFootprintOccupant(
+        definition,
+        oldOrigin,
+        std::nullopt);
+
+    // 2. 写入新 footprint。
+    setFootprintOccupant(
+        definition,
+        newOrigin,
+        std::optional<ItemInstanceId>{
+            instanceId});
+
+    // 3. 最后更新物品原点。
+    placedIt->origin =
+        newOrigin;
+
+    return true;
+}
+
 bool GridInventory::tryPlace(
     ItemInstance &&item,
     GridPosition origin)

@@ -84,6 +84,20 @@ public:
         ItemInstanceId instanceId,
         GridPosition newOrigin) const;
 
+    // 将已放置物品移动到 newOrigin。
+    //
+    // 成功时：
+    // - 清除旧 footprint；
+    // - 写入新 footprint；
+    // - 更新 PlacedItem::origin；
+    // - ItemInstance 和 instanceId 保持不变。
+    //
+    // 失败时 Inventory 完全不变。
+    [[nodiscard]]
+    bool tryMove(
+        ItemInstanceId instanceId,
+        GridPosition newOrigin);
+
     // 成功时把 item 的所有权转入背包。
     //
     // 失败时：
