@@ -421,6 +421,12 @@ GameplayWorld::groundItems() const noexcept
     return groundItems_;
 }
 
+GridInventory &
+GameplayWorld::inventory() noexcept
+{
+    return inventory_;
+}
+
 const GridInventory &
 GameplayWorld::inventory() const noexcept
 {

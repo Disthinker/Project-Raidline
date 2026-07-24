@@ -83,6 +83,14 @@ namespace
     }
 }
 
+App::App()
+    : inventoryInteraction_{
+          InventoryGridSize{
+              world_.inventory().width(),
+              world_.inventory().height()}}
+{
+}
+
 bool App::loadTextures()
 {
     const char *basePath =
@@ -310,6 +318,180 @@ GameplayInput App::makeGameplayInput() const
     return input;
 }
 
+void App::moveInventorySelection(
+    int deltaX,
+    int deltaY) noexcept
+{
+    if (
+        inventoryInteraction_.mode() ==
+        InventoryInteractionMode::Browsing)
+    {
+        inventoryInteraction_.moveFocus(
+            deltaX,
+            deltaY);
+
+        return;
+    }
+
+    inventoryInteraction_.movePreview(
+        deltaX,
+        deltaY);
+}
+
+void App::beginInventoryPlacement()
+{
+    const GridInventory &inventory =
+        world_.inventory();
+
+    const std::optional<ItemInstanceId> instanceId =
+        inventory.occupantAt(
+            inventoryInteraction_.focusedCell());
+
+    // Enter 按在空格上时不发生任何状态变化。
+    if (!instanceId.has_value())
+    {
+        return;
+    }
+
+    const auto &placedItems =
+        inventory.placedItems();
+
+    const auto placedIt =
+        std::find_if(
+            placedItems.begin(),
+            placedItems.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       *instanceId;
+            });
+
+    // cells_ 与 placedItems_ 理论上始终同步。
+    // 若出现不一致，则采用 fail-safe，不进入放置状态。
+    if (placedIt == placedItems.end())
+    {
+        return;
+    }
+
+    const bool started =
+        inventoryInteraction_.beginPlacement(
+            instanceId,
+            placedIt->origin);
+
+    // 当前条件下应当成功。
+    // 保存返回值是为了显式处理 [[nodiscard]]。
+    if (!started)
+    {
+        return;
+    }
+}
+
+void App::confirmInventoryPlacement()
+{
+    const std::optional<ItemInstanceId> instanceId =
+        inventoryInteraction_.selectedInstanceId();
+
+    if (!instanceId.has_value())
+    {
+        // 防御不一致的 UI 状态。
+        inventoryInteraction_.cancelPlacement();
+        return;
+    }
+
+    GridInventory &inventory =
+        world_.inventory();
+
+    const bool moved =
+        inventory.tryMove(
+            *instanceId,
+            inventoryInteraction_.previewOrigin());
+
+    // 成功：回到 Browsing。
+    // 失败：保持 PlacingItem，继续调整。
+    inventoryInteraction_.resolvePlacement(
+        moved);
+}
+
+void App::closeInventory() noexcept
+{
+    // PlacingItem 时关闭背包必须自动取消预览。
+    // Browsing 时该调用是安全的 no-op。
+    inventoryInteraction_.cancelPlacement();
+
+    inventoryOpen_ =
+        false;
+}
+
+void App::handleInventoryInput()
+{
+    // Esc 优先级最高。
+    if (
+        input_.wasActionJustPressed(
+            GameAction::InventoryCancel))
+    {
+        if (
+            inventoryInteraction_.mode() ==
+            InventoryInteractionMode::PlacingItem)
+        {
+            // PlacingItem + Esc：
+            // 取消移动，但背包继续保持打开。
+            inventoryInteraction_.cancelPlacement();
+        }
+        else
+        {
+            // Browsing + Esc：
+            // 关闭背包。
+            closeInventory();
+        }
+
+        return;
+    }
+
+    // 每帧最多响应一个方向动作，
+    // 避免同时按相反方向产生含义不清的结果。
+    if (
+        input_.wasActionJustPressed(
+            GameAction::InventoryUp))
+    {
+        moveInventorySelection(0, -1);
+    }
+    else if (
+        input_.wasActionJustPressed(
+            GameAction::InventoryDown))
+    {
+        moveInventorySelection(0, 1);
+    }
+    else if (
+        input_.wasActionJustPressed(
+            GameAction::InventoryLeft))
+    {
+        moveInventorySelection(-1, 0);
+    }
+    else if (
+        input_.wasActionJustPressed(
+            GameAction::InventoryRight))
+    {
+        moveInventorySelection(1, 0);
+    }
+
+    if (
+        !input_.wasActionJustPressed(
+            GameAction::InventoryConfirm))
+    {
+        return;
+    }
+
+    if (
+        inventoryInteraction_.mode() ==
+        InventoryInteractionMode::Browsing)
+    {
+        beginInventoryPlacement();
+        return;
+    }
+
+    confirmInventoryPlacement();
+}
+
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
@@ -330,14 +512,34 @@ void App::update(float deltaTime)
         input_.wasActionJustPressed(
             GameAction::ToggleInventory))
     {
-        inventoryOpen_ =
-            !inventoryOpen_;
+        if (inventoryOpen_)
+        {
+            // Tab 关闭背包。
+            // 如果正在放置，则同时取消预览。
+            closeInventory();
+        }
+        else
+        {
+            inventoryOpen_ =
+                true;
+        }
     }
 
-    const GameplayInput gameplayInput =
-        makeGameplayInput();
+    if (inventoryOpen_)
+    {
+        handleInventoryInput();
+    }
 
-    // Week 15 的背包面板不暂停游戏。
+    GameplayInput gameplayInput{};
+
+    // 背包打开时世界仍继续 update，
+    // 但玩家移动、射击和拾取输入全部屏蔽。
+    if (!inventoryOpen_)
+    {
+        gameplayInput =
+            makeGameplayInput();
+    }
+
     world_.update(
         gameplayInput,
         deltaTime);
@@ -493,6 +695,63 @@ void App::renderDebugText()
         20.0f,
         116.0f,
         inventoryStateText);
+
+    if (!inventoryOpen_)
+    {
+        return;
+    }
+
+    const InventoryInteractionMode mode =
+        inventoryInteraction_.mode();
+
+    const char *modeText =
+        mode ==
+                InventoryInteractionMode::Browsing
+            ? "Browsing"
+            : "PlacingItem";
+
+    const GridPosition activePosition =
+        mode ==
+                InventoryInteractionMode::Browsing
+            ? inventoryInteraction_.focusedCell()
+            : inventoryInteraction_.previewOrigin();
+
+    const char *positionLabel =
+        mode ==
+                InventoryInteractionMode::Browsing
+            ? "Focus"
+            : "Preview";
+
+    const std::string interactionText =
+        fmt::format(
+            "Mode: {}  {}: ({}, {})",
+            modeText,
+            positionLabel,
+            activePosition.x,
+            activePosition.y);
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        132.0f,
+        interactionText.c_str());
+
+    const std::optional<ItemInstanceId> selected =
+        inventoryInteraction_.selectedInstanceId();
+
+    if (selected.has_value())
+    {
+        const std::string selectedText =
+            fmt::format(
+                "Selected Item ID: {}",
+                *selected);
+
+        SDL_RenderDebugText(
+            renderer_,
+            20.0f,
+            148.0f,
+            selectedText.c_str());
+    }
 }
 
 void App::renderInventoryOverlay()

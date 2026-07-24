@@ -7,12 +7,15 @@
 #include "gameplay_input.h"
 #include "gameplay_world.h"
 #include "input_system.h"
+#include "inventory_interaction.h"
 #include "item_definition.h"
 #include "texture.h"
 
 class App
 {
 public:
+    App();
+
     int run();
 
 private:
@@ -26,6 +29,10 @@ private:
     bool inventoryOpen_{false};
 
     GameplayWorld world_;
+
+    // 只保存 UI 交互状态，不拥有 ItemInstance。
+    InventoryInteractionState
+        inventoryInteraction_;
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -46,6 +53,18 @@ private:
 
     void processEvents();
     void update(float deltaTime);
+
+    // 背包输入编排。
+    void handleInventoryInput();
+
+    void moveInventorySelection(
+        int deltaX,
+        int deltaY) noexcept;
+
+    void beginInventoryPlacement();
+    void confirmInventoryPlacement();
+
+    void closeInventory() noexcept;
 
     void render();
     void renderBackground();
