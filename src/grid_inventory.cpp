@@ -29,6 +29,7 @@ GridInventory::GridInventory(InventoryGridSize size)
 
     const auto width =
         static_cast<std::size_t>(size_.width);
+
     const auto height =
         static_cast<std::size_t>(size_.height);
 
@@ -57,10 +58,15 @@ bool GridInventory::canPlace(
     const ItemDefinition &definition =
         itemDefinition(definitionId);
 
-    return canPlaceDefinition(definition, origin);
+    // 普通放置不允许目标 footprint 出现任何占用者。
+    return canPlaceDefinition(
+        definition,
+        origin,
+        std::nullopt);
 }
 
-std::optional<GridPosition> GridInventory::findFirstFit(
+std::optional<GridPosition>
+GridInventory::findFirstFit(
     ItemId definitionId) const
 {
     const ItemDefinition &definition =
@@ -72,7 +78,10 @@ std::optional<GridPosition> GridInventory::findFirstFit(
         {
             const GridPosition candidate{x, y};
 
-            if (canPlaceDefinition(definition, candidate))
+            if (canPlaceDefinition(
+                    definition,
+                    candidate,
+                    std::nullopt))
             {
                 return candidate;
             }
@@ -80,6 +89,40 @@ std::optional<GridPosition> GridInventory::findFirstFit(
     }
 
     return std::nullopt;
+}
+
+bool GridInventory::canMove(
+    ItemInstanceId instanceId,
+    GridPosition newOrigin) const
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return false;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(
+            placedIt->item.definitionId());
+
+    // 检查目标 footprint 时允许出现当前物品自己的 ID。
+    //
+    // 因此物品向旁边移动一格时，新旧 footprint
+    // 重叠的部分不会被错误判断为冲突。
+    return canPlaceDefinition(
+        definition,
+        newOrigin,
+        std::optional<ItemInstanceId>{
+            instanceId});
 }
 
 bool GridInventory::tryPlace(
@@ -94,6 +137,7 @@ bool GridInventory::tryPlace(
 
     const ItemInstanceId instanceId =
         item.instanceId();
+
     const ItemId definitionId =
         item.definitionId();
 
@@ -108,7 +152,10 @@ bool GridInventory::tryPlace(
 
     // 先完成全部验证。
     // canPlaceDefinition 不修改任何状态。
-    if (!canPlaceDefinition(definition, origin))
+    if (!canPlaceDefinition(
+            definition,
+            origin,
+            std::nullopt))
     {
         return false;
     }
@@ -127,12 +174,14 @@ bool GridInventory::tryPlace(
     setFootprintOccupant(
         definition,
         origin,
-        std::optional<ItemInstanceId>{instanceId});
+        std::optional<ItemInstanceId>{
+            instanceId});
 
     return true;
 }
 
-std::optional<ItemInstance> GridInventory::remove(
+std::optional<ItemInstance>
+GridInventory::remove(
     ItemInstanceId instanceId)
 {
     const auto placedIt =
@@ -154,6 +203,7 @@ std::optional<ItemInstance> GridInventory::remove(
     // 因此必须先读取 origin 和 definition。
     const GridPosition origin =
         placedIt->origin;
+
     const ItemId definitionId =
         placedIt->item.definitionId();
 
@@ -177,7 +227,8 @@ std::optional<ItemInstance> GridInventory::remove(
         std::move(removedItem)};
 }
 
-std::optional<ItemInstanceId> GridInventory::occupantAt(
+std::optional<ItemInstanceId>
+GridInventory::occupantAt(
     GridPosition position) const noexcept
 {
     if (!isWithinBounds(position))
@@ -205,7 +256,8 @@ bool GridInventory::isWithinBounds(
 
 bool GridInventory::canPlaceDefinition(
     const ItemDefinition &definition,
-    GridPosition origin) const noexcept
+    GridPosition origin,
+    std::optional<ItemInstanceId> allowedOccupant) const noexcept
 {
     if (!isWithinBounds(origin))
     {
@@ -214,6 +266,7 @@ bool GridInventory::canPlaceDefinition(
 
     const int itemWidth =
         definition.inventoryWidthCells;
+
     const int itemHeight =
         definition.inventoryHeightCells;
 
@@ -238,19 +291,32 @@ bool GridInventory::canPlaceDefinition(
         return false;
     }
 
-    for (int offsetY = 0;
-         offsetY < itemHeight;
-         ++offsetY)
+    for (
+        int offsetY = 0;
+        offsetY < itemHeight;
+        ++offsetY)
     {
-        for (int offsetX = 0;
-             offsetX < itemWidth;
-             ++offsetX)
+        for (
+            int offsetX = 0;
+            offsetX < itemWidth;
+            ++offsetX)
         {
             const GridPosition coveredPosition{
                 origin.x + offsetX,
                 origin.y + offsetY};
 
-            if (cells_[indexOf(coveredPosition)].has_value())
+            const std::optional<ItemInstanceId> occupant =
+                cells_[indexOf(coveredPosition)];
+
+            // 空格始终允许。
+            //
+            // occupied 且 occupant == allowedOccupant 时，
+            // 表示该格由正在移动的物品自己占用，也允许。
+            //
+            // 其他占用者一律拒绝。
+            if (
+                occupant.has_value() &&
+                occupant != allowedOccupant)
             {
                 return false;
             }
@@ -278,13 +344,15 @@ void GridInventory::setFootprintOccupant(
     GridPosition origin,
     std::optional<ItemInstanceId> occupant) noexcept
 {
-    for (int offsetY = 0;
-         offsetY < definition.inventoryHeightCells;
-         ++offsetY)
+    for (
+        int offsetY = 0;
+        offsetY < definition.inventoryHeightCells;
+        ++offsetY)
     {
-        for (int offsetX = 0;
-             offsetX < definition.inventoryWidthCells;
-             ++offsetX)
+        for (
+            int offsetX = 0;
+            offsetX < definition.inventoryWidthCells;
+            ++offsetX)
         {
             const GridPosition coveredPosition{
                 origin.x + offsetX,
@@ -301,8 +369,10 @@ std::size_t GridInventory::indexOf(
 {
     const auto x =
         static_cast<std::size_t>(position.x);
+
     const auto y =
         static_cast<std::size_t>(position.y);
+
     const auto width =
         static_cast<std::size_t>(size_.width);
 

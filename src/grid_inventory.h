@@ -71,6 +71,19 @@ public:
     std::optional<GridPosition> findFirstFit(
         ItemId definitionId) const;
 
+    // 判断已经放置的物品能否移动到 newOrigin。
+    //
+    // 检查目标 footprint 时：
+    // - 空格允许；
+    // - 由当前 instanceId 占用的格子允许；
+    // - 由其他物品占用的格子拒绝。
+    //
+    // 该函数不修改 Inventory。
+    [[nodiscard]]
+    bool canMove(
+        ItemInstanceId instanceId,
+        GridPosition newOrigin) const;
+
     // 成功时把 item 的所有权转入背包。
     //
     // 失败时：
@@ -103,10 +116,18 @@ private:
     [[nodiscard]]
     bool isWithinBounds(GridPosition position) const noexcept;
 
+    // allowedOccupant 表示检查 footprint 时允许出现的占用者。
+    //
+    // 普通放置传入 nullopt：
+    // 任何已占用格都拒绝。
+    //
+    // 移动检查传入当前物品的 instanceId：
+    // 允许目标 footprint 与自己的旧 footprint 重叠。
     [[nodiscard]]
     bool canPlaceDefinition(
         const ItemDefinition &definition,
-        GridPosition origin) const noexcept;
+        GridPosition origin,
+        std::optional<ItemInstanceId> allowedOccupant) const noexcept;
 
     [[nodiscard]]
     bool containsInstanceId(

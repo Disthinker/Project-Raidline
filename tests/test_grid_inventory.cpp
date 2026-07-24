@@ -796,3 +796,283 @@ TEST(GridInventoryTest, RemovedSpaceCanBeUsedAgain)
         fit.value(),
         (GridPosition{0, 0}));
 }
+
+TEST(GridInventoryTest, CanMoveItemToEmptyArea)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance pistol{
+        24,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{0, 0}));
+
+    EXPECT_TRUE(
+        inventory.canMove(
+            24,
+            GridPosition{4, 3}));
+
+    // canMove 是纯查询，不能修改原位置。
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(24));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 0}),
+        occupiedBy(24));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 3}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 3}),
+        std::nullopt);
+}
+
+TEST(
+    GridInventoryTest,
+    CanMoveItemOverlappingItsOwnOldFootprint)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        25,
+        ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{1, 1}));
+
+    // Medkit 是 2×2。
+    //
+    // 原 footprint：
+    // (1,1) (2,1)
+    // (1,2) (2,2)
+    //
+    // 新 footprint：
+    //       (2,1) (3,1)
+    //       (2,2) (3,2)
+    //
+    // (2,1) 和 (2,2) 由同一个 instanceId 占用，
+    // 因此应当允许。
+    EXPECT_TRUE(
+        inventory.canMove(
+            25,
+            GridPosition{2, 1}));
+
+    // 查询后原 footprint 仍然存在。
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 1}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 2}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 1}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 2}),
+        std::nullopt);
+}
+
+TEST(GridInventoryTest, CanMoveToSameOrigin)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        26,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{2, 2}));
+
+    EXPECT_TRUE(
+        inventory.canMove(
+            26,
+            GridPosition{2, 2}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{2, 2}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        occupiedBy(26));
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 3}),
+        occupiedBy(26));
+}
+
+TEST(GridInventoryTest, RejectsMoveOutsideBounds)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        27,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{0, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{-1, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{7, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{0, 5}));
+
+    // 失败查询不能修改原位置。
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(27));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 1}),
+        occupiedBy(27));
+}
+
+TEST(GridInventoryTest, RejectsMoveOverAnotherItem)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        28,
+        ItemId::Medkit};
+
+    ItemInstance pistol{
+        29,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{3, 0}));
+
+    // Medkit 移动到 (2,0) 后会覆盖：
+    //
+    // (2,0) (3,0)
+    // (2,1) (3,1)
+    //
+    // 其中 (3,0) 已由 Pistol 占用。
+    EXPECT_FALSE(
+        inventory.canMove(
+            28,
+            GridPosition{2, 0}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        2U);
+
+    EXPECT_EQ(
+        inventory.placedItems()[0].origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.placedItems()[1].origin,
+        (GridPosition{3, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(28));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        occupiedBy(28));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 0}),
+        occupiedBy(29));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 0}),
+        occupiedBy(29));
+}
+
+TEST(GridInventoryTest, RejectsMoveForMissingInstanceId)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance cola{
+        30,
+        ItemId::Cola};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(cola),
+            GridPosition{0, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            999,
+            GridPosition{1, 0}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().item.instanceId(),
+        30U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(30));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 0}),
+        std::nullopt);
+}
