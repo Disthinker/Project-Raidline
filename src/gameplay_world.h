@@ -63,6 +63,12 @@ public:
     const std::vector<GroundItem> &
     groundItems() const noexcept;
 
+    // UI 编排层通过该入口执行受控的 Inventory 操作。
+    // 外部仍不能直接访问 GridInventory 的内部容器。
+    [[nodiscard]]
+    GridInventory &
+    inventory() noexcept;
+
     [[nodiscard]]
     const GridInventory &
     inventory() const noexcept;

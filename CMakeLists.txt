@@ -34,6 +34,9 @@ add_executable(Project_Raidline
     src/grid_inventory.h
     src/grid_inventory.cpp
 
+    src/inventory_interaction.h
+    src/inventory_interaction.cpp
+
     src/collision.h
     src/collision.cpp
 
@@ -508,6 +511,42 @@ target_include_directories(
 
 gtest_discover_tests(GridInventoryTest)
 
+# test inventory_interaction
+add_executable(InventoryInteractionTest
+    tests/test_inventory_interaction.cpp
+    src/inventory_interaction.h
+    src/inventory_interaction.cpp
+    src/grid_inventory.h
+    src/item_instance.h
+    src/item_definition.h
+)
+
+target_compile_features(
+    InventoryInteractionTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    InventoryInteractionTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    InventoryInteractionTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    InventoryInteractionTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(InventoryInteractionTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -544,6 +583,12 @@ if(MSVC)
 
     target_compile_options(
         GridInventoryTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        InventoryInteractionTest
         PRIVATE
         /utf-8
     )

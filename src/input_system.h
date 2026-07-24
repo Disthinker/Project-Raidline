@@ -7,6 +7,7 @@
 
 enum class GameAction
 {
+    // 游戏世界输入。
     MoveUp,
     MoveDown,
     MoveLeft,
@@ -14,7 +15,17 @@ enum class GameAction
     Fire,
     Dodge,
     Interact,
-    ToggleInventory
+
+    // 背包开关。
+    ToggleInventory,
+
+    // 背包 UI 输入。
+    InventoryUp,
+    InventoryDown,
+    InventoryLeft,
+    InventoryRight,
+    InventoryConfirm,
+    InventoryCancel
 };
 
 class InputSystem

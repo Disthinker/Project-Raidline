@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "grid_inventory.h"
 
@@ -15,6 +16,35 @@ namespace
     {
         return std::optional<ItemInstanceId>{
             instanceId};
+    }
+    std::vector<std::optional<ItemInstanceId>>
+    snapshotCells(
+        const GridInventory &inventory)
+    {
+        std::vector<
+            std::optional<ItemInstanceId>>
+            snapshot;
+
+        snapshot.reserve(
+            inventory.cellCount());
+
+        for (
+            int y = 0;
+            y < inventory.height();
+            ++y)
+        {
+            for (
+                int x = 0;
+                x < inventory.width();
+                ++x)
+            {
+                snapshot.push_back(
+                    inventory.occupantAt(
+                        GridPosition{x, y}));
+            }
+        }
+
+        return snapshot;
     }
 
 } // namespace
@@ -795,4 +825,657 @@ TEST(GridInventoryTest, RemovedSpaceCanBeUsedAgain)
     EXPECT_EQ(
         fit.value(),
         (GridPosition{0, 0}));
+}
+
+TEST(GridInventoryTest, CanMoveItemToEmptyArea)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance pistol{
+        24,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{0, 0}));
+
+    EXPECT_TRUE(
+        inventory.canMove(
+            24,
+            GridPosition{4, 3}));
+
+    // canMove 是纯查询，不能修改原位置。
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(24));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 0}),
+        occupiedBy(24));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 3}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 3}),
+        std::nullopt);
+}
+
+TEST(
+    GridInventoryTest,
+    CanMoveItemOverlappingItsOwnOldFootprint)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        25,
+        ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{1, 1}));
+
+    // Medkit 是 2×2。
+    //
+    // 原 footprint：
+    // (1,1) (2,1)
+    // (1,2) (2,2)
+    //
+    // 新 footprint：
+    //       (2,1) (3,1)
+    //       (2,2) (3,2)
+    //
+    // (2,1) 和 (2,2) 由同一个 instanceId 占用，
+    // 因此应当允许。
+    EXPECT_TRUE(
+        inventory.canMove(
+            25,
+            GridPosition{2, 1}));
+
+    // 查询后原 footprint 仍然存在。
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 1}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 2}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        occupiedBy(25));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 1}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 2}),
+        std::nullopt);
+}
+
+TEST(GridInventoryTest, CanMoveToSameOrigin)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        26,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{2, 2}));
+
+    EXPECT_TRUE(
+        inventory.canMove(
+            26,
+            GridPosition{2, 2}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{2, 2}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        occupiedBy(26));
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 3}),
+        occupiedBy(26));
+}
+
+TEST(GridInventoryTest, RejectsMoveOutsideBounds)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        27,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{0, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{-1, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{7, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            27,
+            GridPosition{0, 5}));
+
+    // 失败查询不能修改原位置。
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(27));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 1}),
+        occupiedBy(27));
+}
+
+TEST(GridInventoryTest, RejectsMoveOverAnotherItem)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        28,
+        ItemId::Medkit};
+
+    ItemInstance pistol{
+        29,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{3, 0}));
+
+    // Medkit 移动到 (2,0) 后会覆盖：
+    //
+    // (2,0) (3,0)
+    // (2,1) (3,1)
+    //
+    // 其中 (3,0) 已由 Pistol 占用。
+    EXPECT_FALSE(
+        inventory.canMove(
+            28,
+            GridPosition{2, 0}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        2U);
+
+    EXPECT_EQ(
+        inventory.placedItems()[0].origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.placedItems()[1].origin,
+        (GridPosition{3, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(28));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        occupiedBy(28));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 0}),
+        occupiedBy(29));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 0}),
+        occupiedBy(29));
+}
+
+TEST(GridInventoryTest, RejectsMoveForMissingInstanceId)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance cola{
+        30,
+        ItemId::Cola};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(cola),
+            GridPosition{0, 0}));
+
+    EXPECT_FALSE(
+        inventory.canMove(
+            999,
+            GridPosition{1, 0}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().item.instanceId(),
+        30U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({0, 0}),
+        occupiedBy(30));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 0}),
+        std::nullopt);
+}
+
+TEST(GridInventoryTest, SuccessfulMoveUpdatesOrigin)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance pistol{
+        31,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            31,
+            GridPosition{4, 3}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{4, 3}));
+}
+
+TEST(GridInventoryTest, SuccessfulMoveClearsOldCells)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        32,
+        ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{1, 1}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            32,
+            GridPosition{5, 3}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 1}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 2}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        std::nullopt);
+}
+
+TEST(GridInventoryTest, SuccessfulMoveMarksNewCells)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        33,
+        ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            33,
+            GridPosition{4, 2}));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 2}),
+        occupiedBy(33));
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 2}),
+        occupiedBy(33));
+
+    EXPECT_EQ(
+        inventory.occupantAt({4, 3}),
+        occupiedBy(33));
+
+    EXPECT_EQ(
+        inventory.occupantAt({5, 3}),
+        occupiedBy(33));
+}
+
+TEST(GridInventoryTest, SuccessfulMovePreservesInstanceId)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        34,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            34,
+            GridPosition{5, 2}));
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    const PlacedItem &placed =
+        inventory.placedItems().front();
+
+    EXPECT_TRUE(placed.item.valid());
+
+    EXPECT_EQ(
+        placed.item.instanceId(),
+        34U);
+
+    EXPECT_EQ(
+        placed.item.definitionId(),
+        ItemId::Rifle);
+
+    EXPECT_EQ(
+        placed.origin,
+        (GridPosition{5, 2}));
+}
+
+TEST(
+    GridInventoryTest,
+    SuccessfulMoveHandlesSelfOverlap)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        35,
+        ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{1, 1}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            35,
+            GridPosition{2, 1}));
+
+    // 旧 footprint 中不再使用的左列被清空。
+    EXPECT_EQ(
+        inventory.occupantAt({1, 1}),
+        std::nullopt);
+
+    EXPECT_EQ(
+        inventory.occupantAt({1, 2}),
+        std::nullopt);
+
+    // 新旧 footprint 重叠部分仍由原物品占用。
+    EXPECT_EQ(
+        inventory.occupantAt({2, 1}),
+        occupiedBy(35));
+
+    EXPECT_EQ(
+        inventory.occupantAt({2, 2}),
+        occupiedBy(35));
+
+    // 新 footprint 新增的右列被正确写入。
+    EXPECT_EQ(
+        inventory.occupantAt({3, 1}),
+        occupiedBy(35));
+
+    EXPECT_EQ(
+        inventory.occupantAt({3, 2}),
+        occupiedBy(35));
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{2, 1}));
+}
+
+TEST(
+    GridInventoryTest,
+    FailedMoveLeavesOriginAndCellsUnchanged)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance medkit{
+        36,
+        ItemId::Medkit};
+
+    ItemInstance pistol{
+        37,
+        ItemId::Pistol};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(medkit),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(pistol),
+            GridPosition{3, 0}));
+
+    const auto cellsBefore =
+        snapshotCells(inventory);
+
+    EXPECT_FALSE(
+        inventory.tryMove(
+            36,
+            GridPosition{2, 0}));
+
+    const auto cellsAfter =
+        snapshotCells(inventory);
+
+    EXPECT_EQ(
+        cellsAfter,
+        cellsBefore);
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        2U);
+
+    EXPECT_EQ(
+        inventory.placedItems()[0].origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.placedItems()[1].origin,
+        (GridPosition{3, 0}));
+
+    EXPECT_EQ(
+        inventory.placedItems()[0]
+            .item.instanceId(),
+        36U);
+
+    EXPECT_EQ(
+        inventory.placedItems()[1]
+            .item.instanceId(),
+        37U);
+}
+
+TEST(
+    GridInventoryTest,
+    FailedMoveOutsideBoundsLeavesInventoryUnchanged)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        38,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{2, 2}));
+
+    const auto cellsBefore =
+        snapshotCells(inventory);
+
+    EXPECT_FALSE(
+        inventory.tryMove(
+            38,
+            GridPosition{7, 2}));
+
+    EXPECT_EQ(
+        snapshotCells(inventory),
+        cellsBefore);
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{2, 2}));
+
+    EXPECT_EQ(
+        inventory.placedItems()
+            .front()
+            .item.instanceId(),
+        38U);
+}
+
+TEST(GridInventoryTest, MissingIdMoveLeavesInventoryUnchanged)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance cola{
+        39,
+        ItemId::Cola};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(cola),
+            GridPosition{0, 0}));
+
+    const auto cellsBefore =
+        snapshotCells(inventory);
+
+    EXPECT_FALSE(
+        inventory.tryMove(
+            999,
+            GridPosition{1, 0}));
+
+    EXPECT_EQ(
+        snapshotCells(inventory),
+        cellsBefore);
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{0, 0}));
+
+    EXPECT_EQ(
+        inventory.placedItems()
+            .front()
+            .item.instanceId(),
+        39U);
+}
+
+TEST(GridInventoryTest, SameOriginMoveIsNoOpSuccess)
+{
+    GridInventory inventory({10, 6});
+
+    ItemInstance rifle{
+        40,
+        ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(rifle),
+            GridPosition{2, 2}));
+
+    const auto cellsBefore =
+        snapshotCells(inventory);
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            40,
+            GridPosition{2, 2}));
+
+    EXPECT_EQ(
+        snapshotCells(inventory),
+        cellsBefore);
+
+    ASSERT_EQ(
+        inventory.placedItems().size(),
+        1U);
+
+    EXPECT_EQ(
+        inventory.placedItems().front().origin,
+        (GridPosition{2, 2}));
+
+    EXPECT_EQ(
+        inventory.placedItems()
+            .front()
+            .item.instanceId(),
+        40U);
 }

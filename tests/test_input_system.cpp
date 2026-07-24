@@ -345,3 +345,251 @@ TEST(
         input.wasActionJustPressed(
             GameAction::ToggleInventory));
 }
+
+TEST(
+    InputSystemTest,
+    ArrowKeysMapToInventoryDirections)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_UP));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_DOWN));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_LEFT));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RIGHT));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryUp));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryDown));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryLeft));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryRight));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryUp));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryDown));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryLeft));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryRight));
+}
+
+TEST(
+    InputSystemTest,
+    ArrowKeyUpReleasesInventoryDirection)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_LEFT));
+
+    ASSERT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryLeft));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_LEFT));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::InventoryLeft));
+}
+
+TEST(
+    InputSystemTest,
+    HoldingArrowDoesNotRetriggerInventoryDirection)
+{
+    InputSystem input;
+
+    const SDL_Event keyDown =
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RIGHT);
+
+    input.handleEvent(keyDown);
+
+    ASSERT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryRight));
+
+    input.endFrame();
+
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryRight));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::InventoryRight));
+}
+
+TEST(
+    InputSystemTest,
+    EnterSetsInventoryConfirmJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RETURN));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryConfirm));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryConfirm));
+}
+
+TEST(
+    InputSystemTest,
+    KeypadEnterAlsoConfirmsInventory)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_KP_ENTER));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryConfirm));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryConfirm));
+}
+
+TEST(
+    InputSystemTest,
+    EscapeSetsInventoryCancelJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_ESCAPE));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryCancel));
+
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::InventoryCancel));
+}
+
+TEST(
+    InputSystemTest,
+    EndFrameClearsInventoryJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_UP));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RETURN));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_ESCAPE));
+
+    input.endFrame();
+
+    // 按键尚未释放，所以 pressed 状态仍存在。
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryUp));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryConfirm));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::InventoryCancel));
+
+    // 但单帧 justPressed 已被清理。
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::InventoryUp));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::InventoryConfirm));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::InventoryCancel));
+}
+
+TEST(
+    InputSystemTest,
+    GameplayMovementKeyDoesNotTriggerInventoryDirection)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_W));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::MoveUp));
+
+    EXPECT_FALSE(
+        input.isActionPressed(
+            GameAction::InventoryUp));
+
+    EXPECT_FALSE(
+        input.wasActionJustPressed(
+            GameAction::InventoryUp));
+}
