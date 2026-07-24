@@ -270,9 +270,10 @@ TEST(GridInventoryTest, InvalidDefinitionThrows)
     GridInventory inventory({10, 6});
 
     EXPECT_THROW(
-        inventory.canPlace(
-            ItemId::Count,
-            GridPosition{0, 0}),
+        static_cast<void>(
+            inventory.canPlace(
+                ItemId::Count,
+                GridPosition{0, 0})),
         std::out_of_range);
 }
 
@@ -322,7 +323,9 @@ TEST(GridInventoryTest, FindFirstFitRejectsInvalidDefinition)
     GridInventory inventory({10, 6});
 
     EXPECT_THROW(
-        inventory.findFirstFit(ItemId::Count),
+        static_cast<void>(
+            inventory.findFirstFit(
+                ItemId::Count)),
         std::out_of_range);
 }
 
