@@ -73,6 +73,14 @@ private:
     void renderPlayer();
     void renderProjectiles();
     void renderParticles();
+    void renderInventoryBrowsingFocus(
+        float gridX,
+        float gridY);
+
+    void renderInventoryPlacementPreview(
+        const GridInventory &inventory,
+        float gridX,
+        float gridY);
     void renderInventoryOverlay();
     void renderDebugText();
 
