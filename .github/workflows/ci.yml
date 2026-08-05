@@ -27,7 +27,7 @@ jobs:
         shell: pwsh
         run: |
           git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin $env:VCPKG_BASELINE
-          git -C "$env:VCPKG_INSTALLATION_ROOT" checkout --detach $env:VCPKG_BASELINE
+          git -C "$env:VCPKG_INSTALLATION_ROOT" reset --hard $env:VCPKG_BASELINE
           & (Join-Path $env:VCPKG_INSTALLATION_ROOT "bootstrap-vcpkg.bat") -disableMetrics
 
       - name: Configure CMake
@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin "$VCPKG_BASELINE"
-          git -C "$VCPKG_INSTALLATION_ROOT" checkout --detach "$VCPKG_BASELINE"
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard "$VCPKG_BASELINE"
           "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Install vcpkg packages
