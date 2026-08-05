@@ -15,7 +15,7 @@
 | ID | 严重度 | 领域 | 问题与证据 | 状态 | 目标与关闭条件 |
 | --- | --- | --- | --- | --- | --- |
 | RL-W17-001 | P1 | 背包输入 | SDL 事件轮询中曾直接处理 mouse-up，而 Esc/Tab 到 `update()` 才处理；同帧取消可能晚于 `tryMove`。 | Local Fixed | Week17；同帧 Esc/Tab + release 自动测试、Windows/Ubuntu CI 和真实窗口验收通过后关闭。 |
-| [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 最终代码尚缺对应提交的双平台 CI 和 9 项真实窗口验收。 | Open | Week17；PR CI 全绿且人工清单有实测记录后关闭。 |
+| [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 已提交并由草稿 PR #31 跟踪，尚缺最终提交的双平台 CI 结论和 9 项真实窗口验收。 | Open | Week17；PR CI 全绿且人工清单有实测记录后关闭。 |
 | [RL-UX-001 / GitHub #26](https://github.com/Disthinker/Project-Raidline/issues/26) | P2 | 背包 UX | 用户认为方向键移动物品、黄色焦点框和相关提示是遗留行为；当前批准的 Week17 契约仍要求保留 Week16 键盘兼容。 | Needs Decision | 后续稳定化；决定“纯鼠标”或“键鼠并存”，同步不变量、测试和提示后关闭。 |
 | [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 鼠标拖拽虚像当前按候选格吸附跳动；用户期望虚像按像素平滑跟随鼠标，落点合法性仍吸附格子。 | Open | 后续稳定化；虚像保持抓取点平滑移动，inside/outside release 与事务规则不变，视觉验收通过后关闭。 |
 | [RL-ANIM-001 / GitHub #28](https://github.com/Disthinker/Project-Raidline/issues/28) | P2 | 角色表现 | 仓库只有左右移动图集；纯上/下移动回退到同一静态贴图，停止后虽保留模型朝向但视觉上恢复默认。 | Needs Decision | 角色动画任务；冻结四方向资源方案，补上/下动画与停止朝向验收后关闭。 |

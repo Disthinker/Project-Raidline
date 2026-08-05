@@ -7,9 +7,9 @@
 - `main` / `origin/main`：`7f3d91e`，包含 Week 1–16；Week 16 已通过 PR #24 合并。
 - Week 17 开发分支：`week17-mouse-inventory-interaction`，远端与 `a1c164a` 同步，相对 `main` 领先 4 个提交。
 - 接管基础提交：`bf1c84b`，包含 Agent、Skill、项目文档与教学交接基础设施。
-- 当前实现分支：`codex/week17-mouse-inventory-interaction`；Week 17 业务实现与本地验证已完成，尚未推送或创建 PR。
+- 当前实现分支：`codex/week17-mouse-inventory-interaction`；Week 17 业务实现与本地验证已完成并已推送，远端评审入口为草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31)。
 - `a1c164a` 的 GitHub Actions `Project Raidline CI` 已在 Windows 与 Ubuntu 完成并成功：[run 31015344155](https://github.com/Disthinker/Project-Raidline/actions/runs/31015344155)。
-- Week 17 分支当前没有 Pull Request。
+- Week 17 的 Windows/Ubuntu CI 由 PR #31 跟踪；最终状态以该 PR 的 checks 为准。
 
 历史 DevLog 中“PR/CI 待完成”等文字只代表当时状态；当前状态以 Git、源码、CMake 和 CI 为准。
 
@@ -32,7 +32,7 @@
 - Esc 优先取消活动 pointer gesture，其次取消键盘 placement；Tab 清空全部交互状态并关闭背包。
 - hover、持久选择、原 placement 和合法/非法候选均使用 SDL 代码绘制，无新增 UI 图片资产。
 - CMake 新增 `MouseInventoryInteractionTest`；2026-08-06 干净配置、清理 117 个旧产物并完成 99 步全目标构建，CTest 295/295，鼠标目标直接运行 29/29，资产函数测试 3/3，编译数据库已包含鼠标测试源。
-- GitHub Actions 和真实窗口人工验收尚未执行；在这两项完成前 ExecPlan 保留在 `active/`。
+- GitHub Actions 已由 PR #31 触发，真实窗口人工验收尚未执行；在 CI 与人工验收完成前 ExecPlan 保留在 `active/`。
 
 实施与待验收项见 [Week 17 ExecPlan](../exec-plans/active/week17-mouse-inventory-interaction.md)，当前缺陷与延期债务见 [问题台账](KNOWN_ISSUES.md)。
 
