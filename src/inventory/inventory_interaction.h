@@ -26,14 +26,11 @@ public:
         int inventoryY,
         int cellSize);
 
-    // 鼠标移动
     void updateMousePosition(
         MousePosition mouse);
 
-    // 鼠标按下
     void pressMouse();
 
-    // 鼠标释放
     void releaseMouse();
 
     [[nodiscard]]

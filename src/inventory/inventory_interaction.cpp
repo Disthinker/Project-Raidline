@@ -21,14 +21,21 @@ void InventoryInteraction::updateMousePosition(
     focusedCell_ =
         position;
 
-    if (state_ ==
-        InventoryInteractionState::Dragging)
+    if (
+        state_ ==
+        InventoryInteractionState::Selected)
     {
-        if (position.has_value())
-        {
-            previewOrigin_ =
-                position.value();
-        }
+        state_ =
+            InventoryInteractionState::Dragging;
+    }
+
+    if (
+        state_ ==
+            InventoryInteractionState::Dragging &&
+        position.has_value())
+    {
+        previewOrigin_ =
+            position.value();
     }
 }
 
@@ -67,17 +74,27 @@ void InventoryInteraction::releaseMouse()
         return;
     }
 
+    bool moved = false;
+
     if (selectedInstanceId_.has_value())
     {
-        inventory_.tryMove(
-            selectedInstanceId_.value(),
-            previewOrigin_);
+        moved =
+            inventory_.tryMove(
+                selectedInstanceId_.value(),
+                previewOrigin_);
     }
 
-    selectedInstanceId_.reset();
+    if (moved)
+    {
+        selectedInstanceId_.reset();
 
-    state_ =
-        InventoryInteractionState::Idle;
+        state_ =
+            InventoryInteractionState::Idle;
+    }
+
+    // 移动失败：
+    // 保留 Selected/Dragging 状态
+    // 等待玩家继续调整位置
 }
 
 std::optional<GridPosition>
@@ -114,7 +131,8 @@ InventoryInteraction::screenToGrid(
     const int localY =
         mouse.y - inventoryY_;
 
-    if (localX < 0 ||
+    if (
+        localX < 0 ||
         localY < 0)
     {
         return std::nullopt;
@@ -126,7 +144,8 @@ InventoryInteraction::screenToGrid(
     const int y =
         localY / cellSize_;
 
-    if (x < 0 ||
+    if (
+        x < 0 ||
         y < 0 ||
         x >= inventory_.width() ||
         y >= inventory_.height())
