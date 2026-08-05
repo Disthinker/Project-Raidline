@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -34,6 +35,9 @@ private:
     InventoryInteractionState
         inventoryInteraction_;
 
+    std::vector<InventoryPointerEvent>
+        pendingInventoryPointerEvents_;
+
     Texture backgroundTexture_;
     Texture playerTexture_;
     Texture playerMoveHorizontalTexture_;
@@ -55,7 +59,14 @@ private:
     void update(float deltaTime);
 
     // 背包输入编排。
-    void handleInventoryInput();
+    void handleInventoryCancel();
+    void handleInventoryKeyboardInput();
+    void handleInventoryPointerEvent(
+        const InventoryPointerEvent &event);
+
+    [[nodiscard]]
+    InventoryGridLayout
+    inventoryGridLayout() const;
 
     void moveInventorySelection(
         int deltaX,
@@ -81,6 +92,12 @@ private:
         const GridInventory &inventory,
         float gridX,
         float gridY);
+
+    void renderInventoryPointerFeedback(
+        const GridInventory &inventory,
+        float gridX,
+        float gridY);
+
     void renderInventoryOverlay();
     void renderDebugText();
 

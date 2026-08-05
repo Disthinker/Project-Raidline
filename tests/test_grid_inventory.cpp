@@ -180,6 +180,52 @@ TEST(GridInventoryTest, OptionalItemInstanceIsMoveOnly)
     SUCCEED();
 }
 
+TEST(GridInventoryTest, OriginOfFindsPlacedItem)
+{
+    GridInventory inventory({10, 6});
+    ItemInstance item{501, ItemId::Medkit};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(item),
+            GridPosition{2, 3}));
+
+    EXPECT_EQ(
+        inventory.originOf(501),
+        (std::optional<GridPosition>{
+            GridPosition{2, 3}}));
+}
+
+TEST(GridInventoryTest, OriginOfReturnsEmptyForMissingItem)
+{
+    const GridInventory inventory({10, 6});
+
+    EXPECT_EQ(
+        inventory.originOf(999),
+        std::nullopt);
+}
+
+TEST(GridInventoryTest, OriginOfTracksSuccessfulMove)
+{
+    GridInventory inventory({10, 6});
+    ItemInstance item{502, ItemId::Rifle};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(item),
+            GridPosition{0, 0}));
+
+    ASSERT_TRUE(
+        inventory.tryMove(
+            502,
+            GridPosition{4, 2}));
+
+    EXPECT_EQ(
+        inventory.originOf(502),
+        (std::optional<GridPosition>{
+            GridPosition{4, 2}}));
+}
+
 TEST(GridInventoryTest, CanPlaceOneByOneAtOrigin)
 {
     GridInventory inventory({10, 6});

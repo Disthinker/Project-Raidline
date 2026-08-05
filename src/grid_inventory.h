@@ -123,6 +123,12 @@ public:
     std::optional<ItemInstanceId> occupantAt(
         GridPosition position) const noexcept;
 
+    // 按稳定 ID 查询物品当前左上角格子。
+    // 找不到时返回 nullopt，不暴露 placedItems_ 的内部迭代器。
+    [[nodiscard]]
+    std::optional<GridPosition> originOf(
+        ItemInstanceId instanceId) const noexcept;
+
     [[nodiscard]]
     const std::vector<PlacedItem> &placedItems() const noexcept;
 
