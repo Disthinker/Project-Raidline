@@ -52,6 +52,7 @@
 - 多格拖拽的候选左上角由实际 placement origin 与 grab offset 计算，不能把任意被点击覆盖格当作 origin。
 - 网格外没有合法 hover/preview；网格外释放不提交上一次网格内候选。
 - cell size 必须在除法前验证为正；屏幕、面板局部和 GridPosition 坐标必须显式区分。
+- 单帧输入优先级固定为 Tab 关闭、Esc 取消、pointer 事件、keyboard 导航/确认；Tab/Esc 触发时必须丢弃本帧待处理的 mouse-up，不能先提交再取消。
 
 ## 构建与证据
 

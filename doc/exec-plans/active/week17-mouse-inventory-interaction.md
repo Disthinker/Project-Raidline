@@ -1,8 +1,8 @@
 # Week 17：鼠标驱动的格子背包交互
 
-- 状态：Ready（仅完成审计与计划，业务实现未开始）
-- 最后更新：2026-08-05
-- 基线：`week17-mouse-inventory-interaction` / `a1c164a`
+- 状态：Local Stabilized（同帧取消仲裁已本地修复，等待精确提交 CI 与人工验收）
+- 最后更新：2026-08-06
+- 基线：`codex/week17-mouse-inventory-interaction`（从 `bf1c84b` 创建）
 - 目标工作流：`$raidline-feature-delivery` + `$raidline-inventory-domain`
 
 ## 目标与玩家可感知结果
@@ -25,7 +25,7 @@ Week 17 分支新增 `src/inventory/inventory_interaction.{h,cpp}`，但：
 - 新类直接持有 `GridInventory&` 并在 release 调用 `tryMove`，与 Week 16“状态不拥有模型、App 编排提交”的边界不同。
 - `cellSize` 未验证；无阈值、真实 origin、grab offset、outside release、cancel、preview validity、SDL 接线和渲染。
 
-当前绿色 Build/CTest/CI 只证明 Week 16 基线，不证明 Week 17 草稿。
+上述内容是实施前审计记录。当前实现已经迁移到 canonical 文件、删除冲突草稿，并由专用 CMake target 与全量 CTest 覆盖。
 
 ## 范围
 
@@ -160,7 +160,8 @@ SDL_EVENT_MOUSE_* (App)
 ### 阶段 4：App/SDL 与渲染
 
 - 接入 motion、left down/up；复用同一 layout 计算。
-- 完成键鼠仲裁、Esc/Tab/close 规则。
+- 将 SDL mouse event 规范化并按帧暂存；按 Tab、Esc、pointer、keyboard 的优先级统一仲裁。
+- 完成键鼠仲裁、Esc/Tab/close 规则；Tab/Esc 帧丢弃待处理 mouse-up。
 - 绘制 hover、selected 和 canMove 绿/红 preview；不新增 raster UI 资产。
 - 退出条件：主程序构建，手动脚本可复现所有状态。
 
@@ -189,6 +190,7 @@ SDL_EVENT_MOUSE_* (App)
 - candidate 合法、越界、与其他物品冲突、self-overlap、same-origin。
 - outside motion 后 release 不复用旧 preview。
 - invalid release、`tryMove` false、Esc、Tab、close 后状态。
+- 同帧 Esc + release、Tab + release、正常 release，以及 pointer 与 keyboard 同帧输入。
 - keyboard placement 与 pointer gesture 互斥，旧 Week 16 测试不回归。
 
 ### Build integration
@@ -211,7 +213,7 @@ SDL_EVENT_MOUSE_* (App)
 8. 用方向键/Enter 完成一次 Week 16 移动，确认键盘行为未回归。
 9. 关闭再打开背包，确认没有残留 drag/selection/capture。
 
-人工执行前所有条目均为 `未验证`。
+当前 1–9 项仍为 `未验证`，需在真实窗口完成。自动测试已经覆盖坐标、状态、事务与旧键盘兼容，但不替代视觉/手感验收。
 
 ## 风险与缓解
 
@@ -227,11 +229,15 @@ SDL_EVENT_MOUSE_* (App)
 - [x] 2026-08-05：审计 Git、CMake、App、InputSystem、GridInventory、旧/新 interaction 和测试。
 - [x] 2026-08-05：确认新文件未构建及全局类型重名。
 - [x] 2026-08-05：冻结计划范围、键鼠仲裁、outside/invalid/cancel 与多格 grab offset 契约。
-- [ ] 阶段 1：类型与测试契约。
-- [ ] 阶段 2：坐标、hover 与 click。
-- [ ] 阶段 3：drag 与事务。
-- [ ] 阶段 4：App/SDL/渲染。
-- [ ] 阶段 5：验证、文档与教学交接。
+- [x] 2026-08-05：阶段 1，冻结 `InventoryGridLayout`、`InventoryPointerPhase`、`InventoryMoveRequest` 与专用测试目标。
+- [x] 2026-08-05：阶段 2，实现坐标边界、独立 hover、单击持久选择与 4 px 阈值。
+- [x] 2026-08-05：阶段 3，实现 `originOf`、多格 grab offset、optional preview、release request 与事务测试。
+- [x] 2026-08-05：阶段 4，接入 SDL3 鼠标事件、键鼠仲裁、hover/selected/preview 代码绘制，并删除冲突草稿。
+- [x] 2026-08-05：阶段 5 本地部分，干净构建、287/287 CTest、3/3 资产函数测试、compile database 证明、静态审查和文档交接完成。
+- [x] 2026-08-06：发现 event poll 中 mouse-up 早于 `update()` 的 Esc/Tab；新增设备无关 pointer event 队列与帧级仲裁，目标新构建和新增回归通过。
+- [x] 2026-08-06：重新配置 Windows Debug，清理 117 个旧产物并完成 99 步全目标构建；鼠标目标直接运行 29/29、全量 CTest 295/295、资产函数 3/3、compile database 与 diff check 通过。
+- [x] 2026-08-06：建立 `doc/project/KNOWN_ISSUES.md`，登记当前阻塞、用户发现的背包/动画 UX 问题和延期工程债。
+- [ ] 阶段 5 外部部分：GitHub Actions Windows/Ubuntu 与真实窗口人工验收。
 
 ## 决策日志
 
@@ -239,8 +245,14 @@ SDL_EVENT_MOUSE_* (App)
 - 2026-08-05：选择 App 保留提交编排，interaction 只产生值类型请求和保存 stable ID。
 - 2026-08-05：选择 float 逻辑像素 + 正 cell size 的共享 layout，避免新草稿的 int origin 缓存与渲染布局漂移。
 - 2026-08-05：非法/outside release 结束 gesture 并保持 inventory 不变，不保留“鼠标已松开但仍 Dragging”的状态。
-- 2026-08-05：本次 Codex 接管任务只创建计划，不实施 Week 17 业务代码。
+- 2026-08-05：最终冻结 4 逻辑像素阈值；release 产生值类型请求，interaction 不拥有或修改 inventory。
+- 2026-08-05：鼠标单击与合法/非法拖动后保留稳定 ID 选择；空格点击、Tab/close 或模型中 ID 消失时清除。
+- 2026-08-05：发现类布局改变后的旧 Debug 测试对象导致 MSVC `Run-Time Check Failure #2`；对目标做干净重编译后旧键盘测试 13/13 和全量测试均通过。
+- 2026-08-06：不在 SDL poll 循环直接提交 release；App 暂存规范化 pointer event，由 `decideInventoryFrameInput` 先处理 Tab/Esc，保证取消发生在任何 `tryMove` 之前。
+- 2026-08-06：用户提出移除键盘背包操作、平滑拖拽虚像和上下角色动画；前两项中的键盘移除与本计划兼容目标冲突，动画又需要新资源方案，因此本轮写入问题台账，不夹带实现。
 
 ## 最终结果与遗留问题
 
-尚未完成。当前交付物仅为可执行计划。下一安全步骤是阶段 1：先写布局、origin 查询和 pointer 状态测试，再决定最终类型/文件命名并接入 CMake。
+Week 17 代码与本地自动验证已完成。结果包括：单一 canonical 交互状态机、共享布局转换、真实 origin/grab offset、SDL3 输入与绘制、设备无关的帧级输入仲裁、专用鼠标测试和完整文档。同帧取消缺陷已本地修复；其关闭仍依赖精确提交 CI 与人工验收。
+
+尚未完成的外部证据是 GitHub Actions 与 9 项真实窗口人工验收，因此计划暂不移动到 `completed/`。其他已知问题和延期决策统一见 [问题台账](../../project/KNOWN_ISSUES.md)。下一安全步骤是提交/推送当前分支，让 Windows/Ubuntu CI 运行，然后按“人工验收”逐项确认。

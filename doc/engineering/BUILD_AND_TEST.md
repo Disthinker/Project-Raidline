@@ -17,6 +17,14 @@ cmake --build --preset windows-debug
 ctest --preset windows-debug
 ```
 
+如果当前是普通 PowerShell，可先在同一进程加载开发环境：
+
+```powershell
+& 'E:\VisualStudio\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+```
+
+这个路径只用于本机命令示例，不得写入共享 CMake 配置。若未加载 Developer Shell，已有 Ninja cache 仍可能找到 `cl.exe`，但编译会因缺少 MSVC 标准库 `INCLUDE` 而报 `<optional>`、`<array>` 等文件不存在；此时旧 CTest 二进制不属于新代码的验证证据。
+
 Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-debug`。如果 CMake 报找不到 compiler 或 Ninja，先修复 Developer Shell/PATH；如果 toolchain 变成 `/scripts/buildsystems/vcpkg.cmake`，说明 `VCPKG_ROOT` 为空。
 
 ## 定向构建与测试
@@ -24,8 +32,8 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target GridInventoryTest InventoryInteractionTest
-ctest --preset windows-debug -R '^(GridInventoryTest|InventoryInteractionTest)\.'
+cmake --build --preset windows-debug --target GridInventoryTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(GridInventoryTest|InventoryInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -41,7 +49,13 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 17 个 GTest executable；在 Week 17 接入前，现有 263 个 CTest 用例中的 `InventoryInteractionTest` 只编译旧 `src/inventory_interaction.cpp`。Week 17 必须建立命名清晰的鼠标 target，并证明新 `src/inventory/inventory_interaction.cpp` 出现在编译数据库中。
+当前 CMake 注册 18 个 GTest executable、295 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态和事务集成。可用下列命令证明鼠标测试源真实进入编译数据库：
+
+```powershell
+rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
+```
+
+若修改了 `InventoryInteractionState` 的类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，先对相关 target 做干净重编译；这通常表示增量对象仍按旧类尺寸编译，不应误判成某个 GTest 断言失败。
 
 ## 运行程序与人工检查
 
@@ -51,7 +65,7 @@ Ninja Debug 输出通常位于：
 & '.\build\windows-debug\Project_Raidline.exe'
 ```
 
-当前控制：WASD 移动、Space 射击、F 拾取、Tab 背包、方向键浏览/移动、Enter 选择/确认、Esc 取消。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
+当前控制：WASD 移动、Space 射击、F 拾取、Tab 背包；背包内可用方向键/Enter 移动，也可用鼠标 hover、单击选择和按住拖动。Esc 优先取消活动拖动或键盘放置，无活动会话时关闭背包。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
 
 ## Python 与艺术管线测试
 

@@ -12,6 +12,7 @@
 | Week 10–12 | RAII、`std::unique_ptr` custom deleter、move-only、对象组合、`size_t`、`while` 跨帧、`std::mt19937`、distribution、`std::erase_if` |
 | Week 13–14 | 类不变量、`[[nodiscard]]`、组合、状态转换、`std::array`、`std::string_view`、`std::uint64_t` 稳定 ID、所有权转移 |
 | Week 15–16 | 扁平网格、有符号边界、`optional<move-only>`、事务式放置/移动、self-overlap、查询/提交分离、enum 状态机、vector 失效规避 |
+| Week 17 | float 屏幕坐标到格子坐标、左上含/右下不含边界、`Idle/Pressed/Dragging` 指针状态机、像素拖动阈值、多格 grab offset、keyboard focus 与 mouse hover 分离、值类型 pointer event/move request、帧级输入优先级、预览/提交事务边界 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -25,13 +26,13 @@
 - CMake target 源码复用、compile/link/test discovery 的不同失败层。
 - App 初始化/销毁顺序与 SDL 资源依赖。
 
-## Week 17 预期学习主题（尚未完成）
+## Week 17 已落地、仍应复习的主题
 
 - 屏幕、面板局部与网格三种坐标系。
 - 点击、阈值拖拽、释放与取消的显式状态机。
 - 多格物品真实 origin 与 grab offset。
 - keyboard focus 与 mouse hover 两条输入状态的兼容。
 - `canMove` 查询与 `tryMove` 提交之间的预览/事务边界。
-- 引用成员 `GridInventory&` 的生命周期约束与替代架构选择。
-
-只有在 Week 17 实际实现、测试和复盘后，才把这些主题移动到“已使用”。
+- 为什么 interaction 不保存 `GridInventory&`，而由 App 查询模型并提交值类型请求。
+- 为什么 SDL poll 中不能直接提交 mouse-up，而要等 Tab/Esc 完成帧级仲裁后再消费值类型 pointer event。
+- 为什么类布局变化后混用新旧增量对象会表现为 MSVC 栈损坏，而不是普通断言失败。

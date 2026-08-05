@@ -21,7 +21,7 @@
 
 目标是保留 Week 16 键盘行为，同时增加可测试的坐标转换、独立 `hoveredCell`、点击选择、拖拽阈值、多格 grab offset、`canMove` 预览、`tryMove` 释放提交、网格外规则、取消、SDL 适配和代码绘制反馈。
 
-当前只有未接线草稿，不能视为完成。以 [活动 ExecPlan](../exec-plans/active/week17-mouse-inventory-interaction.md) 为实施事实来源。
+当前本地实现、专用测试和帧级输入仲裁已经接入；由于精确提交的 CI 与 9 项真实窗口验收尚未全部完成，仍不能标记为完成。以 [活动 ExecPlan](../exec-plans/active/week17-mouse-inventory-interaction.md) 和 [问题台账](KNOWN_ISSUES.md) 为实施事实来源。
 
 ## 推荐后续候选
 

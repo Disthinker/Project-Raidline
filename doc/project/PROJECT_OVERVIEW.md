@@ -19,7 +19,7 @@ Project Raidline 是一个使用 C++20、SDL3 和像素资源构建的 2D 游戏
 - 表现：玩家/敌人水平帧动画、命中粒子、背景与物品贴图。
 - 世界物品：Cola、Medkit、Pistol、Rifle 的共享定义与唯一运行时实例；地面物品由 F 键拾取。
 - 背包：10×6 格子、确定性 first-fit、footprint 占用、稳定实例 ID、事务式放置与移动。
-- 背包 UI：Tab 开关；方向键浏览或移动预览；Enter 选择/确认；Esc 取消；合法性使用绿/红代码绘制反馈。
+- 背包 UI：Tab 开关；鼠标 hover、单击选择和阈值拖拽；方向键/Enter 键盘兼容；Esc 取消；合法性使用绿/红代码绘制反馈。
 
 ## 当前产品边界
 
@@ -36,4 +36,4 @@ Project Raidline 是一个使用 C++20、SDL3 和像素资源构建的 2D 游戏
 - 使用稳定 ID，避免把容器下标、引用或迭代器当作跨帧身份。
 - 不为未排期系统提前引入 ECS、SceneManager 或通用服务层。
 
-架构职责见 [ARCHITECTURE.md](../architecture/ARCHITECTURE.md)，行为底线见 [INVARIANTS.md](../architecture/INVARIANTS.md)。
+架构职责见 [ARCHITECTURE.md](../architecture/ARCHITECTURE.md)，行为底线见 [INVARIANTS.md](../architecture/INVARIANTS.md)。当前缺陷、待决产品行为和延期工程债见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
