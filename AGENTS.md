@@ -27,7 +27,7 @@ Never discard, overwrite, or broadly reformat unrelated user changes. Check `git
 - Completion standard: `doc/engineering/DEFINITION_OF_DONE.md`
 - Active plans: `doc/exec-plans/active/`
 
-Week 17 mouse inventory interaction is integrated locally and remains active until commit-specific CI and manual acceptance are complete. Read its active ExecPlan and `doc/project/KNOWN_ISSUES.md` before changing inventory interaction code.
+Week 17 mouse inventory interaction is integrated and has commit-specific Windows/Ubuntu CI evidence on PR #31; it remains active until manual acceptance is complete. Read its active ExecPlan and `doc/project/KNOWN_ISSUES.md` before changing inventory interaction code.
 
 ## Architecture guardrails
 

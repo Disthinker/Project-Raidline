@@ -237,7 +237,8 @@ SDL_EVENT_MOUSE_* (App)
 - [x] 2026-08-06：发现 event poll 中 mouse-up 早于 `update()` 的 Esc/Tab；新增设备无关 pointer event 队列与帧级仲裁，目标新构建和新增回归通过。
 - [x] 2026-08-06：重新配置 Windows Debug，清理 117 个旧产物并完成 99 步全目标构建；鼠标目标直接运行 29/29、全量 CTest 295/295、资产函数 3/3、compile database 与 diff check 通过。
 - [x] 2026-08-06：建立 `doc/project/KNOWN_ISSUES.md`，登记当前阻塞、用户发现的背包/动画 UX 问题和延期工程债。
-- [ ] 阶段 5 外部部分：草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 已触发 GitHub Actions Windows/Ubuntu；真实窗口人工验收仍待完成。
+- [x] 2026-08-06：草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的两组 GitHub Actions Windows/Ubuntu checks 全部通过。
+- [ ] 阶段 5 外部部分：真实窗口人工验收仍待完成。
 
 ## 决策日志
 
@@ -255,4 +256,4 @@ SDL_EVENT_MOUSE_* (App)
 
 Week 17 代码与本地自动验证已完成。结果包括：单一 canonical 交互状态机、共享布局转换、真实 origin/grab offset、SDL3 输入与绘制、设备无关的帧级输入仲裁、专用鼠标测试和完整文档。同帧取消缺陷已本地修复；其关闭仍依赖精确提交 CI 与人工验收。
 
-外部证据由草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 GitHub Actions 与 9 项真实窗口人工验收组成，因此计划暂不移动到 `completed/`。其他已知问题和延期决策统一见 [问题台账](../../project/KNOWN_ISSUES.md)。下一安全步骤是确认 PR 的 Windows/Ubuntu CI 结果，然后按“人工验收”逐项确认。
+草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 GitHub Actions 已通过；尚未完成的外部证据只剩 9 项真实窗口人工验收，因此计划暂不移动到 `completed/`。其他已知问题和延期决策统一见 [问题台账](../../project/KNOWN_ISSUES.md)。下一安全步骤是按“人工验收”逐项确认。

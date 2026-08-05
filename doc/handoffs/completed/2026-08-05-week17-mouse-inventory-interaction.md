@@ -5,7 +5,7 @@
 - 任务：Week 17 鼠标驱动的格子背包交互
 - 日期/分支：2026-08-06 / `codex/week17-mouse-inventory-interaction`
 - 基线：`bf1c84b`
-- 完成度：代码与本地自动验证完成，草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 已创建并触发 GitHub Actions；真实窗口人工验收待执行
+- 完成度：代码、本地自动验证和草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 Windows/Ubuntu CI 已完成；真实窗口人工验收待执行
 
 ## 2. 用户可见结果
 
@@ -91,7 +91,7 @@
 - 编译数据库：包含 `tests/test_mouse_inventory_interaction.cpp` 的 MSVC compile command。
 - 其他测试：三个 phase1 asset 函数 3/3。
 - 静态审查：边界、浮点转换、稳定 ID、引用生命周期、失败事务、状态仲裁与 CMake 接线无未处理问题。
-- CI：已由草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 触发，最终状态以 PR checks 为准。
+- CI：草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的两组 Windows/Ubuntu checks 已通过，最终状态以 PR checks 为准。
 - 人工验收：未执行，需真实窗口验证 hover/颜色/手感和 Esc/Tab 操作。
 
 ## 12. 教学分级
@@ -122,8 +122,8 @@
 ## 15. 技术债与测试债
 
 - 技术债：App 仍集中输入、提交和绘制；CMake 仍为测试重复列业务源码；按 ID 查 placement 仍是 O(n)。
-- 测试债：无 App 级 SDL 事件注入、截图或端到端测试；CI 与真实窗口人工验收未执行。
-- 下一安全任务：确认 PR #31 的 Windows/Ubuntu CI，然后执行 ExecPlan 的 9 项人工验收；全部通过后关闭 RL-W17-001/002 并把计划移动到 `completed/`。用户新发现的平滑虚像、键盘遗留和上下动画见 `doc/project/KNOWN_ISSUES.md`，不夹带进本次已冻结契约。
+- 测试债：无 App 级 SDL 事件注入、截图或端到端测试；真实窗口人工验收未执行。
+- 下一安全任务：执行 ExecPlan 的 9 项人工验收；全部通过后关闭 RL-W17-001/002 并把计划移动到 `completed/`。用户新发现的平滑虚像、键盘遗留和上下动画见 `doc/project/KNOWN_ISSUES.md`，不夹带进本次已冻结契约。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 
