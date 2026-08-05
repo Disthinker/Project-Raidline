@@ -50,6 +50,7 @@
 - DevLog 作为历史保留；需要时新增任务记录，不篡改旧状态。
 - `doc/learning/CXX_LEARNING_LEDGER.md` 只追加本次真实学习证据。
 - 在 `doc/handoffs/completed/` 生成中文 C++ 教学交接报告。
+- 在第一次等待远端 CI 前冻结代码、测试和仓库文档；CI 的精确 SHA、run URL 与结论记录在 PR/Issue，不为补写动态结果制造新的仓库提交和 CI 轮次。
 
 ## 交付
 

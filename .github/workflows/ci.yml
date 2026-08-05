@@ -2,7 +2,16 @@ name: Project Raidline CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,8 +20,52 @@ env:
   VCPKG_BASELINE: 40dd49b0c9c7dbd79dc64cad5e82308eae04f67f
 
 jobs:
+  changes:
+    name: Detect C++ CI scope
+    runs-on: ubuntu-22.04
+
+    outputs:
+      cpp: ${{ steps.scope.outputs.cpp }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect non-documentation changes
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "cpp=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base SHA; running the full C++ matrix."
+            exit 0
+          fi
+
+          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+          cpp=false
+
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              doc/*|*.md)
+                ;;
+              *)
+                cpp=true
+                break
+                ;;
+            esac
+          done
+
+          echo "cpp=$cpp" >> "$GITHUB_OUTPUT"
+          printf 'C++ CI required: %s\n' "$cpp"
+
   windows-cpp:
     name: Windows C++ build and test
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     runs-on: windows-2022
 
     env:
@@ -30,6 +83,14 @@ jobs:
           git -C "$env:VCPKG_INSTALLATION_ROOT" reset --hard $env:VCPKG_BASELINE
           & (Join-Path $env:VCPKG_INSTALLATION_ROOT "bootstrap-vcpkg.bat") -disableMetrics
 
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/vcpkg_installed
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/downloads
+          key: raidline-vcpkg-${{ runner.os }}-x64-windows-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+
       - name: Configure CMake
         shell: pwsh
         run: |
@@ -46,6 +107,8 @@ jobs:
 
   ubuntu-cpp:
     name: Ubuntu C++ build and test
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     runs-on: ubuntu-22.04
 
     env:
@@ -66,6 +129,14 @@ jobs:
           git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin "$VCPKG_BASELINE"
           git -C "$VCPKG_INSTALLATION_ROOT" reset --hard "$VCPKG_BASELINE"
           "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg_installed
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/downloads
+          key: raidline-vcpkg-${{ runner.os }}-x64-linux-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Install vcpkg packages
         shell: bash
