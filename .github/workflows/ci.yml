@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  VCPKG_BASELINE: 40dd49b0c9c7dbd79dc64cad5e82308eae04f67f
+
 jobs:
   windows-cpp:
     name: Windows C++ build and test
@@ -23,8 +26,9 @@ jobs:
       - name: Setup vcpkg
         shell: pwsh
         run: |
-          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch origin master
-          git -C "$env:VCPKG_INSTALLATION_ROOT" reset --hard origin/master
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin $env:VCPKG_BASELINE
+          git -C "$env:VCPKG_INSTALLATION_ROOT" checkout --detach $env:VCPKG_BASELINE
+          & (Join-Path $env:VCPKG_INSTALLATION_ROOT "bootstrap-vcpkg.bat") -disableMetrics
 
       - name: Configure CMake
         shell: pwsh
@@ -59,8 +63,9 @@ jobs:
       - name: Setup vcpkg
         shell: bash
         run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch origin master
-          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard origin/master
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin "$VCPKG_BASELINE"
+          git -C "$VCPKG_INSTALLATION_ROOT" checkout --detach "$VCPKG_BASELINE"
+          "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Install vcpkg packages
         shell: bash
