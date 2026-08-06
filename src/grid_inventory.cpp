@@ -311,6 +311,28 @@ GridInventory::occupantAt(
     return cells_[indexOf(position)];
 }
 
+std::optional<GridPosition>
+GridInventory::originOf(
+    ItemInstanceId instanceId) const noexcept
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return std::nullopt;
+    }
+
+    return placedIt->origin;
+}
+
 const std::vector<PlacedItem> &
 GridInventory::placedItems() const noexcept
 {

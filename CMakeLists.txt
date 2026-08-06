@@ -547,6 +547,46 @@ target_include_directories(
 
 gtest_discover_tests(InventoryInteractionTest)
 
+# test mouse_inventory_interaction
+add_executable(MouseInventoryInteractionTest
+    tests/test_mouse_inventory_interaction.cpp
+    src/inventory_interaction.h
+    src/inventory_interaction.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    MouseInventoryInteractionTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    MouseInventoryInteractionTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    MouseInventoryInteractionTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    MouseInventoryInteractionTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(MouseInventoryInteractionTest)
+
 # utf-8
 if(MSVC)
     target_compile_options(Project_Raidline PRIVATE /utf-8)
@@ -589,6 +629,12 @@ if(MSVC)
 
     target_compile_options(
         InventoryInteractionTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        MouseInventoryInteractionTest
         PRIVATE
         /utf-8
     )

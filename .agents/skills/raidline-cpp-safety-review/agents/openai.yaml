@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline C++ Safety Review"
+  short_description: "Review Raidline C++ ownership and safety risks"
+  default_prompt: "Use $raidline-cpp-safety-review to review this C++ change for correctness and ownership risks."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline Inventory Domain"
+  short_description: "Protect Raidline inventory contracts and invariants"
+  default_prompt: "Use $raidline-inventory-domain to work on inventory behavior without violating domain invariants."

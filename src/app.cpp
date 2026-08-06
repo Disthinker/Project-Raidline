@@ -82,6 +82,39 @@ namespace
 
         return true;
     }
+
+    std::optional<InventoryPointerEvent>
+    toInventoryPointerEvent(
+        const SDL_Event &event) noexcept
+    {
+        if (event.type == SDL_EVENT_MOUSE_MOTION)
+        {
+            return InventoryPointerEvent{
+                InventoryPointerEventType::Motion,
+                MousePosition{
+                    event.motion.x,
+                    event.motion.y}};
+        }
+
+        if (event.type != SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            event.type != SDL_EVENT_MOUSE_BUTTON_UP)
+        {
+            return std::nullopt;
+        }
+
+        if (event.button.button != SDL_BUTTON_LEFT)
+        {
+            return std::nullopt;
+        }
+
+        return InventoryPointerEvent{
+            event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                ? InventoryPointerEventType::LeftButtonDown
+                : InventoryPointerEventType::LeftButtonUp,
+            MousePosition{
+                event.button.x,
+                event.button.y}};
+    }
 }
 
 App::App()
@@ -354,22 +387,12 @@ void App::beginInventoryPlacement()
         return;
     }
 
-    const auto &placedItems =
-        inventory.placedItems();
-
-    const auto placedIt =
-        std::find_if(
-            placedItems.begin(),
-            placedItems.end(),
-            [instanceId](const PlacedItem &placed)
-            {
-                return placed.item.instanceId() ==
-                       *instanceId;
-            });
+    const std::optional<GridPosition> itemOrigin =
+        inventory.originOf(*instanceId);
 
     // cells_ 与 placedItems_ 理论上始终同步。
     // 若出现不一致，则采用 fail-safe，不进入放置状态。
-    if (placedIt == placedItems.end())
+    if (!itemOrigin.has_value())
     {
         return;
     }
@@ -377,7 +400,7 @@ void App::beginInventoryPlacement()
     const bool started =
         inventoryInteraction_.beginPlacement(
             instanceId,
-            placedIt->origin);
+            *itemOrigin);
 
     // 当前条件下应当成功。
     // 保存返回值是为了显式处理 [[nodiscard]]。
@@ -415,36 +438,41 @@ void App::confirmInventoryPlacement()
 
 void App::closeInventory() noexcept
 {
-    // PlacingItem 时关闭背包必须自动取消预览。
-    // Browsing 时该调用是安全的 no-op。
-    inventoryInteraction_.cancelPlacement();
+    // Tab / Browsing Esc 关闭背包时统一清理：
+    // 键盘预览、鼠标手势、hover 与持久选择。
+    inventoryInteraction_.reset();
 
     inventoryOpen_ =
         false;
 }
 
-void App::handleInventoryInput()
+void App::handleInventoryCancel()
 {
-    // Esc 优先级最高。
-    if (
-        input_.wasActionJustPressed(
-            GameAction::InventoryCancel))
+    if (inventoryInteraction_.pointerGestureActive())
     {
-        if (
-            inventoryInteraction_.mode() ==
-            InventoryInteractionMode::PlacingItem)
-        {
-            // PlacingItem + Esc：
-            // 取消移动，但背包继续保持打开。
-            inventoryInteraction_.cancelPlacement();
-        }
-        else
-        {
-            // Browsing + Esc：
-            // 关闭背包。
-            closeInventory();
-        }
+        // 鼠标手势优先于键盘放置和关闭。
+        inventoryInteraction_.cancelPointerGesture();
+        return;
+    }
 
+    if (
+        inventoryInteraction_.mode() ==
+        InventoryInteractionMode::PlacingItem)
+    {
+        // PlacingItem + Esc：取消移动，但背包继续保持打开。
+        inventoryInteraction_.cancelPlacement();
+        return;
+    }
+
+    // Browsing + Esc：关闭背包。
+    closeInventory();
+}
+
+void App::handleInventoryKeyboardInput()
+{
+    // 鼠标按下或拖动期间，方向键和 Enter 不参与仲裁。
+    if (inventoryInteraction_.pointerGestureActive())
+    {
         return;
     }
 
@@ -493,9 +521,148 @@ void App::handleInventoryInput()
     confirmInventoryPlacement();
 }
 
+InventoryGridLayout
+App::inventoryGridLayout() const
+{
+    const GridInventory &inventory =
+        world_.inventory();
+
+    const float gridWidth =
+        static_cast<float>(inventory.width()) *
+        kInventoryCellSize;
+
+    const float gridHeight =
+        static_cast<float>(inventory.height()) *
+        kInventoryCellSize;
+
+    const float panelWidth =
+        gridWidth +
+        kInventoryPanelPadding * 2.0F;
+
+    const float panelHeight =
+        gridHeight +
+        kInventoryPanelPadding * 2.0F +
+        kInventoryHeaderHeight;
+
+    const float panelX =
+        (static_cast<float>(kWindowWidth) - panelWidth) /
+        2.0F;
+
+    const float panelY =
+        (static_cast<float>(kWindowHeight) - panelHeight) /
+        2.0F;
+
+    return InventoryGridLayout{
+        panelX + kInventoryPanelPadding,
+        panelY + kInventoryPanelPadding + kInventoryHeaderHeight,
+        kInventoryCellSize,
+        InventoryGridSize{
+            inventory.width(),
+            inventory.height()}};
+}
+
+void App::handleInventoryPointerEvent(
+    const InventoryPointerEvent &event)
+{
+    const MousePosition position =
+        event.position;
+
+    const InventoryGridLayout layout =
+        inventoryGridLayout();
+
+    const std::optional<GridPosition> cell =
+        layout.screenToGrid(position);
+
+    if (event.type == InventoryPointerEventType::Motion)
+    {
+        inventoryInteraction_.updatePointerPosition(
+            position,
+            cell);
+        return;
+    }
+
+    if (event.type == InventoryPointerEventType::LeftButtonDown)
+    {
+        inventoryInteraction_.updatePointerPosition(
+            position,
+            cell);
+
+        if (!cell.has_value())
+        {
+            inventoryInteraction_.clearPointerSelection();
+            return;
+        }
+
+        const GridInventory &inventory =
+            world_.inventory();
+
+        const std::optional<ItemInstanceId> instanceId =
+            inventory.occupantAt(*cell);
+
+        const std::optional<GridPosition> itemOrigin =
+            instanceId.has_value()
+                ? inventory.originOf(*instanceId)
+                : std::nullopt;
+
+        const bool started =
+            inventoryInteraction_.beginPointerPress(
+                instanceId,
+                itemOrigin,
+                *cell,
+                position);
+
+        // 点击空格或键盘放置期间拒绝开始鼠标手势。
+        // 显式保存结果以处理 [[nodiscard]]。
+        if (!started)
+        {
+            return;
+        }
+
+        return;
+    }
+
+    const std::optional<InventoryMoveRequest> request =
+        inventoryInteraction_.releasePointer(
+            position,
+            cell);
+
+    if (!request.has_value())
+    {
+        return;
+    }
+
+    GridInventory &inventory =
+        world_.inventory();
+
+    // canMove 是预览与提交前唯一合法性来源；
+    // tryMove 是唯一写入事务。
+    if (inventory.canMove(
+            request->instanceId,
+            request->destination))
+    {
+        const bool moved =
+            inventory.tryMove(
+                request->instanceId,
+                request->destination);
+
+        if (!moved)
+        {
+            return;
+        }
+    }
+
+    // 若模型已不再包含该 ID，避免 UI 保留悬空选择。
+    if (!inventory.originOf(request->instanceId).has_value())
+    {
+        inventoryInteraction_.clearPointerSelection();
+    }
+}
+
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
+    pendingInventoryPointerEvents_.clear();
+
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
@@ -504,31 +671,64 @@ void App::processEvents()
         {
             running_ = false;
         }
+
+        else if (inventoryOpen_)
+        {
+            const std::optional<InventoryPointerEvent>
+                pointerEvent =
+                    toInventoryPointerEvent(event);
+
+            if (pointerEvent.has_value())
+            {
+                pendingInventoryPointerEvents_.push_back(
+                    *pointerEvent);
+            }
+        }
     }
 }
 
 void App::update(float deltaTime)
 {
-    if (
-        input_.wasActionJustPressed(
-            GameAction::ToggleInventory))
+    const InventoryFrameInputDecision inputDecision =
+        decideInventoryFrameInput(
+            inventoryOpen_,
+            input_.wasActionJustPressed(
+                GameAction::ToggleInventory),
+            input_.wasActionJustPressed(
+                GameAction::InventoryCancel));
+
+    switch (inputDecision.controlAction)
     {
-        if (inventoryOpen_)
+    case InventoryFrameControlAction::OpenInventory:
+        inventoryOpen_ = true;
+        break;
+
+    case InventoryFrameControlAction::CloseInventory:
+        closeInventory();
+        break;
+
+    case InventoryFrameControlAction::CancelInteraction:
+        handleInventoryCancel();
+        break;
+
+    case InventoryFrameControlAction::None:
+        break;
+    }
+
+    if (inputDecision.processPointerEvents)
+    {
+        for (const InventoryPointerEvent &event :
+             pendingInventoryPointerEvents_)
         {
-            // Tab 关闭背包。
-            // 如果正在放置，则同时取消预览。
-            closeInventory();
-        }
-        else
-        {
-            inventoryOpen_ =
-                true;
+            handleInventoryPointerEvent(event);
         }
     }
 
-    if (inventoryOpen_)
+    pendingInventoryPointerEvents_.clear();
+
+    if (inputDecision.processKeyboardInput)
     {
-        handleInventoryInput();
+        handleInventoryKeyboardInput();
     }
 
     GameplayInput gameplayInput{};
@@ -760,7 +960,8 @@ void App::renderInventoryBrowsingFocus(
 {
     if (
         inventoryInteraction_.mode() !=
-        InventoryInteractionMode::Browsing)
+            InventoryInteractionMode::Browsing ||
+        inventoryInteraction_.pointerGestureActive())
     {
         return;
     }
@@ -808,9 +1009,10 @@ void App::renderInventoryPlacementPreview(
     float gridX,
     float gridY)
 {
-    if (
-        inventoryInteraction_.mode() !=
-        InventoryInteractionMode::PlacingItem)
+    const std::optional<GridPosition> activePreview =
+        inventoryInteraction_.activePreviewOrigin();
+
+    if (!activePreview.has_value())
     {
         return;
     }
@@ -848,7 +1050,7 @@ void App::renderInventoryPlacementPreview(
             placedIt->item.definitionId());
 
     const GridPosition previewOrigin =
-        inventoryInteraction_.previewOrigin();
+        *activePreview;
 
     const bool legal =
         inventory.canMove(
@@ -1078,6 +1280,98 @@ void App::renderInventoryPlacementPreview(
     }
 }
 
+void App::renderInventoryPointerFeedback(
+    const GridInventory &inventory,
+    float gridX,
+    float gridY)
+{
+    const std::optional<GridPosition> hoveredCell =
+        inventoryInteraction_.hoveredCell();
+
+    if (hoveredCell.has_value())
+    {
+        SDL_SetRenderDrawColor(
+            renderer_,
+            80,
+            205,
+            225,
+            255);
+
+        const SDL_FRect hoverRect{
+            gridX +
+                static_cast<float>(hoveredCell->x) *
+                    kInventoryCellSize +
+                2.0F,
+            gridY +
+                static_cast<float>(hoveredCell->y) *
+                    kInventoryCellSize +
+                2.0F,
+            kInventoryCellSize - 4.0F,
+            kInventoryCellSize - 4.0F};
+
+        SDL_RenderRect(renderer_, &hoverRect);
+    }
+
+    if (inventoryInteraction_.mode() !=
+            InventoryInteractionMode::Browsing ||
+        inventoryInteraction_.pointerPhase() ==
+            InventoryPointerPhase::Dragging)
+    {
+        return;
+    }
+
+    const std::optional<ItemInstanceId> selectedId =
+        inventoryInteraction_.selectedInstanceId();
+
+    if (!selectedId.has_value())
+    {
+        return;
+    }
+
+    const auto placedIt =
+        std::find_if(
+            inventory.placedItems().begin(),
+            inventory.placedItems().end(),
+            [selectedId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       *selectedId;
+            });
+
+    if (placedIt == inventory.placedItems().end())
+    {
+        return;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(placedIt->item.definitionId());
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        70,
+        170,
+        245,
+        255);
+
+    const SDL_FRect selectedRect{
+        gridX +
+            static_cast<float>(placedIt->origin.x) *
+                kInventoryCellSize +
+            3.0F,
+        gridY +
+            static_cast<float>(placedIt->origin.y) *
+                kInventoryCellSize +
+            3.0F,
+        static_cast<float>(definition.inventoryWidthCells) *
+                kInventoryCellSize -
+            6.0F,
+        static_cast<float>(definition.inventoryHeightCells) *
+                kInventoryCellSize -
+            6.0F};
+
+    SDL_RenderRect(renderer_, &selectedRect);
+}
+
 void App::renderInventoryOverlay()
 {
     if (!inventoryOpen_)
@@ -1088,15 +1382,16 @@ void App::renderInventoryOverlay()
     const GridInventory &inventory =
         world_.inventory();
 
+    const InventoryGridLayout layout =
+        inventoryGridLayout();
+
     const float gridWidth =
-        static_cast<float>(
-            inventory.width()) *
-        kInventoryCellSize;
+        static_cast<float>(inventory.width()) *
+        layout.cellSize();
 
     const float gridHeight =
-        static_cast<float>(
-            inventory.height()) *
-        kInventoryCellSize;
+        static_cast<float>(inventory.height()) *
+        layout.cellSize();
 
     const float panelWidth =
         gridWidth +
@@ -1117,14 +1412,8 @@ void App::renderInventoryOverlay()
          panelHeight) /
         2.0f;
 
-    const float gridX =
-        panelX +
-        kInventoryPanelPadding;
-
-    const float gridY =
-        panelY +
-        kInventoryPanelPadding +
-        kInventoryHeaderHeight;
+    const float gridX = layout.gridX();
+    const float gridY = layout.gridY();
 
     SDL_SetRenderDrawBlendMode(
         renderer_,
@@ -1212,6 +1501,11 @@ void App::renderInventoryOverlay()
 
     // 根据当前模式绘制浏览焦点或移动预览。
     renderInventoryBrowsingFocus(
+        gridX,
+        gridY);
+
+    renderInventoryPointerFeedback(
+        inventory,
         gridX,
         gridY);
 
@@ -1309,11 +1603,23 @@ void App::renderInventoryOverlay()
     const InventoryInteractionMode mode =
         inventoryInteraction_.mode();
 
-    const char *controlText =
-        mode ==
-                InventoryInteractionMode::Browsing
-            ? "Arrows: Move  Enter: Select  Esc/Tab: Close"
-            : "Arrows: Preview  Enter: Confirm  Esc: Cancel  Tab: Close";
+    const char *controlText = nullptr;
+
+    if (inventoryInteraction_.pointerGestureActive())
+    {
+        controlText =
+            "Mouse: Drag/Release  Esc: Cancel Drag  Tab: Close";
+    }
+    else if (mode == InventoryInteractionMode::Browsing)
+    {
+        controlText =
+            "Mouse: Click/Drag  Arrows: Move  Enter: Select  Esc/Tab: Close";
+    }
+    else
+    {
+        controlText =
+            "Arrows: Preview  Enter: Confirm  Esc: Cancel  Tab: Close";
+    }
 
     SDL_RenderDebugText(
         renderer_,
@@ -1324,10 +1630,11 @@ void App::renderInventoryOverlay()
             16.0f,
         controlText);
 
-    // 放置模式下在标题区域显示当前合法性。
-    if (
-        mode ==
-        InventoryInteractionMode::PlacingItem)
+    // 键盘放置或鼠标拖动时显示当前合法性。
+    const std::optional<GridPosition> activePreview =
+        inventoryInteraction_.activePreviewOrigin();
+
+    if (activePreview.has_value())
     {
         const std::optional<ItemInstanceId> selectedId =
             inventoryInteraction_.selectedInstanceId();
@@ -1336,7 +1643,7 @@ void App::renderInventoryOverlay()
             selectedId.has_value() &&
             inventory.canMove(
                 *selectedId,
-                inventoryInteraction_.previewOrigin());
+                *activePreview);
 
         if (legal)
         {

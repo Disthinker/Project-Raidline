@@ -1,28 +1,85 @@
 # Project Raidline Codex Instructions
 
-## Preserve existing work
+## Project
 
-- Treat uncommitted changes as user-owned. Do not revert, overwrite, or reformat unrelated files.
-- Keep generated candidates separate from runtime assets until they pass validation.
+Project Raidline is a C++20/SDL3 2D game prototype moving toward a top-down pixel-art extraction experience. Treat the implemented code as the behavior baseline; the long-term product direction is not evidence that a feature already exists.
 
-## Art asset workflow
+## Sources of truth
 
-For game images, sprites, item art, animation, backgrounds, effects, or UI assets:
+Use this order when facts disagree:
 
-1. Read `art/ART_BIBLE.md`, `art/ASSET_MANIFEST.yaml`, and the relevant specification under `art/specs/`.
-2. The art-control task does not call image generation itself. It scopes packages, writes prompts, creates dedicated user-visible Codex production tasks, reviews returned candidates, requests corrections, publishes approved assets, and starts the next package.
-3. Create one dedicated production task per coherent asset family or package, such as map resources, character layers, weapons, or UI icons. Do not use internal subagents as the normal image-production unit.
-4. The production task uses the built-in image generation workflow unless the user explicitly requests API/CLI generation.
-5. Save the exact rendered prompt and all candidates under `art/work/<package_id>/`.
-6. Never overwrite an approved asset. A visual revision requires a new versioned asset ID and path.
-7. Production tasks may write only inside their assigned `art/work/<package_id>/`.
-8. Only the art-control task may update the manifest, approve a candidate, publish into `assets/`, or close a production package.
-9. Generate each distinct asset or candidate with a separate image-generation call.
-10. Derive inventory and world-size variants deterministically from one approved identity master.
-11. Run the relevant scripts under `tools/art_pipeline/` before marking an asset approved.
+1. The current workspace, including user-owned uncommitted changes.
+2. Current branch code, tests, CMake, CI, and asset manifests.
+3. `main` and merged history.
+4. Current documents under `doc/` and `art/`.
+5. Historical DevLogs and prompt history.
 
-## Phase 1 boundaries
+Never discard, overwrite, or broadly reformat unrelated user changes. Check `git status` before and after work.
 
-- Phase 1 supports Weeks 13-16: item identity art, world pickup art, inventory art, and Week 17 alignment contracts.
-- Do not generate character clothing layers, weapon attachments, map tiles, buildings, corpses, limb fragments, damage overlays, projectile art, or large raster UI panels during Phase 1.
-- Inventory grids, placement highlights, selection rectangles, and drag feedback remain code-rendered SDL elements.
+## Current stage and navigation
+
+- Project summary: `doc/project/PROJECT_OVERVIEW.md`
+- Verified current state: `doc/project/CURRENT_STATE.md`
+- Milestones and candidate roadmap: `doc/project/ROADMAP.md`
+- Architecture and ownership: `doc/architecture/ARCHITECTURE.md`
+- Behavioral invariants: `doc/architecture/INVARIANTS.md`
+- Build and test commands: `doc/engineering/BUILD_AND_TEST.md`
+- Completion standard: `doc/engineering/DEFINITION_OF_DONE.md`
+- Active plans: `doc/exec-plans/active/`
+
+Week 17 mouse inventory interaction is complete with automated, commit-specific Windows/Ubuntu CI, and 9/9 real-window acceptance evidence on PR #31. Read its completed ExecPlan and `doc/project/KNOWN_ISSUES.md` before changing inventory interaction code.
+
+## Architecture guardrails
+
+- Keep SDL event translation and rendering in `App`/input adapters; keep core gameplay and inventory logic independently testable.
+- Preserve the separation between shared `ItemDefinition` data and move-only, stable-ID `ItemInstance` ownership.
+- Use pure queries such as `canMove` before transactional commands such as `tryMove`; failed commands must leave state unchanged.
+- Do not retain `std::vector` references, iterators, or indices across mutations; retain stable IDs.
+- Keep keyboard `focusedCell` distinct from mouse `hoveredCell`.
+- Prefer a small closed slice over speculative ECS, scene, service, or cross-container abstractions.
+
+## Workflows
+
+Use an ExecPlan for multi-system changes, ownership changes, migrations, raid lifecycle work, multi-container transfer, persistence, major refactors, or work that needs several implementation stages. Follow `doc/exec-plans/PLANS.md`.
+
+Use repository skills when their scope matches:
+
+- `$raidline-feature-delivery`: feature, bug fix, or controlled refactor delivery.
+- `$raidline-cpp-safety-review`: C++ ownership, lifetime, invalidation, state, transaction, compile, or link risk.
+- `$raidline-build-test-ci`: configure/build/test/CI execution and diagnosis.
+- `$raidline-task-closeout`: evidence-based task closure and teaching handoff.
+- `$raidline-inventory-domain`: item, inventory, container, equipment, or stash work.
+- `$raidline-art-pipeline`: image, sprite, animation, UI art, asset review, or publishing work.
+
+Use project agents deliberately:
+
+- `raidline-explorer`: read-only code and dependency mapping.
+- `raidline-implementer`: the single normal source-writing worker for an approved scope.
+- `raidline-reviewer`: read-only correctness and C++ safety review.
+- `raidline-verifier`: build, test, static-check, and CI-log verification.
+- `raidline-learning-analyst`: Chinese C++ teaching material from the final diff and failures.
+
+Do not run multiple implementers against overlapping source files. The primary thread owns scope, decisions, integration, and user reporting.
+
+## Validation and closeout
+
+Run the smallest relevant target tests, then the full CTest suite. Consider both Windows and Ubuntu CI behavior. Never report an unexecuted check or manual acceptance item as passed.
+
+Every completed feature task must satisfy `doc/engineering/DEFINITION_OF_DONE.md` and add a Chinese handoff under `doc/handoffs/completed/` using `doc/handoffs/CXX_TEACHING_HANDOFF_TEMPLATE.md`.
+
+## Art asset hard boundaries
+
+Before any art work, read `$raidline-art-pipeline`, `art/ART_BIBLE.md`, `art/ASSET_MANIFEST.yaml`, `art/PRODUCTION_TASK_PROTOCOL.md`, and the relevant `art/specs/` contract.
+
+- The art-control task scopes packages, writes prompts, opens dedicated user-visible production tasks, reviews, requests revisions, publishes, updates the manifest, and closes packages; it does not generate images itself.
+- Use one dedicated production task per coherent asset family. Internal subagents are not the normal image-production unit.
+- A production task may write only inside its assigned `art/work/<package_id>/`; retain the exact prompt and every candidate.
+- Production tasks must not approve their own work, update the manifest, publish into `assets/`, or start downstream packages.
+- Generate every distinct candidate with a separate image-generation call.
+- Never overwrite an approved asset. A visual revision requires a new versioned asset ID and path.
+- Derive inventory and world variants deterministically from one approved identity master with nearest-neighbor scaling.
+- Only art-control may approve, publish, update `art/ASSET_MANIFEST.yaml`, and close a package after technical QA and visual review.
+- Runtime code reads published `assets/`, never `art/work/` candidates.
+- Run the relevant `tools/art_pipeline/` validation before approval; scripts do not replace visual review.
+- Phase 1 excludes character clothing layers, attachments, map/building production, corpses, limb/damage layers, projectile/VFX art, and large raster UI panels.
+- Inventory grids, highlights, selection rectangles, hover, and drag feedback remain code-rendered SDL elements.

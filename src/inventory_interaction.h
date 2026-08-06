@@ -4,6 +4,103 @@
 
 #include "grid_inventory.h"
 
+// SDL 无关的逻辑鼠标位置。
+// App 负责把 SDL_Event 中的坐标转换成该值。
+struct MousePosition
+{
+    float x{};
+    float y{};
+
+    friend bool operator==(
+        const MousePosition &,
+        const MousePosition &) = default;
+};
+
+enum class InventoryPointerEventType
+{
+    Motion,
+    LeftButtonDown,
+    LeftButtonUp
+};
+
+// App 将 SDL 事件转换成该值类型后再交给背包交互层。
+// 这样帧级仲裁和核心测试都不需要依赖 SDL_Event。
+struct InventoryPointerEvent
+{
+    InventoryPointerEventType type{};
+    MousePosition position{};
+
+    friend bool operator==(
+        const InventoryPointerEvent &,
+        const InventoryPointerEvent &) = default;
+};
+
+enum class InventoryFrameControlAction
+{
+    None,
+    OpenInventory,
+    CloseInventory,
+    CancelInteraction
+};
+
+struct InventoryFrameInputDecision
+{
+    InventoryFrameControlAction controlAction{
+        InventoryFrameControlAction::None};
+    bool processPointerEvents{};
+    bool processKeyboardInput{};
+
+    friend bool operator==(
+        const InventoryFrameInputDecision &,
+        const InventoryFrameInputDecision &) = default;
+};
+
+// 固定一帧内的输入优先级：Tab > Esc > pointer > keyboard。
+// 高优先级控制动作会丢弃本帧暂存的 pointer 事件，避免 release
+// 在取消或关闭背包之前提交 GridInventory 写入。
+[[nodiscard]]
+InventoryFrameInputDecision decideInventoryFrameInput(
+    bool inventoryOpen,
+    bool toggleInventoryJustPressed,
+    bool cancelJustPressed) noexcept;
+
+// 背包格子的屏幕布局。
+//
+// 该值对象集中负责屏幕坐标到格子坐标的转换，
+// 让输入命中测试与绘制共享同一套几何参数。
+class InventoryGridLayout
+{
+public:
+    InventoryGridLayout(
+        float gridX,
+        float gridY,
+        float cellSize,
+        InventoryGridSize gridSize);
+
+    [[nodiscard]]
+    float gridX() const noexcept;
+
+    [[nodiscard]]
+    float gridY() const noexcept;
+
+    [[nodiscard]]
+    float cellSize() const noexcept;
+
+    [[nodiscard]]
+    InventoryGridSize gridSize() const noexcept;
+
+    // 左、上边界包含；右、下边界不包含。
+    [[nodiscard]]
+    std::optional<GridPosition> screenToGrid(
+        MousePosition position) const noexcept;
+
+private:
+    float gridX_{};
+    float gridY_{};
+    float cellSize_{};
+    InventoryGridSize gridSize_{};
+};
+
 // 背包交互当前所处的逻辑模式。
 //
 // 该状态不依赖键盘、鼠标或 SDL。
@@ -12,6 +109,23 @@ enum class InventoryInteractionMode
 {
     Browsing,
     PlacingItem
+};
+
+enum class InventoryPointerPhase
+{
+    Idle,
+    Pressed,
+    Dragging
+};
+
+struct InventoryMoveRequest
+{
+    ItemInstanceId instanceId{};
+    GridPosition destination{};
+
+    friend bool operator==(
+        const InventoryMoveRequest &,
+        const InventoryMoveRequest &) = default;
 };
 
 class InventoryInteractionState
@@ -28,11 +142,26 @@ public:
     [[nodiscard]]
     GridPosition focusedCell() const noexcept;
 
-    // 当前正在预览放置的物品稳定 ID。
-    // Browsing 模式下为 nullopt。
+    // 当前键盘放置物品或鼠标持久选择的稳定 ID。
+    // Browsing 模式下可由一次有效鼠标点击保留。
     [[nodiscard]]
     std::optional<ItemInstanceId>
     selectedInstanceId() const noexcept;
+
+    [[nodiscard]]
+    InventoryPointerPhase pointerPhase() const noexcept;
+
+    [[nodiscard]]
+    std::optional<GridPosition>
+    hoveredCell() const noexcept;
+
+    // 键盘放置或鼠标拖动当前使用的候选左上角。
+    [[nodiscard]]
+    std::optional<GridPosition>
+    activePreviewOrigin() const noexcept;
+
+    [[nodiscard]]
+    bool pointerGestureActive() const noexcept;
 
     // PlacingItem 模式下表示候选左上角格子。
     [[nodiscard]]
@@ -76,6 +205,36 @@ public:
     // 原 Inventory 不需要回滚，因为预览期间没有修改它。
     void cancelPlacement() noexcept;
 
+    // 更新鼠标位置和 hover，并在超过阈值后进入拖动。
+    // gridCell 为 nullopt 时表示鼠标位于背包网格外。
+    void updatePointerPosition(
+        MousePosition position,
+        std::optional<GridPosition> gridCell) noexcept;
+
+    // 在已占用格上开始一次鼠标手势。
+    // itemOrigin 是物品真实左上角，用于保存多格物品的抓取偏移。
+    [[nodiscard]]
+    bool beginPointerPress(
+        std::optional<ItemInstanceId> instanceId,
+        std::optional<GridPosition> itemOrigin,
+        GridPosition clickedCell,
+        MousePosition position) noexcept;
+
+    // 鼠标释放时仅生成移动请求，不修改 GridInventory。
+    [[nodiscard]]
+    std::optional<InventoryMoveRequest> releasePointer(
+        MousePosition position,
+        std::optional<GridPosition> gridCell) noexcept;
+
+    // Esc 使用：取消当前鼠标手势，但保留持久选择与 hover。
+    void cancelPointerGesture() noexcept;
+
+    // 点击空格等场景使用：清除持久鼠标选择。
+    void clearPointerSelection() noexcept;
+
+    // 关闭背包时清除全部瞬态交互状态。
+    void reset() noexcept;
+
 private:
     [[nodiscard]]
     GridPosition clampToGrid(
@@ -92,4 +251,20 @@ private:
         selectedInstanceId_;
 
     GridPosition previewOrigin_{0, 0};
+
+    std::optional<GridPosition>
+        hoveredCell_;
+
+    InventoryPointerPhase pointerPhase_{
+        InventoryPointerPhase::Idle};
+
+    std::optional<MousePosition>
+        pointerPressPosition_;
+
+    GridPosition grabOffset_{0, 0};
+
+    std::optional<GridPosition>
+        pointerPreviewOrigin_;
+
+    void resetPointerGesture() noexcept;
 };

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline Build Test CI"
+  short_description: "Run and diagnose Raidline build test and CI"
+  default_prompt: "Use $raidline-build-test-ci to validate this Raidline change locally and in CI."
