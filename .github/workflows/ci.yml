@@ -71,39 +71,60 @@ jobs:
     env:
       BUILD_TYPE: Debug
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.vcpkg-downloads
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup vcpkg
+      - name: Prepare vcpkg baseline
         shell: pwsh
         run: |
-          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin $env:VCPKG_BASELINE
-          git -C "$env:VCPKG_INSTALLATION_ROOT" reset --hard $env:VCPKG_BASELINE
-          & (Join-Path $env:VCPKG_INSTALLATION_ROOT "bootstrap-vcpkg.bat") -disableMetrics
+          git -C "$env:VCPKG_INSTALLATION_ROOT" cat-file -e "$env:VCPKG_BASELINE^{commit}" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin $env:VCPKG_BASELINE
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to fetch vcpkg baseline $env:VCPKG_BASELINE"
+            }
+          }
+
+          & (Join-Path $env:VCPKG_INSTALLATION_ROOT "vcpkg.exe") version
+          if ($LASTEXITCODE -ne 0) {
+            throw "The runner vcpkg executable is unavailable"
+          }
 
       - name: Restore vcpkg cache
         uses: actions/cache@v5
         with:
           path: |
             build/vcpkg_installed
-            ${{ env.VCPKG_INSTALLATION_ROOT }}/downloads
-          key: raidline-vcpkg-${{ runner.os }}-x64-windows-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+            .vcpkg-downloads
+          key: raidline-vcpkg-v2-${{ runner.os }}-x64-windows-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            raidline-vcpkg-${{ runner.os }}-x64-windows-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Configure CMake
         shell: pwsh
         run: |
+          $vsDevShell = Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\Enterprise\Common7\Tools\Launch-VsDevShell.ps1'
+          & $vsDevShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+
           cmake -S . -B build `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE="$env:BUILD_TYPE" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build C++ targets
         shell: pwsh
-        run: cmake --build build --config $env:BUILD_TYPE
+        run: |
+          $vsDevShell = Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\Enterprise\Common7\Tools\Launch-VsDevShell.ps1'
+          & $vsDevShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          cmake --build build --parallel
 
       - name: Run C++ tests
         shell: pwsh
-        run: ctest --test-dir build -C $env:BUILD_TYPE --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel 4
 
   ubuntu-cpp:
     name: Ubuntu C++ build and test
@@ -114,6 +135,7 @@ jobs:
     env:
       BUILD_TYPE: Debug
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.vcpkg-downloads
 
     steps:
       - name: Checkout repository
@@ -123,20 +145,24 @@ jobs:
         shell: bash
         run: bash ci/install_ubuntu_sdl3_deps.sh
 
-      - name: Setup vcpkg
+      - name: Prepare vcpkg baseline
         shell: bash
         run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin "$VCPKG_BASELINE"
-          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard "$VCPKG_BASELINE"
-          "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          if ! git -C "$VCPKG_INSTALLATION_ROOT" cat-file -e "${VCPKG_BASELINE}^{commit}" 2>/dev/null; then
+            git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth=1 origin "$VCPKG_BASELINE"
+          fi
+
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" version
 
       - name: Restore vcpkg cache
         uses: actions/cache@v5
         with:
           path: |
             vcpkg_installed
-            ${{ env.VCPKG_INSTALLATION_ROOT }}/downloads
-          key: raidline-vcpkg-${{ runner.os }}-x64-linux-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+            .vcpkg-downloads
+          key: raidline-vcpkg-v2-${{ runner.os }}-x64-linux-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            raidline-vcpkg-${{ runner.os }}-x64-linux-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Install vcpkg packages
         shell: bash
@@ -182,11 +208,11 @@ jobs:
 
       - name: Build C++ targets
         shell: bash
-        run: cmake --build build
+        run: cmake --build build --parallel
 
       - name: Run C++ tests
         shell: bash
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel 4
 
       - name: Collect diagnostic logs
         if: failure()

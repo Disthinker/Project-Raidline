@@ -92,8 +92,10 @@ Windows 2022 job 同样固定 vcpkg baseline，随后 configure、build all 和 
 - 功能分支只由目标为 `main` 的 `pull_request` 事件触发；`push` 只覆盖 `main`，避免同一提交同时产生 push/PR 两套矩阵。
 - 同一 PR/分支使用 workflow 级 concurrency；新提交会取消尚未完成的旧运行。
 - 一个轻量 Ubuntu job 先比较 PR 与 base 的完整差异。只有 `doc/**` 和 Markdown 的纯文档 PR 会把 Windows/Ubuntu C++ job 标记为 skipped-success；检测失败时默认运行完整矩阵。
-- vcpkg installed tree 与 downloads 使用按 OS、triplet、baseline 和 `vcpkg.json` 锁定的缓存；缓存未命中仍按固定 baseline 完整安装。
+- vcpkg installed tree 与仓库工作区内的 `.vcpkg-downloads` 使用按 OS、triplet、baseline 和 `vcpkg.json` 锁定的缓存；缓存未命中仍按固定 baseline 完整安装。不要在 cache path 中使用 runner 注入但未进入 GitHub `env` context 的 `VCPKG_INSTALLATION_ROOT`，否则表达式会退化为错误的 `/downloads` 路径。
 - `workflow_dispatch` 保留显式手动运行入口。
+
+Windows runner 使用预装的 vcpkg executable，仅在固定 baseline commit 不存在时执行浅 fetch；manifest 的 `builtin-baseline` 继续固定依赖版本，不再每轮 reset/bootstrap 整套 vcpkg。配置前加载 Visual Studio Developer Shell，并使用 Ninja、Debug、`x64-windows` 与并行 build/CTest，保持与本地 preset 的生成器和构建类型一致。
 
 不要在 CI 通过后再提交“CI 已通过”的状态文档。代码、测试、计划和静态状态文档应在第一次等待 CI 前一次性提交；运行 URL、精确 SHA 和最终结论写入 PR 或 GitHub Issue 评论。这样不会为了记录 CI 结果再次触发 CI。若 CI 暴露真实问题，修复提交仍必须重新运行。
 
