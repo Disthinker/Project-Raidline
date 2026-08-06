@@ -1,7 +1,7 @@
 # Week 17：鼠标驱动的格子背包交互
 
-- 状态：Local Stabilized（同帧取消仲裁已本地修复，等待精确提交 CI 与人工验收）
-- 最后更新：2026-08-06
+- 状态：Completed（自动测试、精确提交 CI 与 9/9 真实窗口验收通过）
+- 最后更新：2026-08-07
 - 基线：`codex/week17-mouse-inventory-interaction`（从 `bf1c84b` 创建）
 - 目标工作流：`$raidline-feature-delivery` + `$raidline-inventory-domain`
 
@@ -213,7 +213,7 @@ SDL_EVENT_MOUSE_* (App)
 8. 用方向键/Enter 完成一次 Week 16 移动，确认键盘行为未回归。
 9. 关闭再打开背包，确认没有残留 drag/selection/capture。
 
-当前 1–9 项仍为 `未验证`，需在真实窗口完成。自动测试已经覆盖坐标、状态、事务与旧键盘兼容，但不替代视觉/手感验收。
+2026-08-07，用户在 Windows Debug 的真实 `Project_Raidline.exe` 窗口逐项执行 1–9：hover/focus、单击、阈值、多格抓取、合法/非法释放、网格外释放、Esc/Tab 取消、键盘回归和关闭重开均确认通过。自动测试继续作为坐标、状态和事务证据，人工结果作为视觉与手感证据。
 
 ## 风险与缓解
 
@@ -238,7 +238,7 @@ SDL_EVENT_MOUSE_* (App)
 - [x] 2026-08-06：重新配置 Windows Debug，清理 117 个旧产物并完成 99 步全目标构建；鼠标目标直接运行 29/29、全量 CTest 295/295、资产函数 3/3、compile database 与 diff check 通过。
 - [x] 2026-08-06：建立 `doc/project/KNOWN_ISSUES.md`，登记当前阻塞、用户发现的背包/动画 UX 问题和延期工程债。
 - [x] 2026-08-06：草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的两组 GitHub Actions Windows/Ubuntu checks 全部通过。
-- [ ] 阶段 5 外部部分：真实窗口人工验收仍待完成。
+- [x] 2026-08-07：Windows Debug 真实窗口人工验收 9/9 通过；阶段 5 外部部分完成。
 
 ## 决策日志
 
@@ -251,9 +251,10 @@ SDL_EVENT_MOUSE_* (App)
 - 2026-08-05：发现类布局改变后的旧 Debug 测试对象导致 MSVC `Run-Time Check Failure #2`；对目标做干净重编译后旧键盘测试 13/13 和全量测试均通过。
 - 2026-08-06：不在 SDL poll 循环直接提交 release；App 暂存规范化 pointer event，由 `decideInventoryFrameInput` 先处理 Tab/Esc，保证取消发生在任何 `tryMove` 之前。
 - 2026-08-06：用户提出移除键盘背包操作、平滑拖拽虚像和上下角色动画；前两项中的键盘移除与本计划兼容目标冲突，动画又需要新资源方案，因此本轮写入问题台账，不夹带实现。
+- 2026-08-07：按冻结的 Week 17 契约执行 9 项真实窗口验收并全部通过；键盘契约、平滑虚像和上下动画继续由 #26–#28 独立跟踪。
 
 ## 最终结果与遗留问题
 
-Week 17 代码与本地自动验证已完成。结果包括：单一 canonical 交互状态机、共享布局转换、真实 origin/grab offset、SDL3 输入与绘制、设备无关的帧级输入仲裁、专用鼠标测试和完整文档。同帧取消缺陷已本地修复；其关闭仍依赖精确提交 CI 与人工验收。
+Week 17 已完成。结果包括：单一 canonical 交互状态机、共享布局转换、真实 origin/grab offset、SDL3 输入与绘制、设备无关的帧级输入仲裁、专用鼠标测试和完整文档。同帧取消缺陷由自动回归、Windows/Ubuntu CI 与真实窗口取消操作共同验证。
 
-草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 GitHub Actions 已通过；尚未完成的外部证据只剩 9 项真实窗口人工验收，因此计划暂不移动到 `completed/`。其他已知问题和延期决策统一见 [问题台账](../../project/KNOWN_ISSUES.md)。下一安全步骤是按“人工验收”逐项确认。
+[PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 保存代码与 CI 证据；2026-08-07 人工验收 9/9 通过。其他已知问题和延期决策统一见 [问题台账](../../project/KNOWN_ISSUES.md)。下一安全任务是 [#27 平滑鼠标拖拽虚像](https://github.com/Disthinker/Project-Raidline/issues/27)，随后进入 Week 18 双容器安全转移。

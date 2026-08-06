@@ -3,9 +3,9 @@
 ## 1. 任务名称与状态
 
 - 任务：Week 17 鼠标驱动的格子背包交互
-- 日期/分支：2026-08-06 / `codex/week17-mouse-inventory-interaction`
+- 日期/分支：2026-08-07 / `codex/week17-mouse-inventory-interaction`
 - 基线：`bf1c84b`
-- 完成度：代码、本地自动验证和草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 Windows/Ubuntu CI 已完成；真实窗口人工验收待执行
+- 完成度：代码、本地自动验证、[PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的 Windows/Ubuntu CI 与真实窗口人工验收 9/9 均完成
 
 ## 2. 用户可见结果
 
@@ -76,7 +76,7 @@
 
 | 类别 | 现象 | 根因 | 最终修复 | 验证 |
 | --- | --- | --- | --- | --- |
-| 运行 | `InventoryInteractionTest.exe` 弹出 MSVC `Run-Time Check Failure #2`，提示 `gtest_ar_` 周围栈损坏 | 类尺寸扩大后，增量构建中测试与实现对象没有同时更新，调用方与被调用方对栈上对象布局认识不一致 | 对相关 target 干净重编译，最终再执行全目标 clean build | 旧键盘 13/13；全量 CTest 287/287 |
+| 运行 | `InventoryInteractionTest.exe` 弹出 MSVC `Run-Time Check Failure #2`，提示 `gtest_ar_` 周围栈损坏 | 类尺寸扩大后，增量构建中测试与实现对象没有同时更新，调用方与被调用方对栈上对象布局认识不一致 | 对相关 target 干净重编译，最终再执行全目标 clean build | 旧键盘 13/13；最终全量 CTest 295/295 |
 | 逻辑 | 同一帧 Esc/Tab 与 mouse-up 并存时，mouse-up 在 event poll 中先执行 `tryMove` | 键盘控制动作在 `update()` 才处理，而 pointer 事件在 `processEvents()` 立即提交 | 规范化并暂存 pointer event；用纯 decision 固定帧级优先级 | Esc/Tab + pending release、正常 release 与键鼠同帧回归 |
 | 环境 | 普通 PowerShell 增量构建报 `<optional>`、`<array>` 不存在 | Ninja cache 找到 `cl.exe`，但进程未加载 MSVC `INCLUDE/LIB` | 加载 `Launch-VsDevShell.ps1` 后重新构建；旧测试结果作废 | 干净配置与 99 步全目标构建通过 |
 | 环境 | `poetry run pytest` 找不到 Poetry，系统 Python 也没有 pytest | Python 工具入口未安装进当前 PATH | 对三个无 fixture 的纯测试函数使用现有 Python 直接导入执行 | 3/3 通过 |
@@ -91,8 +91,8 @@
 - 编译数据库：包含 `tests/test_mouse_inventory_interaction.cpp` 的 MSVC compile command。
 - 其他测试：三个 phase1 asset 函数 3/3。
 - 静态审查：边界、浮点转换、稳定 ID、引用生命周期、失败事务、状态仲裁与 CMake 接线无未处理问题。
-- CI：草稿 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 的两组 Windows/Ubuntu checks 已通过，最终状态以 PR checks 为准。
-- 人工验收：未执行，需真实窗口验证 hover/颜色/手感和 Esc/Tab 操作。
+- CI：代码提交 `281ca47` 的 [run 31116450096](https://github.com/Disthinker/Project-Raidline/actions/runs/31116450096) 提供 Windows/Ubuntu 证据；最终状态以 PR checks 为准。
+- 人工验收：2026-08-07 在 Windows Debug 真实游戏窗口执行 1–9，hover/focus、单击、阈值、多格抓取、合法/非法与网格外释放、Esc/Tab 取消、键盘回归和关闭重开全部通过。
 
 ## 12. 教学分级
 
@@ -117,13 +117,13 @@
 - `src/grid_inventory.h/.cpp`：`originOf`、`canMove`、`tryMove`。
 - `src/app.cpp`：`toInventoryPointerEvent`、`handleInventoryCancel`、`handleInventoryKeyboardInput`、`handleInventoryPointerEvent`、帧级队列消费与背包视觉反馈函数。
 - `tests/test_mouse_inventory_interaction.cpp`：Week 17 自动契约。
-- `doc/exec-plans/active/week17-mouse-inventory-interaction.md`：完整范围、风险与待验收项。
+- `doc/exec-plans/completed/week17-mouse-inventory-interaction.md`：完整范围、风险与验收证据。
 
 ## 15. 技术债与测试债
 
 - 技术债：App 仍集中输入、提交和绘制；CMake 仍为测试重复列业务源码；按 ID 查 placement 仍是 O(n)。
-- 测试债：无 App 级 SDL 事件注入、截图或端到端测试；真实窗口人工验收未执行。
-- 下一安全任务：执行 ExecPlan 的 9 项人工验收；全部通过后关闭 RL-W17-001/002 并把计划移动到 `completed/`。用户新发现的平滑虚像、键盘遗留和上下动画见 `doc/project/KNOWN_ISSUES.md`，不夹带进本次已冻结契约。
+- 测试债：无 App 级 SDL 事件注入、截图或端到端测试；当前依赖自动状态测试加真实窗口清单覆盖交互。
+- 下一安全任务：实现 #27 平滑拖拽虚像，再进入 Week 18 双容器安全转移。键盘遗留和上下动画继续见 `doc/project/KNOWN_ISSUES.md`，不夹带进本次已冻结契约。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 

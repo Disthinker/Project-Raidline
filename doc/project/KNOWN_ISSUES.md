@@ -1,12 +1,13 @@
 # Project Raidline 问题台账
 
-最后核对：2026-08-06。本文是当前问题、风险和延期债务的仓库内权威记录；GitHub Issue 用于跟踪可执行项，源码、测试和 CI 仍是行为事实来源。
+最后核对：2026-08-07。本文是当前问题、风险和延期债务的仓库内权威记录；GitHub Issue 用于跟踪可执行项，源码、测试和 CI 仍是行为事实来源。
 
 ## 状态约定
 
 - `Open`：已确认，需要后续处理。
 - `Needs Decision`：现象已确认，但产品行为或资源方案尚未冻结。
 - `Local Fixed`：本地实现和目标测试已完成，等待 CI 或人工验收后关闭。
+- `Closed`：关闭条件已有自动、CI 和适用的人工证据。
 - `Monitoring`：当前不可复现，保留触发条件和复现要求。
 - `Deferred`：已接受但不阻塞当前里程碑。
 
@@ -14,8 +15,8 @@
 
 | ID | 严重度 | 领域 | 问题与证据 | 状态 | 目标与关闭条件 |
 | --- | --- | --- | --- | --- | --- |
-| RL-W17-001 | P1 | 背包输入 | SDL 事件轮询中曾直接处理 mouse-up，而 Esc/Tab 到 `update()` 才处理；同帧取消可能晚于 `tryMove`。 | Local Fixed | Week17；同帧 Esc/Tab + release 自动测试、Windows/Ubuntu CI 和真实窗口验收通过后关闭。 |
-| [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 已提交并由草稿 PR #31 跟踪，Windows/Ubuntu CI 已通过，尚缺 9 项真实窗口验收。 | Open | Week17；人工清单有实测记录后关闭。 |
+| RL-W17-001 | P1 | 背包输入 | SDL 事件轮询中曾直接处理 mouse-up，而 Esc/Tab 到 `update()` 才处理；同帧取消可能晚于 `tryMove`。 | Closed | 29/29 鼠标测试覆盖同帧 Esc/Tab + release；Windows/Ubuntu CI 与 2026-08-07 真实窗口取消验收通过。 |
+| [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 已由 PR #31 跟踪；自动测试、Windows/Ubuntu CI 和 9 项真实窗口验收均已有记录。 | Closed | 2026-08-07 完成；后续 UX/动画/架构债由 #26–#30 独立跟踪。 |
 | [RL-UX-001 / GitHub #26](https://github.com/Disthinker/Project-Raidline/issues/26) | P2 | 背包 UX | 用户认为方向键移动物品、黄色焦点框和相关提示是遗留行为；当前批准的 Week17 契约仍要求保留 Week16 键盘兼容。 | Needs Decision | 后续稳定化；决定“纯鼠标”或“键鼠并存”，同步不变量、测试和提示后关闭。 |
 | [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 鼠标拖拽虚像当前按候选格吸附跳动；用户期望虚像按像素平滑跟随鼠标，落点合法性仍吸附格子。 | Open | 后续稳定化；虚像保持抓取点平滑移动，inside/outside release 与事务规则不变，视觉验收通过后关闭。 |
 | [RL-ANIM-001 / GitHub #28](https://github.com/Disthinker/Project-Raidline/issues/28) | P2 | 角色表现 | 仓库只有左右移动图集；纯上/下移动回退到同一静态贴图，停止后虽保留模型朝向但视觉上恢复默认。 | Needs Decision | 角色动画任务；冻结四方向资源方案，补上/下动画与停止朝向验收后关闭。 |

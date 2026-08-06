@@ -1,6 +1,6 @@
 # Project Raidline 路线图
 
-本文件区分“已完成事实”“当前计划”和“产品候选”。除 Week 17 的活动计划外，未来周次是用户给定的推荐路线，不是已承诺范围；实施前必须重新核对产品优先级与仓库现状。
+本文件区分“已完成事实”和“产品候选”。未来周次是用户给定的推荐路线，不是已承诺范围；实施前必须重新核对产品优先级与仓库现状。
 
 ## 已完成里程碑
 
@@ -14,14 +14,15 @@
 | Week 14 | ItemDefinition/ItemInstance、GroundItem、最近物品拾取 |
 | Week 15 | GridInventory、row-major first-fit、事务式放置、只读背包 UI |
 | Week 16 | `canMove`/`tryMove`、设备无关键盘交互状态、合法性预览与提交/取消 |
+| Week 17 | 鼠标 hover/选择/阈值拖拽、多格 grab offset、合法性反馈、帧级 Tab/Esc 取消仲裁 |
 
 详细演进保留在 `doc/DevLog_Week*.md`，但其中的分支和 CI 状态是历史快照。
 
-## 当前：Week 17 鼠标格子背包交互
+## 最近完成：Week 17 鼠标格子背包交互
 
 目标是保留 Week 16 键盘行为，同时增加可测试的坐标转换、独立 `hoveredCell`、点击选择、拖拽阈值、多格 grab offset、`canMove` 预览、`tryMove` 释放提交、网格外规则、取消、SDL 适配和代码绘制反馈。
 
-当前实现、专用测试和帧级输入仲裁已经接入，草稿 PR #31 的 Windows/Ubuntu CI 已通过；由于 9 项真实窗口验收尚未完成，仍不能标记为完成。以 [活动 ExecPlan](../exec-plans/active/week17-mouse-inventory-interaction.md) 和 [问题台账](KNOWN_ISSUES.md) 为实施事实来源。
+实现、专用测试和帧级输入仲裁已经接入；29/29 鼠标测试、295/295 CTest、Windows/Ubuntu CI 以及 2026-08-07 的 9/9 真实窗口验收共同完成闭环。详细证据见 [已完成 ExecPlan](../exec-plans/completed/week17-mouse-inventory-interaction.md) 和 [问题台账](KNOWN_ISSUES.md)。
 
 ## 推荐后续候选
 
