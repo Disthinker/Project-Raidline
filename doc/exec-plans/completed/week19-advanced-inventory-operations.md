@@ -1,6 +1,6 @@
 # Week19 高级背包操作 ExecPlan
 
-状态：In Progress
+状态：Completed
 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-inventory-domain`
 最后更新：2026-08-07
 
@@ -238,4 +238,6 @@ M3 修订版：
 
 ## 最终结果与遗留问题
 
-Week19 的本地实现、自动测试、安全审查、资源 QA 和全部真实窗口验收已完成。当前唯一未完成的计划证据是冻结提交对应的 Windows/Ubuntu CI 与合入；精确 SHA、run URL 和结论将写入 PR，不在 CI 后追写仓库文档。计划在远端门禁完成前保持 `In Progress`。
+Week19 已通过 [PR #34](https://github.com/Disthinker/Project-Raidline/pull/34) 合入 `main`，合并提交为 `bc0b87d`。冻结提交 `ed7e6bd` 对应的范围检测、Ubuntu C++ build and test、Windows C++ build and test 均通过；CI run 为 `31178863039`。本地 Windows Debug 全量 CTest 367/367、资源 QA、安全审查和全部真实窗口验收均已完成。
+
+未随 Week19 扩张的事项继续保留：随机 Loot、搜索生命周期、RaidSession、Stash、重量、耐久和装备栏。其中最小可搜索柜体与 Loot 进入 Week20 独立 ExecPlan。

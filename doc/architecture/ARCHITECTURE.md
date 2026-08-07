@@ -35,7 +35,7 @@ InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-press
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet` 和 ParticleSystem，并编排更新、命中、原子堆叠拾取与玩家物品丢弃事务。GameplayWorld 是拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建新 placement 时推进序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源和 ParticleSystem，并编排更新、命中、原子堆叠拾取、柜体首次搜索与玩家物品丢弃事务。GameplayWorld 是 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
@@ -46,6 +46,8 @@ InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-press
 - ItemInstance：move-only 唯一堆叠实例、稳定 ID、有效 quantity 与四向运行时 orientation。
 - GroundItem：世界位置与 ItemInstance 所有权；拾取范围读取旋转后的有效尺寸。
 - GridInventory：格子占用、PlacedItem 所有权、合法性查询和事务式放置/移动/旋转 transform，并可在跨容器提交前预留 placement 容量。
+- LootTable/LootRandomSource：验证加权条目和数量范围，通过可注入随机源生成不带实例 ID 的规范化 LootStack；同定义数量先按最大堆叠合并/拆分。
+- StorageCabinet：拥有世界几何、6×6 外部库存和独立于库存是否为空的搜索状态；只接受一次同尺寸完整搜索结果。
 - inventory_transfer：提供跨容器 transform、先合并后 row-major first-fit 的整栈/数量转移，以及允许源目标相同的指定格精确数量放置/合并；计划、ID 冲突检查和容量预留发生在任何 quantity/所有权 mutation 前。
 - InventoryInteractionState：设备无关、容器感知的纯鼠标 hover/选择/拖动状态；拖拽时保存候选方向、离散与连续抓取锚点及可选的所选数量，不拥有 inventory，不直接提交模型变化，只在 release 产生带方向和可选数量的放置或丢弃值请求。
 
@@ -53,12 +55,13 @@ InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-press
 
 ```text
 App ─owns─> SDL/Texture resources
-GameplayWorld ─owns─> world entities + player GridInventory + StorageCabinet
+GameplayWorld ─owns─> world entities + player GridInventory + StorageCabinet + runtime LootRandomSource
 StorageCabinet ─owns─> external GridInventory
 GroundItem ─owns─> ItemInstance   (拾取时转移)
 GridInventory::PlacedItem ─owns─> ItemInstance
 GridInventory::cells_ ─stores─> optional stable ItemInstanceId
 ItemDefinition catalog ─shares─> immutable definition data
+LootTable ─produces─> definition + quantity values (no ItemInstance ownership)
 InventoryInteractionState ─stores─> container ID + optional stable ItemInstanceId + value coordinates
 ```
 
@@ -67,7 +70,7 @@ ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有�
 ## 查询、命令与渲染
 
 - 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、只读 getter；不得修改可观察状态。
-- 命令：`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryPlaceItemQuantityAt`、`dropInventoryItemQuantity`、`remove`、拾取；先完成验证和必要容量预留，再提交位置、方向、数量或所有权变化。
+- 命令：`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`remove`、拾取；先完成验证和必要容量预留，再提交搜索状态、位置、方向、数量或所有权变化。
 - 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
 
 ## 测试与构建边界

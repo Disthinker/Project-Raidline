@@ -13,28 +13,28 @@
 | Week 17 | 鼠标 hover/选择/阈值拖拽、多格 grab offset、合法性反馈与 Tab/Esc 帧级取消仲裁 |
 | 背包 UX 稳定化 | 平滑像素虚影与独立吸附候选；PR #32 |
 | Week 18 | 世界柜体与双容器指定格转移、贴右丢弃条、角色脚下落点、纯鼠标背包；PR #33 |
+| Week 19 | 整栈快捷转移、拖拽旋转、9mm 堆叠、数量拖拽与正式弹药资源；PR #34 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前 PR 候选：Week19 高级背包操作
+## 当前开发：Week20 最小可搜索柜体与 Loot
 
-`codex/week19-advanced-inventory-operations` 已在本地完成并通过人工验收：
+`codex/week20-searchable-containers` 已完成本地逻辑实现与自动验证：
 
-- F / Ctrl+右键双向整栈 first-fit 快捷转移；
-- Pistol/Rifle 拖拽中按 R 四向旋转并保持连续抓取锚点；
-- 9mm 弹药数量、最大堆叠 60、确定性合并与正式像素资源；
-- Ctrl+左键拿取 1、Shift+左键拿取向上取整的一半；
-- PlayerOnly/双容器内指定格数量拆分与合并，以及所选数量脚下丢弃；
-- 失败零修改、稳定 ID 与 Tab/Esc 取消优先契约。
+- 柜体具有显式 Unsearched/Searched 状态，取空不刷新；
+- 首次范围内 F 搜索后打开，后续 F 只打开现有库存；
+- 默认 3 次加权 Loot 抽取与 Ammo9mm 10–30 数量范围；
+- 可注入随机源、稳定权重/数量边界测试；
+- 临时 GridInventory 完整生成后原子提交；
+- 最终 placement 才分配世界稳定 ID，失败不推进序列。
 
-Windows Debug 全目标构建、受影响程序 127/127、全量 CTest 367/367 与修订版真实窗口 1–8 均已通过；当前只待最终 PR 的 Windows/Ubuntu CI 与合入。
+Windows Debug 全目标构建、受影响程序直跑 74/74、全量 CTest 386/386 与真实窗口 1–9 项均已通过；当前只待冻结提交的单一 PR/CI 与合入。
 
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
 | --- | --- | --- |
-| Week19 收口 | 高级背包操作进入 `main` | 单一 PR、Windows/Ubuntu CI、合入后基线核对 |
-| Week20 | 最小可搜索容器与 Loot | 柜体打开时生成/持有战利品、Loot table、可注入随机数、确定性测试 |
+| Week20 收口 | 最小可搜索柜体与 Loot 进入 `main` | 人工验收、所有权审查、文档、单一 PR/CI |
 | Week21 | 最小 RaidSession 与撤离点 | Preparing/InRaid/Extracting/Extracted/PlayerDead/RaidEnded、计时与离开取消 |
 | Week22 | 结算与最小 Stash | 撤离保留、死亡丢失本局所得、局外仓库、重开 |
 | Week23 | 垂直切片 V0 | 进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开 |
