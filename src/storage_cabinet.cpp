@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 #include "collision.h"
 
@@ -73,6 +74,27 @@ bool StorageCabinet::canInteract(Rect actorBounds) const noexcept
             size_.y + interactionPadding_ * 2.0F}};
 
     return isCollision(interactionBounds, actorBounds);
+}
+
+bool StorageCabinet::isSearched() const noexcept
+{
+    return searched_;
+}
+
+bool StorageCabinet::tryCommitSearchResult(
+    GridInventory &&searchResult) noexcept
+{
+    if (searched_ ||
+        !inventory_.placedItems().empty() ||
+        searchResult.width() != inventory_.width() ||
+        searchResult.height() != inventory_.height())
+    {
+        return false;
+    }
+
+    inventory_ = std::move(searchResult);
+    searched_ = true;
+    return true;
 }
 
 GridInventory &StorageCabinet::inventory() noexcept

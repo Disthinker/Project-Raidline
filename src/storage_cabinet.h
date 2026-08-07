@@ -25,6 +25,15 @@ public:
     bool canInteract(Rect actorBounds) const noexcept;
 
     [[nodiscard]]
+    bool isSearched() const noexcept;
+
+    // 只允许未搜索的空柜体接收一次完整、同尺寸的搜索结果。
+    // 失败时正式柜体库存和搜索状态保持不变。
+    [[nodiscard]]
+    bool tryCommitSearchResult(
+        GridInventory &&searchResult) noexcept;
+
+    [[nodiscard]]
     GridInventory &inventory() noexcept;
 
     [[nodiscard]]
@@ -35,4 +44,5 @@ private:
     Vec2 size_{};
     float interactionPadding_{};
     GridInventory inventory_;
+    bool searched_{};
 };

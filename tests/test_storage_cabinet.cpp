@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "storage_cabinet.h"
 
@@ -20,6 +21,93 @@ TEST(StorageCabinetTest, OwnsWorldBoundsAndSixBySixInventory)
     EXPECT_EQ(cabinet.inventory().width(), 6);
     EXPECT_EQ(cabinet.inventory().height(), 6);
     EXPECT_TRUE(cabinet.inventory().placedItems().empty());
+    EXPECT_FALSE(cabinet.isSearched());
+}
+
+TEST(StorageCabinetTest, CommitsOneCompleteSameSizeSearchResult)
+{
+    StorageCabinet cabinet{
+        {960.0F, 296.0F},
+        {96.0F, 128.0F},
+        64.0F,
+        {6, 6}};
+    GridInventory generated{{6, 6}};
+    ASSERT_TRUE(generated.tryPlace(
+        ItemInstance{41, ItemId::Medkit},
+        {2, 3}));
+
+    EXPECT_TRUE(cabinet.tryCommitSearchResult(
+        std::move(generated)));
+    EXPECT_TRUE(cabinet.isSearched());
+    ASSERT_EQ(cabinet.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        cabinet.inventory().placedItems().front().item.instanceId(),
+        41U);
+    EXPECT_EQ(
+        cabinet.inventory().placedItems().front().origin,
+        (GridPosition{2, 3}));
+}
+
+TEST(StorageCabinetTest, RejectsSecondSearchResultWithoutReplacingInventory)
+{
+    StorageCabinet cabinet{
+        {960.0F, 296.0F},
+        {96.0F, 128.0F},
+        64.0F,
+        {6, 6}};
+    GridInventory first{{6, 6}};
+    GridInventory second{{6, 6}};
+    ASSERT_TRUE(first.tryPlace(
+        ItemInstance{51, ItemId::Cola},
+        {0, 0}));
+    ASSERT_TRUE(second.tryPlace(
+        ItemInstance{52, ItemId::Pistol},
+        {1, 1}));
+    ASSERT_TRUE(cabinet.tryCommitSearchResult(
+        std::move(first)));
+
+    EXPECT_FALSE(cabinet.tryCommitSearchResult(
+        std::move(second)));
+    ASSERT_EQ(cabinet.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        cabinet.inventory().placedItems().front().item.instanceId(),
+        51U);
+}
+
+TEST(StorageCabinetTest, RejectsWrongSizeSearchResultWithoutMarkingSearched)
+{
+    StorageCabinet cabinet{
+        {960.0F, 296.0F},
+        {96.0F, 128.0F},
+        64.0F,
+        {6, 6}};
+    GridInventory wrongSize{{5, 6}};
+
+    EXPECT_FALSE(cabinet.tryCommitSearchResult(
+        std::move(wrongSize)));
+    EXPECT_FALSE(cabinet.isSearched());
+    EXPECT_TRUE(cabinet.inventory().placedItems().empty());
+}
+
+TEST(StorageCabinetTest, RejectsSearchWhenUnsearchedInventoryWasExternallyFilled)
+{
+    StorageCabinet cabinet{
+        {960.0F, 296.0F},
+        {96.0F, 128.0F},
+        64.0F,
+        {6, 6}};
+    ASSERT_TRUE(cabinet.inventory().tryPlace(
+        ItemInstance{61, ItemId::Cola},
+        {0, 0}));
+    GridInventory generated{{6, 6}};
+
+    EXPECT_FALSE(cabinet.tryCommitSearchResult(
+        std::move(generated)));
+    EXPECT_FALSE(cabinet.isSearched());
+    ASSERT_EQ(cabinet.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        cabinet.inventory().placedItems().front().item.instanceId(),
+        61U);
 }
 
 TEST(StorageCabinetTest, InteractionUsesExpandedWorldBounds)

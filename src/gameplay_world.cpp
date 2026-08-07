@@ -450,6 +450,113 @@ bool GameplayWorld::canInteractWithContainer() const noexcept
         playerBounds(player_));
 }
 
+bool GameplayWorld::searchStorageCabinet()
+{
+    return searchStorageCabinet(
+        lootRandom_);
+}
+
+bool GameplayWorld::searchStorageCabinet(
+    LootRandomSource &random)
+{
+    if (!canInteractWithContainer())
+    {
+        return false;
+    }
+
+    if (storageCabinet_.isSearched())
+    {
+        return true;
+    }
+
+    if (!storageCabinet_.inventory().placedItems().empty())
+    {
+        return false;
+    }
+
+    const std::vector<LootStack> loot =
+        defaultStorageCabinetLootTable().roll(random);
+
+    const ItemInstanceId maximumId =
+        std::numeric_limits<ItemInstanceId>::max();
+
+    if (loot.size() >
+        static_cast<std::size_t>(
+            maximumId - nextItemInstanceId_))
+    {
+        return false;
+    }
+
+    GridInventory generatedInventory{
+        InventoryGridSize{
+            storageCabinet_.inventory().width(),
+            storageCabinet_.inventory().height()}};
+
+    generatedInventory.reserveForAdditionalItems(
+        loot.size());
+
+    ItemInstanceId candidateId =
+        nextItemInstanceId_;
+
+    for (const LootStack &stack : loot)
+    {
+        if (itemInstanceIdExists(candidateId))
+        {
+            return false;
+        }
+
+        ItemInstance item{
+            candidateId,
+            stack.definitionId,
+            stack.quantity};
+
+        const std::optional<GridPosition> origin =
+            generatedInventory.findFirstFit(
+                stack.definitionId);
+
+        if (!origin.has_value() ||
+            !generatedInventory.tryPlace(
+                std::move(item),
+                *origin))
+        {
+            return false;
+        }
+
+        ++candidateId;
+    }
+
+    if (!storageCabinet_.tryCommitSearchResult(
+            std::move(generatedInventory)))
+    {
+        return false;
+    }
+
+    nextItemInstanceId_ = candidateId;
+    return true;
+}
+
+bool GameplayWorld::itemInstanceIdExists(
+    ItemInstanceId instanceId) const noexcept
+{
+    if (instanceId == 0 ||
+        inventory_.quantityOf(instanceId).has_value() ||
+        storageCabinet_.inventory()
+            .quantityOf(instanceId)
+            .has_value())
+    {
+        return true;
+    }
+
+    return std::any_of(
+        groundItems_.begin(),
+        groundItems_.end(),
+        [instanceId](const GroundItem &groundItem)
+        {
+            return groundItem.item().instanceId() ==
+                   instanceId;
+        });
+}
+
 bool GameplayWorld::dropInventoryItem(
     ItemInstanceId instanceId)
 {

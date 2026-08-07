@@ -9,6 +9,7 @@
 #include "gameplay_input.h"
 #include "grid_inventory.h"
 #include "ground_item.h"
+#include "loot_table.h"
 #include "particle_system.h"
 #include "player.h"
 #include "projectile.h"
@@ -90,6 +91,14 @@ public:
     [[nodiscard]]
     bool canInteractWithContainer() const noexcept;
 
+    [[nodiscard]]
+    bool searchStorageCabinet();
+
+    // 测试和确定性模拟通过该入口注入随机序列。
+    [[nodiscard]]
+    bool searchStorageCabinet(
+        LootRandomSource &random);
+
     // 只允许把玩家背包中的物品丢到角色朝向前方。
     // 失败时玩家背包和地面物品列表均保持不变。
     [[nodiscard]]
@@ -141,6 +150,7 @@ private:
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
+    SeededLootRandomSource lootRandom_;
 
     float fireCooldown_{0.25f};
     float cooldownRemaining_{0.0f};
@@ -156,6 +166,10 @@ private:
     [[nodiscard]]
     std::optional<std::size_t>
     findPickupCandidate() const;
+
+    [[nodiscard]]
+    bool itemInstanceIdExists(
+        ItemInstanceId instanceId) const noexcept;
 
     void tryPickupOne();
 };

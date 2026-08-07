@@ -1,4 +1,7 @@
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
 #include <vector>
 #include <utility>
 
@@ -13,6 +16,46 @@ namespace
         input.fireJustPressed = true;
         input.firePressed = true;
         return input;
+    }
+
+    class SequenceLootRandomSource final : public LootRandomSource
+    {
+    public:
+        explicit SequenceLootRandomSource(
+            std::vector<std::uint32_t> values)
+            : values_{std::move(values)}
+        {
+        }
+
+        std::uint32_t next(
+            std::uint32_t) override
+        {
+            if (position_ >= values_.size())
+            {
+                throw std::runtime_error{
+                    "Unexpected additional loot random draw"};
+            }
+
+            return values_[position_++];
+        }
+
+        std::size_t drawCount() const noexcept
+        {
+            return position_;
+        }
+
+    private:
+        std::vector<std::uint32_t> values_;
+        std::size_t position_{};
+    };
+
+    void movePlayerToCabinet(
+        GameplayWorld &world)
+    {
+        GameplayInput moveRight{};
+        moveRight.moveRight = true;
+        world.update(moveRight, 1.0F);
+        ASSERT_TRUE(world.canInteractWithContainer());
     }
 } // namespace
 
@@ -957,6 +1000,176 @@ TEST(GameplayWorldTest, ContainerInventoryBelongsToStorageCabinet)
     EXPECT_EQ(
         &world.containerInventory(),
         &world.storageCabinet().inventory());
+}
+
+TEST(GameplayWorldLootTest, SearchRequiresPlayerInsideCabinetRange)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    SequenceLootRandomSource random{{0, 0, 0}};
+
+    EXPECT_FALSE(world.searchStorageCabinet(random));
+    EXPECT_EQ(random.drawCount(), 0U);
+    EXPECT_FALSE(world.storageCabinet().isSearched());
+    EXPECT_TRUE(world.containerInventory().placedItems().empty());
+}
+
+TEST(GameplayWorldLootTest, FirstSearchCreatesDeterministicRowMajorLoot)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+
+    ASSERT_TRUE(world.searchStorageCabinet(random));
+
+    EXPECT_TRUE(world.storageCabinet().isSearched());
+    EXPECT_EQ(random.drawCount(), 5U);
+    ASSERT_EQ(world.containerInventory().placedItems().size(), 2U);
+
+    const PlacedItem &cola =
+        world.containerInventory().placedItems()[0];
+    const PlacedItem &ammunition =
+        world.containerInventory().placedItems()[1];
+
+    EXPECT_EQ(cola.item.instanceId(), 1U);
+    EXPECT_EQ(cola.item.definitionId(), ItemId::Cola);
+    EXPECT_EQ(cola.item.quantity(), 1U);
+    EXPECT_EQ(cola.origin, (GridPosition{0, 0}));
+
+    EXPECT_EQ(ammunition.item.instanceId(), 2U);
+    EXPECT_EQ(ammunition.item.definitionId(), ItemId::Ammo9mm);
+    EXPECT_EQ(ammunition.item.quantity(), 40U);
+    EXPECT_EQ(ammunition.origin, (GridPosition{1, 0}));
+}
+
+TEST(GameplayWorldLootTest, ReopeningSearchedCabinetDoesNotReroll)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(world.searchStorageCabinet(random));
+    const std::size_t drawCount = random.drawCount();
+
+    EXPECT_TRUE(world.searchStorageCabinet(random));
+    EXPECT_EQ(random.drawCount(), drawCount);
+    ASSERT_EQ(world.containerInventory().placedItems().size(), 2U);
+    EXPECT_EQ(
+        world.containerInventory().placedItems()[1].item.quantity(),
+        40U);
+}
+
+TEST(GameplayWorldLootTest, EmptySearchedCabinetDoesNotReplenish)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(world.searchStorageCabinet(random));
+    ASSERT_TRUE(world.containerInventory().remove(1).has_value());
+    ASSERT_TRUE(world.containerInventory().remove(2).has_value());
+    ASSERT_TRUE(world.containerInventory().placedItems().empty());
+    const std::size_t drawCount = random.drawCount();
+
+    EXPECT_TRUE(world.searchStorageCabinet(random));
+    EXPECT_EQ(random.drawCount(), drawCount);
+    EXPECT_TRUE(world.containerInventory().placedItems().empty());
+}
+
+TEST(GameplayWorldLootTest, SearchAdvancesWorldIdOnlyForFinalPlacements)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(world.searchStorageCabinet(random));
+
+    ASSERT_TRUE(world.transferInventoryItemQuantity(
+        false,
+        2,
+        10));
+    ASSERT_EQ(world.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        world.inventory().placedItems().front().item.instanceId(),
+        3U);
+    EXPECT_EQ(
+        world.inventory().placedItems().front().item.quantity(),
+        10U);
+}
+
+TEST(GameplayWorldLootTest, IdCollisionLeavesCabinetUnsearchedAndIdSequenceUnchanged)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    ASSERT_TRUE(world.inventory().tryPlace(
+        ItemInstance{1, ItemId::Medkit},
+        {0, 0}));
+    SequenceLootRandomSource firstRandom{
+        {0, 99, 0, 99, 20}};
+
+    EXPECT_FALSE(world.searchStorageCabinet(firstRandom));
+    EXPECT_FALSE(world.storageCabinet().isSearched());
+    EXPECT_TRUE(world.containerInventory().placedItems().empty());
+    ASSERT_TRUE(world.inventory().remove(1).has_value());
+
+    SequenceLootRandomSource secondRandom{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(world.searchStorageCabinet(secondRandom));
+    ASSERT_FALSE(world.containerInventory().placedItems().empty());
+    EXPECT_EQ(
+        world.containerInventory().placedItems().front().item.instanceId(),
+        1U);
+}
+
+TEST(GameplayWorldLootTest, DefaultGroundItemsReserveEarlierWorldIds)
+{
+    GameplayWorld world;
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+
+    ASSERT_TRUE(world.searchStorageCabinet(random));
+    ASSERT_EQ(world.groundItems().size(), 6U);
+    ASSERT_FALSE(world.containerInventory().placedItems().empty());
+    EXPECT_EQ(
+        world.containerInventory().placedItems().front().item.instanceId(),
+        7U);
+}
+
+TEST(GameplayWorldLootTest, InvalidRandomResultLeavesWorldStateUnchanged)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    movePlayerToCabinet(world);
+    SequenceLootRandomSource random{{100}};
+
+    EXPECT_THROW(
+        static_cast<void>(
+            world.searchStorageCabinet(random)),
+        std::out_of_range);
+    EXPECT_FALSE(world.storageCabinet().isSearched());
+    EXPECT_TRUE(world.containerInventory().placedItems().empty());
+
+    SequenceLootRandomSource validRandom{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(world.searchStorageCabinet(validRandom));
+    ASSERT_FALSE(world.containerInventory().placedItems().empty());
+    EXPECT_EQ(
+        world.containerInventory().placedItems().front().item.instanceId(),
+        1U);
 }
 
 TEST(GameplayWorldTest, PlayerMustApproachCabinetBeforeInteraction)
