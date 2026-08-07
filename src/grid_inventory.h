@@ -148,6 +148,10 @@ public:
     std::optional<ItemInstance> remove(
         ItemInstanceId instanceId);
 
+    // 显式销毁当前 Inventory 拥有的全部 ItemInstance，并清空占用表。
+    // 不改变固定网格尺寸或已预留容量。
+    void clear() noexcept;
+
     [[nodiscard]]
     std::optional<ItemInstanceId> occupantAt(
         GridPosition position) const noexcept;

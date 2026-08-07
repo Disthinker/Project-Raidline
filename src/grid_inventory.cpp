@@ -382,6 +382,16 @@ GridInventory::remove(
         std::move(removedItem)};
 }
 
+void GridInventory::clear() noexcept
+{
+    placedItems_.clear();
+
+    std::fill(
+        cells_.begin(),
+        cells_.end(),
+        std::nullopt);
+}
+
 std::optional<ItemInstanceId>
 GridInventory::occupantAt(
     GridPosition position) const noexcept

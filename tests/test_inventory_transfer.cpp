@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -13,6 +14,7 @@ namespace
     {
         ItemInstanceId instanceId{};
         ItemId definitionId{ItemId::Count};
+        std::uint32_t quantity{};
         ItemOrientation orientation{ItemOrientation::Degrees0};
         GridPosition origin{};
 
@@ -45,6 +47,7 @@ namespace
             result.placedItems.push_back({
                 placed.item.instanceId(),
                 placed.item.definitionId(),
+                placed.item.quantity(),
                 placed.item.orientation(),
                 placed.origin,
             });
@@ -617,5 +620,97 @@ TEST(InventoryQuantityPlacementTest, FullTargetRejectsWithoutMutation)
             ItemOrientation::Degrees0,
             903),
         (QuantityTransferResult{}));
+    EXPECT_EQ(snapshot(inventory), before);
+}
+
+TEST(WholeInventoryTransferTest, QueryPlansWithoutMutation)
+{
+    GridInventory source{{4, 2}};
+    GridInventory destination{{4, 2}};
+    place(source, 700, ItemId::Pistol, {0, 0});
+
+    const InventorySnapshot sourceBefore = snapshot(source);
+    const InventorySnapshot destinationBefore = snapshot(destination);
+
+    EXPECT_TRUE(canTransferAllItemsFirstFit(source, destination));
+    EXPECT_EQ(snapshot(source), sourceBefore);
+    EXPECT_EQ(snapshot(destination), destinationBefore);
+}
+
+TEST(WholeInventoryTransferTest, PreservesExactStacksAndUsesStableRowMajorPlan)
+{
+    GridInventory source{{10, 6}};
+    GridInventory destination{{6, 4}};
+    place(destination, 800, ItemId::Pistol, {0, 0});
+    place(source, 701, ItemId::Cola, {0, 0});
+
+    ItemInstance ammo{702, ItemId::Ammo9mm, 37};
+    ASSERT_TRUE(source.tryPlace(std::move(ammo), {1, 0}));
+
+    ItemInstance rifle{703, ItemId::Rifle};
+    ASSERT_TRUE(
+        rifle.trySetOrientation(ItemOrientation::Degrees90));
+    ASSERT_TRUE(source.tryPlace(std::move(rifle), {2, 0}));
+
+    ASSERT_TRUE(tryTransferAllItemsFirstFit(source, destination));
+
+    EXPECT_TRUE(source.placedItems().empty());
+    EXPECT_EQ(destination.originOf(701),
+              (std::optional<GridPosition>{{2, 0}}));
+    EXPECT_EQ(destination.originOf(702),
+              (std::optional<GridPosition>{{3, 0}}));
+    EXPECT_EQ(destination.originOf(703),
+              (std::optional<GridPosition>{{4, 0}}));
+    EXPECT_EQ(destination.quantityOf(702), 37U);
+
+    const PlacedItem &transferredRifle =
+        destination.placedItems().back();
+    EXPECT_EQ(transferredRifle.item.instanceId(), 703U);
+    EXPECT_EQ(transferredRifle.item.orientation(),
+              ItemOrientation::Degrees90);
+}
+
+TEST(WholeInventoryTransferTest, CapacityFailureIsAtomic)
+{
+    GridInventory source{{3, 1}};
+    GridInventory destination{{2, 1}};
+    place(source, 704, ItemId::Pistol, {0, 0});
+    place(source, 705, ItemId::Cola, {2, 0});
+
+    const InventorySnapshot sourceBefore = snapshot(source);
+    const InventorySnapshot destinationBefore = snapshot(destination);
+
+    EXPECT_FALSE(canTransferAllItemsFirstFit(source, destination));
+    EXPECT_FALSE(tryTransferAllItemsFirstFit(source, destination));
+    EXPECT_EQ(snapshot(source), sourceBefore);
+    EXPECT_EQ(snapshot(destination), destinationBefore);
+}
+
+TEST(WholeInventoryTransferTest, DuplicateIdFailureIsAtomic)
+{
+    GridInventory source{{2, 1}};
+    GridInventory destination{{2, 1}};
+    place(source, 706, ItemId::Cola, {0, 0});
+    place(destination, 706, ItemId::Pistol, {0, 0});
+
+    const InventorySnapshot sourceBefore = snapshot(source);
+    const InventorySnapshot destinationBefore = snapshot(destination);
+
+    EXPECT_FALSE(tryTransferAllItemsFirstFit(source, destination));
+    EXPECT_EQ(snapshot(source), sourceBefore);
+    EXPECT_EQ(snapshot(destination), destinationBefore);
+}
+
+TEST(WholeInventoryTransferTest, RejectsSameInventoryAndAcceptsEmptySource)
+{
+    GridInventory inventory{{2, 1}};
+    place(inventory, 707, ItemId::Cola, {0, 0});
+    const InventorySnapshot before = snapshot(inventory);
+
+    EXPECT_FALSE(tryTransferAllItemsFirstFit(inventory, inventory));
+    EXPECT_EQ(snapshot(inventory), before);
+
+    GridInventory empty{{1, 1}};
+    EXPECT_TRUE(tryTransferAllItemsFirstFit(empty, inventory));
     EXPECT_EQ(snapshot(inventory), before);
 }

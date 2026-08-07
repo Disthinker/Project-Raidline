@@ -1144,6 +1144,11 @@ void App::update(float deltaTime)
         gameplayInput,
         deltaTime);
 
+    static_cast<void>(
+        raidSettlement_.settle(
+            world_.raidSession().state(),
+            world_.inventory()));
+
     if (world_.raidSession().isTerminal() &&
         inventoryOverlayState_.isOpen())
     {
@@ -1330,6 +1335,30 @@ void App::renderDebugText()
         148.0F,
         raidTimeText.c_str());
 
+    const std::string stashText =
+        fmt::format(
+            "Stash: {} stacks / {} units",
+            raidSettlement_.stash().stackCount(),
+            raidSettlement_.stash().unitCount());
+
+    SDL_RenderDebugText(
+        renderer_,
+        980.0F,
+        20.0F,
+        stashText.c_str());
+
+    const std::string settlementStateText =
+        fmt::format(
+            "Settlement: {}",
+            raidSettlementStateName(
+                raidSettlement_.state()));
+
+    SDL_RenderDebugText(
+        renderer_,
+        980.0F,
+        36.0F,
+        settlementStateText.c_str());
+
     if (raidSession.state() ==
             RaidSessionState::Extracting ||
         raidSession.state() ==
@@ -1356,13 +1385,13 @@ void App::renderDebugText()
 
         const SDL_FRect outcomePanel{
             470.0F,
-            300.0F,
+            290.0F,
             340.0F,
-            88.0F};
+            112.0F};
 
         const bool extracted =
-            raidSession.state() ==
-            RaidSessionState::Extracted;
+            raidSettlement_.state() ==
+            RaidSettlementState::Extracted;
 
         SDL_SetRenderDrawColor(
             renderer_,
@@ -1390,15 +1419,48 @@ void App::renderDebugText()
                 raidSessionStateName(
                     raidSession.state()));
 
+        const RaidSettlementSummary settlementSummary =
+            raidSettlement_.summary();
+        std::string settlementText;
+
+        switch (raidSettlement_.state())
+        {
+        case RaidSettlementState::Blocked:
+            settlementText =
+                "STASH BLOCKED - INVENTORY PRESERVED";
+            break;
+        case RaidSettlementState::Extracted:
+            settlementText = fmt::format(
+                "STORED {} STACKS / {} UNITS",
+                settlementSummary.stackCount,
+                settlementSummary.unitCount);
+            break;
+        case RaidSettlementState::PlayerDead:
+        case RaidSettlementState::RaidEnded:
+            settlementText = fmt::format(
+                "LOST {} STACKS / {} UNITS",
+                settlementSummary.stackCount,
+                settlementSummary.unitCount);
+            break;
+        case RaidSettlementState::Pending:
+            settlementText = "SETTLEMENT PENDING";
+            break;
+        }
+
         SDL_RenderDebugText(
             renderer_,
             outcomePanel.x + 78.0F,
-            outcomePanel.y + 24.0F,
+            outcomePanel.y + 20.0F,
             outcomeText.c_str());
         SDL_RenderDebugText(
             renderer_,
+            outcomePanel.x + 38.0F,
+            outcomePanel.y + 44.0F,
+            settlementText.c_str());
+        SDL_RenderDebugText(
+            renderer_,
             outcomePanel.x + 46.0F,
-            outcomePanel.y + 48.0F,
+            outcomePanel.y + 72.0F,
             "Gameplay frozen - restart app for a new raid");
 
         SDL_SetRenderDrawBlendMode(

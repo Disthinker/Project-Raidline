@@ -59,6 +59,10 @@ add_executable(Project_Raidline
 
     src/raid_session.h
     src/raid_session.cpp
+    src/stash.h
+    src/stash.cpp
+    src/raid_settlement.h
+    src/raid_settlement.cpp
 
     src/extraction_point.h
     src/extraction_point.cpp
@@ -441,6 +445,51 @@ target_include_directories(
 )
 
 gtest_discover_tests(RaidSessionTest)
+
+# test raid_settlement
+add_executable(RaidSettlementTest
+    tests/test_raid_settlement.cpp
+    src/raid_settlement.cpp
+    src/raid_settlement.h
+    src/stash.cpp
+    src/stash.h
+    src/raid_session.h
+    src/inventory_transfer.cpp
+    src/inventory_transfer.h
+    src/grid_inventory.cpp
+    src/grid_inventory.h
+    src/item_instance.cpp
+    src/item_instance.h
+    src/item_definition.cpp
+    src/item_definition.h
+    src/vec2.h
+)
+
+target_compile_features(
+    RaidSettlementTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    RaidSettlementTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    RaidSettlementTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    RaidSettlementTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(RaidSettlementTest)
 
 # test extraction_point
 add_executable(ExtractionPointTest
@@ -835,6 +884,7 @@ if(MSVC)
     target_compile_options(StorageCabinetTest PRIVATE /utf-8)
     target_compile_options(LootTableTest PRIVATE /utf-8)
     target_compile_options(RaidSessionTest PRIVATE /utf-8)
+    target_compile_options(RaidSettlementTest PRIVATE /utf-8)
     target_compile_options(ExtractionPointTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
