@@ -433,6 +433,90 @@ GameplayWorld::inventory() const noexcept
     return inventory_;
 }
 
+GridInventory &
+GameplayWorld::containerInventory() noexcept
+{
+    return storageCabinet_.inventory();
+}
+
+const GridInventory &
+GameplayWorld::containerInventory() const noexcept
+{
+    return storageCabinet_.inventory();
+}
+
+const StorageCabinet &
+GameplayWorld::storageCabinet() const noexcept
+{
+    return storageCabinet_;
+}
+
+bool GameplayWorld::canInteractWithContainer() const noexcept
+{
+    return storageCabinet_.canInteract(
+        playerBounds(player_));
+}
+
+bool GameplayWorld::dropInventoryItem(
+    ItemInstanceId instanceId)
+{
+    const auto placedIt = std::find_if(
+        inventory_.placedItems().begin(),
+        inventory_.placedItems().end(),
+        [instanceId](const PlacedItem &placed)
+        {
+            return placed.item.instanceId() ==
+                   instanceId;
+        });
+
+    if (placedIt == inventory_.placedItems().end())
+    {
+        return false;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(
+            placedIt->item.definitionId());
+
+    const Vec2 center = playerCenter(player_);
+    const float playerFeetY =
+        player_.position().y + player_.size();
+    const float halfWidth =
+        definition.worldRenderSize.x / 2.0f;
+    const float halfHeight =
+        definition.worldRenderSize.y / 2.0f;
+
+    const Vec2 dropPosition{
+        std::clamp(
+            center.x,
+            halfWidth,
+            kWorldWidth - halfWidth),
+        std::clamp(
+            playerFeetY,
+            halfHeight,
+            kWorldHeight - halfHeight),
+    };
+
+    // 唯一可能抛出的容量增长发生在移出玩家背包之前。
+    groundItems_.reserve(
+        groundItems_.size() + 1);
+
+    std::optional<ItemInstance> removed =
+        inventory_.remove(instanceId);
+
+    if (!removed.has_value())
+    {
+        return false;
+    }
+
+    // GroundItem 构造和已有元素移动均为 noexcept；reserve 后不再分配。
+    groundItems_.emplace_back(
+        std::move(*removed),
+        dropPosition);
+
+    return true;
+}
+
 int GameplayWorld::score() const noexcept
 {
     return score_;

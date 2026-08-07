@@ -91,6 +91,31 @@ GridInventory::findFirstFit(
     return std::nullopt;
 }
 
+void GridInventory::reserveForAdditionalItems(
+    std::size_t additionalItemCount)
+{
+    if (additionalItemCount >
+        placedItems_.max_size() -
+            placedItems_.size())
+    {
+        throw std::length_error{
+            "GridInventory reservation exceeds max_size"};
+    }
+
+    const std::size_t availableCapacity =
+        placedItems_.capacity() -
+        placedItems_.size();
+
+    if (additionalItemCount <= availableCapacity)
+    {
+        return;
+    }
+
+    placedItems_.reserve(
+        placedItems_.size() +
+        additionalItemCount);
+}
+
 bool GridInventory::canMove(
     ItemInstanceId instanceId,
     GridPosition newOrigin) const

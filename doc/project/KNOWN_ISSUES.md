@@ -17,10 +17,11 @@
 | --- | --- | --- | --- | --- | --- |
 | RL-W17-001 | P1 | 背包输入 | SDL 事件轮询中曾直接处理 mouse-up，而 Esc/Tab 到 `update()` 才处理；同帧取消可能晚于 `tryMove`。 | Closed | 29/29 鼠标测试覆盖同帧 Esc/Tab + release；Windows/Ubuntu CI 与 2026-08-07 真实窗口取消验收通过。 |
 | [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 已由 PR #31 跟踪；自动测试、Windows/Ubuntu CI 和 9 项真实窗口验收均已有记录。 | Closed | 2026-08-07 完成；后续 UX/动画/架构债由 #26–#30 独立跟踪。 |
-| [RL-UX-001 / GitHub #26](https://github.com/Disthinker/Project-Raidline/issues/26) | P2 | 背包 UX | 用户认为方向键移动物品、黄色焦点框和相关提示是遗留行为；当前批准的 Week17 契约仍要求保留 Week16 键盘兼容。 | Needs Decision | 后续稳定化；决定“纯鼠标”或“键鼠并存”，同步不变量、测试和提示后关闭。 |
-| [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 本地分支已将像素虚像与吸附候选分离；33/33 鼠标目标、46/46 聚焦 CTest、299/299 全量 CTest、资源检查 3/3 和 Windows Debug 真实窗口 7/7 通过。 | Local Fixed | 取得当前提交的 Windows/Ubuntu CI 证据并合入 `main` 后关闭；动态证据记录在 PR/Issue。 |
+| [RL-UX-001 / GitHub #26](https://github.com/Disthinker/Project-Raidline/issues/26) | P2 | 背包 UX | 产品决策已冻结为纯鼠标背包；本地 Week18 分支已删除方向键/Enter 库存动作、键盘状态、黄色焦点与提示，输入测试确认这些键不再映射。 | Local Fixed | Week18 真实窗口确认方向键/两种 Enter 无库存语义，Windows/Ubuntu CI 通过并合入 `main` 后关闭。 |
+| [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 平滑拖拽虚像已由 PR #32 合入 `main` 的 `c6cda7b`；连续像素虚像与吸附候选保持分离。 | Closed | 2026-08-07 完成；Week18 双容器继续复用并扩展该契约。 |
+| RL-W18-001 | P1 | 容器与丢弃 UX | 首轮 Week18 人工验收后发现第二容器无世界实体/交互门控、丢弃区未贴右侧、Idle 残留蓝色框，随后追加丢弃物应落在角色脚下。当前分支已实现柜体实体与近距离 F 门控、贴右半透明长条、release/Esc/Tab 清选择及脚下落点；用户已确认修订版人工验收 12–16 全部通过。 | Local Fixed | 精确提交的 Windows/Ubuntu CI 通过并合入 `main` 后关闭。 |
 | [RL-ANIM-001 / GitHub #28](https://github.com/Disthinker/Project-Raidline/issues/28) | P2 | 角色表现 | 仓库只有左右移动图集；纯上/下移动回退到同一静态贴图，停止后虽保留模型朝向但视觉上恢复默认。 | Needs Decision | 角色动画任务；冻结四方向资源方案，补上/下动画与停止朝向验收后关闭。 |
-| [RL-ARCH-001 / GitHub #29](https://github.com/Disthinker/Project-Raidline/issues/29) | P2 | 架构 | `src/app.cpp` 集中 SDL 生命周期、输入、纹理和背包编排，并直接绑定玩家背包。 | Deferred | Week18 仅提取双容器所需的最小库存 UI 编排接口；不做无关大重构。 |
+| [RL-ARCH-001 / GitHub #29](https://github.com/Disthinker/Project-Raidline/issues/29) | P2 | 架构 | `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包编排；Week18 已用容器 ID、容器查询与独立布局接口解除“只能绑定玩家背包”的限制。 | Deferred | 多容器阻塞已解除；后续仅在玩法需求驱动下继续拆分，不做无关大重构。 |
 | [RL-BUILD-001 / GitHub #30](https://github.com/Disthinker/Project-Raidline/issues/30) | P2 | 构建 | 多个测试 target 重复编译业务源码；类布局变化时旧对象可能产生 ABI 尺寸不一致。 | Deferred | 后续抽取共享核心 library，并证明所有测试链接同一实现。若栈损坏复现则提升为 P1。 |
 | RL-CI-001 | P3 | CI | `tests/test_phase1_assets.py` 未注册进 CTest 或 GitHub Actions。 | Deferred | 在独立 CI 改进任务中接入并保留失败诊断。 |
 | RL-DATA-001 | P3 | 数据 | ItemDefinition、世界参数、射击参数和部分 UI 布局仍为编译期硬编码。 | Deferred | 数据驱动里程碑排期后处理，不阻塞 Week18。 |

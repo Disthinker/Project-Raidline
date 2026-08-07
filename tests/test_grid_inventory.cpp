@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
@@ -1527,4 +1528,29 @@ TEST(GridInventoryTest, SameOriginMoveIsNoOpSuccess)
             .front()
             .item.instanceId(),
         40U);
+}
+
+TEST(GridInventoryTest, ReserveOverflowLeavesInventoryUnchanged)
+{
+    GridInventory inventory({10, 6});
+    ItemInstance cola{41, ItemId::Cola};
+
+    ASSERT_TRUE(
+        inventory.tryPlace(
+            std::move(cola),
+            GridPosition{0, 0}));
+
+    const auto cellsBefore =
+        snapshotCells(inventory);
+
+    EXPECT_THROW(
+        inventory.reserveForAdditionalItems(
+            std::numeric_limits<std::size_t>::max()),
+        std::length_error);
+
+    EXPECT_EQ(snapshotCells(inventory), cellsBefore);
+    ASSERT_EQ(inventory.placedItems().size(), 1U);
+    EXPECT_EQ(
+        inventory.placedItems().front().item.instanceId(),
+        41U);
 }

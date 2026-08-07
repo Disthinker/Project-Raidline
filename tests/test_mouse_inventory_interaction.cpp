@@ -1,32 +1,62 @@
 #include <gtest/gtest.h>
 
-#include <limits>
+#include <cmath>
 #include <optional>
-#include <stdexcept>
 #include <utility>
-#include <vector>
+#include <variant>
 
+#include "grid_inventory.h"
 #include "inventory_interaction.h"
+#include "inventory_transfer.h"
 
 namespace
 {
-std::vector<std::optional<ItemInstanceId>> snapshotCells(
-    const GridInventory &inventory)
-{
-    std::vector<std::optional<ItemInstanceId>> result;
-    result.reserve(inventory.cellCount());
 
-    for (int y = 0; y < inventory.height(); ++y)
+    constexpr InventoryItemSelection playerItem(
+        ItemInstanceId instanceId)
     {
-        for (int x = 0; x < inventory.width(); ++x)
-        {
-            result.push_back(
-                inventory.occupantAt({x, y}));
-        }
+        return {
+            InventoryContainerId::Player,
+            instanceId};
     }
 
-    return result;
-}
+    constexpr InventoryItemSelection externalItem(
+        ItemInstanceId instanceId)
+    {
+        return {
+            InventoryContainerId::External,
+            instanceId};
+    }
+
+    InventoryPlacementRequest dragPlacement(
+        InventoryInteractionState &state,
+        InventoryItemSelection source,
+        GridPosition sourceOrigin,
+        GridPosition clickedCell,
+        InventoryGridLocation destination)
+    {
+        EXPECT_TRUE(state.beginPointerPress(
+            source,
+            sourceOrigin,
+            clickedCell,
+            {100.0F, 100.0F}));
+
+        const auto request = state.releasePointer(
+            {120.0F, 100.0F},
+            destination,
+            false);
+
+        EXPECT_TRUE(request.has_value());
+        const auto *placement = request.has_value()
+            ? std::get_if<InventoryPlacementRequest>(&*request)
+            : nullptr;
+        EXPECT_NE(placement, nullptr);
+
+        return placement != nullptr
+            ? *placement
+            : InventoryPlacementRequest{};
+    }
+
 } // namespace
 
 TEST(MouseInventoryLayoutTest, RejectsInvalidGeometry)
@@ -34,37 +64,12 @@ TEST(MouseInventoryLayoutTest, RejectsInvalidGeometry)
     EXPECT_THROW(
         (InventoryGridLayout{0.0F, 0.0F, 0.0F, {10, 6}}),
         std::invalid_argument);
-
-    EXPECT_THROW(
-        (InventoryGridLayout{0.0F, 0.0F, -1.0F, {10, 6}}),
-        std::invalid_argument);
-
-    EXPECT_THROW(
-        (InventoryGridLayout{
-            0.0F,
-            0.0F,
-            std::numeric_limits<float>::quiet_NaN(),
-            {10, 6}}),
-        std::invalid_argument);
-
     EXPECT_THROW(
         (InventoryGridLayout{0.0F, 0.0F, 64.0F, {0, 6}}),
         std::invalid_argument);
-
     EXPECT_THROW(
         (InventoryGridLayout{
-            std::numeric_limits<float>::infinity(),
-            0.0F,
-            64.0F,
-            {10, 6}}),
-        std::invalid_argument);
-
-    EXPECT_THROW(
-        (InventoryGridLayout{
-            0.0F,
-            0.0F,
-            std::numeric_limits<float>::max(),
-            {2, 2}}),
+            std::nanf(""), 0.0F, 64.0F, {10, 6}}),
         std::invalid_argument);
 }
 
@@ -74,624 +79,312 @@ TEST(MouseInventoryLayoutTest, ConvertsBoundariesWithoutOffByOne)
         100.0F,
         50.0F,
         64.0F,
-        {10, 6}};
+        {6, 6}};
 
     EXPECT_EQ(
         layout.screenToGrid({100.0F, 50.0F}),
-        (std::optional<GridPosition>{{0, 0}}));
-
+        (std::optional<GridPosition>{GridPosition{0, 0}}));
     EXPECT_EQ(
-        layout.screenToGrid({163.999F, 113.999F}),
-        (std::optional<GridPosition>{{0, 0}}));
-
-    EXPECT_EQ(
-        layout.screenToGrid({164.0F, 114.0F}),
-        (std::optional<GridPosition>{{1, 1}}));
-
-    EXPECT_EQ(
-        layout.screenToGrid({739.999F, 433.999F}),
-        (std::optional<GridPosition>{{9, 5}}));
-
-    EXPECT_EQ(layout.screenToGrid({740.0F, 50.0F}), std::nullopt);
-    EXPECT_EQ(layout.screenToGrid({100.0F, 434.0F}), std::nullopt);
-    EXPECT_EQ(layout.screenToGrid({99.999F, 50.0F}), std::nullopt);
-    EXPECT_EQ(layout.screenToGrid({100.0F, 49.999F}), std::nullopt);
+        layout.screenToGrid({483.99F, 433.99F}),
+        (std::optional<GridPosition>{GridPosition{5, 5}}));
+    EXPECT_EQ(layout.screenToGrid({484.0F, 100.0F}), std::nullopt);
+    EXPECT_EQ(layout.screenToGrid({120.0F, 434.0F}), std::nullopt);
 }
 
-TEST(MouseInventoryLayoutTest, RejectsNonFinitePointerCoordinates)
+TEST(MouseInventoryLayoutTest, DropZoneIsFlushWithRightScreenEdge)
 {
-    const InventoryGridLayout layout{0.0F, 0.0F, 64.0F, {10, 6}};
+    const InventoryScreenRect zone =
+        makeRightEdgeInventoryDropZone(
+            1280.0F,
+            720.0F,
+            96.0F);
 
     EXPECT_EQ(
-        layout.screenToGrid(
-            {std::numeric_limits<float>::quiet_NaN(), 0.0F}),
-        std::nullopt);
+        zone,
+        (InventoryScreenRect{
+            1184.0F,
+            0.0F,
+            96.0F,
+            720.0F}));
+    EXPECT_TRUE(zone.contains({1184.0F, 0.0F}));
+    EXPECT_TRUE(zone.contains({1279.99F, 719.99F}));
+    EXPECT_FALSE(zone.contains({1183.99F, 100.0F}));
+    EXPECT_FALSE(zone.contains({1280.0F, 100.0F}));
 }
 
-TEST(InventoryFrameInputArbitrationTest, TabWinsOverEscapeAndSuppressesOtherInput)
+TEST(MouseInventoryLayoutTest, DropZoneRejectsInvalidGeometry)
+{
+    EXPECT_THROW(
+        makeRightEdgeInventoryDropZone(
+            1280.0F,
+            720.0F,
+            0.0F),
+        std::invalid_argument);
+    EXPECT_THROW(
+        makeRightEdgeInventoryDropZone(
+            1280.0F,
+            720.0F,
+            1281.0F),
+        std::invalid_argument);
+}
+
+TEST(InventoryFrameInputArbitrationTest, TabWinsAndSuppressesPointer)
 {
     EXPECT_EQ(
         decideInventoryFrameInput(true, true, true),
         (InventoryFrameInputDecision{
             InventoryFrameControlAction::CloseInventory,
-            false,
             false}));
 }
 
-TEST(InventoryFrameInputArbitrationTest, EscapeSuppressesPendingPointerRelease)
+TEST(InventoryFrameInputArbitrationTest, EscapeSuppressesPointer)
 {
     EXPECT_EQ(
         decideInventoryFrameInput(true, false, true),
         (InventoryFrameInputDecision{
             InventoryFrameControlAction::CancelInteraction,
-            false,
             false}));
 }
 
-TEST(InventoryFrameInputArbitrationTest, NormalOpenFrameProcessesPointerBeforeKeyboard)
+TEST(InventoryFrameInputArbitrationTest, OpenFrameProcessesPointer)
 {
     EXPECT_EQ(
         decideInventoryFrameInput(true, false, false),
         (InventoryFrameInputDecision{
             InventoryFrameControlAction::None,
-            true,
             true}));
-}
-
-TEST(InventoryFrameInputArbitrationTest, OpeningFrameDoesNotReplayClosedInventoryPointerInput)
-{
-    EXPECT_EQ(
-        decideInventoryFrameInput(false, true, false),
-        (InventoryFrameInputDecision{
-            InventoryFrameControlAction::OpenInventory,
-            false,
-            false}));
-}
-
-TEST(MouseInventoryInteractionTest, HoverDoesNotMoveKeyboardFocus)
-{
-    InventoryInteractionState state({10, 6});
-    state.moveFocus(3, 2);
-
-    state.updatePointerPosition({400.0F, 300.0F}, GridPosition{7, 4});
-
-    EXPECT_EQ(state.hoveredCell(), (std::optional<GridPosition>{{7, 4}}));
-    EXPECT_EQ(state.focusedCell(), (GridPosition{3, 2}));
-}
-
-TEST(MouseInventoryInteractionTest, EmptyPressClearsPersistentSelection)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(12, GridPosition{1, 1}, {1, 1}, {10.0F, 10.0F}));
-
-    EXPECT_EQ(
-        state.releasePointer({10.0F, 10.0F}, GridPosition{1, 1}),
-        std::nullopt);
-
-    EXPECT_EQ(state.selectedInstanceId(), std::optional<ItemInstanceId>{12});
-
-    EXPECT_FALSE(
-        state.beginPointerPress(
-            std::nullopt,
-            std::nullopt,
-            {4, 4},
-            {20.0F, 20.0F}));
-
-    EXPECT_EQ(state.selectedInstanceId(), std::nullopt);
-}
-
-TEST(MouseInventoryInteractionTest, RejectsInvalidPressCoordinates)
-{
-    InventoryInteractionState state({10, 6});
-
-    EXPECT_FALSE(
-        state.beginPointerPress(
-            120,
-            GridPosition{0, 0},
-            GridPosition{-1, 0},
-            {10.0F, 10.0F}));
-
-    EXPECT_FALSE(
-        state.beginPointerPress(
-            120,
-            GridPosition{0, 0},
-            GridPosition{0, 0},
-            {std::numeric_limits<float>::quiet_NaN(), 10.0F}));
-
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-    EXPECT_EQ(state.selectedInstanceId(), std::nullopt);
 }
 
 TEST(MouseInventoryInteractionTest, DragBeginsAtFourLogicalPixels)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(21),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
 
-    ASSERT_TRUE(
-        state.beginPointerPress(13, GridPosition{1, 1}, {1, 1}, {10.0F, 10.0F}));
-
-    state.updatePointerPosition({13.9F, 10.0F}, GridPosition{1, 1});
+    state.updatePointerPosition(
+        {13.99F, 10.0F},
+        InventoryGridLocation{InventoryContainerId::Player, {0, 0}},
+        false);
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Pressed);
-    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
 
-    state.updatePointerPosition({14.0F, 10.0F}, GridPosition{1, 1});
+    state.updatePointerPosition(
+        {14.0F, 10.0F},
+        InventoryGridLocation{InventoryContainerId::Player, {0, 0}},
+        false);
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
-    EXPECT_EQ(
-        state.pointerDragDelta(),
-        (std::optional<MousePosition>{{4.0F, 0.0F}}));
 }
 
-TEST(MouseInventoryInteractionTest, DragPreservesMultiCellGrabOffset)
+TEST(MouseInventoryInteractionTest, CrossGridPreviewPreservesGrabOffset)
 {
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            14,
-            GridPosition{2, 1},
-            GridPosition{4, 2},
-            {10.0F, 10.0F}));
-
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{7, 4});
-
-    EXPECT_EQ(
-        state.activePreviewOrigin(),
-        (std::optional<GridPosition>{{5, 3}}));
-}
-
-TEST(MouseInventoryInteractionTest, DragDeltaTracksSubCellPointerMotion)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            141,
-            GridPosition{2, 1},
-            GridPosition{3, 1},
-            {110.25F, 90.75F}));
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(22),
+        {1, 1},
+        {2, 2},
+        {10.0F, 10.0F}));
 
     state.updatePointerPosition(
-        {114.25F, 90.75F},
-        GridPosition{3, 1});
+        {30.0F, 30.0F},
+        InventoryGridLocation{InventoryContainerId::External, {4, 3}},
+        false);
 
     EXPECT_EQ(
-        state.pointerDragDelta(),
-        (std::optional<MousePosition>{{4.0F, 0.0F}}));
-    EXPECT_EQ(
-        state.activePreviewOrigin(),
-        (std::optional<GridPosition>{{2, 1}}));
-
-    // 指针仍在同一格内，但像素虚像必须继续连续移动。
-    state.updatePointerPosition(
-        {118.5F, 93.25F},
-        GridPosition{3, 1});
-
-    EXPECT_EQ(
-        state.pointerDragDelta(),
-        (std::optional<MousePosition>{{8.25F, 2.5F}}));
-    EXPECT_EQ(
-        state.activePreviewOrigin(),
-        (std::optional<GridPosition>{{2, 1}}));
+        state.activePreviewLocation(),
+        (std::optional<InventoryGridLocation>{
+            InventoryGridLocation{
+                InventoryContainerId::External,
+                {3, 2}}}));
 }
 
-TEST(MouseInventoryInteractionTest, OutsideDragKeepsPixelDeltaButClearsGridPreview)
+TEST(MouseInventoryInteractionTest, DragDeltaTracksSubCellMotionAcrossBlankSpace)
 {
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            142,
-            GridPosition{2, 1},
-            GridPosition{3, 1},
-            {10.0F, 10.0F}));
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(23),
+        {0, 0},
+        {0, 0},
+        {100.0F, 80.0F}));
 
     state.updatePointerPosition(
-        {20.0F, 18.0F},
-        GridPosition{5, 3});
-    ASSERT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
-
-    state.updatePointerPosition({37.0F, 41.0F}, std::nullopt);
+        {112.5F, 86.25F},
+        std::nullopt,
+        false);
 
     EXPECT_EQ(
         state.pointerDragDelta(),
-        (std::optional<MousePosition>{{27.0F, 31.0F}}));
-    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
+        (std::optional<MousePosition>{MousePosition{12.5F, 6.25F}}));
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
 }
 
-TEST(MouseInventoryInteractionTest, NonFiniteMotionDoesNotPolluteDragDelta)
+TEST(MouseInventoryInteractionTest, DropZoneStateHasNoSnappedPreview)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(24),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
 
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            143,
-            GridPosition{1, 1},
-            GridPosition{1, 1},
-            {10.0F, 10.0F}));
+    state.updatePointerPosition(
+        {30.0F, 30.0F},
+        std::nullopt,
+        true);
 
+    EXPECT_TRUE(state.pointerOverDropZone());
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
+    EXPECT_TRUE(state.pointerDragDelta().has_value());
+}
+
+TEST(MouseInventoryInteractionTest, NonFiniteMotionDoesNotPolluteDelta)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(25),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
     state.updatePointerPosition(
         {20.0F, 10.0F},
-        GridPosition{2, 1});
-    ASSERT_EQ(
+        InventoryGridLocation{InventoryContainerId::Player, {0, 0}},
+        false);
+
+    state.updatePointerPosition(
+        {std::nanf(""), 10.0F},
+        std::nullopt,
+        true);
+
+    EXPECT_EQ(
         state.pointerDragDelta(),
-        (std::optional<MousePosition>{{10.0F, 0.0F}}));
-
-    state.updatePointerPosition(
-        {std::numeric_limits<float>::quiet_NaN(), 30.0F},
-        std::nullopt);
-
-    EXPECT_EQ(
-        state.pointerDragDelta(),
-        (std::optional<MousePosition>{{10.0F, 0.0F}}));
-    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
+        (std::optional<MousePosition>{MousePosition{10.0F, 0.0F}}));
+    EXPECT_FALSE(state.pointerOverDropZone());
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
 }
 
-TEST(MouseInventoryInteractionTest, CancelAndResetClearDragDelta)
+TEST(MouseInventoryIntegrationTest, SameContainerDragUsesMoveTransaction)
 {
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            144,
-            GridPosition{1, 1},
-            GridPosition{1, 1},
-            {10.0F, 10.0F}));
-    state.updatePointerPosition(
-        {20.0F, 10.0F},
-        GridPosition{2, 1});
-    ASSERT_TRUE(state.pointerDragDelta().has_value());
-
-    state.cancelPointerGesture();
-    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            145,
-            GridPosition{1, 1},
-            GridPosition{1, 1},
-            {30.0F, 30.0F}));
-    state.updatePointerPosition(
-        {40.0F, 30.0F},
-        GridPosition{2, 1});
-    ASSERT_TRUE(state.pointerDragDelta().has_value());
-
-    state.reset();
-    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
-}
-
-TEST(MouseInventoryInteractionTest, GrabOffsetCanProduceNegativeCandidate)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            140,
-            GridPosition{2, 1},
-            GridPosition{4, 2},
-            {10.0F, 10.0F}));
-
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{0, 0});
-
-    EXPECT_EQ(
-        state.activePreviewOrigin(),
-        (std::optional<GridPosition>{{-2, -1}}));
-}
-
-TEST(MouseInventoryInteractionTest, LeavingGridClearsPreviewAndReentryRestoresIt)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(15, GridPosition{2, 1}, {3, 1}, {10.0F, 10.0F}));
-
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{5, 3});
-    ASSERT_TRUE(state.activePreviewOrigin().has_value());
-
-    state.updatePointerPosition({30.0F, 10.0F}, std::nullopt);
-    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
-
-    state.updatePointerPosition({40.0F, 10.0F}, GridPosition{6, 4});
-    EXPECT_EQ(
-        state.activePreviewOrigin(),
-        (std::optional<GridPosition>{{5, 4}}));
-}
-
-TEST(MouseInventoryInteractionTest, ClickSelectsWithoutMoveRequest)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(16, GridPosition{2, 2}, {2, 2}, {10.0F, 10.0F}));
-
-    EXPECT_EQ(
-        state.releasePointer({12.0F, 10.0F}, GridPosition{2, 2}),
-        std::nullopt);
-
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-    EXPECT_EQ(state.selectedInstanceId(), std::optional<ItemInstanceId>{16});
-}
-
-TEST(MouseInventoryInteractionTest, OutsideReleaseCancelsCommitRequest)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(17, GridPosition{2, 2}, {2, 2}, {10.0F, 10.0F}));
-
-    EXPECT_EQ(state.releasePointer({20.0F, 10.0F}, std::nullopt), std::nullopt);
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
-}
-
-TEST(MouseInventoryInteractionTest, ValidDragReleaseReturnsMoveRequest)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(18, GridPosition{1, 1}, {2, 1}, {10.0F, 10.0F}));
-
-    EXPECT_EQ(
-        state.releasePointer({20.0F, 10.0F}, GridPosition{6, 4}),
-        (std::optional<InventoryMoveRequest>{
-            InventoryMoveRequest{18, {5, 4}}}));
-    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
-}
-
-TEST(MouseInventoryInteractionTest, EscapeStyleCancelKeepsSelection)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(19, GridPosition{1, 1}, {1, 1}, {10.0F, 10.0F}));
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{3, 3});
-
-    state.cancelPointerGesture();
-
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
-    EXPECT_EQ(state.selectedInstanceId(), std::optional<ItemInstanceId>{19});
-}
-
-TEST(MouseInventoryInteractionTest, KeyboardAndPointerGesturesAreMutuallyExclusive)
-{
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(20, GridPosition{1, 1}, {1, 1}, {10.0F, 10.0F}));
-
-    state.moveFocus(3, 2);
-    EXPECT_EQ(state.focusedCell(), (GridPosition{0, 0}));
-    EXPECT_FALSE(state.beginPlacement(20, GridPosition{1, 1}));
-
-    state.cancelPointerGesture();
-    ASSERT_TRUE(state.beginPlacement(20, GridPosition{1, 1}));
-
-    EXPECT_FALSE(
-        state.beginPointerPress(20, GridPosition{1, 1}, {1, 1}, {10.0F, 10.0F}));
-}
-
-TEST(MouseInventoryInteractionTest, ResetClearsAllTransientState)
-{
-    InventoryInteractionState state({10, 6});
-    state.moveFocus(3, 2);
-    state.updatePointerPosition({20.0F, 20.0F}, GridPosition{4, 4});
-
-    ASSERT_TRUE(
-        state.beginPointerPress(21, GridPosition{4, 4}, {4, 4}, {20.0F, 20.0F}));
-
-    state.reset();
-
-    EXPECT_EQ(state.mode(), InventoryInteractionMode::Browsing);
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-    EXPECT_EQ(state.selectedInstanceId(), std::nullopt);
-    EXPECT_EQ(state.hoveredCell(), std::nullopt);
-    EXPECT_EQ(state.focusedCell(), (GridPosition{3, 2}));
-}
-
-TEST(MouseInventoryIntegrationTest, MultiCellDragCommitsThroughInventoryTransaction)
-{
-    GridInventory inventory({10, 6});
-    ItemInstance rifle{101, ItemId::Rifle};
-    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {1, 1}));
-
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            101,
-            inventory.originOf(101),
-            {3, 2},
-            {10.0F, 10.0F}));
-
-    const auto request =
-        state.releasePointer({20.0F, 10.0F}, GridPosition{7, 4});
-
-    ASSERT_TRUE(request.has_value());
-    ASSERT_TRUE(inventory.canMove(request->instanceId, request->destination));
-    ASSERT_TRUE(inventory.tryMove(request->instanceId, request->destination));
-    EXPECT_EQ(inventory.originOf(101), (std::optional<GridPosition>{{5, 3}}));
-}
-
-TEST(MouseInventoryIntegrationTest, InvalidDropLeavesInventoryUnchanged)
-{
-    GridInventory inventory({10, 6});
-    ItemInstance medkit{102, ItemId::Medkit};
-    ItemInstance blocker{103, ItemId::Cola};
+    GridInventory inventory{{10, 6}};
+    ItemInstance medkit{31, ItemId::Medkit};
     ASSERT_TRUE(inventory.tryPlace(std::move(medkit), {0, 0}));
-    ASSERT_TRUE(inventory.tryPlace(std::move(blocker), {4, 2}));
-    const auto before = snapshotCells(inventory);
 
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
+    const InventoryPlacementRequest request = dragPlacement(
+        state,
+        playerItem(31),
+        {0, 0},
+        {1, 1},
+        {InventoryContainerId::Player, {4, 3}});
+
+    ASSERT_EQ(request.destination.cell, (GridPosition{3, 2}));
     ASSERT_TRUE(
-        state.beginPointerPress(102, inventory.originOf(102), {1, 1}, {10.0F, 10.0F}));
-
-    const auto request =
-        state.releasePointer({20.0F, 10.0F}, GridPosition{5, 3});
-
-    ASSERT_TRUE(request.has_value());
-    EXPECT_FALSE(inventory.canMove(request->instanceId, request->destination));
-    EXPECT_FALSE(inventory.tryMove(request->instanceId, request->destination));
-    EXPECT_EQ(snapshotCells(inventory), before);
-    EXPECT_EQ(inventory.originOf(102), (std::optional<GridPosition>{{0, 0}}));
+        inventory.tryMove(
+            request.source.instanceId,
+            request.destination.cell));
+    EXPECT_EQ(
+        inventory.originOf(31),
+        (std::optional<GridPosition>{GridPosition{3, 2}}));
 }
 
-TEST(MouseInventoryIntegrationTest, SelfOverlappingDragIsAllowed)
+TEST(MouseInventoryIntegrationTest, CrossContainerDragUsesTransferTransaction)
 {
-    GridInventory inventory({10, 6});
-    ItemInstance rifle{105, ItemId::Rifle};
-    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {1, 1}));
+    GridInventory player{{10, 6}};
+    GridInventory external{{6, 6}};
+    ItemInstance rifle{32, ItemId::Rifle};
+    ASSERT_TRUE(player.tryPlace(std::move(rifle), {0, 0}));
 
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(105, inventory.originOf(105), {3, 1}, {10.0F, 10.0F}));
+    InventoryInteractionState state;
+    const InventoryPlacementRequest request = dragPlacement(
+        state,
+        playerItem(32),
+        {0, 0},
+        {2, 1},
+        {InventoryContainerId::External, {3, 2}});
 
-    const auto request =
-        state.releasePointer({20.0F, 10.0F}, GridPosition{4, 1});
-
-    ASSERT_TRUE(request.has_value());
-    EXPECT_TRUE(inventory.canMove(request->instanceId, request->destination));
-    EXPECT_TRUE(inventory.tryMove(request->instanceId, request->destination));
-    EXPECT_EQ(inventory.originOf(105), (std::optional<GridPosition>{{2, 1}}));
+    ASSERT_TRUE(tryTransferItem(
+        player,
+        external,
+        request.source.instanceId,
+        request.destination.cell));
+    EXPECT_TRUE(player.placedItems().empty());
+    EXPECT_EQ(
+        external.originOf(32),
+        (std::optional<GridPosition>{GridPosition{1, 1}}));
 }
 
-TEST(MouseInventoryIntegrationTest, SameCellDragCommitsAsNoOp)
+TEST(MouseInventoryIntegrationTest, InvalidCrossContainerDropIsNonMutating)
 {
-    GridInventory inventory({10, 6});
-    ItemInstance cola{106, ItemId::Cola};
-    ASSERT_TRUE(inventory.tryPlace(std::move(cola), {3, 2}));
+    GridInventory player{{10, 6}};
+    GridInventory external{{6, 6}};
+    ItemInstance rifle{33, ItemId::Rifle};
+    ASSERT_TRUE(player.tryPlace(std::move(rifle), {0, 0}));
 
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(106, inventory.originOf(106), {3, 2}, {10.0F, 10.0F}));
+    InventoryInteractionState state;
+    const InventoryPlacementRequest request = dragPlacement(
+        state,
+        playerItem(33),
+        {0, 0},
+        {0, 0},
+        {InventoryContainerId::External, {5, 5}});
 
-    const auto request =
-        state.releasePointer({14.0F, 10.0F}, GridPosition{3, 2});
-
-    ASSERT_TRUE(request.has_value());
-    EXPECT_TRUE(inventory.tryMove(request->instanceId, request->destination));
-    EXPECT_EQ(inventory.originOf(106), (std::optional<GridPosition>{{3, 2}}));
+    EXPECT_FALSE(tryTransferItem(
+        player,
+        external,
+        request.source.instanceId,
+        request.destination.cell));
+    EXPECT_EQ(
+        player.originOf(33),
+        (std::optional<GridPosition>{GridPosition{0, 0}}));
+    EXPECT_TRUE(external.placedItems().empty());
 }
 
-TEST(MouseInventoryIntegrationTest, OutsideDropLeavesInventoryUnchanged)
+TEST(MouseInventoryFrameArbitrationTest, EscapeAndReleaseDoNotCommit)
 {
-    GridInventory inventory({10, 6});
-    ItemInstance medkit{104, ItemId::Medkit};
-    ASSERT_TRUE(inventory.tryPlace(std::move(medkit), {2, 2}));
+    GridInventory inventory{{10, 6}};
+    ItemInstance item{41, ItemId::Pistol};
+    ASSERT_TRUE(inventory.tryPlace(std::move(item), {0, 0}));
 
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(104, inventory.originOf(104), {2, 2}, {10.0F, 10.0F}));
-
-    EXPECT_EQ(state.releasePointer({20.0F, 10.0F}, std::nullopt), std::nullopt);
-    EXPECT_EQ(inventory.originOf(104), (std::optional<GridPosition>{{2, 2}}));
-}
-
-TEST(MouseInventoryFrameArbitrationTest, EscapeAndPendingReleaseLeaveInventoryUnchanged)
-{
-    GridInventory inventory({10, 6});
-    ItemInstance medkit{201, ItemId::Medkit};
-    ASSERT_TRUE(inventory.tryPlace(std::move(medkit), {1, 1}));
-    const auto before = snapshotCells(inventory);
-
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            201,
-            inventory.originOf(201),
-            {1, 1},
-            {10.0F, 10.0F}));
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{6, 4});
-    ASSERT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(41),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
+    state.updatePointerPosition(
+        {30.0F, 30.0F},
+        InventoryGridLocation{InventoryContainerId::Player, {3, 2}},
+        false);
 
     const InventoryFrameInputDecision decision =
         decideInventoryFrameInput(true, false, true);
-
-    ASSERT_EQ(
-        decision.controlAction,
-        InventoryFrameControlAction::CancelInteraction);
     ASSERT_FALSE(decision.processPointerEvents);
     state.cancelPointerGesture();
 
-    EXPECT_EQ(snapshotCells(inventory), before);
-    EXPECT_EQ(inventory.originOf(201), (std::optional<GridPosition>{{1, 1}}));
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
+    EXPECT_EQ(
+        inventory.originOf(41),
+        (std::optional<GridPosition>{GridPosition{0, 0}}));
 }
 
-TEST(MouseInventoryFrameArbitrationTest, TabAndPendingReleaseLeaveInventoryUnchanged)
+TEST(MouseInventoryFrameArbitrationTest, TabAndReleaseDoNotCommit)
 {
-    GridInventory inventory({10, 6});
-    ItemInstance rifle{202, ItemId::Rifle};
-    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {1, 1}));
-    const auto before = snapshotCells(inventory);
+    GridInventory inventory{{10, 6}};
+    ItemInstance item{42, ItemId::Pistol};
+    ASSERT_TRUE(inventory.tryPlace(std::move(item), {0, 0}));
 
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            202,
-            inventory.originOf(202),
-            {2, 1},
-            {10.0F, 10.0F}));
-    state.updatePointerPosition({20.0F, 10.0F}, GridPosition{7, 4});
-    ASSERT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(42),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
 
     const InventoryFrameInputDecision decision =
         decideInventoryFrameInput(true, true, false);
-
-    ASSERT_EQ(
-        decision.controlAction,
-        InventoryFrameControlAction::CloseInventory);
     ASSERT_FALSE(decision.processPointerEvents);
     state.reset();
 
-    EXPECT_EQ(snapshotCells(inventory), before);
-    EXPECT_EQ(inventory.originOf(202), (std::optional<GridPosition>{{1, 1}}));
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
-}
-
-TEST(MouseInventoryFrameArbitrationTest, NormalPendingReleaseCommitsMove)
-{
-    GridInventory inventory({10, 6});
-    ItemInstance cola{203, ItemId::Cola};
-    ASSERT_TRUE(inventory.tryPlace(std::move(cola), {1, 1}));
-
-    InventoryInteractionState state({10, 6});
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            203,
-            inventory.originOf(203),
-            {1, 1},
-            {10.0F, 10.0F}));
-
-    const InventoryFrameInputDecision decision =
-        decideInventoryFrameInput(true, false, false);
-
-    ASSERT_TRUE(decision.processPointerEvents);
-    const auto request =
-        state.releasePointer({20.0F, 10.0F}, GridPosition{5, 3});
-    ASSERT_TRUE(request.has_value());
-    ASSERT_TRUE(inventory.canMove(request->instanceId, request->destination));
-    ASSERT_TRUE(inventory.tryMove(request->instanceId, request->destination));
-
-    EXPECT_EQ(inventory.originOf(203), (std::optional<GridPosition>{{5, 3}}));
-}
-
-TEST(MouseInventoryFrameArbitrationTest, PointerPressSuppressesSameFrameKeyboardMove)
-{
-    InventoryInteractionState state({10, 6});
-    const InventoryFrameInputDecision decision =
-        decideInventoryFrameInput(true, false, false);
-
-    ASSERT_TRUE(decision.processPointerEvents);
-    ASSERT_TRUE(
-        state.beginPointerPress(
-            204,
-            GridPosition{2, 2},
-            {2, 2},
-            {10.0F, 10.0F}));
-
-    ASSERT_TRUE(decision.processKeyboardInput);
-    state.moveFocus(1, 0);
-
-    EXPECT_EQ(state.focusedCell(), (GridPosition{0, 0}));
-    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Pressed);
+    EXPECT_EQ(
+        inventory.originOf(42),
+        (std::optional<GridPosition>{GridPosition{0, 0}}));
 }

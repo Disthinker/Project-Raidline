@@ -11,6 +11,7 @@
 #include "particle_system.h"
 #include "player.h"
 #include "projectile.h"
+#include "storage_cabinet.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
 // GameplayWorld 根据这些定义自行生成稳定 instanceId。
@@ -74,6 +75,26 @@ public:
     inventory() const noexcept;
 
     [[nodiscard]]
+    GridInventory &
+    containerInventory() noexcept;
+
+    [[nodiscard]]
+    const GridInventory &
+    containerInventory() const noexcept;
+
+    [[nodiscard]]
+    const StorageCabinet &storageCabinet() const noexcept;
+
+    [[nodiscard]]
+    bool canInteractWithContainer() const noexcept;
+
+    // 只允许把玩家背包中的物品丢到角色朝向前方。
+    // 失败时玩家背包和地面物品列表均保持不变。
+    [[nodiscard]]
+    bool dropInventoryItem(
+        ItemInstanceId instanceId);
+
+    [[nodiscard]]
     int score() const noexcept;
 
 private:
@@ -84,6 +105,11 @@ private:
 
     std::vector<GroundItem> groundItems_;
     GridInventory inventory_{{10, 6}};
+    StorageCabinet storageCabinet_{
+        {960.0F, 296.0F},
+        {96.0F, 128.0F},
+        64.0F,
+        {6, 6}};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};

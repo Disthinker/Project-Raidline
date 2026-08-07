@@ -32,8 +32,8 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target GridInventoryTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(GridInventoryTest|InventoryInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
+cmake --build --preset windows-debug --target GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(GridInventoryTest|InventoryTransferTest|StorageCabinetTest|GameplayWorldTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -49,7 +49,7 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 18 个 GTest executable、299 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态、平滑像素拖拽和事务集成。可用下列命令证明鼠标测试源真实进入编译数据库：
+当前 CMake 注册 20 个 GTest executable、304 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态、平滑像素拖拽和事务集成；`InventoryTransferTest` 与 `StorageCabinetTest` 分别覆盖跨容器事务和世界柜体边界。可用下列命令证明鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
@@ -65,7 +65,7 @@ Ninja Debug 输出通常位于：
 & '.\build\windows-debug\Project_Raidline.exe'
 ```
 
-当前控制：WASD 移动、Space 射击、F 拾取、Tab 背包；背包内可用方向键/Enter 移动，也可用鼠标 hover、单击选择和按住拖动。Esc 优先取消活动拖动或键盘放置，无活动会话时关闭背包。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
+当前控制：WASD 移动、Space 射击、F 拾取/近距离打开柜体、Tab 打开玩家背包。Tab 只显示玩家背包；靠近柜体按 F 才显示右侧柜体容器。背包物品仅用鼠标按住拖动，方向键和 Enter 没有库存语义；Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后物品出现在角色脚下。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
 
 ## Python 与艺术管线测试
 
