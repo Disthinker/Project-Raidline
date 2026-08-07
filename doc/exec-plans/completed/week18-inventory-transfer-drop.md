@@ -1,6 +1,6 @@
 # Week18：双容器转移、物品丢弃与纯鼠标背包交互
 
-- 状态：In Progress
+- 状态：Completed
 - 负责人/工作流：Codex / `raidline-feature-delivery`、`raidline-inventory-domain`、`raidline-cpp-safety-review`、`raidline-build-test-ci`、`raidline-task-closeout`
 - 最后更新：2026-08-07
 
@@ -177,4 +177,4 @@
 
 本地实现和自动验证已完成，未发现需要阻塞人工验收的 C++ 安全问题。与最初计划相比，第二容器现在由可见的 `StorageCabinet` 世界实体拥有，但仍保持为空的内存内库存，不夹带 Loot 生成；App 只增加容器感知布局/查询和路由，没有进行大规模拆分。
 
-本地实现、自动测试、安全审查和修订版人工验收均已完成。尚未完成的关闭条件：提交并推送冻结版本，以及取得一次 Windows/Ubuntu CI 汇总结论。在这些证据完成前，本计划保持 `In Progress`，不得移入 `completed/`。
+本地实现、自动测试、安全审查和修订版人工验收均已完成。冻结版本由提交 `03e9841` 发布，经 [PR #33](https://github.com/Disthinker/Project-Raidline/pull/33) 的 Windows/Ubuntu CI 验证后合入 `main@7e436aa`。Week18 关闭并归档；后续旋转、堆叠和数量操作由独立 Week19 计划负责。

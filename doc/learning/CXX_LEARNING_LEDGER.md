@@ -15,6 +15,7 @@
 | Week 17 | float 屏幕坐标到格子坐标、左上含/右下不含边界、`Idle/Pressed/Dragging` 指针状态机、像素拖动阈值、多格 grab offset、keyboard focus 与 mouse hover 分离、值类型 pointer event/move request、帧级输入优先级、预览/提交事务边界 |
 | 背包 UX 稳定化（#27） | 用两个独立 `std::optional` 表达连续像素位移与吸附格候选、由原 placement 加 press→current delta 保留抓取点、有限浮点输入防护、纯渲染预览与模型事务继续分离 |
 | Week 18 | 两个 move-only 所有者间的事务式转移、目标预留后提交、失败回滚、`std::variant` 请求、容器 ID 值状态、显式丢弃所有权转移、`vector::max_size` 溢出防护、`StorageCabinet` 组合所有权、Closed/PlayerOnly/Container 视图状态、有限浮点交互边界 |
+| Week 19 | 四向 orientation 与 footprint transform、连续/离散抓取锚点同步、精确数量拆分/合并计划、世界级稳定 ID 分配、`std::optional<std::uint32_t>` 拖拽意图、同/跨容器指定格数量事务、部分 GroundItem 丢弃、预留后无抛出提交、MSVC `/showIncludes` 与 Ninja 依赖追踪 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -28,6 +29,8 @@
 - CMake target 源码复用、compile/link/test discovery 的不同失败层。
 - App 初始化/销毁顺序与 SDL 资源依赖。
 - 两容器事务中“查询成功”到“最终提交”之间的前置条件，以及为什么预留容量必须早于源物品移出。
+- 数量拆分时“源 ID、目标 ID、新 ID”三种身份规则，以及为什么失败不能推进世界 ID 序列。
+- 同一 `GridInventory` 内拆分/合并与两个不同 `GridInventory` 间转移在引用失效和提交顺序上的差异。
 
 ## Week 17–18 已落地、仍应复习的主题
 

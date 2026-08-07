@@ -1,57 +1,60 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-07，`codex/week18-inventory-transfer-drop` 本地自动验证候选。
+最后核对：2026-08-07，`codex/week19-advanced-inventory-operations` 最终 PR 候选。
 
-## Git 与 CI 基线
+## Git、验证与 CI 基线
 
-- `main` / `origin/main`：`c6cda7b`，已通过 [PR #32](https://github.com/Disthinker/Project-Raidline/pull/32) 合入平滑背包拖拽虚像。
-- 当前实现分支：`codex/week18-inventory-transfer-drop`，从 `c6cda7b` 创建，范围为双容器安全转移、玩家物品丢弃和纯鼠标背包。
-- 当前工作区已完成全目标 Windows Debug 构建和全量 CTest 304/304；用户已确认 Week18 修订版第 12–16 项真实窗口验收全部通过，当前提交的 Windows/Ubuntu CI 尚未执行。
-- CI 的精确 SHA、run URL 与最终结论将记录在 PR/Issue，不在仓库文档中追写动态结果，避免产生额外 CI 轮次。
+- `main` / `origin/main`：`7e436aa`，Week18 已通过 [PR #33](https://github.com/Disthinker/Project-Raidline/pull/33) 合入双容器安全转移、柜体交互、贴右丢弃区、角色脚下落点与纯鼠标背包。
+- 当前实现分支：`codex/week19-advanced-inventory-operations`，从 `7e436aa` 创建，范围为整栈快捷转移、拖拽旋转、9mm 弹药堆叠、按数量拿取/放置/合并/丢弃及正式弹药资源。
+- Windows Debug 全目标增量构建成功，四个受影响测试程序直接运行 127/127 通过，全量 CTest 367/367 通过；未复现 `gtest_ar_` 栈损坏。
+- 用户已确认 M1 1–7、M2 1–8、M3 第一版 1–8，以及按数量拖拽修订版 1–8 的真实窗口验收全部通过。
+- 9mm 资源验证通过；由于当前环境没有 Poetry/pytest，三个 `tests/test_phase1_assets.py` 纯断言以现有 Python/Pillow 直接运行，3/3 通过。
+- Week19 精确提交的 Windows/Ubuntu CI 尚未执行。动态 SHA、run URL 与最终结论只记录在 PR/Issue，避免为追写 CI 结果再触发一轮构建。
 
-历史 DevLog 中“PR/CI 待完成”等文字只代表当时状态；当前状态以 Git、源码、CMake 和 CI 为准。
+## 已进入 main：Week 1–18
 
-## 已进入 main 的基线：Week 1–17 与平滑拖拽
+- Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
+- Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
+- Tab 只打开玩家背包；角色靠近柜体按 F 才打开双容器界面。柜体交互与世界拾取在同帧互斥。
+- 同容器移动、跨容器指定格转移和 row-major first-fit 核心转移都保持 move-only 所有权与稳定 ID；失败保持参与容器不变。
+- 玩家物品可拖到贴住屏幕右侧的半透明丢弃条并落在角色脚下；外部容器物品不能直接丢弃。
+- 背包是纯鼠标交互；方向键和两种 Enter 没有库存语义，Idle 不显示持久 hover/选择框，Tab/Esc 继续优先于同帧提交。
 
-- CMake 主程序和 CTest 已编译 `src/inventory_interaction.{h,cpp}` 的 Week17 鼠标交互与后续平滑虚像。
-- `GridInventory::canMove` 是无副作用合法性查询；`tryMove` 是先验证后提交的事务入口。
-- 平滑虚像使用原 placement 加 press→current 像素位移；红/绿候选 footprint 独立吸附格子。
-- 分支创建时仍保留 Week16 键盘兼容；本 Week18 分支根据新的产品决策明确替换为纯鼠标契约。
+Week18 计划已按 PR #33 的合入事实归档到 `doc/exec-plans/completed/`。
 
-## Week 17 历史验收状态
+## Week19 最终 PR 候选
 
-- 只保留并扩展 canonical `src/inventory_interaction.{h,cpp}`；冲突且未接线的 `src/inventory/inventory_interaction.*` 草稿已删除。
-- `InventoryGridLayout` 使用 float 逻辑坐标，验证有限原点、正 cell size、正网格尺寸与有限总 extent；命中规则为左/上包含、右/下排除。
-- `InventoryInteractionState` 同时保存独立的 keyboard focus、mouse hover、持久选择，以及 `Idle/Pressed/Dragging` 指针状态；固定拖动阈值为 4 逻辑像素。
-- 多格物品通过 `GridInventory::originOf` 获取真实左上角并保存 grab offset；鼠标移出网格会清空候选，释放不会产生提交请求。
-- App 把 SDL3 motion/left button 规范化为设备无关值并暂存到当前帧；`canMove` 负责绿/红预览合法性，`tryMove` 只在有效 release 时提交。
-- `decideInventoryFrameInput` 固定 Tab → Esc → pointer → keyboard 的单帧优先级；Tab/Esc 会丢弃待处理 mouse-up，保证取消发生在任何提交之前。
-- Esc 优先取消活动 pointer gesture，其次取消键盘 placement；Tab 清空全部交互状态并关闭背包。
-- hover、持久选择、原 placement 和合法/非法候选均使用 SDL 代码绘制，无新增 UI 图片资产。
-- CMake 新增 `MouseInventoryInteractionTest`；2026-08-06 干净配置、清理 117 个旧产物并完成 99 步全目标构建，CTest 295/295，鼠标目标直接运行 29/29，资产函数测试 3/3，编译数据库已包含鼠标测试源。
-- 2026-08-07 在 Windows Debug 真实游戏窗口完成 9/9 人工验收：hover/focus、单击、阈值、多格 grab offset、合法/非法释放、网格外释放、Esc/Tab 取消、Week 16 键盘回归以及关闭重开状态均通过。
-- Week 17 ExecPlan 已完成并归档；后续平滑拖拽虚像、键盘契约决策和上下方向动画继续作为独立问题跟踪，不夹带进 Week 17。
+### 整栈快捷转移
 
-以上键盘焦点与 keyboard 仲裁描述是 Week17 当时的已验收历史，不是当前 Week18 分支行为。
+- 双容器 Idle 状态下，鼠标悬停物品后按 F 或 Ctrl+右键，将整栈按“先稳定顺序合并、再 row-major first-fit”转移到另一侧。
+- PlayerOnly、空格、活动拖拽、目标容量不足、Tab/Esc 优先帧均不提交；快捷转移不恢复持久蓝色高亮。
 
-实现与验收证据见 [Week 17 ExecPlan](../exec-plans/completed/week17-mouse-inventory-interaction.md)，当前缺陷与延期债务见 [问题台账](KNOWN_ISSUES.md)。
+### 拖拽旋转
 
-## Week18 本地实现状态
+- Pistol/Rifle 在 Dragging 状态按 R 顺时针旋转 90°；候选 footprint、连续像素抓取锚点、同容器 transform、跨容器 transform 和脚下丢弃方向一致提交。
+- 四次旋转恢复原方向；不可旋转物品忽略 R；非法释放、Esc 与 Tab 不修改 origin、orientation 或 cells。
 
-- `GameplayWorld` 拥有玩家 10×6 背包和世界柜体，柜体拥有自己的 6×6 容器；`inventory_transfer` 提供指定格与 row-major first-fit 的事务式转移。
-- 转移在源物品移出前完成目标合法性验证和容量预留；成功保持稳定 ID/定义，失败保持两个容器不变。
-- 玩家背包物品可拖到贴住屏幕右边缘的半透明 `DROP` 长条，成为角色脚底中心且限制在世界边界内的 `GroundItem`；第二容器不能直接丢弃。
-- `InventoryOverlayState` 区分关闭、Tab 玩家背包和 F 柜体双栏；`InventoryInteractionState` 已收敛为容器感知的纯鼠标状态，release/Esc/Tab 清除临时选择，Idle 不绘制 hover/蓝框。平滑虚像、抓取偏移、吸附 footprint、普通空白释放取消和 Tab/Esc 同帧优先契约继续保留。
-- 方向键、主 Enter、数字键盘 Enter、黄色键盘焦点与相关提示已从输入、状态、渲染和测试中删除。
-- 修订前 11/11 人工验收已由用户确认；柜体、上下文容器、右侧丢弃条、无闲置高亮和脚下落点修订完成后，全目标 Windows Debug 构建与全量 CTest 304/304 通过，用户随后确认修订版第 12–16 项真实窗口验收全部通过。当前提交 CI 待完成。
+### 堆叠与数量拖拽
 
-实现与验收清单见 [Week18 活跃 ExecPlan](../exec-plans/active/week18-inventory-transfer-drop.md)；动态 CI 结果只记录在后续 PR/Issue。
+- `Ammo9mm` 是已发布的 1×1、不可旋转、最大堆叠 60 的弹药定义；正式场景提供数量 25 和 40 的两堆地面弹药。
+- F/Ctrl+右键仍移动整栈。Ctrl+左键立即拿起 1，Shift+左键立即拿起向上取整的一半；Ctrl+Shift+左键无操作。
+- 数量拿取在 PlayerOnly 和双容器界面都可用。源栈在 release 前不变，平滑虚影显示所选数量，包括明确显示 `1`。
+- release 到指定空格会拆分新 placement，到同类未满栈会精确合并，到玩家丢弃区只把所选数量作为新地面栈放到角色脚下。
+- 拆分保留源 ID 并由 `GameplayWorld` 为新 placement 分配 ID；合并保留目标 ID。失败或取消不修改源/目标/地面，也不消耗 ID。
+
+### 弹药资源
+
+- 独立生产任务 `019fdb3a-add1-7ab3-a67e-8cd0ad4bc009` 生成两个候选并使用唯一一次修复；art-control 批准 candidate 01。
+- 正式 master、64×64 inventory 与 32×32 world 资源由同一身份确定性派生，尺寸、Alpha、透明角、安全留白、1×1 footprint 与不可旋转合同均通过 QA。
+- “未精确呈现四枚弹药”作为已接受偏差记录；正式合同只要求少量弹药可见，运行时辨识度优先。
 
 ## 已知工程债
 
-- `src/app.cpp` 约 2000 行，集中 SDL 生命周期、输入编排、纹理和背包绘制；Week18 只增加了双容器所需的窄接口，整体拆分继续由架构债跟踪。
-- CMake 为多个测试 target 重复列出业务源码，主程序能链接不代表测试 target 完整；MSVC 增量对象在类布局变化后需警惕 ABI 尺寸不一致。
-- ItemDefinition 仍是编译期静态目录；世界、射击和 UI 布局有硬编码常量。
-- 缺少 App 级截图/端到端 UI 测试；后续视觉与操作变化仍需人工验收。
-- `tests/test_phase1_assets.py` 尚未纳入 CTest 或 GitHub Actions。
-- 艺术管线仍有批准资产覆盖保护只靠流程、候选跨包扫描和命名枪械工具硬编码等债务。
+- `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
+- 多个测试 target 重复编译业务源码；CMake 已修正中文 MSVC `/showIncludes` 前缀导致 Ninja `#deps 0` 的已知路径，但共享核心 library 仍是延期任务。
+- 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
+- `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
+- 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
+- 完整 Loot table、搜索计时、RaidSession、撤离、Stash、装备栏、重量、耐久和持久化尚未实现。
+
+详细行为见 [Week19 活跃 ExecPlan](../exec-plans/active/week19-advanced-inventory-operations.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
