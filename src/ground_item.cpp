@@ -4,7 +4,7 @@
 
 GroundItem::GroundItem(
     ItemInstance item,
-    Vec2 position)
+    Vec2 position) noexcept
     : item_{std::move(item)},
       position_{position}
 {

@@ -15,6 +15,7 @@
 | Week 15 | GridInventory、row-major first-fit、事务式放置、只读背包 UI |
 | Week 16 | `canMove`/`tryMove`、设备无关键盘交互状态、合法性预览与提交/取消 |
 | Week 17 | 鼠标 hover/选择/阈值拖拽、多格 grab offset、合法性反馈、帧级 Tab/Esc 取消仲裁 |
+| 背包 UX 稳定化 | 平滑像素拖拽虚像，保留独立吸附格候选；PR #32 已合入 `main` |
 
 详细演进保留在 `doc/DevLog_Week*.md`，但其中的分支和 CI 状态是历史快照。
 
@@ -24,16 +25,16 @@
 
 实现、专用测试和帧级输入仲裁已经接入；29/29 鼠标测试、295/295 CTest、Windows/Ubuntu CI 以及 2026-08-07 的 9/9 真实窗口验收共同完成闭环。详细证据见 [已完成 ExecPlan](../exec-plans/completed/week17-mouse-inventory-interaction.md) 和 [问题台账](KNOWN_ISSUES.md)。
 
-## 当前稳定化：平滑鼠标拖拽虚像
+## 当前开发：Week 18 双容器转移、丢弃与纯鼠标背包
 
-[GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) 的本地实现已将连续像素虚像与吸附格子候选分离，并完成 299/299 CTest 与 Windows Debug 真实窗口 7/7 验收。当前提交 CI 通过并合入 `main` 后关闭该问题，再从更新后的 `main` 开始 Week 18；不在本任务中夹带 #26 键盘契约或 #28 上下方向动画。
+`codex/week18-inventory-transfer-drop` 已在本地实现玩家 10×6 背包与世界柜体所拥有的 6×6 `GridInventory` 之间的指定格/首个可用位置安全转移、贴右侧丢弃条、角色脚下落点，以及纯鼠标交互。Tab 只显示玩家背包，靠近柜体按 F 才显示右侧容器；方向键和两种 Enter 的库存语义、黄色键盘焦点与 Idle 选择框已删除。Windows Debug 完整构建和全量 CTest 304/304 已通过；修订版第 12–16 项真实窗口验收、提交 CI 与合入仍待完成，因此 Week18 尚未列入已完成里程碑。
 
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
 | --- | --- | --- |
-| Week 18 | 玩家背包与第二个 GridInventory 安全转移 | move-only 跨所有者转移、稳定 ID、失败回滚、自动/指定位置 |
-| Week 19 | 一个可搜索地图容器与最小 Loot | 双容器 UI、权重 Loot、可注入随机数、确定性测试 |
+| Week 18 收口 | 双容器转移、显式丢弃与纯鼠标背包 | 真实窗口验收、Windows/Ubuntu CI、合入 `main` |
+| Week 19 | 一个可搜索地图容器与最小 Loot | 容器交互生命周期、权重 Loot、可注入随机数、确定性测试 |
 | Week 20 | 最小 RaidSession 与撤离点 | Preparing/InRaid/Extracting/Extracted/PlayerDead/RaidEnded、计时与离开取消 |
 | Week 21 | 结算与最小 Stash | 撤离保留、死亡丢失本局所得、局外仓库、重开 |
 | Week 22 | 垂直切片 V0 | 进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开 |

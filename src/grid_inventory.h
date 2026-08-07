@@ -71,6 +71,11 @@ public:
     std::optional<GridPosition> findFirstFit(
         ItemId definitionId) const;
 
+    // 为即将到来的事务式放置预留元素容量。
+    // 分配失败时 Inventory 的可观察内容保持不变。
+    void reserveForAdditionalItems(
+        std::size_t additionalItemCount);
+
     // 判断已经放置的物品能否移动到 newOrigin。
     //
     // 检查目标 footprint 时：

@@ -898,3 +898,214 @@ TEST(
         std::optional<ItemInstanceId>{
             pistolId});
 }
+
+TEST(GameplayWorldTest, OwnsEmptySixBySixContainerInventory)
+{
+    const GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    EXPECT_EQ(world.containerInventory().width(), 6);
+    EXPECT_EQ(world.containerInventory().height(), 6);
+    EXPECT_TRUE(
+        world.containerInventory()
+            .placedItems()
+            .empty());
+}
+
+TEST(GameplayWorldTest, ContainerInventoryBelongsToStorageCabinet)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    EXPECT_EQ(
+        &world.containerInventory(),
+        &world.storageCabinet().inventory());
+}
+
+TEST(GameplayWorldTest, PlayerMustApproachCabinetBeforeInteraction)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    EXPECT_FALSE(world.canInteractWithContainer());
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    world.update(moveRight, 1.0F);
+
+    EXPECT_TRUE(world.canInteractWithContainer());
+}
+
+TEST(GameplayWorldTest, DropsPlayerInventoryItemAtPlayersFeet)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    ItemInstance rifle{501, ItemId::Rifle};
+
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(rifle),
+            {2, 1}));
+
+    ASSERT_TRUE(world.dropInventoryItem(501));
+
+    EXPECT_TRUE(world.inventory().placedItems().empty());
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    const GroundItem &dropped = world.groundItems().front();
+    EXPECT_EQ(dropped.item().instanceId(), 501U);
+    EXPECT_EQ(dropped.item().definitionId(), ItemId::Rifle);
+    EXPECT_FLOAT_EQ(dropped.position().x, 656.0f);
+    EXPECT_FLOAT_EQ(dropped.position().y, 392.0f);
+}
+
+TEST(GameplayWorldTest, MissingDropIdLeavesWorldUnchanged)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    ItemInstance cola{502, ItemId::Cola};
+
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(cola),
+            {0, 0}));
+
+    EXPECT_FALSE(world.dropInventoryItem(999));
+    ASSERT_EQ(world.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        world.inventory()
+            .placedItems()
+            .front()
+            .item.instanceId(),
+        502U);
+    EXPECT_TRUE(world.groundItems().empty());
+}
+
+TEST(GameplayWorldTest, CannotDropDirectlyFromContainerInventory)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+    ItemInstance medkit{503, ItemId::Medkit};
+
+    ASSERT_TRUE(
+        world.containerInventory().tryPlace(
+            std::move(medkit),
+            {1, 1}));
+
+    EXPECT_FALSE(world.dropInventoryItem(503));
+    ASSERT_EQ(
+        world.containerInventory().placedItems().size(),
+        1U);
+    EXPECT_TRUE(world.groundItems().empty());
+}
+
+TEST(GameplayWorldTest, DropPositionKeepsItemInsideWorldBounds)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    GameplayInput moveDown{};
+    moveDown.moveDown = true;
+    world.update(moveDown, 10.0f);
+
+    ItemInstance cola{504, ItemId::Cola};
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(cola),
+            {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(504));
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().y,
+        704.0f);
+}
+
+TEST(GameplayWorldTest, DropPositionIgnoresRightFacingDirection)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    world.update(moveRight, 0.0f);
+
+    ItemInstance cola{505, ItemId::Cola};
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(cola),
+            {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(505));
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().x,
+        656.0f);
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().y,
+        392.0f);
+}
+
+TEST(GameplayWorldTest, DropPositionIgnoresDownFacingDirection)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    GameplayInput moveDown{};
+    moveDown.moveDown = true;
+    world.update(moveDown, 0.0f);
+
+    ItemInstance cola{506, ItemId::Cola};
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(cola),
+            {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(506));
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().x,
+        656.0f);
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().y,
+        392.0f);
+}
+
+TEST(GameplayWorldTest, DropPositionIgnoresLeftFacingDirection)
+{
+    GameplayWorld world{
+        3,
+        std::vector<GroundItemSpawn>{}};
+
+    GameplayInput moveLeft{};
+    moveLeft.moveLeft = true;
+    world.update(moveLeft, 0.0f);
+
+    ItemInstance cola{507, ItemId::Cola};
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(cola),
+            {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(507));
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().x,
+        656.0f);
+    EXPECT_FLOAT_EQ(
+        world.groundItems().front().position().y,
+        392.0f);
+}

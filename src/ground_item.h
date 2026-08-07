@@ -11,7 +11,7 @@ class GroundItem
 public:
     GroundItem(
         ItemInstance item,
-        Vec2 position);
+        Vec2 position) noexcept;
 
     ~GroundItem() = default;
 

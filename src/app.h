@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -27,7 +28,7 @@ private:
     Uint64 lastCounter_{};
 
     bool running_{false};
-    bool inventoryOpen_{false};
+    InventoryOverlayState inventoryOverlayState_;
 
     GameplayWorld world_;
 
@@ -60,43 +61,52 @@ private:
 
     // 背包输入编排。
     void handleInventoryCancel();
-    void handleInventoryKeyboardInput();
     void handleInventoryPointerEvent(
         const InventoryPointerEvent &event);
 
     [[nodiscard]]
     InventoryGridLayout
-    inventoryGridLayout() const;
+    inventoryGridLayout(
+        InventoryContainerId container) const;
 
-    void moveInventorySelection(
-        int deltaX,
-        int deltaY) noexcept;
+    [[nodiscard]]
+    std::optional<InventoryGridLocation>
+    inventoryLocationAt(
+        MousePosition position) const;
 
-    void beginInventoryPlacement();
-    void confirmInventoryPlacement();
+    [[nodiscard]]
+    GridInventory &inventoryFor(
+        InventoryContainerId container) noexcept;
+
+    [[nodiscard]]
+    const GridInventory &inventoryFor(
+        InventoryContainerId container) const noexcept;
+
+    [[nodiscard]]
+    SDL_FRect inventoryDropZone() const noexcept;
+
+    [[nodiscard]]
+    bool inventoryDropZoneContains(
+        MousePosition position) const noexcept;
 
     void closeInventory() noexcept;
 
     void render();
     void renderBackground();
+    void renderStorageCabinet();
     void renderGroundItems();
     void renderEnemies();
     void renderPlayer();
     void renderProjectiles();
     void renderParticles();
-    void renderInventoryBrowsingFocus(
-        float gridX,
-        float gridY);
-
     void renderInventoryPlacementPreview(
         const GridInventory &inventory,
-        float gridX,
-        float gridY);
+        InventoryContainerId container,
+        const InventoryGridLayout &layout);
 
     void renderInventoryPointerFeedback(
-        const GridInventory &inventory,
-        float gridX,
-        float gridY);
+        InventoryContainerId container,
+        const InventoryGridLayout &layout);
 
     void renderInventoryOverlay();
     void renderDebugText();

@@ -33,6 +33,11 @@ add_executable(Project_Raidline
     src/ground_item.cpp
     src/grid_inventory.h
     src/grid_inventory.cpp
+    src/inventory_transfer.h
+    src/inventory_transfer.cpp
+
+    src/storage_cabinet.h
+    src/storage_cabinet.cpp
 
     src/inventory_interaction.h
     src/inventory_interaction.cpp
@@ -258,6 +263,9 @@ add_executable(GameplayWorldTest
 
     src/grid_inventory.h
     src/grid_inventory.cpp
+
+    src/storage_cabinet.h
+    src/storage_cabinet.cpp
 )
 
 target_compile_features(
@@ -285,6 +293,49 @@ target_include_directories(
 )
 
 gtest_discover_tests(GameplayWorldTest)
+
+# test storage_cabinet
+add_executable(StorageCabinetTest
+    tests/test_storage_cabinet.cpp
+    src/storage_cabinet.cpp
+    src/storage_cabinet.h
+    src/collision.cpp
+    src/collision.h
+    src/rect.h
+    src/vec2.h
+    src/grid_inventory.cpp
+    src/grid_inventory.h
+    src/item_definition.cpp
+    src/item_definition.h
+    src/item_instance.cpp
+    src/item_instance.h
+)
+
+target_compile_features(
+    StorageCabinetTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    StorageCabinetTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    StorageCabinetTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    StorageCabinetTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(StorageCabinetTest)
 
 # test texture
 add_executable(TextureTest
@@ -511,6 +562,46 @@ target_include_directories(
 
 gtest_discover_tests(GridInventoryTest)
 
+# test inventory_transfer
+add_executable(InventoryTransferTest
+    tests/test_inventory_transfer.cpp
+    src/inventory_transfer.h
+    src/inventory_transfer.cpp
+    src/grid_inventory.h
+    src/grid_inventory.cpp
+    src/item_instance.h
+    src/item_instance.cpp
+    src/item_definition.h
+    src/item_definition.cpp
+    src/vec2.h
+)
+
+target_compile_features(
+    InventoryTransferTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    InventoryTransferTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    InventoryTransferTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    InventoryTransferTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(InventoryTransferTest)
+
 # test inventory_interaction
 add_executable(InventoryInteractionTest
     tests/test_inventory_interaction.cpp
@@ -552,6 +643,8 @@ add_executable(MouseInventoryInteractionTest
     tests/test_mouse_inventory_interaction.cpp
     src/inventory_interaction.h
     src/inventory_interaction.cpp
+    src/inventory_transfer.h
+    src/inventory_transfer.cpp
     src/grid_inventory.h
     src/grid_inventory.cpp
     src/item_instance.h
@@ -598,6 +691,7 @@ if(MSVC)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
+    target_compile_options(StorageCabinetTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)
@@ -623,6 +717,12 @@ if(MSVC)
 
     target_compile_options(
         GridInventoryTest
+        PRIVATE
+        /utf-8
+    )
+
+    target_compile_options(
+        InventoryTransferTest
         PRIVATE
         /utf-8
     )

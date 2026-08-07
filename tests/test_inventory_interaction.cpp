@@ -1,344 +1,258 @@
 #include <gtest/gtest.h>
 
-#include <optional>
-#include <stdexcept>
+#include <variant>
 
 #include "inventory_interaction.h"
 
-TEST(
-    InventoryInteractionTest,
-    StartsBrowsingAtTopLeft)
+namespace
 {
-    InventoryInteractionState state({10, 6});
 
-    EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
+    constexpr InventoryItemSelection playerItem(
+        ItemInstanceId instanceId)
+    {
+        return {
+            InventoryContainerId::Player,
+            instanceId};
+    }
 
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{0, 0}));
+    constexpr InventoryItemSelection externalItem(
+        ItemInstanceId instanceId)
+    {
+        return {
+            InventoryContainerId::External,
+            instanceId};
+    }
 
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{0, 0}));
+} // namespace
 
-    EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::nullopt);
+TEST(InventoryInteractionTest, StartsAsPureMouseIdleState)
+{
+    const InventoryInteractionState state;
+
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
+    EXPECT_EQ(state.hoveredLocation(), std::nullopt);
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
+    EXPECT_FALSE(state.pointerOverDropZone());
 }
 
-TEST(
-    InventoryInteractionTest,
-    RejectsInvalidGridDimensions)
+TEST(InventoryInteractionTest, ClickReleaseClearsTransientSelection)
 {
-    EXPECT_THROW(
-        (InventoryInteractionState{
-            InventoryGridSize{0, 6}}),
-        std::invalid_argument);
+    InventoryInteractionState state;
 
-    EXPECT_THROW(
-        (InventoryInteractionState{
-            InventoryGridSize{10, 0}}),
-        std::invalid_argument);
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(11),
+        {1, 1},
+        {1, 1},
+        {100.0F, 100.0F}));
 
-    EXPECT_THROW(
-        (InventoryInteractionState{
-            InventoryGridSize{-1, 6}}),
-        std::invalid_argument);
+    const auto request = state.releasePointer(
+        {101.0F, 101.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {1, 1}},
+        false);
+
+    EXPECT_EQ(request, std::nullopt);
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
 }
 
-TEST(
-    InventoryInteractionTest,
-    BrowsingFocusMovesAndClamps)
+TEST(InventoryInteractionTest, CrossContainerDragCreatesPlacementRequest)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
 
-    state.moveFocus(3, 2);
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(12),
+        {2, 1},
+        {3, 2},
+        {100.0F, 100.0F}));
 
+    const auto request = state.releasePointer(
+        {120.0F, 100.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {4, 3}},
+        false);
+
+    ASSERT_TRUE(request.has_value());
+    const auto *placement =
+        std::get_if<InventoryPlacementRequest>(&*request);
+    ASSERT_NE(placement, nullptr);
+    EXPECT_EQ(placement->source, playerItem(12));
     EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{3, 2}));
-
-    state.moveFocus(-100, -100);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{0, 0}));
-
-    state.moveFocus(100, 100);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{9, 5}));
+        placement->destination,
+        (InventoryGridLocation{
+            InventoryContainerId::External,
+            {3, 2}}));
 }
 
-TEST(
-    InventoryInteractionTest,
-    EmptySelectionDoesNotStartPlacement)
+TEST(InventoryInteractionTest, PlayerDragToDropZoneCreatesDropRequest)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
 
-    EXPECT_FALSE(
-        state.beginPlacement(
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(13),
+        {0, 0},
+        {0, 0},
+        {20.0F, 20.0F}));
+
+    const auto request = state.releasePointer(
+        {40.0F, 40.0F},
+        std::nullopt,
+        true);
+
+    ASSERT_TRUE(request.has_value());
+    const auto *drop =
+        std::get_if<InventoryDropRequest>(&*request);
+    ASSERT_NE(drop, nullptr);
+    EXPECT_EQ(drop->source, playerItem(13));
+}
+
+TEST(InventoryInteractionTest, ExternalItemCannotCreateDropRequest)
+{
+    InventoryInteractionState state;
+
+    ASSERT_TRUE(state.beginPointerPress(
+        externalItem(14),
+        {0, 0},
+        {0, 0},
+        {20.0F, 20.0F}));
+
+    EXPECT_EQ(
+        state.releasePointer(
+            {40.0F, 40.0F},
             std::nullopt,
-            GridPosition{3, 2}));
-
-    EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
-
-    EXPECT_EQ(
-        state.selectedInstanceId(),
+            true),
         std::nullopt);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{0, 0}));
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
 }
 
-TEST(
-    InventoryInteractionTest,
-    InvalidZeroIdDoesNotStartPlacement)
+TEST(InventoryInteractionTest, OrdinaryOutsideReleaseCancels)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
 
-    EXPECT_FALSE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{0},
-            GridPosition{1, 1}));
-
-    EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(15),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
 
     EXPECT_EQ(
-        state.selectedInstanceId(),
+        state.releasePointer(
+            {40.0F, 40.0F},
+            std::nullopt,
+            false),
         std::nullopt);
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
 }
 
-TEST(
-    InventoryInteractionTest,
-    OccupiedSelectionStartsPlacement)
+TEST(InventoryInteractionTest, CancelClearsSelectionAndKeepsHover)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(16),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
 
-    state.moveFocus(3, 2);
+    const InventoryGridLocation hover{
+        InventoryContainerId::External,
+        {2, 2}};
+    state.updatePointerPosition(
+        {30.0F, 30.0F},
+        hover,
+        false);
+    state.cancelPointerGesture();
 
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{42},
-            GridPosition{2, 1}));
-
-    EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::PlacingItem);
-
-    EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::optional<ItemInstanceId>{42});
-
-    // previewOrigin 使用物品左上角，
-    // 不一定等于玩家选中的 footprint 格子。
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{2, 1}));
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{3, 2}));
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
+    EXPECT_EQ(state.hoveredLocation(), hover);
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
 }
 
-TEST(
-    InventoryInteractionTest,
-    FocusDoesNotMoveWhilePlacing)
+TEST(InventoryOverlayStateTest, StartsClosed)
 {
-    InventoryInteractionState state({10, 6});
+    const InventoryOverlayState state;
 
-    state.moveFocus(2, 2);
-
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{43},
-            GridPosition{1, 1}));
-
-    state.moveFocus(4, 3);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{2, 2}));
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{1, 1}));
+    EXPECT_FALSE(state.isOpen());
+    EXPECT_FALSE(state.showsExternalContainer());
+    EXPECT_EQ(state.mode(), InventoryOverlayMode::Closed);
 }
 
-TEST(
-    InventoryInteractionTest,
-    PreviewMovesAndClampsWhilePlacing)
+TEST(InventoryOverlayStateTest, TabStyleOpenShowsOnlyPlayerInventory)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryOverlayState state;
 
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{44},
-            GridPosition{2, 2}));
+    state.openPlayerInventory();
 
-    state.movePreview(3, 1);
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{5, 3}));
-
-    state.movePreview(-100, -100);
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{0, 0}));
-
-    state.movePreview(100, 100);
-
-    // 只 clamp 左上角。
-    // 对多格物品而言，该位置可能由 canMove 判定为非法。
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{9, 5}));
+    EXPECT_TRUE(state.isOpen());
+    EXPECT_FALSE(state.showsExternalContainer());
+    EXPECT_EQ(state.mode(), InventoryOverlayMode::PlayerOnly);
 }
 
-TEST(
-    InventoryInteractionTest,
-    PreviewDoesNotMoveWhileBrowsing)
+TEST(InventoryOverlayStateTest, CabinetOpenShowsExternalContainer)
 {
-    InventoryInteractionState state({10, 6});
+    InventoryOverlayState state;
 
-    state.movePreview(5, 4);
+    state.openContainerInventory();
 
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{0, 0}));
+    EXPECT_TRUE(state.isOpen());
+    EXPECT_TRUE(state.showsExternalContainer());
+    EXPECT_EQ(state.mode(), InventoryOverlayMode::Container);
 
-    EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
+    state.close();
+    EXPECT_FALSE(state.isOpen());
+    EXPECT_FALSE(state.showsExternalContainer());
 }
 
-TEST(
-    InventoryInteractionTest,
-    RejectedPlacementStaysPlacing)
+TEST(InventoryContainerInteractionTest, InRangeInteractOpensAndConsumesGameplay)
 {
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{45},
-            GridPosition{1, 1}));
-
-    state.movePreview(2, 1);
-
-    state.resolvePlacement(false);
-
     EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::PlacingItem);
-
-    EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::optional<ItemInstanceId>{45});
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{3, 2}));
+        decideInventoryContainerInteraction(false, false, true, true),
+        (InventoryContainerInteractionDecision{true, true}));
 }
 
-TEST(
-    InventoryInteractionTest,
-    SuccessfulPlacementReturnsToBrowsing)
+TEST(InventoryContainerInteractionTest, OutOfRangeInteractRemainsGameplayInput)
 {
-    InventoryInteractionState state({10, 6});
-
-    state.moveFocus(1, 1);
-
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{46},
-            GridPosition{1, 1}));
-
-    state.movePreview(3, 2);
-
-    state.resolvePlacement(true);
-
     EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
-
-    EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::nullopt);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{4, 3}));
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{4, 3}));
+        decideInventoryContainerInteraction(false, false, false, true),
+        (InventoryContainerInteractionDecision{false, false}));
 }
 
-TEST(
-    InventoryInteractionTest,
-    CancelPlacementReturnsToOriginalFocus)
+TEST(InventoryContainerInteractionTest, OpenOverlaySuppressesWorldInput)
 {
-    InventoryInteractionState state({10, 6});
-
-    state.moveFocus(4, 2);
-
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{47},
-            GridPosition{3, 1}));
-
-    state.movePreview(2, 2);
-
-    state.cancelPlacement();
-
     EXPECT_EQ(
-        state.mode(),
-        InventoryInteractionMode::Browsing);
-
-    EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::nullopt);
-
-    EXPECT_EQ(
-        state.focusedCell(),
-        (GridPosition{4, 2}));
-
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{4, 2}));
+        decideInventoryContainerInteraction(true, false, true, true),
+        (InventoryContainerInteractionDecision{false, true}));
 }
 
-TEST(
-    InventoryInteractionTest,
-    CannotBeginAnotherPlacementWhilePlacing)
+TEST(InventoryContainerInteractionTest, TabOrEscControlWinsOverCabinetInteract)
 {
-    InventoryInteractionState state({10, 6});
-
-    ASSERT_TRUE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{48},
-            GridPosition{1, 1}));
-
-    EXPECT_FALSE(
-        state.beginPlacement(
-            std::optional<ItemInstanceId>{49},
-            GridPosition{5, 4}));
-
     EXPECT_EQ(
-        state.selectedInstanceId(),
-        std::optional<ItemInstanceId>{48});
+        decideInventoryContainerInteraction(false, true, true, true),
+        (InventoryContainerInteractionDecision{false, true}));
+}
 
-    EXPECT_EQ(
-        state.previewOrigin(),
-        (GridPosition{1, 1}));
+TEST(InventoryInteractionTest, ResetClearsAllPointerState)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(17),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F}));
+    state.updatePointerPosition(
+        {30.0F, 30.0F},
+        std::nullopt,
+        true);
+
+    state.reset();
+
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
+    EXPECT_EQ(state.hoveredLocation(), std::nullopt);
+    EXPECT_EQ(state.activePreviewLocation(), std::nullopt);
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
+    EXPECT_FALSE(state.pointerOverDropZone());
+    EXPECT_FALSE(state.pointerGestureActive());
 }

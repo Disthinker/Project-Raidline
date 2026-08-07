@@ -20,11 +20,6 @@ enum class GameAction
     ToggleInventory,
 
     // 背包 UI 输入。
-    InventoryUp,
-    InventoryDown,
-    InventoryLeft,
-    InventoryRight,
-    InventoryConfirm,
     InventoryCancel
 };
 

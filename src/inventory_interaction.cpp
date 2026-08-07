@@ -1,12 +1,81 @@
 #include "inventory_interaction.h"
 
-#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
 namespace
 {
-constexpr float inventoryDragThreshold = 4.0F;
+    constexpr float kInventoryDragThreshold{4.0F};
+
+    bool isFinite(MousePosition position) noexcept
+    {
+        return std::isfinite(position.x) &&
+               std::isfinite(position.y);
+    }
+}
+
+bool InventoryScreenRect::contains(
+    MousePosition position) const noexcept
+{
+    return isFinite(position) &&
+           position.x >= x &&
+           position.y >= y &&
+           position.x < x + width &&
+           position.y < y + height;
+}
+
+InventoryScreenRect makeRightEdgeInventoryDropZone(
+    float screenWidth,
+    float screenHeight,
+    float zoneWidth)
+{
+    if (!std::isfinite(screenWidth) ||
+        !std::isfinite(screenHeight) ||
+        !std::isfinite(zoneWidth) ||
+        screenWidth <= 0.0F ||
+        screenHeight <= 0.0F ||
+        zoneWidth <= 0.0F ||
+        zoneWidth > screenWidth)
+    {
+        throw std::invalid_argument(
+            "Inventory drop zone geometry must be finite and positive");
+    }
+
+    return InventoryScreenRect{
+        screenWidth - zoneWidth,
+        0.0F,
+        zoneWidth,
+        screenHeight};
+}
+
+InventoryOverlayMode InventoryOverlayState::mode() const noexcept
+{
+    return mode_;
+}
+
+bool InventoryOverlayState::isOpen() const noexcept
+{
+    return mode_ != InventoryOverlayMode::Closed;
+}
+
+bool InventoryOverlayState::showsExternalContainer() const noexcept
+{
+    return mode_ == InventoryOverlayMode::Container;
+}
+
+void InventoryOverlayState::openPlayerInventory() noexcept
+{
+    mode_ = InventoryOverlayMode::PlayerOnly;
+}
+
+void InventoryOverlayState::openContainerInventory() noexcept
+{
+    mode_ = InventoryOverlayMode::Container;
+}
+
+void InventoryOverlayState::close() noexcept
+{
+    mode_ = InventoryOverlayMode::Closed;
 }
 
 InventoryFrameInputDecision decideInventoryFrameInput(
@@ -20,7 +89,6 @@ InventoryFrameInputDecision decideInventoryFrameInput(
             inventoryOpen
                 ? InventoryFrameControlAction::CloseInventory
                 : InventoryFrameControlAction::OpenInventory,
-            false,
             false};
     }
 
@@ -28,7 +96,6 @@ InventoryFrameInputDecision decideInventoryFrameInput(
     {
         return InventoryFrameInputDecision{
             InventoryFrameControlAction::CancelInteraction,
-            false,
             false};
     }
 
@@ -36,11 +103,34 @@ InventoryFrameInputDecision decideInventoryFrameInput(
     {
         return InventoryFrameInputDecision{
             InventoryFrameControlAction::None,
-            true,
             true};
     }
 
     return InventoryFrameInputDecision{};
+}
+
+InventoryContainerInteractionDecision
+decideInventoryContainerInteraction(
+    bool inventoryOpen,
+    bool inventoryControlConsumedFrame,
+    bool cabinetInRange,
+    bool interactJustPressed) noexcept
+{
+    if (inventoryOpen || inventoryControlConsumedFrame)
+    {
+        return InventoryContainerInteractionDecision{
+            false,
+            true};
+    }
+
+    if (cabinetInRange && interactJustPressed)
+    {
+        return InventoryContainerInteractionDecision{
+            true,
+            true};
+    }
+
+    return InventoryContainerInteractionDecision{};
 }
 
 InventoryGridLayout::InventoryGridLayout(
@@ -75,12 +165,9 @@ InventoryGridLayout::InventoryGridLayout(
     }
 
     const float gridWidth =
-        cellSize_ *
-        static_cast<float>(gridSize_.width);
-
+        cellSize_ * static_cast<float>(gridSize_.width);
     const float gridHeight =
-        cellSize_ *
-        static_cast<float>(gridSize_.height);
+        cellSize_ * static_cast<float>(gridSize_.height);
 
     if (!std::isfinite(gridWidth) ||
         !std::isfinite(gridHeight))
@@ -115,25 +202,17 @@ std::optional<GridPosition>
 InventoryGridLayout::screenToGrid(
     MousePosition position) const noexcept
 {
-    if (!std::isfinite(position.x) ||
-        !std::isfinite(position.y))
+    if (!isFinite(position))
     {
         return std::nullopt;
     }
 
-    const float relativeX =
-        position.x - gridX_;
-
-    const float relativeY =
-        position.y - gridY_;
-
+    const float relativeX = position.x - gridX_;
+    const float relativeY = position.y - gridY_;
     const float gridWidth =
-        cellSize_ *
-        static_cast<float>(gridSize_.width);
-
+        cellSize_ * static_cast<float>(gridSize_.width);
     const float gridHeight =
-        cellSize_ *
-        static_cast<float>(gridSize_.height);
+        cellSize_ * static_cast<float>(gridSize_.height);
 
     if (relativeX < 0.0F ||
         relativeY < 0.0F ||
@@ -148,39 +227,10 @@ InventoryGridLayout::screenToGrid(
         static_cast<int>(relativeY / cellSize_)};
 }
 
-InventoryInteractionState::InventoryInteractionState(
-    InventoryGridSize gridSize)
-    : gridSize_{gridSize}
+std::optional<InventoryItemSelection>
+InventoryInteractionState::selectedItem() const noexcept
 {
-    if (gridSize_.width <= 0)
-    {
-        throw std::invalid_argument(
-            "Inventory interaction width must be positive");
-    }
-
-    if (gridSize_.height <= 0)
-    {
-        throw std::invalid_argument(
-            "Inventory interaction height must be positive");
-    }
-}
-
-InventoryInteractionMode
-InventoryInteractionState::mode() const noexcept
-{
-    return mode_;
-}
-
-GridPosition
-InventoryInteractionState::focusedCell() const noexcept
-{
-    return focusedCell_;
-}
-
-std::optional<ItemInstanceId>
-InventoryInteractionState::selectedInstanceId() const noexcept
-{
-    return selectedInstanceId_;
+    return selectedItem_;
 }
 
 InventoryPointerPhase
@@ -189,26 +239,26 @@ InventoryInteractionState::pointerPhase() const noexcept
     return pointerPhase_;
 }
 
-std::optional<GridPosition>
-InventoryInteractionState::hoveredCell() const noexcept
+std::optional<InventoryGridLocation>
+InventoryInteractionState::hoveredLocation() const noexcept
 {
-    return hoveredCell_;
+    return hoveredLocation_;
 }
 
-std::optional<GridPosition>
-InventoryInteractionState::activePreviewOrigin() const noexcept
+std::optional<InventoryGridLocation>
+InventoryInteractionState::activePreviewLocation() const noexcept
 {
-    if (mode_ == InventoryInteractionMode::PlacingItem)
+    if (pointerPhase_ != InventoryPointerPhase::Dragging)
     {
-        return previewOrigin_;
+        return std::nullopt;
     }
 
-    if (pointerPhase_ == InventoryPointerPhase::Dragging)
-    {
-        return pointerPreviewOrigin_;
-    }
+    return pointerPreviewLocation_;
+}
 
-    return std::nullopt;
+bool InventoryInteractionState::pointerOverDropZone() const noexcept
+{
+    return pointerOverDropZone_;
 }
 
 bool InventoryInteractionState::pointerGestureActive() const noexcept
@@ -231,155 +281,27 @@ InventoryInteractionState::pointerDragDelta() const noexcept
         pointerCurrentPosition_->y - pointerPressPosition_->y};
 }
 
-GridPosition
-InventoryInteractionState::previewOrigin() const noexcept
-{
-    return previewOrigin_;
-}
-
-void InventoryInteractionState::moveFocus(
-    int deltaX,
-    int deltaY) noexcept
-{
-    if (
-        mode_ !=
-            InventoryInteractionMode::Browsing ||
-        pointerGestureActive())
-    {
-        return;
-    }
-
-    focusedCell_ =
-        clampToGrid(
-            GridPosition{
-                focusedCell_.x + deltaX,
-                focusedCell_.y + deltaY});
-
-    // Browsing 模式下没有正在移动的物品。
-    // 让 previewOrigin 跟随焦点，避免残留旧预览坐标。
-    previewOrigin_ =
-        focusedCell_;
-}
-
-bool InventoryInteractionState::beginPlacement(
-    std::optional<ItemInstanceId> instanceId,
-    GridPosition itemOrigin) noexcept
-{
-    if (
-        mode_ !=
-            InventoryInteractionMode::Browsing ||
-        pointerGestureActive())
-    {
-        return false;
-    }
-
-    if (
-        !instanceId.has_value() ||
-        *instanceId == 0)
-    {
-        return false;
-    }
-
-    clearPointerSelection();
-
-    selectedInstanceId_ =
-        instanceId;
-
-    previewOrigin_ =
-        clampToGrid(itemOrigin);
-
-    mode_ =
-        InventoryInteractionMode::PlacingItem;
-
-    return true;
-}
-
-void InventoryInteractionState::movePreview(
-    int deltaX,
-    int deltaY) noexcept
-{
-    if (
-        mode_ !=
-        InventoryInteractionMode::PlacingItem)
-    {
-        return;
-    }
-
-    previewOrigin_ =
-        clampToGrid(
-            GridPosition{
-                previewOrigin_.x + deltaX,
-                previewOrigin_.y + deltaY});
-}
-
-void InventoryInteractionState::resolvePlacement(
-    bool succeeded) noexcept
-{
-    if (
-        mode_ !=
-        InventoryInteractionMode::PlacingItem)
-    {
-        return;
-    }
-
-    // 非法确认不等于取消。
-    // 保留选择和候选位置，让玩家继续调整。
-    if (!succeeded)
-    {
-        return;
-    }
-
-    // 成功后浏览焦点移动到物品的新 origin。
-    focusedCell_ =
-        previewOrigin_;
-
-    selectedInstanceId_.reset();
-
-    mode_ =
-        InventoryInteractionMode::Browsing;
-
-    previewOrigin_ =
-        focusedCell_;
-}
-
-void InventoryInteractionState::cancelPlacement() noexcept
-{
-    if (
-        mode_ !=
-        InventoryInteractionMode::PlacingItem)
-    {
-        return;
-    }
-
-    selectedInstanceId_.reset();
-
-    mode_ =
-        InventoryInteractionMode::Browsing;
-
-    // 取消只清理 UI 预览状态。
-    // 浏览焦点保持在开始放置前的位置。
-    previewOrigin_ =
-        focusedCell_;
-}
-
 void InventoryInteractionState::updatePointerPosition(
     MousePosition position,
-    std::optional<GridPosition> gridCell) noexcept
+    std::optional<InventoryGridLocation> gridLocation,
+    bool overDropZone) noexcept
 {
-    if (!std::isfinite(position.x) ||
-        !std::isfinite(position.y))
+    if (!isFinite(position))
     {
-        hoveredCell_.reset();
+        hoveredLocation_.reset();
+        pointerOverDropZone_ = false;
 
         if (pointerPhase_ == InventoryPointerPhase::Dragging)
         {
-            pointerPreviewOrigin_.reset();
+            pointerPreviewLocation_.reset();
         }
 
         return;
     }
 
-    hoveredCell_ = gridCell;
+    hoveredLocation_ = gridLocation;
+    pointerOverDropZone_ =
+        overDropZone && !gridLocation.has_value();
 
     if (pointerPhase_ == InventoryPointerPhase::Idle ||
         !pointerPressPosition_.has_value())
@@ -393,20 +315,16 @@ void InventoryInteractionState::updatePointerPosition(
     {
         const float deltaX =
             position.x - pointerPressPosition_->x;
-
         const float deltaY =
             position.y - pointerPressPosition_->y;
-
         const float distanceSquared =
             deltaX * deltaX + deltaY * deltaY;
-
         const float thresholdSquared =
-            inventoryDragThreshold * inventoryDragThreshold;
+            kInventoryDragThreshold * kInventoryDragThreshold;
 
         if (distanceSquared >= thresholdSquared)
         {
-            pointerPhase_ =
-                InventoryPointerPhase::Dragging;
+            pointerPhase_ = InventoryPointerPhase::Dragging;
         }
     }
 
@@ -415,98 +333,113 @@ void InventoryInteractionState::updatePointerPosition(
         return;
     }
 
-    if (!gridCell.has_value())
+    if (!gridLocation.has_value())
     {
-        pointerPreviewOrigin_.reset();
+        pointerPreviewLocation_.reset();
         return;
     }
 
-    pointerPreviewOrigin_ =
+    pointerPreviewLocation_ = InventoryGridLocation{
+        gridLocation->container,
         GridPosition{
-            gridCell->x - grabOffset_.x,
-            gridCell->y - grabOffset_.y};
+            gridLocation->cell.x - grabOffset_.x,
+            gridLocation->cell.y - grabOffset_.y}};
 }
 
 bool InventoryInteractionState::beginPointerPress(
-    std::optional<ItemInstanceId> instanceId,
-    std::optional<GridPosition> itemOrigin,
+    InventoryItemSelection selection,
+    GridPosition itemOrigin,
     GridPosition clickedCell,
     MousePosition position) noexcept
 {
-    if (mode_ != InventoryInteractionMode::Browsing ||
-        pointerGestureActive())
+    if (pointerGestureActive())
     {
         return false;
     }
 
-    if (!instanceId.has_value() ||
-        *instanceId == 0 ||
-        !itemOrigin.has_value() ||
-        clampToGrid(clickedCell) != clickedCell ||
-        clampToGrid(*itemOrigin) != *itemOrigin ||
-        !std::isfinite(position.x) ||
-        !std::isfinite(position.y))
+    if (selection.instanceId == 0 ||
+        itemOrigin.x < 0 ||
+        itemOrigin.y < 0 ||
+        clickedCell.x < itemOrigin.x ||
+        clickedCell.y < itemOrigin.y ||
+        !isFinite(position))
     {
-        clearPointerSelection();
+        clearSelection();
         return false;
     }
 
-    selectedInstanceId_ = instanceId;
+    selectedItem_ = selection;
     pointerPressPosition_ = position;
     pointerCurrentPosition_ = position;
-    grabOffset_ =
-        GridPosition{
-            clickedCell.x - itemOrigin->x,
-            clickedCell.y - itemOrigin->y};
-    pointerPreviewOrigin_ = itemOrigin;
+    grabOffset_ = GridPosition{
+        clickedCell.x - itemOrigin.x,
+        clickedCell.y - itemOrigin.y};
+    pointerPreviewLocation_ = InventoryGridLocation{
+        selection.container,
+        itemOrigin};
     pointerPhase_ = InventoryPointerPhase::Pressed;
+    pointerOverDropZone_ = false;
 
     return true;
 }
 
-std::optional<InventoryMoveRequest>
+std::optional<InventoryPointerRequest>
 InventoryInteractionState::releasePointer(
     MousePosition position,
-    std::optional<GridPosition> gridCell) noexcept
+    std::optional<InventoryGridLocation> gridLocation,
+    bool overDropZone) noexcept
 {
-    updatePointerPosition(position, gridCell);
+    updatePointerPosition(
+        position,
+        gridLocation,
+        overDropZone);
 
-    std::optional<InventoryMoveRequest> request;
+    std::optional<InventoryPointerRequest> request;
 
     if (pointerPhase_ == InventoryPointerPhase::Dragging &&
-        selectedInstanceId_.has_value() &&
-        pointerPreviewOrigin_.has_value())
+        selectedItem_.has_value())
     {
-        request = InventoryMoveRequest{
-            *selectedInstanceId_,
-            *pointerPreviewOrigin_};
+        if (pointerPreviewLocation_.has_value())
+        {
+            request = InventoryPlacementRequest{
+                *selectedItem_,
+                *pointerPreviewLocation_};
+        }
+        else if (
+            pointerOverDropZone_ &&
+            selectedItem_->container ==
+                InventoryContainerId::Player)
+        {
+            request = InventoryDropRequest{
+                *selectedItem_};
+        }
     }
 
     resetPointerGesture();
+    selectedItem_.reset();
     return request;
 }
 
 void InventoryInteractionState::cancelPointerGesture() noexcept
 {
     resetPointerGesture();
+    selectedItem_.reset();
 }
 
-void InventoryInteractionState::clearPointerSelection() noexcept
+void InventoryInteractionState::clearSelection() noexcept
 {
-    if (mode_ == InventoryInteractionMode::Browsing &&
-        !pointerGestureActive())
+    if (!pointerGestureActive())
     {
-        selectedInstanceId_.reset();
+        selectedItem_.reset();
     }
 }
 
 void InventoryInteractionState::reset() noexcept
 {
-    mode_ = InventoryInteractionMode::Browsing;
-    selectedInstanceId_.reset();
-    hoveredCell_.reset();
+    selectedItem_.reset();
+    hoveredLocation_.reset();
+    pointerOverDropZone_ = false;
     resetPointerGesture();
-    previewOrigin_ = focusedCell_;
 }
 
 void InventoryInteractionState::resetPointerGesture() noexcept
@@ -514,21 +447,6 @@ void InventoryInteractionState::resetPointerGesture() noexcept
     pointerPhase_ = InventoryPointerPhase::Idle;
     pointerPressPosition_.reset();
     pointerCurrentPosition_.reset();
-    pointerPreviewOrigin_.reset();
+    pointerPreviewLocation_.reset();
     grabOffset_ = GridPosition{0, 0};
-}
-
-GridPosition
-InventoryInteractionState::clampToGrid(
-    GridPosition position) const noexcept
-{
-    return GridPosition{
-        std::clamp(
-            position.x,
-            0,
-            gridSize_.width - 1),
-        std::clamp(
-            position.y,
-            0,
-            gridSize_.height - 1)};
 }
