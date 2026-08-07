@@ -18,7 +18,7 @@
 | RL-W17-001 | P1 | 背包输入 | SDL 事件轮询中曾直接处理 mouse-up，而 Esc/Tab 到 `update()` 才处理；同帧取消可能晚于 `tryMove`。 | Closed | 29/29 鼠标测试覆盖同帧 Esc/Tab + release；Windows/Ubuntu CI 与 2026-08-07 真实窗口取消验收通过。 |
 | [RL-W17-002 / GitHub #25](https://github.com/Disthinker/Project-Raidline/issues/25) | P1 | 交付 | Week17 已由 PR #31 跟踪；自动测试、Windows/Ubuntu CI 和 9 项真实窗口验收均已有记录。 | Closed | 2026-08-07 完成；后续 UX/动画/架构债由 #26–#30 独立跟踪。 |
 | [RL-UX-001 / GitHub #26](https://github.com/Disthinker/Project-Raidline/issues/26) | P2 | 背包 UX | 用户认为方向键移动物品、黄色焦点框和相关提示是遗留行为；当前批准的 Week17 契约仍要求保留 Week16 键盘兼容。 | Needs Decision | 后续稳定化；决定“纯鼠标”或“键鼠并存”，同步不变量、测试和提示后关闭。 |
-| [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 鼠标拖拽虚像当前按候选格吸附跳动；用户期望虚像按像素平滑跟随鼠标，落点合法性仍吸附格子。 | Open | 后续稳定化；虚像保持抓取点平滑移动，inside/outside release 与事务规则不变，视觉验收通过后关闭。 |
+| [RL-UX-002 / GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) | P2 | 背包 UX | 本地分支已将像素虚像与吸附候选分离；33/33 鼠标目标、46/46 聚焦 CTest、299/299 全量 CTest、资源检查 3/3 和 Windows Debug 真实窗口 7/7 通过。 | Local Fixed | 取得当前提交的 Windows/Ubuntu CI 证据并合入 `main` 后关闭；动态证据记录在 PR/Issue。 |
 | [RL-ANIM-001 / GitHub #28](https://github.com/Disthinker/Project-Raidline/issues/28) | P2 | 角色表现 | 仓库只有左右移动图集；纯上/下移动回退到同一静态贴图，停止后虽保留模型朝向但视觉上恢复默认。 | Needs Decision | 角色动画任务；冻结四方向资源方案，补上/下动画与停止朝向验收后关闭。 |
 | [RL-ARCH-001 / GitHub #29](https://github.com/Disthinker/Project-Raidline/issues/29) | P2 | 架构 | `src/app.cpp` 集中 SDL 生命周期、输入、纹理和背包编排，并直接绑定玩家背包。 | Deferred | Week18 仅提取双容器所需的最小库存 UI 编排接口；不做无关大重构。 |
 | [RL-BUILD-001 / GitHub #30](https://github.com/Disthinker/Project-Raidline/issues/30) | P2 | 构建 | 多个测试 target 重复编译业务源码；类布局变化时旧对象可能产生 ABI 尺寸不一致。 | Deferred | 后续抽取共享核心 library，并证明所有测试链接同一实现。若栈损坏复现则提升为 P1。 |

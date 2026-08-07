@@ -216,6 +216,21 @@ bool InventoryInteractionState::pointerGestureActive() const noexcept
     return pointerPhase_ != InventoryPointerPhase::Idle;
 }
 
+std::optional<MousePosition>
+InventoryInteractionState::pointerDragDelta() const noexcept
+{
+    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
+        !pointerPressPosition_.has_value() ||
+        !pointerCurrentPosition_.has_value())
+    {
+        return std::nullopt;
+    }
+
+    return MousePosition{
+        pointerCurrentPosition_->x - pointerPressPosition_->x,
+        pointerCurrentPosition_->y - pointerPressPosition_->y};
+}
+
 GridPosition
 InventoryInteractionState::previewOrigin() const noexcept
 {
@@ -351,6 +366,19 @@ void InventoryInteractionState::updatePointerPosition(
     MousePosition position,
     std::optional<GridPosition> gridCell) noexcept
 {
+    if (!std::isfinite(position.x) ||
+        !std::isfinite(position.y))
+    {
+        hoveredCell_.reset();
+
+        if (pointerPhase_ == InventoryPointerPhase::Dragging)
+        {
+            pointerPreviewOrigin_.reset();
+        }
+
+        return;
+    }
+
     hoveredCell_ = gridCell;
 
     if (pointerPhase_ == InventoryPointerPhase::Idle ||
@@ -358,6 +386,8 @@ void InventoryInteractionState::updatePointerPosition(
     {
         return;
     }
+
+    pointerCurrentPosition_ = position;
 
     if (pointerPhase_ == InventoryPointerPhase::Pressed)
     {
@@ -423,6 +453,7 @@ bool InventoryInteractionState::beginPointerPress(
 
     selectedInstanceId_ = instanceId;
     pointerPressPosition_ = position;
+    pointerCurrentPosition_ = position;
     grabOffset_ =
         GridPosition{
             clickedCell.x - itemOrigin->x,
@@ -482,6 +513,7 @@ void InventoryInteractionState::resetPointerGesture() noexcept
 {
     pointerPhase_ = InventoryPointerPhase::Idle;
     pointerPressPosition_.reset();
+    pointerCurrentPosition_.reset();
     pointerPreviewOrigin_.reset();
     grabOffset_ = GridPosition{0, 0};
 }

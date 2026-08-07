@@ -213,9 +213,13 @@ TEST(MouseInventoryInteractionTest, DragBeginsAtFourLogicalPixels)
 
     state.updatePointerPosition({13.9F, 10.0F}, GridPosition{1, 1});
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Pressed);
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
 
     state.updatePointerPosition({14.0F, 10.0F}, GridPosition{1, 1});
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
+    EXPECT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{4.0F, 0.0F}}));
 }
 
 TEST(MouseInventoryInteractionTest, DragPreservesMultiCellGrabOffset)
@@ -234,6 +238,126 @@ TEST(MouseInventoryInteractionTest, DragPreservesMultiCellGrabOffset)
     EXPECT_EQ(
         state.activePreviewOrigin(),
         (std::optional<GridPosition>{{5, 3}}));
+}
+
+TEST(MouseInventoryInteractionTest, DragDeltaTracksSubCellPointerMotion)
+{
+    InventoryInteractionState state({10, 6});
+
+    ASSERT_TRUE(
+        state.beginPointerPress(
+            141,
+            GridPosition{2, 1},
+            GridPosition{3, 1},
+            {110.25F, 90.75F}));
+
+    state.updatePointerPosition(
+        {114.25F, 90.75F},
+        GridPosition{3, 1});
+
+    EXPECT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{4.0F, 0.0F}}));
+    EXPECT_EQ(
+        state.activePreviewOrigin(),
+        (std::optional<GridPosition>{{2, 1}}));
+
+    // 指针仍在同一格内，但像素虚像必须继续连续移动。
+    state.updatePointerPosition(
+        {118.5F, 93.25F},
+        GridPosition{3, 1});
+
+    EXPECT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{8.25F, 2.5F}}));
+    EXPECT_EQ(
+        state.activePreviewOrigin(),
+        (std::optional<GridPosition>{{2, 1}}));
+}
+
+TEST(MouseInventoryInteractionTest, OutsideDragKeepsPixelDeltaButClearsGridPreview)
+{
+    InventoryInteractionState state({10, 6});
+
+    ASSERT_TRUE(
+        state.beginPointerPress(
+            142,
+            GridPosition{2, 1},
+            GridPosition{3, 1},
+            {10.0F, 10.0F}));
+
+    state.updatePointerPosition(
+        {20.0F, 18.0F},
+        GridPosition{5, 3});
+    ASSERT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
+
+    state.updatePointerPosition({37.0F, 41.0F}, std::nullopt);
+
+    EXPECT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{27.0F, 31.0F}}));
+    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
+}
+
+TEST(MouseInventoryInteractionTest, NonFiniteMotionDoesNotPolluteDragDelta)
+{
+    InventoryInteractionState state({10, 6});
+
+    ASSERT_TRUE(
+        state.beginPointerPress(
+            143,
+            GridPosition{1, 1},
+            GridPosition{1, 1},
+            {10.0F, 10.0F}));
+
+    state.updatePointerPosition(
+        {20.0F, 10.0F},
+        GridPosition{2, 1});
+    ASSERT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{10.0F, 0.0F}}));
+
+    state.updatePointerPosition(
+        {std::numeric_limits<float>::quiet_NaN(), 30.0F},
+        std::nullopt);
+
+    EXPECT_EQ(
+        state.pointerDragDelta(),
+        (std::optional<MousePosition>{{10.0F, 0.0F}}));
+    EXPECT_EQ(state.activePreviewOrigin(), std::nullopt);
+}
+
+TEST(MouseInventoryInteractionTest, CancelAndResetClearDragDelta)
+{
+    InventoryInteractionState state({10, 6});
+
+    ASSERT_TRUE(
+        state.beginPointerPress(
+            144,
+            GridPosition{1, 1},
+            GridPosition{1, 1},
+            {10.0F, 10.0F}));
+    state.updatePointerPosition(
+        {20.0F, 10.0F},
+        GridPosition{2, 1});
+    ASSERT_TRUE(state.pointerDragDelta().has_value());
+
+    state.cancelPointerGesture();
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
+
+    ASSERT_TRUE(
+        state.beginPointerPress(
+            145,
+            GridPosition{1, 1},
+            GridPosition{1, 1},
+            {30.0F, 30.0F}));
+    state.updatePointerPosition(
+        {40.0F, 30.0F},
+        GridPosition{2, 1});
+    ASSERT_TRUE(state.pointerDragDelta().has_value());
+
+    state.reset();
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
 }
 
 TEST(MouseInventoryInteractionTest, GrabOffsetCanProduceNegativeCandidate)
@@ -297,6 +421,7 @@ TEST(MouseInventoryInteractionTest, OutsideReleaseCancelsCommitRequest)
 
     EXPECT_EQ(state.releasePointer({20.0F, 10.0F}, std::nullopt), std::nullopt);
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
 }
 
 TEST(MouseInventoryInteractionTest, ValidDragReleaseReturnsMoveRequest)
@@ -310,6 +435,7 @@ TEST(MouseInventoryInteractionTest, ValidDragReleaseReturnsMoveRequest)
         state.releasePointer({20.0F, 10.0F}, GridPosition{6, 4}),
         (std::optional<InventoryMoveRequest>{
             InventoryMoveRequest{18, {5, 4}}}));
+    EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
 }
 
 TEST(MouseInventoryInteractionTest, EscapeStyleCancelKeepsSelection)

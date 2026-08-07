@@ -13,6 +13,7 @@
 | Week 13–14 | 类不变量、`[[nodiscard]]`、组合、状态转换、`std::array`、`std::string_view`、`std::uint64_t` 稳定 ID、所有权转移 |
 | Week 15–16 | 扁平网格、有符号边界、`optional<move-only>`、事务式放置/移动、self-overlap、查询/提交分离、enum 状态机、vector 失效规避 |
 | Week 17 | float 屏幕坐标到格子坐标、左上含/右下不含边界、`Idle/Pressed/Dragging` 指针状态机、像素拖动阈值、多格 grab offset、keyboard focus 与 mouse hover 分离、值类型 pointer event/move request、帧级输入优先级、预览/提交事务边界 |
+| 背包 UX 稳定化（#27） | 用两个独立 `std::optional` 表达连续像素位移与吸附格候选、由原 placement 加 press→current delta 保留抓取点、有限浮点输入防护、纯渲染预览与模型事务继续分离 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
