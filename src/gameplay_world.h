@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "enemy.h"
+#include "extraction_point.h"
 #include "gameplay_input.h"
 #include "grid_inventory.h"
 #include "ground_item.h"
@@ -13,6 +14,7 @@
 #include "particle_system.h"
 #include "player.h"
 #include "projectile.h"
+#include "raid_session.h"
 #include "storage_cabinet.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
@@ -89,6 +91,15 @@ public:
     const StorageCabinet &storageCabinet() const noexcept;
 
     [[nodiscard]]
+    const ExtractionPoint &extractionPoint() const noexcept;
+
+    [[nodiscard]]
+    const RaidSession &raidSession() const noexcept;
+
+    [[nodiscard]]
+    bool markPlayerDead() noexcept;
+
+    [[nodiscard]]
     bool canInteractWithContainer() const noexcept;
 
     [[nodiscard]]
@@ -147,6 +158,13 @@ private:
         {96.0F, 128.0F},
         64.0F,
         {6, 6}};
+    ExtractionPoint extractionPoint_{
+        {64.0F, 520.0F},
+        {176.0F, 136.0F}};
+    RaidSession raidSession_{
+        RaidSessionConfig{
+            180.0F,
+            3.0F}};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};

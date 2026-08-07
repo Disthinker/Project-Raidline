@@ -1110,7 +1110,8 @@ void App::update(float deltaTime)
 
     // 背包打开时世界仍继续 update，
     // 但玩家移动、射击和拾取输入全部屏蔽。
-    if (!inventoryOverlayState_.isOpen())
+    if (!inventoryOverlayState_.isOpen() &&
+        world_.raidSession().isActive())
     {
         gameplayInput =
             makeGameplayInput();
@@ -1142,6 +1143,12 @@ void App::update(float deltaTime)
     world_.update(
         gameplayInput,
         deltaTime);
+
+    if (world_.raidSession().isTerminal() &&
+        inventoryOverlayState_.isOpen())
+    {
+        closeInventory();
+    }
 }
 
 void App::renderDebugText()
@@ -1297,6 +1304,108 @@ void App::renderDebugText()
         116.0f,
         inventoryStateText);
 
+    const RaidSession &raidSession =
+        world_.raidSession();
+
+    const std::string raidStateText =
+        fmt::format(
+            "Raid: {}",
+            raidSessionStateName(
+                raidSession.state()));
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0F,
+        132.0F,
+        raidStateText.c_str());
+
+    const std::string raidTimeText =
+        fmt::format(
+            "Raid Time: {:.1f}s",
+            raidSession.raidTimeRemaining());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0F,
+        148.0F,
+        raidTimeText.c_str());
+
+    if (raidSession.state() ==
+            RaidSessionState::Extracting ||
+        raidSession.state() ==
+            RaidSessionState::Extracted)
+    {
+        const std::string extractionText =
+            fmt::format(
+                "Extraction: {:.0f}%",
+                raidSession.extractionProgress() *
+                    100.0F);
+
+        SDL_RenderDebugText(
+            renderer_,
+            20.0F,
+            164.0F,
+            extractionText.c_str());
+    }
+
+    if (raidSession.isTerminal())
+    {
+        SDL_SetRenderDrawBlendMode(
+            renderer_,
+            SDL_BLENDMODE_BLEND);
+
+        const SDL_FRect outcomePanel{
+            470.0F,
+            300.0F,
+            340.0F,
+            88.0F};
+
+        const bool extracted =
+            raidSession.state() ==
+            RaidSessionState::Extracted;
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            extracted ? 20 : 95,
+            extracted ? 105 : 24,
+            extracted ? 58 : 24,
+            225);
+        SDL_RenderFillRect(
+            renderer_,
+            &outcomePanel);
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            extracted ? 125 : 215,
+            extracted ? 235 : 110,
+            extracted ? 155 : 110,
+            255);
+        SDL_RenderRect(
+            renderer_,
+            &outcomePanel);
+
+        const std::string outcomeText =
+            fmt::format(
+                "RAID RESULT: {}",
+                raidSessionStateName(
+                    raidSession.state()));
+
+        SDL_RenderDebugText(
+            renderer_,
+            outcomePanel.x + 78.0F,
+            outcomePanel.y + 24.0F,
+            outcomeText.c_str());
+        SDL_RenderDebugText(
+            renderer_,
+            outcomePanel.x + 46.0F,
+            outcomePanel.y + 48.0F,
+            "Gameplay frozen - restart app for a new raid");
+
+        SDL_SetRenderDrawBlendMode(
+            renderer_,
+            SDL_BLENDMODE_NONE);
+    }
+
     if (!inventoryOverlayState_.isOpen())
     {
         return;
@@ -1321,7 +1430,7 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        132.0f,
+        180.0f,
         interactionText.c_str());
 
     if (inventoryOverlayState_.showsExternalContainer())
@@ -1329,7 +1438,7 @@ void App::renderDebugText()
         SDL_RenderDebugText(
             renderer_,
             20.0f,
-            164.0f,
+            212.0f,
             "Quick Transfer: F / Ctrl+Right Click");
     }
 
@@ -1349,7 +1458,7 @@ void App::renderDebugText()
         SDL_RenderDebugText(
             renderer_,
             20.0f,
-            148.0f,
+            196.0f,
             selectedText.c_str());
     }
 }
@@ -2198,6 +2307,120 @@ void App::renderBackground()
     SDL_RenderTexture(renderer_, backgroundTexture_.get(), nullptr, nullptr);
 }
 
+void App::renderExtractionPoint()
+{
+    const ExtractionPoint &extractionPoint =
+        world_.extractionPoint();
+    const Rect &bounds =
+        extractionPoint.bounds();
+    const RaidSession &raidSession =
+        world_.raidSession();
+
+    const bool extracting =
+        raidSession.state() ==
+        RaidSessionState::Extracting;
+    const bool extracted =
+        raidSession.state() ==
+        RaidSessionState::Extracted;
+
+    const SDL_FRect zone{
+        bounds.position.x,
+        bounds.position.y,
+        bounds.size.x,
+        bounds.size.y};
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        extracted ? 30 : 25,
+        extracting || extracted ? 155 : 92,
+        extracted ? 70 : 62,
+        extracting || extracted ? 118 : 76);
+    SDL_RenderFillRect(
+        renderer_,
+        &zone);
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        extracting || extracted ? 132 : 88,
+        extracting || extracted ? 245 : 188,
+        extracting || extracted ? 158 : 112,
+        255);
+    SDL_RenderRect(
+        renderer_,
+        &zone);
+
+    SDL_RenderDebugText(
+        renderer_,
+        zone.x + 44.0F,
+        zone.y + 16.0F,
+        "EXTRACTION");
+
+    if (extracting || extracted)
+    {
+        const float progress =
+            raidSession.extractionProgress();
+
+        const SDL_FRect progressTrack{
+            zone.x + 12.0F,
+            zone.y + zone.h - 24.0F,
+            zone.w - 24.0F,
+            10.0F};
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            10,
+            30,
+            18,
+            190);
+        SDL_RenderFillRect(
+            renderer_,
+            &progressTrack);
+
+        const SDL_FRect progressFill{
+            progressTrack.x,
+            progressTrack.y,
+            progressTrack.w * progress,
+            progressTrack.h};
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            126,
+            235,
+            154,
+            240);
+        SDL_RenderFillRect(
+            renderer_,
+            &progressFill);
+
+        const float timeRemaining =
+            std::max(
+                0.0F,
+                raidSession.extractionDuration() -
+                    raidSession.extractionTimeElapsed());
+
+        const std::string extractionPrompt =
+            extracted
+                ? "EXTRACTED"
+                : fmt::format(
+                      "HOLD POSITION {:.1f}s",
+                      timeRemaining);
+
+        SDL_RenderDebugText(
+            renderer_,
+            zone.x + 22.0F,
+            zone.y + 48.0F,
+            extractionPrompt.c_str());
+    }
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_NONE);
+}
+
 void App::renderStorageCabinet()
 {
     const StorageCabinet &cabinet =
@@ -2498,6 +2721,8 @@ void App::render()
         renderer_);
 
     renderBackground();
+
+    renderExtractionPoint();
 
     renderStorageCabinet();
 

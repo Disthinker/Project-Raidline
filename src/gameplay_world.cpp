@@ -154,6 +154,15 @@ GameplayWorld::GameplayWorld(
             spawn.position,
             spawn.quantity);
     }
+
+    const bool raidStarted =
+        raidSession_.start();
+
+    if (!raidStarted)
+    {
+        throw std::logic_error{
+            "GameplayWorld failed to start its raid session"};
+    }
 }
 
 void GameplayWorld::spawnGroundItem(
@@ -279,6 +288,11 @@ void GameplayWorld::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    if (!raidSession_.isActive())
+    {
+        return;
+    }
+
     // 先更新上一帧已经存在的粒子。
     particleSystem_.update(
         deltaTime);
@@ -288,6 +302,18 @@ void GameplayWorld::update(
         deltaTime,
         kWorldWidth,
         kWorldHeight);
+
+    // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
+    raidSession_.update(
+        deltaTime,
+        extractionPoint_.contains(
+            playerCenter(player_)));
+
+    // 终局形成后，本帧不再产生拾取、射击、敌人或命中结果。
+    if (!raidSession_.isActive())
+    {
+        return;
+    }
 
     // 使用移动完成后的 Player 位置判断拾取。
     // 每个 interactJustPressed 最多处理一件物品。
@@ -444,9 +470,27 @@ GameplayWorld::storageCabinet() const noexcept
     return storageCabinet_;
 }
 
+const ExtractionPoint &
+GameplayWorld::extractionPoint() const noexcept
+{
+    return extractionPoint_;
+}
+
+const RaidSession &
+GameplayWorld::raidSession() const noexcept
+{
+    return raidSession_;
+}
+
+bool GameplayWorld::markPlayerDead() noexcept
+{
+    return raidSession_.markPlayerDead();
+}
+
 bool GameplayWorld::canInteractWithContainer() const noexcept
 {
-    return storageCabinet_.canInteract(
+    return raidSession_.isActive() &&
+           storageCabinet_.canInteract(
         playerBounds(player_));
 }
 

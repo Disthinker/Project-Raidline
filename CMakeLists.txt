@@ -57,6 +57,12 @@ add_executable(Project_Raidline
     src/loot_table.h
     src/loot_table.cpp
 
+    src/raid_session.h
+    src/raid_session.cpp
+
+    src/extraction_point.h
+    src/extraction_point.cpp
+
     src/inventory_interaction.h
     src/inventory_interaction.cpp
 
@@ -290,6 +296,12 @@ add_executable(GameplayWorldTest
 
     src/loot_table.h
     src/loot_table.cpp
+
+    src/raid_session.h
+    src/raid_session.cpp
+
+    src/extraction_point.h
+    src/extraction_point.cpp
 )
 
 target_compile_features(
@@ -396,6 +408,74 @@ target_include_directories(
 )
 
 gtest_discover_tests(LootTableTest)
+
+# test raid_session
+add_executable(RaidSessionTest
+    tests/test_raid_session.cpp
+    src/raid_session.cpp
+    src/raid_session.h
+)
+
+target_compile_features(
+    RaidSessionTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    RaidSessionTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    RaidSessionTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    RaidSessionTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(RaidSessionTest)
+
+# test extraction_point
+add_executable(ExtractionPointTest
+    tests/test_extraction_point.cpp
+    src/extraction_point.cpp
+    src/extraction_point.h
+    src/rect.h
+    src/vec2.h
+)
+
+target_compile_features(
+    ExtractionPointTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    ExtractionPointTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    ExtractionPointTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    ExtractionPointTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(ExtractionPointTest)
 
 # test texture
 add_executable(TextureTest
@@ -754,6 +834,8 @@ if(MSVC)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(StorageCabinetTest PRIVATE /utf-8)
     target_compile_options(LootTableTest PRIVATE /utf-8)
+    target_compile_options(RaidSessionTest PRIVATE /utf-8)
+    target_compile_options(ExtractionPointTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)

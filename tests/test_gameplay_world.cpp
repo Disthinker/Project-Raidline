@@ -1579,3 +1579,183 @@ TEST(GameplayWorldStackTest, PartialDropRejectsConflictingWorldId)
     EXPECT_EQ(world.inventory().quantityOf(1), 10U);
     EXPECT_TRUE(world.groundItems().empty());
 }
+
+namespace
+{
+    void movePlayerIntoExtractionPoint(
+        GameplayWorld &world)
+    {
+        GameplayInput moveLeft{};
+        moveLeft.moveLeft = true;
+        world.update(moveLeft, 2.0F);
+
+        GameplayInput moveDown{};
+        moveDown.moveDown = true;
+        world.update(moveDown, 0.65F);
+
+        ASSERT_EQ(
+            world.raidSession().state(),
+            RaidSessionState::Extracting);
+    }
+}
+
+TEST(GameplayWorldRaidTest, StartsActiveRaidWithPublishedExtractionPoint)
+{
+    const GameplayWorld world;
+
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(
+        world.raidSession().raidTimeRemaining(),
+        180.0F);
+
+    const Rect &bounds =
+        world.extractionPoint().bounds();
+
+    EXPECT_FLOAT_EQ(bounds.position.x, 64.0F);
+    EXPECT_FLOAT_EQ(bounds.position.y, 520.0F);
+    EXPECT_FLOAT_EQ(bounds.size.x, 176.0F);
+    EXPECT_FLOAT_EQ(bounds.size.y, 136.0F);
+}
+
+TEST(GameplayWorldRaidTest, ActiveWorldAdvancesRaidClock)
+{
+    GameplayWorld world;
+
+    world.update(GameplayInput{}, 1.25F);
+
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(
+        world.raidSession().raidTimeRemaining(),
+        178.75F);
+}
+
+TEST(GameplayWorldRaidTest, MovingCenterIntoPointStartsExtraction)
+{
+    GameplayWorld world;
+
+    movePlayerIntoExtractionPoint(world);
+
+    EXPECT_GT(
+        world.raidSession().extractionTimeElapsed(),
+        0.0F);
+    EXPECT_TRUE(
+        world.extractionPoint().contains(
+            Vec2{
+                world.player().position().x +
+                    world.player().size() / 2.0F,
+                world.player().position().y +
+                    world.player().size() / 2.0F}));
+}
+
+TEST(GameplayWorldRaidTest, LeavingPointCancelsExtraction)
+{
+    GameplayWorld world;
+    movePlayerIntoExtractionPoint(world);
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    world.update(moveRight, 0.5F);
+
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(
+        world.raidSession().extractionTimeElapsed(),
+        0.0F);
+}
+
+TEST(GameplayWorldRaidTest, ContinuousStayExtractsAndFreezesGameplay)
+{
+    GameplayWorld world{
+        3,
+        {
+            {
+                ItemId::Cola,
+                Vec2{176.0F, 532.0F},
+            },
+        }};
+    movePlayerIntoExtractionPoint(world);
+
+    world.update(GameplayInput{}, 2.5F);
+
+    ASSERT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::Extracted);
+    const Vec2 extractedPosition =
+        world.player().position();
+    const std::size_t projectileCount =
+        world.projectiles().size();
+    ASSERT_EQ(world.groundItems().size(), 1U);
+
+    GameplayInput terminalInput{};
+    terminalInput.moveRight = true;
+    terminalInput.firePressed = true;
+    terminalInput.fireJustPressed = true;
+    terminalInput.interactJustPressed = true;
+    world.update(terminalInput, 1.0F);
+
+    EXPECT_FLOAT_EQ(
+        world.player().position().x,
+        extractedPosition.x);
+    EXPECT_FLOAT_EQ(
+        world.player().position().y,
+        extractedPosition.y);
+    EXPECT_EQ(world.projectiles().size(), projectileCount);
+    EXPECT_EQ(world.groundItems().size(), 1U);
+    EXPECT_TRUE(world.inventory().placedItems().empty());
+}
+
+TEST(GameplayWorldRaidTest, PlayerDeathCommandIsStickyAndFreezesWorld)
+{
+    GameplayWorld world;
+    const Vec2 alivePosition =
+        world.player().position();
+
+    ASSERT_TRUE(world.markPlayerDead());
+    EXPECT_FALSE(world.markPlayerDead());
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::PlayerDead);
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    world.update(moveRight, 1.0F);
+
+    EXPECT_FLOAT_EQ(
+        world.player().position().x,
+        alivePosition.x);
+    EXPECT_FLOAT_EQ(
+        world.player().position().y,
+        alivePosition.y);
+}
+
+TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)
+{
+    GameplayWorld world;
+    const Vec2 activePosition =
+        world.player().position();
+
+    world.update(GameplayInput{}, 180.0F);
+
+    ASSERT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::RaidEnded);
+    EXPECT_FLOAT_EQ(
+        world.raidSession().raidTimeRemaining(),
+        0.0F);
+
+    GameplayInput moveLeft{};
+    moveLeft.moveLeft = true;
+    world.update(moveLeft, 1.0F);
+
+    EXPECT_FLOAT_EQ(
+        world.player().position().x,
+        activePosition.x);
+    EXPECT_FLOAT_EQ(
+        world.player().position().y,
+        activePosition.y);
+}
