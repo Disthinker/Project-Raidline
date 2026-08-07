@@ -61,6 +61,16 @@
 - 只有玩家背包物品可丢弃；成功后玩家 footprint 清除，世界新增拥有同一实例的 GroundItem。
 - 丢弃位置位于玩家逻辑碰撞体的脚底中心，与当前朝向无关，并按物品世界渲染半尺寸限制在世界边界内；失败不改变背包或地面物品。
 
+## 柜体搜索与 Loot
+
+- 柜体是否已搜索是独立生命周期状态，不能由库存是否为空推断；已搜索空柜不得重新生成 Loot。
+- LootTable 条目必须引用有效且已发布视觉资源的 ItemDefinition，权重大于 0，数量范围位于 `[1, maxStackSize]`。
+- 随机选择使用 `[0, totalWeight)`；测试通过可控 `LootRandomSource` 验证权重和数量边界，不断言不同标准库的具体分布序列。
+- LootTable 只生成定义与数量值；相同定义先按最大堆叠规范化，最终 placement 才由 GameplayWorld 分配稳定 ID。
+- 首次搜索先在同尺寸临时 GridInventory 完成全部 row-major placement、容量分配和 ID 冲突检查；正式柜体只接受一次完整 move-commit。
+- 范围外、随机源非法、ID 冲突、尺寸不匹配或 placement 失败时，柜体库存、搜索状态、世界 ID 序列和其他物品所有权均不变。
+- 已搜索重开是成功 no-op，不消费随机值；Tab 打开的 PlayerOnly 背包不得触发搜索。
+
 ## 背包交互
 
 - 预览和按 R 旋转候选都不修改 GridInventory；同容器旋转提交只能通过 `tryTransform`，跨容器旋转提交只能通过 transform 转移服务。

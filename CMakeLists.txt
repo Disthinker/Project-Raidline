@@ -54,6 +54,9 @@ add_executable(Project_Raidline
     src/storage_cabinet.h
     src/storage_cabinet.cpp
 
+    src/loot_table.h
+    src/loot_table.cpp
+
     src/inventory_interaction.h
     src/inventory_interaction.cpp
 
@@ -284,6 +287,9 @@ add_executable(GameplayWorldTest
 
     src/storage_cabinet.h
     src/storage_cabinet.cpp
+
+    src/loot_table.h
+    src/loot_table.cpp
 )
 
 target_compile_features(
@@ -354,6 +360,42 @@ target_include_directories(
 )
 
 gtest_discover_tests(StorageCabinetTest)
+
+# test loot_table
+add_executable(LootTableTest
+    tests/test_loot_table.cpp
+    src/loot_table.cpp
+    src/loot_table.h
+    src/item_definition.cpp
+    src/item_definition.h
+    src/vec2.h
+)
+
+target_compile_features(
+    LootTableTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    LootTableTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    LootTableTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    LootTableTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(LootTableTest)
 
 # test texture
 add_executable(TextureTest
@@ -711,6 +753,7 @@ if(MSVC)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(StorageCabinetTest PRIVATE /utf-8)
+    target_compile_options(LootTableTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)
     target_compile_options(ParticleTest PRIVATE /utf-8)

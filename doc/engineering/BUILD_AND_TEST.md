@@ -40,8 +40,8 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(GridInventoryTest|InventoryTransferTest|StorageCabinetTest|GameplayWorldTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
+cmake --build --preset windows-debug --target LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(LootTableTest|GridInventoryTest|InventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -57,10 +57,11 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 20 个 GTest executable、367 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚，`GameplayWorldTest` 覆盖整栈/部分脚下丢弃与地面往返，`StorageCabinetTest` 覆盖世界柜体边界。可用下列命令证明鼠标测试源真实进入编译数据库：
+当前 CMake 注册 21 个 GTest executable、386 个 CTest 用例。`LootTableTest` 覆盖权重/数量边界、堆叠规范化、非法表和随机源契约；`GameplayWorldLootTest` 覆盖首次搜索、重开不重抽、取空不刷新、稳定 ID 与失败快照。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚。可用下列命令证明 Loot 与鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
+rg 'loot_table.cpp|test_loot_table.cpp' build/windows-debug/compile_commands.json
 ```
 
 若修改类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，或链接器仍引用旧函数签名，先检查 Ninja 是否真实记录头文件依赖：
@@ -79,7 +80,7 @@ Ninja Debug 输出通常位于：
 & '.\build\windows-debug\Project_Raidline.exe'
 ```
 
-当前控制：WASD 移动、Space 射击、F 拾取/近距离打开柜体、Tab 打开玩家背包。Tab 只显示玩家背包；靠近柜体按 F 才显示右侧柜体容器。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药，供堆叠/拆分验收；未发布视觉资源的逻辑物品不会由正式内容生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
+当前控制：WASD 移动、Space 射击、F 拾取/近距离搜索或打开柜体、Tab 打开玩家背包。Tab 只显示玩家背包；未搜索柜体在范围内显示 `F: SEARCH CABINET`，首次 F 生成一次 Loot 并显示右侧容器，之后提示为 `F: OPEN CABINET`，关闭/取空/重开不会刷新。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药；未发布视觉资源的逻辑物品不会由正式内容或 LootTable 生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
 
 ## Python 与艺术管线测试
 

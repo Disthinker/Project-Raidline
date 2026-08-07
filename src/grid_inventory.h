@@ -53,6 +53,12 @@ class GridInventory
 public:
     explicit GridInventory(InventoryGridSize size);
 
+    GridInventory(const GridInventory &) = delete;
+    GridInventory &operator=(const GridInventory &) = delete;
+
+    GridInventory(GridInventory &&) noexcept = default;
+    GridInventory &operator=(GridInventory &&) noexcept = default;
+
     [[nodiscard]]
     int width() const noexcept;
 

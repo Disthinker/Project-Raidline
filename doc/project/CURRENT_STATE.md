@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-07，`codex/week19-advanced-inventory-operations` 最终 PR 候选。
+最后核对：2026-08-07，`codex/week20-searchable-containers` 本地验收候选。
 
 ## Git、验证与 CI 基线
 
-- `main` / `origin/main`：`7e436aa`，Week18 已通过 [PR #33](https://github.com/Disthinker/Project-Raidline/pull/33) 合入双容器安全转移、柜体交互、贴右丢弃区、角色脚下落点与纯鼠标背包。
-- 当前实现分支：`codex/week19-advanced-inventory-operations`，从 `7e436aa` 创建，范围为整栈快捷转移、拖拽旋转、9mm 弹药堆叠、按数量拿取/放置/合并/丢弃及正式弹药资源。
-- Windows Debug 全目标增量构建成功，四个受影响测试程序直接运行 127/127 通过，全量 CTest 367/367 通过；未复现 `gtest_ar_` 栈损坏。
-- 用户已确认 M1 1–7、M2 1–8、M3 第一版 1–8，以及按数量拖拽修订版 1–8 的真实窗口验收全部通过。
-- 9mm 资源验证通过；由于当前环境没有 Poetry/pytest，三个 `tests/test_phase1_assets.py` 纯断言以现有 Python/Pillow 直接运行，3/3 通过。
-- Week19 精确提交的 Windows/Ubuntu CI 尚未执行。动态 SHA、run URL 与最终结论只记录在 PR/Issue，避免为追写 CI 结果再触发一轮构建。
+- `main` / `origin/main`：`bc0b87d`，Week19 已通过 [PR #34](https://github.com/Disthinker/Project-Raidline/pull/34) 合入；范围检测、Ubuntu 和 Windows CI 全部通过。
+- 当前实现分支：`codex/week20-searchable-containers`，从 `bc0b87d` 创建；范围为单个世界柜体的一次性搜索状态、默认 LootTable、可注入随机源、原子生成提交和 Search/Open 玩家提示。
+- Windows Debug 全目标构建成功；LootTableTest、StorageCabinetTest、GameplayWorldTest 三个程序直接运行 74/74，通过且未复现 `gtest_ar_` 栈损坏。
+- Windows Debug 全量 CTest 386/386 通过；`ctest -N` 同样注册 386 项。
+- `compile_commands.json` 已确认 `loot_table.cpp` 进入主程序、GameplayWorldTest 和 LootTableTest，`test_loot_table.cpp` 进入独立测试目标。
+- 用户已完成 Week20 真实窗口 1–9 项：Search/Open 提示、首次生成、关闭重开、转移后持久、取空不刷新、Tab PlayerOnly 和旧玩法回归全部通过。
 
-## 已进入 main：Week 1–18
+## 已进入 main：Week 1–19
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -22,7 +22,9 @@
 
 Week18 计划已按 PR #33 的合入事实归档到 `doc/exec-plans/completed/`。
 
-## Week19 最终 PR 候选
+Week19 计划已按 PR #34 的合入事实归档；整栈快捷转移、拖拽旋转、9mm 堆叠与数量拖拽均已进入 `main`。
+
+## Week19 已合入能力
 
 ### 整栈快捷转移
 
@@ -48,6 +50,16 @@ Week18 计划已按 PR #33 的合入事实归档到 `doc/exec-plans/completed/`�
 - 正式 master、64×64 inventory 与 32×32 world 资源由同一身份确定性派生，尺寸、Alpha、透明角、安全留白、1×1 footprint 与不可旋转合同均通过 QA。
 - “未精确呈现四枚弹药”作为已接受偏差记录；正式合同只要求少量弹药可见，运行时辨识度优先。
 
+## Week20 最终 PR 候选
+
+- `StorageCabinet` 具有独立于库存是否为空的 `Unsearched/Searched` 生命周期；取空后不会刷新。
+- 默认柜体 LootTable 固定进行 3 次加权抽取：Cola 24、Medkit 20、Pistol 16、Rifle 8、Ammo9mm 32；弹药单次数量为 10–30。
+- LootTable 只产生定义与数量值；GameplayWorld 为最终规范化 placement 分配稳定 ID。
+- 搜索先生成完整临时 6×6 Inventory，全部成功后一次性 move-commit；失败保持柜体、搜索状态和世界 ID 序列不变。
+- 正常运行时使用种子随机源，测试通过可控序列源稳定覆盖权重、数量和失败边界。
+- 范围内未搜索提示为 `F: SEARCH CABINET`；成功搜索或已搜索重开显示 `F: OPEN CABINET`。
+- Tab 仍只打开玩家背包；范围外搜索、重复搜索和已取空柜体均不会生成新物品。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
@@ -55,6 +67,6 @@ Week18 计划已按 PR #33 的合入事实归档到 `doc/exec-plans/completed/`�
 - 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 完整 Loot table、搜索计时、RaidSession、撤离、Stash、装备栏、重量、耐久和持久化尚未实现。
+- 搜索计时、多柜体选择、外部数据 Loot、RaidSession、撤离、Stash、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-详细行为见 [Week19 活跃 ExecPlan](../exec-plans/active/week19-advanced-inventory-operations.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+详细行为见 [Week20 活跃 ExecPlan](../exec-plans/active/week20-searchable-containers.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

@@ -1127,8 +1127,11 @@ void App::update(float deltaTime)
 
     if (containerDecision.openContainer)
     {
-        inventoryInteraction_.reset();
-        inventoryOverlayState_.openContainerInventory();
+        if (world_.searchStorageCabinet())
+        {
+            inventoryInteraction_.reset();
+            inventoryOverlayState_.openContainerInventory();
+        }
     }
 
     if (containerDecision.suppressGameplayInput)
@@ -2264,7 +2267,9 @@ void App::renderStorageCabinet()
             renderer_,
             body.x - 12.0F,
             body.y - 20.0F,
-            "F: OPEN CABINET");
+            cabinet.isSearched()
+                ? "F: OPEN CABINET"
+                : "F: SEARCH CABINET");
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
