@@ -163,6 +163,13 @@ public:
     [[nodiscard]]
     bool pointerGestureActive() const noexcept;
 
+    // 仅在鼠标进入 Dragging 后返回从按下点到当前点的逻辑像素位移。
+    // App 使用原物品屏幕位置加该位移绘制平滑虚像；
+    // 格子候选仍由 activePreviewOrigin() 独立提供。
+    [[nodiscard]]
+    std::optional<MousePosition>
+    pointerDragDelta() const noexcept;
+
     // PlacingItem 模式下表示候选左上角格子。
     [[nodiscard]]
     GridPosition previewOrigin() const noexcept;
@@ -260,6 +267,9 @@ private:
 
     std::optional<MousePosition>
         pointerPressPosition_;
+
+    std::optional<MousePosition>
+        pointerCurrentPosition_;
 
     GridPosition grabOffset_{0, 0};
 

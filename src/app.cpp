@@ -1012,7 +1012,11 @@ void App::renderInventoryPlacementPreview(
     const std::optional<GridPosition> activePreview =
         inventoryInteraction_.activePreviewOrigin();
 
-    if (!activePreview.has_value())
+    const std::optional<MousePosition> pointerDragDelta =
+        inventoryInteraction_.pointerDragDelta();
+
+    if (!activePreview.has_value() &&
+        !pointerDragDelta.has_value())
     {
         return;
     }
@@ -1049,78 +1053,100 @@ void App::renderInventoryPlacementPreview(
         itemDefinition(
             placedIt->item.definitionId());
 
-    const GridPosition previewOrigin =
-        *activePreview;
-
-    const bool legal =
-        inventory.canMove(
-            *selectedId,
-            previewOrigin);
-
     const int itemWidth =
         definition.inventoryWidthCells;
 
     const int itemHeight =
         definition.inventoryHeightCells;
 
-    const bool footprintFullyInside =
-        previewOrigin.x >= 0 &&
-        previewOrigin.y >= 0 &&
-        itemWidth > 0 &&
-        itemHeight > 0 &&
-        itemWidth <= inventory.width() &&
-        itemHeight <= inventory.height() &&
-        previewOrigin.x <=
-            inventory.width() - itemWidth &&
-        previewOrigin.y <=
-            inventory.height() - itemHeight;
+    std::optional<SDL_FRect> ghostDestination;
 
-    // footprint 完整位于网格内时，
-    // 在候选位置绘制一份半透明物品图标。
-    //
-    // 原物品仍保留在旧位置，这里只是 UI 幽灵预览。
-    if (footprintFullyInside)
+    if (pointerDragDelta.has_value())
+    {
+        // 原 placement 在拖拽预览期间不变。
+        // 以原屏幕左上角加 press->current 像素位移，
+        // 可以保留 mouse-down 时抓住的精确像素点。
+        ghostDestination = SDL_FRect{
+            gridX +
+                static_cast<float>(placedIt->origin.x) *
+                    kInventoryCellSize +
+                pointerDragDelta->x,
+            gridY +
+                static_cast<float>(placedIt->origin.y) *
+                    kInventoryCellSize +
+                pointerDragDelta->y,
+            static_cast<float>(itemWidth) *
+                kInventoryCellSize,
+            static_cast<float>(itemHeight) *
+                kInventoryCellSize};
+    }
+    else if (activePreview.has_value())
+    {
+        const GridPosition previewOrigin = *activePreview;
+
+        const bool footprintFullyInside =
+            previewOrigin.x >= 0 &&
+            previewOrigin.y >= 0 &&
+            itemWidth > 0 &&
+            itemHeight > 0 &&
+            itemWidth <= inventory.width() &&
+            itemHeight <= inventory.height() &&
+            previewOrigin.x <= inventory.width() - itemWidth &&
+            previewOrigin.y <= inventory.height() - itemHeight;
+
+        // 键盘放置继续把虚像吸附到完整合法的网格范围。
+        if (footprintFullyInside)
+        {
+            ghostDestination = SDL_FRect{
+                gridX +
+                    static_cast<float>(previewOrigin.x) *
+                        kInventoryCellSize,
+                gridY +
+                    static_cast<float>(previewOrigin.y) *
+                        kInventoryCellSize,
+                static_cast<float>(itemWidth) *
+                    kInventoryCellSize,
+                static_cast<float>(itemHeight) *
+                    kInventoryCellSize};
+        }
+    }
+
+    if (ghostDestination.has_value())
     {
         const std::size_t textureIndex =
-            static_cast<std::size_t>(
-                definition.id);
+            static_cast<std::size_t>(definition.id);
 
         Texture &texture =
             inventoryItemTextures_[textureIndex];
 
         if (texture.valid())
         {
-            const SDL_FRect previewDestination{
-                gridX +
-                    static_cast<float>(
-                        previewOrigin.x) *
-                        kInventoryCellSize,
-                gridY +
-                    static_cast<float>(
-                        previewOrigin.y) *
-                        kInventoryCellSize,
-                static_cast<float>(itemWidth) *
-                    kInventoryCellSize,
-                static_cast<float>(itemHeight) *
-                    kInventoryCellSize};
-
-            SDL_SetTextureAlphaMod(
-                texture.get(),
-                145);
+            SDL_SetTextureAlphaMod(texture.get(), 145);
 
             SDL_RenderTexture(
                 renderer_,
                 texture.get(),
                 nullptr,
-                &previewDestination);
+                &*ghostDestination);
 
             // 纹理对象会被后续帧继续复用，
             // 因此必须恢复默认不透明度。
-            SDL_SetTextureAlphaMod(
-                texture.get(),
-                255);
+            SDL_SetTextureAlphaMod(texture.get(), 255);
         }
     }
+
+    // 鼠标在网格外时仍绘制平滑虚像，但不绘制候选 footprint。
+    if (!activePreview.has_value())
+    {
+        return;
+    }
+
+    const GridPosition previewOrigin = *activePreview;
+
+    const bool legal =
+        inventory.canMove(
+            *selectedId,
+            previewOrigin);
 
     // 合法位置使用淡绿色；
     // 非法位置使用淡红色。

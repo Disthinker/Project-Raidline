@@ -1,14 +1,13 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-07，`codex/week17-mouse-inventory-interaction` 的 Week 17 交付候选。
+最后核对：2026-08-07，`codex/smooth-inventory-drag-ghost` 的 GitHub #27 本地验证候选。
 
 ## Git 与 CI 基线
 
-- `main` / `origin/main`：`7f3d91e`，包含 Week 1–16；Week 16 已通过 PR #24 合并。
-- 接管基础提交：`bf1c84b`，包含 Agent、Skill、项目文档与教学交接基础设施。
-- 当前实现分支：`codex/week17-mouse-inventory-interaction`；Week 17 业务实现、自动验证和人工验收已完成，远端交付入口为 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31)。
-- `a1c164a` 的 GitHub Actions `Project Raidline CI` 已在 Windows 与 Ubuntu 完成并成功：[run 31015344155](https://github.com/Disthinker/Project-Raidline/actions/runs/31015344155)。
-- Week 17 代码提交 `281ca47` 的 Windows/Ubuntu CI 由 [run 31116450096](https://github.com/Disthinker/Project-Raidline/actions/runs/31116450096) 跟踪；精确最终状态以该 run 和 PR checks 为准。
+- `main` / `origin/main`：`dfe2e77`，已通过 [PR #31](https://github.com/Disthinker/Project-Raidline/pull/31) 合入 Week 17 鼠标背包交互。
+- 当前实现分支：`codex/smooth-inventory-drag-ghost`，从 `dfe2e77` 创建，只处理 [GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) 的平滑拖拽虚像。
+- 当前分支已完成全目标 Windows Debug 构建、库存聚焦 CTest 46/46、全量 CTest 299/299、Phase 1 资源函数 3/3，以及 2026-08-07 Windows Debug 真实窗口 7/7 人工验收；当前提交的 Windows/Ubuntu CI 尚未执行。
+- CI 的精确 SHA、run URL 与最终结论将记录在 PR/Issue，不在仓库文档中追写动态结果，避免产生额外 CI 轮次。
 
 历史 DevLog 中“PR/CI 待完成”等文字只代表当时状态；当前状态以 Git、源码、CMake 和 CI 为准。
 
@@ -35,6 +34,16 @@
 - Week 17 ExecPlan 已完成并归档；后续平滑拖拽虚像、键盘契约决策和上下方向动画继续作为独立问题跟踪，不夹带进 Week 17。
 
 实现与验收证据见 [Week 17 ExecPlan](../exec-plans/completed/week17-mouse-inventory-interaction.md)，当前缺陷与延期债务见 [问题台账](KNOWN_ISSUES.md)。
+
+## GitHub #27 本地实现状态
+
+- `InventoryInteractionState` 在活动鼠标手势中保存最新有限逻辑像素位置，并仅在 `Dragging` 阶段公开 press→current 位移。
+- App 使用“原 placement 屏幕原点 + 像素位移”绘制半透明虚像，保留精确抓取点；红/绿候选 footprint 仍独立吸附格子。
+- 鼠标移出网格后虚像继续跟随，但候选格保持为空，释放不会产生移动请求；Esc、Tab、release 与 reset 都清除像素拖拽状态。
+- Week 16 键盘预览和 `GridInventory::canMove`/`tryMove` 事务边界没有改变；键盘遗留行为继续由 #26 跟踪。
+- 本地自动验证和真实窗口 7/7 人工验收已完成；当前提交 CI 尚待验证，因此 #27 仍不能关闭。
+
+实现、验证与交接见 [已完成 ExecPlan](../exec-plans/completed/smooth-inventory-drag-ghost.md)；动态 CI 结果只记录在 PR/Issue。
 
 ## 已知工程债
 

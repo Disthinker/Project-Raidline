@@ -49,7 +49,7 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 18 个 GTest executable、295 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态和事务集成。可用下列命令证明鼠标测试源真实进入编译数据库：
+当前 CMake 注册 18 个 GTest executable、299 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态、平滑像素拖拽和事务集成。可用下列命令证明鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json

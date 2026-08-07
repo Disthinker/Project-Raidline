@@ -24,6 +24,10 @@
 
 实现、专用测试和帧级输入仲裁已经接入；29/29 鼠标测试、295/295 CTest、Windows/Ubuntu CI 以及 2026-08-07 的 9/9 真实窗口验收共同完成闭环。详细证据见 [已完成 ExecPlan](../exec-plans/completed/week17-mouse-inventory-interaction.md) 和 [问题台账](KNOWN_ISSUES.md)。
 
+## 当前稳定化：平滑鼠标拖拽虚像
+
+[GitHub #27](https://github.com/Disthinker/Project-Raidline/issues/27) 的本地实现已将连续像素虚像与吸附格子候选分离，并完成 299/299 CTest 与 Windows Debug 真实窗口 7/7 验收。当前提交 CI 通过并合入 `main` 后关闭该问题，再从更新后的 `main` 开始 Week 18；不在本任务中夹带 #26 键盘契约或 #28 上下方向动画。
+
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
