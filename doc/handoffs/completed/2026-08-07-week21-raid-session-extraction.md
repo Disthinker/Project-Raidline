@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：最小 RaidSession、固定撤离点、连续撤离与终局冻结
-- 日期/分支/commit：2026-08-07，`codex/week21-raid-session-extraction`，尚未冻结提交
-- 完成度：代码、自动测试、安全审查、静态文档与真实窗口 1–8 完成；commit-specific CI 和合入未验证
+- 日期/分支/commit：2026-08-07，`codex/week21-raid-session-extraction`，功能头提交 `06d0d8e`，merge commit `8130c09`
+- 完成度：代码、自动测试、安全审查、静态文档、真实窗口 1–8、commit-specific CI 与合入全部完成
 
 ## 2. 用户可见结果
 
@@ -90,7 +90,7 @@
 - 全量 CTest：416/416；`ctest -N` 注册 416。
 - 接线：compile database 证明两个业务源进入主程序和 GameplayWorldTest，测试源进入独立 target。
 - 其他测试：未修改任何艺术资源，`tests/test_phase1_assets.py` 不适用。
-- CI：尚未创建冻结提交/PR，未验证。
+- CI：[GitHub Actions run 31191339832](https://github.com/Disthinker/Project-Raidline/actions/runs/31191339832) 全部通过：范围检测 5 秒、Ubuntu 1 分 20 秒、Windows 3 分 48 秒。
 - 人工验收：用户在真实窗口确认 1–8 全部通过。
 
 ## 12. 教学分级
@@ -122,7 +122,7 @@
 
 - 技术债：PlayerDead 没有玩家 Health/受击来源；没有结算、Stash、局内重开；App 继续集中渲染职责；时间步仍是可变 deltaTime。
 - 测试债：没有 App 级原生 SDL 事件/截图自动化；超时的视觉结果只由领域测试覆盖；Ubuntu 仅能在 PR CI 验证。
-- 下一安全任务：冻结两条提交并完成单一 PR/CI；合入后进入 Week22 结算与最小 Stash。
+- 下一安全任务：为 Week22 结算与最小 Stash 冻结产品规则并建立独立 ExecPlan。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 

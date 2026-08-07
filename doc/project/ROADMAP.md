@@ -15,21 +15,13 @@
 | Week 18 | 世界柜体与双容器指定格转移、贴右丢弃条、角色脚下落点、纯鼠标背包；PR #33 |
 | Week 19 | 整栈快捷转移、拖拽旋转、9mm 堆叠、数量拖拽与正式弹药资源；PR #34 |
 | Week 20 | 一次性柜体搜索、加权 Loot、可注入随机源、临时 Inventory 原子提交；PR #35 |
+| Week 21 | 六态 RaidSession、固定撤离点、连续撤离、终止竞态与终局冻结；PR #36 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week21 最小 RaidSession 与撤离点
+## 当前开发：Week22 待规划
 
-`codex/week21-raid-session-extraction` 已完成本地逻辑实现与自动验证：
-
-- 六态 RaidSession 与 180 秒倒计时；
-- 地图左下方固定代码绘制撤离点；
-- 玩家中心进入后连续 3 秒撤离，离开立即取消并清零；
-- 撤离/超时竞态按先发生者决定，完全同时超时优先；
-- Extracted/PlayerDead/RaidEnded 终局 sticky 并冻结 GameplayWorld；
-- PlayerDead 领域入口已建立，但玩家 Health/受击接线不在本轮范围。
-
-Windows Debug 全目标构建、受影响程序直跑 90/90、全量 CTest 416/416 与真实窗口 1–8 均已通过；当前只待冻结提交的单一 PR/CI 与合入。
+Week21 已通过 PR #36 合入 `main`。下一候选是“结算与最小 Stash”，实施前需要冻结撤离保留、死亡丢失、局外仓库与重开规则，并建立独立 ExecPlan。
 
 ## 推荐后续候选
 
