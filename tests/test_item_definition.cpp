@@ -19,10 +19,42 @@ namespace
 
 TEST(
     ItemDefinitionTest,
-    CatalogContainsFourDefinitions)
+    CatalogContainsFiveDefinitions)
 {
-    EXPECT_EQ(itemCount(), 4u);
-    EXPECT_EQ(itemDefinitions().size(), 4u);
+    EXPECT_EQ(itemCount(), 5u);
+    EXPECT_EQ(itemDefinitions().size(), 5u);
+}
+
+TEST(ItemDefinitionTest, ExistingItemsRemainNonStackable)
+{
+    EXPECT_EQ(itemDefinition(ItemId::Cola).maxStackSize, 1U);
+    EXPECT_EQ(itemDefinition(ItemId::Medkit).maxStackSize, 1U);
+    EXPECT_EQ(itemDefinition(ItemId::Pistol).maxStackSize, 1U);
+    EXPECT_EQ(itemDefinition(ItemId::Rifle).maxStackSize, 1U);
+}
+
+TEST(ItemDefinitionTest, NineMillimeterAmmoIsAStackablePublishedItem)
+{
+    const ItemDefinition &ammo =
+        itemDefinition(ItemId::Ammo9mm);
+
+    EXPECT_EQ(ammo.id, ItemId::Ammo9mm);
+    EXPECT_EQ(ammo.category, ItemCategory::Ammunition);
+    EXPECT_EQ(ammo.inventoryWidthCells, 1);
+    EXPECT_EQ(ammo.inventoryHeightCells, 1);
+    EXPECT_FALSE(ammo.canRotate);
+    EXPECT_EQ(ammo.maxStackSize, 60U);
+    EXPECT_TRUE(ammo.visualAssetsPublished);
+    EXPECT_EQ(
+        ammo.inventoryTexturePath,
+        std::string_view{
+            "items/inventory/"
+            "item_ammo_9mm_basic_v1_64x64.png"});
+    EXPECT_EQ(
+        ammo.worldTexturePath,
+        std::string_view{
+            "items/world/"
+            "item_ammo_9mm_basic_v1_32x32.png"});
 }
 
 TEST(
@@ -160,6 +192,10 @@ TEST(
     EXPECT_EQ(
         itemDefinition(ItemId::Rifle).id,
         ItemId::Rifle);
+
+    EXPECT_EQ(
+        itemDefinition(ItemId::Ammo9mm).id,
+        ItemId::Ammo9mm);
 }
 
 TEST(
@@ -247,4 +283,52 @@ TEST(
     EXPECT_NE(
         rifle.inventoryTexturePath,
         rifle.worldTexturePath);
+}
+
+TEST(ItemDefinitionTest, RectangularWeaponsSupportFourWayRotation)
+{
+    const ItemDefinition &rifle =
+        itemDefinition(ItemId::Rifle);
+
+    EXPECT_TRUE(rifle.canRotate);
+    EXPECT_EQ(
+        inventoryFootprint(rifle, ItemOrientation::Degrees0),
+        (InventoryFootprint{4, 2}));
+    EXPECT_EQ(
+        inventoryFootprint(rifle, ItemOrientation::Degrees90),
+        (InventoryFootprint{2, 4}));
+    EXPECT_EQ(
+        inventoryFootprint(rifle, ItemOrientation::Degrees180),
+        (InventoryFootprint{4, 2}));
+    EXPECT_EQ(
+        inventoryFootprint(rifle, ItemOrientation::Degrees270),
+        (InventoryFootprint{2, 4}));
+}
+
+TEST(ItemDefinitionTest, SquareItemsRejectNonDefaultOrientation)
+{
+    const ItemDefinition &medkit =
+        itemDefinition(ItemId::Medkit);
+
+    EXPECT_FALSE(medkit.canRotate);
+    EXPECT_TRUE(canUseItemOrientation(
+        medkit,
+        ItemOrientation::Degrees0));
+    EXPECT_FALSE(canUseItemOrientation(
+        medkit,
+        ItemOrientation::Degrees90));
+}
+
+TEST(ItemDefinitionTest, ClockwiseOrientationCyclesBackToZero)
+{
+    ItemOrientation orientation = ItemOrientation::Degrees0;
+
+    orientation = rotatedClockwise(orientation);
+    EXPECT_EQ(orientation, ItemOrientation::Degrees90);
+    orientation = rotatedClockwise(orientation);
+    EXPECT_EQ(orientation, ItemOrientation::Degrees180);
+    orientation = rotatedClockwise(orientation);
+    EXPECT_EQ(orientation, ItemOrientation::Degrees270);
+    orientation = rotatedClockwise(orientation);
+    EXPECT_EQ(orientation, ItemOrientation::Degrees0);
 }

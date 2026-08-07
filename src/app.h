@@ -36,8 +36,8 @@ private:
     InventoryInteractionState
         inventoryInteraction_;
 
-    std::vector<InventoryPointerEvent>
-        pendingInventoryPointerEvents_;
+    std::vector<InventoryUiEvent>
+        pendingInventoryUiEvents_;
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -63,6 +63,14 @@ private:
     void handleInventoryCancel();
     void handleInventoryPointerEvent(
         const InventoryPointerEvent &event);
+
+    void handleInventoryQuickTransferEvent(
+        const InventoryQuickTransferEvent &event);
+
+    void handleInventoryPartialTransferEvent(
+        const InventoryPartialTransferEvent &event);
+
+    void handleInventoryRotateEvent() noexcept;
 
     [[nodiscard]]
     InventoryGridLayout

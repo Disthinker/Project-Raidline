@@ -1554,3 +1554,86 @@ TEST(GridInventoryTest, ReserveOverflowLeavesInventoryUnchanged)
         inventory.placedItems().front().item.instanceId(),
         41U);
 }
+
+TEST(GridInventoryRotationTest, RotatedFootprintCanFitWhereDefaultCannot)
+{
+    GridInventory inventory({2, 4});
+
+    EXPECT_FALSE(
+        inventory.canPlace(
+            ItemId::Rifle,
+            {0, 0},
+            ItemOrientation::Degrees0));
+    EXPECT_TRUE(
+        inventory.canPlace(
+            ItemId::Rifle,
+            {0, 0},
+            ItemOrientation::Degrees90));
+}
+
+TEST(GridInventoryRotationTest, TransformCommitsOriginOrientationAndCells)
+{
+    GridInventory inventory({10, 6});
+    ItemInstance rifle{51, ItemId::Rifle};
+    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {0, 0}));
+
+    ASSERT_TRUE(inventory.tryTransform(
+        51,
+        {3, 1},
+        ItemOrientation::Degrees90));
+
+    ASSERT_EQ(inventory.placedItems().size(), 1U);
+    const PlacedItem &placed = inventory.placedItems().front();
+    EXPECT_EQ(placed.origin, (GridPosition{3, 1}));
+    EXPECT_EQ(
+        placed.item.orientation(),
+        ItemOrientation::Degrees90);
+    EXPECT_EQ(inventory.occupantAt({0, 0}), std::nullopt);
+    EXPECT_EQ(inventory.occupantAt({3, 1}), occupiedBy(51));
+    EXPECT_EQ(inventory.occupantAt({4, 4}), occupiedBy(51));
+    EXPECT_EQ(inventory.occupantAt({5, 1}), std::nullopt);
+}
+
+TEST(GridInventoryRotationTest, TransformAllowsRotatedSelfOverlap)
+{
+    GridInventory inventory({10, 6});
+    ItemInstance pistol{52, ItemId::Pistol};
+    ASSERT_TRUE(inventory.tryPlace(std::move(pistol), {2, 2}));
+
+    EXPECT_TRUE(inventory.canTransform(
+        52,
+        {2, 2},
+        ItemOrientation::Degrees90));
+    ASSERT_TRUE(inventory.tryTransform(
+        52,
+        {2, 2},
+        ItemOrientation::Degrees90));
+
+    EXPECT_EQ(inventory.occupantAt({2, 2}), occupiedBy(52));
+    EXPECT_EQ(inventory.occupantAt({2, 3}), occupiedBy(52));
+    EXPECT_EQ(inventory.occupantAt({3, 2}), std::nullopt);
+}
+
+TEST(GridInventoryRotationTest, FailedTransformPreservesCompleteState)
+{
+    GridInventory inventory({6, 4});
+    ItemInstance rifle{53, ItemId::Rifle};
+    ItemInstance blocker{54, ItemId::Cola};
+    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(blocker), {3, 3}));
+
+    const auto cellsBefore = snapshotCells(inventory);
+
+    EXPECT_FALSE(inventory.tryTransform(
+        53,
+        {2, 0},
+        ItemOrientation::Degrees90));
+    EXPECT_EQ(snapshotCells(inventory), cellsBefore);
+    ASSERT_EQ(inventory.placedItems().size(), 2U);
+    EXPECT_EQ(
+        inventory.placedItems()[0].origin,
+        (GridPosition{0, 0}));
+    EXPECT_EQ(
+        inventory.placedItems()[0].item.orientation(),
+        ItemOrientation::Degrees0);
+}

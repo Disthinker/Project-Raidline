@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -19,6 +20,7 @@ struct GroundItemSpawn
 {
     ItemId definitionId{};
     Vec2 position{};
+    std::uint32_t quantity{1};
 };
 
 class GameplayWorld
@@ -95,6 +97,32 @@ public:
         ItemInstanceId instanceId);
 
     [[nodiscard]]
+    bool dropInventoryItem(
+        ItemInstanceId instanceId,
+        ItemOrientation orientation);
+
+    [[nodiscard]]
+    bool dropInventoryItemQuantity(
+        ItemInstanceId instanceId,
+        std::uint32_t quantity,
+        ItemOrientation orientation);
+
+    [[nodiscard]]
+    bool transferInventoryItemQuantity(
+        bool sourceIsPlayerInventory,
+        ItemInstanceId instanceId,
+        std::uint32_t quantity);
+
+    [[nodiscard]]
+    bool placeInventoryItemQuantity(
+        bool sourceIsPlayerInventory,
+        bool destinationIsPlayerInventory,
+        ItemInstanceId instanceId,
+        std::uint32_t quantity,
+        GridPosition destinationOrigin,
+        ItemOrientation destinationOrientation);
+
+    [[nodiscard]]
     int score() const noexcept;
 
 private:
@@ -122,7 +150,8 @@ private:
 
     void spawnGroundItem(
         ItemId definitionId,
-        Vec2 position);
+        Vec2 position,
+        std::uint32_t quantity);
 
     [[nodiscard]]
     std::optional<std::size_t>

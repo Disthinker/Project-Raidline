@@ -1,0 +1,100 @@
+{
+  "package_id": "ammo_9mm_pack_v1",
+  "status": "passed",
+  "selection": {
+    "path": "art/work/ammo_9mm_pack_v1/candidates/item_ammo_9mm_basic_v1/candidate_01_rgba.png",
+    "sha256": "0f7392f03a405d2c058f1dbc7692e08cdd985095ae6bd533fc0e0c41146fbe02",
+    "accepted_deviations": [
+      "The selected candidate does not satisfy the production prompt's exact-four presentation. The authoritative asset contract requires a few visible brass cartridge tips, and candidate 01 has the strongest 9mm-ammunition readability at both 64x64 and 32x32."
+    ]
+  },
+  "assets": {
+    "item_ammo_9mm_basic_v1": {
+      "master": {
+        "path": "assets/items/source/item_ammo_9mm_basic_v1.png",
+        "sha256": "963acf604689b3d0fe84678f13343b9e470ed5330efe3e4fba74a1df79f1b9d3",
+        "size": [
+          256,
+          256
+        ],
+        "expected_size": [
+          256,
+          256
+        ],
+        "alpha_bbox": [
+          49,
+          24,
+          207,
+          232
+        ],
+        "transparent_corners": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "opaque_near_magenta_pixels": 0,
+        "transparent_rgb_clean": true,
+        "passed": true
+      },
+      "inventory": {
+        "path": "assets/items/inventory/item_ammo_9mm_basic_v1_64x64.png",
+        "sha256": "12663590f499e4098f09a64b96dcdf97c5a14698286ef0df4513ba65b298a8a5",
+        "size": [
+          64,
+          64
+        ],
+        "expected_size": [
+          64,
+          64
+        ],
+        "alpha_bbox": [
+          12,
+          6,
+          52,
+          58
+        ],
+        "transparent_corners": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "opaque_near_magenta_pixels": 0,
+        "transparent_rgb_clean": true,
+        "passed": true
+      },
+      "world": {
+        "path": "assets/items/world/item_ammo_9mm_basic_v1_32x32.png",
+        "sha256": "d86a02b54a4559d4a6b7f76cbfc2288abd1e88c27fe5a12f13208f9a5a3cefc8",
+        "size": [
+          32,
+          32
+        ],
+        "expected_size": [
+          32,
+          32
+        ],
+        "alpha_bbox": [
+          6,
+          3,
+          26,
+          29
+        ],
+        "transparent_corners": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "opaque_near_magenta_pixels": 0,
+        "transparent_rgb_clean": true,
+        "passed": true
+      },
+      "safe_padding_ok": true,
+      "footprint_ok": true,
+      "non_rotatable_contract_ok": true,
+      "deterministic_identity_ok": true
+    }
+  }
+}

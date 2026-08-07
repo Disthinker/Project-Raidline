@@ -10,6 +10,17 @@ void InputSystem::handleEvent(
         return;
     }
 
+    if (event.type == SDL_EVENT_KEY_DOWN)
+    {
+        pressedScancodes_.insert(
+            event.key.scancode);
+    }
+    else
+    {
+        pressedScancodes_.erase(
+            event.key.scancode);
+    }
+
     const std::optional<GameAction> action =
         mapScancodeToAction(
             event.key.scancode);
@@ -54,6 +65,22 @@ bool InputSystem::wasActionJustPressed(
 {
     return justPressedActions_.find(action) !=
            justPressedActions_.end();
+}
+
+bool InputSystem::isControlPressed() const noexcept
+{
+    return pressedScancodes_.contains(
+               SDL_SCANCODE_LCTRL) ||
+           pressedScancodes_.contains(
+               SDL_SCANCODE_RCTRL);
+}
+
+bool InputSystem::isShiftPressed() const noexcept
+{
+    return pressedScancodes_.contains(
+               SDL_SCANCODE_LSHIFT) ||
+           pressedScancodes_.contains(
+               SDL_SCANCODE_RSHIFT);
 }
 
 void InputSystem::endFrame()

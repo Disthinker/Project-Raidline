@@ -23,6 +23,14 @@ ctest --preset windows-debug
 & 'E:\VisualStudio\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
 ```
 
+中文 MSVC + Ninja 使用 `/showIncludes` 追踪头文件。配置和构建必须使用一致的控制台代码页；本机统一为 UTF-8：
+
+```powershell
+chcp 65001
+```
+
+仓库的 CMake 配置会纠正 CMake 3.31 已知的中文前缀乱码检测，但同一 `build/windows-debug` 不应交替由不同代码页的进程增量构建。
+
 这个路径只用于本机命令示例，不得写入共享 CMake 配置。若未加载 Developer Shell，已有 Ninja cache 仍可能找到 `cl.exe`，但编译会因缺少 MSVC 标准库 `INCLUDE` 而报 `<optional>`、`<array>` 等文件不存在；此时旧 CTest 二进制不属于新代码的验证证据。
 
 Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-debug`。如果 CMake 报找不到 compiler 或 Ninja，先修复 Developer Shell/PATH；如果 toolchain 变成 `/scripts/buildsystems/vcpkg.cmake`，说明 `VCPKG_ROOT` 为空。
@@ -49,13 +57,19 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 20 个 GTest executable、304 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、鼠标状态、平滑像素拖拽和事务集成；`InventoryTransferTest` 与 `StorageCabinetTest` 分别覆盖跨容器事务和世界柜体边界。可用下列命令证明鼠标测试源真实进入编译数据库：
+当前 CMake 注册 20 个 GTest executable、367 个 CTest 用例。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚，`GameplayWorldTest` 覆盖整栈/部分脚下丢弃与地面往返，`StorageCabinetTest` 覆盖世界柜体边界。可用下列命令证明鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
 ```
 
-若修改了 `InventoryInteractionState` 的类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，先对相关 target 做干净重编译；这通常表示增量对象仍按旧类尺寸编译，不应误判成某个 GTest 断言失败。
+若修改类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，或链接器仍引用旧函数签名，先检查 Ninja 是否真实记录头文件依赖：
+
+```powershell
+ninja -C build/windows-debug -t deps 'CMakeFiles/Project_Raidline.dir/src/app.cpp.obj'
+```
+
+输出应为非零 `#deps` 并列出相关头文件。若是 `#deps 0`，固定代码页后执行 `cmake --fresh --preset windows-debug`，再执行一次 `cmake --build --preset windows-debug --target clean` 和全量构建；旧二进制不可作为验证证据。
 
 ## 运行程序与人工检查
 
@@ -65,7 +79,7 @@ Ninja Debug 输出通常位于：
 & '.\build\windows-debug\Project_Raidline.exe'
 ```
 
-当前控制：WASD 移动、Space 射击、F 拾取/近距离打开柜体、Tab 打开玩家背包。Tab 只显示玩家背包；靠近柜体按 F 才显示右侧柜体容器。背包物品仅用鼠标按住拖动，方向键和 Enter 没有库存语义；Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后物品出现在角色脚下。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
+当前控制：WASD 移动、Space 射击、F 拾取/近距离打开柜体、Tab 打开玩家背包。Tab 只显示玩家背包；靠近柜体按 F 才显示右侧柜体容器。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药，供堆叠/拆分验收；未发布视觉资源的逻辑物品不会由正式内容生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
 
 ## Python 与艺术管线测试
 

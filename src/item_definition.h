@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 #include "vec2.h"
@@ -14,6 +15,7 @@ enum class ItemId
     Medkit,
     Pistol,
     Rifle,
+    Ammo9mm,
     Count
 };
 
@@ -21,7 +23,26 @@ enum class ItemCategory
 {
     Consumable,
     Medical,
-    Weapon
+    Weapon,
+    Ammunition
+};
+
+enum class ItemOrientation
+{
+    Degrees0,
+    Degrees90,
+    Degrees180,
+    Degrees270
+};
+
+struct InventoryFootprint
+{
+    int width{};
+    int height{};
+
+    friend bool operator==(
+        const InventoryFootprint &,
+        const InventoryFootprint &) = default;
 };
 
 // 一种物品的共享静态数据。
@@ -34,6 +55,12 @@ struct ItemDefinition
 
     int inventoryWidthCells{};
     int inventoryHeightCells{};
+    bool canRotate{};
+    std::uint32_t maxStackSize{1};
+
+    // A logical definition may land before its approved art package. Such
+    // entries must not be spawned by production content or loaded as textures.
+    bool visualAssetsPublished{true};
 
     Vec2 worldRenderSize{};
     Vec2 pickupSize{};
@@ -62,3 +89,26 @@ itemDefinitions() noexcept;
 [[nodiscard]]
 const ItemDefinition &
 itemDefinition(ItemId id);
+
+[[nodiscard]]
+bool isValidItemOrientation(
+    ItemOrientation orientation) noexcept;
+
+[[nodiscard]]
+ItemOrientation rotatedClockwise(
+    ItemOrientation orientation) noexcept;
+
+[[nodiscard]]
+bool canUseItemOrientation(
+    const ItemDefinition &definition,
+    ItemOrientation orientation) noexcept;
+
+[[nodiscard]]
+InventoryFootprint inventoryFootprint(
+    const ItemDefinition &definition,
+    ItemOrientation orientation) noexcept;
+
+[[nodiscard]]
+Vec2 orientedSize(
+    Vec2 baseSize,
+    ItemOrientation orientation) noexcept;

@@ -313,6 +313,118 @@ TEST(MouseInventoryIntegrationTest, CrossContainerDragUsesTransferTransaction)
         (std::optional<GridPosition>{GridPosition{1, 1}}));
 }
 
+TEST(MouseInventoryIntegrationTest, RotatedSameContainerDragCommitsTransform)
+{
+    GridInventory inventory{{10, 6}};
+    ItemInstance pistol{34, ItemId::Pistol};
+    ASSERT_TRUE(inventory.tryPlace(std::move(pistol), {0, 0}));
+
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(34),
+        {0, 0},
+        {1, 0},
+        {100.0F, 100.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {2, 1},
+            true,
+            {1.25F, 0.5F}}));
+    state.updatePointerPosition(
+        {120.0F, 120.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {4, 3}},
+        false);
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+
+    const auto pointerRequest = state.releasePointer(
+        {120.0F, 120.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {4, 3}},
+        false);
+    ASSERT_TRUE(pointerRequest.has_value());
+    const auto *placement =
+        std::get_if<InventoryPlacementRequest>(&*pointerRequest);
+    ASSERT_NE(placement, nullptr);
+    EXPECT_EQ(placement->destination.cell, (GridPosition{4, 2}));
+    EXPECT_EQ(placement->orientation, ItemOrientation::Degrees90);
+
+    ASSERT_TRUE(inventory.tryTransform(
+        placement->source.instanceId,
+        placement->destination.cell,
+        placement->orientation));
+    EXPECT_EQ(
+        inventory.originOf(34),
+        (std::optional<GridPosition>{GridPosition{4, 2}}));
+    ASSERT_EQ(inventory.placedItems().size(), 1U);
+    EXPECT_EQ(
+        inventory.placedItems().front().item.orientation(),
+        ItemOrientation::Degrees90);
+    EXPECT_EQ(inventory.occupantAt({4, 2}), 34U);
+    EXPECT_EQ(inventory.occupantAt({4, 3}), 34U);
+    EXPECT_EQ(inventory.occupantAt({5, 2}), std::nullopt);
+}
+
+TEST(MouseInventoryIntegrationTest, RotatedCrossContainerDragCommitsTransform)
+{
+    GridInventory player{{10, 6}};
+    GridInventory external{{6, 6}};
+    ItemInstance rifle{35, ItemId::Rifle};
+    ASSERT_TRUE(player.tryPlace(std::move(rifle), {0, 0}));
+
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(35),
+        {0, 0},
+        {2, 1},
+        {100.0F, 100.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {4, 2},
+            true,
+            {2.25F, 1.5F}}));
+    state.updatePointerPosition(
+        {120.0F, 120.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {4, 4}},
+        false);
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+
+    const auto pointerRequest = state.releasePointer(
+        {120.0F, 120.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {4, 4}},
+        false);
+    ASSERT_TRUE(pointerRequest.has_value());
+    const auto *placement =
+        std::get_if<InventoryPlacementRequest>(&*pointerRequest);
+    ASSERT_NE(placement, nullptr);
+    EXPECT_EQ(placement->destination.cell, (GridPosition{4, 2}));
+    EXPECT_EQ(placement->orientation, ItemOrientation::Degrees90);
+
+    ASSERT_TRUE(tryTransferItemTransform(
+        player,
+        external,
+        placement->source.instanceId,
+        placement->destination.cell,
+        placement->orientation));
+    EXPECT_TRUE(player.placedItems().empty());
+    EXPECT_EQ(
+        external.originOf(35),
+        (std::optional<GridPosition>{GridPosition{4, 2}}));
+    ASSERT_EQ(external.placedItems().size(), 1U);
+    EXPECT_EQ(
+        external.placedItems().front().item.orientation(),
+        ItemOrientation::Degrees90);
+    EXPECT_EQ(external.occupantAt({4, 2}), 35U);
+    EXPECT_EQ(external.occupantAt({5, 5}), 35U);
+    EXPECT_EQ(external.occupantAt({3, 2}), std::nullopt);
+}
+
 TEST(MouseInventoryIntegrationTest, InvalidCrossContainerDropIsNonMutating)
 {
     GridInventory player{{10, 6}};
@@ -358,7 +470,7 @@ TEST(MouseInventoryFrameArbitrationTest, EscapeAndReleaseDoNotCommit)
 
     const InventoryFrameInputDecision decision =
         decideInventoryFrameInput(true, false, true);
-    ASSERT_FALSE(decision.processPointerEvents);
+    ASSERT_FALSE(decision.processUiEvents);
     state.cancelPointerGesture();
 
     EXPECT_EQ(
@@ -381,7 +493,7 @@ TEST(MouseInventoryFrameArbitrationTest, TabAndReleaseDoNotCommit)
 
     const InventoryFrameInputDecision decision =
         decideInventoryFrameInput(true, true, false);
-    ASSERT_FALSE(decision.processPointerEvents);
+    ASSERT_FALSE(decision.processUiEvents);
     state.reset();
 
     EXPECT_EQ(

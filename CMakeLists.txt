@@ -1,6 +1,21 @@
 cmake_minimum_required(VERSION 3.15)
 project(Project_Raidline CXX)
 
+# CMake 3.31 can mis-decode the UTF-8 Chinese MSVC /showIncludes prefix
+# through the system ANSI code page. Ninja then records zero header
+# dependencies, so a class-layout change may leave ABI-incompatible objects.
+# Correct only that known bad detection; English and other locales keep the
+# prefix CMake detected normally.
+if(
+    MSVC
+    AND CMAKE_GENERATOR MATCHES "Ninja"
+    AND CMAKE_CL_SHOWINCLUDES_PREFIX STREQUAL
+        "娉ㄦ剰: 鍖呭惈鏂囦欢:  ")
+    set(
+        CMAKE_CL_SHOWINCLUDES_PREFIX
+        "注意: 包含文件:  ")
+endif()
+
 # 1. 寻找 Vcpkg 安装的第三方依赖
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
@@ -263,6 +278,9 @@ add_executable(GameplayWorldTest
 
     src/grid_inventory.h
     src/grid_inventory.cpp
+
+    src/inventory_transfer.h
+    src/inventory_transfer.cpp
 
     src/storage_cabinet.h
     src/storage_cabinet.cpp
@@ -610,6 +628,7 @@ add_executable(InventoryInteractionTest
     src/grid_inventory.h
     src/item_instance.h
     src/item_definition.h
+    src/item_definition.cpp
 )
 
 target_compile_features(

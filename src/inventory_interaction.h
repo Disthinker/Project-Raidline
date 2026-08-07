@@ -53,6 +53,41 @@ struct InventoryPointerEvent
         const InventoryPointerEvent &) = default;
 };
 
+// F 在按键事件到达时采样当前鼠标位置；Ctrl+右键使用点击位置。
+// App 先刷新 hover，再解析源格，因此界面打开后无需先晃动鼠标。
+struct InventoryQuickTransferEvent
+{
+    std::optional<MousePosition> pointerPosition;
+
+    friend bool operator==(
+        const InventoryQuickTransferEvent &,
+        const InventoryQuickTransferEvent &) = default;
+};
+
+struct InventoryRotateEvent
+{
+    friend bool operator==(
+        const InventoryRotateEvent &,
+        const InventoryRotateEvent &) = default;
+};
+
+struct InventoryPartialTransferEvent
+{
+    MousePosition pointerPosition{};
+    bool controlPressed{};
+    bool shiftPressed{};
+
+    friend bool operator==(
+        const InventoryPartialTransferEvent &,
+        const InventoryPartialTransferEvent &) = default;
+};
+
+using InventoryUiEvent = std::variant<
+    InventoryPointerEvent,
+    InventoryQuickTransferEvent,
+    InventoryRotateEvent,
+    InventoryPartialTransferEvent>;
+
 enum class InventoryFrameControlAction
 {
     None,
@@ -92,7 +127,7 @@ struct InventoryFrameInputDecision
 {
     InventoryFrameControlAction controlAction{
         InventoryFrameControlAction::None};
-    bool processPointerEvents{};
+    bool processUiEvents{};
 
     friend bool operator==(
         const InventoryFrameInputDecision &,
@@ -192,10 +227,72 @@ enum class InventoryPointerPhase
     Dragging
 };
 
+struct InventoryPointerItemGeometry
+{
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+    InventoryFootprint footprint{1, 1};
+    bool canRotate{};
+    MousePosition grabOffsetInCells{};
+
+    friend bool operator==(
+        const InventoryPointerItemGeometry &,
+        const InventoryPointerItemGeometry &) = default;
+};
+
+struct InventoryDragVisual
+{
+    MousePosition pointerPosition{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+    InventoryFootprint footprint{1, 1};
+    MousePosition grabOffsetInCells{};
+    std::optional<std::uint32_t> selectedQuantity;
+
+    friend bool operator==(
+        const InventoryDragVisual &,
+        const InventoryDragVisual &) = default;
+};
+
+struct InventoryQuickTransferRequest
+{
+    InventoryGridLocation source{};
+
+    friend bool operator==(
+        const InventoryQuickTransferRequest &,
+        const InventoryQuickTransferRequest &) = default;
+};
+
+enum class InventoryPartialTransferMode
+{
+    One,
+    Half
+};
+
+[[nodiscard]]
+std::optional<InventoryPartialTransferMode>
+decideInventoryPartialTransferMode(
+    bool controlPressed,
+    bool shiftPressed) noexcept;
+
+[[nodiscard]]
+std::uint32_t inventoryPartialTransferQuantity(
+    InventoryPartialTransferMode mode,
+    std::uint32_t availableQuantity) noexcept;
+
+// 快捷转移只在双容器界面、Idle 且存在 hover 时产生请求。
+// 这里只决定 UI 意图，不查询或修改 GridInventory。
+[[nodiscard]]
+std::optional<InventoryQuickTransferRequest>
+decideInventoryQuickTransfer(
+    InventoryOverlayMode overlayMode,
+    InventoryPointerPhase pointerPhase,
+    std::optional<InventoryGridLocation> hoveredLocation) noexcept;
+
 struct InventoryPlacementRequest
 {
     InventoryItemSelection source{};
     InventoryGridLocation destination{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+    std::optional<std::uint32_t> selectedQuantity;
 
     friend bool operator==(
         const InventoryPlacementRequest &,
@@ -205,6 +302,8 @@ struct InventoryPlacementRequest
 struct InventoryDropRequest
 {
     InventoryItemSelection source{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+    std::optional<std::uint32_t> selectedQuantity;
 
     friend bool operator==(
         const InventoryDropRequest &,
@@ -245,6 +344,10 @@ public:
     std::optional<MousePosition>
     pointerDragDelta() const noexcept;
 
+    [[nodiscard]]
+    std::optional<InventoryDragVisual>
+    activeDragVisual() const noexcept;
+
     void updatePointerPosition(
         MousePosition position,
         std::optional<InventoryGridLocation> gridLocation,
@@ -257,6 +360,29 @@ public:
         GridPosition itemOrigin,
         GridPosition clickedCell,
         MousePosition position) noexcept;
+
+    [[nodiscard]]
+    bool beginPointerPress(
+        InventoryItemSelection selection,
+        GridPosition itemOrigin,
+        GridPosition clickedCell,
+        MousePosition position,
+        InventoryPointerItemGeometry geometry) noexcept;
+
+    // Modifier-left selection starts dragging immediately. The source stack is
+    // not changed until the release request is committed by the world layer.
+    [[nodiscard]]
+    bool beginQuantityPointerDrag(
+        InventoryItemSelection selection,
+        GridPosition itemOrigin,
+        GridPosition clickedCell,
+        MousePosition position,
+        InventoryPointerItemGeometry geometry,
+        std::uint32_t selectedQuantity) noexcept;
+
+    // 仅修改拖拽候选；不提交 ItemInstance 或 GridInventory。
+    [[nodiscard]]
+    bool rotatePointerItemClockwise() noexcept;
 
     // 仅生成请求，不直接修改 GridInventory 或 GameplayWorld。
     [[nodiscard]]
@@ -283,6 +409,8 @@ private:
     std::optional<MousePosition> pointerPressPosition_;
     std::optional<MousePosition> pointerCurrentPosition_;
     GridPosition grabOffset_{0, 0};
+    InventoryPointerItemGeometry pointerItemGeometry_{};
+    std::optional<std::uint32_t> pointerSelectedQuantity_;
     std::optional<InventoryGridLocation> pointerPreviewLocation_;
     bool pointerOverDropZone_{};
 

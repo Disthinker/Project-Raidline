@@ -65,11 +65,15 @@ public:
     [[nodiscard]]
     bool canPlace(
         ItemId definitionId,
-        GridPosition origin) const;
+        GridPosition origin,
+        ItemOrientation orientation =
+            ItemOrientation::Degrees0) const;
 
     [[nodiscard]]
     std::optional<GridPosition> findFirstFit(
-        ItemId definitionId) const;
+        ItemId definitionId,
+        ItemOrientation orientation =
+            ItemOrientation::Degrees0) const;
 
     // 为即将到来的事务式放置预留元素容量。
     // 分配失败时 Inventory 的可观察内容保持不变。
@@ -89,6 +93,13 @@ public:
         ItemInstanceId instanceId,
         GridPosition newOrigin) const;
 
+    // 同时查询位置与方向变化，不修改 Inventory。
+    [[nodiscard]]
+    bool canTransform(
+        ItemInstanceId instanceId,
+        GridPosition newOrigin,
+        ItemOrientation newOrientation) const;
+
     // 将已放置物品移动到 newOrigin。
     //
     // 成功时：
@@ -102,6 +113,13 @@ public:
     bool tryMove(
         ItemInstanceId instanceId,
         GridPosition newOrigin);
+
+    // 原子提交新位置与新方向；失败时 cells、origin 和 orientation 不变。
+    [[nodiscard]]
+    bool tryTransform(
+        ItemInstanceId instanceId,
+        GridPosition newOrigin,
+        ItemOrientation newOrientation);
 
     // 成功时把 item 的所有权转入背包。
     //
@@ -135,6 +153,17 @@ public:
         ItemInstanceId instanceId) const noexcept;
 
     [[nodiscard]]
+    std::optional<std::uint32_t> quantityOf(
+        ItemInstanceId instanceId) const noexcept;
+
+    // Narrow mutation primitive used by prevalidated multi-stack
+    // transactions. It never changes placement or cell occupancy.
+    [[nodiscard]]
+    bool trySetItemQuantity(
+        ItemInstanceId instanceId,
+        std::uint32_t quantity);
+
+    [[nodiscard]]
     const std::vector<PlacedItem> &placedItems() const noexcept;
 
 private:
@@ -152,6 +181,7 @@ private:
     bool canPlaceDefinition(
         const ItemDefinition &definition,
         GridPosition origin,
+        ItemOrientation orientation,
         std::optional<ItemInstanceId> allowedOccupant) const noexcept;
 
     [[nodiscard]]
@@ -164,6 +194,7 @@ private:
     void setFootprintOccupant(
         const ItemDefinition &definition,
         GridPosition origin,
+        ItemOrientation orientation,
         std::optional<ItemInstanceId> occupant) noexcept;
 
     // 只能对已经确认合法的坐标调用。

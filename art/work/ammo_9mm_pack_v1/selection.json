@@ -1,0 +1,17 @@
+{
+  "package_id": "ammo_9mm_pack_v1",
+  "selection_basis": "art-control original-size and deterministic 64x64/32x32 runtime review",
+  "selected_candidates": {
+    "item_ammo_9mm_basic_v1": "art/work/ammo_9mm_pack_v1/candidates/item_ammo_9mm_basic_v1/candidate_01_rgba.png"
+  },
+  "approved": true,
+  "approved_by": "art-control",
+  "repair_rounds_used": 1,
+  "accepted_deviations": [
+    "The selected candidate does not satisfy the production prompt's exact-four presentation. The authoritative asset contract requires a few visible brass cartridge tips, and candidate 01 has the strongest 9mm-ammunition readability at both 64x64 and 32x32."
+  ],
+  "rejected_outputs": {
+    "candidate_02": "Four-count composition passed, but the circular brass forms read as cartridge bases or primers after runtime reduction.",
+    "repair_01": "The sole repair call produced only two cartridges instead of the required four and therefore failed its own repair objective."
+  }
+}

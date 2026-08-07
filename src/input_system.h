@@ -37,6 +37,14 @@ public:
     bool wasActionJustPressed(
         GameAction action) const;
 
+    // 背包鼠标快捷操作需要在 SDL 事件到达时记录 Ctrl 快照。
+    // 左右 Ctrl 任意一个仍按下时都返回 true。
+    [[nodiscard]]
+    bool isControlPressed() const noexcept;
+
+    [[nodiscard]]
+    bool isShiftPressed() const noexcept;
+
     void endFrame();
 
 private:
@@ -45,6 +53,10 @@ private:
 
     std::unordered_set<GameAction>
         justPressedActions_;
+
+    // 保留原始按键状态，使未映射为 GameAction 的修饰键仍可查询。
+    std::unordered_set<SDL_Scancode>
+        pressedScancodes_;
 
     [[nodiscard]]
     std::optional<GameAction>
