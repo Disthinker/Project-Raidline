@@ -113,6 +113,7 @@ jobs:
             -G Ninja `
             -DCMAKE_BUILD_TYPE="$env:BUILD_TYPE" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVCPKG_APPLOCAL_DEPS=OFF `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build C++ targets
@@ -124,7 +125,9 @@ jobs:
 
       - name: Run C++ tests
         shell: pwsh
-        run: ctest --test-dir build --output-on-failure --parallel 4
+        run: |
+          $env:PATH = "${{ github.workspace }}\build\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+          ctest --test-dir build --output-on-failure --parallel 4
 
   ubuntu-cpp:
     name: Ubuntu C++ build and test
