@@ -17,6 +17,7 @@
 | Week 18 | 两个 move-only 所有者间的事务式转移、目标预留后提交、失败回滚、`std::variant` 请求、容器 ID 值状态、显式丢弃所有权转移、`vector::max_size` 溢出防护、`StorageCabinet` 组合所有权、Closed/PlayerOnly/Container 视图状态、有限浮点交互边界 |
 | Week 19 | 四向 orientation 与 footprint transform、连续/离散抓取锚点同步、精确数量拆分/合并计划、世界级稳定 ID 分配、`std::optional<std::uint32_t>` 拖拽意图、同/跨容器指定格数量事务、部分 GroundItem 丢弃、预留后无抛出提交、MSVC `/showIncludes` 与 Ninja 依赖追踪 |
 | Week 20 | 纯虚随机源接口与运行时多态、`final`、`std::mt19937` 注入边界、加权半开区间选择、结果堆叠规范化、显式 Unsearched/Searched 状态、临时 move-only GridInventory 原子提交、默认 move 特殊成员与 `noexcept`、首次搜索稳定 ID 事务 |
+| Week 21 | 六态有限状态机、sticky 终局、连续占用取消语义、同一 deltaTime 内竞争终止事件、有限浮点配置/派生边界验证、半开矩形点包含、领域状态与 SDL 只读渲染分离、终局帧 mutation 截断 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -34,6 +35,9 @@
 - 同一 `GridInventory` 内拆分/合并与两个不同 `GridInventory` 间转移在引用失效和提交顺序上的差异。
 - 随机源内部状态无法回滚，但为什么领域状态仍能通过“先完整生成、后一次提交”获得强事务保证。
 - 抽取结果值、最终 ItemInstance 和柜体 GridInventory 三层之间的职责与所有权边界。
+- 大 deltaTime 同时跨过两个 deadline 时，为什么需要比较“事件还剩多久”而不是固定检查顺序。
+- 为什么撤离占用读取玩家逻辑中心而不是渲染 sprite，以及半开边界如何避免相邻区域双重命中。
+- 状态机终局 sticky、同帧提前 return 与 App 只读反馈如何共同防止终局后的额外玩法 mutation。
 
 ## Week 17–18 已落地、仍应复习的主题
 

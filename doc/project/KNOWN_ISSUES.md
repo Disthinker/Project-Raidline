@@ -23,7 +23,7 @@
 | [RL-ANIM-001 / GitHub #28](https://github.com/Disthinker/Project-Raidline/issues/28) | P2 | 角色表现 | 仓库只有左右移动图集；纯上/下移动回退到同一静态贴图，停止后虽保留模型朝向但视觉上恢复默认。 | Needs Decision | 角色动画任务；冻结四方向资源方案，补上/下动画与停止朝向验收后关闭。 |
 | [RL-ARCH-001 / GitHub #29](https://github.com/Disthinker/Project-Raidline/issues/29) | P2 | 架构 | `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包编排；Week18 已用容器 ID、容器查询与独立布局接口解除“只能绑定玩家背包”的限制。 | Deferred | 多容器阻塞已解除；后续仅在玩法需求驱动下继续拆分，不做无关大重构。 |
 | [RL-BUILD-001 / GitHub #30](https://github.com/Disthinker/Project-Raidline/issues/30) | P2 | 构建 | 多个测试 target 重复编译业务源码，扩大干净构建成本和 target 接线遗漏风险；本轮旧 ABI 对象的直接根因已拆分为 RL-BUILD-002。 | Deferred | 后续抽取共享核心 library，并证明所有测试链接同一实现；不阻塞 M2 人工验收。 |
-| RL-BUILD-002 | P1 | Windows 构建 | Week19 M2 再次出现 `MouseInventoryInteractionTest.exe` 的 `gtest_ar_` 栈损坏，主程序随后也链接到旧函数签名。Ninja `-t deps` 显示相关对象为 `#deps 0`；根因是 CMake 3.31 中文 MSVC `/showIncludes` 前缀编码与编译代码页不一致。 | Closed | CMake 纠正已知乱码前缀；固定 UTF-8 后干净/增量构建与全量测试均通过，PR #34 Windows CI 通过。Week20 类布局变更后 3 个 Debug 程序 74/74、全量 386/386 再次未复现。 |
+| RL-BUILD-002 | P1 | Windows 构建 | Week19 M2 再次出现 `MouseInventoryInteractionTest.exe` 的 `gtest_ar_` 栈损坏，主程序随后也链接到旧函数签名。Ninja `-t deps` 显示相关对象为 `#deps 0`；根因是 CMake 3.31 中文 MSVC `/showIncludes` 前缀编码与编译代码页不一致。 | Closed | CMake 纠正已知乱码前缀；固定 UTF-8 后干净/增量构建与全量测试均通过，PR #34 Windows CI 通过。Week21 新增类与 target 后 3 个 Debug 程序 90/90、全量 416/416 再次未复现。 |
 | RL-CI-001 | P3 | CI | `tests/test_phase1_assets.py` 未注册进 CTest 或 GitHub Actions。 | Deferred | 在独立 CI 改进任务中接入并保留失败诊断。 |
 | RL-DATA-001 | P3 | 数据 | ItemDefinition、世界参数、射击参数和部分 UI 布局仍为编译期硬编码。 | Deferred | 数据驱动里程碑排期后处理，不阻塞 Week18。 |
 | RL-ART-001 | P3 | 美术管线 | 已批准资源的覆盖保护主要依赖流程，跨包候选扫描和部分命名枪械工具仍硬编码。 | Deferred | 后续艺术管线加固任务。 |

@@ -1,6 +1,6 @@
 # Week20 最小可搜索柜体与 Loot ExecPlan
 
-- 状态：In Progress
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-inventory-domain`
 - 最后更新：2026-08-07
 
@@ -210,6 +210,8 @@ App 只发起命令和读取 `isSearched()` 渲染提示，不保存 Loot 或 It
 - 2026-08-07：C++ 安全审查未发现阻塞项；临时 Inventory 包含所有可抛分配，正式提交为 `noexcept` move，失败不跨 mutation 保留引用或推进世界 ID。真实窗口 1–9 项仍待用户执行。
 - 2026-08-07：用户确认真实窗口 1–9 项全部通过；首次搜索、重开持久、转移后保持、取空不刷新、Tab PlayerOnly 与旧玩法回归达到人工退出条件。
 - 2026-08-07：代码、测试和 CMake 冻结为功能提交 `86ef327`；进入中文教学移交、文档提交、单推送与单 PR/CI 收口。
+- 2026-08-07：文档提交 `1f20065` 后创建 PR #35；范围检测、Windows、Ubuntu CI 全部通过，用户真实窗口 1–9 已记录。
+- 2026-08-07：PR #35 从精确头提交 `1f20065` 以 merge commit `4ec46c4` 合入 main；ExecPlan 按合入事实归档。
 
 ## 发现记录
 
@@ -220,4 +222,4 @@ App 只发起命令和读取 `isSearched()` 渲染提示，不保存 Loot 或 It
 
 ## 最终结果、验证证据与遗留问题
 
-Loot 领域、柜体/世界事务、App 接线、Windows Debug 构建、聚焦/直跑/全量测试、安全审查、真实窗口 1–9 项和功能提交均已完成。当前未完成项只剩文档提交、单一 PR/CI 与合并证据；在远端门禁完成前计划保持 `In Progress`。
+Loot 领域、柜体/世界事务、App 接线、Windows Debug 构建、聚焦/直跑/全量测试、安全审查、真实窗口 1–9、文档、PR #35、Windows/Ubuntu CI 和合并证据均已完成。最终进入 main 的 merge commit 为 `4ec46c4`；遗留项保持在问题台账与后续路线图中。

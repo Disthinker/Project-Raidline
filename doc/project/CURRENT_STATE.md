@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-07，`codex/week20-searchable-containers` 本地验收候选。
+最后核对：2026-08-07，`codex/week21-raid-session-extraction` 本地人工验收候选。
 
 ## Git、验证与 CI 基线
 
-- `main` / `origin/main`：`bc0b87d`，Week19 已通过 [PR #34](https://github.com/Disthinker/Project-Raidline/pull/34) 合入；范围检测、Ubuntu 和 Windows CI 全部通过。
-- 当前实现分支：`codex/week20-searchable-containers`，从 `bc0b87d` 创建；范围为单个世界柜体的一次性搜索状态、默认 LootTable、可注入随机源、原子生成提交和 Search/Open 玩家提示。
-- Windows Debug 全目标构建成功；LootTableTest、StorageCabinetTest、GameplayWorldTest 三个程序直接运行 74/74，通过且未复现 `gtest_ar_` 栈损坏。
-- Windows Debug 全量 CTest 386/386 通过；`ctest -N` 同样注册 386 项。
-- `compile_commands.json` 已确认 `loot_table.cpp` 进入主程序、GameplayWorldTest 和 LootTableTest，`test_loot_table.cpp` 进入独立测试目标。
-- 用户已完成 Week20 真实窗口 1–9 项：Search/Open 提示、首次生成、关闭重开、转移后持久、取空不刷新、Tab PlayerOnly 和旧玩法回归全部通过。
+- `main` / `origin/main`：`4ec46c4`，Week20 已通过 [PR #35](https://github.com/Disthinker/Project-Raidline/pull/35) 合入；范围检测、Ubuntu 和 Windows CI 以及真实窗口 1–9 全部通过。
+- 当前实现分支：`codex/week21-raid-session-extraction`，从 `4ec46c4` 创建；范围为独立 RaidSession、固定撤离点、连续 3 秒撤离、离开取消、180 秒局内计时和终局冻结。
+- Windows Debug configure 与全目标构建成功；RaidSessionTest、ExtractionPointTest、GameplayWorldTest 三个程序直接运行 90/90，通过且未复现 `gtest_ar_` 栈损坏。
+- Windows Debug 全量 CTest 416/416 通过；`ctest -N` 同样注册 416 项。
+- `compile_commands.json` 已确认 `raid_session.cpp` 与 `extraction_point.cpp` 进入主程序和 GameplayWorldTest，独立测试源进入各自测试目标。
+- 用户已完成 Week21 真实窗口 1–8：倒计时、撤离区、旧玩法回归、进入/离开清零、成功撤离、终局冻结与重启新 Raid 全部通过。当前分支仍缺冻结提交的 GitHub Actions 证据，不能标记完成。
 
-## 已进入 main：Week 1–19
+## 已进入 main：Week 1–20
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -23,6 +23,8 @@
 Week18 计划已按 PR #33 的合入事实归档到 `doc/exec-plans/completed/`。
 
 Week19 计划已按 PR #34 的合入事实归档；整栈快捷转移、拖拽旋转、9mm 堆叠与数量拖拽均已进入 `main`。
+
+Week20 计划已按 PR #35 的合入事实归档；一次性柜体搜索、默认加权 Loot 与原子生成提交均已进入 `main`。
 
 ## Week19 已合入能力
 
@@ -50,7 +52,7 @@ Week19 计划已按 PR #34 的合入事实归档；整栈快捷转移、拖拽�
 - 正式 master、64×64 inventory 与 32×32 world 资源由同一身份确定性派生，尺寸、Alpha、透明角、安全留白、1×1 footprint 与不可旋转合同均通过 QA。
 - “未精确呈现四枚弹药”作为已接受偏差记录；正式合同只要求少量弹药可见，运行时辨识度优先。
 
-## Week20 最终 PR 候选
+## Week20 已合入能力
 
 - `StorageCabinet` 具有独立于库存是否为空的 `Unsearched/Searched` 生命周期；取空后不会刷新。
 - 默认柜体 LootTable 固定进行 3 次加权抽取：Cola 24、Medkit 20、Pistol 16、Rifle 8、Ammo9mm 32；弹药单次数量为 10–30。
@@ -60,6 +62,15 @@ Week19 计划已按 PR #34 的合入事实归档；整栈快捷转移、拖拽�
 - 范围内未搜索提示为 `F: SEARCH CABINET`；成功搜索或已搜索重开显示 `F: OPEN CABINET`。
 - Tab 仍只打开玩家背包；范围外搜索、重复搜索和已取空柜体均不会生成新物品。
 
+## Week21 本地人工验收候选
+
+- `RaidSession` 显式建模 `Preparing/InRaid/Extracting/Extracted/PlayerDead/RaidEnded`；构造后由 GameplayWorld 自动开局。
+- 默认 Raid 时长 180 秒，固定撤离耗时 3 秒；地图左下方代码绘制 176×136 的半透明撤离区。
+- 玩家逻辑中心进入撤离区后连续计时，离开立即回到 InRaid 并清零；重新进入从 0 开始。
+- 大 deltaTime 比较撤离与超时谁先发生；完全同时由超时获胜，确保一局只有一个 sticky 终局结果。
+- 撤离、死亡或超时后 GameplayWorld 停止移动、射击、拾取、敌人和命中 mutation；App 关闭库存 overlay 并显示终局反馈。
+- PlayerDead 已有显式领域命令和测试，但项目尚无玩家受伤/Health 接线；真实战斗死亡留到垂直切片阶段。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
@@ -67,6 +78,6 @@ Week19 计划已按 PR #34 的合入事实归档；整栈快捷转移、拖拽�
 - 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、RaidSession、撤离、Stash、装备栏、重量、耐久和跨进程持久化尚未实现。
+- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、结算、Stash、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-详细行为见 [Week20 活跃 ExecPlan](../exec-plans/active/week20-searchable-containers.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+详细行为见 [Week21 活跃 ExecPlan](../exec-plans/active/week21-raid-session-extraction.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
