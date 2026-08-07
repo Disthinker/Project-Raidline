@@ -1,6 +1,6 @@
 # Week21 最小 RaidSession 与撤离点 ExecPlan
 
-- 状态：In Progress
+- 状态：Complete
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-build-test-ci` + `raidline-cpp-safety-review` + `raidline-task-closeout`
 - 最后更新：2026-08-07
 
@@ -164,6 +164,8 @@
 - 2026-08-07：compile database 确认两个新业务源进入主程序和 GameplayWorldTest，两个测试源进入独立测试目标；Python 资源测试因本任务未修改资产而不适用。
 - 2026-08-07：C++ 状态/所有权审查补充派生右/下边界有限性验证后无剩余阻塞项；真实窗口 1–8 与 commit-specific CI 仍待完成。
 - 2026-08-07：用户确认真实窗口 1–8 全部通过；进入冻结提交、单推送、单 PR/CI 收口。
+- 2026-08-07：PR #36 的最终头提交 `06d0d8e` 通过 GitHub Actions run `31191339832`：范围检测、Ubuntu 与 Windows 全部通过；Windows applocal 文件锁和构建期测试发现 DLL 路径问题分别由 `f821672`、`06d0d8e` 收口。
+- 2026-08-07：PR #36 以 merge commit `8130c09` 合入 `main`，本地 `main` 已快进同步；Week21 完整闭环。
 
 ## 发现记录
 
@@ -174,4 +176,4 @@
 
 ## 最终结果、验证证据与遗留问题
 
-代码、测试、CMake、项目文档、教学移交与真实窗口 1–8 已完成。Windows Debug configure、全目标 build、聚焦 90/90、直接程序 90/90、全量 CTest 416/416、CTest discovery 416 和 compile database 接线均通过；没有修改美术资源，Python 资产测试不适用。当前仅剩冻结提交、单一 PR/CI 与合入证据，因此计划保持 In Progress。
+代码、测试、CMake、项目文档、教学移交与真实窗口 1–8 已完成。Windows Debug configure、全目标 build、聚焦 90/90、直接程序 90/90、全量 CTest 416/416、CTest discovery 416 和 compile database 接线均通过；没有修改美术资源，Python 资产测试不适用。commit-specific Windows/Ubuntu CI 全部通过，PR #36 已合入 `main`，计划状态为 Complete。
