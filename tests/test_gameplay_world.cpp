@@ -405,7 +405,7 @@ TEST(
 
     ASSERT_EQ(
         world.groundItems().size(),
-        4U);
+        6U);
 
     EXPECT_EQ(
         world.groundItems()[0]
@@ -450,6 +450,41 @@ TEST(
             .item()
             .definitionId(),
         ItemId::Rifle);
+
+    EXPECT_EQ(
+        world.groundItems()[4]
+            .item()
+            .instanceId(),
+        5U);
+    EXPECT_EQ(
+        world.groundItems()[4]
+            .item()
+            .definitionId(),
+        ItemId::Ammo9mm);
+    EXPECT_EQ(
+        world.groundItems()[4]
+            .item()
+            .quantity(),
+        25U);
+
+    EXPECT_EQ(
+        world.groundItems()[5]
+            .item()
+            .instanceId(),
+        6U);
+    EXPECT_EQ(
+        world.groundItems()[5]
+            .item()
+            .definitionId(),
+        ItemId::Ammo9mm);
+    EXPECT_EQ(
+        world.groundItems()[5]
+            .item()
+            .quantity(),
+        40U);
+    EXPECT_TRUE(
+        itemDefinition(ItemId::Ammo9mm)
+            .visualAssetsPublished);
 }
 
 TEST(
@@ -1108,4 +1143,226 @@ TEST(GameplayWorldTest, DropPositionIgnoresLeftFacingDirection)
     EXPECT_FLOAT_EQ(
         world.groundItems().front().position().y,
         392.0f);
+}
+
+TEST(GameplayWorldTest, DropCommitsRequestedItemOrientation)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{10, 6}};
+    ItemInstance rifle{508, ItemId::Rifle};
+    ASSERT_TRUE(
+        world.inventory().tryPlace(
+            std::move(rifle),
+            {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(
+        508,
+        ItemOrientation::Degrees90));
+
+    ASSERT_EQ(world.groundItems().size(), 1U);
+    EXPECT_EQ(
+        world.groundItems().front().item().orientation(),
+        ItemOrientation::Degrees90);
+    EXPECT_TRUE(world.inventory().placedItems().empty());
+}
+
+TEST(GameplayWorldStackTest, PickupMergesWholeGroundStackAtomically)
+{
+    GameplayWorld world{
+        3,
+        {{ItemId::Ammo9mm, {640.0F, 360.0F}, 2}},
+        InventoryGridSize{1, 1}};
+    ItemInstance ammo{700, ItemId::Ammo9mm, 58};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    GameplayInput pickup{};
+    pickup.interactJustPressed = true;
+    world.update(pickup, 0.0F);
+
+    EXPECT_TRUE(world.groundItems().empty());
+    ASSERT_EQ(world.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.instanceId(), 700U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.quantity(), 60U);
+}
+
+TEST(GameplayWorldStackTest, FailedPickupPreservesGroundAndInventoryQuantities)
+{
+    GameplayWorld world{
+        3,
+        {{ItemId::Ammo9mm, {640.0F, 360.0F}, 1}},
+        InventoryGridSize{1, 1}};
+    ItemInstance ammo{701, ItemId::Ammo9mm, 60};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    GameplayInput pickup{};
+    pickup.interactJustPressed = true;
+    world.update(pickup, 0.0F);
+
+    ASSERT_EQ(world.groundItems().size(), 1U);
+    EXPECT_EQ(world.groundItems().front().item().quantity(), 1U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.quantity(), 60U);
+}
+
+TEST(GameplayWorldStackTest, PartialContainerTransferConsumesWorldIdOnCommit)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1}};
+    ItemInstance ammo{702, ItemId::Ammo9mm, 10};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    ASSERT_TRUE(world.transferInventoryItemQuantity(true, 702, 4));
+
+    ASSERT_EQ(world.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.quantity(), 6U);
+    ASSERT_EQ(world.containerInventory().placedItems().size(), 1U);
+    EXPECT_EQ(
+        world.containerInventory().placedItems().front().item.instanceId(),
+        1U);
+    EXPECT_EQ(
+        world.containerInventory().placedItems().front().item.quantity(),
+        4U);
+}
+
+TEST(GameplayWorldStackTest, PickupMergesThenPlacesRemainderWithGroundId)
+{
+    GameplayWorld world{
+        3,
+        {{ItemId::Ammo9mm, {640.0F, 360.0F}, 5}},
+        InventoryGridSize{2, 1}};
+    ItemInstance ammo{703, ItemId::Ammo9mm, 59};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    GameplayInput pickup{};
+    pickup.interactJustPressed = true;
+    world.update(pickup, 0.0F);
+
+    EXPECT_TRUE(world.groundItems().empty());
+    ASSERT_EQ(world.inventory().placedItems().size(), 2U);
+    EXPECT_EQ(world.inventory().placedItems()[0].item.instanceId(), 703U);
+    EXPECT_EQ(world.inventory().placedItems()[0].item.quantity(), 60U);
+    EXPECT_EQ(world.inventory().placedItems()[1].item.instanceId(), 1U);
+    EXPECT_EQ(world.inventory().placedItems()[1].item.quantity(), 4U);
+    EXPECT_EQ(world.inventory().placedItems()[1].origin, (GridPosition{1, 0}));
+}
+
+TEST(GameplayWorldStackTest, DropAndPickupPreserveWholeStackQuantityAndId)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1}};
+    ItemInstance ammo{704, ItemId::Ammo9mm, 25};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItem(704));
+    ASSERT_EQ(world.groundItems().size(), 1U);
+    EXPECT_EQ(world.groundItems().front().item().instanceId(), 704U);
+    EXPECT_EQ(world.groundItems().front().item().quantity(), 25U);
+
+    GameplayInput pickup{};
+    pickup.interactJustPressed = true;
+    world.update(pickup, 0.0F);
+
+    EXPECT_TRUE(world.groundItems().empty());
+    ASSERT_EQ(world.inventory().placedItems().size(), 1U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.instanceId(), 704U);
+    EXPECT_EQ(world.inventory().placedItems().front().item.quantity(), 25U);
+}
+
+TEST(GameplayWorldStackTest, PartialDropCreatesGroundStackAtPlayersFeet)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1}};
+    ItemInstance ammo{705, ItemId::Ammo9mm, 25};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    ASSERT_TRUE(world.dropInventoryItemQuantity(
+        705,
+        5,
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(world.inventory().quantityOf(705), 20U);
+    ASSERT_EQ(world.groundItems().size(), 1U);
+    EXPECT_EQ(world.groundItems().front().item().instanceId(), 1U);
+    EXPECT_EQ(world.groundItems().front().item().quantity(), 5U);
+    EXPECT_FLOAT_EQ(world.groundItems().front().position().x, 656.0F);
+    EXPECT_FLOAT_EQ(world.groundItems().front().position().y, 392.0F);
+}
+
+TEST(GameplayWorldStackTest, QuantityPlacementWorksInsidePlayerInventory)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{3, 1}};
+    ItemInstance ammo{706, ItemId::Ammo9mm, 9};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    ASSERT_TRUE(world.placeInventoryItemQuantity(
+        true,
+        true,
+        706,
+        1,
+        {2, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(world.inventory().quantityOf(706), 8U);
+    EXPECT_EQ(world.inventory().quantityOf(1), 1U);
+    EXPECT_EQ(world.inventory().originOf(1),
+              (std::optional<GridPosition>{GridPosition{2, 0}}));
+}
+
+TEST(GameplayWorldStackTest, FailedQuantityPlacementDoesNotConsumeWorldId)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{3, 1}};
+    ItemInstance sourceAmmo{707, ItemId::Ammo9mm, 10};
+    ItemInstance fullAmmo{708, ItemId::Ammo9mm, 60};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(fullAmmo), {1, 0}));
+
+    EXPECT_FALSE(world.placeInventoryItemQuantity(
+        true,
+        true,
+        707,
+        1,
+        {1, 0},
+        ItemOrientation::Degrees0));
+    ASSERT_TRUE(world.placeInventoryItemQuantity(
+        true,
+        true,
+        707,
+        1,
+        {2, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(world.inventory().quantityOf(707), 9U);
+    EXPECT_EQ(world.inventory().quantityOf(1), 1U);
+    EXPECT_EQ(world.inventory().originOf(2), std::nullopt);
+}
+
+TEST(GameplayWorldStackTest, PartialDropRejectsConflictingWorldId)
+{
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1}};
+    ItemInstance ammo{1, ItemId::Ammo9mm, 10};
+    ASSERT_TRUE(world.inventory().tryPlace(std::move(ammo), {0, 0}));
+
+    EXPECT_FALSE(world.dropInventoryItemQuantity(
+        1,
+        1,
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(world.inventory().quantityOf(1), 10U);
+    EXPECT_TRUE(world.groundItems().empty());
 }

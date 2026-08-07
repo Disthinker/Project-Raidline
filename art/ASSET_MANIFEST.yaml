@@ -45,6 +45,23 @@ production_packages:
     acceptance_report: art/reviews/named_firearms_pack_v1/acceptance.md
     repair_rounds_used: 0
 
+  - id: ammo_9mm_pack_v1
+    status: completed_accepted
+    production_thread_id: 019fdb3a-add1-7ab3-a67e-8cd0ad4bc009
+    production_thread_host: local
+    brief: .prompts/art/ammo_9mm_pack_v1/PRODUCTION_BRIEF.md
+    contract: art/specs/ammo_9mm_pack_v1.json
+    work_root: art/work/ammo_9mm_pack_v1/
+    candidates_per_asset: 2
+    maximum_repair_rounds: 1
+    result: art/work/ammo_9mm_pack_v1/result.json
+    selection: art/work/ammo_9mm_pack_v1/selection.json
+    contact_sheet: art/reviews/ammo_9mm_pack_v1/contact_sheet.png
+    technical_qa: art/reviews/ammo_9mm_pack_v1/qa.json
+    acceptance_report: art/reviews/ammo_9mm_pack_v1/acceptance.md
+    repair_rounds_used: 1
+    accepted_deviation: exact-four production composition replaced by formal-contract few-cartridge runtime readability
+
 anchors:
   - id: player_static_existing_v1
     status: approved
@@ -208,6 +225,26 @@ assets:
       source_master: assets/items/source/item_shotgun_m870_v1.png
       inventory_texture: assets/items/inventory/item_shotgun_m870_v1_320x128.png
       world_texture: assets/items/world/item_shotgun_m870_v1_160x64.png
+
+  - id: item_ammo_9mm_basic_v1
+    family: ammunition
+    type: item_identity
+    status: approved
+    priority: P0
+    grid_footprint: [1, 1]
+    can_rotate: false
+    max_stack_size: 60
+    master_size: [256, 256]
+    inventory_size: [64, 64]
+    world_draw_size: [32, 32]
+    work_package: ammo_9mm_pack_v1
+    selected_candidate: art/work/ammo_9mm_pack_v1/candidates/item_ammo_9mm_basic_v1/candidate_01_rgba.png
+    approved_in_batch: ammo_9mm_pack_v1
+    accepted_deviation: exact-four production composition replaced by formal-contract few-cartridge runtime readability
+    final:
+      source_master: assets/items/source/item_ammo_9mm_basic_v1.png
+      inventory_texture: assets/items/inventory/item_ammo_9mm_basic_v1_64x64.png
+      world_texture: assets/items/world/item_ammo_9mm_basic_v1_32x32.png
 
 deferred_families:
   - character_layers

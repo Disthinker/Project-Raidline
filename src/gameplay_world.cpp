@@ -1,11 +1,13 @@
 #include "gameplay_world.h"
 
 #include <algorithm>
+#include <exception>
 #include <limits>
 #include <utility>
 
 #include "collision.h"
 #include "hit_resolution.h"
+#include "inventory_transfer.h"
 
 namespace
 {
@@ -44,6 +46,16 @@ namespace
             {
                 ItemId::Rifle,
                 Vec2{960.0f, 520.0f},
+            },
+            {
+                ItemId::Ammo9mm,
+                Vec2{640.0f, 440.0f},
+                25,
+            },
+            {
+                ItemId::Ammo9mm,
+                Vec2{760.0f, 440.0f},
+                40,
             },
         };
     }
@@ -139,13 +151,15 @@ GameplayWorld::GameplayWorld(
     {
         spawnGroundItem(
             spawn.definitionId,
-            spawn.position);
+            spawn.position,
+            spawn.quantity);
     }
 }
 
 void GameplayWorld::spawnGroundItem(
     ItemId definitionId,
-    Vec2 position)
+    Vec2 position,
+    std::uint32_t quantity)
 {
     // 只有 GroundItem 成功创建后才递增 ID。
     // 若 definitionId 非法，ItemInstance 构造会抛出，
@@ -156,7 +170,8 @@ void GameplayWorld::spawnGroundItem(
     groundItems_.emplace_back(
         ItemInstance{
             instanceId,
-            definitionId},
+            definitionId,
+            quantity},
         position);
 
     ++nextItemInstanceId_;
@@ -234,39 +249,17 @@ void GameplayWorld::tryPickupOne()
     GroundItem &groundItem =
         groundItems_[index];
 
-    const ItemInstance &candidateItem =
-        groundItem.item();
-
-    // 必须先确认背包有合法位置。
-    //
-    // 背包满时不会调用任何移动操作，因此：
-    // - GroundItem 保留；
-    // - ItemInstance ID 保留；
-    // - 背包保持不变。
-    const std::optional<GridPosition> placement =
-        inventory_.findFirstFit(
-            candidateItem.definitionId());
-
-    if (!placement.has_value())
-    {
-        return;
-    }
-
-    // itemForTransfer() 返回原 ItemInstance 引用。
-    // std::move 只把它转换为右值引用。
-    //
-    // tryPlace 失败时不会真正移动，因此 GroundItem
-    // 仍持有有效 ItemInstance。
+    // Stack insertion completes planning and capacity reservation before it
+    // changes any destination quantity or moves the ground item. Failure keeps
+    // both the GroundItem and the inventory unchanged.
     const bool placed =
-        inventory_.tryPlace(
+        tryInsertItemFirstFit(
+            inventory_,
             std::move(
-                groundItem.itemForTransfer()),
-            *placement);
+                groundItem.itemForTransfer()));
 
     if (!placed)
     {
-        // 理论上 findFirstFit 成功后这里应当成功。
-        // 仍采用 fail-safe：不删除 GroundItem。
         return;
     }
 
@@ -474,17 +467,81 @@ bool GameplayWorld::dropInventoryItem(
         return false;
     }
 
+    return dropInventoryItem(
+        instanceId,
+        placedIt->item.orientation());
+}
+
+bool GameplayWorld::dropInventoryItem(
+    ItemInstanceId instanceId,
+    ItemOrientation orientation)
+{
+    const auto placedIt = std::find_if(
+        inventory_.placedItems().begin(),
+        inventory_.placedItems().end(),
+        [instanceId](const PlacedItem &placed)
+        {
+            return placed.item.instanceId() ==
+                   instanceId;
+        });
+
+    if (placedIt == inventory_.placedItems().end())
+    {
+        return false;
+    }
+
+    return dropInventoryItemQuantity(
+        instanceId,
+        placedIt->item.quantity(),
+        orientation);
+}
+
+bool GameplayWorld::dropInventoryItemQuantity(
+    ItemInstanceId instanceId,
+    std::uint32_t quantity,
+    ItemOrientation orientation)
+{
+    const auto placedIt = std::find_if(
+        inventory_.placedItems().begin(),
+        inventory_.placedItems().end(),
+        [instanceId](const PlacedItem &placed)
+        {
+            return placed.item.instanceId() ==
+                   instanceId;
+        });
+
+    if (placedIt == inventory_.placedItems().end() ||
+        quantity == 0 ||
+        quantity > placedIt->item.quantity())
+    {
+        return false;
+    }
+
     const ItemDefinition &definition =
         itemDefinition(
             placedIt->item.definitionId());
 
+    if (!canUseItemOrientation(
+            definition,
+            orientation))
+    {
+        return false;
+    }
+
+    const GridPosition sourceOrigin = placedIt->origin;
+    const std::uint32_t sourceQuantity =
+        placedIt->item.quantity();
+    const bool partial = quantity < sourceQuantity;
+
     const Vec2 center = playerCenter(player_);
     const float playerFeetY =
         player_.position().y + player_.size();
-    const float halfWidth =
-        definition.worldRenderSize.x / 2.0f;
-    const float halfHeight =
-        definition.worldRenderSize.y / 2.0f;
+    const Vec2 renderSize =
+        orientedSize(
+            definition.worldRenderSize,
+            orientation);
+    const float halfWidth = renderSize.x / 2.0f;
+    const float halfHeight = renderSize.y / 2.0f;
 
     const Vec2 dropPosition{
         std::clamp(
@@ -497,9 +554,58 @@ bool GameplayWorld::dropInventoryItem(
             kWorldHeight - halfHeight),
     };
 
-    // 唯一可能抛出的容量增长发生在移出玩家背包之前。
+    std::optional<ItemInstance> splitItem;
+    if (partial)
+    {
+        const bool splitIdAlreadyExists =
+            inventory_.quantityOf(nextItemInstanceId_).has_value() ||
+            storageCabinet_.inventory()
+                .quantityOf(nextItemInstanceId_)
+                .has_value() ||
+            std::any_of(
+                groundItems_.begin(),
+                groundItems_.end(),
+                [this](const GroundItem &groundItem)
+                {
+                    return groundItem.item().instanceId() ==
+                           nextItemInstanceId_;
+                });
+
+        if (splitIdAlreadyExists)
+        {
+            return false;
+        }
+
+        splitItem.emplace(
+            nextItemInstanceId_,
+            placedIt->item.definitionId(),
+            quantity);
+
+        if (!splitItem->trySetOrientation(orientation))
+        {
+            return false;
+        }
+    }
+
+    // 唯一可能抛出的容量增长发生在修改玩家背包之前。
     groundItems_.reserve(
         groundItems_.size() + 1);
+
+    if (partial)
+    {
+        if (!inventory_.trySetItemQuantity(
+                instanceId,
+                sourceQuantity - quantity))
+        {
+            std::terminate();
+        }
+
+        groundItems_.emplace_back(
+            std::move(*splitItem),
+            dropPosition);
+        ++nextItemInstanceId_;
+        return true;
+    }
 
     std::optional<ItemInstance> removed =
         inventory_.remove(instanceId);
@@ -509,12 +615,87 @@ bool GameplayWorld::dropInventoryItem(
         return false;
     }
 
+    if (!removed->trySetOrientation(orientation))
+    {
+        const bool restored = inventory_.tryPlace(
+            std::move(*removed),
+            sourceOrigin);
+
+        if (!restored)
+        {
+            std::terminate();
+        }
+
+        return false;
+    }
+
     // GroundItem 构造和已有元素移动均为 noexcept；reserve 后不再分配。
     groundItems_.emplace_back(
         std::move(*removed),
         dropPosition);
 
     return true;
+}
+
+bool GameplayWorld::transferInventoryItemQuantity(
+    bool sourceIsPlayerInventory,
+    ItemInstanceId instanceId,
+    std::uint32_t quantity)
+{
+    GridInventory &source = sourceIsPlayerInventory
+        ? inventory_
+        : storageCabinet_.inventory();
+    GridInventory &destination = sourceIsPlayerInventory
+        ? storageCabinet_.inventory()
+        : inventory_;
+
+    const QuantityTransferResult result =
+        tryTransferItemQuantityFirstFit(
+            source,
+            destination,
+            instanceId,
+            quantity,
+            nextItemInstanceId_);
+
+    if (result.consumedSplitInstanceId)
+    {
+        ++nextItemInstanceId_;
+    }
+
+    return result.succeeded;
+}
+
+bool GameplayWorld::placeInventoryItemQuantity(
+    bool sourceIsPlayerInventory,
+    bool destinationIsPlayerInventory,
+    ItemInstanceId instanceId,
+    std::uint32_t quantity,
+    GridPosition destinationOrigin,
+    ItemOrientation destinationOrientation)
+{
+    GridInventory &source = sourceIsPlayerInventory
+        ? inventory_
+        : storageCabinet_.inventory();
+    GridInventory &destination = destinationIsPlayerInventory
+        ? inventory_
+        : storageCabinet_.inventory();
+
+    const QuantityTransferResult result =
+        tryPlaceItemQuantityAt(
+            source,
+            destination,
+            instanceId,
+            quantity,
+            destinationOrigin,
+            destinationOrientation,
+            nextItemInstanceId_);
+
+    if (result.consumedSplitInstanceId)
+    {
+        ++nextItemInstanceId_;
+    }
+
+    return result.succeeded;
 }
 
 int GameplayWorld::score() const noexcept

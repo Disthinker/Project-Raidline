@@ -34,7 +34,9 @@ Rect GroundItem::pickupBounds() const
             item_.definitionId());
 
     const Vec2 pickupSize =
-        definition.pickupSize;
+        orientedSize(
+            definition.pickupSize,
+            item_.orientation());
 
     return Rect{
         Vec2{

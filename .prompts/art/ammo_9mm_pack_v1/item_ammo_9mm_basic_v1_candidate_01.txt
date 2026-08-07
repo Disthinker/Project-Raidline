@@ -1,0 +1,11 @@
+Use case: stylized-concept
+Asset type: Project Raidline production-ready pixel-art ammunition identity master for inventory and world pickup
+Primary request: create exactly one compact unbranded 9mm pistol-ammunition carton in the established Project Raidline pixel-art language
+Subject: one small worn olive-drab cardboard ammunition box, lid slightly open as part of the same box, with four restrained brass cartridge tips visible in two neat rows inside; the box is the single coherent object and must read clearly as pistol ammunition after reduction to 32x32 pixels
+Style/medium: crisp hand-authored 2D pixel art with stylized realism, chunky deliberate pixel clusters, a strong charcoal outline, limited tonal steps, and no antialiased vector look
+Composition/framing: lightly top-down three-quarter view, centered on a square canvas, complete uncropped silhouette, generous empty border on every side, compact near-square footprint
+Lighting/mood: restrained upper-left light, compact internal shadow only, no cast shadow and no floor contact shadow
+Color palette: muted olive-drab and khaki cardboard, worn charcoal edges, aged brass cartridge tips, restrained dark brown wear; no bright saturated color fields
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local removal, with no gradient, texture, floor, reflection, halo, or lighting variation
+Constraints: exactly one ammunition box; lid and visible cartridges remain contained within the box silhouette; no loose or separate cartridges; no weapon; no hands; no pouch; no text, letters, numbers, caliber marking, logo, brand, trademark, watermark, border, UI frame, muzzle effect, smoke, blood, or cast shadow; do not use #ff00ff on the object
+Avoid: photorealism, smooth 3D product rendering, glossy modern packaging, futuristic or cyberpunk ornament, oversized bullets, multiple boxes, exploded view, scattered ammunition, cartoon exaggeration, unreadable micro-detail, or transparent background in the raw chroma render

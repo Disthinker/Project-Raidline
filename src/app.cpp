@@ -47,6 +47,102 @@ namespace
     constexpr float kInventoryPanelY{72.0f};
     constexpr float kInventoryDropWidth{96.0f};
 
+    double orientationAngle(
+        ItemOrientation orientation) noexcept
+    {
+        switch (orientation)
+        {
+        case ItemOrientation::Degrees0:
+            return 0.0;
+        case ItemOrientation::Degrees90:
+            return 90.0;
+        case ItemOrientation::Degrees180:
+            return 180.0;
+        case ItemOrientation::Degrees270:
+            return 270.0;
+        }
+
+        return 0.0;
+    }
+
+    void renderOrientedTexture(
+        SDL_Renderer *renderer,
+        SDL_Texture *texture,
+        const SDL_FRect &orientedBounds,
+        float baseWidth,
+        float baseHeight,
+        ItemOrientation orientation)
+    {
+        if (orientation == ItemOrientation::Degrees0)
+        {
+            static_cast<void>(
+                SDL_RenderTexture(
+                    renderer,
+                    texture,
+                    nullptr,
+                    &orientedBounds));
+            return;
+        }
+
+        const float centerX =
+            orientedBounds.x + orientedBounds.w / 2.0F;
+        const float centerY =
+            orientedBounds.y + orientedBounds.h / 2.0F;
+        const SDL_FRect unrotatedDestination{
+            centerX - baseWidth / 2.0F,
+            centerY - baseHeight / 2.0F,
+            baseWidth,
+            baseHeight};
+
+        static_cast<void>(
+            SDL_RenderTextureRotated(
+                renderer,
+                texture,
+                nullptr,
+                &unrotatedDestination,
+                orientationAngle(orientation),
+                nullptr,
+                SDL_FLIP_NONE));
+    }
+
+    void renderItemQuantityBadge(
+        SDL_Renderer *renderer,
+        const SDL_FRect &itemBounds,
+        std::uint32_t quantity,
+        bool showSingle = false)
+    {
+        if (quantity == 0 ||
+            (quantity == 1 && !showSingle))
+        {
+            return;
+        }
+
+        const std::string text =
+            std::to_string(quantity);
+        const float textWidth =
+            static_cast<float>(text.size()) * 8.0F;
+        const float badgeWidth =
+            std::max(18.0F, textWidth + 6.0F);
+        const SDL_FRect badge{
+            itemBounds.x + itemBounds.w - badgeWidth - 3.0F,
+            itemBounds.y + itemBounds.h - 15.0F,
+            badgeWidth,
+            13.0F};
+
+        SDL_SetRenderDrawBlendMode(
+            renderer,
+            SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 8, 10, 12, 220);
+        SDL_RenderFillRect(renderer, &badge);
+        SDL_SetRenderDrawColor(renderer, 235, 238, 240, 255);
+        SDL_RenderRect(renderer, &badge);
+        SDL_RenderDebugText(
+            renderer,
+            badge.x + 3.0F,
+            badge.y + 3.0F,
+            text.c_str());
+    }
+
     bool loadTexture(
         SDL_Renderer *renderer,
         const std::string &path,
@@ -120,6 +216,73 @@ namespace
             MousePosition{
                 event.button.x,
                 event.button.y}};
+    }
+
+    std::optional<InventoryUiEvent>
+    toInventoryUiEvent(
+        const SDL_Event &event,
+        bool controlPressed,
+        bool shiftPressed) noexcept
+    {
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            (controlPressed || shiftPressed))
+        {
+            return InventoryUiEvent{
+                InventoryPartialTransferEvent{
+                    MousePosition{
+                        event.button.x,
+                        event.button.y},
+                    controlPressed,
+                    shiftPressed}};
+        }
+
+        const std::optional<InventoryPointerEvent> pointerEvent =
+            toInventoryPointerEvent(event);
+
+        if (pointerEvent.has_value())
+        {
+            return InventoryUiEvent{*pointerEvent};
+        }
+
+        if (event.type == SDL_EVENT_KEY_DOWN &&
+            event.key.scancode == SDL_SCANCODE_R &&
+            !event.key.repeat)
+        {
+            return InventoryUiEvent{
+                InventoryRotateEvent{}};
+        }
+
+        if (event.type == SDL_EVENT_KEY_DOWN &&
+            event.key.scancode == SDL_SCANCODE_F &&
+            !event.key.repeat)
+        {
+            float pointerX{};
+            float pointerY{};
+            static_cast<void>(
+                SDL_GetMouseState(
+                    &pointerX,
+                    &pointerY));
+
+            return InventoryUiEvent{
+                InventoryQuickTransferEvent{
+                    MousePosition{
+                        pointerX,
+                        pointerY}}};
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            controlPressed)
+        {
+            return InventoryUiEvent{
+                InventoryQuickTransferEvent{
+                    MousePosition{
+                        event.button.x,
+                        event.button.y}}};
+        }
+
+        return std::nullopt;
     }
 }
 
@@ -226,6 +389,11 @@ bool App::loadTextures()
     {
         const ItemDefinition &definition =
             definitions[index];
+
+        if (!definition.visualAssetsPublished)
+        {
+            continue;
+        }
 
         const std::string worldPath =
             assetRoot +
@@ -553,6 +721,41 @@ void App::handleInventoryPointerEvent(
             return;
         }
 
+        const auto &placedItems = inventory.placedItems();
+        const auto placedIt = std::find_if(
+            placedItems.begin(),
+            placedItems.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() == *instanceId;
+            });
+
+        if (placedIt == placedItems.end())
+        {
+            inventoryInteraction_.clearSelection();
+            return;
+        }
+
+        const ItemDefinition &definition =
+            itemDefinition(
+                placedIt->item.definitionId());
+        const InventoryFootprint footprint =
+            inventoryFootprint(
+                definition,
+                placedIt->item.orientation());
+        const InventoryGridLayout layout =
+            inventoryGridLayout(location->container);
+        const float cellSize = layout.cellSize();
+        const MousePosition grabOffsetInCells{
+            (position.x -
+             (layout.gridX() +
+              static_cast<float>(itemOrigin->x) * cellSize)) /
+                cellSize,
+            (position.y -
+             (layout.gridY() +
+              static_cast<float>(itemOrigin->y) * cellSize)) /
+                cellSize};
+
         static_cast<void>(
             inventoryInteraction_.beginPointerPress(
                 InventoryItemSelection{
@@ -560,7 +763,12 @@ void App::handleInventoryPointerEvent(
                     *instanceId},
                 *itemOrigin,
                 location->cell,
-                position));
+                position,
+                InventoryPointerItemGeometry{
+                    placedIt->item.orientation(),
+                    footprint,
+                    definition.canRotate,
+                    grabOffsetInCells}));
         return;
     }
 
@@ -585,20 +793,34 @@ void App::handleInventoryPointerEvent(
 
         bool succeeded{};
 
-        if (placement->source.container ==
+        if (placement->selectedQuantity.has_value())
+        {
+            succeeded = world_.placeInventoryItemQuantity(
+                placement->source.container ==
+                    InventoryContainerId::Player,
+                placement->destination.container ==
+                    InventoryContainerId::Player,
+                placement->source.instanceId,
+                *placement->selectedQuantity,
+                placement->destination.cell,
+                placement->orientation);
+        }
+        else if (placement->source.container ==
             placement->destination.container)
         {
-            succeeded = source.tryMove(
+            succeeded = source.tryTransform(
                 placement->source.instanceId,
-                placement->destination.cell);
+                placement->destination.cell,
+                placement->orientation);
         }
         else
         {
-            succeeded = tryTransferItem(
+            succeeded = tryTransferItemTransform(
                 source,
                 destination,
                 placement->source.instanceId,
-                placement->destination.cell);
+                placement->destination.cell,
+                placement->orientation);
         }
 
         if (succeeded &&
@@ -616,16 +838,189 @@ void App::handleInventoryPointerEvent(
 
     if (drop.source.container ==
             InventoryContainerId::Player &&
-        world_.dropInventoryItem(drop.source.instanceId))
+        (drop.selectedQuantity.has_value()
+             ? world_.dropInventoryItemQuantity(
+                   drop.source.instanceId,
+                   *drop.selectedQuantity,
+                   drop.orientation)
+             : world_.dropInventoryItem(
+                   drop.source.instanceId,
+                   drop.orientation)))
     {
         inventoryInteraction_.clearSelection();
     }
 }
 
+void App::handleInventoryRotateEvent() noexcept
+{
+    static_cast<void>(
+        inventoryInteraction_.rotatePointerItemClockwise());
+}
+
+void App::handleInventoryQuickTransferEvent(
+    const InventoryQuickTransferEvent &event)
+{
+    if (event.pointerPosition.has_value())
+    {
+        const MousePosition position =
+            *event.pointerPosition;
+
+        inventoryInteraction_.updatePointerPosition(
+            position,
+            inventoryLocationAt(position),
+            inventoryDropZoneContains(position));
+    }
+
+    const std::optional<InventoryQuickTransferRequest> request =
+        decideInventoryQuickTransfer(
+            inventoryOverlayState_.mode(),
+            inventoryInteraction_.pointerPhase(),
+            inventoryInteraction_.hoveredLocation());
+
+    if (!request.has_value())
+    {
+        return;
+    }
+
+    GridInventory &source =
+        inventoryFor(request->source.container);
+
+    const InventoryContainerId destinationContainer =
+        request->source.container == InventoryContainerId::Player
+            ? InventoryContainerId::External
+            : InventoryContainerId::Player;
+
+    GridInventory &destination =
+        inventoryFor(destinationContainer);
+
+    if (tryTransferItemAtCellFirstFit(
+            source,
+            destination,
+            request->source.cell))
+    {
+        inventoryInteraction_.clearSelection();
+    }
+}
+
+void App::handleInventoryPartialTransferEvent(
+    const InventoryPartialTransferEvent &event)
+{
+    const std::optional<InventoryPartialTransferMode> mode =
+        decideInventoryPartialTransferMode(
+            event.controlPressed,
+            event.shiftPressed);
+
+    if (!mode.has_value())
+    {
+        return;
+    }
+
+    if (inventoryInteraction_.pointerPhase() !=
+        InventoryPointerPhase::Idle)
+    {
+        return;
+    }
+
+    const std::optional<InventoryGridLocation> location =
+        inventoryLocationAt(event.pointerPosition);
+    inventoryInteraction_.updatePointerPosition(
+        event.pointerPosition,
+        location,
+        inventoryDropZoneContains(event.pointerPosition));
+
+    if (!location.has_value())
+    {
+        return;
+    }
+
+    GridInventory &source =
+        inventoryFor(location->container);
+    const std::optional<ItemInstanceId> instanceId =
+        source.occupantAt(location->cell);
+
+    if (!instanceId.has_value())
+    {
+        return;
+    }
+
+    const std::optional<std::uint32_t> availableQuantity =
+        source.quantityOf(*instanceId);
+
+    if (!availableQuantity.has_value())
+    {
+        return;
+    }
+
+    const std::uint32_t requestedQuantity =
+        inventoryPartialTransferQuantity(
+            *mode,
+            *availableQuantity);
+
+    const auto &placedItems = source.placedItems();
+    const auto placedIt = std::find_if(
+        placedItems.begin(),
+        placedItems.end(),
+        [instanceId](const PlacedItem &placed)
+        {
+            return placed.item.instanceId() == *instanceId;
+        });
+
+    if (placedIt == placedItems.end())
+    {
+        return;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(placedIt->item.definitionId());
+    if (definition.maxStackSize <= 1)
+    {
+        return;
+    }
+
+    const std::optional<GridPosition> itemOrigin =
+        source.originOf(*instanceId);
+    if (!itemOrigin.has_value())
+    {
+        return;
+    }
+
+    const InventoryGridLayout layout =
+        inventoryGridLayout(location->container);
+    const float cellSize = layout.cellSize();
+    const InventoryFootprint footprint =
+        inventoryFootprint(
+            definition,
+            placedIt->item.orientation());
+    const MousePosition grabOffsetInCells{
+        (event.pointerPosition.x -
+         (layout.gridX() +
+          static_cast<float>(itemOrigin->x) * cellSize)) /
+            cellSize,
+        (event.pointerPosition.y -
+         (layout.gridY() +
+          static_cast<float>(itemOrigin->y) * cellSize)) /
+            cellSize};
+
+    static_cast<void>(
+        inventoryInteraction_.beginQuantityPointerDrag(
+            InventoryItemSelection{
+                location->container,
+                *instanceId},
+            *itemOrigin,
+            location->cell,
+            event.pointerPosition,
+            InventoryPointerItemGeometry{
+                placedIt->item.orientation(),
+                footprint,
+                definition.canRotate,
+                grabOffsetInCells},
+            requestedQuantity));
+}
+
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
-    pendingInventoryPointerEvents_.clear();
+    pendingInventoryUiEvents_.clear();
 
     SDL_Event event;
     while (SDL_PollEvent(&event))
@@ -638,14 +1033,16 @@ void App::processEvents()
 
         else if (inventoryOverlayState_.isOpen())
         {
-            const std::optional<InventoryPointerEvent>
-                pointerEvent =
-                    toInventoryPointerEvent(event);
+            const std::optional<InventoryUiEvent> uiEvent =
+                toInventoryUiEvent(
+                    event,
+                    input_.isControlPressed(),
+                    input_.isShiftPressed());
 
-            if (pointerEvent.has_value())
+            if (uiEvent.has_value())
             {
-                pendingInventoryPointerEvents_.push_back(
-                    *pointerEvent);
+                pendingInventoryUiEvents_.push_back(
+                    *uiEvent);
             }
         }
     }
@@ -679,16 +1076,35 @@ void App::update(float deltaTime)
         break;
     }
 
-    if (inputDecision.processPointerEvents)
+    if (inputDecision.processUiEvents)
     {
-        for (const InventoryPointerEvent &event :
-             pendingInventoryPointerEvents_)
+        for (const InventoryUiEvent &event :
+             pendingInventoryUiEvents_)
         {
-            handleInventoryPointerEvent(event);
+            if (const auto *pointerEvent =
+                    std::get_if<InventoryPointerEvent>(&event))
+            {
+                handleInventoryPointerEvent(*pointerEvent);
+            }
+            else if (const auto *quickTransferEvent =
+                         std::get_if<InventoryQuickTransferEvent>(&event))
+            {
+                handleInventoryQuickTransferEvent(
+                    *quickTransferEvent);
+            }
+            else if (std::holds_alternative<InventoryRotateEvent>(event))
+            {
+                handleInventoryRotateEvent();
+            }
+            else
+            {
+                handleInventoryPartialTransferEvent(
+                    std::get<InventoryPartialTransferEvent>(event));
+            }
         }
     }
 
-    pendingInventoryPointerEvents_.clear();
+    pendingInventoryUiEvents_.clear();
 
     GameplayInput gameplayInput{};
 
@@ -905,6 +1321,15 @@ void App::renderDebugText()
         132.0f,
         interactionText.c_str());
 
+    if (inventoryOverlayState_.showsExternalContainer())
+    {
+        SDL_RenderDebugText(
+            renderer_,
+            20.0f,
+            164.0f,
+            "Quick Transfer: F / Ctrl+Right Click");
+    }
+
     const std::optional<InventoryItemSelection> selected =
         inventoryInteraction_.selectedItem();
 
@@ -933,11 +1358,11 @@ void App::renderInventoryPlacementPreview(
     const std::optional<InventoryGridLocation> activePreview =
         inventoryInteraction_.activePreviewLocation();
 
-    const std::optional<MousePosition> pointerDragDelta =
-        inventoryInteraction_.pointerDragDelta();
+    const std::optional<InventoryDragVisual> dragVisual =
+        inventoryInteraction_.activeDragVisual();
 
     if (!activePreview.has_value() &&
-        !pointerDragDelta.has_value())
+        !dragVisual.has_value())
     {
         return;
     }
@@ -977,11 +1402,16 @@ void App::renderInventoryPlacementPreview(
         itemDefinition(
             placedIt->item.definitionId());
 
-    const int itemWidth =
-        definition.inventoryWidthCells;
-
-    const int itemHeight =
-        definition.inventoryHeightCells;
+    const ItemOrientation previewOrientation =
+        dragVisual.has_value()
+            ? dragVisual->orientation
+            : placedIt->item.orientation();
+    const InventoryFootprint previewFootprint =
+        inventoryFootprint(
+            definition,
+            previewOrientation);
+    const int itemWidth = previewFootprint.width;
+    const int itemHeight = previewFootprint.height;
 
     const float gridX = layout.gridX();
     const float gridY = layout.gridY();
@@ -989,21 +1419,16 @@ void App::renderInventoryPlacementPreview(
 
     std::optional<SDL_FRect> ghostDestination;
 
-    if (pointerDragDelta.has_value() &&
+    if (dragVisual.has_value() &&
         container == selected->container)
     {
-        // 原 placement 在拖拽预览期间不变。
-        // 以原屏幕左上角加 press->current 像素位移，
-        // 可以保留 mouse-down 时抓住的精确像素点。
+        // 用当前鼠标位置减去旋转后的连续抓取锚点，
+        // 保证按 R 后虚像不会从指针下跳走。
         ghostDestination = SDL_FRect{
-            gridX +
-                static_cast<float>(placedIt->origin.x) *
-                    cellSize +
-                pointerDragDelta->x,
-            gridY +
-                static_cast<float>(placedIt->origin.y) *
-                    cellSize +
-                pointerDragDelta->y,
+            dragVisual->pointerPosition.x -
+                dragVisual->grabOffsetInCells.x * cellSize,
+            dragVisual->pointerPosition.y -
+                dragVisual->grabOffsetInCells.y * cellSize,
             static_cast<float>(itemWidth) *
                 cellSize,
             static_cast<float>(itemHeight) *
@@ -1022,11 +1447,22 @@ void App::renderInventoryPlacementPreview(
         {
             SDL_SetTextureAlphaMod(texture.get(), 145);
 
-            SDL_RenderTexture(
+            renderOrientedTexture(
                 renderer_,
                 texture.get(),
-                nullptr,
-                &*ghostDestination);
+                *ghostDestination,
+                static_cast<float>(
+                    definition.inventoryWidthCells) * cellSize,
+                static_cast<float>(
+                    definition.inventoryHeightCells) * cellSize,
+                previewOrientation);
+
+            renderItemQuantityBadge(
+                renderer_,
+                *ghostDestination,
+                dragVisual->selectedQuantity.value_or(
+                    placedIt->item.quantity()),
+                dragVisual->selectedQuantity.has_value());
 
             // 纹理对象会被后续帧继续复用，
             // 因此必须恢复默认不透明度。
@@ -1043,16 +1479,25 @@ void App::renderInventoryPlacementPreview(
 
     const GridPosition previewOrigin = activePreview->cell;
 
-    const bool legal =
-        selected->container == container
-            ? inventory.canMove(
+    const bool legal = dragVisual->selectedQuantity.has_value()
+        ? canPlaceItemQuantityAt(
+              sourceInventory,
+              inventory,
+              selected->instanceId,
+              *dragVisual->selectedQuantity,
+              previewOrigin,
+              previewOrientation)
+        : selected->container == container
+            ? inventory.canTransform(
                   selected->instanceId,
-                  previewOrigin)
-            : canTransferItem(
+                  previewOrigin,
+                  previewOrientation)
+            : canTransferItemTransform(
                   sourceInventory,
                   inventory,
                   selected->instanceId,
-                  previewOrigin);
+                  previewOrigin,
+                  previewOrientation);
 
     // 合法位置使用淡绿色；
     // 非法位置使用淡红色。
@@ -1327,6 +1772,11 @@ void App::renderInventoryOverlay()
             continue;
         }
 
+        const InventoryFootprint footprint =
+            inventoryFootprint(
+                definition,
+                placed.item.orientation());
+
         const SDL_FRect destination{
             gridX +
                 static_cast<float>(
@@ -1337,17 +1787,28 @@ void App::renderInventoryOverlay()
                     placed.origin.y) *
                     kInventoryCellSize,
             static_cast<float>(
+                footprint.width) *
+                kInventoryCellSize,
+            static_cast<float>(
+                footprint.height) *
+                kInventoryCellSize};
+
+        renderOrientedTexture(
+            renderer_,
+            texture.get(),
+            destination,
+            static_cast<float>(
                 definition.inventoryWidthCells) *
                 kInventoryCellSize,
             static_cast<float>(
                 definition.inventoryHeightCells) *
-                kInventoryCellSize};
+                kInventoryCellSize,
+            placed.item.orientation());
 
-        SDL_RenderTexture(
+        renderItemQuantityBadge(
             renderer_,
-            texture.get(),
-            nullptr,
-            &destination);
+            destination,
+            placed.item.quantity());
     }
 
     renderInventoryPointerFeedback(
@@ -1441,7 +1902,7 @@ void App::renderInventoryOverlay()
         itemCountText.c_str());
 
     const char *controlText =
-        "Mouse: drag items  Esc: cancel/close  Tab: close";
+        "Drag | Ctrl+LMB: 1 | Shift+LMB: half | R: rotate";
 
     SDL_RenderDebugText(
         renderer_,
@@ -1526,6 +1987,11 @@ void App::renderInventoryOverlay()
             continue;
         }
 
+        const InventoryFootprint footprint =
+            inventoryFootprint(
+                definition,
+                placed.item.orientation());
+
         const SDL_FRect destination{
             externalGridX +
                 static_cast<float>(placed.origin.x) *
@@ -1533,16 +1999,25 @@ void App::renderInventoryOverlay()
             externalGridY +
                 static_cast<float>(placed.origin.y) *
                     kInventoryCellSize,
+            static_cast<float>(footprint.width) *
+                kInventoryCellSize,
+            static_cast<float>(footprint.height) *
+                kInventoryCellSize};
+
+        renderOrientedTexture(
+            renderer_,
+            texture.get(),
+            destination,
             static_cast<float>(definition.inventoryWidthCells) *
                 kInventoryCellSize,
             static_cast<float>(definition.inventoryHeightCells) *
-                kInventoryCellSize};
+                kInventoryCellSize,
+            placed.item.orientation());
 
-        SDL_RenderTexture(
+        renderItemQuantityBadge(
             renderer_,
-            texture.get(),
-            nullptr,
-            &destination);
+            destination,
+            placed.item.quantity());
     }
 
     renderInventoryPointerFeedback(
@@ -1846,7 +2321,9 @@ void App::renderGroundItems()
             groundItem.position();
 
         const Vec2 renderSize =
-            definition.worldRenderSize;
+            orientedSize(
+                definition.worldRenderSize,
+                item.orientation());
 
         SDL_FRect destination{
             center.x -
@@ -1856,11 +2333,18 @@ void App::renderGroundItems()
             renderSize.x,
             renderSize.y};
 
-        SDL_RenderTexture(
+        renderOrientedTexture(
             renderer_,
             texture.get(),
-            nullptr,
-            &destination);
+            destination,
+            definition.worldRenderSize.x,
+            definition.worldRenderSize.y,
+            item.orientation());
+
+        renderItemQuantityBadge(
+            renderer_,
+            destination,
+            item.quantity());
     }
 }
 

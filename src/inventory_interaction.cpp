@@ -198,6 +198,56 @@ InventoryGridLayout::gridSize() const noexcept
     return gridSize_;
 }
 
+std::optional<InventoryQuickTransferRequest>
+decideInventoryQuickTransfer(
+    InventoryOverlayMode overlayMode,
+    InventoryPointerPhase pointerPhase,
+    std::optional<InventoryGridLocation> hoveredLocation) noexcept
+{
+    if (overlayMode != InventoryOverlayMode::Container ||
+        pointerPhase != InventoryPointerPhase::Idle ||
+        !hoveredLocation.has_value())
+    {
+        return std::nullopt;
+    }
+
+    return InventoryQuickTransferRequest{
+        *hoveredLocation};
+}
+
+std::optional<InventoryPartialTransferMode>
+decideInventoryPartialTransferMode(
+    bool controlPressed,
+    bool shiftPressed) noexcept
+{
+    if (controlPressed == shiftPressed)
+    {
+        return std::nullopt;
+    }
+
+    return controlPressed
+        ? InventoryPartialTransferMode::One
+        : InventoryPartialTransferMode::Half;
+}
+
+std::uint32_t inventoryPartialTransferQuantity(
+    InventoryPartialTransferMode mode,
+    std::uint32_t availableQuantity) noexcept
+{
+    if (availableQuantity == 0)
+    {
+        return 0;
+    }
+
+    if (mode == InventoryPartialTransferMode::One)
+    {
+        return 1;
+    }
+
+    return availableQuantity / 2 +
+           availableQuantity % 2;
+}
+
 std::optional<GridPosition>
 InventoryGridLayout::screenToGrid(
     MousePosition position) const noexcept
@@ -281,6 +331,23 @@ InventoryInteractionState::pointerDragDelta() const noexcept
         pointerCurrentPosition_->y - pointerPressPosition_->y};
 }
 
+std::optional<InventoryDragVisual>
+InventoryInteractionState::activeDragVisual() const noexcept
+{
+    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
+        !pointerCurrentPosition_.has_value())
+    {
+        return std::nullopt;
+    }
+
+    return InventoryDragVisual{
+        *pointerCurrentPosition_,
+        pointerItemGeometry_.orientation,
+        pointerItemGeometry_.footprint,
+        pointerItemGeometry_.grabOffsetInCells,
+        pointerSelectedQuantity_};
+}
+
 void InventoryInteractionState::updatePointerPosition(
     MousePosition position,
     std::optional<InventoryGridLocation> gridLocation,
@@ -352,6 +419,33 @@ bool InventoryInteractionState::beginPointerPress(
     GridPosition clickedCell,
     MousePosition position) noexcept
 {
+    const GridPosition grabOffset{
+        clickedCell.x - itemOrigin.x,
+        clickedCell.y - itemOrigin.y};
+
+    return beginPointerPress(
+        selection,
+        itemOrigin,
+        clickedCell,
+        position,
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            InventoryFootprint{
+                grabOffset.x + 1,
+                grabOffset.y + 1},
+            false,
+            MousePosition{
+                static_cast<float>(grabOffset.x) + 0.5F,
+                static_cast<float>(grabOffset.y) + 0.5F}});
+}
+
+bool InventoryInteractionState::beginPointerPress(
+    InventoryItemSelection selection,
+    GridPosition itemOrigin,
+    GridPosition clickedCell,
+    MousePosition position,
+    InventoryPointerItemGeometry geometry) noexcept
+{
     if (pointerGestureActive())
     {
         return false;
@@ -368,17 +462,119 @@ bool InventoryInteractionState::beginPointerPress(
         return false;
     }
 
+    const GridPosition requestedGrabOffset{
+        clickedCell.x - itemOrigin.x,
+        clickedCell.y - itemOrigin.y};
+
+    const InventoryPointerItemGeometry resolvedGeometry = geometry;
+
+    if (!isValidItemOrientation(
+            resolvedGeometry.orientation) ||
+        resolvedGeometry.footprint.width <= 0 ||
+        resolvedGeometry.footprint.height <= 0 ||
+        requestedGrabOffset.x >=
+            resolvedGeometry.footprint.width ||
+        requestedGrabOffset.y >=
+            resolvedGeometry.footprint.height ||
+        !isFinite(
+            resolvedGeometry.grabOffsetInCells) ||
+        resolvedGeometry.grabOffsetInCells.x < 0.0F ||
+        resolvedGeometry.grabOffsetInCells.y < 0.0F ||
+        resolvedGeometry.grabOffsetInCells.x >=
+            static_cast<float>(
+                resolvedGeometry.footprint.width) ||
+        resolvedGeometry.grabOffsetInCells.y >=
+            static_cast<float>(
+                resolvedGeometry.footprint.height) ||
+        (!resolvedGeometry.canRotate &&
+         resolvedGeometry.orientation !=
+             ItemOrientation::Degrees0))
+    {
+        clearSelection();
+        return false;
+    }
+
     selectedItem_ = selection;
     pointerPressPosition_ = position;
     pointerCurrentPosition_ = position;
-    grabOffset_ = GridPosition{
-        clickedCell.x - itemOrigin.x,
-        clickedCell.y - itemOrigin.y};
+    grabOffset_ = requestedGrabOffset;
+    pointerItemGeometry_ = resolvedGeometry;
     pointerPreviewLocation_ = InventoryGridLocation{
         selection.container,
         itemOrigin};
     pointerPhase_ = InventoryPointerPhase::Pressed;
+    pointerSelectedQuantity_.reset();
     pointerOverDropZone_ = false;
+
+    return true;
+}
+
+bool InventoryInteractionState::beginQuantityPointerDrag(
+    InventoryItemSelection selection,
+    GridPosition itemOrigin,
+    GridPosition clickedCell,
+    MousePosition position,
+    InventoryPointerItemGeometry geometry,
+    std::uint32_t selectedQuantity) noexcept
+{
+    if (selectedQuantity == 0 ||
+        !beginPointerPress(
+            selection,
+            itemOrigin,
+            clickedCell,
+            position,
+            geometry))
+    {
+        return false;
+    }
+
+    pointerSelectedQuantity_ = selectedQuantity;
+    pointerPhase_ = InventoryPointerPhase::Dragging;
+    return true;
+}
+
+bool InventoryInteractionState::rotatePointerItemClockwise() noexcept
+{
+    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
+        !pointerItemGeometry_.canRotate)
+    {
+        return false;
+    }
+
+    const InventoryFootprint oldFootprint =
+        pointerItemGeometry_.footprint;
+    const GridPosition oldGrabOffset = grabOffset_;
+    const MousePosition oldGrabOffsetInCells =
+        pointerItemGeometry_.grabOffsetInCells;
+
+    pointerItemGeometry_.orientation =
+        rotatedClockwise(
+            pointerItemGeometry_.orientation);
+    pointerItemGeometry_.footprint =
+        InventoryFootprint{
+            oldFootprint.height,
+            oldFootprint.width};
+    grabOffset_ = GridPosition{
+        oldFootprint.height - 1 - oldGrabOffset.y,
+        oldGrabOffset.x};
+    pointerItemGeometry_.grabOffsetInCells =
+        MousePosition{
+            static_cast<float>(oldFootprint.height) -
+                oldGrabOffsetInCells.y,
+            oldGrabOffsetInCells.x};
+
+    if (hoveredLocation_.has_value())
+    {
+        pointerPreviewLocation_ = InventoryGridLocation{
+            hoveredLocation_->container,
+            GridPosition{
+                hoveredLocation_->cell.x - grabOffset_.x,
+                hoveredLocation_->cell.y - grabOffset_.y}};
+    }
+    else
+    {
+        pointerPreviewLocation_.reset();
+    }
 
     return true;
 }
@@ -403,7 +599,9 @@ InventoryInteractionState::releasePointer(
         {
             request = InventoryPlacementRequest{
                 *selectedItem_,
-                *pointerPreviewLocation_};
+                *pointerPreviewLocation_,
+                pointerItemGeometry_.orientation,
+                pointerSelectedQuantity_};
         }
         else if (
             pointerOverDropZone_ &&
@@ -411,7 +609,9 @@ InventoryInteractionState::releasePointer(
                 InventoryContainerId::Player)
         {
             request = InventoryDropRequest{
-                *selectedItem_};
+                *selectedItem_,
+                pointerItemGeometry_.orientation,
+                pointerSelectedQuantity_};
         }
     }
 
@@ -449,4 +649,6 @@ void InventoryInteractionState::resetPointerGesture() noexcept
     pointerCurrentPosition_.reset();
     pointerPreviewLocation_.reset();
     grabOffset_ = GridPosition{0, 0};
+    pointerItemGeometry_ = InventoryPointerItemGeometry{};
+    pointerSelectedQuantity_.reset();
 }

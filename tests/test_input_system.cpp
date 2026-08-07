@@ -455,3 +455,83 @@ TEST(
         input.isActionPressed(
             GameAction::MoveUp));
 }
+
+TEST(
+    InputSystemTest,
+    LeftControlTracksModifierWithoutGameplayAction)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_LCTRL));
+
+    EXPECT_TRUE(input.isControlPressed());
+    expectNoActionPressed(input);
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_LCTRL));
+
+    EXPECT_FALSE(input.isControlPressed());
+}
+
+TEST(
+    InputSystemTest,
+    EitherControlKeyKeepsModifierPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_LCTRL));
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RCTRL));
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_LCTRL));
+
+    EXPECT_TRUE(input.isControlPressed());
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_RCTRL));
+
+    EXPECT_FALSE(input.isControlPressed());
+}
+
+TEST(InputSystemTest, EitherShiftKeyTracksModifierSnapshot)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_LSHIFT));
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_RSHIFT));
+
+    EXPECT_TRUE(input.isShiftPressed());
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_LSHIFT));
+    EXPECT_TRUE(input.isShiftPressed());
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_UP,
+            SDL_SCANCODE_RSHIFT));
+    EXPECT_FALSE(input.isShiftPressed());
+}

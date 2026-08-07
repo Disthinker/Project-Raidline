@@ -1,0 +1,264 @@
+{
+  "package_id": "ammo_9mm_pack_v1",
+  "status": "generated_pending_control_review",
+  "approved": false,
+  "published": false,
+  "generation_mode": "built-in image_gen",
+  "calls_completed": 3,
+  "candidate_generation_calls_completed": 2,
+  "repair_edit_calls_completed": 1,
+  "maximum_repair_rounds": 1,
+  "repair_rounds_used": 1,
+  "repair_rounds_remaining": 0,
+  "further_generation_permitted": false,
+  "repair_status": "completed_noncompliant_repair_exhausted",
+  "failed_generation_attempts": [],
+  "reference_inspection": {
+    "method": "view_image at original detail",
+    "failures": [],
+    "images": [
+      {
+        "path": "assets/items/source/item_cola_basic_v1.png",
+        "role": "approved 1x1 item pixel-density and padding reference",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/items/source/item_medkit_basic_v1.png",
+        "role": "approved container-like material, wear and outline reference",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/characters/protagonist_left_minimal_256x320.png",
+        "role": "immutable project pixel-style anchor",
+        "status": "inspected"
+      },
+      {
+        "path": "assets/backgrounds/project_raidline_test_map_1280x720.png",
+        "role": "palette and runtime-contrast reference",
+        "status": "inspected"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "asset_id": "item_ammo_9mm_basic_v1",
+      "recommended_candidate": null,
+      "recommendation_reason": "No candidate is recommended after art-control rejected candidates 01 and 02 and the package's only allowed repair round failed the core count constraint. Repair 01 preserves clear side-profile ammunition readability but contains only two cartridges instead of exactly four in a two-by-two arrangement.",
+      "candidates": [
+        {
+          "id": "candidate_01",
+          "prompt": {
+            "path": "prompts/item_ammo_9mm_basic_v1_candidate_01.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "df8643ebe204715dac36667b0c0cf4ad50114f2a555a7e6dae7f255909086e84"
+          },
+          "generated_source": "C:/Users/25113/.codex/generated_images/019fdb3a-add1-7ab3-a67e-8cd0ad4bc009/exec-74a9bd64-5a93-4425-8e52-8ca93a68515c.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_ammo_9mm_basic_v1/candidate_01_chroma.png",
+              "sha256": "98a0e9226132cfb9681a0487e0ceb119276454533006c7f541105fb8f66ca193",
+              "matches_generated_original": true,
+              "sampled_key": "#f904f3",
+              "exact_ff00ff_pixels": 2
+            },
+            "rgba": {
+              "path": "candidates/item_ammo_9mm_basic_v1/candidate_01_rgba.png",
+              "sha256": "0f7392f03a405d2c058f1dbc7692e08cdd985095ae6bd533fc0e0c41146fbe02"
+            }
+          },
+          "visual_review": {
+            "result": "technical_pass_with_prompt_deviation",
+            "summary": "One complete uncropped worn olive-drab ammunition carton with an attached open lid, coherent dark outline, contained brass ammunition, no cast shadow and no forbidden extra object. The render visibly shows about six cartridge bodies rather than the requested four restrained cartridge tips.",
+            "single_coherent_box": true,
+            "attached_lid": true,
+            "four_visible_tips_exact": false,
+            "loose_or_separate_cartridge_absent": true,
+            "text_brand_logo_absent": true,
+            "weapon_hand_pouch_absent": true,
+            "cast_shadow_absent": true
+          },
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1254, 1254],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 310425,
+            "alpha_opaque_pixels": 306336,
+            "alpha_partial_pixels": 4089,
+            "alpha_bbox_px": [342, 231, 918, 990],
+            "transparent_margins_px": [342, 231, 336, 264],
+            "minimum_margin_fraction": 0.184211,
+            "corner_alpha": [0, 0, 0, 0],
+            "opaque_magenta_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_single_box_silhouette": true,
+            "generous_padding": true,
+            "result": "pass"
+          }
+        },
+        {
+          "id": "candidate_02",
+          "prompt": {
+            "path": "prompts/item_ammo_9mm_basic_v1_candidate_02.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "d50ab8ed30b5689135fb6dda3e31af39c18cd59d4005fc61d8485cf84fa779f4"
+          },
+          "generated_source": "C:/Users/25113/.codex/generated_images/019fdb3a-add1-7ab3-a67e-8cd0ad4bc009/exec-c59421ae-347e-4dc2-a746-20d51e6f9d13.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_ammo_9mm_basic_v1/candidate_02_chroma.png",
+              "sha256": "02a66bf70a029edebe4d5f7e38bd04f99336432ae5d21f565a7d47da4ff69936",
+              "matches_generated_original": true,
+              "sampled_key": "#fa04f5",
+              "exact_ff00ff_pixels": 28
+            },
+            "rgba": {
+              "path": "candidates/item_ammo_9mm_basic_v1/candidate_02_rgba.png",
+              "sha256": "5b54078590970f81e75d1b4e02c0506fca941c0cfdb42941993dd9fc7535bc33"
+            }
+          },
+          "visual_review": {
+            "result": "pass_and_production_task_recommendation",
+            "summary": "One complete uncropped squat gray-green ammunition carton with an attached flap folded back, exactly four organized brass forms contained inside, bold readable pixel clusters, compact internal shadow and no forbidden extra object or cast shadow.",
+            "single_coherent_box": true,
+            "attached_lid": true,
+            "four_visible_tips_exact": true,
+            "loose_or_separate_cartridge_absent": true,
+            "text_brand_logo_absent": true,
+            "weapon_hand_pouch_absent": true,
+            "cast_shadow_absent": true
+          },
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1254, 1254],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 301246,
+            "alpha_opaque_pixels": 297507,
+            "alpha_partial_pixels": 3739,
+            "alpha_bbox_px": [318, 232, 919, 978],
+            "transparent_margins_px": [318, 232, 335, 276],
+            "minimum_margin_fraction": 0.185008,
+            "corner_alpha": [0, 0, 0, 0],
+            "opaque_magenta_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_single_box_silhouette": true,
+            "generous_padding": true,
+            "result": "pass"
+          }
+        }
+      ],
+      "repairs": [
+        {
+          "id": "repair_01",
+          "round": 1,
+          "maximum_repair_rounds": 1,
+          "is_final_allowed_repair": true,
+          "imagegen_call_type": "built-in edit with referenced_image_paths",
+          "source_reference": {
+            "path": "candidates/item_ammo_9mm_basic_v1/candidate_01_rgba.png",
+            "sha256": "0f7392f03a405d2c058f1dbc7692e08cdd985095ae6bd533fc0e0c41146fbe02",
+            "role": "only edit target and identity reference"
+          },
+          "prompt": {
+            "path": "prompts/item_ammo_9mm_basic_v1_repair_01.txt",
+            "byte_exact_copy_of_frozen_prompt": true,
+            "sha256": "829ae4b93538d5da022fa35ba655a780aff1e40682924cd02578238679971306"
+          },
+          "generated_source": "C:/Users/25113/.codex/generated_images/019fdb3a-add1-7ab3-a67e-8cd0ad4bc009/exec-49846648-e277-4389-8d19-4631dec644a7.png",
+          "files": {
+            "chroma": {
+              "path": "candidates/item_ammo_9mm_basic_v1/repair_01_chroma.png",
+              "sha256": "de5cd2226f171646e0b6c4a4e5b4af928256422ce52e260f0167c18e2ea1a1aa",
+              "matches_generated_original": true,
+              "sampled_key": "#f604f1",
+              "exact_ff00ff_pixels": 10
+            },
+            "rgba": {
+              "path": "candidates/item_ammo_9mm_basic_v1/repair_01_rgba.png",
+              "sha256": "35c18fb34e7f2253e587a2072de3a2e406dfdba41f399a7d7b1c573e9152d69d"
+            }
+          },
+          "visual_review": {
+            "result": "fail_core_count_constraint",
+            "summary": "The edit retains one complete worn olive-drab box, attached lid, strong pixel silhouette and two unmistakable short 9mm side-profile cartridges. It does not satisfy the frozen repair requirement because only two cartridges are visible rather than exactly four in a two-by-two group.",
+            "single_coherent_box": true,
+            "attached_lid": true,
+            "visible_cartridge_count": 2,
+            "required_cartridge_count": 4,
+            "two_by_two_arrangement": false,
+            "clear_side_profile_bullet_tips": true,
+            "round_primer_or_case_bases_facing_viewer_absent": true,
+            "fifth_or_sixth_cartridge_absent": true,
+            "hidden_partial_extra_cartridge_absent": true,
+            "loose_or_separate_ammunition_absent": true,
+            "text_brand_logo_absent": true,
+            "weapon_hand_pouch_absent": true,
+            "cast_shadow_absent": true
+          },
+          "technical_qa": {
+            "mode": "RGBA",
+            "size_px": [1254, 1254],
+            "alpha_min_max": [0, 255],
+            "alpha_nonzero_pixels": 313849,
+            "alpha_opaque_pixels": 309835,
+            "alpha_partial_pixels": 4014,
+            "alpha_bbox_px": [336, 231, 919, 987],
+            "transparent_margins_px": [336, 231, 335, 267],
+            "minimum_margin_fraction": 0.184211,
+            "corner_alpha": [0, 0, 0, 0],
+            "opaque_magenta_pixels": 0,
+            "near_opaque_magenta_pixels": 0,
+            "complete_single_box_silhouette": true,
+            "generous_padding": true,
+            "result": "pass"
+          },
+          "production_task_recommendation": "do_not_approve",
+          "risks": [
+            "Repair 01 fails the mandatory exactly-four-cartridges constraint by showing only two cartridges.",
+            "The edit preserves the desired side-profile bullet readability and avoids primer/base-facing circles, but the missing second row makes the requested two-by-two layout absent.",
+            "No 256x256, 64x64 or 32x32 derivative was created, so final runtime-scale readability remains untested."
+          ]
+        }
+      ],
+      "risks": [
+        "Candidate 01 deviates from the frozen count and presentation constraint by showing about six full cartridge bodies rather than four restrained tips.",
+        "Candidate 02's four large round brass forms may read as cartridge bases or oversized rounds after reduction; art control should verify ammunition readability at the eventual 32x32 world profile before approval.",
+        "Repair 01 used the only allowed repair round but shows only two side-profile cartridges instead of exactly four in a two-by-two group.",
+        "No candidate or repair has been derived to 256x256, 64x64 or 32x32 because deterministic profile derivation is outside this production task."
+      ]
+    }
+  ],
+  "recommended_candidates": {},
+  "chroma_key_processing": {
+    "requested_key": "#ff00ff",
+    "method": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+    "sampled_keys": {
+      "candidate_01": "#f904f3",
+      "candidate_02": "#fa04f5",
+      "repair_01": "#f604f1"
+    },
+    "raw_chroma_mathematically_uniform_exact_ff00ff": false,
+    "note": "The built-in generator produced visually flat near-magenta backgrounds with small RGB variation instead of mathematically uniform #ff00ff. Raw chroma renders were preserved byte-for-byte. Border auto-key removal succeeded; all RGBA corners are transparent and no opaque or near-opaque magenta pixels remain."
+  },
+  "known_risks": [
+    "Candidate 01 does not exactly meet the four-visible-tip constraint and is not recommended.",
+    "Candidate 02 was not approved by art control because its brass shapes risk reading as cartridge bases or oversized rounds.",
+    "Repair 01 exhausted the one allowed repair round and fails the required four-cartridge count by showing only two cartridges; no package output is recommended for approval.",
+    "Raw chroma backgrounds are near-magenta rather than mathematically uniform exact #ff00ff; the unchanged raw renders retain this generator deviation.",
+    "Production-task recommendation is evidence only and is not approval."
+  ],
+  "scope_confirmation": {
+    "written_only_inside_assigned_work_root": true,
+    "master_256_created": false,
+    "inventory_derivatives_created": false,
+    "world_derivatives_created": false,
+    "self_approved": false,
+    "manifest_modified": false,
+    "formal_assets_modified": false,
+    "source_code_modified": false,
+    "documentation_modified": false,
+    "downstream_work_started": false,
+    "maximum_repair_rounds_exhausted": true,
+    "additional_candidate_generation_allowed": false
+  },
+  "written_root": "art/work/ammo_9mm_pack_v1/"
+}

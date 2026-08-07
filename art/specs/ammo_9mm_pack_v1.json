@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "package_id": "ammo_9mm_pack_v1",
+  "inventory_cell_size": 64,
+  "source_scale": 4,
+  "inventory_safe_padding": 6,
+  "candidates_per_asset": 2,
+  "maximum_repair_rounds": 1,
+  "assets": {
+    "item_ammo_9mm_basic_v1": {
+      "family": "ammunition",
+      "type": "item_identity",
+      "display_name": "9mm Ammunition",
+      "identity": "one compact unbranded worn olive-drab pistol-ammunition carton, lid slightly open, with a few brass cartridge tips visible inside",
+      "grid_footprint": [1, 1],
+      "can_rotate": false,
+      "max_stack_size": 60,
+      "master_size": [256, 256],
+      "inventory_size": [64, 64],
+      "world_size": [32, 32]
+    }
+  }
+}

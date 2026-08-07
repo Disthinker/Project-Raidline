@@ -234,6 +234,220 @@ TEST(InventoryContainerInteractionTest, TabOrEscControlWinsOverCabinetInteract)
         (InventoryContainerInteractionDecision{false, true}));
 }
 
+TEST(InventoryQuickTransferTest, ContainerIdleHoverCreatesRequest)
+{
+    const InventoryGridLocation hovered{
+        InventoryContainerId::Player,
+        {3, 2}};
+
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::Container,
+            InventoryPointerPhase::Idle,
+            hovered),
+        (std::optional<InventoryQuickTransferRequest>{
+            InventoryQuickTransferRequest{hovered}}));
+}
+
+TEST(InventoryPartialTransferTest, ModifierChoiceIsExclusive)
+{
+    EXPECT_EQ(
+        decideInventoryPartialTransferMode(true, false),
+        InventoryPartialTransferMode::One);
+    EXPECT_EQ(
+        decideInventoryPartialTransferMode(false, true),
+        InventoryPartialTransferMode::Half);
+    EXPECT_EQ(
+        decideInventoryPartialTransferMode(false, false),
+        std::nullopt);
+    EXPECT_EQ(
+        decideInventoryPartialTransferMode(true, true),
+        std::nullopt);
+}
+
+TEST(InventoryPartialTransferTest, HalfRoundsOddQuantityUp)
+{
+    EXPECT_EQ(
+        inventoryPartialTransferQuantity(
+            InventoryPartialTransferMode::Half,
+            5),
+        3U);
+    EXPECT_EQ(
+        inventoryPartialTransferQuantity(
+            InventoryPartialTransferMode::Half,
+            6),
+        3U);
+    EXPECT_EQ(
+        inventoryPartialTransferQuantity(
+            InventoryPartialTransferMode::One,
+            60),
+        1U);
+}
+
+TEST(InventoryPartialTransferTest, QuantitySelectionStartsDraggingImmediately)
+{
+    InventoryInteractionState state;
+
+    ASSERT_TRUE(state.beginQuantityPointerDrag(
+        playerItem(71),
+        {2, 1},
+        {2, 1},
+        {100.0F, 80.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {1, 1},
+            false,
+            {0.5F, 0.5F}},
+        1));
+
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
+    const auto visual = state.activeDragVisual();
+    ASSERT_TRUE(visual.has_value());
+    EXPECT_EQ(visual->selectedQuantity, 1U);
+    EXPECT_EQ(
+        state.activePreviewLocation(),
+        (std::optional<InventoryGridLocation>{
+            InventoryGridLocation{
+                InventoryContainerId::Player,
+                {2, 1}}}));
+}
+
+TEST(InventoryPartialTransferTest, QuantitySelectionIsCarriedByReleaseRequest)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginQuantityPointerDrag(
+        playerItem(72),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {1, 1},
+            false,
+            {0.25F, 0.25F}},
+        5));
+
+    const auto request = state.releasePointer(
+        {30.0F, 10.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {3, 0}},
+        false);
+
+    ASSERT_TRUE(request.has_value());
+    const auto *placement =
+        std::get_if<InventoryPlacementRequest>(&*request);
+    ASSERT_NE(placement, nullptr);
+    EXPECT_EQ(placement->selectedQuantity, 5U);
+    EXPECT_EQ(placement->destination.cell, (GridPosition{3, 0}));
+}
+
+TEST(InventoryPartialTransferTest, CancelClearsQuantitySelectionWithoutRequest)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginQuantityPointerDrag(
+        playerItem(73),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {1, 1},
+            false,
+            {0.5F, 0.5F}},
+        3));
+
+    state.cancelPointerGesture();
+
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Idle);
+    EXPECT_EQ(state.selectedItem(), std::nullopt);
+    EXPECT_EQ(state.activeDragVisual(), std::nullopt);
+}
+
+TEST(InventoryPartialTransferTest, QuantitySelectionIsCarriedByDropRequest)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginQuantityPointerDrag(
+        playerItem(74),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {1, 1},
+            false,
+            {0.5F, 0.5F}},
+        4));
+
+    const auto request = state.releasePointer(
+        {1200.0F, 100.0F},
+        std::nullopt,
+        true);
+
+    ASSERT_TRUE(request.has_value());
+    const auto *drop = std::get_if<InventoryDropRequest>(&*request);
+    ASSERT_NE(drop, nullptr);
+    EXPECT_EQ(drop->selectedQuantity, 4U);
+}
+
+TEST(InventoryQuickTransferTest, ExternalHoverPreservesSourceContainer)
+{
+    const InventoryGridLocation hovered{
+        InventoryContainerId::External,
+        {1, 4}};
+
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::Container,
+            InventoryPointerPhase::Idle,
+            hovered),
+        (std::optional<InventoryQuickTransferRequest>{
+            InventoryQuickTransferRequest{hovered}}));
+}
+
+TEST(InventoryQuickTransferTest, PlayerOnlyOverlayHasNoDestination)
+{
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::PlayerOnly,
+            InventoryPointerPhase::Idle,
+            InventoryGridLocation{
+                InventoryContainerId::Player,
+                {0, 0}}),
+        std::nullopt);
+}
+
+TEST(InventoryQuickTransferTest, MissingHoverDoesNotCreateRequest)
+{
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::Container,
+            InventoryPointerPhase::Idle,
+            std::nullopt),
+        std::nullopt);
+}
+
+TEST(InventoryQuickTransferTest, PressedOrDraggingGestureBlocksRequest)
+{
+    const InventoryGridLocation hovered{
+        InventoryContainerId::Player,
+        {0, 0}};
+
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::Container,
+            InventoryPointerPhase::Pressed,
+            hovered),
+        std::nullopt);
+
+    EXPECT_EQ(
+        decideInventoryQuickTransfer(
+            InventoryOverlayMode::Container,
+            InventoryPointerPhase::Dragging,
+            hovered),
+        std::nullopt);
+}
+
 TEST(InventoryInteractionTest, ResetClearsAllPointerState)
 {
     InventoryInteractionState state;
@@ -255,4 +469,167 @@ TEST(InventoryInteractionTest, ResetClearsAllPointerState)
     EXPECT_EQ(state.pointerDragDelta(), std::nullopt);
     EXPECT_FALSE(state.pointerOverDropZone());
     EXPECT_FALSE(state.pointerGestureActive());
+}
+
+TEST(InventoryRotationInteractionTest, RotationOnlyAppliesWhileDragging)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(61),
+        {1, 1},
+        {2, 1},
+        {100.0F, 100.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {4, 2},
+            true,
+            {1.25F, 0.5F}}));
+
+    EXPECT_FALSE(state.rotatePointerItemClockwise());
+    state.updatePointerPosition(
+        {110.0F, 100.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {3, 2}},
+        false);
+    EXPECT_TRUE(state.rotatePointerItemClockwise());
+}
+
+TEST(InventoryRotationInteractionTest, RotationKeepsGrabPointUnderPointer)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(62),
+        {1, 1},
+        {3, 2},
+        {100.0F, 100.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {4, 2},
+            true,
+            {2.25F, 1.5F}}));
+    state.updatePointerPosition(
+        {120.0F, 100.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {5, 4}},
+        false);
+
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+
+    EXPECT_EQ(
+        state.activePreviewLocation(),
+        (std::optional<InventoryGridLocation>{
+            InventoryGridLocation{
+                InventoryContainerId::External,
+                {5, 2}}}));
+    const auto visual = state.activeDragVisual();
+    ASSERT_TRUE(visual.has_value());
+    EXPECT_EQ(visual->orientation, ItemOrientation::Degrees90);
+    EXPECT_EQ(visual->footprint, (InventoryFootprint{2, 4}));
+    EXPECT_FLOAT_EQ(visual->grabOffsetInCells.x, 0.5F);
+    EXPECT_FLOAT_EQ(visual->grabOffsetInCells.y, 2.25F);
+}
+
+TEST(InventoryRotationInteractionTest, FourRotationsRestoreOriginalGeometry)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(63),
+        {0, 0},
+        {1, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {2, 1},
+            true,
+            {1.5F, 0.25F}}));
+    state.updatePointerPosition(
+        {20.0F, 10.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {4, 3}},
+        false);
+
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+
+    const auto visual = state.activeDragVisual();
+    ASSERT_TRUE(visual.has_value());
+    EXPECT_EQ(visual->orientation, ItemOrientation::Degrees0);
+    EXPECT_EQ(visual->footprint, (InventoryFootprint{2, 1}));
+    EXPECT_FLOAT_EQ(visual->grabOffsetInCells.x, 1.5F);
+    EXPECT_FLOAT_EQ(visual->grabOffsetInCells.y, 0.25F);
+    EXPECT_EQ(
+        state.activePreviewLocation(),
+        (std::optional<InventoryGridLocation>{
+            InventoryGridLocation{
+                InventoryContainerId::Player,
+                {3, 3}}}));
+}
+
+TEST(InventoryRotationInteractionTest, ReleaseCarriesCandidateOrientation)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(64),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {2, 1},
+            true,
+            {0.25F, 0.25F}}));
+    state.updatePointerPosition(
+        {20.0F, 10.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {2, 2}},
+        false);
+    ASSERT_TRUE(state.rotatePointerItemClockwise());
+
+    const auto request = state.releasePointer(
+        {20.0F, 10.0F},
+        InventoryGridLocation{
+            InventoryContainerId::External,
+            {2, 2}},
+        false);
+
+    ASSERT_TRUE(request.has_value());
+    const auto *placement =
+        std::get_if<InventoryPlacementRequest>(&*request);
+    ASSERT_NE(placement, nullptr);
+    EXPECT_EQ(
+        placement->orientation,
+        ItemOrientation::Degrees90);
+}
+
+TEST(InventoryRotationInteractionTest, NonRotatableItemIgnoresRotation)
+{
+    InventoryInteractionState state;
+    ASSERT_TRUE(state.beginPointerPress(
+        playerItem(65),
+        {0, 0},
+        {0, 0},
+        {10.0F, 10.0F},
+        InventoryPointerItemGeometry{
+            ItemOrientation::Degrees0,
+            {2, 2},
+            false,
+            {0.5F, 0.5F}}));
+    state.updatePointerPosition(
+        {20.0F, 10.0F},
+        InventoryGridLocation{
+            InventoryContainerId::Player,
+            {2, 2}},
+        false);
+
+    EXPECT_FALSE(state.rotatePointerItemClockwise());
+    const auto visual = state.activeDragVisual();
+    ASSERT_TRUE(visual.has_value());
+    EXPECT_EQ(visual->orientation, ItemOrientation::Degrees0);
+    EXPECT_EQ(visual->footprint, (InventoryFootprint{2, 2}));
 }

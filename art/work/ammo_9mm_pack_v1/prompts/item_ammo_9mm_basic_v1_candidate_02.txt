@@ -1,0 +1,11 @@
+Use case: stylized-concept
+Asset type: Project Raidline production-ready pixel-art ammunition identity master for inventory and world pickup
+Primary request: create exactly one compact unbranded 9mm pistol-ammunition carton in the established Project Raidline pixel-art language
+Subject: one squat, weathered gray-green and khaki cardboard ammunition box, its attached top flap folded slightly backward, with four small aged-brass cartridge tips visible as a tight organized group inside; it must remain a single coherent box object and read clearly as pistol ammunition at 32x32 pixels
+Style/medium: crisp hand-authored 2D pixel art with stylized realism, bold readable pixel clusters, a dark charcoal silhouette, restrained highlights, and limited value bands matching a grounded post-disaster survival game
+Composition/framing: lightly top-down three-quarter view from a subtly different angle than candidate 01, centered on a square canvas, complete uncropped silhouette, generous empty border, compact near-square footprint
+Lighting/mood: consistent upper-left light with a small internal box shadow, no cast shadow and no ground plane
+Color palette: desaturated gray-green, khaki fiber edges, charcoal wear, aged brass; subdued and practical, with strong contrast against dark inventory cells
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local removal, with no gradient, texture, floor, reflection, halo, or lighting variation
+Constraints: exactly one ammunition box; flap and cartridges remain inside the unified silhouette; no loose or separate cartridges; no weapon; no hands; no pouch; no text, letters, numbers, caliber marking, logo, brand, trademark, watermark, border, UI frame, muzzle effect, smoke, blood, or cast shadow; do not use #ff00ff on the object
+Avoid: photorealism, smooth vector or 3D render, bright commercial packaging, futuristic ornament, oversized cartridge shapes, multiple objects, scattered ammunition, exploded view, excessive fine noise, cartoon proportions, or transparent background in the raw chroma render

@@ -53,7 +53,8 @@ std::size_t GridInventory::cellCount() const noexcept
 
 bool GridInventory::canPlace(
     ItemId definitionId,
-    GridPosition origin) const
+    GridPosition origin,
+    ItemOrientation orientation) const
 {
     const ItemDefinition &definition =
         itemDefinition(definitionId);
@@ -62,12 +63,14 @@ bool GridInventory::canPlace(
     return canPlaceDefinition(
         definition,
         origin,
+        orientation,
         std::nullopt);
 }
 
 std::optional<GridPosition>
 GridInventory::findFirstFit(
-    ItemId definitionId) const
+    ItemId definitionId,
+    ItemOrientation orientation) const
 {
     const ItemDefinition &definition =
         itemDefinition(definitionId);
@@ -81,6 +84,7 @@ GridInventory::findFirstFit(
             if (canPlaceDefinition(
                     definition,
                     candidate,
+                    orientation,
                     std::nullopt))
             {
                 return candidate;
@@ -146,6 +150,39 @@ bool GridInventory::canMove(
     return canPlaceDefinition(
         definition,
         newOrigin,
+        placedIt->item.orientation(),
+        std::optional<ItemInstanceId>{
+            instanceId});
+}
+
+bool GridInventory::canTransform(
+    ItemInstanceId instanceId,
+    GridPosition newOrigin,
+    ItemOrientation newOrientation) const
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return false;
+    }
+
+    const ItemDefinition &definition =
+        itemDefinition(
+            placedIt->item.definitionId());
+
+    return canPlaceDefinition(
+        definition,
+        newOrigin,
+        newOrientation,
         std::optional<ItemInstanceId>{
             instanceId});
 }
@@ -169,56 +206,71 @@ bool GridInventory::tryMove(
         return false;
     }
 
-    // 在修改任何数据之前完成全部验证。
-    //
-    // canMove 是 const 查询：
-    // - 不清除旧格；
-    // - 不写入新格；
-    // - 不修改 origin。
-    if (!canMove(instanceId, newOrigin))
+    return tryTransform(
+        instanceId,
+        newOrigin,
+        placedIt->item.orientation());
+}
+
+bool GridInventory::tryTransform(
+    ItemInstanceId instanceId,
+    GridPosition newOrigin,
+    ItemOrientation newOrientation)
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end() ||
+        !canTransform(
+            instanceId,
+            newOrigin,
+            newOrientation))
     {
         return false;
     }
 
-    // 移动到相同 origin 是成功的 no-op。
-    //
-    // 不需要清除并重新写入相同 footprint，
-    // 也不会改变 ItemInstance 或稳定 ID。
-    if (placedIt->origin == newOrigin)
+    const GridPosition oldOrigin =
+        placedIt->origin;
+    const ItemOrientation oldOrientation =
+        placedIt->item.orientation();
+
+    if (oldOrigin == newOrigin &&
+        oldOrientation == newOrientation)
     {
         return true;
     }
-
-    const GridPosition oldOrigin =
-        placedIt->origin;
 
     const ItemDefinition &definition =
         itemDefinition(
             placedIt->item.definitionId());
 
-    // 从这里开始的操作均为 noexcept：
-    // optional<ItemInstanceId> 赋值和 GridPosition 赋值
-    // 都不会抛出异常。
-    //
-    // 因此在验证成功后可以安全提交整个事务。
+    // 方向验证仍在修改 cells 前完成。成功后剩余提交均为 noexcept。
+    if (!placedIt->item.trySetOrientation(newOrientation))
+    {
+        return false;
+    }
 
-    // 1. 清除旧 footprint。
     setFootprintOccupant(
         definition,
         oldOrigin,
+        oldOrientation,
         std::nullopt);
 
-    // 2. 写入新 footprint。
     setFootprintOccupant(
         definition,
         newOrigin,
+        newOrientation,
         std::optional<ItemInstanceId>{
             instanceId});
 
-    // 3. 最后更新物品原点。
-    placedIt->origin =
-        newOrigin;
-
+    placedIt->origin = newOrigin;
     return true;
 }
 
@@ -252,6 +304,7 @@ bool GridInventory::tryPlace(
     if (!canPlaceDefinition(
             definition,
             origin,
+            item.orientation(),
             std::nullopt))
     {
         return false;
@@ -271,6 +324,7 @@ bool GridInventory::tryPlace(
     setFootprintOccupant(
         definition,
         origin,
+        placedItems_.back().item.orientation(),
         std::optional<ItemInstanceId>{
             instanceId});
 
@@ -304,6 +358,9 @@ GridInventory::remove(
     const ItemId definitionId =
         placedIt->item.definitionId();
 
+    const ItemOrientation orientation =
+        placedIt->item.orientation();
+
     const ItemDefinition &definition =
         itemDefinition(definitionId);
 
@@ -311,6 +368,7 @@ GridInventory::remove(
     setFootprintOccupant(
         definition,
         origin,
+        orientation,
         std::nullopt);
 
     // 在 erase 前移出真正的 ItemInstance。
@@ -358,6 +416,46 @@ GridInventory::originOf(
     return placedIt->origin;
 }
 
+std::optional<std::uint32_t>
+GridInventory::quantityOf(
+    ItemInstanceId instanceId) const noexcept
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    if (placedIt == placedItems_.end())
+    {
+        return std::nullopt;
+    }
+
+    return placedIt->item.quantity();
+}
+
+bool GridInventory::trySetItemQuantity(
+    ItemInstanceId instanceId,
+    std::uint32_t quantity)
+{
+    const auto placedIt =
+        std::find_if(
+            placedItems_.begin(),
+            placedItems_.end(),
+            [instanceId](const PlacedItem &placed)
+            {
+                return placed.item.instanceId() ==
+                       instanceId;
+            });
+
+    return placedIt != placedItems_.end() &&
+           placedIt->item.trySetQuantity(quantity);
+}
+
 const std::vector<PlacedItem> &
 GridInventory::placedItems() const noexcept
 {
@@ -376,6 +474,7 @@ bool GridInventory::isWithinBounds(
 bool GridInventory::canPlaceDefinition(
     const ItemDefinition &definition,
     GridPosition origin,
+    ItemOrientation orientation,
     std::optional<ItemInstanceId> allowedOccupant) const noexcept
 {
     if (!isWithinBounds(origin))
@@ -383,11 +482,13 @@ bool GridInventory::canPlaceDefinition(
         return false;
     }
 
-    const int itemWidth =
-        definition.inventoryWidthCells;
+    const InventoryFootprint footprint =
+        inventoryFootprint(
+            definition,
+            orientation);
 
-    const int itemHeight =
-        definition.inventoryHeightCells;
+    const int itemWidth = footprint.width;
+    const int itemHeight = footprint.height;
 
     if (itemWidth <= 0 || itemHeight <= 0)
     {
@@ -461,16 +562,22 @@ bool GridInventory::containsInstanceId(
 void GridInventory::setFootprintOccupant(
     const ItemDefinition &definition,
     GridPosition origin,
+    ItemOrientation orientation,
     std::optional<ItemInstanceId> occupant) noexcept
 {
+    const InventoryFootprint footprint =
+        inventoryFootprint(
+            definition,
+            orientation);
+
     for (
         int offsetY = 0;
-        offsetY < definition.inventoryHeightCells;
+        offsetY < footprint.height;
         ++offsetY)
     {
         for (
             int offsetX = 0;
-            offsetX < definition.inventoryWidthCells;
+            offsetX < footprint.width;
             ++offsetX)
         {
             const GridPosition coveredPosition{
