@@ -1,15 +1,19 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-07，Week21 已通过 PR #36 合入 `main`，本地同步完成。
+最后核对：2026-08-08，Week22 结算与最小 Stash 已完成本地实现、自动验证和真实窗口验收，等待提交与 commit-specific CI。
 
 ## Git、验证与 CI 基线
 
-- `main` / `origin/main`：`8130c09`，Week21 已通过 [PR #36](https://github.com/Disthinker/Project-Raidline/pull/36) 合入；功能头提交为 `06d0d8e`。
+- `main` / `origin/main`：`083cb8c`；Week21 功能已通过 [PR #36](https://github.com/Disthinker/Project-Raidline/pull/36) 合入，收口文档已通过 PR #37 合入。
+- 当前本地分支：`codex/week22-raid-settlement-stash`，尚未提交、推送或创建 PR。
 - commit-specific [GitHub Actions run 31191339832](https://github.com/Disthinker/Project-Raidline/actions/runs/31191339832) 全部通过：范围检测 5 秒、Ubuntu 1 分 20 秒、Windows 3 分 48 秒。
-- Windows Debug configure 与全目标构建成功；RaidSessionTest、ExtractionPointTest、GameplayWorldTest 三个程序直接运行 90/90，通过且未复现 `gtest_ar_` 栈损坏。
-- Windows Debug 全量 CTest 416/416 通过；`ctest -N` 同样注册 416 项。
-- `compile_commands.json` 已确认 `raid_session.cpp` 与 `extraction_point.cpp` 进入主程序和 GameplayWorldTest，独立测试源进入各自测试目标。
+- Week21 Windows Debug configure 与全目标构建成功；RaidSessionTest、ExtractionPointTest、GameplayWorldTest 三个程序直接运行 90/90，通过且未复现 `gtest_ar_` 栈损坏。
+- Week21 Windows Debug 全量 CTest 416/416 通过；`ctest -N` 同样注册 416 项。
+- Week21 `compile_commands.json` 已确认 `raid_session.cpp` 与 `extraction_point.cpp` 进入主程序和 GameplayWorldTest，独立测试源进入各自测试目标。
 - 用户已完成 Week21 真实窗口 1–8：倒计时、撤离区、旧玩法回归、进入/离开清零、成功撤离、终局冻结与重启新 Raid 全部通过。
+- Week22 Windows Debug configure、受影响目标、主程序和全目标构建成功；聚焦 CTest 100/100、RaidSettlementTest 直接运行 12/12、全量 CTest 434/434 通过，未复现 `gtest_ar_` 栈损坏。
+- 用户已完成 Week22 真实窗口 1–8：初始 Stash、携带物记录、撤离结算、STORED 栈/单位统计、背包清空、未拾取物排除、终局冻结与无运行库错误全部通过。
+- Week22 尚未提交或执行 commit-specific Windows/Ubuntu CI；这些结果不能标记为通过。
 
 ## 已进入 main：Week 1–21
 
@@ -73,6 +77,15 @@ Week21 计划已按 PR #36 的合入事实归档；RaidSession、固定撤离点
 - 撤离、死亡或超时后 GameplayWorld 停止移动、射击、拾取、敌人和命中 mutation；App 关闭库存 overlay 并显示终局反馈。
 - PlayerDead 已有显式领域命令和测试，但项目尚无玩家受伤/Health 接线；真实战斗死亡留到垂直切片阶段。
 
+## Week22 本地待验收能力
+
+- `Stash` 默认拥有独立 20×12 `GridInventory`，当前只存在于内存中，不提供仓库操作 UI 或跨进程保存。
+- 撤离结算按源 placement 稳定顺序和目标 row-major first-fit，把玩家背包中的每个完整堆叠原样移动到 Stash；稳定 ID、定义、数量与方向保持不变，不自动合并。
+- 死亡或 Raid 超时会先记录携带栈数/单位数，再显式清空玩家背包；世界和柜体中未携带的物品不进入 Stash。
+- Stash 容量不足、footprint 无法放置或稳定 ID 冲突时进入 `Blocked`，玩家背包与 Stash 均不发生部分提交，并可在条件改变后重试。
+- App 在 `GameplayWorld::update` 后触发领域结算；调试区显示 Stash 数量与结算状态，终局面板显示 `STORED`、`LOST` 或 `STASH BLOCKED`。
+- 人工验收后新增两项独立库存 UX 需求：可行时原子交换拖拽物与目标处若干物品的位置（GitHub #38），以及 Ctrl/Shift 数量点击后松开按键仍保持虚像跟随、再次点击提交（GitHub #39）；二者只登记，不属于 Week22。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
@@ -80,6 +93,6 @@ Week21 计划已按 PR #36 的合入事实归档；RaidSession、固定撤离点
 - 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、结算、Stash、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
+- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、Stash UI/出战选择、第二局/局内重开、跨 Raid ID 分配、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-详细行为见 [Week21 已完成 ExecPlan](../exec-plans/completed/week21-raid-session-extraction.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week22 当前合同与验证记录见 [活动 ExecPlan](../exec-plans/active/week22-raid-settlement-stash.md)；Week21 已合入行为见 [已完成 ExecPlan](../exec-plans/completed/week21-raid-session-extraction.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
