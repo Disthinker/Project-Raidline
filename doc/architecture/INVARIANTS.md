@@ -71,6 +71,19 @@
 - 范围外、随机源非法、ID 冲突、尺寸不匹配或 placement 失败时，柜体库存、搜索状态、世界 ID 序列和其他物品所有权均不变。
 - 已搜索重开是成功 no-op，不消费随机值；Tab 打开的 PlayerOnly 背包不得触发搜索。
 
+## Raid 生命周期与撤离
+
+- Raid 配置中的总时长和撤离时长必须为有限正数；Raid 剩余时间与撤离已用时间始终 clamp 在各自合法范围。
+- RaidSession 构造后为 Preparing，只有一次成功 start 可进入 InRaid；Extracted、PlayerDead 和 RaidEnded 都是不可逆的 sticky 终局。
+- 只有 InRaid 与 Extracting 接受局内计时、玩家死亡命令和 GameplayWorld 玩法更新。
+- ExtractionPoint 的位置、尺寸及右/下派生边界必须有限，尺寸为正；contains 使用左/上包含、右/下排除的半开矩形。
+- 撤离占用只读取玩家 32×32 逻辑碰撞体中心，不读取更大的渲染 sprite 或 PNG Alpha。
+- 玩家中心进入撤离点时开始连续计时；任何一次离开都立即回到 InRaid 并把撤离进度清零，不能跨多次进入累计。
+- 大 deltaTime 同时覆盖撤离与超时时，时间上先发生的事件决定唯一终局；完全同时由 RaidEnded 获胜。
+- 非正或非有限 deltaTime 不推进 Raid/撤离时钟，但仍允许当前帧占用观察触发进入或离开撤离状态。
+- GameplayWorld 在玩家移动后更新 RaidSession；若本帧形成终局，本帧不再提交拾取、射击、敌人、投射物或命中 mutation，后续帧保持冻结。
+- App 只能读取并呈现 RaidSession，不得保存第二份状态、倒计时或撤离进度；库存 overlay 打开不会暂停 Raid 时钟，终局时必须关闭 overlay。
+
 ## 背包交互
 
 - 预览和按 R 旋转候选都不修改 GridInventory；同容器旋转提交只能通过 `tryTransform`，跨容器旋转提交只能通过 transform 转移服务。

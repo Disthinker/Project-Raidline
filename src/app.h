@@ -101,6 +101,7 @@ private:
 
     void render();
     void renderBackground();
+    void renderExtractionPoint();
     void renderStorageCabinet();
     void renderGroundItems();
     void renderEnemies();

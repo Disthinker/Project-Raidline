@@ -14,28 +14,27 @@
 | 背包 UX 稳定化 | 平滑像素虚影与独立吸附候选；PR #32 |
 | Week 18 | 世界柜体与双容器指定格转移、贴右丢弃条、角色脚下落点、纯鼠标背包；PR #33 |
 | Week 19 | 整栈快捷转移、拖拽旋转、9mm 堆叠、数量拖拽与正式弹药资源；PR #34 |
+| Week 20 | 一次性柜体搜索、加权 Loot、可注入随机源、临时 Inventory 原子提交；PR #35 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week20 最小可搜索柜体与 Loot
+## 当前开发：Week21 最小 RaidSession 与撤离点
 
-`codex/week20-searchable-containers` 已完成本地逻辑实现与自动验证：
+`codex/week21-raid-session-extraction` 已完成本地逻辑实现与自动验证：
 
-- 柜体具有显式 Unsearched/Searched 状态，取空不刷新；
-- 首次范围内 F 搜索后打开，后续 F 只打开现有库存；
-- 默认 3 次加权 Loot 抽取与 Ammo9mm 10–30 数量范围；
-- 可注入随机源、稳定权重/数量边界测试；
-- 临时 GridInventory 完整生成后原子提交；
-- 最终 placement 才分配世界稳定 ID，失败不推进序列。
+- 六态 RaidSession 与 180 秒倒计时；
+- 地图左下方固定代码绘制撤离点；
+- 玩家中心进入后连续 3 秒撤离，离开立即取消并清零；
+- 撤离/超时竞态按先发生者决定，完全同时超时优先；
+- Extracted/PlayerDead/RaidEnded 终局 sticky 并冻结 GameplayWorld；
+- PlayerDead 领域入口已建立，但玩家 Health/受击接线不在本轮范围。
 
-Windows Debug 全目标构建、受影响程序直跑 74/74、全量 CTest 386/386 与真实窗口 1–9 项均已通过；当前只待冻结提交的单一 PR/CI 与合入。
+Windows Debug 全目标构建、受影响程序直跑 90/90、全量 CTest 416/416 与真实窗口 1–8 均已通过；当前只待冻结提交的单一 PR/CI 与合入。
 
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
 | --- | --- | --- |
-| Week20 收口 | 最小可搜索柜体与 Loot 进入 `main` | 人工验收、所有权审查、文档、单一 PR/CI |
-| Week21 | 最小 RaidSession 与撤离点 | Preparing/InRaid/Extracting/Extracted/PlayerDead/RaidEnded、计时与离开取消 |
 | Week22 | 结算与最小 Stash | 撤离保留、死亡丢失本局所得、局外仓库、重开 |
 | Week23 | 垂直切片 V0 | 进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开 |
 | 后续 V1 | 装备与内容扩展 | 装备栏、WeaponInstance/装填、重量/耐久、尸体搜索、AI、固定地图、数据驱动与持久化 |
