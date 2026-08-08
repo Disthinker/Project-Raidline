@@ -48,12 +48,13 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人接触伤害及 Raid 生命周期。GameplayWorld 在玩家移动后用逻辑中心更新撤离占用；敌人移动后、玩家射击和投射物推进前结算带冷却的接触伤害，致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人接触伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。敌人移动后、玩家射击和投射物推进前结算带冷却的接触伤害，致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
 - Player：运动、朝向、动画与唯一拥有的 3 HP Health；受控伤害只报告首次 alive→dead。
 - Enemy：运动、朝向、动画与自己的 Health；当前接触只提供 V0 玩家伤害，不包含攻击 AI。
+- WeaponFireState：SDL 无关的单局射击时间状态，返回确定性 ShotSpec；不拥有 Projectile，也不直接渲染准星。
 - Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
 - Particle/ParticleSystem：短生命周期命中反馈。
 - ItemDefinition：共享静态物品数据、基础 footprint、旋转能力、最大堆叠与视觉资源发布状态，不拥有 Texture。
@@ -78,7 +79,7 @@ App ─aliases(non-owning)─> GameSession owned by GameFlow
 GameFlow ─owns─> GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
-GameplayWorld ─owns─> single-Raid entities + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
+GameplayWorld ─owns─> single-Raid entities + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
 Player ─owns─> Health
 Enemy ─owns─> Health
 StorageCabinet ─owns─> external GridInventory

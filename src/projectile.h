@@ -15,6 +15,7 @@ public:
     void update(float deltaTime);
 
     Vec2 position() const;
+    Vec2 velocity() const noexcept;
     float width() const;
     float height() const;
     Rect bounds() const;

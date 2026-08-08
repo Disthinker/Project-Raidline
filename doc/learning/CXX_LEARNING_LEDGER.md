@@ -22,6 +22,7 @@
 | Week 23 | `std::unique_ptr<GameplayWorld>` 单局所有权、候选对象先构造后 `swap` 的强失败语义、外部 Stash 注入、跨局稳定 ID 高水位、InRaid/SettlementBlocked/BetweenRaids 会话状态、just-pressed 重开边沿、只读局外视图 |
 | Week 24 | Player 组合拥有 Health、受控伤害命令统一生命与 Raid 终局、碰撞 cooldown 跨帧状态、致死帧早返回、成功/失败垂直切片集成测试、类布局依赖复验 |
 | Week 25 | SDL 无关顶层四态状态机、组合根再封装、非拥有引用成员与构造/析构顺序、删除复制/移动保护别名、屏幕输入边沿消费、状态路由与非活动子系统冻结 |
+| Week 26 | SDL 无关武器时间状态、值类型 `ShotSpec`、`std::optional<Vec2>` 瞄准快照、确定性整数伪随机偏移、向量旋转/归一化、held 与 edge 合并、UI pointer 抑制到物理释放、代码绘制准星反馈 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -53,6 +54,14 @@
 - 为什么顶层流程必须唯一拥有 GameSession，并由状态路由决定是否调用 update，而不能只在渲染层“隐藏”仍运行的世界。
 - 引用成员为什么不会延长对象生命周期，以及成员声明顺序、初始化顺序和删除 App 复制/移动如何共同保护 `gameSession_` 非拥有别名。
 - 为什么屏幕转换帧需要消费 Enter/点击并立即返回，避免一个输入边沿跨越 MainMenu、Base 与新 Raid。
+- 为什么射击时间状态必须由 GameplayWorld 内的领域对象唯一拥有，而 App 只读反馈，避免 cooldown/扩散双事实源。
+- 为什么只读取 mouse held 会丢失同帧 down+up 的极短点击，以及 `fireJustPressed || firePressed` 如何同时覆盖单击与连射。
+- 为什么 UI 消费左键后必须抑制到物理 release，而不能只清除当前帧 edge；以及该设备级抑制为何不应清除 Space fire。
+- 为什么任意方向弹丸要同时改变速度、枪口生成点和方向无关 AABB，而不能只旋转 velocity。
+- 为什么 SDL cursor 可见性是 App 必须成对恢复的进程级状态，以及 shutdown 为何仍要执行兜底 `SDL_ShowCursor()`。
+- 为什么拖尾渲染应只读取 const velocity 快照，并让视觉弹头尺寸与 8×8 逻辑碰撞体保持解耦。
+- 为什么提高 Projectile 速度后需要有限子步进防止离散 AABB 穿透，以及每个子步删除容器元素后只能累计值结果、不能保留实体引用。
+- 为什么命中火花可以复用只读 Particle 值并在 App 中改变颜色/线条，而伤害与得分仍只能来自一次 HitResolutionResult。
 
 ## Week 17–18 已落地、仍应复习的主题
 

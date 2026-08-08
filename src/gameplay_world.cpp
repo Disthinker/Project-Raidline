@@ -1,6 +1,7 @@
 #include "gameplay_world.h"
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <limits>
 #include <stdexcept>
@@ -15,9 +16,11 @@ namespace
     constexpr float kWorldWidth{1280.0f};
     constexpr float kWorldHeight{720.0f};
 
-    constexpr float kProjectileSpeed{600.0f};
+    constexpr float kProjectileSpeed{1200.0f};
     constexpr float kProjectileWidth{8.0f};
-    constexpr float kProjectileHeight{20.0f};
+    constexpr float kProjectileHeight{8.0f};
+    constexpr float kMaximumProjectileTravelPerStep{8.0F};
+    constexpr float kMaximumProjectileSubsteps{256.0F};
 
     constexpr int kDefaultEnemyMaxHealth{3};
     constexpr int kProjectileDamage{1};
@@ -355,6 +358,16 @@ void GameplayWorld::update(
         kWorldWidth,
         kWorldHeight);
 
+    if (input.aimWorldPosition.has_value())
+    {
+        const Vec2 center = playerCenter(player_);
+        static_cast<void>(
+            player_.faceDirection(
+                Vec2{
+                    input.aimWorldPosition->x - center.x,
+                    input.aimWorldPosition->y - center.y}));
+    }
+
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     raidSession_.update(
         deltaTime,
@@ -397,53 +410,88 @@ void GameplayWorld::update(
         return;
     }
 
-    cooldownRemaining_ -=
-        deltaTime;
+    const std::optional<ShotSpec> shot =
+        weaponFire_.update(
+            input.firePressed || input.fireJustPressed,
+            player_.facingDirection(),
+            deltaTime);
 
-    if (
-        input.firePressed &&
-        cooldownRemaining_ <= 0.0f)
+    if (shot.has_value())
     {
-        const float projectileX =
-            player_.position().x +
-            player_.size() / 2.0f -
-            kProjectileWidth / 2.0f;
+        const Vec2 center = playerCenter(player_);
+        const float muzzleDistance =
+            player_.size() / 2.0F +
+            std::max(kProjectileWidth, kProjectileHeight) / 2.0F;
 
-        const float projectileY =
-            player_.position().y -
-            kProjectileHeight;
+        const Vec2 projectileCenter{
+            center.x + shot->direction.x * muzzleDistance,
+            center.y + shot->direction.y * muzzleDistance};
 
         const Vec2 projectileVelocity{
-            player_.facingDirection().x *
-                kProjectileSpeed,
-            player_.facingDirection().y *
-                kProjectileSpeed};
+            shot->direction.x * kProjectileSpeed,
+            shot->direction.y * kProjectileSpeed};
 
         projectiles_.emplace_back(
             Vec2{
-                projectileX,
-                projectileY},
+                projectileCenter.x - kProjectileWidth / 2.0F,
+                projectileCenter.y - kProjectileHeight / 2.0F},
             projectileVelocity,
             kProjectileWidth,
             kProjectileHeight,
             kProjectileDamage);
-
-        cooldownRemaining_ =
-            fireCooldown_;
     }
+
+    std::size_t projectileSubsteps{1U};
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        const float requestedSubsteps = std::ceil(
+            kProjectileSpeed * deltaTime /
+            kMaximumProjectileTravelPerStep);
+        projectileSubsteps = static_cast<std::size_t>(
+            std::clamp(
+                requestedSubsteps,
+                1.0F,
+                kMaximumProjectileSubsteps));
+    }
+
+    const float projectileStepTime =
+        deltaTime /
+        static_cast<float>(projectileSubsteps);
+    HitResolutionResult hitResult{};
 
     for (
-        Projectile &projectile :
-        projectiles_)
+        std::size_t step{0U};
+        step < projectileSubsteps && !projectiles_.empty();
+        ++step)
     {
-        projectile.update(
-            deltaTime);
-    }
+        for (Projectile &projectile : projectiles_)
+        {
+            projectile.update(projectileStepTime);
+        }
 
-    const HitResolutionResult hitResult =
-        resolveProjectileEnemyHits(
-            projectiles_,
-            enemies_);
+        HitResolutionResult stepResult =
+            resolveProjectileEnemyHits(
+                projectiles_,
+                enemies_);
+        hitResult.hitPositions.insert(
+            hitResult.hitPositions.end(),
+            stepResult.hitPositions.begin(),
+            stepResult.hitPositions.end());
+        hitResult.enemiesKilled +=
+            stepResult.enemiesKilled;
+
+        projectiles_.erase(
+            std::remove_if(
+                projectiles_.begin(),
+                projectiles_.end(),
+                [](const Projectile &projectile)
+                {
+                    return projectile.isOutside(
+                        kWorldWidth,
+                        kWorldHeight);
+                }),
+            projectiles_.end());
+    }
 
     // 每次有效命中都生成粒子，
     // 与本次命中是否致命无关。
@@ -465,17 +513,6 @@ void GameplayWorld::update(
         killedEnemyCount *
         kScorePerEnemy;
 
-    projectiles_.erase(
-        std::remove_if(
-            projectiles_.begin(),
-            projectiles_.end(),
-            [](const Projectile &projectile)
-            {
-                return projectile.isOutside(
-                    kWorldWidth,
-                    kWorldHeight);
-            }),
-        projectiles_.end());
 }
 
 const Player &
@@ -548,6 +585,16 @@ const RaidSession &
 GameplayWorld::raidSession() const noexcept
 {
     return raidSession_;
+}
+
+float GameplayWorld::weaponSpreadDegrees() const noexcept
+{
+    return weaponFire_.spreadDegrees();
+}
+
+float GameplayWorld::weaponVisualRecoilPixels() const noexcept
+{
+    return weaponFire_.visualRecoilPixels();
 }
 
 bool GameplayWorld::markPlayerDead() noexcept

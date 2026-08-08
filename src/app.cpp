@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -525,11 +526,16 @@ GameplayInput App::makeGameplayInput() const
 
     input.fireJustPressed =
         input_.wasActionJustPressed(
-            GameAction::Fire);
+            GameAction::Fire) ||
+        input_.wasPrimaryPointerJustPressed();
 
     input.firePressed =
         input_.isActionPressed(
-            GameAction::Fire);
+            GameAction::Fire) ||
+        input_.isPrimaryPointerPressed();
+
+    input.aimWorldPosition =
+        pointerWorldPosition_;
 
     input.interactJustPressed =
         input_.wasActionJustPressed(
@@ -595,6 +601,7 @@ void App::closeInventory() noexcept
     inventoryInteraction_.reset();
 
     inventoryOverlayState_.close();
+    input_.suppressPrimaryPointerUntilRelease();
 }
 
 void App::handleInventoryCancel()
@@ -1095,6 +1102,21 @@ void App::processEvents()
     while (SDL_PollEvent(&event))
     {
         input_.handleEvent(event);
+
+        if (event.type == SDL_EVENT_MOUSE_MOTION)
+        {
+            pointerWorldPosition_ = Vec2{
+                event.motion.x,
+                event.motion.y};
+        }
+        else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                 event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+        {
+            pointerWorldPosition_ = Vec2{
+                event.button.x,
+                event.button.y};
+        }
+
         if (event.type == SDL_EVENT_QUIT)
         {
             running_ = false;
@@ -1103,17 +1125,27 @@ void App::processEvents()
         else if (!gameFlow_.isRaidScreen())
         {
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-                event.button.button == SDL_BUTTON_LEFT &&
-                screenPrimaryButtonContains(
-                    event.button.x,
-                    event.button.y))
+                event.button.button == SDL_BUTTON_LEFT)
             {
-                pendingScreenConfirm_ = true;
+                input_.suppressPrimaryPointerUntilRelease();
+
+                if (screenPrimaryButtonContains(
+                        event.button.x,
+                        event.button.y))
+                {
+                    pendingScreenConfirm_ = true;
+                }
             }
         }
 
         else if (inventoryOverlayState_.isOpen())
         {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event.button.button == SDL_BUTTON_LEFT)
+            {
+                input_.suppressPrimaryPointerUntilRelease();
+            }
+
             const std::optional<InventoryUiEvent> uiEvent =
                 toInventoryUiEvent(
                     event,
@@ -1180,6 +1212,12 @@ void App::update(float deltaTime)
 
     case InventoryFrameControlAction::None:
         break;
+    }
+
+    if (inputDecision.controlAction !=
+        InventoryFrameControlAction::None)
+    {
+        input_.suppressPrimaryPointerUntilRelease();
     }
 
     if (inputDecision.processUiEvents)
@@ -2823,19 +2861,156 @@ void App::renderStorageCabinet()
 
 void App::renderProjectiles()
 {
-    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
     for (const auto &projectile : gameSession_.world().projectiles())
     {
         const Vec2 pos = projectile.position();
+        const Vec2 velocity = projectile.velocity();
+        const float speed = std::sqrt(
+            velocity.x * velocity.x +
+            velocity.y * velocity.y);
+        const Vec2 direction =
+            std::isfinite(speed) && speed > 0.0F
+                                   ? Vec2{
+                                         velocity.x / speed,
+                                         velocity.y / speed}
+                                   : Vec2{};
+        const Vec2 center{
+            pos.x + projectile.width() / 2.0F,
+            pos.y + projectile.height() / 2.0F};
 
-        SDL_FRect rect{
-            pos.x,
-            pos.y,
-            projectile.width(),
-            projectile.height()};
+        SDL_SetRenderDrawColor(renderer_, 255, 72, 8, 115);
+        SDL_RenderLine(
+            renderer_,
+            center.x - direction.x * 38.0F,
+            center.y - direction.y * 38.0F,
+            center.x - direction.x * 18.0F,
+            center.y - direction.y * 18.0F);
 
-        SDL_RenderFillRect(renderer_, &rect);
+        SDL_SetRenderDrawColor(renderer_, 255, 164, 24, 225);
+        SDL_RenderLine(
+            renderer_,
+            center.x - direction.x * 20.0F,
+            center.y - direction.y * 20.0F,
+            center.x - direction.x * 3.0F,
+            center.y - direction.y * 3.0F);
+
+        const SDL_FRect farEmber{
+            center.x - direction.x * 29.0F - 0.75F,
+            center.y - direction.y * 29.0F - 0.75F,
+            1.5F,
+            1.5F};
+        SDL_SetRenderDrawColor(renderer_, 255, 104, 8, 145);
+        SDL_RenderFillRect(renderer_, &farEmber);
+
+        const SDL_FRect nearEmber{
+            center.x - direction.x * 12.0F - 1.0F,
+            center.y - direction.y * 12.0F - 1.0F,
+            2.0F,
+            2.0F};
+        SDL_SetRenderDrawColor(renderer_, 255, 196, 48, 235);
+        SDL_RenderFillRect(renderer_, &nearEmber);
+
+        const SDL_FRect glow{
+            center.x - 2.5F,
+            center.y - 2.5F,
+            5.0F,
+            5.0F};
+        SDL_SetRenderDrawColor(renderer_, 255, 176, 32, 135);
+        SDL_RenderFillRect(renderer_, &glow);
+
+        SDL_SetRenderDrawColor(renderer_, 255, 236, 136, 255);
+        SDL_RenderLine(
+            renderer_,
+            center.x - direction.x * 2.0F,
+            center.y - direction.y * 2.0F,
+            center.x + direction.x * 3.0F,
+            center.y + direction.y * 3.0F);
+
+        const SDL_FRect core{
+            center.x - 1.5F,
+            center.y - 1.5F,
+            3.0F,
+            3.0F};
+        SDL_SetRenderDrawColor(renderer_, 255, 252, 212, 255);
+        SDL_RenderFillRect(renderer_, &core);
     }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
+void App::syncSystemCursorVisibility() noexcept
+{
+    const bool shouldHide =
+        gameFlow_.isRaidScreen() &&
+        gameSession_.world().raidSession().isActive() &&
+        !inventoryOverlayState_.isOpen() &&
+        pointerWorldPosition_.has_value();
+
+    if (shouldHide == systemCursorHidden_)
+    {
+        return;
+    }
+
+    if (shouldHide)
+    {
+        if (SDL_HideCursor())
+        {
+            systemCursorHidden_ = true;
+        }
+        return;
+    }
+
+    if (SDL_ShowCursor())
+    {
+        systemCursorHidden_ = false;
+    }
+}
+
+void App::renderAimCrosshair()
+{
+    if (!pointerWorldPosition_.has_value() ||
+        inventoryOverlayState_.isOpen() ||
+        !gameSession_.world().raidSession().isActive())
+    {
+        return;
+    }
+
+    const float feedbackRadius =
+        6.0F +
+        gameSession_.world().weaponVisualRecoilPixels() +
+        gameSession_.world().weaponSpreadDegrees() * 1.5F;
+    constexpr float kArmLength{7.0F};
+    const Vec2 center = *pointerWorldPosition_;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+    SDL_RenderLine(
+        renderer_,
+        center.x - feedbackRadius - kArmLength,
+        center.y,
+        center.x - feedbackRadius,
+        center.y);
+    SDL_RenderLine(
+        renderer_,
+        center.x + feedbackRadius,
+        center.y,
+        center.x + feedbackRadius + kArmLength,
+        center.y);
+    SDL_RenderLine(
+        renderer_,
+        center.x,
+        center.y - feedbackRadius - kArmLength,
+        center.x,
+        center.y - feedbackRadius);
+    SDL_RenderLine(
+        renderer_,
+        center.x,
+        center.y + feedbackRadius,
+        center.x,
+        center.y + feedbackRadius + kArmLength);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderGroundItems()
@@ -3012,23 +3187,67 @@ void App::renderParticles()
     for (const Particle &particle : gameSession_.world().particles())
     {
         const float life = particle.normalizedLifetime();
-        const float renderSize = std::max(1.0f, particle.size() * life);
-        const float halfSize = renderSize / 2.0f;
-
-        const Uint8 alpha = static_cast<Uint8>(
-            std::clamp(life, 0.0f, 1.0f) * 220.0f);
-
-        SDL_SetRenderDrawColor(renderer_, 210, 210, 210, alpha);
-
         const Vec2 center = particle.position();
-        SDL_FRect rect{
-            center.x - halfSize,
-            center.y - halfSize,
-            renderSize,
-            renderSize};
+        const Vec2 velocity = particle.velocity();
+        const float speed = std::sqrt(
+            velocity.x * velocity.x +
+            velocity.y * velocity.y);
+        const Vec2 direction =
+            std::isfinite(speed) && speed > 0.0F
+                                   ? Vec2{
+                                         velocity.x / speed,
+                                         velocity.y / speed}
+                                   : Vec2{};
 
-        SDL_RenderFillRect(renderer_, &rect);
+        const float sparkLength = std::clamp(
+            particle.size() * (1.5F + life * 1.5F),
+            3.0F,
+            12.0F);
+        const Uint8 emberAlpha = static_cast<Uint8>(
+            std::clamp(life, 0.0F, 1.0F) * 170.0F);
+        const Uint8 hotAlpha = static_cast<Uint8>(
+            std::clamp(life, 0.0F, 1.0F) * 255.0F);
+
+        SDL_SetRenderDrawColor(renderer_, 255, 72, 8, emberAlpha);
+        SDL_RenderLine(
+            renderer_,
+            center.x - direction.x * sparkLength,
+            center.y - direction.y * sparkLength,
+            center.x,
+            center.y);
+
+        SDL_SetRenderDrawColor(renderer_, 255, 188, 40, hotAlpha);
+        SDL_RenderLine(
+            renderer_,
+            center.x - direction.x * sparkLength * 0.5F,
+            center.y - direction.y * sparkLength * 0.5F,
+            center.x,
+            center.y);
+
+        const float glowSize = std::max(
+            2.0F,
+            particle.size() * life * 1.6F);
+        const SDL_FRect glow{
+            center.x - glowSize / 2.0F,
+            center.y - glowSize / 2.0F,
+            glowSize,
+            glowSize};
+        SDL_SetRenderDrawColor(renderer_, 255, 112, 12, emberAlpha / 2U);
+        SDL_RenderFillRect(renderer_, &glow);
+
+        const float coreSize = std::max(
+            1.0F,
+            particle.size() * life * 0.55F);
+        const SDL_FRect core{
+            center.x - coreSize / 2.0F,
+            center.y - coreSize / 2.0F,
+            coreSize,
+            coreSize};
+        SDL_SetRenderDrawColor(renderer_, 255, 244, 176, hotAlpha);
+        SDL_RenderFillRect(renderer_, &core);
     }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderScreenPrimaryButton(
@@ -3193,6 +3412,7 @@ void App::renderRaidScreen()
     renderPlayer();
     renderProjectiles();
     renderParticles();
+    renderAimCrosshair();
 
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
@@ -3208,6 +3428,8 @@ void App::renderRaidScreen()
 
 void App::render()
 {
+    syncSystemCursorVisibility();
+
     SDL_SetRenderDrawColor(
         renderer_,
         0,
@@ -3242,6 +3464,9 @@ void App::render()
 
 void App::shutdown()
 {
+    static_cast<void>(SDL_ShowCursor());
+    systemCursorHidden_ = false;
+
     // 所有 SDL_Texture 必须在 Renderer 之前释放。
     for (
         Texture &texture :

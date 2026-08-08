@@ -216,9 +216,11 @@ TEST(GameplayWorldTest, FireCreatesProjectile)
     const Projectile &projectile = world.projectiles()[0];
 
     EXPECT_FLOAT_EQ(projectile.position().x, 652.0f);
-    EXPECT_FLOAT_EQ(projectile.position().y, 340.0f);
+    EXPECT_FLOAT_EQ(projectile.position().y, 352.0f);
     EXPECT_FLOAT_EQ(projectile.width(), 8.0f);
-    EXPECT_FLOAT_EQ(projectile.height(), 20.0f);
+    EXPECT_FLOAT_EQ(projectile.height(), 8.0f);
+    EXPECT_FLOAT_EQ(projectile.velocity().x, 0.0F);
+    EXPECT_FLOAT_EQ(projectile.velocity().y, -1200.0F);
     EXPECT_EQ(projectile.damage(), 1);
 }
 
@@ -267,14 +269,53 @@ TEST(
     EXPECT_EQ(world.enemies()[0].health(), 3);
 
     GameplayInput noInput{};
-    world.update(noInput, 0.35f);
+    constexpr float kSimulationStep{1.0F / 60.0F};
+    constexpr int kMaximumFrames{20};
+    int simulatedFrames{0};
+    while (!world.projectiles().empty() &&
+           simulatedFrames < kMaximumFrames)
+    {
+        world.update(noInput, kSimulationStep);
+        ++simulatedFrames;
+    }
 
     EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_LT(simulatedFrames, kMaximumFrames);
 
     ASSERT_EQ(world.enemies().size(), 1u);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_FALSE(world.enemies()[0].isDead());
     EXPECT_EQ(world.score(), 0);
+
+    const ParticleBurstConfig impactConfig{};
+    ASSERT_EQ(
+        world.particles().size(),
+        impactConfig.particleCount);
+    for (const Particle &particle : world.particles())
+    {
+        EXPECT_GE(particle.duration(), impactConfig.minLifetime);
+        EXPECT_LE(particle.duration(), impactConfig.maxLifetime);
+        EXPECT_GE(particle.size(), impactConfig.minSize);
+        EXPECT_LE(particle.size(), impactConfig.maxSize);
+    }
+}
+
+TEST(GameplayWorldTest, FastProjectileDoesNotTunnelThroughEnemyDuringLargeFrame)
+{
+    GameplayWorld world;
+    world.update(makeFireInput(), 0.0F);
+
+    ASSERT_EQ(world.projectiles().size(), 1U);
+    ASSERT_EQ(world.enemies().size(), 1U);
+
+    world.update(GameplayInput{}, 0.30F);
+
+    EXPECT_TRUE(world.projectiles().empty());
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies()[0].health(), 2);
+    EXPECT_EQ(
+        world.particles().size(),
+        ParticleBurstConfig{}.particleCount);
 }
 
 // GameplayWorld 持有的 Enemy 不再是静态实体
@@ -402,6 +443,68 @@ TEST(GameplayWorldTest, FireWithoutMovementUsesPreviousFacingDirection)
     EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
 }
 
+TEST(GameplayWorldTest, PointerAimControlsFacingAndShotWithoutMovement)
+{
+    GameplayWorld world;
+    GameplayInput input = makeFireInput();
+    input.aimWorldPosition = Vec2{1000.0F, 376.0F};
+
+    world.update(input, 0.0F);
+
+    ASSERT_EQ(world.projectiles().size(), 1U);
+    EXPECT_FLOAT_EQ(world.player().position().x, 640.0F);
+    EXPECT_FLOAT_EQ(world.player().position().y, 360.0F);
+    EXPECT_FLOAT_EQ(world.player().facingDirection().x, 1.0F);
+    EXPECT_FLOAT_EQ(world.player().facingDirection().y, 0.0F);
+
+    const Vec2 initialPosition = world.projectiles()[0].position();
+    world.update(GameplayInput{}, 0.01F);
+    EXPECT_GT(world.projectiles()[0].position().x, initialPosition.x);
+    EXPECT_FLOAT_EQ(world.projectiles()[0].position().y, initialPosition.y);
+}
+
+TEST(GameplayWorldTest, PointerAimDoesNotChangeMovementDirection)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+    input.moveLeft = true;
+    input.aimWorldPosition = Vec2{1000.0F, 376.0F};
+
+    world.update(input, 0.1F);
+
+    EXPECT_LT(world.player().position().x, 640.0F);
+    EXPECT_FLOAT_EQ(world.player().facingDirection().x, 1.0F);
+    EXPECT_FLOAT_EQ(world.player().facingDirection().y, 0.0F);
+}
+
+TEST(GameplayWorldTest, AimAtPlayerCenterPreservesPreviousFacing)
+{
+    GameplayWorld world;
+    GameplayInput faceRight{};
+    faceRight.moveRight = true;
+    world.update(faceRight, 0.0F);
+
+    GameplayInput aimAtCenter{};
+    aimAtCenter.aimWorldPosition = Vec2{656.0F, 376.0F};
+    world.update(aimAtCenter, 0.0F);
+
+    EXPECT_FLOAT_EQ(world.player().facingDirection().x, 1.0F);
+    EXPECT_FLOAT_EQ(world.player().facingDirection().y, 0.0F);
+}
+
+TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
+{
+    GameplayWorld world;
+    world.update(makeFireInput(), 0.0F);
+
+    EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 1.0F);
+    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 3.0F);
+
+    world.update(GameplayInput{}, 1.0F);
+    EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 0.0F);
+    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
+}
+
 // 斜向射击
 TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
 {
@@ -436,6 +539,18 @@ TEST(GameplayWorldTest, HoldingFireCreatesFirstProjectileImmediately)
     EXPECT_EQ(world.projectiles().size(), 1u);
 }
 
+TEST(GameplayWorldTest, FireEdgeCreatesShotEvenIfReleasedWithinFrame)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+    input.fireJustPressed = true;
+    input.firePressed = false;
+
+    world.update(input, 0.0F);
+
+    EXPECT_EQ(world.projectiles().size(), 1U);
+}
+
 // 按住 Fire 但冷却未结束时，不会再次创建 Projectile
 TEST(GameplayWorldTest, HoldingFireDoesNotCreateProjectileBeforeCooldownEnds)
 {
@@ -463,7 +578,7 @@ TEST(GameplayWorldTest, HoldingFireCreatesAnotherProjectileAfterCooldownEnds)
 
     input.fireJustPressed = false;
     input.firePressed = true;
-    world.update(input, 0.25f);
+    world.update(input, 0.12f);
 
     EXPECT_EQ(world.projectiles().size(), 2u);
 }
@@ -478,7 +593,7 @@ TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
     EXPECT_EQ(world.projectiles().size(), 1u);
 
     GameplayInput noInput{};
-    world.update(noInput, 0.25f);
+    world.update(noInput, 0.12f);
 
     EXPECT_EQ(world.projectiles().size(), 1u);
 }

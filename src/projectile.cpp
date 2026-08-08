@@ -26,6 +26,12 @@ Vec2 Projectile::position() const
 {
     return position_;
 }
+
+Vec2 Projectile::velocity() const noexcept
+{
+    return velocity_;
+}
+
 float Projectile::width() const
 {
     return width_;

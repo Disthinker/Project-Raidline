@@ -41,6 +41,8 @@ private:
     GameSession &gameSession_;
 
     bool pendingScreenConfirm_{false};
+    std::optional<Vec2> pointerWorldPosition_;
+    bool systemCursorHidden_{false};
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -121,6 +123,7 @@ private:
     void closeInventory() noexcept;
 
     void render();
+    void syncSystemCursorVisibility() noexcept;
     void renderMainMenu();
     void renderBase();
     void renderRaidScreen();
@@ -133,6 +136,7 @@ private:
     void renderEnemies();
     void renderPlayer();
     void renderProjectiles();
+    void renderAimCrosshair();
     void renderParticles();
     void renderInventoryPlacementPreview(
         const GridInventory &inventory,

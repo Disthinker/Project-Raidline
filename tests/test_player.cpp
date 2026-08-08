@@ -495,3 +495,22 @@ TEST(
         player.facingDirection().y,
         0.0f);
 }
+
+TEST(PlayerTest, ExplicitAimDirectionIsNormalized)
+{
+    Player player{100.0F, 100.0F};
+
+    ASSERT_TRUE(player.faceDirection(Vec2{3.0F, 4.0F}));
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 0.6F);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, 0.8F);
+}
+
+TEST(PlayerTest, ZeroAimDirectionPreservesPreviousFacing)
+{
+    Player player{100.0F, 100.0F};
+    ASSERT_TRUE(player.faceDirection(Vec2{1.0F, 0.0F}));
+
+    EXPECT_FALSE(player.faceDirection(Vec2{}));
+    EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0F);
+    EXPECT_FLOAT_EQ(player.facingDirection().y, 0.0F);
+}

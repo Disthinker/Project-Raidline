@@ -48,6 +48,16 @@ public:
     [[nodiscard]]
     bool isShiftPressed() const noexcept;
 
+    [[nodiscard]]
+    bool isPrimaryPointerPressed() const noexcept;
+
+    [[nodiscard]]
+    bool wasPrimaryPointerJustPressed() const noexcept;
+
+    // A UI layer calls this after consuming a left click. If the physical
+    // button is still held, gameplay remains suppressed until its matching up.
+    void suppressPrimaryPointerUntilRelease() noexcept;
+
     void endFrame();
 
 private:
@@ -60,6 +70,11 @@ private:
     // 保留原始按键状态，使未映射为 GameAction 的修饰键仍可查询。
     std::unordered_set<SDL_Scancode>
         pressedScancodes_;
+
+    bool primaryPointerPhysicallyPressed_{};
+    bool primaryPointerPressed_{};
+    bool primaryPointerJustPressed_{};
+    bool primaryPointerSuppressedUntilRelease_{};
 
     [[nodiscard]]
     std::optional<GameAction>

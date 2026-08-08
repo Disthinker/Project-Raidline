@@ -86,6 +86,8 @@ add_executable(Project_Raidline
     src/gameplay_input.h
     src/gameplay_world.h
     src/gameplay_world.cpp
+    src/weapon_fire.h
+    src/weapon_fire.cpp
 
     src/texture.h
     src/texture.cpp
@@ -180,6 +182,21 @@ target_include_directories(PlayerTest PRIVATE src)
 
 gtest_discover_tests(PlayerTest)
 
+# test weapon_fire
+add_executable(WeaponFireTest
+    tests/test_weapon_fire.cpp
+    src/weapon_fire.cpp
+    src/weapon_fire.h
+    src/vec2.h
+)
+
+target_compile_features(WeaponFireTest PRIVATE cxx_std_20)
+set_target_properties(WeaponFireTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(WeaponFireTest PRIVATE GTest::gtest_main)
+target_include_directories(WeaponFireTest PRIVATE src)
+
+gtest_discover_tests(WeaponFireTest)
+
 # test projectile
 add_executable(ProjectileTest
     tests/test_projectile.cpp
@@ -257,6 +274,8 @@ add_executable(GameplayWorldTest
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
+    src/weapon_fire.cpp
+    src/weapon_fire.h
 
     src/player.cpp
     src/player.h
@@ -505,6 +524,8 @@ add_executable(GameSessionTest
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
+    src/weapon_fire.cpp
+    src/weapon_fire.h
 
     src/player.cpp
     src/player.h
@@ -597,6 +618,8 @@ add_executable(GameFlowTest
     src/gameplay_world.cpp
     src/gameplay_world.h
     src/gameplay_input.h
+    src/weapon_fire.cpp
+    src/weapon_fire.h
 
     src/player.cpp
     src/player.h
@@ -1061,6 +1084,7 @@ if(MSVC)
     target_compile_options(HealthTest PRIVATE /utf-8)
     target_compile_options(InputSystemTest PRIVATE /utf-8)
     target_compile_options(PlayerTest PRIVATE /utf-8)
+    target_compile_options(WeaponFireTest PRIVATE /utf-8)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)

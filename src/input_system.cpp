@@ -3,6 +3,41 @@
 void InputSystem::handleEvent(
     const SDL_Event &event)
 {
+    if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+    {
+        pressedActions_.clear();
+        justPressedActions_.clear();
+        pressedScancodes_.clear();
+        primaryPointerPhysicallyPressed_ = false;
+        primaryPointerPressed_ = false;
+        primaryPointerJustPressed_ = false;
+        primaryPointerSuppressedUntilRelease_ = false;
+        return;
+    }
+
+    if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+         event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+        event.button.button == SDL_BUTTON_LEFT)
+    {
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+        {
+            primaryPointerPhysicallyPressed_ = false;
+            primaryPointerPressed_ = false;
+            primaryPointerSuppressedUntilRelease_ = false;
+            return;
+        }
+
+        primaryPointerPhysicallyPressed_ = true;
+
+        if (!primaryPointerSuppressedUntilRelease_ &&
+            !primaryPointerPressed_)
+        {
+            primaryPointerPressed_ = true;
+            primaryPointerJustPressed_ = true;
+        }
+        return;
+    }
+
     if (
         event.type != SDL_EVENT_KEY_DOWN &&
         event.type != SDL_EVENT_KEY_UP)
@@ -83,11 +118,30 @@ bool InputSystem::isShiftPressed() const noexcept
                SDL_SCANCODE_RSHIFT);
 }
 
+bool InputSystem::isPrimaryPointerPressed() const noexcept
+{
+    return primaryPointerPressed_;
+}
+
+bool InputSystem::wasPrimaryPointerJustPressed() const noexcept
+{
+    return primaryPointerJustPressed_;
+}
+
+void InputSystem::suppressPrimaryPointerUntilRelease() noexcept
+{
+    primaryPointerPressed_ = false;
+    primaryPointerJustPressed_ = false;
+    primaryPointerSuppressedUntilRelease_ =
+        primaryPointerPhysicallyPressed_;
+}
+
 void InputSystem::endFrame()
 {
     // justPressed 只保留一帧。
     // pressed 状态等到对应 KeyUp 才清除。
     justPressedActions_.clear();
+    primaryPointerJustPressed_ = false;
 }
 
 std::optional<GameAction>
