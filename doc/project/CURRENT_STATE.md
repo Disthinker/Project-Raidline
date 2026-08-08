@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week23 可重复 Raid 会话已在 `codex/week23-game-session` 本地实现，并通过自动测试与真实窗口验收 1–9；精确 head CI 与 PR 尚未完成，`main` 基线仍是已合入的 Week22。
+最后核对：2026-08-08，Week23 可重复 Raid 会话已通过 [PR #42](https://github.com/Disthinker/Project-Raidline/pull/42) 合入 `main@d0ec7d8`；本地自动测试、真实窗口验收 1–9 与精确 head Windows/Ubuntu CI 均已通过。
 
 ## Git、验证与 CI 基线
 
@@ -15,9 +15,10 @@
 - PR #40 已在精确 head `d9c8d14` 上通过全部门禁并合入；CI 动态结果保存在 PR 评论中，没有为了写回结果再触发第二轮 C++ 矩阵。
 - Week23 Windows Debug configure、主程序和全目标增量构建成功；初始聚焦 CTest 86/86、ID 边界修复后聚焦复验 54/54、全量 CTest 446/446、`GameSessionTest.exe` 直接运行 7/7，`ctest -N` 注册 446 项。
 - Week23 `compile_commands.json` 已确认 `game_session.cpp` 同时进入 `Project_Raidline` 与 `GameSessionTest`，`test_game_session.cpp` 进入专用测试目标；未复现 `gtest_ar_` 栈损坏。
-- Week23 真实窗口 1–9 已由用户确认全部通过；Windows/Ubuntu CI 当前仍未验证，不能把分支结果描述为已合入 `main`。
+- Week23 真实窗口 1–9 已由用户确认全部通过；feature commit `b8b76cd` 的 [GitHub Actions run 31237026576](https://github.com/Disthinker/Project-Raidline/actions/runs/31237026576) 全部通过：范围检测 5 秒、Ubuntu 1 分 25 秒、Windows 3 分 39 秒。
+- PR #42 已按精确 feature head `b8b76cd` 合入，merge commit 为 `d0ec7d8`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
 
-## 已进入 main：Week 1–22
+## 已进入 main：Week 1–23
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -90,7 +91,7 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - App 在 `GameplayWorld::update` 后触发领域结算；调试区显示 Stash 数量与结算状态，终局面板显示 `STORED`、`LOST` 或 `STASH BLOCKED`。
 - 人工验收后新增两项独立库存 UX 需求：可行时原子交换拖拽物与目标处若干物品的位置（GitHub #38），以及 Ctrl/Shift 数量点击后松开按键仍保持虚像跟随、再次点击提交（GitHub #39）；二者只登记，不属于 Week22。
 
-## Week23 本地已实现、待验收能力
+## Week23 已合入能力
 
 - `GameSession` 拥有进程内长期 Stash、当前 `GameplayWorld`、当前单局 `RaidSettlement` 和 Raid 编号；App 不再分别拥有世界与结算。
 - 结算完成后进入 `BetweenRaids`，终局显示缩放后的 20×12 只读 Stash 网格；按 `N` 从完整结算态开始下一局，按住不会重复跳局。
@@ -105,6 +106,6 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。第二局与跨 Raid ID 已在 Week23 分支本地实现并通过人工验收，仍待 CI 与合入。
+- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week23 当前合同与本地证据见 [活动 ExecPlan](../exec-plans/active/week23-repeatable-game-session.md)；Week22 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week22-raid-settlement-stash.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week23 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week23-repeatable-game-session.md)；Week22 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week22-raid-settlement-stash.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

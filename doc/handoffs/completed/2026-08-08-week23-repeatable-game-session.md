@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：Week23 可重复 Raid 会话、跨局 Stash 与稳定 ID
-- 日期/分支/commit：2026-08-08，`codex/week23-game-session`，commit 尚未创建
-- 完成度：代码、本地自动测试与真实窗口 1–9 完成；Windows/Ubuntu CI、PR 与合入未验证
+- 日期/分支/commit：2026-08-08，`codex/week23-game-session`，feature `b8b76cd`，merge `d0ec7d8`
+- 完成度：代码、本地自动测试、真实窗口 1–9、Windows/Ubuntu CI 与 PR #42 合入全部完成
 
 ## 2. 用户可见结果
 
@@ -87,7 +87,7 @@
 - 全量 CTest：446/446。
 - 其他测试：`GameSessionTest.exe` 直接运行 7/7；`ctest -N` 注册 446；compile database 确认 `game_session.cpp` 进入主程序和测试。
 - Phase1 pytest：未执行；本轮无艺术资源变化。
-- CI：未验证。
+- CI：精确 feature head `b8b76cd` 的 [GitHub Actions run 31237026576](https://github.com/Disthinker/Project-Raidline/actions/runs/31237026576) 全部通过；范围检测 5 秒、Ubuntu 1 分 25 秒、Windows 3 分 39 秒。
 - 人工验收：用户确认真实窗口清单 1–9 全部通过。
 
 ## 12. 教学分级
@@ -113,13 +113,13 @@
 - `src/raid_settlement.cpp`：`RaidSettlement::settle`
 - `src/app.cpp`：`App::update`、`App::renderStashOverlay`、`App::renderDebugText`
 - `tests/test_game_session.cpp`：跨局完整回归
-- `doc/exec-plans/active/week23-repeatable-game-session.md`：冻结合同与证据
+- `doc/exec-plans/completed/week23-repeatable-game-session.md`：冻结合同与完整验证证据
 
 ## 15. 技术债与测试债
 
 - 技术债：Stash 只读且无配装；App 绘制职责继续集中；测试 target 重复编译核心源码；无跨进程保存。
-- 测试债：缺少 App 级自动输入/截图测试；Stash 网格布局与 N 键真实窗口行为已经人工验收，Ubuntu/Windows CI 尚未执行。
-- 下一安全任务：完成单次精确 head CI，收口 Week23；随后进入 Week24 垂直切片回归，不夹带 #38/#39。
+- 测试债：缺少 App 级自动输入/截图测试；Stash 网格布局与 N 键真实窗口行为已经人工验收，Ubuntu/Windows CI 已通过。
+- 下一安全任务：进入 Week24 垂直切片回归，系统验证“进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开”完整循环，不夹带 #38/#39。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 
