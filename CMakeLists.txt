@@ -65,6 +65,8 @@ add_executable(Project_Raidline
     src/raid_settlement.cpp
     src/game_session.h
     src/game_session.cpp
+    src/game_flow.h
+    src/game_flow.cpp
 
     src/extraction_point.h
     src/extraction_point.cpp
@@ -582,6 +584,98 @@ target_include_directories(
 
 gtest_discover_tests(GameSessionTest)
 
+# test game_flow
+add_executable(GameFlowTest
+    tests/test_game_flow.cpp
+
+    src/game_flow.cpp
+    src/game_flow.h
+
+    src/game_session.cpp
+    src/game_session.h
+
+    src/gameplay_world.cpp
+    src/gameplay_world.h
+    src/gameplay_input.h
+
+    src/player.cpp
+    src/player.h
+
+    src/projectile.cpp
+    src/projectile.h
+
+    src/enemy.cpp
+    src/enemy.h
+
+    src/rect.h
+    src/vec2.h
+
+    src/hit_resolution.cpp
+    src/hit_resolution.h
+
+    src/collision.cpp
+    src/collision.h
+
+    src/animation.cpp
+    src/animation.h
+
+    src/particle.cpp
+    src/particle.h
+    src/particle_system.cpp
+    src/particle_system.h
+
+    src/item_definition.cpp
+    src/item_definition.h
+    src/item_instance.cpp
+    src/item_instance.h
+    src/ground_item.cpp
+    src/ground_item.h
+    src/grid_inventory.cpp
+    src/grid_inventory.h
+    src/inventory_transfer.cpp
+    src/inventory_transfer.h
+
+    src/storage_cabinet.cpp
+    src/storage_cabinet.h
+    src/loot_table.cpp
+    src/loot_table.h
+
+    src/raid_session.cpp
+    src/raid_session.h
+    src/extraction_point.cpp
+    src/extraction_point.h
+    src/stash.cpp
+    src/stash.h
+    src/raid_settlement.cpp
+    src/raid_settlement.h
+)
+
+target_compile_features(
+    GameFlowTest
+    PRIVATE
+    cxx_std_20
+)
+
+set_target_properties(
+    GameFlowTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(
+    GameFlowTest
+    PRIVATE
+    GTest::gtest_main
+)
+
+target_include_directories(
+    GameFlowTest
+    PRIVATE
+    src
+)
+
+gtest_discover_tests(GameFlowTest)
+
 # test extraction_point
 add_executable(ExtractionPointTest
     tests/test_extraction_point.cpp
@@ -977,6 +1071,7 @@ if(MSVC)
     target_compile_options(RaidSessionTest PRIVATE /utf-8)
     target_compile_options(RaidSettlementTest PRIVATE /utf-8)
     target_compile_options(GameSessionTest PRIVATE /utf-8)
+    target_compile_options(GameFlowTest PRIVATE /utf-8)
     target_compile_options(ExtractionPointTest PRIVATE /utf-8)
     target_compile_options(TextureTest PRIVATE /utf-8)
     target_compile_options(AnimationTest PRIVATE /utf-8)

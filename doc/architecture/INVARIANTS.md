@@ -99,19 +99,28 @@
 
 ## 跨 Raid GameSession
 
-- GameSession 始终拥有一个有效的当前 GameplayWorld、一个跨局 Stash 和一个仅属于当前 Raid 的 RaidSettlement；App 不保存这些状态的副本。
+- GameSession 始终拥有一个有效的当前 GameplayWorld、一个跨局 Stash 和一个仅属于当前 Raid 的 RaidSettlement；GameFlow 是它的唯一所有者，App 不保存这些状态的副本。
 - 只有结算进入 Extracted、PlayerDead 或 RaidEnded 完成态后才能开始下一局；活动 Raid、Pending 与 Blocked 均拒绝重开且无副作用。
 - 下一局必须先使用旧世界的“下一未使用 ID”完整构造候选 GameplayWorld，再交换所有权；构造失败时旧终局、Stash、结算、Raid 编号和 ID 高水位不变。
 - 跨 Raid ID 序列按分配历史单调前进，不能通过扫描当前存活实例最大值重建；已销毁或留在 Stash 的 ID 均不得复用。
 - 下一 ID 高水位达到 `std::numeric_limits<ItemInstanceId>::max()` 表示没有可安全递增的新 ID；任何需要创建拆分实例的丢弃、转移或指定格放置必须原子失败，不能分配后回绕到 0。
 - 新 Raid 创建新的玩家、敌人、地面物品、柜体搜索状态、RaidSession 和空玩家背包；Stash 中的 ItemInstance 不复制、不重建、不自动进入出战背包。
 - Stash 只在当前 App 进程内跨局保留；只读网格不构成配装 UI、磁盘保存或跨进程持久化承诺。
-- `N` 只使用 just-pressed 边沿触发重开；按住不重复创建 Raid，成功重开帧不再把同帧其他输入提交给新世界。
+
+## 顶层 GameFlow
+
+- 顶层状态只能是 MainMenu、Base、Raid 或 RaidResult；App 不保存第二份屏幕状态，也不能直接写状态枚举。
+- 只有 Raid 状态可以调用 `GameSession::update`；MainMenu、Base 和 RaidResult 中玩家、敌人、投射物、Raid 时钟与结算都必须冻结。
+- MainMenu 只能通过 Start 进入 Base；Base 只能通过 Deploy 进入 Raid；完整结算只能先进入 RaidResult，再通过确认返回 Base。非法转换返回 false 且不修改会话或世界。
+- 第一次 Deploy 激活构造时已准备的 Raid 1；以后只有完整结算返回 Base 后的 Deploy 才能调用 `startNextRaid()`，每次成功只增加一个 Raid 编号。
+- SettlementBlocked 不得进入 RaidResult、Base 或下一 Raid；它保留当前世界与结算以供既有恢复路径处理。
+- Enter/数字键盘 Enter 与屏幕主按钮点击使用单次边沿确认；转换成功的帧必须终止屏幕处理，不能把同一输入继续提交到新屏幕、GameplayWorld 或库存。
+- `N` 不再映射为重开；下一局必须经过 RaidResult→Base→Deploy。
 
 ## 背包交互
 
 - 预览和按 R 旋转候选都不修改 GridInventory；同容器旋转提交只能通过 `tryTransform`，跨容器旋转提交只能通过 transform 转移服务。
-- 背包是纯鼠标交互：方向键、主 Enter 和数字键盘 Enter 不具有库存语义，也不存在键盘焦点或键盘放置模式。
+- 背包是纯鼠标交互：方向键、主 Enter 和数字键盘 Enter 不具有库存语义，也不存在键盘焦点或键盘放置模式；Enter 仅在非 Raid 屏幕作为顶层确认。
 - 鼠标状态保存源容器、稳定 ID、抓取偏移与值坐标，不保存可能因容器 mutation 失效的业务引用或迭代器。
 - 多格拖拽的候选左上角由实际 placement origin 与 grab offset 计算，不能把任意被点击覆盖格当作 origin。
 - 拖拽旋转必须同时变换离散格锚点和连续像素锚点；四次顺时针旋转恢复原方向、footprint 与抓取关系。

@@ -123,8 +123,9 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_ESCAPE:
         return GameAction::InventoryCancel;
 
-    case SDL_SCANCODE_N:
-        return GameAction::StartNextRaid;
+    case SDL_SCANCODE_RETURN:
+    case SDL_SCANCODE_KP_ENTER:
+        return GameAction::ScreenConfirm;
 
     default:
         return std::nullopt;

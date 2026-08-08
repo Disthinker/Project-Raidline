@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week24 feature commit `d8c58e6` 已通过 PR #44 合入 `main@1415238`；玩家生命、敌人接触死亡和成功/失败跨系统回归已通过本地自动测试、真实窗口验收与精确 head Windows/Ubuntu CI。Week25 顶层游戏流程壳已进入 Ready 计划阶段，尚未开始业务代码改动。
+最后核对：2026-08-08，Week24 已完成并收口到 `main@43eb571`。Week25 顶层游戏流程壳已在 `codex/week25-game-flow` 完成本地候选：Windows Debug 全目标构建、CTest 462/462 和用户真实窗口 1–10 全部通过；提交、PR 与精确 head Windows/Ubuntu CI 尚未执行。
 
 ## Git、验证与 CI 基线
 
@@ -21,6 +21,7 @@
 - Week24 新增关键测试程序直接运行 3/3、4/4、8/8；`ctest -N` 注册 453 项，compile database 与 Ninja `#deps 197/168` 证明 Player 类布局变化进入主程序和关键测试目标，未出现运行库错误。
 - Week24 真实窗口 1–8 已由用户确认全部通过；feature commit `d8c58e6` 的 [GitHub Actions run 31244714973](https://github.com/Disthinker/Project-Raidline/actions/runs/31244714973) 全部通过：范围检测 7 秒、Ubuntu 1 分 9 秒、Windows 3 分 12 秒。
 - PR #44 已按精确 feature head `d8c58e6` 合入，merge commit 为 `1415238`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
+- Week25 `GameFlowTest` 与 `InputSystemTest` 聚焦 CTest 31/31、Windows Debug 全目标构建和全量 CTest 462/462 通过；新增流程代码已进入主程序与专用测试目标。用户已确认真实窗口 1–10 全部通过；提交和 CI 仍明确待执行。
 
 ## 已进入 main：Week 1–24
 
@@ -113,17 +114,19 @@ Week24 计划已按 PR #44 的合入事实归档；玩家 3 HP、敌人接触伤
 - 致死伤害在同一命令中把生命归零并形成 sticky `PlayerDead`；致死帧在玩家射击、投射物推进、命中和计分前返回，随后由既有结算清空携带物并显示 `LOST`。
 - GameSession 自动回归已串联“搜索→转移→撤离→Stash→重开”成功路径，以及“携带物→死亡→损失→重开”失败路径。
 
-## 下一阶段：Week25 顶层游戏流程壳
+## Week25 本地候选：顶层游戏流程壳
 
-- 已登记长期体验强化方向：主菜单/基地/地图副本、鼠标瞄准射击与后坐力、敌人抓/挠/咬三类攻击，以及敌人感知/追击/攻击决策 AI。
-- 推荐顺序是先建立 `MainMenu → Base → Raid → RaidResult → Base` 的可测试流程，再做鼠标战斗入口、敌人攻击动作、AI 决策和整体手感收口，避免继续把状态直接堆入 `App`。
-- Week25 只闭合主菜单、基地和单一当前地图副本的流程壳，不提前实现最终 UI 美术、多地图内容、完整配装、保存系统或通用 SceneManager。
+- SDL 无关的 `GameFlow` 唯一拥有 `GameSession`，显式建模 MainMenu、Base、Raid 与 RaidResult；只有 Raid 转发 GameplayInput 与 deltaTime。
+- 主菜单和基地使用代码绘制占位界面；Base 只读显示 Stash 与部署信息。第一次部署激活已准备的 Raid 1，后续部署才创建下一局。
+- 完整结算进入 RaidResult，确认后返回 Base；Blocked 不得绕过结算。旧 `N` 重开已移除，Enter/数字键盘 Enter 与鼠标主按钮使用屏幕级单次确认。
+- 流程转换帧立即终止处理，避免同一输入泄漏到新屏幕、玩家射击或库存；MainMenu、Base 与 RaidResult 的世界更新均有自动冻结覆盖。
+- 真实窗口 1–10 已由用户确认全部通过；当前仍缺提交与精确 head CI，不能把 Week25 标记为完成或已进入 main。
 
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
 - 多个测试 target 重复编译业务源码；CMake 已修正中文 MSVC `/showIncludes` 前缀导致 Ninja `#deps 0` 的已知路径，但共享核心 library 仍是延期任务。
-- 缺少 App 级自动化 UI/截图测试；本轮真实窗口 1–8 已通过，但未来输入和视觉变化仍不能只依赖自动测试。
+- 缺少 App 级自动化 UI/截图测试；Week25 真实窗口 1–10 已通过，但未来输入和视觉变化仍不能只依赖领域自动测试。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
 - 搜索计时、多柜体选择、外部数据 Loot、复杂敌人攻击、受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。

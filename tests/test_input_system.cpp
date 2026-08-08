@@ -29,7 +29,7 @@ namespace
             GameAction::Interact,
             GameAction::ToggleInventory,
             GameAction::InventoryCancel,
-            GameAction::StartNextRaid,
+            GameAction::ScreenConfirm,
         };
 
         for (const GameAction action : kActions)
@@ -373,7 +373,7 @@ TEST(
 
 TEST(
     InputSystemTest,
-    ArrowKeysAndEnterAreUnmapped)
+    ArrowKeysAndNKeyAreUnmapped)
 {
     InputSystem input;
 
@@ -382,8 +382,7 @@ TEST(
         SDL_SCANCODE_DOWN,
         SDL_SCANCODE_LEFT,
         SDL_SCANCODE_RIGHT,
-        SDL_SCANCODE_RETURN,
-        SDL_SCANCODE_KP_ENTER,
+        SDL_SCANCODE_N,
     };
 
     for (const SDL_Scancode scancode : kRemovedInventoryKeys)
@@ -443,28 +442,45 @@ TEST(
 
 TEST(
     InputSystemTest,
-    NKeySetsStartNextRaidOnlyOnceWhileHeld)
+    ReturnKeySetsScreenConfirmOnlyOnceWhileHeld)
 {
     InputSystem input;
     const SDL_Event keyDown =
         makeKeyEvent(
             SDL_EVENT_KEY_DOWN,
-            SDL_SCANCODE_N);
+            SDL_SCANCODE_RETURN);
 
     input.handleEvent(keyDown);
 
     EXPECT_TRUE(input.isActionPressed(
-        GameAction::StartNextRaid));
+        GameAction::ScreenConfirm));
     EXPECT_TRUE(input.wasActionJustPressed(
-        GameAction::StartNextRaid));
+        GameAction::ScreenConfirm));
 
     input.endFrame();
     input.handleEvent(keyDown);
 
     EXPECT_TRUE(input.isActionPressed(
-        GameAction::StartNextRaid));
+        GameAction::ScreenConfirm));
     EXPECT_FALSE(input.wasActionJustPressed(
-        GameAction::StartNextRaid));
+        GameAction::ScreenConfirm));
+}
+
+TEST(
+    InputSystemTest,
+    KeypadEnterMapsToScreenConfirm)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_KP_ENTER));
+
+    EXPECT_TRUE(input.isActionPressed(
+        GameAction::ScreenConfirm));
+    EXPECT_TRUE(input.wasActionJustPressed(
+        GameAction::ScreenConfirm));
 }
 
 TEST(

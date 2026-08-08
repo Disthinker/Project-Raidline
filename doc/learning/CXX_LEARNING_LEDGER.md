@@ -21,6 +21,7 @@
 | Week 22 | 组合式 Stash 所有权、整容器预规划事务、占用位图模拟、批量 reserve 后无分配提交、完整堆叠身份保留、Blocked 可重试状态、显式批量销毁、Raid 终局到结算终局的幂等映射 |
 | Week 23 | `std::unique_ptr<GameplayWorld>` 单局所有权、候选对象先构造后 `swap` 的强失败语义、外部 Stash 注入、跨局稳定 ID 高水位、InRaid/SettlementBlocked/BetweenRaids 会话状态、just-pressed 重开边沿、只读局外视图 |
 | Week 24 | Player 组合拥有 Health、受控伤害命令统一生命与 Raid 终局、碰撞 cooldown 跨帧状态、致死帧早返回、成功/失败垂直切片集成测试、类布局依赖复验 |
+| Week 25 | SDL 无关顶层四态状态机、组合根再封装、非拥有引用成员与构造/析构顺序、删除复制/移动保护别名、屏幕输入边沿消费、状态路由与非活动子系统冻结 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -49,6 +50,9 @@
 - RaidSettlement 为何只保存单局 sticky 结果，而长期 Stash 必须由更外层 GameSession 拥有并显式注入。
 - 为什么 Player 应唯一拥有 Health，而 GameplayWorld 只编排伤害与 RaidSession 转换，避免 HP 与终局双事实源。
 - 为什么敌人接触要限制“一次 update 最多一击”并使用时间冷却，以及致死检查为何必须位于射击/命中之前。
+- 为什么顶层流程必须唯一拥有 GameSession，并由状态路由决定是否调用 update，而不能只在渲染层“隐藏”仍运行的世界。
+- 引用成员为什么不会延长对象生命周期，以及成员声明顺序、初始化顺序和删除 App 复制/移动如何共同保护 `gameSession_` 非拥有别名。
+- 为什么屏幕转换帧需要消费 Enter/点击并立即返回，避免一个输入边沿跨越 MainMenu、Base 与新 Raid。
 
 ## Week 17–18 已落地、仍应复习的主题
 

@@ -22,8 +22,8 @@ enum class GameAction
     // 背包 UI 输入。
     InventoryCancel,
 
-    // 完成结算后的局外出战入口。
-    StartNextRaid
+    // 主菜单、基地和 Raid 结果页的主操作确认。
+    ScreenConfirm
 };
 
 class InputSystem

@@ -24,7 +24,7 @@
 
 ## 当前开发：Week25 顶层游戏流程壳
 
-Week24 已通过 PR #44 合入 `main@1415238`。下一步先建立 `MainMenu → Base → Raid → RaidResult → Base` 的顶层流程壳，让基地成为跨局 Stash 与出战入口，让当前 GameplayWorld 成为明确的单一地图副本。Week25 不制作最终 UI 美术、不扩充地图内容，也不提前引入通用 SceneManager。活动计划见 `doc/exec-plans/active/week25-game-flow-shell.md`。
+Week24 已通过 PR #44 合入；Week25 本地候选已建立 `MainMenu → Base → Raid → RaidResult → Base` 的顶层流程壳，让基地成为跨局 Stash 与出战入口，让当前 GameplayWorld 成为明确的单一地图副本。Windows Debug 全目标构建、CTest 462/462 和真实窗口 1–10 已通过，精确 head CI 尚待执行，因此 Week25 仍为 In Progress。Week25 不制作最终 UI 美术、不扩充地图内容，也不提前引入通用 SceneManager。活动计划见 `doc/exec-plans/active/week25-game-flow-shell.md`。
 
 ## Week25–Week30 推荐顺序
 
