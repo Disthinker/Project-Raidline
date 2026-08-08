@@ -6,6 +6,10 @@
 
 - Health 的最大值大于 0，当前值始终在 `[0, max]`；非正伤害不生效。
 - `takeDamage` 只在 alive→dead 的那次调用报告死亡；已经死亡的对象不重复结算。
+- Player 唯一拥有默认 3 HP 的 Health；GameplayWorld、GameSession 与 App 不保存第二份玩家生命。
+- 只有活动 Raid 接受玩家伤害；任何 GameplayWorld 级死亡入口都必须同时得到 Player HP 0 与 sticky `PlayerDead`，终局后伤害无副作用。
+- 存活敌人与玩家逻辑 AABB 正面积重叠时造成 1 点接触伤害；第一次立即生效，之后 0.75 秒内不重复，每次 world update 最多一击且不按敌人数叠加。
+- 接触伤害冷却只由正 deltaTime 缩短；致死接触发生在玩家射击、投射物推进、命中和计分之前，并立即停止本帧这些后续 mutation。
 - AABB 必须有正面积重叠；仅边缘接触不算命中。
 - 一发 Projectile 一次最多命中一个 Enemy；死亡 Enemy 不再被命中或重复计分。
 - 遍历期间收集结果，完成遍历后再删除容器元素，避免迭代器/引用失效。

@@ -102,3 +102,23 @@ std::size_t Player::currentAnimationFrameIndex() const
 {
     return movementAnimator_.currentFrameIndex();
 }
+
+bool Player::takeDamage(int damage)
+{
+    return health_.takeDamage(damage);
+}
+
+int Player::health() const noexcept
+{
+    return health_.current();
+}
+
+int Player::maxHealth() const noexcept
+{
+    return health_.maximum();
+}
+
+bool Player::isDead() const noexcept
+{
+    return health_.isDead();
+}

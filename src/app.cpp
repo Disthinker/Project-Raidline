@@ -1258,11 +1258,26 @@ void App::renderDebugText()
         36.0f,
         scoreText.c_str());
 
-    std::string healthText;
+    const Player &player =
+        gameSession_.world().player();
+
+    const std::string playerHealthText =
+        fmt::format(
+            "Player HP: {}/{}",
+            player.health(),
+            player.maxHealth());
+
+    SDL_RenderDebugText(
+        renderer_,
+        20.0f,
+        52.0f,
+        playerHealthText.c_str());
+
+    std::string enemyHealthText;
 
     if (gameSession_.world().enemies().empty())
     {
-        healthText =
+        enemyHealthText =
             "Enemy HP: defeated";
     }
     else
@@ -1270,7 +1285,7 @@ void App::renderDebugText()
         const Enemy &enemy =
             gameSession_.world().enemies().front();
 
-        healthText =
+        enemyHealthText =
             fmt::format(
                 "Enemy HP: {}/{}",
                 enemy.health(),
@@ -1280,8 +1295,8 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        52.0f,
-        healthText.c_str());
+        68.0f,
+        enemyHealthText.c_str());
 
     const std::string groundItemText =
         fmt::format(
@@ -1291,7 +1306,7 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        68.0f,
+        84.0f,
         groundItemText.c_str());
 
     const std::string inventoryItemText =
@@ -1304,13 +1319,13 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        84.0f,
+        100.0f,
         inventoryItemText.c_str());
 
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        100.0f,
+        116.0f,
         "Interact: F");
     const char *inventoryStateText =
         inventoryOverlayState_.showsExternalContainer()
@@ -1322,7 +1337,7 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0f,
-        116.0f,
+        132.0f,
         inventoryStateText);
 
     const RaidSession &raidSession =
@@ -1337,7 +1352,7 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0F,
-        132.0F,
+        148.0F,
         raidStateText.c_str());
 
     const std::string raidTimeText =
@@ -1348,7 +1363,7 @@ void App::renderDebugText()
     SDL_RenderDebugText(
         renderer_,
         20.0F,
-        148.0F,
+        164.0F,
         raidTimeText.c_str());
 
     const std::string stashText =
@@ -1402,7 +1417,7 @@ void App::renderDebugText()
         SDL_RenderDebugText(
             renderer_,
             20.0F,
-            164.0F,
+            180.0F,
             extractionText.c_str());
     }
 

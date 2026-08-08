@@ -70,6 +70,15 @@ TEST(GameplayWorldTest, InitialPlayerPosition)
     EXPECT_FLOAT_EQ(position.y, 360.0f);
 }
 
+TEST(GameplayWorldTest, InitialPlayerHealthIsFull)
+{
+    const GameplayWorld world;
+
+    EXPECT_EQ(world.player().health(), 3);
+    EXPECT_EQ(world.player().maxHealth(), 3);
+    EXPECT_FALSE(world.player().isDead());
+}
+
 // 初始 Projectile 集合为空
 TEST(GameplayWorldTest, InitialProjectilesEmpty)
 {
@@ -1801,6 +1810,8 @@ TEST(GameplayWorldRaidTest, PlayerDeathCommandIsStickyAndFreezesWorld)
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::PlayerDead);
+    EXPECT_EQ(world.player().health(), 0);
+    EXPECT_TRUE(world.player().isDead());
 
     GameplayInput moveRight{};
     moveRight.moveRight = true;
@@ -1812,6 +1823,64 @@ TEST(GameplayWorldRaidTest, PlayerDeathCommandIsStickyAndFreezesWorld)
     EXPECT_FLOAT_EQ(
         world.player().position().y,
         alivePosition.y);
+}
+
+TEST(GameplayWorldRaidTest, PlayerDamageConnectsHealthToStickyRaidDeath)
+{
+    GameplayWorld world;
+
+    EXPECT_FALSE(world.damagePlayer(1));
+    EXPECT_EQ(world.player().health(), 2);
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::InRaid);
+
+    EXPECT_TRUE(world.damagePlayer(2));
+    EXPECT_EQ(world.player().health(), 0);
+    EXPECT_TRUE(world.player().isDead());
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::PlayerDead);
+
+    EXPECT_FALSE(world.damagePlayer(1));
+    EXPECT_EQ(world.player().health(), 0);
+}
+
+TEST(GameplayWorldRaidTest, EnemyContactUsesCooldownAndLethalFrameDoesNotFire)
+{
+    GameplayWorld world;
+
+    GameplayInput moveUp{};
+    moveUp.moveUp = true;
+    world.update(moveUp, 1.0F);
+    ASSERT_EQ(world.player().health(), 3);
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    world.update(moveRight, 1.0F);
+    ASSERT_EQ(world.player().health(), 2);
+
+    // deltaTime 为 0 时双方仍重叠，但伤害冷却不会缩短，
+    // 因而不能按渲染帧连续扣血。
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.player().health(), 2);
+
+    world.update(moveRight, 0.75F);
+    ASSERT_EQ(world.player().health(), 1);
+
+    world.update(moveRight, 0.5F);
+    ASSERT_EQ(world.player().health(), 1);
+
+    GameplayInput lethalContact{};
+    lethalContact.firePressed = true;
+    lethalContact.fireJustPressed = true;
+    world.update(lethalContact, 0.5F);
+
+    EXPECT_EQ(world.player().health(), 0);
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::PlayerDead);
+    EXPECT_TRUE(world.projectiles().empty());
 }
 
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)

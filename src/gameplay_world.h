@@ -109,6 +109,11 @@ public:
     [[nodiscard]]
     bool markPlayerDead() noexcept;
 
+    // 只有活动 Raid 接受伤害。致死时在同一命令内把 RaidSession
+    // 转为 PlayerDead，避免出现 HP 为 0 但 Raid 仍活动的状态。
+    [[nodiscard]]
+    bool damagePlayer(int damage);
+
     [[nodiscard]]
     bool canInteractWithContainer() const noexcept;
 
@@ -187,6 +192,7 @@ private:
 
     float fireCooldown_{0.25f};
     float cooldownRemaining_{0.0f};
+    float playerContactDamageCooldownRemaining_{0.0f};
 
     ParticleSystem particleSystem_;
     int score_{0};
@@ -203,6 +209,9 @@ private:
     [[nodiscard]]
     bool itemInstanceIdExists(
         ItemInstanceId instanceId) const noexcept;
+
+    [[nodiscard]]
+    bool resolveEnemyContactDamage();
 
     void tryPickupOne();
 };

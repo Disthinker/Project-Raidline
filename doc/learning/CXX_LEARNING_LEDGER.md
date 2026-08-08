@@ -20,6 +20,7 @@
 | Week 21 | 六态有限状态机、sticky 终局、连续占用取消语义、同一 deltaTime 内竞争终止事件、有限浮点配置/派生边界验证、半开矩形点包含、领域状态与 SDL 只读渲染分离、终局帧 mutation 截断 |
 | Week 22 | 组合式 Stash 所有权、整容器预规划事务、占用位图模拟、批量 reserve 后无分配提交、完整堆叠身份保留、Blocked 可重试状态、显式批量销毁、Raid 终局到结算终局的幂等映射 |
 | Week 23 | `std::unique_ptr<GameplayWorld>` 单局所有权、候选对象先构造后 `swap` 的强失败语义、外部 Stash 注入、跨局稳定 ID 高水位、InRaid/SettlementBlocked/BetweenRaids 会话状态、just-pressed 重开边沿、只读局外视图 |
+| Week 24 | Player 组合拥有 Health、受控伤害命令统一生命与 Raid 终局、碰撞 cooldown 跨帧状态、致死帧早返回、成功/失败垂直切片集成测试、类布局依赖复验 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -46,6 +47,8 @@
 - 为什么跨局 ID 必须传递“下一未使用值”而不是扫描存活对象最大值，以及已销毁 ID 仍不能复用。
 - 为什么重开要先构造完整 `std::unique_ptr<GameplayWorld>` 候选再 `swap`，而不能先销毁旧终局后尝试构造。
 - RaidSettlement 为何只保存单局 sticky 结果，而长期 Stash 必须由更外层 GameSession 拥有并显式注入。
+- 为什么 Player 应唯一拥有 Health，而 GameplayWorld 只编排伤害与 RaidSession 转换，避免 HP 与终局双事实源。
+- 为什么敌人接触要限制“一次 update 最多一击”并使用时间冷却，以及致死检查为何必须位于射击/命中之前。
 
 ## Week 17–18 已落地、仍应复习的主题
 

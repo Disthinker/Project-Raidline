@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week23 可重复 Raid 会话已通过 [PR #42](https://github.com/Disthinker/Project-Raidline/pull/42) 合入 `main@d0ec7d8`；本地自动测试、真实窗口验收 1–9 与精确 head Windows/Ubuntu CI 均已通过。
+最后核对：2026-08-08，`main@d5956bc` 已完成 Week23 收口；Week24 垂直切片正在 `codex/week24-vertical-slice` 收口，玩家生命、敌人接触死亡和成功/失败跨系统回归已通过本地自动测试与真实窗口验收，精确 head CI 尚未完成。
 
 ## Git、验证与 CI 基线
 
@@ -17,6 +17,9 @@
 - Week23 `compile_commands.json` 已确认 `game_session.cpp` 同时进入 `Project_Raidline` 与 `GameSessionTest`，`test_game_session.cpp` 进入专用测试目标；未复现 `gtest_ar_` 栈损坏。
 - Week23 真实窗口 1–9 已由用户确认全部通过；feature commit `b8b76cd` 的 [GitHub Actions run 31237026576](https://github.com/Disthinker/Project-Raidline/actions/runs/31237026576) 全部通过：范围检测 5 秒、Ubuntu 1 分 25 秒、Windows 3 分 39 秒。
 - PR #42 已按精确 feature head `b8b76cd` 合入，merge commit 为 `d0ec7d8`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
+- Week24 Windows Debug configure、受影响目标、主程序与全目标构建成功；聚焦 CTest 两轮均为 103/103，全量 CTest 453/453 通过。
+- Week24 新增关键测试程序直接运行 3/3、4/4、8/8；`ctest -N` 注册 453 项，compile database 与 Ninja `#deps 197/168` 证明 Player 类布局变化进入主程序和关键测试目标，未出现运行库错误。
+- Week24 真实窗口 1–8 已由用户确认全部通过；Windows/Ubuntu CI 当前未验证，分支尚未合入 `main`。
 
 ## 已进入 main：Week 1–23
 
@@ -80,7 +83,6 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - 玩家逻辑中心进入撤离区后连续计时，离开立即回到 InRaid 并清零；重新进入从 0 开始。
 - 大 deltaTime 比较撤离与超时谁先发生；完全同时由超时获胜，确保一局只有一个 sticky 终局结果。
 - 撤离、死亡或超时后 GameplayWorld 停止移动、射击、拾取、敌人和命中 mutation；App 关闭库存 overlay 并显示终局反馈。
-- PlayerDead 已有显式领域命令和测试，但项目尚无玩家受伤/Health 接线；真实战斗死亡留到垂直切片阶段。
 
 ## Week22 已合入能力
 
@@ -99,13 +101,20 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - GameplayWorld 可从指定第一个 ID 创建，并公开下一未使用 ID；GameSession 在销毁旧世界前读取高水位，后续 Raid 不复用已撤离、已丢失或已销毁实例的稳定 ID。
 - `startNextRaid()` 先完整构造候选世界再交换；活动局、Pending、Blocked、Raid 编号溢出或候选构造失败均不修改旧终局、Stash 或编号。
 
+## Week24 本地已实现并通过人工验收、待 CI
+
+- Player 唯一拥有默认 3 HP 的 `Health`；App 左上角显示当前/最大生命，新 Raid 创建全新 Player 并恢复 3/3。
+- 活动 Raid 中与存活敌人的正面积碰撞造成 1 点接触伤害；首次立即生效，之后使用 0.75 秒冷却，每次 world update 最多结算一次。
+- 致死伤害在同一命令中把生命归零并形成 sticky `PlayerDead`；致死帧在玩家射击、投射物推进、命中和计分前返回，随后由既有结算清空携带物并显示 `LOST`。
+- GameSession 自动回归已串联“搜索→转移→撤离→Stash→重开”成功路径，以及“携带物→死亡→损失→重开”失败路径。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
 - 多个测试 target 重复编译业务源码；CMake 已修正中文 MSVC `/showIncludes` 前缀导致 Ninja `#deps 0` 的已知路径，但共享核心 library 仍是延期任务。
-- 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
+- 缺少 App 级自动化 UI/截图测试；本轮真实窗口 1–8 已通过，但未来输入和视觉变化仍不能只依赖自动测试。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
+- 搜索计时、多柜体选择、外部数据 Loot、复杂敌人攻击、受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week23 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week23-repeatable-game-session.md)；Week22 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week22-raid-settlement-stash.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week24 当前合同与本地证据见 [活动 ExecPlan](../exec-plans/active/week24-vertical-slice-v0.md)；Week23 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week23-repeatable-game-session.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
