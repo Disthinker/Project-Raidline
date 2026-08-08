@@ -1,6 +1,6 @@
 # Week23 可重复 Raid 会话与 Stash 边界 ExecPlan
 
-- 状态：In Progress
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-inventory-domain` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-08
 
@@ -102,7 +102,7 @@ N key while BetweenRaids
 8. 终局 Stash 网格的边框、物品贴图、数量徽标和提示文字没有越界或明显遮挡。
 9. 运行期间不出现 Microsoft Visual C++ Runtime Library / `gtest_ar_` 错误。
 
-以上条目在实际执行前均为“未验证”。
+用户已在真实窗口逐项执行并确认 1–9 全部通过。
 
 ## 风险、替代方案与失败语义
 
@@ -118,6 +118,8 @@ N key while BetweenRaids
 - 2026-08-08：完成 `GameSession`、外部 Stash 结算、GameplayWorld ID 起点/高水位、App `N` 重开与只读 Stash 网格；主程序和专用测试 target 已接入 CMake。
 - 2026-08-08：Windows Debug configure 与全目标增量 build 通过；初始聚焦 CTest 86/86，ID 耗尽边界修复后复验 54/54，最终全量 CTest 446/446、`GameSessionTest.exe` 直接运行 7/7，`ctest -N` 注册 446 项，compile database 同时包含主程序和测试的 `game_session.cpp`。未执行 Phase1 pytest（本轮无艺术资源变化）。
 - 2026-08-08：用户完成真实窗口人工验收并确认清单 1–9 全部通过；Stash 展示、跨 Raid 重开/重置、稳定 ID 行为、长按 `N` 边沿语义和运行库稳定性均满足本轮验收。
+- 2026-08-08：创建 feature commit `b8b76cd` 与 PR #42；精确 head 的 GitHub Actions run 31237026576 全部通过（范围检测 5 秒、Ubuntu 1 分 25 秒、Windows 3 分 39 秒），未为记录动态 CI 结果触发第二轮矩阵。
+- 2026-08-08：PR #42 以 merge commit `d0ec7d8` 合入 `main`；活动计划移入 `doc/exec-plans/completed/`，Week23 完成收口。
 
 ## 发现记录
 
@@ -134,4 +136,4 @@ N key while BetweenRaids
 
 ## 最终结果、验证与偏差
 
-代码、本地自动测试与真实窗口人工验收 1–9 已完成。Windows/Ubuntu 精确 head CI、提交/PR 和最终文档归档仍未完成，因此计划保持 In Progress。
+Week23 计划结果全部完成：代码、本地自动测试、真实窗口人工验收 1–9 与精确 head Windows/Ubuntu CI 均通过；feature commit `b8b76cd` 已通过 PR #42 合入 `main@d0ec7d8`。Phase1 pytest 未执行，因为本轮没有艺术资源变化。计划已归档，未夹带 Stash 配装、跨进程持久化或 GitHub #38/#39。
