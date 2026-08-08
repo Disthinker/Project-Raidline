@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：撤离保留、死亡/超时丢失、内存 Stash 与终局结算反馈。
-- 日期/分支/commit：2026-08-07，`codex/week22-raid-settlement-stash`；当前工作区尚未提交，没有 commit SHA。
-- 完成度：本地代码、自动测试、安全审查、静态文档和真实窗口 1–8 完成；commit-specific Windows/Ubuntu CI、提交与 PR 尚未完成，ExecPlan 仍为 active。
+- 日期/分支/commit：2026-08-07 至 2026-08-08，`codex/week22-raid-settlement-stash`；功能 `75ea3a3`、文档 `d9c8d14`、PR #40 feature merge `5e62c85`。
+- 完成度：代码、自动测试、安全审查、静态文档、真实窗口 1–8、commit-specific Windows/Ubuntu CI 与合入全部完成。
 
 ## 2. 用户可见结果
 
@@ -89,7 +89,7 @@ App 当前独占 RaidSettlement，RaidSettlement 独占 Stash，Stash 独占其 
 - 全量 CTest：434/434；discovery 为 434。
 - 接线：compile database 包含主程序的 stash/raid_settlement 源和 RaidSettlementTest 的三份对应测试/业务源。
 - 其他测试：未修改美术资源，Phase 1 pytest 不适用。
-- CI：未执行；当前没有提交 SHA 或 PR。
+- CI：[GitHub Actions run 31196148364](https://github.com/Disthinker/Project-Raidline/actions/runs/31196148364) 在精确 head `d9c8d14` 上通过：范围检测 7 秒、Ubuntu 1 分 13 秒、Windows 3 分 40 秒。
 - 人工验收：用户于 2026-08-08 确认真实窗口 1–8 全部通过；撤离存入数量、背包清空、未拾取物排除、终局冻结和关闭无运行库错误均符合预期。
 
 ## 12. 教学分级
@@ -123,7 +123,7 @@ App 当前独占 RaidSettlement，RaidSettlement 独占 Stash，Stash 独占其 
 - 技术债：App 是临时结算组合根；没有 GameSession、跨 Raid ID 分配、Stash UI 或持久化；CMake 仍重复编译业务源码。
 - 新登记 UX：GitHub #38 跟踪拖拽位置原子交换，#39 跟踪 Ctrl/Shift 数量点击锁定；二者不属于 Week22。
 - 测试债：没有 App 原生 SDL/截图自动化；Blocked UI、死亡 UI、超时 UI 只由领域测试证明；Ubuntu 只能由 PR CI 验证。
-- 下一安全任务：先完成真实窗口和 CI 收口 Week22，再建立 Week23 GameSession/第二局/跨 Raid ID 与最小 Stash 查看边界的独立 ExecPlan。
+- 下一安全任务：为 Week23 GameSession、第二局、跨 Raid ID 与最小 Stash 查看/出战边界建立独立 ExecPlan；库存 #38/#39 保持独立稳定化候选。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 

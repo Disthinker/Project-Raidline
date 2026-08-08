@@ -16,12 +16,13 @@
 | Week 19 | 整栈快捷转移、拖拽旋转、9mm 堆叠、数量拖拽与正式弹药资源；PR #34 |
 | Week 20 | 一次性柜体搜索、加权 Loot、可注入随机源、临时 Inventory 原子提交；PR #35 |
 | Week 21 | 六态 RaidSession、固定撤离点、连续撤离、终止竞态与终局冻结；PR #36 |
+| Week 22 | 撤离存入内存 Stash、死亡/超时损失、Blocked 原子失败、结算统计与反馈；PR #40 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week22 本地待验收
+## 当前开发：Week23 待规划
 
-“结算与最小 Stash”已完成本地实现和 Windows Debug 自动验证：撤离保留完整携带堆叠，死亡/超时丢失携带物，容量或 ID 冲突保持双方不变。真实窗口验收、提交、Windows/Ubuntu CI 与合入仍未完成，因此 Week22 尚未进入上方的 `main` 里程碑表。
+Week22 已通过 PR #40、Windows/Ubuntu CI 和真实窗口 1–8 合入 `main`。下一阶段候选是“可重复 Raid 会话与 Stash 边界”；实施前需要冻结 GameSession 所有权、跨 Raid 稳定 ID、结算后重开和最小 Stash 查看/出战规则，并建立独立 ExecPlan。
 
 ## 推荐后续候选
 

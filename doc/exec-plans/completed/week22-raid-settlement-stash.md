@@ -1,8 +1,8 @@
 # Week22 Raid 结算与最小 Stash ExecPlan
 
-- 状态：Awaiting Commit-Specific CI
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-inventory-domain` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
-- 最后更新：2026-08-07
+- 最后更新：2026-08-08
 
 ## 目标与玩家可感知结果
 
@@ -143,6 +143,7 @@ PlayerDead、RaidEnded 与 Stash 满使用自动测试验证；当前没有玩�
 - 2026-08-07：Windows Debug 受影响目标、主程序和全目标构建成功；聚焦 CTest 100/100、RaidSettlementTest 直接运行 12/12、全量 CTest 434/434、discovery 434 项全部通过。
 - 2026-08-07：完成所有权/事务安全审查与静态文档同步；转入真实窗口 1–8 验收，尚未提交或触发 CI。
 - 2026-08-08：用户确认真实窗口 1–8 全部通过；另提出库存位置原子交换与 Ctrl/Shift 数量点击锁定两项后续需求，已登记为 GitHub #38/#39，不扩入 Week22。
+- 2026-08-08：提交 `75ea3a3` / `d9c8d14` 并通过 PR #40 发布；commit-specific run 31196148364 的范围检测、Ubuntu、Windows 全部通过，随后以 merge commit `5e62c85` 合入 `main`。
 
 ## 发现记录
 
@@ -164,4 +165,5 @@ PlayerDead、RaidEnded 与 Stash 满使用自动测试验证；当前没有玩�
 - 安全审查：ItemInstance 仅 move 不复制；整批计划在第一件 source mutation 前完成 ID/footprint/容量验证和目标 reserve；死亡/超时显式销毁所有权；无跨 mutation 引用或迭代器保存。
 - 艺术测试：本轮未修改资源，`tests/test_phase1_assets.py` 不适用。
 - 人工验收：用户于 2026-08-08 确认真实窗口 1–8 全部通过，包括初始状态、撤离存入统计、玩家背包清空、世界物品排除、终局冻结和无 MSVC 运行库错误。
-- 尚未完成：commit、push、PR、Windows/Ubuntu commit-specific CI。因此计划保持 active，Week22 尚未关闭或合入。
+- 发布与合入：PR #40 在精确 head `d9c8d14` 上通过 commit-specific [run 31196148364](https://github.com/Disthinker/Project-Raidline/actions/runs/31196148364)，范围检测 7 秒、Ubuntu 1 分 13 秒、Windows 3 分 40 秒；feature merge commit 为 `5e62c85`。
+- 遗留边界：Stash UI、出战选择、第二局、跨 Raid ID 和持久化留给 Week23/后续；库存位置交换 #38 与数量点击锁定 #39 是独立 UX 候选，不回填 Week22。
