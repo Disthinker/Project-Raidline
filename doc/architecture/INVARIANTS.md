@@ -91,7 +91,18 @@
 - 整背包转移先复制目标占用、验证全部稳定 ID 并规划所有 row-major 目标，再一次性预留目标 placement 容量；容量、footprint 或 ID 冲突时不得移动第一件物品。
 - PlayerDead/RaidEnded 必须先记录玩家携带的栈数与单位数，再显式销毁玩家背包中的全部 ItemInstance；Stash、柜体和地面物品不受影响。
 - Blocked 必须保持玩家背包和 Stash 的 placement、cells、顺序、ID、数量与方向完全不变，并允许在外部条件改变后重试。
-- Week22 Stash 仅在 App 进程内存中存在；不能把它描述为已保存到磁盘，跨 Raid ID 分配、第二局创建与 Stash UI 属于后续会话层。
+- Stash 仅在 App 进程内存中存在；不能把它描述为已保存到磁盘。Week23 只增加跨 Raid ID、第二局创建和只读 Stash 网格，配装交互与持久化仍属于后续里程碑。
+
+## 跨 Raid GameSession
+
+- GameSession 始终拥有一个有效的当前 GameplayWorld、一个跨局 Stash 和一个仅属于当前 Raid 的 RaidSettlement；App 不保存这些状态的副本。
+- 只有结算进入 Extracted、PlayerDead 或 RaidEnded 完成态后才能开始下一局；活动 Raid、Pending 与 Blocked 均拒绝重开且无副作用。
+- 下一局必须先使用旧世界的“下一未使用 ID”完整构造候选 GameplayWorld，再交换所有权；构造失败时旧终局、Stash、结算、Raid 编号和 ID 高水位不变。
+- 跨 Raid ID 序列按分配历史单调前进，不能通过扫描当前存活实例最大值重建；已销毁或留在 Stash 的 ID 均不得复用。
+- 下一 ID 高水位达到 `std::numeric_limits<ItemInstanceId>::max()` 表示没有可安全递增的新 ID；任何需要创建拆分实例的丢弃、转移或指定格放置必须原子失败，不能分配后回绕到 0。
+- 新 Raid 创建新的玩家、敌人、地面物品、柜体搜索状态、RaidSession 和空玩家背包；Stash 中的 ItemInstance 不复制、不重建、不自动进入出战背包。
+- Stash 只在当前 App 进程内跨局保留；只读网格不构成配装 UI、磁盘保存或跨进程持久化承诺。
+- `N` 只使用 just-pressed 边沿触发重开；按住不重复创建 Raid，成功重开帧不再把同帧其他输入提交给新世界。
 
 ## 背包交互
 

@@ -22,17 +22,10 @@ namespace
 
 }
 
-RaidSettlement::RaidSettlement() = default;
-
-RaidSettlement::RaidSettlement(
-    InventoryGridSize stashSize)
-    : stash_(stashSize)
-{
-}
-
 RaidSettlementAttempt RaidSettlement::settle(
     RaidSessionState raidState,
-    GridInventory &playerInventory)
+    GridInventory &playerInventory,
+    Stash &stash)
 {
     if (isComplete())
     {
@@ -49,7 +42,7 @@ RaidSettlementAttempt RaidSettlement::settle(
     case RaidSessionState::Extracted:
         summary_ = summarize(playerInventory);
 
-        if (!stash_.tryStoreAll(playerInventory))
+        if (!stash.tryStoreAll(playerInventory))
         {
             state_ = RaidSettlementState::Blocked;
             return RaidSettlementAttempt::Blocked;
@@ -89,16 +82,6 @@ bool RaidSettlement::isComplete() const noexcept
 RaidSettlementSummary RaidSettlement::summary() const noexcept
 {
     return summary_;
-}
-
-Stash &RaidSettlement::stash() noexcept
-{
-    return stash_;
-}
-
-const Stash &RaidSettlement::stash() const noexcept
-{
-    return stash_;
 }
 
 const char *raidSettlementStateName(

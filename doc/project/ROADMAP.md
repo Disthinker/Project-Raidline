@@ -20,15 +20,15 @@
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week23 待规划
+## 当前开发：Week23 实施与验收中
 
-Week22 已通过 PR #40、Windows/Ubuntu CI 和真实窗口 1–8 合入 `main`。下一阶段候选是“可重复 Raid 会话与 Stash 边界”；实施前需要冻结 GameSession 所有权、跨 Raid 稳定 ID、结算后重开和最小 Stash 查看/出战规则，并建立独立 ExecPlan。
+Week23 已冻结为“可重复 Raid 会话与 Stash 边界”：GameSession 拥有长期 Stash 与当前单局对象，结算后显示只读仓库，按 `N` 以空背包开始下一局，并沿用跨 Raid 稳定 ID 高水位。Windows Debug 全目标构建、聚焦测试、全量 CTest 446/446 与真实窗口 1–9 已通过；Windows/Ubuntu CI、PR 与合入仍未完成。活动计划见 `doc/exec-plans/active/week23-repeatable-game-session.md`。
 
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
 | --- | --- | --- |
-| Week23 | 可重复 Raid 会话与 Stash 边界 | GameSession 所有权、跨 Raid 稳定 ID 分配、结算后重开、最小出战/仓库查看入口 |
+| Week23（进行中） | 可重复 Raid 会话与 Stash 边界 | GameSession 所有权、跨 Raid 稳定 ID 分配、结算后重开、只读仓库与空背包出战入口 |
 | Week24 | 垂直切片 V0 收口 | 进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开完整回归 |
 | 后续 V1 | 装备与内容扩展 | 装备栏、WeaponInstance/装填、重量/耐久、尸体搜索、AI、固定地图、数据驱动与持久化 |
 

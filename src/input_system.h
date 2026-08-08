@@ -20,7 +20,10 @@ enum class GameAction
     ToggleInventory,
 
     // 背包 UI 输入。
-    InventoryCancel
+    InventoryCancel,
+
+    // 完成结算后的局外出战入口。
+    StartNextRaid
 };
 
 class InputSystem

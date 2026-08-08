@@ -6,12 +6,11 @@
 
 #include <SDL3/SDL.h>
 
+#include "game_session.h"
 #include "gameplay_input.h"
-#include "gameplay_world.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
-#include "raid_settlement.h"
 #include "texture.h"
 
 class App
@@ -31,8 +30,7 @@ private:
     bool running_{false};
     InventoryOverlayState inventoryOverlayState_;
 
-    GameplayWorld world_;
-    RaidSettlement raidSettlement_;
+    GameSession gameSession_;
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -120,6 +118,7 @@ private:
         const InventoryGridLayout &layout);
 
     void renderInventoryOverlay();
+    void renderStashOverlay();
     void renderDebugText();
 
     void shutdown();
