@@ -17,6 +17,7 @@ public:
     Vec2 position() const;
     float size() const;
     Vec2 facingDirection() const;
+    [[nodiscard]] bool faceDirection(Vec2 direction) noexcept;
     bool isMoving() const;
     std::size_t currentAnimationFrameIndex() const;
 

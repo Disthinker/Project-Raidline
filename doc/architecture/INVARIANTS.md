@@ -14,6 +14,21 @@
 - 一发 Projectile 一次最多命中一个 Enemy；死亡 Enemy 不再被命中或重复计分。
 - 遍历期间收集结果，完成遍历后再删除容器元素，避免迭代器/引用失效。
 
+## 瞄准、射击与投射物
+
+- `GameplayInput` 只携带 SDL 无关的可选世界瞄准点与 fire held/edge 快照；SDL 坐标采集、屏幕/库存输入所有权和准星绘制留在 App/InputSystem 边界。
+- WASD 只决定移动；Player 移动完成后，有效非零有限 aim direction 才能覆盖 facing。中心、NaN 或 Inf 瞄准保留上次有效 facing。
+- `GameplayWorld` 唯一拥有 `WeaponFireState`；App 只能读取扩散与可视后坐力，不保存第二份 cooldown、扩散或后坐状态。新 GameplayWorld 自动得到干净状态。
+- 第一发精确；持续射击使用项目自有整数序列产生有界确定性角度偏移。cooldown、扩散和后坐始终有限并 clamp 在配置范围内；停止射击经过恢复延迟后回到零。
+- 非有限或负 deltaTime 不推进武器状态且不生成 shot；零 deltaTime 可观察一次有效输入边沿。每次 update 最多生成一发，不按大 deltaTime 补发历史子弹。
+- Projectile 只在 `WeaponFireState` 返回有效 `ShotSpec` 后创建；方向归一化，生成中心位于玩家逻辑碰撞体沿最终方向的外缘，逻辑 footprint 为方向无关的 8×8。
+- 左键被屏幕或库存层消费后，在对应物理释放前不得重新武装 pointer fire；该抑制不影响独立的 Space fire。失焦清除键盘和 pointer held/edge。
+- 世界层同时接受 `firePressed` 与 `fireJustPressed`，确保同帧 down+up 的极短有效点击不丢失；UI 消费路径必须在进入世界前清除 pointer edge。
+- App 只在活动 Raid、库存关闭且代码准星可用时隐藏系统鼠标；菜单、Base、库存、终局和 shutdown 必须恢复 SDL cursor，不能让进程级光标状态泄漏到 UI 或退出后。
+- 投射物拖尾只读 `Projectile::velocity()` 计算反方向视觉采样；弹头、辉光和拖尾尺寸不改变 Projectile 的 8×8 逻辑 AABB、伤害或命中规则。
+- 高速 Projectile 在一次世界更新内按有限距离子步进执行“推进→命中→出界删除”；每个子步命中结果先按值累计，不能跨 `vector` 删除保留 Projectile/Enemy 引用或迭代器。子步数量必须有上限，避免异常大 deltaTime 形成无界循环。
+- 命中火花只表现既有 `HitResolutionResult::hitPositions`；颜色、长度、数量和寿命调优不得产生第二次伤害、重复得分或改变碰撞位置。
+
 ## 资源与动画
 
 - Texture 唯一拥有 SDL_Texture：不可复制、可移动，并在 Renderer 销毁前释放。

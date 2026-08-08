@@ -10,13 +10,13 @@
 
 struct ParticleBurstConfig
 {
-    std::size_t particleCount{12};
-    float minSpeed{100.0f};
-    float maxSpeed{220.0f};
-    float minLifetime{0.18f};
-    float maxLifetime{0.38f};
-    float minSize{3.0f};
-    float maxSize{7.0f};
+    std::size_t particleCount{16};
+    float minSpeed{160.0f};
+    float maxSpeed{340.0f};
+    float minLifetime{0.10f};
+    float maxLifetime{0.24f};
+    float minSize{2.0f};
+    float maxSize{4.5f};
 };
 
 class ParticleSystem

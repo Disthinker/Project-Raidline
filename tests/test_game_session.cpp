@@ -317,6 +317,24 @@ TEST(GameSessionTest, RestartIsAcceptedOnlyOncePerCompletedRaid)
     EXPECT_EQ(session.raidNumber(), 2U);
 }
 
+TEST(GameSessionTest, NextRaidStartsWithFreshWeaponFireState)
+{
+    GameSession session;
+    GameplayInput fire{};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    session.update(fire, 0.0F);
+
+    ASSERT_GT(session.world().weaponSpreadDegrees(), 0.0F);
+    ASSERT_GT(session.world().weaponVisualRecoilPixels(), 0.0F);
+    ASSERT_TRUE(session.world().markPlayerDead());
+    session.update(GameplayInput{}, 0.0F);
+    ASSERT_TRUE(session.startNextRaid());
+
+    EXPECT_FLOAT_EQ(session.world().weaponSpreadDegrees(), 0.0F);
+    EXPECT_FLOAT_EQ(session.world().weaponVisualRecoilPixels(), 0.0F);
+}
+
 TEST(GameSessionTest, StateNamesAreStableForDebugOutput)
 {
     EXPECT_STREQ(

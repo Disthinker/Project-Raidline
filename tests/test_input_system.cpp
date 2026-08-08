@@ -16,6 +16,14 @@ namespace
         return event;
     }
 
+    SDL_Event makePrimaryPointerEvent(Uint32 eventType)
+    {
+        SDL_Event event{};
+        event.type = eventType;
+        event.button.button = SDL_BUTTON_LEFT;
+        return event;
+    }
+
     void expectNoActionPressed(
         const InputSystem &input)
     {
@@ -577,4 +585,97 @@ TEST(InputSystemTest, EitherShiftKeyTracksModifierSnapshot)
             SDL_EVENT_KEY_UP,
             SDL_SCANCODE_RSHIFT));
     EXPECT_FALSE(input.isShiftPressed());
+}
+
+TEST(InputSystemTest, PrimaryPointerDownCreatesHeldAndEdgeState)
+{
+    InputSystem input;
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+
+    EXPECT_TRUE(input.isPrimaryPointerPressed());
+    EXPECT_TRUE(input.wasPrimaryPointerJustPressed());
+
+    input.endFrame();
+    EXPECT_TRUE(input.isPrimaryPointerPressed());
+    EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
+}
+
+TEST(InputSystemTest, PrimaryPointerUpClearsHeldState)
+{
+    InputSystem input;
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_UP));
+
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
+}
+
+TEST(InputSystemTest, SuppressedUiClickCannotLeakBeforePhysicalRelease)
+{
+    InputSystem input;
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+    input.suppressPrimaryPointerUntilRelease();
+
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
+    EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
+
+    input.endFrame();
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
+
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_UP));
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+    EXPECT_TRUE(input.isPrimaryPointerPressed());
+    EXPECT_TRUE(input.wasPrimaryPointerJustPressed());
+}
+
+TEST(InputSystemTest, FocusLossClearsKeyboardAndPointerState)
+{
+    InputSystem input;
+    input.handleEvent(
+        makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_W));
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+
+    SDL_Event focusLost{};
+    focusLost.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    input.handleEvent(focusLost);
+
+    EXPECT_FALSE(input.isActionPressed(GameAction::MoveUp));
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
+    EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
+}
+
+TEST(InputSystemTest, RightPointerButtonDoesNotArmPrimaryFire)
+{
+    InputSystem input;
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.button.button = SDL_BUTTON_RIGHT;
+
+    input.handleEvent(event);
+
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
+    EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
+}
+
+TEST(InputSystemTest, PointerSuppressionDoesNotClearSpaceFire)
+{
+    InputSystem input;
+    input.handleEvent(
+        makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_SPACE));
+    input.handleEvent(
+        makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+
+    input.suppressPrimaryPointerUntilRelease();
+
+    EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
+    EXPECT_FALSE(input.isPrimaryPointerPressed());
 }

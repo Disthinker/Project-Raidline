@@ -93,6 +93,25 @@ Vec2 Player::facingDirection() const
     return facingDirection_;
 }
 
+bool Player::faceDirection(Vec2 direction) noexcept
+{
+    const float lengthSquared =
+        direction.x * direction.x +
+        direction.y * direction.y;
+
+    if (!std::isfinite(lengthSquared) ||
+        lengthSquared <= 0.0F)
+    {
+        return false;
+    }
+
+    const float length = std::sqrt(lengthSquared);
+    facingDirection_ = Vec2{
+        direction.x / length,
+        direction.y / length};
+    return true;
+}
+
 bool Player::isMoving() const
 {
     return isMoving_;

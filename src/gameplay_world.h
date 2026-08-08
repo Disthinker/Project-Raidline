@@ -16,6 +16,7 @@
 #include "projectile.h"
 #include "raid_session.h"
 #include "storage_cabinet.h"
+#include "weapon_fire.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
 // GameplayWorld 根据这些定义自行生成稳定 instanceId。
@@ -106,6 +107,9 @@ public:
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
 
+    [[nodiscard]] float weaponSpreadDegrees() const noexcept;
+    [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
+
     [[nodiscard]]
     bool markPlayerDead() noexcept;
 
@@ -190,8 +194,7 @@ private:
     ItemInstanceId nextItemInstanceId_{1};
     SeededLootRandomSource lootRandom_;
 
-    float fireCooldown_{0.25f};
-    float cooldownRemaining_{0.0f};
+    WeaponFireState weaponFire_;
     float playerContactDamageCooldownRemaining_{0.0f};
 
     ParticleSystem particleSystem_;

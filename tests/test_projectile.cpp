@@ -17,6 +17,8 @@ TEST(ProjectileTest, StoresInitialState)
 
     EXPECT_FLOAT_EQ(projectile.position().x, 100.0f);
     EXPECT_FLOAT_EQ(projectile.position().y, 100.0f);
+    EXPECT_FLOAT_EQ(projectile.velocity().x, 0.0f);
+    EXPECT_FLOAT_EQ(projectile.velocity().y, -100.0f);
     EXPECT_FLOAT_EQ(projectile.width(), 4.0f);
     EXPECT_FLOAT_EQ(projectile.height(), 12.0f);
 }
