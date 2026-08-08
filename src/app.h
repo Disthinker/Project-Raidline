@@ -6,7 +6,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "game_session.h"
+#include "game_flow.h"
 #include "gameplay_input.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
@@ -17,6 +17,11 @@ class App
 {
 public:
     App();
+
+    App(const App &) = delete;
+    App &operator=(const App &) = delete;
+    App(App &&) = delete;
+    App &operator=(App &&) = delete;
 
     int run();
 
@@ -30,7 +35,12 @@ private:
     bool running_{false};
     InventoryOverlayState inventoryOverlayState_;
 
-    GameSession gameSession_;
+    GameFlow gameFlow_;
+
+    // 非拥有别名；gameFlow_ 先构造、后销毁，且 App 禁止复制/移动。
+    GameSession &gameSession_;
+
+    bool pendingScreenConfirm_{false};
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -55,6 +65,17 @@ private:
     bool initialize();
 
     GameplayInput makeGameplayInput() const;
+
+    [[nodiscard]]
+    bool handleScreenConfirm() noexcept;
+
+    [[nodiscard]]
+    SDL_FRect screenPrimaryButton() const noexcept;
+
+    [[nodiscard]]
+    bool screenPrimaryButtonContains(
+        float x,
+        float y) const noexcept;
 
     void processEvents();
     void update(float deltaTime);
@@ -100,6 +121,11 @@ private:
     void closeInventory() noexcept;
 
     void render();
+    void renderMainMenu();
+    void renderBase();
+    void renderRaidScreen();
+    void renderScreenPrimaryButton(
+        const char *label);
     void renderBackground();
     void renderExtractionPoint();
     void renderStorageCabinet();

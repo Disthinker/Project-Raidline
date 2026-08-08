@@ -53,6 +53,14 @@ namespace
     constexpr float kStashPanelHeight{380.0F};
     constexpr float kStashGridX{440.0F};
     constexpr float kStashGridY{200.0F};
+    constexpr float kFlowPanelX{340.0F};
+    constexpr float kFlowPanelY{140.0F};
+    constexpr float kFlowPanelWidth{600.0F};
+    constexpr float kFlowPanelHeight{440.0F};
+    constexpr float kFlowButtonX{500.0F};
+    constexpr float kFlowButtonY{500.0F};
+    constexpr float kFlowButtonWidth{280.0F};
+    constexpr float kFlowButtonHeight{60.0F};
 
     double orientationAngle(
         ItemOrientation orientation) noexcept
@@ -293,7 +301,10 @@ namespace
     }
 }
 
-App::App() = default;
+App::App()
+    : gameSession_{gameFlow_.gameSession()}
+{
+}
 
 bool App::loadTextures()
 {
@@ -525,6 +536,56 @@ GameplayInput App::makeGameplayInput() const
             GameAction::Interact);
 
     return input;
+}
+
+bool App::handleScreenConfirm() noexcept
+{
+    bool transitioned{false};
+
+    switch (gameFlow_.state())
+    {
+    case GameFlowState::MainMenu:
+        transitioned = gameFlow_.startGame();
+        break;
+    case GameFlowState::Base:
+        transitioned = gameFlow_.deploy();
+        break;
+    case GameFlowState::Raid:
+        break;
+    case GameFlowState::RaidResult:
+        transitioned = gameFlow_.returnToBase();
+        break;
+    }
+
+    if (transitioned)
+    {
+        closeInventory();
+        pendingInventoryUiEvents_.clear();
+    }
+
+    return transitioned;
+}
+
+SDL_FRect App::screenPrimaryButton() const noexcept
+{
+    return SDL_FRect{
+        kFlowButtonX,
+        kFlowButtonY,
+        kFlowButtonWidth,
+        kFlowButtonHeight};
+}
+
+bool App::screenPrimaryButtonContains(
+    float x,
+    float y) const noexcept
+{
+    const SDL_FRect button =
+        screenPrimaryButton();
+
+    return x >= button.x &&
+           y >= button.y &&
+           x < button.x + button.w &&
+           y < button.y + button.h;
 }
 
 void App::closeInventory() noexcept
@@ -1028,6 +1089,7 @@ void App::handleInventoryPartialTransferEvent(
 void App::processEvents()
 {
     pendingInventoryUiEvents_.clear();
+    pendingScreenConfirm_ = false;
 
     SDL_Event event;
     while (SDL_PollEvent(&event))
@@ -1036,6 +1098,18 @@ void App::processEvents()
         if (event.type == SDL_EVENT_QUIT)
         {
             running_ = false;
+        }
+
+        else if (!gameFlow_.isRaidScreen())
+        {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event.button.button == SDL_BUTTON_LEFT &&
+                screenPrimaryButtonContains(
+                    event.button.x,
+                    event.button.y))
+            {
+                pendingScreenConfirm_ = true;
+            }
         }
 
         else if (inventoryOverlayState_.isOpen())
@@ -1057,13 +1131,24 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
-    if (input_.wasActionJustPressed(
-            GameAction::StartNextRaid) &&
-        gameSession_.startNextRaid())
+    const bool screenConfirm =
+        pendingScreenConfirm_ ||
+        input_.wasActionJustPressed(
+            GameAction::ScreenConfirm);
+    pendingScreenConfirm_ = false;
+
+    if (!gameFlow_.isRaidScreen())
     {
-        closeInventory();
-        inventoryInteraction_.reset();
         pendingInventoryUiEvents_.clear();
+
+        if (screenConfirm)
+        {
+            static_cast<void>(
+                handleScreenConfirm());
+        }
+
+        // 屏幕转换帧在此终止；Enter/鼠标点击不能继续落入新屏幕
+        // 或刚激活的 GameplayWorld。
         return;
     }
 
@@ -1161,11 +1246,12 @@ void App::update(float deltaTime)
         gameplayInput = GameplayInput{};
     }
 
-    gameSession_.update(
+    gameFlow_.update(
         gameplayInput,
         deltaTime);
 
-    if (gameSession_.world().raidSession().isTerminal() &&
+    if ((!gameFlow_.isRaidScreen() ||
+         gameSession_.world().raidSession().isTerminal()) &&
         inventoryOverlayState_.isOpen())
     {
         closeInventory();
@@ -1392,7 +1478,9 @@ void App::renderDebugText()
 
     const std::string gameSessionText =
         fmt::format(
-            "Session: {} | Raid {}",
+            "Flow: {} | Session: {} | Raid {}",
+            gameFlowStateName(
+                gameFlow_.state()),
             gameSessionStateName(
                 gameSession_.state()),
             gameSession_.raidNumber());
@@ -1470,11 +1558,10 @@ void App::renderDebugText()
             settlementText.c_str());
 
         const std::string nextRaidText =
-            gameSession_.canStartNextRaid()
-                ? fmt::format(
-                      "N: START RAID {} - EMPTY LOADOUT",
-                      gameSession_.raidNumber() + 1U)
-                : "Resolve Stash capacity before next raid";
+            gameFlow_.state() ==
+                    GameFlowState::RaidResult
+                ? "ENTER / CLICK: RETURN TO BASE"
+                : "Resolve Stash capacity before returning";
 
         SDL_RenderDebugText(
             renderer_,
@@ -2381,11 +2468,6 @@ void App::renderInventoryOverlay()
 
 void App::renderStashOverlay()
 {
-    if (!gameSession_.world().raidSession().isTerminal())
-    {
-        return;
-    }
-
     const GridInventory &stashInventory =
         gameSession_.stash().inventory();
     const float gridWidth =
@@ -2408,15 +2490,17 @@ void App::renderStashOverlay()
     const bool extracted =
         gameSession_.settlement().state() ==
         RaidSettlementState::Extracted;
+    const bool baseScreen =
+        gameFlow_.state() == GameFlowState::Base;
 
     SDL_SetRenderDrawBlendMode(
         renderer_,
         SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(
         renderer_,
-        extracted ? 14 : 36,
-        extracted ? 45 : 20,
-        extracted ? 31 : 22,
+        baseScreen ? 18 : extracted ? 14 : 36,
+        baseScreen ? 31 : extracted ? 45 : 20,
+        baseScreen ? 38 : extracted ? 31 : 22,
         238);
     SDL_RenderFillRect(renderer_, &panel);
 
@@ -2509,9 +2593,9 @@ void App::renderStashOverlay()
 
     SDL_SetRenderDrawColor(
         renderer_,
-        extracted ? 125 : 215,
-        extracted ? 235 : 110,
-        extracted ? 155 : 110,
+        baseScreen ? 105 : extracted ? 125 : 215,
+        baseScreen ? 170 : extracted ? 235 : 110,
+        baseScreen ? 205 : extracted ? 155 : 110,
         255);
     SDL_RenderRect(renderer_, &panel);
     SDL_RenderRect(renderer_, &grid);
@@ -2521,7 +2605,9 @@ void App::renderStashOverlay()
         renderer_,
         kStashPanelX + 18.0F,
         kStashPanelY + 16.0F,
-        "STASH - READ ONLY");
+        baseScreen
+            ? "BASE STASH - READ ONLY"
+            : "STASH - READ ONLY");
 
     const std::string countText =
         fmt::format(
@@ -2945,22 +3031,159 @@ void App::renderParticles()
     }
 }
 
-void App::render()
+void App::renderScreenPrimaryButton(
+    const char *label)
+{
+    const SDL_FRect button =
+        screenPrimaryButton();
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        42,
+        102,
+        82,
+        245);
+    SDL_RenderFillRect(renderer_, &button);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        132,
+        225,
+        176,
+        255);
+    SDL_RenderRect(renderer_, &button);
+
+    const float textWidth =
+        static_cast<float>(
+            std::char_traits<char>::length(label)) *
+        8.0F;
+    SDL_RenderDebugText(
+        renderer_,
+        button.x + (button.w - textWidth) / 2.0F,
+        button.y + 26.0F,
+        label);
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_NONE);
+}
+
+void App::renderMainMenu()
+{
+    const SDL_FRect panel{
+        kFlowPanelX,
+        kFlowPanelY,
+        kFlowPanelWidth,
+        kFlowPanelHeight};
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        14,
+        24,
+        29,
+        245);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        92,
+        154,
+        132,
+        255);
+    SDL_RenderRect(renderer_, &panel);
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        230,
+        236,
+        232,
+        255);
+    SDL_RenderDebugText(
+        renderer_,
+        564.0F,
+        244.0F,
+        "PROJECT RAIDLINE");
+    SDL_RenderDebugText(
+        renderer_,
+        524.0F,
+        282.0F,
+        "EXTRACTION PROTOTYPE");
+    SDL_RenderDebugText(
+        renderer_,
+        520.0F,
+        340.0F,
+        "ENTER THE BASE TO PREPARE");
+    SDL_RenderDebugText(
+        renderer_,
+        536.0F,
+        366.0F,
+        "YOUR NEXT RAID DEPLOYMENT");
+
+    renderScreenPrimaryButton(
+        "START GAME");
+}
+
+void App::renderBase()
 {
     SDL_SetRenderDrawColor(
         renderer_,
-        0,
-        0,
-        0,
+        220,
+        232,
+        228,
         255);
+    SDL_RenderDebugText(
+        renderer_,
+        574.0F,
+        54.0F,
+        "RAIDLINE BASE");
 
-    SDL_RenderClear(
-        renderer_);
+    renderStashOverlay();
 
+    std::string deploymentText{
+        "DEPLOYMENT UNAVAILABLE"};
+
+    if (gameSession_.state() ==
+        GameSessionState::InRaid)
+    {
+        deploymentText = fmt::format(
+            "NEXT DEPLOYMENT: RAID {} | EMPTY LOADOUT",
+            gameSession_.raidNumber());
+    }
+    else if (gameSession_.canStartNextRaid())
+    {
+        deploymentText = fmt::format(
+            "NEXT DEPLOYMENT: RAID {} | EMPTY LOADOUT",
+            gameSession_.raidNumber() + 1U);
+    }
+    SDL_RenderDebugText(
+        renderer_,
+        474.0F,
+        480.0F,
+        deploymentText.c_str());
+
+    renderScreenPrimaryButton(
+        "DEPLOY TO MAP");
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        150,
+        170,
+        176,
+        255);
+    SDL_RenderDebugText(
+        renderer_,
+        520.0F,
+        584.0F,
+        "CLICK BUTTON OR PRESS ENTER");
+}
+
+void App::renderRaidScreen()
+{
     renderBackground();
-
     renderExtractionPoint();
-
     renderStorageCabinet();
 
     // 地面物品位于角色与敌人下层。
@@ -2974,11 +3197,44 @@ void App::render()
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
 
-    // 终局后展示跨局保留的只读 Stash。
-    renderStashOverlay();
+    if (gameSession_.world().raidSession().isTerminal())
+    {
+        renderStashOverlay();
+    }
 
     // 调试信息保持在最上层。
     renderDebugText();
+}
+
+void App::render()
+{
+    SDL_SetRenderDrawColor(
+        renderer_,
+        0,
+        0,
+        0,
+        255);
+
+    SDL_RenderClear(
+        renderer_);
+
+    switch (gameFlow_.state())
+    {
+    case GameFlowState::MainMenu:
+        renderMainMenu();
+        break;
+    case GameFlowState::Base:
+        renderBase();
+        break;
+    case GameFlowState::Raid:
+        renderRaidScreen();
+        break;
+    case GameFlowState::RaidResult:
+        renderRaidScreen();
+        renderScreenPrimaryButton(
+            "RETURN TO BASE");
+        break;
+    }
 
     SDL_RenderPresent(
         renderer_);

@@ -1,6 +1,6 @@
 # Week25 主菜单、基地与单地图副本流程壳 ExecPlan
 
-- 状态：Ready
+- 状态：In Progress
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-08
 
@@ -18,11 +18,11 @@ MainMenu → Base → Raid → RaidResult → Base → 下一次 Raid
 
 ## 当前仓库状态与基线
 
-- 基线为 `main@1415238`；Week24 feature commit `d8c58e6` 已通过 PR #44 合入。
+- 功能代码基线为 `main@1415238`，当前分支从 Week24 收口后的干净 `main@43eb571` 创建；Week24 feature commit `d8c58e6` 已通过 PR #44 合入。
 - Windows Debug 全量 CTest 为 453/453；Week24 真实窗口 1–8 与精确 head Windows/Ubuntu CI 已通过。
-- `App` 当前直接拥有 `GameSession`，所有事件、更新和渲染默认假定随时存在可访问的 GameplayWorld。
+- 实施前的 `App` 直接拥有 `GameSession`，所有事件、更新和渲染默认假定随时存在可访问的 GameplayWorld。
 - `GameSession` 构造时立即创建 Raid 1，拥有进程内 Stash、当前 GameplayWorld、RaidSettlement、Raid 编号与稳定 ID 高水位；结算后进入 `BetweenRaids`，按 `N` 直接创建下一局。
-- 当前没有主菜单、基地、地图选择、屏幕级状态机或独立 UI 场景资源。
+- 实施前没有主菜单、基地、地图选择、屏幕级状态机或独立 UI 场景资源。
 
 ## 冻结范围
 
@@ -114,7 +114,7 @@ SDL event
 9. SettlementBlocked 时不能返回 Base 或部署下一局。
 10. 全流程无 Microsoft Visual C++ Runtime Library / `gtest_ar_` 错误。
 
-以上条目在用户实际执行前均为“未验证”。
+2026-08-08：用户确认真实窗口 1–10 全部通过，包括主菜单/基地单次转换、Raid 1 旧玩法、STORED、Raid 2 重置与 Stash 保留、LOST、长按/快速输入、旧 N 无效和无运行库错误。SettlementBlocked 的不可绕过边界由自动测试覆盖。
 
 ## 风险、替代方案与失败语义
 
@@ -127,12 +127,16 @@ SDL event
 ## 进度记录
 
 - 2026-08-08：Week24 通过 PR #44 合入；用户明确下一阶段仍需强化主菜单/基地/地图副本、鼠标射击、敌人三类攻击与敌人 AI。按依赖拆分 Week25–Week30，并将 Week25 冻结为顶层流程壳。
+- 2026-08-08：从干净 `main@43eb571` 创建 `codex/week25-game-flow`；完成 SDL 无关 GameFlow、专用测试、Enter 主操作与 App 四态输入/更新/占位渲染的首轮接线，进入编译验证。
+- 2026-08-08：完成 C++ 安全审查并补充 RaidResult、敌人/结算冻结与超时结果回归；聚焦 CTest 31/31、专用程序 3/3 与 8/8、Windows Debug 全目标构建及全量 CTest 462/462 通过。compile database 和 Ninja `#deps 198` 证明新源与头文件进入目标；等待真实窗口 1–10。
+- 2026-08-08：用户确认真实窗口 1–10 全部通过；本地与人工门禁完成，进入单一提交、PR 和一次精确 head CI 阶段。
 
 ## 发现记录
 
 - 当前 App 无条件读取 `gameSession_.world()`，说明屏幕路由必须先于渲染/输入接线，否则主菜单仍会隐式依赖 Raid 视图。
 - GameSession 已正确拥有跨局 Stash 和稳定 ID 高水位；Week25 无需为基地复制第二份库存或重新设计物品所有权。
 - `BetweenRaids` 当前同时承担结果展示和下一局入口；新流程需要把“结果确认”和“基地部署”拆成两个显式玩家动作。
+- Visual Studio Developer PowerShell 脚本在未传 `-SkipAutomaticLocation` 时会切换到默认 `source\repos`；自动命令必须在加载环境后显式切回仓库，或使用该参数。普通 PowerShell 中 `ctest` 也可能不在 PATH，需使用配置中的 CMake bin 或 Developer Shell。
 
 ## 决策日志
 
@@ -142,4 +146,13 @@ SDL event
 
 ## 最终结果、验证与偏差
 
-计划已达到 Ready，尚未开始业务代码改动、自动测试或人工验收。下一安全步骤是在独立 feature 分支实现 GameFlow 领域状态与专用测试，再接入 App。
+本地候选已实现：`GameFlow` 唯一拥有 `GameSession`，App 完成四态输入/update/render 路由，Enter/点击替代旧 `N` 重开，并保留既有 Raid 与库存路径。安全审查未发现阻断项；`App` 的 `GameSession&` 是受成员顺序和删除复制/移动保护的非拥有别名。
+
+- Configure：既有 Windows Debug preset 配置成功，无 CMake 变更后的重新配置错误。
+- 聚焦构建：`GameFlowTest InputSystemTest Project_Raidline` 成功。
+- 聚焦测试：`GameFlowTest|InputSystemTest` 31/31；专用程序直接运行分别 8/8 与筛选 3/3，无运行库错误。
+- 全量构建/CTest：全部 target 构建成功，462/462 通过；`ctest -N` 注册 462 项。
+- 接线证据：compile database 同时包含主程序和 `GameFlowTest` 的 `game_flow.cpp`，以及 `test_game_flow.cpp`；主程序 `app.cpp.obj` 为 `#deps 198` 并包含 `game_flow.h`。
+- 不适用：本轮无艺术资源变化，未运行 Phase1 pytest。
+- 人工验收：用户确认真实窗口 1–10 全部通过。
+- 待完成：提交/推送、单一 PR、精确 feature head Windows/Ubuntu CI。未执行项没有标记为通过。

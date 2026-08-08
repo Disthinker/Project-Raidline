@@ -9,6 +9,9 @@ SDL events / textures / renderer
  App + InputSystem adapters
             │ GameplayInput / method calls
             ▼
+          GameFlow
+            │ own and route
+            ▼
          GameSession
             │ own and coordinate
             ▼
@@ -29,14 +32,19 @@ value/domain types: Vec2 · Rect · Health · ItemDefinition · ItemInstance
 - 采集事件，通过 InputSystem 和帧级 `InventoryUiEvent` 队列适配到游戏/背包逻辑。
 - 计算渲染布局、source rect 和绘制顺序。
 - 编排纯鼠标双容器背包状态、显式丢弃区与 `GridInventory` 查询/提交。
-- 拥有进程内 `GameSession` 组合根；只读渲染玩家生命、撤离区、Raid 状态/计时/进度、Stash 统计、终局反馈和缩放后的只读 Stash 网格。
-- 在局外阶段把 `N` 的 just-pressed 输入适配为 `GameSession::startNextRaid()`；不保存第二份会话状态、Raid 编号或稳定 ID 序列。
+- 拥有进程内 `GameFlow` 组合根；通过非拥有 `GameSession&` 别名复用既有 Raid/背包适配代码，App 禁止复制和移动，别名不承担所有权。
+- 按 `GameFlowState` 路由主菜单、基地、Raid 与结果页的事件、更新和渲染；把 Enter 或主按钮点击适配为受控屏幕命令，不保存第二份流程、会话、Raid 编号或稳定 ID 状态。
+- 只读渲染玩家生命、撤离区、Raid 状态/计时/进度、Stash 统计、终局反馈和缩放后的只读 Stash 网格。
 
 App 不应成为物品放置、碰撞、伤害或 Raid 规则的事实来源。`src/app.cpp` 当前较大是已知债务，不代表每个功能都应顺手拆分它。
 
 ### InputSystem、GameplayInput 与鼠标布局适配
 
-InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-pressed，并保留左右 Ctrl/Shift 的原始按键状态；`N` 是完成结算后的下一局入口，方向键和 Enter 不再映射为背包动作。GameplayInput 是不依赖 SDL 的世界输入数据边界。App 使用每个容器自己的 `InventoryGridLayout` 把 SDL float 逻辑坐标转换为带 `InventoryContainerId` 的格子位置，并把 mouse、整栈快速转移、数量拿取和旋转事件规范化为 `InventoryUiEvent` 暂存到当前帧。`decideInventoryFrameInput` 先仲裁 Tab/Esc，再允许 App 按原始事件顺序处理 UI 队列；核心模型不接收 `SDL_Event`。
+InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-pressed，并保留左右 Ctrl/Shift 的原始按键状态；主 Enter 和数字键盘 Enter 映射为屏幕级 `ScreenConfirm`，`N` 与方向键不映射。Enter 在背包内仍没有库存语义。GameplayInput 是不依赖 SDL 的世界输入数据边界。App 使用每个容器自己的 `InventoryGridLayout` 把 SDL float 逻辑坐标转换为带 `InventoryContainerId` 的格子位置，并把 mouse、整栈快速转移、数量拿取和旋转事件规范化为 `InventoryUiEvent` 暂存到当前帧。`decideInventoryFrameInput` 先仲裁 Tab/Esc，再允许 App 按原始事件顺序处理 UI 队列；核心模型不接收 `SDL_Event`。
+
+### GameFlow
+
+SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 MainMenu 开始；Start 进入 Base，第一次 Deploy 激活已准备但冻结的 Raid 1，后续 Deploy 通过 `GameSession::startNextRaid()` 创建新世界。只有 Raid 状态把 GameplayInput 与 deltaTime 转发给 GameSession；完整结算进入 RaidResult，再由显式确认返回 Base。Blocked 保持在 Raid，不能绕过结算。所有非法转换返回 false 且不修改状态。
 
 ### GameplayWorld
 
@@ -65,7 +73,9 @@ InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-press
 ## 所有权图
 
 ```text
-App ─owns─> SDL/Texture resources + GameSession
+App ─owns─> SDL/Texture resources + GameFlow
+App ─aliases(non-owning)─> GameSession owned by GameFlow
+GameFlow ─owns─> GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
 GameplayWorld ─owns─> single-Raid entities + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
@@ -84,8 +94,8 @@ ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有�
 
 ## 查询、命令与渲染
 
-- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
-- 命令：`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
+- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
+- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
 - 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
 
 ## 测试与构建边界
