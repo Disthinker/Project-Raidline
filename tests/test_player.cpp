@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <cmath>
+#include <limits>
 #include "player.h"
 
 // 向右移动
@@ -378,6 +379,7 @@ TEST(PlayerTest, DamageUsesOwnedHealthState)
     EXPECT_TRUE(player.takeDamage(2));
     EXPECT_EQ(player.health(), 0);
     EXPECT_TRUE(player.isDead());
+    EXPECT_FALSE(player.isImpactSlowed());
 }
 
 TEST(PlayerTest, DamageAfterDeathDoesNotReportAnotherDeath)
@@ -513,4 +515,70 @@ TEST(PlayerTest, ZeroAimDirectionPreservesPreviousFacing)
     EXPECT_FALSE(player.faceDirection(Vec2{}));
     EXPECT_FLOAT_EQ(player.facingDirection().x, 1.0F);
     EXPECT_FLOAT_EQ(player.facingDirection().y, 0.0F);
+}
+
+TEST(PlayerTest, ControlSuppressesMovementForTheWholeExpiryFrame)
+{
+    Player player{100.0F, 100.0F};
+    ASSERT_TRUE(player.applyControl(0.50F));
+
+    GameplayInput input{};
+    input.moveRight = true;
+    player.update(input, 0.50F, 1280.0F, 720.0F);
+
+    EXPECT_FLOAT_EQ(player.position().x, 100.0F);
+    EXPECT_FALSE(player.isControlled());
+    EXPECT_FLOAT_EQ(player.controlRemaining(), 0.0F);
+
+    player.update(input, 0.10F, 1280.0F, 720.0F);
+    EXPECT_GT(player.position().x, 100.0F);
+}
+
+TEST(PlayerTest, RepeatedControlKeepsTheLongerRemainingDuration)
+{
+    Player player{100.0F, 100.0F};
+    ASSERT_TRUE(player.applyControl(0.75F));
+    ASSERT_TRUE(player.applyControl(0.25F));
+    EXPECT_FLOAT_EQ(player.controlRemaining(), 0.75F);
+
+    ASSERT_TRUE(player.applyControl(1.00F));
+    EXPECT_FLOAT_EQ(player.controlRemaining(), 1.00F);
+}
+
+TEST(PlayerTest, InvalidControlAndControlAfterDeathAreRejected)
+{
+    Player player{100.0F, 100.0F};
+
+    EXPECT_FALSE(player.applyControl(0.0F));
+    EXPECT_FALSE(player.applyControl(-1.0F));
+    EXPECT_FALSE(player.applyControl(
+        std::numeric_limits<float>::quiet_NaN()));
+    EXPECT_FALSE(player.isControlled());
+
+    ASSERT_TRUE(player.takeDamage(player.health()));
+    EXPECT_FALSE(player.applyControl(0.75F));
+}
+
+TEST(PlayerTest, NonLethalHitBrieflySlowsMovementThenFullyRecovers)
+{
+    Player player{100.0F, 100.0F};
+    ASSERT_FALSE(player.takeDamage(1));
+    ASSERT_TRUE(player.isImpactSlowed());
+    EXPECT_FLOAT_EQ(player.impactSlowRemaining(), 0.18F);
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    player.update(moveRight, 0.10F, 1280.0F, 720.0F);
+    EXPECT_NEAR(player.position().x, 106.72F, 0.0001F);
+    EXPECT_NEAR(player.impactSlowRemaining(), 0.08F, 0.0001F);
+
+    player.update(moveRight, 0.08F, 1280.0F, 720.0F);
+    EXPECT_FALSE(player.isImpactSlowed());
+    const float slowedPosition = player.position().x;
+
+    player.update(moveRight, 0.10F, 1280.0F, 720.0F);
+    EXPECT_NEAR(
+        player.position().x - slowedPosition,
+        24.0F,
+        0.0001F);
 }

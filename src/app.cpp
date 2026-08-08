@@ -1529,6 +1529,71 @@ void App::renderDebugText()
         52.0F,
         gameSessionText.c_str());
 
+    std::string enemyAiText{"Enemy AI: none"};
+    if (!gameSession_.world().enemies().empty())
+    {
+        const Enemy &enemy =
+            gameSession_.world().enemies().front();
+        if (enemy.isDead())
+        {
+            enemyAiText = "Enemy AI: defeated";
+        }
+        else if (enemy.attackType().has_value())
+        {
+            enemyAiText = fmt::format(
+                "Enemy AI: {} {}",
+                enemyAttackTypeName(*enemy.attackType()),
+                enemyAttackPhaseName(enemy.attackPhase()));
+        }
+        else if (enemy.isMoving())
+        {
+            enemyAiText = "Enemy AI: pursuing";
+        }
+        else
+        {
+            enemyAiText = "Enemy AI: holding";
+        }
+
+        if (!enemy.isDead())
+        {
+            enemyAiText += fmt::format(
+                " | Move {} {:.0f}",
+                enemyMovementStateName(
+                    enemy.movementState()),
+                enemy.movementSpeed());
+            if (enemy.isImpactSlowed())
+            {
+                enemyAiText += fmt::format(
+                    " | stagger {:.2f}s",
+                    enemy.impactSlowRemaining());
+            }
+        }
+    }
+
+    SDL_RenderDebugText(
+        renderer_,
+        980.0F,
+        68.0F,
+        enemyAiText.c_str());
+
+    std::string playerControlText =
+        player.isControlled()
+            ? fmt::format(
+                  "Player controlled: {:.2f}s",
+                  player.controlRemaining())
+            : "Player controlled: no";
+    if (player.isImpactSlowed())
+    {
+        playerControlText += fmt::format(
+            " | stagger {:.2f}s",
+            player.impactSlowRemaining());
+    }
+    SDL_RenderDebugText(
+        renderer_,
+        980.0F,
+        84.0F,
+        playerControlText.c_str());
+
     if (raidSession.state() ==
             RaidSessionState::Extracting ||
         raidSession.state() ==
@@ -3101,38 +3166,50 @@ void App::renderPlayer()
             playerTexture_.get(),
             nullptr,
             &playerRect);
-        return;
     }
-
-    std::size_t frameIndex{0};
-
-    if (player.isMoving())
+    else
     {
-        frameIndex =
-            player.currentAnimationFrameIndex();
+        std::size_t frameIndex{0};
+
+        if (player.isMoving())
+        {
+            frameIndex =
+                player.currentAnimationFrameIndex();
+        }
+
+        if (frameIndex >= kPlayerMoveFrameCount)
+        {
+            frameIndex = 0;
+        }
+        const float sourceX =
+            static_cast<float>(frameIndex) *
+            kPlayerMoveSourceFrameWidth;
+        const float sourceY =
+            player.facingDirection().x < 0.0f
+                ? kPlayerMoveLeftRowY
+                : kPlayerMoveRightRowY;
+        SDL_FRect sourceRect{
+            sourceX,
+            sourceY,
+            kPlayerMoveSourceFrameWidth,
+            kPlayerMoveSourceFrameHeight};
+        SDL_RenderTexture(
+            renderer_,
+            playerMoveHorizontalTexture_.get(),
+            &sourceRect,
+            &playerRect);
     }
 
-    if (frameIndex >= kPlayerMoveFrameCount)
+    if (player.isImpactSlowed())
     {
-        frameIndex = 0;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            255U,
+            196U,
+            72U,
+            255U);
+        SDL_RenderRect(renderer_, &playerRect);
     }
-    const float sourceX =
-        static_cast<float>(frameIndex) *
-        kPlayerMoveSourceFrameWidth;
-    const float sourceY =
-        player.facingDirection().x < 0.0f
-            ? kPlayerMoveLeftRowY
-            : kPlayerMoveRightRowY;
-    SDL_FRect sourceRect{
-        sourceX,
-        sourceY,
-        kPlayerMoveSourceFrameWidth,
-        kPlayerMoveSourceFrameHeight};
-    SDL_RenderTexture(
-        renderer_,
-        playerMoveHorizontalTexture_.get(),
-        &sourceRect,
-        &playerRect);
 }
 
 void App::renderEnemies()
@@ -3172,12 +3249,160 @@ void App::renderEnemies()
             sourceY,
             kEnemyMoveSourceFrameWidth,
             kEnemyMoveSourceFrameHeight};
-        SDL_RenderTexture(
-            renderer_,
-            enemyMoveHorizontalTexture_.get(),
-            &sourceRect,
-            &enemyRect);
+        if (enemy.attackPhase() == EnemyAttackPhase::OffBalance)
+        {
+            SDL_RenderTextureRotated(
+                renderer_,
+                enemyMoveHorizontalTexture_.get(),
+                &sourceRect,
+                &enemyRect,
+                90.0,
+                nullptr,
+                SDL_FLIP_NONE);
+        }
+        else
+        {
+            SDL_RenderTexture(
+                renderer_,
+                enemyMoveHorizontalTexture_.get(),
+                &sourceRect,
+                &enemyRect);
+        }
+
+        if (enemy.isImpactSlowed())
+        {
+            SDL_SetRenderDrawColor(
+                renderer_,
+                255U,
+                196U,
+                72U,
+                255U);
+            SDL_RenderRect(renderer_, &enemyRect);
+        }
     }
+}
+
+void App::renderEnemyAttackTelegraphs()
+{
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+
+    for (const Enemy &enemy :
+         gameSession_.world().enemies())
+    {
+        const std::optional<EnemyAttackType> attackType =
+            enemy.attackType();
+        if (!attackType.has_value())
+        {
+            continue;
+        }
+
+        const EnemyAttackPhase phase =
+            enemy.attackPhase();
+        const std::optional<Rect> attackRegion =
+            phase == EnemyAttackPhase::Active
+                ? enemy.attackHitbox()
+                : enemy.attackTelegraphBounds();
+        if (!attackRegion.has_value())
+        {
+            continue;
+        }
+
+        Uint8 red{255U};
+        Uint8 green{196U};
+        Uint8 blue{64U};
+        switch (*attackType)
+        {
+        case EnemyAttackType::Grab:
+            red = 30U;
+            green = 210U;
+            blue = 255U;
+            break;
+        case EnemyAttackType::Scratch:
+            break;
+        case EnemyAttackType::Bite:
+            red = 255U;
+            green = 62U;
+            blue = 132U;
+            break;
+        }
+
+        if (phase == EnemyAttackPhase::OffBalance)
+        {
+            red = 255U;
+            green = 92U;
+            blue = 48U;
+        }
+
+        Uint8 fillAlpha{50U};
+        Uint8 borderAlpha{235U};
+        if (phase == EnemyAttackPhase::Active)
+        {
+            fillAlpha = 112U;
+            borderAlpha = 255U;
+        }
+        else if (phase == EnemyAttackPhase::Recovery)
+        {
+            fillAlpha = 18U;
+            borderAlpha = 90U;
+        }
+        else if (phase == EnemyAttackPhase::OffBalance)
+        {
+            fillAlpha = 36U;
+            borderAlpha = 220U;
+        }
+
+        const SDL_FRect region{
+            attackRegion->position.x,
+            attackRegion->position.y,
+            attackRegion->size.x,
+            attackRegion->size.y};
+        SDL_SetRenderDrawColor(
+            renderer_,
+            red,
+            green,
+            blue,
+            fillAlpha);
+        SDL_RenderFillRect(renderer_, &region);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            red,
+            green,
+            blue,
+            borderAlpha);
+        SDL_RenderRect(renderer_, &region);
+
+        const Rect enemyBounds = enemy.bounds();
+        const Vec2 direction = enemy.attackDirection();
+        const float centerX =
+            enemyBounds.position.x + enemyBounds.size.x / 2.0F;
+        const float centerY =
+            enemyBounds.position.y + enemyBounds.size.y / 2.0F;
+        if (phase != EnemyAttackPhase::OffBalance)
+        {
+            SDL_RenderLine(
+                renderer_,
+                centerX,
+                centerY,
+                centerX + direction.x * 72.0F,
+                centerY + direction.y * 72.0F);
+        }
+
+        const std::string label = fmt::format(
+            "{} {}",
+            enemyAttackTypeName(*attackType),
+            enemyAttackPhaseName(phase));
+        SDL_RenderDebugText(
+            renderer_,
+            enemyBounds.position.x,
+            enemyBounds.position.y - 14.0F,
+            label.c_str());
+    }
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_NONE);
 }
 
 void App::renderParticles()
@@ -3408,6 +3633,7 @@ void App::renderRaidScreen()
     // 地面物品位于角色与敌人下层。
     renderGroundItems();
 
+    renderEnemyAttackTelegraphs();
     renderEnemies();
     renderPlayer();
     renderProjectiles();

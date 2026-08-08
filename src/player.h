@@ -10,7 +10,7 @@
 class Player
 {
 public:
-    Player(float x, float y);
+    Player(float x, float y, int maxHealth = 3);
 
     void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight);
 
@@ -22,6 +22,13 @@ public:
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);
+
+    [[nodiscard]] bool isImpactSlowed() const noexcept;
+    [[nodiscard]] float impactSlowRemaining() const noexcept;
+
+    [[nodiscard]] bool applyControl(float duration) noexcept;
+    [[nodiscard]] bool isControlled() const noexcept;
+    [[nodiscard]] float controlRemaining() const noexcept;
 
     int health() const noexcept;
     int maxHealth() const noexcept;
@@ -36,4 +43,6 @@ private:
     bool isMoving_{false};
     Animator movementAnimator_;
     Health health_{3};
+    float controlRemaining_{};
+    float impactSlowRemaining_{};
 };
