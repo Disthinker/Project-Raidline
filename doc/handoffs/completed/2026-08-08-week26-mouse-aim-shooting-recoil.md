@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：Week26 鼠标瞄准、左键连续射击、确定性扩散、V0 可视后坐力、高速火光弹体与命中反馈。
-- 日期/分支/commit：2026-08-08；`codex/week26-mouse-aim-shooting-recoil`；基线 `main@ff828de`，本报告随待创建的 Week26 feature commit 一并冻结。
-- 完成度：代码、文档、Windows Debug 全目标构建、聚焦 CTest 57/57、全量 CTest 483/483 已完成；用户已确认人工验收 1–10、11–13，最终手感验收 15 与精确 feature head Windows/Ubuntu CI 尚未验证。
+- 日期/分支/commit：2026-08-08；`codex/week26-mouse-aim-shooting-recoil`；基线 `main@ff828de`，feature commit `3a52354`，PR #48 merge commit `0847da0`。
+- 完成度：代码、文档、Windows Debug 全目标构建、聚焦 CTest 57/57、全量 CTest 483/483、用户人工验收 1–10/11–13/15 与精确 feature head Windows/Ubuntu CI 全部完成。
 
 ## 2. 用户可见结果
 
@@ -88,7 +88,7 @@
 | 编译环境 | 普通 PowerShell 加载 `Launch-VsDevShell.ps1` 失败，`cmake/cl` 不可见。 | 本会话环境同时存在 `Path/PATH` 键，VS PowerShell 模块合并字典失败。 | 改用 `VsDevCmd.bat` 与 Visual Studio CMake 明确路径；未把本机路径写入共享项目配置。 | 后续全目标构建成功。 |
 | 构建权限 | 首次 Ninja 构建出现 C1041 PDB 与 `.ninja_lock` permission denied。 | 沙箱禁止在 E 盘 build 目录写入，不是源码编译错误。 | 以受控工作区构建权限重跑相同命令。 | 主程序、聚焦目标和全目标均成功链接。 |
 | 运行 UX | 代码准星与系统鼠标同时显示。 | 只绘制了准星，没有管理 SDL 进程级 cursor 状态。 | 生命周期条件显隐并在 shutdown 兜底恢复。 | 用户确认补充验收 11–13。 |
-| 视觉 UX | 首轮弹体过大、块状拖尾不明显，900 px/s 仍偏慢，命中灰粒子冲击不足。 | 表现面积集中在弹头，速度和命中反馈层次不足。 | 3×3 热芯、细长两段拖尾、1200 px/s、短寿命火光火花。 | 自动行为测试通过；最终手感验收 15 未验证。 |
+| 视觉 UX | 首轮弹体过大、块状拖尾不明显，900 px/s 仍偏慢，命中灰粒子冲击不足。 | 表现面积集中在弹头，速度和命中反馈层次不足。 | 3×3 热芯、细长两段拖尾、1200 px/s、短寿命火光火花。 | 自动行为测试与用户最终手感验收 15 均通过。 |
 | 正确性风险 | 提高弹速会让单次离散 AABB 跨过敌人。 | 一帧只在最终位置检查碰撞。 | 有界距离子步推进并按值累计命中结果。 | `FastProjectileDoesNotTunnelThroughEnemyDuringLargeFrame` 通过。 |
 | 测试耦合 | 原 cooldown 测试用 0.25 秒推进后，弹丸提前命中并被删除。 | 测试把 cadence 与世界命中路径混在同一个时间假设中。 | cadence 测试改用精确 0.12 秒，命中由独立测试覆盖。 | 全量 CTest 483/483。 |
 | 链接 | 未发生。 | — | — | 全目标链接成功。 |
@@ -101,8 +101,8 @@
 - 全量 CTest：Windows Debug 并行执行 483/483 通过，用时 6.35 秒。
 - 注册/接线：`ctest -N` 为 483；`compile_commands.json` 包含 `weapon_fire.cpp` 与 `gameplay_world.cpp` 的主程序/测试编译项；主程序 `gameplay_world.cpp.obj` 的 Ninja `#deps 120`。
 - 其他测试：无艺术资源变化，`tests/test_phase1_assets.py` 不适用且未执行。
-- CI：尚未创建 feature commit/PR，精确 head Windows/Ubuntu CI 未验证。
-- 人工验收：用户确认 1–10 和 11–13；最终合并验收 15（1200 px/s、细小拖尾、醒目火光命中）未验证。
+- CI：feature commit `3a52354` 的 Actions run 31260317298 全部通过：范围检测 6 秒、Ubuntu 1 分 23 秒、Windows 3 分 15 秒；PR #48 已合入。
+- 人工验收：用户确认 1–10、11–13 与最终合并验收 15（1200 px/s、细小拖尾、醒目火光命中）全部通过。
 
 ## 12. 教学分级
 
@@ -130,13 +130,13 @@
 - `src/player.cpp`：`Player::faceDirection`。
 - `src/gameplay_world.cpp`：`GameplayWorld::update` 的 aim、ShotSpec、方向枪口和 projectile substeps。
 - `tests/test_weapon_fire.cpp`、`tests/test_input_system.cpp`、`tests/test_gameplay_world.cpp`、`tests/test_game_session.cpp`：合同与回归证据。
-- `doc/exec-plans/active/week26-mouse-aim-shooting-recoil.md`：范围、调参、验收和剩余状态。
+- `doc/exec-plans/completed/week26-mouse-aim-shooting-recoil.md`：范围、调参、验收和最终状态。
 
 ## 15. 技术债与测试债
 
 - 技术债：武器参数仍为编译期硬编码；App 继续承担较多 SDL/渲染职责；多个测试 target 重复编译业务源码；大于子步上限可完全覆盖的极端 deltaTime 仍不是连续碰撞检测。
 - 测试债：没有 App 自动化截图/视觉测试；系统鼠标显隐、准星、弹道与命中颜色仍依赖真实窗口；Ubuntu 只由 PR CI 验证。
-- 下一安全任务：先取得最终手感验收 15，再完成精确 feature head CI 和 Week26 合入；之后按路线图为 Week27 冻结抓/挠/咬的 Windup/Active/Recovery、伤害窗口、位移与控制合同。
+- 下一安全任务：Week26 已通过精确 head CI、最终手感验收和 PR #48 合入；按路线图实施 Week27 抓/挠/咬的 Windup/Active/Recovery、单次伤害窗口、位移与控制合同。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 
