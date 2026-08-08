@@ -21,15 +21,15 @@
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前基线：Week23 已闭环
+## 当前开发：Week24 垂直切片 V0 收口
 
-Week23 的“可重复 Raid 会话与 Stash 边界”已通过 PR #42 合入：GameSession 拥有长期 Stash 与当前单局对象，结算后显示只读仓库，按 `N` 以空背包开始下一局，并沿用跨 Raid 稳定 ID 高水位。Windows Debug 全目标构建、聚焦测试、全量 CTest 446/446、真实窗口 1–9 与精确 head Windows/Ubuntu CI 均已通过。完成计划见 `doc/exec-plans/completed/week23-repeatable-game-session.md`。
+Week24 正在闭合真实可玩的失败出口：Player 拥有 3 HP，敌人接触按 0.75 秒冷却造成伤害，0 HP 自动进入 PlayerDead、清空携带物并允许开始全新 Raid。成功路径与失败路径已在 GameSession 层串联回归；Windows Debug 全目标构建、聚焦测试 103/103、全量 CTest 453/453 和真实窗口 1–8 已通过，Windows/Ubuntu CI 作为 feature PR 的最后合并门禁。活动计划见 `doc/exec-plans/active/week24-vertical-slice-v0.md`。
 
 ## 推荐后续候选
 
 | 候选阶段 | 产品结果 | 关键工程主题 |
 | --- | --- | --- |
-| Week24（推荐下一步） | 垂直切片 V0 收口 | 进入→战斗/避敌→搜索→背包→撤离/死亡→结算→重开完整回归 |
+| Week24（进行中） | 垂直切片 V0 收口 | 玩家 3 HP、敌人接触伤害、真实死亡出口与成功/失败完整回归 |
 | 后续 V1 | 装备与内容扩展 | 装备栏、WeaponInstance/装填、重量/耐久、尸体搜索、AI、固定地图、数据驱动与持久化 |
 
 ## 独立稳定化候选

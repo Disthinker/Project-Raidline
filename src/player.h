@@ -1,9 +1,11 @@
 #pragma once
 
-#include "gameplay_input.h"
-#include "vec2.h"
-#include "animation.h"
 #include <cstddef>
+
+#include "animation.h"
+#include "gameplay_input.h"
+#include "health_system.h"
+#include "vec2.h"
 
 class Player
 {
@@ -18,6 +20,12 @@ public:
     bool isMoving() const;
     std::size_t currentAnimationFrameIndex() const;
 
+    [[nodiscard]] bool takeDamage(int damage);
+
+    int health() const noexcept;
+    int maxHealth() const noexcept;
+    bool isDead() const noexcept;
+
 private:
     Vec2 position_;
     float speed_{240.0f};
@@ -26,4 +34,5 @@ private:
 
     bool isMoving_{false};
     Animator movementAnimator_;
+    Health health_{3};
 };

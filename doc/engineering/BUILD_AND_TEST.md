@@ -40,8 +40,8 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target InputSystemTest RaidSessionTest RaidSettlementTest GameSessionTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(InputSystemTest|RaidSessionTest|RaidSettlementTest|GameSessionTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
+cmake --build --preset windows-debug --target InputSystemTest PlayerTest RaidSessionTest RaidSettlementTest GameSessionTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(InputSystemTest|PlayerTest|RaidSessionTest|RaidSettlementTest|GameSessionTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -57,7 +57,7 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 25 个 GTest executable、446 个 CTest 用例。`RaidSessionTest` 覆盖六态转换、连续撤离、离开取消、超时/撤离竞态、死亡与 sticky 终局；`RaidSettlementTest` 覆盖外部 Stash 注入、撤离存入、死亡/超时丢失、Blocked 原子失败/重试、空背包与 sticky 完成态；`GameSessionTest` 覆盖局外阶段、Stash 跨局保留、空背包第二局、稳定 ID 不复用、死亡损失、Blocked 拒绝重开和一次性重开；`GameplayWorldTest` 额外覆盖 ID 高水位耗尽时部分拆分/丢弃原子失败且不回绕；`ExtractionPointTest` 覆盖有限几何和半开边界。`LootTableTest` 覆盖权重/数量边界、堆叠规范化、非法表和随机源契约；`GameplayWorldLootTest` 覆盖首次搜索、重开不重抽、取空不刷新、稳定 ID 与失败快照。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、整背包无合并原子转移、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚。可用下列命令证明 Raid、Loot、会话与鼠标测试源真实进入编译数据库：
+当前 CMake 注册 25 个 GTest executable、453 个 CTest 用例。`PlayerTest` 覆盖默认 3 HP、非致命/致命伤害与死亡幂等；`RaidSessionTest` 覆盖六态转换、连续撤离、离开取消、超时/撤离竞态、死亡与 sticky 终局；`RaidSettlementTest` 覆盖外部 Stash 注入、撤离存入、死亡/超时丢失、Blocked 原子失败/重试、空背包与 sticky 完成态；`GameSessionTest` 覆盖搜索→转移→撤离→Stash→重开成功切片、死亡损失切片、跨局保留、稳定 ID、Blocked 与一次性重开；`GameplayWorldTest` 额外覆盖玩家生命、接触伤害冷却、致死帧冻结和 ID 高水位耗尽原子失败；`ExtractionPointTest` 覆盖有限几何和半开边界。`LootTableTest` 覆盖权重/数量边界、堆叠规范化、非法表和随机源契约；`GameplayWorldLootTest` 覆盖首次搜索、重开不重抽、取空不刷新、稳定 ID 与失败快照。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、整背包无合并原子转移、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚。可用下列命令证明 Raid、Loot、会话与鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
@@ -83,7 +83,7 @@ Ninja Debug 输出通常位于：
 & '.\build\windows-debug\Project_Raidline.exe'
 ```
 
-当前控制：WASD 移动、Space 射击、F 拾取/近距离搜索或打开柜体、Tab 打开玩家背包。程序启动后自动进入 180 秒 Raid；地图左下方半透明绿色区域是撤离点，玩家逻辑中心进入后连续停留 3 秒完成撤离，提前离开会取消并清零。结算后显示只读 20×12 Stash 网格；完整结算态按 `N` 创建空背包的下一局，按住 `N` 不会重复跳局，Blocked 时不能重开。Stash 在当前进程内跨 Raid 保留，但尚无配装与磁盘保存。Tab 只显示玩家背包；未搜索柜体在范围内显示 `F: SEARCH CABINET`，首次 F 生成一次 Loot 并显示右侧容器，之后提示为 `F: OPEN CABINET`，关闭/取空/重开不会刷新。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药；未发布视觉资源的逻辑物品不会由正式内容或 LootTable 生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
+当前控制：WASD 移动、Space 射击、F 拾取/近距离搜索或打开柜体、Tab 打开玩家背包。左上角显示 `Player HP: current/max`；玩家与存活敌人接触立即受到 1 点伤害，随后有 0.75 秒冷却，生命归零进入 `PlayerDead` 并按死亡结算携带物。程序启动后自动进入 180 秒 Raid；地图左下方半透明绿色区域是撤离点，玩家逻辑中心进入后连续停留 3 秒完成撤离，提前离开会取消并清零。结算后显示只读 20×12 Stash 网格；完整结算态按 `N` 创建空背包、满 3 HP 的下一局，按住 `N` 不会重复跳局，Blocked 时不能重开。Stash 在当前进程内跨 Raid 保留，但尚无配装与磁盘保存。Tab 只显示玩家背包；未搜索柜体在范围内显示 `F: SEARCH CABINET`，首次 F 生成一次 Loot 并显示右侧容器，之后提示为 `F: OPEN CABINET`，关闭/取空/重开不会刷新。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药；未发布视觉资源的逻辑物品不会由正式内容或 LootTable 生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
 
 ## Python 与艺术管线测试
 

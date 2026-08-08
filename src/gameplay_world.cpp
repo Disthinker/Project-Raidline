@@ -21,6 +21,8 @@ namespace
 
     constexpr int kDefaultEnemyMaxHealth{3};
     constexpr int kProjectileDamage{1};
+    constexpr int kEnemyContactDamage{1};
+    constexpr float kEnemyContactDamageCooldown{0.75f};
 
     constexpr int kScorePerEnemy{100};
 
@@ -379,6 +381,22 @@ void GameplayWorld::update(
             kWorldWidth);
     }
 
+    if (deltaTime > 0.0f)
+    {
+        playerContactDamageCooldownRemaining_ =
+            std::max(
+                0.0f,
+                playerContactDamageCooldownRemaining_ -
+                    deltaTime);
+    }
+
+    // 接触伤害在射击、投射物推进与命中前结算。若本帧致死，
+    // 立即停止后续 mutation，使终局帧不会继续生成投射物或得分。
+    if (resolveEnemyContactDamage())
+    {
+        return;
+    }
+
     cooldownRemaining_ -=
         deltaTime;
 
@@ -534,7 +552,80 @@ GameplayWorld::raidSession() const noexcept
 
 bool GameplayWorld::markPlayerDead() noexcept
 {
-    return raidSession_.markPlayerDead();
+    if (!raidSession_.isActive() ||
+        player_.isDead())
+    {
+        return false;
+    }
+
+    // 兼容既有领域命令，但不绕过 Player 唯一拥有的 Health。
+    // 活动玩家的当前生命严格大于 0，因此不会触发非法伤害异常。
+    return damagePlayer(
+        player_.health());
+}
+
+bool GameplayWorld::damagePlayer(int damage)
+{
+    if (!raidSession_.isActive())
+    {
+        return false;
+    }
+
+    const bool killed =
+        player_.takeDamage(damage);
+
+    if (!killed)
+    {
+        return false;
+    }
+
+    const bool markedDead =
+        raidSession_.markPlayerDead();
+
+    if (!markedDead)
+    {
+        // 活动态检查与 Health 的首次致死转换之间没有其他状态写入；
+        // 到达这里意味着内部不变量已被破坏。
+        std::terminate();
+    }
+
+    return true;
+}
+
+bool GameplayWorld::resolveEnemyContactDamage()
+{
+    if (playerContactDamageCooldownRemaining_ > 0.0f)
+    {
+        return false;
+    }
+
+    const Rect bounds =
+        playerBounds(player_);
+
+    const bool touchingLivingEnemy =
+        std::any_of(
+            enemies_.begin(),
+            enemies_.end(),
+            [&bounds](const Enemy &enemy)
+            {
+                return !enemy.isDead() &&
+                       isCollision(
+                           bounds,
+                           enemy.bounds());
+            });
+
+    if (!touchingLivingEnemy)
+    {
+        return false;
+    }
+
+    const bool killed =
+        damagePlayer(kEnemyContactDamage);
+
+    playerContactDamageCooldownRemaining_ =
+        kEnemyContactDamageCooldown;
+
+    return killed;
 }
 
 bool GameplayWorld::canInteractWithContainer() const noexcept

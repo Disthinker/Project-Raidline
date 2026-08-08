@@ -29,7 +29,7 @@ value/domain types: Vec2 · Rect · Health · ItemDefinition · ItemInstance
 - 采集事件，通过 InputSystem 和帧级 `InventoryUiEvent` 队列适配到游戏/背包逻辑。
 - 计算渲染布局、source rect 和绘制顺序。
 - 编排纯鼠标双容器背包状态、显式丢弃区与 `GridInventory` 查询/提交。
-- 拥有进程内 `GameSession` 组合根；只读渲染撤离区、Raid 状态/计时/进度、Stash 统计、终局反馈和缩放后的只读 Stash 网格。
+- 拥有进程内 `GameSession` 组合根；只读渲染玩家生命、撤离区、Raid 状态/计时/进度、Stash 统计、终局反馈和缩放后的只读 Stash 网格。
 - 在局外阶段把 `N` 的 just-pressed 输入适配为 `GameSession::startNextRaid()`；不保存第二份会话状态、Raid 编号或稳定 ID 序列。
 
 App 不应成为物品放置、碰撞、伤害或 Raid 规则的事实来源。`src/app.cpp` 当前较大是已知债务，不代表每个功能都应顺手拆分它。
@@ -40,11 +40,12 @@ InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-press
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃及 Raid 生命周期。GameplayWorld 在玩家移动后用逻辑中心更新撤离占用；终局形成后冻结玩法 mutation。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人接触伤害及 Raid 生命周期。GameplayWorld 在玩家移动后用逻辑中心更新撤离占用；敌人移动后、玩家射击和投射物推进前结算带冷却的接触伤害，致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
-- Player/Enemy：运动、朝向、生命和动画组合。
+- Player：运动、朝向、动画与唯一拥有的 3 HP Health；受控伤害只报告首次 alive→dead。
+- Enemy：运动、朝向、动画与自己的 Health；当前接触只提供 V0 玩家伤害，不包含攻击 AI。
 - Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
 - Particle/ParticleSystem：短生命周期命中反馈。
 - ItemDefinition：共享静态物品数据、基础 footprint、旋转能力、最大堆叠与视觉资源发布状态，不拥有 Texture。
@@ -68,6 +69,8 @@ App ─owns─> SDL/Texture resources + GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
 GameplayWorld ─owns─> single-Raid entities + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
+Player ─owns─> Health
+Enemy ─owns─> Health
 StorageCabinet ─owns─> external GridInventory
 GroundItem ─owns─> ItemInstance   (拾取时转移)
 GridInventory::PlacedItem ─owns─> ItemInstance

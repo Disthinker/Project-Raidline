@@ -358,6 +358,37 @@ TEST(PlayerTest, OppositeHorizontalInputsDoNotStartMovementAnimation)
     EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
 }
 
+TEST(PlayerTest, StartsWithThreeHealth)
+{
+    const Player player(640.0f, 360.0f);
+
+    EXPECT_EQ(player.health(), 3);
+    EXPECT_EQ(player.maxHealth(), 3);
+    EXPECT_FALSE(player.isDead());
+}
+
+TEST(PlayerTest, DamageUsesOwnedHealthState)
+{
+    Player player(640.0f, 360.0f);
+
+    EXPECT_FALSE(player.takeDamage(1));
+    EXPECT_EQ(player.health(), 2);
+    EXPECT_FALSE(player.isDead());
+
+    EXPECT_TRUE(player.takeDamage(2));
+    EXPECT_EQ(player.health(), 0);
+    EXPECT_TRUE(player.isDead());
+}
+
+TEST(PlayerTest, DamageAfterDeathDoesNotReportAnotherDeath)
+{
+    Player player(640.0f, 360.0f);
+
+    ASSERT_TRUE(player.takeDamage(3));
+    EXPECT_FALSE(player.takeDamage(1));
+    EXPECT_EQ(player.health(), 0);
+}
+
 // 垂直移动同样属于 Moving；是否有对应美术资源由 App 渲染层决定。
 TEST(PlayerTest, VerticalInputSetsMovingState)
 {

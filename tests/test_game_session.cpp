@@ -1,11 +1,51 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "game_session.h"
 
 namespace
 {
+    class SequenceLootRandomSource final
+        : public LootRandomSource
+    {
+    public:
+        explicit SequenceLootRandomSource(
+            std::vector<std::uint32_t> values)
+            : values_{std::move(values)}
+        {
+        }
+
+        std::uint32_t next(
+            std::uint32_t upperExclusive) override
+        {
+            if (position_ >= values_.size())
+            {
+                throw std::runtime_error{
+                    "SequenceLootRandomSource exhausted"};
+            }
+
+            const std::uint32_t value =
+                values_[position_++];
+
+            if (value >= upperExclusive)
+            {
+                throw std::out_of_range{
+                    "SequenceLootRandomSource value is out of range"};
+            }
+
+            return value;
+        }
+
+    private:
+        std::vector<std::uint32_t> values_;
+        std::size_t position_{};
+    };
+
     GameplayInput moveLeftInput()
     {
         GameplayInput input{};
@@ -44,6 +84,18 @@ namespace
     {
         session.update(moveLeftInput(), 1.5F);
         session.update(moveDownInput(), 0.45F);
+        session.update(GameplayInput{}, 3.0F);
+
+        ASSERT_EQ(
+            session.world().raidSession().state(),
+            RaidSessionState::Extracted);
+    }
+
+    void moveFromCabinetToExtraction(
+        GameSession &session)
+    {
+        session.update(moveLeftInput(), 3.0F);
+        session.update(moveDownInput(), 0.65F);
         session.update(GameplayInput{}, 3.0F);
 
         ASSERT_EQ(
@@ -136,6 +188,71 @@ TEST(GameSessionTest, ExtractionPersistsStashAndStartsFreshSecondRaid)
         secondRaidFirstId + 6U);
 }
 
+TEST(GameSessionTest, SearchTransferExtractionAndRestartFormOneSuccessSlice)
+{
+    GameSession session;
+
+    GameplayInput moveRight{};
+    moveRight.moveRight = true;
+    session.update(moveRight, 1.0F);
+    ASSERT_TRUE(
+        session.world().canInteractWithContainer());
+
+    SequenceLootRandomSource random{
+        {0, 99, 0, 99, 20}};
+    ASSERT_TRUE(
+        session.world().searchStorageCabinet(random));
+    ASSERT_EQ(
+        session.world().containerInventory()
+            .placedItems()
+            .size(),
+        2U);
+
+    const PlacedItem &cabinetItem =
+        session.world().containerInventory()
+            .placedItems()
+            .front();
+    const ItemInstanceId transferredId =
+        cabinetItem.item.instanceId();
+    const std::uint32_t transferredQuantity =
+        cabinetItem.item.quantity();
+
+    ASSERT_TRUE(
+        session.world().transferInventoryItemQuantity(
+            false,
+            transferredId,
+            transferredQuantity));
+    ASSERT_EQ(
+        session.world().inventory()
+            .placedItems()
+            .size(),
+        1U);
+
+    moveFromCabinetToExtraction(session);
+
+    ASSERT_EQ(
+        session.state(),
+        GameSessionState::BetweenRaids);
+    ASSERT_EQ(session.stash().stackCount(), 1U);
+    EXPECT_EQ(session.stash().unitCount(), 1U);
+    EXPECT_EQ(
+        session.stash().inventory()
+            .placedItems()
+            .front()
+            .item.instanceId(),
+        transferredId);
+
+    ASSERT_TRUE(session.startNextRaid());
+    EXPECT_EQ(session.raidNumber(), 2U);
+    EXPECT_EQ(session.world().player().health(), 3);
+    EXPECT_EQ(session.world().player().maxHealth(), 3);
+    EXPECT_TRUE(
+        session.world().inventory()
+            .placedItems()
+            .empty());
+    EXPECT_EQ(session.stash().stackCount(), 1U);
+}
+
 TEST(GameSessionTest, SecondRaidLossDoesNotRemovePreviousStash)
 {
     GameSession session;
@@ -144,7 +261,7 @@ TEST(GameSessionTest, SecondRaidLossDoesNotRemovePreviousStash)
     ASSERT_TRUE(session.startNextRaid());
 
     pickUpDefaultMedkit(session);
-    ASSERT_TRUE(session.world().markPlayerDead());
+    ASSERT_TRUE(session.world().damagePlayer(3));
     session.update(GameplayInput{}, 0.0F);
 
     EXPECT_EQ(session.state(), GameSessionState::BetweenRaids);
@@ -155,6 +272,15 @@ TEST(GameSessionTest, SecondRaidLossDoesNotRemovePreviousStash)
         session.world().inventory().placedItems().empty());
     EXPECT_EQ(session.stash().stackCount(), 1U);
     EXPECT_EQ(session.stash().unitCount(), 1U);
+
+    ASSERT_TRUE(session.startNextRaid());
+    EXPECT_EQ(session.raidNumber(), 3U);
+    EXPECT_EQ(session.world().player().health(), 3);
+    EXPECT_TRUE(
+        session.world().inventory()
+            .placedItems()
+            .empty());
+    EXPECT_EQ(session.stash().stackCount(), 1U);
 }
 
 TEST(GameSessionTest, BlockedSettlementCannotStartAnotherRaid)
