@@ -84,6 +84,15 @@
 - GameplayWorld 在玩家移动后更新 RaidSession；若本帧形成终局，本帧不再提交拾取、射击、敌人、投射物或命中 mutation，后续帧保持冻结。
 - App 只能读取并呈现 RaidSession，不得保存第二份状态、倒计时或撤离进度；库存 overlay 打开不会暂停 Raid 时钟，终局时必须关闭 overlay。
 
+## Raid 结算与 Stash
+
+- RaidSettlement 的 Pending/Blocked 不是完成态；Extracted、PlayerDead、RaidEnded 是 sticky 完成态，重复调用不得再次转移、销毁或统计物品。
+- Extracted 必须把玩家背包中的每个完整堆叠移动到 Stash，保持稳定 ID、定义、数量、orientation 和源 placement 顺序；结算存入不自动合并堆叠。
+- 整背包转移先复制目标占用、验证全部稳定 ID 并规划所有 row-major 目标，再一次性预留目标 placement 容量；容量、footprint 或 ID 冲突时不得移动第一件物品。
+- PlayerDead/RaidEnded 必须先记录玩家携带的栈数与单位数，再显式销毁玩家背包中的全部 ItemInstance；Stash、柜体和地面物品不受影响。
+- Blocked 必须保持玩家背包和 Stash 的 placement、cells、顺序、ID、数量与方向完全不变，并允许在外部条件改变后重试。
+- Week22 Stash 仅在 App 进程内存中存在；不能把它描述为已保存到磁盘，跨 Raid ID 分配、第二局创建与 Stash UI 属于后续会话层。
+
 ## 背包交互
 
 - 预览和按 R 旋转候选都不修改 GridInventory；同容器旋转提交只能通过 `tryTransform`，跨容器旋转提交只能通过 transform 转移服务。

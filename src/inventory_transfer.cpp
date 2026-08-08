@@ -10,6 +10,17 @@
 namespace
 {
 
+    struct WholeItemPlacement
+    {
+        ItemInstanceId instanceId{};
+        GridPosition origin{};
+        ItemOrientation orientation{
+            ItemOrientation::Degrees0};
+    };
+
+    using WholeInventoryTransferPlan =
+        std::vector<WholeItemPlacement>;
+
     const PlacedItem *findPlacedItem(
         const GridInventory &inventory,
         ItemInstanceId instanceId) noexcept
@@ -41,6 +52,181 @@ namespace
         return findPlacedItem(
                    inventory,
                    instanceId) != nullptr;
+    }
+
+    std::size_t planningIndex(
+        int width,
+        GridPosition position) noexcept
+    {
+        return static_cast<std::size_t>(position.y) *
+                   static_cast<std::size_t>(width) +
+               static_cast<std::size_t>(position.x);
+    }
+
+    bool canPlaceOnPlanningGrid(
+        const std::vector<unsigned char> &occupied,
+        int width,
+        int height,
+        InventoryFootprint footprint,
+        GridPosition origin) noexcept
+    {
+        if (footprint.width <= 0 ||
+            footprint.height <= 0 ||
+            origin.x < 0 ||
+            origin.y < 0 ||
+            footprint.width > width ||
+            footprint.height > height ||
+            origin.x > width - footprint.width ||
+            origin.y > height - footprint.height)
+        {
+            return false;
+        }
+
+        for (int offsetY = 0;
+             offsetY < footprint.height;
+             ++offsetY)
+        {
+            for (int offsetX = 0;
+                 offsetX < footprint.width;
+                 ++offsetX)
+            {
+                if (occupied[planningIndex(
+                        width,
+                        GridPosition{
+                            origin.x + offsetX,
+                            origin.y + offsetY})] != 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    void occupyPlanningGrid(
+        std::vector<unsigned char> &occupied,
+        int width,
+        InventoryFootprint footprint,
+        GridPosition origin) noexcept
+    {
+        for (int offsetY = 0;
+             offsetY < footprint.height;
+             ++offsetY)
+        {
+            for (int offsetX = 0;
+                 offsetX < footprint.width;
+                 ++offsetX)
+            {
+                occupied[planningIndex(
+                    width,
+                    GridPosition{
+                        origin.x + offsetX,
+                        origin.y + offsetY})] = 1;
+            }
+        }
+    }
+
+    std::optional<WholeInventoryTransferPlan>
+    makeWholeInventoryTransferPlan(
+        const GridInventory &source,
+        const GridInventory &destination)
+    {
+        if (&source == &destination)
+        {
+            return std::nullopt;
+        }
+
+        std::vector<unsigned char> occupied(
+            destination.cellCount(),
+            0);
+
+        for (int y = 0;
+             y < destination.height();
+             ++y)
+        {
+            for (int x = 0;
+                 x < destination.width();
+                 ++x)
+            {
+                if (destination.occupantAt({x, y}).has_value())
+                {
+                    occupied[planningIndex(
+                        destination.width(),
+                        {x, y})] = 1;
+                }
+            }
+        }
+
+        WholeInventoryTransferPlan plan;
+        plan.reserve(source.placedItems().size());
+
+        for (const PlacedItem &placed :
+             source.placedItems())
+        {
+            const ItemInstanceId instanceId =
+                placed.item.instanceId();
+
+            if (containsInstanceId(
+                    destination,
+                    instanceId))
+            {
+                return std::nullopt;
+            }
+
+            const ItemOrientation orientation =
+                placed.item.orientation();
+            const InventoryFootprint footprint =
+                inventoryFootprint(
+                    itemDefinition(
+                        placed.item.definitionId()),
+                    orientation);
+
+            std::optional<GridPosition> destinationOrigin;
+
+            for (int y = 0;
+                 y < destination.height() &&
+                 !destinationOrigin.has_value();
+                 ++y)
+            {
+                for (int x = 0;
+                     x < destination.width();
+                     ++x)
+                {
+                    const GridPosition candidate{x, y};
+
+                    if (canPlaceOnPlanningGrid(
+                            occupied,
+                            destination.width(),
+                            destination.height(),
+                            footprint,
+                            candidate))
+                    {
+                        destinationOrigin = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (!destinationOrigin.has_value())
+            {
+                return std::nullopt;
+            }
+
+            occupyPlanningGrid(
+                occupied,
+                destination.width(),
+                footprint,
+                *destinationOrigin);
+
+            plan.push_back(
+                WholeItemPlacement{
+                    instanceId,
+                    *destinationOrigin,
+                    orientation});
+        }
+
+        return plan;
     }
 
     struct StackFill
@@ -371,6 +557,54 @@ bool tryTransferItemAtCellFirstFit(
         source,
         destination,
         *instanceId);
+}
+
+bool canTransferAllItemsFirstFit(
+    const GridInventory &source,
+    const GridInventory &destination)
+{
+    return makeWholeInventoryTransferPlan(
+               source,
+               destination)
+        .has_value();
+}
+
+bool tryTransferAllItemsFirstFit(
+    GridInventory &source,
+    GridInventory &destination)
+{
+    std::optional<WholeInventoryTransferPlan> plan =
+        makeWholeInventoryTransferPlan(
+            source,
+            destination);
+
+    if (!plan.has_value())
+    {
+        return false;
+    }
+
+    // The only expected allocation in the commit path occurs before source
+    // ownership changes. Each later transfer reuses this reserved capacity.
+    destination.reserveForAdditionalItems(
+        plan->size());
+
+    for (const WholeItemPlacement &placement : *plan)
+    {
+        if (!tryTransferItemTransform(
+                source,
+                destination,
+                placement.instanceId,
+                placement.origin,
+                placement.orientation))
+        {
+            // The immutable plan and single-threaded inventories make this
+            // unreachable unless an internal inventory invariant is broken.
+            // Returning false here would incorrectly expose partial commit.
+            std::terminate();
+        }
+    }
+
+    return true;
 }
 
 QuantityTransferResult tryTransferItemQuantityFirstFit(

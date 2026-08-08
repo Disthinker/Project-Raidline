@@ -11,6 +11,7 @@
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
+#include "raid_settlement.h"
 #include "texture.h"
 
 class App
@@ -31,6 +32,7 @@ private:
     InventoryOverlayState inventoryOverlayState_;
 
     GameplayWorld world_;
+    RaidSettlement raidSettlement_;
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState

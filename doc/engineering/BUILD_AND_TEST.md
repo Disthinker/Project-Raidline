@@ -40,8 +40,8 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target RaidSessionTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(RaidSessionTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
+cmake --build --preset windows-debug --target RaidSessionTest RaidSettlementTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(RaidSessionTest|RaidSettlementTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -57,12 +57,13 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 23 个 GTest executable、416 个 CTest 用例。`RaidSessionTest` 覆盖六态转换、连续撤离、离开取消、超时/撤离竞态、死亡与 sticky 终局；`ExtractionPointTest` 覆盖有限几何和半开边界；`GameplayWorldRaidTest` 覆盖移动后占用、撤离、默认超时和终局冻结。`LootTableTest` 覆盖权重/数量边界、堆叠规范化、非法表和随机源契约；`GameplayWorldLootTest` 覆盖首次搜索、重开不重抽、取空不刷新、稳定 ID 与失败快照。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚。可用下列命令证明 Raid、Loot 与鼠标测试源真实进入编译数据库：
+当前 CMake 注册 24 个 GTest executable、434 个 CTest 用例。`RaidSessionTest` 覆盖六态转换、连续撤离、离开取消、超时/撤离竞态、死亡与 sticky 终局；`RaidSettlementTest` 覆盖撤离存入、死亡/超时丢失、Blocked 原子失败/重试、空背包与 sticky 完成态；`ExtractionPointTest` 覆盖有限几何和半开边界；`GameplayWorldRaidTest` 覆盖移动后占用、撤离、默认超时和终局冻结。`LootTableTest` 覆盖权重/数量边界、堆叠规范化、非法表和随机源契约；`GameplayWorldLootTest` 覆盖首次搜索、重开不重抽、取空不刷新、稳定 ID 与失败快照。`MouseInventoryInteractionTest` 编译 canonical `src/inventory_interaction.cpp` 与真实 `GridInventory`，覆盖布局、帧级输入仲裁、平滑像素拖拽、旋转锚点和同/跨容器事务集成；`InventoryTransferTest` 覆盖整栈 first-fit、整背包无合并原子转移、同/跨容器指定格精确数量放置、稳定合并顺序、拆分 ID 和失败回滚。可用下列命令证明 Raid、Loot 与鼠标测试源真实进入编译数据库：
 
 ```powershell
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
 rg 'loot_table.cpp|test_loot_table.cpp' build/windows-debug/compile_commands.json
 rg 'raid_session.cpp|extraction_point.cpp|test_raid_session.cpp|test_extraction_point.cpp' build/windows-debug/compile_commands.json
+rg 'raid_settlement.cpp|stash.cpp|test_raid_settlement.cpp' build/windows-debug/compile_commands.json
 ```
 
 若修改类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，或链接器仍引用旧函数签名，先检查 Ninja 是否真实记录头文件依赖：

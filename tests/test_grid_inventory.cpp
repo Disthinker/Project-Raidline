@@ -1637,3 +1637,23 @@ TEST(GridInventoryRotationTest, FailedTransformPreservesCompleteState)
         inventory.placedItems()[0].item.orientation(),
         ItemOrientation::Degrees0);
 }
+
+TEST(GridInventoryTest, ClearDestroysItemsAndResetsEveryCell)
+{
+    GridInventory inventory({6, 4});
+    ItemInstance rifle{61, ItemId::Rifle};
+    ItemInstance ammo{62, ItemId::Ammo9mm, 19};
+    ASSERT_TRUE(inventory.tryPlace(std::move(rifle), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(ammo), {5, 3}));
+
+    inventory.clear();
+
+    EXPECT_TRUE(inventory.placedItems().empty());
+    EXPECT_EQ(inventory.width(), 6);
+    EXPECT_EQ(inventory.height(), 4);
+
+    for (const auto &cell : snapshotCells(inventory))
+    {
+        EXPECT_EQ(cell, std::nullopt);
+    }
+}

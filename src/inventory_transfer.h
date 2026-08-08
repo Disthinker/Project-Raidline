@@ -60,6 +60,22 @@ bool tryTransferItemAtCellFirstFit(
     GridInventory &destination,
     GridPosition sourceCell);
 
+// Plans a complete, non-merging transfer in source placement order. Each
+// exact stack keeps its stable ID, quantity and orientation, and receives the
+// next row-major fit in destination. The query never mutates either inventory.
+[[nodiscard]]
+bool canTransferAllItemsFirstFit(
+    const GridInventory &source,
+    const GridInventory &destination);
+
+// Transfers every exact source stack or leaves both inventories unchanged.
+// Expected failures (capacity, footprint or ID conflict) are resolved before
+// the first ownership mutation.
+[[nodiscard]]
+bool tryTransferAllItemsFirstFit(
+    GridInventory &source,
+    GridInventory &destination);
+
 struct QuantityTransferResult
 {
     bool succeeded{};
