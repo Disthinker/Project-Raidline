@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：玩家生命、敌人接触死亡与成功/失败垂直切片回归
-- 日期/分支/commit：2026-08-08，`codex/week24-vertical-slice`，commit 尚未创建
-- 完成度：代码、安全审查、本地自动测试与真实窗口 1–8 完成；Windows/Ubuntu CI、PR 与合入未验证
+- 日期/分支/commit：2026-08-08，`codex/week24-vertical-slice`，feature commit `d8c58e6`，PR #44，merge commit `1415238`
+- 完成度：代码、安全审查、本地自动测试、真实窗口 1–8、精确 head Windows/Ubuntu CI、PR 与合入全部完成
 
 ## 2. 用户可见结果
 
@@ -22,7 +22,7 @@
 | `tests/test_player.cpp` | 3 个 Player Health 测试 | 初始、非致命、致命与重复死亡 |
 | `tests/test_gameplay_world.cpp` | Player Health、领域伤害、接触冷却/致死测试 | 世界级状态与帧顺序回归 |
 | `tests/test_game_session.cpp` | 成功切片测试、第二局死亡损失扩展 | 串联搜索/转移/撤离/死亡/结算/重开 |
-| `doc/exec-plans/active/week24-vertical-slice-v0.md` | Week24 活动计划 | 冻结范围、证据与人工清单 |
+| `doc/exec-plans/completed/week24-vertical-slice-v0.md` | Week24 已完成计划 | 冻结范围、证据与人工清单 |
 
 ## 4. 修改前后的执行路径
 
@@ -83,7 +83,7 @@ Player 直接组合拥有 `Health health_{3}`，生命周期与当前 GameplayWo
 - 全量 CTest：453/453。
 - 其他测试：Player 新测试直接 3/3、GameplayWorld 生命/接触直接 4/4、GameSessionTest 直接 8/8；无 `gtest_ar_`/运行库错误。`ctest -N` 注册 453；compile database 与 Ninja `#deps 197/168` 证明接线有效。
 - Phase1 pytest：未执行；本轮无艺术资源变化。
-- CI：未验证。
+- CI：feature commit `d8c58e6` 的 GitHub Actions run 31244714973 全部通过；范围检测 7 秒、Ubuntu 1 分 9 秒、Windows 3 分 12 秒。
 - 人工验收：用户在 Windows Debug 真实窗口中确认 1–8 全部通过。
 
 ## 12. 教学分级
@@ -110,13 +110,13 @@ Player 直接组合拥有 `Health health_{3}`，生命周期与当前 GameplayWo
 - `src/app.cpp`：`App::renderDebugText` 的 Player HP 展示。
 - `tests/test_gameplay_world.cpp`：接触路径、cooldown 与致死帧顺序。
 - `tests/test_game_session.cpp`：成功/失败跨系统回归。
-- `doc/exec-plans/active/week24-vertical-slice-v0.md`：冻结合同、验证与人工清单。
+- `doc/exec-plans/completed/week24-vertical-slice-v0.md`：冻结合同、验证与人工清单。
 
 ## 15. 技术债与测试债
 
 - 技术债：接触伤害使用离散帧末 AABB，极大 deltaTime 可能穿越而不命中；伤害数值为 V0 常量；App 调试文本仍为开发 UI；没有复杂敌人攻击、治疗或受伤表现。
-- 测试债：缺少 App 级自动输入/截图测试；本轮真实碰撞手感、文字布局与完整窗口流程已人工通过，Ubuntu/Windows CI 尚未执行。
-- 下一安全任务：创建单一 feature PR 并只等待一次精确 head CI；通过并获授权合入后归档计划，再依据体验决定进入 V1 还是独立处理 #38/#39/#28。
+- 测试债：缺少 App 级自动输入/截图测试；本轮真实碰撞手感、文字布局与完整窗口流程已人工通过，Ubuntu/Windows CI 也已通过。
+- 下一安全任务：按 Week25 计划建立 `MainMenu → Base → Raid → RaidResult → Base` 顶层流程壳；后续依次推进鼠标射击、敌人攻击动作、敌人 AI 和战斗手感收口，库存 #38/#39/#28 继续作为独立稳定化任务。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 

@@ -1,6 +1,6 @@
 # Week24 垂直切片 V0 收口 ExecPlan
 
-- 状态：In Progress
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-08
 
@@ -116,6 +116,8 @@ GameSession::update
 - 2026-08-08：修复后重新编译 GameplayWorldTest、GameSessionTest 和主程序，聚焦 CTest 再次 103/103；Windows Debug 全目标构建与全量 CTest 453/453 通过。
 - 2026-08-08：Player 新测试直接运行 3/3、GameplayWorld 生命/接触测试 4/4、GameSessionTest 8/8，均无运行库错误；`ctest -N` 注册 453 项，compile database 含主程序及三个测试目标的真实源，Ninja 对主程序 app.cpp 和 GameplayWorld 测试分别记录 `#deps 197/168` 且包含 `player.h`。Phase1 pytest 未执行（本轮无艺术资源变化）。
 - 2026-08-08：用户完成真实窗口人工验收并确认清单 1–8 全部通过；生命显示、接触伤害节奏、死亡冻结、损失结算、新 Raid 重置、成功撤离与运行库稳定性均满足本轮验收。
+- 2026-08-08：创建 feature commit `d8c58e6` 与 PR #44；精确 head 的 GitHub Actions run 31244714973 全部通过（范围检测 7 秒、Ubuntu 1 分 9 秒、Windows 3 分 12 秒），未为记录动态 CI 结果触发第二轮 C++ 矩阵。
+- 2026-08-08：PR #44 以 merge commit `1415238` 合入 `main`；活动计划移入 `doc/exec-plans/completed/`，Week24 完成收口。
 
 ## 发现记录
 
@@ -130,4 +132,4 @@ GameSession::update
 
 ## 最终结果、验证与偏差
 
-代码、C++ 安全复核、本地 configure/build、聚焦测试、全量 CTest、接线证明与真实窗口 1–8 均已完成。精确 head Windows/Ubuntu CI、PR 合入和最终归档仍未完成，因此计划保持 In Progress。实现没有加入敌人攻击 AI、治疗、击退、美术资源或库存 #38/#39。
+Week24 计划结果全部完成：代码与安全复核通过，本地聚焦 CTest 两轮 103/103、全量 CTest 453/453、真实窗口 1–8 与精确 head Windows/Ubuntu CI 均通过；feature commit `d8c58e6` 已通过 PR #44 合入 `main@1415238`。Phase1 pytest 未执行，因为本轮没有艺术资源变化。计划已归档，未夹带敌人攻击 AI、治疗、击退、美术资源或库存 #38/#39。
