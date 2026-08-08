@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week24 已完成并收口到 `main@43eb571`。Week25 顶层游戏流程壳已在 `codex/week25-game-flow` 完成本地候选：Windows Debug 全目标构建、CTest 462/462 和用户真实窗口 1–10 全部通过；提交、PR 与精确 head Windows/Ubuntu CI 尚未执行。
+最后核对：2026-08-08，Week25 feature commit `23cd19b` 已通过 PR #46 合入 `main@08e4475`；顶层游戏流程壳已通过 Windows Debug 全目标构建、CTest 462/462、用户真实窗口 1–10 与精确 head Windows/Ubuntu CI。Week26 鼠标瞄准、射击与 V0 后坐力处于 Ready 计划阶段，尚未开始业务代码改动。
 
 ## Git、验证与 CI 基线
 
@@ -21,9 +21,11 @@
 - Week24 新增关键测试程序直接运行 3/3、4/4、8/8；`ctest -N` 注册 453 项，compile database 与 Ninja `#deps 197/168` 证明 Player 类布局变化进入主程序和关键测试目标，未出现运行库错误。
 - Week24 真实窗口 1–8 已由用户确认全部通过；feature commit `d8c58e6` 的 [GitHub Actions run 31244714973](https://github.com/Disthinker/Project-Raidline/actions/runs/31244714973) 全部通过：范围检测 7 秒、Ubuntu 1 分 9 秒、Windows 3 分 12 秒。
 - PR #44 已按精确 feature head `d8c58e6` 合入，merge commit 为 `1415238`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
-- Week25 `GameFlowTest` 与 `InputSystemTest` 聚焦 CTest 31/31、Windows Debug 全目标构建和全量 CTest 462/462 通过；新增流程代码已进入主程序与专用测试目标。用户已确认真实窗口 1–10 全部通过；提交和 CI 仍明确待执行。
+- Week25 `GameFlowTest` 与 `InputSystemTest` 聚焦 CTest 31/31、Windows Debug 全目标构建和全量 CTest 462/462 通过；新增流程代码已进入主程序与专用测试目标。用户已确认真实窗口 1–10 全部通过。
+- Week25 feature commit `23cd19b` 的 [GitHub Actions run 31247705924](https://github.com/Disthinker/Project-Raidline/actions/runs/31247705924) 全部通过：范围检测 5 秒、Ubuntu 1 分 10 秒、Windows 3 分 31 秒。
+- PR #46 已按精确 feature head `23cd19b` 合入，merge commit 为 `08e4475`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
 
-## 已进入 main：Week 1–24
+## 已进入 main：Week 1–25
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -45,6 +47,8 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 Week23 计划已按 PR #42 的合入事实归档；可重复 Raid、跨局 Stash、稳定 ID 高水位和只读仓库均已进入 `main`。
 
 Week24 计划已按 PR #44 的合入事实归档；玩家 3 HP、敌人接触伤害、真实死亡出口和成功/失败完整回归均已进入 `main`。
+
+Week25 计划已按 PR #46 的合入事实归档；MainMenu、Base、Raid、RaidResult 顶层流程壳与非 Raid 冻结均已进入 `main`。
 
 ## Week19 已合入能力
 
@@ -114,13 +118,20 @@ Week24 计划已按 PR #44 的合入事实归档；玩家 3 HP、敌人接触伤
 - 致死伤害在同一命令中把生命归零并形成 sticky `PlayerDead`；致死帧在玩家射击、投射物推进、命中和计分前返回，随后由既有结算清空携带物并显示 `LOST`。
 - GameSession 自动回归已串联“搜索→转移→撤离→Stash→重开”成功路径，以及“携带物→死亡→损失→重开”失败路径。
 
-## Week25 本地候选：顶层游戏流程壳
+## Week25 已合入能力
 
 - SDL 无关的 `GameFlow` 唯一拥有 `GameSession`，显式建模 MainMenu、Base、Raid 与 RaidResult；只有 Raid 转发 GameplayInput 与 deltaTime。
 - 主菜单和基地使用代码绘制占位界面；Base 只读显示 Stash 与部署信息。第一次部署激活已准备的 Raid 1，后续部署才创建下一局。
 - 完整结算进入 RaidResult，确认后返回 Base；Blocked 不得绕过结算。旧 `N` 重开已移除，Enter/数字键盘 Enter 与鼠标主按钮使用屏幕级单次确认。
 - 流程转换帧立即终止处理，避免同一输入泄漏到新屏幕、玩家射击或库存；MainMenu、Base 与 RaidResult 的世界更新均有自动冻结覆盖。
-- 真实窗口 1–10 已由用户确认全部通过；当前仍缺提交与精确 head CI，不能把 Week25 标记为完成或已进入 main。
+- 真实窗口 1–10 与精确 head Windows/Ubuntu CI 均已通过；feature commit `23cd19b` 已由 PR #46 合入 `main@08e4475`。
+
+## 下一阶段：Week26 鼠标瞄准、射击与 V0 后坐力
+
+- 鼠标世界位置将独立于 WASD 移动决定瞄准方向，左键在 Raid 且库存关闭时触发连续射击；Space 暂保留为回归路径。
+- 射击冷却、扩散累积/恢复、可视后坐力与确定性偏移进入 SDL 无关、可测试的武器射击状态；App 只负责坐标和输入适配。
+- 屏幕按钮、库存鼠标操作和切屏点击不得泄漏为射击；中心/非有限瞄准、终局冻结和现有命中链保持安全。
+- 本轮不实现弹匣/换弹/弹药消耗、武器切换/改装、相机震动、音效、正式准星资源、敌人攻击或 AI。
 
 ## 已知工程债
 
@@ -131,4 +142,4 @@ Week24 计划已按 PR #44 的合入事实归档；玩家 3 HP、敌人接触伤
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
 - 搜索计时、多柜体选择、外部数据 Loot、复杂敌人攻击、受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week25 合同见 [活动 ExecPlan](../exec-plans/active/week25-game-flow-shell.md)；Week24 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week24-vertical-slice-v0.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week26 合同见 [活动 ExecPlan](../exec-plans/active/week26-mouse-aim-shooting-recoil.md)；Week25 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week25-game-flow-shell.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
