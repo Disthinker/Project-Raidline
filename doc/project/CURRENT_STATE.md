@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week25 feature commit `23cd19b` 与文档收口已分别通过 PR #46/#47 合入 `main@ff828de`。Week26 鼠标瞄准、射击与 V0 后坐力已在本地功能分支实现，真实窗口 1–10 与补充 11–13 已由用户确认通过；最新手感修订把细小火光弹体提高到 1200 px/s，并增加高速弹丸子步进命中与短促火光冲击反馈。Windows Debug 全目标构建、聚焦 CTest 57/57 与全量 CTest 483/483 通过，最终手感验收、提交和精确 head Windows/Ubuntu CI 尚未执行。
+最后核对：2026-08-08，Week26 feature commit `3a52354` 已通过 PR #48 合入 `main@0847da0`。鼠标瞄准、左键/Space 统一射击、V0 扩散与后坐力、1200 px/s 细小火光弹体、高速子步命中和短促命中火花均已完成；Windows Debug 聚焦 CTest 57/57、全量 CTest 483/483、精确 head Windows/Ubuntu CI 与用户最终人工验收 15 全部通过。Week27 敌人抓/挠/咬攻击进入 Ready 计划阶段。
 
 ## Git、验证与 CI 基线
 
@@ -24,8 +24,11 @@
 - Week25 `GameFlowTest` 与 `InputSystemTest` 聚焦 CTest 31/31、Windows Debug 全目标构建和全量 CTest 462/462 通过；新增流程代码已进入主程序与专用测试目标。用户已确认真实窗口 1–10 全部通过。
 - Week25 feature commit `23cd19b` 的 [GitHub Actions run 31247705924](https://github.com/Disthinker/Project-Raidline/actions/runs/31247705924) 全部通过：范围检测 5 秒、Ubuntu 1 分 10 秒、Windows 3 分 31 秒。
 - PR #46 已按精确 feature head `23cd19b` 合入，merge commit 为 `08e4475`；CI 动态证据保存在 PR 评论中，没有为写回结果触发第二轮 C++ 矩阵。
+- Week26 Windows Debug 全目标构建、聚焦 CTest 57/57 与全量 CTest 483/483 通过；`ctest -N` 注册 483 项，compile database 与 Ninja `#deps 120` 证明新射击实现进入主程序和测试目标。
+- Week26 feature commit `3a52354` 的 [GitHub Actions run 31260317298](https://github.com/Disthinker/Project-Raidline/actions/runs/31260317298) 全部通过：范围检测 6 秒、Ubuntu 1 分 23 秒、Windows 3 分 15 秒。
+- 用户确认 Week26 原 1–10、补充 11–13 与最终合并验收 15 全部通过；PR #48 已按精确 feature head 合入，merge commit 为 `0847da0`。
 
-## 已进入 main：Week 1–25
+## 已进入 main：Week 1–26
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -49,6 +52,8 @@ Week23 计划已按 PR #42 的合入事实归档；可重复 Raid、跨局 Stash
 Week24 计划已按 PR #44 的合入事实归档；玩家 3 HP、敌人接触伤害、真实死亡出口和成功/失败完整回归均已进入 `main`。
 
 Week25 计划已按 PR #46 的合入事实归档；MainMenu、Base、Raid、RaidResult 顶层流程壳与非 Raid 冻结均已进入 `main`。
+
+Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击状态、准星/系统鼠标仲裁、高速弹丸与火光命中反馈均已进入 `main`。
 
 ## Week19 已合入能力
 
@@ -126,14 +131,15 @@ Week25 计划已按 PR #46 的合入事实归档；MainMenu、Base、Raid、Raid
 - 流程转换帧立即终止处理，避免同一输入泄漏到新屏幕、玩家射击或库存；MainMenu、Base 与 RaidResult 的世界更新均有自动冻结覆盖。
 - 真实窗口 1–10 与精确 head Windows/Ubuntu CI 均已通过；feature commit `23cd19b` 已由 PR #46 合入 `main@08e4475`。
 
-## Week26 已本地实现、待人工验收
+## Week26 已合入能力
 
 - 鼠标世界位置独立于 WASD 移动决定瞄准方向；左键在活动 Raid 且库存关闭时触发连续射击，Space 保留为同一领域输入的回归路径。
 - `GameplayWorld` 唯一拥有 SDL 无关的 `WeaponFireState`，负责 0.12 秒 cadence、首发精确、最大 6° 确定性扩散、恢复延迟和代码准星所读取的可视后坐力；每次 update 最多生成一发。
 - Player 移动完成后才应用有效 aim facing，因此移动与瞄准解耦；投射物从最终方向的玩家外缘生成，速度为 1200 px/s，逻辑 AABB 统一为 8×8。弹丸推进按有限距离子步进解析命中，避免提高速度后在较大帧间隔中直接穿过敌人。
 - 活动 Raid 且库存关闭时隐藏系统鼠标，只显示代码准星；菜单、Base、库存、终局和 shutdown 恢复系统鼠标。投射物视觉为 3×3 热芯、5×5 微光、方向短弹头、两段红橙/金黄细线和小火星；命中时产生短寿命的白热—金黄—红橙放射火花，两者都不改变逻辑碰撞与伤害。
 - `InputSystem` 单独跟踪左键 held/edge，并允许屏幕/库存层抑制到物理释放；菜单点击、库存操作、Tab/Esc、失焦和终局不会泄漏为射击，极短 down+up 同帧仍由 `fireJustPressed` 保留一发。
-- 最新 1200 px/s、子步进命中与火光冲击修订已完成 Windows Debug 全目标构建、聚焦 CTest 57/57 和全量 CTest 483/483；`compile_commands.json` 证明新实现进入主程序与 GameplayWorldTest，Ninja 对主程序 `gameplay_world.cpp.obj` 记录 120 个头文件依赖。真实窗口 1–10 与补充 11–13 已通过；最终手感验收与 CI 保持未验证。
+- 1200 px/s、子步进命中与火光冲击修订已完成 Windows Debug 全目标构建、聚焦 CTest 57/57 和全量 CTest 483/483；`compile_commands.json` 证明新实现进入主程序与 GameplayWorldTest，Ninja 对主程序 `gameplay_world.cpp.obj` 记录 120 个头文件依赖。
+- 真实窗口 1–10、补充 11–13 和最终合并验收 15 均由用户确认通过；精确 head Windows/Ubuntu CI 通过，feature commit `3a52354` 已由 PR #48 合入 `main@0847da0`。
 - 本轮不实现弹匣/换弹/弹药消耗、武器切换/改装、相机震动、音效、正式准星资源、敌人攻击或 AI。
 
 ## 已知工程债
@@ -145,4 +151,4 @@ Week25 计划已按 PR #46 的合入事实归档；MainMenu、Base、Raid、Raid
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
 - 搜索计时、多柜体选择、外部数据 Loot、复杂敌人攻击、受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week26 合同见 [活动 ExecPlan](../exec-plans/active/week26-mouse-aim-shooting-recoil.md)；Week25 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week25-game-flow-shell.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week27 合同见 [活动 ExecPlan](../exec-plans/active/week27-enemy-readable-attacks.md)；Week26 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week26-mouse-aim-shooting-recoil.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

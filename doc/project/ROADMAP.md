@@ -20,12 +20,13 @@
 | Week 23 | 可重复 Raid 会话、跨局 Stash、稳定 ID 高水位、只读仓库与空背包重开；PR #42 |
 | Week 24 | 玩家 3 HP、敌人接触伤害、真实死亡出口与成功/失败完整垂直回归；PR #44 |
 | Week 25 | MainMenu/Base/Raid/RaidResult 顶层流程、非 Raid 冻结、单地图部署与跨局返回；PR #46 |
+| Week 26 | 鼠标独立瞄准、左键/Space 统一射击、扩散/后坐力、1200 px/s 高速弹丸与火光命中反馈；PR #48 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week26 鼠标瞄准、射击与 V0 后坐力
+## 当前开发：Week27 敌人三类可读攻击
 
-Week25 已通过 PR #46 合入 `main@08e4475`。下一步让鼠标世界位置独立决定瞄准方向，以左键连续射击，并建立可调、确定性且可自动测试的扩散累积/恢复与 V0 可视后坐力；Space 在本轮保留为回归路径。Week26 不实现弹药消耗、换弹、武器系统、相机震动、音效、敌人攻击或 AI。活动计划见 `doc/exec-plans/active/week26-mouse-aim-shooting-recoil.md`。
+Week26 已通过 PR #48 合入 `main@0847da0`。下一步先建立不依赖 AI 决策的敌人动作规则：抓以短前摇锁定方向并突进，挠提供近距离单次普通伤害，咬具有明显前摇、2 点伤害和短暂控制。三种攻击统一使用 `Windup → Active → Recovery`、单次命中窗口与代码占位预警；Week28 再负责感知、追击和攻击选择。活动计划见 `doc/exec-plans/active/week27-enemy-readable-attacks.md`。
 
 ## Week25–Week30 推荐顺序
 

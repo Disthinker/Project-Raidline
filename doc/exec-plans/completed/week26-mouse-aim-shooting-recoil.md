@@ -1,6 +1,6 @@
 # Week26 鼠标瞄准、射击与 V0 后坐力 ExecPlan
 
-- 状态：Implemented / Awaiting Supplemental Manual Acceptance
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-08
 
@@ -144,7 +144,7 @@ SDL mouse motion/button + keyboard
 
 15. 1200 px/s 子弹在近中距离内飞行明显更短，细小弹头与火光拖尾仍可辨认；正常帧率与一次 0.30 秒大帧间隔都能命中敌人，命中瞬间出现短促的白热—金黄—红橙放射火花，且伤害、得分和射速不回归。
 
-最终 15 在用户实际执行前为“未验证”。
+用户已于 2026-08-08 确认最终合并验收 15 通过。
 
 ## 风险、替代方案与失败语义
 
@@ -166,6 +166,7 @@ SDL mouse motion/button + keyboard
 - 2026-08-08：用户确认补充 11–13 全部通过，但继续反馈首轮弹头偏大、拖尾不明显。第二轮纯渲染调优改为 3×3 热芯、5×5 微光、方向短弹头、两段细长火光线和小火星；Project_Raidline 构建与 CTest 482/482 再次通过，等待最终 14。
 - 2026-08-08：最终 14 尚未明确确认时收到进一步手感反馈：900 px/s 飞行仍偏长、命中冲击不突出。第三轮修订提高到 1200 px/s，增加最多 8 px 常规步长、256 次上限的高速弹丸子步进，并把默认命中反馈改为 16 枚更快、更短的火光火花；Windows Debug 全目标构建、聚焦 CTest 57/57 和全量 CTest 483/483 通过，等待最终 15。
 - 2026-08-08：完成 C++ 安全复核与教学交接 `doc/handoffs/completed/2026-08-08-week26-mouse-aim-shooting-recoil.md`；未发现可操作的所有权、生命周期或 vector 失效问题，保留最终手感验收 15 与精确 feature head CI 为未验证。
+- 2026-08-08：feature commit `3a52354` 的 [Actions run 31260317298](https://github.com/Disthinker/Project-Raidline/actions/runs/31260317298) 全部通过：范围检测 6 秒、Ubuntu 1 分 23 秒、Windows 3 分 15 秒。用户随后明确确认最终验收 15 通过；PR #48 按精确 head 合入，merge commit 为 `0847da0`，Week26 满足 DoD 并归档。
 
 ## 发现记录
 
@@ -192,6 +193,6 @@ SDL mouse motion/button + keyboard
 
 ## 最终结果、验证与偏差
 
-Week26 功能已在 `codex/week26-mouse-aim-shooting-recoil` 本地实现。领域状态由 `GameplayWorld` 内唯一的 `WeaponFireState` 持有；App 只适配 SDL pointer、仲裁 UI 所有权并读取反馈绘制准星。用户已确认原 1–10 与补充 11–13 全部通过；最新本地修订将弹速提高到 1200 px/s，以有限子步防止高速穿透，并用短寿命火光火花突出命中。Windows Debug 全目标构建成功，聚焦 CTest 57/57、全量 CTest 483/483；compile database 与 Ninja `#deps 120` 证明实现进入主程序和测试目标。C++ 安全复核无可操作发现，中文教学交接已生成。
+Week26 功能由 feature commit `3a52354` 完成。领域状态由 `GameplayWorld` 内唯一的 `WeaponFireState` 持有；App 只适配 SDL pointer、仲裁 UI 所有权并读取反馈绘制准星。用户确认原 1–10、补充 11–13 与最终合并验收 15 全部通过。Windows Debug 全目标构建成功，聚焦 CTest 57/57、全量 CTest 483/483；compile database 与 Ninja `#deps 120` 证明实现进入主程序和测试目标。精确 head Actions run 31260317298 的范围检测、Ubuntu 与 Windows 全部通过；PR #48 合入 `main@0847da0`。C++ 安全复核无可操作发现，中文教学交接已生成。
 
-当前偏差仅为收口阶段尚未完成：最终手感验收 15 尚未完成；本分支尚未提交、推送，Week26 CI 尚未运行。
+偏差：投射物调参按三轮人工反馈从 700→900→1200 px/s，增加有限子步与火光命中表现；这些均保持在 Week26 射击手感范围内。未引入弹药消耗、换弹、武器装备、相机震动、音效、敌人攻击或 AI。
