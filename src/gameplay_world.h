@@ -40,6 +40,12 @@ public:
     // 正常游戏仍使用默认的 3 HP Enemy。
     explicit GameplayWorld(int enemyMaxHealth);
 
+    // Allows integration tests to keep a player alive after Scratch + Bite
+    // without changing the shipped three-HP balance.
+    GameplayWorld(
+        int enemyMaxHealth,
+        int playerMaxHealth);
+
     // 使用默认 10×6 背包。
     GameplayWorld(
         int enemyMaxHealth,
@@ -170,7 +176,19 @@ public:
     ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
-    Player player_{640.0f, 360.0f};
+    struct PlayerHealthOverrideTag
+    {
+    };
+
+    GameplayWorld(
+        int enemyMaxHealth,
+        std::vector<GroundItemSpawn> initialGroundItems,
+        InventoryGridSize inventorySize,
+        ItemInstanceId firstItemInstanceId,
+        int playerMaxHealth,
+        PlayerHealthOverrideTag);
+
+    Player player_;
 
     std::vector<Projectile> projectiles_;
     std::vector<Enemy> enemies_;
@@ -195,7 +213,6 @@ private:
     SeededLootRandomSource lootRandom_;
 
     WeaponFireState weaponFire_;
-    float playerContactDamageCooldownRemaining_{0.0f};
 
     ParticleSystem particleSystem_;
     int score_{0};
@@ -212,9 +229,6 @@ private:
     [[nodiscard]]
     bool itemInstanceIdExists(
         ItemInstanceId instanceId) const noexcept;
-
-    [[nodiscard]]
-    bool resolveEnemyContactDamage();
 
     void tryPickupOne();
 };

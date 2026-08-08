@@ -133,6 +133,7 @@ private:
     void renderExtractionPoint();
     void renderStorageCabinet();
     void renderGroundItems();
+    void renderEnemyAttackTelegraphs();
     void renderEnemies();
     void renderPlayer();
     void renderProjectiles();

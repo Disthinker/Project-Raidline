@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -7,6 +8,9 @@ namespace
 {
     constexpr std::size_t kPlayerMoveFrameCount{6};
     constexpr float kPlayerMoveFrameDuration{0.09f};
+    constexpr float kImpactSlowDurationSeconds{0.18F};
+    constexpr float kImpactSlowTimeMultiplier{0.28F};
+    constexpr float kTimerEpsilon{0.00001F};
 
     AnimationClip makePlayerMoveClip()
     {
@@ -17,16 +21,46 @@ namespace
     }
 }
 
-Player::Player(float x, float y)
+Player::Player(float x, float y, int maxHealth)
     : position_{x, y},
       movementAnimator_{
           makePlayerMoveClip(),
-          AnimationPlayMode::Loop}
+          AnimationPlayMode::Loop},
+      health_{maxHealth}
 {
 }
 
 void Player::update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight)
 {
+    const bool wasControlled = isControlled();
+    float effectiveDeltaTime{};
+    if (std::isfinite(deltaTime) &&
+        deltaTime > 0.0F)
+    {
+        const float slowedTime = std::min(
+            deltaTime,
+            impactSlowRemaining_);
+        const float remainingAfterUpdate =
+            impactSlowRemaining_ - deltaTime;
+        impactSlowRemaining_ =
+            remainingAfterUpdate <= kTimerEpsilon
+                ? 0.0F
+                : remainingAfterUpdate;
+        effectiveDeltaTime =
+            slowedTime * kImpactSlowTimeMultiplier +
+            (deltaTime - slowedTime);
+        controlRemaining_ = std::max(
+            0.0F,
+            controlRemaining_ - deltaTime);
+    }
+
+    if (wasControlled)
+    {
+        isMoving_ = false;
+        movementAnimator_.reset();
+        return;
+    }
+
     Vec2 direction{};
 
     if (input.moveUp)
@@ -57,10 +91,10 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         direction.y /= length;
         facingDirection_ = direction;
         // 归一化方向更新
-        position_.x += direction.x * speed_ * deltaTime;
-        position_.y += direction.y * speed_ * deltaTime;
+        position_.x += direction.x * speed_ * effectiveDeltaTime;
+        position_.y += direction.y * speed_ * effectiveDeltaTime;
 
-        movementAnimator_.update(deltaTime);
+        movementAnimator_.update(effectiveDeltaTime);
     }
     else if (wasMoving)
     {
@@ -124,7 +158,54 @@ std::size_t Player::currentAnimationFrameIndex() const
 
 bool Player::takeDamage(int damage)
 {
-    return health_.takeDamage(damage);
+    const bool wasDead = isDead();
+    const bool killed = health_.takeDamage(damage);
+    if (!wasDead && !killed)
+    {
+        impactSlowRemaining_ = kImpactSlowDurationSeconds;
+    }
+    else if (killed)
+    {
+        impactSlowRemaining_ = 0.0F;
+    }
+    return killed;
+}
+
+bool Player::isImpactSlowed() const noexcept
+{
+    return impactSlowRemaining_ > 0.0F;
+}
+
+float Player::impactSlowRemaining() const noexcept
+{
+    return impactSlowRemaining_;
+}
+
+bool Player::applyControl(float duration) noexcept
+{
+    if (!std::isfinite(duration) ||
+        duration <= 0.0F ||
+        isDead())
+    {
+        return false;
+    }
+
+    controlRemaining_ = std::max(
+        controlRemaining_,
+        duration);
+    isMoving_ = false;
+    movementAnimator_.reset();
+    return true;
+}
+
+bool Player::isControlled() const noexcept
+{
+    return controlRemaining_ > 0.0F;
+}
+
+float Player::controlRemaining() const noexcept
+{
+    return controlRemaining_;
 }
 
 int Player::health() const noexcept

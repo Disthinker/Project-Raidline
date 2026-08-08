@@ -48,12 +48,12 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人接触伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。敌人移动后、玩家射击和投射物推进前结算带冷却的接触伤害，致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。活动 Raid 中，世界把玩家中心相对向量交给每个 Enemy；Enemy 自己用确定性 `EnemyAiState` 决定 72 px/s 二维追击、近距离 Scratch 或满足“已挠击且中距离保持 0.5 秒”的特殊 Grab 请求，并用 `EnemyAttackState` 推进攻击阶段。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
-- Player：运动、朝向、动画与唯一拥有的 3 HP Health；受控伤害只报告首次 alive→dead。
-- Enemy：运动、朝向、动画与自己的 Health；当前接触只提供 V0 玩家伤害，不包含攻击 AI。
+- Player：运动、朝向、动画、唯一拥有的默认 3 HP Health 与短暂受控剩余时间；受控期间移动被抑制，世界同时抑制射击和世界交互。
+- Enemy：运动、朝向、动画、自己的 Health、确定性追击/选招状态、`Stationary/Normal/Attack` 速度档位、受击减速与抓/挠/抱咬攻击阶段；Grab 前摇可追踪，Active 锁向，空冲失衡，世界只读取攻击快照并提交碰撞结果。
 - WeaponFireState：SDL 无关的单局射击时间状态，返回确定性 ShotSpec；不拥有 Projectile，也不直接渲染准星。
 - Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
 - Particle/ParticleSystem：短生命周期命中反馈。
@@ -80,8 +80,8 @@ GameFlow ─owns─> GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
 GameplayWorld ─owns─> single-Raid entities + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
-Player ─owns─> Health
-Enemy ─owns─> Health
+Player ─owns─> Health + control remaining time
+Enemy ─owns─> Health + EnemyAiState + EnemyAttackState
 StorageCabinet ─owns─> external GridInventory
 GroundItem ─owns─> ItemInstance   (拾取时转移)
 GridInventory::PlacedItem ─owns─> ItemInstance
@@ -95,8 +95,8 @@ ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有�
 
 ## 查询、命令与渲染
 
-- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
-- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
+- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、Enemy 攻击快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
+- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`Enemy::updateTowardsTarget/tryStartAttack/consumeAttackHit`、`Player::applyControl`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
 - 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
 
 ## 测试与构建边界

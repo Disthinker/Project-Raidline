@@ -8,8 +8,14 @@
 - `takeDamage` 只在 alive→dead 的那次调用报告死亡；已经死亡的对象不重复结算。
 - Player 唯一拥有默认 3 HP 的 Health；GameplayWorld、GameSession 与 App 不保存第二份玩家生命。
 - 只有活动 Raid 接受玩家伤害；任何 GameplayWorld 级死亡入口都必须同时得到 Player HP 0 与 sticky `PlayerDead`，终局后伤害无副作用。
-- 存活敌人与玩家逻辑 AABB 正面积重叠时造成 1 点接触伤害；第一次立即生效，之后 0.75 秒内不重复，每次 world update 最多一击且不按敌人数叠加。
-- 接触伤害冷却只由正 deltaTime 缩短；致死接触发生在玩家射击、投射物推进、命中和计分之前，并立即停止本帧这些后续 mutation。
+- 敌人与玩家单纯重叠不再产生被动接触伤害；普通伤害来自 Scratch Active，特殊高伤害来自 Grab 接触后原子转换得到的 Bite Active。Grab 本身伤害必须为 0，AI 不得独立选择 Bite。
+- Scratch/Bite 严格经历 `Windup → Active → Recovery → Idle`；未命中的 Grab 经 `Windup → Active → OffBalance → Idle`。一次动作链最多消费一个伤害命中，Windup、Recovery、OffBalance、Idle 和已消费 Active 均不能重复伤害。
+- Grab Windup 可按最新有限目标方向追踪并使用 Normal 速度；进入 Active 后方向锁定，按实际消费时间累计固定突进距离并夹在世界边界。接触后立即停止位移并转换为 Bite；空冲必须保持有限的长失衡。攻击致死发生在玩家射击、投射物推进、命中和计分之前，并立即停止本帧这些后续 mutation。
+- 咬命中存活玩家时施加有限短暂控制；Player 唯一拥有控制剩余时间，重复控制取较大剩余值而不累加。受控帧抑制移动、射击和世界交互，到期后的下一帧自然恢复；瞄准和 UI 生命周期不由控制状态复制持有。
+- Enemy 唯一拥有确定性的 `EnemyAiState` 与 `EnemyAttackState`。首次接敌和普通近战默认 Scratch；Grab 只有在至少启动一次 Scratch 后、目标连续处于特殊中距离带达到阈值且冷却完成时才能请求，启动后消耗本次武装。除 Grab Windup 允许追踪外，动作阶段不重新选招。
+- AI 驱动移动只有 `Stationary=0`、`Normal=72`、`Attack=135 px/s` 三档；普通追击与 Grab Windup 使用 Normal，Grab Active 使用 Attack，其余攻击阶段和 OffBalance 使用 Stationary。
+- Player 与 Enemy 各自唯一拥有 0.18 秒受击减速计时，按真实时间衰减并把受影响区间的移动/动作时间乘以 0.28；非致死命中刷新计时，死亡不保留减速。Bite 控制优先抑制 Player 输入。
+- AI 的零、NaN 或 Inf 目标向量不能产生移动或攻击；冷却、位置、方向和阶段时间始终保持有限。死亡、终局和新 Raid 分别停止、冻结和重建 AI/攻击/控制状态。
 - AABB 必须有正面积重叠；仅边缘接触不算命中。
 - 一发 Projectile 一次最多命中一个 Enemy；死亡 Enemy 不再被命中或重复计分。
 - 遍历期间收集结果，完成遍历后再删除容器元素，避免迭代器/引用失效。

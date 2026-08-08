@@ -21,11 +21,11 @@ namespace
     constexpr float kProjectileHeight{8.0f};
     constexpr float kMaximumProjectileTravelPerStep{8.0F};
     constexpr float kMaximumProjectileSubsteps{256.0F};
+    constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
+    constexpr float kMaximumEnemySubsteps{2048.0F};
 
     constexpr int kDefaultEnemyMaxHealth{3};
     constexpr int kProjectileDamage{1};
-    constexpr int kEnemyContactDamage{1};
-    constexpr float kEnemyContactDamageCooldown{0.75f};
 
     constexpr int kScorePerEnemy{100};
 
@@ -91,6 +91,17 @@ namespace
             position.y + halfSize};
     }
 
+    Vec2 enemyCenter(
+        const Enemy &enemy)
+    {
+        const Vec2 position = enemy.position();
+        const Vec2 size = enemy.size();
+
+        return Vec2{
+            position.x + size.x / 2.0F,
+            position.y + size.y / 2.0F};
+    }
+
     float distanceSquared(
         Vec2 first,
         Vec2 second)
@@ -136,6 +147,19 @@ GameplayWorld::GameplayWorld(
 
 GameplayWorld::GameplayWorld(
     int enemyMaxHealth,
+    int playerMaxHealth)
+    : GameplayWorld{
+          enemyMaxHealth,
+          makeDefaultGroundItemSpawns(),
+          kDefaultInventorySize,
+          ItemInstanceId{1},
+          playerMaxHealth,
+          PlayerHealthOverrideTag{}}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    int enemyMaxHealth,
     std::vector<GroundItemSpawn> initialGroundItems)
     : GameplayWorld{
           enemyMaxHealth,
@@ -161,7 +185,25 @@ GameplayWorld::GameplayWorld(
     std::vector<GroundItemSpawn> initialGroundItems,
     InventoryGridSize inventorySize,
     ItemInstanceId firstItemInstanceId)
-    : inventory_{inventorySize},
+    : GameplayWorld{
+          enemyMaxHealth,
+          std::move(initialGroundItems),
+          inventorySize,
+          firstItemInstanceId,
+          3,
+          PlayerHealthOverrideTag{}}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    int enemyMaxHealth,
+    std::vector<GroundItemSpawn> initialGroundItems,
+    InventoryGridSize inventorySize,
+    ItemInstanceId firstItemInstanceId,
+    int playerMaxHealth,
+    PlayerHealthOverrideTag)
+    : player_{640.0F, 360.0F, playerMaxHealth},
+      inventory_{inventorySize},
       nextItemInstanceId_{firstItemInstanceId},
       particleSystem_{
           0xC0FFEEu,
@@ -352,6 +394,9 @@ void GameplayWorld::update(
     particleSystem_.update(
         deltaTime);
 
+    const bool controlsSuppressedAtFrameStart =
+        player_.isControlled();
+
     player_.update(
         input,
         deltaTime,
@@ -380,39 +425,142 @@ void GameplayWorld::update(
         return;
     }
 
-    // 使用移动完成后的 Player 位置判断拾取。
-    // 每个 interactJustPressed 最多处理一件物品。
-    if (input.interactJustPressed)
+    // Bounded substeps keep attack phase transitions and one-shot hit
+    // opportunities observable even when a render frame is long.
+    std::size_t enemySubsteps{1U};
+    if (std::isfinite(deltaTime) &&
+        deltaTime > 0.0F)
+    {
+        const float requestedSubsteps = std::ceil(
+            deltaTime / kMaximumEnemyStepTime);
+        enemySubsteps = static_cast<std::size_t>(
+            std::clamp(
+                requestedSubsteps,
+                1.0F,
+                kMaximumEnemySubsteps));
+    }
+
+    const float enemyStepTime =
+        deltaTime /
+        static_cast<float>(enemySubsteps);
+
+    for (std::size_t step{0U};
+         step < enemySubsteps;
+         ++step)
+    {
+        for (Enemy &enemy : enemies_)
+        {
+            const Vec2 playerPosition =
+                playerCenter(player_);
+            const Vec2 enemyPosition =
+                enemyCenter(enemy);
+
+            static_cast<void>(
+                enemy.updateTowardsTarget(
+                    Vec2{
+                        playerPosition.x - enemyPosition.x,
+                        playerPosition.y - enemyPosition.y},
+                    enemyStepTime,
+                    kWorldWidth,
+                    kWorldHeight));
+
+            if (enemy.hasGrabContactOpportunity())
+            {
+                const std::optional<Rect> grabHitbox =
+                    enemy.attackHitbox();
+                if (!grabHitbox.has_value() ||
+                    !isCollision(
+                        *grabHitbox,
+                        playerBounds(player_)))
+                {
+                    continue;
+                }
+
+                // Grab itself deals no damage. Contact atomically changes the
+                // owned attack state to the Bite follow-up, then consumes that
+                // follow-up once before mutating Player/Raid state.
+                if (!enemy.confirmGrabContact())
+                {
+                    std::terminate();
+                }
+
+                const std::optional<EnemyAttackConfig> biteConfig =
+                    enemy.attackConfig();
+                if (!biteConfig.has_value() ||
+                    enemy.attackType() != EnemyAttackType::Bite ||
+                    !enemy.consumeAttackHit())
+                {
+                    std::terminate();
+                }
+
+                if (damagePlayer(biteConfig->damage))
+                {
+                    return;
+                }
+
+                if (biteConfig->controlDuration > 0.0F)
+                {
+                    static_cast<void>(
+                        player_.applyControl(
+                            biteConfig->controlDuration));
+                }
+                continue;
+            }
+
+            if (!enemy.hasAttackHitOpportunity())
+            {
+                continue;
+            }
+
+            const std::optional<Rect> hitbox =
+                enemy.attackHitbox();
+            const std::optional<EnemyAttackConfig> attackConfig =
+                enemy.attackConfig();
+
+            if (!hitbox.has_value() ||
+                !attackConfig.has_value() ||
+                !isCollision(
+                    *hitbox,
+                    playerBounds(player_)))
+            {
+                continue;
+            }
+
+            // Consume before mutating Player/Raid so a large frame cannot
+            // submit the same attack hit twice.
+            if (!enemy.consumeAttackHit())
+            {
+                std::terminate();
+            }
+
+            if (damagePlayer(attackConfig->damage))
+            {
+                return;
+            }
+
+            if (attackConfig->controlDuration > 0.0F)
+            {
+                static_cast<void>(
+                    player_.applyControl(
+                        attackConfig->controlDuration));
+            }
+        }
+    }
+
+    const bool controlsSuppressed =
+        controlsSuppressedAtFrameStart ||
+        player_.isControlled();
+
+    if (!controlsSuppressed &&
+        input.interactJustPressed)
     {
         tryPickupOne();
     }
 
-    for (Enemy &enemy : enemies_)
-    {
-        enemy.update(
-            deltaTime,
-            kWorldWidth);
-    }
-
-    if (deltaTime > 0.0f)
-    {
-        playerContactDamageCooldownRemaining_ =
-            std::max(
-                0.0f,
-                playerContactDamageCooldownRemaining_ -
-                    deltaTime);
-    }
-
-    // 接触伤害在射击、投射物推进与命中前结算。若本帧致死，
-    // 立即停止后续 mutation，使终局帧不会继续生成投射物或得分。
-    if (resolveEnemyContactDamage())
-    {
-        return;
-    }
-
     const std::optional<ShotSpec> shot =
         weaponFire_.update(
-            input.firePressed || input.fireJustPressed,
+            !controlsSuppressed &&
+                (input.firePressed || input.fireJustPressed),
             player_.facingDirection(),
             deltaTime);
 
@@ -639,45 +787,10 @@ bool GameplayWorld::damagePlayer(int damage)
     return true;
 }
 
-bool GameplayWorld::resolveEnemyContactDamage()
-{
-    if (playerContactDamageCooldownRemaining_ > 0.0f)
-    {
-        return false;
-    }
-
-    const Rect bounds =
-        playerBounds(player_);
-
-    const bool touchingLivingEnemy =
-        std::any_of(
-            enemies_.begin(),
-            enemies_.end(),
-            [&bounds](const Enemy &enemy)
-            {
-                return !enemy.isDead() &&
-                       isCollision(
-                           bounds,
-                           enemy.bounds());
-            });
-
-    if (!touchingLivingEnemy)
-    {
-        return false;
-    }
-
-    const bool killed =
-        damagePlayer(kEnemyContactDamage);
-
-    playerContactDamageCooldownRemaining_ =
-        kEnemyContactDamageCooldown;
-
-    return killed;
-}
-
 bool GameplayWorld::canInteractWithContainer() const noexcept
 {
     return raidSession_.isActive() &&
+           !player_.isControlled() &&
            storageCabinet_.canInteract(
         playerBounds(player_));
 }
