@@ -29,6 +29,7 @@ namespace
             GameAction::Interact,
             GameAction::ToggleInventory,
             GameAction::InventoryCancel,
+            GameAction::StartNextRaid,
         };
 
         for (const GameAction action : kActions)
@@ -438,6 +439,32 @@ TEST(
     EXPECT_FALSE(
         input.wasActionJustPressed(
             GameAction::InventoryCancel));
+}
+
+TEST(
+    InputSystemTest,
+    NKeySetsStartNextRaidOnlyOnceWhileHeld)
+{
+    InputSystem input;
+    const SDL_Event keyDown =
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_N);
+
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(input.isActionPressed(
+        GameAction::StartNextRaid));
+    EXPECT_TRUE(input.wasActionJustPressed(
+        GameAction::StartNextRaid));
+
+    input.endFrame();
+    input.handleEvent(keyDown);
+
+    EXPECT_TRUE(input.isActionPressed(
+        GameAction::StartNextRaid));
+    EXPECT_FALSE(input.wasActionJustPressed(
+        GameAction::StartNextRaid));
 }
 
 TEST(

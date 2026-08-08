@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 #include <utility>
@@ -100,6 +101,86 @@ TEST(GameplayWorldTest, InitialScoreIsZero)
     const GameplayWorld world;
 
     EXPECT_EQ(world.score(), 0);
+}
+
+TEST(GameplayWorldTest, CustomFirstItemIdSeedsDefaultGroundItems)
+{
+    GameplayWorld world{ItemInstanceId{50}};
+
+    ASSERT_EQ(world.groundItems().size(), 6U);
+    EXPECT_EQ(
+        world.groundItems().front().item().instanceId(),
+        50U);
+    EXPECT_EQ(
+        world.groundItems().back().item().instanceId(),
+        55U);
+    EXPECT_EQ(world.nextItemInstanceId(), 56U);
+}
+
+TEST(GameplayWorldTest, ZeroFirstItemIdIsRejected)
+{
+    EXPECT_THROW(
+        GameplayWorld(ItemInstanceId{0}),
+        std::invalid_argument);
+}
+
+TEST(
+    GameplayWorldTest,
+    ExhaustedIdSpaceRejectsPartialDropWithoutMutation)
+{
+    const ItemInstanceId maximumId =
+        std::numeric_limits<ItemInstanceId>::max();
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1},
+        maximumId};
+    ItemInstance ammo{1, ItemId::Ammo9mm, 2};
+    ASSERT_TRUE(world.inventory().tryPlace(
+        std::move(ammo),
+        {0, 0}));
+
+    EXPECT_FALSE(world.dropInventoryItemQuantity(
+        1,
+        1,
+        ItemOrientation::Degrees0));
+    EXPECT_EQ(world.inventory().quantityOf(1), 2U);
+    EXPECT_TRUE(world.groundItems().empty());
+    EXPECT_EQ(world.nextItemInstanceId(), maximumId);
+}
+
+TEST(
+    GameplayWorldTest,
+    ExhaustedIdSpaceRejectsPartialInventoryPlacements)
+{
+    const ItemInstanceId maximumId =
+        std::numeric_limits<ItemInstanceId>::max();
+    GameplayWorld world{
+        3,
+        {},
+        InventoryGridSize{2, 1},
+        maximumId};
+    ItemInstance ammo{1, ItemId::Ammo9mm, 2};
+    ASSERT_TRUE(world.inventory().tryPlace(
+        std::move(ammo),
+        {0, 0}));
+
+    EXPECT_FALSE(world.transferInventoryItemQuantity(
+        true,
+        1,
+        1));
+    EXPECT_FALSE(world.placeInventoryItemQuantity(
+        true,
+        true,
+        1,
+        1,
+        {1, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(world.inventory().quantityOf(1), 2U);
+    EXPECT_TRUE(
+        world.containerInventory().placedItems().empty());
+    EXPECT_EQ(world.nextItemInstanceId(), maximumId);
 }
 
 // MoveRight input 更新后，world.player().position().x 变大

@@ -46,6 +46,13 @@ namespace
     constexpr float kInventoryPanelsGap{24.0f};
     constexpr float kInventoryPanelY{72.0f};
     constexpr float kInventoryDropWidth{96.0f};
+    constexpr float kStashCellSize{20.0F};
+    constexpr float kStashPanelX{410.0F};
+    constexpr float kStashPanelY{90.0F};
+    constexpr float kStashPanelWidth{460.0F};
+    constexpr float kStashPanelHeight{380.0F};
+    constexpr float kStashGridX{440.0F};
+    constexpr float kStashGridY{200.0F};
 
     double orientationAngle(
         ItemOrientation orientation) noexcept
@@ -548,9 +555,9 @@ App::inventoryGridLayout(
         inventoryFor(container);
 
     const GridInventory &playerInventory =
-        world_.inventory();
+        gameSession_.world().inventory();
     const GridInventory &externalInventory =
-        world_.containerInventory();
+        gameSession_.world().containerInventory();
 
     const float playerPanelWidth =
         static_cast<float>(playerInventory.width()) *
@@ -633,16 +640,16 @@ GridInventory &App::inventoryFor(
     InventoryContainerId container) noexcept
 {
     return container == InventoryContainerId::Player
-        ? world_.inventory()
-        : world_.containerInventory();
+        ? gameSession_.world().inventory()
+        : gameSession_.world().containerInventory();
 }
 
 const GridInventory &App::inventoryFor(
     InventoryContainerId container) const noexcept
 {
     return container == InventoryContainerId::Player
-        ? world_.inventory()
-        : world_.containerInventory();
+        ? gameSession_.world().inventory()
+        : gameSession_.world().containerInventory();
 }
 
 SDL_FRect App::inventoryDropZone() const noexcept
@@ -795,7 +802,7 @@ void App::handleInventoryPointerEvent(
 
         if (placement->selectedQuantity.has_value())
         {
-            succeeded = world_.placeInventoryItemQuantity(
+            succeeded = gameSession_.world().placeInventoryItemQuantity(
                 placement->source.container ==
                     InventoryContainerId::Player,
                 placement->destination.container ==
@@ -839,11 +846,11 @@ void App::handleInventoryPointerEvent(
     if (drop.source.container ==
             InventoryContainerId::Player &&
         (drop.selectedQuantity.has_value()
-             ? world_.dropInventoryItemQuantity(
+             ? gameSession_.world().dropInventoryItemQuantity(
                    drop.source.instanceId,
                    *drop.selectedQuantity,
                    drop.orientation)
-             : world_.dropInventoryItem(
+             : gameSession_.world().dropInventoryItem(
                    drop.source.instanceId,
                    drop.orientation)))
     {
@@ -1050,10 +1057,24 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
+    if (input_.wasActionJustPressed(
+            GameAction::StartNextRaid) &&
+        gameSession_.startNextRaid())
+    {
+        closeInventory();
+        inventoryInteraction_.reset();
+        pendingInventoryUiEvents_.clear();
+        return;
+    }
+
+    const bool raidAcceptsInventoryInput =
+        gameSession_.world().raidSession().isActive();
+
     const InventoryFrameInputDecision inputDecision =
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
-            input_.wasActionJustPressed(
+            raidAcceptsInventoryInput &&
+                input_.wasActionJustPressed(
                 GameAction::ToggleInventory),
             input_.wasActionJustPressed(
                 GameAction::InventoryCancel));
@@ -1111,7 +1132,7 @@ void App::update(float deltaTime)
     // 背包打开时世界仍继续 update，
     // 但玩家移动、射击和拾取输入全部屏蔽。
     if (!inventoryOverlayState_.isOpen() &&
-        world_.raidSession().isActive())
+        gameSession_.world().raidSession().isActive())
     {
         gameplayInput =
             makeGameplayInput();
@@ -1123,12 +1144,12 @@ void App::update(float deltaTime)
                 inventoryOverlayState_.isOpen(),
                 inputDecision.controlAction !=
                     InventoryFrameControlAction::None,
-                world_.canInteractWithContainer(),
+                gameSession_.world().canInteractWithContainer(),
                 gameplayInput.interactJustPressed);
 
     if (containerDecision.openContainer)
     {
-        if (world_.searchStorageCabinet())
+        if (gameSession_.world().searchStorageCabinet())
         {
             inventoryInteraction_.reset();
             inventoryOverlayState_.openContainerInventory();
@@ -1140,16 +1161,11 @@ void App::update(float deltaTime)
         gameplayInput = GameplayInput{};
     }
 
-    world_.update(
+    gameSession_.update(
         gameplayInput,
         deltaTime);
 
-    static_cast<void>(
-        raidSettlement_.settle(
-            world_.raidSession().state(),
-            world_.inventory()));
-
-    if (world_.raidSession().isTerminal() &&
+    if (gameSession_.world().raidSession().isTerminal() &&
         inventoryOverlayState_.isOpen())
     {
         closeInventory();
@@ -1234,7 +1250,7 @@ void App::renderDebugText()
     const std::string scoreText =
         fmt::format(
             "Score: {}",
-            world_.score());
+            gameSession_.world().score());
 
     SDL_RenderDebugText(
         renderer_,
@@ -1244,7 +1260,7 @@ void App::renderDebugText()
 
     std::string healthText;
 
-    if (world_.enemies().empty())
+    if (gameSession_.world().enemies().empty())
     {
         healthText =
             "Enemy HP: defeated";
@@ -1252,7 +1268,7 @@ void App::renderDebugText()
     else
     {
         const Enemy &enemy =
-            world_.enemies().front();
+            gameSession_.world().enemies().front();
 
         healthText =
             fmt::format(
@@ -1270,7 +1286,7 @@ void App::renderDebugText()
     const std::string groundItemText =
         fmt::format(
             "Ground Items: {}",
-            world_.groundItems().size());
+            gameSession_.world().groundItems().size());
 
     SDL_RenderDebugText(
         renderer_,
@@ -1281,7 +1297,7 @@ void App::renderDebugText()
     const std::string inventoryItemText =
         fmt::format(
             "Inventory Items: {}",
-            world_.inventory()
+            gameSession_.world().inventory()
                 .placedItems()
                 .size());
 
@@ -1310,7 +1326,7 @@ void App::renderDebugText()
         inventoryStateText);
 
     const RaidSession &raidSession =
-        world_.raidSession();
+        gameSession_.world().raidSession();
 
     const std::string raidStateText =
         fmt::format(
@@ -1338,8 +1354,8 @@ void App::renderDebugText()
     const std::string stashText =
         fmt::format(
             "Stash: {} stacks / {} units",
-            raidSettlement_.stash().stackCount(),
-            raidSettlement_.stash().unitCount());
+            gameSession_.stash().stackCount(),
+            gameSession_.stash().unitCount());
 
     SDL_RenderDebugText(
         renderer_,
@@ -1351,13 +1367,26 @@ void App::renderDebugText()
         fmt::format(
             "Settlement: {}",
             raidSettlementStateName(
-                raidSettlement_.state()));
+                gameSession_.settlement().state()));
 
     SDL_RenderDebugText(
         renderer_,
         980.0F,
         36.0F,
         settlementStateText.c_str());
+
+    const std::string gameSessionText =
+        fmt::format(
+            "Session: {} | Raid {}",
+            gameSessionStateName(
+                gameSession_.state()),
+            gameSession_.raidNumber());
+
+    SDL_RenderDebugText(
+        renderer_,
+        980.0F,
+        52.0F,
+        gameSessionText.c_str());
 
     if (raidSession.state() ==
             RaidSessionState::Extracting ||
@@ -1379,51 +1408,18 @@ void App::renderDebugText()
 
     if (raidSession.isTerminal())
     {
-        SDL_SetRenderDrawBlendMode(
-            renderer_,
-            SDL_BLENDMODE_BLEND);
-
-        const SDL_FRect outcomePanel{
-            470.0F,
-            290.0F,
-            340.0F,
-            112.0F};
-
-        const bool extracted =
-            raidSettlement_.state() ==
-            RaidSettlementState::Extracted;
-
-        SDL_SetRenderDrawColor(
-            renderer_,
-            extracted ? 20 : 95,
-            extracted ? 105 : 24,
-            extracted ? 58 : 24,
-            225);
-        SDL_RenderFillRect(
-            renderer_,
-            &outcomePanel);
-
-        SDL_SetRenderDrawColor(
-            renderer_,
-            extracted ? 125 : 215,
-            extracted ? 235 : 110,
-            extracted ? 155 : 110,
-            255);
-        SDL_RenderRect(
-            renderer_,
-            &outcomePanel);
-
         const std::string outcomeText =
             fmt::format(
-                "RAID RESULT: {}",
+                "RAID {} RESULT: {}",
+                gameSession_.raidNumber(),
                 raidSessionStateName(
                     raidSession.state()));
 
         const RaidSettlementSummary settlementSummary =
-            raidSettlement_.summary();
+            gameSession_.settlement().summary();
         std::string settlementText;
 
-        switch (raidSettlement_.state())
+        switch (gameSession_.settlement().state())
         {
         case RaidSettlementState::Blocked:
             settlementText =
@@ -1449,23 +1445,27 @@ void App::renderDebugText()
 
         SDL_RenderDebugText(
             renderer_,
-            outcomePanel.x + 78.0F,
-            outcomePanel.y + 20.0F,
+            kStashPanelX + 130.0F,
+            kStashPanelY + 42.0F,
             outcomeText.c_str());
         SDL_RenderDebugText(
             renderer_,
-            outcomePanel.x + 38.0F,
-            outcomePanel.y + 44.0F,
+            kStashPanelX + 76.0F,
+            kStashPanelY + 62.0F,
             settlementText.c_str());
+
+        const std::string nextRaidText =
+            gameSession_.canStartNextRaid()
+                ? fmt::format(
+                      "N: START RAID {} - EMPTY LOADOUT",
+                      gameSession_.raidNumber() + 1U)
+                : "Resolve Stash capacity before next raid";
+
         SDL_RenderDebugText(
             renderer_,
-            outcomePanel.x + 46.0F,
-            outcomePanel.y + 72.0F,
-            "Gameplay frozen - restart app for a new raid");
-
-        SDL_SetRenderDrawBlendMode(
-            renderer_,
-            SDL_BLENDMODE_NONE);
+            kStashPanelX + 92.0F,
+            kStashPanelY + 82.0F,
+            nextRaidText.c_str());
     }
 
     if (!inventoryOverlayState_.isOpen())
@@ -1851,7 +1851,7 @@ void App::renderInventoryOverlay()
     }
 
     const GridInventory &inventory =
-        world_.inventory();
+        gameSession_.world().inventory();
 
     const InventoryGridLayout layout =
         inventoryGridLayout(
@@ -2088,7 +2088,7 @@ void App::renderInventoryOverlay()
         controlText);
 
     const GridInventory &externalInventory =
-        world_.containerInventory();
+        gameSession_.world().containerInventory();
 
     const InventoryGridLayout externalLayout =
         inventoryGridLayout(
@@ -2364,6 +2364,166 @@ void App::renderInventoryOverlay()
         SDL_BLENDMODE_NONE);
 }
 
+void App::renderStashOverlay()
+{
+    if (!gameSession_.world().raidSession().isTerminal())
+    {
+        return;
+    }
+
+    const GridInventory &stashInventory =
+        gameSession_.stash().inventory();
+    const float gridWidth =
+        static_cast<float>(stashInventory.width()) *
+        kStashCellSize;
+    const float gridHeight =
+        static_cast<float>(stashInventory.height()) *
+        kStashCellSize;
+    const SDL_FRect panel{
+        kStashPanelX,
+        kStashPanelY,
+        kStashPanelWidth,
+        kStashPanelHeight};
+    const SDL_FRect grid{
+        kStashGridX,
+        kStashGridY,
+        gridWidth,
+        gridHeight};
+
+    const bool extracted =
+        gameSession_.settlement().state() ==
+        RaidSettlementState::Extracted;
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        extracted ? 14 : 36,
+        extracted ? 45 : 20,
+        extracted ? 31 : 22,
+        238);
+    SDL_RenderFillRect(renderer_, &panel);
+
+    SDL_SetRenderDrawColor(renderer_, 24, 30, 34, 248);
+    SDL_RenderFillRect(renderer_, &grid);
+
+    for (const PlacedItem &placed :
+         stashInventory.placedItems())
+    {
+        const ItemDefinition &definition =
+            itemDefinition(
+                placed.item.definitionId());
+        const Texture &texture =
+            inventoryItemTextures_[
+                static_cast<std::size_t>(
+                    definition.id)];
+
+        if (!texture.valid())
+        {
+            continue;
+        }
+
+        const InventoryFootprint footprint =
+            inventoryFootprint(
+                definition,
+                placed.item.orientation());
+        const SDL_FRect destination{
+            kStashGridX +
+                static_cast<float>(placed.origin.x) *
+                    kStashCellSize,
+            kStashGridY +
+                static_cast<float>(placed.origin.y) *
+                    kStashCellSize,
+            static_cast<float>(footprint.width) *
+                kStashCellSize,
+            static_cast<float>(footprint.height) *
+                kStashCellSize};
+
+        renderOrientedTexture(
+            renderer_,
+            texture.get(),
+            destination,
+            static_cast<float>(
+                definition.inventoryWidthCells) *
+                kStashCellSize,
+            static_cast<float>(
+                definition.inventoryHeightCells) *
+                kStashCellSize,
+            placed.item.orientation());
+
+        renderItemQuantityBadge(
+            renderer_,
+            destination,
+            placed.item.quantity());
+    }
+
+    SDL_SetRenderDrawColor(renderer_, 91, 105, 112, 205);
+
+    for (int column = 0;
+         column <= stashInventory.width();
+         ++column)
+    {
+        const float x =
+            kStashGridX +
+            static_cast<float>(column) *
+                kStashCellSize;
+        SDL_RenderLine(
+            renderer_,
+            x,
+            kStashGridY,
+            x,
+            kStashGridY + gridHeight);
+    }
+
+    for (int row = 0;
+         row <= stashInventory.height();
+         ++row)
+    {
+        const float y =
+            kStashGridY +
+            static_cast<float>(row) *
+                kStashCellSize;
+        SDL_RenderLine(
+            renderer_,
+            kStashGridX,
+            y,
+            kStashGridX + gridWidth,
+            y);
+    }
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        extracted ? 125 : 215,
+        extracted ? 235 : 110,
+        extracted ? 155 : 110,
+        255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_RenderRect(renderer_, &grid);
+
+    SDL_SetRenderDrawColor(renderer_, 225, 230, 232, 255);
+    SDL_RenderDebugText(
+        renderer_,
+        kStashPanelX + 18.0F,
+        kStashPanelY + 16.0F,
+        "STASH - READ ONLY");
+
+    const std::string countText =
+        fmt::format(
+            "{} STACKS / {} UNITS",
+            gameSession_.stash().stackCount(),
+            gameSession_.stash().unitCount());
+    SDL_RenderDebugText(
+        renderer_,
+        kStashPanelX + 282.0F,
+        kStashPanelY + 16.0F,
+        countText.c_str());
+
+    SDL_SetRenderDrawBlendMode(
+        renderer_,
+        SDL_BLENDMODE_NONE);
+}
+
 void App::renderBackground()
 {
     SDL_RenderTexture(renderer_, backgroundTexture_.get(), nullptr, nullptr);
@@ -2372,11 +2532,11 @@ void App::renderBackground()
 void App::renderExtractionPoint()
 {
     const ExtractionPoint &extractionPoint =
-        world_.extractionPoint();
+        gameSession_.world().extractionPoint();
     const Rect &bounds =
         extractionPoint.bounds();
     const RaidSession &raidSession =
-        world_.raidSession();
+        gameSession_.world().raidSession();
 
     const bool extracting =
         raidSession.state() ==
@@ -2486,7 +2646,7 @@ void App::renderExtractionPoint()
 void App::renderStorageCabinet()
 {
     const StorageCabinet &cabinet =
-        world_.storageCabinet();
+        gameSession_.world().storageCabinet();
     const Rect bounds = cabinet.bounds();
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -2539,13 +2699,13 @@ void App::renderStorageCabinet()
 
     SDL_SetRenderDrawColor(
         renderer_,
-        world_.canInteractWithContainer() ? 225 : 45,
-        world_.canInteractWithContainer() ? 205 : 32,
-        world_.canInteractWithContainer() ? 115 : 25,
+        gameSession_.world().canInteractWithContainer() ? 225 : 45,
+        gameSession_.world().canInteractWithContainer() ? 205 : 32,
+        gameSession_.world().canInteractWithContainer() ? 115 : 25,
         255);
     SDL_RenderRect(renderer_, &body);
 
-    if (world_.canInteractWithContainer() &&
+    if (gameSession_.world().canInteractWithContainer() &&
         !inventoryOverlayState_.isOpen())
     {
         SDL_RenderDebugText(
@@ -2563,7 +2723,7 @@ void App::renderStorageCabinet()
 void App::renderProjectiles()
 {
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-    for (const auto &projectile : world_.projectiles())
+    for (const auto &projectile : gameSession_.world().projectiles())
     {
         const Vec2 pos = projectile.position();
 
@@ -2581,7 +2741,7 @@ void App::renderGroundItems()
 {
     for (
         const GroundItem &groundItem :
-        world_.groundItems())
+        gameSession_.world().groundItems())
     {
         const ItemInstance &item =
             groundItem.item();
@@ -2640,7 +2800,7 @@ void App::renderGroundItems()
 
 void App::renderPlayer()
 {
-    const Player &player = world_.player();
+    const Player &player = gameSession_.world().player();
     const Vec2 logicPos = player.position();
     const float logicSize = player.size();
 
@@ -2701,7 +2861,7 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
-    for (const auto &enemy : world_.enemies())
+    for (const auto &enemy : gameSession_.world().enemies())
     {
         const Rect bounds = enemy.bounds();
         const float spriteX =
@@ -2748,7 +2908,7 @@ void App::renderParticles()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const Particle &particle : world_.particles())
+    for (const Particle &particle : gameSession_.world().particles())
     {
         const float life = particle.normalizedLifetime();
         const float renderSize = std::max(1.0f, particle.size() * life);
@@ -2798,6 +2958,9 @@ void App::render()
 
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
+
+    // 终局后展示跨局保留的只读 Stash。
+    renderStashOverlay();
 
     // 调试信息保持在最上层。
     renderDebugText();

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <exception>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 
 #include "collision.h"
@@ -104,7 +105,18 @@ GameplayWorld::GameplayWorld()
     : GameplayWorld{
           kDefaultEnemyMaxHealth,
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize}
+          kDefaultInventorySize,
+          ItemInstanceId{1}}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    ItemInstanceId firstItemInstanceId)
+    : GameplayWorld{
+          kDefaultEnemyMaxHealth,
+          makeDefaultGroundItemSpawns(),
+          kDefaultInventorySize,
+          firstItemInstanceId}
 {
 }
 
@@ -131,11 +143,42 @@ GameplayWorld::GameplayWorld(
     int enemyMaxHealth,
     std::vector<GroundItemSpawn> initialGroundItems,
     InventoryGridSize inventorySize)
+    : GameplayWorld{
+          enemyMaxHealth,
+          std::move(initialGroundItems),
+          inventorySize,
+          ItemInstanceId{1}}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    int enemyMaxHealth,
+    std::vector<GroundItemSpawn> initialGroundItems,
+    InventoryGridSize inventorySize,
+    ItemInstanceId firstItemInstanceId)
     : inventory_{inventorySize},
+      nextItemInstanceId_{firstItemInstanceId},
       particleSystem_{
           0xC0FFEEu,
           ParticleBurstConfig{}}
 {
+    if (firstItemInstanceId == 0)
+    {
+        throw std::invalid_argument{
+            "GameplayWorld first ItemInstanceId must be greater than zero"};
+    }
+
+    const ItemInstanceId maximumId =
+        std::numeric_limits<ItemInstanceId>::max();
+
+    if (initialGroundItems.size() >
+        static_cast<std::size_t>(
+            maximumId - firstItemInstanceId))
+    {
+        throw std::overflow_error{
+            "GameplayWorld does not have enough ItemInstanceId values"};
+    }
+
     enemies_.emplace_back(
         Vec2{600.0f, 100.0f},
         Vec2{50.0f, 50.0f},
@@ -170,6 +213,13 @@ void GameplayWorld::spawnGroundItem(
     Vec2 position,
     std::uint32_t quantity)
 {
+    if (nextItemInstanceId_ ==
+        std::numeric_limits<ItemInstanceId>::max())
+    {
+        throw std::overflow_error{
+            "GameplayWorld exhausted ItemInstanceId values"};
+    }
+
     // 只有 GroundItem 成功创建后才递增 ID。
     // 若 definitionId 非法，ItemInstance 构造会抛出，
     // 当前 ID 不会被跳过。
@@ -708,6 +758,12 @@ bool GameplayWorld::dropInventoryItemQuantity(
     std::optional<ItemInstance> splitItem;
     if (partial)
     {
+        if (nextItemInstanceId_ ==
+            std::numeric_limits<ItemInstanceId>::max())
+        {
+            return false;
+        }
+
         const bool splitIdAlreadyExists =
             inventory_.quantityOf(nextItemInstanceId_).has_value() ||
             storageCabinet_.inventory()
@@ -800,6 +856,17 @@ bool GameplayWorld::transferInventoryItemQuantity(
         ? storageCabinet_.inventory()
         : inventory_;
 
+    const std::optional<std::uint32_t> sourceQuantity =
+        source.quantityOf(instanceId);
+
+    if (sourceQuantity.has_value() &&
+        quantity < *sourceQuantity &&
+        nextItemInstanceId_ ==
+            std::numeric_limits<ItemInstanceId>::max())
+    {
+        return false;
+    }
+
     const QuantityTransferResult result =
         tryTransferItemQuantityFirstFit(
             source,
@@ -831,6 +898,17 @@ bool GameplayWorld::placeInventoryItemQuantity(
         ? inventory_
         : storageCabinet_.inventory();
 
+    const std::optional<std::uint32_t> sourceQuantity =
+        source.quantityOf(instanceId);
+
+    if (sourceQuantity.has_value() &&
+        quantity < *sourceQuantity &&
+        nextItemInstanceId_ ==
+            std::numeric_limits<ItemInstanceId>::max())
+    {
+        return false;
+    }
+
     const QuantityTransferResult result =
         tryPlaceItemQuantityAt(
             source,
@@ -852,4 +930,10 @@ bool GameplayWorld::placeInventoryItemQuantity(
 int GameplayWorld::score() const noexcept
 {
     return score_;
+}
+
+ItemInstanceId
+GameplayWorld::nextItemInstanceId() const noexcept
+{
+    return nextItemInstanceId_;
 }

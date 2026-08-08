@@ -38,15 +38,11 @@ struct RaidSettlementSummary
 class RaidSettlement
 {
 public:
-    RaidSettlement();
-
-    explicit RaidSettlement(
-        InventoryGridSize stashSize);
-
     [[nodiscard]]
     RaidSettlementAttempt settle(
         RaidSessionState raidState,
-        GridInventory &playerInventory);
+        GridInventory &playerInventory,
+        Stash &stash);
 
     [[nodiscard]]
     RaidSettlementState state() const noexcept;
@@ -57,17 +53,10 @@ public:
     [[nodiscard]]
     RaidSettlementSummary summary() const noexcept;
 
-    [[nodiscard]]
-    Stash &stash() noexcept;
-
-    [[nodiscard]]
-    const Stash &stash() const noexcept;
-
 private:
     RaidSettlementState state_{
         RaidSettlementState::Pending};
     RaidSettlementSummary summary_{};
-    Stash stash_;
 };
 
 [[nodiscard]]

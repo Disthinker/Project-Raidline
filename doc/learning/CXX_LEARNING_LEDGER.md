@@ -19,6 +19,7 @@
 | Week 20 | 纯虚随机源接口与运行时多态、`final`、`std::mt19937` 注入边界、加权半开区间选择、结果堆叠规范化、显式 Unsearched/Searched 状态、临时 move-only GridInventory 原子提交、默认 move 特殊成员与 `noexcept`、首次搜索稳定 ID 事务 |
 | Week 21 | 六态有限状态机、sticky 终局、连续占用取消语义、同一 deltaTime 内竞争终止事件、有限浮点配置/派生边界验证、半开矩形点包含、领域状态与 SDL 只读渲染分离、终局帧 mutation 截断 |
 | Week 22 | 组合式 Stash 所有权、整容器预规划事务、占用位图模拟、批量 reserve 后无分配提交、完整堆叠身份保留、Blocked 可重试状态、显式批量销毁、Raid 终局到结算终局的幂等映射 |
+| Week 23 | `std::unique_ptr<GameplayWorld>` 单局所有权、候选对象先构造后 `swap` 的强失败语义、外部 Stash 注入、跨局稳定 ID 高水位、InRaid/SettlementBlocked/BetweenRaids 会话状态、just-pressed 重开边沿、只读局外视图 |
 | 工程接管 | Agent TOML、仓库级 Skill、ExecPlan、证据式 DoD、构建/CI 环境与代码故障分层 |
 
 ## 持续学习债
@@ -42,6 +43,9 @@
 - 为什么整背包转移不能逐件“试试看”，以及如何用目标占用副本先证明所有 placement 都能提交。
 - RaidSession 的终局与 RaidSettlement 的完成态为什么是两个职责不同、但都必须 sticky 的状态边界。
 - `clear()`、逐件 move 到 Stash 和未来跨 Raid ID 分配分别代表销毁、所有权转移与身份生成，不能混成同一规则。
+- 为什么跨局 ID 必须传递“下一未使用值”而不是扫描存活对象最大值，以及已销毁 ID 仍不能复用。
+- 为什么重开要先构造完整 `std::unique_ptr<GameplayWorld>` 候选再 `swap`，而不能先销毁旧终局后尝试构造。
+- RaidSettlement 为何只保存单局 sticky 结果，而长期 Stash 必须由更外层 GameSession 拥有并显式注入。
 
 ## Week 17–18 已落地、仍应复习的主题
 

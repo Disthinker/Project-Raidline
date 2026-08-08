@@ -29,30 +29,33 @@ namespace
 
 TEST(RaidSettlementTest, DefaultStashIsTwentyByTwelve)
 {
+    Stash stash;
     RaidSettlement settlement;
 
-    EXPECT_EQ(settlement.stash().inventory().width(), 20);
-    EXPECT_EQ(settlement.stash().inventory().height(), 12);
+    EXPECT_EQ(stash.inventory().width(), 20);
+    EXPECT_EQ(stash.inventory().height(), 12);
     EXPECT_EQ(settlement.state(), RaidSettlementState::Pending);
     EXPECT_FALSE(settlement.isComplete());
 }
 
 TEST(RaidSettlementTest, NonTerminalRaidDoesNotMutateInventory)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{3, 1}};
     place(player, 1, ItemId::Pistol, {0, 0});
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::InRaid, player),
+        settlement.settle(RaidSessionState::InRaid, player, stash),
         RaidSettlementAttempt::NotTerminal);
     EXPECT_EQ(player.placedItems().size(), 1U);
-    EXPECT_EQ(settlement.stash().stackCount(), 0U);
+    EXPECT_EQ(stash.stackCount(), 0U);
     EXPECT_EQ(settlement.summary(), (RaidSettlementSummary{}));
 }
 
 TEST(RaidSettlementTest, ExtractionMovesExactStacksAndRecordsSummary)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{6, 4}};
     place(player, 2, ItemId::Pistol, {0, 0});
@@ -64,7 +67,7 @@ TEST(RaidSettlementTest, ExtractionMovesExactStacksAndRecordsSummary)
     ASSERT_TRUE(player.tryPlace(std::move(rifle), {3, 0}));
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Completed);
 
     EXPECT_TRUE(player.placedItems().empty());
@@ -72,12 +75,12 @@ TEST(RaidSettlementTest, ExtractionMovesExactStacksAndRecordsSummary)
     EXPECT_TRUE(settlement.isComplete());
     EXPECT_EQ(settlement.summary(),
               (RaidSettlementSummary{3, 43}));
-    EXPECT_EQ(settlement.stash().stackCount(), 3U);
-    EXPECT_EQ(settlement.stash().unitCount(), 43U);
-    EXPECT_EQ(settlement.stash().inventory().quantityOf(3), 41U);
+    EXPECT_EQ(stash.stackCount(), 3U);
+    EXPECT_EQ(stash.unitCount(), 43U);
+    EXPECT_EQ(stash.inventory().quantityOf(3), 41U);
 
     const auto &stored =
-        settlement.stash().inventory().placedItems();
+        stash.inventory().placedItems();
     ASSERT_EQ(stored.size(), 3U);
     EXPECT_EQ(stored[0].item.instanceId(), 2U);
     EXPECT_EQ(stored[1].item.instanceId(), 3U);
@@ -88,29 +91,31 @@ TEST(RaidSettlementTest, ExtractionMovesExactStacksAndRecordsSummary)
 
 TEST(RaidSettlementTest, DeathClearsCarriedGoodsAndRecordsLoss)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{2, 1}};
     place(player, 5, ItemId::Ammo9mm, {0, 0}, 24);
     place(player, 6, ItemId::Cola, {1, 0});
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::PlayerDead, player),
+        settlement.settle(RaidSessionState::PlayerDead, player, stash),
         RaidSettlementAttempt::Completed);
     EXPECT_TRUE(player.placedItems().empty());
     EXPECT_EQ(settlement.state(), RaidSettlementState::PlayerDead);
     EXPECT_EQ(settlement.summary(),
               (RaidSettlementSummary{2, 25}));
-    EXPECT_EQ(settlement.stash().stackCount(), 0U);
+    EXPECT_EQ(stash.stackCount(), 0U);
 }
 
 TEST(RaidSettlementTest, TimeoutClearsCarriedGoodsAndRecordsLoss)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{1, 1}};
     place(player, 7, ItemId::Cola, {0, 0});
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::RaidEnded, player),
+        settlement.settle(RaidSessionState::RaidEnded, player, stash),
         RaidSettlementAttempt::Completed);
     EXPECT_TRUE(player.placedItems().empty());
     EXPECT_EQ(settlement.state(), RaidSettlementState::RaidEnded);
@@ -120,86 +125,91 @@ TEST(RaidSettlementTest, TimeoutClearsCarriedGoodsAndRecordsLoss)
 
 TEST(RaidSettlementTest, CompletedSettlementIsSticky)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{2, 1}};
     place(player, 8, ItemId::Cola, {0, 0});
     ASSERT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Completed);
 
     place(player, 9, ItemId::Cola, {1, 0});
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::PlayerDead, player),
+        settlement.settle(RaidSessionState::PlayerDead, player, stash),
         RaidSettlementAttempt::AlreadyCompleted);
     EXPECT_EQ(settlement.state(), RaidSettlementState::Extracted);
     EXPECT_EQ(settlement.summary(),
               (RaidSettlementSummary{1, 1}));
     EXPECT_EQ(player.placedItems().size(), 1U);
-    EXPECT_EQ(settlement.stash().stackCount(), 1U);
+    EXPECT_EQ(stash.stackCount(), 1U);
 }
 
 TEST(RaidSettlementTest, BlockedExtractionPreservesPlayerInventory)
 {
-    RaidSettlement settlement{{1, 1}};
+    Stash stash{{1, 1}};
+    RaidSettlement settlement;
     GridInventory player{{2, 1}};
     place(player, 10, ItemId::Pistol, {0, 0});
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Blocked);
     EXPECT_EQ(settlement.state(), RaidSettlementState::Blocked);
     EXPECT_FALSE(settlement.isComplete());
     EXPECT_EQ(player.placedItems().size(), 1U);
     EXPECT_EQ(player.occupantAt({0, 0}),
               (std::optional<ItemInstanceId>{10}));
-    EXPECT_EQ(settlement.stash().stackCount(), 0U);
+    EXPECT_EQ(stash.stackCount(), 0U);
 }
 
 TEST(RaidSettlementTest, BlockedExtractionCanRetryAfterCapacityChanges)
 {
-    RaidSettlement settlement{{1, 1}};
+    Stash stash{{1, 1}};
+    RaidSettlement settlement;
     GridInventory player{{1, 1}};
-    place(settlement.stash().inventory(), 11, ItemId::Cola, {0, 0});
+    place(stash.inventory(), 11, ItemId::Cola, {0, 0});
     place(player, 12, ItemId::Ammo9mm, {0, 0}, 9);
 
     ASSERT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Blocked);
-    ASSERT_TRUE(settlement.stash().inventory().remove(11).has_value());
+    ASSERT_TRUE(stash.inventory().remove(11).has_value());
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Completed);
     EXPECT_TRUE(player.placedItems().empty());
-    EXPECT_EQ(settlement.stash().inventory().quantityOf(12), 9U);
+    EXPECT_EQ(stash.inventory().quantityOf(12), 9U);
     EXPECT_EQ(settlement.summary(),
               (RaidSettlementSummary{1, 9}));
 }
 
 TEST(RaidSettlementTest, DuplicateStableIdBlocksWithoutMutation)
 {
-    RaidSettlement settlement{{2, 1}};
+    Stash stash{{2, 1}};
+    RaidSettlement settlement;
     GridInventory player{{1, 1}};
-    place(settlement.stash().inventory(), 13, ItemId::Cola, {0, 0});
+    place(stash.inventory(), 13, ItemId::Cola, {0, 0});
     place(player, 13, ItemId::Ammo9mm, {0, 0}, 7);
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Blocked);
     EXPECT_EQ(player.placedItems().size(), 1U);
     EXPECT_EQ(player.quantityOf(13), 7U);
-    EXPECT_EQ(settlement.stash().stackCount(), 1U);
-    EXPECT_EQ(settlement.stash().inventory().quantityOf(13), 1U);
+    EXPECT_EQ(stash.stackCount(), 1U);
+    EXPECT_EQ(stash.inventory().quantityOf(13), 1U);
 }
 
 TEST(RaidSettlementTest, EmptyExtractionCompletesSuccessfully)
 {
+    Stash stash;
     RaidSettlement settlement;
     GridInventory player{{1, 1}};
 
     EXPECT_EQ(
-        settlement.settle(RaidSessionState::Extracted, player),
+        settlement.settle(RaidSessionState::Extracted, player, stash),
         RaidSettlementAttempt::Completed);
     EXPECT_EQ(settlement.summary(), (RaidSettlementSummary{}));
     EXPECT_EQ(settlement.state(), RaidSettlementState::Extracted);
@@ -208,7 +218,7 @@ TEST(RaidSettlementTest, EmptyExtractionCompletesSuccessfully)
 TEST(RaidSettlementTest, InvalidStashDimensionsAreRejected)
 {
     EXPECT_THROW(
-        RaidSettlement((InventoryGridSize{0, 1})),
+        Stash((InventoryGridSize{0, 1})),
         std::invalid_argument);
 }
 

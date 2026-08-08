@@ -31,6 +31,10 @@ class GameplayWorld
 public:
     GameplayWorld();
 
+    // 可重复 Raid 会话传入本局第一个未使用的稳定 ID。
+    explicit GameplayWorld(
+        ItemInstanceId firstItemInstanceId);
+
     // 为 GameplayWorldTest 提供最小 Enemy HP 配置入口。
     // 正常游戏仍使用默认的 3 HP Enemy。
     explicit GameplayWorld(int enemyMaxHealth);
@@ -45,6 +49,12 @@ public:
         int enemyMaxHealth,
         std::vector<GroundItemSpawn> initialGroundItems,
         InventoryGridSize inventorySize);
+
+    GameplayWorld(
+        int enemyMaxHealth,
+        std::vector<GroundItemSpawn> initialGroundItems,
+        InventoryGridSize inventorySize,
+        ItemInstanceId firstItemInstanceId);
 
     void update(
         const GameplayInput &input,
@@ -144,6 +154,11 @@ public:
 
     [[nodiscard]]
     int score() const noexcept;
+
+    // 返回尚未分配的下一个 ID，而不是当前存活实例的最大值。
+    // 已销毁物品的 ID 也不会因此被复用。
+    [[nodiscard]]
+    ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
     Player player_{640.0f, 360.0f};

@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week22 结算与最小 Stash 已通过 PR #40、Windows/Ubuntu CI 与真实窗口验收合入 `main`。
+最后核对：2026-08-08，Week23 可重复 Raid 会话已在 `codex/week23-game-session` 本地实现，并通过自动测试与真实窗口验收 1–9；精确 head CI 与 PR 尚未完成，`main` 基线仍是已合入的 Week22。
 
 ## Git、验证与 CI 基线
 
@@ -13,6 +13,9 @@
 - Week22 Windows Debug configure、受影响目标、主程序和全目标构建成功；聚焦 CTest 100/100、RaidSettlementTest 直接运行 12/12、全量 CTest 434/434 通过，未复现 `gtest_ar_` 栈损坏。
 - 用户已完成 Week22 真实窗口 1–8：初始 Stash、携带物记录、撤离结算、STORED 栈/单位统计、背包清空、未拾取物排除、终局冻结与无运行库错误全部通过。
 - PR #40 已在精确 head `d9c8d14` 上通过全部门禁并合入；CI 动态结果保存在 PR 评论中，没有为了写回结果再触发第二轮 C++ 矩阵。
+- Week23 Windows Debug configure、主程序和全目标增量构建成功；初始聚焦 CTest 86/86、ID 边界修复后聚焦复验 54/54、全量 CTest 446/446、`GameSessionTest.exe` 直接运行 7/7，`ctest -N` 注册 446 项。
+- Week23 `compile_commands.json` 已确认 `game_session.cpp` 同时进入 `Project_Raidline` 与 `GameSessionTest`，`test_game_session.cpp` 进入专用测试目标；未复现 `gtest_ar_` 栈损坏。
+- Week23 真实窗口 1–9 已由用户确认全部通过；Windows/Ubuntu CI 当前仍未验证，不能把分支结果描述为已合入 `main`。
 
 ## 已进入 main：Week 1–22
 
@@ -87,6 +90,14 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - App 在 `GameplayWorld::update` 后触发领域结算；调试区显示 Stash 数量与结算状态，终局面板显示 `STORED`、`LOST` 或 `STASH BLOCKED`。
 - 人工验收后新增两项独立库存 UX 需求：可行时原子交换拖拽物与目标处若干物品的位置（GitHub #38），以及 Ctrl/Shift 数量点击后松开按键仍保持虚像跟随、再次点击提交（GitHub #39）；二者只登记，不属于 Week22。
 
+## Week23 本地已实现、待验收能力
+
+- `GameSession` 拥有进程内长期 Stash、当前 `GameplayWorld`、当前单局 `RaidSettlement` 和 Raid 编号；App 不再分别拥有世界与结算。
+- 结算完成后进入 `BetweenRaids`，终局显示缩放后的 20×12 只读 Stash 网格；按 `N` 从完整结算态开始下一局，按住不会重复跳局。
+- 新 Raid 重新创建玩家、敌人、地面物品、未搜索柜体和 180 秒倒计时，玩家背包为空；Stash 保留但本轮不能选择出战物。
+- GameplayWorld 可从指定第一个 ID 创建，并公开下一未使用 ID；GameSession 在销毁旧世界前读取高水位，后续 Raid 不复用已撤离、已丢失或已销毁实例的稳定 ID。
+- `startNextRaid()` 先完整构造候选世界再交换；活动局、Pending、Blocked、Raid 编号溢出或候选构造失败均不修改旧终局、Stash 或编号。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
@@ -94,6 +105,6 @@ Week22 计划已按 PR #40 的合入事实归档；撤离存入 Stash、死亡/�
 - 缺少 App 级自动化 UI/截图测试；输入和视觉变化仍需要真实窗口验收。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、Stash UI/出战选择、第二局/局内重开、跨 Raid ID 分配、装备栏、重量、耐久和跨进程持久化尚未实现。
+- 搜索计时、多柜体选择、外部数据 Loot、玩家死亡接线、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。第二局与跨 Raid ID 已在 Week23 分支本地实现并通过人工验收，仍待 CI 与合入。
 
-Week22 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week22-raid-settlement-stash.md)；Week21 已合入行为见 [已完成 ExecPlan](../exec-plans/completed/week21-raid-session-extraction.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week23 当前合同与本地证据见 [活动 ExecPlan](../exec-plans/active/week23-repeatable-game-session.md)；Week22 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week22-raid-settlement-stash.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
