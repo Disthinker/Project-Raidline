@@ -1,6 +1,6 @@
 # Week25 主菜单、基地与单地图副本流程壳 ExecPlan
 
-- 状态：In Progress
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-08
 
@@ -130,6 +130,7 @@ SDL event
 - 2026-08-08：从干净 `main@43eb571` 创建 `codex/week25-game-flow`；完成 SDL 无关 GameFlow、专用测试、Enter 主操作与 App 四态输入/更新/占位渲染的首轮接线，进入编译验证。
 - 2026-08-08：完成 C++ 安全审查并补充 RaidResult、敌人/结算冻结与超时结果回归；聚焦 CTest 31/31、专用程序 3/3 与 8/8、Windows Debug 全目标构建及全量 CTest 462/462 通过。compile database 和 Ninja `#deps 198` 证明新源与头文件进入目标；等待真实窗口 1–10。
 - 2026-08-08：用户确认真实窗口 1–10 全部通过；本地与人工门禁完成，进入单一提交、PR 和一次精确 head CI 阶段。
+- 2026-08-08：feature commit `23cd19b` 通过 [PR #46](https://github.com/Disthinker/Project-Raidline/pull/46) 合入，merge commit 为 `08e4475`。精确 head [Actions run 31247705924](https://github.com/Disthinker/Project-Raidline/actions/runs/31247705924) 全部通过：范围检测 5 秒、Ubuntu 1 分 10 秒、Windows 3 分 31 秒。Week25 满足 DoD 并归档。
 
 ## 发现记录
 
@@ -155,4 +156,6 @@ SDL event
 - 接线证据：compile database 同时包含主程序和 `GameFlowTest` 的 `game_flow.cpp`，以及 `test_game_flow.cpp`；主程序 `app.cpp.obj` 为 `#deps 198` 并包含 `game_flow.h`。
 - 不适用：本轮无艺术资源变化，未运行 Phase1 pytest。
 - 人工验收：用户确认真实窗口 1–10 全部通过。
-- 待完成：提交/推送、单一 PR、精确 feature head Windows/Ubuntu CI。未执行项没有标记为通过。
+- Git/CI：feature commit `23cd19b` 已通过 PR #46 合入 `main@08e4475`；精确 head Actions run 31247705924 的范围检测、Ubuntu 与 Windows 全部通过。
+- 偏差：无范围扩张；主菜单/基地/结果页继续使用代码绘制占位 UI，符合本轮明确边界。
+- 遗留：App 级 UI 自动化、最终菜单/基地美术、可操作 Stash、多地图与其他长期工程债继续留待独立任务；Week26 从鼠标瞄准、射击与 V0 后坐力开始。

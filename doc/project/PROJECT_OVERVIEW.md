@@ -14,7 +14,7 @@ Project Raidline 是一个使用 C++20、SDL3 和像素资源构建的 2D 游戏
 
 ## 当前可运行切片
 
-- 顶层流程（Week25 本地候选）：启动于 MainMenu，经 Base 部署到 Raid，完整结算后进入 RaidResult 并返回 Base；非 Raid 屏幕冻结世界，Enter/点击只提交一次屏幕转换。
+- 顶层流程：启动于 MainMenu，经 Base 部署到 Raid，完整结算后进入 RaidResult 并返回 Base；非 Raid 屏幕冻结世界，Enter/点击只提交一次屏幕转换。Week25 已通过 PR #46 合入。
 - 玩家：WASD 移动、朝向保持、斜向归一化、Space 连续射击和冷却；默认拥有 3 HP 并显示调试生命文本。
 - 敌人与战斗：水平移动和边界反弹、Health、AABB 命中、伤害、死亡、调试分数；敌人接触可按冷却伤害玩家并触发真实失败结算。
 - 表现：玩家/敌人水平帧动画、命中粒子、背景与物品贴图。
