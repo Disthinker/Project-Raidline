@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "combat_feedback.h"
 #include "enemy.h"
 #include "enemy_squad.h"
 #include "extraction_point.h"
@@ -131,6 +132,9 @@ public:
     [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
 
     [[nodiscard]]
+    const CombatFeedbackState &combatFeedback() const noexcept;
+
+    [[nodiscard]]
     bool markPlayerDead() noexcept;
 
     // 只有活动 Raid 接受伤害。致死时在同一命令内把 RaidSession
@@ -228,6 +232,7 @@ private:
     SeededLootRandomSource lootRandom_;
 
     WeaponFireState weaponFire_;
+    CombatFeedbackState combatFeedback_;
 
     ParticleSystem particleSystem_;
     int score_{0};

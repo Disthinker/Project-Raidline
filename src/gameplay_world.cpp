@@ -437,6 +437,8 @@ void GameplayWorld::update(
         return;
     }
 
+    combatFeedback_.update(deltaTime);
+
     // 先更新上一帧已经存在的粒子。
     particleSystem_.update(
         deltaTime);
@@ -557,7 +559,12 @@ void GameplayWorld::update(
                     std::terminate();
                 }
 
-                if (damagePlayer(biteConfig->damage))
+                const bool playerKilled =
+                    damagePlayer(biteConfig->damage);
+                static_cast<void>(
+                    combatFeedback_.recordPlayerHit(
+                        EnemyAttackType::Bite));
+                if (playerKilled)
                 {
                     return;
                 }
@@ -597,7 +604,20 @@ void GameplayWorld::update(
                 std::terminate();
             }
 
-            if (damagePlayer(attackConfig->damage))
+            const std::optional<EnemyAttackType> attackType =
+                enemy.attackType();
+            if (!attackType.has_value())
+            {
+                std::terminate();
+            }
+
+            const bool playerKilled =
+                damagePlayer(attackConfig->damage);
+            if (!combatFeedback_.recordPlayerHit(*attackType))
+            {
+                std::terminate();
+            }
+            if (playerKilled)
             {
                 return;
             }
@@ -651,6 +671,13 @@ void GameplayWorld::update(
             kProjectileWidth,
             kProjectileHeight,
             kProjectileDamage);
+
+        if (!combatFeedback_.recordShot(
+                projectileCenter,
+                shot->direction))
+        {
+            std::terminate();
+        }
     }
 
     std::size_t projectileSubsteps{1U};
@@ -713,6 +740,11 @@ void GameplayWorld::update(
     {
         particleSystem_.emitImpact(
             position);
+    }
+
+    if (!hitResult.hitPositions.empty())
+    {
+        combatFeedback_.recordEnemyHit();
     }
 
     // enemiesKilled 是 std::size_t。
@@ -807,6 +839,12 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
     return weaponFire_.visualRecoilPixels();
+}
+
+const CombatFeedbackState &
+GameplayWorld::combatFeedback() const noexcept
+{
+    return combatFeedback_;
 }
 
 bool GameplayWorld::markPlayerDead() noexcept

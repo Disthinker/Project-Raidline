@@ -158,6 +158,21 @@ TEST(GameplayWorldTest, InitialProjectilesEmpty)
     EXPECT_TRUE(world.projectiles().empty());
 }
 
+TEST(GameplayWorldTest, InitialCombatFeedbackIsClear)
+{
+    const GameplayWorld world;
+
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().muzzleFlashIntensity(),
+        0.0F);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().hitConfirmIntensity(),
+        0.0F);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().playerDamagePulseIntensity(),
+        0.0F);
+}
+
 // Week28 正式 Raid 默认部署三个确定性 Enemy。
 TEST(GameplayWorldTest, InitialEnemiesState)
 {
@@ -467,6 +482,9 @@ TEST(
     EXPECT_FALSE(world.enemies()[0].isDead());
     EXPECT_TRUE(world.enemies()[0].isImpactSlowed());
     EXPECT_EQ(world.score(), 0);
+    EXPECT_GT(
+        world.combatFeedback().hitConfirmIntensity(),
+        0.0F);
 
     const ParticleBurstConfig impactConfig{};
     ASSERT_EQ(
@@ -685,10 +703,22 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
 
     EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 1.0F);
     EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 3.0F);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().muzzleFlashIntensity(),
+        1.0F);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().muzzleDirection().x,
+        world.player().facingDirection().x);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().muzzleDirection().y,
+        world.player().facingDirection().y);
 
     world.update(GameplayInput{}, 1.0F);
     EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 0.0F);
     EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().muzzleFlashIntensity(),
+        0.0F);
 }
 
 // 斜向射击
@@ -2132,6 +2162,9 @@ TEST(GameplayWorldRaidTest, PlayerDamageConnectsHealthToStickyRaidDeath)
 
     EXPECT_FALSE(world.damagePlayer(1));
     EXPECT_EQ(world.player().health(), 2);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().playerDamagePulseIntensity(),
+        0.0F);
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::InRaid);
@@ -2154,6 +2187,9 @@ TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoes
     ASSERT_TRUE(advanceUntilFirstScratchHits(world));
     ASSERT_EQ(world.player().health(), 2);
     ASSERT_TRUE(world.player().isImpactSlowed());
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().playerDamagePulseIntensity(),
+        0.55F);
     world.update(GameplayInput{}, 0.0F);
     EXPECT_EQ(world.player().health(), 2);
 
@@ -2164,6 +2200,9 @@ TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoes
     ASSERT_TRUE(advanceUntilGrabBites(world));
 
     EXPECT_EQ(world.player().health(), 0);
+    EXPECT_FLOAT_EQ(
+        world.combatFeedback().playerDamagePulseIntensity(),
+        1.0F);
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::PlayerDead);

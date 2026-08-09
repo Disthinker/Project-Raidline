@@ -13,6 +13,7 @@
 #include <SDL3_image/SDL_image.h>
 #include <fmt/core.h>
 
+#include "enemy_attack_presentation.h"
 #include "inventory_transfer.h"
 
 namespace
@@ -3087,6 +3088,52 @@ void App::renderAimCrosshair()
         center.y + feedbackRadius,
         center.x,
         center.y + feedbackRadius + kArmLength);
+
+    const float hitConfirmIntensity =
+        gameSession_.world()
+            .combatFeedback()
+            .hitConfirmIntensity();
+    if (hitConfirmIntensity > 0.0F)
+    {
+        const Uint8 hitConfirmAlpha = static_cast<Uint8>(
+            std::clamp(
+                110.0F + 145.0F * hitConfirmIntensity,
+                0.0F,
+                255.0F));
+        constexpr float kConfirmInner{3.0F};
+        const float confirmOuter =
+            7.0F + 2.0F * hitConfirmIntensity;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            255U,
+            224U,
+            112U,
+            hitConfirmAlpha);
+        SDL_RenderLine(
+            renderer_,
+            center.x - confirmOuter,
+            center.y - confirmOuter,
+            center.x - kConfirmInner,
+            center.y - kConfirmInner);
+        SDL_RenderLine(
+            renderer_,
+            center.x + kConfirmInner,
+            center.y - kConfirmInner,
+            center.x + confirmOuter,
+            center.y - confirmOuter);
+        SDL_RenderLine(
+            renderer_,
+            center.x - confirmOuter,
+            center.y + confirmOuter,
+            center.x - kConfirmInner,
+            center.y + kConfirmInner);
+        SDL_RenderLine(
+            renderer_,
+            center.x + kConfirmInner,
+            center.y + kConfirmInner,
+            center.x + confirmOuter,
+            center.y + confirmOuter);
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
@@ -3247,8 +3294,19 @@ void App::renderEnemies()
             spriteY,
             kEnemySpriteWidth,
             kEnemySpriteHeight};
-        std::size_t frameIndex =
-            enemy.currentAnimationFrameIndex();
+        const EnemyAttackPresentationSample attackPresentation =
+            sampleEnemyAttackPresentation(
+                enemy.attackType(),
+                enemy.attackPhase(),
+                enemy.attackPhaseRemaining(),
+                enemy.attackConfig());
+
+        // The movement sheet has the same six-frame/two-row layout and is
+        // intentionally retained as the safe fallback until the reviewed
+        // Grab/Scratch/Bite sheets land through the art pipeline.
+        std::size_t frameIndex = attackPresentation.usesAttackSheet
+                                     ? attackPresentation.frameIndex
+                                     : enemy.currentAnimationFrameIndex();
         if (frameIndex >= kEnemyMoveFrameCount)
         {
             frameIndex = 0;
@@ -3535,6 +3593,119 @@ void App::renderParticles()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+void App::renderCombatFeedback()
+{
+    if (!gameSession_.world().raidSession().isActive())
+    {
+        return;
+    }
+
+    const CombatFeedbackState &feedback =
+        gameSession_.world().combatFeedback();
+    const float muzzleIntensity =
+        feedback.muzzleFlashIntensity();
+    const float damageIntensity =
+        feedback.playerDamagePulseIntensity();
+
+    if (muzzleIntensity <= 0.0F &&
+        damageIntensity <= 0.0F)
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    if (muzzleIntensity > 0.0F)
+    {
+        const Vec2 origin = feedback.muzzleOrigin();
+        const Vec2 direction = feedback.muzzleDirection();
+        const Vec2 perpendicular{-direction.y, direction.x};
+        const float length = 10.0F + 8.0F * muzzleIntensity;
+        const float halfWidth = 2.0F + 3.0F * muzzleIntensity;
+        const Uint8 outerAlpha = static_cast<Uint8>(
+            std::clamp(
+                170.0F * muzzleIntensity,
+                0.0F,
+                255.0F));
+        const Uint8 coreAlpha = static_cast<Uint8>(
+            std::clamp(
+                255.0F * muzzleIntensity,
+                0.0F,
+                255.0F));
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            255U,
+            142U,
+            42U,
+            outerAlpha);
+        SDL_RenderLine(
+            renderer_,
+            origin.x,
+            origin.y,
+            origin.x + direction.x * length +
+                perpendicular.x * halfWidth,
+            origin.y + direction.y * length +
+                perpendicular.y * halfWidth);
+        SDL_RenderLine(
+            renderer_,
+            origin.x,
+            origin.y,
+            origin.x + direction.x * length -
+                perpendicular.x * halfWidth,
+            origin.y + direction.y * length -
+                perpendicular.y * halfWidth);
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            255U,
+            246U,
+            190U,
+            coreAlpha);
+        SDL_RenderLine(
+            renderer_,
+            origin.x - direction.x * 2.0F,
+            origin.y - direction.y * 2.0F,
+            origin.x + direction.x * length,
+            origin.y + direction.y * length);
+    }
+
+    if (damageIntensity > 0.0F)
+    {
+        const float edgeThickness =
+            12.0F + 18.0F * damageIntensity;
+        const Uint8 edgeAlpha = static_cast<Uint8>(
+            std::clamp(
+                128.0F * damageIntensity,
+                0.0F,
+                255.0F));
+        const std::array<SDL_FRect, 4U> edges{
+            SDL_FRect{0.0F, 0.0F,
+                      static_cast<float>(kWindowWidth), edgeThickness},
+            SDL_FRect{0.0F,
+                      static_cast<float>(kWindowHeight) - edgeThickness,
+                      static_cast<float>(kWindowWidth), edgeThickness},
+            SDL_FRect{0.0F, 0.0F,
+                      edgeThickness, static_cast<float>(kWindowHeight)},
+            SDL_FRect{static_cast<float>(kWindowWidth) - edgeThickness,
+                      0.0F,
+                      edgeThickness, static_cast<float>(kWindowHeight)}};
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            210U,
+            34U,
+            28U,
+            edgeAlpha);
+        for (const SDL_FRect &edge : edges)
+        {
+            SDL_RenderFillRect(renderer_, &edge);
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderScreenPrimaryButton(
     const char *label)
 {
@@ -3698,6 +3869,7 @@ void App::renderRaidScreen()
     renderPlayer();
     renderProjectiles();
     renderParticles();
+    renderCombatFeedback();
     renderAimCrosshair();
 
     // 背包覆盖层显示在游戏世界上方。

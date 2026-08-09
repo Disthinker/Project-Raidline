@@ -81,6 +81,8 @@ add_executable(Project_Raidline
     src/enemy.cpp
     src/enemy_attack.h
     src/enemy_attack.cpp
+    src/enemy_attack_presentation.h
+    src/enemy_attack_presentation.cpp
     src/enemy_ai.h
     src/enemy_ai.cpp
     src/enemy_squad.h
@@ -94,6 +96,8 @@ add_executable(Project_Raidline
     src/gameplay_world.cpp
     src/weapon_fire.h
     src/weapon_fire.cpp
+    src/combat_feedback.h
+    src/combat_feedback.cpp
 
     src/texture.h
     src/texture.cpp
@@ -203,6 +207,22 @@ target_include_directories(WeaponFireTest PRIVATE src)
 
 gtest_discover_tests(WeaponFireTest)
 
+# test combat_feedback
+add_executable(CombatFeedbackTest
+    tests/test_combat_feedback.cpp
+    src/combat_feedback.cpp
+    src/combat_feedback.h
+    src/enemy_attack.h
+    src/vec2.h
+)
+
+target_compile_features(CombatFeedbackTest PRIVATE cxx_std_20)
+set_target_properties(CombatFeedbackTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(CombatFeedbackTest PRIVATE GTest::gtest_main)
+target_include_directories(CombatFeedbackTest PRIVATE src)
+
+gtest_discover_tests(CombatFeedbackTest)
+
 # test projectile
 add_executable(ProjectileTest
     tests/test_projectile.cpp
@@ -267,6 +287,31 @@ target_link_libraries(EnemyAttackTest PRIVATE GTest::gtest_main)
 target_include_directories(EnemyAttackTest PRIVATE src)
 
 gtest_discover_tests(EnemyAttackTest)
+
+# test enemy_attack_presentation
+add_executable(EnemyAttackPresentationTest
+    tests/test_enemy_attack_presentation.cpp
+    src/enemy_attack_presentation.cpp
+    src/enemy_attack_presentation.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/vec2.h
+)
+
+target_compile_features(EnemyAttackPresentationTest PRIVATE cxx_std_20)
+set_target_properties(
+    EnemyAttackPresentationTest
+    PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+target_link_libraries(
+    EnemyAttackPresentationTest
+    PRIVATE
+    GTest::gtest_main
+)
+target_include_directories(EnemyAttackPresentationTest PRIVATE src)
+
+gtest_discover_tests(EnemyAttackPresentationTest)
 
 # test enemy_ai
 add_executable(EnemyAiTest
@@ -339,6 +384,8 @@ add_executable(GameplayWorldTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/combat_feedback.cpp
+    src/combat_feedback.h
 
     src/player.cpp
     src/player.h
@@ -595,6 +642,8 @@ add_executable(GameSessionTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/combat_feedback.cpp
+    src/combat_feedback.h
 
     src/player.cpp
     src/player.h
@@ -695,6 +744,8 @@ add_executable(GameFlowTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/combat_feedback.cpp
+    src/combat_feedback.h
 
     src/player.cpp
     src/player.h
@@ -1166,10 +1217,12 @@ if(MSVC)
     target_compile_options(InputSystemTest PRIVATE /utf-8)
     target_compile_options(PlayerTest PRIVATE /utf-8)
     target_compile_options(WeaponFireTest PRIVATE /utf-8)
+    target_compile_options(CombatFeedbackTest PRIVATE /utf-8)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(EnemyAttackTest PRIVATE /utf-8)
+    target_compile_options(EnemyAttackPresentationTest PRIVATE /utf-8)
     target_compile_options(EnemyAiTest PRIVATE /utf-8)
     target_compile_options(EnemySquadTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)

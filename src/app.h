@@ -139,6 +139,7 @@ private:
     void renderProjectiles();
     void renderAimCrosshair();
     void renderParticles();
+    void renderCombatFeedback();
     void renderInventoryPlacementPreview(
         const GridInventory &inventory,
         InventoryContainerId container,

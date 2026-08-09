@@ -327,12 +327,24 @@ TEST(GameSessionTest, NextRaidStartsWithFreshWeaponFireState)
 
     ASSERT_GT(session.world().weaponSpreadDegrees(), 0.0F);
     ASSERT_GT(session.world().weaponVisualRecoilPixels(), 0.0F);
+    ASSERT_GT(
+        session.world().combatFeedback().muzzleFlashIntensity(),
+        0.0F);
     ASSERT_TRUE(session.world().markPlayerDead());
     session.update(GameplayInput{}, 0.0F);
     ASSERT_TRUE(session.startNextRaid());
 
     EXPECT_FLOAT_EQ(session.world().weaponSpreadDegrees(), 0.0F);
     EXPECT_FLOAT_EQ(session.world().weaponVisualRecoilPixels(), 0.0F);
+    EXPECT_FLOAT_EQ(
+        session.world().combatFeedback().muzzleFlashIntensity(),
+        0.0F);
+    EXPECT_FLOAT_EQ(
+        session.world().combatFeedback().hitConfirmIntensity(),
+        0.0F);
+    EXPECT_FLOAT_EQ(
+        session.world().combatFeedback().playerDamagePulseIntensity(),
+        0.0F);
 }
 
 TEST(GameSessionTest, StateNamesAreStableForDebugOutput)
