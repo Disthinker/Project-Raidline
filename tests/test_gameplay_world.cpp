@@ -158,11 +158,11 @@ TEST(GameplayWorldTest, InitialProjectilesEmpty)
     EXPECT_TRUE(world.projectiles().empty());
 }
 
-// 初始 Enemy 有 1 个，position=(600,100)，size=(50,50)
+// Week28 正式 Raid 默认部署三个确定性 Enemy。
 TEST(GameplayWorldTest, InitialEnemiesState)
 {
     GameplayWorld world;
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
 
     const Enemy &enemy = world.enemies()[0];
     const Vec2 enemyPosition = enemy.position();
@@ -175,6 +175,113 @@ TEST(GameplayWorldTest, InitialEnemiesState)
     EXPECT_EQ(enemy.health(), 3);
     EXPECT_EQ(enemy.maxHealth(), 3);
     EXPECT_FALSE(enemy.isDead());
+
+    EXPECT_FLOAT_EQ(world.enemies()[1].position().x, 350.0F);
+    EXPECT_FLOAT_EQ(world.enemies()[1].position().y, 500.0F);
+    EXPECT_FLOAT_EQ(world.enemies()[2].position().x, 930.0F);
+    EXPECT_FLOAT_EQ(world.enemies()[2].position().y, 500.0F);
+    for (const Enemy &deployedEnemy : world.enemies())
+    {
+        EXPECT_EQ(
+            deployedEnemy.awarenessState(),
+            EnemyAwarenessState::Unaware);
+    }
+}
+
+TEST(GameplayWorldTest, DefaultSquadAcquiresPlayerAndAssignsOneEngager)
+{
+    GameplayWorld world;
+
+    world.update(GameplayInput{}, 0.0F);
+    world.update(GameplayInput{}, 1.0F / 120.0F);
+
+    std::size_t engageCount{};
+    for (const Enemy &enemy : world.enemies())
+    {
+        EXPECT_EQ(
+            enemy.awarenessState(),
+            EnemyAwarenessState::Alerted);
+        if (enemy.tacticalRole() == EnemyTacticalRole::Engage)
+        {
+            ++engageCount;
+        }
+    }
+
+    EXPECT_EQ(engageCount, 1U);
+}
+
+TEST(GameplayWorldTest, CloseSquadStartsAtMostOneAttackPerSubstep)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{590.0F, 360.0F}},
+            EnemySpawn{Vec2{640.0F, 300.0F}},
+            EnemySpawn{Vec2{690.0F, 360.0F}}},
+        20};
+
+    world.update(GameplayInput{}, 0.0F);
+    world.update(GameplayInput{}, 1.0F / 120.0F);
+
+    std::size_t activeAttackCount{};
+    for (const Enemy &enemy : world.enemies())
+    {
+        if (enemy.attackPhase() != EnemyAttackPhase::Idle)
+        {
+            ++activeAttackCount;
+        }
+    }
+
+    EXPECT_EQ(activeAttackCount, 1U);
+}
+
+TEST(GameplayWorldTest, OverlappingSquadUsesSnapshotSeparation)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{400.0F, 350.0F}},
+            EnemySpawn{Vec2{400.0F, 350.0F}},
+            EnemySpawn{Vec2{400.0F, 350.0F}}},
+        20};
+
+    world.update(GameplayInput{}, 0.0F);
+    world.update(GameplayInput{}, 1.0F);
+
+    ASSERT_EQ(world.enemies().size(), 3U);
+    EXPECT_LT(
+        world.enemies()[0].position().x,
+        world.enemies()[2].position().x);
+}
+
+TEST(GameplayWorldTest, DistantEnemyRemainsUnawareAndStationary)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{0.0F, 0.0F}}},
+        20};
+    const Vec2 initialPosition =
+        world.enemies().front().position();
+
+    world.update(GameplayInput{}, 1.0F);
+
+    const Enemy &enemy = world.enemies().front();
+    EXPECT_EQ(
+        enemy.awarenessState(),
+        EnemyAwarenessState::Unaware);
+    EXPECT_FLOAT_EQ(enemy.position().x, initialPosition.x);
+    EXPECT_FLOAT_EQ(enemy.position().y, initialPosition.y);
+}
+
+TEST(GameplayWorldTest, InvalidEnemySpawnIsRejected)
+{
+    EnemySpawn invalidSpawn;
+    invalidSpawn.position.x =
+        std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_THROW(
+        GameplayWorld(
+            std::vector<EnemySpawn>{invalidSpawn},
+            3),
+        std::invalid_argument);
 }
 
 TEST(GameplayWorldTest, InitialScoreIsZero)
@@ -338,7 +445,7 @@ TEST(
     world.update(fire, 0.0f);
 
     ASSERT_EQ(world.projectiles().size(), 1u);
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
     EXPECT_EQ(world.enemies()[0].health(), 3);
 
     GameplayInput noInput{};
@@ -355,7 +462,7 @@ TEST(
     EXPECT_TRUE(world.projectiles().empty());
     EXPECT_LT(simulatedFrames, kMaximumFrames);
 
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_FALSE(world.enemies()[0].isDead());
     EXPECT_TRUE(world.enemies()[0].isImpactSlowed());
@@ -380,12 +487,12 @@ TEST(GameplayWorldTest, FastProjectileDoesNotTunnelThroughEnemyDuringLargeFrame)
     world.update(makeFireInput(), 0.0F);
 
     ASSERT_EQ(world.projectiles().size(), 1U);
-    ASSERT_EQ(world.enemies().size(), 1U);
+    ASSERT_EQ(world.enemies().size(), 3U);
 
     world.update(GameplayInput{}, 0.30F);
 
     EXPECT_TRUE(world.projectiles().empty());
-    ASSERT_EQ(world.enemies().size(), 1U);
+    ASSERT_EQ(world.enemies().size(), 3U);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_EQ(
         world.particles().size(),
@@ -397,7 +504,7 @@ TEST(GameplayWorldTest, EnemyPursuesPlayerInTwoDimensions)
     GameplayWorld world;
     GameplayInput input{};
 
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
     const Vec2 initialPosition = world.enemies()[0].position();
     const Vec2 playerPosition = world.player().position();
     const float initialDistanceSquared =
@@ -406,7 +513,7 @@ TEST(GameplayWorldTest, EnemyPursuesPlayerInTwoDimensions)
 
     world.update(input, 1.0f);
 
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
     const Vec2 updatedPosition = world.enemies()[0].position();
     const float updatedDistanceSquared =
         std::pow(playerPosition.x - updatedPosition.x, 2.0F) +
@@ -422,7 +529,7 @@ TEST(GameplayWorldTest, EnemyFirstApproachUsesNormalPursuitInsteadOfGrab)
     GameplayWorld world;
     world.update(GameplayInput{}, 1.20F);
 
-    ASSERT_EQ(world.enemies().size(), 1u);
+    ASSERT_EQ(world.enemies().size(), 3u);
     const Enemy &enemy = world.enemies()[0];
 
     EXPECT_FALSE(enemy.attackType().has_value());

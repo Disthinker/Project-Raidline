@@ -124,6 +124,15 @@ namespace
     // Enemy 移动动画每帧持续 0.125 秒。
     constexpr float kEnemyMoveFrameDuration{0.125f};
     constexpr float kHalfEnemyMoveFrameDuration{0.0625f};
+
+    EnemyTacticalDirective engageDirective()
+    {
+        return EnemyTacticalDirective{
+            EnemyTacticalRole::Engage,
+            true,
+            Vec2{},
+            1.0F};
+    }
 }
 
 // 正水平速度应让 Enemy 初始朝右。
@@ -352,7 +361,8 @@ TEST(EnemyTest, AiPursuitMovesVerticallyAndAdvancesAnimation)
 
     static_cast<void>(
         enemy.updateTowardsTarget(
-            Vec2{0.0F, 300.0F},
+            Vec2{125.0F, 425.0F},
+            engageDirective(),
             0.25F,
             1280.0F,
             720.0F));
@@ -380,7 +390,8 @@ TEST(EnemyTest, ActiveAttackKeepsLockedDirectionAndSuppressesAiMovement)
 
     static_cast<void>(
         enemy.updateTowardsTarget(
-            Vec2{-300.0F, 0.0F},
+            Vec2{-175.0F, 125.0F},
+            engageDirective(),
             0.05F,
             1280.0F,
             720.0F));
@@ -443,7 +454,8 @@ TEST(EnemyTest, AttackMovementUsesStationaryNormalAndAttackTiers)
     EXPECT_FLOAT_EQ(grabEnemy.movementSpeed(), 72.0F);
 
     static_cast<void>(grabEnemy.updateTowardsTarget(
-        Vec2{0.0F, 100.0F},
+        Vec2{125.0F, 225.0F},
+        engageDirective(),
         0.55F,
         1280.0F,
         720.0F));
@@ -456,7 +468,8 @@ TEST(EnemyTest, AttackMovementUsesStationaryNormalAndAttackTiers)
     EXPECT_FLOAT_EQ(grabEnemy.position().y, 139.6F);
 
     static_cast<void>(grabEnemy.updateTowardsTarget(
-        Vec2{-100.0F, 0.0F},
+        Vec2{25.0F, 125.0F},
+        engageDirective(),
         0.55F,
         1280.0F,
         720.0F));
@@ -483,7 +496,8 @@ TEST(EnemyTest, NonLethalProjectileDamageBrieflySlowsEnemyTime)
     EXPECT_FLOAT_EQ(enemy.impactSlowRemaining(), 0.18F);
 
     static_cast<void>(enemy.updateTowardsTarget(
-        Vec2{300.0F, 0.0F},
+        Vec2{425.0F, 125.0F},
+        engageDirective(),
         0.10F,
         1280.0F,
         720.0F));
@@ -491,7 +505,8 @@ TEST(EnemyTest, NonLethalProjectileDamageBrieflySlowsEnemyTime)
     EXPECT_NEAR(enemy.impactSlowRemaining(), 0.08F, 0.0001F);
 
     static_cast<void>(enemy.updateTowardsTarget(
-        Vec2{300.0F, 0.0F},
+        Vec2{425.0F, 125.0F},
+        engageDirective(),
         0.08F,
         1280.0F,
         720.0F));
@@ -499,7 +514,8 @@ TEST(EnemyTest, NonLethalProjectileDamageBrieflySlowsEnemyTime)
     const float slowedPosition = enemy.position().x;
 
     static_cast<void>(enemy.updateTowardsTarget(
-        Vec2{300.0F, 0.0F},
+        Vec2{425.0F, 125.0F},
+        engageDirective(),
         0.10F,
         1280.0F,
         720.0F));

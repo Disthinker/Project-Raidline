@@ -190,7 +190,7 @@ TEST(GameSessionTest, ExtractionPersistsStashAndStartsFreshSecondRaid)
 
 TEST(GameSessionTest, SearchTransferExtractionAndRestartFormOneSuccessSlice)
 {
-    GameSession session;
+    GameSession session{std::vector<EnemySpawn>{}};
 
     GameplayInput moveRight{};
     moveRight.moveRight = true;

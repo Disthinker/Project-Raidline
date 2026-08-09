@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-09，Week27 简单敌人 AI 与可读攻击已通过 PR #50 合入 `main@520f4ec`。最终提交 `4f151f1` 的 Windows Debug 全目标构建、全量 CTest 519/519、第二轮真实窗口 1–13，以及 Ubuntu/Windows 精确 head CI 全部通过。当前进入 Week28：深化距离感知与失去目标、最后已知位置搜索、平滑转向、局部 steering 和确定性多敌人协作。
+最后核对：2026-08-09，Week27 简单敌人 AI 与可读攻击已通过 PR #50 合入，Week27 收口/Week28 计划 PR #51 已合入 `main@f131f9e`。当前分支 `codex/week28-enemy-perception-coordination` 已完成距离感知滞回、最后已知位置搜索、平滑转向、局部 steering、单主攻者协调和默认三敌人部署；Windows Debug 全目标构建与全量 CTest 544/544 已通过，用户已确认真实窗口 1–13 全部通过。精确 head Ubuntu/Windows CI 尚未执行，因此 Week28 仍是“人工验收完成、CI 待运行”，尚未合入 `main`。
 
 ## Git、验证与 CI 基线
 
@@ -28,6 +28,7 @@
 - Week26 feature commit `3a52354` 的 [GitHub Actions run 31260317298](https://github.com/Disthinker/Project-Raidline/actions/runs/31260317298) 全部通过：范围检测 6 秒、Ubuntu 1 分 23 秒、Windows 3 分 15 秒。
 - 用户确认 Week26 原 1–10、补充 11–13 与最终合并验收 15 全部通过；PR #48 已按精确 feature head 合入，merge commit 为 `0847da0`。
 - Week27 首轮与第二轮真实窗口验收均由用户确认 1–13 全部通过。第二轮 Windows Debug 全目标构建成功，`EnemyAttackTest`、`EnemyAiTest`、`EnemyTest`、`PlayerTest` 与 `GameplayWorldTest` 聚焦回归通过，全量 CTest 519/519；测试程序直接运行未出现 Runtime Library / `gtest_ar_`。最终提交 `4f151f1` 的范围检测、Ubuntu 与 Windows CI 全部通过，PR #50 已合入 `main@520f4ec`。
+- Week28 当前分支 Windows Debug 全目标构建成功，CMake 注册 30 个 GTest executable、全量 CTest 544/544 通过；`EnemyAiStateTest` 21/21，新增 `EnemySquadCoordinatorTest` 10/10。新增源已进入主程序、GameplayWorldTest、GameSessionTest 与 GameFlowTest；用户已确认真实窗口 1–13 全部通过，CI 保持未验证。
 
 ## 已进入 main：Week 1–27
 
@@ -152,6 +153,15 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 - App 只读 Enemy/Player 快照：Grab 为蓝青、Scratch 为金黄、Bite 为红紫；Windup 显示预警，Active 高亮命中区，Recovery 降亮，OffBalance 以橙红范围和敌人横倒 90° 表达。受击者短暂显示火光色轮廓，debug 区显示动作、移动档位/速度、控制与顿挫剩余时间。
 - 本轮仍不实现视野/听觉、失去目标、寻路/避障、多敌人协作、随机权重、行为树、正式攻击动画/音效、击退或完整受伤表现；这些分别进入 Week28 AI 深化和 Week29 战斗表现。
 
+## Week28 当前分支能力（人工验收通过，待 CI 与合入）
+
+- `EnemyAiState` 新增 `Unaware/Alerted/Searching`。360 px 内获取目标，已警觉后超过 460 px 才丢失，随后只追冻结的最后已知位置；到达 20 px 内或 2 秒记忆耗尽后停止搜索。
+- 普通追击、搜索和支援 steering 使用 540°/秒的有限转向；支援者在 105–155 px 距离带内侧向移动，过近后撤、过远接近。
+- `EnemySquadCoordinator` 在每个敌人子步读取全体值快照，稳定分配至多一个 `Engage`，其余为 `Support`，并在 82 px 邻域内生成上限 1.25 的分离向量。先计算全部指令再提交，避免遍历顺序污染 steering。
+- 正式 Raid 默认部署三名敌人；只有 `Alerted + Engage` 可新开 Scratch/Grab。活动攻击保留攻击权，倒伏、死亡或失去目标后可由另一名合格敌人接替。
+- App 汇总存活/警觉/搜索数量，并用灰、红/青、橙轮廓及逐敌文本区分感知和角色；逻辑仍由 Enemy/GameplayWorld 唯一拥有。
+- Week27 的 Scratch、条件 Grab→Bite、OffBalance、三级速度、双方顿挫和单次命中测试均保留。本轮不含视锥、遮挡、听觉、寻路、正式动画或音效。
+
 ## 已知工程债
 
 - `src/app.cpp` 仍集中 SDL 生命周期、输入、纹理和背包绘制；本轮只增加必要的事件与路由，没有进行无关大重构。
@@ -159,6 +169,6 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 - 缺少 App 级自动化 UI/截图测试；Week25 真实窗口 1–10 已通过，但未来输入和视觉变化仍不能只依赖领域自动测试。
 - `tests/test_phase1_assets.py` 尚未进入 CTest/CI，当前环境也没有项目级 Poetry/pytest 命令。
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
-- 搜索计时、多柜体选择、外部数据 Loot、复杂敌人感知/协作、正式攻击与受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
+- 多柜体选择、外部数据 Loot、视锥/遮挡/听觉/寻路等复杂感知、正式攻击与受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week27 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week27-enemy-readable-attacks.md)；Week28 合同见 [活动 ExecPlan](../exec-plans/active/week28-enemy-perception-and-coordination.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week27 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week27-enemy-readable-attacks.md)；Week28 实现、自动证据与待验收项见 [活动 ExecPlan](../exec-plans/active/week28-enemy-perception-and-coordination.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

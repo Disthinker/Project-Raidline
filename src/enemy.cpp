@@ -168,7 +168,8 @@ EnemyAttackAdvance Enemy::update(
 }
 
 EnemyAttackAdvance Enemy::updateTowardsTarget(
-    Vec2 targetOffset,
+    Vec2 targetPosition,
+    const EnemyTacticalDirective &tacticalDirective,
     float deltaTime,
     float worldWidth,
     float worldHeight)
@@ -179,6 +180,7 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
     ai_.reset();
     velocity_ = Vec2{};
     movementState_ = EnemyMovementState::Stationary;
+    tacticalRole_ = EnemyTacticalRole::Support;
     impactSlowRemaining_ = 0.0F;
     movementAnimator_.reset();
     return EnemyAttackAdvance{};
@@ -186,14 +188,26 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
 
   const float effectiveDeltaTime =
       consumeImpactAdjustedDeltaTime(deltaTime);
+  tacticalRole_ = tacticalDirective.role;
+
+  const Vec2 selfPosition{
+      position_.x + size_.x / 2.0F,
+      position_.y + size_.y / 2.0F};
+  const Vec2 targetOffset{
+      targetPosition.x - selfPosition.x,
+      targetPosition.y - selfPosition.y};
 
   if (attack_.phase() != EnemyAttackPhase::Idle)
   {
+    EnemyTacticalDirective activeDirective = tacticalDirective;
+    activeDirective.canStartAttack = false;
     static_cast<void>(
         ai_.update(
-            targetOffset,
-            false,
-            deltaTime));
+            EnemyAiInput{
+                selfPosition,
+                targetPosition,
+                activeDirective,
+                deltaTime}));
     return updateActiveAttack(
         targetOffset,
         effectiveDeltaTime,
@@ -203,9 +217,11 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
 
   const EnemyAiDecision decision =
       ai_.update(
-          targetOffset,
-          true,
-          deltaTime);
+          EnemyAiInput{
+              selfPosition,
+              targetPosition,
+              tacticalDirective,
+              deltaTime});
 
   if (decision.attackRequest.has_value() &&
       tryStartAttack(
@@ -214,6 +230,7 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
   {
     ai_.recordAttackStarted(
         *decision.attackRequest);
+    tacticalRole_ = EnemyTacticalRole::Engage;
     return updateActiveAttack(
         targetOffset,
         effectiveDeltaTime,
@@ -448,6 +465,27 @@ float Enemy::movementSpeed() const noexcept
   }
 
   return 0.0F;
+}
+
+EnemyAwarenessState Enemy::awarenessState() const noexcept
+{
+  return ai_.awarenessState();
+}
+
+EnemyTacticalRole Enemy::tacticalRole() const noexcept
+{
+  return tacticalRole_;
+}
+
+float Enemy::searchTimeRemaining() const noexcept
+{
+  return ai_.searchTimeRemaining();
+}
+
+std::optional<Vec2>
+Enemy::lastKnownTargetPosition() const noexcept
+{
+  return ai_.lastKnownTargetPosition();
 }
 
 std::size_t Enemy::currentAnimationFrameIndex() const

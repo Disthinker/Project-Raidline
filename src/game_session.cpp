@@ -16,6 +16,15 @@ GameSession::GameSession(
 {
 }
 
+GameSession::GameSession(
+    std::vector<EnemySpawn> firstRaidEnemies)
+    : stash_{},
+      world_{std::make_unique<GameplayWorld>(
+          std::move(firstRaidEnemies),
+          3)}
+{
+}
+
 void GameSession::update(
     const GameplayInput &input,
     float deltaTime)

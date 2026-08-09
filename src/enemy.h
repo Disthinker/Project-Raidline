@@ -51,7 +51,8 @@ public:
 
     [[nodiscard]]
     EnemyAttackAdvance updateTowardsTarget(
-        Vec2 targetOffset,
+        Vec2 targetPosition,
+        const EnemyTacticalDirective &tacticalDirective,
         float deltaTime,
         float worldWidth,
         float worldHeight);
@@ -98,6 +99,10 @@ public:
     bool isMoving() const;
     [[nodiscard]] EnemyMovementState movementState() const noexcept;
     [[nodiscard]] float movementSpeed() const noexcept;
+    [[nodiscard]] EnemyAwarenessState awarenessState() const noexcept;
+    [[nodiscard]] EnemyTacticalRole tacticalRole() const noexcept;
+    [[nodiscard]] float searchTimeRemaining() const noexcept;
+    [[nodiscard]] std::optional<Vec2> lastKnownTargetPosition() const noexcept;
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);
@@ -120,6 +125,7 @@ private:
     EnemyAttackState attack_;
     EnemyAiState ai_;
     EnemyMovementState movementState_{EnemyMovementState::Stationary};
+    EnemyTacticalRole tacticalRole_{EnemyTacticalRole::Support};
     float impactSlowRemaining_{};
 
     [[nodiscard]]

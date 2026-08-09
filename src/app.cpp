@@ -1397,24 +1397,32 @@ void App::renderDebugText()
         52.0f,
         playerHealthText.c_str());
 
-    std::string enemyHealthText;
-
-    if (gameSession_.world().enemies().empty())
+    std::size_t aliveEnemyCount{};
+    std::size_t alertedEnemyCount{};
+    std::size_t searchingEnemyCount{};
+    for (const Enemy &enemy : gameSession_.world().enemies())
     {
-        enemyHealthText =
-            "Enemy HP: defeated";
+        if (!enemy.isDead())
+        {
+            ++aliveEnemyCount;
+            if (enemy.awarenessState() == EnemyAwarenessState::Alerted)
+            {
+                ++alertedEnemyCount;
+            }
+            else if (enemy.awarenessState() == EnemyAwarenessState::Searching)
+            {
+                ++searchingEnemyCount;
+            }
+        }
     }
-    else
-    {
-        const Enemy &enemy =
-            gameSession_.world().enemies().front();
 
-        enemyHealthText =
-            fmt::format(
-                "Enemy HP: {}/{}",
-                enemy.health(),
-                enemy.maxHealth());
-    }
+    const std::string enemyHealthText =
+        fmt::format(
+            "Enemies: {}/{} | Alerted {} | Searching {}",
+            aliveEnemyCount,
+            gameSession_.world().enemies().size(),
+            alertedEnemyCount,
+            searchingEnemyCount);
 
     SDL_RenderDebugText(
         renderer_,
@@ -1541,23 +1549,27 @@ void App::renderDebugText()
         else if (enemy.attackType().has_value())
         {
             enemyAiText = fmt::format(
-                "Enemy AI: {} {}",
+                "Lead AI: {} {}",
                 enemyAttackTypeName(*enemy.attackType()),
                 enemyAttackPhaseName(enemy.attackPhase()));
         }
         else if (enemy.isMoving())
         {
-            enemyAiText = "Enemy AI: pursuing";
+            enemyAiText = "Lead AI: moving";
         }
         else
         {
-            enemyAiText = "Enemy AI: holding";
+            enemyAiText = "Lead AI: holding";
         }
 
         if (!enemy.isDead())
         {
             enemyAiText += fmt::format(
-                " | Move {} {:.0f}",
+                " | {} {} | Move {} {:.0f}",
+                enemyAwarenessStateName(
+                    enemy.awarenessState()),
+                enemyTacticalRoleName(
+                    enemy.tacticalRole()),
                 enemyMovementStateName(
                     enemy.movementState()),
                 enemy.movementSpeed());
@@ -3214,8 +3226,13 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
-    for (const auto &enemy : gameSession_.world().enemies())
+    const std::vector<Enemy> &enemies =
+        gameSession_.world().enemies();
+    for (std::size_t enemyIndex{0U};
+         enemyIndex < enemies.size();
+         ++enemyIndex)
     {
+        const Enemy &enemy = enemies[enemyIndex];
         const Rect bounds = enemy.bounds();
         const float spriteX =
             bounds.position.x +
@@ -3278,6 +3295,49 @@ void App::renderEnemies()
                 72U,
                 255U);
             SDL_RenderRect(renderer_, &enemyRect);
+        }
+        else if (!enemy.isDead())
+        {
+            switch (enemy.awarenessState())
+            {
+            case EnemyAwarenessState::Unaware:
+                SDL_SetRenderDrawColor(
+                    renderer_, 120U, 132U, 146U, 220U);
+                break;
+            case EnemyAwarenessState::Alerted:
+                if (enemy.tacticalRole() == EnemyTacticalRole::Engage)
+                {
+                    SDL_SetRenderDrawColor(
+                        renderer_, 255U, 76U, 60U, 255U);
+                }
+                else
+                {
+                    SDL_SetRenderDrawColor(
+                        renderer_, 72U, 190U, 255U, 235U);
+                }
+                break;
+            case EnemyAwarenessState::Searching:
+                SDL_SetRenderDrawColor(
+                    renderer_, 255U, 152U, 48U, 240U);
+                break;
+            }
+            SDL_RenderRect(renderer_, &enemyRect);
+        }
+
+        if (!enemy.isDead())
+        {
+            const std::string enemyStateText = fmt::format(
+                "E{} {} {}",
+                enemyIndex + 1U,
+                enemyAwarenessStateName(
+                    enemy.awarenessState()),
+                enemyTacticalRoleName(
+                    enemy.tacticalRole()));
+            SDL_RenderDebugText(
+                renderer_,
+                enemyRect.x,
+                enemyRect.y - 10.0F,
+                enemyStateText.c_str());
         }
     }
 }

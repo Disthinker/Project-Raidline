@@ -48,12 +48,13 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。活动 Raid 中，世界把玩家中心相对向量交给每个 Enemy；Enemy 自己用确定性 `EnemyAiState` 决定 72 px/s 二维追击、近距离 Scratch 或满足“已挠击且中距离保持 0.5 秒”的特殊 Grab 请求，并用 `EnemyAttackState` 推进攻击阶段。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。正式 Raid 默认部署三名敌人；每个敌人子步先捕获全体中心、存活、感知与攻击阶段的值快照，再由无所有权的 `EnemySquadCoordinator` 统一产生至多一个主攻指令、支援侧向和有界局部分离，最后才按稳定槽位提交 Enemy 更新。Enemy 自己用确定性 `EnemyAiState` 拥有距离感知滞回、最后已知位置、2 秒搜索记忆、有限转向、支援距离保持、攻击冷却与 Week27 选招；只有 `Alerted + Engage` 可请求新攻击。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
 - Player：运动、朝向、动画、唯一拥有的默认 3 HP Health 与短暂受控剩余时间；受控期间移动被抑制，世界同时抑制射击和世界交互。
-- Enemy：运动、朝向、动画、自己的 Health、确定性追击/选招状态、`Stationary/Normal/Attack` 速度档位、受击减速与抓/挠/抱咬攻击阶段；Grab 前摇可追踪，Active 锁向，空冲失衡，世界只读取攻击快照并提交碰撞结果。
+- Enemy：运动、朝向、动画、自己的 Health、距离感知/搜索记忆/平滑转向/确定性选招状态、`Stationary/Normal/Attack` 速度档位、受击减速与抓/挠/抱咬攻击阶段；Grab 前摇可追踪，Active 锁向，空冲失衡，世界只读取值快照并提交碰撞结果。
+- EnemySquadCoordinator：无所有权、无跨帧状态的值协调器；读取同一子步的全体 Enemy 快照，稳定选择唯一 Engage、生成 Support 指令与有界分离向量，不直接修改 Enemy。
 - WeaponFireState：SDL 无关的单局射击时间状态，返回确定性 ShotSpec；不拥有 Projectile，也不直接渲染准星。
 - Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
 - Particle/ParticleSystem：短生命周期命中反馈。
@@ -79,9 +80,9 @@ App ─aliases(non-owning)─> GameSession owned by GameFlow
 GameFlow ─owns─> GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
-GameplayWorld ─owns─> single-Raid entities + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
+GameplayWorld ─owns─> single-Raid entities + EnemySquadCoordinator + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
 Player ─owns─> Health + control remaining time
-Enemy ─owns─> Health + EnemyAiState + EnemyAttackState
+Enemy ─owns─> Health + EnemyAiState(perception/memory/turning) + EnemyAttackState
 StorageCabinet ─owns─> external GridInventory
 GroundItem ─owns─> ItemInstance   (拾取时转移)
 GridInventory::PlacedItem ─owns─> ItemInstance
