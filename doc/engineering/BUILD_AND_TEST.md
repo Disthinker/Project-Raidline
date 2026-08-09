@@ -37,7 +37,7 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 
 ## 定向构建与测试
 
-> Week28 当前分支自动基线：CMake 注册 30 个 GTest executable、544 个 CTest 用例。新增回归覆盖感知获取/丢失滞回、冻结最后已知位置、搜索到达/超时/重发现、有限转向、支援距离策略、唯一主攻权、稳定平局和快照分离；Week27 的首次不 Grab、近距 Scratch、条件 Grab→Bite、OffBalance、三级速度与双方顿挫继续覆盖。2026-08-09 Windows Debug 全目标构建与 544/544 CTest 已通过，用户已确认真实窗口 1–13 全部通过；CI 尚未执行。
+> Week28 `main@c4658e7` 权威基线：CMake 注册 30 个 GTest executable、544 个 CTest 用例。感知获取/丢失滞回、冻结最后已知位置、搜索到达/超时/重发现、有限转向、支援距离、唯一主攻、稳定平局和快照分离，以及 Week27 攻击与顿挫回归均已覆盖。Windows Debug 全目标构建、544/544 CTest、真实窗口 1–13 和精确提交 `07755f6` 的 Ubuntu/Windows CI 均已通过。
 
 先构建并运行最小相关目标，再做全量：
 
@@ -83,7 +83,7 @@ ninja -C build/windows-debug -t deps 'CMakeFiles/Project_Raidline.dir/src/app.cp
 
 > Week27 第二轮战斗规则（覆盖下方基础流程段落中的首轮选招描述）：敌人以 72 px/s 常态追击，76 px 内通常使用 0.18 秒前摇 Scratch。至少启动一次 Scratch 后，玩家退到 100–170 px 并保持约 0.50 秒才会诱发 Grab；Grab 前摇中敌人继续常速追踪，Active 以 135 px/s 锁向冲刺。抱住后立即 Bite（2 伤害、0.75 秒控制），空冲后横倒失衡 1.35 秒。玩家被近战命中、敌人被子弹命中都会短暂出现火光轮廓并减速。
 
-> Week28 当前分支规则：正式 Raid 默认三名敌人；360 px 内获取、460 px 外丢失，Searching 只追最后已知位置并在到达或约 2 秒后停止。红色 `Engage` 可攻击，青色 `Support` 保持外侧距离，橙色表示 Searching；同一时刻只应有一名敌人新开攻击。用户已确认真实窗口 1–13 全部通过。
+> Week28 已合入规则：正式 Raid 默认三名敌人；360 px 内获取、460 px 外丢失，Searching 只追最后已知位置并在到达或约 2 秒后停止。红色 `Engage` 可攻击，青色 `Support` 保持外侧距离，橙色表示 Searching；同一时刻只应有一名敌人新开攻击。用户已确认真实窗口 1–13 全部通过。
 
 Ninja Debug 输出通常位于：
 
