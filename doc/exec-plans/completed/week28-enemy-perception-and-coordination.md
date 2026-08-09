@@ -1,6 +1,6 @@
 # Week28 敌人感知、搜索与多敌人协作 ExecPlan
 
-- 状态：Manual Accepted / CI Pending
+- 状态：Complete
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-09
 
@@ -143,6 +143,7 @@ GameplayWorld enemy substep
 - 2026-08-09：Windows Debug 全目标构建通过，`ctest -N` 注册 544 项，全量 CTest 544/544 通过；`EnemyAiStateTest` 21/21、`EnemySquadCoordinatorTest` 10/10。真实窗口 1–13 与精确 head CI 保持未验证。
 - 2026-08-09：用户在真实 Windows Debug 窗口中确认人工验收 1–13 全部通过；三敌人感知/搜索/角色交接、Week27 攻击回归、边界、旧玩法、流程冻结和无运行库错误均获人工接受。精确 head CI 仍未执行。
 - 2026-08-09：尝试补跑未注册进 CTest 的 `tests/test_phase1_assets.py`；直接脚本入口缺少仓库根模块路径，模块入口显示它不是 unittest，pytest 入口则因当前 Python 环境未安装 pytest 而未执行。Week28 未修改资产，记录为非阻塞环境缺项，不虚构 PASS。
+- 2026-08-09：冻结提交 `07755f6` 通过 PR #52 的唯一一轮 CI：范围检测 7 秒、Ubuntu 1 分 39 秒、Windows 4 分；CI 证据写入 PR 会话而未产生第二次仓库提交。PR #52 以 merge commit `c4658e7` 合入 `main`。
 
 ## 决策日志
 
@@ -164,4 +165,4 @@ GameplayWorld enemy substep
 - Windows Debug 全目标构建和全量 CTest 544/544 已通过；新增源已接入主程序、EnemySquadTest、GameplayWorldTest、GameSessionTest 与 GameFlowTest。
 - 无范围偏差：未加入视锥、遮挡、听觉、寻路、动态刷怪、随机权重、正式动画或音效。为保持 Week27 回归强度，最终测试数由首轮实现后的 541 增至 544。
 
-人工验收 1–13 已全部通过。下一安全步骤是冻结当前代码与文档，按精确 head 提交、推送、创建单一 Week28 PR并只等待一轮 Ubuntu/Windows CI；CI 通过并合入后再把本计划移入 `completed/`，不为写回动态 CI 结果制造第二次 C++ 运行。
+Week28 已完整完成：本地 Windows Debug 全目标构建、544/544 CTest、真实窗口 1–13、精确 head Ubuntu/Windows CI 和 PR 合入均通过。最终功能提交为 `07755f6`，PR #52 merge commit 为 `c4658e7`。动态 CI 证据只保存在 PR 会话中，没有触发第二次 C++ 矩阵。下一安全步骤是从更新后的 `main` 开始 Week29 战斗表现与节奏强化，并按美术管线把正式抓/挠/咬帧资产拆到独立生产任务。

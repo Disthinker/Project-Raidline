@@ -3,8 +3,8 @@
 ## 1. 任务名称与状态
 
 - 任务：在 Week27 可读攻击之上实现距离感知、最后已知位置搜索、平滑转向、支援距离、局部分离和单主攻者协调。
-- 日期/分支/commit：2026-08-09，`codex/week28-enemy-perception-coordination`，基线 `main@f131f9e`；当前实现尚未提交。
-- 完成度：代码、文档、Windows Debug 自动验证和真实窗口 1–13 完成；精确 head CI、PR 和合入尚未完成。
+- 日期/分支/commit：2026-08-09，`codex/week28-enemy-perception-coordination`，功能提交 `07755f6`，PR #52 merge commit `c4658e7`。
+- 完成度：代码、文档、Windows Debug 自动验证、真实窗口 1–13、精确 head Ubuntu/Windows CI、PR 和合入全部完成。
 
 ## 2. 用户可见结果
 
@@ -103,7 +103,7 @@ GameplayWorld enemy substep
 - 全量 CTest：`ctest -N` 注册 544；`ctest --preset windows-debug --output-on-failure` 为 544/544，14.90 秒。
 - 其他测试：实现阶段直接运行 EnemyAi、EnemySquad、Enemy 与 GameplayWorld 测试程序，未出现 Microsoft Runtime Library / `gtest_ar_`。
 - 非 CTest 检查：`tests/test_phase1_assets.py` 未执行；直接入口缺少仓库根模块路径，`python -m pytest` 因当前环境未安装 pytest 而停止。本轮未修改资产，保留为已披露的环境缺项。
-- CI：未执行，不能标记通过。
+- CI：[GitHub Actions run 31300301471](https://github.com/Disthinker/Project-Raidline/actions/runs/31300301471) 全部通过：范围检测 7 秒、Ubuntu 1 分 39 秒、Windows 4 分。
 - 人工验收：用户在真实 Windows Debug 窗口中确认 1–13 全部通过。
 
 ## 12. 教学分级
@@ -136,8 +136,8 @@ GameplayWorld enemy substep
 ## 15. 技术债与测试债
 
 - 技术债：当前协调只有距离和局部分离，没有地图障碍、FOV/听觉、寻路或长期角色锁定；默认三敌人数值仍需真实窗口调优。
-- 测试债：App 没有自动截图/UI 测试；本轮三敌人视觉可读性、搜索路线和实际战斗节奏已由用户人工接受，但 Ubuntu/Windows CI 尚未运行。
-- 下一安全任务：先完成真实窗口 1–13；通过后只提交一次精确 head、创建单一 PR 并等待一轮 CI。Week28 合入后进入 Week29 战斗表现与节奏强化。
+- 测试债：App 没有自动截图/UI 测试；本轮三敌人视觉可读性、搜索路线和实际战斗节奏已由用户人工接受。Phase 1 资产 pytest 仍未纳入项目环境/CI。
+- 下一安全任务：从 `main@c4658e7` 进入 Week29 战斗表现与节奏强化；正式攻击帧资产必须走独立生产任务和 art-control 审核。
 
 ## 16. 可复制给网页端 GPT 的教学 Prompt
 
