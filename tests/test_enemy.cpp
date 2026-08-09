@@ -326,3 +326,185 @@ TEST(EnemyTest, LethalDamageReportsDeathTransition)
 
     EXPECT_FALSE(enemy.takeDamage(1));
 }
+
+TEST(EnemyTest, LethalHitClearsExistingImpactSlow)
+{
+    Enemy enemy{
+        Vec2{},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+
+    ASSERT_FALSE(enemy.takeDamage(1));
+    ASSERT_TRUE(enemy.isImpactSlowed());
+    ASSERT_TRUE(enemy.takeDamage(2));
+    EXPECT_FALSE(enemy.isImpactSlowed());
+    EXPECT_FLOAT_EQ(enemy.impactSlowRemaining(), 0.0F);
+}
+
+TEST(EnemyTest, AiPursuitMovesVerticallyAndAdvancesAnimation)
+{
+    Enemy enemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+
+    static_cast<void>(
+        enemy.updateTowardsTarget(
+            Vec2{0.0F, 300.0F},
+            0.25F,
+            1280.0F,
+            720.0F));
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 100.0F);
+    EXPECT_FLOAT_EQ(enemy.position().y, 118.0F);
+    EXPECT_FLOAT_EQ(enemy.velocity().x, 0.0F);
+    EXPECT_FLOAT_EQ(enemy.velocity().y, 72.0F);
+    EXPECT_EQ(enemy.movementState(), EnemyMovementState::Normal);
+    EXPECT_FLOAT_EQ(enemy.movementSpeed(), 72.0F);
+    EXPECT_TRUE(enemy.isMoving());
+    EXPECT_EQ(enemy.currentAnimationFrameIndex(), 2U);
+}
+
+TEST(EnemyTest, ActiveAttackKeepsLockedDirectionAndSuppressesAiMovement)
+{
+    Enemy enemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    ASSERT_TRUE(enemy.tryStartAttack(
+        EnemyAttackType::Scratch,
+        Vec2{1.0F, 0.0F}));
+
+    static_cast<void>(
+        enemy.updateTowardsTarget(
+            Vec2{-300.0F, 0.0F},
+            0.05F,
+            1280.0F,
+            720.0F));
+
+    EXPECT_EQ(enemy.attackPhase(), EnemyAttackPhase::Windup);
+    EXPECT_FLOAT_EQ(enemy.attackDirection().x, 1.0F);
+    EXPECT_FLOAT_EQ(enemy.attackDirection().y, 0.0F);
+    EXPECT_FLOAT_EQ(enemy.position().x, 100.0F);
+    EXPECT_FLOAT_EQ(enemy.position().y, 100.0F);
+    EXPECT_FALSE(enemy.isMoving());
+}
+
+TEST(EnemyTest, GrabLungeIsClampedToWorldBounds)
+{
+    Enemy enemy{
+        Vec2{930.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    ASSERT_TRUE(enemy.tryStartAttack(
+        EnemyAttackType::Grab,
+        Vec2{1.0F, 0.0F}));
+
+    static_cast<void>(
+        enemy.update(
+            0.50F,
+            1000.0F,
+            720.0F));
+
+    EXPECT_FLOAT_EQ(enemy.position().x, 950.0F);
+    EXPECT_GE(enemy.position().y, 0.0F);
+}
+
+TEST(EnemyTest, AttackMovementUsesStationaryNormalAndAttackTiers)
+{
+    Enemy scratchEnemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    ASSERT_TRUE(scratchEnemy.tryStartAttack(
+        EnemyAttackType::Scratch,
+        Vec2{1.0F, 0.0F}));
+    EXPECT_EQ(
+        scratchEnemy.movementState(),
+        EnemyMovementState::Stationary);
+    EXPECT_FLOAT_EQ(scratchEnemy.movementSpeed(), 0.0F);
+
+    Enemy grabEnemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    ASSERT_TRUE(grabEnemy.tryStartAttack(
+        EnemyAttackType::Grab,
+        Vec2{1.0F, 0.0F}));
+    EXPECT_EQ(
+        grabEnemy.movementState(),
+        EnemyMovementState::Normal);
+    EXPECT_FLOAT_EQ(grabEnemy.movementSpeed(), 72.0F);
+
+    static_cast<void>(grabEnemy.updateTowardsTarget(
+        Vec2{0.0F, 100.0F},
+        0.55F,
+        1280.0F,
+        720.0F));
+    EXPECT_EQ(grabEnemy.attackPhase(), EnemyAttackPhase::Active);
+    EXPECT_EQ(
+        grabEnemy.movementState(),
+        EnemyMovementState::Attack);
+    EXPECT_FLOAT_EQ(grabEnemy.movementSpeed(), 135.0F);
+    EXPECT_FLOAT_EQ(grabEnemy.position().x, 100.0F);
+    EXPECT_FLOAT_EQ(grabEnemy.position().y, 139.6F);
+
+    static_cast<void>(grabEnemy.updateTowardsTarget(
+        Vec2{-100.0F, 0.0F},
+        0.55F,
+        1280.0F,
+        720.0F));
+    EXPECT_EQ(
+        grabEnemy.attackPhase(),
+        EnemyAttackPhase::OffBalance);
+    EXPECT_EQ(
+        grabEnemy.movementState(),
+        EnemyMovementState::Stationary);
+    EXPECT_FLOAT_EQ(grabEnemy.movementSpeed(), 0.0F);
+    EXPECT_FLOAT_EQ(grabEnemy.position().x, 100.0F);
+    EXPECT_FLOAT_EQ(grabEnemy.position().y, 213.85F);
+}
+
+TEST(EnemyTest, NonLethalProjectileDamageBrieflySlowsEnemyTime)
+{
+    Enemy enemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    ASSERT_FALSE(enemy.takeDamage(1));
+    ASSERT_TRUE(enemy.isImpactSlowed());
+    EXPECT_FLOAT_EQ(enemy.impactSlowRemaining(), 0.18F);
+
+    static_cast<void>(enemy.updateTowardsTarget(
+        Vec2{300.0F, 0.0F},
+        0.10F,
+        1280.0F,
+        720.0F));
+    EXPECT_NEAR(enemy.position().x, 102.016F, 0.0001F);
+    EXPECT_NEAR(enemy.impactSlowRemaining(), 0.08F, 0.0001F);
+
+    static_cast<void>(enemy.updateTowardsTarget(
+        Vec2{300.0F, 0.0F},
+        0.08F,
+        1280.0F,
+        720.0F));
+    EXPECT_FALSE(enemy.isImpactSlowed());
+    const float slowedPosition = enemy.position().x;
+
+    static_cast<void>(enemy.updateTowardsTarget(
+        Vec2{300.0F, 0.0F},
+        0.10F,
+        1280.0F,
+        720.0F));
+    EXPECT_NEAR(
+        enemy.position().x - slowedPosition,
+        7.2F,
+        0.0001F);
+}

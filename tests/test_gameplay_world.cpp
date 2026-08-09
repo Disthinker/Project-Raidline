@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -57,6 +58,77 @@ namespace
         moveRight.moveRight = true;
         world.update(moveRight, 1.0F);
         ASSERT_TRUE(world.canInteractWithContainer());
+    }
+
+    float playerEnemyCenterDistance(
+        const GameplayWorld &world)
+    {
+        const Player &player = world.player();
+        const Enemy &enemy = world.enemies().front();
+        const Vec2 playerCenter{
+            player.position().x + player.size() / 2.0F,
+            player.position().y + player.size() / 2.0F};
+        const Vec2 enemyCenter{
+            enemy.position().x + enemy.size().x / 2.0F,
+            enemy.position().y + enemy.size().y / 2.0F};
+        return std::hypot(
+            playerCenter.x - enemyCenter.x,
+            playerCenter.y - enemyCenter.y);
+    }
+
+    bool advanceUntilFirstScratchHits(
+        GameplayWorld &world)
+    {
+        const int initialHealth = world.player().health();
+        constexpr float kStep{1.0F / 120.0F};
+        for (int frame = 0; frame < 600; ++frame)
+        {
+            world.update(GameplayInput{}, kStep);
+            if (world.player().health() < initialHealth)
+            {
+                return world.enemies().front().attackType() ==
+                       EnemyAttackType::Scratch;
+            }
+        }
+        return false;
+    }
+
+    bool retreatAndHoldUntilGrabStarts(
+        GameplayWorld &world)
+    {
+        constexpr float kStep{1.0F / 120.0F};
+        for (int frame = 0; frame < 600; ++frame)
+        {
+            if (world.enemies().front().attackType() ==
+                EnemyAttackType::Grab)
+            {
+                return true;
+            }
+
+            GameplayInput retreat{};
+            if (playerEnemyCenterDistance(world) < 140.0F)
+            {
+                retreat.moveDown = true;
+            }
+            world.update(retreat, kStep);
+        }
+        return false;
+    }
+
+    bool advanceUntilGrabBites(
+        GameplayWorld &world)
+    {
+        const int healthBeforeBite = world.player().health();
+        constexpr float kStep{1.0F / 120.0F};
+        for (int frame = 0; frame < 360; ++frame)
+        {
+            world.update(GameplayInput{}, kStep);
+            if (world.player().health() <= healthBeforeBite - 2)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 } // namespace
 
@@ -262,6 +334,7 @@ TEST(
     GameplayWorld world;
 
     GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{625.0F, 125.0F};
     world.update(fire, 0.0f);
 
     ASSERT_EQ(world.projectiles().size(), 1u);
@@ -285,6 +358,7 @@ TEST(
     ASSERT_EQ(world.enemies().size(), 1u);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_FALSE(world.enemies()[0].isDead());
+    EXPECT_TRUE(world.enemies()[0].isImpactSlowed());
     EXPECT_EQ(world.score(), 0);
 
     const ParticleBurstConfig impactConfig{};
@@ -318,38 +392,43 @@ TEST(GameplayWorldTest, FastProjectileDoesNotTunnelThroughEnemyDuringLargeFrame)
         ParticleBurstConfig{}.particleCount);
 }
 
-// GameplayWorld 持有的 Enemy 不再是静态实体
-TEST(GameplayWorldTest, EnemyMovesAfterWorldUpdate)
+TEST(GameplayWorldTest, EnemyPursuesPlayerInTwoDimensions)
 {
     GameplayWorld world;
     GameplayInput input{};
 
     ASSERT_EQ(world.enemies().size(), 1u);
     const Vec2 initialPosition = world.enemies()[0].position();
+    const Vec2 playerPosition = world.player().position();
+    const float initialDistanceSquared =
+        std::pow(playerPosition.x - initialPosition.x, 2.0F) +
+        std::pow(playerPosition.y - initialPosition.y, 2.0F);
 
     world.update(input, 1.0f);
 
     ASSERT_EQ(world.enemies().size(), 1u);
     const Vec2 updatedPosition = world.enemies()[0].position();
+    const float updatedDistanceSquared =
+        std::pow(playerPosition.x - updatedPosition.x, 2.0F) +
+        std::pow(playerPosition.y - updatedPosition.y, 2.0F);
 
     EXPECT_GT(updatedPosition.x, initialPosition.x);
-    EXPECT_FLOAT_EQ(updatedPosition.y, initialPosition.y);
+    EXPECT_GT(updatedPosition.y, initialPosition.y);
+    EXPECT_LT(updatedDistanceSquared, initialDistanceSquared);
 }
 
-// World 中的 Enemy 会在右边界反弹
-TEST(GameplayWorldTest, EnemyBouncesAtRightBoundary)
+TEST(GameplayWorldTest, EnemyFirstApproachUsesNormalPursuitInsteadOfGrab)
 {
     GameplayWorld world;
-    GameplayInput input{};
-
-    world.update(input, 10.0f);
+    world.update(GameplayInput{}, 1.20F);
 
     ASSERT_EQ(world.enemies().size(), 1u);
-
     const Enemy &enemy = world.enemies()[0];
 
-    EXPECT_FLOAT_EQ(enemy.position().x, 1230.0f);
-    EXPECT_LT(enemy.velocity().x, 0.0f);
+    EXPECT_FALSE(enemy.attackType().has_value());
+    EXPECT_EQ(enemy.attackPhase(), EnemyAttackPhase::Idle);
+    EXPECT_EQ(enemy.movementState(), EnemyMovementState::Normal);
+    EXPECT_FLOAT_EQ(enemy.movementSpeed(), 72.0F);
 }
 
 // 右朝向射击
@@ -1961,41 +2040,56 @@ TEST(GameplayWorldRaidTest, PlayerDamageConnectsHealthToStickyRaidDeath)
     EXPECT_EQ(world.player().health(), 0);
 }
 
-TEST(GameplayWorldRaidTest, EnemyContactUsesCooldownAndLethalFrameDoesNotFire)
+TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
     GameplayWorld world;
 
-    GameplayInput moveUp{};
-    moveUp.moveUp = true;
-    world.update(moveUp, 1.0F);
-    ASSERT_EQ(world.player().health(), 3);
-
-    GameplayInput moveRight{};
-    moveRight.moveRight = true;
-    world.update(moveRight, 1.0F);
+    ASSERT_TRUE(advanceUntilFirstScratchHits(world));
     ASSERT_EQ(world.player().health(), 2);
-
-    // deltaTime 为 0 时双方仍重叠，但伤害冷却不会缩短，
-    // 因而不能按渲染帧连续扣血。
+    ASSERT_TRUE(world.player().isImpactSlowed());
     world.update(GameplayInput{}, 0.0F);
     EXPECT_EQ(world.player().health(), 2);
 
-    world.update(moveRight, 0.75F);
-    ASSERT_EQ(world.player().health(), 1);
-
-    world.update(moveRight, 0.5F);
-    ASSERT_EQ(world.player().health(), 1);
-
-    GameplayInput lethalContact{};
-    lethalContact.firePressed = true;
-    lethalContact.fireJustPressed = true;
-    world.update(lethalContact, 0.5F);
+    ASSERT_TRUE(retreatAndHoldUntilGrabStarts(world));
+    ASSERT_EQ(
+        world.enemies().front().attackType(),
+        EnemyAttackType::Grab);
+    ASSERT_TRUE(advanceUntilGrabBites(world));
 
     EXPECT_EQ(world.player().health(), 0);
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::PlayerDead);
     EXPECT_TRUE(world.projectiles().empty());
+}
+
+TEST(GameplayWorldRaidTest, SurvivingBiteSuppressesMovementAndFire)
+{
+    GameplayWorld world{3, 5};
+
+    ASSERT_TRUE(advanceUntilFirstScratchHits(world));
+    ASSERT_EQ(world.player().health(), 4);
+    ASSERT_TRUE(retreatAndHoldUntilGrabStarts(world));
+    ASSERT_TRUE(advanceUntilGrabBites(world));
+    ASSERT_EQ(world.player().health(), 2);
+    ASSERT_TRUE(world.player().isControlled());
+
+    const Vec2 controlledPosition = world.player().position();
+    GameplayInput blockedInput{};
+    blockedInput.moveRight = true;
+    blockedInput.firePressed = true;
+    blockedInput.fireJustPressed = true;
+    blockedInput.interactJustPressed = true;
+    world.update(blockedInput, 0.10F);
+
+    EXPECT_FLOAT_EQ(
+        world.player().position().x,
+        controlledPosition.x);
+    EXPECT_FLOAT_EQ(
+        world.player().position().y,
+        controlledPosition.y);
+    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.player().isControlled());
 }
 
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)

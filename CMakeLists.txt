@@ -79,6 +79,10 @@ add_executable(Project_Raidline
 
     src/enemy.h
     src/enemy.cpp
+    src/enemy_attack.h
+    src/enemy_attack.cpp
+    src/enemy_ai.h
+    src/enemy_ai.cpp
 
     src/hit_resolution.h
     src/hit_resolution.cpp
@@ -232,6 +236,10 @@ add_executable(EnemyTest
     tests/test_enemy.cpp
     src/enemy.cpp
     src/enemy.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
     src/animation.h
     src/animation.cpp
 )
@@ -243,6 +251,38 @@ target_include_directories(EnemyTest PRIVATE src)
 
 gtest_discover_tests(EnemyTest)
 
+# test enemy_attack
+add_executable(EnemyAttackTest
+    tests/test_enemy_attack.cpp
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/vec2.h
+)
+
+target_compile_features(EnemyAttackTest PRIVATE cxx_std_20)
+set_target_properties(EnemyAttackTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(EnemyAttackTest PRIVATE GTest::gtest_main)
+target_include_directories(EnemyAttackTest PRIVATE src)
+
+gtest_discover_tests(EnemyAttackTest)
+
+# test enemy_ai
+add_executable(EnemyAiTest
+    tests/test_enemy_ai.cpp
+    src/enemy_ai.cpp
+    src/enemy_ai.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/vec2.h
+)
+
+target_compile_features(EnemyAiTest PRIVATE cxx_std_20)
+set_target_properties(EnemyAiTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(EnemyAiTest PRIVATE GTest::gtest_main)
+target_include_directories(EnemyAiTest PRIVATE src)
+
+gtest_discover_tests(EnemyAiTest)
+
 # test hit_resolution
 add_executable(HitResolutionTest
     tests/test_hit_resolution.cpp
@@ -252,6 +292,10 @@ add_executable(HitResolutionTest
     src/collision.h
     src/enemy.cpp
     src/enemy.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
     src/projectile.cpp
     src/projectile.h
     src/rect.h
@@ -285,6 +329,10 @@ add_executable(GameplayWorldTest
 
     src/enemy.cpp
     src/enemy.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
 
     src/rect.h
     src/vec2.h
@@ -535,6 +583,10 @@ add_executable(GameSessionTest
 
     src/enemy.cpp
     src/enemy.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
 
     src/rect.h
     src/vec2.h
@@ -629,6 +681,10 @@ add_executable(GameFlowTest
 
     src/enemy.cpp
     src/enemy.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
 
     src/rect.h
     src/vec2.h
@@ -1088,6 +1144,8 @@ if(MSVC)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)
+    target_compile_options(EnemyAttackTest PRIVATE /utf-8)
+    target_compile_options(EnemyAiTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(StorageCabinetTest PRIVATE /utf-8)
