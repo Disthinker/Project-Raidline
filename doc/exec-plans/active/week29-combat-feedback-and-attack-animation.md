@@ -138,6 +138,7 @@ GameplayWorld command result
 - 2026-08-09：完成 `art/specs/enemy_default_attacks_v1.json`、production brief 与六个冻结候选提示词；已检查现有敌人图集原图，未生成图片、未写 `art/work/`、未发布 runtime 资产、未修改 manifest。
 - 2026-08-09：C++ 安全审查无阻塞项；Windows Debug 全目标增量构建通过，完整 CTest 564/564 通过。直接运行 EnemyAttackPresentation/CombatFeedback/GameplayWorld/GameSession/GameFlow 共 123/123 通过且无 Runtime Library / `gtest_ar_`。
 - 2026-08-09：用户确认代码反馈/fallback 人工验收 1–8 全部通过，并明确要求暂不进入下一步美术任务。未创建生产任务、未生成或发布 PNG、未修改 manifest；Week29 保持活动状态，等待用户以后恢复 `enemy_default_attacks_v1`。
+- 2026-08-09：用户在验收后修订命中反馈方向：普通命中不再显示准星确认，仅爆头/弱点命中显示专用反馈。由于当前尚无命中部位/弱点领域合同，本分支不以渲染猜测临时修改，需求登记为 RL-COMBAT-001；肢体破坏、尸体残留和准星固定落点/地面粒子分别登记为 RL-COMBAT-002～004，均未启动实现或美术生产。
 
 ## 决策日志
 
@@ -145,7 +146,8 @@ GameplayWorld command result
 - 2026-08-09：正式包采用三张独立 6 帧×2 行 sheet，复用现有 256×320 frame、pivot、footline 与 64×80 runtime draw contract。
 - 2026-08-09：本轮增加枪口、命中确认和玩家受伤脉冲，不引入相机系统、屏幕震动或全局 hit-stop，避免把表现周扩大为世界坐标重构。
 - 2026-08-09：未获用户明确允许创建独立生产任务前，不由 art-control 当前任务直接生成图像；先推进可测试代码合同和 production brief。
+- 2026-08-09：当前“任意敌人命中显示 X”保留为已验收 fallback 历史事实，不再视为长期产品合同；后续先由命中部位系统提供明确的普通/爆头/弱点结果，再移除普通命中反馈，避免 App 复制或推断伤害事实。
 
 ## 最终结果、验证与偏差
 
-代码与无新资产 fallback 已实现，并通过本地自动验证和用户代码阶段人工验收 1–8；正式图集和最终视觉接线尚未完成，因此 Week29 不能关闭。当前偏差是运行时在攻击阶段按 0–5 帧采样既有移动 sheet，而不是正式 Grab/Scratch/Bite sheet；该 fallback 保证缺失新 PNG 时仍可启动，但不能作为正式动画验收证据。用户已明确暂停美术任务；恢复后再创建独立用户可见生产任务生成 `enemy_default_attacks_v1` 六个候选，由 art-control 审核、最多一次精确修复、发布三张版本化图集并完成最终接线与 CI。
+代码与无新资产 fallback 已实现，并通过本地自动验证和用户代码阶段人工验收 1–8；正式图集和最终视觉接线尚未完成，因此 Week29 不能关闭。当前偏差是运行时在攻击阶段按 0–5 帧采样既有移动 sheet，而不是正式 Grab/Scratch/Bite sheet；该 fallback 保证缺失新 PNG 时仍可启动，但不能作为正式动画验收证据。用户已明确暂停美术任务；恢复后再创建独立用户可见生产任务生成 `enemy_default_attacks_v1` 六个候选，由 art-control 审核、最多一次精确修复、发布三张版本化图集并完成最终接线与 CI。验收后的产品修订另要求普通命中最终不显示准星确认；该修订依赖尚未实现的命中部位/弱点合同，已由 RL-COMBAT-001 跟踪，不在当前暂停中的动画资产任务内临时实现。
