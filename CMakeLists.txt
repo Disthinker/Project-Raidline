@@ -83,6 +83,8 @@ add_executable(Project_Raidline
     src/enemy_attack.cpp
     src/enemy_ai.h
     src/enemy_ai.cpp
+    src/enemy_squad.h
+    src/enemy_squad.cpp
 
     src/hit_resolution.h
     src/hit_resolution.cpp
@@ -283,6 +285,23 @@ target_include_directories(EnemyAiTest PRIVATE src)
 
 gtest_discover_tests(EnemyAiTest)
 
+# test enemy_squad
+add_executable(EnemySquadTest
+    tests/test_enemy_squad.cpp
+    src/enemy_squad.cpp
+    src/enemy_squad.h
+    src/enemy_ai.h
+    src/enemy_attack.h
+    src/vec2.h
+)
+
+target_compile_features(EnemySquadTest PRIVATE cxx_std_20)
+set_target_properties(EnemySquadTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(EnemySquadTest PRIVATE GTest::gtest_main)
+target_include_directories(EnemySquadTest PRIVATE src)
+
+gtest_discover_tests(EnemySquadTest)
+
 # test hit_resolution
 add_executable(HitResolutionTest
     tests/test_hit_resolution.cpp
@@ -333,6 +352,8 @@ add_executable(GameplayWorldTest
     src/enemy_attack.h
     src/enemy_ai.cpp
     src/enemy_ai.h
+    src/enemy_squad.cpp
+    src/enemy_squad.h
 
     src/rect.h
     src/vec2.h
@@ -587,6 +608,8 @@ add_executable(GameSessionTest
     src/enemy_attack.h
     src/enemy_ai.cpp
     src/enemy_ai.h
+    src/enemy_squad.cpp
+    src/enemy_squad.h
 
     src/rect.h
     src/vec2.h
@@ -685,6 +708,8 @@ add_executable(GameFlowTest
     src/enemy_attack.h
     src/enemy_ai.cpp
     src/enemy_ai.h
+    src/enemy_squad.cpp
+    src/enemy_squad.h
 
     src/rect.h
     src/vec2.h
@@ -1146,6 +1171,7 @@ if(MSVC)
     target_compile_options(EnemyTest PRIVATE /utf-8)
     target_compile_options(EnemyAttackTest PRIVATE /utf-8)
     target_compile_options(EnemyAiTest PRIVATE /utf-8)
+    target_compile_options(EnemySquadTest PRIVATE /utf-8)
     target_compile_options(HitResolutionTest PRIVATE /utf-8)
     target_compile_options(GameplayWorldTest PRIVATE /utf-8)
     target_compile_options(StorageCabinetTest PRIVATE /utf-8)

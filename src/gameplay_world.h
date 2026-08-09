@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "enemy.h"
+#include "enemy_squad.h"
 #include "extraction_point.h"
 #include "gameplay_input.h"
 #include "grid_inventory.h"
@@ -27,6 +28,13 @@ struct GroundItemSpawn
     std::uint32_t quantity{1};
 };
 
+struct EnemySpawn
+{
+    Vec2 position{};
+    Vec2 size{50.0F, 50.0F};
+    int maxHealth{3};
+};
+
 class GameplayWorld
 {
 public:
@@ -44,6 +52,12 @@ public:
     // without changing the shipped three-HP balance.
     GameplayWorld(
         int enemyMaxHealth,
+        int playerMaxHealth);
+
+    // Week28 deterministic multi-enemy integration tests can provide an
+    // explicit deployment without mutating the owned vector after start.
+    GameplayWorld(
+        std::vector<EnemySpawn> initialEnemies,
         int playerMaxHealth);
 
     // 使用默认 10×6 背包。
@@ -181,10 +195,10 @@ private:
     };
 
     GameplayWorld(
-        int enemyMaxHealth,
         std::vector<GroundItemSpawn> initialGroundItems,
         InventoryGridSize inventorySize,
         ItemInstanceId firstItemInstanceId,
+        std::vector<EnemySpawn> initialEnemies,
         int playerMaxHealth,
         PlayerHealthOverrideTag);
 
@@ -192,6 +206,7 @@ private:
 
     std::vector<Projectile> projectiles_;
     std::vector<Enemy> enemies_;
+    EnemySquadCoordinator enemySquadCoordinator_;
 
     std::vector<GroundItem> groundItems_;
     GridInventory inventory_{{10, 6}};

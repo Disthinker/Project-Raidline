@@ -37,13 +37,13 @@ Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-deb
 
 ## 定向构建与测试
 
-> Week27 第二轮权威基线（覆盖首轮 509 项历史证据）：CMake 注册 29 个 GTest executable、519 个 CTest 用例。新增回归覆盖首次接敌不 Grab、近距默认 Scratch、Scratch 后中距离连续保持 0.50 秒、Grab 前摇追踪/Active 锁向、Grab→Bite 原子转换、空冲 OffBalance、0/72/135 px/s 三级速度，以及 Player/Enemy 0.18 秒受击减速。2026-08-08 Windows Debug 全目标构建与 519/519 CTest 已通过。
+> Week28 当前分支自动基线：CMake 注册 30 个 GTest executable、544 个 CTest 用例。新增回归覆盖感知获取/丢失滞回、冻结最后已知位置、搜索到达/超时/重发现、有限转向、支援距离策略、唯一主攻权、稳定平局和快照分离；Week27 的首次不 Grab、近距 Scratch、条件 Grab→Bite、OffBalance、三级速度与双方顿挫继续覆盖。2026-08-09 Windows Debug 全目标构建与 544/544 CTest 已通过，用户已确认真实窗口 1–13 全部通过；CI 尚未执行。
 
 先构建并运行最小相关目标，再做全量：
 
 ```powershell
-cmake --build --preset windows-debug --target InputSystemTest PlayerTest EnemyTest EnemyAttackTest EnemyAiTest RaidSessionTest RaidSettlementTest GameSessionTest GameFlowTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(InputSystemTest|PlayerTest|EnemyTest|EnemyAttackStateTest|EnemyAiStateTest|RaidSessionTest|RaidSettlementTest|GameSessionTest|GameFlowTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
+cmake --build --preset windows-debug --target InputSystemTest PlayerTest EnemyTest EnemyAttackTest EnemyAiTest EnemySquadTest RaidSessionTest RaidSettlementTest GameSessionTest GameFlowTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
+ctest --preset windows-debug -R '^(InputSystemTest|PlayerTest|EnemyTest|EnemyAttackStateTest|EnemyAiStateTest|EnemySquadCoordinatorTest|RaidSessionTest|RaidSettlementTest|GameSessionTest|GameFlowTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
 ctest --preset windows-debug
 ```
 
@@ -59,10 +59,10 @@ ctest --test-dir build/windows-debug -N
 rg 'inventory.interaction' build/windows-debug/compile_commands.json
 ```
 
-当前 CMake 注册 29 个 GTest executable、519 个 CTest 用例。战斗专项覆盖首次接敌不 Grab、近距默认 Scratch、特殊条件保持/重置/消费、Grab 前摇追踪与 Active 锁向、Grab→Bite、OffBalance、三级速度、双方受击减速、致死清理和世界集成；其余 WeaponFire、GameplayWorld、GameFlow、Raid、Loot、会话与库存回归继续全部注册。可用下列命令证明新 AI/攻击、流程、Raid、Loot、会话与鼠标测试源真实进入编译数据库：
+当前 CMake 注册 30 个 GTest executable、544 个 CTest 用例。战斗专项覆盖感知/搜索/平滑转向、支援距离、唯一主攻与快照分离，并保留首次接敌不 Grab、近距 Scratch、特殊条件保持/重置/消费、Grab→Bite、OffBalance、三级速度、双方受击减速、致死清理和世界集成；其余 WeaponFire、GameplayWorld、GameFlow、Raid、Loot、会话与库存回归继续全部注册。可用下列命令证明新 AI/协调、流程、Raid、Loot、会话与鼠标测试源真实进入编译数据库：
 
 ```powershell
-rg 'enemy_attack.cpp|enemy_ai.cpp|test_enemy_attack.cpp|test_enemy_ai.cpp' build/windows-debug/compile_commands.json
+rg 'enemy_attack.cpp|enemy_ai.cpp|enemy_squad.cpp|test_enemy_attack.cpp|test_enemy_ai.cpp|test_enemy_squad.cpp' build/windows-debug/compile_commands.json
 rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
 rg 'loot_table.cpp|test_loot_table.cpp' build/windows-debug/compile_commands.json
 rg 'raid_session.cpp|extraction_point.cpp|test_raid_session.cpp|test_extraction_point.cpp' build/windows-debug/compile_commands.json
@@ -82,6 +82,8 @@ ninja -C build/windows-debug -t deps 'CMakeFiles/Project_Raidline.dir/src/app.cp
 ## 运行程序与人工检查
 
 > Week27 第二轮战斗规则（覆盖下方基础流程段落中的首轮选招描述）：敌人以 72 px/s 常态追击，76 px 内通常使用 0.18 秒前摇 Scratch。至少启动一次 Scratch 后，玩家退到 100–170 px 并保持约 0.50 秒才会诱发 Grab；Grab 前摇中敌人继续常速追踪，Active 以 135 px/s 锁向冲刺。抱住后立即 Bite（2 伤害、0.75 秒控制），空冲后横倒失衡 1.35 秒。玩家被近战命中、敌人被子弹命中都会短暂出现火光轮廓并减速。
+
+> Week28 当前分支规则：正式 Raid 默认三名敌人；360 px 内获取、460 px 外丢失，Searching 只追最后已知位置并在到达或约 2 秒后停止。红色 `Engage` 可攻击，青色 `Support` 保持外侧距离，橙色表示 Searching；同一时刻只应有一名敌人新开攻击。用户已确认真实窗口 1–13 全部通过。
 
 Ninja Debug 输出通常位于：
 

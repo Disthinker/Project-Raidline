@@ -24,6 +24,11 @@ public:
     explicit GameSession(
         InventoryGridSize stashSize);
 
+    // Integration tests can isolate a long non-combat settlement slice with
+    // an explicit first-raid deployment. Shipped sessions use the default.
+    explicit GameSession(
+        std::vector<EnemySpawn> firstRaidEnemies);
+
     void update(
         const GameplayInput &input,
         float deltaTime);

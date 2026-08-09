@@ -1,6 +1,6 @@
 # Week28 敌人感知、搜索与多敌人协作 ExecPlan
 
-- 状态：Ready
+- 状态：Manual Accepted / CI Pending
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
 - 最后更新：2026-08-09
 
@@ -16,7 +16,7 @@
 
 ## 当前仓库状态与基线
 
-- Week27 最终提交 `4f151f1` 已由 PR #50 合入 `main@520f4ec`；Windows Debug 全量 CTest 为 519/519，第二轮真实窗口 1–13 与 Ubuntu/Windows CI 全部通过。
+- Week27 最终提交 `4f151f1` 已由 PR #50 合入；Week27 收口与本计划由 PR #51 合入 `main@f131f9e`。Week28 当前工作位于 `codex/week28-enemy-perception-coordination`，尚未提交、推送或运行 CI。
 - `GameplayWorld` 已用 `std::vector<Enemy>` 拥有敌人，但默认只部署一名；每个敌人直接收到实时玩家 offset，因此即使相距很远也始终追踪。
 - `EnemyAiState` 唯一拥有攻击冷却与特殊 Grab 武装条件；`Enemy` 唯一拥有 AI、攻击和受击状态；`GameplayWorld` 用最大 1/120 秒子步编排敌人、攻击命中和终局。
 - App 已遍历全部敌人渲染精灵和攻击预警，但 HUD/debug 主要只显示首名敌人。本轮继续使用代码占位表现，不依赖新美术资产。
@@ -137,13 +137,31 @@ GameplayWorld enemy substep
 ## 进度记录
 
 - 2026-08-09：PR #50 以 merge commit `520f4ec` 合入；核对当前单敌人默认部署、全知 offset 输入、`EnemyAiState` 冷却/特殊武装所有权、`GameplayWorld` 有界子步和 App 多敌人遍历能力，冻结本计划契约。
+- 2026-08-09：PR #51 合入 `main@f131f9e` 后创建 Week28 分支；扩展 `EnemyAiState` 的感知、记忆、支援距离与有限转向，新增无所有权 `EnemySquadCoordinator`，并以显式 spawn 构造器接入默认三敌人世界。
+- 2026-08-09：完成世界子步“全体值快照 → 全体指令 → 按索引提交”，App 增加逐敌感知/角色占位与 HUD 汇总；Week27 攻击、终局和会话回归保持原调用顺序。
+- 2026-08-09：C++ 安全审查核对架构、不变量和完整 diff，未发现未解决的所有权、引用失效、异常、`noexcept`、`[[nodiscard]]` 或链接问题；补回 3 项 Week27 AI 回归，避免感知重写削弱旧合同保护。
+- 2026-08-09：Windows Debug 全目标构建通过，`ctest -N` 注册 544 项，全量 CTest 544/544 通过；`EnemyAiStateTest` 21/21、`EnemySquadCoordinatorTest` 10/10。真实窗口 1–13 与精确 head CI 保持未验证。
+- 2026-08-09：用户在真实 Windows Debug 窗口中确认人工验收 1–13 全部通过；三敌人感知/搜索/角色交接、Week27 攻击回归、边界、旧玩法、流程冻结和无运行库错误均获人工接受。精确 head CI 仍未执行。
+- 2026-08-09：尝试补跑未注册进 CTest 的 `tests/test_phase1_assets.py`；直接脚本入口缺少仓库根模块路径，模块入口显示它不是 unittest，pytest 入口则因当前 Python 环境未安装 pytest 而未执行。Week28 未修改资产，记录为非阻塞环境缺项，不虚构 PASS。
 
 ## 决策日志
 
 - 2026-08-09：选择距离感知滞回与最后已知位置记忆，不提前实现视锥、遮挡或听觉系统。
 - 2026-08-09：选择独立、无所有权的协调层和“快照后统一提交”，不让 Enemy 互持指针，也不引入 Squad 实体生命周期。
 - 2026-08-09：选择单主攻者 + 支援距离带，优先解决多敌人重叠和同时扣血；更复杂的包抄、随机权重与角色持续锁定留作后续调优。
+- 2026-08-09：活动 Windup/Active/Recovery 持有攻击 token，OffBalance 主动让出；这样已开始动作不会因邻居距离变化被中断，倒伏又不会阻塞其他敌人接替。
+- 2026-08-09：保留死亡 Enemy 槽位、不在 Raid 中擦除 vector 元素；稳定下标既用于等距平局和支援左右侧，也避免协调阶段出现 iterator/reference 失效。
+- 2026-08-09：对有限但平方运算溢出的极端坐标按“距离无穷大”处理，不错误当作零距离获取目标。
 
 ## 最终结果、验证与偏差
 
-尚未实现。下一安全步骤是先扩展 `EnemyAiState` 的感知/记忆与转向测试，再接入协调层和正式三敌人部署。
+实现已完成，自动验证通过，尚未达到最终完成态：
+
+- 新增 `EnemyAwarenessState`、最后已知位置与搜索计时、540°/秒有限转向、105–155 px 支援距离策略；非法/溢出坐标退化为无移动和无攻击。
+- 新增 `EnemySquadCoordinator` 与 10 项专用测试；每个子步至多一个 Engage，活动攻击保留 token，等距按稳定槽位，分离只读同一快照且输出有界。
+- `GameplayWorld` 默认部署三名敌人，并提供显式 spawn 列表用于单/多敌人测试；`GameSession` 的长结算切片可用空敌人部署隔离非战斗目标，生产构造仍使用默认三敌人。
+- App 汇总 alive/alerted/searching，逐敌显示 awareness/role，并用灰、红/青、橙轮廓辅助真实窗口验收。
+- Windows Debug 全目标构建和全量 CTest 544/544 已通过；新增源已接入主程序、EnemySquadTest、GameplayWorldTest、GameSessionTest 与 GameFlowTest。
+- 无范围偏差：未加入视锥、遮挡、听觉、寻路、动态刷怪、随机权重、正式动画或音效。为保持 Week27 回归强度，最终测试数由首轮实现后的 541 增至 544。
+
+人工验收 1–13 已全部通过。下一安全步骤是冻结当前代码与文档，按精确 head 提交、推送、创建单一 Week28 PR并只等待一轮 Ubuntu/Windows CI；CI 通过并合入后再把本计划移入 `completed/`，不为写回动态 CI 结果制造第二次 C++ 运行。

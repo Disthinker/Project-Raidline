@@ -13,6 +13,9 @@
 - Grab Windup 可按最新有限目标方向追踪并使用 Normal 速度；进入 Active 后方向锁定，按实际消费时间累计固定突进距离并夹在世界边界。接触后立即停止位移并转换为 Bite；空冲必须保持有限的长失衡。攻击致死发生在玩家射击、投射物推进、命中和计分之前，并立即停止本帧这些后续 mutation。
 - 咬命中存活玩家时施加有限短暂控制；Player 唯一拥有控制剩余时间，重复控制取较大剩余值而不累加。受控帧抑制移动、射击和世界交互，到期后的下一帧自然恢复；瞄准和 UI 生命周期不由控制状态复制持有。
 - Enemy 唯一拥有确定性的 `EnemyAiState` 与 `EnemyAttackState`。首次接敌和普通近战默认 Scratch；Grab 只有在至少启动一次 Scratch 后、目标连续处于特殊中距离带达到阈值且冷却完成时才能请求，启动后消耗本次武装。除 Grab Windup 允许追踪外，动作阶段不重新选招。
+- 感知严格使用 `Unaware → Alerted → Searching`：获取半径小于丢失半径；`Searching` 只能追踪进入搜索前冻结的最后已知世界位置，到达或 2 秒记忆耗尽后清除记忆并回到 `Unaware`。只有 `Alerted + Engage` 可请求新攻击。
+- 每个敌人子步先捕获全体 Enemy 值快照并计算全部协调指令，再开始任何 Enemy mutation；同一快照至多一个 Engage。等距按稳定 vector 槽位选取，活动 Windup/Active/Recovery 保留攻击权，死亡、Searching、Unaware 与 OffBalance 不获得新攻击许可。
+- 邻居分离只读取有限、存活的快照位置，输出必须有限且有界；协调层不保存 `Enemy&`、iterator、指针或跨帧状态，默认部署完成后不因协调过程增删 `enemies_`。
 - AI 驱动移动只有 `Stationary=0`、`Normal=72`、`Attack=135 px/s` 三档；普通追击与 Grab Windup 使用 Normal，Grab Active 使用 Attack，其余攻击阶段和 OffBalance 使用 Stationary。
 - Player 与 Enemy 各自唯一拥有 0.18 秒受击减速计时，按真实时间衰减并把受影响区间的移动/动作时间乘以 0.28；非致死命中刷新计时，死亡不保留减速。Bite 控制优先抑制 Player 输入。
 - AI 的零、NaN 或 Inf 目标向量不能产生移动或攻击；冷却、位置、方向和阶段时间始终保持有限。死亡、终局和新 Raid 分别停止、冻结和重建 AI/攻击/控制状态。

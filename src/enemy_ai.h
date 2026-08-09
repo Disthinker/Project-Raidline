@@ -5,6 +5,27 @@
 #include "enemy_attack.h"
 #include "vec2.h"
 
+enum class EnemyAwarenessState
+{
+    Unaware,
+    Alerted,
+    Searching
+};
+
+enum class EnemyTacticalRole
+{
+    Engage,
+    Support
+};
+
+[[nodiscard]]
+const char *enemyAwarenessStateName(
+    EnemyAwarenessState state) noexcept;
+
+[[nodiscard]]
+const char *enemyTacticalRoleName(
+    EnemyTacticalRole role) noexcept;
+
 struct EnemyAiConfig
 {
     float normalMoveSpeed{72.0F};
@@ -16,6 +37,30 @@ struct EnemyAiConfig
     float specialChargeHoldDuration{0.50F};
     float grabCooldown{4.00F};
     float scratchCooldown{0.65F};
+
+    float acquireTargetDistance{360.0F};
+    float loseTargetDistance{460.0F};
+    float searchMemoryDuration{2.0F};
+    float searchArrivalDistance{20.0F};
+    float maximumTurnRateRadians{9.42477796F};
+    float supportMinDistance{105.0F};
+    float supportMaxDistance{155.0F};
+};
+
+struct EnemyTacticalDirective
+{
+    EnemyTacticalRole role{EnemyTacticalRole::Support};
+    bool canStartAttack{};
+    Vec2 separationDirection{};
+    float supportSide{1.0F};
+};
+
+struct EnemyAiInput
+{
+    Vec2 selfPosition{};
+    Vec2 targetPosition{};
+    EnemyTacticalDirective tactical{};
+    float deltaTime{};
 };
 
 struct EnemyAiDecision
@@ -32,9 +77,7 @@ public:
 
     [[nodiscard]]
     EnemyAiDecision update(
-        Vec2 targetOffset,
-        bool canStartAttack,
-        float deltaTime) noexcept;
+        const EnemyAiInput &input) noexcept;
 
     void recordAttackStarted(
         EnemyAttackType type) noexcept;
@@ -54,14 +97,37 @@ public:
     [[nodiscard]]
     float specialChargeHoldRemaining() const noexcept;
 
+    [[nodiscard]]
+    EnemyAwarenessState awarenessState() const noexcept;
+
+    [[nodiscard]]
+    std::optional<Vec2> lastKnownTargetPosition() const noexcept;
+
+    [[nodiscard]]
+    float searchTimeRemaining() const noexcept;
+
 private:
     EnemyAiConfig config_;
     float grabCooldownRemaining_{};
     float scratchCooldownRemaining_{};
     bool specialChargeArmed_{};
     float specialChargeHoldTime_{};
+    EnemyAwarenessState awarenessState_{EnemyAwarenessState::Unaware};
+    std::optional<Vec2> lastKnownTargetPosition_;
+    float searchTimeRemaining_{};
+    Vec2 currentMoveDirection_{};
 
     void advanceCooldowns(float deltaTime) noexcept;
+
+    void updatePerception(
+        Vec2 selfPosition,
+        Vec2 targetPosition,
+        float deltaTime) noexcept;
+
+    [[nodiscard]]
+    Vec2 updateMoveDirection(
+        Vec2 desiredDirection,
+        float deltaTime) noexcept;
 
     [[nodiscard]]
     bool attackReady(

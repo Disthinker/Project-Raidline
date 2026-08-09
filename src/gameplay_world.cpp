@@ -29,6 +29,24 @@ namespace
 
     constexpr int kScorePerEnemy{100};
 
+    std::vector<EnemySpawn> makeDefaultEnemySpawns(
+        int maximumHealth)
+    {
+        return std::vector<EnemySpawn>{
+            EnemySpawn{
+                Vec2{600.0F, 100.0F},
+                Vec2{50.0F, 50.0F},
+                maximumHealth},
+            EnemySpawn{
+                Vec2{350.0F, 500.0F},
+                Vec2{50.0F, 50.0F},
+                maximumHealth},
+            EnemySpawn{
+                Vec2{930.0F, 500.0F},
+                Vec2{50.0F, 50.0F},
+                maximumHealth}};
+    }
+
     constexpr InventoryGridSize kDefaultInventorySize{
         10,
         6};
@@ -149,10 +167,23 @@ GameplayWorld::GameplayWorld(
     int enemyMaxHealth,
     int playerMaxHealth)
     : GameplayWorld{
-          enemyMaxHealth,
           makeDefaultGroundItemSpawns(),
           kDefaultInventorySize,
           ItemInstanceId{1},
+          makeDefaultEnemySpawns(enemyMaxHealth),
+          playerMaxHealth,
+          PlayerHealthOverrideTag{}}
+{
+}
+
+GameplayWorld::GameplayWorld(
+    std::vector<EnemySpawn> initialEnemies,
+    int playerMaxHealth)
+    : GameplayWorld{
+          makeDefaultGroundItemSpawns(),
+          kDefaultInventorySize,
+          ItemInstanceId{1},
+          std::move(initialEnemies),
           playerMaxHealth,
           PlayerHealthOverrideTag{}}
 {
@@ -186,20 +217,20 @@ GameplayWorld::GameplayWorld(
     InventoryGridSize inventorySize,
     ItemInstanceId firstItemInstanceId)
     : GameplayWorld{
-          enemyMaxHealth,
           std::move(initialGroundItems),
           inventorySize,
           firstItemInstanceId,
+          makeDefaultEnemySpawns(enemyMaxHealth),
           3,
           PlayerHealthOverrideTag{}}
 {
 }
 
 GameplayWorld::GameplayWorld(
-    int enemyMaxHealth,
     std::vector<GroundItemSpawn> initialGroundItems,
     InventoryGridSize inventorySize,
     ItemInstanceId firstItemInstanceId,
+    std::vector<EnemySpawn> initialEnemies,
     int playerMaxHealth,
     PlayerHealthOverrideTag)
     : player_{640.0F, 360.0F, playerMaxHealth},
@@ -226,11 +257,27 @@ GameplayWorld::GameplayWorld(
             "GameplayWorld does not have enough ItemInstanceId values"};
     }
 
-    enemies_.emplace_back(
-        Vec2{600.0f, 100.0f},
-        Vec2{50.0f, 50.0f},
-        Vec2{150.0f, 0.0f},
-        enemyMaxHealth);
+    enemies_.reserve(initialEnemies.size());
+    for (const EnemySpawn &spawn : initialEnemies)
+    {
+        if (!std::isfinite(spawn.position.x) ||
+            !std::isfinite(spawn.position.y) ||
+            !std::isfinite(spawn.size.x) ||
+            !std::isfinite(spawn.size.y) ||
+            spawn.size.x <= 0.0F ||
+            spawn.size.y <= 0.0F ||
+            spawn.maxHealth <= 0)
+        {
+            throw std::invalid_argument{
+                "GameplayWorld EnemySpawn contains invalid values"};
+        }
+
+        enemies_.emplace_back(
+            spawn.position,
+            spawn.size,
+            Vec2{},
+            spawn.maxHealth);
+    }
 
     groundItems_.reserve(
         initialGroundItems.size());
@@ -448,18 +495,35 @@ void GameplayWorld::update(
          step < enemySubsteps;
          ++step)
     {
-        for (Enemy &enemy : enemies_)
+        const Vec2 playerPosition =
+            playerCenter(player_);
+        std::vector<EnemySquadMemberSnapshot> enemySnapshots;
+        enemySnapshots.reserve(enemies_.size());
+        for (const Enemy &enemy : enemies_)
         {
-            const Vec2 playerPosition =
-                playerCenter(player_);
-            const Vec2 enemyPosition =
-                enemyCenter(enemy);
+            enemySnapshots.push_back(
+                EnemySquadMemberSnapshot{
+                    enemyCenter(enemy),
+                    !enemy.isDead(),
+                    enemy.awarenessState(),
+                    enemy.attackPhase()});
+        }
+
+        const std::vector<EnemyTacticalDirective> directives =
+            enemySquadCoordinator_.decide(
+                enemySnapshots,
+                playerPosition);
+
+        for (std::size_t enemyIndex{0U};
+             enemyIndex < enemies_.size();
+             ++enemyIndex)
+        {
+            Enemy &enemy = enemies_[enemyIndex];
 
             static_cast<void>(
                 enemy.updateTowardsTarget(
-                    Vec2{
-                        playerPosition.x - enemyPosition.x,
-                        playerPosition.y - enemyPosition.y},
+                    playerPosition,
+                    directives[enemyIndex],
                     enemyStepTime,
                     kWorldWidth,
                     kWorldHeight));

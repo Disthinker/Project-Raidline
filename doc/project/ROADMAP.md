@@ -27,7 +27,7 @@
 
 ## 当前开发：Week28 敌人感知与多敌人协作
 
-Week27 已通过 PR #50 合入 `main@520f4ec`：最终提交 `4f151f1` 的 Windows Debug 全量 519 项回归、真实窗口 1–13 与 Ubuntu/Windows 精确 head CI 全部通过。Week28 在不引入导航网格或行为树的前提下，增加距离感知滞回、最后已知位置搜索、平滑转向、距离保持、局部邻居分离和单主攻者小队协调。活动计划见 `doc/exec-plans/active/week28-enemy-perception-and-coordination.md`。
+Week27 已通过 PR #50 合入；Week27 收口与 Week28 计划 PR #51 已合入 `main@f131f9e`。当前 Week28 分支已完成距离感知滞回、最后已知位置搜索、平滑转向、距离保持、局部邻居分离、单主攻者小队协调和默认三敌人部署，Windows Debug 全目标构建与全量 CTest 544/544 已通过，用户已确认真实窗口 1–13 全部通过；精确 head CI 待执行。活动计划见 `doc/exec-plans/active/week28-enemy-perception-and-coordination.md`。
 
 ## Week25–Week30 推荐顺序
 
