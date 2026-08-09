@@ -6,7 +6,7 @@
 - 完成范围：确定性二维追击、近距默认 Scratch、条件诱发 Grab→Bite、空冲 OffBalance、三级移动速度、双方受击减速、单次命中与代码预警。首轮 13 项人工验收已经通过，随后根据游玩反馈完成第二轮节奏修订。
 - 自动证据：第二轮 Windows Debug 全目标构建成功；全量 CTest 519/519 通过；新增源进入主程序和所有依赖 Enemy 的测试目标，未出现 Runtime Library / `gtest_ar_`。
 - 人工证据：用户在真实 Windows Debug 窗口中确认第二轮 1–13 全部通过。
-- 尚未完成：Ubuntu/Windows 精确 head CI、提交/推送/PR。因此本文件是“修订后实现交接”，不是 Week27 已合入证明。
+- 合入证据：最终提交 `4f151f1` 的 Ubuntu/Windows 精确 head CI 全部通过，PR #50 由 merge commit `520f4ec` 合入 `main`。
 
 ## 2. 玩家可见结果
 
@@ -126,7 +126,7 @@ Player 与 Enemy 还分别拥有 `impactSlowRemaining_`。非致死命中刷新�
 - `EnemyAttackTest.exe` 11/11、`EnemyAiTest.exe` 8/8 与 GameplayWorld 关键集成 4/4 直接运行通过，未出现 Microsoft Runtime Library / `gtest_ar_` 栈损坏。
 - `compile_commands.json` 中主程序、EnemyTest、HitResolutionTest、GameplayWorldTest、GameSessionTest、GameFlowTest 均编译 `enemy_attack.cpp` 与 `enemy_ai.cpp`。
 - C++ 安全审查未发现仍需修改的所有权、引用失效、`noexcept`、`[[nodiscard]]`、状态转换或链接问题。
-- 剩余风险：Ubuntu 尚待 PR CI；App 没有自动截图测试；预警颜色、范围可读性、AI 节奏和真实操作躲避依赖用户窗口验收；极端非终局大 deltaTime 超出 2048 子步覆盖能力时仍是有界近似。
+- 剩余风险：App 没有自动截图测试；正式攻击动画与音效尚未制作；极端非终局大 deltaTime 超出 2048 子步覆盖能力时仍是有界近似。距离感知、失去目标与多敌人协作属于 Week28。
 
 ## 13. 本轮明确未做
 
@@ -153,5 +153,5 @@ Player 与 Enemy 还分别拥有 `impactSlowRemaining_`。非致死命中刷新�
 ```text
 你是我的 C++ 学习教练。不要修改 Project Raidline 的项目代码。
 
-请只根据 doc/handoffs/completed/2026-08-08-week27-enemy-ai-readable-attacks.md 和对应真实 diff 教学。先解释，再逐步提问。重点结合 EnemyAiState 与 EnemyAttackState 的职责分离、确定性距离/冷却决策、锁定方向、阶段剩余时间、Grab 帧率独立位移、单次命中先消费后伤害、Player 控制唯一所有权、GameplayWorld 有界子步、App 只读预警，以及 vector 引用生命周期。请区分自动测试已经证明的行为与仍需真实窗口/Ubuntu CI 验证的部分，不要把 Week28 的感知/寻路或 Week29 的正式动画说成已经实现。
+请只根据 doc/handoffs/completed/2026-08-08-week27-enemy-ai-readable-attacks.md 和对应真实 diff 教学。先解释，再逐步提问。重点结合 EnemyAiState 与 EnemyAttackState 的职责分离、确定性距离/冷却决策、锁定方向、阶段剩余时间、Grab 帧率独立位移、单次命中先消费后伤害、Player 控制唯一所有权、GameplayWorld 有界子步、App 只读预警，以及 vector 引用生命周期。请区分本地自动测试、真实窗口验收和精确提交 Ubuntu/Windows CI 各自证明的内容，不要把 Week28 的感知/寻路或 Week29 的正式动画说成已经实现。
 ```

@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-08，Week26 与收口文档已通过 PR #48/#49 合入 `main@3b77718`。Week27 简单敌人 AI 与可读攻击正在 `codex/week27-enemy-readable-attacks` 收口：根据首轮人工反馈，第二轮已把选招改为“近距默认 Scratch，至少一次 Scratch 后退到中距离保持 0.5 秒才诱发 Grab→Bite”，并加入空冲 `OffBalance`、0/72/135 px/s 三级速度及双方受击减速。Windows Debug 全目标构建、全量 CTest 519/519 和第二轮真实窗口 1–13 均已通过；Ubuntu/Windows 精确 head CI、提交与 PR 尚未执行，因此仍未进入 `main`。
+最后核对：2026-08-09，Week27 简单敌人 AI 与可读攻击已通过 PR #50 合入 `main@520f4ec`。最终提交 `4f151f1` 的 Windows Debug 全目标构建、全量 CTest 519/519、第二轮真实窗口 1–13，以及 Ubuntu/Windows 精确 head CI 全部通过。当前进入 Week28：深化距离感知与失去目标、最后已知位置搜索、平滑转向、局部 steering 和确定性多敌人协作。
 
 ## Git、验证与 CI 基线
 
@@ -27,9 +27,9 @@
 - Week26 Windows Debug 全目标构建、聚焦 CTest 57/57 与全量 CTest 483/483 通过；`ctest -N` 注册 483 项，compile database 与 Ninja `#deps 120` 证明新射击实现进入主程序和测试目标。
 - Week26 feature commit `3a52354` 的 [GitHub Actions run 31260317298](https://github.com/Disthinker/Project-Raidline/actions/runs/31260317298) 全部通过：范围检测 6 秒、Ubuntu 1 分 23 秒、Windows 3 分 15 秒。
 - 用户确认 Week26 原 1–10、补充 11–13 与最终合并验收 15 全部通过；PR #48 已按精确 feature head 合入，merge commit 为 `0847da0`。
-- Week27 首轮与第二轮真实窗口验收均由用户确认 1–13 全部通过。第二轮 Windows Debug 全目标构建成功，`EnemyAttackTest`、`EnemyAiTest`、`EnemyTest`、`PlayerTest` 与 `GameplayWorldTest` 聚焦回归通过，全量 CTest 519/519；测试程序直接运行未出现 Runtime Library / `gtest_ar_`。精确 head CI 待执行。
+- Week27 首轮与第二轮真实窗口验收均由用户确认 1–13 全部通过。第二轮 Windows Debug 全目标构建成功，`EnemyAttackTest`、`EnemyAiTest`、`EnemyTest`、`PlayerTest` 与 `GameplayWorldTest` 聚焦回归通过，全量 CTest 519/519；测试程序直接运行未出现 Runtime Library / `gtest_ar_`。最终提交 `4f151f1` 的范围检测、Ubuntu 与 Windows CI 全部通过，PR #50 已合入 `main@520f4ec`。
 
-## 已进入 main：Week 1–26
+## 已进入 main：Week 1–27
 
 - Week 1–17 已形成 CMake/vcpkg/GTest/CTest、SDL App、玩家/敌人/射击/命中、RAII 纹理、动画、粒子、Health、物品实例、地面拾取、网格背包与鼠标交互基础。
 - Week18 的 `GameplayWorld` 拥有玩家 10×6 背包和世界 `StorageCabinet`；柜体拥有 6×6 外部库存。
@@ -120,7 +120,7 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 ## Week24 已合入能力
 
 - Player 唯一拥有默认 3 HP 的 `Health`；App 左上角显示当前/最大生命，新 Raid 创建全新 Player 并恢复 3/3。
-- Week24 合入时，活动 Raid 中与存活敌人的正面积碰撞会按 0.75 秒冷却造成 1 点接触伤害；该 V0 占位规则已在 Week27 当前分支由抓/挠/咬 Active 命中窗口替代。
+- Week24 合入时，活动 Raid 中与存活敌人的正面积碰撞会按 0.75 秒冷却造成 1 点接触伤害；该 V0 占位规则已在 Week27 由抓/挠/咬 Active 命中窗口替代。
 - 致死伤害在同一命令中把生命归零并形成 sticky `PlayerDead`；致死帧在玩家射击、投射物推进、命中和计分前返回，随后由既有结算清空携带物并显示 `LOST`。
 - GameSession 自动回归已串联“搜索→转移→撤离→Stash→重开”成功路径，以及“携带物→死亡→损失→重开”失败路径。
 
@@ -143,7 +143,7 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 - 真实窗口 1–10、补充 11–13 和最终合并验收 15 均由用户确认通过；精确 head Windows/Ubuntu CI 通过，feature commit `3a52354` 已由 PR #48 合入 `main@0847da0`。
 - 本轮不实现弹匣/换弹/弹药消耗、武器切换/改装、相机震动、音效、正式准星资源、敌人攻击或 AI。
 
-## Week27 当前分支已实现、待验收能力
+## Week27 已合入能力
 
 - `EnemyAiState` 是 SDL 无关、确定性的简单 AI：以 72 px/s 朝玩家中心二维追击，76 px 内默认请求带 0.18 秒前摇的 Scratch。Scratch 启动后才武装特殊攻击；玩家退到 100–170 px 并连续保持 0.50 秒、且 4 秒 Grab 冷却完成时，AI 才请求 Grab。AI 不独立选择 Bite。
 - `EnemyAttackState` 统一拥有 Grab/Scratch/Bite 配置、有界阶段推进和单次命中消费。Grab Windup 0.55 秒内按 72 px/s 追踪，Active 锁向后按 135 px/s 冲刺 0.55 秒；碰撞原子转换为 2 点伤害、0.75 秒控制的 Bite，空冲进入 1.35 秒 `OffBalance`。Scratch 造成 1 点伤害。
@@ -161,4 +161,4 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
 - 搜索计时、多柜体选择、外部数据 Loot、复杂敌人感知/协作、正式攻击与受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week27 合同见 [活动 ExecPlan](../exec-plans/active/week27-enemy-readable-attacks.md)；Week26 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week26-mouse-aim-shooting-recoil.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week27 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week27-enemy-readable-attacks.md)；Week28 合同见 [活动 ExecPlan](../exec-plans/active/week28-enemy-perception-and-coordination.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

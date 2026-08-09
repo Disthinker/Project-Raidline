@@ -21,12 +21,13 @@
 | Week 24 | 玩家 3 HP、敌人接触伤害、真实死亡出口与成功/失败完整垂直回归；PR #44 |
 | Week 25 | MainMenu/Base/Raid/RaidResult 顶层流程、非 Raid 冻结、单地图部署与跨局返回；PR #46 |
 | Week 26 | 鼠标独立瞄准、左键/Space 统一射击、扩散/后坐力、1200 px/s 高速弹丸与火光命中反馈；PR #48 |
+| Week 27 | 近距默认挠击、条件 Grab→Bite、空冲 `OffBalance`、三级移动速度与双方受击顿挫；PR #50 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
-## 当前开发：Week27 简单敌人 AI 与三类可读攻击
+## 当前开发：Week28 敌人感知与多敌人协作
 
-Week26 已通过 PR #48 合入，收口文档通过 PR #49 合入 `main@3b77718`。Week27 第二轮战斗节奏修订已通过 Windows Debug 全量 519 项回归和真实窗口 1–13，待精确 head CI：普通近战默认挠击；玩家在至少一次挠击后退到中距离并保持约 0.5 秒，才会诱发“移动前摇 → 较慢冲刺抱取 → 咬击”特殊链，空冲进入长失衡。敌人拥有静止/常态/攻击三级速度，玩家与敌人受击均短暂减速；Week28 改为深化感知丢失、距离保持与多敌人协作。活动计划见 `doc/exec-plans/active/week27-enemy-readable-attacks.md`。
+Week27 已通过 PR #50 合入 `main@520f4ec`：最终提交 `4f151f1` 的 Windows Debug 全量 519 项回归、真实窗口 1–13 与 Ubuntu/Windows 精确 head CI 全部通过。Week28 在不引入导航网格或行为树的前提下，增加距离感知滞回、最后已知位置搜索、平滑转向、距离保持、局部邻居分离和单主攻者小队协调。活动计划见 `doc/exec-plans/active/week28-enemy-perception-and-coordination.md`。
 
 ## Week25–Week30 推荐顺序
 

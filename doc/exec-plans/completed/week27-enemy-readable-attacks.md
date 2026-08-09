@@ -1,8 +1,8 @@
 # Week27 敌人抓、挠、咬三类可读攻击 ExecPlan
 
-- 状态：Manual Accepted / Ready for Commit and Exact-Head CI
+- 状态：Completed
 - 负责人/工作流：主线程；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-task-closeout`
-- 最后更新：2026-08-08
+- 最后更新：2026-08-09
 
 ## 目标与玩家可感知结果
 
@@ -166,6 +166,7 @@ GameFlow (Raid only)
 - 2026-08-08：GameplayWorld 用最大 1/120 秒、最多 2048 次攻击子步替代旧接触伤害；Active 命中先消费窗口，再提交 1/1/2 伤害与 Bite 控制，致死帧继续保持射击/投射物/计分早退。
 - 2026-08-08：Player 唯一拥有控制剩余时间；App 接入 Grab 蓝青、Scratch 金黄、Bite 红紫的 Windup/Active/Recovery 范围、锁向线、标签和 AI/控制 debug 文本。
 - 2026-08-08：Windows Debug 全目标构建成功；聚焦测试通过；全量 CTest 509/509、`ctest -N` 509 通过。`EnemyAttackTest.exe` 11/11、`EnemyAiTest.exe` 8/8 与 GameplayWorld 关键集成 4/4 直接运行通过，未出现 Runtime Library / `gtest_ar_`；compile database 确认新源进入主程序及 Enemy 依赖测试目标。C++ 安全审查未留可执行缺陷，真实窗口 13 项与精确 head CI 待执行。
+- 2026-08-09：最终实现提交为 `4f151f1`。PR #50 的范围检测、Ubuntu C++ 与 Windows C++ 检查分别在 7 秒、1 分 26 秒、3 分 54 秒内通过；PR 以 merge commit `520f4ec` 合入 `main`。动态 CI 证据保留在 PR 评论中，没有为回写结果制造第二轮矩阵。
 
 ## 决策日志
 
@@ -177,7 +178,7 @@ GameFlow (Raid only)
 
 ## 最终结果、验证与偏差
 
-Week27 业务实现与本地自动验证已完成，尚未提交、推送或创建 PR。Windows Debug 全目标构建、专用/集成测试、直接 Debug 程序和全量 CTest 509/509 均通过；新增源已进入主程序与相关测试目标。真实窗口 13 项人工验收、Ubuntu/Windows 精确 head CI 和合入尚未执行，因此计划继续留在 active，不标记完成。
+Week27 已完整关闭。最终提交 `4f151f1` 的 Windows Debug 全目标构建、专用/集成测试、直接 Debug 程序和全量 CTest 519/519 均通过；新增源已进入主程序与相关测试目标。用户确认第二轮真实窗口 1–13 全部通过；PR #50 的范围检测、Ubuntu 与 Windows 精确 head CI 全部成功，并以 merge commit `520f4ec` 合入 `main`。
 
 与原始计划相比，本轮按用户明确要求把“简单 AI 首次接入”从 Week28 提前到 Week27；Week28 相应只承担感知丢失、距离保持、多敌人协作与选招调优。未引入视野/听觉、寻路、随机权重、行为树或正式攻击美术。
 
@@ -217,3 +218,4 @@ Week27 业务实现与本地自动验证已完成，尚未提交、推送或创�
 - 2026-08-08：最终全量 CTest 519/519 通过，总耗时 16.50 秒；专用 EnemyAttack 14/14、EnemyAi 11/11、Enemy 25/25、Player 36/36、GameplayWorld 81/81 直接运行通过，未出现 Runtime Library / `gtest_ar_`。
 - 2026-08-08：`git diff --check` 通过；C++ 安全复核确认攻击/AI/控制/减速状态均按值唯一拥有，无新增裸资源、跨帧引用或无界循环。
 - 2026-08-08：用户在真实 Windows Debug 窗口中确认第二轮人工验收 1–13 全部通过；首次 Scratch、条件抱咬、空冲倒伏、三级速度、双方受击顿挫及既有玩法回归均获接受。代码、测试和静态文档自此冻结，后续 CI 动态结果只写入 PR，不修改本分支制造第二轮矩阵。
+- 2026-08-09：冻结后的精确提交 `4f151f1` 通过 PR #50 的 Ubuntu/Windows CI，并由 merge commit `520f4ec` 合入 `main`；Week27 满足 Definition of Done，本计划转入 `completed/`。
