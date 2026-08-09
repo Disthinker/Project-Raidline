@@ -48,7 +48,7 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 
 ### GameplayWorld
 
-拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。正式 Raid 默认部署三名敌人；每个敌人子步先捕获全体中心、存活、感知与攻击阶段的值快照，再由无所有权的 `EnemySquadCoordinator` 统一产生至多一个主攻指令、支援侧向和有界局部分离，最后才按稳定槽位提交 Enemy 更新。Enemy 自己用确定性 `EnemyAiState` 拥有距离感知滞回、最后已知位置、2 秒搜索记忆、有限转向、支援距离保持、攻击冷却与 Week27 选招；只有 `Alerted + Engage` 可请求新攻击。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
+拥有 Player、Enemy、Projectile、WeaponFireState、CombatFeedbackState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。它只在 ShotSpec 已生成、投射物真实命中或敌人攻击真实伤害提交后刷新短时战斗反馈；反馈不参与伤害、命中、射速或 AI 判定。正式 Raid 默认部署三名敌人；每个敌人子步先捕获全体中心、存活、感知与攻击阶段的值快照，再由无所有权的 `EnemySquadCoordinator` 统一产生至多一个主攻指令、支援侧向和有界局部分离，最后才按稳定槽位提交 Enemy 更新。Enemy 自己用确定性 `EnemyAiState` 拥有距离感知滞回、最后已知位置、2 秒搜索记忆、有限转向、支援距离保持、攻击冷却与 Week27 选招；只有 `Alerted + Engage` 可请求新攻击。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
 
 ### 逻辑对象与系统
 
@@ -56,6 +56,8 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 - Enemy：运动、朝向、动画、自己的 Health、距离感知/搜索记忆/平滑转向/确定性选招状态、`Stationary/Normal/Attack` 速度档位、受击减速与抓/挠/抱咬攻击阶段；Grab 前摇可追踪，Active 锁向，空冲失衡，世界只读取值快照并提交碰撞结果。
 - EnemySquadCoordinator：无所有权、无跨帧状态的值协调器；读取同一子步的全体 Enemy 快照，稳定选择唯一 Engage、生成 Support 指令与有界分离向量，不直接修改 Enemy。
 - WeaponFireState：SDL 无关的单局射击时间状态，返回确定性 ShotSpec；不拥有 Projectile，也不直接渲染准星。
+- CombatFeedbackState：SDL 无关的单局短时表现状态，保存有限的枪口火光、敌人命中确认和玩家受伤脉冲计时；只接受世界已提交结果，不拥有 Projectile、Enemy、Player 或 SDL 资源。
+- enemy_attack_presentation：无状态纯采样器；读取 EnemyAttackState 的类型、阶段、剩余时间与配置快照，返回 0–5 帧、阶段进度和强调值，不推进第二套动画时间。
 - Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
 - Particle/ParticleSystem：短生命周期命中反馈。
 - ItemDefinition：共享静态物品数据、基础 footprint、旋转能力、最大堆叠与视觉资源发布状态，不拥有 Texture。
@@ -80,7 +82,7 @@ App ─aliases(non-owning)─> GameSession owned by GameFlow
 GameFlow ─owns─> GameSession
 GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
 Stash ─owns─> in-process cross-Raid GridInventory
-GameplayWorld ─owns─> single-Raid entities + EnemySquadCoordinator + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
+GameplayWorld ─owns─> single-Raid entities + EnemySquadCoordinator + WeaponFireState + CombatFeedbackState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
 Player ─owns─> Health + control remaining time
 Enemy ─owns─> Health + EnemyAiState(perception/memory/turning) + EnemyAttackState
 StorageCabinet ─owns─> external GridInventory
@@ -96,7 +98,7 @@ ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有�
 
 ## 查询、命令与渲染
 
-- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、Enemy 攻击快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
+- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、`GameplayWorld::combatFeedback`、Enemy 攻击/表现采样快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
 - 命令：`GameFlow::startGame/deploy/update/returnToBase`、`Enemy::updateTowardsTarget/tryStartAttack/consumeAttackHit`、`Player::applyControl`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
 - 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
 

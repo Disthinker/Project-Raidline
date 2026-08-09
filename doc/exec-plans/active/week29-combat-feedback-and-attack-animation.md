@@ -1,6 +1,6 @@
 # Week29 战斗反馈、节奏与抓/挠/咬动画 ExecPlan
 
-- 状态：Ready
+- 状态：In Progress（代码/fallback 与其人工验收已完成；正式美术按用户要求暂停）
 - 负责人/工作流：主线程负责代码与 art-control；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-art-pipeline` + `raidline-task-closeout`
 - 最后更新：2026-08-09
 
@@ -132,6 +132,12 @@ GameplayWorld command result
 ## 进度记录
 
 - 2026-08-09：Week28 PR #52 以 merge commit `c4658e7` 合入；读取 art pipeline、Art Bible、manifest、生产协议和 Character Layer calibration contract，确认正式敌人攻击帧属于 Week29 显式重开范围且必须使用独立生产任务。
+- 2026-08-09：实现无状态 `sampleEnemyAttackPresentation`，按现有 EnemyAttackState 快照为 Grab/Scratch/Bite 映射 6 帧阶段区间；Idle、OffBalance、缺失类型、非法枚举与非法浮点安全 fallback。独立测试 8/8 通过。
+- 2026-08-09：实现 GameplayWorld 唯一拥有的 `CombatFeedbackState`，只在真实 shot、投射物命中和 Scratch/Bite 伤害提交后刷新枪口、命中确认和受伤脉冲；App 只读渲染，Scratch/Bite 强度分别为 0.55/1.0，新 Raid 自动清空。独立测试 11/11 通过。
+- 2026-08-09：App 已接入现有移动 sheet 的阶段采样 fallback、短枪口火光、准星 X 形命中确认和有界受伤边缘脉冲；未新增第二伤害、射速、攻击或动画时钟。
+- 2026-08-09：完成 `art/specs/enemy_default_attacks_v1.json`、production brief 与六个冻结候选提示词；已检查现有敌人图集原图，未生成图片、未写 `art/work/`、未发布 runtime 资产、未修改 manifest。
+- 2026-08-09：C++ 安全审查无阻塞项；Windows Debug 全目标增量构建通过，完整 CTest 564/564 通过。直接运行 EnemyAttackPresentation/CombatFeedback/GameplayWorld/GameSession/GameFlow 共 123/123 通过且无 Runtime Library / `gtest_ar_`。
+- 2026-08-09：用户确认代码反馈/fallback 人工验收 1–8 全部通过，并明确要求暂不进入下一步美术任务。未创建生产任务、未生成或发布 PNG、未修改 manifest；Week29 保持活动状态，等待用户以后恢复 `enemy_default_attacks_v1`。
 
 ## 决策日志
 
@@ -142,4 +148,4 @@ GameplayWorld command result
 
 ## 最终结果、验证与偏差
 
-尚未实现。下一安全步骤是在 Week29 功能分支先实现 SDL 无关的攻击表现采样和 CombatFeedbackState 测试，同时编写 `enemy_default_attacks_v1` 的 production brief 与 JSON contract；正式图像生成等待独立用户可见生产任务。
+代码与无新资产 fallback 已实现，并通过本地自动验证和用户代码阶段人工验收 1–8；正式图集和最终视觉接线尚未完成，因此 Week29 不能关闭。当前偏差是运行时在攻击阶段按 0–5 帧采样既有移动 sheet，而不是正式 Grab/Scratch/Bite sheet；该 fallback 保证缺失新 PNG 时仍可启动，但不能作为正式动画验收证据。用户已明确暂停美术任务；恢复后再创建独立用户可见生产任务生成 `enemy_default_attacks_v1` 六个候选，由 art-control 审核、最多一次精确修复、发布三张版本化图集并完成最终接线与 CI。

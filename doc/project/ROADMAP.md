@@ -22,12 +22,13 @@
 | Week 25 | MainMenu/Base/Raid/RaidResult 顶层流程、非 Raid 冻结、单地图部署与跨局返回；PR #46 |
 | Week 26 | 鼠标独立瞄准、左键/Space 统一射击、扩散/后坐力、1200 px/s 高速弹丸与火光命中反馈；PR #48 |
 | Week 27 | 近距默认挠击、条件 Grab→Bite、空冲 `OffBalance`、三级移动速度与双方受击顿挫；PR #50 |
+| Week 28 | 距离感知滞回、最后已知位置搜索、平滑转向、默认三敌人、局部分离与单主攻/支援协调；PR #52 |
 
 详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
 
 ## 当前开发：Week29 战斗反馈与抓/挠/咬动画
 
-Week28 冻结提交 `07755f6` 已通过本地 544/544、真实窗口 1–13 和精确 head Ubuntu/Windows CI，并由 PR #52 合入 `main@c4658e7`。Week29 将增加 SDL 无关的攻击表现采样、正式敌人攻击 sheet 接线、命中确认/受伤脉冲/枪口反馈和一轮战斗节奏调参；正式帧资产按 `enemy_default_attacks_v1` 独立生产包生成、审核后才能发布，音效、完整相机系统、血液与尸体仍不在本轮。活动计划见 `doc/exec-plans/active/week29-combat-feedback-and-attack-animation.md`。
+Week28 冻结提交 `07755f6` 已通过本地 544/544、真实窗口 1–13 和精确 head Ubuntu/Windows CI，并由 PR #52 合入 `main@c4658e7`。Week29 功能分支已完成 SDL 无关的攻击表现采样、命中确认/受伤脉冲/枪口反馈、现有移动 sheet fallback 接线及 `enemy_default_attacks_v1` 生产合同，本地 Windows Debug 全目标构建与 CTest 564/564 通过。正式帧资产仍须在独立用户可见生产任务中生成并由 art-control 审核后发布；音效、完整相机系统、血液与尸体仍不在本轮。活动计划见 `doc/exec-plans/active/week29-combat-feedback-and-attack-animation.md`。
 
 ## Week25–Week30 推荐顺序
 

@@ -37,6 +37,9 @@
 - 投射物拖尾只读 `Projectile::velocity()` 计算反方向视觉采样；弹头、辉光和拖尾尺寸不改变 Projectile 的 8×8 逻辑 AABB、伤害或命中规则。
 - 高速 Projectile 在一次世界更新内按有限距离子步进执行“推进→命中→出界删除”；每个子步命中结果先按值累计，不能跨 `vector` 删除保留 Projectile/Enemy 引用或迭代器。子步数量必须有上限，避免异常大 deltaTime 形成无界循环。
 - 命中火花只表现既有 `HitResolutionResult::hitPositions`；颜色、长度、数量和寿命调优不得产生第二次伤害、重复得分或改变碰撞位置。
+- `GameplayWorld` 唯一拥有 `CombatFeedbackState`；枪口火光只能由成功生成的 ShotSpec 触发，命中确认只能由非空 `HitResolutionResult::hitPositions` 触发，玩家受伤脉冲只能在 Scratch/Bite 伤害提交后触发。App 只读快照，不保存第二份计时或反向提交玩法命令。
+- 战斗反馈时长、强度、位置与方向始终有限且有界；非有限或非正 deltaTime 不推进，重复事件只刷新计时/取较强值而不无界累加。终局后不生成新反馈，新 GameplayWorld 必须从全清状态开始。
+- 敌人攻击表现采样不拥有或推进时间；相同的 attack type/phase/remaining/config 快照必须得到相同的 0–5 帧结果。Idle、OffBalance、缺失类型、非法枚举和非法数值安全退化为移动图 fallback。
 
 ## 资源与动画
 
