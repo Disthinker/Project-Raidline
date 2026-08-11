@@ -880,17 +880,9 @@ void App::handleInventoryPointerEvent(
                 placement->destination.cell,
                 placement->orientation);
         }
-        else if (placement->source.container ==
-            placement->destination.container)
-        {
-            succeeded = source.tryTransform(
-                placement->source.instanceId,
-                placement->destination.cell,
-                placement->orientation);
-        }
         else
         {
-            succeeded = tryTransferItemTransform(
+            succeeded = tryPlaceWholeItemAt(
                 source,
                 destination,
                 placement->source.instanceId,
@@ -1878,17 +1870,12 @@ void App::renderInventoryPlacementPreview(
               *dragVisual->selectedQuantity,
               previewOrigin,
               previewOrientation)
-        : selected->container == container
-            ? inventory.canTransform(
-                  selected->instanceId,
-                  previewOrigin,
-                  previewOrientation)
-            : canTransferItemTransform(
-                  sourceInventory,
-                  inventory,
-                  selected->instanceId,
-                  previewOrigin,
-                  previewOrientation);
+        : canPlaceWholeItemAt(
+              sourceInventory,
+              inventory,
+              selected->instanceId,
+              previewOrigin,
+              previewOrientation);
 
     // 合法位置使用淡绿色；
     // 非法位置使用淡红色。

@@ -494,6 +494,147 @@ bool tryTransferItemTransform(
     return false;
 }
 
+bool canPlaceWholeItemAt(
+    const GridInventory &source,
+    const GridInventory &destination,
+    ItemInstanceId instanceId,
+    GridPosition destinationOrigin,
+    ItemOrientation destinationOrientation)
+{
+    const PlacedItem *sourceItem =
+        findPlacedItem(source, instanceId);
+
+    if (sourceItem == nullptr ||
+        (&source != &destination &&
+         containsInstanceId(destination, instanceId)))
+    {
+        return false;
+    }
+
+    const std::optional<ItemInstanceId> destinationId =
+        destination.occupantAt(destinationOrigin);
+
+    if (!destinationId.has_value() ||
+        (&source == &destination &&
+         *destinationId == instanceId))
+    {
+        return &source == &destination
+            ? source.canTransform(
+                  instanceId,
+                  destinationOrigin,
+                  destinationOrientation)
+            : canTransferItemTransform(
+                  source,
+                  destination,
+                  instanceId,
+                  destinationOrigin,
+                  destinationOrientation);
+    }
+
+    const PlacedItem *destinationItem =
+        findPlacedItem(destination, *destinationId);
+    if (destinationItem == nullptr ||
+        destinationItem->item.definitionId() !=
+            sourceItem->item.definitionId())
+    {
+        return false;
+    }
+
+    const std::uint32_t maxStackSize =
+        itemDefinition(sourceItem->item.definitionId())
+            .maxStackSize;
+
+    return maxStackSize > 1 &&
+           destinationItem->item.quantity() < maxStackSize;
+}
+
+bool tryPlaceWholeItemAt(
+    GridInventory &source,
+    GridInventory &destination,
+    ItemInstanceId instanceId,
+    GridPosition destinationOrigin,
+    ItemOrientation destinationOrientation)
+{
+    if (!canPlaceWholeItemAt(
+            source,
+            destination,
+            instanceId,
+            destinationOrigin,
+            destinationOrientation))
+    {
+        return false;
+    }
+
+    const std::optional<ItemInstanceId> destinationId =
+        destination.occupantAt(destinationOrigin);
+
+    if (!destinationId.has_value() ||
+        (&source == &destination &&
+         *destinationId == instanceId))
+    {
+        return &source == &destination
+            ? source.tryTransform(
+                  instanceId,
+                  destinationOrigin,
+                  destinationOrientation)
+            : tryTransferItemTransform(
+                  source,
+                  destination,
+                  instanceId,
+                  destinationOrigin,
+                  destinationOrientation);
+    }
+
+    const PlacedItem *sourceItem =
+        findPlacedItem(source, instanceId);
+    const PlacedItem *destinationItem =
+        findPlacedItem(destination, *destinationId);
+    if (sourceItem == nullptr || destinationItem == nullptr)
+    {
+        std::terminate();
+    }
+
+    const std::uint32_t sourceQuantity =
+        sourceItem->item.quantity();
+    const std::uint32_t destinationQuantity =
+        destinationItem->item.quantity();
+    const std::uint32_t maxStackSize =
+        itemDefinition(sourceItem->item.definitionId())
+            .maxStackSize;
+    const std::uint32_t transferredQuantity =
+        std::min(
+            sourceQuantity,
+            maxStackSize - destinationQuantity);
+
+    if (transferredQuantity < sourceQuantity)
+    {
+        if (!source.trySetItemQuantity(
+                instanceId,
+                sourceQuantity - transferredQuantity))
+        {
+            std::terminate();
+        }
+    }
+    else
+    {
+        std::optional<ItemInstance> removed =
+            source.remove(instanceId);
+        if (!removed.has_value())
+        {
+            std::terminate();
+        }
+    }
+
+    if (!destination.trySetItemQuantity(
+            *destinationId,
+            destinationQuantity + transferredQuantity))
+    {
+        std::terminate();
+    }
+
+    return true;
+}
+
 std::optional<GridPosition> findFirstTransferFit(
     const GridInventory &source,
     const GridInventory &destination,

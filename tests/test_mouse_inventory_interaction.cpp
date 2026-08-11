@@ -278,10 +278,12 @@ TEST(MouseInventoryIntegrationTest, SameContainerDragUsesMoveTransaction)
         {InventoryContainerId::Player, {4, 3}});
 
     ASSERT_EQ(request.destination.cell, (GridPosition{3, 2}));
-    ASSERT_TRUE(
-        inventory.tryMove(
-            request.source.instanceId,
-            request.destination.cell));
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
+        request.source.instanceId,
+        request.destination.cell,
+        request.orientation));
     EXPECT_EQ(
         inventory.originOf(31),
         (std::optional<GridPosition>{GridPosition{3, 2}}));
@@ -302,15 +304,45 @@ TEST(MouseInventoryIntegrationTest, CrossContainerDragUsesTransferTransaction)
         {2, 1},
         {InventoryContainerId::External, {3, 2}});
 
-    ASSERT_TRUE(tryTransferItem(
+    ASSERT_TRUE(tryPlaceWholeItemAt(
         player,
         external,
         request.source.instanceId,
-        request.destination.cell));
+        request.destination.cell,
+        request.orientation));
     EXPECT_TRUE(player.placedItems().empty());
     EXPECT_EQ(
         external.originOf(32),
         (std::optional<GridPosition>{GridPosition{1, 1}}));
+}
+
+TEST(MouseInventoryIntegrationTest, WholeStackDragMergesAtOccupiedCell)
+{
+    GridInventory inventory{{2, 1}};
+    ItemInstance sourceAmmo{36, ItemId::Ammo9mm, 10};
+    ItemInstance targetAmmo{37, ItemId::Ammo9mm, 55};
+    ASSERT_TRUE(inventory.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(targetAmmo), {1, 0}));
+
+    InventoryInteractionState state;
+    const InventoryPlacementRequest request = dragPlacement(
+        state,
+        playerItem(36),
+        {0, 0},
+        {0, 0},
+        {InventoryContainerId::Player, {1, 0}});
+
+    ASSERT_EQ(request.selectedQuantity, std::nullopt);
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
+        request.source.instanceId,
+        request.destination.cell,
+        request.orientation));
+    EXPECT_EQ(inventory.quantityOf(36), 5U);
+    EXPECT_EQ(inventory.originOf(36),
+              (std::optional<GridPosition>{{0, 0}}));
+    EXPECT_EQ(inventory.quantityOf(37), 60U);
 }
 
 TEST(MouseInventoryIntegrationTest, RotatedSameContainerDragCommitsTransform)
@@ -351,7 +383,9 @@ TEST(MouseInventoryIntegrationTest, RotatedSameContainerDragCommitsTransform)
     EXPECT_EQ(placement->destination.cell, (GridPosition{4, 2}));
     EXPECT_EQ(placement->orientation, ItemOrientation::Degrees90);
 
-    ASSERT_TRUE(inventory.tryTransform(
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
         placement->source.instanceId,
         placement->destination.cell,
         placement->orientation));
@@ -406,7 +440,7 @@ TEST(MouseInventoryIntegrationTest, RotatedCrossContainerDragCommitsTransform)
     EXPECT_EQ(placement->destination.cell, (GridPosition{4, 2}));
     EXPECT_EQ(placement->orientation, ItemOrientation::Degrees90);
 
-    ASSERT_TRUE(tryTransferItemTransform(
+    ASSERT_TRUE(tryPlaceWholeItemAt(
         player,
         external,
         placement->source.instanceId,
@@ -440,11 +474,12 @@ TEST(MouseInventoryIntegrationTest, InvalidCrossContainerDropIsNonMutating)
         {0, 0},
         {InventoryContainerId::External, {5, 5}});
 
-    EXPECT_FALSE(tryTransferItem(
+    EXPECT_FALSE(tryPlaceWholeItemAt(
         player,
         external,
         request.source.instanceId,
-        request.destination.cell));
+        request.destination.cell,
+        request.orientation));
     EXPECT_EQ(
         player.originOf(33),
         (std::optional<GridPosition>{GridPosition{0, 0}}));

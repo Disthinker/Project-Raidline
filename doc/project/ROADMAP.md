@@ -47,6 +47,7 @@ Week28 冻结提交 `07755f6` 已通过本地 544/544、真实窗口 1–13 和�
 - 角色上/下移动动画和停止朝向表现。
 - [库存拖拽可行位置原子交换（#38）](https://github.com/Disthinker/Project-Raidline/issues/38)，包括一个拖拽物与目标处若干 placement 的事务式重排。
 - [Ctrl/Shift 数量点击锁定拖拽（#39）](https://github.com/Disthinker/Project-Raidline/issues/39)，松开鼠标和修饰键后虚像继续跟随，下一次点击提交。
+- RL-INV-003 普通整堆弹药拖到同定义堆的合并已在独立分支本地修复；目标补到 60、源余量原地保留，2026-08-11 人工验收通过，待精确提交 CI 后关闭。
 - 把共享业务源码抽为核心 library，降低重复编译与旧对象风险。
 - 把 Phase 1 资源测试接入 CTest/CI，并继续加固批准资产的不可覆盖保护。
 - 在不扩大玩法范围的前提下拆分 `App` 的背包 UI 编排职责。

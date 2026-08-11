@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-09，Week28 敌人感知、搜索与多敌人协作已通过 PR #52 合入 `main@c4658e7`。冻结提交 `07755f6` 的 Windows Debug 全目标构建、全量 CTest 544/544、真实窗口 1–13 和唯一一轮 GitHub Actions 均通过：范围检测 7 秒、Ubuntu 1 分 39 秒、Windows 4 分。当前进入 Week29：强化玩家射击与敌人攻击的视觉反馈、节奏和正式抓/挠/咬动画接线；正式帧资产必须通过独立美术生产任务生成和审核。
+最后核对：2026-08-11。Week 1–28 已进入 main；Week29 战斗反馈仍在独立分支，尚未合入 main，正式攻击动画继续暂停。本分支从 `origin/main@61718f6` 独立处理 RL-INV-003：普通整堆弹药拖放合并已完成本地实现、自动验证和真实窗口验收，等待精确提交 CI。
 
 ## Git、验证与 CI 基线
 
@@ -29,6 +29,7 @@
 - 用户确认 Week26 原 1–10、补充 11–13 与最终合并验收 15 全部通过；PR #48 已按精确 feature head 合入，merge commit 为 `0847da0`。
 - Week27 首轮与第二轮真实窗口验收均由用户确认 1–13 全部通过。第二轮 Windows Debug 全目标构建成功，`EnemyAttackTest`、`EnemyAiTest`、`EnemyTest`、`PlayerTest` 与 `GameplayWorldTest` 聚焦回归通过，全量 CTest 519/519；测试程序直接运行未出现 Runtime Library / `gtest_ar_`。最终提交 `4f151f1` 的范围检测、Ubuntu 与 Windows CI 全部通过，PR #50 已合入 `main@520f4ec`。
 - Week28 冻结提交 `07755f6` 的 Windows Debug 全目标构建成功，CMake 注册 30 个 GTest executable、全量 CTest 544/544 通过；`EnemyAiStateTest` 21/21，`EnemySquadCoordinatorTest` 10/10，真实窗口 1–13 全部通过。[GitHub Actions run 31300301471](https://github.com/Disthinker/Project-Raidline/actions/runs/31300301471) 的范围检测、Ubuntu 与 Windows 均通过；PR #52 已以 merge commit `c4658e7` 合入。
+- RL-INV-003 分支 `codex/rl-inv-003-ammo-stack-merge` 已完成 Windows Debug configure、226 步全目标重建和全量 CTest 552/552；新增整堆合并及鼠标请求回归均通过。用户于 2026-08-11 确认真实窗口 1–5 全部通过；精确提交 Windows/Ubuntu CI 待执行。
 
 ## 已进入 main：Week 1–28
 
@@ -171,4 +172,4 @@ Week26 计划已按 PR #48 的合入事实归档；鼠标瞄准、统一射击�
 - 角色纯上/下移动动画和停止后的视觉朝向仍是待决表现问题。
 - 多柜体选择、外部数据 Loot、视锥/遮挡/听觉/寻路等复杂感知、正式攻击与受伤表现/击退、治疗、可操作 Stash/出战选择、局内重开、装备栏、重量、耐久和跨进程持久化尚未实现。
 
-Week27 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week27-enemy-readable-attacks.md)；Week28 合同与验证见 [已完成 ExecPlan](../exec-plans/completed/week28-enemy-perception-and-coordination.md)；Week29 合同见 [活动 ExecPlan](../exec-plans/active/week29-combat-feedback-and-attack-animation.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+Week27 合同与验证记录见 [已完成 ExecPlan](../exec-plans/completed/week27-enemy-readable-attacks.md)；Week28 合同与验证见 [已完成 ExecPlan](../exec-plans/completed/week28-enemy-perception-and-coordination.md)；Week29 合同见 [活动 ExecPlan](../exec-plans/active/week29-combat-feedback-and-attack-animation.md)；RL-INV-003 本地修复合同见 [活动 ExecPlan](../exec-plans/active/rl-inv-003-ammo-stack-merge.md)，已知问题见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。

@@ -38,6 +38,28 @@ bool tryTransferItemTransform(
     GridPosition destinationOrigin,
     ItemOrientation destinationOrientation);
 
+// Applies the normal whole-stack pointer-placement rules. An empty target
+// uses same-inventory transform or cross-inventory transfer. A matching,
+// non-full stack accepts as much as its max stack size permits; any source
+// remainder keeps its stable ID, origin and orientation.
+[[nodiscard]]
+bool canPlaceWholeItemAt(
+    const GridInventory &source,
+    const GridInventory &destination,
+    ItemInstanceId instanceId,
+    GridPosition destinationOrigin,
+    ItemOrientation destinationOrientation);
+
+// Commits the placement described by canPlaceWholeItemAt. Merges preserve
+// the destination stable ID and never allocate a new item instance ID.
+[[nodiscard]]
+bool tryPlaceWholeItemAt(
+    GridInventory &source,
+    GridInventory &destination,
+    ItemInstanceId instanceId,
+    GridPosition destinationOrigin,
+    ItemOrientation destinationOrientation);
+
 // 按行优先查询目标容器中的第一个合法位置。
 [[nodiscard]]
 std::optional<GridPosition> findFirstTransferFit(

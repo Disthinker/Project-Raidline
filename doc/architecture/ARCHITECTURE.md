@@ -69,7 +69,7 @@ SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 Main
 - GameSession：进程内跨 Raid 组合根，拥有长期 Stash、当前 `GameplayWorld`、当前 `RaidSettlement` 和 Raid 编号；结算完成后进入 BetweenRaids，先完整构造候选世界再交换，Blocked 或构造失败不重开。
 - Stash：拥有默认 20×12 的局外 `GridInventory`，提供完整背包存入与栈/单位统计；跨当前进程中的多局保留，App 只读显示，仍没有磁盘持久化或配装交互。
 - RaidSettlement：把 RaidSession 终局提交为独立 sticky 单局结算状态；调用方显式提供长期 Stash，撤离将完整堆叠存入，死亡/超时记录后销毁携带物，阻塞时保留双方并允许重试。
-- inventory_transfer：提供跨容器 transform、先合并后 row-major first-fit 的整栈/数量转移、允许源目标相同的指定格精确数量放置/合并，以及不合并的整背包原子转移；计划、ID 冲突检查和容量预留发生在任何 quantity/所有权 mutation 前。
+- inventory_transfer：提供跨容器 transform、先合并后 row-major first-fit 的整栈/数量转移、普通整堆指针放置/部分填满、允许源目标相同的指定格精确数量放置/合并，以及不合并的整背包原子转移；查询先验证 ID、定义与容量，提交不跨容器 mutation 保留业务指针。
 - InventoryInteractionState：设备无关、容器感知的纯鼠标 hover/选择/拖动状态；拖拽时保存候选方向、离散与连续抓取锚点及可选的所选数量，不拥有 inventory，不直接提交模型变化，只在 release 产生带方向和可选数量的放置或丢弃值请求。
 
 ## 所有权图
@@ -96,9 +96,9 @@ ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有�
 
 ## 查询、命令与渲染
 
-- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、Enemy 攻击快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
-- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`Enemy::updateTowardsTarget/tryStartAttack/consumeAttackHit`、`Player::applyControl`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
-- 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
+- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canPlaceWholeItemAt`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、Enemy 攻击快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
+- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`Enemy::updateTowardsTarget/tryStartAttack/consumeAttackHit`、`Player::applyControl`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryPlaceWholeItemAt`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
+- 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通整堆拖拽预览统一使用 `canPlaceWholeItemAt`，释放使用 `tryPlaceWholeItemAt`；空目标委托既有 transform/transfer，匹配未满目标执行部分填满。数量拖拽继续使用 `canPlaceItemQuantityAt` 的精确数量合同并在平滑虚影上显示所选数量。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
 
 ## 测试与构建边界
 

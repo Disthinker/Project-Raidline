@@ -85,6 +85,8 @@
 - first-fit 转移使用目标容器的 row-major 第一个合法位置，结果必须确定。
 - 堆叠转移先按目标 placement 顺序填充同定义未满栈，再为余量使用 row-major first-fit；请求数量不能完整容纳时两个容器完全不变。
 - 拆分保留源栈 ID 并为新 placement 分配新 ID；合并保留目标栈 ID。新 ID 只由 GameplayWorld 分配，并且只在成功提交实际新 placement 后消耗。
+- 普通整堆指针放置到同定义未满栈时，目标最多填到 `maxStackSize`；完全吸收时移除源 placement，容量不足时源堆以原 ID、origin、orientation 保留余量。目标始终保留自己的 ID、origin、orientation，合并不创建或消耗新 ID。
+- 普通整堆放置的查询与提交必须共享定义、容量、ID 冲突和空格 transform/transfer 规则；满堆、定义不匹配、不可堆叠物品或无效源失败时，参与容器完全不变。该部分填满合同不得放宽 Ctrl/Shift 数量拖拽的“精确请求数量或完全不变”语义。
 - 普通与快捷 first-fit 转移保留现有 orientation，不自动旋转找空位；显式 transform 转移只有在目标 footprint 合法时才提交新方向。
 - 只有玩家背包物品可丢弃；成功后玩家 footprint 清除，世界新增拥有同一实例的 GroundItem。
 - 丢弃位置位于玩家逻辑碰撞体的脚底中心，与当前朝向无关，并按物品世界渲染半尺寸限制在世界边界内；失败不改变背包或地面物品。
@@ -143,7 +145,7 @@
 
 ## 背包交互
 
-- 预览和按 R 旋转候选都不修改 GridInventory；同容器旋转提交只能通过 `tryTransform`，跨容器旋转提交只能通过 transform 转移服务。
+- 预览和按 R 旋转候选都不修改 GridInventory；普通拖拽统一通过整堆放置服务，空目标在同容器委托 `tryTransform`、跨容器委托 transform 转移，匹配占用目标则按整堆合并合同提交。
 - 背包是纯鼠标交互：方向键、主 Enter 和数字键盘 Enter 不具有库存语义，也不存在键盘焦点或键盘放置模式；Enter 仅在非 Raid 屏幕作为顶层确认。
 - 鼠标状态保存源容器、稳定 ID、抓取偏移与值坐标，不保存可能因容器 mutation 失效的业务引用或迭代器。
 - 多格拖拽的候选左上角由实际 placement origin 与 grab offset 计算，不能把任意被点击覆盖格当作 origin。
