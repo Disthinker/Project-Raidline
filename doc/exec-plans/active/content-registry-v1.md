@@ -1,6 +1,6 @@
 # Content Registry v1 ExecPlan
 
-状态：本地实现与自动化通过；等待 PR 精确 head CI
+状态：实现 head 本地自动化与 CI 通过；等待最终证据 head CI
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -95,6 +95,20 @@
 - [x] 建立强类型 DefinitionId、不可变 ContentRegistry 与 JSON v1 校验器。
 - [x] 迁移物品、Loot、敌人部署和首图常量并保留显式枚举适配器。
 - [x] Windows Debug 重新配置、70 步构建、focused 134/134、full 574/574 与发布资源存在性检查通过。
-- [ ] 提交、推送、创建 PR，并完成精确 head Windows/Ubuntu CI。
+- [x] 以 `a3afbf6` 提交实现、`3a12385` 提交状态文档，推送并创建 Draft PR #57。
+- [x] 实现/初始证据 head `3a12385` 的范围检测、Windows 与 Ubuntu CI 全部成功。
+- [ ] 最终证据 head 的范围、Windows、Ubuntu CI 全部成功并把 PR #57 转 Ready。
 
 最后更新：2026-08-14。
+
+## 9. 交付证据
+
+- 分支：`codex/content-registry-v1`；基线：`origin/main@1837928`。
+- 内容 schema/version：1 / `v0-content-registry-1`；发行输入：`assets/content/v1/core.json`。
+- Windows Debug：重新配置成功；首次完整增量构建 70 步成功。
+- focused：DefinitionId、ContentRegistry、ItemDefinition、LootTable、GameplayWorld、GameSession、GameFlow 共 134/134 通过。
+- full：CTest 574/574 通过，0 失败。
+- 资源：Registry 发布引用校验与 11 个物理发布文件存在性检查通过。
+- CI：实现/初始证据 head `3a12385` 的 [run 31813262919](https://github.com/Disthinker/Project-Raidline/actions/runs/31813262919) 范围检测、Windows、Ubuntu 全部成功。
+- 人工验收：不适用；本迁移不改变可见行为，开发代理未启动游戏。
+- 偏差：本机 VS vcpkg 的旧 MSYS2 runtime URL 失效；已用仓库内锁定的官方 `nlohmann-json` 3.12.0 header-only overlay 收口，CI Windows/Ubuntu 均验证通过。

@@ -6,7 +6,7 @@
 
 - `origin/main@1837928` 已包含 PR #55 Core Extraction Alpha Slice 0、PR #54 RL-INV-003 与 PR #56 Build Module Foundation；对应精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
 - 当前开发分支：`codex/content-registry-v1`，从干净的 `origin/main@1837928` 创建，只迁移内容定义，不改变玩家行为。
-- Content Registry v1 本地实现已建立强类型定义 ID、不可变 JSON Registry、首批内容迁移与过渡枚举适配器；Windows Debug 70 步构建、focused 134/134、全量 574/574 通过，等待 PR 精确 head CI。
+- Content Registry v1 已建立强类型定义 ID、不可变 JSON Registry、首批内容迁移与过渡枚举适配器；Windows Debug 70 步构建、focused 134/134、全量 574/574 通过。Draft PR #57 实现/初始证据 head `3a12385` 三项 CI 成功，等待最终证据 head 门禁。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
 
@@ -56,7 +56,7 @@
 
 ## 尚未完成
 
-- Content Registry v1：完成 PR 精确 head Windows/Ubuntu CI 并进入接受基线。
+- Content Registry v1：完成 PR #57 最终证据 head Windows/Ubuntu CI、转 Ready 并进入接受基线。
 - 后续架构迁移：Profile Asset Registry。
 - Slice 1–4 的全部玩家功能。
 - Week29 代码反馈的独立整理。
