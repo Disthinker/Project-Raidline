@@ -16,1237 +16,400 @@ if(
         "注意: 包含文件:  ")
 endif()
 
-# 1. 寻找 Vcpkg 安装的第三方依赖
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 
-# 2. 编译游戏主可执行文件
-add_executable(Project_Raidline
-    src/main.cpp
+function(raidline_configure_library target)
+    target_compile_features(${target} PUBLIC cxx_std_20)
+    set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
+    target_include_directories(
+        ${target}
+        PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8)
+    endif()
+endfunction()
+
+function(raidline_configure_executable target)
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
+
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8)
+    endif()
+endfunction()
+
+# A production implementation belongs to exactly one module. Tests link the
+# production modules and never compile a second copy of business source.
+function(raidline_assert_unique_compiled_sources)
+    set(seen_sources)
+    set(seen_owners)
+
+    foreach(target IN LISTS ARGN)
+        get_target_property(target_sources ${target} SOURCES)
+
+        foreach(source IN LISTS target_sources)
+            if(NOT source MATCHES "\\.(c|cc|cpp|cxx)$")
+                continue()
+            endif()
+
+            get_filename_component(
+                absolute_source
+                "${source}"
+                ABSOLUTE
+                BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+            file(
+                RELATIVE_PATH
+                source_key
+                "${CMAKE_CURRENT_SOURCE_DIR}"
+                "${absolute_source}")
+            string(REPLACE "\\" "/" source_key "${source_key}")
+            list(FIND seen_sources "${source_key}" existing_index)
+
+            if(NOT existing_index EQUAL -1)
+                list(GET seen_owners ${existing_index} existing_owner)
+                message(
+                    FATAL_ERROR
+                    "Production source ${source} belongs to both "
+                    "${existing_owner} and ${target}.")
+            endif()
+
+            list(APPEND seen_sources "${source_key}")
+            list(APPEND seen_owners "${target}")
+        endforeach()
+    endforeach()
+
+    file(
+        GLOB absolute_business_sources
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+
+    set(all_business_sources)
+    foreach(source IN LISTS absolute_business_sources)
+        file(
+            RELATIVE_PATH
+            source_key
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${source}")
+        string(REPLACE "\\" "/" source_key "${source_key}")
+        list(APPEND all_business_sources "${source_key}")
+    endforeach()
+
+    list(
+        REMOVE_ITEM
+        all_business_sources
+        "src/main.cpp")
+
+    set(owned_sources ${seen_sources})
+    list(SORT all_business_sources)
+    list(SORT owned_sources)
+
+    if(NOT all_business_sources STREQUAL owned_sources)
+        set(missing_sources ${all_business_sources})
+        set(unexpected_sources ${owned_sources})
+
+        foreach(source IN LISTS owned_sources)
+            list(REMOVE_ITEM missing_sources "${source}")
+        endforeach()
+        foreach(source IN LISTS all_business_sources)
+            list(REMOVE_ITEM unexpected_sources "${source}")
+        endforeach()
+
+        message(
+            FATAL_ERROR
+            "Every non-main src/*.cpp must belong to exactly one production "
+            "module. Missing: ${missing_sources}; unexpected: "
+            "${unexpected_sources}.")
+    endif()
+endfunction()
+
+# Domain and simulation stay buildable without SDL. Listing public headers on
+# their owning targets lets this guard catch direct SDL includes before build.
+function(raidline_assert_no_sdl_includes target)
+    get_target_property(target_sources ${target} SOURCES)
+
+    foreach(source IN LISTS target_sources)
+        if(NOT source MATCHES "\\.(c|cc|cpp|cxx|h|hpp)$")
+            continue()
+        endif()
+
+        get_filename_component(
+            absolute_source
+            "${source}"
+            ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        file(READ "${absolute_source}" source_contents)
+        string(
+            REGEX MATCH
+            "#[ \t]*include[ \t]*[<\"]SDL"
+            forbidden_include
+            "${source_contents}")
+
+        if(forbidden_include)
+            message(
+                FATAL_ERROR
+                "${target} must remain SDL-free, but ${source} includes SDL.")
+        endif()
+    endforeach()
+endfunction()
+
+# Stable modular-monolith production targets. This PR moves build ownership
+# only; existing App, GameplayWorld and V0 behavior remain unchanged.
+add_library(raidline_domain STATIC
+    src/health_system.h
+    src/item_definition.cpp
+    src/item_definition.h
+    src/item_instance.cpp
+    src/item_instance.h
+    src/grid_inventory.cpp
+    src/grid_inventory.h
+    src/inventory_transfer.cpp
+    src/inventory_transfer.h
+    src/loot_table.cpp
+    src/loot_table.h
+    src/raid_session.cpp
+    src/raid_session.h
+    src/raid_settlement.cpp
+    src/raid_settlement.h
+    src/shot_resolution.cpp
+    src/shot_resolution.h
+    src/stash.cpp
+    src/stash.h
+    src/rect.h
+    src/vec2.h
+)
+raidline_configure_library(raidline_domain)
+add_library(raidline::domain ALIAS raidline_domain)
+
+add_library(raidline_simulation STATIC
+    src/animation.cpp
+    src/animation.h
+    src/collision.cpp
+    src/collision.h
+    src/enemy.cpp
+    src/enemy.h
+    src/enemy_ai.cpp
+    src/enemy_ai.h
+    src/enemy_attack.cpp
+    src/enemy_attack.h
+    src/enemy_squad.cpp
+    src/enemy_squad.h
+    src/extraction_point.cpp
+    src/extraction_point.h
+    src/gameplay_input.h
+    src/gameplay_world.cpp
+    src/gameplay_world.h
+    src/ground_item.cpp
+    src/ground_item.h
+    src/hit_resolution.cpp
+    src/hit_resolution.h
+    src/particle.cpp
+    src/particle.h
+    src/particle_system.cpp
+    src/particle_system.h
+    src/player.cpp
+    src/player.h
+    src/projectile.cpp
+    src/projectile.h
+    src/storage_cabinet.cpp
+    src/storage_cabinet.h
+    src/weapon_fire.cpp
+    src/weapon_fire.h
+)
+raidline_configure_library(raidline_simulation)
+target_link_libraries(raidline_simulation PUBLIC raidline::domain)
+add_library(raidline::simulation ALIAS raidline_simulation)
+
+add_library(raidline_services STATIC
+    src/game_flow.cpp
+    src/game_flow.h
+    src/game_session.cpp
+    src/game_session.h
+)
+raidline_configure_library(raidline_services)
+target_link_libraries(
+    raidline_services
+    PUBLIC
+    raidline::domain
+    raidline::simulation)
+add_library(raidline::services ALIAS raidline_services)
+
+add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
-
-    src/input_system.h
     src/input_system.cpp
-
-    src/player.h
-    src/player.cpp
-
-    src/projectile.h
-    src/projectile.cpp
-
-    src/vec2.h
-    src/rect.h
-
-    src/item_definition.h
-    src/item_definition.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/ground_item.h
-    src/ground_item.cpp
-    src/grid_inventory.h
-    src/grid_inventory.cpp
-    src/inventory_transfer.h
-    src/inventory_transfer.cpp
-
-    src/storage_cabinet.h
-    src/storage_cabinet.cpp
-
-    src/loot_table.h
-    src/loot_table.cpp
-
-    src/raid_session.h
-    src/raid_session.cpp
-    src/stash.h
-    src/stash.cpp
-    src/raid_settlement.h
-    src/raid_settlement.cpp
-    src/game_session.h
-    src/game_session.cpp
-    src/game_flow.h
-    src/game_flow.cpp
-
-    src/extraction_point.h
-    src/extraction_point.cpp
-
-    src/inventory_interaction.h
+    src/input_system.h
     src/inventory_interaction.cpp
-
-    src/collision.h
-    src/collision.cpp
-
-    src/enemy.h
-    src/enemy.cpp
-    src/enemy_attack.h
-    src/enemy_attack.cpp
-    src/enemy_ai.h
-    src/enemy_ai.cpp
-    src/enemy_squad.h
-    src/enemy_squad.cpp
-
-    src/hit_resolution.h
-    src/hit_resolution.cpp
-
-    src/gameplay_input.h
-    src/gameplay_world.h
-    src/gameplay_world.cpp
-    src/weapon_fire.h
-    src/weapon_fire.cpp
-    src/shot_resolution.h
-    src/shot_resolution.cpp
-
-    src/texture.h
+    src/inventory_interaction.h
     src/texture.cpp
-
-    src/animation.h
-    src/animation.cpp
-
-    src/particle.h
-    src/particle.cpp
-    src/particle_system.h
-    src/particle_system.cpp
+    src/texture.h
 )
-
-target_compile_features(
-    Project_Raidline
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    Project_Raidline
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
+raidline_configure_library(raidline_sdl_client)
 target_link_libraries(
-    Project_Raidline
+    raidline_sdl_client
+    PUBLIC
+    raidline::services
+    SDL3::SDL3
     PRIVATE
     fmt::fmt
-    SDL3::SDL3
-    SDL3_image::SDL3_image
-)
+    SDL3_image::SDL3_image)
+add_library(raidline::sdl_client ALIAS raidline_sdl_client)
 
-target_include_directories(
-    Project_Raidline
-    PRIVATE
-    src
-)
+set(RAIDLINE_PRODUCTION_TARGETS
+    raidline_domain
+    raidline_simulation
+    raidline_services
+    raidline_sdl_client)
+
+raidline_assert_unique_compiled_sources(${RAIDLINE_PRODUCTION_TARGETS})
+raidline_assert_no_sdl_includes(raidline_domain)
+raidline_assert_no_sdl_includes(raidline_simulation)
+
+add_executable(Project_Raidline src/main.cpp)
+raidline_configure_executable(Project_Raidline)
+target_link_libraries(Project_Raidline PRIVATE raidline::sdl_client)
 
 add_custom_command(
     TARGET Project_Raidline
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
-        $<TARGET_FILE_DIR:Project_Raidline>/assets
-)
+        $<TARGET_FILE_DIR:Project_Raidline>/assets)
 
-# 3. 开启测试功能并配置 GTest 可执行文件, test health_system
 enable_testing()
-add_executable(HealthTest
-    tests/test_health.cpp
-)
-
-target_compile_features(HealthTest PRIVATE cxx_std_20)
-set_target_properties(HealthTest PROPERTIES CXX_EXTENSIONS OFF)
-
-# 将 GTest 主程序与 fmt 库链接到我们的测试目标上
-target_link_libraries(HealthTest PRIVATE GTest::gtest_main)
-target_include_directories(HealthTest PRIVATE src)
-
-# 向 CMake 的 CTest 工具注册所有的 Google Test 用例
 include(GoogleTest)
-gtest_discover_tests(HealthTest)
 
-# test input_system
-add_executable(InputSystemTest
+function(raidline_add_test target source module)
+    if(NOT ARGC EQUAL 3 OR NOT source MATCHES "^tests/.+\\.cpp$")
+        message(
+            FATAL_ERROR
+            "raidline_add_test accepts one tests/*.cpp source and one "
+            "production module; tests must not compile business source.")
+    endif()
+
+    add_executable(${target} ${source})
+    raidline_configure_executable(${target})
+    target_link_libraries(
+        ${target}
+        PRIVATE
+        GTest::gtest_main
+        ${module})
+    gtest_discover_tests(${target})
+endfunction()
+
+raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
+raidline_add_test(
+    InputSystemTest
     tests/test_input_system.cpp
-    src/input_system.cpp
-    src/input_system.h
-)
-target_compile_features(InputSystemTest PRIVATE cxx_std_20)
-set_target_properties(InputSystemTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(InputSystemTest PRIVATE GTest::gtest_main SDL3::SDL3)
-target_include_directories(InputSystemTest PRIVATE src)
-
-gtest_discover_tests(InputSystemTest)
-
-# test player
-add_executable(PlayerTest
-    tests/test_player.cpp
-    src/player.cpp
-    src/player.h
-    src/gameplay_input.h
-    src/animation.h
-    src/animation.cpp
-)
-
-target_compile_features(PlayerTest PRIVATE cxx_std_20)
-set_target_properties(PlayerTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(PlayerTest PRIVATE GTest::gtest_main)
-target_include_directories(PlayerTest PRIVATE src)
-
-gtest_discover_tests(PlayerTest)
-
-# test weapon_fire
-add_executable(WeaponFireTest
+    raidline::sdl_client)
+raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
+raidline_add_test(
+    WeaponFireTest
     tests/test_weapon_fire.cpp
-    src/weapon_fire.cpp
-    src/weapon_fire.h
-    src/vec2.h
-)
-
-target_compile_features(WeaponFireTest PRIVATE cxx_std_20)
-set_target_properties(WeaponFireTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(WeaponFireTest PRIVATE GTest::gtest_main)
-target_include_directories(WeaponFireTest PRIVATE src)
-
-gtest_discover_tests(WeaponFireTest)
-
-# test shot_resolution
-add_executable(ShotResolutionTest
+    raidline::simulation)
+raidline_add_test(
+    ShotResolutionTest
     tests/test_shot_resolution.cpp
-    src/shot_resolution.cpp
-    src/shot_resolution.h
-    src/vec2.h
-)
-
-target_compile_features(ShotResolutionTest PRIVATE cxx_std_20)
-set_target_properties(ShotResolutionTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(ShotResolutionTest PRIVATE GTest::gtest_main)
-target_include_directories(ShotResolutionTest PRIVATE src)
-
-gtest_discover_tests(ShotResolutionTest)
-
-# test projectile
-add_executable(ProjectileTest
+    raidline::domain)
+raidline_add_test(
+    ProjectileTest
     tests/test_projectile.cpp
-    src/projectile.cpp
-    src/projectile.h
-    src/vec2.h
-)
-
-target_compile_features(ProjectileTest PRIVATE cxx_std_20)
-set_target_properties(ProjectileTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(ProjectileTest PRIVATE GTest::gtest_main)
-target_include_directories(ProjectileTest PRIVATE src)
-
-gtest_discover_tests(ProjectileTest)
-
-# test collision
-add_executable(CollisionTest
+    raidline::simulation)
+raidline_add_test(
+    CollisionTest
     tests/test_collision.cpp
-    src/collision.cpp
-    src/collision.h
-    src/rect.h
-)
-
-target_compile_features(CollisionTest PRIVATE cxx_std_20)
-set_target_properties(CollisionTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(CollisionTest PRIVATE GTest::gtest_main)
-target_include_directories(CollisionTest PRIVATE src)
-
-gtest_discover_tests(CollisionTest)
-
-# test enemy
-add_executable(EnemyTest
-    tests/test_enemy.cpp
-    src/enemy.cpp
-    src/enemy.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/animation.h
-    src/animation.cpp
-)
-
-target_compile_features(EnemyTest PRIVATE cxx_std_20)
-set_target_properties(EnemyTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(EnemyTest PRIVATE GTest::gtest_main)
-target_include_directories(EnemyTest PRIVATE src)
-
-gtest_discover_tests(EnemyTest)
-
-# test enemy_attack
-add_executable(EnemyAttackTest
+    raidline::simulation)
+raidline_add_test(EnemyTest tests/test_enemy.cpp raidline::simulation)
+raidline_add_test(
+    EnemyAttackTest
     tests/test_enemy_attack.cpp
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/vec2.h
-)
-
-target_compile_features(EnemyAttackTest PRIVATE cxx_std_20)
-set_target_properties(EnemyAttackTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(EnemyAttackTest PRIVATE GTest::gtest_main)
-target_include_directories(EnemyAttackTest PRIVATE src)
-
-gtest_discover_tests(EnemyAttackTest)
-
-# test enemy_ai
-add_executable(EnemyAiTest
+    raidline::simulation)
+raidline_add_test(
+    EnemyAiTest
     tests/test_enemy_ai.cpp
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/vec2.h
-)
-
-target_compile_features(EnemyAiTest PRIVATE cxx_std_20)
-set_target_properties(EnemyAiTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(EnemyAiTest PRIVATE GTest::gtest_main)
-target_include_directories(EnemyAiTest PRIVATE src)
-
-gtest_discover_tests(EnemyAiTest)
-
-# test enemy_squad
-add_executable(EnemySquadTest
+    raidline::simulation)
+raidline_add_test(
+    EnemySquadTest
     tests/test_enemy_squad.cpp
-    src/enemy_squad.cpp
-    src/enemy_squad.h
-    src/enemy_ai.h
-    src/enemy_attack.h
-    src/vec2.h
-)
-
-target_compile_features(EnemySquadTest PRIVATE cxx_std_20)
-set_target_properties(EnemySquadTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(EnemySquadTest PRIVATE GTest::gtest_main)
-target_include_directories(EnemySquadTest PRIVATE src)
-
-gtest_discover_tests(EnemySquadTest)
-
-# test hit_resolution
-add_executable(HitResolutionTest
+    raidline::simulation)
+raidline_add_test(
+    HitResolutionTest
     tests/test_hit_resolution.cpp
-    src/hit_resolution.h
-    src/hit_resolution.cpp
-    src/collision.cpp
-    src/collision.h
-    src/enemy.cpp
-    src/enemy.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/rect.h
-    src/vec2.h
-    src/animation.h
-    src/animation.cpp
-)
-
-target_compile_features(HitResolutionTest PRIVATE cxx_std_20)
-set_target_properties(HitResolutionTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(HitResolutionTest PRIVATE GTest::gtest_main)
-target_include_directories(HitResolutionTest PRIVATE src)
-
-gtest_discover_tests(HitResolutionTest)
-
-# test gameplay_world
-add_executable(GameplayWorldTest
+    raidline::simulation)
+raidline_add_test(
+    GameplayWorldTest
     tests/test_gameplay_world.cpp
-
-    src/gameplay_world.cpp
-    src/gameplay_world.h
-    src/gameplay_input.h
-    src/weapon_fire.cpp
-    src/weapon_fire.h
-    src/shot_resolution.cpp
-    src/shot_resolution.h
-
-    src/player.cpp
-    src/player.h
-
-    src/projectile.cpp
-    src/projectile.h
-
-    src/enemy.cpp
-    src/enemy.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/enemy_squad.cpp
-    src/enemy_squad.h
-
-    src/rect.h
-    src/vec2.h
-
-    src/hit_resolution.cpp
-    src/hit_resolution.h
-
-    src/collision.cpp
-    src/collision.h
-
-    src/animation.h
-    src/animation.cpp
-
-    src/particle.h
-    src/particle.cpp
-    src/particle_system.h
-    src/particle_system.cpp
-
-    src/item_definition.h
-    src/item_definition.cpp
-
-    src/item_instance.h
-    src/item_instance.cpp
-
-    src/ground_item.h
-    src/ground_item.cpp
-
-    src/grid_inventory.h
-    src/grid_inventory.cpp
-
-    src/inventory_transfer.h
-    src/inventory_transfer.cpp
-
-    src/storage_cabinet.h
-    src/storage_cabinet.cpp
-
-    src/loot_table.h
-    src/loot_table.cpp
-
-    src/raid_session.h
-    src/raid_session.cpp
-
-    src/extraction_point.h
-    src/extraction_point.cpp
-)
-
-target_compile_features(
-    GameplayWorldTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    GameplayWorldTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    GameplayWorldTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    GameplayWorldTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(GameplayWorldTest)
-
-# test storage_cabinet
-add_executable(StorageCabinetTest
+    raidline::simulation)
+raidline_add_test(
+    StorageCabinetTest
     tests/test_storage_cabinet.cpp
-    src/storage_cabinet.cpp
-    src/storage_cabinet.h
-    src/collision.cpp
-    src/collision.h
-    src/rect.h
-    src/vec2.h
-    src/grid_inventory.cpp
-    src/grid_inventory.h
-    src/item_definition.cpp
-    src/item_definition.h
-    src/item_instance.cpp
-    src/item_instance.h
-)
-
-target_compile_features(
-    StorageCabinetTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    StorageCabinetTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    StorageCabinetTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    StorageCabinetTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(StorageCabinetTest)
-
-# test loot_table
-add_executable(LootTableTest
+    raidline::simulation)
+raidline_add_test(
+    LootTableTest
     tests/test_loot_table.cpp
-    src/loot_table.cpp
-    src/loot_table.h
-    src/item_definition.cpp
-    src/item_definition.h
-    src/vec2.h
-)
-
-target_compile_features(
-    LootTableTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    LootTableTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    LootTableTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    LootTableTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(LootTableTest)
-
-# test raid_session
-add_executable(RaidSessionTest
+    raidline::domain)
+raidline_add_test(
+    RaidSessionTest
     tests/test_raid_session.cpp
-    src/raid_session.cpp
-    src/raid_session.h
-)
-
-target_compile_features(
-    RaidSessionTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    RaidSessionTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    RaidSessionTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    RaidSessionTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(RaidSessionTest)
-
-# test raid_settlement
-add_executable(RaidSettlementTest
+    raidline::domain)
+raidline_add_test(
+    RaidSettlementTest
     tests/test_raid_settlement.cpp
-    src/raid_settlement.cpp
-    src/raid_settlement.h
-    src/stash.cpp
-    src/stash.h
-    src/raid_session.h
-    src/inventory_transfer.cpp
-    src/inventory_transfer.h
-    src/grid_inventory.cpp
-    src/grid_inventory.h
-    src/item_instance.cpp
-    src/item_instance.h
-    src/item_definition.cpp
-    src/item_definition.h
-    src/vec2.h
-)
-
-target_compile_features(
-    RaidSettlementTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    RaidSettlementTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    RaidSettlementTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    RaidSettlementTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(RaidSettlementTest)
-
-# test game_session
-add_executable(GameSessionTest
+    raidline::domain)
+raidline_add_test(
+    GameSessionTest
     tests/test_game_session.cpp
-
-    src/game_session.cpp
-    src/game_session.h
-
-    src/gameplay_world.cpp
-    src/gameplay_world.h
-    src/gameplay_input.h
-    src/weapon_fire.cpp
-    src/weapon_fire.h
-    src/shot_resolution.cpp
-    src/shot_resolution.h
-
-    src/player.cpp
-    src/player.h
-
-    src/projectile.cpp
-    src/projectile.h
-
-    src/enemy.cpp
-    src/enemy.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/enemy_squad.cpp
-    src/enemy_squad.h
-
-    src/rect.h
-    src/vec2.h
-
-    src/hit_resolution.cpp
-    src/hit_resolution.h
-
-    src/collision.cpp
-    src/collision.h
-
-    src/animation.cpp
-    src/animation.h
-
-    src/particle.cpp
-    src/particle.h
-    src/particle_system.cpp
-    src/particle_system.h
-
-    src/item_definition.cpp
-    src/item_definition.h
-    src/item_instance.cpp
-    src/item_instance.h
-    src/ground_item.cpp
-    src/ground_item.h
-    src/grid_inventory.cpp
-    src/grid_inventory.h
-    src/inventory_transfer.cpp
-    src/inventory_transfer.h
-
-    src/storage_cabinet.cpp
-    src/storage_cabinet.h
-    src/loot_table.cpp
-    src/loot_table.h
-
-    src/raid_session.cpp
-    src/raid_session.h
-    src/extraction_point.cpp
-    src/extraction_point.h
-    src/stash.cpp
-    src/stash.h
-    src/raid_settlement.cpp
-    src/raid_settlement.h
-)
-
-target_compile_features(
-    GameSessionTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    GameSessionTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    GameSessionTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    GameSessionTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(GameSessionTest)
-
-# test game_flow
-add_executable(GameFlowTest
+    raidline::services)
+raidline_add_test(
+    GameFlowTest
     tests/test_game_flow.cpp
-
-    src/game_flow.cpp
-    src/game_flow.h
-
-    src/game_session.cpp
-    src/game_session.h
-
-    src/gameplay_world.cpp
-    src/gameplay_world.h
-    src/gameplay_input.h
-    src/weapon_fire.cpp
-    src/weapon_fire.h
-    src/shot_resolution.cpp
-    src/shot_resolution.h
-
-    src/player.cpp
-    src/player.h
-
-    src/projectile.cpp
-    src/projectile.h
-
-    src/enemy.cpp
-    src/enemy.h
-    src/enemy_attack.cpp
-    src/enemy_attack.h
-    src/enemy_ai.cpp
-    src/enemy_ai.h
-    src/enemy_squad.cpp
-    src/enemy_squad.h
-
-    src/rect.h
-    src/vec2.h
-
-    src/hit_resolution.cpp
-    src/hit_resolution.h
-
-    src/collision.cpp
-    src/collision.h
-
-    src/animation.cpp
-    src/animation.h
-
-    src/particle.cpp
-    src/particle.h
-    src/particle_system.cpp
-    src/particle_system.h
-
-    src/item_definition.cpp
-    src/item_definition.h
-    src/item_instance.cpp
-    src/item_instance.h
-    src/ground_item.cpp
-    src/ground_item.h
-    src/grid_inventory.cpp
-    src/grid_inventory.h
-    src/inventory_transfer.cpp
-    src/inventory_transfer.h
-
-    src/storage_cabinet.cpp
-    src/storage_cabinet.h
-    src/loot_table.cpp
-    src/loot_table.h
-
-    src/raid_session.cpp
-    src/raid_session.h
-    src/extraction_point.cpp
-    src/extraction_point.h
-    src/stash.cpp
-    src/stash.h
-    src/raid_settlement.cpp
-    src/raid_settlement.h
-)
-
-target_compile_features(
-    GameFlowTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    GameFlowTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    GameFlowTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    GameFlowTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(GameFlowTest)
-
-# test extraction_point
-add_executable(ExtractionPointTest
+    raidline::services)
+raidline_add_test(
+    ExtractionPointTest
     tests/test_extraction_point.cpp
-    src/extraction_point.cpp
-    src/extraction_point.h
-    src/rect.h
-    src/vec2.h
-)
-
-target_compile_features(
-    ExtractionPointTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    ExtractionPointTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    ExtractionPointTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    ExtractionPointTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(ExtractionPointTest)
-
-# test texture
-add_executable(TextureTest
-    tests/test_texture.cpp
-    src/texture.h
-    src/texture.cpp
-)
-
-target_compile_features(
-    TextureTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    TextureTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    TextureTest
-    PRIVATE
-    GTest::gtest_main
-    SDL3::SDL3
-)
-
-target_include_directories(
-    TextureTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(TextureTest)
-
-# test animation
-add_executable(AnimationTest
+    raidline::simulation)
+raidline_add_test(TextureTest tests/test_texture.cpp raidline::sdl_client)
+raidline_add_test(
+    AnimationTest
     tests/test_animation.cpp
-    src/animation.h
-    src/animation.cpp
-)
-
-target_compile_features(AnimationTest PRIVATE cxx_std_20)
-set_target_properties(AnimationTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(AnimationTest PRIVATE GTest::gtest_main)
-target_include_directories(AnimationTest PRIVATE src)
-
-gtest_discover_tests(AnimationTest)
-
-# test particle
-add_executable(ParticleTest
+    raidline::simulation)
+raidline_add_test(
+    ParticleTest
     tests/test_particle.cpp
-    src/particle.h
-    src/particle.cpp
-)
-
-target_compile_features(ParticleTest PRIVATE cxx_std_20)
-set_target_properties(ParticleTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(ParticleTest PRIVATE GTest::gtest_main)
-target_include_directories(ParticleTest PRIVATE src)
-
-gtest_discover_tests(ParticleTest)
-
-# test particle_system
-add_executable(ParticleSystemTest
+    raidline::simulation)
+raidline_add_test(
+    ParticleSystemTest
     tests/test_particle_system.cpp
-    src/particle_system.h
-    src/particle_system.cpp
-    src/particle.h
-    src/particle.cpp
-)
-
-target_compile_features(ParticleSystemTest PRIVATE cxx_std_20)
-set_target_properties(ParticleSystemTest PROPERTIES CXX_EXTENSIONS OFF)
-target_link_libraries(ParticleSystemTest PRIVATE GTest::gtest_main)
-target_include_directories(ParticleSystemTest PRIVATE src)
-
-gtest_discover_tests(ParticleSystemTest)
-
-# test item_definition
-add_executable(ItemDefinitionTest
+    raidline::simulation)
+raidline_add_test(
+    ItemDefinitionTest
     tests/test_item_definition.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/vec2.h
-)
-
-target_compile_features(
-    ItemDefinitionTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    ItemDefinitionTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    ItemDefinitionTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    ItemDefinitionTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(ItemDefinitionTest)
-
-# test item_instance
-add_executable(ItemInstanceTest
+    raidline::domain)
+raidline_add_test(
+    ItemInstanceTest
     tests/test_item_instance.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/vec2.h
-)
-
-target_compile_features(
-    ItemInstanceTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    ItemInstanceTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    ItemInstanceTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    ItemInstanceTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(ItemInstanceTest)
-
-# test ground_item
-add_executable(GroundItemTest
+    raidline::domain)
+raidline_add_test(
+    GroundItemTest
     tests/test_ground_item.cpp
-    src/ground_item.h
-    src/ground_item.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/rect.h
-    src/vec2.h
-)
-
-target_compile_features(
-    GroundItemTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    GroundItemTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    GroundItemTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    GroundItemTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(GroundItemTest)
-
-# test grid_inventory
-add_executable(GridInventoryTest
+    raidline::simulation)
+raidline_add_test(
+    GridInventoryTest
     tests/test_grid_inventory.cpp
-    src/grid_inventory.h
-    src/grid_inventory.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/vec2.h
-)
-
-target_compile_features(
-    GridInventoryTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    GridInventoryTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    GridInventoryTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    GridInventoryTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(GridInventoryTest)
-
-# test inventory_transfer
-add_executable(InventoryTransferTest
+    raidline::domain)
+raidline_add_test(
+    InventoryTransferTest
     tests/test_inventory_transfer.cpp
-    src/inventory_transfer.h
-    src/inventory_transfer.cpp
-    src/grid_inventory.h
-    src/grid_inventory.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/vec2.h
-)
-
-target_compile_features(
-    InventoryTransferTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    InventoryTransferTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    InventoryTransferTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    InventoryTransferTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(InventoryTransferTest)
-
-# test inventory_interaction
-add_executable(InventoryInteractionTest
+    raidline::domain)
+raidline_add_test(
+    InventoryInteractionTest
     tests/test_inventory_interaction.cpp
-    src/inventory_interaction.h
-    src/inventory_interaction.cpp
-    src/grid_inventory.h
-    src/item_instance.h
-    src/item_definition.h
-    src/item_definition.cpp
-)
-
-target_compile_features(
-    InventoryInteractionTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    InventoryInteractionTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    InventoryInteractionTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    InventoryInteractionTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(InventoryInteractionTest)
-
-# test mouse_inventory_interaction
-add_executable(MouseInventoryInteractionTest
+    raidline::sdl_client)
+raidline_add_test(
+    MouseInventoryInteractionTest
     tests/test_mouse_inventory_interaction.cpp
-    src/inventory_interaction.h
-    src/inventory_interaction.cpp
-    src/inventory_transfer.h
-    src/inventory_transfer.cpp
-    src/grid_inventory.h
-    src/grid_inventory.cpp
-    src/item_instance.h
-    src/item_instance.cpp
-    src/item_definition.h
-    src/item_definition.cpp
-    src/vec2.h
-)
-
-target_compile_features(
-    MouseInventoryInteractionTest
-    PRIVATE
-    cxx_std_20
-)
-
-set_target_properties(
-    MouseInventoryInteractionTest
-    PROPERTIES
-    CXX_EXTENSIONS OFF
-)
-
-target_link_libraries(
-    MouseInventoryInteractionTest
-    PRIVATE
-    GTest::gtest_main
-)
-
-target_include_directories(
-    MouseInventoryInteractionTest
-    PRIVATE
-    src
-)
-
-gtest_discover_tests(MouseInventoryInteractionTest)
-
-# utf-8
-if(MSVC)
-    target_compile_options(Project_Raidline PRIVATE /utf-8)
-    target_compile_options(HealthTest PRIVATE /utf-8)
-    target_compile_options(InputSystemTest PRIVATE /utf-8)
-    target_compile_options(PlayerTest PRIVATE /utf-8)
-    target_compile_options(WeaponFireTest PRIVATE /utf-8)
-    target_compile_options(ShotResolutionTest PRIVATE /utf-8)
-    target_compile_options(ProjectileTest PRIVATE /utf-8)
-    target_compile_options(CollisionTest PRIVATE /utf-8)
-    target_compile_options(EnemyTest PRIVATE /utf-8)
-    target_compile_options(EnemyAttackTest PRIVATE /utf-8)
-    target_compile_options(EnemyAiTest PRIVATE /utf-8)
-    target_compile_options(EnemySquadTest PRIVATE /utf-8)
-    target_compile_options(HitResolutionTest PRIVATE /utf-8)
-    target_compile_options(GameplayWorldTest PRIVATE /utf-8)
-    target_compile_options(StorageCabinetTest PRIVATE /utf-8)
-    target_compile_options(LootTableTest PRIVATE /utf-8)
-    target_compile_options(RaidSessionTest PRIVATE /utf-8)
-    target_compile_options(RaidSettlementTest PRIVATE /utf-8)
-    target_compile_options(GameSessionTest PRIVATE /utf-8)
-    target_compile_options(GameFlowTest PRIVATE /utf-8)
-    target_compile_options(ExtractionPointTest PRIVATE /utf-8)
-    target_compile_options(TextureTest PRIVATE /utf-8)
-    target_compile_options(AnimationTest PRIVATE /utf-8)
-    target_compile_options(ParticleTest PRIVATE /utf-8)
-    target_compile_options(ParticleSystemTest PRIVATE /utf-8)
-
-    target_compile_options(
-        ItemDefinitionTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        ItemInstanceTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        GroundItemTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        GridInventoryTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        InventoryTransferTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        InventoryInteractionTest
-        PRIVATE
-        /utf-8
-    )
-
-    target_compile_options(
-        MouseInventoryInteractionTest
-        PRIVATE
-        /utf-8
-    )
-endif()
+    raidline::sdl_client)
