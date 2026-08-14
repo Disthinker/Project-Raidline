@@ -61,8 +61,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "v0-content-registry-1");
-    ASSERT_EQ(registry.items().size(), 5U);
+    EXPECT_EQ(registry.contentVersion(), "core-alpha-content-1");
+    ASSERT_EQ(registry.items().size(), 11U);
     ASSERT_EQ(registry.lootTables().size(), 1U);
     ASSERT_EQ(registry.enemyDeployments().size(), 1U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -71,6 +71,16 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.ammunition.9mm_basic"});
     EXPECT_EQ(ammunition.id, ItemId::Ammo9mm);
     EXPECT_EQ(ammunition.maxStackSize, 60U);
+    EXPECT_EQ(ammunition.marketBuyPrice, 1U);
+
+    const ItemDefinition &chestRig = registry.item(
+        ItemDefinitionId{"item.container.chest_rig_small"});
+    EXPECT_EQ(chestRig.id, ItemId::Count);
+    EXPECT_EQ(chestRig.equipmentSlot, EquipmentSlotKind::ChestRig);
+    ASSERT_EQ(chestRig.containerCompartments.size(), 4U);
+    EXPECT_EQ(
+        chestRig.containerCompartments.front().pocketKind,
+        ContainerPocketKind::MagazineOnly);
 
     const MapDefinition &map = defaultV0MapDefinition();
     EXPECT_EQ(map.id.value(), "map.v0.test");

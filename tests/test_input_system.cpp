@@ -222,6 +222,25 @@ TEST(
 
 TEST(
     InputSystemTest,
+    EKeyDownAlsoSetsInteractJustPressed)
+{
+    InputSystem input;
+
+    input.handleEvent(
+        makeKeyEvent(
+            SDL_EVENT_KEY_DOWN,
+            SDL_SCANCODE_E));
+
+    EXPECT_TRUE(
+        input.isActionPressed(
+            GameAction::Interact));
+    EXPECT_TRUE(
+        input.wasActionJustPressed(
+            GameAction::Interact));
+}
+
+TEST(
+    InputSystemTest,
     EndFrameClearsInteractJustPressed)
 {
     InputSystem input;

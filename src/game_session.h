@@ -1,11 +1,19 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 
+#include "economy_domain.h"
 #include "gameplay_world.h"
+#include "inventory_domain.h"
 #include "raid_settlement.h"
+#include "save_repository.h"
 #include "stash.h"
+
+enum class BaseFacilityKind;
 
 enum class GameSessionState
 {
@@ -14,8 +22,9 @@ enum class GameSessionState
     BetweenRaids,
 };
 
-// 进程内跨 Raid 组合根。它拥有长期 Stash、单局世界、单局结算和
-// 不回退的稳定 ID 高水位；不负责 SDL 输入或渲染。
+// 当前会话组合根。ProfileState 是新版 Base 的跨进程权威状态；旧 Stash、
+// GameplayWorld 与 RaidSettlement 仅作为隔离的 V0 Raid 适配器保留。
+// 本类型不负责 SDL 输入或渲染。
 class GameSession
 {
 public:
@@ -65,12 +74,40 @@ public:
     [[nodiscard]]
     ItemInstanceId nextItemInstanceId() const noexcept;
 
+    void configurePersistence(std::filesystem::path directory);
+
+    [[nodiscard]] bool hasSavedProfile() const;
+    [[nodiscard]] bool startNewProfile(std::string profileId);
+    [[nodiscard]] bool continueProfile();
+
+    [[nodiscard]] const ProfileState &profile() const noexcept;
+
+    [[nodiscard]] InventoryReceipt executeProfileInventory(
+        const InventoryCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] EconomyReceipt executeProfileEconomy(
+        const EconomyCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
+    [[nodiscard]] const std::string &persistenceMessage() const noexcept;
+
+    void noteBaseFacility(BaseFacilityKind facility);
+
 private:
+    ProfileState profile_;
+    std::optional<SaveRepository> saveRepository_;
+    SaveLoadStatus lastSaveLoadStatus_{SaveLoadStatus::NotFound};
+    std::string persistenceMessage_;
     Stash stash_;
     std::unique_ptr<GameplayWorld> world_;
     RaidSettlement settlement_;
     GameSessionState state_{GameSessionState::InRaid};
     std::size_t raidNumber_{1};
+
+    [[nodiscard]] bool commitProfileCandidate(ProfileState candidate);
+    void refreshLoadoutTutorial();
 };
 
 [[nodiscard]]

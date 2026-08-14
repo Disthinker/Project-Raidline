@@ -1,5 +1,10 @@
 #pragma once
 
+#include <filesystem>
+#include <optional>
+#include <string>
+
+#include "base_world.h"
 #include "game_session.h"
 
 enum class GameFlowState
@@ -23,8 +28,25 @@ public:
     [[nodiscard]]
     bool startGame() noexcept;
 
+    void configurePersistence(std::filesystem::path directory);
+
+    [[nodiscard]] bool startNewGame(std::string profileId);
+    [[nodiscard]] bool continueGame();
+
     [[nodiscard]]
     bool deploy() noexcept;
+
+    void updateBase(
+        const BaseInput &input,
+        float deltaTime) noexcept;
+
+    void closeBaseFacility() noexcept;
+
+    [[nodiscard]] std::optional<BaseFacilityKind>
+    activeBaseFacility() const noexcept;
+
+    [[nodiscard]] BaseWorld &baseWorld() noexcept;
+    [[nodiscard]] const BaseWorld &baseWorld() const noexcept;
 
     void update(
         const GameplayInput &input,
@@ -47,8 +69,10 @@ public:
 
 private:
     GameSession gameSession_;
+    BaseWorld baseWorld_;
     GameFlowState state_{GameFlowState::MainMenu};
     bool firstDeploymentPending_{true};
+    std::optional<BaseFacilityKind> activeBaseFacility_;
 };
 
 [[nodiscard]]
