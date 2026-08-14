@@ -110,6 +110,7 @@ SessionProjection snapshot() const;
 - 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
 - Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
 - Raid 帧内模拟不每帧保存；Deploy 先保存完整 pending Raid 和本局生成资产，终局再以同一 SettlementId 原子提交。
+- 当前 GridInventory 适配器的整堆拖拽预览与提交共用同一领域规则：空目标保持 transform/transfer，同定义未满堆按上限部分填满；拒绝时源、目标、高水位和 ID 序列不变。Ctrl/Shift 数量拖拽继续使用独立的精确数量原子合同。
 
 ## 动作、模拟、射击与随机
 

@@ -522,6 +522,162 @@ TEST(InventoryStackTransferTest, ConflictingSplitIdRejectsWithoutMutation)
     EXPECT_TRUE(destination.placedItems().empty());
 }
 
+TEST(InventoryWholeStackPlacementTest, QueryAllowsMergeWithoutMutation)
+{
+    GridInventory inventory{{2, 1}};
+    ItemInstance sourceAmmo{450, ItemId::Ammo9mm, 10};
+    ItemInstance targetAmmo{451, ItemId::Ammo9mm, 45};
+    ASSERT_TRUE(inventory.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(targetAmmo), {1, 0}));
+    const InventorySnapshot before = snapshot(inventory);
+
+    EXPECT_TRUE(canPlaceWholeItemAt(
+        inventory,
+        inventory,
+        450,
+        {1, 0},
+        ItemOrientation::Degrees0));
+    EXPECT_EQ(snapshot(inventory), before);
+}
+
+TEST(InventoryWholeStackPlacementTest, SameInventoryMergeFullyAbsorbsSource)
+{
+    GridInventory inventory{{2, 1}};
+    ItemInstance sourceAmmo{452, ItemId::Ammo9mm, 10};
+    ItemInstance targetAmmo{453, ItemId::Ammo9mm, 50};
+    ASSERT_TRUE(inventory.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(targetAmmo), {1, 0}));
+
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
+        452,
+        {1, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(inventory.originOf(452), std::nullopt);
+    EXPECT_EQ(inventory.originOf(453),
+              (std::optional<GridPosition>{{1, 0}}));
+    EXPECT_EQ(inventory.quantityOf(453), 60U);
+}
+
+TEST(InventoryWholeStackPlacementTest, SameInventoryOverflowLeavesRemainderAtSource)
+{
+    GridInventory inventory{{2, 1}};
+    ItemInstance sourceAmmo{454, ItemId::Ammo9mm, 10};
+    ItemInstance targetAmmo{455, ItemId::Ammo9mm, 55};
+    ASSERT_TRUE(inventory.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(targetAmmo), {1, 0}));
+
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
+        454,
+        {1, 0},
+        ItemOrientation::Degrees90));
+
+    EXPECT_EQ(inventory.quantityOf(454), 5U);
+    EXPECT_EQ(inventory.originOf(454),
+              (std::optional<GridPosition>{{0, 0}}));
+    EXPECT_EQ(inventory.quantityOf(455), 60U);
+    EXPECT_EQ(inventory.originOf(455),
+              (std::optional<GridPosition>{{1, 0}}));
+}
+
+TEST(InventoryWholeStackPlacementTest, CrossInventoryMergeFullyAbsorbsSource)
+{
+    GridInventory source{{1, 1}};
+    GridInventory destination{{1, 1}};
+    ItemInstance sourceAmmo{456, ItemId::Ammo9mm, 5};
+    ItemInstance targetAmmo{457, ItemId::Ammo9mm, 55};
+    ASSERT_TRUE(source.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(destination.tryPlace(std::move(targetAmmo), {0, 0}));
+
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        source,
+        destination,
+        456,
+        {0, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_TRUE(source.placedItems().empty());
+    EXPECT_EQ(destination.quantityOf(457), 60U);
+    EXPECT_EQ(destination.originOf(456), std::nullopt);
+}
+
+TEST(InventoryWholeStackPlacementTest, CrossInventoryOverflowLeavesSourceUnmoved)
+{
+    GridInventory source{{1, 1}};
+    GridInventory destination{{1, 1}};
+    ItemInstance sourceAmmo{458, ItemId::Ammo9mm, 10};
+    ItemInstance targetAmmo{459, ItemId::Ammo9mm, 57};
+    ASSERT_TRUE(source.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(destination.tryPlace(std::move(targetAmmo), {0, 0}));
+
+    ASSERT_TRUE(tryPlaceWholeItemAt(
+        source,
+        destination,
+        458,
+        {0, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(source.quantityOf(458), 7U);
+    EXPECT_EQ(source.originOf(458),
+              (std::optional<GridPosition>{{0, 0}}));
+    EXPECT_EQ(destination.quantityOf(459), 60U);
+}
+
+TEST(InventoryWholeStackPlacementTest, InvalidMergeTargetsLeaveBothInventoriesUnchanged)
+{
+    GridInventory source{{1, 1}};
+    GridInventory fullDestination{{1, 1}};
+    GridInventory mismatchedDestination{{1, 1}};
+    ItemInstance sourceAmmo{460, ItemId::Ammo9mm, 10};
+    ItemInstance fullAmmo{461, ItemId::Ammo9mm, 60};
+    ItemInstance cola{462, ItemId::Cola};
+    ASSERT_TRUE(source.tryPlace(std::move(sourceAmmo), {0, 0}));
+    ASSERT_TRUE(fullDestination.tryPlace(std::move(fullAmmo), {0, 0}));
+    ASSERT_TRUE(mismatchedDestination.tryPlace(std::move(cola), {0, 0}));
+    const InventorySnapshot sourceBefore = snapshot(source);
+    const InventorySnapshot fullBefore = snapshot(fullDestination);
+    const InventorySnapshot mismatchedBefore = snapshot(mismatchedDestination);
+
+    EXPECT_FALSE(tryPlaceWholeItemAt(
+        source,
+        fullDestination,
+        460,
+        {0, 0},
+        ItemOrientation::Degrees0));
+    EXPECT_FALSE(tryPlaceWholeItemAt(
+        source,
+        mismatchedDestination,
+        460,
+        {0, 0},
+        ItemOrientation::Degrees0));
+
+    EXPECT_EQ(snapshot(source), sourceBefore);
+    EXPECT_EQ(snapshot(fullDestination), fullBefore);
+    EXPECT_EQ(snapshot(mismatchedDestination), mismatchedBefore);
+}
+
+TEST(InventoryWholeStackPlacementTest, NonStackableMatchRejectsWithoutMutation)
+{
+    GridInventory inventory{{2, 1}};
+    ItemInstance sourceCola{463, ItemId::Cola};
+    ItemInstance targetCola{464, ItemId::Cola};
+    ASSERT_TRUE(inventory.tryPlace(std::move(sourceCola), {0, 0}));
+    ASSERT_TRUE(inventory.tryPlace(std::move(targetCola), {1, 0}));
+    const InventorySnapshot before = snapshot(inventory);
+
+    EXPECT_FALSE(tryPlaceWholeItemAt(
+        inventory,
+        inventory,
+        463,
+        {1, 0},
+        ItemOrientation::Degrees0));
+    EXPECT_EQ(snapshot(inventory), before);
+}
+
 TEST(InventoryQuantityPlacementTest, SplitsWithinSameInventoryAtExactCell)
 {
     GridInventory inventory{{3, 1}};
