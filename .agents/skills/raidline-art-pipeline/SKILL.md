@@ -5,6 +5,10 @@ description: Control Project Raidline image, sprite, item art, animation, backgr
 
 # Raidline Art Pipeline
 
+## Current activation state
+
+This skill is disabled for normal development. Official Grab/Scratch/Bite animation and all other new formal art/audio production remain paused. Unless the user explicitly reopens a named package, do not generate candidates, write `art/work/`, publish runtime assets, or modify the manifest. Code-rendered fallbacks and already approved runtime assets remain allowed.
+
 ## Load the authoritative contract
 
 Read `art/ART_BIBLE.md`, `art/ASSET_MANIFEST.yaml`, `art/PRODUCTION_TASK_PROTOCOL.md`, `art/README.md`, the relevant `art/specs/` Markdown and JSON contracts, and the applicable script under `tools/art_pipeline/`. Treat the manifest as current publication state and `art/work/` as unapproved production evidence.

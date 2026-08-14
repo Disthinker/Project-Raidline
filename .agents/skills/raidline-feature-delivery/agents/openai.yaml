@@ -1,4 +1,0 @@
-interface:
-  display_name: "Raidline Feature Delivery"
-  short_description: "Deliver Raidline features safely end to end"
-  default_prompt: "Use $raidline-feature-delivery to implement and verify this Raidline feature end to end."

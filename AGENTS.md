@@ -1,85 +1,77 @@
-# Project Raidline Codex Instructions
+# Project Raidline delivery rules
 
-## Project
+## Mission and product scope
 
-Project Raidline is a C++20/SDL3 2D game prototype moving toward a top-down pixel-art extraction experience. Treat the implemented code as the behavior baseline; the long-term product direction is not evidence that a feature already exists.
+Project Raidline is an independent game in production, not a weekly teaching exercise. Work is organized by playable product slices, ownership boundaries, regression evidence, and reviewable PRs.
 
-## Sources of truth
+For Core Extraction Alpha, the external GDD repository is read-only product input. Its `05_Core_Extraction_Alpha_首阶段功能规格.md` is the only first-stage scope contract. Other GDD files describe long-term direction; a feature enters Alpha only when the scope contract includes it.
 
-Use this order when facts disagree:
+Source priority:
 
-1. The current workspace, including user-owned uncommitted changes.
-2. Current branch code, tests, CMake, CI, and asset manifests.
-3. `main` and merged history.
-4. Current documents under `doc/` and `art/`.
-5. Historical DevLogs and prompt history.
+1. Explicit user product decisions and authorization boundaries.
+2. The active stage scope contract and active ExecPlan.
+3. Current branch code, tests, and reproducible runtime evidence.
+4. `origin/main`, accepted PRs, architecture invariants, and current-state docs.
+5. Historical Week plans, handoffs, learning notes, and candidate designs.
 
-Never discard, overwrite, or broadly reformat unrelated user changes. Check `git status` before and after work.
+When sources conflict, record the conflict and follow the higher source. Do not silently rewrite the GDD from the code repository.
 
-## Current stage and navigation
+## Git and release control
 
-- Project summary: `doc/project/PROJECT_OVERVIEW.md`
-- Verified current state: `doc/project/CURRENT_STATE.md`
-- Milestones and candidate roadmap: `doc/project/ROADMAP.md`
-- Architecture and ownership: `doc/architecture/ARCHITECTURE.md`
-- Behavioral invariants: `doc/architecture/INVARIANTS.md`
-- Build and test commands: `doc/engineering/BUILD_AND_TEST.md`
-- Completion standard: `doc/engineering/DEFINITION_OF_DONE.md`
-- Active plans: `doc/exec-plans/active/`
+- Fetch before starting a task and report branch, HEAD, `origin/main`, worktree state, dependency PRs, and relevant CI.
+- One product slice or focused defect uses one `codex/...` branch. Start from the latest accepted dependency baseline, normally `origin/main`.
+- Never use another open feature branch as an implicit base. Do not copy an open fix into a second branch merely to unblock unrelated work.
+- Do not mix unrelated work, rewrite shared history, force-push, or merge a PR without explicit authorization.
+- Keep commits coherent and reviewable. Push and open a PR only after the scoped evidence gate passes.
+- Historical Week documents remain evidence; new product milestones are not organized by Week number.
 
-Week 17 mouse inventory interaction is complete with automated, commit-specific Windows/Ubuntu CI, and 9/9 real-window acceptance evidence on PR #31. Read its completed ExecPlan and `doc/project/KNOWN_ISSUES.md` before changing inventory interaction code.
+## Architecture and domain rules
 
-## Architecture guardrails
+- `App` translates input and renders read-only projections. It must not own assets, decide inventory legality, infer hit semantics, or synthesize settlement results.
+- `GameFlow` owns screen-level transitions. `GameSession` is the composition root for persistent profile state and the mutually exclusive `BaseWorld` or `GameplayWorld` runtime.
+- `BaseWorld` owns only base-space transient state. `GameplayWorld` owns only one Raid runtime. Neither owns the authoritative long-term asset registry.
+- One `AssetRegistry` is the authority for every unique item instance. Locations are stable domain values such as Stash, equipment, container, weapon, action hold, ground, or settlement transit.
+- Keep definitions immutable and shared; keep instances move-only with stable IDs. Save IDs and relationships, never pointers, vector indexes, UI cells, or display names.
+- Query before command. A rejected command leaves every participant unchanged. Multi-owner changes commit atomically.
+- Do not retain references, pointers, or iterators into `std::vector` across erase, insertion, reallocation, move, or transaction commit.
+- UI consumes domain results. Ordinary hit, headshot, weak point, armor, action, economy, deploy, and settlement facts must never be guessed from animations, colors, collision labels, or display names.
+- Core Extraction Alpha establishes `ShotCommand -> ShotResolution -> HitResult`. The current `Projectile` path is a temporary adapter only; weapon, damage, persistence, and App projections may not require that entity type.
+- Stable IDs are monotonic within their identity domain. Save formats are versioned, migrations are explicit, and Raid deploy/settlement uses a unique idempotency key.
+- Do not introduce an ECS, service locator, universal event bus, or framework without a current consumer and a measured need.
 
-- Keep SDL event translation and rendering in `App`/input adapters; keep core gameplay and inventory logic independently testable.
-- Preserve the separation between shared `ItemDefinition` data and move-only, stable-ID `ItemInstance` ownership.
-- Use pure queries such as `canMove` before transactional commands such as `tryMove`; failed commands must leave state unchanged.
-- Do not retain `std::vector` references, iterators, or indices across mutations; retain stable IDs.
-- Keep keyboard `focusedCell` distinct from mouse `hoveredCell`.
-- Prefer a small closed slice over speculative ECS, scene, service, or cross-container abstractions.
+## Core Extraction Alpha scope guard
 
-## Workflows
+The active scope includes only the features enumerated in the Alpha scope contract. In particular:
 
-Use an ExecPlan for multi-system changes, ownership changes, migrations, raid lifecycle work, multi-container transfer, persistence, major refactors, or work that needs several implementation stages. Follow `doc/exec-plans/PLANS.md`.
+- The active equipment slots are primary weapon, chest rig, and backpack.
+- The first Raid has no hard time failure. The legacy 180-second timeout is scheduled for removal behind an explicit lifecycle contract.
+- Player health migrates from the V0 value to 100 HP only in the planned health/medical slice.
+- One fixed map is represented by data definitions and a frozen per-Raid snapshot.
+- Failure means full loss for death, active quit, or abnormal quit; settlement is idempotent.
+- Formal attack animations, new art/audio production, multi-map work, high-risk phase, armor, hit regions, penetration, durability, faults, complex injuries, quests, crafting, base building, population, and story content are excluded.
 
-Use repository skills when their scope matches:
+## Build, test, and evidence
 
-- `$raidline-feature-delivery`: feature, bug fix, or controlled refactor delivery.
-- `$raidline-cpp-safety-review`: C++ ownership, lifetime, invalidation, state, transaction, compile, or link risk.
-- `$raidline-build-test-ci`: configure/build/test/CI execution and diagnosis.
-- `$raidline-task-closeout`: evidence-based task closure and teaching handoff.
-- `$raidline-inventory-domain`: item, inventory, container, equipment, or stash work.
-- `$raidline-art-pipeline`: image, sprite, animation, UI art, asset review, or publishing work.
+- Use the repository `windows-debug` preset, Ninja, Debug, x64-windows, the configured Visual Studio Developer Shell, and UTF-8 code page.
+- Any source or CMake change requires an incremental build and relevant automated tests. Header or class-layout changes require rebuilding every affected target.
+- If MSVC/GTest reports `gtest_ar_` stack corruption, inspect Ninja header dependencies and rebuild affected targets; never treat stale binaries as evidence.
+- Run focused tests during implementation and the full registered CTest suite before push. C++-affecting PRs must pass exact-head Windows and Ubuntu CI.
+- Manual acceptance proves visible player behavior only. Record build identity, steps, expected result, actual result, and deviations.
+- A task closes with scope, changed contracts, automated evidence, manual evidence when relevant, risks, rollback, commit, push, and PR. Teaching handoffs and learning ledgers are optional historical material, not completion gates.
 
-Use project agents deliberately:
+## Art boundary
 
-- `raidline-explorer`: read-only code and dependency mapping.
-- `raidline-implementer`: the single normal source-writing worker for an approved scope.
-- `raidline-reviewer`: read-only correctness and C++ safety review.
-- `raidline-verifier`: build, test, static-check, and CI-log verification.
-- `raidline-learning-analyst`: Chinese C++ teaching material from the final diff and failures.
+- Official Grab/Scratch/Bite art and all other new formal art/audio production are paused.
+- Without renewed user authorization, do not generate candidates, write `art/work/`, publish runtime assets, or modify the art manifest.
+- Runtime code may use already approved assets and code-rendered fallback presentation. Only an explicitly reopened art package may use `$raidline-art-pipeline`.
 
-Do not run multiple implementers against overlapping source files. The primary thread owns scope, decisions, integration, and user reporting.
+## On-demand project skills
 
-## Validation and closeout
+- `$raidline-project-governor`: dependency, branch, scope, release, and PR control.
+- `$raidline-feature-slice-delivery`: deliver one playable vertical slice.
+- `$raidline-architecture-domain-invariants`: ownership, commands, IDs, persistence, and C++ safety review.
+- `$raidline-build-test-regression`: build, automated regression, CI, and evidence.
+- `$raidline-gameplay-acceptance`: executable player-flow acceptance and defect capture.
+- `$raidline-art-pipeline`: disabled unless the user explicitly reopens a named art package.
 
-Run the smallest relevant target tests, then the full CTest suite. Consider both Windows and Ubuntu CI behavior. Never report an unexecuted check or manual acceptance item as passed.
-
-Every completed feature task must satisfy `doc/engineering/DEFINITION_OF_DONE.md` and add a Chinese handoff under `doc/handoffs/completed/` using `doc/handoffs/CXX_TEACHING_HANDOFF_TEMPLATE.md`.
-
-## Art asset hard boundaries
-
-Before any art work, read `$raidline-art-pipeline`, `art/ART_BIBLE.md`, `art/ASSET_MANIFEST.yaml`, `art/PRODUCTION_TASK_PROTOCOL.md`, and the relevant `art/specs/` contract.
-
-- The art-control task scopes packages, writes prompts, opens dedicated user-visible production tasks, reviews, requests revisions, publishes, updates the manifest, and closes packages; it does not generate images itself.
-- Use one dedicated production task per coherent asset family. Internal subagents are not the normal image-production unit.
-- A production task may write only inside its assigned `art/work/<package_id>/`; retain the exact prompt and every candidate.
-- Production tasks must not approve their own work, update the manifest, publish into `assets/`, or start downstream packages.
-- Generate every distinct candidate with a separate image-generation call.
-- Never overwrite an approved asset. A visual revision requires a new versioned asset ID and path.
-- Derive inventory and world variants deterministically from one approved identity master with nearest-neighbor scaling.
-- Only art-control may approve, publish, update `art/ASSET_MANIFEST.yaml`, and close a package after technical QA and visual review.
-- Runtime code reads published `assets/`, never `art/work/` candidates.
-- Run the relevant `tools/art_pipeline/` validation before approval; scripts do not replace visual review.
-- Phase 1 excludes character clothing layers, attachments, map/building production, corpses, limb/damage layers, projectile/VFX art, and large raster UI panels.
-- Inventory grids, highlights, selection rectangles, hover, and drag feedback remain code-rendered SDL elements.
+Use these as bounded responsibilities, not as a reason to create long-lived agent threads. The primary developer remains accountable for integrating their evidence.

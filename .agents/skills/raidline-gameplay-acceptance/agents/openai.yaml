@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline Gameplay Acceptance"
+  short_description: "Verify Raidline player flows in the real game"
+  default_prompt: "Use $raidline-gameplay-acceptance to verify this Raidline slice in the executable."

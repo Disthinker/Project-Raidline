@@ -1,147 +1,54 @@
-# Project Raidline 构建、测试与 CI
+# Project Raidline 构建与测试
 
-命令以当前 `CMakePresets.json`、`CMakeLists.txt`、`vcpkg.json` 和 `.github/workflows/ci.yml` 为最终事实来源。工具链或 workflow 变化时先更新配置，再更新本文件。
+最后核对：2026-08-14。
 
-## Windows 前置条件
+## Windows 支持环境
 
-- Visual Studio C++ x64 工具链（`cl.exe`）已进入当前 Developer PowerShell 环境。
-- CMake 与 Ninja 在 `PATH`；可使用 Visual Studio 自带版本。
-- `VCPKG_ROOT` 指向含 `scripts/buildsystems/vcpkg.cmake` 的 vcpkg 根目录。
+- Visual Studio：`E:\WorkPlace\VS 2022\IDE`
+- Developer Shell：`E:\WorkPlace\VS 2022\IDE\Common7\Tools\Launch-VsDevShell.ps1`
+- `VCPKG_ROOT`：`E:\WorkPlace\VS 2022\IDE\VC\vcpkg`
+- Preset：`windows-debug`
+- Generator/配置/目标：Ninja / Debug / `x64-windows`
+- 代码页：UTF-8
 
-本机当前安装位置是 `E:\VisualStudio\VC\vcpkg`，但不要把该用户路径写入共享 CMake 配置。推荐打开 “Developer PowerShell for VS 2022” 后运行：
+Developer Shell 初始化会改变当前目录，因此必须显式返回仓库：
 
 ```powershell
-$env:VCPKG_ROOT = 'E:\VisualStudio\VC\vcpkg'
+& 'E:\WorkPlace\VS 2022\IDE\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64
+Set-Location -LiteralPath 'E:\WorkPlace\Projects\C\Project RaidLine'
+chcp 65001
+$env:VCPKG_ROOT = 'E:\WorkPlace\VS 2022\IDE\VC\vcpkg'
+```
+
+## 配置、构建与测试
+
+```powershell
 cmake --preset windows-debug
 cmake --build --preset windows-debug
-ctest --preset windows-debug
+ctest --test-dir build/windows-debug --output-on-failure -j 8
 ```
 
-如果当前是普通 PowerShell，可先在同一进程加载开发环境：
+当前 `codex/core-extraction-alpha-slice-0` 分支在重新配置和完整增量构建后注册 550 个 CTest，550/550 通过。射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过。当前精确 head 的 GitHub Windows/Ubuntu CI 尚待推送 PR 后运行。
 
-```powershell
-& 'E:\VisualStudio\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
-```
+## 按风险选择证据
 
-中文 MSVC + Ninja 使用 `/showIncludes` 追踪头文件。配置和构建必须使用一致的控制台代码页；本机统一为 UTF-8：
+- 修改纯领域类：构建对应测试目标，跑 focused tests，再跑全量 CTest。
+- 修改头文件或类布局：重建所有消费者；不能只看单个测试目标。
+- 修改 CMake：重新运行 `cmake --preset windows-debug` 后构建。
+- 修改 App/SDL 投影：构建主程序，跑领域/流程回归，并做真实窗口或至少进程启动冒烟。
+- 修改资产管线：只有艺术包重新授权后，才运行相应 `tools/art_pipeline` 与 `tests/test_phase1_assets.py`；这些命令可能写 QA 输出，运行前先确认边界。
 
-```powershell
-chcp 65001
-```
+## stale binary 与 MSVC 头依赖
 
-仓库的 CMake 配置会纠正 CMake 3.31 已知的中文前缀乱码检测，但同一 `build/windows-debug` 不应交替由不同代码页的进程增量构建。
+CMakeLists 中保留了 MSVC 中文 `/showIncludes` 前缀修正。若出现源码与行为不一致或 `gtest_ar_` 栈损坏：
 
-这个路径只用于本机命令示例，不得写入共享 CMake 配置。若未加载 Developer Shell，已有 Ninja cache 仍可能找到 `cl.exe`，但编译会因缺少 MSVC 标准库 `INCLUDE` 而报 `<optional>`、`<array>` 等文件不存在；此时旧 CTest 二进制不属于新代码的验证证据。
+1. 检查 Ninja 是否记录受影响头文件依赖。
+2. 检查目标对象时间戳与编译命令。
+3. 重建全部消费者，必要时只删除明确受影响的对象/目标后重建。
+4. 重新运行 focused/full tests。
 
-Preset 使用 Ninja、Debug、`x64-windows`，构建目录是 `build/windows-debug`。如果 CMake 报找不到 compiler 或 Ninja，先修复 Developer Shell/PATH；如果 toolchain 变成 `/scripts/buildsystems/vcpkg.cmake`，说明 `VCPKG_ROOT` 为空。
+不得把旧二进制结果当作新代码证据，也不得用破坏性清理替代依赖诊断。
 
-## 定向构建与测试
+## 证据记录格式
 
-> Week28 `main@c4658e7` 权威基线：CMake 注册 30 个 GTest executable、544 个 CTest 用例。感知获取/丢失滞回、冻结最后已知位置、搜索到达/超时/重发现、有限转向、支援距离、唯一主攻、稳定平局和快照分离，以及 Week27 攻击与顿挫回归均已覆盖。Windows Debug 全目标构建、544/544 CTest、真实窗口 1–13 和精确提交 `07755f6` 的 Ubuntu/Windows CI 均已通过。
-
-先构建并运行最小相关目标，再做全量：
-
-```powershell
-cmake --build --preset windows-debug --target InputSystemTest PlayerTest EnemyTest EnemyAttackTest EnemyAiTest EnemySquadTest RaidSessionTest RaidSettlementTest GameSessionTest GameFlowTest ExtractionPointTest LootTableTest GridInventoryTest InventoryTransferTest StorageCabinetTest GameplayWorldTest InventoryInteractionTest MouseInventoryInteractionTest
-ctest --preset windows-debug -R '^(InputSystemTest|PlayerTest|EnemyTest|EnemyAttackStateTest|EnemyAiStateTest|EnemySquadCoordinatorTest|RaidSessionTest|RaidSettlementTest|GameSessionTest|GameFlowTest|ExtractionPointTest|GameplayWorldRaidTest|LootTableTest|GridInventoryTest|InventoryTransferTest|WholeInventoryTransferTest|StorageCabinetTest|GameplayWorldTest|GameplayWorldLootTest|InventoryInteractionTest|InventoryOverlayStateTest|InventoryContainerInteractionTest|InventoryFrameInputArbitrationTest|MouseInventoryLayoutTest|MouseInventoryInteractionTest|MouseInventoryIntegrationTest|MouseInventoryFrameArbitrationTest)\.'
-ctest --preset windows-debug
-```
-
-显示注册用例而不执行：
-
-```powershell
-ctest --test-dir build/windows-debug -N
-```
-
-定位新源是否实际编译：
-
-```powershell
-rg 'inventory.interaction' build/windows-debug/compile_commands.json
-```
-
-当前 CMake 注册 30 个 GTest executable、544 个 CTest 用例。战斗专项覆盖感知/搜索/平滑转向、支援距离、唯一主攻与快照分离，并保留首次接敌不 Grab、近距 Scratch、特殊条件保持/重置/消费、Grab→Bite、OffBalance、三级速度、双方受击减速、致死清理和世界集成；其余 WeaponFire、GameplayWorld、GameFlow、Raid、Loot、会话与库存回归继续全部注册。可用下列命令证明新 AI/协调、流程、Raid、Loot、会话与鼠标测试源真实进入编译数据库：
-
-```powershell
-rg 'enemy_attack.cpp|enemy_ai.cpp|enemy_squad.cpp|test_enemy_attack.cpp|test_enemy_ai.cpp|test_enemy_squad.cpp' build/windows-debug/compile_commands.json
-rg 'test_mouse_inventory_interaction.cpp' build/windows-debug/compile_commands.json
-rg 'loot_table.cpp|test_loot_table.cpp' build/windows-debug/compile_commands.json
-rg 'raid_session.cpp|extraction_point.cpp|test_raid_session.cpp|test_extraction_point.cpp' build/windows-debug/compile_commands.json
-rg 'raid_settlement.cpp|stash.cpp|test_raid_settlement.cpp' build/windows-debug/compile_commands.json
-rg 'game_session.cpp|test_game_session.cpp' build/windows-debug/compile_commands.json
-rg 'game_flow.cpp|test_game_flow.cpp' build/windows-debug/compile_commands.json
-```
-
-若修改类布局后 Debug 测试出现 MSVC `Run-Time Check Failure #2`，或链接器仍引用旧函数签名，先检查 Ninja 是否真实记录头文件依赖：
-
-```powershell
-ninja -C build/windows-debug -t deps 'CMakeFiles/Project_Raidline.dir/src/app.cpp.obj'
-```
-
-输出应为非零 `#deps` 并列出相关头文件。若是 `#deps 0`，固定代码页后执行 `cmake --fresh --preset windows-debug`，再执行一次 `cmake --build --preset windows-debug --target clean` 和全量构建；旧二进制不可作为验证证据。
-
-## 运行程序与人工检查
-
-> Week27 第二轮战斗规则（覆盖下方基础流程段落中的首轮选招描述）：敌人以 72 px/s 常态追击，76 px 内通常使用 0.18 秒前摇 Scratch。至少启动一次 Scratch 后，玩家退到 100–170 px 并保持约 0.50 秒才会诱发 Grab；Grab 前摇中敌人继续常速追踪，Active 以 135 px/s 锁向冲刺。抱住后立即 Bite（2 伤害、0.75 秒控制），空冲后横倒失衡 1.35 秒。玩家被近战命中、敌人被子弹命中都会短暂出现火光轮廓并减速。
-
-> Week28 已合入规则：正式 Raid 默认三名敌人；360 px 内获取、460 px 外丢失，Searching 只追最后已知位置并在到达或约 2 秒后停止。红色 `Engage` 可攻击，青色 `Support` 保持外侧距离，橙色表示 Searching；同一时刻只应有一名敌人新开攻击。用户已确认真实窗口 1–13 全部通过。
-
-Ninja Debug 输出通常位于：
-
-```powershell
-& '.\build\windows-debug\Project_Raidline.exe'
-```
-
-程序启动于 MainMenu；点击主按钮或按 Enter 进入 Base，再次确认才部署 Raid 1。Base 显示只读 Stash 与下一次部署信息；Raid 结算后进入 RaidResult，确认后返回 Base，再由 Deploy 创建空背包、满 3 HP 的下一局。`N` 已取消映射；Blocked 时不能返回基地或部署。Raid 内控制为 WASD 移动、鼠标瞄准、左键或 Space 射击、F 拾取/近距离搜索或打开柜体、Tab 打开玩家背包；活动战斗只显示代码准星，系统鼠标在 UI/终局恢复。左上角显示 `Player HP: current/max`。敌人主动二维追击并自主选择抓/挠/咬：蓝青 Grab 锁向后突进，金黄 Scratch 是短前摇近战，红紫 Bite 是长前摇、2 点伤害与 0.75 秒控制；只有 Active 高亮命中区造成单次伤害，单纯重叠不再扣血。受控期间 WASD、射击与世界 F 交互无效，到期后恢复；生命归零进入 `PlayerDead` 并按死亡结算携带物。
-
-地图左下方半透明绿色区域是撤离点，玩家逻辑中心进入后连续停留 3 秒完成撤离，提前离开会取消并清零。Stash 在当前进程内跨 Raid 保留，但尚无配装与磁盘保存。Tab 只显示玩家背包；未搜索柜体在范围内显示 `F: SEARCH CABINET`，首次 F 生成一次 Loot 并显示右侧容器，之后提示为 `F: OPEN CABINET`，关闭/取空/重开不会刷新。在双容器界面中，鼠标悬停物品后按 F 或 Ctrl+右键可将整栈按“先合并、后 row-major first-fit”移到另一侧。对弹药按 Ctrl+左键会立即拿起 1 个，按 Shift+左键会立即拿起向上取整的一半，数量虚影随鼠标移动；这两种拿取在只有玩家背包时同样可用，松开到空格/同类未满栈/玩家丢弃区时才提交。Ctrl+Shift+左键无操作。普通背包物品用鼠标按住拖动，拖拽 Pistol/Rifle 时按 R 顺时针旋转 90°；方向键和 Enter 没有库存语义，Enter 仅在非 Raid 屏幕作为顶层确认。Esc 优先取消活动拖动，无活动手势时关闭背包。右侧贴边半透明长条是玩家物品丢弃区，成功后所选整栈或数量出现在角色脚下并保留适用的方向、数量和稳定 ID 规则。正式场景在角色下方与右下方放置数量 25 和 40 的两堆已发布 9mm 弹药；未发布视觉资源的逻辑物品不会由正式内容或 LootTable 生成。涉及渲染或输入的任务必须列出要观察的状态，不能只以“程序能启动”作为验收。
-
-## Python 与艺术管线测试
-
-`tests/test_phase1_assets.py` 未注册进 CTest/CI，需要独立执行：
-
-```powershell
-poetry run pytest tests/test_phase1_assets.py
-```
-
-艺术构建、预览、contact sheet 和 validate 命令会写文件；先按 `$raidline-art-pipeline` 核对范围和权限，不把它们当成纯只读检查。
-
-## Ubuntu / CI 等价路径
-
-GitHub Actions 使用 Ubuntu 22.04：
-
-1. `ci/install_ubuntu_sdl3_deps.sh` 安装 SDL3 系统构建依赖。
-2. 将 runner 的 vcpkg fetch/reset/bootstrap 到 `vcpkg.json` 的固定 baseline。
-3. 显式安装 `x64-linux` manifest 包。
-4. 使用 Ninja、Debug、`VCPKG_MANIFEST_INSTALL=OFF` 和仓库内 `vcpkg_installed` 配置。
-5. `cmake --build build` 后运行 `ctest --test-dir build --output-on-failure`。
-
-Windows 2022 job 同样固定 vcpkg baseline，随后 configure、build all 和 full CTest。workflow 的执行策略是：
-
-- 功能分支只由目标为 `main` 的 `pull_request` 事件触发；`push` 只覆盖 `main`，避免同一提交同时产生 push/PR 两套矩阵。
-- 同一 PR/分支使用 workflow 级 concurrency；新提交会取消尚未完成的旧运行。
-- 一个轻量 Ubuntu job 先比较 PR 与 base 的完整差异。只有 `doc/**` 和 Markdown 的纯文档 PR 会把 Windows/Ubuntu C++ job 标记为 skipped-success；检测失败时默认运行完整矩阵。
-- vcpkg installed tree 与仓库工作区内的 `.vcpkg-downloads` 使用按 OS、triplet、baseline 和 `vcpkg.json` 锁定的缓存；缓存未命中仍按固定 baseline 完整安装。不要在 cache path 中使用 runner 注入但未进入 GitHub `env` context 的 `VCPKG_INSTALLATION_ROOT`，否则表达式会退化为错误的 `/downloads` 路径。
-- `workflow_dispatch` 保留显式手动运行入口。
-
-Windows runner 使用预装的 vcpkg executable，仅在固定 baseline commit 不存在时执行浅 fetch；manifest 的 `builtin-baseline` 继续固定依赖版本，不再每轮 reset/bootstrap 整套 vcpkg。配置前加载 Visual Studio Developer Shell，并使用 Ninja、Debug、`x64-windows` 与并行 build/CTest，保持与本地 preset 的生成器和构建类型一致。
-
-不要在 CI 通过后再提交“CI 已通过”的状态文档。代码、测试、计划和静态状态文档应在第一次等待 CI 前一次性提交；运行 URL、精确 SHA 和最终结论写入 PR 或 GitHub Issue 评论。这样不会为了记录 CI 结果再次触发 CI。若 CI 暴露真实问题，修复提交仍必须重新运行。
-
-轮询时只等待 PR 的当前 head：优先使用一次 `gh pr checks <number> --watch`，不要同时反复查询每个 job 或历史 run。CI 结束后再做一次最终状态读取即可。
-
-## 故障分类
-
-按第一根因分类，不把级联错误分别修补：
-
-| 层 | 常见证据 | 处理方向 |
-| --- | --- | --- |
-| 环境/工具链 | 找不到 cl、Ninja、toolchain | Developer Shell、PATH、VCPKG_ROOT |
-| 依赖 | baseline 不存在、包构建失败 | vcpkg commit/系统依赖/runner 状态 |
-| Configure | generator/cache/toolchain 冲突 | 核对 preset 与 build dir |
-| Compile | header、类型重定义、模板诊断 | 找到首个源级错误 |
-| Link | unresolved external、重复符号 | target 漏 `.cpp` 或 ODR 问题 |
-| Test | assertion/discovery/fixture | 行为契约与 target 注册 |
-| Runtime/UI | 资源路径、输入、视觉 | 可复现步骤和人工证据 |
-| CI-only | 本地与 runner 差异 | 比较 OS、compiler、generator、triplet、manifest 行为 |
-
-每次汇报准确记录命令、结果、测试数量、CI 对应 commit、跳过项和未执行的人工验收。
+每次交付记录：分支与提交、Preset、重新配置与否、构建目标、registered/passed/failed 数、focused tests、启动/真实窗口验收、Windows/Ubuntu CI、未验证风险。

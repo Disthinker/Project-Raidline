@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline Build Test Regression"
+  short_description: "Build and prove Raidline regressions"
+  default_prompt: "Use $raidline-build-test-regression to build and verify this exact Raidline revision."
