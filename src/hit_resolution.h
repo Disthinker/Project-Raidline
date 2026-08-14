@@ -4,13 +4,27 @@
 #include <vector>
 
 #include "enemy.h"
-#include "projectile.h"
+#include "rect.h"
+#include "shot_resolution.h"
 #include "vec2.h"
+
+// A short-lived collision observation supplied by either the V0 Projectile
+// adapter or the future non-entity logical flight implementation.
+struct ShotCollisionCandidate
+{
+    ShotId shotId{kInvalidShotId};
+    Rect bounds{};
+    int damage{};
+};
 
 struct HitResolutionResult
 {
-    std::vector<Vec2> hitPositions;
+    std::vector<HitResult> hits;
+    std::vector<ShotId> consumedShotIds;
     std::size_t enemiesKilled{0};
 };
 
-HitResolutionResult resolveProjectileEnemyHits(std::vector<Projectile> &projectiles_, std::vector<Enemy> &enemies_);
+[[nodiscard]]
+HitResolutionResult resolveShotEnemyHits(
+    const std::vector<ShotCollisionCandidate> &shots,
+    std::vector<Enemy> &enemies);

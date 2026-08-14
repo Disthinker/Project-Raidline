@@ -2936,26 +2936,16 @@ void App::renderStorageCabinet()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::renderProjectiles()
+void App::renderShotPresentations()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const auto &projectile : gameSession_.world().projectiles())
+    for (
+        const ShotPresentationSnapshot &shot :
+        gameSession_.world().shotPresentationSnapshots())
     {
-        const Vec2 pos = projectile.position();
-        const Vec2 velocity = projectile.velocity();
-        const float speed = std::sqrt(
-            velocity.x * velocity.x +
-            velocity.y * velocity.y);
-        const Vec2 direction =
-            std::isfinite(speed) && speed > 0.0F
-                                   ? Vec2{
-                                         velocity.x / speed,
-                                         velocity.y / speed}
-                                   : Vec2{};
-        const Vec2 center{
-            pos.x + projectile.width() / 2.0F,
-            pos.y + projectile.height() / 2.0F};
+        const Vec2 center = shot.center;
+        const Vec2 direction = shot.direction;
 
         SDL_SetRenderDrawColor(renderer_, 255, 72, 8, 115);
         SDL_RenderLine(
@@ -3696,7 +3686,7 @@ void App::renderRaidScreen()
     renderEnemyAttackTelegraphs();
     renderEnemies();
     renderPlayer();
-    renderProjectiles();
+    renderShotPresentations();
     renderParticles();
     renderAimCrosshair();
 

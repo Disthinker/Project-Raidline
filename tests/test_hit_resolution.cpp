@@ -4,363 +4,199 @@
 
 #include "hit_resolution.h"
 
-// 默认 Enemy HP 为 1，因此保持原来的一击击杀兼容行为。
-TEST(HitResolutionTest, BothDecreaseAfterLethalHit)
+namespace
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{0.0f, 0.0f},
-            10.0f,
-            10.0f}};
-
-    std::vector<Enemy> enemies{
-        Enemy{
-            Vec2{15.0f, 15.0f},
-            Vec2{10.0f, 10.0f}}};
-
-    const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
-
-    EXPECT_TRUE(projectiles.empty());
-    EXPECT_TRUE(enemies.empty());
-
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_EQ(result.enemiesKilled, 1u);
+    ShotCollisionCandidate makeShot(
+        ShotId shotId,
+        Vec2 position,
+        Vec2 size = Vec2{10.0F, 10.0F},
+        int damage = 1)
+    {
+        return ShotCollisionCandidate{
+            shotId,
+            Rect{position, size},
+            damage};
+    }
 }
 
-TEST(HitResolutionTest, NoHitKeepsBothCollections)
+TEST(HitResolutionTest, LethalHitConsumesShotAndEnemy)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            10.0f,
-            10.0f},
-        Projectile{
-            Vec2{20.0f, 20.0f},
-            Vec2{},
-            10.0f,
-            10.0f}};
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 10.0F})};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{15.0F, 15.0F}, Vec2{10.0F, 10.0F}}};
 
+    const HitResolutionResult result =
+        resolveShotEnemyHits(shots, enemies);
+
+    EXPECT_TRUE(enemies.empty());
+    ASSERT_EQ(result.hits.size(), 1U);
+    ASSERT_EQ(result.consumedShotIds.size(), 1U);
+    EXPECT_EQ(result.consumedShotIds[0], 1U);
+    EXPECT_EQ(result.enemiesKilled, 1U);
+}
+
+TEST(HitResolutionTest, NoHitKeepsEnemiesAndDoesNotConsumeShot)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 10.0F}),
+        makeShot(2, Vec2{20.0F, 20.0F})};
     std::vector<Enemy> enemies{
         Enemy{
-            Vec2{100.0f, 100.0f},
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            3},
-        Enemy{
-            Vec2{200.0f, 200.0f},
-            Vec2{10.0f, 10.0f},
+            Vec2{100.0F, 100.0F},
+            Vec2{10.0F, 10.0F},
             Vec2{},
             3}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    EXPECT_EQ(projectiles.size(), 2u);
-    ASSERT_EQ(enemies.size(), 2u);
-
+    ASSERT_EQ(enemies.size(), 1U);
     EXPECT_EQ(enemies[0].health(), 3);
-    EXPECT_EQ(enemies[1].health(), 3);
-
-    EXPECT_TRUE(result.hitPositions.empty());
-    EXPECT_EQ(result.enemiesKilled, 0u);
+    EXPECT_TRUE(result.hits.empty());
+    EXPECT_TRUE(result.consumedShotIds.empty());
+    EXPECT_EQ(result.enemiesKilled, 0U);
 }
 
-TEST(
-    HitResolutionTest,
-    NonLethalHitConsumesProjectileAndKeepsEnemy)
+TEST(HitResolutionTest, NonLethalHitProducesDomainResult)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1}};
-
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(42, Vec2{20.0F, 30.0F}, Vec2{8.0F, 20.0F}, 2)};
     std::vector<Enemy> enemies{
         Enemy{
-            Vec2{15.0f, 15.0f},
-            Vec2{10.0f, 10.0f},
+            Vec2{24.0F, 35.0F},
+            Vec2{20.0F, 20.0F},
             Vec2{},
-            2}};
+            3}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    EXPECT_TRUE(projectiles.empty());
-
-    ASSERT_EQ(enemies.size(), 1u);
+    ASSERT_EQ(enemies.size(), 1U);
     EXPECT_EQ(enemies[0].health(), 1);
-    EXPECT_FALSE(enemies[0].isDead());
-
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_EQ(result.enemiesKilled, 0u);
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.hits[0].shotId, 42U);
+    EXPECT_EQ(result.hits[0].targetKind, HitTargetKind::Enemy);
+    EXPECT_FLOAT_EQ(result.hits[0].position.x, 24.0F);
+    EXPECT_FLOAT_EQ(result.hits[0].position.y, 40.0F);
+    EXPECT_EQ(result.hits[0].damageApplied, 2);
+    EXPECT_FALSE(result.hits[0].targetKilled);
+    EXPECT_EQ(result.enemiesKilled, 0U);
 }
 
-TEST(
-    HitResolutionTest,
-    LethalHitRemovesEnemyAndCountsKill)
+TEST(HitResolutionTest, OneShotHitsAtMostOneEnemy)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            2}};
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F})};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{12.0F, 12.0F}, Vec2{5.0F, 5.0F}},
+        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}};
 
+    const HitResolutionResult result =
+        resolveShotEnemyHits(shots, enemies);
+
+    EXPECT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.enemiesKilled, 1U);
+}
+
+TEST(HitResolutionTest, OverkillCountsOnlyOneKill)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(
+            1,
+            Vec2{10.0F, 10.0F},
+            Vec2{10.0F, 10.0F},
+            10)};
     std::vector<Enemy> enemies{
         Enemy{
-            Vec2{15.0f, 15.0f},
-            Vec2{10.0f, 10.0f},
+            Vec2{10.0F, 10.0F},
+            Vec2{10.0F, 10.0F},
             Vec2{},
             2}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    EXPECT_TRUE(projectiles.empty());
     EXPECT_TRUE(enemies.empty());
-
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_EQ(result.enemiesKilled, 1u);
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_TRUE(result.hits[0].targetKilled);
+    EXPECT_EQ(result.enemiesKilled, 1U);
 }
 
-TEST(
-    HitResolutionTest,
-    OverkillCountsOnlyOneKill)
+TEST(HitResolutionTest, MultipleShotsAccumulateDamageAndCountOneKill)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            10}};
-
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 15.0F}),
+        makeShot(2, Vec2{20.0F, 20.0F})};
     std::vector<Enemy> enemies{
         Enemy{
-            Vec2{15.0f, 15.0f},
-            Vec2{10.0f, 10.0f},
+            Vec2{5.0F, 5.0F},
+            Vec2{30.0F, 30.0F},
             Vec2{},
             2}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    EXPECT_TRUE(projectiles.empty());
     EXPECT_TRUE(enemies.empty());
-
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_EQ(result.enemiesKilled, 1u);
+    EXPECT_EQ(result.hits.size(), 2U);
+    EXPECT_EQ(result.consumedShotIds.size(), 2U);
+    EXPECT_EQ(result.enemiesKilled, 1U);
 }
 
-TEST(
-    HitResolutionTest,
-    OneProjectileHitsAtMostOneEnemy)
+TEST(HitResolutionTest, LaterShotCanHitNextEnemyAfterEarlierKill)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            20.0f,
-            20.0f}};
-
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F}),
+        makeShot(2, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F})};
     std::vector<Enemy> enemies{
-        Enemy{
-            Vec2{12.0f, 12.0f},
-            Vec2{5.0f, 5.0f}},
-        Enemy{
-            Vec2{18.0f, 18.0f},
-            Vec2{5.0f, 5.0f}}};
+        Enemy{Vec2{12.0F, 12.0F}, Vec2{5.0F, 5.0F}},
+        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    EXPECT_TRUE(projectiles.empty());
-
-    // Projectile 只击杀第一个碰到的 Enemy。
-    EXPECT_EQ(enemies.size(), 1u);
-
-    EXPECT_EQ(result.hitPositions.size(), 1u);
-    EXPECT_EQ(result.enemiesKilled, 1u);
-}
-
-TEST(
-    HitResolutionTest,
-    MultipleProjectilesAccumulateDamageOnOneEnemy)
-{
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 15.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1},
-        Projectile{
-            Vec2{20.0f, 20.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1}};
-
-    std::vector<Enemy> enemies{
-        Enemy{
-            Vec2{5.0f, 5.0f},
-            Vec2{30.0f, 30.0f},
-            Vec2{},
-            2}};
-
-    const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
-
-    EXPECT_TRUE(projectiles.empty());
     EXPECT_TRUE(enemies.empty());
-
-    // 两次有效命中，各产生一个 impact position。
-    EXPECT_EQ(result.hitPositions.size(), 2u);
-
-    // 同一个 Enemy 只发生一次 alive -> dead。
-    EXPECT_EQ(result.enemiesKilled, 1u);
+    EXPECT_EQ(result.hits.size(), 2U);
+    EXPECT_EQ(result.enemiesKilled, 2U);
 }
 
-TEST(
-    HitResolutionTest,
-    DeadEnemyIsNotDamagedOrCountedAgain)
+TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 15.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1},
-        Projectile{
-            Vec2{15.0f, 15.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1},
-        Projectile{
-            Vec2{20.0f, 15.0f},
-            Vec2{},
-            10.0f,
-            10.0f,
-            1}};
-
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(1, Vec2{10.0F, 10.0F}),
+        makeShot(2, Vec2{10.0F, 10.0F})};
     std::vector<Enemy> enemies{
-        Enemy{
-            Vec2{5.0f, 5.0f},
-            Vec2{30.0f, 30.0f},
-            Vec2{},
-            2}};
+        Enemy{Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    // 前两枚 Projectile 扣除 2 HP。
-    // 第三枚看到 Enemy 已死亡，因此不被消耗。
-    ASSERT_EQ(projectiles.size(), 1u);
     EXPECT_TRUE(enemies.empty());
-
-    EXPECT_EQ(result.hitPositions.size(), 2u);
-    EXPECT_EQ(result.enemiesKilled, 1u);
+    ASSERT_EQ(result.consumedShotIds.size(), 1U);
+    EXPECT_EQ(result.consumedShotIds[0], 1U);
+    EXPECT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.enemiesKilled, 1U);
 }
 
-TEST(
-    HitResolutionTest,
-    HitPositionEqualsProjectileCenter)
+TEST(HitResolutionTest, InvalidCandidateCannotDamageOrBeConsumed)
 {
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{20.0f, 30.0f},
-            Vec2{},
-            8.0f,
-            20.0f,
-            1}};
-
+    const std::vector<ShotCollisionCandidate> shots{
+        makeShot(kInvalidShotId, Vec2{10.0F, 10.0F}),
+        makeShot(2, Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}, 0)};
     std::vector<Enemy> enemies{
         Enemy{
-            Vec2{24.0f, 35.0f},
-            Vec2{20.0f, 20.0f},
+            Vec2{10.0F, 10.0F},
+            Vec2{10.0F, 10.0F},
             Vec2{},
-            2}};
+            3}};
 
     const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
+        resolveShotEnemyHits(shots, enemies);
 
-    ASSERT_EQ(result.hitPositions.size(), 1u);
-
-    EXPECT_FLOAT_EQ(
-        result.hitPositions[0].x,
-        24.0f);
-
-    EXPECT_FLOAT_EQ(
-        result.hitPositions[0].y,
-        40.0f);
-
-    EXPECT_EQ(result.enemiesKilled, 0u);
-}
-
-TEST(
-    HitResolutionTest,
-    ProjectileCanHitNextLivingEnemyAfterEarlierEnemyDies)
-{
-    std::vector<Projectile> projectiles{
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            20.0f,
-            20.0f,
-            1},
-        Projectile{
-            Vec2{10.0f, 10.0f},
-            Vec2{},
-            20.0f,
-            20.0f,
-            1}};
-
-    std::vector<Enemy> enemies{
-        Enemy{
-            Vec2{12.0f, 12.0f},
-            Vec2{5.0f, 5.0f},
-            Vec2{},
-            1},
-        Enemy{
-            Vec2{18.0f, 18.0f},
-            Vec2{5.0f, 5.0f},
-            Vec2{},
-            1}};
-
-    const HitResolutionResult result =
-        resolveProjectileEnemyHits(
-            projectiles,
-            enemies);
-
-    EXPECT_TRUE(projectiles.empty());
-    EXPECT_TRUE(enemies.empty());
-
-    EXPECT_EQ(result.hitPositions.size(), 2u);
-    EXPECT_EQ(result.enemiesKilled, 2u);
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(enemies[0].health(), 3);
+    EXPECT_TRUE(result.hits.empty());
+    EXPECT_TRUE(result.consumedShotIds.empty());
 }

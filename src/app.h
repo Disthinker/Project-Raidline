@@ -136,7 +136,7 @@ private:
     void renderEnemyAttackTelegraphs();
     void renderEnemies();
     void renderPlayer();
-    void renderProjectiles();
+    void renderShotPresentations();
     void renderAimCrosshair();
     void renderParticles();
     void renderInventoryPlacementPreview(
