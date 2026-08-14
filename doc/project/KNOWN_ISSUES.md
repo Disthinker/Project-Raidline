@@ -38,7 +38,7 @@ Alpha 范围内普通数值、接口、交互和验收不列为用户决策，�
 | --- | --- |
 | Core Extraction Alpha Slice 0 | 自动化与用户真实窗口验收通过，PR #55 已合入 main |
 | RL-INV-003 / PR #54 | 已合入 `main@5bbddc3` |
-| Build Module Foundation | 四库目标与本地 558/558 已完成，等待提交、PR 和精确 head CI |
+| Build Module Foundation | PR #56 实现/初始证据 head 本地 558/558 与三项 CI 通过，等待最终纯证据 head 门禁 |
 | Slice 1 | 等待三项架构迁移：Base、Stash、三槽配装、Profile/Persistence |
 | Slice 2 | 等待 Slice 1：弹匣/枪膛/弹药、100 HP/Medkit、随身库存 |
 | Slice 3 | 等待 Slice 2：单图快照、无硬时限、撤离与全损幂等结算 |

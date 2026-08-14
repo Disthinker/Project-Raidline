@@ -26,7 +26,7 @@
 
 - 2026-08-14 再次执行 `git fetch origin`；PR #55 已以 `c7a3931`、PR #54 已以 `5bbddc3` 进入 main。
 - 当前架构迁移从干净的 `origin/main@5bbddc3` 创建 `codex/build-module-foundation`，没有叠加未合入分支。
-- Build Module Foundation 本地四库全目标构建成功，focused 133/133、全量 558/558 通过；等待提交、PR 与精确 head CI。
+- Build Module Foundation 本地四库全目标构建成功，focused 133/133、全量 558/558 通过；Draft PR #56 实现/初始证据 head `a375fec` 三项 CI 成功，等待最终证据 head 门禁。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
 - RL-INV-003 已成为接受基线的一部分；Slice 1 仍等待 Build Module Foundation、Content Registry v1 和 Profile Asset Registry 三项独立迁移。
 
@@ -214,7 +214,7 @@ Project_Raidline.exe
 - [x] 完整版模块化单体、内容/存档、资产所有权与分阶段迁移方案已写入仓库文档。
 - [x] PR #55 与 PR #54 已分别以 merge commit `c7a3931`、`5bbddc3` 进入 main。
 - [x] 从 `origin/main@5bbddc3` 建立 Build Module Foundation 分支；四库本地构建、focused 133/133 与全量 558/558 通过。
-- [ ] Build Module Foundation 提交、PR 与精确 head CI 完成并进入接受基线。
+- [ ] Build Module Foundation PR #56 最终证据 head CI 完成、转 Ready 并进入接受基线。
 - [ ] Content Registry v1 与 Profile Asset Registry 依次进入接受基线。
 
 最后更新：2026-08-14。

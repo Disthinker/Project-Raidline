@@ -16,7 +16,7 @@ PR #55 与 PR #54 已进入 `origin/main@5bbddc3`。当前从该接受基线依�
 
 | 迁移 PR | 结果 | 行为要求 |
 | --- | --- | --- |
-| Build Module Foundation | 四个生产库目标，测试链接生产库 | 本地实现与 558/558 已通过，等待 PR/CI |
+| Build Module Foundation | 四个生产库目标，测试链接生产库 | PR #56 实现 head 本地 558/558 与三项 CI 通过，等待最终证据门禁 |
 | Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 不改变现有内容数量与手感 |
 | Profile Asset Registry | ProfileState、唯一 AssetRegistry、AssetLocation、revision | 旧 GameplayWorld 通过适配器保持可玩 |
 

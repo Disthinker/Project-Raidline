@@ -6,7 +6,7 @@
 
 - `origin/main@5bbddc3` 已包含 PR #55 Core Extraction Alpha Slice 0 与 PR #54 RL-INV-003；两项精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
 - 当前开发分支：`codex/build-module-foundation`，从干净的 `origin/main@5bbddc3` 创建，只迁移构建所有权，不改变玩家行为。
-- Build Module Foundation 本地已建立四个生产库、测试生产库链接和配置期模块守卫；等待提交、PR 与精确 head CI。
+- Build Module Foundation 已建立四个生产库、测试生产库链接和配置期模块守卫；Draft PR #56 的实现/初始证据 head `a375fec` 三项 CI 全部成功，等待最终纯证据 head 门禁。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
 
@@ -52,7 +52,7 @@
 
 ## 尚未完成
 
-- Build Module Foundation：完成提交、PR 与精确 head Windows/Ubuntu CI，并在用户授权后合入。
+- Build Module Foundation：完成最终纯证据 head CI、转 Ready，并在用户授权后合入 PR #56。
 - 后续架构迁移：Content Registry v1、Profile Asset Registry。
 - Slice 1–4 的全部玩家功能。
 - Week29 代码反馈的独立整理。
