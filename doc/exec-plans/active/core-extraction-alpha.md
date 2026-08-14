@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0 自动化与用户真实窗口验收完成，等待 PR 接受与依赖合入
+状态：Slice 0 与 RL-INV-003 已进入 main；架构迁移 1 Build Module Foundation 进行中
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-代码基线：`origin/main@61718f6`
+当前接受基线：`origin/main@5bbddc3`（Slice 0 原始实施基线为 `61718f6`）
 
-实施分支：`codex/core-extraction-alpha-slice-0`
+当前实施分支：`codex/build-module-foundation`
 
 ## 1. 目标与完成定义
 
@@ -24,11 +24,11 @@
 
 ## 2. 已验证基线与依赖
 
-- 2026-08-14 执行 `git fetch origin`。
-- 当前接管时工作树为干净的 `codex/rl-inv-003-ammo-stack-merge@228ac7b`；PR #54 为 OPEN Draft、MERGEABLE，Windows/Ubuntu/范围检测 CI 全部成功，但尚未合入。
-- `origin/main@61718f6` 未包含 PR #54，也未包含 Week29。
+- 2026-08-14 再次执行 `git fetch origin`；PR #55 已以 `c7a3931`、PR #54 已以 `5bbddc3` 进入 main。
+- 当前架构迁移从干净的 `origin/main@5bbddc3` 创建 `codex/build-module-foundation`，没有叠加未合入分支。
+- Build Module Foundation 本地四库全目标构建成功，focused 133/133、全量 558/558 通过；Draft PR #56 实现/初始证据 head `a375fec` 三项 CI 成功，等待最终证据 head 门禁。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
-- 库存分支增量构建无工作并通过 552/552 CTest。Slice 0 从 `origin/main` 独立开始，不复制 PR #54；Slice 1 的完整库存交互依赖 #54 先进入接受基线。
+- RL-INV-003 已成为接受基线的一部分；Slice 1 仍等待 Build Module Foundation、Content Registry v1 和 Profile Asset Registry 三项独立迁移。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -212,6 +212,10 @@ Project_Raidline.exe
 - [x] 射击边界 `234d479` 与治理/路线 `3c08eec` 已提交，分支已推送并创建 Draft PR #55。
 - [x] 精确代码提交 `d046753` 的本机 550/550 与 GitHub 范围检测、Windows、Ubuntu CI 全部通过。
 - [x] 完整版模块化单体、内容/存档、资产所有权与分阶段迁移方案已写入仓库文档。
+- [x] PR #55 与 PR #54 已分别以 merge commit `c7a3931`、`5bbddc3` 进入 main。
+- [x] 从 `origin/main@5bbddc3` 建立 Build Module Foundation 分支；四库本地构建、focused 133/133 与全量 558/558 通过。
+- [ ] Build Module Foundation PR #56 最终证据 head CI 完成、转 Ready 并进入接受基线。
+- [ ] Content Registry v1 与 Profile Asset Registry 依次进入接受基线。
 
 最后更新：2026-08-14。
 
