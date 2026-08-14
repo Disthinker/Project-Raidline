@@ -24,7 +24,7 @@ PR #55 和 #54 均进入 `origin/main` 后，先完成三项有当前消费者�
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | 进行中 |
+| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | 自动化与用户验收通过，等待 PR 接受 |
 | Slice 1 | 可步行 Base、可操作 Stash、三槽配装、重启保持 | Profile、AssetRegistry、Inventory/Equipment、Persistence | 等待 Slice 0；依赖 #54 接受 |
 | Slice 2 | 真实弹匣/枪膛/弹药、100 HP、Medkit 与随身库存 | WeaponAmmo、Action、Health/Medical | 等待 Slice 1 |
 | Slice 3 | 一张固定图可搜索/战斗/撤离或全损，退出幂等结算 | MapDefinition、RaidSnapshot、Settlement | 等待 Slice 2 |

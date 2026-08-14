@@ -36,7 +36,7 @@ Alpha 范围内普通数值、接口、交互和验收不列为用户决策，�
 
 | 任务 | 状态 |
 | --- | --- |
-| Core Extraction Alpha Slice 0 | 进行中：治理/路线/架构、射击窄边界、测试骨架、Timeout 退场计划 |
+| Core Extraction Alpha Slice 0 | 自动化与用户真实窗口验收通过，等待 PR #55 review/接受/合入 |
 | Slice 1 | 等待 Slice 0 和 #54 接受：Base、Stash、三槽配装、Profile/Persistence |
 | Slice 2 | 等待 Slice 1：弹匣/枪膛/弹药、100 HP/Medkit、随身库存 |
 | Slice 3 | 等待 Slice 2：单图快照、无硬时限、撤离与全损幂等结算 |

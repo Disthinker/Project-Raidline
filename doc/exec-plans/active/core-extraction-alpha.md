@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0 自动化完成，等待用户真实窗口验收与依赖合入
+状态：Slice 0 自动化与用户真实窗口验收完成，等待 PR 接受与依赖合入
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -114,7 +114,7 @@ Project_Raidline.exe
 6. 等待旧 V0 的 180 秒结束，确认仍进入旧 `RAID ENDED` 结果；这只验证兼容退场路径，不代表 Alpha 接受硬时限。
 7. 全程确认没有 runtime/gtest 报错、重复输入、光标状态或界面输入泄漏。
 
-PR #55 在用户明确确认这些步骤前保持 Draft。
+2026-08-14，用户确认固定 1–7 清单验收成功且未报告偏差；PR #55 已满足转为 Ready 的人工门槛。
 
 提交/PR：治理/路线一个提交，射击边界一个提交；同一 Slice 0 PR，不夹带 #54 或 Week29。
 
@@ -208,7 +208,7 @@ PR #55 在用户明确确认这些步骤前保持 Draft。
 - [x] 完成 V0 差距矩阵、目标架构、产品路线和 skills/agents 审计设计。
 - [x] 完成治理文档与 skills 重构并通过 diff 检查。
 - [x] 完成射击窄边界；专项 102/102、全量 550/550 自动化通过。
-- [ ] 用户完成固定真实窗口兼容验收；开发代理不再自行启动游戏。
+- [x] 用户使用包含精确游戏代码 `d046753` 的 Windows Debug 可执行文件完成固定真实窗口兼容验收，报告 1–7 全部通过且无偏差；开发代理未自行启动游戏替代该证据。
 - [x] 射击边界 `234d479` 与治理/路线 `3c08eec` 已提交，分支已推送并创建 Draft PR #55。
 - [x] 精确代码提交 `d046753` 的本机 550/550 与 GitHub 范围检测、Windows、Ubuntu CI 全部通过。
 - [x] 完整版模块化单体、内容/存档、资产所有权与分阶段迁移方案已写入仓库文档。
@@ -221,4 +221,5 @@ PR #55 在用户明确确认这些步骤前保持 Draft。
 - `ShotResolutionTest`、`HitResolutionTest`、`GameplayWorldTest`、`GameplayWorldRaidTest`、`GameSessionTest`、`GameFlowTest` 共 102/102 通过。
 - 全量 CTest 550/550 通过，0 失败。
 - `Project_Raidline.exe` 以无 Shell、无窗口进程启动，3 秒仍存活后由冒烟脚本停止；未把该结果冒充真实窗口视觉验收。
-- Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`；代码精确提交 `d046753` 的范围检测、Windows 和 Ubuntu CI 全部成功。后续文档提交必须再次通过范围检查。
+- 用户使用 `build/windows-debug/Project_Raidline.exe` 完成菜单、Base、射击/命中、死亡、撤离、旧 Timeout 与输入/报错清单，报告全部通过且无偏差。
+- PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`；验收记录前的精确 head `831ff93` 范围检测、Windows 和 Ubuntu CI 全部成功。验收记录提交后必须再次通过精确 head CI 才能转为 Ready。
