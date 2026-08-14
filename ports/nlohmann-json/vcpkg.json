@@ -1,0 +1,8 @@
+{
+  "name": "nlohmann-json",
+  "version-semver": "3.12.0",
+  "port-version": 2,
+  "description": "JSON for Modern C++ (Raidline header-only overlay)",
+  "homepage": "https://github.com/nlohmann/json",
+  "license": "MIT"
+}

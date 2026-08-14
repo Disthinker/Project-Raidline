@@ -4,6 +4,7 @@
   "dependencies": [
     "fmt",
     "gtest",
+    "nlohmann-json",
     "sdl3",
     {
       "name": "sdl3-image",

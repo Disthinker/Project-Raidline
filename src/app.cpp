@@ -13,6 +13,7 @@
 #include <SDL3_image/SDL_image.h>
 #include <fmt/core.h>
 
+#include "content_registry.h"
 #include "inventory_transfer.h"
 
 namespace
@@ -331,8 +332,8 @@ bool App::loadTextures()
 
     const std::string backgroundPath =
         assetRoot +
-        "backgrounds/"
-        "project_raidline_test_map_1280x720.png";
+        defaultV0MapDefinition()
+            .backgroundTexturePath;
 
     const std::string playerPath =
         assetRoot +

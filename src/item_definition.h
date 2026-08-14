@@ -3,8 +3,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <string_view>
 
+#include "definition_id.h"
 #include "vec2.h"
 
 // 标识“物品定义的种类”。
@@ -49,8 +52,12 @@ struct InventoryFootprint
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
 struct ItemDefinition
 {
+    ItemDefinitionId definitionId;
+
+    // Transitional V0 adapter. New content and future persistence use
+    // definitionId; ItemId is removed after instance consumers migrate.
     ItemId id{};
-    std::string_view displayName{};
+    std::string displayName;
     ItemCategory category{};
 
     int inventoryWidthCells{};
@@ -66,8 +73,8 @@ struct ItemDefinition
     Vec2 pickupSize{};
 
     // 相对于运行时 assets/ 目录的路径。
-    std::string_view inventoryTexturePath{};
-    std::string_view worldTexturePath{};
+    std::string inventoryTexturePath;
+    std::string worldTexturePath;
 };
 
 constexpr std::size_t itemCount() noexcept
@@ -82,13 +89,31 @@ using ItemDefinitionCatalog =
 // 返回完整静态目录，不复制数据。
 [[nodiscard]]
 const ItemDefinitionCatalog &
-itemDefinitions() noexcept;
+itemDefinitions();
 
 // 根据稳定 ItemId 查询定义。
 // ItemId::Count 或其他非法枚举值会抛出 std::out_of_range。
 [[nodiscard]]
 const ItemDefinition &
 itemDefinition(ItemId id);
+
+// Explicit one-cycle adapter between the original enum and stable content ID.
+[[nodiscard]]
+const ItemDefinitionId &
+legacyItemDefinitionId(ItemId id);
+
+[[nodiscard]]
+std::optional<ItemId>
+legacyItemId(
+    const ItemDefinitionId &id) noexcept;
+
+[[nodiscard]]
+std::optional<ItemId>
+legacyItemId(
+    std::string_view legacyName) noexcept;
+
+[[nodiscard]]
+std::string_view legacyItemName(ItemId id);
 
 [[nodiscard]]
 bool isValidItemOrientation(

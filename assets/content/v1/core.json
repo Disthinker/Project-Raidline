@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "content_version": "v0-content-registry-1",
+  "published_resources": [
+    "backgrounds/project_raidline_test_map_1280x720.png",
+    "items/inventory/item_cola_basic_v1_64x64.png",
+    "items/world/item_cola_basic_v1_32x32.png",
+    "items/inventory/item_medkit_basic_v1_128x128.png",
+    "items/world/item_medkit_basic_v1_64x64.png",
+    "items/inventory/item_pistol_basic_v1_128x64.png",
+    "items/world/item_pistol_basic_v1_64x32.png",
+    "items/inventory/item_rifle_basic_v1_256x128.png",
+    "items/world/item_rifle_basic_v1_128x64.png",
+    "items/inventory/item_ammo_9mm_basic_v1_64x64.png",
+    "items/world/item_ammo_9mm_basic_v1_32x32.png"
+  ],
+  "items": [
+    {
+      "id": "item.loot.cola_basic",
+      "legacy_id": "cola",
+      "display_name": "Cola",
+      "category": "consumable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/item_cola_basic_v1_64x64.png",
+      "world_texture": "items/world/item_cola_basic_v1_32x32.png"
+    },
+    {
+      "id": "item.medical.medkit_basic",
+      "legacy_id": "medkit",
+      "display_name": "Medical Kit",
+      "category": "medical",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png"
+    },
+    {
+      "id": "item.weapon.pistol_basic",
+      "legacy_id": "pistol",
+      "display_name": "Pistol",
+      "category": "weapon",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 48}
+      },
+      "inventory_texture": "items/inventory/item_pistol_basic_v1_128x64.png",
+      "world_texture": "items/world/item_pistol_basic_v1_64x32.png"
+    },
+    {
+      "id": "item.weapon.rifle_basic",
+      "legacy_id": "rifle",
+      "display_name": "Rifle",
+      "category": "weapon",
+      "inventory": {"width": 4, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 128, "y": 64},
+        "pickup_size": {"x": 136, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_rifle_basic_v1_256x128.png",
+      "world_texture": "items/world/item_rifle_basic_v1_128x64.png"
+    },
+    {
+      "id": "item.ammunition.9mm_basic",
+      "legacy_id": "ammo_9mm",
+      "display_name": "9mm Ammunition",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/item_ammo_9mm_basic_v1_64x64.png",
+      "world_texture": "items/world/item_ammo_9mm_basic_v1_32x32.png"
+    }
+  ],
+  "loot_tables": [
+    {
+      "id": "loot.storage_cabinet.default",
+      "roll_count": 3,
+      "entries": [
+        {"item": "item.loot.cola_basic", "weight": 24, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.medical.medkit_basic", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.pistol_basic", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.9mm_basic", "weight": 32, "minimum_quantity": 10, "maximum_quantity": 30}
+      ]
+    }
+  ],
+  "enemy_deployments": [
+    {
+      "id": "enemy_deployment.v0.default",
+      "enemies": [
+        {"position": {"x": 600, "y": 100}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
+        {"position": {"x": 350, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
+        {"position": {"x": 930, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 3}
+      ]
+    }
+  ],
+  "maps": [
+    {
+      "id": "map.v0.test",
+      "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
+      "world_size": {"x": 1280, "y": 720},
+      "walkable_bounds": {
+        "position": {"x": 0, "y": 0},
+        "size": {"x": 1280, "y": 720}
+      },
+      "player_spawn": {"x": 640, "y": 360},
+      "default_inventory": {"width": 10, "height": 6},
+      "ground_items": [
+        {"item": "item.loot.cola_basic", "position": {"x": 720, "y": 380}, "quantity": 1},
+        {"item": "item.medical.medkit_basic", "position": {"x": 520, "y": 420}, "quantity": 1},
+        {"item": "item.weapon.pistol_basic", "position": {"x": 820, "y": 300}, "quantity": 1},
+        {"item": "item.weapon.rifle_basic", "position": {"x": 960, "y": 520}, "quantity": 1},
+        {"item": "item.ammunition.9mm_basic", "position": {"x": 640, "y": 440}, "quantity": 25},
+        {"item": "item.ammunition.9mm_basic", "position": {"x": 760, "y": 440}, "quantity": 40}
+      ],
+      "storage_cabinet": {
+        "bounds": {
+          "position": {"x": 960, "y": 296},
+          "size": {"x": 96, "y": 128}
+        },
+        "interaction_range": 64,
+        "inventory": {"width": 6, "height": 6}
+      },
+      "extraction_point": {
+        "position": {"x": 64, "y": 520},
+        "size": {"x": 176, "y": 136}
+      },
+      "raid_rules": {
+        "duration_seconds": 180,
+        "extraction_duration_seconds": 3
+      },
+      "storage_loot_table": "loot.storage_cabinet.default",
+      "enemy_deployment": "enemy_deployment.v0.default"
+    }
+  ]
+}
