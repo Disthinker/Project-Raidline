@@ -6,7 +6,7 @@
 
 - `origin/main@c7a3931` 已通过 PR #55 接受 Core Extraction Alpha Slice 0；精确 feature head 为 `ef21672`，范围检测、Windows、Ubuntu CI 与用户真实窗口清单全部通过。
 - 当前开发分支：`codex/rl-inv-003-ammo-stack-merge`。原实现 head `228ac7b` 已完成独立 CI 与用户真实窗口验收，现正以 merge commit 吸收最新 `origin/main` 并复验组合基线。
-- PR #54 仍为 OPEN Draft；在组合基线 focused/full tests 与精确 head CI 通过前不转 Ready。
+- PR #54 的实现、最新主线组合复验、用户验收与精确 merge head `0523b3d` CI 全部通过；最终纯文档收口 head 通过门禁后转 Ready，未经明确授权不合并。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
 
@@ -14,7 +14,7 @@
 
 - PR #55 精确 head `ef21672` 本机注册 550 个 CTest，550/550 通过；范围检测、Windows 和 Ubuntu CI 全部成功。
 - PR #54 原实现 head `228ac7b` 在其旧基线上完成 Windows Debug 全目标构建，focused 45/45、全量 552/552、范围检测、Windows 和 Ubuntu CI 全部成功。
-- PR #54 与 `origin/main@c7a3931` 的组合基线已重新配置并完成 55 步增量全目标构建；精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过，仍需精确 merge head CI。
+- PR #54 与 `origin/main@c7a3931` 的组合基线已重新配置并完成 55 步增量全目标构建；精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过，精确 merge head `0523b3d` 三项 CI 全部成功。
 - Windows 工具链：Visual Studio Developer Shell 17.13.6，x64 host/x64 target，Ninja，Debug，`x64-windows`，UTF-8。
 
 ## 当前产品里程碑
@@ -50,7 +50,7 @@
 
 ## 尚未完成
 
-- PR #54：完成精确 merge head CI、转 Ready 与接受/合入。
+- PR #54：完成最终纯文档 head 门禁、转 Ready 与接受/合入。
 - 架构迁移：等待 PR #54 进入 `origin/main` 后，从最新主线依次建立独立迁移分支。
 - Slice 1–4 的全部玩家功能。
 - Week29 代码反馈的独立整理。

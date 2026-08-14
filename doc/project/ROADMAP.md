@@ -12,7 +12,7 @@
 
 ## 架构迁移门槛
 
-PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组合复验，等待精确 head CI。两者均进入主线后，先完成三项有当前消费者的架构迁移，再继续 Alpha 玩家功能：
+PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组合复验、用户验收和精确 merge head CI，等待接受/合入。两者均进入主线后，先完成三项有当前消费者的架构迁移，再继续 Alpha 玩家功能：
 
 | 迁移 PR | 结果 | 行为要求 |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组�
 
 ## 并行但不混写的分支
 
-- PR #54 `codex/rl-inv-003-ammo-stack-merge`：最新 main 本地 558/558 与既有人工验收成功，等待精确 head CI，仍保持独立库存修复范围。
+- PR #54 `codex/rl-inv-003-ammo-stack-merge`：最新 main 本地 558/558、既有人工验收和精确 merge head CI 成功，等待接受/合入，仍保持独立库存修复范围。
 - `codex/week29-combat-feedback-and-attack-animation`：代码反馈与 fallback 已完成但无 PR、未进 main；正式攻击美术继续暂停。后续只允许独立整理代码部分，不能混入架构迁移。
 
 ## 产品级决策门槛

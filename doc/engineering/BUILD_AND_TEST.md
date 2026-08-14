@@ -30,7 +30,7 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 当前 `codex/core-extraction-alpha-slice-0` 的精确代码提交 `d046753` 在重新配置和完整增量构建后注册 550 个 CTest，550/550 通过。射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过；GitHub 范围检测、Windows 和 Ubuntu CI 全部成功。真实窗口与手感验收由用户在自动化完成后统一执行，开发代理不自行打开游戏，也不把进程存活冒烟当作人工验收。
 
-`codex/rl-inv-003-ammo-stack-merge` 吸收 `origin/main@c7a3931` 后重新配置并完成 55 步增量全目标构建；RL-INV-003 精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过。该组合基线仍需精确 merge head 的 Windows/Ubuntu CI。
+`codex/rl-inv-003-ammo-stack-merge` 吸收 `origin/main@c7a3931` 后重新配置并完成 55 步增量全目标构建；RL-INV-003 精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过。精确 merge head `0523b3d` 的范围检测、Windows 和 Ubuntu CI 全部成功。
 
 ## 按风险选择证据
 
