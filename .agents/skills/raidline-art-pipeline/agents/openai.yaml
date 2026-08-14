@@ -1,4 +1,4 @@
 interface:
   display_name: "Raidline Art Pipeline"
-  short_description: "Control Raidline art production review and publishing"
-  default_prompt: "Use $raidline-art-pipeline to plan, review, validate, or publish a Raidline art package."
+  short_description: "Guard paused Raidline art production and publishing"
+  default_prompt: "Use $raidline-art-pipeline only after the user explicitly reopens a named Raidline art package."

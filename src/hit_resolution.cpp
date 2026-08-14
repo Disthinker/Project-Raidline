@@ -6,23 +6,19 @@
 
 #include "collision.h"
 
-HitResolutionResult resolveProjectileEnemyHits(
-    std::vector<Projectile> &projectiles,
+HitResolutionResult resolveShotEnemyHits(
+    const std::vector<ShotCollisionCandidate> &shots,
     std::vector<Enemy> &enemies)
 {
     HitResolutionResult result{};
 
-    std::vector<bool> projectileConsumed(
-        projectiles.size(),
-        false);
-
-    for (
-        std::size_t projectileIndex{0};
-        projectileIndex < projectiles.size();
-        ++projectileIndex)
+    for (const ShotCollisionCandidate &shot : shots)
     {
-        const Projectile &projectile =
-            projectiles[projectileIndex];
+        if (shot.shotId == kInvalidShotId ||
+            shot.damage <= 0)
+        {
+            continue;
+        }
 
         for (Enemy &enemy : enemies)
         {
@@ -34,24 +30,33 @@ HitResolutionResult resolveProjectileEnemyHits(
             }
 
             if (!isCollision(
-                    projectile.bounds(),
+                    shot.bounds,
                     enemy.bounds()))
             {
                 continue;
             }
 
-            // 一枚 Projectile 一次最多命中一个 Enemy。
-            projectileConsumed[projectileIndex] = true;
+            // One resolved shot can hit at most one enemy in the Alpha V0
+            // adapter. The caller consumes the matching transient flight.
+            result.consumedShotIds.push_back(
+                shot.shotId);
 
-            result.hitPositions.push_back(
-                Vec2{
-                    projectile.position().x +
-                        projectile.width() / 2.0f,
-                    projectile.position().y +
-                        projectile.height() / 2.0f});
+            const Vec2 hitPosition{
+                shot.bounds.position.x +
+                    shot.bounds.size.x / 2.0F,
+                shot.bounds.position.y +
+                    shot.bounds.size.y / 2.0F};
 
             const bool killed =
-                enemy.takeDamage(projectile.damage());
+                enemy.takeDamage(shot.damage);
+
+            result.hits.push_back(
+                HitResult{
+                    shot.shotId,
+                    HitTargetKind::Enemy,
+                    hitPosition,
+                    shot.damage,
+                    killed});
 
             if (killed)
             {
@@ -61,19 +66,6 @@ HitResolutionResult resolveProjectileEnemyHits(
             break;
         }
     }
-
-    std::size_t projectileEraseIndex{0};
-
-    std::erase_if(
-        projectiles,
-        [&](const Projectile &)
-        {
-            const bool shouldErase =
-                projectileConsumed[projectileEraseIndex];
-
-            ++projectileEraseIndex;
-            return shouldErase;
-        });
 
     std::erase_if(
         enemies,

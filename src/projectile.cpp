@@ -2,12 +2,19 @@
 #include "projectile.h"
 #include <stdexcept>
 
-Projectile::Projectile(Vec2 position, Vec2 velocity, float width, float height, int damage)
+Projectile::Projectile(
+    Vec2 position,
+    Vec2 velocity,
+    float width,
+    float height,
+    int damage,
+    ShotId shotId)
     : position_(position),
       velocity_(velocity),
       width_(width),
       height_(height),
-      damage_{damage}
+      damage_{damage},
+      shotId_{shotId}
 {
     if (damage <= 0)
     {
@@ -54,4 +61,9 @@ bool Projectile::isOutside(float worldWidth, float worldHeight) const
 int Projectile::damage() const noexcept
 {
     return damage_;
+}
+
+ShotId Projectile::shotId() const noexcept
+{
+    return shotId_;
 }

@@ -1,57 +1,53 @@
-# Project Raidline 路线图
+# Project Raidline 产品交付路线
 
-本文件区分“已完成事实”和“产品候选”。未来阶段不是自动承诺；每次实施前重新核对用户优先级、仓库状态和美术依赖。
+最后核对：2026-08-14。
 
-## 已进入 main 的里程碑
+## 当前产品目标
 
-| 阶段 | 已闭环结果 |
-| --- | --- |
-| Week 1–3 | CMake/vcpkg/GTest/CI、SDL App、输入、玩家移动、资源加载与基础渲染 |
-| Week 4–8 | Projectile、Enemy、AABB、世界边界、朝向射击与 cooldown |
-| Week 9–13 | 命中结果、Texture RAII、动画、ParticleSystem、Health、Damage、Death、Score |
-| Week 14–16 | ItemDefinition/ItemInstance、GroundItem、最近拾取、GridInventory、事务式放置/移动与交互状态 |
-| Week 17 | 鼠标 hover/选择/阈值拖拽、多格 grab offset、合法性反馈与 Tab/Esc 帧级取消仲裁 |
-| 背包 UX 稳定化 | 平滑像素虚影与独立吸附候选；PR #32 |
-| Week 18 | 世界柜体与双容器指定格转移、贴右丢弃条、角色脚下落点、纯鼠标背包；PR #33 |
-| Week 19 | 整栈快捷转移、拖拽旋转、9mm 堆叠、数量拖拽与正式弹药资源；PR #34 |
-| Week 20 | 一次性柜体搜索、加权 Loot、可注入随机源、临时 Inventory 原子提交；PR #35 |
-| Week 21 | 六态 RaidSession、固定撤离点、连续撤离、终止竞态与终局冻结；PR #36 |
-| Week 22 | 撤离存入内存 Stash、死亡/超时损失、Blocked 原子失败、结算统计与反馈；PR #40 |
-| Week 23 | 可重复 Raid 会话、跨局 Stash、稳定 ID 高水位、只读仓库与空背包重开；PR #42 |
-| Week 24 | 玩家 3 HP、敌人接触伤害、真实死亡出口与成功/失败完整垂直回归；PR #44 |
-| Week 25 | MainMenu/Base/Raid/RaidResult 顶层流程、非 Raid 冻结、单地图部署与跨局返回；PR #46 |
-| Week 26 | 鼠标独立瞄准、左键/Space 统一射击、扩散/后坐力、1200 px/s 高速弹丸与火光命中反馈；PR #48 |
-| Week 27 | 近距默认挠击、条件 Grab→Bite、空冲 `OffBalance`、三级移动速度与双方受击顿挫；PR #50 |
+当前里程碑是 **Core Extraction Alpha**。唯一范围合同为外部 GDD 资料库的 `05_Core_Extraction_Alpha_首阶段功能规格.md`，执行计划见 `doc/exec-plans/active/core-extraction-alpha.md`。
 
-详细历史保留在 `doc/DevLog_Week*.md` 与已完成 ExecPlan；其中分支和 CI 描述只代表当时快照。
+路线以可玩的垂直切片组织，不再以 Week 编号作为产品里程碑。Week 1–28、Week29 和相关 handoff 保留为 V0 历史证据。
 
-## 当前开发：Week29 战斗反馈与抓/挠/咬动画
+正式产品技术边界固定为 Windows PC、键鼠优先、纯单机离线。代码保持 Linux 编译和领域测试兼容性，但当前不承诺 Linux 同步发行、联机、主机平台或公开 Mod 支持。长期采用模块化单体，完整结构见 `doc/architecture/ARCHITECTURE.md`。
 
-Week28 冻结提交 `07755f6` 已通过本地 544/544、真实窗口 1–13 和精确 head Ubuntu/Windows CI，并由 PR #52 合入 `main@c4658e7`。Week29 将增加 SDL 无关的攻击表现采样、正式敌人攻击 sheet 接线、命中确认/受伤脉冲/枪口反馈和一轮战斗节奏调参；正式帧资产按 `enemy_default_attacks_v1` 独立生产包生成、审核后才能发布，音效、完整相机系统、血液与尸体仍不在本轮。活动计划见 `doc/exec-plans/active/week29-combat-feedback-and-attack-animation.md`。
+## 架构迁移门槛
 
-## Week25–Week30 推荐顺序
+PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组合复验，等待精确 head CI。两者均进入主线后，先完成三项有当前消费者的架构迁移，再继续 Alpha 玩家功能：
 
-| 阶段 | 玩家可感知结果 | 关键工程主题与边界 |
+| 迁移 PR | 结果 | 行为要求 |
 | --- | --- | --- |
-| Week25 | 主菜单进入基地，从基地部署到当前地图；结算后回到基地并可再次出战 | 小型 `GameFlow` 状态机、屏幕级输入/渲染路由、单一地图副本生命周期；不做最终美术或通用 SceneManager |
-| Week26 | 鼠标决定瞄准方向，左键射击；射击具备可调后坐力、扩散和恢复手感 | 屏幕/世界坐标、Aim 输入、武器射击状态、确定性随机/曲线与调试参数；保留键盘回归路径直到验收 |
-| Week27 | 敌人低速二维追击并以短前摇挠击为常态；玩家可通过中距离保持诱发抱咬，空冲会倒伏失衡，双方受击均有顿挫 | 确定性条件选招、Grab→Bite 原子动作链、`OffBalance`、静止/常态/攻击三级速度、受击时间倍率与代码占位表现 |
-| Week28 | 敌人对玩家的感知与战术选择更可信，多个敌人不再只做全知直线追击 | 感知/失去目标、距离保持、转向与局部 steering、多敌人协作、攻击选择调优；暂不引入导航网格或行为树框架 |
-| Week29 | 玩家射击与敌人攻击形成可玩的战斗节奏，抓/挠/咬具有正式且可读的动画表现 | 命中反馈、后坐力调参、受伤反馈、难度与完整成功/失败回归；按独立美术生产协议制作并接入三类攻击动画，音效仍另行排期 |
-| Week30 | 基地可选择多个固定地图副本，不同地图拥有独立出生、敌人、Loot 与撤离配置 | 显式 MapDefinition/MapId、确定性实例创建和数据边界；不做程序生成地图 |
+| Build Module Foundation | 四个生产库目标，测试链接生产库 | V0 行为和测试不得减少 |
+| Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 不改变现有内容数量与手感 |
+| Profile Asset Registry | ProfileState、唯一 AssetRegistry、AssetLocation、revision | 旧 GameplayWorld 通过适配器保持可玩 |
 
-上述顺序按依赖排列：顶层流程先于地图扩展，玩家战斗入口先于敌人战斗平衡，敌人动作规则先于 AI 选择，最后再集中做手感与内容扩展。每周实施前仍需把具体数值、美术依赖和人工验收冻结到独立 ExecPlan。
+## Core Extraction Alpha
 
-## 独立稳定化候选
+| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | PR #55 已合入 `main@c7a3931` |
+| Slice 1 | 可步行 Base、可操作 Stash、三槽配装、重启保持 | Profile、AssetRegistry、Inventory/Equipment、Persistence | 等待 #54 与三项架构迁移 |
+| Slice 2 | 真实弹匣/枪膛/弹药、100 HP、Medkit 与随身库存 | WeaponAmmo、Action、Health/Medical | 等待 Slice 1 |
+| Slice 3 | 一张固定图可搜索/战斗/撤离或全损，退出幂等结算 | MapDefinition、RaidSnapshot、Settlement | 等待 Slice 2 |
+| Slice 4 | 买卖、救济、连续多局和跨进程闭环 | Economy、Relief、完整产品验收 | 等待 Slice 3 |
 
-- 角色上/下移动动画和停止朝向表现。
-- [库存拖拽可行位置原子交换（#38）](https://github.com/Disthinker/Project-Raidline/issues/38)，包括一个拖拽物与目标处若干 placement 的事务式重排。
-- [Ctrl/Shift 数量点击锁定拖拽（#39）](https://github.com/Disthinker/Project-Raidline/issues/39)，松开鼠标和修饰键后虚像继续跟随，下一次点击提交。
-- RL-INV-003 普通整堆弹药拖到同定义堆的合并已在独立分支本地修复；目标补到 60、源余量原地保留，2026-08-11 人工验收通过，待精确提交 CI 后关闭。
-- 把共享业务源码抽为核心 library，降低重复编译与旧对象风险。
-- 把 Phase 1 资源测试接入 CTest/CI，并继续加固批准资产的不可覆盖保护。
-- 在不扩大玩法范围的前提下拆分 `App` 的背包 UI 编排职责。
+## Alpha 之后的完整版阶段
 
-## 未排期边界
+| 阶段 | 目标 | 不提前进入 Alpha 的代表系统 |
+| --- | --- | --- |
+| Survival Loadout | 增加真实配装、损耗与医疗取舍 | 其余装备槽、防具、流血/疼痛、耐久/故障、维修、组件、战术电子 |
+| Raid Pressure & Variety | 增加路线、地图与持续压力差异 | 多固定地图、高危、特殊撤离、情报、尸体、更多敌人；随机地图后置 |
+| Base Growth | 把带回物转化为长期能力和人群选择 | 先建立唯一 WorldClock，再加入商人、任务、制造、设施、人口、士气 |
+| Regional Campaign | 形成空间战略和周期危机 | 地点、旅行、迁徙、哨所、战斗小组、外围行动、尸潮攻城 |
+| Content Beta | 形成正式内容体量和叙事路线 | 派系、敌人生态、主线、系统商店、随机地图候选；每项另有范围合同 |
+| Release Candidate | 形成可发布 Windows 产品 | 正式美术/音频、性能、可访问性、本地化、打包、诊断和存档迁移演练 |
 
-程序生成地图、ECS、通用 SceneManager、导航网格/行为树框架、网络同步、大规模 GameplayWorld 重写、复杂装备/武器改装、音频和完整商业化内容均未排期。任何新任务如需引入其中一项，先建立独立范围和 ExecPlan。
+阶段只表达依赖顺序；每阶段仍拆成独立、可运行、可测试、可回滚的垂直切片。
+
+## 并行但不混写的分支
+
+- PR #54 `codex/rl-inv-003-ammo-stack-merge`：最新 main 本地 558/558 与既有人工验收成功，等待精确 head CI，仍保持独立库存修复范围。
+- `codex/week29-combat-feedback-and-attack-animation`：代码反馈与 fallback 已完成但无 PR、未进 main；正式攻击美术继续暂停。后续只允许独立整理代码部分，不能混入架构迁移。
+
+## 产品级决策门槛
+
+Alpha 范围内普通架构、数值、交互和验收由开发主控直接收口。只有改变四个产品支柱、失败损失、商业模式、叙事主方向或显著扩大范围时才请求用户决策。

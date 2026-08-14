@@ -1,4 +1,0 @@
-interface:
-  display_name: "Raidline Task Closeout"
-  short_description: "Close Raidline tasks with evidence and teaching notes"
-  default_prompt: "Use $raidline-task-closeout to finish this task with verification evidence and a Chinese C++ handoff."

@@ -94,6 +94,8 @@ add_executable(Project_Raidline
     src/gameplay_world.cpp
     src/weapon_fire.h
     src/weapon_fire.cpp
+    src/shot_resolution.h
+    src/shot_resolution.cpp
 
     src/texture.h
     src/texture.cpp
@@ -202,6 +204,21 @@ target_link_libraries(WeaponFireTest PRIVATE GTest::gtest_main)
 target_include_directories(WeaponFireTest PRIVATE src)
 
 gtest_discover_tests(WeaponFireTest)
+
+# test shot_resolution
+add_executable(ShotResolutionTest
+    tests/test_shot_resolution.cpp
+    src/shot_resolution.cpp
+    src/shot_resolution.h
+    src/vec2.h
+)
+
+target_compile_features(ShotResolutionTest PRIVATE cxx_std_20)
+set_target_properties(ShotResolutionTest PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(ShotResolutionTest PRIVATE GTest::gtest_main)
+target_include_directories(ShotResolutionTest PRIVATE src)
+
+gtest_discover_tests(ShotResolutionTest)
 
 # test projectile
 add_executable(ProjectileTest
@@ -315,8 +332,6 @@ add_executable(HitResolutionTest
     src/enemy_attack.h
     src/enemy_ai.cpp
     src/enemy_ai.h
-    src/projectile.cpp
-    src/projectile.h
     src/rect.h
     src/vec2.h
     src/animation.h
@@ -339,6 +354,8 @@ add_executable(GameplayWorldTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/shot_resolution.cpp
+    src/shot_resolution.h
 
     src/player.cpp
     src/player.h
@@ -595,6 +612,8 @@ add_executable(GameSessionTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/shot_resolution.cpp
+    src/shot_resolution.h
 
     src/player.cpp
     src/player.h
@@ -695,6 +714,8 @@ add_executable(GameFlowTest
     src/gameplay_input.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/shot_resolution.cpp
+    src/shot_resolution.h
 
     src/player.cpp
     src/player.h
@@ -1166,6 +1187,7 @@ if(MSVC)
     target_compile_options(InputSystemTest PRIVATE /utf-8)
     target_compile_options(PlayerTest PRIVATE /utf-8)
     target_compile_options(WeaponFireTest PRIVATE /utf-8)
+    target_compile_options(ShotResolutionTest PRIVATE /utf-8)
     target_compile_options(ProjectileTest PRIVATE /utf-8)
     target_compile_options(CollisionTest PRIVATE /utf-8)
     target_compile_options(EnemyTest PRIVATE /utf-8)

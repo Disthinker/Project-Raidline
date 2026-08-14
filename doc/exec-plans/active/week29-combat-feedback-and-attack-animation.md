@@ -1,7 +1,9 @@
 # Week29 战斗反馈、节奏与抓/挠/咬动画 ExecPlan
 
-- 状态：Ready
-- 负责人/工作流：主线程负责代码与 art-control；`raidline-feature-delivery` + `raidline-cpp-safety-review` + `raidline-build-test-ci` + `raidline-art-pipeline` + `raidline-task-closeout`
+> 当前状态（2026-08-14）：代码反馈与 fallback 位于独立分支 `codex/week29-combat-feedback-and-attack-animation@6c23389`，未进入 main 且没有 PR。正式 Grab/Scratch/Bite 美术生产继续暂停；未经用户重新授权，不得生成候选、写入 `art/work/`、发布 runtime PNG 或修改 manifest。本计划不是当前 Core Extraction Alpha 的活动产品路线。
+
+- 状态：Paused；代码分支未提 PR，正式美术未授权
+- 负责人/工作流：本计划保留为历史证据；当前开发由 Core Extraction Alpha ExecPlan 和新的按需交付 skills 管理
 - 最后更新：2026-08-09
 
 ## 目标与玩家可感知结果

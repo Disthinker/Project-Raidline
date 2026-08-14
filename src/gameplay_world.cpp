@@ -16,16 +16,15 @@ namespace
     constexpr float kWorldWidth{1280.0f};
     constexpr float kWorldHeight{720.0f};
 
-    constexpr float kProjectileSpeed{1200.0f};
-    constexpr float kProjectileWidth{8.0f};
-    constexpr float kProjectileHeight{8.0f};
+    constexpr float kLegacyShotSpeed{1200.0f};
+    constexpr float kLegacyShotExtent{8.0f};
     constexpr float kMaximumProjectileTravelPerStep{8.0F};
     constexpr float kMaximumProjectileSubsteps{256.0F};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
     constexpr int kDefaultEnemyMaxHealth{3};
-    constexpr int kProjectileDamage{1};
+    constexpr int kLegacyShotDamage{1};
 
     constexpr int kScorePerEnemy{100};
 
@@ -633,31 +632,45 @@ void GameplayWorld::update(
         const Vec2 center = playerCenter(player_);
         const float muzzleDistance =
             player_.size() / 2.0F +
-            std::max(kProjectileWidth, kProjectileHeight) / 2.0F;
+            kLegacyShotExtent / 2.0F;
 
-        const Vec2 projectileCenter{
+        const Vec2 shotOrigin{
             center.x + shot->direction.x * muzzleDistance,
             center.y + shot->direction.y * muzzleDistance};
 
-        const Vec2 projectileVelocity{
-            shot->direction.x * kProjectileSpeed,
-            shot->direction.y * kProjectileSpeed};
+        const ShotResolution resolution = resolveShotCommand(
+            ShotCommand{
+                nextShotId_,
+                shotOrigin,
+                shot->direction,
+                kLegacyShotSpeed,
+                kLegacyShotExtent,
+                kLegacyShotDamage});
+
+        if (!resolution.accepted())
+        {
+            std::terminate();
+        }
 
         projectiles_.emplace_back(
             Vec2{
-                projectileCenter.x - kProjectileWidth / 2.0F,
-                projectileCenter.y - kProjectileHeight / 2.0F},
-            projectileVelocity,
-            kProjectileWidth,
-            kProjectileHeight,
-            kProjectileDamage);
+                resolution.origin.x -
+                    resolution.collisionExtent / 2.0F,
+                resolution.origin.y -
+                    resolution.collisionExtent / 2.0F},
+            resolution.velocity,
+            resolution.collisionExtent,
+            resolution.collisionExtent,
+            resolution.damage,
+            resolution.shotId);
+        ++nextShotId_;
     }
 
     std::size_t projectileSubsteps{1U};
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         const float requestedSubsteps = std::ceil(
-            kProjectileSpeed * deltaTime /
+            kLegacyShotSpeed * deltaTime /
             kMaximumProjectileTravelPerStep);
         projectileSubsteps = static_cast<std::size_t>(
             std::clamp(
@@ -681,16 +694,38 @@ void GameplayWorld::update(
             projectile.update(projectileStepTime);
         }
 
+        std::vector<ShotCollisionCandidate> collisionCandidates;
+        collisionCandidates.reserve(projectiles_.size());
+        for (const Projectile &projectile : projectiles_)
+        {
+            collisionCandidates.push_back(
+                ShotCollisionCandidate{
+                    projectile.shotId(),
+                    projectile.bounds(),
+                    projectile.damage()});
+        }
+
         HitResolutionResult stepResult =
-            resolveProjectileEnemyHits(
-                projectiles_,
+            resolveShotEnemyHits(
+                collisionCandidates,
                 enemies_);
-        hitResult.hitPositions.insert(
-            hitResult.hitPositions.end(),
-            stepResult.hitPositions.begin(),
-            stepResult.hitPositions.end());
+        hitResult.hits.insert(
+            hitResult.hits.end(),
+            stepResult.hits.begin(),
+            stepResult.hits.end());
         hitResult.enemiesKilled +=
             stepResult.enemiesKilled;
+
+        std::erase_if(
+            projectiles_,
+            [&](const Projectile &projectile)
+            {
+                return std::find(
+                           stepResult.consumedShotIds.begin(),
+                           stepResult.consumedShotIds.end(),
+                           projectile.shotId()) !=
+                       stepResult.consumedShotIds.end();
+            });
 
         projectiles_.erase(
             std::remove_if(
@@ -708,11 +743,11 @@ void GameplayWorld::update(
     // 每次有效命中都生成粒子，
     // 与本次命中是否致命无关。
     for (
-        const Vec2 &position :
-        hitResult.hitPositions)
+        const HitResult &hit :
+        hitResult.hits)
     {
         particleSystem_.emitImpact(
-            position);
+            hit.position);
     }
 
     // enemiesKilled 是 std::size_t。
@@ -737,6 +772,38 @@ const std::vector<Projectile> &
 GameplayWorld::projectiles() const
 {
     return projectiles_;
+}
+
+std::vector<ShotPresentationSnapshot>
+GameplayWorld::shotPresentationSnapshots() const
+{
+    std::vector<ShotPresentationSnapshot> snapshots;
+    snapshots.reserve(projectiles_.size());
+
+    for (const Projectile &projectile : projectiles_)
+    {
+        const Vec2 velocity = projectile.velocity();
+        const float speed = std::sqrt(
+            velocity.x * velocity.x +
+            velocity.y * velocity.y);
+        const Vec2 direction =
+            std::isfinite(speed) && speed > 0.0F
+                ? Vec2{
+                      velocity.x / speed,
+                      velocity.y / speed}
+                : Vec2{};
+        snapshots.push_back(
+            ShotPresentationSnapshot{
+                projectile.shotId(),
+                Vec2{
+                    projectile.position().x +
+                        projectile.width() / 2.0F,
+                    projectile.position().y +
+                        projectile.height() / 2.0F},
+                direction});
+    }
+
+    return snapshots;
 }
 
 const std::vector<Enemy> &

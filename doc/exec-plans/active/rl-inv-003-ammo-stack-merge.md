@@ -2,12 +2,13 @@
 
 ## Status
 
-In Progress — local implementation, automated verification and manual acceptance complete; exact-commit CI pending
+In Progress — latest-main local revalidation and manual acceptance complete; exact merge-head CI pending
 
 ## Baseline
 
 - Branch: `codex/rl-inv-003-ammo-stack-merge`
-- Base: `origin/main@61718f6`
+- Original base: `origin/main@61718f6`
+- Revalidation base: `origin/main@c7a3931` after accepted PR #55
 - Scope: only RL-INV-003 inventory stack placement behavior and its documentation/tests
 
 ## Goal
@@ -48,7 +49,7 @@ In Progress — local implementation, automated verification and manual acceptan
 
 ### Automated
 
-- `InventoryTransferTest` / `InventoryStackPlacementTest`
+- `InventoryTransferTest` / `InventoryWholeStackPlacementTest`
 - `MouseInventoryInteractionTest` / `MouseInventoryIntegrationTest`
 - Windows Debug full build
 - Full CTest suite
@@ -78,4 +79,6 @@ Result: 2026-08-11，用户确认以下 1–5 项真实 Windows Debug 窗口验�
 - [x] 完成本地自动化验证：聚焦 45/45、Windows Debug 226 步全目标重建、全量 CTest 552/552。
 - [x] 完成 diff、安全与文档复核，准备人工验收清单。
 - [x] 用户完成真实窗口同/跨容器、溢出、失败场景和精确数量回归验收（2026-08-11，1–5 全部通过）。
+- [x] 以 merge commit 吸收 `origin/main@c7a3931`，保留新版产品架构并只带回 RL-INV-003 的窄库存不变量。
+- [x] 完成组合基线本地复验：重新配置、55 步增量全目标构建、精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558。
 - [ ] 精确提交通过 Windows/Ubuntu CI 后关闭问题并归档本计划。

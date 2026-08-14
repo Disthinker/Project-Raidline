@@ -16,6 +16,7 @@
 #include "player.h"
 #include "projectile.h"
 #include "raid_session.h"
+#include "shot_resolution.h"
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
 
@@ -85,8 +86,16 @@ public:
     const Player &player() const;
 
     [[nodiscard]]
+    // Test-only visibility into the temporary V0 flight adapter. App and
+    // domain consumers must use shot projections/results instead.
     const std::vector<Projectile> &
     projectiles() const;
+
+    // App consumes this read-only projection instead of the temporary V0
+    // Projectile adapter. It has no collision or damage authority.
+    [[nodiscard]]
+    std::vector<ShotPresentationSnapshot>
+    shotPresentationSnapshots() const;
 
     [[nodiscard]]
     const std::vector<Enemy> &
@@ -205,6 +214,7 @@ private:
     Player player_;
 
     std::vector<Projectile> projectiles_;
+    ShotId nextShotId_{1};
     std::vector<Enemy> enemies_;
     EnemySquadCoordinator enemySquadCoordinator_;
 

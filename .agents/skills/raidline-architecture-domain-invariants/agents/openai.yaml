@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raidline Architecture Invariants"
+  short_description: "Protect Raidline ownership IDs and domain contracts"
+  default_prompt: "Use $raidline-architecture-domain-invariants to design or review these Raidline domain boundaries."
