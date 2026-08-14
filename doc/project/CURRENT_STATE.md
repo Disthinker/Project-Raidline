@@ -6,6 +6,7 @@
 
 - `origin/main@61718f6` 是 Core Extraction Alpha Slice 0 的基线。
 - 当前开发分支：`codex/core-extraction-alpha-slice-0`，从 `origin/main` 独立创建。
+- Slice 0 已推送并创建 Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`。
 - PR #54 `codex/rl-inv-003-ammo-stack-merge@228ac7b` 为 OPEN Draft、MERGEABLE；范围检测、Windows 和 Ubuntu CI 成功，但尚未合入 main。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
@@ -43,7 +44,7 @@
 - 当前 Projectile 被收束为 GameplayWorld 内部的 V0 飞行适配器；App 改读只读射击表现投影。
 - `HitResolutionResult` 现在输出领域 `HitResult`，粒子与计分消费结果而不是自行推断命中语义。
 - 射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过；全量 550/550 通过。重建后的可执行文件用无 Shell、无窗口进程接口启动，3 秒后仍存活并由测试脚本正常停止。
-- 真实窗口完整视觉交互验收尚未执行；当前证据只证明构建、领域回归与启动存活。射击边界已提交为 `234d479`；治理文档尚待提交，分支尚未推送、未建 PR。
+- 真实窗口完整视觉交互验收尚未执行；当前证据只证明构建、领域回归与启动存活。射击边界提交为 `234d479`，治理/路线提交为 `3c08eec`；分支已推送，Draft PR #55 等待精确 head CI 与视觉验收。
 
 ## 尚未完成
 

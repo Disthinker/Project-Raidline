@@ -183,7 +183,7 @@ App (input translation + read-only projections)
 - [x] 完成治理文档与 skills 重构并通过 diff 检查。
 - [x] 完成射击窄边界；专项 102/102、全量 550/550 自动化通过。
 - [ ] 完成真实窗口兼容验收。当前仅完成可执行文件 3 秒启动存活冒烟。
-- [ ] 提交、推送并创建 Slice 0 PR。射击边界已提交为 `234d479`。
+- [x] 射击边界 `234d479` 与治理/路线 `3c08eec` 已提交，分支已推送并创建 Draft PR #55。
 
 最后更新：2026-08-14。
 
@@ -193,3 +193,4 @@ App (input translation + read-only projections)
 - `ShotResolutionTest`、`HitResolutionTest`、`GameplayWorldTest`、`GameplayWorldRaidTest`、`GameSessionTest`、`GameFlowTest` 共 102/102 通过。
 - 全量 CTest 550/550 通过，0 失败。
 - `Project_Raidline.exe` 以无 Shell、无窗口进程启动，3 秒仍存活后由冒烟脚本停止；未把该结果冒充真实窗口视觉验收。
+- Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`；精确 head CI 等待本记录提交后运行。
