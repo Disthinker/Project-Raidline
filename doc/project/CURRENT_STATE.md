@@ -43,11 +43,11 @@
 - Windows Debug 当前树构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 17/17 通过。
 - 全量 CTest 620/620 通过，0 失败。
-- exact-head GitHub 范围检测、Windows/Ubuntu CI 与集中真实窗口验收尚未执行，因此 Extraction Loop 还不是接受基线。
+- PR #59 精确代码 head `864f12e` 的 GitHub 范围检测、Windows 与 Ubuntu CI 全部成功；集中真实窗口验收尚未执行，因此 Extraction Loop 还不是接受基线。
 
 ## 尚未完成
 
-- Extraction Loop：推送/PR、exact-head CI 和用户集中真实窗口验收。
+- Extraction Loop：PR #59 等待用户集中真实窗口验收；通过后记录证据并转为 Ready，合并仍需显式授权。
 - Alpha Hardening：连续多局、损坏恢复组合、跨进程长序列、平衡与 Alpha 完成报告。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。

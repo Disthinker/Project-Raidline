@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 已进入 main；Extraction Loop 端到端代码与本地自动化完成，等待 CI 与用户验收
+状态：Persistent Base 已进入 main；Extraction Loop 端到端代码、本地自动化与精确代码 head CI 完成，等待用户验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -29,7 +29,7 @@
 - Content Registry v1 从干净的 `origin/main@1837928` 创建，本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过；PR #57 已以 merge commit `14cf79b` 进入 main。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
 - Persistent Base 从干净的 `origin/main@14cf79b` 创建；Windows Debug 120 步构建、focused 70/70、全量 CTest 601/601、exact-head CI 与用户 6/6 集中验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。
-- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；领域合同 `2d9b96d` 与端到端实现 `66f3120` 已完成，Windows Debug 构建、focused 17/17 与全量 CTest 620/620 通过，等待 exact-head CI 和用户集中验收。
+- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；领域合同 `2d9b96d` 与端到端实现 `66f3120` 已完成，Windows Debug 构建、focused 17/17、全量 CTest 620/620 与 PR #59 精确代码 head CI 通过，等待用户集中验收。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -197,7 +197,8 @@ Project_Raidline.exe
 - [x] 从 `origin/main@b1ea3c3` 建立 Extraction Loop 分支并完成领域合同提交 `2d9b96d`。
 - [x] 完成 WeaponAmmo、100 HP/Medkit、RaidSnapshot、真实 Loot/随身库存、无硬时限与幂等 Settlement 的端到端实现提交 `66f3120`。
 - [x] Extraction Loop focused 17/17 与全量 CTest 620/620 通过；开发代理未启动游戏。
-- [ ] Extraction Loop exact-head CI 与用户集中真实窗口验收通过并进入接受基线。
+- [x] PR #59 精确代码 head `864f12e` 的范围检测、Windows 与 Ubuntu CI 全部成功。
+- [ ] 用户完成 Extraction Loop 集中真实窗口验收；通过后记录证据、转为 Ready，并等待显式合并授权。
 
 最后更新：2026-08-15。
 
