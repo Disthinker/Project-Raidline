@@ -1,6 +1,6 @@
 # Build Module Foundation ExecPlan
 
-状态：本地实现、自动化与实现 head CI 通过；PR #56 等待最终证据 head 门禁
+状态：已完成；PR #56 以 merge commit `1837928` 进入 main
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -82,7 +82,7 @@ Project_Raidline (main.cpp)
 - 代表 domain/simulation/services/SDL client 与 RL-INV-003 的 focused CTest 133/133 通过。
 - 全量 CTest 558/558 通过，0 失败。
 - 实现与初始证据 head `a375fec` 的范围检测、Windows C++、Ubuntu C++ CI 全部成功：[CI run 31805812872](https://github.com/Disthinker/Project-Raidline/actions/runs/31805812872)。
-- 本次纯证据收口提交成为新 PR head 后，仍须通过同一组精确 head 门禁才可转 Ready。
+- 最终证据 head `ef66dbd` 的范围检测、Windows C++、Ubuntu C++ CI 全部成功：[CI run 31806491008](https://github.com/Disthinker/Project-Raidline/actions/runs/31806491008)。
 
 人工验收：本 PR 不改变可见行为，因此不新增真实窗口门禁，也不由开发代理启动游戏。若代码审查或 CI 暴露运行时链接风险，再把 Slice 0 的既有窗口清单放在所有自动化之后交给用户复验。
 
@@ -107,7 +107,8 @@ Project_Raidline (main.cpp)
 - [x] focused 133/133、全量 558/558 通过。
 - [x] 以 `4f91781` 提交构建迁移、`a375fec` 提交计划与状态，推送并创建 Draft PR #56。
 - [x] 实现与初始证据 head `a375fec` 的范围、Windows、Ubuntu CI 全部成功。
-- [ ] 最终纯证据 head 的精确 CI 全部成功并把 PR #56 转 Ready。
-- [ ] PR 接受后归档本计划并从最新 main 开始 Content Registry v1。
+- [x] 最终证据 head `ef66dbd` 的范围、Windows、Ubuntu CI 全部成功并把 PR #56 转 Ready。
+- [x] PR #56 以 merge commit `1837928` 进入 main，本计划归档。
+- [x] 从最新 main 开始独立 Content Registry v1 切片。
 
 最后更新：2026-08-14。

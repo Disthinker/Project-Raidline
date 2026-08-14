@@ -12,12 +12,12 @@
 
 ## 架构迁移门槛
 
-PR #55 与 PR #54 已进入 `origin/main@5bbddc3`。当前从该接受基线依次完成三项有消费者的架构迁移，再继续 Alpha 玩家功能：
+PR #55、PR #54 与 PR #56 已进入 `origin/main@1837928`。当前从该接受基线继续完成后两项有消费者的架构迁移，再进入 Alpha 玩家功能：
 
 | 迁移 PR | 结果 | 行为要求 |
 | --- | --- | --- |
-| Build Module Foundation | 四个生产库目标，测试链接生产库 | PR #56 实现 head 本地 558/558 与三项 CI 通过，等待最终证据门禁 |
-| Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 不改变现有内容数量与手感 |
+| Build Module Foundation | 四个生产库目标，测试链接生产库 | PR #56 已以 merge commit `1837928` 进入 main |
+| Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 本地 134/134 focused、574/574 全量通过，等待 PR 精确 head CI；行为不变 |
 | Profile Asset Registry | ProfileState、唯一 AssetRegistry、AssetLocation、revision | 旧 GameplayWorld 通过适配器保持可玩 |
 
 ## Core Extraction Alpha
@@ -45,7 +45,7 @@ PR #55 与 PR #54 已进入 `origin/main@5bbddc3`。当前从该接受基线依�
 
 ## 并行但不混写的分支
 
-- `codex/build-module-foundation`：只迁移 CMake 构建所有权；不夹带内容、资产所有权或玩家功能。
+- `codex/content-registry-v1`：只迁移版本化内容定义与旧枚举适配；不夹带资产所有权、存档或玩家功能。
 - `codex/week29-combat-feedback-and-attack-animation`：代码反馈与 fallback 已完成但无 PR、未进 main；正式攻击美术继续暂停。后续只允许独立整理代码部分，不能混入架构迁移。
 
 ## 产品级决策门槛

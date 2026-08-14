@@ -8,14 +8,12 @@
 #include <utility>
 
 #include "collision.h"
+#include "content_registry.h"
 #include "hit_resolution.h"
 #include "inventory_transfer.h"
 
 namespace
 {
-    constexpr float kWorldWidth{1280.0f};
-    constexpr float kWorldHeight{720.0f};
-
     constexpr float kLegacyShotSpeed{1200.0f};
     constexpr float kLegacyShotExtent{8.0f};
     constexpr float kMaximumProjectileTravelPerStep{8.0F};
@@ -23,64 +21,83 @@ namespace
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
-    constexpr int kDefaultEnemyMaxHealth{3};
     constexpr int kLegacyShotDamage{1};
 
     constexpr int kScorePerEnemy{100};
 
+    const MapDefinition &defaultMap()
+    {
+        return defaultV0MapDefinition();
+    }
+
+    float worldWidth()
+    {
+        return defaultMap().worldSize.x;
+    }
+
+    float worldHeight()
+    {
+        return defaultMap().worldSize.y;
+    }
+
+    std::vector<EnemySpawn> makeDefaultEnemySpawns()
+    {
+        const EnemyDeploymentDefinition &deployment =
+            publishedContentRegistry().enemyDeployment(
+                defaultMap().enemyDeploymentId);
+        std::vector<EnemySpawn> result;
+        result.reserve(deployment.enemies.size());
+        for (const EnemySpawnDefinition &enemy : deployment.enemies)
+        {
+            result.push_back(
+                EnemySpawn{
+                    enemy.position,
+                    enemy.size,
+                    enemy.maximumHealth});
+        }
+        return result;
+    }
+
     std::vector<EnemySpawn> makeDefaultEnemySpawns(
         int maximumHealth)
     {
-        return std::vector<EnemySpawn>{
-            EnemySpawn{
-                Vec2{600.0F, 100.0F},
-                Vec2{50.0F, 50.0F},
-                maximumHealth},
-            EnemySpawn{
-                Vec2{350.0F, 500.0F},
-                Vec2{50.0F, 50.0F},
-                maximumHealth},
-            EnemySpawn{
-                Vec2{930.0F, 500.0F},
-                Vec2{50.0F, 50.0F},
-                maximumHealth}};
+        std::vector<EnemySpawn> result =
+            makeDefaultEnemySpawns();
+        for (EnemySpawn &enemy : result)
+        {
+            enemy.maxHealth = maximumHealth;
+        }
+        return result;
     }
 
-    constexpr InventoryGridSize kDefaultInventorySize{
-        10,
-        6};
+    InventoryGridSize defaultInventorySize()
+    {
+        return InventoryGridSize{
+            defaultMap().defaultInventorySize.width,
+            defaultMap().defaultInventorySize.height};
+    }
 
     std::vector<GroundItemSpawn>
     makeDefaultGroundItemSpawns()
     {
-        return {
+        std::vector<GroundItemSpawn> result;
+        result.reserve(defaultMap().groundItems.size());
+        for (const GroundItemDefinition &item : defaultMap().groundItems)
+        {
+            const std::optional<ItemId> legacyId =
+                legacyItemId(item.itemDefinitionId);
+            if (!legacyId.has_value())
             {
-                ItemId::Cola,
-                Vec2{720.0f, 380.0f},
-            },
-            {
-                ItemId::Medkit,
-                Vec2{520.0f, 420.0f},
-            },
-            {
-                ItemId::Pistol,
-                Vec2{820.0f, 300.0f},
-            },
-            {
-                ItemId::Rifle,
-                Vec2{960.0f, 520.0f},
-            },
-            {
-                ItemId::Ammo9mm,
-                Vec2{640.0f, 440.0f},
-                25,
-            },
-            {
-                ItemId::Ammo9mm,
-                Vec2{760.0f, 440.0f},
-                40,
-            },
-        };
+                throw std::logic_error{
+                    "V0 map content requires a legacy ItemId adapter"};
+            }
+            result.push_back(
+                GroundItemSpawn{
+                    *legacyId,
+                    item.position,
+                    item.quantity});
+        }
+        return result;
     }
 
     Rect playerBounds(
@@ -136,20 +153,24 @@ namespace
 
 GameplayWorld::GameplayWorld()
     : GameplayWorld{
-          kDefaultEnemyMaxHealth,
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize,
-          ItemInstanceId{1}}
+          defaultInventorySize(),
+          ItemInstanceId{1},
+          makeDefaultEnemySpawns(),
+          3,
+          PlayerHealthOverrideTag{}}
 {
 }
 
 GameplayWorld::GameplayWorld(
     ItemInstanceId firstItemInstanceId)
     : GameplayWorld{
-          kDefaultEnemyMaxHealth,
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize,
-          firstItemInstanceId}
+          defaultInventorySize(),
+          firstItemInstanceId,
+          makeDefaultEnemySpawns(),
+          3,
+          PlayerHealthOverrideTag{}}
 {
 }
 
@@ -158,7 +179,7 @@ GameplayWorld::GameplayWorld(
     : GameplayWorld{
           enemyMaxHealth,
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize}
+          defaultInventorySize()}
 {
 }
 
@@ -167,7 +188,7 @@ GameplayWorld::GameplayWorld(
     int playerMaxHealth)
     : GameplayWorld{
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize,
+          defaultInventorySize(),
           ItemInstanceId{1},
           makeDefaultEnemySpawns(enemyMaxHealth),
           playerMaxHealth,
@@ -180,7 +201,7 @@ GameplayWorld::GameplayWorld(
     int playerMaxHealth)
     : GameplayWorld{
           makeDefaultGroundItemSpawns(),
-          kDefaultInventorySize,
+          defaultInventorySize(),
           ItemInstanceId{1},
           std::move(initialEnemies),
           playerMaxHealth,
@@ -194,7 +215,7 @@ GameplayWorld::GameplayWorld(
     : GameplayWorld{
           enemyMaxHealth,
           std::move(initialGroundItems),
-          kDefaultInventorySize}
+          defaultInventorySize()}
 {
 }
 
@@ -232,8 +253,25 @@ GameplayWorld::GameplayWorld(
     std::vector<EnemySpawn> initialEnemies,
     int playerMaxHealth,
     PlayerHealthOverrideTag)
-    : player_{640.0F, 360.0F, playerMaxHealth},
+    : player_{
+          defaultMap().playerSpawn.x,
+          defaultMap().playerSpawn.y,
+          playerMaxHealth},
       inventory_{inventorySize},
+      storageCabinet_{
+          defaultMap().storageCabinet.bounds.position,
+          defaultMap().storageCabinet.bounds.size,
+          defaultMap().storageCabinet.interactionRange,
+          InventoryGridSize{
+              defaultMap().storageCabinet.inventorySize.width,
+              defaultMap().storageCabinet.inventorySize.height}},
+      extractionPoint_{
+          defaultMap().extractionPoint.position,
+          defaultMap().extractionPoint.size},
+      raidSession_{
+          RaidSessionConfig{
+              defaultMap().raidRules.durationSeconds,
+              defaultMap().raidRules.extractionDurationSeconds}},
       nextItemInstanceId_{firstItemInstanceId},
       particleSystem_{
           0xC0FFEEu,
@@ -446,8 +484,8 @@ void GameplayWorld::update(
     player_.update(
         input,
         deltaTime,
-        kWorldWidth,
-        kWorldHeight);
+        worldWidth(),
+        worldHeight());
 
     if (input.aimWorldPosition.has_value())
     {
@@ -524,8 +562,8 @@ void GameplayWorld::update(
                     playerPosition,
                     directives[enemyIndex],
                     enemyStepTime,
-                    kWorldWidth,
-                    kWorldHeight));
+                    worldWidth(),
+                    worldHeight()));
 
             if (enemy.hasGrabContactOpportunity())
             {
@@ -734,8 +772,8 @@ void GameplayWorld::update(
                 [](const Projectile &projectile)
                 {
                     return projectile.isOutside(
-                        kWorldWidth,
-                        kWorldHeight);
+                        worldWidth(),
+                        worldHeight());
                 }),
             projectiles_.end());
     }
@@ -1130,11 +1168,11 @@ bool GameplayWorld::dropInventoryItemQuantity(
         std::clamp(
             center.x,
             halfWidth,
-            kWorldWidth - halfWidth),
+            worldWidth() - halfWidth),
         std::clamp(
             playerFeetY,
             halfHeight,
-            kWorldHeight - halfHeight),
+            worldHeight() - halfHeight),
     };
 
     std::optional<ItemInstance> splitItem;

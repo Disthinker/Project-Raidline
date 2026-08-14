@@ -1,8 +1,11 @@
 #include "loot_table.h"
 
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
+
+#include "content_registry.h"
 
 namespace
 {
@@ -224,15 +227,38 @@ LootTable::entries() const noexcept
 
 const LootTable &defaultStorageCabinetLootTable()
 {
-    static const LootTable table{
+    static const LootTable table = []
+    {
+        const ContentRegistry &registry =
+            publishedContentRegistry();
+        const LootTableDefinition &definition =
+            registry.lootTable(
+                defaultV0MapDefinition()
+                    .storageLootTableId);
+
+        std::vector<LootTableEntry> entries;
+        entries.reserve(definition.entries.size());
+        for (const LootContentEntry &entry : definition.entries)
         {
-            {ItemId::Cola, 24, 1, 1},
-            {ItemId::Medkit, 20, 1, 1},
-            {ItemId::Pistol, 16, 1, 1},
-            {ItemId::Rifle, 8, 1, 1},
-            {ItemId::Ammo9mm, 32, 10, 30},
-        },
-        3};
+            const std::optional<ItemId> itemId =
+                legacyItemId(entry.itemDefinitionId);
+            if (!itemId.has_value())
+            {
+                throw std::logic_error{
+                    "V0 loot content requires a legacy ItemId adapter"};
+            }
+            entries.push_back(
+                LootTableEntry{
+                    *itemId,
+                    entry.weight,
+                    entry.minimumQuantity,
+                    entry.maximumQuantity});
+        }
+
+        return LootTable{
+            std::move(entries),
+            definition.rollCount};
+    }();
 
     return table;
 }

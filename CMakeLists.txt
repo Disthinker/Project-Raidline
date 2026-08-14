@@ -18,8 +18,24 @@ endif()
 
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
+
+set(RAIDLINE_PUBLISHED_CONTENT_FILE
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/content/v1/core.json")
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${RAIDLINE_PUBLISHED_CONTENT_FILE}")
+file(READ
+    "${RAIDLINE_PUBLISHED_CONTENT_FILE}"
+    RAIDLINE_PUBLISHED_CONTENT_JSON)
+configure_file(
+    src/published_content_json.h.in
+    generated/published_content_json.h
+    @ONLY)
 
 function(raidline_configure_library target)
     target_compile_features(${target} PUBLIC cxx_std_20)
@@ -160,6 +176,9 @@ endfunction()
 # Stable modular-monolith production targets. This PR moves build ownership
 # only; existing App, GameplayWorld and V0 behavior remain unchanged.
 add_library(raidline_domain STATIC
+    src/content_registry.cpp
+    src/content_registry.h
+    src/definition_id.h
     src/health_system.h
     src/item_definition.cpp
     src/item_definition.h
@@ -183,6 +202,14 @@ add_library(raidline_domain STATIC
     src/vec2.h
 )
 raidline_configure_library(raidline_domain)
+target_include_directories(
+    raidline_domain
+    PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(
+    raidline_domain
+    PRIVATE
+    nlohmann_json::nlohmann_json)
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
@@ -385,6 +412,17 @@ raidline_add_test(
     ParticleSystemTest
     tests/test_particle_system.cpp
     raidline::simulation)
+raidline_add_test(
+    ContentRegistryTest
+    tests/test_content_registry.cpp
+    raidline::domain)
+file(TO_CMAKE_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    RAIDLINE_SOURCE_ASSET_DIR)
+target_compile_definitions(
+    ContentRegistryTest
+    PRIVATE
+    "RAIDLINE_SOURCE_ASSET_DIR=\"${RAIDLINE_SOURCE_ASSET_DIR}\"")
 raidline_add_test(
     ItemDefinitionTest
     tests/test_item_definition.cpp

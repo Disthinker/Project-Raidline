@@ -220,18 +220,9 @@ private:
 
     std::vector<GroundItem> groundItems_;
     GridInventory inventory_{{10, 6}};
-    StorageCabinet storageCabinet_{
-        {960.0F, 296.0F},
-        {96.0F, 128.0F},
-        64.0F,
-        {6, 6}};
-    ExtractionPoint extractionPoint_{
-        {64.0F, 520.0F},
-        {176.0F, 136.0F}};
-    RaidSession raidSession_{
-        RaidSessionConfig{
-            180.0F,
-            3.0F}};
+    StorageCabinet storageCabinet_;
+    ExtractionPoint extractionPoint_;
+    RaidSession raidSession_;
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
