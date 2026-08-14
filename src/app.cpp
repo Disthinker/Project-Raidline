@@ -5,6 +5,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <chrono>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <utility>
@@ -14,6 +16,7 @@
 #include <fmt/core.h>
 
 #include "content_registry.h"
+#include "alpha_content_ids.h"
 #include "inventory_transfer.h"
 
 namespace
@@ -63,6 +66,82 @@ namespace
     constexpr float kFlowButtonY{500.0F};
     constexpr float kFlowButtonWidth{280.0F};
     constexpr float kFlowButtonHeight{60.0F};
+    constexpr float kBaseStashX{40.0F};
+    constexpr float kBaseStashY{184.0F};
+    constexpr float kBaseStashCellSize{24.0F};
+    constexpr float kBasePocketCellSize{28.0F};
+
+    SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
+    {
+        const float index = static_cast<float>(slot);
+        return SDL_FRect{560.0F + index * 220.0F, 92.0F, 190.0F, 64.0F};
+    }
+
+    bool contains(const SDL_FRect &rect, MousePosition point) noexcept
+    {
+        return point.x >= rect.x && point.y >= rect.y &&
+               point.x < rect.x + rect.w && point.y < rect.y + rect.h;
+    }
+
+    struct ProfileGridView
+    {
+        ProfileContainerId container;
+        float x{};
+        float y{};
+        float cellSize{};
+        const char *label{};
+    };
+
+    std::vector<ProfileGridView> profileGridViews(
+        const ProfileState &profile)
+    {
+        std::vector<ProfileGridView> result{
+            ProfileGridView{
+                ProfileContainerId::stash(),
+                kBaseStashX,
+                kBaseStashY,
+                kBaseStashCellSize,
+                "STASH"}};
+
+        if (const auto chest = equippedAsset(
+                profile,
+                EquipmentSlotKind::ChestRig))
+        {
+            result.push_back({
+                ProfileContainerId::compartment(*chest, 0),
+                570.0F, 230.0F, kBasePocketCellSize, "MAG 1"});
+            result.push_back({
+                ProfileContainerId::compartment(*chest, 1),
+                620.0F, 230.0F, kBasePocketCellSize, "MAG 2"});
+            result.push_back({
+                ProfileContainerId::compartment(*chest, 2),
+                680.0F, 230.0F, kBasePocketCellSize, "UTIL 1"});
+            result.push_back({
+                ProfileContainerId::compartment(*chest, 3),
+                724.0F, 230.0F, kBasePocketCellSize, "UTIL 2"});
+        }
+        if (const auto backpack = equippedAsset(
+                profile,
+                EquipmentSlotKind::Backpack))
+        {
+            result.push_back({
+                ProfileContainerId::compartment(*backpack, 0),
+                820.0F, 230.0F, kBasePocketCellSize, "BACKPACK"});
+        }
+        return result;
+    }
+
+    const std::array<ItemDefinitionId, 6> &fixedSupplyIds()
+    {
+        static const std::array<ItemDefinitionId, 6> ids{
+            alpha_content::rifle,
+            alpha_content::magazine,
+            alpha_content::ammunition,
+            alpha_content::chestRig,
+            alpha_content::backpack,
+            alpha_content::medkit};
+        return ids;
+    }
 
     double orientationAngle(
         ItemOrientation orientation) noexcept
@@ -477,6 +556,19 @@ bool App::initialize()
         return false;
     }
 
+    char *preferencePath = SDL_GetPrefPath(
+        "Disthinker",
+        "Project Raidline");
+    if (preferencePath == nullptr)
+    {
+        fmt::print("SDL_GetPrefPath failed: {}\n", SDL_GetError());
+        SDL_Quit();
+        return false;
+    }
+    gameFlow_.configurePersistence(
+        std::filesystem::path{preferencePath});
+    SDL_free(preferencePath);
+
     window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
     if (!window_)
     {
@@ -545,17 +637,23 @@ GameplayInput App::makeGameplayInput() const
     return input;
 }
 
-bool App::handleScreenConfirm() noexcept
+bool App::handleScreenConfirm()
 {
     bool transitioned{false};
 
     switch (gameFlow_.state())
     {
     case GameFlowState::MainMenu:
-        transitioned = gameFlow_.startGame();
+        handleMainMenuCommand(
+            gameSession_.hasSavedProfile()
+                ? MainMenuCommand::Continue
+                : MainMenuCommand::NewGame);
+        transitioned = gameFlow_.state() == GameFlowState::Base;
         break;
     case GameFlowState::Base:
-        transitioned = gameFlow_.deploy();
+        transitioned =
+            gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+            gameFlow_.deploy();
         break;
     case GameFlowState::Raid:
         break;
@@ -571,6 +669,96 @@ bool App::handleScreenConfirm() noexcept
     }
 
     return transitioned;
+}
+
+SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
+{
+    return SDL_FRect{500.0F, 340.0F + static_cast<float>(index) * 58.0F, 280.0F, 46.0F};
+}
+
+std::optional<MainMenuCommand> App::mainMenuCommandAt(
+    float x,
+    float y) const noexcept
+{
+    const MousePosition point{x, y};
+    for (std::size_t index = 0; index < 4; ++index)
+    {
+        if (contains(mainMenuButton(index), point))
+        {
+            return static_cast<MainMenuCommand>(index);
+        }
+    }
+    return std::nullopt;
+}
+
+void App::handleMainMenuCommand(MainMenuCommand command)
+{
+    if (settingsOpen_)
+    {
+        if (command == MainMenuCommand::Settings)
+        {
+            settingsOpen_ = false;
+        }
+        return;
+    }
+
+    if (command == MainMenuCommand::Continue)
+    {
+        if (!gameSession_.hasSavedProfile())
+        {
+            uiMessage_ = "NO VALID PRIMARY SAVE";
+            return;
+        }
+        if (!gameFlow_.continueGame())
+        {
+            uiMessage_ = gameSession_.persistenceMessage();
+            return;
+        }
+        uiMessage_ = gameSession_.lastSaveLoadStatus() ==
+                SaveLoadStatus::RecoveredBackup
+            ? "RECOVERED SAFE BACKUP"
+            : "PROFILE LOADED";
+        return;
+    }
+
+    if (command == MainMenuCommand::NewGame)
+    {
+        if (gameSession_.hasSavedProfile() && !newGameOverwriteArmed_)
+        {
+            newGameOverwriteArmed_ = true;
+            uiMessage_ = "PRESS NEW GAME AGAIN TO OVERWRITE";
+            return;
+        }
+        const auto ticks = std::chrono::system_clock::now()
+            .time_since_epoch().count();
+        if (!gameFlow_.startNewGame(
+                "profile-" + std::to_string(ticks)))
+        {
+            uiMessage_ = gameSession_.persistenceMessage();
+            return;
+        }
+        newGameOverwriteArmed_ = false;
+        uiMessage_ = "NEW PROFILE CREATED";
+        return;
+    }
+
+    if (command == MainMenuCommand::Settings)
+    {
+        settingsOpen_ = true;
+        uiMessage_.clear();
+        return;
+    }
+    running_ = false;
+}
+
+std::string App::nextProfileTransactionId(const char *prefix)
+{
+    ++profileTransactionSequence_;
+    return fmt::format(
+        "ui.{}.rev{}.{}",
+        prefix,
+        gameSession_.profile().revision,
+        profileTransactionSequence_);
 }
 
 SDL_FRect App::screenPrimaryButton() const noexcept
@@ -614,6 +802,258 @@ void App::handleInventoryCancel()
     }
 
     closeInventory();
+}
+
+void App::updateBase(float deltaTime)
+{
+    if (gameFlow_.activeBaseFacility().has_value())
+    {
+        if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+        {
+            gameFlow_.closeBaseFacility();
+            profileAssetSelection_.reset();
+            pendingBaseClicks_.clear();
+            uiMessage_.clear();
+            return;
+        }
+
+        if (pendingBaseRotate_ && profileAssetSelection_.has_value())
+        {
+            profileAssetSelection_->orientation = rotatedClockwise(
+                profileAssetSelection_->orientation);
+        }
+        for (const BasePointerClick &click : pendingBaseClicks_)
+        {
+            handleBasePointerClick(click);
+        }
+        pendingBaseClicks_.clear();
+        return;
+    }
+
+    BaseInput input;
+    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
+    input.sprint = input_.isShiftPressed();
+    input.interactJustPressed =
+        input_.wasActionJustPressed(GameAction::Interact);
+    gameFlow_.updateBase(input, deltaTime);
+}
+
+void App::handleBasePointerClick(const BasePointerClick &click)
+{
+    const auto facility = gameFlow_.activeBaseFacility();
+    if (!facility.has_value())
+    {
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::RaidGate)
+    {
+        if (screenPrimaryButtonContains(click.position.x, click.position.y))
+        {
+            if (!gameFlow_.deploy())
+            {
+                uiMessage_ = "DEPLOYMENT IS NOT AVAILABLE";
+            }
+            else
+            {
+                profileAssetSelection_.reset();
+            }
+        }
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::Supply)
+    {
+        const auto &supply = fixedSupplyIds();
+        for (std::size_t index = 0; index < supply.size(); ++index)
+        {
+            const SDL_FRect row{
+                100.0F,
+                164.0F + static_cast<float>(index) * 54.0F,
+                430.0F,
+                44.0F};
+            if (!contains(row, click.position))
+            {
+                continue;
+            }
+            const std::uint32_t quantity =
+                supply[index] == alpha_content::ammunition ? 30U : 1U;
+            const EconomyReceipt receipt =
+                gameSession_.executeProfileEconomy(
+                    PurchaseCommand{supply[index], quantity},
+                    nextProfileTransactionId("purchase"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format("PURCHASED | CURRENCY {}", gameSession_.profile().currency)
+                : receipt.message;
+            return;
+        }
+
+        std::size_t rowIndex{};
+        for (const AssetRecord *asset : assetsInContainer(
+                 gameSession_.profile(),
+                 ProfileContainerId::stash()))
+        {
+            if (rowIndex >= 12)
+            {
+                break;
+            }
+            const SDL_FRect row{
+                650.0F,
+                164.0F + static_cast<float>(rowIndex) * 30.0F,
+                500.0F,
+                26.0F};
+            if (contains(row, click.position))
+            {
+                profileAssetSelection_ = ProfileAssetSelection{
+                    asset->instanceId,
+                    0,
+                    asset->orientation};
+                uiMessage_ = "SELECTED FOR RECYCLE";
+                return;
+            }
+            ++rowIndex;
+        }
+
+        const SDL_FRect recycleButton{820.0F, 554.0F, 280.0F, 48.0F};
+        if (contains(recycleButton, click.position) &&
+            profileAssetSelection_.has_value())
+        {
+            const EconomyReceipt receipt = gameSession_.executeProfileEconomy(
+                RecycleCommand{profileAssetSelection_->instanceId},
+                nextProfileTransactionId("recycle"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format("RECYCLED | CURRENCY {}", gameSession_.profile().currency)
+                : receipt.message;
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
+
+        const SDL_FRect reliefButton{140.0F, 554.0F, 280.0F, 48.0F};
+        if (contains(reliefButton, click.position))
+        {
+            const std::string batchId = nextProfileTransactionId("relief-batch");
+            const EconomyReceipt receipt = gameSession_.executeProfileEconomy(
+                ClaimReliefCommand{batchId},
+                nextProfileTransactionId("claim-relief"));
+            uiMessage_ = receipt.succeeded
+                ? "RELIEF BATCH ADDED TO STASH"
+                : receipt.message;
+        }
+        return;
+    }
+
+    const ProfileState &profile = gameSession_.profile();
+    for (EquipmentSlotKind slot : {
+             EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::ChestRig,
+             EquipmentSlotKind::Backpack})
+    {
+        if (!contains(equipmentSlotRect(slot), click.position))
+        {
+            continue;
+        }
+        if (!profileAssetSelection_.has_value())
+        {
+            if (const auto equipped = equippedAsset(profile, slot))
+            {
+                const AssetRecord *asset = profile.assets.find(*equipped);
+                profileAssetSelection_ = ProfileAssetSelection{
+                    *equipped, 0, asset->orientation};
+            }
+            return;
+        }
+        const InventoryReceipt receipt =
+            gameSession_.executeProfileInventory(
+                InventoryEquipCommand{
+                    profileAssetSelection_->instanceId,
+                    slot},
+                nextProfileTransactionId("equip"));
+        uiMessage_ = receipt.succeeded ? "EQUIPMENT UPDATED" : receipt.message;
+        if (receipt.succeeded)
+        {
+            profileAssetSelection_.reset();
+        }
+        return;
+    }
+
+    for (const ProfileGridView &view : profileGridViews(profile))
+    {
+        InventoryGridSize size{};
+        try
+        {
+            size = profileContainerSize(
+                profile,
+                publishedContentRegistry(),
+                view.container);
+        }
+        catch (...)
+        {
+            continue;
+        }
+        const SDL_FRect bounds{
+            view.x,
+            view.y,
+            static_cast<float>(size.width) * view.cellSize,
+            static_cast<float>(size.height) * view.cellSize};
+        if (!contains(bounds, click.position))
+        {
+            continue;
+        }
+        const GridPosition cell{
+            static_cast<int>((click.position.x - view.x) / view.cellSize),
+            static_cast<int>((click.position.y - view.y) / view.cellSize)};
+        if (!profileAssetSelection_.has_value())
+        {
+            const auto occupant = profileAssetAtCell(
+                profile,
+                publishedContentRegistry(),
+                view.container,
+                cell);
+            if (occupant.has_value())
+            {
+                const AssetRecord *asset = profile.assets.find(*occupant);
+                std::uint32_t quantity{};
+                if (click.controlPressed != click.shiftPressed)
+                {
+                    quantity = click.controlPressed
+                        ? 1U
+                        : (asset->quantity + 1U) / 2U;
+                }
+                profileAssetSelection_ = ProfileAssetSelection{
+                    *occupant,
+                    quantity,
+                    asset->orientation};
+                uiMessage_ = quantity == 0
+                    ? "ASSET SELECTED"
+                    : fmt::format("LOCKED QUANTITY {}", quantity);
+            }
+            return;
+        }
+
+        const InventoryReceipt receipt =
+            gameSession_.executeProfileInventory(
+                InventoryMoveCommand{
+                    profileAssetSelection_->instanceId,
+                    profileAssetSelection_->quantity,
+                    StoredAssetLocation{view.container, cell},
+                    profileAssetSelection_->orientation},
+                nextProfileTransactionId("move"));
+        uiMessage_ = receipt.succeeded ? "INVENTORY UPDATED" : receipt.message;
+        if (receipt.succeeded)
+        {
+            profileAssetSelection_.reset();
+        }
+        return;
+    }
+
+    profileAssetSelection_.reset();
+    uiMessage_.clear();
 }
 
 InventoryGridLayout
@@ -1089,6 +1529,9 @@ void App::handleInventoryPartialTransferEvent(
 void App::processEvents()
 {
     pendingInventoryUiEvents_.clear();
+    pendingBaseClicks_.clear();
+    pendingBaseRotate_ = false;
+    pendingMainMenuCommand_.reset();
     pendingScreenConfirm_ = false;
 
     SDL_Event event;
@@ -1115,16 +1558,66 @@ void App::processEvents()
             running_ = false;
         }
 
-        else if (!gameFlow_.isRaidScreen())
+        else if (gameFlow_.state() == GameFlowState::MainMenu)
         {
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
             {
                 input_.suppressPrimaryPointerUntilRelease();
+                pendingMainMenuCommand_ = mainMenuCommandAt(
+                    event.button.x,
+                    event.button.y);
+            }
+            else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
+            {
+                switch (event.key.scancode)
+                {
+                case SDL_SCANCODE_C:
+                    pendingMainMenuCommand_ = MainMenuCommand::Continue;
+                    break;
+                case SDL_SCANCODE_N:
+                    pendingMainMenuCommand_ = MainMenuCommand::NewGame;
+                    break;
+                case SDL_SCANCODE_S:
+                    pendingMainMenuCommand_ = MainMenuCommand::Settings;
+                    break;
+                case SDL_SCANCODE_Q:
+                    pendingMainMenuCommand_ = MainMenuCommand::Exit;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
 
-                if (screenPrimaryButtonContains(
-                        event.button.x,
-                        event.button.y))
+        else if (gameFlow_.state() == GameFlowState::Base)
+        {
+            if (gameFlow_.activeBaseFacility().has_value() &&
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event.button.button == SDL_BUTTON_LEFT)
+            {
+                input_.suppressPrimaryPointerUntilRelease();
+                pendingBaseClicks_.push_back(BasePointerClick{
+                    MousePosition{event.button.x, event.button.y},
+                    input_.isControlPressed(),
+                    input_.isShiftPressed()});
+            }
+            else if (gameFlow_.activeBaseFacility().has_value() &&
+                     event.type == SDL_EVENT_KEY_DOWN &&
+                     event.key.scancode == SDL_SCANCODE_R &&
+                     !event.key.repeat)
+            {
+                pendingBaseRotate_ = true;
+            }
+        }
+
+        else if (gameFlow_.state() == GameFlowState::RaidResult)
+        {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event.button.button == SDL_BUTTON_LEFT)
+            {
+                input_.suppressPrimaryPointerUntilRelease();
+                if (screenPrimaryButtonContains(event.button.x, event.button.y))
                 {
                     pendingScreenConfirm_ = true;
                 }
@@ -1162,18 +1655,41 @@ void App::update(float deltaTime)
             GameAction::ScreenConfirm);
     pendingScreenConfirm_ = false;
 
-    if (!gameFlow_.isRaidScreen())
+    if (gameFlow_.state() == GameFlowState::MainMenu)
     {
         pendingInventoryUiEvents_.clear();
-
-        if (screenConfirm)
+        if (pendingMainMenuCommand_.has_value())
+        {
+            handleMainMenuCommand(*pendingMainMenuCommand_);
+        }
+        else if (screenConfirm)
         {
             static_cast<void>(
                 handleScreenConfirm());
         }
+        return;
+    }
 
-        // 屏幕转换帧在此终止；Enter/鼠标点击不能继续落入新屏幕
-        // 或刚激活的 GameplayWorld。
+    if (gameFlow_.state() == GameFlowState::Base)
+    {
+        pendingInventoryUiEvents_.clear();
+        if (screenConfirm &&
+            gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate)
+        {
+            static_cast<void>(handleScreenConfirm());
+            return;
+        }
+        updateBase(deltaTime);
+        return;
+    }
+
+    if (gameFlow_.state() == GameFlowState::RaidResult)
+    {
+        pendingInventoryUiEvents_.clear();
+        if (screenConfirm)
+        {
+            static_cast<void>(handleScreenConfirm());
+        }
         return;
     }
 
@@ -3588,28 +4104,456 @@ void App::renderMainMenu()
         564.0F,
         244.0F,
         "PROJECT RAIDLINE");
-    SDL_RenderDebugText(
-        renderer_,
-        524.0F,
-        282.0F,
-        "EXTRACTION PROTOTYPE");
-    SDL_RenderDebugText(
-        renderer_,
-        520.0F,
-        340.0F,
-        "ENTER THE BASE TO PREPARE");
-    SDL_RenderDebugText(
-        renderer_,
-        536.0F,
-        366.0F,
-        "YOUR NEXT RAID DEPLOYMENT");
+    SDL_RenderDebugText(renderer_, 548.0F, 278.0F, "CORE EXTRACTION ALPHA");
 
-    renderScreenPrimaryButton(
-        "START GAME");
+    if (settingsOpen_)
+    {
+        SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
+        SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
+        SDL_RenderDebugText(renderer_, 500.0F, 400.0F, "TAB INVENTORY  ESC CLOSE  R ROTATE");
+        const SDL_FRect back = mainMenuButton(2);
+        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
+        SDL_RenderFillRect(renderer_, &back);
+        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
+        SDL_RenderRect(renderer_, &back);
+        SDL_RenderDebugText(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
+    }
+    else
+    {
+        const std::array<const char *, 4> labels{
+            "CONTINUE GAME",
+            newGameOverwriteArmed_ ? "CONFIRM NEW GAME" : "NEW GAME",
+            "SETTINGS",
+            "EXIT"};
+        for (std::size_t index = 0; index < labels.size(); ++index)
+        {
+            const SDL_FRect button = mainMenuButton(index);
+            const bool disabled = index == 0 && !gameSession_.hasSavedProfile();
+            SDL_SetRenderDrawColor(
+                renderer_,
+                disabled ? 34 : 42,
+                disabled ? 45 : 102,
+                disabled ? 48 : 82,
+                245);
+            SDL_RenderFillRect(renderer_, &button);
+            SDL_SetRenderDrawColor(
+                renderer_,
+                disabled ? 80 : 132,
+                disabled ? 90 : 225,
+                disabled ? 94 : 176,
+                255);
+            SDL_RenderRect(renderer_, &button);
+            SDL_RenderDebugText(
+                renderer_,
+                button.x + 16.0F,
+                button.y + 17.0F,
+                labels[index]);
+        }
+    }
+
+    if (!uiMessage_.empty())
+    {
+        SDL_RenderDebugText(renderer_, 484.0F, 596.0F, uiMessage_.c_str());
+    }
+}
+
+void App::renderBaseWorld()
+{
+    SDL_SetRenderDrawColor(renderer_, 20, 32, 34, 255);
+    const SDL_FRect courtyard{32.0F, 24.0F, 1216.0F, 664.0F};
+    SDL_RenderFillRect(renderer_, &courtyard);
+    SDL_SetRenderDrawColor(renderer_, 76, 98, 96, 255);
+    SDL_RenderRect(renderer_, &courtyard);
+
+    for (const BaseFacility &facility : gameFlow_.baseWorld().facilities())
+    {
+        const SDL_FRect bounds{
+            facility.bounds.position.x,
+            facility.bounds.position.y,
+            facility.bounds.size.x,
+            facility.bounds.size.y};
+        switch (facility.kind)
+        {
+        case BaseFacilityKind::Storage:
+            SDL_SetRenderDrawColor(renderer_, 48, 78, 96, 255);
+            break;
+        case BaseFacilityKind::Supply:
+            SDL_SetRenderDrawColor(renderer_, 78, 76, 48, 255);
+            break;
+        case BaseFacilityKind::RaidGate:
+            SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
+            break;
+        }
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 174, 188, 180, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        SDL_RenderDebugText(
+            renderer_,
+            bounds.x + 18.0F,
+            bounds.y + bounds.h / 2.0F,
+            baseFacilityName(facility.kind));
+    }
+
+    const Vec2 playerPosition = gameFlow_.baseWorld().playerPosition();
+    const Vec2 playerSize = gameFlow_.baseWorld().playerSize();
+    const SDL_FRect player{
+        playerPosition.x,
+        playerPosition.y,
+        playerSize.x,
+        playerSize.y};
+    SDL_SetRenderDrawColor(renderer_, 116, 194, 168, 255);
+    SDL_RenderFillRect(renderer_, &player);
+    SDL_SetRenderDrawColor(renderer_, 210, 238, 226, 255);
+    SDL_RenderRect(renderer_, &player);
+
+    if (const auto facility = gameFlow_.baseWorld().interactableFacility())
+    {
+        const std::string prompt = fmt::format(
+            "E - {}",
+            baseFacilityName(*facility));
+        SDL_RenderDebugText(renderer_, 520.0F, 650.0F, prompt.c_str());
+    }
+}
+
+void App::renderProfileAsset(
+    const AssetRecord &asset,
+    const SDL_FRect &bounds,
+    float cellSize)
+{
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(asset.definitionId);
+    const auto legacy = legacyItemId(asset.definitionId);
+    const Texture *texture{};
+    if (legacy.has_value())
+    {
+        texture = &inventoryItemTextures_[static_cast<std::size_t>(*legacy)];
+    }
+
+    if (texture != nullptr && texture->valid())
+    {
+        renderOrientedTexture(
+            renderer_,
+            texture->get(),
+            bounds,
+            static_cast<float>(definition.inventoryWidthCells) * cellSize,
+            static_cast<float>(definition.inventoryHeightCells) * cellSize,
+            asset.orientation);
+    }
+    else
+    {
+        switch (definition.category)
+        {
+        case ItemCategory::Weapon:
+            SDL_SetRenderDrawColor(renderer_, 94, 112, 122, 255);
+            break;
+        case ItemCategory::Magazine:
+        case ItemCategory::Ammunition:
+            SDL_SetRenderDrawColor(renderer_, 116, 98, 54, 255);
+            break;
+        case ItemCategory::Container:
+            SDL_SetRenderDrawColor(renderer_, 78, 104, 82, 255);
+            break;
+        case ItemCategory::Medical:
+            SDL_SetRenderDrawColor(renderer_, 126, 68, 68, 255);
+            break;
+        default:
+            SDL_SetRenderDrawColor(renderer_, 92, 80, 112, 255);
+            break;
+        }
+        SDL_RenderFillRect(renderer_, &bounds);
+        const std::string shortName = definition.displayName.substr(
+            0,
+            std::min<std::size_t>(definition.displayName.size(), 12));
+        SDL_SetRenderDrawColor(renderer_, 232, 236, 232, 255);
+        SDL_RenderDebugText(
+            renderer_,
+            bounds.x + 3.0F,
+            bounds.y + 4.0F,
+            shortName.c_str());
+    }
+
+    SDL_SetRenderDrawColor(renderer_, 214, 220, 214, 255);
+    SDL_RenderRect(renderer_, &bounds);
+    renderItemQuantityBadge(renderer_, bounds, asset.quantity);
+    if (profileAssetSelection_.has_value() &&
+        profileAssetSelection_->instanceId == asset.instanceId)
+    {
+        SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
+        SDL_RenderRect(renderer_, &bounds);
+    }
+}
+
+void App::renderProfileGrid(
+    ProfileContainerId container,
+    float x,
+    float y,
+    float cellSize,
+    const char *label)
+{
+    const ProfileState &profile = gameSession_.profile();
+    InventoryGridSize size{};
+    try
+    {
+        size = profileContainerSize(
+            profile,
+            publishedContentRegistry(),
+            container);
+    }
+    catch (...)
+    {
+        return;
+    }
+    const SDL_FRect grid{
+        x,
+        y,
+        static_cast<float>(size.width) * cellSize,
+        static_cast<float>(size.height) * cellSize};
+    SDL_SetRenderDrawColor(renderer_, 20, 27, 30, 255);
+    SDL_RenderFillRect(renderer_, &grid);
+    SDL_SetRenderDrawColor(renderer_, 86, 102, 108, 255);
+    for (int column = 0; column <= size.width; ++column)
+    {
+        SDL_RenderLine(
+            renderer_,
+            x + static_cast<float>(column) * cellSize,
+            y,
+            x + static_cast<float>(column) * cellSize,
+            y + grid.h);
+    }
+    for (int row = 0; row <= size.height; ++row)
+    {
+        SDL_RenderLine(
+            renderer_,
+            x,
+            y + static_cast<float>(row) * cellSize,
+            x + grid.w,
+            y + static_cast<float>(row) * cellSize);
+    }
+    SDL_RenderDebugText(renderer_, x, y - 20.0F, label);
+
+    for (const AssetRecord *asset : assetsInContainer(profile, container))
+    {
+        const auto &stored = std::get<StoredAssetLocation>(asset->location);
+        const InventoryFootprint footprint = inventoryFootprint(
+            publishedContentRegistry().item(asset->definitionId),
+            asset->orientation);
+        renderProfileAsset(
+            *asset,
+            SDL_FRect{
+                x + static_cast<float>(stored.origin.x) * cellSize,
+                y + static_cast<float>(stored.origin.y) * cellSize,
+                static_cast<float>(footprint.width) * cellSize,
+                static_cast<float>(footprint.height) * cellSize},
+            cellSize);
+    }
+}
+
+void App::renderBaseStorage()
+{
+    const SDL_FRect panel{20.0F, 50.0F, 1240.0F, 650.0F};
+    SDL_SetRenderDrawColor(renderer_, 14, 22, 26, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 108, 158, 174, 255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_RenderDebugText(renderer_, 44.0F, 72.0F, "STORAGE & LOADOUT");
+
+    const ProfileState &profile = gameSession_.profile();
+    for (EquipmentSlotKind slot : {
+             EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::ChestRig,
+             EquipmentSlotKind::Backpack})
+    {
+        const SDL_FRect bounds = equipmentSlotRect(slot);
+        SDL_SetRenderDrawColor(renderer_, 32, 46, 50, 255);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 112, 142, 148, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        const char *label = slot == EquipmentSlotKind::PrimaryWeapon
+            ? "PRIMARY"
+            : slot == EquipmentSlotKind::ChestRig
+                ? "CHEST RIG"
+                : "BACKPACK";
+        SDL_RenderDebugText(renderer_, bounds.x + 8.0F, bounds.y + 8.0F, label);
+        if (const auto id = equippedAsset(profile, slot))
+        {
+            const AssetRecord *asset = profile.assets.find(*id);
+            const std::string name =
+                publishedContentRegistry().item(asset->definitionId).displayName;
+            SDL_RenderDebugText(
+                renderer_, bounds.x + 8.0F, bounds.y + 34.0F, name.c_str());
+            if (profileAssetSelection_.has_value() &&
+                profileAssetSelection_->instanceId == *id)
+            {
+                SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
+                SDL_RenderRect(renderer_, &bounds);
+            }
+        }
+    }
+
+    for (const ProfileGridView &view : profileGridViews(profile))
+    {
+        renderProfileGrid(
+            view.container,
+            view.x,
+            view.y,
+            view.cellSize,
+            view.label);
+    }
+
+    SDL_SetRenderDrawColor(renderer_, 214, 222, 220, 255);
+    SDL_RenderDebugText(
+        renderer_,
+        570.0F,
+        430.0F,
+        "CLICK ASSET, THEN DESTINATION | CTRL=1 | SHIFT=HALF | R=ROTATE");
+    SDL_RenderDebugText(renderer_, 570.0F, 458.0F, "ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_RenderDebugText(renderer_, 570.0F, 492.0F, uiMessage_.c_str());
+    }
+}
+
+void App::renderBaseSupply()
+{
+    const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
+    SDL_SetRenderDrawColor(renderer_, 24, 25, 18, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 170, 154, 94, 255);
+    SDL_RenderRect(renderer_, &panel);
+    const std::string currency = fmt::format(
+        "SUPPLY & RECOVERY | CURRENCY {}",
+        gameSession_.profile().currency);
+    SDL_RenderDebugText(renderer_, 96.0F, 100.0F, currency.c_str());
+
+    const auto &supply = fixedSupplyIds();
+    for (std::size_t index = 0; index < supply.size(); ++index)
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(supply[index]);
+        const SDL_FRect row{
+            100.0F,
+            164.0F + static_cast<float>(index) * 54.0F,
+            430.0F,
+            44.0F};
+        SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(renderer_, 174, 158, 92, 255);
+        SDL_RenderRect(renderer_, &row);
+        const std::uint32_t quantity =
+            supply[index] == alpha_content::ammunition ? 30U : 1U;
+        const std::string label = fmt::format(
+            "BUY {} x{} | {}",
+            definition.displayName,
+            quantity,
+            definition.marketBuyPrice * quantity);
+        SDL_RenderDebugText(renderer_, row.x + 10.0F, row.y + 16.0F, label.c_str());
+    }
+
+    SDL_RenderDebugText(renderer_, 650.0F, 138.0F, "STASH - SELECT TO RECYCLE");
+    std::size_t rowIndex{};
+    for (const AssetRecord *asset : assetsInContainer(
+             gameSession_.profile(),
+             ProfileContainerId::stash()))
+    {
+        if (rowIndex >= 12) break;
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        const SDL_FRect row{
+            650.0F,
+            164.0F + static_cast<float>(rowIndex) * 30.0F,
+            500.0F,
+            26.0F};
+        SDL_SetRenderDrawColor(renderer_, 42, 44, 34, 255);
+        SDL_RenderFillRect(renderer_, &row);
+        if (profileAssetSelection_.has_value() &&
+            profileAssetSelection_->instanceId == asset->instanceId)
+        {
+            SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
+            SDL_RenderRect(renderer_, &row);
+        }
+        const std::string label = fmt::format(
+            "{} x{} | RECYCLE {}{}",
+            definition.displayName,
+            asset->quantity,
+            definition.marketRecyclePrice * asset->quantity,
+            asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
+        SDL_RenderDebugText(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
+        ++rowIndex;
+    }
+
+    const SDL_FRect reliefButton{140.0F, 554.0F, 280.0F, 48.0F};
+    const bool eligible = isReliefEligible(
+        gameSession_.profile(),
+        publishedContentRegistry());
+    SDL_SetRenderDrawColor(renderer_, eligible ? 68 : 42, eligible ? 104 : 48, 60, 255);
+    SDL_RenderFillRect(renderer_, &reliefButton);
+    SDL_RenderDebugText(
+        renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
+        eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
+
+    const SDL_FRect recycleButton{820.0F, 554.0F, 280.0F, 48.0F};
+    SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
+    SDL_RenderFillRect(renderer_, &recycleButton);
+    SDL_RenderDebugText(renderer_, recycleButton.x + 40.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
+    SDL_RenderDebugText(renderer_, 96.0F, 630.0F, "ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_RenderDebugText(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
+    }
+}
+
+void App::renderBaseDeployment()
+{
+    const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
+    SDL_SetRenderDrawColor(renderer_, 28, 18, 18, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_RenderDebugText(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
+
+    const ProfileState &profile = gameSession_.profile();
+    float y = 244.0F;
+    for (EquipmentSlotKind slot : {
+             EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::ChestRig,
+             EquipmentSlotKind::Backpack})
+    {
+        const auto id = equippedAsset(profile, slot);
+        const std::string name = id.has_value()
+            ? publishedContentRegistry().item(
+                  profile.assets.find(*id)->definitionId).displayName
+            : "EMPTY";
+        const char *slotNameText = slot == EquipmentSlotKind::PrimaryWeapon
+            ? "PRIMARY"
+            : slot == EquipmentSlotKind::ChestRig ? "CHEST RIG" : "BACKPACK";
+        const std::string row = fmt::format("{}: {}", slotNameText, name);
+        SDL_RenderDebugText(renderer_, 480.0F, y, row.c_str());
+        y += 34.0F;
+    }
+
+    const bool capable = hasMinimumRaidCapability(
+        profile,
+        publishedContentRegistry());
+    SDL_RenderDebugText(
+        renderer_,
+        458.0F,
+        370.0F,
+        capable
+            ? "LOADOUT HAS MINIMUM RAID CAPABILITY"
+            : "WARNING: LOADOUT MAY BE EMPTY OR UNABLE TO FIRE");
+    SDL_RenderDebugText(
+        renderer_,
+        442.0F,
+        402.0F,
+        "PERSISTENT DEPLOYMENT CONNECTS IN EXTRACTION LOOP SLICE");
+    renderScreenPrimaryButton("DEPLOY V0 ADAPTER");
+    SDL_RenderDebugText(renderer_, 482.0F, 590.0F, "ENTER/CLICK DEPLOY | ESC CLOSE");
 }
 
 void App::renderBase()
 {
+    renderBaseWorld();
+
     SDL_SetRenderDrawColor(
         renderer_,
         220,
@@ -3622,44 +4566,44 @@ void App::renderBase()
         54.0F,
         "RAIDLINE BASE");
 
-    renderStashOverlay();
+    const std::string currency = fmt::format(
+        "CURRENCY {} | REV {}",
+        gameSession_.profile().currency,
+        gameSession_.profile().revision);
+    SDL_RenderDebugText(renderer_, 1010.0F, 54.0F, currency.c_str());
 
-    std::string deploymentText{
-        "DEPLOYMENT UNAVAILABLE"};
-
-    if (gameSession_.state() ==
-        GameSessionState::InRaid)
+    const char *goal = "OBJECTIVE COMPLETE";
+    switch (gameSession_.profile().tutorial)
     {
-        deploymentText = fmt::format(
-            "NEXT DEPLOYMENT: RAID {} | EMPTY LOADOUT",
-            gameSession_.raidNumber());
+    case TutorialProgress::FindStorage:
+        goal = "OBJECTIVE: FIND STORAGE";
+        break;
+    case TutorialProgress::PrepareLoadout:
+        goal = "OBJECTIVE: EQUIP PRIMARY WEAPON";
+        break;
+    case TutorialProgress::FindRaidGate:
+        goal = "OBJECTIVE: FIND RAID GATE";
+        break;
+    case TutorialProgress::Complete:
+        break;
     }
-    else if (gameSession_.canStartNextRaid())
+    SDL_RenderDebugText(renderer_, 48.0F, 54.0F, goal);
+
+    if (const auto facility = gameFlow_.activeBaseFacility())
     {
-        deploymentText = fmt::format(
-            "NEXT DEPLOYMENT: RAID {} | EMPTY LOADOUT",
-            gameSession_.raidNumber() + 1U);
+        switch (*facility)
+        {
+        case BaseFacilityKind::Storage:
+            renderBaseStorage();
+            break;
+        case BaseFacilityKind::Supply:
+            renderBaseSupply();
+            break;
+        case BaseFacilityKind::RaidGate:
+            renderBaseDeployment();
+            break;
+        }
     }
-    SDL_RenderDebugText(
-        renderer_,
-        474.0F,
-        480.0F,
-        deploymentText.c_str());
-
-    renderScreenPrimaryButton(
-        "DEPLOY TO MAP");
-
-    SDL_SetRenderDrawColor(
-        renderer_,
-        150,
-        170,
-        176,
-        255);
-    SDL_RenderDebugText(
-        renderer_,
-        520.0F,
-        584.0F,
-        "CLICK BUTTON OR PRESS ENTER");
 }
 
 void App::renderRaidScreen()
