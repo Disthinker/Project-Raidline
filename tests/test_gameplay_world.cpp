@@ -403,6 +403,22 @@ TEST(GameplayWorldTest, FireCreatesProjectile)
     EXPECT_EQ(projectile.damage(), 1);
 }
 
+TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
+{
+    GameplayWorld world;
+    world.update(makeFireInput(), 0.0F);
+
+    const std::vector<ShotPresentationSnapshot> snapshots =
+        world.shotPresentationSnapshots();
+
+    ASSERT_EQ(snapshots.size(), 1U);
+    EXPECT_NE(snapshots[0].shotId, kInvalidShotId);
+    EXPECT_FLOAT_EQ(snapshots[0].center.x, 656.0F);
+    EXPECT_FLOAT_EQ(snapshots[0].center.y, 356.0F);
+    EXPECT_FLOAT_EQ(snapshots[0].direction.x, 0.0F);
+    EXPECT_FLOAT_EQ(snapshots[0].direction.y, -1.0F);
+}
+
 // 不按 Fire 不生成 Projectile
 TEST(GameplayWorldTest, NoFireDoesNotCreateProjectile)
 {

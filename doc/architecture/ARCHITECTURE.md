@@ -1,107 +1,162 @@
-# Project Raidline 架构
+# Project Raidline 完整版目标架构
 
-## 运行时分层
+最后核对：2026-08-14。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
 
-```text
-SDL events / textures / renderer
-            │
-            ▼
- App + InputSystem adapters
-            │ GameplayInput / method calls
-            ▼
-          GameFlow
-            │ own and route
-            ▼
-         GameSession
-            │ own and coordinate
-            ▼
-GameplayWorld · RaidSettlement · Stash
-            │
-            ▼
-Player · Enemy · Projectile · GroundItem · GridInventory · ParticleSystem · ExtractionPoint · RaidSession
-            │ uses
-            ▼
-value/domain types: Vec2 · Rect · Health · ItemDefinition · ItemInstance
-```
+## 架构原则
 
-## 主要职责
+- 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
+- Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
+- 当前唯一产品范围仍是 Core Extraction Alpha。长期系统只保留被当前消费者需要的稳定边界，不创建空转的世界时间、人口、任务、建设或联机状态。
+- 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
+- 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
 
-### App
-
-- 拥有 SDL Window/Renderer 的生命周期和 Texture RAII 对象。
-- 采集事件，通过 InputSystem 和帧级 `InventoryUiEvent` 队列适配到游戏/背包逻辑。
-- 计算渲染布局、source rect 和绘制顺序。
-- 编排纯鼠标双容器背包状态、显式丢弃区与 `GridInventory` 查询/提交。
-- 拥有进程内 `GameFlow` 组合根；通过非拥有 `GameSession&` 别名复用既有 Raid/背包适配代码，App 禁止复制和移动，别名不承担所有权。
-- 按 `GameFlowState` 路由主菜单、基地、Raid 与结果页的事件、更新和渲染；把 Enter 或主按钮点击适配为受控屏幕命令，不保存第二份流程、会话、Raid 编号或稳定 ID 状态。
-- 只读渲染玩家生命、撤离区、Raid 状态/计时/进度、Stash 统计、终局反馈和缩放后的只读 Stash 网格。
-
-App 不应成为物品放置、碰撞、伤害或 Raid 规则的事实来源。`src/app.cpp` 当前较大是已知债务，不代表每个功能都应顺手拆分它。
-
-### InputSystem、GameplayInput 与鼠标布局适配
-
-InputSystem 把 SDL scancode 映射为 `GameAction`，维护 held 与 just-pressed，并保留左右 Ctrl/Shift 的原始按键状态；主 Enter 和数字键盘 Enter 映射为屏幕级 `ScreenConfirm`，`N` 与方向键不映射。Enter 在背包内仍没有库存语义。GameplayInput 是不依赖 SDL 的世界输入数据边界。App 使用每个容器自己的 `InventoryGridLayout` 把 SDL float 逻辑坐标转换为带 `InventoryContainerId` 的格子位置，并把 mouse、整栈快速转移、数量拿取和旋转事件规范化为 `InventoryUiEvent` 暂存到当前帧。`decideInventoryFrameInput` 先仲裁 Tab/Esc，再允许 App 按原始事件顺序处理 UI 队列；核心模型不接收 `SDL_Event`。
-
-### GameFlow
-
-SDL 无关的顶层四态状态机，唯一拥有 `GameSession`。默认从 MainMenu 开始；Start 进入 Base，第一次 Deploy 激活已准备但冻结的 Raid 1，后续 Deploy 通过 `GameSession::startNextRaid()` 创建新世界。只有 Raid 状态把 GameplayInput 与 deltaTime 转发给 GameSession；完整结算进入 RaidResult，再由显式确认返回 Base。Blocked 保持在 Raid，不能绕过结算。所有非法转换返回 false 且不修改状态。
-
-### GameplayWorld
-
-拥有 Player、Enemy、Projectile、WeaponFireState、GroundItem、玩家 `GridInventory`、拥有第二容器库存的 `StorageCabinet`、运行时 Loot 随机源、ParticleSystem、ExtractionPoint 和 RaidSession，并编排更新、命中、原子堆叠拾取、柜体首次搜索、玩家物品丢弃、敌人攻击伤害及 Raid 生命周期。GameplayWorld 在玩家移动后应用可选世界瞄准点，用唯一 WeaponFireState 决定 cadence、扩散与可视后坐力；1200 px/s 投射物以有界子步执行推进、命中和出界删除。正式 Raid 默认部署三名敌人；每个敌人子步先捕获全体中心、存活、感知与攻击阶段的值快照，再由无所有权的 `EnemySquadCoordinator` 统一产生至多一个主攻指令、支援侧向和有界局部分离，最后才按稳定槽位提交 Enemy 更新。Enemy 自己用确定性 `EnemyAiState` 拥有距离感知滞回、最后已知位置、2 秒搜索记忆、有限转向、支援距离保持、攻击冷却与 Week27 选招；只有 `Alerted + Engage` 可请求新攻击。Grab Windup 持续追踪并按常速移动，Active 才锁向并以 135 px/s 冲刺；接触原子转换为 Bite，空冲转入 `OffBalance`。世界只在有界攻击子步的单次 Active 命中窗口中提交伤害/控制；致死时同步形成 PlayerDead 并立即停止本帧后续 mutation。Player 与 Enemy 各自拥有受击减速计时，不由世界或渲染层复制。它仍是单局内 Loot 与拆分堆叠稳定 ID 的唯一分配者，并且只在事务成功创建最终 placement 时推进序列。构造时可接收本局第一个未使用 ID，并公开只读的下一 ID 高水位，供 GameSession 创建下一局时继续序列。App 通常通过只读 getter 渲染；背包 UI 通过受控入口完成同容器移动或跨容器转移。
-
-### 逻辑对象与系统
-
-- Player：运动、朝向、动画、唯一拥有的默认 3 HP Health 与短暂受控剩余时间；受控期间移动被抑制，世界同时抑制射击和世界交互。
-- Enemy：运动、朝向、动画、自己的 Health、距离感知/搜索记忆/平滑转向/确定性选招状态、`Stationary/Normal/Attack` 速度档位、受击减速与抓/挠/抱咬攻击阶段；Grab 前摇可追踪，Active 锁向，空冲失衡，世界只读取值快照并提交碰撞结果。
-- EnemySquadCoordinator：无所有权、无跨帧状态的值协调器；读取同一子步的全体 Enemy 快照，稳定选择唯一 Engage、生成 Support 指令与有界分离向量，不直接修改 Enemy。
-- WeaponFireState：SDL 无关的单局射击时间状态，返回确定性 ShotSpec；不拥有 Projectile，也不直接渲染准星。
-- Projectile/Rect/Collision/HitResolution：投射物运动、AABB 和确定性命中处理。
-- Particle/ParticleSystem：短生命周期命中反馈。
-- ItemDefinition：共享静态物品数据、基础 footprint、旋转能力、最大堆叠与视觉资源发布状态，不拥有 Texture。
-- ItemInstance：move-only 唯一堆叠实例、稳定 ID、有效 quantity 与四向运行时 orientation。
-- GroundItem：世界位置与 ItemInstance 所有权；拾取范围读取旋转后的有效尺寸。
-- GridInventory：格子占用、PlacedItem 所有权、合法性查询和事务式放置/移动/旋转 transform，并可在跨容器提交前预留 placement 容量。
-- LootTable/LootRandomSource：验证加权条目和数量范围，通过可注入随机源生成不带实例 ID 的规范化 LootStack；同定义数量先按最大堆叠合并/拆分。
-- StorageCabinet：拥有世界几何、6×6 外部库存和独立于库存是否为空的搜索状态；只接受一次同尺寸完整搜索结果。
-- ExtractionPoint：拥有经过验证的 Rect，使用半开矩形对玩家逻辑中心执行无副作用包含查询。
-- RaidSession：SDL 无关的六态状态机，拥有 Raid 剩余时间与连续撤离进度，并按先发生的终止事件形成 sticky 结果。
-- GameSession：进程内跨 Raid 组合根，拥有长期 Stash、当前 `GameplayWorld`、当前 `RaidSettlement` 和 Raid 编号；结算完成后进入 BetweenRaids，先完整构造候选世界再交换，Blocked 或构造失败不重开。
-- Stash：拥有默认 20×12 的局外 `GridInventory`，提供完整背包存入与栈/单位统计；跨当前进程中的多局保留，App 只读显示，仍没有磁盘持久化或配装交互。
-- RaidSettlement：把 RaidSession 终局提交为独立 sticky 单局结算状态；调用方显式提供长期 Stash，撤离将完整堆叠存入，死亡/超时记录后销毁携带物，阻塞时保留双方并允许重试。
-- inventory_transfer：提供跨容器 transform、先合并后 row-major first-fit 的整栈/数量转移、允许源目标相同的指定格精确数量放置/合并，以及不合并的整背包原子转移；计划、ID 冲突检查和容量预留发生在任何 quantity/所有权 mutation 前。
-- InventoryInteractionState：设备无关、容器感知的纯鼠标 hover/选择/拖动状态；拖拽时保存候选方向、离散与连续抓取锚点及可选的所选数量，不拥有 inventory，不直接提交模型变化，只在 release 产生带方向和可选数量的放置或丢弃值请求。
-
-## 所有权图
+## 进程与模块关系
 
 ```text
-App ─owns─> SDL/Texture resources + GameFlow
-App ─aliases(non-owning)─> GameSession owned by GameFlow
-GameFlow ─owns─> GameSession
-GameSession ─owns─> Stash + current GameplayWorld + current RaidSettlement
-Stash ─owns─> in-process cross-Raid GridInventory
-GameplayWorld ─owns─> single-Raid entities + EnemySquadCoordinator + WeaponFireState + player GridInventory + StorageCabinet + runtime LootRandomSource + ExtractionPoint + RaidSession + ID high-water mark
-Player ─owns─> Health + control remaining time
-Enemy ─owns─> Health + EnemyAiState(perception/memory/turning) + EnemyAttackState
-StorageCabinet ─owns─> external GridInventory
-GroundItem ─owns─> ItemInstance   (拾取时转移)
-GridInventory::PlacedItem ─owns─> ItemInstance
-GridInventory::cells_ ─stores─> optional stable ItemInstanceId
-ItemDefinition catalog ─shares─> immutable definition data
-LootTable ─produces─> definition + quantity values (no ItemInstance ownership)
-InventoryInteractionState ─stores─> container ID + optional stable ItemInstanceId + value coordinates
+Project_Raidline.exe
+└─ AppHost                         SDL 生命周期、窗口、主循环
+   ├─ InputMapper                 SDL 事件 -> 设备无关意图
+   ├─ ScreenRouter                菜单、场景、模态界面与覆盖层
+   ├─ Renderer                    只读投影 -> SDL 表现
+   └─ GameRuntime                 进程级组合根
+      ├─ ContentRegistry          不可变内容定义
+      ├─ SaveRepository           存档、迁移、备份、原子替换
+      └─ GameSession              当前档案与游戏流程
+         ├─ ProfileState          长期权威状态
+         └─ ActiveActivity        同时只有一个活动运行时
+            ├─ BaseRuntime
+            ├─ RaidRuntime
+            └─ 后续按实际切片加入 Travel/Siege 等运行时
 ```
 
-ItemInstance 只能在一个所有者中。`cells_` 是冗余索引，不拥有实例；每次成功事务必须同步 placement 与所有覆盖格。
+计划中的 CMake 生产目标：
 
-## 查询、命令与渲染
+| 目标 | 职责 | 依赖边界 |
+| --- | --- | --- |
+| `raidline_domain` | 稳定 ID、资产、库存、装备、弹药、经济、结算与持久化 DTO | 禁止 SDL |
+| `raidline_simulation` | Base/Raid 运行时、AI、动作、射击、碰撞与伤害 | 依赖 domain，禁止 SDL |
+| `raidline_services` | GameSession、流程编排、内容加载、存档事务和跨领域用例 | 依赖 domain/simulation |
+| `raidline_sdl_client` | 输入、屏幕控制器、渲染、音画投影和平台路径 | 依赖 services，SDL 只在此边界出现 |
 
-- 查询：`canPlace`、`findFirstFit`、`canMove`、`canTransform`、`canTransferItemTransform`、`canTransferAllItemsFirstFit`、`canPlaceItemQuantityAt`、`findFirstTransferFit`、`occupantAt`、`originOf`、`ExtractionPoint::contains`、`GameplayWorld::nextItemInstanceId`、Enemy 攻击快照、Player 控制快照、GameFlow/GameSession/RaidSession/RaidSettlement 状态与只读 getter；不得修改可观察状态。
-- 命令：`GameFlow::startGame/deploy/update/returnToBase`、`Enemy::updateTowardsTarget/tryStartAttack/consumeAttackHit`、`Player::applyControl`、`tryPlace`、`tryMove`、`tryTransform`、`tryTransferItemTransform`、`tryTransferItemFirstFit`、`tryTransferAllItemsFirstFit`、`tryPlaceItemQuantityAt`、`searchStorageCabinet`、`dropInventoryItemQuantity`、`RaidSession::start/update/markPlayerDead`、`RaidSettlement::settle`、`GameSession::update/startNextRaid`、`clear`、`remove`、拾取；先完成验证和必要容量预留，再提交状态、位置、方向、数量或所有权变化。
-- 渲染：读取世界和 UI 状态，不成为合法性事实来源。普通拖拽预览使用 transform 查询；数量拖拽使用 `canPlaceItemQuantityAt` 并在平滑虚影上显示所选数量；最终释放才执行对应命令。SDL 仅旋转既有批准纹理，不引入第二套方向资源。
+测试链接生产库，不再为每个测试目标重复编译业务源码。`App` 和 `GameplayWorld` 按消费者逐步迁移，禁止一次性无行为重写。
 
-## 测试与构建边界
+## GameRuntime、GameSession 与活动运行时
 
-每个逻辑对象/系统有独立 GTest executable，CMake 当前重复列出所需 `.cpp`。这使 target 依赖显式但容易遗漏：新增源码必须同时接入主程序和相关测试 target。长期可以抽共享核心 library，但不能借相邻玩法功能做无关大改。
+- `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
+- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和一个封闭的 `ActiveActivity`。
+- `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
+- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。长期 BaseState、设施、人口和日程在真正有消费者时进入 ProfileState 的独立子领域。
+- `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
+- Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
 
-完整行为不变量见 [INVARIANTS.md](INVARIANTS.md)。
+## ProfileState 与资产所有权
+
+`ProfileState` 最终聚合：
+
+- `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
+- 唯一 `AssetRegistry`；
+- 当前启用的 Player、Equipment、Economy、Knowledge、Objective、Base 与 World 子状态；
+- 引导标志、已提交事务凭证和 pending activity；
+- 最近已提交的 Deploy、Settlement、交易与奖励幂等记录。
+
+Alpha 只实例化资产、三槽装备、货币/救济、引导和 pending Raid 所需字段。未启用的长期系统通过后续版本迁移加入。
+
+`AssetRegistry` 使用 `AssetInstanceId -> AssetRecord` 唯一拥有真实物品。Stash、格子容器、装备和场景只保存实例 ID、位置及布局，不拥有第二份实例对象。
+
+`AssetLocation` 是封闭值类型，按实际消费者逐步加入：
+
+- Stash 或根级存储区中的格子位置；
+- 装备槽；
+- 容器实例的稳定分区、格位与方向；
+- 武器安装点；
+- 动作暂持；
+- Raid 地面位置；
+- 结算中转；
+- 后续正式加入的丢失记录或 NPC 任务位置。
+
+设施、人口、任务和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。
+
+弹药堆是带数量的资产实例；弹匣实例保存有序 `AmmoDefinitionId` 序列；枪膛保存可选弹药定义。普通弹药单位不为每发分配 AssetInstanceId，但散装数量、弹匣序列、枪膛和击发消耗必须守恒。
+
+## 查询、命令、结果与事务
+
+公共领域接口采用强类型请求和结果：
+
+```cpp
+struct CommandContext
+{
+    ProfileRevision expectedRevision;
+    TransactionId transactionId;
+};
+
+Expected<InventoryPlan, DomainError>
+queryInventory(const InventoryQuery &) const;
+
+Expected<InventoryReceipt, DomainError>
+execute(const InventoryCommand &, const CommandContext &);
+
+Expected<DeployReceipt, DomainError>
+deploy(const DeployCommand &, const CommandContext &);
+
+Expected<SettlementReceipt, DomainError>
+settle(const SettlementCommand &, const CommandContext &);
+
+SessionProjection snapshot() const;
+```
+
+- 查询返回带 `ProfileRevision` 的计划；提交时重验版本、来源、目标、父容器、容量、货币和 ID。
+- 拒绝命令保证所有参与状态、货币、高水位和 revision 不变。
+- 命令返回 receipt 与明确领域事实；UI 不读取或持有可变领域对象。
+- 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
+- Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
+- Raid 帧内模拟不每帧保存；Deploy 先保存完整 pending Raid 和本局生成资产，终局再以同一 SettlementId 原子提交。
+
+## 动作、模拟、射击与随机
+
+- Action 使用类型安全的状态变体。换弹、治疗、撤离、维修等拥有各自前置条件、阶段和提交点，只共享窄时间线工具。
+- Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
+- 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；最终选择结果写入 RaidSnapshot。
+- 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
+- Alpha 当前合同保持：
+
+```text
+WeaponFire/Ammo
+  -> ShotCommand
+  -> ShotResolution
+  -> temporary V0 flight adapter
+  -> HitResult
+  -> damage / feedback / App projection
+```
+
+`Projectile` 只能作为 V0 适配器。WeaponAmmo、伤害、持久化和 App 不得要求该类型；命中部位、弱点、防护和穿透只能由未来扩展的 HitResult 表达。
+
+## 内容定义
+
+- 内容定义目标格式为版本化 JSON，并由 `nlohmann_json` 读取。
+- 定义 ID 使用稳定命名字符串，例如 `item.weapon.basic_rifle`；运行时可以缓存稠密索引，存档永远保存字符串 ID。
+- 第一批迁移现有物品、Loot、敌人部署和首图常量；旧枚举适配器只保留一个迁移周期。
+- 内容加载验证重复 ID、非法引用、容器循环、价格套利、地图连通性和缺失发布资源。
+- 发行内容不承诺热更新或公开 Mod API；调试重载不能改变已经开始的 RaidSnapshot。
+- 显示文本使用定义元数据或未来本地化 key，不参与领域分支。
+
+## 存档与平台文件
+
+- 第一个跨进程正式存档是 schema v1；当前 V0 没有需要兼容的正式玩家存档。
+- 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
+- 保存流程：写临时文件、刷新、回读并完整校验、把当前有效主档滚动为安全备份、原子替换主档。
+- Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
+- 设置与档案分文件保存。Steam 云存档以后只同步本地档案文件，不进入领域模型。
+- 迁移只能逐版本执行；失败时保留原文件并尝试最近有效备份。未知定义、重复实例 ID、坏引用和高水位倒退均拒绝加载。
+- Alpha 不支持 Raid 中途续玩。加载到 pending Raid 时按同一 SettlementId 幂等提交失败；未来续玩通过新增活动快照版本实现。
+
+## 迁移顺序
+
+依赖 PR #55 与 #54 均进入 `origin/main` 后，按以下独立 PR 推进：
+
+1. `codex/build-module-foundation`：建立四个库目标并消除重复业务源码编译，不改变玩家行为。
+2. `codex/content-registry-v1`：强类型 DefinitionId、JSON ContentRegistry 和首批定义迁移。
+3. `codex/profile-asset-registry`：ProfileState、AssetRegistry、AssetLocation、revision 与库存 ID 布局迁移。
+4. `codex/core-alpha-base-persistence`：可步行 Base、三入口、三槽配装、新存档和 schema v1。
+5. 继续按 Weapon/Medical、Raid/Settlement、Economy/Relief 三个 Alpha 垂直切片交付。
+
+每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。
