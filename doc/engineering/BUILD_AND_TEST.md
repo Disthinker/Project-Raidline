@@ -28,7 +28,7 @@ cmake --build --preset windows-debug
 ctest --test-dir build/windows-debug --output-on-failure -j 8
 ```
 
-当前 `codex/core-extraction-alpha-slice-0` 分支在重新配置和完整增量构建后注册 550 个 CTest，550/550 通过。射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过。当前精确 head 的 GitHub Windows/Ubuntu CI 尚待推送 PR 后运行。
+当前 `codex/core-extraction-alpha-slice-0` 的精确代码提交 `d046753` 在重新配置和完整增量构建后注册 550 个 CTest，550/550 通过。射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过；GitHub 范围检测、Windows 和 Ubuntu CI 全部成功。真实窗口与手感验收由用户在自动化完成后统一执行，开发代理不自行打开游戏，也不把进程存活冒烟当作人工验收。
 
 ## 按风险选择证据
 

@@ -6,7 +6,7 @@
 
 - `origin/main@61718f6` 是 Core Extraction Alpha Slice 0 的基线。
 - 当前开发分支：`codex/core-extraction-alpha-slice-0`，从 `origin/main` 独立创建。
-- Slice 0 已推送并创建 Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`。
+- Slice 0 已推送并创建 Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`。代码精确提交 `d046753` 的范围检测、Windows 和 Ubuntu CI 全部成功；在用户完成人工验收前保持 Draft。
 - PR #54 `codex/rl-inv-003-ammo-stack-merge@228ac7b` 为 OPEN Draft、MERGEABLE；范围检测、Windows 和 Ubuntu CI 成功，但尚未合入 main。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
@@ -14,7 +14,7 @@
 ## 已验证构建基线
 
 - 库存修复分支在本机 `windows-debug` 增量构建为 `ninja: no work to do`，552/552 CTest 通过。
-- `origin/main` 不包含库存分支的 8 个新回归，也不包含 Week29；Slice 0 重新配置后注册 550 个 CTest，550/550 通过。
+- `origin/main` 不包含库存分支的 8 个新回归，也不包含 Week29；Slice 0 精确代码提交 `d046753` 重新配置、完整构建并注册 550 个 CTest，550/550 通过。
 - Windows 工具链：Visual Studio Developer Shell 17.13.6，x64 host/x64 target，Ninja，Debug，`x64-windows`，UTF-8。
 
 ## 当前产品里程碑
@@ -29,6 +29,8 @@
 4. Slice 3：单图快照、无硬时限、撤离与全损幂等结算。
 5. Slice 4：固定供应/回收、货币、救济、连续多局与跨进程验收。
 
+进入玩家功能切片前先完成三项架构迁移：构建目标模块化、版本化内容注册表、Profile/AssetRegistry 唯一所有权。迁移只建立 Alpha 正在消费的完整版扩展边界，不提前实现世界时间、人口、任务、建设或其他长期系统。
+
 ## 已完成 V0 能力
 
 - 顶层 `MainMenu → Base → Raid → RaidResult → Base` 流程和进程内多局会话。
@@ -39,16 +41,17 @@
 
 ## Slice 0 当前改动
 
-- 项目 AGENTS、skills、产品路线、目标架构、ExecPlan 和 DoD 已从教学周次导向重构为产品切片交付导向。
+- 项目 AGENTS、skills、产品路线、完整版目标架构、ExecPlan 和 DoD 已从教学周次导向重构为产品切片交付导向。
 - 新增 `ShotCommand`、`ShotResolution`、`HitResult` 和 `ShotPresentationSnapshot`。
 - 当前 Projectile 被收束为 GameplayWorld 内部的 V0 飞行适配器；App 改读只读射击表现投影。
 - `HitResolutionResult` 现在输出领域 `HitResult`，粒子与计分消费结果而不是自行推断命中语义。
-- 射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过；全量 550/550 通过。重建后的可执行文件用无 Shell、无窗口进程接口启动，3 秒后仍存活并由测试脚本正常停止。
-- 真实窗口完整视觉交互验收尚未执行；当前证据只证明构建、领域回归与启动存活。射击边界提交为 `234d479`，治理/路线提交为 `3c08eec`；分支已推送，Draft PR #55 等待精确 head CI 与视觉验收。
+- 射击/命中/GameplayWorld/GameSession/GameFlow 专项 102/102 通过；精确代码提交 `d046753` 全量 550/550 通过，GitHub 三项检查成功。
+- 真实窗口完整视觉交互验收由用户在自动化完成后执行；开发代理不再自行启动游戏。当前证据只证明构建、领域回归与 CI。PR #55 在用户确认前保持 Draft。
 
 ## 尚未完成
 
-- Slice 0：自动化、真实窗口验收、提交、推送与 PR。
+- Slice 0：只剩用户真实窗口验收、转为 Ready 和后续接受/合入。
+- 架构迁移：等待 PR #55 与 PR #54 先后进入 `origin/main`，随后从最新主线依次建立独立迁移分支。
 - Slice 1–4 的全部玩家功能。
 - PR #54 的接受/合入；Week29 代码反馈的独立整理。
 - 正式攻击动画及所有新美术/音频生产仍暂停。

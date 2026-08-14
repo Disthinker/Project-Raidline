@@ -4,6 +4,8 @@
 
 Project Raidline is an independent game in production, not a weekly teaching exercise. Work is organized by playable product slices, ownership boundaries, regression evidence, and reviewable PRs.
 
+The shipping architecture targets Windows PC, keyboard-and-mouse-first, offline single-player. Keep SDL-independent code portable enough for Linux build/test CI, but do not introduce networking, console certification, public modding, or cross-platform release frameworks without a new product decision and an active consumer.
+
 For Core Extraction Alpha, the external GDD repository is read-only product input. Its `05_Core_Extraction_Alpha_首阶段功能规格.md` is the only first-stage scope contract. Other GDD files describe long-term direction; a feature enters Alpha only when the scope contract includes it.
 
 Source priority:
@@ -38,6 +40,8 @@ When sources conflict, record the conflict and follow the higher source. Do not 
 - Core Extraction Alpha establishes `ShotCommand -> ShotResolution -> HitResult`. The current `Projectile` path is a temporary adapter only; weapon, damage, persistence, and App projections may not require that entity type.
 - Stable IDs are monotonic within their identity domain. Save formats are versioned, migrations are explicit, and Raid deploy/settlement uses a unique idempotency key.
 - Do not introduce an ECS, service locator, universal event bus, or framework without a current consumer and a measured need.
+- The target modular monolith uses `raidline_domain`, `raidline_simulation`, `raidline_services`, and `raidline_sdl_client`; introduce each target only through the accepted architecture migration sequence and keep domain/simulation SDL-free.
+- Content definitions migrate to versioned JSON with stable namespaced IDs; persistence saves those IDs, never runtime indexes. Do not add hot reload or a public mod API as part of Alpha.
 
 ## Core Extraction Alpha scope guard
 

@@ -1,63 +1,123 @@
-# Project Raidline 目标架构
+# Project Raidline 完整版目标架构
 
-最后核对：2026-08-14。本文描述 Core Extraction Alpha 的目标边界以及 V0 的迁移方式；实际完成度以 `doc/project/CURRENT_STATE.md` 和测试为准。
+最后核对：2026-08-14。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
 
-## 组合根与场景关系
+## 架构原则
+
+- 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
+- Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
+- 当前唯一产品范围仍是 Core Extraction Alpha。长期系统只保留被当前消费者需要的稳定边界，不创建空转的世界时间、人口、任务、建设或联机状态。
+- 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
+- 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
+
+## 进程与模块关系
 
 ```text
-App
-└─ GameFlow
-   └─ GameSession
-      ├─ ProfileState
-      ├─ BaseWorld      (仅 Base 状态存在)
-      ├─ GameplayWorld  (仅 Raid 状态存在)
-      ├─ ActionDomain
-      └─ SettlementDomain
+Project_Raidline.exe
+└─ AppHost                         SDL 生命周期、窗口、主循环
+   ├─ InputMapper                 SDL 事件 -> 设备无关意图
+   ├─ ScreenRouter                菜单、场景、模态界面与覆盖层
+   ├─ Renderer                    只读投影 -> SDL 表现
+   └─ GameRuntime                 进程级组合根
+      ├─ ContentRegistry          不可变内容定义
+      ├─ SaveRepository           存档、迁移、备份、原子替换
+      └─ GameSession              当前档案与游戏流程
+         ├─ ProfileState          长期权威状态
+         └─ ActiveActivity        同时只有一个活动运行时
+            ├─ BaseRuntime
+            ├─ RaidRuntime
+            └─ 后续按实际切片加入 Travel/Siege 等运行时
 ```
 
-- `App` 负责 SDL 生命周期、输入翻译和只读投影渲染。它不提交跨所有者状态拼装，不根据表现猜测领域结果。
-- `GameFlow` 只仲裁 `MainMenu → Base → Raid → RaidResult → Base`。
-- `GameSession` 是进程内组合根，持有长期档案与当前唯一场景运行时。Base 和 Raid 不同时推进。
-- `BaseWorld` 只拥有玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文；Base 不运行敌人、Loot、撤离计时或战斗。
-- `GameplayWorld` 只拥有本次 Raid 的空间实体、AI、动作推进和 `RaidSessionSnapshot`；它不拥有长期 Stash 或货币真值。
+计划中的 CMake 生产目标：
 
-## 长期档案与持久化
-
-`ProfileState` 持有：
-
-- 唯一 `AssetRegistry`；
-- Stash、三槽 Equipment、容器关系与 AssetLocation；
-- 普通货币、救济批次和轻量引导标志；
-- 稳定 ID 高水位；
-- 存档版本、档案 ID、pending Raid 和最后已结算 ID。
-
-Persistence 保存值与关系，不保存指针、引用、vector 下标、UI 格位对象或场景地址。每次 Base 资产事务和 Raid 结算成功后执行临时文件写入、校验和原子替换；安全备份仅在主档损坏或迁移失败时恢复。
-
-## 定义与实例
-
-- ContentDefinition 是不可变注册数据：物品、容器、槽位、武器、弹药、弹匣、医疗、地图、Loot 和敌人部署使用稳定定义 ID。
-- AssetInstance 是唯一资产：稳定实例 ID、定义 ID、数量/次数及当前启用字段。
-- 未启用的耐久、故障、复杂伤势等不创建空运行状态；未来通过版本化字段和能力注册扩展。
-- 显示名称、图标、动画、颜色和文件路径不参与领域分支。
-
-## 领域边界
-
-| 领域 | 权威职责 | 对 App 输出 |
+| 目标 | 职责 | 依赖边界 |
 | --- | --- | --- |
-| AssetRegistry | 唯一实例所有权、ID 分配和位置关系 | 只读资产投影 |
-| Inventory/Equipment | 原子移动、交换、堆叠、装备、容器规则 | 查询计划、提交结果、拒绝原因 |
-| WeaponAmmo | 弹匣有序序列、枪膛、Base 压卸弹、Raid 换弹和击发消耗 | 弹药/动作/击发结果 |
-| Action | 开始、阶段、提交点、中断、完成及暂持资产 | 动作投影与结果 |
-| RaidSession/Map | MapDefinition、本局种子、出生撤离配对、Loot/敌人快照和生命周期 | 本局只读投影、撤离资格 |
-| Settlement | 成功带回、失败全损、容量阻塞、结算幂等 | RaidResult 数据 |
-| Economy/Relief | 固定供应、回收、货币、防套利和单份救济 | 交易/资格/余额结果 |
-| Persistence | 版本化保存、迁移、校验、备份和 pending Raid 恢复 | 加载/保存/恢复结果 |
+| `raidline_domain` | 稳定 ID、资产、库存、装备、弹药、经济、结算与持久化 DTO | 禁止 SDL |
+| `raidline_simulation` | Base/Raid 运行时、AI、动作、射击、碰撞与伤害 | 依赖 domain，禁止 SDL |
+| `raidline_services` | GameSession、流程编排、内容加载、存档事务和跨领域用例 | 依赖 domain/simulation |
+| `raidline_sdl_client` | 输入、屏幕控制器、渲染、音画投影和平台路径 | 依赖 services，SDL 只在此边界出现 |
 
-## 射击迁移边界
+测试链接生产库，不再为每个测试目标重复编译业务源码。`App` 和 `GameplayWorld` 按消费者逐步迁移，禁止一次性无行为重写。
 
-正式方向是不创建可渲染/可碰撞场景实体弹丸，而是保存短生命逻辑飞行记录并分段连续扫掠。Alpha 不同时重做动态准星、部位、穿透和最终弹道。
+## GameRuntime、GameSession 与活动运行时
 
-当前迁移合同：
+- `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
+- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和一个封闭的 `ActiveActivity`。
+- `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
+- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。长期 BaseState、设施、人口和日程在真正有消费者时进入 ProfileState 的独立子领域。
+- `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
+- Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
+
+## ProfileState 与资产所有权
+
+`ProfileState` 最终聚合：
+
+- `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
+- 唯一 `AssetRegistry`；
+- 当前启用的 Player、Equipment、Economy、Knowledge、Objective、Base 与 World 子状态；
+- 引导标志、已提交事务凭证和 pending activity；
+- 最近已提交的 Deploy、Settlement、交易与奖励幂等记录。
+
+Alpha 只实例化资产、三槽装备、货币/救济、引导和 pending Raid 所需字段。未启用的长期系统通过后续版本迁移加入。
+
+`AssetRegistry` 使用 `AssetInstanceId -> AssetRecord` 唯一拥有真实物品。Stash、格子容器、装备和场景只保存实例 ID、位置及布局，不拥有第二份实例对象。
+
+`AssetLocation` 是封闭值类型，按实际消费者逐步加入：
+
+- Stash 或根级存储区中的格子位置；
+- 装备槽；
+- 容器实例的稳定分区、格位与方向；
+- 武器安装点；
+- 动作暂持；
+- Raid 地面位置；
+- 结算中转；
+- 后续正式加入的丢失记录或 NPC 任务位置。
+
+设施、人口、任务和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。
+
+弹药堆是带数量的资产实例；弹匣实例保存有序 `AmmoDefinitionId` 序列；枪膛保存可选弹药定义。普通弹药单位不为每发分配 AssetInstanceId，但散装数量、弹匣序列、枪膛和击发消耗必须守恒。
+
+## 查询、命令、结果与事务
+
+公共领域接口采用强类型请求和结果：
+
+```cpp
+struct CommandContext
+{
+    ProfileRevision expectedRevision;
+    TransactionId transactionId;
+};
+
+Expected<InventoryPlan, DomainError>
+queryInventory(const InventoryQuery &) const;
+
+Expected<InventoryReceipt, DomainError>
+execute(const InventoryCommand &, const CommandContext &);
+
+Expected<DeployReceipt, DomainError>
+deploy(const DeployCommand &, const CommandContext &);
+
+Expected<SettlementReceipt, DomainError>
+settle(const SettlementCommand &, const CommandContext &);
+
+SessionProjection snapshot() const;
+```
+
+- 查询返回带 `ProfileRevision` 的计划；提交时重验版本、来源、目标、父容器、容量、货币和 ID。
+- 拒绝命令保证所有参与状态、货币、高水位和 revision 不变。
+- 命令返回 receipt 与明确领域事实；UI 不读取或持有可变领域对象。
+- 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
+- Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
+- Raid 帧内模拟不每帧保存；Deploy 先保存完整 pending Raid 和本局生成资产，终局再以同一 SettlementId 原子提交。
+
+## 动作、模拟、射击与随机
+
+- Action 使用类型安全的状态变体。换弹、治疗、撤离、维修等拥有各自前置条件、阶段和提交点，只共享窄时间线工具。
+- Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
+- 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；最终选择结果写入 RaidSnapshot。
+- 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
+- Alpha 当前合同保持：
 
 ```text
 WeaponFire/Ammo
@@ -68,24 +128,35 @@ WeaponFire/Ammo
   -> damage / feedback / App projection
 ```
 
-`Projectile` 只能作为临时飞行适配器。WeaponAmmo、伤害、持久化和 App 不得要求该类型。普通命中、爆头和弱点只能来自未来扩展的 HitResult，App 不按碰撞标签猜测。
+`Projectile` 只能作为 V0 适配器。WeaponAmmo、伤害、持久化和 App 不得要求该类型；命中部位、弱点、防护和穿透只能由未来扩展的 HitResult 表达。
 
-## 事务、ID 与幂等
+## 内容定义
 
-- 查询不修改；命令在提交前复核版本和全部前置条件。
-- 一次事务涉及的源、目标、父容器、装备槽、货币和 ID 分配要么全部成功，要么全部不变。
-- 每个唯一资产任一时刻恰有一个 AssetLocation。动作暂持和结算中转也是显式位置。
-- 资产 ID 单调递增且不复用；定义 ID 稳定；Raid/结算使用独立稳定 ID。
-- Deploy 先原子持久化资产快照、结算 ID 和 pending 标记，再进入 Raid。终局消费同一 ID；重放返回已提交结果。
+- 内容定义目标格式为版本化 JSON，并由 `nlohmann_json` 读取。
+- 定义 ID 使用稳定命名字符串，例如 `item.weapon.basic_rifle`；运行时可以缓存稠密索引，存档永远保存字符串 ID。
+- 第一批迁移现有物品、Loot、敌人部署和首图常量；旧枚举适配器只保留一个迁移周期。
+- 内容加载验证重复 ID、非法引用、容器循环、价格套利、地图连通性和缺失发布资源。
+- 发行内容不承诺热更新或公开 Mod API；调试重载不能改变已经开始的 RaidSnapshot。
+- 显示文本使用定义元数据或未来本地化 key，不参与领域分支。
 
-## 迁移策略
+## 存档与平台文件
 
-按垂直切片建立新边界，再迁移消费者；不做一次性重写：
+- 第一个跨进程正式存档是 schema v1；当前 V0 没有需要兼容的正式玩家存档。
+- 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
+- 保存流程：写临时文件、刷新、回读并完整校验、把当前有效主档滚动为安全备份、原子替换主档。
+- Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
+- 设置与档案分文件保存。Steam 云存档以后只同步本地档案文件，不进入领域模型。
+- 迁移只能逐版本执行；失败时保留原文件并尝试最近有效备份。未知定义、重复实例 ID、坏引用和高水位倒退均拒绝加载。
+- Alpha 不支持 Raid 中途续玩。加载到 pending Raid 时按同一 SettlementId 幂等提交失败；未来续玩通过新增活动快照版本实现。
 
-1. Slice 0 建立治理、射击窄边界和 Timeout 退场测试。
-2. Slice 1 把长期资产移出场景并建立 Base/Persistence。
-3. Slice 2 把武器弹药、100 HP 和医疗接入真实资产。
-4. Slice 3 把固定常量迁入 MapDefinition/RaidSnapshot 并替换 Timeout。
-5. Slice 4 接入经济、救济和连续多局产品门槛。
+## 迁移顺序
 
-不得借迁移引入大型 ECS、服务定位器、万能事件总线或没有消费者的未来状态。
+依赖 PR #55 与 #54 均进入 `origin/main` 后，按以下独立 PR 推进：
+
+1. `codex/build-module-foundation`：建立四个库目标并消除重复业务源码编译，不改变玩家行为。
+2. `codex/content-registry-v1`：强类型 DefinitionId、JSON ContentRegistry 和首批定义迁移。
+3. `codex/profile-asset-registry`：ProfileState、AssetRegistry、AssetLocation、revision 与库存 ID 布局迁移。
+4. `codex/core-alpha-base-persistence`：可步行 Base、三入口、三槽配装、新存档和 schema v1。
+5. 继续按 Weapon/Medical、Raid/Settlement、Economy/Relief 三个 Alpha 垂直切片交付。
+
+每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

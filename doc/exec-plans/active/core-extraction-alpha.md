@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0 进行中
+状态：Slice 0 自动化完成，等待用户真实窗口验收与依赖合入
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -57,21 +57,25 @@
 ## 4. 目标架构与所有权
 
 ```text
-App (input translation + read-only projections)
-└─ GameFlow (MainMenu/Base/Raid/RaidResult transitions)
-   └─ GameSession (composition root)
-      ├─ ProfileState
-      │  ├─ AssetRegistry (only unique-item owner)
-      │  ├─ InventoryDomain / EquipmentDomain
-      │  ├─ EconomyState / ReliefState
-      │  ├─ progression flags + stable-ID high-water marks
-      │  └─ Persistence metadata + pending Raid marker
-      ├─ BaseWorld OR GameplayWorld (never both active)
-      ├─ ActionDomain
-      └─ SettlementDomain
+Project_Raidline.exe
+└─ AppHost (SDL lifecycle, window, main loop)
+   ├─ InputMapper
+   ├─ ScreenRouter
+   ├─ Renderer (read-only projections)
+   └─ GameRuntime (process composition root)
+      ├─ ContentRegistry (immutable definitions)
+      ├─ SaveRepository (migration, backup, atomic replace)
+      └─ GameSession (active profile and flow)
+         ├─ ProfileState (long-lived authoritative state)
+         └─ ActiveActivity (exactly one)
+            ├─ BaseRuntime
+            └─ RaidRuntime
 ```
 
-- `ProfileState` 是跨场景、跨进程的长期事实；场景和 UI 不拥有资产。
+构建最终收束为四个稳定目标：`raidline_domain`、`raidline_simulation`、`raidline_services` 和 `raidline_sdl_client`。领域与模拟禁止依赖 SDL；测试链接生产库，不再为每个测试目标重复编译业务源码。当前 `App`、`GameFlow`、`GameSession` 与 `GameplayWorld` 按消费者渐进迁移，不一次性重写。
+
+- `GameRuntime` 是进程级组合根；`GameSession` 持有当前存档和流程；同时只允许一种活动运行时。当前 `GameplayWorld` 将由职责明确的 `RaidRuntime` 渐进替代。
+- `ProfileState` 是跨场景、跨进程的长期事实；场景和 UI 不拥有资产，并保存 revision、ID 高水位、已提交事务与 pending activity。
 - `AssetRegistry` 唯一拥有每个 `ItemInstance`；`AssetLocation` 表达 Stash、装备槽、容器分区、武器安装点/枪膛、动作暂持、地面与结算中转。
 - `InventoryDomain`/`EquipmentDomain` 以查询、命令、结果提交原子移动/交换/堆叠/装备；容器内容通过父资产关系随容器移动。
 - `WeaponAmmoDomain` 拥有武器实例、弹匣有序序列、枪膛和击发消耗；不依赖场景 Projectile 类型。
@@ -79,8 +83,11 @@ App (input translation + read-only projections)
 - `MapDefinition` 是不可变定义；`RaidSessionSnapshot` 保存 `MapId`、种子、成对出生/撤离、Loot 与敌人部署一次抽取结果及唯一结算 ID。
 - `SettlementDomain` 从 Raid 快照和资产位置生成一次性结果；成功带回，失败全损；同一结算 ID 重放得到同一已提交结果。
 - `EconomyDomain` 只处理固定供应、回收、普通货币和救济资格；不创建库存刷新、商人等级或任务状态。
-- `Persistence` 保存稳定 ID、定义 ID、实例字段、所有权关系、货币、标志、版本、高水位和 pending Raid；使用临时文件 + 原子替换，备份只用于损坏/迁移恢复。
-- App 发送领域命令、读取领域结果与投影。显示名称、碰撞颜色、动画帧和 UI 格位不决定合法性。
+- `Persistence` 的第一个正式跨进程格式为 schema v1；保存稳定 ID、命名字符串定义 ID、实例字段、所有权关系、货币、标志、版本、高水位、幂等键和 pending Raid。使用候选状态、临时文件、回读校验、安全备份与平台原子替换。
+- 内容定义使用版本化 JSON 和命名字符串 ID；加载时验证重复 ID、非法引用、容器循环、价格套利、地图连通性和缺失资源。Alpha 不承诺热更新或公开 Mod API。
+- App 发送带 `expectedRevision` 与 `transactionId` 的领域命令，读取 receipt、领域事实和只读 projection。拒绝命令保持状态哈希、高水位和货币不变；不建立全局事件总线。
+- 模拟使用固定 60 Hz 步长；随机使用跨编译器稳定的 PCG32 与命名随机流，最终地图/Loot/部署选择写入 Raid 快照。
+- 显示名称、碰撞颜色、动画帧和 UI 格位不决定合法性。完整版架构细则见 `doc/architecture/ARCHITECTURE.md`。
 
 ## 5. Slice 0：基线、合同与测试骨架
 
@@ -97,15 +104,34 @@ App (input translation + read-only projections)
 
 自动化：ShotCommand 合法/非法输入、归一化、状态名、HitResult 传播；现有射击/命中/GameplayWorld/GameFlow 回归；全量 CTest；精确 head Windows/Ubuntu CI。
 
-人工验收：现有 V0 从菜单到 Raid 的射击、命中、撤离、死亡、Timeout 行为暂不回归；确认 App 轨迹显示仍存在。Timeout 只证明旧适配器未意外改变，不代表 Alpha 接受它。
+人工验收在自动化与 CI 完成后由用户统一执行，开发代理不自行打开游戏。固定步骤：
+
+1. 启动后只显示 MainMenu；按 Enter 或单击一次，只进入一次 Base。
+2. 在 Base 确认 Stash 与 Raid 入口可见；交互一次，只进入一次 Raid。
+3. 移动鼠标并进行单发/连发，确认方向、轨迹和连续射击；命中/击杀后确认分数、粒子与命中表现未消失。
+4. 让玩家死亡，确认进入失败 RaidResult；返回 Base 后再次出击，确认单局状态已重置。
+5. 在撤离区保持约 3 秒，确认成功撤离、RaidResult 与返回 Base 流程。
+6. 等待旧 V0 的 180 秒结束，确认仍进入旧 `RAID ENDED` 结果；这只验证兼容退场路径，不代表 Alpha 接受硬时限。
+7. 全程确认没有 runtime/gtest 报错、重复输入、光标状态或界面输入泄漏。
+
+PR #55 在用户明确确认这些步骤前保持 Draft。
 
 提交/PR：治理/路线一个提交，射击边界一个提交；同一 Slice 0 PR，不夹带 #54 或 Week29。
 
 回滚：射击边界为单独提交，可完整 revert 回旧 Projectile 直连；文档提交可独立保留。
 
+### Slice 0 之后的架构迁移门禁
+
+1. PR #55 完成用户真实窗口验收并按授权进入 `origin/main`。
+2. PR #54 更新到最新主线，复验库存回归并独立进入 `origin/main`。
+3. 从同时包含两项依赖的最新 `origin/main` 依次建立：`codex/build-module-foundation`、`codex/content-registry-v1`、`codex/profile-asset-registry`。
+4. 三项迁移分别只处理构建所有权、内容定义、资产所有权；玩家可见 Alpha 功能从 `codex/core-alpha-base-persistence` 开始。
+
+每个分支单独提交/PR，并通过 focused tests、全量 CTest、Windows/Ubuntu CI；只有存在可见行为变化时才安排相应用户真实窗口验收。任何迁移失败均可按独立 PR 回滚，不在未合入分支上叠加后续工作。
+
 ## 6. Slice 1：Base、Stash、配装与持久化
 
-依赖：Slice 0 合入；PR #54 或等价库存修复已进入接受基线。
+依赖：Slice 0、PR #54 与三项架构迁移均已进入接受基线。
 
 禁止范围：不实现真实弹药、Medkit、Raid 新内容、经济、基地建设/NPC/世界时间；不扩展三槽之外装备。
 
@@ -182,8 +208,10 @@ App (input translation + read-only projections)
 - [x] 完成 V0 差距矩阵、目标架构、产品路线和 skills/agents 审计设计。
 - [x] 完成治理文档与 skills 重构并通过 diff 检查。
 - [x] 完成射击窄边界；专项 102/102、全量 550/550 自动化通过。
-- [ ] 完成真实窗口兼容验收。当前仅完成可执行文件 3 秒启动存活冒烟。
+- [ ] 用户完成固定真实窗口兼容验收；开发代理不再自行启动游戏。
 - [x] 射击边界 `234d479` 与治理/路线 `3c08eec` 已提交，分支已推送并创建 Draft PR #55。
+- [x] 精确代码提交 `d046753` 的本机 550/550 与 GitHub 范围检测、Windows、Ubuntu CI 全部通过。
+- [x] 完整版模块化单体、内容/存档、资产所有权与分阶段迁移方案已写入仓库文档。
 
 最后更新：2026-08-14。
 
@@ -193,4 +221,4 @@ App (input translation + read-only projections)
 - `ShotResolutionTest`、`HitResolutionTest`、`GameplayWorldTest`、`GameplayWorldRaidTest`、`GameSessionTest`、`GameFlowTest` 共 102/102 通过。
 - 全量 CTest 550/550 通过，0 失败。
 - `Project_Raidline.exe` 以无 Shell、无窗口进程启动，3 秒仍存活后由冒烟脚本停止；未把该结果冒充真实窗口视觉验收。
-- Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`；精确 head CI 等待本记录提交后运行。
+- Draft PR #55：`https://github.com/Disthinker/Project-Raidline/pull/55`；代码精确提交 `d046753` 的范围检测、Windows 和 Ubuntu CI 全部成功。后续文档提交必须再次通过范围检查。
