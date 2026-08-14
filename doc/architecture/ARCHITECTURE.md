@@ -29,7 +29,7 @@ Project_Raidline.exe
             └─ 后续按实际切片加入 Travel/Siege 等运行时
 ```
 
-计划中的 CMake 生产目标：
+已进入 main 的 CMake 生产目标：
 
 | 目标 | 职责 | 依赖边界 |
 | --- | --- | --- |
@@ -140,6 +140,15 @@ WeaponFire/Ammo
 - 发行内容不承诺热更新或公开 Mod API；调试重载不能改变已经开始的 RaidSnapshot。
 - 显示文本使用定义元数据或未来本地化 key，不参与领域分支。
 
+Content Registry v1 的当前落地边界：
+
+- `assets/content/v1/core.json` 是现有五项物品、默认柜体 Loot、默认三敌人部署和 V0 首图常量的单一内容输入；CMake 配置时把发行 JSON 嵌入只读生产代码，运行时不在帧循环读取文件。
+- `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
+- v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
+- 容器循环与价格套利仍是长期加载门槛，但对应定义域尚无 Alpha 消费者，因此不在 v1 schema 中创建空字段；分别随容器和经济内容切片加入。
+- `ItemId`、`ItemInstance` 和纹理数组当前通过显式映射消费稳定 ID，只允许存续到下一项 Profile Asset Registry 迁移，不允许成为新内容扩展点。
+- Windows 内置 vcpkg 的旧 MSYS2 pkg-config 下载已失效；仓库提供只安装官方 3.12.0 单头文件和 CMake target 的 `nlohmann-json` overlay，使 Windows/Ubuntu 使用同一锁定依赖而不更新整套工具链。
+
 ## 存档与平台文件
 
 - 第一个跨进程正式存档是 schema v1；当前 V0 没有需要兼容的正式玩家存档。
@@ -154,8 +163,8 @@ WeaponFire/Ammo
 
 依赖 PR #55 与 #54 均进入 `origin/main` 后，按以下独立 PR 推进：
 
-1. `codex/build-module-foundation`：建立四个库目标并消除重复业务源码编译，不改变玩家行为。
-2. `codex/content-registry-v1`：强类型 DefinitionId、JSON ContentRegistry 和首批定义迁移。
+1. `codex/build-module-foundation`：已由 PR #56 进入 main，建立四个库目标并消除重复业务源码编译。
+2. `codex/content-registry-v1`：本地实现强类型 DefinitionId、JSON ContentRegistry 和首批定义迁移，等待 PR 精确 head CI/接受。
 3. `codex/profile-asset-registry`：ProfileState、AssetRegistry、AssetLocation、revision 与库存 ID 布局迁移。
 4. `codex/core-alpha-base-persistence`：可步行 Base、三入口、三槽配装、新存档和 schema v1。
 5. 继续按 Weapon/Medical、Raid/Settlement、Economy/Relief 三个 Alpha 垂直切片交付。

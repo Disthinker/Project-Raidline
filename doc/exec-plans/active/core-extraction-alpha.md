@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0 与 RL-INV-003 已进入 main；架构迁移 1 Build Module Foundation 进行中
+状态：Slice 0、RL-INV-003 与架构迁移 1 已进入 main；架构迁移 2 Content Registry v1 进行中
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-当前接受基线：`origin/main@5bbddc3`（Slice 0 原始实施基线为 `61718f6`）
+当前接受基线：`origin/main@1837928`（Slice 0 原始实施基线为 `61718f6`）
 
-当前实施分支：`codex/build-module-foundation`
+当前实施分支：`codex/content-registry-v1`
 
 ## 1. 目标与完成定义
 
@@ -25,10 +25,10 @@
 ## 2. 已验证基线与依赖
 
 - 2026-08-14 再次执行 `git fetch origin`；PR #55 已以 `c7a3931`、PR #54 已以 `5bbddc3` 进入 main。
-- 当前架构迁移从干净的 `origin/main@5bbddc3` 创建 `codex/build-module-foundation`，没有叠加未合入分支。
-- Build Module Foundation 本地四库全目标构建成功，focused 133/133、全量 558/558 通过；Draft PR #56 实现/初始证据 head `a375fec` 三项 CI 成功，等待最终证据 head 门禁。
+- Build Module Foundation 最终 head `ef66dbd` 三项 CI 成功，PR #56 已以 merge commit `1837928` 进入 main。
+- Content Registry v1 从干净的 `origin/main@1837928` 创建，没有叠加未合入分支；本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过，等待 PR 精确 head CI。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
-- RL-INV-003 已成为接受基线的一部分；Slice 1 仍等待 Build Module Foundation、Content Registry v1 和 Profile Asset Registry 三项独立迁移。
+- RL-INV-003 与 Build Module Foundation 已成为接受基线的一部分；Slice 1 仍等待 Content Registry v1 和 Profile Asset Registry 两项独立迁移。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -214,8 +214,10 @@ Project_Raidline.exe
 - [x] 完整版模块化单体、内容/存档、资产所有权与分阶段迁移方案已写入仓库文档。
 - [x] PR #55 与 PR #54 已分别以 merge commit `c7a3931`、`5bbddc3` 进入 main。
 - [x] 从 `origin/main@5bbddc3` 建立 Build Module Foundation 分支；四库本地构建、focused 133/133 与全量 558/558 通过。
-- [ ] Build Module Foundation PR #56 最终证据 head CI 完成、转 Ready 并进入接受基线。
-- [ ] Content Registry v1 与 Profile Asset Registry 依次进入接受基线。
+- [x] Build Module Foundation PR #56 最终 head CI 成功，并以 merge commit `1837928` 进入接受基线。
+- [x] 从 `origin/main@1837928` 建立 Content Registry v1；本地构建、focused 134/134 与全量 574/574 通过。
+- [ ] Content Registry v1 完成 PR 精确 head CI 并进入接受基线。
+- [ ] Profile Asset Registry 进入接受基线。
 
 最后更新：2026-08-14。
 

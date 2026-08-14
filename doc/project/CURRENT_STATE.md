@@ -4,9 +4,9 @@
 
 ## Git 与交付基线
 
-- `origin/main@5bbddc3` 已包含 PR #55 Core Extraction Alpha Slice 0 与 PR #54 RL-INV-003；两项精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
-- 当前开发分支：`codex/build-module-foundation`，从干净的 `origin/main@5bbddc3` 创建，只迁移构建所有权，不改变玩家行为。
-- Build Module Foundation 已建立四个生产库、测试生产库链接和配置期模块守卫；Draft PR #56 的实现/初始证据 head `a375fec` 三项 CI 全部成功，等待最终纯证据 head 门禁。
+- `origin/main@1837928` 已包含 PR #55 Core Extraction Alpha Slice 0、PR #54 RL-INV-003 与 PR #56 Build Module Foundation；对应精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
+- 当前开发分支：`codex/content-registry-v1`，从干净的 `origin/main@1837928` 创建，只迁移内容定义，不改变玩家行为。
+- Content Registry v1 本地实现已建立强类型定义 ID、不可变 JSON Registry、首批内容迁移与过渡枚举适配器；Windows Debug 70 步构建、focused 134/134、全量 574/574 通过，等待 PR 精确 head CI。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
 
@@ -16,6 +16,8 @@
 - PR #54 原实现 head `228ac7b` 在其旧基线上完成 Windows Debug 全目标构建，focused 45/45、全量 552/552、范围检测、Windows 和 Ubuntu CI 全部成功。
 - PR #54 与 `origin/main@c7a3931` 的组合基线已重新配置并完成 55 步增量全目标构建；精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过，精确 merge head `0523b3d` 三项 CI 全部成功。
 - Build Module Foundation 在 `origin/main@5bbddc3` 上重新配置并完成 68 步全目标构建；31/31 个非 main 业务 `.cpp` 各生成一条生产库编译规则，focused 133/133、全量 558/558 通过。
+- PR #56 最终 feature head `ef66dbd` 的范围检测、Windows 和 Ubuntu CI 全部成功，并以 merge commit `1837928` 进入 main。
+- Content Registry v1 在 `origin/main@1837928` 上引入 `nlohmann-json` header-only overlay 后完成 Windows Debug 重新配置与 70 步构建；强类型 ID/Registry/发布资源/现有内容/玩法流程 focused 134/134、全量 574/574 通过。
 - Windows 工具链：Visual Studio Developer Shell 17.13.6，x64 host/x64 target，Ninja，Debug，`x64-windows`，UTF-8。
 
 ## 当前产品里程碑
@@ -40,6 +42,8 @@
 - 当前射击、子步防穿透、敌人感知/协调、Grab/Scratch/Bite 代码攻击、粒子与代码反馈。
 - `ShotCommand → ShotResolution → HitResult` 窄边界；Projectile 仅为 GameplayWorld 内部 V0 适配器，App 读取只读表现投影。
 - 产品治理、skills、完整版目标架构、路线、ExecPlan 和 DoD 已转为垂直切片交付导向。
+- 四个生产库与唯一业务源码编译所有权已进入 main。
+- 当前五项物品、默认柜体 Loot、默认三敌人部署与 V0 首图常量已在开发分支迁入 `assets/content/v1/core.json`；Registry 构造期验证 schema、ID、引用、数值、连通边界与发布资源，旧 `ItemId` 只作为单周期适配器。
 
 ## RL-INV-003 已接受合同
 
@@ -52,8 +56,8 @@
 
 ## 尚未完成
 
-- Build Module Foundation：完成最终纯证据 head CI、转 Ready，并在用户授权后合入 PR #56。
-- 后续架构迁移：Content Registry v1、Profile Asset Registry。
+- Content Registry v1：完成 PR 精确 head Windows/Ubuntu CI 并进入接受基线。
+- 后续架构迁移：Profile Asset Registry。
 - Slice 1–4 的全部玩家功能。
 - Week29 代码反馈的独立整理。
 - 正式攻击动画及所有新美术/音频生产仍暂停。

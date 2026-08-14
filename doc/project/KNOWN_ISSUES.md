@@ -26,7 +26,8 @@ Alpha 范围内普通数值、接口、交互和验收不列为用户决策，�
 
 ## 延期工程债
 
-- `src/app.cpp` 与 `GameplayWorld` 仍过大，必须按消费者逐片迁移，禁止一次性无行为重写。CMake 重复业务源码编译已在 Build Module Foundation 分支修复，等待 PR 接受。
+- `src/app.cpp` 与 `GameplayWorld` 仍过大，必须按消费者逐片迁移，禁止一次性无行为重写。CMake 重复业务源码编译已由 PR #56 修复并进入 main。
+- Content Registry v1 暂时保留 `ItemId`/`ItemInstance` 旧枚举适配器；Profile Asset Registry 必须把实例身份迁到稳定 `ItemDefinitionId` 后删除该适配器，不能继续为新内容扩展枚举。
 - 当前 `Projectile`、3 HP、180 秒 Timeout、只读 Stash 是 V0 适配器/旧合同，禁止继续扩展；按 Alpha Slice 0–3 依次退场。
 - RL-COMBAT-002 肢体破坏、血液、击退与碎块；RL-COMBAT-003 敌人尸体残留与生命周期，均不在 Alpha。
 - Week29 代码反馈分支无 PR、未进 main；其代码可独立整理，正式攻击动画继续暂停。
@@ -38,7 +39,8 @@ Alpha 范围内普通数值、接口、交互和验收不列为用户决策，�
 | --- | --- |
 | Core Extraction Alpha Slice 0 | 自动化与用户真实窗口验收通过，PR #55 已合入 main |
 | RL-INV-003 / PR #54 | 已合入 `main@5bbddc3` |
-| Build Module Foundation | PR #56 实现/初始证据 head 本地 558/558 与三项 CI 通过，等待最终纯证据 head 门禁 |
+| Build Module Foundation | PR #56 最终 head 三项 CI 通过，已以 merge commit `1837928` 合入 main |
+| Content Registry v1 | 本地实现与 Windows Debug 构建完成；focused 134/134、全量 574/574 通过，等待 PR 精确 head CI |
 | Slice 1 | 等待三项架构迁移：Base、Stash、三槽配装、Profile/Persistence |
 | Slice 2 | 等待 Slice 1：弹匣/枪膛/弹药、100 HP/Medkit、随身库存 |
 | Slice 3 | 等待 Slice 2：单图快照、无硬时限、撤离与全损幂等结算 |
