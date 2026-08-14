@@ -15,7 +15,7 @@
 
 为了扩大单次交付步幅，剩余 Alpha 由三个宏切片收束：
 
-1. **Persistent Base**：Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复；当前开发中。
+1. **Persistent Base**：Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复；PR #58 自动化与人工验收均通过，等待合入。
 2. **Extraction Loop**：弹匣/枪膛/弹药、100 HP/Medkit、随身库存、单图快照、无硬时限、撤离/全损幂等结算。
 3. **Alpha Hardening**：连续多局、异常退出、损坏恢复、三组配置、平衡与完整人工验收。
 
@@ -45,12 +45,12 @@
 
 - Windows Debug 重新配置和 120 步完整构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70 通过；存档恢复专项 9/9 通过。
-- 全量 CTest 601/601 通过，0 失败；精确 head Windows/Ubuntu CI 等待推送后的 Draft PR 验证。
-- 本分支不由开发代理启动游戏；集中真实窗口验收在自动化及 CI 后交给用户。
+- 全量 CTest 601/601 通过，0 失败；PR #58 精确代码 head `9786d38` 的范围检测、Windows 与 Ubuntu CI 全部成功。
+- 用户在精确代码 head `9786d38` 上完成第 6 节集中真实窗口验收，6/6 通过且无偏差；开发代理未启动游戏。
 
 ## 尚未完成
 
-- Persistent Base：完成提交、推送、Draft PR、精确 head CI 与用户真实窗口验收。
+- Persistent Base：PR #58 等待显式合并授权并进入 main。
 - Extraction Loop 与 Alpha Hardening 全部工作。
 - V0 `ItemId`/`ItemInstance`、3 HP、180 秒 Timeout、无限弹和 V0 settlement 适配器退场。
 - Week29 代码反馈独立整理。

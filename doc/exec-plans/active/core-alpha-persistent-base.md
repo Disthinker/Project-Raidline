@@ -69,4 +69,6 @@
 - 2026-08-14：PR #57 以 merge commit `14cf79b` 进入 main；从该精确基线创建本分支并完成现状审计。
 - 2026-08-15：完成 Profile/AssetRegistry、库存与经济命令、schema v1 存档、可行走 Base、三设施 App 接线和覆盖这些边界的自动化测试。
 - 2026-08-15：Windows Debug 重新配置及 120 步完整构建成功；focused 70/70、存档恢复专项 9/9、全量 CTest 601/601 通过，0 失败。开发代理未启动游戏。
-- 待完成：形成可回滚提交、推送 Draft PR、等待精确 head Windows/Ubuntu CI，然后由用户执行第 6 节集中人工验收。
+- 2026-08-15：以三个可回滚提交形成 Draft PR #58；精确代码 head `9786d38` 的范围检测、Windows 与 Ubuntu CI 全部成功。
+- 2026-08-15：用户在精确代码 head `9786d38` 上完成第 6 节集中人工验收，Base 移动/三设施、仓储配装/原子库存、Ctrl/Shift 锁定数量、供应/回收/救济、跨进程恢复及 V0 Raid 回归共 6/6 通过，无偏差。
+- 待完成：PR #58 获得显式合并授权并进入 main；之后从最新 `origin/main` 开始 Extraction Loop 宏切片。

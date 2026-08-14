@@ -1,13 +1,13 @@
 # Project Raidline 已知问题与待办
 
-最后核对：2026-08-14。
+最后核对：2026-08-15。
 
 ## 已确认缺陷
 
 | ID | 问题 | 状态/依赖 |
 | --- | --- | --- |
-| RL-INV-001 | 背包物品合法位置缺少完整原子交换 | Persistent Base 新 InventoryDomain 已实现并有拒绝不变测试；等待 PR/人工验收。V0 Raid inventory 保持旧适配器 |
-| RL-INV-002 | Ctrl/Shift 数量选择后的点击锁定拖拽不完整 | Persistent Base 已实现 Ctrl=1、Shift=向上取半并锁定到第二次点击；等待 PR/人工验收 |
+| RL-INV-001 | 背包物品合法位置缺少完整原子交换 | PR #58 新 InventoryDomain 已实现并通过拒绝不变自动化与用户人工验收；等待合入。V0 Raid inventory 保持旧适配器 |
+| RL-INV-002 | Ctrl/Shift 数量选择后的点击锁定拖拽不完整 | PR #58 已实现 Ctrl=1、Shift=向上取半并锁定到第二次点击，用户人工验收通过；等待合入 |
 | RL-INV-003 | 同定义弹药堆叠与 60 发上限 | PR #54 已合入并完成人工验收 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | Alpha 只保留 HitResult 边界；App 不得猜测 |
 | RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 最终射击手感后移，不在 V0 适配器顺带扩张 |
@@ -36,7 +36,7 @@
 | 任务 | 状态 |
 | --- | --- |
 | PR #55 / #54 / #56 / #57 | 已进入 `origin/main@14cf79b` |
-| Persistent Base | 领域、存档、BaseWorld 与 App 初版完成；focused 回归通过，等待全量/CI/人工验收 |
+| Persistent Base | PR #58 领域、存档、BaseWorld 与 App 完成；本地 601/601、精确 head CI 与用户 6/6 人工验收通过，等待合入 |
 | Extraction Loop | 等待 Persistent Base 接受 |
 | Alpha Hardening | 等待 Extraction Loop |
 

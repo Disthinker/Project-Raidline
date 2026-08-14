@@ -1,6 +1,6 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-14。
+最后核对：2026-08-15。
 
 ## 当前目标与交付节奏
 
@@ -23,7 +23,7 @@
 
 | 宏切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | `codex/core-alpha-persistent-base` 开发中 |
+| Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | PR #58 自动化与用户验收通过，等待合入 |
 | Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement | 等待 Persistent Base 接受 |
 | Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置和完整产品验收 | 稳定性、恢复、平衡、发布证据 | 等待 Extraction Loop |
 
