@@ -1,6 +1,6 @@
 # Project Raidline 完整版目标架构
 
-最后核对：2026-08-14。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
+最后核对：2026-08-15。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
 
 ## 架构原则
 
@@ -43,7 +43,7 @@ Project_Raidline.exe
 ## GameRuntime、GameSession 与活动运行时
 
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
-- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和一个封闭的 `ActiveActivity`。Persistent Base 已把 Profile 与 BaseRuntime 接入；旧 `GameplayWorld` 仍作为预构造 V0 adapter 存活到 Extraction Loop，不得读写 Profile 资产。
+- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和当前活动运行时。Persistent Base 已把 Profile 与 BaseRuntime 接入；Extraction Loop 已让 Alpha `GameplayWorld` 从 pending Raid 快照构造，并只通过 GameSession 命令读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
 - `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。长期 BaseState、设施、人口和日程在真正有消费者时进入 ProfileState 的独立子领域。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
@@ -56,17 +56,15 @@ Project_Raidline.exe
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
 - 三槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 后续由 Extraction Loop 加入的 pending activity 与 Deploy/Settlement 幂等记录。
+- 当前 HP、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
 
-Persistent Base 已实例化资产、三槽装备、货币/救济和引导。pending Raid 只在 Extraction Loop 有真实消费者时进入 schema；未启用的长期系统通过后续显式迁移加入。
+Persistent Base 已实例化资产、三槽装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算。未启用的长期系统只通过后续显式迁移加入。
 
 `AssetRegistry` 使用 `AssetInstanceId -> AssetRecord` 唯一拥有真实物品。Stash、格子容器、装备和场景只保存实例 ID、位置及布局，不拥有第二份实例对象。
 
-`AssetLocation` 是封闭值类型。当前已启用 Stash、装备槽和容器实例分区；以下 Raid 位置按消费者逐步加入：
+`AssetLocation` 是封闭值类型。当前已启用 Stash、装备槽、容器实例分区、武器安装点和 Raid 地面位置；以下位置只在出现消费者时逐步加入：
 
-- 武器安装点；
 - 动作暂持；
-- Raid 地面位置；
 - 结算中转；
 - 后续正式加入的丢失记录或 NPC 任务位置。
 
@@ -142,12 +140,12 @@ Content Registry 的当前落地边界：
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
-- `ItemId`、V0 `ItemInstance` 和纹理数组只允许存在于隔离旧 Raid；新 Profile/存档只保存稳定 `ItemDefinitionId`。Extraction Loop 迁移全部 Raid 消费者后删除旧枚举。
+- `ItemId`、V0 `ItemInstance` 和纹理数组只允许存在于历史 V0 回归路径；生产 Alpha 的 Profile、Raid 和存档只保存稳定 `ItemDefinitionId`。旧枚举按消费者安全退场，不得新增用途。
 - Windows 内置 vcpkg 的旧 MSYS2 pkg-config 下载已失效；仓库提供只安装官方 3.12.0 单头文件和 CMake target 的 `nlohmann-json` overlay，使 Windows/Ubuntu 使用同一锁定依赖而不更新整套工具链。
 
 ## 存档与平台文件
 
-- 第一个跨进程正式存档 schema v1 已由 Persistent Base 落地；当前 V0 没有需要兼容的正式玩家存档。
+- Persistent Base 落地了第一个跨进程 schema v1；Extraction Loop 已升级到 schema v2，并提供 v1→v2 显式迁移。当前 V0 没有需要兼容的正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -161,8 +159,8 @@ Content Registry 的当前落地边界：
 
 1. `codex/build-module-foundation`：已由 PR #56 进入 main，建立四个库目标并消除重复业务源码编译。
 2. `codex/content-registry-v1`：已由 PR #57 以 merge commit `14cf79b` 进入 main。
-3. `codex/core-alpha-persistent-base`：合并 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1，当前开发中。
-4. `codex/core-alpha-extraction-loop`：一次接入 WeaponAmmo、Medical、RaidSnapshot、无硬时限和幂等 Settlement，并删除 V0 资产枚举适配器。
+3. `codex/core-alpha-persistent-base`：已由 PR #58 以 merge commit `b1ea3c3` 进入 main，交付 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1。
+4. `codex/core-alpha-extraction-loop`：已在当前分支完成 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement；等待 CI 与用户验收后接受。
 5. `codex/core-alpha-hardening`：连续多局、异常退出、损坏恢复、平衡和 Alpha 完整验收。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

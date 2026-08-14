@@ -81,4 +81,7 @@
 
 - 2026-08-15：用户以“下一步”授权执行已公布的合并步骤；PR #58 以 merge commit `b1ea3c3` 进入 main。
 - 2026-08-15：从干净的 `origin/main@b1ea3c3` 创建 `codex/core-alpha-extraction-loop`，重新读取唯一 Alpha 范围合同并固定本计划。
-
+- 2026-08-15：领域合同提交 `2d9b96d` 完成 content v2、稳定 PCG32、WeaponAmmo、RaidAction、RaidLifecycle、schema v2 与 focused tests。
+- 2026-08-15：端到端提交 `66f3120` 接通 Base 弹药/医疗、持久 Deploy、Alpha GameplayWorld、真实射击消耗、换弹/治疗/Loot/随身库存、四类结算与 RaidResult；生产 Alpha 不再使用 V0 柜体、无限弹和 Timeout 结算。
+- 2026-08-15：补齐普通/救济弹堆隔离，以及 Raid Loot 合并或装填后历史快照仍合法的所有权规则。Windows Debug 构建成功，focused 17/17、全量 CTest 620/620 通过；开发代理未启动游戏。
+- 待完成：Draft PR exact-head 范围检测、Windows/Ubuntu CI，以及用户执行第 8 节集中真实窗口验收。

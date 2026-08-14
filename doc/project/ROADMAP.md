@@ -18,16 +18,17 @@
 | RL-INV-003 | PR #54 已进入 main |
 | Build Module Foundation | PR #56 / merge commit `1837928` |
 | Content Registry v1 | PR #57 / merge commit `14cf79b` |
+| Persistent Base | PR #58 / merge commit `b1ea3c3` |
 
 ## Core Extraction Alpha 宏切片
 
 | 宏切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | PR #58 自动化与用户验收通过，等待合入 |
-| Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement | 等待 Persistent Base 接受 |
-| Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置和完整产品验收 | 稳定性、恢复、平衡、发布证据 | 等待 Extraction Loop |
+| Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | 已由 PR #58 接受并进入 main |
+| Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement、schema v2 | 当前分支端到端实现与本地 620/620 完成；等待 PR CI 和用户集中验收 |
+| Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置和完整产品验收 | 稳定性、恢复、平衡、发布证据 | 等待 Extraction Loop 接受 |
 
-Persistent Base 保持 V0 Raid 为隔离适配器，不复制 Profile 资产；Extraction Loop 一次性接入真实 Deploy、随身资产与 Settlement，并同步移除 180 秒硬失败和 3 HP 旧合同。
+生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
 ## Alpha 之后的完整版阶段
 
@@ -42,6 +43,6 @@ Persistent Base 保持 V0 Raid 为隔离适配器，不复制 Profile 资产；E
 
 ## 不混写边界
 
-- `codex/core-alpha-persistent-base` 只交付 Base 长期资产闭环；不提前实现 WeaponAmmo、医疗动作、真实 Raid 部署和结算。
+- `codex/core-alpha-extraction-loop` 只交付 Alpha 的真实资产 Raid 闭环；不提前实现特殊弹、部位、复杂伤势、耐久、多地图、高危或长期系统。
 - Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
 - Alpha 内普通架构、数值、交互和验收由开发主控收口；只有改变产品支柱、失败损失、商业模式、叙事方向或显著扩大范围才请求用户决策。

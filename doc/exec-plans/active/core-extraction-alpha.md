@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0、RL-INV-003 与两项架构迁移已进入 main；Persistent Base 宏切片进行中
+状态：Persistent Base 已进入 main；Extraction Loop 端到端代码与本地自动化完成，等待 CI 与用户验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-当前接受基线：`origin/main@14cf79b`（Slice 0 原始实施基线为 `61718f6`）
+当前接受基线：`origin/main@b1ea3c3`（Slice 0 原始实施基线为 `61718f6`）
 
-当前实施分支：`codex/core-alpha-persistent-base`
+当前实施分支：`codex/core-alpha-extraction-loop`
 
 ## 1. 目标与完成定义
 
@@ -28,7 +28,8 @@
 - Build Module Foundation 最终 head `ef66dbd` 三项 CI 成功，PR #56 已以 merge commit `1837928` 进入 main。
 - Content Registry v1 从干净的 `origin/main@1837928` 创建，本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过；PR #57 已以 merge commit `14cf79b` 进入 main。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
-- Persistent Base 从干净的 `origin/main@14cf79b` 创建；Profile/AssetRegistry、库存、经济、schema v1 存档、可行走 Base 和三设施已完成本地实现，Windows Debug 120 步构建、focused 70/70 与全量 CTest 601/601 通过，等待 Draft PR exact-head CI 与用户人工验收。
+- Persistent Base 从干净的 `origin/main@14cf79b` 创建；Windows Debug 120 步构建、focused 70/70、全量 CTest 601/601、exact-head CI 与用户 6/6 集中验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。
+- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；领域合同 `2d9b96d` 与端到端实现 `66f3120` 已完成，Windows Debug 构建、focused 17/17 与全量 CTest 620/620 通过，等待 exact-head CI 和用户集中验收。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -128,7 +129,7 @@ Project_Raidline.exe
 
 ## 6. Persistent Base 宏切片
 
-依赖：`origin/main@14cf79b`。活动计划：`doc/exec-plans/active/core-alpha-persistent-base.md`。
+依赖：`origin/main@14cf79b`。已接受计划证据：`doc/exec-plans/active/core-alpha-persistent-base.md`。
 
 禁止范围：不实现真实 Raid Deploy、弹匣内容/枪膛、Raid 换弹、100 HP/治疗动作、RaidSnapshot、全损结算或移除 Timeout；不扩展三槽之外装备。
 
@@ -142,17 +143,17 @@ Project_Raidline.exe
 
 ## 7. Extraction Loop 宏切片
 
-依赖：Persistent Base 接受并合入 main。
+依赖：Persistent Base 已由 PR #58 合入 `origin/main@b1ea3c3`。活动计划：`doc/exec-plans/active/core-alpha-extraction-loop.md`。
 
 禁止范围：不实现特殊弹、完整逻辑弹道重做、耐久/故障、防具/部位/复杂伤势、多地图、高危、特殊撤离、增援、尸体搜索或寻回。
 
 交付：弹匣有序内容、枪膛、Base 压卸弹、胸挂 R 换弹、真实消耗；100 HP、Medkit 与 Action；Raid 随身库存；三组出生撤离、三组敌人部署、一次性 Loot 快照；无硬时限；成功带回、死亡/主动/异常退出全损；RaidResult 与幂等 pending Raid。
 
-自动化：弹药守恒；动作任意提交点合法；治疗次数；固定种子快照；地图配置可达；时间不失败；Deploy/成功/失败/重载只结算一次；删除 V0 ItemId/ItemInstance 适配器后的全量回归。
+自动化：弹药守恒；动作任意提交点合法；治疗次数；固定种子快照；地图配置可达；时间不失败；Deploy/成功/失败/重载只结算一次；生产 Alpha 绕过 V0 ItemId/ItemInstance 后的全量回归。
 
 人工验收：一次集中完成压弹/配装、换弹、治疗、Loot 整理、三类路线、成功、死亡、主动退出、强制关闭和重开。
 
-回滚：Weapon/Medical、RaidSnapshot、Settlement 与 App 接线分提交；旧适配器只保留到新端到端自动化通过，不作为合入后的长期双路径。
+回滚：Weapon/Medical、RaidSnapshot、Settlement 与 App 接线分提交；旧适配器隔离保留给历史回归，不得成为生产 Alpha 的并行资产路径，后续仅在删除证明完整时退场。
 
 ## 8. Alpha Hardening 宏切片
 
@@ -170,7 +171,7 @@ Project_Raidline.exe
 
 ## 10. 风险与真正产品级决策
 
-- Persistent Base 与旧 Raid 暂时存在两个隔离资产模型；禁止隐式复制，Extraction Loop 必须以显式 Deploy/Settlement 完成单一所有权迁移。
+- 生产 Alpha 已通过显式 Deploy/Settlement 使用单一 Profile AssetRegistry；旧 V0 资产模型只留作历史回归，不得重新接回生产流程或隐式复制。
 - Week29 代码反馈有复用价值，但没有 PR；Alpha 不依赖它。后续应单独整理代码反馈 PR，继续排除正式攻击图像。
 - App 和 GameplayWorld 体积过大，必须按消费者逐片拆分；一次性重写会扩大回归面。
 - 无硬时限会降低首图清敌后的压力，这是 Alpha 有意减法；不得擅自加刷新、资源腐坏或隐性倒计时。
@@ -192,9 +193,13 @@ Project_Raidline.exe
 - [x] Build Module Foundation PR #56 最终 head CI 成功，并以 merge commit `1837928` 进入接受基线。
 - [x] 从 `origin/main@1837928` 建立 Content Registry v1；本地构建、focused 134/134 与全量 574/574 通过。
 - [x] Content Registry v1 精确 head CI 成功，PR #57 以 merge commit `14cf79b` 进入接受基线。
-- [ ] Persistent Base 完成全量回归、CI 与用户集中人工验收并进入接受基线。
+- [x] Persistent Base 完成全量回归、CI 与用户 6/6 集中人工验收；PR #58 以 merge commit `b1ea3c3` 进入接受基线。
+- [x] 从 `origin/main@b1ea3c3` 建立 Extraction Loop 分支并完成领域合同提交 `2d9b96d`。
+- [x] 完成 WeaponAmmo、100 HP/Medkit、RaidSnapshot、真实 Loot/随身库存、无硬时限与幂等 Settlement 的端到端实现提交 `66f3120`。
+- [x] Extraction Loop focused 17/17 与全量 CTest 620/620 通过；开发代理未启动游戏。
+- [ ] Extraction Loop exact-head CI 与用户集中真实窗口验收通过并进入接受基线。
 
-最后更新：2026-08-14。
+最后更新：2026-08-15。
 
 ### 2026-08-14 Slice 0 证据
 
