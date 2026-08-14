@@ -115,6 +115,55 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-merge-loot",
+        publishedContentRegistry());
+    equipAlphaLoadout(profile);
+    const AssetInstanceId backpack = *equippedAsset(
+        profile,
+        EquipmentSlotKind::Backpack);
+    const AssetInstanceId ammunition =
+        firstAsset(profile, alpha_content::ammunition);
+    profile.assets.findMutable(ammunition)->quantity = 55;
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            ammunition,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "store-ammunition"}).succeeded);
+    ASSERT_TRUE(deploy(profile, 8821).succeeded);
+
+    const AssetInstanceId loot = profile.pendingRaid->loot.front().assetId;
+    AssetRecord *lootAsset = profile.assets.findMutable(loot);
+    ASSERT_NE(lootAsset, nullptr);
+    lootAsset->definitionId = alpha_content::ammunition;
+    lootAsset->quantity = 5;
+    lootAsset->reliefBatchId.reset();
+    ASSERT_TRUE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+
+    const InventoryReceipt pickedUp = pickupRaidLoot(
+        profile,
+        publishedContentRegistry(),
+        loot,
+        CommandContext{profile.revision, "merge-picked-ammunition"});
+
+    ASSERT_TRUE(pickedUp.succeeded) << pickedUp.message;
+    EXPECT_EQ(profile.assets.find(ammunition)->quantity, 60U);
+    EXPECT_EQ(profile.assets.find(loot), nullptr);
+    EXPECT_TRUE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+}
+
 TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
 {
     ProfileState profile = makeNewAlphaProfile(

@@ -16,6 +16,7 @@ bool GameFlow::startGame() noexcept
     }
 
     state_ = GameFlowState::Base;
+    persistentAlphaMode_ = false;
     return true;
 }
 
@@ -32,6 +33,7 @@ bool GameFlow::startNewGame(std::string profileId)
         return false;
     }
     state_ = GameFlowState::Base;
+    persistentAlphaMode_ = true;
     activeBaseFacility_.reset();
     baseWorld_.resetAtMedicalPoint();
     return true;
@@ -44,7 +46,10 @@ bool GameFlow::continueGame()
     {
         return false;
     }
-    state_ = GameFlowState::Base;
+    persistentAlphaMode_ = true;
+    state_ = gameSession_.recoveredAbandonedRaid()
+        ? GameFlowState::RaidResult
+        : GameFlowState::Base;
     activeBaseFacility_.reset();
     baseWorld_.resetAtMedicalPoint();
     return true;
@@ -55,6 +60,23 @@ bool GameFlow::deploy() noexcept
     if (state_ != GameFlowState::Base)
     {
         return false;
+    }
+
+    if (persistentAlphaMode_)
+    {
+        std::uint64_t seed = profileStateFingerprint(
+            gameSession_.profile()) ^ 0x726169646c696e65ULL;
+        if (seed == 0)
+        {
+            seed = 1;
+        }
+        if (!gameSession_.deployAlpha(seed))
+        {
+            return false;
+        }
+        activeBaseFacility_.reset();
+        state_ = GameFlowState::Raid;
+        return true;
     }
 
     if (firstDeploymentPending_)
@@ -144,7 +166,12 @@ bool GameFlow::returnToBase() noexcept
         return false;
     }
 
-    if (gameSession_.settlement().state() == RaidSettlementState::Extracted)
+    const bool extracted = persistentAlphaMode_
+        ? gameSession_.profile().lastRaidResult.has_value() &&
+          gameSession_.profile().lastRaidResult->outcome ==
+              RaidResultOutcome::Extracted
+        : gameSession_.settlement().state() == RaidSettlementState::Extracted;
+    if (extracted)
     {
         baseWorld_.resetAtRaidGate();
     }

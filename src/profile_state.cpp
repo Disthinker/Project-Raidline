@@ -682,9 +682,10 @@ ProfileValidationResult validateProfileState(
         for (const RaidLootSnapshot &loot : raid.loot)
         {
             const AssetRecord *asset = profile.assets.find(loot.assetId);
-            if (asset == nullptr || loot.assetId == 0 ||
+            if (loot.assetId == 0 ||
                 !snapshotLoot.insert(loot.assetId).second ||
-                (!groundAssetIds.contains(loot.assetId) &&
+                (asset != nullptr &&
+                 !groundAssetIds.contains(loot.assetId) &&
                  !assetIsCarried(profile, loot.assetId)))
             {
                 return {false, "pending Raid Loot ownership is invalid"};

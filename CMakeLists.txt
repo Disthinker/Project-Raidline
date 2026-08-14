@@ -413,6 +413,10 @@ raidline_add_test(
     tests/test_game_session.cpp
     raidline::services)
 raidline_add_test(
+    AlphaExtractionSessionTest
+    tests/test_alpha_extraction_session.cpp
+    raidline::services)
+raidline_add_test(
     PersistentSessionTest
     tests/test_persistent_session.cpp
     raidline::services)

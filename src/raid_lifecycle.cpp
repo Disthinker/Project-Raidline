@@ -364,6 +364,30 @@ InventoryReceipt pickupRaidLoot(
         for (ProfileContainerId container :
              carriedContainers(profile, content, slot))
         {
+            for (const auto &[candidateId, candidate] :
+                 profile.assets.records())
+            {
+                static_cast<void>(candidateId);
+                const auto *stored =
+                    std::get_if<StoredAssetLocation>(&candidate.location);
+                if (stored == nullptr || stored->container != container ||
+                    candidate.definitionId != asset->definitionId ||
+                    candidate.reliefBatchId != asset->reliefBatchId ||
+                    definition.maxStackSize <= 1 ||
+                    candidate.quantity >= definition.maxStackSize)
+                {
+                    continue;
+                }
+                return executeInventory(
+                    profile,
+                    content,
+                    InventoryMoveCommand{
+                        assetId,
+                        0,
+                        *stored,
+                        candidate.orientation},
+                    context);
+            }
             const auto origin = findFirstProfileFit(
                 profile,
                 content,

@@ -30,16 +30,6 @@ namespace
         return defaultV0MapDefinition();
     }
 
-    float worldWidth()
-    {
-        return defaultMap().worldSize.x;
-    }
-
-    float worldHeight()
-    {
-        return defaultMap().worldSize.y;
-    }
-
     std::vector<EnemySpawn> makeDefaultEnemySpawns()
     {
         const EnemyDeploymentDefinition &deployment =
@@ -207,6 +197,40 @@ GameplayWorld::GameplayWorld(
           playerMaxHealth,
           PlayerHealthOverrideTag{}}
 {
+}
+
+GameplayWorld::GameplayWorld(RaidWorldConfig config)
+    : GameplayWorld{
+          std::vector<GroundItemSpawn>{},
+          defaultInventorySize(),
+          ItemInstanceId{1},
+          std::move(config.initialEnemies),
+          config.playerMaximumHealth,
+          PlayerHealthOverrideTag{}}
+{
+    if (!std::isfinite(config.worldSize.x) ||
+        !std::isfinite(config.worldSize.y) ||
+        config.worldSize.x <= 0.0F || config.worldSize.y <= 0.0F ||
+        config.playerCurrentHealth <= 0 ||
+        config.playerCurrentHealth > config.playerMaximumHealth)
+    {
+        throw std::invalid_argument{"RaidWorldConfig is invalid"};
+    }
+    worldSize_ = config.worldSize;
+    alphaRaidWorld_ = true;
+    player_ = Player{
+        config.playerSpawn.x,
+        config.playerSpawn.y,
+        config.playerMaximumHealth,
+        config.playerCurrentHealth};
+    extractionPoint_ = ExtractionPoint{
+        config.extractionPoint.position,
+        config.extractionPoint.size};
+    raidSession_ = RaidSession{RaidSessionConfig{0.0F, 3.0F, false}};
+    if (!raidSession_.start())
+    {
+        throw std::logic_error{"Alpha Raid session failed to start"};
+    }
 }
 
 GameplayWorld::GameplayWorld(
@@ -469,6 +493,7 @@ void GameplayWorld::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    shotFiredLastUpdate_ = false;
     if (!raidSession_.isActive())
     {
         return;
@@ -500,7 +525,7 @@ void GameplayWorld::update(
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     raidSession_.update(
         deltaTime,
-        extractionPoint_.contains(
+        !player_.isControlled() && extractionPoint_.contains(
             playerCenter(player_)));
 
     // 终局形成后，本帧不再产生拾取、射击、敌人或命中结果。
@@ -667,6 +692,7 @@ void GameplayWorld::update(
 
     if (shot.has_value())
     {
+        shotFiredLastUpdate_ = true;
         const Vec2 center = playerCenter(player_);
         const float muzzleDistance =
             player_.size() / 2.0F +
@@ -769,7 +795,7 @@ void GameplayWorld::update(
             std::remove_if(
                 projectiles_.begin(),
                 projectiles_.end(),
-                [](const Projectile &projectile)
+                [this](const Projectile &projectile)
                 {
                     return projectile.isOutside(
                         worldWidth(),
@@ -912,6 +938,25 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
     return weaponFire_.visualRecoilPixels();
+}
+
+bool GameplayWorld::shotFiredLastUpdate() const noexcept
+{
+    return shotFiredLastUpdate_;
+}
+
+bool GameplayWorld::isAlphaRaidWorld() const noexcept
+{
+    return alphaRaidWorld_;
+}
+
+bool GameplayWorld::restorePlayerHealth(int amount)
+{
+    if (!raidSession_.isActive() || player_.isDead() || amount <= 0)
+    {
+        return false;
+    }
+    return player_.restoreHealth(amount) > 0;
 }
 
 bool GameplayWorld::markPlayerDead() noexcept
@@ -1356,4 +1401,14 @@ ItemInstanceId
 GameplayWorld::nextItemInstanceId() const noexcept
 {
     return nextItemInstanceId_;
+}
+
+float GameplayWorld::worldWidth() const noexcept
+{
+    return worldSize_.x;
+}
+
+float GameplayWorld::worldHeight() const noexcept
+{
+    return worldSize_.y;
 }

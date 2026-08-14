@@ -1,6 +1,9 @@
 #include "game_session.h"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 #include "base_world.h"
@@ -40,6 +43,13 @@ void GameSession::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    if (alphaRaidActive_ ||
+        (profile_.pendingRaid.has_value() &&
+         state_ == GameSessionState::SettlementBlocked))
+    {
+        updateAlphaRaid(input, deltaTime);
+        return;
+    }
     if (state_ == GameSessionState::BetweenRaids)
     {
         return;
@@ -191,6 +201,10 @@ bool GameSession::startNewProfile(std::string profileId)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    alphaRaidActive_ = false;
+    recoveredAbandonedRaid_ = false;
+    state_ = GameSessionState::BetweenRaids;
+    raidNumber_ = 1;
     lastSaveLoadStatus_ = SaveLoadStatus::LoadedPrimary;
     persistenceMessage_ = std::move(saveMessage);
     return true;
@@ -210,8 +224,145 @@ bool GameSession::continueProfile()
     {
         return false;
     }
-    profile_ = std::move(*result.profile);
+    ProfileState candidate = std::move(*result.profile);
+    recoveredAbandonedRaid_ = false;
+    if (candidate.pendingRaid.has_value())
+    {
+        const std::string settlementId = candidate.pendingRaid->settlementId;
+        const RaidSettlementReceipt settled = settlePendingRaid(
+            candidate,
+            publishedContentRegistry(),
+            settlementId,
+            RaidResultOutcome::AbnormalQuit);
+        if (!settled.succeeded)
+        {
+            persistenceMessage_ = settled.message;
+            return false;
+        }
+        const SaveWriteResult saved = saveRepository_->save(
+            candidate,
+            publishedContentRegistry().contentVersion());
+        if (!saved.succeeded)
+        {
+            persistenceMessage_ = saved.message;
+            return false;
+        }
+        recoveredAbandonedRaid_ = true;
+    }
+    profile_ = std::move(candidate);
+    alphaRaidActive_ = false;
+    state_ = GameSessionState::BetweenRaids;
+    raidNumber_ = profile_.committedSettlements.size() + 1U;
     return true;
+}
+
+bool GameSession::deployAlpha(std::uint64_t seed)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0)
+    {
+        return false;
+    }
+    const std::size_t number = profile_.committedSettlements.size() + 1U;
+    ProfileState candidate = profile_;
+    const std::string raidId = candidate.profileId + "-raid-" +
+        std::to_string(number);
+    const std::string settlementId = candidate.profileId + "-settlement-" +
+        std::to_string(number);
+    const DeployReceipt receipt = executeDeploy(
+        candidate,
+        publishedContentRegistry(),
+        DeployCommand{
+            raidId,
+            settlementId,
+            seed,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{
+            profile_.revision,
+            "deploy:" + raidId});
+    if (!receipt.succeeded || !candidate.pendingRaid.has_value())
+    {
+        persistenceMessage_ = receipt.message;
+        return false;
+    }
+
+    std::unique_ptr<GameplayWorld> candidateWorld;
+    try
+    {
+        const PendingRaidSnapshot &snapshot = *candidate.pendingRaid;
+        std::vector<EnemySpawn> enemies;
+        enemies.reserve(snapshot.enemies.size());
+        for (const RaidEnemySnapshot &enemy : snapshot.enemies)
+        {
+            enemies.push_back(EnemySpawn{
+                enemy.position,
+                enemy.size,
+                enemy.maximumHealth});
+        }
+        candidateWorld = std::make_unique<GameplayWorld>(RaidWorldConfig{
+            publishedContentRegistry().map(snapshot.mapDefinitionId).worldSize,
+            snapshot.playerSpawn,
+            snapshot.extractionPoint,
+            std::move(enemies),
+            100,
+            candidate.currentHealth});
+    }
+    catch (const std::exception &error)
+    {
+        persistenceMessage_ = error.what();
+        return false;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return false;
+    }
+    world_.swap(candidateWorld);
+    settlement_ = RaidSettlement{};
+    state_ = GameSessionState::InRaid;
+    raidNumber_ = number;
+    alphaRaidActive_ = true;
+    recoveredAbandonedRaid_ = false;
+    raidActionState_.cancel();
+    return true;
+}
+
+bool GameSession::activeQuitAlphaRaid()
+{
+    return alphaRaidActive_ && settleAlphaRaid(RaidResultOutcome::ActiveQuit);
+}
+
+bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
+{
+    const AssetRecord *asset = profile_.assets.find(medkitAssetId);
+    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+        asset == nullptr || !assetIsCarried(profile_, medkitAssetId) ||
+        asset->remainingCharges == 0 || world_->player().health() >= 100)
+    {
+        return false;
+    }
+    try
+    {
+        if (publishedContentRegistry().item(asset->definitionId).category !=
+            ItemCategory::Medical)
+        {
+            return false;
+        }
+    }
+    catch (...)
+    {
+        return false;
+    }
+    return raidActionState_.start(
+        HealRaidAction{medkitAssetId, 0.0F, 5.0F});
+}
+
+bool GameSession::alphaRaidActive() const noexcept
+{
+    return alphaRaidActive_;
+}
+
+bool GameSession::recoveredAbandonedRaid() const noexcept
+{
+    return recoveredAbandonedRaid_;
 }
 
 const ProfileState &GameSession::profile() const noexcept
@@ -293,6 +444,67 @@ EconomyReceipt GameSession::executeProfileEconomy(
     return receipt;
 }
 
+WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
+    const WeaponAmmoCommand &command,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    WeaponAmmoReceipt receipt = executeWeaponAmmo(
+        candidate,
+        publishedContentRegistry(),
+        command,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return WeaponAmmoReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision,
+            WeaponAmmoResult::Dry,
+            std::nullopt};
+    }
+    return receipt;
+}
+
+HealReceipt GameSession::executeBaseHeal(
+    AssetInstanceId medkitAssetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    HealReceipt receipt = executeHeal(
+        candidate,
+        publishedContentRegistry(),
+        medkitAssetId,
+        HealAccess::AnyOwned,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return HealReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision,
+            0};
+    }
+    return receipt;
+}
+
+const RaidActionState &GameSession::raidActionState() const noexcept
+{
+    return raidActionState_;
+}
+
 SaveLoadStatus GameSession::lastSaveLoadStatus() const noexcept
 {
     return lastSaveLoadStatus_;
@@ -303,10 +515,324 @@ const std::string &GameSession::persistenceMessage() const noexcept
     return persistenceMessage_;
 }
 
-bool GameSession::commitProfileCandidate(ProfileState candidate)
+void GameSession::updateAlphaRaid(
+    const GameplayInput &input,
+    float deltaTime)
+{
+    if (!profile_.pendingRaid.has_value())
+    {
+        alphaRaidActive_ = false;
+        state_ = GameSessionState::BetweenRaids;
+        return;
+    }
+    if (input.quitRaidJustPressed && alphaRaidActive_)
+    {
+        static_cast<void>(activeQuitAlphaRaid());
+        return;
+    }
+    const RaidSessionState currentState = world_->raidSession().state();
+    if (currentState == RaidSessionState::Extracted)
+    {
+        static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));
+        return;
+    }
+    if (currentState == RaidSessionState::PlayerDead)
+    {
+        static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
+        return;
+    }
+
+    const auto weapon = equippedAsset(
+        profile_,
+        EquipmentSlotKind::PrimaryWeapon);
+    if (!raidActionState_.active().has_value() && !input.inventoryOpen)
+    {
+        if (input.reloadJustPressed && weapon.has_value())
+        {
+            if (const auto magazine = selectRaidReloadMagazine(
+                    profile_,
+                    publishedContentRegistry(),
+                    *weapon))
+            {
+                static_cast<void>(raidActionState_.start(
+                    ReloadRaidAction{*weapon, *magazine, 0.0F, 2.0F}));
+            }
+        }
+        else if (input.healJustPressed)
+        {
+            if (const auto medkit = selectQuickMedkit(
+                    profile_,
+                    publishedContentRegistry()))
+            {
+                static_cast<void>(raidActionState_.start(
+                    HealRaidAction{*medkit, 0.0F, 5.0F}));
+            }
+        }
+    }
+
+    GameplayInput simulationInput = input;
+    simulationInput.reloadJustPressed = false;
+    simulationInput.healJustPressed = false;
+    simulationInput.quitRaidJustPressed = false;
+    if (input.inventoryOpen || raidActionState_.active().has_value())
+    {
+        simulationInput.fireJustPressed = false;
+        simulationInput.firePressed = false;
+    }
+
+    std::optional<ProfileState> firedCandidate;
+    if (weapon.has_value() &&
+        !raidActionState_.active().has_value() &&
+        !input.inventoryOpen &&
+        (input.firePressed || input.fireJustPressed))
+    {
+        ProfileState candidate = profile_;
+        WeaponAmmoReceipt fire = executeWeaponAmmo(
+            candidate,
+            publishedContentRegistry(),
+            FireWeaponCommand{*weapon},
+            CommandContext{
+                profile_.revision,
+                nextRaidTransaction("fire")});
+        if (fire.succeeded && fire.result == WeaponAmmoResult::Chambered)
+        {
+            static_cast<void>(commitProfileCandidate(
+                std::move(candidate),
+                false));
+            simulationInput.fireJustPressed = false;
+            simulationInput.firePressed = false;
+        }
+        else if (fire.succeeded && fire.result == WeaponAmmoResult::Fired)
+        {
+            firedCandidate = std::move(candidate);
+        }
+        else
+        {
+            simulationInput.fireJustPressed = false;
+            simulationInput.firePressed = false;
+        }
+    }
+    else if (!weapon.has_value())
+    {
+        simulationInput.fireJustPressed = false;
+        simulationInput.firePressed = false;
+    }
+
+    world_->update(simulationInput, deltaTime);
+    if (world_->shotFiredLastUpdate())
+    {
+        if (!firedCandidate.has_value())
+        {
+            std::terminate();
+        }
+        static_cast<void>(commitProfileCandidate(
+            std::move(*firedCandidate),
+            false));
+    }
+
+    if (world_->raidSession().state() == RaidSessionState::PlayerDead)
+    {
+        raidActionState_.cancel();
+        static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
+        return;
+    }
+    if (world_->raidSession().state() == RaidSessionState::Extracted)
+    {
+        raidActionState_.cancel();
+        static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));
+        return;
+    }
+
+    if (raidActionState_.active().has_value())
+    {
+        const bool controlled = world_->player().isControlled();
+        const bool interrupted = controlled || input.inventoryOpen ||
+            std::visit(
+                [&input](const auto &action)
+                {
+                    using Action = std::decay_t<decltype(action)>;
+                    if constexpr (std::is_same_v<Action, ReloadRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.healJustPressed;
+                    }
+                    else if constexpr (std::is_same_v<Action, HealRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                },
+                *raidActionState_.active());
+        const RaidActionAdvance advance = raidActionState_.update(
+            deltaTime,
+            interrupted);
+        if (advance == RaidActionAdvance::Completed)
+        {
+            const std::optional<RaidAction> completed =
+                raidActionState_.takeCompleted();
+            if (completed.has_value())
+            {
+                if (const auto *reload =
+                        std::get_if<ReloadRaidAction>(&*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+                        candidate,
+                        publishedContentRegistry(),
+                        InstallMagazineCommand{
+                            reload->weaponAssetId,
+                            reload->magazineAssetId},
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("reload")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate),
+                            false));
+                    }
+                    else
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *heal =
+                             std::get_if<HealRaidAction>(&*completed))
+                {
+                    ProfileState candidate = profile_;
+                    candidate.currentHealth = world_->player().health();
+                    const HealReceipt receipt = executeHeal(
+                        candidate,
+                        publishedContentRegistry(),
+                        heal->medkitAssetId,
+                        HealAccess::CarriedOnly,
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("heal")});
+                    if (receipt.succeeded && commitProfileCandidate(
+                            std::move(candidate),
+                            false))
+                    {
+                        static_cast<void>(
+                            world_->restorePlayerHealth(receipt.healedAmount));
+                    }
+                    else if (!receipt.succeeded)
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+            }
+        }
+    }
+
+    if (input.interactJustPressed &&
+        !raidActionState_.active().has_value())
+    {
+        if (const auto loot = nearbyRaidLoot())
+        {
+            ProfileState candidate = profile_;
+            const InventoryReceipt receipt = pickupRaidLoot(
+                candidate,
+                publishedContentRegistry(),
+                *loot,
+                CommandContext{
+                    profile_.revision,
+                    nextRaidTransaction("pickup")});
+            if (receipt.succeeded)
+            {
+                static_cast<void>(commitProfileCandidate(
+                    std::move(candidate),
+                    false));
+            }
+            else
+            {
+                persistenceMessage_ = receipt.message;
+            }
+        }
+    }
+}
+
+bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
+{
+    if (!profile_.pendingRaid.has_value())
+    {
+        return false;
+    }
+    ProfileState candidate = profile_;
+    candidate.currentHealth = std::max(1, world_->player().health());
+    const RaidSettlementReceipt receipt = settlePendingRaid(
+        candidate,
+        publishedContentRegistry(),
+        candidate.pendingRaid->settlementId,
+        outcome);
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
+    }
+    raidActionState_.cancel();
+    alphaRaidActive_ = false;
+    state_ = GameSessionState::BetweenRaids;
+    return true;
+}
+
+std::string GameSession::nextRaidTransaction(std::string_view prefix)
+{
+    ++raidCommandSequence_;
+    return std::string{prefix} + ":" +
+        (profile_.pendingRaid.has_value()
+             ? profile_.pendingRaid->raidId
+             : profile_.profileId) + ":" +
+        std::to_string(raidCommandSequence_);
+}
+
+std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
+{
+    if (!profile_.pendingRaid.has_value())
+    {
+        return std::nullopt;
+    }
+    const Vec2 playerPosition = world_->player().position();
+    const float half = world_->player().size() / 2.0F;
+    const Vec2 playerCenter{playerPosition.x + half, playerPosition.y + half};
+    std::optional<AssetInstanceId> result;
+    float bestDistance = 72.0F * 72.0F;
+    for (const RaidLootSnapshot &loot : profile_.pendingRaid->loot)
+    {
+        const AssetRecord *asset = profile_.assets.find(loot.assetId);
+        if (asset == nullptr ||
+            !std::holds_alternative<RaidGroundAssetLocation>(asset->location))
+        {
+            continue;
+        }
+        const float dx = loot.position.x - playerCenter.x;
+        const float dy = loot.position.y - playerCenter.y;
+        const float distance = dx * dx + dy * dy;
+        if (distance <= bestDistance)
+        {
+            bestDistance = distance;
+            result = loot.assetId;
+        }
+    }
+    return result;
+}
+
+bool GameSession::commitProfileCandidate(
+    ProfileState candidate,
+    bool persist)
 {
     std::string saveMessage;
-    if (saveRepository_.has_value())
+    if (persist && saveRepository_.has_value())
     {
         const SaveWriteResult result = saveRepository_->save(
             candidate,

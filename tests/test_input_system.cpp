@@ -33,6 +33,8 @@ namespace
             GameAction::MoveLeft,
             GameAction::MoveRight,
             GameAction::Fire,
+            GameAction::Reload,
+            GameAction::Heal,
             GameAction::Dodge,
             GameAction::Interact,
             GameAction::ToggleInventory,
@@ -218,6 +220,16 @@ TEST(
     EXPECT_TRUE(
         input.wasActionJustPressed(
             GameAction::Interact));
+}
+
+TEST(InputSystemTest, RaidResourceKeysMapToReloadAndHeal)
+{
+    InputSystem input;
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_R));
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_5));
+
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Reload));
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::Heal));
 }
 
 TEST(

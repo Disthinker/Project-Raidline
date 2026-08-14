@@ -72,6 +72,7 @@ private:
     BaseWorld baseWorld_;
     GameFlowState state_{GameFlowState::MainMenu};
     bool firstDeploymentPending_{true};
+    bool persistentAlphaMode_{};
     std::optional<BaseFacilityKind> activeBaseFacility_;
 };
 

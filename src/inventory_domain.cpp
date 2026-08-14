@@ -164,6 +164,7 @@ InventoryReceipt applyMove(
         {
             AssetRecord *target = candidate.assets.findMutable(*overlaps.begin());
             if (target == nullptr || target->definitionId != source->definitionId ||
+                target->reliefBatchId != source->reliefBatchId ||
                 target->quantity > definition.maxStackSize - requested)
             {
                 return failure(
@@ -192,6 +193,17 @@ InventoryReceipt applyMove(
         }
 
         if (target->definitionId == source->definitionId &&
+            target->reliefBatchId != source->reliefBatchId &&
+            definition.maxStackSize > 1)
+        {
+            return failure(
+                DomainErrorCode::IllegalDestination,
+                "stacks from different relief batches cannot be combined",
+                candidate.revision);
+        }
+
+        if (target->definitionId == source->definitionId &&
+            target->reliefBatchId == source->reliefBatchId &&
             definition.maxStackSize > 1)
         {
             const std::uint32_t available =

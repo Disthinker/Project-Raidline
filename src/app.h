@@ -82,6 +82,8 @@ private:
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
+    bool deploymentWarningArmed_{};
+    bool raidQuitArmed_{};
     std::string uiMessage_;
 
     Texture backgroundTexture_;
@@ -107,6 +109,8 @@ private:
     void handleMainMenuCommand(MainMenuCommand command);
     void updateBase(float deltaTime);
     void handleBasePointerClick(const BasePointerClick &click);
+    void handleRaidProfileClick(const BasePointerClick &click);
+    [[nodiscard]] bool tryDeployFromBase();
 
     [[nodiscard]] std::string nextProfileTransactionId(
         const char *prefix);
@@ -192,6 +196,7 @@ private:
     void renderExtractionPoint();
     void renderStorageCabinet();
     void renderGroundItems();
+    void renderAlphaRaidLoot();
     void renderEnemyAttackTelegraphs();
     void renderEnemies();
     void renderPlayer();

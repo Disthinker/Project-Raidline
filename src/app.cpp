@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -70,6 +71,15 @@ namespace
     constexpr float kBaseStashY{184.0F};
     constexpr float kBaseStashCellSize{24.0F};
     constexpr float kBasePocketCellSize{28.0F};
+
+    SDL_FRect baseActionButton(std::size_t index) noexcept
+    {
+        return SDL_FRect{
+            570.0F + static_cast<float>(index) * 130.0F,
+            548.0F,
+            120.0F,
+            42.0F};
+    }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
@@ -634,6 +644,13 @@ GameplayInput App::makeGameplayInput() const
         input_.wasActionJustPressed(
             GameAction::Interact);
 
+    input.reloadJustPressed =
+        input_.wasActionJustPressed(GameAction::Reload);
+    input.healJustPressed =
+        input_.wasActionJustPressed(GameAction::Heal);
+    input.quitRaidJustPressed =
+        input_.wasActionJustPressed(GameAction::InventoryCancel);
+
     return input;
 }
 
@@ -653,7 +670,7 @@ bool App::handleScreenConfirm()
     case GameFlowState::Base:
         transitioned =
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
-            gameFlow_.deploy();
+            tryDeployFromBase();
         break;
     case GameFlowState::Raid:
         break;
@@ -669,6 +686,50 @@ bool App::handleScreenConfirm()
     }
 
     return transitioned;
+}
+
+bool App::tryDeployFromBase()
+{
+    const ProfileState &profile = gameSession_.profile();
+    const auto weapon = equippedAsset(
+        profile,
+        EquipmentSlotKind::PrimaryWeapon);
+    std::size_t usableRounds{};
+    if (weapon.has_value())
+    {
+        const AssetRecord *record = profile.assets.find(*weapon);
+        if (record != nullptr && record->chamberedRound.has_value())
+        {
+            ++usableRounds;
+        }
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (assetIsCarried(profile, id) &&
+                publishedContentRegistry().item(asset.definitionId).category ==
+                    ItemCategory::Magazine)
+            {
+                usableRounds += asset.magazineRounds.size();
+            }
+        }
+    }
+    const bool unsafe = !weapon.has_value() || usableRounds == 0;
+    if (unsafe && !deploymentWarningArmed_)
+    {
+        deploymentWarningArmed_ = true;
+        uiMessage_ = "UNSAFE LOADOUT - CONFIRM DEPLOY AGAIN";
+        return false;
+    }
+    if (!gameFlow_.deploy())
+    {
+        uiMessage_ = gameSession_.persistenceMessage().empty()
+            ? "DEPLOYMENT IS NOT AVAILABLE"
+            : gameSession_.persistenceMessage();
+        return false;
+    }
+    deploymentWarningArmed_ = false;
+    raidQuitArmed_ = false;
+    uiMessage_.clear();
+    return true;
 }
 
 SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
@@ -714,10 +775,12 @@ void App::handleMainMenuCommand(MainMenuCommand command)
             uiMessage_ = gameSession_.persistenceMessage();
             return;
         }
-        uiMessage_ = gameSession_.lastSaveLoadStatus() ==
-                SaveLoadStatus::RecoveredBackup
-            ? "RECOVERED SAFE BACKUP"
-            : "PROFILE LOADED";
+        uiMessage_ = gameSession_.recoveredAbandonedRaid()
+            ? "UNFINISHED RAID SETTLED AS FAILURE"
+            : gameSession_.lastSaveLoadStatus() ==
+                    SaveLoadStatus::RecoveredBackup
+                ? "RECOVERED SAFE BACKUP"
+                : "PROFILE LOADED";
         return;
     }
 
@@ -788,6 +851,7 @@ void App::closeInventory() noexcept
     // Tab / browsing Esc closes the inventory and clears all pointer state,
     // hover state, and transient pointer selection.
     inventoryInteraction_.reset();
+    profileAssetSelection_.reset();
 
     inventoryOverlayState_.close();
     input_.suppressPrimaryPointerUntilRelease();
@@ -813,6 +877,7 @@ void App::updateBase(float deltaTime)
             gameFlow_.closeBaseFacility();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
+            deploymentWarningArmed_ = false;
             uiMessage_.clear();
             return;
         }
@@ -853,9 +918,12 @@ void App::handleBasePointerClick(const BasePointerClick &click)
     {
         if (screenPrimaryButtonContains(click.position.x, click.position.y))
         {
-            if (!gameFlow_.deploy())
+            if (!tryDeployFromBase())
             {
-                uiMessage_ = "DEPLOYMENT IS NOT AVAILABLE";
+                if (uiMessage_.empty())
+                {
+                    uiMessage_ = "DEPLOYMENT IS NOT AVAILABLE";
+                }
             }
             else
             {
@@ -982,6 +1050,141 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         return;
     }
 
+    for (std::size_t actionIndex = 0; actionIndex < 5; ++actionIndex)
+    {
+        if (!contains(baseActionButton(actionIndex), click.position))
+        {
+            continue;
+        }
+        if (actionIndex == 3)
+        {
+            const auto weapon = equippedAsset(
+                profile,
+                EquipmentSlotKind::PrimaryWeapon);
+            if (!weapon.has_value())
+            {
+                uiMessage_ = "NO PRIMARY WEAPON EQUIPPED";
+                return;
+            }
+            const AssetRecord *record = profile.assets.find(*weapon);
+            if (record->chamberedRound.has_value())
+            {
+                uiMessage_ = "PRIMARY WEAPON ALREADY CHAMBERED";
+                return;
+            }
+            const WeaponAmmoReceipt receipt =
+                gameSession_.executeProfileWeaponAmmo(
+                    FireWeaponCommand{*weapon},
+                    nextProfileTransactionId("base-chamber"));
+            uiMessage_ = receipt.result == WeaponAmmoResult::Chambered
+                ? "PRIMARY WEAPON CHAMBERED"
+                : receipt.message.empty() ? "NO ROUND AVAILABLE" : receipt.message;
+            return;
+        }
+        if (!profileAssetSelection_.has_value())
+        {
+            uiMessage_ = "SELECT AN ASSET FIRST";
+            return;
+        }
+        const AssetRecord *selected = profile.assets.find(
+            profileAssetSelection_->instanceId);
+        if (selected == nullptr)
+        {
+            profileAssetSelection_.reset();
+            return;
+        }
+        const AssetInstanceId selectedId = selected->instanceId;
+        if (actionIndex == 0)
+        {
+            const ItemDefinition &definition =
+                publishedContentRegistry().item(selected->definitionId);
+            if (definition.category != ItemCategory::Magazine ||
+                !definition.compatibleAmmunitionDefinitionId.has_value())
+            {
+                uiMessage_ = "SELECT A MAGAZINE TO FILL";
+                return;
+            }
+            const AssetRecord *ammunition{};
+            for (const AssetRecord *candidate : assetsInContainer(
+                     profile,
+                     ProfileContainerId::stash()))
+            {
+                if (candidate->definitionId ==
+                    *definition.compatibleAmmunitionDefinitionId)
+                {
+                    ammunition = candidate;
+                    break;
+                }
+            }
+            if (ammunition == nullptr)
+            {
+                uiMessage_ = "NO COMPATIBLE STASH AMMUNITION";
+                return;
+            }
+            const WeaponAmmoReceipt receipt =
+                gameSession_.executeProfileWeaponAmmo(
+                    LoadMagazineCommand{
+                        selected->instanceId,
+                        ammunition->instanceId,
+                        0},
+                    nextProfileTransactionId("base-load"));
+            uiMessage_ = receipt.succeeded
+                ? "MAGAZINE FILLED"
+                : receipt.message;
+            return;
+        }
+        if (actionIndex == 1)
+        {
+            const WeaponAmmoReceipt receipt =
+                gameSession_.executeProfileWeaponAmmo(
+                    UnloadMagazineCommand{
+                        selected->instanceId,
+                        ProfileContainerId::stash()},
+                    nextProfileTransactionId("base-unload"));
+            uiMessage_ = receipt.succeeded
+                ? "MAGAZINE UNLOADED TO STASH"
+                : receipt.message;
+            return;
+        }
+        if (actionIndex == 2)
+        {
+            const auto weapon = equippedAsset(
+                profile,
+                EquipmentSlotKind::PrimaryWeapon);
+            if (!weapon.has_value())
+            {
+                uiMessage_ = "EQUIP A PRIMARY WEAPON FIRST";
+                return;
+            }
+            const WeaponAmmoReceipt receipt =
+                gameSession_.executeProfileWeaponAmmo(
+                    InstallMagazineCommand{
+                        *weapon,
+                        selected->instanceId},
+                    nextProfileTransactionId("base-install"));
+            uiMessage_ = receipt.succeeded
+                ? "MAGAZINE INSTALLED"
+                : receipt.message;
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
+
+        const HealReceipt receipt = gameSession_.executeBaseHeal(
+            selectedId,
+            nextProfileTransactionId("base-heal"));
+        uiMessage_ = receipt.succeeded
+            ? fmt::format("HEALED {} HP", receipt.healedAmount)
+            : receipt.message;
+        if (gameSession_.profile().assets.find(selectedId) == nullptr)
+        {
+            profileAssetSelection_.reset();
+        }
+        return;
+    }
+
     for (const ProfileGridView &view : profileGridViews(profile))
     {
         InventoryGridSize size{};
@@ -1054,6 +1257,100 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     profileAssetSelection_.reset();
     uiMessage_.clear();
+}
+
+void App::handleRaidProfileClick(const BasePointerClick &click)
+{
+    const ProfileState &profile = gameSession_.profile();
+    if (contains(baseActionButton(4), click.position))
+    {
+        if (!profileAssetSelection_.has_value() ||
+            !gameSession_.startAlphaHeal(
+                profileAssetSelection_->instanceId))
+        {
+            uiMessage_ = "SELECT A CARRIED MEDKIT WHILE INJURED";
+            return;
+        }
+        profileAssetSelection_.reset();
+        uiMessage_ = "MEDKIT ACTION STARTED";
+        closeInventory();
+        return;
+    }
+
+    for (const ProfileGridView &view : profileGridViews(profile))
+    {
+        if (view.container.kind == ProfileContainerKind::Stash)
+        {
+            continue;
+        }
+        InventoryGridSize size{};
+        try
+        {
+            size = profileContainerSize(
+                profile,
+                publishedContentRegistry(),
+                view.container);
+        }
+        catch (...)
+        {
+            continue;
+        }
+        const SDL_FRect bounds{
+            view.x,
+            view.y,
+            static_cast<float>(size.width) * view.cellSize,
+            static_cast<float>(size.height) * view.cellSize};
+        if (!contains(bounds, click.position))
+        {
+            continue;
+        }
+        const GridPosition cell{
+            static_cast<int>((click.position.x - view.x) / view.cellSize),
+            static_cast<int>((click.position.y - view.y) / view.cellSize)};
+        if (!profileAssetSelection_.has_value())
+        {
+            const auto occupant = profileAssetAtCell(
+                profile,
+                publishedContentRegistry(),
+                view.container,
+                cell);
+            if (occupant.has_value())
+            {
+                const AssetRecord *asset = profile.assets.find(*occupant);
+                std::uint32_t quantity{};
+                if (click.controlPressed != click.shiftPressed)
+                {
+                    quantity = click.controlPressed
+                        ? 1U
+                        : (asset->quantity + 1U) / 2U;
+                }
+                profileAssetSelection_ = ProfileAssetSelection{
+                    *occupant,
+                    quantity,
+                    asset->orientation};
+                uiMessage_ = "CARRIED ASSET SELECTED";
+            }
+            return;
+        }
+
+        const InventoryReceipt receipt = gameSession_.executeProfileInventory(
+            InventoryMoveCommand{
+                profileAssetSelection_->instanceId,
+                profileAssetSelection_->quantity,
+                StoredAssetLocation{view.container, cell},
+                profileAssetSelection_->orientation},
+            nextProfileTransactionId("raid-move"));
+        uiMessage_ = receipt.succeeded
+            ? "CARRIED INVENTORY UPDATED"
+            : receipt.message;
+        if (receipt.succeeded)
+        {
+            profileAssetSelection_.reset();
+        }
+        return;
+    }
+
+    profileAssetSelection_.reset();
 }
 
 InventoryGridLayout
@@ -1626,6 +1923,25 @@ void App::processEvents()
 
         else if (inventoryOverlayState_.isOpen())
         {
+            if (gameSession_.world().isAlphaRaidWorld())
+            {
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingBaseClicks_.push_back(BasePointerClick{
+                        MousePosition{event.button.x, event.button.y},
+                        input_.isControlPressed(),
+                        input_.isShiftPressed()});
+                }
+                else if (event.type == SDL_EVENT_KEY_DOWN &&
+                         event.key.scancode == SDL_SCANCODE_R &&
+                         !event.key.repeat)
+                {
+                    pendingBaseRotate_ = true;
+                }
+                continue;
+            }
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
             {
@@ -1729,7 +2045,11 @@ void App::update(float deltaTime)
         input_.suppressPrimaryPointerUntilRelease();
     }
 
-    if (inputDecision.processUiEvents)
+    const bool alphaRaidInventory =
+        inventoryOverlayState_.isOpen() &&
+        gameSession_.world().isAlphaRaidWorld();
+
+    if (inputDecision.processUiEvents && !alphaRaidInventory)
     {
         for (const InventoryUiEvent &event :
              pendingInventoryUiEvents_)
@@ -1757,17 +2077,61 @@ void App::update(float deltaTime)
         }
     }
 
+    if (alphaRaidInventory)
+    {
+        if (pendingBaseRotate_ && profileAssetSelection_.has_value())
+        {
+            profileAssetSelection_->orientation = rotatedClockwise(
+                profileAssetSelection_->orientation);
+        }
+        for (const BasePointerClick &click : pendingBaseClicks_)
+        {
+            handleRaidProfileClick(click);
+        }
+        pendingBaseClicks_.clear();
+        pendingBaseRotate_ = false;
+    }
+
     pendingInventoryUiEvents_.clear();
 
     GameplayInput gameplayInput{};
 
     // 背包打开时世界仍继续 update，
     // 但玩家移动、射击和拾取输入全部屏蔽。
-    if (!inventoryOverlayState_.isOpen() &&
-        gameSession_.world().raidSession().isActive())
+    if (gameSession_.world().raidSession().isActive())
     {
         gameplayInput =
             makeGameplayInput();
+    }
+
+    gameplayInput.inventoryOpen = inventoryOverlayState_.isOpen();
+    if (inventoryOverlayState_.isOpen())
+    {
+        gameplayInput.fireJustPressed = false;
+        gameplayInput.firePressed = false;
+        gameplayInput.reloadJustPressed = false;
+        gameplayInput.healJustPressed = false;
+        gameplayInput.quitRaidJustPressed = false;
+        gameplayInput.interactJustPressed = false;
+    }
+    if (inputDecision.controlAction != InventoryFrameControlAction::None)
+    {
+        gameplayInput.quitRaidJustPressed = false;
+    }
+    if (gameSession_.world().isAlphaRaidWorld() &&
+        gameplayInput.quitRaidJustPressed)
+    {
+        if (!raidQuitArmed_)
+        {
+            raidQuitArmed_ = true;
+            gameplayInput.quitRaidJustPressed = false;
+            uiMessage_ =
+                "PRESS ESC AGAIN TO ABANDON RAID AND LOSE ALL CARRIED ASSETS";
+        }
+        else
+        {
+            raidQuitArmed_ = false;
+        }
     }
 
     const InventoryContainerInteractionDecision
@@ -1776,7 +2140,8 @@ void App::update(float deltaTime)
                 inventoryOverlayState_.isOpen(),
                 inputDecision.controlAction !=
                     InventoryFrameControlAction::None,
-                gameSession_.world().canInteractWithContainer(),
+                !gameSession_.world().isAlphaRaidWorld() &&
+                    gameSession_.world().canInteractWithContainer(),
                 gameplayInput.interactJustPressed);
 
     if (containerDecision.openContainer)
@@ -1788,7 +2153,8 @@ void App::update(float deltaTime)
         }
     }
 
-    if (containerDecision.suppressGameplayInput)
+    if (containerDecision.suppressGameplayInput &&
+        !gameSession_.world().isAlphaRaidWorld())
     {
         gameplayInput = GameplayInput{};
     }
@@ -1796,6 +2162,11 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+
+    if (!gameFlow_.isRaidScreen())
+    {
+        raidQuitArmed_ = false;
+    }
 
     if ((!gameFlow_.isRaidScreen() ||
          gameSession_.world().raidSession().isTerminal()) &&
@@ -1939,10 +2310,21 @@ void App::renderDebugText()
         68.0f,
         enemyHealthText.c_str());
 
+    std::size_t groundCount = gameSession_.world().groundItems().size();
+    if (gameSession_.world().isAlphaRaidWorld())
+    {
+        groundCount = 0;
+        for (const auto &[id, asset] : gameSession_.profile().assets.records())
+        {
+            static_cast<void>(id);
+            if (std::holds_alternative<RaidGroundAssetLocation>(asset.location))
+            {
+                ++groundCount;
+            }
+        }
+    }
     const std::string groundItemText =
-        fmt::format(
-            "Ground Items: {}",
-            gameSession_.world().groundItems().size());
+        fmt::format("Ground Items: {}", groundCount);
 
     SDL_RenderDebugText(
         renderer_,
@@ -1950,12 +2332,11 @@ void App::renderDebugText()
         84.0f,
         groundItemText.c_str());
 
+    const std::size_t carriedCount = gameSession_.world().isAlphaRaidWorld()
+        ? carriedAssetIds(gameSession_.profile()).size()
+        : gameSession_.world().inventory().placedItems().size();
     const std::string inventoryItemText =
-        fmt::format(
-            "Inventory Items: {}",
-            gameSession_.world().inventory()
-                .placedItems()
-                .size());
+        fmt::format("Inventory Items: {}", carriedCount);
 
     SDL_RenderDebugText(
         renderer_,
@@ -1997,9 +2378,11 @@ void App::renderDebugText()
         raidStateText.c_str());
 
     const std::string raidTimeText =
-        fmt::format(
-            "Raid Time: {:.1f}s",
-            raidSession.raidTimeRemaining());
+        gameSession_.world().isAlphaRaidWorld()
+            ? "Raid Time: NO HARD LIMIT"
+            : fmt::format(
+                  "Raid Time: {:.1f}s",
+                  raidSession.raidTimeRemaining());
 
     SDL_RenderDebugText(
         renderer_,
@@ -2007,11 +2390,15 @@ void App::renderDebugText()
         164.0F,
         raidTimeText.c_str());
 
-    const std::string stashText =
-        fmt::format(
-            "Stash: {} stacks / {} units",
-            gameSession_.stash().stackCount(),
-            gameSession_.stash().unitCount());
+    const std::string stashText = gameSession_.world().isAlphaRaidWorld()
+        ? fmt::format(
+              "Profile assets: {} | Currency {}",
+              gameSession_.profile().assets.records().size(),
+              gameSession_.profile().currency)
+        : fmt::format(
+              "Stash: {} stacks / {} units",
+              gameSession_.stash().stackCount(),
+              gameSession_.stash().unitCount());
 
     SDL_RenderDebugText(
         renderer_,
@@ -2115,6 +2502,61 @@ void App::renderDebugText()
         84.0F,
         playerControlText.c_str());
 
+    if (gameSession_.world().isAlphaRaidWorld())
+    {
+        std::string ammunitionText{"Weapon: NONE"};
+        if (const auto weapon = equippedAsset(
+                gameSession_.profile(),
+                EquipmentSlotKind::PrimaryWeapon))
+        {
+            const AssetRecord *record =
+                gameSession_.profile().assets.find(*weapon);
+            const auto magazine = installedMagazine(
+                gameSession_.profile(),
+                *weapon);
+            ammunitionText = fmt::format(
+                "Chamber {} | Magazine {}",
+                record->chamberedRound.has_value() ? 1 : 0,
+                magazine.has_value()
+                    ? magazineRoundCount(gameSession_.profile(), *magazine)
+                    : 0U);
+        }
+        SDL_RenderDebugText(
+            renderer_, 980.0F, 100.0F, ammunitionText.c_str());
+
+        if (gameSession_.raidActionState().active().has_value())
+        {
+            const char *name = std::visit(
+                [](const auto &action)
+                {
+                    using Action = std::decay_t<decltype(action)>;
+                    if constexpr (std::is_same_v<Action, ReloadRaidAction>)
+                        return "RELOADING";
+                    if constexpr (std::is_same_v<Action, HealRaidAction>)
+                        return "HEALING";
+                    return "EXTRACTING";
+                },
+                *gameSession_.raidActionState().active());
+            const std::string action = fmt::format(
+                "{} {:.0f}%",
+                name,
+                gameSession_.raidActionState().progress() * 100.0F);
+            SDL_RenderDebugText(
+                renderer_, 980.0F, 116.0F, action.c_str());
+        }
+        else
+        {
+            SDL_RenderDebugText(
+                renderer_, 980.0F, 116.0F,
+                "R RELOAD | 5 QUICK MED | TAB INVENTORY");
+        }
+        if (!uiMessage_.empty())
+        {
+            SDL_RenderDebugText(
+                renderer_, 760.0F, 684.0F, uiMessage_.c_str());
+        }
+    }
+
     if (raidSession.state() ==
             RaidSessionState::Extracting ||
         raidSession.state() ==
@@ -2133,7 +2575,8 @@ void App::renderDebugText()
             extractionText.c_str());
     }
 
-    if (raidSession.isTerminal())
+    if (raidSession.isTerminal() &&
+        !gameSession_.world().isAlphaRaidWorld())
     {
         const std::string outcomeText =
             fmt::format(
@@ -2568,6 +3011,50 @@ void App::renderInventoryOverlay()
 {
     if (!inventoryOverlayState_.isOpen())
     {
+        return;
+    }
+
+    if (gameSession_.world().isAlphaRaidWorld())
+    {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        const SDL_FRect panel{520.0F, 176.0F, 730.0F, 450.0F};
+        SDL_SetRenderDrawColor(renderer_, 12, 18, 22, 232);
+        SDL_RenderFillRect(renderer_, &panel);
+        SDL_SetRenderDrawColor(renderer_, 102, 156, 168, 255);
+        SDL_RenderRect(renderer_, &panel);
+        SDL_RenderDebugText(
+            renderer_, 550.0F, 194.0F,
+            "CARRIED INVENTORY - MOVEMENT REMAINS ACTIVE");
+        const ProfileState &profile = gameSession_.profile();
+        for (const ProfileGridView &view : profileGridViews(profile))
+        {
+            if (view.container.kind == ProfileContainerKind::Stash)
+            {
+                continue;
+            }
+            renderProfileGrid(
+                view.container,
+                view.x,
+                view.y,
+                view.cellSize,
+                view.label);
+        }
+        const SDL_FRect medButton = baseActionButton(4);
+        SDL_SetRenderDrawColor(renderer_, 48, 92, 76, 255);
+        SDL_RenderFillRect(renderer_, &medButton);
+        SDL_SetRenderDrawColor(renderer_, 122, 205, 162, 255);
+        SDL_RenderRect(renderer_, &medButton);
+        SDL_RenderDebugText(
+            renderer_, medButton.x + 8.0F, medButton.y + 16.0F,
+            "USE MED");
+        SDL_RenderDebugText(
+            renderer_, 550.0F, 596.0F,
+            "CLICK SOURCE THEN DESTINATION | R ROTATE | ESC/TAB CLOSE");
+        if (!uiMessage_.empty())
+        {
+            SDL_RenderDebugText(renderer_, 550.0F, 614.0F, uiMessage_.c_str());
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
 
@@ -3087,6 +3574,75 @@ void App::renderInventoryOverlay()
 
 void App::renderStashOverlay()
 {
+    if (gameSession_.world().isAlphaRaidWorld() &&
+        gameFlow_.state() == GameFlowState::RaidResult)
+    {
+        const SDL_FRect panel{
+            kStashPanelX,
+            kStashPanelY,
+            kStashPanelWidth,
+            kStashPanelHeight};
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 20, 28, 30, 244);
+        SDL_RenderFillRect(renderer_, &panel);
+        SDL_SetRenderDrawColor(renderer_, 122, 184, 166, 255);
+        SDL_RenderRect(renderer_, &panel);
+        SDL_RenderDebugText(
+            renderer_, panel.x + 154.0F, panel.y + 24.0F,
+            "RAID RESULT");
+        const auto &result = gameSession_.profile().lastRaidResult;
+        if (result.has_value())
+        {
+            const char *outcome = result->outcome == RaidResultOutcome::Extracted
+                ? "EXTRACTED"
+                : result->outcome == RaidResultOutcome::PlayerDead
+                    ? "PLAYER DEAD"
+                    : result->outcome == RaidResultOutcome::ActiveQuit
+                        ? "RAID ABANDONED"
+                        : "ABNORMAL EXIT - FAILED";
+            SDL_RenderDebugText(
+                renderer_, panel.x + 24.0F, panel.y + 64.0F, outcome);
+            const std::string currency = fmt::format(
+                "CURRENCY CHANGE: {:+}",
+                result->currencyDelta);
+            SDL_RenderDebugText(
+                renderer_, panel.x + 24.0F, panel.y + 90.0F,
+                currency.c_str());
+            if (result->outcome == RaidResultOutcome::Extracted)
+            {
+                const std::string count = fmt::format(
+                    "RETURNED ASSETS: {}",
+                    result->returnedItemDefinitionIds.size());
+                SDL_RenderDebugText(
+                    renderer_, panel.x + 24.0F, panel.y + 122.0F,
+                    count.c_str());
+                float y = panel.y + 148.0F;
+                for (std::size_t index = 0;
+                     index < result->returnedItemDefinitionIds.size() &&
+                     index < 9U;
+                     ++index)
+                {
+                    const std::string &name = publishedContentRegistry().item(
+                        result->returnedItemDefinitionIds[index]).displayName;
+                    SDL_RenderDebugText(
+                        renderer_, panel.x + 42.0F, y, name.c_str());
+                    y += 20.0F;
+                }
+            }
+            else
+            {
+                SDL_RenderDebugText(
+                    renderer_, panel.x + 24.0F, panel.y + 130.0F,
+                    "ALL CARRIED ASSETS WERE LOST");
+                SDL_RenderDebugText(
+                    renderer_, panel.x + 24.0F, panel.y + 154.0F,
+                    "NO LOST-ITEM LIST IS GENERATED");
+            }
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+
     const GridInventory &stashInventory =
         gameSession_.stash().inventory();
     const float gridWidth =
@@ -4110,7 +4666,7 @@ void App::renderMainMenu()
     {
         SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
         SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(renderer_, 500.0F, 400.0F, "TAB INVENTORY  ESC CLOSE  R ROTATE");
+        SDL_RenderDebugText(renderer_, 468.0F, 400.0F, "RAID: R RELOAD  5 MED  TAB INVENTORY  ESC ABANDON/CLOSE");
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
@@ -4407,9 +4963,82 @@ void App::renderBaseStorage()
         430.0F,
         "CLICK ASSET, THEN DESTINATION | CTRL=1 | SHIFT=HALF | R=ROTATE");
     SDL_RenderDebugText(renderer_, 570.0F, 458.0F, "ESC CLOSE");
+    const std::array<const char *, 5> actionLabels{
+        "FILL MAG", "EMPTY MAG", "INSTALL", "CHAMBER", "USE MED"};
+    for (std::size_t index = 0; index < actionLabels.size(); ++index)
+    {
+        const SDL_FRect button = baseActionButton(index);
+        SDL_SetRenderDrawColor(renderer_, 42, 78, 82, 255);
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(renderer_, 112, 174, 176, 255);
+        SDL_RenderRect(renderer_, &button);
+        SDL_RenderDebugText(
+            renderer_, button.x + 8.0F, button.y + 16.0F,
+            actionLabels[index]);
+    }
+    if (const auto weapon = equippedAsset(
+            profile,
+            EquipmentSlotKind::PrimaryWeapon))
+    {
+        const AssetRecord *record = profile.assets.find(*weapon);
+        const auto magazine = installedMagazine(profile, *weapon);
+        const std::string weaponState = fmt::format(
+            "PRIMARY: CHAMBER {} | MAG {}",
+            record->chamberedRound.has_value() ? "READY" : "EMPTY",
+            magazine.has_value()
+                ? std::to_string(magazineRoundCount(profile, *magazine))
+                : "NONE");
+        SDL_RenderDebugText(renderer_, 570.0F, 516.0F, weaponState.c_str());
+    }
     if (!uiMessage_.empty())
     {
-        SDL_RenderDebugText(renderer_, 570.0F, 492.0F, uiMessage_.c_str());
+        SDL_RenderDebugText(renderer_, 570.0F, 610.0F, uiMessage_.c_str());
+    }
+}
+
+void App::renderAlphaRaidLoot()
+{
+    const ProfileState &profile = gameSession_.profile();
+    if (!profile.pendingRaid.has_value())
+    {
+        return;
+    }
+    for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
+    {
+        const AssetRecord *asset = profile.assets.find(loot.assetId);
+        if (asset == nullptr ||
+            !std::holds_alternative<RaidGroundAssetLocation>(asset->location))
+        {
+            continue;
+        }
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        const Vec2 size = definition.worldRenderSize;
+        const SDL_FRect destination{
+            loot.position.x - size.x / 2.0F,
+            loot.position.y - size.y / 2.0F,
+            size.x,
+            size.y};
+        bool rendered{};
+        if (const auto legacy = legacyItemId(asset->definitionId))
+        {
+            const Texture &texture = worldItemTextures_[
+                static_cast<std::size_t>(*legacy)];
+            if (texture.valid())
+            {
+                SDL_RenderTexture(
+                    renderer_, texture.get(), nullptr, &destination);
+                rendered = true;
+            }
+        }
+        if (!rendered)
+        {
+            SDL_SetRenderDrawColor(renderer_, 176, 142, 76, 255);
+            SDL_RenderFillRect(renderer_, &destination);
+            SDL_SetRenderDrawColor(renderer_, 238, 214, 132, 255);
+            SDL_RenderRect(renderer_, &destination);
+        }
+        renderItemQuantityBadge(renderer_, destination, asset->quantity);
     }
 }
 
@@ -4531,22 +5160,47 @@ void App::renderBaseDeployment()
         y += 34.0F;
     }
 
-    const bool capable = hasMinimumRaidCapability(
+    const auto weapon = equippedAsset(
         profile,
-        publishedContentRegistry());
+        EquipmentSlotKind::PrimaryWeapon);
+    std::size_t loadedRounds{};
+    bool chambered{};
+    if (weapon.has_value())
+    {
+        const AssetRecord *record = profile.assets.find(*weapon);
+        chambered = record != nullptr && record->chamberedRound.has_value();
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (assetIsCarried(profile, id) &&
+                publishedContentRegistry().item(asset.definitionId).category ==
+                    ItemCategory::Magazine)
+            {
+                loadedRounds += asset.magazineRounds.size();
+            }
+        }
+    }
+    const bool capable = weapon.has_value() && (chambered || loadedRounds > 0);
+    const std::string fireStatus = !weapon.has_value()
+        ? "NO PRIMARY WEAPON"
+        : chambered
+            ? fmt::format("CAN FIRE NOW | {} MAGAZINE ROUNDS", loadedRounds)
+            : loadedRounds > 0
+                ? fmt::format("NEEDS CHAMBER/RELOAD | {} ROUNDS", loadedRounds)
+                : "NO USABLE AMMUNITION";
     SDL_RenderDebugText(
         renderer_,
         458.0F,
         370.0F,
-        capable
-            ? "LOADOUT HAS MINIMUM RAID CAPABILITY"
-            : "WARNING: LOADOUT MAY BE EMPTY OR UNABLE TO FIRE");
+        fireStatus.c_str());
     SDL_RenderDebugText(
         renderer_,
         442.0F,
         402.0F,
-        "PERSISTENT DEPLOYMENT CONNECTS IN EXTRACTION LOOP SLICE");
-    renderScreenPrimaryButton("DEPLOY V0 ADAPTER");
+        capable
+            ? "DEPLOY SAVES A PENDING RAID BEFORE ENTERING"
+            : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
+    renderScreenPrimaryButton(
+        deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     SDL_RenderDebugText(renderer_, 482.0F, 590.0F, "ENTER/CLICK DEPLOY | ESC CLOSE");
 }
 
@@ -4610,10 +5264,20 @@ void App::renderRaidScreen()
 {
     renderBackground();
     renderExtractionPoint();
-    renderStorageCabinet();
+    if (!gameSession_.world().isAlphaRaidWorld())
+    {
+        renderStorageCabinet();
+    }
 
     // 地面物品位于角色与敌人下层。
-    renderGroundItems();
+    if (gameSession_.world().isAlphaRaidWorld())
+    {
+        renderAlphaRaidLoot();
+    }
+    else
+    {
+        renderGroundItems();
+    }
 
     renderEnemyAttackTelegraphs();
     renderEnemies();
@@ -4625,7 +5289,8 @@ void App::renderRaidScreen()
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
 
-    if (gameSession_.world().raidSession().isTerminal())
+    if (gameSession_.world().raidSession().isTerminal() ||
+        gameFlow_.state() == GameFlowState::RaidResult)
     {
         renderStashOverlay();
     }

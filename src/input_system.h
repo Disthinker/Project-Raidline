@@ -13,6 +13,8 @@ enum class GameAction
     MoveLeft,
     MoveRight,
     Fire,
+    Reload,
+    Heal,
     Dodge,
     Interact,
 

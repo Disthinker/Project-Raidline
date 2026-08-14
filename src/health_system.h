@@ -1,18 +1,36 @@
 #pragma once
 
+#include <algorithm>
 #include <stdexcept>
 
 class Health
 {
 public:
     explicit Health(int maxHealth)
-        : maxHealth_(maxHealth),
-          currentHealth_(maxHealth)
+        : Health(maxHealth, maxHealth)
     {
-        if (maxHealth <= 0)
+    }
+
+    Health(int maxHealth, int currentHealth)
+        : maxHealth_(maxHealth),
+          currentHealth_(currentHealth)
+    {
+        if (maxHealth <= 0 || currentHealth <= 0 ||
+            currentHealth > maxHealth)
         {
-            throw std::invalid_argument("Max health must be greater than zero");
+            throw std::invalid_argument("Health values are invalid");
         }
+    }
+
+    [[nodiscard]] int restore(int amount)
+    {
+        if (amount <= 0)
+        {
+            throw std::invalid_argument("Restore amount must be positive");
+        }
+        const int before = currentHealth_;
+        currentHealth_ = std::min(maxHealth_, currentHealth_ + amount);
+        return currentHealth_ - before;
     }
 
     [[nodiscard]] bool takeDamage(int damage)

@@ -74,6 +74,20 @@ TEST(RaidSessionTest, ActiveRaidCountsDown)
     EXPECT_FLOAT_EQ(session.raidTimeRemaining(), 18.5F);
 }
 
+TEST(RaidSessionTest, NoHardTimeLimitNeverTimesOutAndStillExtracts)
+{
+    RaidSession session{RaidSessionConfig{0.0F, 3.0F, false}};
+    ASSERT_TRUE(session.start());
+
+    session.update(10000.0F, false);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(session.raidTimeRemaining(), 0.0F);
+
+    session.update(3.0F, true);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+    EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
 TEST(RaidSessionTest, EnteringStartsContinuousExtraction)
 {
     RaidSession session{

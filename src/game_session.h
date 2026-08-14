@@ -1,14 +1,18 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "economy_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
+#include "raid_action.h"
+#include "raid_lifecycle.h"
 #include "raid_settlement.h"
 #include "save_repository.h"
 #include "stash.h"
@@ -80,6 +84,12 @@ public:
     [[nodiscard]] bool startNewProfile(std::string profileId);
     [[nodiscard]] bool continueProfile();
 
+    [[nodiscard]] bool deployAlpha(std::uint64_t seed);
+    [[nodiscard]] bool activeQuitAlphaRaid();
+    [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
+    [[nodiscard]] bool alphaRaidActive() const noexcept;
+    [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
+
     [[nodiscard]] const ProfileState &profile() const noexcept;
 
     [[nodiscard]] InventoryReceipt executeProfileInventory(
@@ -89,6 +99,16 @@ public:
     [[nodiscard]] EconomyReceipt executeProfileEconomy(
         const EconomyCommand &command,
         std::string transactionId);
+
+    [[nodiscard]] WeaponAmmoReceipt executeProfileWeaponAmmo(
+        const WeaponAmmoCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] HealReceipt executeBaseHeal(
+        AssetInstanceId medkitAssetId,
+        std::string transactionId);
+
+    [[nodiscard]] const RaidActionState &raidActionState() const noexcept;
 
     [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
@@ -105,9 +125,19 @@ private:
     RaidSettlement settlement_;
     GameSessionState state_{GameSessionState::InRaid};
     std::size_t raidNumber_{1};
+    bool alphaRaidActive_{};
+    bool recoveredAbandonedRaid_{};
+    RaidActionState raidActionState_;
+    std::uint64_t raidCommandSequence_{};
 
-    [[nodiscard]] bool commitProfileCandidate(ProfileState candidate);
+    [[nodiscard]] bool commitProfileCandidate(
+        ProfileState candidate,
+        bool persist = true);
     void refreshLoadoutTutorial();
+    void updateAlphaRaid(const GameplayInput &input, float deltaTime);
+    [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
+    [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
+    [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
 };
 
 [[nodiscard]]

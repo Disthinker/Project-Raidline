@@ -172,6 +172,33 @@ TEST(InventoryDomainTest, WholeStackMergePreservesDestinationStableId)
     EXPECT_EQ(profile.assets.find(smallId), nullptr);
 }
 
+TEST(InventoryDomainTest, ReliefAndOrdinaryAmmunitionCannotBeMerged)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "inventory-relief-provenance",
+        publishedContentRegistry());
+    const auto ammunition = assets(profile, alpha_content::ammunition);
+    ASSERT_EQ(ammunition.size(), 2U);
+    profile.assets.findMutable(ammunition[0])->reliefBatchId = "relief-1";
+    const StoredAssetLocation destination = std::get<StoredAssetLocation>(
+        profile.assets.find(ammunition[1])->location);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const InventoryReceipt receipt = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            ammunition[0],
+            0,
+            destination,
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "reject-relief-laundering"});
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
 TEST(InventoryDomainTest, NonEmptyContainerCannotBeNested)
 {
     ProfileState profile = makeNewAlphaProfile(
