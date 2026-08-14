@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "v0-content-registry-1",
+  "content_version": "core-alpha-content-1",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -28,7 +28,8 @@
         "pickup_size": {"x": 48, "y": 48}
       },
       "inventory_texture": "items/inventory/item_cola_basic_v1_64x64.png",
-      "world_texture": "items/world/item_cola_basic_v1_32x32.png"
+      "world_texture": "items/world/item_cola_basic_v1_32x32.png",
+      "market_recycle_price": 15
     },
     {
       "id": "item.medical.medkit_basic",
@@ -73,7 +74,12 @@
         "pickup_size": {"x": 136, "y": 72}
       },
       "inventory_texture": "items/inventory/item_rifle_basic_v1_256x128.png",
-      "world_texture": "items/world/item_rifle_basic_v1_128x64.png"
+      "world_texture": "items/world/item_rifle_basic_v1_128x64.png",
+      "equipment_slot": "primary_weapon",
+      "market_buy_price": 300,
+      "market_recycle_price": 75,
+      "compatible_ammunition": "item.ammunition.9mm_basic",
+      "compatible_magazine": "item.magazine.9mm_30"
     },
     {
       "id": "item.ammunition.9mm_basic",
@@ -88,7 +94,117 @@
         "pickup_size": {"x": 48, "y": 48}
       },
       "inventory_texture": "items/inventory/item_ammo_9mm_basic_v1_64x64.png",
-      "world_texture": "items/world/item_ammo_9mm_basic_v1_32x32.png"
+      "world_texture": "items/world/item_ammo_9mm_basic_v1_32x32.png",
+      "market_buy_price": 1,
+      "market_recycle_price": 1
+    },
+    {
+      "id": "item.magazine.9mm_30",
+      "display_name": "30-round Magazine",
+      "category": "magazine",
+      "inventory": {"width": 1, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 64},
+        "pickup_size": {"x": 40, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_magazine.png",
+      "world_texture": "items/world/unpublished_magazine.png",
+      "market_buy_price": 30,
+      "market_recycle_price": 7,
+      "magazine_capacity": 30,
+      "compatible_ammunition": "item.ammunition.9mm_basic"
+    },
+    {
+      "id": "item.container.chest_rig_small",
+      "display_name": "Small Chest Rig",
+      "category": "container",
+      "inventory": {"width": 3, "height": 3, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 96, "y": 96},
+        "pickup_size": {"x": 104, "y": 104}
+      },
+      "inventory_texture": "items/inventory/unpublished_chest_rig.png",
+      "world_texture": "items/world/unpublished_chest_rig.png",
+      "equipment_slot": "chest_rig",
+      "container_compartments": [
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 1, "pocket": "general"},
+        {"width": 1, "height": 1, "pocket": "general"}
+      ],
+      "market_buy_price": 100,
+      "market_recycle_price": 25
+    },
+    {
+      "id": "item.container.backpack_small",
+      "display_name": "Small Backpack",
+      "category": "container",
+      "inventory": {"width": 4, "height": 4, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 96, "y": 96},
+        "pickup_size": {"x": 104, "y": 104}
+      },
+      "inventory_texture": "items/inventory/unpublished_backpack.png",
+      "world_texture": "items/world/unpublished_backpack.png",
+      "equipment_slot": "backpack",
+      "container_compartments": [
+        {"width": 5, "height": 4, "pocket": "general"}
+      ],
+      "market_buy_price": 120,
+      "market_recycle_price": 30
+    },
+    {
+      "id": "item.medical.medkit_alpha",
+      "display_name": "Basic Medkit",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_buy_price": 60,
+      "market_recycle_price": 15,
+      "maximum_charges": 3
+    },
+    {
+      "id": "item.loot.scrap_parts",
+      "display_name": "Scrap Parts",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 40}
+      },
+      "inventory_texture": "items/inventory/unpublished_scrap.png",
+      "world_texture": "items/world/unpublished_scrap.png",
+      "market_recycle_price": 20
+    },
+    {
+      "id": "item.loot.electronics",
+      "display_name": "Damaged Electronics",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_electronics.png",
+      "world_texture": "items/world/unpublished_electronics.png",
+      "market_recycle_price": 45
     }
   ],
   "loot_tables": [

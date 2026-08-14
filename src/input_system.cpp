@@ -168,6 +168,7 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_LSHIFT:
         return GameAction::Dodge;
 
+    case SDL_SCANCODE_E:
     case SDL_SCANCODE_F:
         return GameAction::Interact;
 

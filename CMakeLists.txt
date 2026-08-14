@@ -173,13 +173,19 @@ function(raidline_assert_no_sdl_includes target)
     endforeach()
 endfunction()
 
-# Stable modular-monolith production targets. This PR moves build ownership
-# only; existing App, GameplayWorld and V0 behavior remain unchanged.
+# Stable modular-monolith production targets. Persistent Profile/Inventory/
+# Economy live in domain, Base/Raid runtime in simulation, orchestration and
+# persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/alpha_content_ids.h
     src/content_registry.cpp
     src/content_registry.h
     src/definition_id.h
     src/health_system.h
+    src/economy_domain.cpp
+    src/economy_domain.h
+    src/inventory_domain.cpp
+    src/inventory_domain.h
     src/item_definition.cpp
     src/item_definition.h
     src/item_instance.cpp
@@ -190,6 +196,8 @@ add_library(raidline_domain STATIC
     src/inventory_transfer.h
     src/loot_table.cpp
     src/loot_table.h
+    src/profile_state.cpp
+    src/profile_state.h
     src/raid_session.cpp
     src/raid_session.h
     src/raid_settlement.cpp
@@ -215,6 +223,8 @@ add_library(raidline::domain ALIAS raidline_domain)
 add_library(raidline_simulation STATIC
     src/animation.cpp
     src/animation.h
+    src/base_world.cpp
+    src/base_world.h
     src/collision.cpp
     src/collision.h
     src/enemy.cpp
@@ -256,13 +266,17 @@ add_library(raidline_services STATIC
     src/game_flow.h
     src/game_session.cpp
     src/game_session.h
+    src/save_repository.cpp
+    src/save_repository.h
 )
 raidline_configure_library(raidline_services)
 target_link_libraries(
     raidline_services
     PUBLIC
     raidline::domain
-    raidline::simulation)
+    raidline::simulation
+    PRIVATE
+    nlohmann_json::nlohmann_json)
 add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
@@ -392,6 +406,10 @@ raidline_add_test(
     tests/test_game_session.cpp
     raidline::services)
 raidline_add_test(
+    PersistentSessionTest
+    tests/test_persistent_session.cpp
+    raidline::services)
+raidline_add_test(
     GameFlowTest
     tests/test_game_flow.cpp
     raidline::services)
@@ -416,6 +434,26 @@ raidline_add_test(
     ContentRegistryTest
     tests/test_content_registry.cpp
     raidline::domain)
+raidline_add_test(
+    ProfileStateTest
+    tests/test_profile_state.cpp
+    raidline::domain)
+raidline_add_test(
+    InventoryDomainTest
+    tests/test_inventory_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    EconomyDomainTest
+    tests/test_economy_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseWorldTest
+    tests/test_base_world.cpp
+    raidline::simulation)
+raidline_add_test(
+    SaveRepositoryTest
+    tests/test_save_repository.cpp
+    raidline::services)
 file(TO_CMAKE_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     RAIDLINE_SOURCE_ASSET_DIR)

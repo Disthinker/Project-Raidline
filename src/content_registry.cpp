@@ -76,6 +76,41 @@ namespace
         return value.get<bool>();
     }
 
+    std::optional<std::string> optionalString(
+        const Json &parent,
+        std::string_view field)
+    {
+        const auto found = parent.find(std::string{field});
+        if (found == parent.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_string() || found->get<std::string>().empty())
+        {
+            fail(std::string{field} + " must be a non-empty string");
+        }
+        return found->get<std::string>();
+    }
+
+    std::uint32_t optionalUint(
+        const Json &parent,
+        std::string_view field)
+    {
+        const auto found = parent.find(std::string{field});
+        if (found == parent.end())
+        {
+            return 0;
+        }
+        if ((!found->is_number_unsigned() && !found->is_number_integer()) ||
+            found->get<std::int64_t>() < 0 ||
+            static_cast<std::uint64_t>(found->get<std::int64_t>()) >
+                std::numeric_limits<std::uint32_t>::max())
+        {
+            fail(std::string{field} + " must be a uint32");
+        }
+        return static_cast<std::uint32_t>(found->get<std::uint64_t>());
+    }
+
     std::uint32_t requiredPositiveUint(
         const Json &parent,
         std::string_view field)
@@ -216,9 +251,87 @@ namespace
         {
             return ItemCategory::Ammunition;
         }
+        if (value == "magazine")
+        {
+            return ItemCategory::Magazine;
+        }
+        if (value == "container")
+        {
+            return ItemCategory::Container;
+        }
+        if (value == "loot")
+        {
+            return ItemCategory::Loot;
+        }
 
         fail("item category is not supported: " +
              std::string{value});
+    }
+
+    std::optional<EquipmentSlotKind> parseEquipmentSlot(
+        const Json &item)
+    {
+        const std::optional<std::string> value =
+            optionalString(item, "equipment_slot");
+        if (!value.has_value())
+        {
+            return std::nullopt;
+        }
+        if (*value == "primary_weapon")
+        {
+            return EquipmentSlotKind::PrimaryWeapon;
+        }
+        if (*value == "chest_rig")
+        {
+            return EquipmentSlotKind::ChestRig;
+        }
+        if (*value == "backpack")
+        {
+            return EquipmentSlotKind::Backpack;
+        }
+        fail("equipment_slot is not supported: " + *value);
+    }
+
+    std::vector<ContainerCompartmentDefinition>
+    parseContainerCompartments(const Json &item)
+    {
+        const auto found = item.find("container_compartments");
+        if (found == item.end())
+        {
+            return {};
+        }
+        if (!found->is_array())
+        {
+            fail("container_compartments must be an array");
+        }
+
+        std::vector<ContainerCompartmentDefinition> result;
+        for (const Json &value : *found)
+        {
+            if (!value.is_object())
+            {
+                fail("container compartment must be an object");
+            }
+            const std::string pocket = requiredString(value, "pocket");
+            ContainerPocketKind pocketKind{};
+            if (pocket == "general")
+            {
+                pocketKind = ContainerPocketKind::General;
+            }
+            else if (pocket == "magazine_only")
+            {
+                pocketKind = ContainerPocketKind::MagazineOnly;
+            }
+            else
+            {
+                fail("container pocket kind is not supported: " + pocket);
+            }
+            result.push_back(ContainerCompartmentDefinition{
+                requiredPositiveInt(value, "width"),
+                requiredPositiveInt(value, "height"),
+                pocketKind});
+        }
+        return result;
     }
 
     bool pointInside(
@@ -318,23 +431,25 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("item definition ID must use the item namespace");
             }
 
-            const std::string legacyName =
-                requiredString(itemValue, "legacy_id");
-            const std::optional<ItemId> legacyId =
-                ::legacyItemId(legacyName);
-            if (!legacyId.has_value() ||
-                legacyItemDefinitionId(*legacyId) != definitionId)
+            std::optional<ItemId> legacyId;
+            if (const auto legacyName =
+                    optionalString(itemValue, "legacy_id"))
             {
-                fail("item legacy adapter does not match its stable ID");
-            }
+                legacyId = ::legacyItemId(*legacyName);
+                if (!legacyId.has_value() ||
+                    legacyItemDefinitionId(*legacyId) != definitionId)
+                {
+                    fail("item legacy adapter does not match its stable ID");
+                }
 
-            const std::size_t legacyIndex =
-                static_cast<std::size_t>(*legacyId);
-            if (legacyIdsSeen[legacyIndex])
-            {
-                fail("item legacy adapter is duplicated");
+                const std::size_t legacyIndex =
+                    static_cast<std::size_t>(*legacyId);
+                if (legacyIdsSeen[legacyIndex])
+                {
+                    fail("item legacy adapter is duplicated");
+                }
+                legacyIdsSeen[legacyIndex] = true;
             }
-            legacyIdsSeen[legacyIndex] = true;
 
             const Json &inventory =
                 requiredObject(itemValue, "inventory");
@@ -361,7 +476,7 @@ ContentRegistry ContentRegistry::fromJson(
 
             ItemDefinition definition{
                 definitionId,
-                *legacyId,
+                legacyId.value_or(ItemId::Count),
                 requiredString(itemValue, "display_name"),
                 parseItemCategory(
                     requiredString(itemValue, "category")),
@@ -374,6 +489,37 @@ ContentRegistry ContentRegistry::fromJson(
                 parseVec2(world, "pickup_size"),
                 std::move(inventoryTexture),
                 std::move(worldTexture)};
+
+            definition.equipmentSlot = parseEquipmentSlot(itemValue);
+            definition.containerCompartments =
+                parseContainerCompartments(itemValue);
+            definition.marketBuyPrice =
+                optionalUint(itemValue, "market_buy_price");
+            definition.marketRecyclePrice =
+                optionalUint(itemValue, "market_recycle_price");
+            definition.maximumCharges =
+                optionalUint(itemValue, "maximum_charges");
+            definition.magazineCapacity =
+                optionalUint(itemValue, "magazine_capacity");
+
+            if (const auto ammunition =
+                    optionalString(itemValue, "compatible_ammunition"))
+            {
+                definition.compatibleAmmunitionDefinitionId =
+                    ItemDefinitionId{*ammunition};
+            }
+            if (const auto magazine =
+                    optionalString(itemValue, "compatible_magazine"))
+            {
+                definition.compatibleMagazineDefinitionId =
+                    ItemDefinitionId{*magazine};
+            }
+
+            if (definition.marketRecyclePrice > definition.marketBuyPrice &&
+                definition.marketBuyPrice != 0)
+            {
+                fail("item recycle price exceeds buy price");
+            }
 
             if (definition.worldRenderSize.x <= 0.0F ||
                 definition.worldRenderSize.y <= 0.0F ||
@@ -391,6 +537,23 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("duplicate item definition ID");
             }
             registry.items_.push_back(std::move(definition));
+        }
+
+        for (const ItemDefinition &definition : registry.items_)
+        {
+            const auto requireItemReference =
+                [&registry](const std::optional<ItemDefinitionId> &id)
+                {
+                    if (id.has_value() &&
+                        !registry.itemIndex_.contains(*id))
+                    {
+                        fail("item capability references an unknown item");
+                    }
+                };
+            requireItemReference(
+                definition.compatibleAmmunitionDefinitionId);
+            requireItemReference(
+                definition.compatibleMagazineDefinitionId);
         }
 
         for (const Json &lootValue :

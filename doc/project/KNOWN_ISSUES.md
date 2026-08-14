@@ -1,49 +1,43 @@
 # Project Raidline 已知问题与待办
 
-最后核对：2026-08-14。分类用于区分可以直接修复的缺陷、真正需要产品决定的问题、延期工程债与当前阶段任务。
+最后核对：2026-08-15。
 
 ## 已确认缺陷
 
 | ID | 问题 | 状态/依赖 |
 | --- | --- | --- |
-| RL-INV-001 | 背包物品合法位置缺少完整原子交换 | 未修复；纳入 Slice 1 InventoryDomain |
-| RL-INV-002 | Ctrl/Shift 数量选择后的点击锁定拖拽行为不完整 | 未修复；纳入 Slice 1 UI/事务接线 |
-| RL-INV-003 | 同定义弹药拖到已有堆时不能合并，单堆上限应为 60 | 已修复；PR #54 以 merge commit `5bbddc3` 合入 main |
-| RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | Alpha 只建立 HitResult 边界；正式部位后移，App 不得猜测 |
-| RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 最终射击手感后移；不得在 Alpha 射击适配器中顺带扩张 |
-| RL-ANIM-001 | 角色上下移动动画和停止朝向仍不完整 | 延后到独立表现切片，不阻塞 Alpha 资产闭环 |
+| RL-INV-001 | 背包物品合法位置缺少完整原子交换 | PR #58 新 InventoryDomain 已实现并通过拒绝不变自动化与用户人工验收；等待合入。V0 Raid inventory 保持旧适配器 |
+| RL-INV-002 | Ctrl/Shift 数量选择后的点击锁定拖拽不完整 | PR #58 已实现 Ctrl=1、Shift=向上取半并锁定到第二次点击，用户人工验收通过；等待合入 |
+| RL-INV-003 | 同定义弹药堆叠与 60 发上限 | PR #54 已合入并完成人工验收 |
+| RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | Alpha 只保留 HitResult 边界；App 不得猜测 |
+| RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 最终射击手感后移，不在 V0 适配器顺带扩张 |
+| RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | 独立表现切片，不阻塞 Alpha 资产闭环 |
 
-## 需要设计决策
+## 需要未来产品决策
 
-这些是未来真正产品级问题，不阻塞 Core Extraction Alpha：
+- 无终局倒计时下的长期持续高危压力。
+- 最终动态准星、短促逻辑弹道延迟和射击手感验收标准。
+- 完整产品早/中/后期目标、结束条件和长期基地路线。
+- 灾难成因、主叙事责任链和正式世界观包装。
 
-- 完整游戏持续高危如何在无终局倒计时下维持压力。
-- 最终动态准星、短促逻辑弹道延迟和射击手感的产品验收标准。
-- 完整产品早/中/后期目标与结束条件。
-- 灾难成因、主叙事责任链和长期基地路线的最终选择。
-
-Alpha 范围内普通数值、接口、交互和验收不列为用户决策，由主控根据实现与试玩收口。
+以上均不阻塞 Core Extraction Alpha；Alpha 普通数值、接口和验收由开发主控收口。
 
 ## 延期工程债
 
-- `src/app.cpp` 与 `GameplayWorld` 仍过大，必须按消费者逐片迁移，禁止一次性无行为重写。CMake 重复业务源码编译已由 PR #56 修复并进入 main。
-- Content Registry v1 暂时保留 `ItemId`/`ItemInstance` 旧枚举适配器；Profile Asset Registry 必须把实例身份迁到稳定 `ItemDefinitionId` 后删除该适配器，不能继续为新内容扩展枚举。
-- 当前 `Projectile`、3 HP、180 秒 Timeout、只读 Stash 是 V0 适配器/旧合同，禁止继续扩展；按 Alpha Slice 0–3 依次退场。
-- RL-COMBAT-002 肢体破坏、血液、击退与碎块；RL-COMBAT-003 敌人尸体残留与生命周期，均不在 Alpha。
-- Week29 代码反馈分支无 PR、未进 main；其代码可独立整理，正式攻击动画继续暂停。
-- 正式美术/音频、manifest 发布和 runtime 资源接入在用户重新授权前全部暂停。
+- `src/app.cpp` 与 `GameplayWorld` 仍偏大，继续按 Base/Raid 消费者迁移，禁止一次性无行为重写。
+- V0 `ItemId`/`ItemInstance` 枚举适配器只服务隔离的旧 Raid；新 Profile 内容不得扩展枚举。Extraction Loop 在迁移真实 Raid 资产时删除该适配器。
+- 当前 Projectile、3 HP、180 秒 Timeout、无限弹和 V0 RaidSettlement 禁止继续扩展，由 Extraction Loop 替换。
+- Persistent Base 的固定 UI 使用代码 fallback；正式美术、音频、manifest 与 runtime 资源发布仍在用户重新授权前暂停。
+- RL-COMBAT-002 肢体破坏/血液/击退/碎块和 RL-COMBAT-003 尸体残留均不在 Alpha。
+- Week29 分支无 PR、未进 main；代码可独立整理，正式攻击动画继续暂停。
 
 ## 阶段任务
 
 | 任务 | 状态 |
 | --- | --- |
-| Core Extraction Alpha Slice 0 | 自动化与用户真实窗口验收通过，PR #55 已合入 main |
-| RL-INV-003 / PR #54 | 已合入 `main@5bbddc3` |
-| Build Module Foundation | PR #56 最终 head 三项 CI 通过，已以 merge commit `1837928` 合入 main |
-| Content Registry v1 | 本地实现与 Windows Debug 构建完成；focused 134/134、全量 574/574 通过，等待 PR 精确 head CI |
-| Slice 1 | 等待三项架构迁移：Base、Stash、三槽配装、Profile/Persistence |
-| Slice 2 | 等待 Slice 1：弹匣/枪膛/弹药、100 HP/Medkit、随身库存 |
-| Slice 3 | 等待 Slice 2：单图快照、无硬时限、撤离与全损幂等结算 |
-| Slice 4 | 等待 Slice 3：基础经济、救济、连续多局和跨进程验收 |
+| PR #55 / #54 / #56 / #57 | 已进入 `origin/main@14cf79b` |
+| Persistent Base | PR #58 领域、存档、BaseWorld 与 App 完成；本地 601/601、精确 head CI 与用户 6/6 人工验收通过，等待合入 |
+| Extraction Loop | 等待 Persistent Base 接受 |
+| Alpha Hardening | 等待 Extraction Loop |
 
-完整依赖、自动化、人工验收、PR 和回滚边界见 `doc/exec-plans/active/core-extraction-alpha.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/core-alpha-persistent-base.md`。

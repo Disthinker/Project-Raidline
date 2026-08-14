@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "definition_id.h"
 #include "vec2.h"
@@ -27,7 +28,34 @@ enum class ItemCategory
     Consumable,
     Medical,
     Weapon,
-    Ammunition
+    Ammunition,
+    Magazine,
+    Container,
+    Loot
+};
+
+enum class EquipmentSlotKind
+{
+    PrimaryWeapon,
+    ChestRig,
+    Backpack
+};
+
+enum class ContainerPocketKind
+{
+    General,
+    MagazineOnly
+};
+
+struct ContainerCompartmentDefinition
+{
+    int width{};
+    int height{};
+    ContainerPocketKind pocketKind{ContainerPocketKind::General};
+
+    friend bool operator==(
+        const ContainerCompartmentDefinition &,
+        const ContainerCompartmentDefinition &) = default;
 };
 
 enum class ItemOrientation
@@ -75,6 +103,21 @@ struct ItemDefinition
     // 相对于运行时 assets/ 目录的路径。
     std::string inventoryTexturePath;
     std::string worldTexturePath;
+
+    // Optional Alpha capabilities. Legacy V0 definitions omit fields they do
+    // not consume; Profile/Inventory code branches on these typed values,
+    // never on display names.
+    std::optional<EquipmentSlotKind> equipmentSlot;
+    std::vector<ContainerCompartmentDefinition>
+        containerCompartments;
+    std::uint32_t marketBuyPrice{};
+    std::uint32_t marketRecyclePrice{};
+    std::uint32_t maximumCharges{};
+    std::uint32_t magazineCapacity{};
+    std::optional<ItemDefinitionId>
+        compatibleAmmunitionDefinitionId;
+    std::optional<ItemDefinitionId>
+        compatibleMagazineDefinitionId;
 };
 
 constexpr std::size_t itemCount() noexcept

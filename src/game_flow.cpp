@@ -19,6 +19,37 @@ bool GameFlow::startGame() noexcept
     return true;
 }
 
+void GameFlow::configurePersistence(std::filesystem::path directory)
+{
+    gameSession_.configurePersistence(std::move(directory));
+}
+
+bool GameFlow::startNewGame(std::string profileId)
+{
+    if (state_ != GameFlowState::MainMenu ||
+        !gameSession_.startNewProfile(std::move(profileId)))
+    {
+        return false;
+    }
+    state_ = GameFlowState::Base;
+    activeBaseFacility_.reset();
+    baseWorld_.resetAtMedicalPoint();
+    return true;
+}
+
+bool GameFlow::continueGame()
+{
+    if (state_ != GameFlowState::MainMenu ||
+        !gameSession_.continueProfile())
+    {
+        return false;
+    }
+    state_ = GameFlowState::Base;
+    activeBaseFacility_.reset();
+    baseWorld_.resetAtMedicalPoint();
+    return true;
+}
+
 bool GameFlow::deploy() noexcept
 {
     if (state_ != GameFlowState::Base)
@@ -36,6 +67,7 @@ bool GameFlow::deploy() noexcept
         }
 
         firstDeploymentPending_ = false;
+        activeBaseFacility_.reset();
         state_ = GameFlowState::Raid;
         return true;
     }
@@ -46,7 +78,43 @@ bool GameFlow::deploy() noexcept
     }
 
     state_ = GameFlowState::Raid;
+    activeBaseFacility_.reset();
     return true;
+}
+
+void GameFlow::updateBase(
+    const BaseInput &input,
+    float deltaTime) noexcept
+{
+    if (state_ != GameFlowState::Base || activeBaseFacility_.has_value())
+    {
+        return;
+    }
+    activeBaseFacility_ = baseWorld_.update(input, deltaTime);
+    if (activeBaseFacility_.has_value())
+    {
+        gameSession_.noteBaseFacility(*activeBaseFacility_);
+    }
+}
+
+void GameFlow::closeBaseFacility() noexcept
+{
+    activeBaseFacility_.reset();
+}
+
+std::optional<BaseFacilityKind> GameFlow::activeBaseFacility() const noexcept
+{
+    return activeBaseFacility_;
+}
+
+BaseWorld &GameFlow::baseWorld() noexcept
+{
+    return baseWorld_;
+}
+
+const BaseWorld &GameFlow::baseWorld() const noexcept
+{
+    return baseWorld_;
 }
 
 void GameFlow::update(
@@ -76,6 +144,15 @@ bool GameFlow::returnToBase() noexcept
         return false;
     }
 
+    if (gameSession_.settlement().state() == RaidSettlementState::Extracted)
+    {
+        baseWorld_.resetAtRaidGate();
+    }
+    else
+    {
+        baseWorld_.resetAtMedicalPoint();
+    }
+    activeBaseFacility_.reset();
     state_ = GameFlowState::Base;
     return true;
 }

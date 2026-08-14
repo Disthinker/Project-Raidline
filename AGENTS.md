@@ -21,10 +21,10 @@ When sources conflict, record the conflict and follow the higher source. Do not 
 ## Git and release control
 
 - Fetch before starting a task and report branch, HEAD, `origin/main`, worktree state, dependency PRs, and relevant CI.
-- One product slice or focused defect uses one `codex/...` branch. Start from the latest accepted dependency baseline, normally `origin/main`.
+- One playable macro slice or focused defect uses one `codex/...` branch. A macro slice may include several directly dependent domain/service/client migrations when they produce one coherent player result; keep them as internal rollback commits instead of separate waiting PRs. Start from the latest accepted dependency baseline, normally `origin/main`.
 - Never use another open feature branch as an implicit base. Do not copy an open fix into a second branch merely to unblock unrelated work.
 - Do not mix unrelated work, rewrite shared history, force-push, or merge a PR without explicit authorization.
-- Keep commits coherent and reviewable. Push and open a PR only after the scoped evidence gate passes.
+- Keep commits coherent and reviewable. Push and open a PR only after the scoped evidence gate passes. Do not create a second code revision and CI cycle solely to copy already visible CI evidence into a document; record final exact-head evidence in the PR and synchronize accepted facts in the next repository-state update.
 - Historical Week documents remain evidence; new product milestones are not organized by Week number.
 
 ## Architecture and domain rules
@@ -60,7 +60,7 @@ The active scope includes only the features enumerated in the Alpha scope contra
 - Any source or CMake change requires an incremental build and relevant automated tests. Header or class-layout changes require rebuilding every affected target.
 - If MSVC/GTest reports `gtest_ar_` stack corruption, inspect Ninja header dependencies and rebuild affected targets; never treat stale binaries as evidence.
 - Run focused tests during implementation and the full registered CTest suite before push. C++-affecting PRs must pass exact-head Windows and Ubuntu CI.
-- Manual acceptance proves visible player behavior only. Record build identity, steps, expected result, actual result, and deviations.
+- Manual acceptance proves visible player behavior only. Finish implementation, automated regression and CI first, then give the user one consolidated real-window checklist; the development agent does not launch the game as a substitute.
 - A task closes with scope, changed contracts, automated evidence, manual evidence when relevant, risks, rollback, commit, push, and PR. Teaching handoffs and learning ledgers are optional historical material, not completion gates.
 
 ## Art boundary

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -12,6 +14,28 @@
 #include "inventory_interaction.h"
 #include "item_definition.h"
 #include "texture.h"
+
+enum class MainMenuCommand
+{
+    Continue,
+    NewGame,
+    Settings,
+    Exit
+};
+
+struct BasePointerClick
+{
+    MousePosition position;
+    bool controlPressed{};
+    bool shiftPressed{};
+};
+
+struct ProfileAssetSelection
+{
+    AssetInstanceId instanceId{};
+    std::uint32_t quantity{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+};
 
 class App
 {
@@ -41,6 +65,9 @@ private:
     GameSession &gameSession_;
 
     bool pendingScreenConfirm_{false};
+    std::optional<MainMenuCommand> pendingMainMenuCommand_;
+    std::vector<BasePointerClick> pendingBaseClicks_;
+    bool pendingBaseRotate_{};
     std::optional<Vec2> pointerWorldPosition_;
     bool systemCursorHidden_{false};
 
@@ -50,6 +77,12 @@ private:
 
     std::vector<InventoryUiEvent>
         pendingInventoryUiEvents_;
+
+    std::optional<ProfileAssetSelection> profileAssetSelection_;
+    std::uint64_t profileTransactionSequence_{};
+    bool newGameOverwriteArmed_{};
+    bool settingsOpen_{};
+    std::string uiMessage_;
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -69,7 +102,19 @@ private:
     GameplayInput makeGameplayInput() const;
 
     [[nodiscard]]
-    bool handleScreenConfirm() noexcept;
+    bool handleScreenConfirm();
+
+    void handleMainMenuCommand(MainMenuCommand command);
+    void updateBase(float deltaTime);
+    void handleBasePointerClick(const BasePointerClick &click);
+
+    [[nodiscard]] std::string nextProfileTransactionId(
+        const char *prefix);
+
+    [[nodiscard]] std::optional<MainMenuCommand>
+    mainMenuCommandAt(float x, float y) const noexcept;
+
+    [[nodiscard]] SDL_FRect mainMenuButton(std::size_t index) const noexcept;
 
     [[nodiscard]]
     SDL_FRect screenPrimaryButton() const noexcept;
@@ -126,6 +171,20 @@ private:
     void syncSystemCursorVisibility() noexcept;
     void renderMainMenu();
     void renderBase();
+    void renderBaseWorld();
+    void renderBaseStorage();
+    void renderBaseSupply();
+    void renderBaseDeployment();
+    void renderProfileGrid(
+        ProfileContainerId container,
+        float x,
+        float y,
+        float cellSize,
+        const char *label);
+    void renderProfileAsset(
+        const AssetRecord &asset,
+        const SDL_FRect &bounds,
+        float cellSize);
     void renderRaidScreen();
     void renderScreenPrimaryButton(
         const char *label);

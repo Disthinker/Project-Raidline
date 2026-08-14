@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Slice 0、RL-INV-003 与架构迁移 1 已进入 main；架构迁移 2 Content Registry v1 进行中
+状态：Slice 0、RL-INV-003 与两项架构迁移已进入 main；Persistent Base 宏切片进行中
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-当前接受基线：`origin/main@1837928`（Slice 0 原始实施基线为 `61718f6`）
+当前接受基线：`origin/main@14cf79b`（Slice 0 原始实施基线为 `61718f6`）
 
-当前实施分支：`codex/content-registry-v1`
+当前实施分支：`codex/core-alpha-persistent-base`
 
 ## 1. 目标与完成定义
 
@@ -26,9 +26,9 @@
 
 - 2026-08-14 再次执行 `git fetch origin`；PR #55 已以 `c7a3931`、PR #54 已以 `5bbddc3` 进入 main。
 - Build Module Foundation 最终 head `ef66dbd` 三项 CI 成功，PR #56 已以 merge commit `1837928` 进入 main。
-- Content Registry v1 从干净的 `origin/main@1837928` 创建，没有叠加未合入分支；本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过。Draft PR #57 实现/初始证据 head `3a12385` 三项 CI 成功，等待最终证据 head 门禁。
+- Content Registry v1 从干净的 `origin/main@1837928` 创建，本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过；PR #57 已以 merge commit `14cf79b` 进入 main。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
-- RL-INV-003 与 Build Module Foundation 已成为接受基线的一部分；Slice 1 仍等待 Content Registry v1 和 Profile Asset Registry 两项独立迁移。
+- Persistent Base 从干净的 `origin/main@14cf79b` 创建；Profile/AssetRegistry、库存、经济、schema v1 存档、可行走 Base 和三设施已完成本地实现，Windows Debug 120 步构建、focused 70/70 与全量 CTest 601/601 通过，等待 Draft PR exact-head CI 与用户人工验收。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -122,80 +122,55 @@ Project_Raidline.exe
 
 ### Slice 0 之后的架构迁移门禁
 
-1. PR #55 完成用户真实窗口验收并按授权进入 `origin/main`。
-2. PR #54 更新到最新主线，复验库存回归并独立进入 `origin/main`。
-3. 从同时包含两项依赖的最新 `origin/main` 依次建立：`codex/build-module-foundation`、`codex/content-registry-v1`、`codex/profile-asset-registry`。
-4. 三项迁移分别只处理构建所有权、内容定义、资产所有权；玩家可见 Alpha 功能从 `codex/core-alpha-base-persistence` 开始。
+1. PR #55、#54、#56 和 #57 已依次进入 `origin/main@14cf79b`。
+2. 后续不再把 Profile Asset Registry、Base Persistence、Weapon/Medical、Raid/Settlement 和 Economy/Relief 拆成五个中途交付点，而按完整玩家结果收束为三个宏切片。
+3. 每个宏切片从最新接受的 `origin/main` 建独立分支，内部用多个可回滚提交，自动化和 CI 完成后只安排一次集中用户真实窗口验收。
 
-每个分支单独提交/PR，并通过 focused tests、全量 CTest、Windows/Ubuntu CI；只有存在可见行为变化时才安排相应用户真实窗口验收。任何迁移失败均可按独立 PR 回滚，不在未合入分支上叠加后续工作。
+## 6. Persistent Base 宏切片
 
-## 6. Slice 1：Base、Stash、配装与持久化
+依赖：`origin/main@14cf79b`。活动计划：`doc/exec-plans/active/core-alpha-persistent-base.md`。
 
-依赖：Slice 0、PR #54 与三项架构迁移均已进入接受基线。
+禁止范围：不实现真实 Raid Deploy、弹匣内容/枪膛、Raid 换弹、100 HP/治疗动作、RaidSnapshot、全损结算或移除 Timeout；不扩展三槽之外装备。
 
-禁止范围：不实现真实弹药、Medkit、Raid 新内容、经济、基地建设/NPC/世界时间；不扩展三槽之外装备。
+交付：ProfileState、唯一 AssetRegistry、封闭 AssetLocation、revision/事务；原子库存/配装；可行走 Base 与三入口；新存档、自动保存、主档/备份/原子替换；固定供应/回收、货币、条件式救济和首次目标链。
 
-交付：`ProfileState`、`AssetRegistry`、`AssetLocation`、`Inventory/EquipmentDomain`；紧凑 `BaseWorld` 与三设施入口；统一 Stash/配装界面；主武器/胸挂/背包与容器规则；版本化主存档/备份；新存档初始实例全入 Stash。
+自动化：资产唯一位置；交换/堆叠/数量锁定/装备失败不变；非空容器嵌套拒绝；交易/救济幂等；schema v1 往返、checksum、损坏主档恢复；Base 移动/设施交互；全量 V0 回归。
 
-自动化：资产唯一所有权；移动/交换/堆叠/装备原子失败；非空容器嵌套拒绝；容器移动内容保持；存档往返、ID 高水位、旧版本默认、损坏主档恢复。
+人工验收：集中验证新游戏、Base 移动/冲刺/E 交互、仓储配装、Ctrl/Shift 数量、买卖/救济、关闭重开及 V0 Raid 兼容路径。由用户在自动化及 CI 后执行，开发代理不启动游戏。
 
-人工验收：新游戏覆盖确认；Base 移动/冲刺/交互；三入口识别；配装/卸下/容器移动；关闭重开保持资产；Base 无射击/换弹。
+回滚：Profile 领域、存档/Base 服务与 App 接线分提交；旧 Raid 与 Profile registry 明确隔离，不复制真实资产。
 
-提交/PR：领域与持久化、Base 运行时、UI 投影可分提交；一个 Slice 1 PR，任何地图/弹药需求另开 Slice。
+## 7. Extraction Loop 宏切片
 
-回滚：新组合根置于功能开关/构造路径后；可回退到旧 V0 会话而不迁移正式存档版本。
+依赖：Persistent Base 接受并合入 main。
 
-## 7. Slice 2：弹匣/枪膛/弹药、100 HP/Medkit、随身库存
+禁止范围：不实现特殊弹、完整逻辑弹道重做、耐久/故障、防具/部位/复杂伤势、多地图、高危、特殊撤离、增援、尸体搜索或寻回。
 
-依赖：Slice 1 的资产所有权与保存。
+交付：弹匣有序内容、枪膛、Base 压卸弹、胸挂 R 换弹、真实消耗；100 HP、Medkit 与 Action；Raid 随身库存；三组出生撤离、三组敌人部署、一次性 Loot 快照；无硬时限；成功带回、死亡/主动/异常退出全损；RaidResult 与幂等 pending Raid。
 
-禁止范围：不实现特殊弹、混装 UI、耐久/故障、防具/部位/流血/复杂医疗；不替换完整逻辑弹道。
+自动化：弹药守恒；动作任意提交点合法；治疗次数；固定种子快照；地图配置可达；时间不失败；Deploy/成功/失败/重载只结算一次；删除 V0 ItemId/ItemInstance 适配器后的全量回归。
 
-交付：一武器、一弹匣、一普通弹药；散装/有序弹匣/枪膛；Base 即时压卸弹；胸挂 R 普通换弹；真实弹药消耗；100 HP；1×1、3 次、每次 30 HP、5 秒 Medkit；5 医疗轮盘壳；Raid 随身库存。
+人工验收：一次集中完成压弹/配装、换弹、治疗、Loot 整理、三类路线、成功、死亡、主动退出、强制关闭和重开。
 
-自动化：弹药守恒；满/空/膛内弹；候选弹匣稳定顺序；换弹中断暂持收束；Medkit 满血拒绝、提交点、次数、死亡/中断；保存往返。
+回滚：Weapon/Medical、RaidSnapshot、Settlement 与 App 接线分提交；旧适配器只保留到新端到端自动化通过，不作为合入后的长期双路径。
 
-人工验收：Base 压卸弹、配装、进 Raid、击发消耗、R 换弹、5 轮盘治疗与中断、撤离保留 HP、失败回满 HP。
+## 8. Alpha Hardening 宏切片
 
-提交/PR：WeaponAmmo、Action/Health、UI 接线分提交；一个 Slice 2 PR。
+依赖：Extraction Loop 接受并合入 main。
 
-回滚：旧无限弹射击适配器保留到新供弹集成测试通过；迁移版本为新字段提供显式默认。
+禁止范围：不通过增加敌人刷新、倒计时、高危、任务或复杂伤势掩盖节奏问题。
 
-## 8. Slice 3：单图快照、Loot/敌人、撤离与全损结算
+交付：10 次混合成功/失败、至少 3 次跨进程重开、三条失败路径、损坏存档恢复、三组地图配置、首次引导、空手/无弹警告、平衡与 Alpha 完成报告。
 
-依赖：Slice 2 的完整 Deploy 资产与资源消耗。
+自动化：长序列资产/货币/弹药守恒；重复加载/结算；主档/备份组合；内容价格和地图验证；Windows/Ubuntu CI 与发布包冒烟。
 
-禁止范围：不实现多地图、程序生成、高危、特殊撤离、增援、敌人装备掉落、尸体搜索或寻回。
+人工验收：执行 GDD 固定 1–8 清单并判断核心循环吸引力、失败惩罚、整备摩擦和固定地图路线取舍。
 
-交付：显式 `MapDefinition`；至少三组 `SpawnExtractionPair`、三组 4～6 敌人部署、8～12 Loot 槽且每局 6～9 有效；一次生成快照；无硬时限；3 秒普通撤离；成功全保留、死亡/主动退出/异常退出全损；RaidResult；pending Raid 幂等失败。
-
-自动化：固定种子快照；配对可达/集合数量验证；不刷新/不增援；时间不判负；成功/失败/容量阻塞/重复结算/异常退出重载。
-
-人工验收：三条路线、搜索/战斗/规避、清敌后安全搜索、撤离读条、死亡/退出/强制关闭后重开、RaidResult 不显示损失清单。
-
-提交/PR：定义/快照、生命周期/结算、场景/UI 分提交；一个 Slice 3 PR。
-
-回滚：保留旧固定场景构造适配器；无硬时限变更单独提交，可在不恢复产品接受状态的前提下定位回归。
-
-## 9. Slice 4：经济、救济、连续多局与跨进程验收
-
-依赖：Slice 3 的稳定结算与持久化。
-
-禁止范围：不实现专业商人、库存刷新、声望、任务、制造、系统商店、世界时间或正式题材包装。
-
-交付：固定无限基础供应；25% 低价回收基线且无套利；普通货币；条件式单份不可回收救济；首次环境目标链；连续多局与跨进程产品验收。
-
-自动化：交易原子性、余额不足、拆装防套利、救济资格/单份/重载/丢失后重领、连续成功失败序列、主档损坏恢复。
-
-人工验收：新玩家首局；成功积累；连续失败后重新出击；主动空手/无弹警告；跨进程恢复；备份不暴露回档。
-
-提交/PR：经济/救济、引导/投影、闭环回归分提交；一个 Slice 4 PR。
-
-回滚：经济定义与实例迁移分离；救济可单独关闭，固定供应仍保证最低可玩性。
+回滚：平衡只修改版本化内容数据；稳定性修复按缺陷提交独立回滚，不增加范围外机制。
 
 ## 10. 风险与真正产品级决策
 
-- #54 未合入会阻塞 Slice 1 的统一库存事务，但不阻塞 Slice 0。
+- Persistent Base 与旧 Raid 暂时存在两个隔离资产模型；禁止隐式复制，Extraction Loop 必须以显式 Deploy/Settlement 完成单一所有权迁移。
 - Week29 代码反馈有复用价值，但没有 PR；Alpha 不依赖它。后续应单独整理代码反馈 PR，继续排除正式攻击图像。
 - App 和 GameplayWorld 体积过大，必须按消费者逐片拆分；一次性重写会扩大回归面。
 - 无硬时限会降低首图清敌后的压力，这是 Alpha 有意减法；不得擅自加刷新、资源腐坏或隐性倒计时。
@@ -216,8 +191,8 @@ Project_Raidline.exe
 - [x] 从 `origin/main@5bbddc3` 建立 Build Module Foundation 分支；四库本地构建、focused 133/133 与全量 558/558 通过。
 - [x] Build Module Foundation PR #56 最终 head CI 成功，并以 merge commit `1837928` 进入接受基线。
 - [x] 从 `origin/main@1837928` 建立 Content Registry v1；本地构建、focused 134/134 与全量 574/574 通过。
-- [ ] Content Registry v1 完成 PR 精确 head CI 并进入接受基线。
-- [ ] Profile Asset Registry 进入接受基线。
+- [x] Content Registry v1 精确 head CI 成功，PR #57 以 merge commit `14cf79b` 进入接受基线。
+- [ ] Persistent Base 完成全量回归、CI 与用户集中人工验收并进入接受基线。
 
 最后更新：2026-08-14。
 

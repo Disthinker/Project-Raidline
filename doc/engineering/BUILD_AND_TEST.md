@@ -1,6 +1,6 @@
 # Project Raidline 构建与测试
 
-最后核对：2026-08-14。
+最后核对：2026-08-15。
 
 ## Windows 支持环境
 
@@ -35,6 +35,8 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 `codex/build-module-foundation` 从 `origin/main@5bbddc3` 重新配置并完成 68 步全目标构建。四个生产库生成成功，31/31 个非 main 业务 `.cpp` 各有且仅有一条生产库编译规则；跨层 focused 133/133、全量 CTest 558/558 通过。最终 feature head `ef66dbd` 的范围检测、Windows、Ubuntu CI 全部成功，PR #56 已以 merge commit `1837928` 进入 main。该迁移不改变可见行为，人工窗口验收不适用。
 
 `codex/content-registry-v1` 从 `origin/main@1837928` 引入锁定的 `nlohmann-json` 3.12.0 header-only overlay，绕开旧 VS vcpkg 对已下线 MSYS2 runtime 的 pkg-config 下载，不更新其他依赖。Windows Debug 重新配置和 70 步全目标构建成功；DefinitionId/Registry/物品/Loot/GameplayWorld/GameSession/GameFlow focused 134/134、全量 CTest 574/574 通过。发布资源逻辑引用与物理文件存在性均由自动化覆盖；Draft PR #57 实现/初始证据 head `3a12385` 的范围检测、Windows、Ubuntu CI 全部成功。本迁移不改变可见行为，开发代理不启动游戏，人工窗口验收不适用。
+
+`codex/core-alpha-persistent-base` 从已包含 PR #57 的 `origin/main@14cf79b` 重新配置并完成 120 步全目标构建。Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70、存档恢复专项 9/9、全量 CTest 601/601 通过，0 失败；`Project_Raidline.exe` 已生成但未由开发代理启动。精确 head CI 与用户真实窗口验收等待 Draft PR 阶段执行。
 
 ## 按风险选择证据
 
