@@ -3,10 +3,14 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <tuple>
+#include <vector>
 
 #include "alpha_content_ids.h"
 #include "economy_domain.h"
+#include "raid_lifecycle.h"
 #include "save_repository.h"
+#include "weapon_ammo_domain.h"
 
 namespace
 {
@@ -34,7 +38,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV1RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV2RoundTripPreservesAuthoritativeState)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -51,6 +55,100 @@ TEST(SaveRepositoryTest, SchemaV1RoundTripPreservesAuthoritativeState)
     ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
     ASSERT_TRUE(loaded.profile.has_value());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v1-migration",
+        publishedContentRegistry());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const std::string text = serializeProfileEnvelope(
+        profile,
+        "core-alpha-content-1",
+        1);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        text,
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(profileStateFingerprint(*migrated.profile), fingerprint);
+    EXPECT_EQ(migrated.profile->currentHealth, 100);
+    EXPECT_FALSE(migrated.profile->pendingRaid.has_value());
+}
+
+TEST(SaveRepositoryTest, SchemaV2PreservesPendingRaidAndWeaponAmmunition)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-pending-raid",
+        publishedContentRegistry());
+    const auto find = [&profile](const ItemDefinitionId &definitionId)
+    {
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (asset.definitionId == definitionId)
+            {
+                return id;
+            }
+        }
+        return AssetInstanceId{};
+    };
+    const AssetInstanceId rifle = find(alpha_content::rifle);
+    const AssetInstanceId magazine = find(alpha_content::magazine);
+    const AssetInstanceId ammunition = find(alpha_content::ammunition);
+    const AssetInstanceId chest = find(alpha_content::chestRig);
+    const AssetInstanceId backpack = find(alpha_content::backpack);
+    for (const auto &[assetId, slot, transaction] :
+         std::vector<std::tuple<AssetInstanceId, EquipmentSlotKind, std::string>>{
+             {rifle, EquipmentSlotKind::PrimaryWeapon, "save-equip-rifle"},
+             {chest, EquipmentSlotKind::ChestRig, "save-equip-chest"},
+             {backpack, EquipmentSlotKind::Backpack, "save-equip-backpack"}})
+    {
+        ASSERT_TRUE(executeInventory(
+            profile,
+            publishedContentRegistry(),
+            InventoryEquipCommand{assetId, slot},
+            CommandContext{profile.revision, transaction}).succeeded);
+    }
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 30},
+        CommandContext{profile.revision, "save-load-magazine"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{rifle, magazine},
+        CommandContext{profile.revision, "save-install-magazine"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "save-chamber"}).succeeded);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-raid",
+            "save-settlement",
+            7319,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "save-deploy"}).succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(installedMagazine(*loaded.profile, rifle), magazine);
+    EXPECT_EQ(magazineRoundCount(*loaded.profile, magazine), 29U);
+    EXPECT_TRUE(loaded.profile->assets.find(rifle)->chamberedRound.has_value());
 }
 
 TEST(SaveRepositoryTest, FirstSuccessfulSaveAlsoCreatesRecoveryBackup)

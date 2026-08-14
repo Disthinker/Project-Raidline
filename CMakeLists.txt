@@ -198,6 +198,10 @@ add_library(raidline_domain STATIC
     src/loot_table.h
     src/profile_state.cpp
     src/profile_state.h
+    src/raid_lifecycle.cpp
+    src/raid_lifecycle.h
+    src/raid_action.cpp
+    src/raid_action.h
     src/raid_session.cpp
     src/raid_session.h
     src/raid_settlement.cpp
@@ -206,6 +210,9 @@ add_library(raidline_domain STATIC
     src/shot_resolution.h
     src/stash.cpp
     src/stash.h
+    src/stable_random.h
+    src/weapon_ammo_domain.cpp
+    src/weapon_ammo_domain.h
     src/rect.h
     src/vec2.h
 )
@@ -445,6 +452,18 @@ raidline_add_test(
 raidline_add_test(
     EconomyDomainTest
     tests/test_economy_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    WeaponAmmoDomainTest
+    tests/test_weapon_ammo_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    RaidActionTest
+    tests/test_raid_action.cpp
+    raidline::domain)
+raidline_add_test(
+    RaidLifecycleTest
+    tests/test_raid_lifecycle.cpp
     raidline::domain)
 raidline_add_test(
     BaseWorldTest

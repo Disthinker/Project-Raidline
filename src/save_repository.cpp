@@ -3,6 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
@@ -106,7 +107,68 @@ std::optional<TutorialProgress> parseTutorial(std::string_view value)
     return std::nullopt;
 }
 
-Json profilePayload(const ProfileState &profile)
+std::string raidOutcomeName(RaidResultOutcome outcome)
+{
+    switch (outcome)
+    {
+    case RaidResultOutcome::Extracted:
+        return "extracted";
+    case RaidResultOutcome::PlayerDead:
+        return "player_dead";
+    case RaidResultOutcome::ActiveQuit:
+        return "active_quit";
+    case RaidResultOutcome::AbnormalQuit:
+        return "abnormal_quit";
+    }
+    return "invalid";
+}
+
+std::optional<RaidResultOutcome> parseRaidOutcome(std::string_view value)
+{
+    if (value == "extracted") return RaidResultOutcome::Extracted;
+    if (value == "player_dead") return RaidResultOutcome::PlayerDead;
+    if (value == "active_quit") return RaidResultOutcome::ActiveQuit;
+    if (value == "abnormal_quit") return RaidResultOutcome::AbnormalQuit;
+    return std::nullopt;
+}
+
+Json vectorValue(Vec2 value)
+{
+    return {{"x", value.x}, {"y", value.y}};
+}
+
+Vec2 parseVector(const Json &value)
+{
+    return {value.at("x").get<float>(), value.at("y").get<float>()};
+}
+
+Json roundValue(const MagazineRoundRecord &round)
+{
+    Json value{{"definition_id", round.definitionId.value()}};
+    if (round.reliefBatchId.has_value())
+    {
+        value["relief_batch_id"] = *round.reliefBatchId;
+    }
+    return value;
+}
+
+MagazineRoundRecord parseRound(const Json &value)
+{
+    MagazineRoundRecord round{
+        ItemDefinitionId{value.at("definition_id").get<std::string>()},
+        std::nullopt};
+    if (value.contains("relief_batch_id"))
+    {
+        round.reliefBatchId = value.at("relief_batch_id").get<std::string>();
+        if (round.reliefBatchId->empty())
+        {
+            throw std::runtime_error{"round relief batch ID is empty"};
+        }
+    }
+    return round;
+}
+
+Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
 {
     Json assets = Json::array();
     for (const auto &[id, asset] : profile.assets.records())
@@ -131,12 +193,38 @@ Json profilePayload(const ProfileState &profile)
                     {"compartment", stored->container.compartmentIndex}};
             }
         }
-        else
+        else if (const auto *equipped =
+                     std::get_if<EquippedAssetLocation>(&asset.location))
         {
             location = {
                 {"type", "equipped"},
-                {"slot", slotName(
-                    std::get<EquippedAssetLocation>(asset.location).slot)}};
+                {"slot", slotName(equipped->slot)}};
+        }
+        else if (const auto *installed =
+                     std::get_if<InstalledMagazineLocation>(&asset.location))
+        {
+            if (schemaVersion == 1)
+            {
+                throw std::invalid_argument{
+                    "schema v1 cannot represent installed magazines"};
+            }
+            location = {
+                {"type", "installed_magazine"},
+                {"weapon_asset_id", installed->weaponAssetId}};
+        }
+        else
+        {
+            if (schemaVersion == 1)
+            {
+                throw std::invalid_argument{
+                    "schema v1 cannot represent Raid ground assets"};
+            }
+            const auto &ground =
+                std::get<RaidGroundAssetLocation>(asset.location);
+            location = {
+                {"type", "raid_ground"},
+                {"raid_id", ground.raidId},
+                {"loot_slot_index", ground.lootSlotIndex}};
         }
 
         Json value{
@@ -150,6 +238,17 @@ Json profilePayload(const ProfileState &profile)
         {
             value["relief_batch_id"] = *asset.reliefBatchId;
         }
+        if (schemaVersion >= 2)
+        {
+            value["magazine_rounds"] = Json::array();
+            for (const MagazineRoundRecord &round : asset.magazineRounds)
+            {
+                value["magazine_rounds"].push_back(roundValue(round));
+            }
+            value["chambered_round"] = asset.chamberedRound.has_value()
+                ? roundValue(*asset.chamberedRound)
+                : Json(nullptr);
+        }
         assets.push_back(std::move(value));
     }
 
@@ -159,7 +258,7 @@ Json profilePayload(const ProfileState &profile)
         transactions.push_back(transaction);
     }
 
-    return Json{
+    Json payload{
         {"profile_id", profile.profileId},
         {"revision", profile.revision},
         {"currency", profile.currency},
@@ -167,6 +266,78 @@ Json profilePayload(const ProfileState &profile)
         {"next_asset_id", profile.assets.nextAssetId()},
         {"committed_transactions", std::move(transactions)},
         {"assets", std::move(assets)}};
+    if (schemaVersion == 1)
+    {
+        return payload;
+    }
+
+    payload["current_health"] = profile.currentHealth;
+    payload["committed_settlements"] = Json::array();
+    for (const std::string &settlement : profile.committedSettlements)
+    {
+        payload["committed_settlements"].push_back(settlement);
+    }
+
+    if (profile.pendingRaid.has_value())
+    {
+        const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        Json enemies = Json::array();
+        for (const RaidEnemySnapshot &enemy : raid.enemies)
+        {
+            enemies.push_back({
+                {"position", vectorValue(enemy.position)},
+                {"size", vectorValue(enemy.size)},
+                {"maximum_health", enemy.maximumHealth}});
+        }
+        Json loot = Json::array();
+        for (const RaidLootSnapshot &entry : raid.loot)
+        {
+            loot.push_back({
+                {"asset_id", entry.assetId},
+                {"slot_index", entry.slotIndex},
+                {"position", vectorValue(entry.position)}});
+        }
+        payload["pending_raid"] = {
+            {"raid_id", raid.raidId},
+            {"settlement_id", raid.settlementId},
+            {"rules_version", raid.rulesVersion},
+            {"map_definition_id", raid.mapDefinitionId.value()},
+            {"seed", raid.seed},
+            {"spawn_extraction_pair_id", raid.spawnExtractionPairId},
+            {"enemy_deployment_id", raid.enemyDeploymentId.value()},
+            {"player_spawn", vectorValue(raid.playerSpawn)},
+            {"extraction_point", {
+                {"position", vectorValue(raid.extractionPoint.position)},
+                {"size", vectorValue(raid.extractionPoint.size)}}},
+            {"enemies", std::move(enemies)},
+            {"loot", std::move(loot)},
+            {"carried_root_asset_ids", raid.carriedRootAssetIds},
+            {"starting_health", raid.startingHealth}};
+    }
+    else
+    {
+        payload["pending_raid"] = nullptr;
+    }
+
+    if (profile.lastRaidResult.has_value())
+    {
+        Json returned = Json::array();
+        for (const ItemDefinitionId &id :
+             profile.lastRaidResult->returnedItemDefinitionIds)
+        {
+            returned.push_back(id.value());
+        }
+        payload["last_raid_result"] = {
+            {"settlement_id", profile.lastRaidResult->settlementId},
+            {"outcome", raidOutcomeName(profile.lastRaidResult->outcome)},
+            {"returned_item_definition_ids", std::move(returned)},
+            {"currency_delta", profile.lastRaidResult->currencyDelta}};
+    }
+    else
+    {
+        payload["last_raid_result"] = nullptr;
+    }
+    return payload;
 }
 
 std::optional<std::string> readText(const std::filesystem::path &path)
@@ -225,12 +396,17 @@ bool isValidEnvelope(
 
 std::string serializeProfileEnvelope(
     const ProfileState &profile,
-    std::string_view contentVersion)
+    std::string_view contentVersion,
+    std::uint32_t schemaVersion)
 {
-    Json payload = profilePayload(profile);
+    if (schemaVersion != 1 && schemaVersion != 2)
+    {
+        throw std::invalid_argument{"unsupported save schema version"};
+    }
+    Json payload = profilePayload(profile, schemaVersion);
     const std::string payloadText = payload.dump();
     Json envelope{
-        {"schema_version", 1},
+        {"schema_version", schemaVersion},
         {"profile_id", profile.profileId},
         {"revision", profile.revision},
         {"content_version", contentVersion},
@@ -246,11 +422,19 @@ SaveLoadResult deserializeProfileEnvelope(
     try
     {
         const Json envelope = Json::parse(text.begin(), text.end());
-        if (!envelope.is_object() ||
-            envelope.at("schema_version").get<int>() != 1 ||
-            !envelope.at("content_version").is_string() ||
-            envelope.at("content_version").get<std::string>() !=
-                content.contentVersion())
+        if (!envelope.is_object() || !envelope.at("schema_version").is_number_unsigned() ||
+            !envelope.at("content_version").is_string())
+        {
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
+        }
+        const std::uint32_t schemaVersion =
+            envelope.at("schema_version").get<std::uint32_t>();
+        const std::string contentVersion =
+            envelope.at("content_version").get<std::string>();
+        const bool legacyV1Content = schemaVersion == 1 &&
+            contentVersion == "core-alpha-content-1";
+        if ((schemaVersion != 1 && schemaVersion != 2) ||
+            (contentVersion != content.contentVersion() && !legacyV1Content))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
         }
@@ -275,6 +459,9 @@ SaveLoadResult deserializeProfileEnvelope(
             return {SaveLoadStatus::Failed, std::nullopt, "save header does not match payload"};
         }
         profile.tutorial = *tutorial;
+        profile.currentHealth = schemaVersion >= 2
+            ? payload.at("current_health").get<int>()
+            : 100;
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
 
@@ -284,6 +471,19 @@ SaveLoadResult deserializeProfileEnvelope(
             if (value.empty() || !profile.committedTransactions.insert(value).second)
             {
                 return {SaveLoadStatus::Failed, std::nullopt, "transaction history is invalid"};
+            }
+        }
+
+        if (schemaVersion >= 2)
+        {
+            for (const Json &settlement : payload.at("committed_settlements"))
+            {
+                const std::string value = settlement.get<std::string>();
+                if (value.empty() || !profile.committedSettlements.insert(value).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "settlement history is invalid"};
+                }
             }
         }
 
@@ -310,6 +510,18 @@ SaveLoadResult deserializeProfileEnvelope(
                 if (asset.reliefBatchId->empty())
                 {
                     return {SaveLoadStatus::Failed, std::nullopt, "relief batch ID is empty"};
+                }
+            }
+            if (schemaVersion >= 2)
+            {
+                for (const Json &round : value.at("magazine_rounds"))
+                {
+                    asset.magazineRounds.push_back(parseRound(round));
+                }
+                if (!value.at("chambered_round").is_null())
+                {
+                    asset.chamberedRound =
+                        parseRound(value.at("chambered_round"));
                 }
             }
 
@@ -353,6 +565,18 @@ SaveLoadResult deserializeProfileEnvelope(
                         origin.at("x").get<int>(),
                         origin.at("y").get<int>()}};
             }
+            else if (schemaVersion >= 2 &&
+                     locationType == "installed_magazine")
+            {
+                asset.location = InstalledMagazineLocation{
+                    location.at("weapon_asset_id").get<AssetInstanceId>()};
+            }
+            else if (schemaVersion >= 2 && locationType == "raid_ground")
+            {
+                asset.location = RaidGroundAssetLocation{
+                    location.at("raid_id").get<std::string>(),
+                    location.at("loot_slot_index").get<std::uint32_t>()};
+            }
             else
             {
                 return {SaveLoadStatus::Failed, std::nullopt, "asset location type is invalid"};
@@ -362,6 +586,69 @@ SaveLoadResult deserializeProfileEnvelope(
             {
                 return {SaveLoadStatus::Failed, std::nullopt, "asset ID is duplicated"};
             }
+        }
+
+        if (schemaVersion >= 2 && !payload.at("pending_raid").is_null())
+        {
+            const Json &value = payload.at("pending_raid");
+            PendingRaidSnapshot raid;
+            raid.raidId = value.at("raid_id").get<std::string>();
+            raid.settlementId = value.at("settlement_id").get<std::string>();
+            raid.rulesVersion = value.at("rules_version").get<std::string>();
+            raid.mapDefinitionId = MapDefinitionId{
+                value.at("map_definition_id").get<std::string>()};
+            raid.seed = value.at("seed").get<std::uint64_t>();
+            raid.spawnExtractionPairId =
+                value.at("spawn_extraction_pair_id").get<std::string>();
+            raid.enemyDeploymentId = EnemyDeploymentDefinitionId{
+                value.at("enemy_deployment_id").get<std::string>()};
+            raid.playerSpawn = parseVector(value.at("player_spawn"));
+            raid.extractionPoint = ContentRect{
+                parseVector(value.at("extraction_point").at("position")),
+                parseVector(value.at("extraction_point").at("size"))};
+            for (const Json &enemy : value.at("enemies"))
+            {
+                raid.enemies.push_back(RaidEnemySnapshot{
+                    parseVector(enemy.at("position")),
+                    parseVector(enemy.at("size")),
+                    enemy.at("maximum_health").get<int>()});
+            }
+            for (const Json &entry : value.at("loot"))
+            {
+                raid.loot.push_back(RaidLootSnapshot{
+                    entry.at("asset_id").get<AssetInstanceId>(),
+                    entry.at("slot_index").get<std::uint32_t>(),
+                    parseVector(entry.at("position"))});
+            }
+            raid.carriedRootAssetIds =
+                value.at("carried_root_asset_ids")
+                    .get<std::vector<AssetInstanceId>>();
+            raid.startingHealth = value.at("starting_health").get<int>();
+            profile.pendingRaid = std::move(raid);
+        }
+
+        if (schemaVersion >= 2 && !payload.at("last_raid_result").is_null())
+        {
+            const Json &value = payload.at("last_raid_result");
+            const auto outcome = parseRaidOutcome(
+                value.at("outcome").get<std::string>());
+            if (!outcome.has_value())
+            {
+                return {SaveLoadStatus::Failed, std::nullopt,
+                        "Raid result outcome is invalid"};
+            }
+            LastRaidResult result;
+            result.settlementId =
+                value.at("settlement_id").get<std::string>();
+            result.outcome = *outcome;
+            for (const Json &id :
+                 value.at("returned_item_definition_ids"))
+            {
+                result.returnedItemDefinitionIds.emplace_back(
+                    id.get<std::string>());
+            }
+            result.currencyDelta = value.at("currency_delta").get<std::int64_t>();
+            profile.lastRaidResult = std::move(result);
         }
 
         const ProfileValidationResult validation =

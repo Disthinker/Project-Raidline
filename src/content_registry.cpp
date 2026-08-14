@@ -593,8 +593,7 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredPositiveUint(entryValue, "maximum_quantity")};
                 const ItemDefinition &item =
                     registry.items_[itemIndex->second];
-                if (!item.visualAssetsPublished ||
-                    entry.minimumQuantity > entry.maximumQuantity ||
+                if (entry.minimumQuantity > entry.maximumQuantity ||
                     entry.maximumQuantity > item.maxStackSize)
                 {
                     fail("loot entry violates its item definition");
@@ -773,6 +772,49 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map references an unknown loot table or deployment");
             }
 
+            if (mapValue.contains("spawn_extraction_pairs"))
+            {
+                for (const Json &pairValue :
+                     requiredArray(mapValue, "spawn_extraction_pairs"))
+                {
+                    SpawnExtractionPairDefinition pair;
+                    pair.id = requiredString(pairValue, "id");
+                    pair.playerSpawn = parseVec2(pairValue, "player_spawn");
+                    pair.extractionPoint =
+                        parseRect(pairValue, "extraction_point");
+                    definition.spawnExtractionPairs.push_back(
+                        std::move(pair));
+                }
+                for (const Json &deploymentValue :
+                     requiredArray(mapValue, "raid_enemy_deployments"))
+                {
+                    EnemyDeploymentDefinitionId id{
+                        deploymentValue.get<std::string>()};
+                    if (!registry.enemyDeploymentIndex_.contains(id))
+                    {
+                        fail("Alpha map references an unknown deployment");
+                    }
+                    definition.raidEnemyDeploymentIds.push_back(
+                        std::move(id));
+                }
+                for (const Json &slotValue :
+                     requiredArray(mapValue, "raid_loot_slots"))
+                {
+                    definition.raidLootSlots.push_back(
+                        RaidLootSlotDefinition{
+                            requiredString(slotValue, "id"),
+                            requiredString(slotValue, "route"),
+                            parseVec2(slotValue, "position")});
+                }
+                definition.raidLootTableId = LootTableDefinitionId{
+                    requiredString(mapValue, "raid_loot_table")};
+                if (!registry.lootTableIndex_.contains(
+                        definition.raidLootTableId))
+                {
+                    fail("Alpha map references an unknown Raid Loot table");
+                }
+            }
+
             const ContentRect worldBounds{
                 Vec2{},
                 definition.worldSize};
@@ -800,6 +842,68 @@ ContentRegistry ContentRegistry::fromJson(
                         definition.walkableBounds))
                 {
                     fail("map ground item is outside walkable bounds");
+                }
+            }
+
+
+            if (!definition.spawnExtractionPairs.empty())
+            {
+                if (definition.spawnExtractionPairs.size() != 3 ||
+                    definition.raidEnemyDeploymentIds.size() != 3 ||
+                    definition.raidLootSlots.size() < 8 ||
+                    definition.raidLootSlots.size() > 12)
+                {
+                    fail("Alpha map configuration counts are invalid");
+                }
+                std::set<std::string> pairIds;
+                for (const SpawnExtractionPairDefinition &pair :
+                     definition.spawnExtractionPairs)
+                {
+                    if (pair.id.empty() || !pairIds.insert(pair.id).second ||
+                        !pointInside(pair.playerSpawn, definition.walkableBounds) ||
+                        !rectInside(pair.extractionPoint, definition.walkableBounds))
+                    {
+                        fail("Alpha spawn/extraction pair is invalid");
+                    }
+                }
+                std::set<std::string> routes;
+                std::set<std::string> slotIds;
+                for (const RaidLootSlotDefinition &slot :
+                     definition.raidLootSlots)
+                {
+                    routes.insert(slot.route);
+                    if (slot.id.empty() || !slotIds.insert(slot.id).second ||
+                        !pointInside(slot.position, definition.walkableBounds))
+                    {
+                        fail("Alpha Raid Loot slot is invalid");
+                    }
+                }
+                if (!routes.contains("central") ||
+                    !routes.contains("perimeter") ||
+                    !routes.contains("resource"))
+                {
+                    fail("Alpha Raid Loot slots do not cover every route");
+                }
+                for (const EnemyDeploymentDefinitionId &id :
+                     definition.raidEnemyDeploymentIds)
+                {
+                    const auto &alphaDeployment =
+                        registry.enemyDeployment(id);
+                    if (alphaDeployment.enemies.size() < 4 ||
+                        alphaDeployment.enemies.size() > 6)
+                    {
+                        fail("Alpha enemy deployment must contain 4 to 6 enemies");
+                    }
+                    for (const EnemySpawnDefinition &enemy :
+                         alphaDeployment.enemies)
+                    {
+                        if (!rectInside(
+                                ContentRect{enemy.position, enemy.size},
+                                definition.walkableBounds))
+                        {
+                            fail("Alpha enemy deployment is outside map bounds");
+                        }
+                    }
                 }
             }
 

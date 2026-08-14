@@ -56,9 +56,40 @@ struct EquippedAssetLocation
         const EquippedAssetLocation &) = default;
 };
 
+struct InstalledMagazineLocation
+{
+    AssetInstanceId weaponAssetId{};
+
+    friend bool operator==(
+        const InstalledMagazineLocation &,
+        const InstalledMagazineLocation &) = default;
+};
+
+struct RaidGroundAssetLocation
+{
+    std::string raidId;
+    std::uint32_t lootSlotIndex{};
+
+    friend bool operator==(
+        const RaidGroundAssetLocation &,
+        const RaidGroundAssetLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
-    EquippedAssetLocation>;
+    EquippedAssetLocation,
+    InstalledMagazineLocation,
+    RaidGroundAssetLocation>;
+
+struct MagazineRoundRecord
+{
+    ItemDefinitionId definitionId;
+    std::optional<std::string> reliefBatchId;
+
+    friend bool operator==(
+        const MagazineRoundRecord &,
+        const MagazineRoundRecord &) = default;
+};
 
 struct AssetRecord
 {
@@ -68,6 +99,8 @@ struct AssetRecord
     ItemOrientation orientation{ItemOrientation::Degrees0};
     std::uint32_t remainingCharges{};
     std::optional<std::string> reliefBatchId;
+    std::vector<MagazineRoundRecord> magazineRounds;
+    std::optional<MagazineRoundRecord> chamberedRound;
     AssetLocation location{StoredAssetLocation{
         ProfileContainerId::stash(),
         GridPosition{}}};
@@ -109,14 +142,65 @@ enum class TutorialProgress
     Complete
 };
 
+enum class RaidResultOutcome
+{
+    Extracted,
+    PlayerDead,
+    ActiveQuit,
+    AbnormalQuit
+};
+
+struct RaidEnemySnapshot
+{
+    Vec2 position{};
+    Vec2 size{50.0F, 50.0F};
+    int maximumHealth{};
+};
+
+struct RaidLootSnapshot
+{
+    AssetInstanceId assetId{};
+    std::uint32_t slotIndex{};
+    Vec2 position{};
+};
+
+struct PendingRaidSnapshot
+{
+    std::string raidId;
+    std::string settlementId;
+    std::string rulesVersion;
+    MapDefinitionId mapDefinitionId;
+    std::uint64_t seed{};
+    std::string spawnExtractionPairId;
+    EnemyDeploymentDefinitionId enemyDeploymentId;
+    Vec2 playerSpawn{};
+    ContentRect extractionPoint;
+    std::vector<RaidEnemySnapshot> enemies;
+    std::vector<RaidLootSnapshot> loot;
+    std::vector<AssetInstanceId> carriedRootAssetIds;
+    int startingHealth{100};
+};
+
+struct LastRaidResult
+{
+    std::string settlementId;
+    RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
+    std::vector<ItemDefinitionId> returnedItemDefinitionIds;
+    std::int64_t currencyDelta{};
+};
+
 struct ProfileState
 {
     std::string profileId;
     ProfileRevision revision{1};
     std::uint32_t currency{};
     TutorialProgress tutorial{TutorialProgress::FindStorage};
+    int currentHealth{100};
     AssetRegistry assets;
     std::set<std::string> committedTransactions;
+    std::set<std::string> committedSettlements;
+    std::optional<PendingRaidSnapshot> pendingRaid;
+    std::optional<LastRaidResult> lastRaidResult;
 };
 
 struct ProfileValidationResult
@@ -148,6 +232,17 @@ struct ProfileValidationResult
 [[nodiscard]] std::optional<AssetInstanceId> equippedAsset(
     const ProfileState &profile,
     EquipmentSlotKind slot) noexcept;
+
+[[nodiscard]] std::optional<AssetInstanceId> installedMagazine(
+    const ProfileState &profile,
+    AssetInstanceId weaponAssetId) noexcept;
+
+[[nodiscard]] bool assetIsCarried(
+    const ProfileState &profile,
+    AssetInstanceId instanceId) noexcept;
+
+[[nodiscard]] std::vector<AssetInstanceId> carriedAssetIds(
+    const ProfileState &profile);
 
 [[nodiscard]] std::optional<AssetInstanceId> profileAssetAtCell(
     const ProfileState &profile,
