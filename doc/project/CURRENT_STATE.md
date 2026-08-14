@@ -4,9 +4,9 @@
 
 ## Git 与交付基线
 
-- `origin/main@c7a3931` 已通过 PR #55 接受 Core Extraction Alpha Slice 0；精确 feature head 为 `ef21672`，范围检测、Windows、Ubuntu CI 与用户真实窗口清单全部通过。
-- 当前开发分支：`codex/rl-inv-003-ammo-stack-merge`。原实现 head `228ac7b` 已完成独立 CI 与用户真实窗口验收，现正以 merge commit 吸收最新 `origin/main` 并复验组合基线。
-- PR #54 的实现、最新主线组合复验、用户验收与精确 merge head `0523b3d` CI 全部通过；最终纯文档收口 head 通过门禁后转 Ready，未经明确授权不合并。
+- `origin/main@5bbddc3` 已包含 PR #55 Core Extraction Alpha Slice 0 与 PR #54 RL-INV-003；两项精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
+- 当前开发分支：`codex/build-module-foundation`，从干净的 `origin/main@5bbddc3` 创建，只迁移构建所有权，不改变玩家行为。
+- Build Module Foundation 本地已建立四个生产库、测试生产库链接和配置期模块守卫；等待提交、PR 与精确 head CI。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
 - 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
 
@@ -15,6 +15,7 @@
 - PR #55 精确 head `ef21672` 本机注册 550 个 CTest，550/550 通过；范围检测、Windows 和 Ubuntu CI 全部成功。
 - PR #54 原实现 head `228ac7b` 在其旧基线上完成 Windows Debug 全目标构建，focused 45/45、全量 552/552、范围检测、Windows 和 Ubuntu CI 全部成功。
 - PR #54 与 `origin/main@c7a3931` 的组合基线已重新配置并完成 55 步增量全目标构建；精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过，精确 merge head `0523b3d` 三项 CI 全部成功。
+- Build Module Foundation 在 `origin/main@5bbddc3` 上重新配置并完成 68 步全目标构建；31/31 个非 main 业务 `.cpp` 各生成一条生产库编译规则，focused 133/133、全量 558/558 通过。
 - Windows 工具链：Visual Studio Developer Shell 17.13.6，x64 host/x64 target，Ninja，Debug，`x64-windows`，UTF-8。
 
 ## 当前产品里程碑
@@ -40,18 +41,19 @@
 - `ShotCommand → ShotResolution → HitResult` 窄边界；Projectile 仅为 GameplayWorld 内部 V0 适配器，App 读取只读表现投影。
 - 产品治理、skills、完整版目标架构、路线、ExecPlan 和 DoD 已转为垂直切片交付导向。
 
-## RL-INV-003 当前改动
+## RL-INV-003 已接受合同
 
 - 普通整堆拖拽使用统一的 `canPlaceWholeItemAt` 查询与 `tryPlaceWholeItemAt` 命令，App 预览与释放提交不再分叉。
 - 空目标保持既有 transform/transfer；同定义未满堆最多补到定义上限 60，完全吸收时移除源，容量不足时源以原稳定 ID、位置和方向保留余量。
 - 满堆、定义不匹配、不可堆叠、缺失源和跨容器稳定 ID 冲突均拒绝且不修改状态或 ID 高水位。
 - Ctrl/Shift 数量拖拽继续使用精确数量原子合同，不允许隐式部分提交。
 - 用户已于 2026-08-11 完成同/跨容器、溢出、失败不变和数量拖拽固定 1–5 清单，报告全部通过。
+- PR #54 已于 2026-08-14 以 merge commit `5bbddc3` 合入 main。
 
 ## 尚未完成
 
-- PR #54：完成最终纯文档 head 门禁、转 Ready 与接受/合入。
-- 架构迁移：等待 PR #54 进入 `origin/main` 后，从最新主线依次建立独立迁移分支。
+- Build Module Foundation：完成提交、PR 与精确 head Windows/Ubuntu CI，并在用户授权后合入。
+- 后续架构迁移：Content Registry v1、Profile Asset Registry。
 - Slice 1–4 的全部玩家功能。
 - Week29 代码反馈的独立整理。
 - 正式攻击动画及所有新美术/音频生产仍暂停。

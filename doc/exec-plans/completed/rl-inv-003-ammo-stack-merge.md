@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete — latest-main local/CI revalidation and manual acceptance passed; awaiting PR acceptance and merge
+Complete — latest-main local/CI revalidation and manual acceptance passed; PR #54 merged as `5bbddc3`
 
 ## Baseline
 
@@ -82,4 +82,4 @@ Result: 2026-08-11，用户确认以下 1–5 项真实 Windows Debug 窗口验�
 - [x] 以 merge commit 吸收 `origin/main@c7a3931`，保留新版产品架构并只带回 RL-INV-003 的窄库存不变量。
 - [x] 完成组合基线本地复验：重新配置、55 步增量全目标构建、精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558。
 - [x] 精确 merge head `0523b3d` 的范围检测、Windows 和 Ubuntu CI 全部通过。
-- [ ] PR #54 接受并合入 main 后关闭 RL-INV-003，并将本计划归档。
+- [x] PR #54 已于 2026-08-14 接受并以 merge commit `5bbddc3` 合入 main；RL-INV-003 关闭并归档本计划。

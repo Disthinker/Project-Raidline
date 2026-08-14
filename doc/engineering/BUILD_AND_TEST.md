@@ -32,6 +32,8 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/rl-inv-003-ammo-stack-merge` 吸收 `origin/main@c7a3931` 后重新配置并完成 55 步增量全目标构建；RL-INV-003 精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过。精确 merge head `0523b3d` 的范围检测、Windows 和 Ubuntu CI 全部成功。
 
+`codex/build-module-foundation` 从 `origin/main@5bbddc3` 重新配置并完成 68 步全目标构建。四个生产库生成成功，31/31 个非 main 业务 `.cpp` 各有且仅有一条生产库编译规则；跨层 focused 133/133、全量 CTest 558/558 通过。该分支不改变可见行为，人工窗口验收不作为门禁；精确 head CI 尚待 PR 推送后完成。
+
 ## 按风险选择证据
 
 - 修改纯领域类：构建对应测试目标，跑 focused tests，再跑全量 CTest。

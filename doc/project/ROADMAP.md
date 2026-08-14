@@ -12,11 +12,11 @@
 
 ## 架构迁移门槛
 
-PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组合复验、用户验收和精确 merge head CI，等待接受/合入。两者均进入主线后，先完成三项有当前消费者的架构迁移，再继续 Alpha 玩家功能：
+PR #55 与 PR #54 已进入 `origin/main@5bbddc3`。当前从该接受基线依次完成三项有消费者的架构迁移，再继续 Alpha 玩家功能：
 
 | 迁移 PR | 结果 | 行为要求 |
 | --- | --- | --- |
-| Build Module Foundation | 四个生产库目标，测试链接生产库 | V0 行为和测试不得减少 |
+| Build Module Foundation | 四个生产库目标，测试链接生产库 | 本地实现与 558/558 已通过，等待 PR/CI |
 | Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 不改变现有内容数量与手感 |
 | Profile Asset Registry | ProfileState、唯一 AssetRegistry、AssetLocation、revision | 旧 GameplayWorld 通过适配器保持可玩 |
 
@@ -24,8 +24,8 @@ PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组�
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | PR #55 已合入 `main@c7a3931` |
-| Slice 1 | 可步行 Base、可操作 Stash、三槽配装、重启保持 | Profile、AssetRegistry、Inventory/Equipment、Persistence | 等待 #54 与三项架构迁移 |
+| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | PR #55 已合入 main |
+| Slice 1 | 可步行 Base、可操作 Stash、三槽配装、重启保持 | Profile、AssetRegistry、Inventory/Equipment、Persistence | 等待三项架构迁移 |
 | Slice 2 | 真实弹匣/枪膛/弹药、100 HP、Medkit 与随身库存 | WeaponAmmo、Action、Health/Medical | 等待 Slice 1 |
 | Slice 3 | 一张固定图可搜索/战斗/撤离或全损，退出幂等结算 | MapDefinition、RaidSnapshot、Settlement | 等待 Slice 2 |
 | Slice 4 | 买卖、救济、连续多局和跨进程闭环 | Economy、Relief、完整产品验收 | 等待 Slice 3 |
@@ -45,7 +45,7 @@ PR #55 已进入 `origin/main@c7a3931`；PR #54 已通过该主线的本地组�
 
 ## 并行但不混写的分支
 
-- PR #54 `codex/rl-inv-003-ammo-stack-merge`：最新 main 本地 558/558、既有人工验收和精确 merge head CI 成功，等待接受/合入，仍保持独立库存修复范围。
+- `codex/build-module-foundation`：只迁移 CMake 构建所有权；不夹带内容、资产所有权或玩家功能。
 - `codex/week29-combat-feedback-and-attack-animation`：代码反馈与 fallback 已完成但无 PR、未进 main；正式攻击美术继续暂停。后续只允许独立整理代码部分，不能混入架构迁移。
 
 ## 产品级决策门槛
