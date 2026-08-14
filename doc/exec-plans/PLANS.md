@@ -16,3 +16,5 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 活动计划应能让接管者不依赖聊天历史继续工作。普通实现细节由开发主控决定；只有产品支柱、失败损失、商业模式、叙事主方向或显著范围扩张才升级给用户。
 
 当前总计划：`active/core-extraction-alpha.md`。
+
+当前实现计划：`active/core-alpha-persistent-base.md`。已完成的 Content Registry v1 计划归档在 `completed/content-registry-v1.md`。

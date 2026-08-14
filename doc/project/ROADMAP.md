@@ -2,33 +2,32 @@
 
 最后核对：2026-08-14。
 
-## 当前产品目标
+## 当前目标与交付节奏
 
-当前里程碑是 **Core Extraction Alpha**。唯一范围合同为外部 GDD 资料库的 `05_Core_Extraction_Alpha_首阶段功能规格.md`，执行计划见 `doc/exec-plans/active/core-extraction-alpha.md`。
+当前唯一产品目标是 **Core Extraction Alpha**。唯一范围合同为外部 GDD 的 `05_Core_Extraction_Alpha_首阶段功能规格.md`，总计划见 `doc/exec-plans/active/core-extraction-alpha.md`。
 
-路线以可玩的垂直切片组织，不再以 Week 编号作为产品里程碑。Week 1–28、Week29 和相关 handoff 保留为 V0 历史证据。
+路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
-正式产品技术边界固定为 Windows PC、键鼠优先、纯单机离线。代码保持 Linux 编译和领域测试兼容性，但当前不承诺 Linux 同步发行、联机、主机平台或公开 Mod 支持。长期采用模块化单体，完整结构见 `doc/architecture/ARCHITECTURE.md`。
+技术边界保持 Windows PC、键鼠优先、纯单机离线、C++20/SDL3 模块化单体；Linux 只承担编译与 SDL 无关回归。当前不引入联机、主机平台、公开 Mod、ECS、服务定位器或通用事件总线。
 
-## 架构迁移门槛
+## 已接受架构基线
 
-PR #55、PR #54 与 PR #56 已进入 `origin/main@1837928`。当前从该接受基线继续完成后两项有消费者的架构迁移，再进入 Alpha 玩家功能：
+| 能力 | 接受结果 |
+| --- | --- |
+| Core Extraction Alpha Slice 0 | PR #55 已进入 main |
+| RL-INV-003 | PR #54 已进入 main |
+| Build Module Foundation | PR #56 / merge commit `1837928` |
+| Content Registry v1 | PR #57 / merge commit `14cf79b` |
 
-| 迁移 PR | 结果 | 行为要求 |
-| --- | --- | --- |
-| Build Module Foundation | 四个生产库目标，测试链接生产库 | PR #56 已以 merge commit `1837928` 进入 main |
-| Content Registry v1 | 强类型 DefinitionId、JSON 注册表、首批定义迁移 | 本地 134/134 focused、574/574 全量通过，等待 PR 精确 head CI；行为不变 |
-| Profile Asset Registry | ProfileState、唯一 AssetRegistry、AssetLocation、revision | 旧 GameplayWorld 通过适配器保持可玩 |
+## Core Extraction Alpha 宏切片
 
-## Core Extraction Alpha
-
-| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| 宏切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Slice 0 | V0 行为保持可运行，产品范围与工程合同冻结 | 治理规则、目标架构、射击窄边界、测试骨架、Timeout 退场计划 | PR #55 已合入 main |
-| Slice 1 | 可步行 Base、可操作 Stash、三槽配装、重启保持 | Profile、AssetRegistry、Inventory/Equipment、Persistence | 等待三项架构迁移 |
-| Slice 2 | 真实弹匣/枪膛/弹药、100 HP、Medkit 与随身库存 | WeaponAmmo、Action、Health/Medical | 等待 Slice 1 |
-| Slice 3 | 一张固定图可搜索/战斗/撤离或全损，退出幂等结算 | MapDefinition、RaidSnapshot、Settlement | 等待 Slice 2 |
-| Slice 4 | 买卖、救济、连续多局和跨进程闭环 | Economy、Relief、完整产品验收 | 等待 Slice 3 |
+| Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | `codex/core-alpha-persistent-base` 开发中 |
+| Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement | 等待 Persistent Base 接受 |
+| Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置和完整产品验收 | 稳定性、恢复、平衡、发布证据 | 等待 Extraction Loop |
+
+Persistent Base 保持 V0 Raid 为隔离适配器，不复制 Profile 资产；Extraction Loop 一次性接入真实 Deploy、随身资产与 Settlement，并同步移除 180 秒硬失败和 3 HP 旧合同。
 
 ## Alpha 之后的完整版阶段
 
@@ -36,18 +35,13 @@ PR #55、PR #54 与 PR #56 已进入 `origin/main@1837928`。当前从该接受�
 | --- | --- | --- |
 | Survival Loadout | 增加真实配装、损耗与医疗取舍 | 其余装备槽、防具、流血/疼痛、耐久/故障、维修、组件、战术电子 |
 | Raid Pressure & Variety | 增加路线、地图与持续压力差异 | 多固定地图、高危、特殊撤离、情报、尸体、更多敌人；随机地图后置 |
-| Base Growth | 把带回物转化为长期能力和人群选择 | 先建立唯一 WorldClock，再加入商人、任务、制造、设施、人口、士气 |
+| Base Growth | 把带回物转化为长期能力和人群选择 | 唯一 WorldClock、商人、任务、制造、设施、人口、士气 |
 | Regional Campaign | 形成空间战略和周期危机 | 地点、旅行、迁徙、哨所、战斗小组、外围行动、尸潮攻城 |
 | Content Beta | 形成正式内容体量和叙事路线 | 派系、敌人生态、主线、系统商店、随机地图候选；每项另有范围合同 |
-| Release Candidate | 形成可发布 Windows 产品 | 正式美术/音频、性能、可访问性、本地化、打包、诊断和存档迁移演练 |
+| Release Candidate | 形成可发布 Windows 产品 | 正式美术/音频、性能、可访问性、本地化、打包、诊断和迁移演练 |
 
-阶段只表达依赖顺序；每阶段仍拆成独立、可运行、可测试、可回滚的垂直切片。
+## 不混写边界
 
-## 并行但不混写的分支
-
-- `codex/content-registry-v1`：只迁移版本化内容定义与旧枚举适配；不夹带资产所有权、存档或玩家功能。
-- `codex/week29-combat-feedback-and-attack-animation`：代码反馈与 fallback 已完成但无 PR、未进 main；正式攻击美术继续暂停。后续只允许独立整理代码部分，不能混入架构迁移。
-
-## 产品级决策门槛
-
-Alpha 范围内普通架构、数值、交互和验收由开发主控直接收口。只有改变四个产品支柱、失败损失、商业模式、叙事主方向或显著扩大范围时才请求用户决策。
+- `codex/core-alpha-persistent-base` 只交付 Base 长期资产闭环；不提前实现 WeaponAmmo、医疗动作、真实 Raid 部署和结算。
+- Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
+- Alpha 内普通架构、数值、交互和验收由开发主控收口；只有改变产品支柱、失败损失、商业模式、叙事方向或显著扩大范围才请求用户决策。

@@ -43,7 +43,7 @@ Project_Raidline.exe
 ## GameRuntime、GameSession 与活动运行时
 
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
-- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和一个封闭的 `ActiveActivity`。
+- `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和一个封闭的 `ActiveActivity`。Persistent Base 已把 Profile 与 BaseRuntime 接入；旧 `GameplayWorld` 仍作为预构造 V0 adapter 存活到 Extraction Loop，不得读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
 - `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。长期 BaseState、设施、人口和日程在真正有消费者时进入 ProfileState 的独立子领域。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
@@ -51,23 +51,19 @@ Project_Raidline.exe
 
 ## ProfileState 与资产所有权
 
-`ProfileState` 最终聚合：
+`ProfileState` 当前已聚合：
 
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
-- 当前启用的 Player、Equipment、Economy、Knowledge、Objective、Base 与 World 子状态；
-- 引导标志、已提交事务凭证和 pending activity；
-- 最近已提交的 Deploy、Settlement、交易与奖励幂等记录。
+- 三槽 Equipment、Economy、引导标志和已提交事务凭证；
+- 后续由 Extraction Loop 加入的 pending activity 与 Deploy/Settlement 幂等记录。
 
-Alpha 只实例化资产、三槽装备、货币/救济、引导和 pending Raid 所需字段。未启用的长期系统通过后续版本迁移加入。
+Persistent Base 已实例化资产、三槽装备、货币/救济和引导。pending Raid 只在 Extraction Loop 有真实消费者时进入 schema；未启用的长期系统通过后续显式迁移加入。
 
 `AssetRegistry` 使用 `AssetInstanceId -> AssetRecord` 唯一拥有真实物品。Stash、格子容器、装备和场景只保存实例 ID、位置及布局，不拥有第二份实例对象。
 
-`AssetLocation` 是封闭值类型，按实际消费者逐步加入：
+`AssetLocation` 是封闭值类型。当前已启用 Stash、装备槽和容器实例分区；以下 Raid 位置按消费者逐步加入：
 
-- Stash 或根级存储区中的格子位置；
-- 装备槽；
-- 容器实例的稳定分区、格位与方向；
 - 武器安装点；
 - 动作暂持；
 - Raid 地面位置；
@@ -135,25 +131,25 @@ WeaponFire/Ammo
 
 - 内容定义目标格式为版本化 JSON，并由 `nlohmann_json` 读取。
 - 定义 ID 使用稳定命名字符串，例如 `item.weapon.basic_rifle`；运行时可以缓存稠密索引，存档永远保存字符串 ID。
-- 第一批迁移现有物品、Loot、敌人部署和首图常量；旧枚举适配器只保留一个迁移周期。
+- 已迁移 V0 物品、Alpha Base 物品/容器/经济能力、Loot、敌人部署和首图常量；旧枚举只隔离服务尚未迁移的 V0 Raid。
 - 内容加载验证重复 ID、非法引用、容器循环、价格套利、地图连通性和缺失发布资源。
 - 发行内容不承诺热更新或公开 Mod API；调试重载不能改变已经开始的 RaidSnapshot。
 - 显示文本使用定义元数据或未来本地化 key，不参与领域分支。
 
-Content Registry v1 的当前落地边界：
+Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是现有五项物品、默认柜体 Loot、默认三敌人部署和 V0 首图常量的单一内容输入；CMake 配置时把发行 JSON 嵌入只读生产代码，运行时不在帧循环读取文件。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha 弹匣/胸挂/背包/Medkit/Loot、装备槽、容器分区、价格、默认柜体 Loot、默认敌人部署和 V0 首图常量的单一内容输入；CMake 配置时嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
-- 容器循环与价格套利仍是长期加载门槛，但对应定义域尚无 Alpha 消费者，因此不在 v1 schema 中创建空字段；分别随容器和经济内容切片加入。
-- `ItemId`、`ItemInstance` 和纹理数组当前通过显式映射消费稳定 ID，只允许存续到下一项 Profile Asset Registry 迁移，不允许成为新内容扩展点。
+- 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
+- `ItemId`、V0 `ItemInstance` 和纹理数组只允许存在于隔离旧 Raid；新 Profile/存档只保存稳定 `ItemDefinitionId`。Extraction Loop 迁移全部 Raid 消费者后删除旧枚举。
 - Windows 内置 vcpkg 的旧 MSYS2 pkg-config 下载已失效；仓库提供只安装官方 3.12.0 单头文件和 CMake target 的 `nlohmann-json` overlay，使 Windows/Ubuntu 使用同一锁定依赖而不更新整套工具链。
 
 ## 存档与平台文件
 
-- 第一个跨进程正式存档是 schema v1；当前 V0 没有需要兼容的正式玩家存档。
+- 第一个跨进程正式存档 schema v1 已由 Persistent Base 落地；当前 V0 没有需要兼容的正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
-- 保存流程：写临时文件、刷新、回读并完整校验、把当前有效主档滚动为安全备份、原子替换主档。
+- 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
 - 设置与档案分文件保存。Steam 云存档以后只同步本地档案文件，不进入领域模型。
 - 迁移只能逐版本执行；失败时保留原文件并尝试最近有效备份。未知定义、重复实例 ID、坏引用和高水位倒退均拒绝加载。
@@ -161,12 +157,12 @@ Content Registry v1 的当前落地边界：
 
 ## 迁移顺序
 
-依赖 PR #55 与 #54 均进入 `origin/main` 后，按以下独立 PR 推进：
+当前迁移按玩家结果收束为：
 
 1. `codex/build-module-foundation`：已由 PR #56 进入 main，建立四个库目标并消除重复业务源码编译。
-2. `codex/content-registry-v1`：本地实现强类型 DefinitionId、JSON ContentRegistry 和首批定义迁移，等待 PR 精确 head CI/接受。
-3. `codex/profile-asset-registry`：ProfileState、AssetRegistry、AssetLocation、revision 与库存 ID 布局迁移。
-4. `codex/core-alpha-base-persistence`：可步行 Base、三入口、三槽配装、新存档和 schema v1。
-5. 继续按 Weapon/Medical、Raid/Settlement、Economy/Relief 三个 Alpha 垂直切片交付。
+2. `codex/content-registry-v1`：已由 PR #57 以 merge commit `14cf79b` 进入 main。
+3. `codex/core-alpha-persistent-base`：合并 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1，当前开发中。
+4. `codex/core-alpha-extraction-loop`：一次接入 WeaponAmmo、Medical、RaidSnapshot、无硬时限和幂等 Settlement，并删除 V0 资产枚举适配器。
+5. `codex/core-alpha-hardening`：连续多局、异常退出、损坏恢复、平衡和 Alpha 完整验收。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

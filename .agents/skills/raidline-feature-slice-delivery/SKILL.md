@@ -16,10 +16,11 @@ Read the active scope contract and ExecPlan. State the player outcome, owned sta
 - Query before command; make multi-owner transitions atomic and non-mutating on failure.
 - Add only abstractions with a current slice consumer.
 - Preserve excluded systems as documented boundaries, not empty runtime frameworks.
+- Prefer one larger player-result PR over a chain of architecture-only PRs when the migrations share the same accepted baseline and direct consumer. Preserve reviewability through domain/service/client commits and explicit rollback points.
 
 ## Verify continuously
 
-Run focused tests after each domain change, rebuild affected targets after header/layout changes, then run full CTest. Perform the ExecPlan's visible player-flow checks before handoff.
+Run focused tests after each domain change, rebuild affected targets after header/layout changes, then run full CTest and exact-head CI. Put the consolidated visible player-flow checklist last for the user; do not launch the game on the user's behalf.
 
 ## Hand off
 

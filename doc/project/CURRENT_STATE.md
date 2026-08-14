@@ -1,69 +1,63 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-14。
+最后核对：2026-08-15。
 
 ## Git 与交付基线
 
-- `origin/main@1837928` 已包含 PR #55 Core Extraction Alpha Slice 0、PR #54 RL-INV-003 与 PR #56 Build Module Foundation；对应精确 feature head 的范围检测、Windows、Ubuntu CI 及适用用户真实窗口清单全部通过。
-- 当前开发分支：`codex/content-registry-v1`，从干净的 `origin/main@1837928` 创建，只迁移内容定义，不改变玩家行为。
-- Content Registry v1 已建立强类型定义 ID、不可变 JSON Registry、首批内容迁移与过渡枚举适配器；Windows Debug 70 步构建、focused 134/134、全量 574/574 通过。Draft PR #57 实现/初始证据 head `3a12385` 三项 CI 成功，等待最终证据 head 门禁。
-- Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main，GitHub 无对应 PR。
-- 正式 Grab/Scratch/Bite 攻击图像未生成、未发布、未接入；`art/work/enemy_default_attacks_v1` 与 runtime 攻击资产不存在，美术生产保持暂停。
-
-## 已验证构建基线
-
-- PR #55 精确 head `ef21672` 本机注册 550 个 CTest，550/550 通过；范围检测、Windows 和 Ubuntu CI 全部成功。
-- PR #54 原实现 head `228ac7b` 在其旧基线上完成 Windows Debug 全目标构建，focused 45/45、全量 552/552、范围检测、Windows 和 Ubuntu CI 全部成功。
-- PR #54 与 `origin/main@c7a3931` 的组合基线已重新配置并完成 55 步增量全目标构建；精确新增行为 8/8、广义库存/鼠标 37/37、全量 CTest 558/558 通过，精确 merge head `0523b3d` 三项 CI 全部成功。
-- Build Module Foundation 在 `origin/main@5bbddc3` 上重新配置并完成 68 步全目标构建；31/31 个非 main 业务 `.cpp` 各生成一条生产库编译规则，focused 133/133、全量 558/558 通过。
-- PR #56 最终 feature head `ef66dbd` 的范围检测、Windows 和 Ubuntu CI 全部成功，并以 merge commit `1837928` 进入 main。
-- Content Registry v1 在 `origin/main@1837928` 上引入 `nlohmann-json` header-only overlay 后完成 Windows Debug 重新配置与 70 步构建；强类型 ID/Registry/发布资源/现有内容/玩法流程 focused 134/134、全量 574/574 通过。
-- Windows 工具链：Visual Studio Developer Shell 17.13.6，x64 host/x64 target，Ninja，Debug，`x64-windows`，UTF-8。
+- `origin/main@14cf79b` 已包含 PR #55 Core Extraction Alpha Slice 0、PR #54 RL-INV-003、PR #56 Build Module Foundation 和 PR #57 Content Registry v1；四项合入前的精确 feature head Windows/Ubuntu CI 均成功。
+- 当前开发分支：`codex/core-alpha-persistent-base`，从干净的 `origin/main@14cf79b` 创建。
+- 当前活动计划：`doc/exec-plans/active/core-alpha-persistent-base.md`。
+- Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-当前里程碑为 Core Extraction Alpha，唯一范围合同是外部 GDD 资料库的 `05_Core_Extraction_Alpha_首阶段功能规格.md`。活动总计划为 `doc/exec-plans/active/core-extraction-alpha.md`。
+当前唯一里程碑是 **Core Extraction Alpha**，唯一范围合同是外部 GDD 的 `05_Core_Extraction_Alpha_首阶段功能规格.md`。
 
-新路线采用 5 个垂直切片：
+为了扩大单次交付步幅，剩余 Alpha 由三个宏切片收束：
 
-1. Slice 0：基线、领域合同、测试骨架与旧 Timeout 退场策略，已进入 main。
-2. Slice 1：可步行 Base、Stash、三槽配装、Profile/Persistence。
-3. Slice 2：弹匣/枪膛/弹药、100 HP/Medkit、随身库存。
-4. Slice 3：单图快照、无硬时限、撤离与全损幂等结算。
-5. Slice 4：固定供应/回收、货币、救济、连续多局与跨进程验收。
+1. **Persistent Base**：Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复；当前开发中。
+2. **Extraction Loop**：弹匣/枪膛/弹药、100 HP/Medkit、随身库存、单图快照、无硬时限、撤离/全损幂等结算。
+3. **Alpha Hardening**：连续多局、异常退出、损坏恢复、三组配置、平衡与完整人工验收。
 
-进入玩家功能切片前先完成三项架构迁移：构建目标模块化、版本化内容注册表、Profile/AssetRegistry 唯一所有权。迁移只建立 Alpha 正在消费的完整版扩展边界，不提前实现世界时间、人口、任务、建设或其他长期系统。
+每个宏切片内部仍按领域、服务、客户端和证据形成可回滚提交，但不再为每个技术边界单独中断一次玩家功能交付。
 
-## 已完成 V0 与 Slice 0 能力
+## 已接受能力
 
-- 顶层 `MainMenu → Base → Raid → RaidResult → Base` 流程和进程内多局会话。
-- `ItemDefinition` 与 move-only `ItemInstance`、稳定 ID、高水位、格子库存、旋转、拆分、转移、搜索容器、地面拾取/丢弃。
-- 固定 Raid 场景、三秒撤离、成功/死亡/Timeout 结算、只读 Stash。
-- 当前射击、子步防穿透、敌人感知/协调、Grab/Scratch/Bite 代码攻击、粒子与代码反馈。
-- `ShotCommand → ShotResolution → HitResult` 窄边界；Projectile 仅为 GameplayWorld 内部 V0 适配器，App 读取只读表现投影。
-- 产品治理、skills、完整版目标架构、路线、ExecPlan 和 DoD 已转为垂直切片交付导向。
-- 四个生产库与唯一业务源码编译所有权已进入 main。
-- 当前五项物品、默认柜体 Loot、默认三敌人部署与 V0 首图常量已在开发分支迁入 `assets/content/v1/core.json`；Registry 构造期验证 schema、ID、引用、数值、连通边界与发布资源，旧 `ItemId` 只作为单周期适配器。
+- `MainMenu → Base → Raid → RaidResult → Base` V0 流程和进程内多局会话。
+- move-only V0 `ItemInstance`、稳定 ID、高水位、格子库存、旋转、拆分、转移、Loot、地面拾取/丢弃和三秒撤离。
+- RL-INV-003 同定义堆叠合并与 60 发上限已由 PR #54 进入 main，并完成人工验收。
+- `ShotCommand → ShotResolution → HitResult` 窄边界；Projectile 只作为 GameplayWorld 内部 V0 适配器。
+- 四个生产库、唯一业务源码编译所有权、强类型 DefinitionId、版本化 JSON ContentRegistry 和仓库本地 nlohmann-json overlay 已进入 main。
+- `assets/content/v1/core.json` 已是当前内容定义输入，Registry 验证 schema、稳定 ID、引用、数值、地图边界和发布资源。
 
-## RL-INV-003 已接受合同
+## Persistent Base 当前实现
 
-- 普通整堆拖拽使用统一的 `canPlaceWholeItemAt` 查询与 `tryPlaceWholeItemAt` 命令，App 预览与释放提交不再分叉。
-- 空目标保持既有 transform/transfer；同定义未满堆最多补到定义上限 60，完全吸收时移除源，容量不足时源以原稳定 ID、位置和方向保留余量。
-- 满堆、定义不匹配、不可堆叠、缺失源和跨容器稳定 ID 冲突均拒绝且不修改状态或 ID 高水位。
-- Ctrl/Shift 数量拖拽继续使用精确数量原子合同，不允许隐式部分提交。
-- 用户已于 2026-08-11 完成同/跨容器、溢出、失败不变和数量拖拽固定 1–5 清单，报告全部通过。
-- PR #54 已于 2026-08-14 以 merge commit `5bbddc3` 合入 main。
+- `ProfileState` 保存 profile ID、revision、货币、引导、事务凭证和稳定 ID 高水位。
+- `AssetRegistry` 唯一拥有 Base 资产；每个资产保存稳定实例 ID、DefinitionId、数量/次数、方向、救济批次和封闭位置。
+- Stash、装备槽和容器分区只由位置投影得到；主武器、胸挂、背包三个槽已启用，胸挂包含两个弹匣袋与两个通用袋，背包为 `5×4`。
+- 移动、原子交换、堆叠、Ctrl=1/Shift=一半的锁定数量拆分、装备/卸下及非空容器嵌套拒绝已进入统一命令边界。
+- 新存档初始资产、固定供应、低价回收、货币和条件式单份救济已经进入领域与 App。
+- schema v1 保存外壳、checksum、临时文件回读、安全备份、Windows 原子替换和损坏主档恢复已实现；App 使用 SDL 首选数据目录。
+- Base 已成为可行走安全空间，仓储配装、供应回收和 Raid 出击三个设施通过 E 交互；首次环境目标链随成功事务自动保存。
+- 旧 V0 Raid 暂时与 Profile registry 隔离，出击界面明确标记为 V0 adapter；真实资产 Deploy/Settlement 在 Extraction Loop 宏切片接入。
+
+## 当前自动化证据
+
+- Windows Debug 重新配置和 120 步完整构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
+- Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70 通过；存档恢复专项 9/9 通过。
+- 全量 CTest 601/601 通过，0 失败；精确 head Windows/Ubuntu CI 等待推送后的 Draft PR 验证。
+- 本分支不由开发代理启动游戏；集中真实窗口验收在自动化及 CI 后交给用户。
 
 ## 尚未完成
 
-- Content Registry v1：完成 PR #57 最终证据 head Windows/Ubuntu CI、转 Ready 并进入接受基线。
-- 后续架构迁移：Profile Asset Registry。
-- Slice 1–4 的全部玩家功能。
-- Week29 代码反馈的独立整理。
-- 正式攻击动画及所有新美术/音频生产仍暂停。
+- Persistent Base：完成提交、推送、Draft PR、精确 head CI 与用户真实窗口验收。
+- Extraction Loop 与 Alpha Hardening 全部工作。
+- V0 `ItemId`/`ItemInstance`、3 HP、180 秒 Timeout、无限弹和 V0 settlement 适配器退场。
+- Week29 代码反馈独立整理。
+- 正式攻击动画及所有新正式美术/音频生产。
 
 ## 明确停止扩展的 V0 合同
 
-- 3 HP、180 秒直接失败、只读 Stash、无限弹和 App 直读 Projectile 不是产品终态。
-- 在替代切片完成前保留它们的回归测试，但不得继续在这些旧边界上增加新系统。
+- 3 HP、180 秒直接失败、V0 只读 Stash、无限弹和 App/V0 对 Projectile 的兼容路径不是产品终态。
+- Persistent Base 不向 V0 Raid 复制真实资产；下一宏切片以显式 Deploy/Settlement 事务替换该隔离桥。
 - 普通命中最终不显示准星 X；爆头/弱点反馈等待命中部位领域合同，App 不得猜测。
