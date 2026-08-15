@@ -85,4 +85,6 @@
 - 2026-08-15：端到端提交 `66f3120` 接通 Base 弹药/医疗、持久 Deploy、Alpha GameplayWorld、真实射击消耗、换弹/治疗/Loot/随身库存、四类结算与 RaidResult；生产 Alpha 不再使用 V0 柜体、无限弹和 Timeout 结算。
 - 2026-08-15：补齐普通/救济弹堆隔离，以及 Raid Loot 合并或装填后历史快照仍合法的所有权规则。Windows Debug 构建成功，focused 17/17、全量 CTest 620/620 通过；开发代理未启动游戏。
 - 2026-08-15：Draft PR #59 创建；精确代码 head `864f12e` 的范围检测、Windows 与 Ubuntu CI 全部成功。
-- 待完成：用户执行第 8 节集中真实窗口验收；通过后记录证据并转为 Ready，合并仍需显式授权。
+- 2026-08-15：PR #59 head `0b495f7` 的范围检测、Windows 与 Ubuntu CI 全部成功。
+- 2026-08-15：用户使用当前 Windows Debug 可执行文件执行第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏。
+- 2026-08-15：验收记录随当前证据提交进入 PR #59；最终 CI 成功后由 Release Control 转为 Ready，合并仍需显式授权。

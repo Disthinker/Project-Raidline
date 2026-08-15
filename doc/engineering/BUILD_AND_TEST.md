@@ -38,7 +38,7 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/core-alpha-persistent-base` 从已包含 PR #57 的 `origin/main@14cf79b` 重新配置并完成 120 步全目标构建。Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70、存档恢复专项 9/9、全量 CTest 601/601 通过，0 失败；精确 head CI 与用户 6/6 真实窗口验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。开发代理未启动游戏。
 
-`codex/core-alpha-extraction-loop` 从 `origin/main@b1ea3c3` 创建。领域合同提交 `2d9b96d` 与端到端实现提交 `66f3120` 已通过 Windows Debug 构建；InventoryDomain/RaidLifecycle/AlphaExtractionSession focused 17/17、全量 CTest 620/620 通过，0 失败。PR #59 精确代码 head `864f12e` 的范围检测、Windows 与 Ubuntu CI 全部成功。`Project_Raidline.exe` 已生成但未由开发代理启动；用户集中真实窗口验收仍待执行。
+`codex/core-alpha-extraction-loop` 从 `origin/main@b1ea3c3` 创建。领域合同提交 `2d9b96d` 与端到端实现提交 `66f3120` 已通过 Windows Debug 构建；InventoryDomain/RaidLifecycle/AlphaExtractionSession focused 17/17、全量 CTest 620/620 通过，0 失败。PR #59 head `0b495f7` 的范围检测、Windows 与 Ubuntu CI 全部成功。用户使用当前 Windows Debug 可执行文件完成第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏。
 
 ## 按风险选择证据
 

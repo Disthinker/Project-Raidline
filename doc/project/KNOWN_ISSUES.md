@@ -36,7 +36,7 @@
 | 任务 | 状态 |
 | --- | --- |
 | PR #55 / #54 / #56 / #57 / #58 | 已进入 `origin/main@b1ea3c3` |
-| Extraction Loop | PR #59 当前分支 `2d9b96d` + `66f3120` 已完成端到端实现；本地 620/620 与精确代码 head CI 通过，等待用户集中验收 |
+| Extraction Loop | PR #59 当前分支 `2d9b96d` + `66f3120` 已完成端到端实现；本地 620/620、精确 head CI 与用户 7/7 集中验收通过，等待显式合并授权 |
 | Alpha Hardening | 等待 Extraction Loop 接受 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/core-alpha-extraction-loop.md`。

@@ -14,7 +14,7 @@
 当前唯一里程碑是 **Core Extraction Alpha**，唯一范围合同是外部 GDD 的 `05_Core_Extraction_Alpha_首阶段功能规格.md`。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
-2. **Extraction Loop**：领域、服务、模拟和客户端代码已在当前分支完成，本地自动化通过；等待 exact-head CI 与用户集中真实窗口验收。
+2. **Extraction Loop**：领域、服务、模拟和客户端代码已在当前分支完成；本地自动化、exact-head CI 与用户集中真实窗口验收均通过，PR #59 已满足 Ready 门槛并等待显式合并授权。
 3. **Alpha Hardening**：等待 Extraction Loop 接受后进行连续多局、跨进程恢复组合、平衡和完整 Alpha 验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
@@ -43,11 +43,12 @@
 - Windows Debug 当前树构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 17/17 通过。
 - 全量 CTest 620/620 通过，0 失败。
-- PR #59 精确代码 head `864f12e` 的 GitHub 范围检测、Windows 与 Ubuntu CI 全部成功；集中真实窗口验收尚未执行，因此 Extraction Loop 还不是接受基线。
+- PR #59 head `0b495f7` 的 GitHub 范围检测、Windows 与 Ubuntu CI 全部成功。
+- 用户使用当前 Windows Debug 可执行文件完成第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏替代该证据。
 
 ## 尚未完成
 
-- Extraction Loop：PR #59 等待用户集中真实窗口验收；通过后记录证据并转为 Ready，合并仍需显式授权。
+- Extraction Loop：PR #59 已满足自动化、CI 与人工门槛，等待显式合并授权；进入 main 前仍不属于接受基线。
 - Alpha Hardening：连续多局、损坏恢复组合、跨进程长序列、平衡与 Alpha 完成报告。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。
