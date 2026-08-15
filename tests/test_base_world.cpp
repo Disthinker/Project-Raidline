@@ -13,6 +13,9 @@ TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
     const Vec2 after = world.playerPosition();
     EXPECT_GT(after.x, before.x);
     EXPECT_LT(after.y, before.y);
+    EXPECT_TRUE(world.playerIsMoving());
+    EXPECT_GT(world.playerFacingDirection().x, 0.0F);
+    EXPECT_LT(world.playerFacingDirection().y, 0.0F);
 
     input.sprint = true;
     for (int index = 0; index < 20; ++index)
@@ -21,6 +24,21 @@ TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
     }
     EXPECT_LE(world.playerPosition().x + world.playerSize().x, 1248.0F);
     EXPECT_GE(world.playerPosition().y, 24.0F);
+}
+
+TEST(BaseWorldTest, MovementAnimationResetsWhenPlayerStops)
+{
+    BaseWorld world;
+    BaseInput input;
+    input.moveLeft = true;
+    static_cast<void>(world.update(input, 0.19F));
+    EXPECT_TRUE(world.playerIsMoving());
+    EXPECT_GT(world.playerAnimationFrame(), 0U);
+    EXPECT_LT(world.playerFacingDirection().x, 0.0F);
+
+    static_cast<void>(world.update(BaseInput{}, 0.01F));
+    EXPECT_FALSE(world.playerIsMoving());
+    EXPECT_EQ(world.playerAnimationFrame(), 0U);
 }
 
 TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)

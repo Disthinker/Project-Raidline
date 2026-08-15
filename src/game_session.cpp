@@ -330,6 +330,31 @@ bool GameSession::activeQuitAlphaRaid()
     return alphaRaidActive_ && settleAlphaRaid(RaidResultOutcome::ActiveQuit);
 }
 
+bool GameSession::startAlphaReload(
+    AssetInstanceId weaponAssetId,
+    AssetInstanceId magazineAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+        equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon) !=
+            std::optional<AssetInstanceId>{weaponAssetId} ||
+        !assetIsCarried(profile_, magazineAssetId))
+    {
+        return false;
+    }
+    const WeaponAmmoPlan plan = queryWeaponAmmo(
+        profile_,
+        publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{
+            weaponAssetId,
+            magazineAssetId});
+    return plan.canCommit && raidActionState_.start(
+        ReloadRaidAction{
+            weaponAssetId,
+            magazineAssetId,
+            0.0F,
+            2.0F});
+}
+
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 {
     const AssetRecord *asset = profile_.assets.find(medkitAssetId);
@@ -554,8 +579,7 @@ void GameSession::updateAlphaRaid(
                     publishedContentRegistry(),
                     *weapon))
             {
-                static_cast<void>(raidActionState_.start(
-                    ReloadRaidAction{*weapon, *magazine, 0.0F, 2.0F}));
+                static_cast<void>(startAlphaReload(*weapon, *magazine));
             }
         }
         else if (input.healJustPressed)
@@ -683,7 +707,7 @@ void GameSession::updateAlphaRaid(
                     const WeaponAmmoReceipt receipt = executeWeaponAmmo(
                         candidate,
                         publishedContentRegistry(),
-                        InstallMagazineCommand{
+                        InstallMagazineAndChamberCommand{
                             reload->weaponAssetId,
                             reload->magazineAssetId},
                         CommandContext{

@@ -277,6 +277,141 @@ InventoryGridLayout::screenToGrid(
         static_cast<int>(relativeY / cellSize_)};
 }
 
+InventoryPointerPhase InventoryDragGesture::phase() const noexcept
+{
+    return phase_;
+}
+
+bool InventoryDragGesture::active() const noexcept
+{
+    return phase_ != InventoryPointerPhase::Idle;
+}
+
+std::optional<MousePosition> InventoryDragGesture::dragDelta() const noexcept
+{
+    if (phase_ != InventoryPointerPhase::Dragging ||
+        !pressPosition_.has_value() || !currentPosition_.has_value())
+    {
+        return std::nullopt;
+    }
+    return MousePosition{
+        currentPosition_->x - pressPosition_->x,
+        currentPosition_->y - pressPosition_->y};
+}
+
+std::optional<InventoryDragVisual> InventoryDragGesture::visual() const noexcept
+{
+    if (phase_ != InventoryPointerPhase::Dragging ||
+        !currentPosition_.has_value())
+    {
+        return std::nullopt;
+    }
+    return InventoryDragVisual{
+        *currentPosition_,
+        geometry_.orientation,
+        geometry_.footprint,
+        geometry_.grabOffsetInCells,
+        selectedQuantity_};
+}
+
+GridPosition InventoryDragGesture::grabOffset() const noexcept
+{
+    return grabOffset_;
+}
+
+bool InventoryDragGesture::begin(
+    GridPosition itemOrigin,
+    GridPosition clickedCell,
+    MousePosition position,
+    InventoryPointerItemGeometry geometry,
+    std::optional<std::uint32_t> selectedQuantity) noexcept
+{
+    if (active() || itemOrigin.x < 0 || itemOrigin.y < 0 ||
+        clickedCell.x < itemOrigin.x || clickedCell.y < itemOrigin.y ||
+        !isFinite(position) ||
+        (selectedQuantity.has_value() && *selectedQuantity == 0))
+    {
+        return false;
+    }
+    const GridPosition requestedGrabOffset{
+        clickedCell.x - itemOrigin.x,
+        clickedCell.y - itemOrigin.y};
+    if (!isValidItemOrientation(geometry.orientation) ||
+        geometry.footprint.width <= 0 || geometry.footprint.height <= 0 ||
+        requestedGrabOffset.x >= geometry.footprint.width ||
+        requestedGrabOffset.y >= geometry.footprint.height ||
+        !isFinite(geometry.grabOffsetInCells) ||
+        geometry.grabOffsetInCells.x < 0.0F ||
+        geometry.grabOffsetInCells.y < 0.0F ||
+        geometry.grabOffsetInCells.x >=
+            static_cast<float>(geometry.footprint.width) ||
+        geometry.grabOffsetInCells.y >=
+            static_cast<float>(geometry.footprint.height) ||
+        (!geometry.canRotate &&
+         geometry.orientation != ItemOrientation::Degrees0))
+    {
+        return false;
+    }
+    pressPosition_ = position;
+    currentPosition_ = position;
+    grabOffset_ = requestedGrabOffset;
+    geometry_ = geometry;
+    selectedQuantity_ = selectedQuantity;
+    phase_ = InventoryPointerPhase::Pressed;
+    return true;
+}
+
+void InventoryDragGesture::update(MousePosition position) noexcept
+{
+    if (!active() || !isFinite(position) || !pressPosition_.has_value())
+    {
+        return;
+    }
+    currentPosition_ = position;
+    if (phase_ == InventoryPointerPhase::Pressed)
+    {
+        const float deltaX = position.x - pressPosition_->x;
+        const float deltaY = position.y - pressPosition_->y;
+        const float thresholdSquared =
+            kInventoryDragThreshold * kInventoryDragThreshold;
+        if (deltaX * deltaX + deltaY * deltaY >= thresholdSquared)
+        {
+            phase_ = InventoryPointerPhase::Dragging;
+        }
+    }
+}
+
+bool InventoryDragGesture::rotateClockwise() noexcept
+{
+    if (phase_ != InventoryPointerPhase::Dragging || !geometry_.canRotate)
+    {
+        return false;
+    }
+    const InventoryFootprint oldFootprint = geometry_.footprint;
+    const GridPosition oldGrabOffset = grabOffset_;
+    const MousePosition oldGrabOffsetInCells = geometry_.grabOffsetInCells;
+    geometry_.orientation = rotatedClockwise(geometry_.orientation);
+    geometry_.footprint = InventoryFootprint{
+        oldFootprint.height, oldFootprint.width};
+    grabOffset_ = GridPosition{
+        oldFootprint.height - 1 - oldGrabOffset.y,
+        oldGrabOffset.x};
+    geometry_.grabOffsetInCells = MousePosition{
+        static_cast<float>(oldFootprint.height) - oldGrabOffsetInCells.y,
+        oldGrabOffsetInCells.x};
+    return true;
+}
+
+void InventoryDragGesture::reset() noexcept
+{
+    phase_ = InventoryPointerPhase::Idle;
+    pressPosition_.reset();
+    currentPosition_.reset();
+    grabOffset_ = GridPosition{0, 0};
+    geometry_ = InventoryPointerItemGeometry{};
+    selectedQuantity_.reset();
+}
+
 std::optional<InventoryItemSelection>
 InventoryInteractionState::selectedItem() const noexcept
 {
@@ -286,7 +421,7 @@ InventoryInteractionState::selectedItem() const noexcept
 InventoryPointerPhase
 InventoryInteractionState::pointerPhase() const noexcept
 {
-    return pointerPhase_;
+    return gesture_.phase();
 }
 
 std::optional<InventoryGridLocation>
@@ -298,7 +433,7 @@ InventoryInteractionState::hoveredLocation() const noexcept
 std::optional<InventoryGridLocation>
 InventoryInteractionState::activePreviewLocation() const noexcept
 {
-    if (pointerPhase_ != InventoryPointerPhase::Dragging)
+    if (gesture_.phase() != InventoryPointerPhase::Dragging)
     {
         return std::nullopt;
     }
@@ -313,39 +448,19 @@ bool InventoryInteractionState::pointerOverDropZone() const noexcept
 
 bool InventoryInteractionState::pointerGestureActive() const noexcept
 {
-    return pointerPhase_ != InventoryPointerPhase::Idle;
+    return gesture_.active();
 }
 
 std::optional<MousePosition>
 InventoryInteractionState::pointerDragDelta() const noexcept
 {
-    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
-        !pointerPressPosition_.has_value() ||
-        !pointerCurrentPosition_.has_value())
-    {
-        return std::nullopt;
-    }
-
-    return MousePosition{
-        pointerCurrentPosition_->x - pointerPressPosition_->x,
-        pointerCurrentPosition_->y - pointerPressPosition_->y};
+    return gesture_.dragDelta();
 }
 
 std::optional<InventoryDragVisual>
 InventoryInteractionState::activeDragVisual() const noexcept
 {
-    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
-        !pointerCurrentPosition_.has_value())
-    {
-        return std::nullopt;
-    }
-
-    return InventoryDragVisual{
-        *pointerCurrentPosition_,
-        pointerItemGeometry_.orientation,
-        pointerItemGeometry_.footprint,
-        pointerItemGeometry_.grabOffsetInCells,
-        pointerSelectedQuantity_};
+    return gesture_.visual();
 }
 
 void InventoryInteractionState::updatePointerPosition(
@@ -358,7 +473,7 @@ void InventoryInteractionState::updatePointerPosition(
         hoveredLocation_.reset();
         pointerOverDropZone_ = false;
 
-        if (pointerPhase_ == InventoryPointerPhase::Dragging)
+        if (gesture_.phase() == InventoryPointerPhase::Dragging)
         {
             pointerPreviewLocation_.reset();
         }
@@ -370,32 +485,13 @@ void InventoryInteractionState::updatePointerPosition(
     pointerOverDropZone_ =
         overDropZone && !gridLocation.has_value();
 
-    if (pointerPhase_ == InventoryPointerPhase::Idle ||
-        !pointerPressPosition_.has_value())
+    if (!gesture_.active())
     {
         return;
     }
 
-    pointerCurrentPosition_ = position;
-
-    if (pointerPhase_ == InventoryPointerPhase::Pressed)
-    {
-        const float deltaX =
-            position.x - pointerPressPosition_->x;
-        const float deltaY =
-            position.y - pointerPressPosition_->y;
-        const float distanceSquared =
-            deltaX * deltaX + deltaY * deltaY;
-        const float thresholdSquared =
-            kInventoryDragThreshold * kInventoryDragThreshold;
-
-        if (distanceSquared >= thresholdSquared)
-        {
-            pointerPhase_ = InventoryPointerPhase::Dragging;
-        }
-    }
-
-    if (pointerPhase_ != InventoryPointerPhase::Dragging)
+    gesture_.update(position);
+    if (gesture_.phase() != InventoryPointerPhase::Dragging)
     {
         return;
     }
@@ -407,10 +503,10 @@ void InventoryInteractionState::updatePointerPosition(
     }
 
     pointerPreviewLocation_ = InventoryGridLocation{
-        gridLocation->container,
-        GridPosition{
-            gridLocation->cell.x - grabOffset_.x,
-            gridLocation->cell.y - grabOffset_.y}};
+            gridLocation->container,
+            GridPosition{
+            gridLocation->cell.x - gesture_.grabOffset().x,
+            gridLocation->cell.y - gesture_.grabOffset().y}};
 }
 
 bool InventoryInteractionState::beginPointerPress(
@@ -446,64 +542,16 @@ bool InventoryInteractionState::beginPointerPress(
     MousePosition position,
     InventoryPointerItemGeometry geometry) noexcept
 {
-    if (pointerGestureActive())
-    {
-        return false;
-    }
-
     if (selection.instanceId == 0 ||
-        itemOrigin.x < 0 ||
-        itemOrigin.y < 0 ||
-        clickedCell.x < itemOrigin.x ||
-        clickedCell.y < itemOrigin.y ||
-        !isFinite(position))
+        !gesture_.begin(itemOrigin, clickedCell, position, geometry))
     {
         clearSelection();
         return false;
     }
-
-    const GridPosition requestedGrabOffset{
-        clickedCell.x - itemOrigin.x,
-        clickedCell.y - itemOrigin.y};
-
-    const InventoryPointerItemGeometry resolvedGeometry = geometry;
-
-    if (!isValidItemOrientation(
-            resolvedGeometry.orientation) ||
-        resolvedGeometry.footprint.width <= 0 ||
-        resolvedGeometry.footprint.height <= 0 ||
-        requestedGrabOffset.x >=
-            resolvedGeometry.footprint.width ||
-        requestedGrabOffset.y >=
-            resolvedGeometry.footprint.height ||
-        !isFinite(
-            resolvedGeometry.grabOffsetInCells) ||
-        resolvedGeometry.grabOffsetInCells.x < 0.0F ||
-        resolvedGeometry.grabOffsetInCells.y < 0.0F ||
-        resolvedGeometry.grabOffsetInCells.x >=
-            static_cast<float>(
-                resolvedGeometry.footprint.width) ||
-        resolvedGeometry.grabOffsetInCells.y >=
-            static_cast<float>(
-                resolvedGeometry.footprint.height) ||
-        (!resolvedGeometry.canRotate &&
-         resolvedGeometry.orientation !=
-             ItemOrientation::Degrees0))
-    {
-        clearSelection();
-        return false;
-    }
-
     selectedItem_ = selection;
-    pointerPressPosition_ = position;
-    pointerCurrentPosition_ = position;
-    grabOffset_ = requestedGrabOffset;
-    pointerItemGeometry_ = resolvedGeometry;
     pointerPreviewLocation_ = InventoryGridLocation{
         selection.container,
         itemOrigin};
-    pointerPhase_ = InventoryPointerPhase::Pressed;
-    pointerSelectedQuantity_.reset();
     pointerOverDropZone_ = false;
 
     return true;
@@ -517,59 +565,39 @@ bool InventoryInteractionState::beginQuantityPointerDrag(
     InventoryPointerItemGeometry geometry,
     std::uint32_t selectedQuantity) noexcept
 {
-    if (selectedQuantity == 0 ||
-        !beginPointerPress(
-            selection,
+    if (selection.instanceId == 0 || selectedQuantity == 0 ||
+        !gesture_.begin(
             itemOrigin,
             clickedCell,
             position,
-            geometry))
+            geometry,
+            selectedQuantity))
     {
+        clearSelection();
         return false;
     }
-
-    pointerSelectedQuantity_ = selectedQuantity;
-    pointerPhase_ = InventoryPointerPhase::Dragging;
+    selectedItem_ = selection;
+    pointerPreviewLocation_ = InventoryGridLocation{
+        selection.container,
+        itemOrigin};
+    pointerOverDropZone_ = false;
     return true;
 }
 
 bool InventoryInteractionState::rotatePointerItemClockwise() noexcept
 {
-    if (pointerPhase_ != InventoryPointerPhase::Dragging ||
-        !pointerItemGeometry_.canRotate)
+    if (!gesture_.rotateClockwise())
     {
         return false;
     }
-
-    const InventoryFootprint oldFootprint =
-        pointerItemGeometry_.footprint;
-    const GridPosition oldGrabOffset = grabOffset_;
-    const MousePosition oldGrabOffsetInCells =
-        pointerItemGeometry_.grabOffsetInCells;
-
-    pointerItemGeometry_.orientation =
-        rotatedClockwise(
-            pointerItemGeometry_.orientation);
-    pointerItemGeometry_.footprint =
-        InventoryFootprint{
-            oldFootprint.height,
-            oldFootprint.width};
-    grabOffset_ = GridPosition{
-        oldFootprint.height - 1 - oldGrabOffset.y,
-        oldGrabOffset.x};
-    pointerItemGeometry_.grabOffsetInCells =
-        MousePosition{
-            static_cast<float>(oldFootprint.height) -
-                oldGrabOffsetInCells.y,
-            oldGrabOffsetInCells.x};
 
     if (hoveredLocation_.has_value())
     {
         pointerPreviewLocation_ = InventoryGridLocation{
             hoveredLocation_->container,
             GridPosition{
-                hoveredLocation_->cell.x - grabOffset_.x,
-                hoveredLocation_->cell.y - grabOffset_.y}};
+                hoveredLocation_->cell.x - gesture_.grabOffset().x,
+                hoveredLocation_->cell.y - gesture_.grabOffset().y}};
     }
     else
     {
@@ -592,7 +620,8 @@ InventoryInteractionState::releasePointer(
 
     std::optional<InventoryPointerRequest> request;
 
-    if (pointerPhase_ == InventoryPointerPhase::Dragging &&
+    const std::optional<InventoryDragVisual> visual = gesture_.visual();
+    if (visual.has_value() &&
         selectedItem_.has_value())
     {
         if (pointerPreviewLocation_.has_value())
@@ -600,8 +629,8 @@ InventoryInteractionState::releasePointer(
             request = InventoryPlacementRequest{
                 *selectedItem_,
                 *pointerPreviewLocation_,
-                pointerItemGeometry_.orientation,
-                pointerSelectedQuantity_};
+                visual->orientation,
+                visual->selectedQuantity};
         }
         else if (
             pointerOverDropZone_ &&
@@ -610,8 +639,8 @@ InventoryInteractionState::releasePointer(
         {
             request = InventoryDropRequest{
                 *selectedItem_,
-                pointerItemGeometry_.orientation,
-                pointerSelectedQuantity_};
+                visual->orientation,
+                visual->selectedQuantity};
         }
     }
 
@@ -644,11 +673,6 @@ void InventoryInteractionState::reset() noexcept
 
 void InventoryInteractionState::resetPointerGesture() noexcept
 {
-    pointerPhase_ = InventoryPointerPhase::Idle;
-    pointerPressPosition_.reset();
-    pointerCurrentPosition_.reset();
+    gesture_.reset();
     pointerPreviewLocation_.reset();
-    grabOffset_ = GridPosition{0, 0};
-    pointerItemGeometry_ = InventoryPointerItemGeometry{};
-    pointerSelectedQuantity_.reset();
 }

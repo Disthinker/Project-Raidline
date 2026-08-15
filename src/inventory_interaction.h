@@ -252,6 +252,37 @@ struct InventoryDragVisual
         const InventoryDragVisual &) = default;
 };
 
+// Device-independent pointer gesture shared by legacy GridInventory and the
+// Profile/AssetRegistry inventory screen. It owns no item or container state.
+class InventoryDragGesture
+{
+public:
+    [[nodiscard]] InventoryPointerPhase phase() const noexcept;
+    [[nodiscard]] bool active() const noexcept;
+    [[nodiscard]] std::optional<MousePosition> dragDelta() const noexcept;
+    [[nodiscard]] std::optional<InventoryDragVisual> visual() const noexcept;
+    [[nodiscard]] GridPosition grabOffset() const noexcept;
+
+    [[nodiscard]] bool begin(
+        GridPosition itemOrigin,
+        GridPosition clickedCell,
+        MousePosition position,
+        InventoryPointerItemGeometry geometry,
+        std::optional<std::uint32_t> selectedQuantity = std::nullopt) noexcept;
+
+    void update(MousePosition position) noexcept;
+    [[nodiscard]] bool rotateClockwise() noexcept;
+    void reset() noexcept;
+
+private:
+    InventoryPointerPhase phase_{InventoryPointerPhase::Idle};
+    std::optional<MousePosition> pressPosition_;
+    std::optional<MousePosition> currentPosition_;
+    GridPosition grabOffset_{0, 0};
+    InventoryPointerItemGeometry geometry_{};
+    std::optional<std::uint32_t> selectedQuantity_;
+};
+
 struct InventoryQuickTransferRequest
 {
     InventoryGridLocation source{};
@@ -369,8 +400,8 @@ public:
         MousePosition position,
         InventoryPointerItemGeometry geometry) noexcept;
 
-    // Modifier-left selection starts dragging immediately. The source stack is
-    // not changed until the release request is committed by the world layer.
+    // Modifier-left locks quantity at pointer-down, then uses the same four
+    // pixel drag threshold. The source stack is unchanged until commit.
     [[nodiscard]]
     bool beginQuantityPointerDrag(
         InventoryItemSelection selection,
@@ -402,15 +433,7 @@ public:
 private:
     std::optional<InventoryItemSelection> selectedItem_;
     std::optional<InventoryGridLocation> hoveredLocation_;
-
-    InventoryPointerPhase pointerPhase_{
-        InventoryPointerPhase::Idle};
-
-    std::optional<MousePosition> pointerPressPosition_;
-    std::optional<MousePosition> pointerCurrentPosition_;
-    GridPosition grabOffset_{0, 0};
-    InventoryPointerItemGeometry pointerItemGeometry_{};
-    std::optional<std::uint32_t> pointerSelectedQuantity_;
+    InventoryDragGesture gesture_;
     std::optional<InventoryGridLocation> pointerPreviewLocation_;
     bool pointerOverDropZone_{};
 

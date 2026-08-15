@@ -158,6 +158,52 @@ TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSecon
     EXPECT_EQ(magazineRoundCount(session.profile(), *installed), 20U);
 }
 
+TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSeconds)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-targeted-reload"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId original = *installedMagazine(session.profile(), rifle);
+    const auto magazines = assets(session.profile(), alpha_content::magazine);
+    const auto target = std::find_if(
+        magazines.begin(),
+        magazines.end(),
+        [original, &session](AssetInstanceId id)
+        {
+            return id != original &&
+                   assetIsCarried(session.profile(), id) &&
+                   magazineRoundCount(session.profile(), id) == 20U;
+        });
+    ASSERT_NE(target, magazines.end());
+    ASSERT_TRUE(session.deployAlpha(3320));
+
+    for (int shot = 0; shot < 10; ++shot)
+    {
+        ASSERT_TRUE(session.executeProfileWeaponAmmo(
+            FireWeaponCommand{rifle},
+            "targeted-setup-fire-" + std::to_string(shot)).succeeded);
+    }
+    ASSERT_FALSE(session.profile().assets.find(rifle)->chamberedRound.has_value());
+    const std::uint64_t beforeInterrupted =
+        profileStateFingerprint(session.profile());
+
+    ASSERT_TRUE(session.startAlphaReload(rifle, *target));
+    GameplayInput inventoryOpened{};
+    inventoryOpened.inventoryOpen = true;
+    session.update(inventoryOpened, 0.5F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupted);
+    EXPECT_EQ(installedMagazine(session.profile(), rifle), original);
+
+    ASSERT_TRUE(session.startAlphaReload(rifle, *target));
+    session.update(GameplayInput{}, 2.0F);
+    EXPECT_EQ(installedMagazine(session.profile(), rifle), *target);
+    EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
+}
+
 TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)
 {
     GameSession session;

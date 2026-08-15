@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | 已由 PR #58 接受并进入 main |
 | Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement、schema v2 | PR #59 已接受并进入 main |
-| Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置和完整产品验收 | 稳定性、恢复、平衡、发布证据 | 本地实现与 627/627 自动化通过；等待 PR/CI 和最终人工验收 |
+| Alpha Hardening | 连续多局、异常退出、损坏恢复、三组路线配置、可正常游玩的统一库存与完整产品验收 | 稳定性、恢复、领域驱动交互、平衡、发布证据 | 本地实现、Windows Debug 全目标与 637/637 自动化通过；等待 PR #60 CI 和最终人工验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

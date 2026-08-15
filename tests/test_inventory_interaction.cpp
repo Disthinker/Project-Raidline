@@ -284,7 +284,7 @@ TEST(InventoryPartialTransferTest, HalfRoundsOddQuantityUp)
         1U);
 }
 
-TEST(InventoryPartialTransferTest, QuantitySelectionStartsDraggingImmediately)
+TEST(InventoryPartialTransferTest, QuantitySelectionUsesTheSharedDragThreshold)
 {
     InventoryInteractionState state;
 
@@ -300,6 +300,12 @@ TEST(InventoryPartialTransferTest, QuantitySelectionStartsDraggingImmediately)
             {0.5F, 0.5F}},
         1));
 
+    EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Pressed);
+    EXPECT_FALSE(state.activeDragVisual().has_value());
+    state.updatePointerPosition(
+        {104.0F, 80.0F},
+        InventoryGridLocation{InventoryContainerId::Player, {2, 1}},
+        false);
     EXPECT_EQ(state.pointerPhase(), InventoryPointerPhase::Dragging);
     const auto visual = state.activeDragVisual();
     ASSERT_TRUE(visual.has_value());

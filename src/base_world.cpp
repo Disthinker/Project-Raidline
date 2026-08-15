@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -19,10 +20,19 @@ float distanceSquaredToRect(Vec2 point, const Rect &rect) noexcept
     const float dy = point.y - nearestY;
     return dx * dx + dy * dy;
 }
+
+AnimationClip makeBasePlayerMoveClip()
+{
+    return AnimationClip{
+        std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
+}
 }
 
 BaseWorld::BaseWorld()
-    : facilities_{
+    : playerMovementAnimator_{
+          makeBasePlayerMoveClip(),
+          AnimationPlayMode::Loop},
+      facilities_{
           BaseFacility{
               BaseFacilityKind::Storage,
               Rect{{76.0F, 176.0F}, {228.0F, 188.0F}},
@@ -53,9 +63,17 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             direction.x * direction.x + direction.y * direction.y;
         if (lengthSquared > 0.0F)
         {
+            const bool wasMoving = playerIsMoving_;
             const float inverseLength = 1.0F / std::sqrt(lengthSquared);
             direction.x *= inverseLength;
             direction.y *= inverseLength;
+            playerFacingDirection_ = direction;
+            playerIsMoving_ = true;
+            if (!wasMoving)
+            {
+                playerMovementAnimator_.reset();
+            }
+            playerMovementAnimator_.update(deltaTime);
             const float speed = input.sprint ? 280.0F : 180.0F;
             playerPosition_.x += direction.x * speed * deltaTime;
             playerPosition_.y += direction.y * speed * deltaTime;
@@ -70,6 +88,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 walkableBounds_.position.y,
                 walkableBounds_.position.y +
                     walkableBounds_.size.y - playerSize_.y);
+        }
+        else
+        {
+            playerIsMoving_ = false;
+            playerMovementAnimator_.reset();
         }
     }
 
@@ -88,6 +111,21 @@ Vec2 BaseWorld::playerPosition() const noexcept
 Vec2 BaseWorld::playerSize() const noexcept
 {
     return playerSize_;
+}
+
+Vec2 BaseWorld::playerFacingDirection() const noexcept
+{
+    return playerFacingDirection_;
+}
+
+bool BaseWorld::playerIsMoving() const noexcept
+{
+    return playerIsMoving_;
+}
+
+std::size_t BaseWorld::playerAnimationFrame() const noexcept
+{
+    return playerMovementAnimator_.currentFrameIndex();
 }
 
 const std::array<BaseFacility, 3> &BaseWorld::facilities() const noexcept
@@ -114,11 +152,15 @@ std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
 void BaseWorld::resetAtRaidGate() noexcept
 {
     playerPosition_ = Vec2{620.0F, 152.0F};
+    playerIsMoving_ = false;
+    playerMovementAnimator_.reset();
 }
 
 void BaseWorld::resetAtMedicalPoint() noexcept
 {
     playerPosition_ = Vec2{620.0F, 600.0F};
+    playerIsMoving_ = false;
+    playerMovementAnimator_.reset();
 }
 
 const char *baseFacilityName(BaseFacilityKind kind) noexcept

@@ -293,6 +293,8 @@ add_library(raidline_sdl_client STATIC
     src/input_system.h
     src/inventory_interaction.cpp
     src/inventory_interaction.h
+    src/profile_inventory_interaction.cpp
+    src/profile_inventory_interaction.h
     src/texture.cpp
     src/texture.h
 )
@@ -515,4 +517,8 @@ raidline_add_test(
 raidline_add_test(
     MouseInventoryInteractionTest
     tests/test_mouse_inventory_interaction.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    ProfileInventoryInteractionTest
+    tests/test_profile_inventory_interaction.cpp
     raidline::sdl_client)
