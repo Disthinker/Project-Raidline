@@ -204,7 +204,8 @@ Project_Raidline.exe
 - [x] PR #59 已以 merge commit `ed45baa` 进入 main；从该接受基线建立 `codex/core-alpha-hardening`。
 - [x] Hardening 修复装入弹匣/枪膛弹药未计入最低出击能力的问题，并确保 pending Raid 的恢复备份不能绕过异常退出全损。
 - [x] Hardening focused 37/37、全量 CTest 637/637 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档、Deploy 保存失败及统一库存交互均有自动化证据。
-- [ ] Hardening exact-head Windows/Ubuntu CI、GDD 1–8 集中人工验收与 Alpha 完成报告。
+- [x] Hardening 返工提交 `daceec6` 的 Windows/Ubuntu CI（run `31861016485`）通过。
+- [ ] 用户按正常游玩流程完成最终验收与 Alpha 完成报告。
 
 最后更新：2026-08-15。
 

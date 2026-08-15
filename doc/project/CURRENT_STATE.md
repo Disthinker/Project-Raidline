@@ -15,7 +15,7 @@
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
-3. **Alpha Hardening**：恢复/救济缺陷、内容合同、自动化长序列及玩家反馈触发的库存/角色显示返工已在当前分支完成；本地门槛通过，等待推送更新、exact-head CI 与最终集中人工验收。
+3. **Alpha Hardening**：恢复/救济缺陷、内容合同、自动化长序列及玩家反馈触发的库存/角色显示返工已在当前分支完成；本地门槛与 PR #60 exact-head CI 通过，等待最终正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -45,7 +45,7 @@
 - EconomyDomain、ContentRegistry、SaveRepository、AlphaExtractionSession 与 AlphaHardening focused 37/37 通过。
 - 全量 CTest 637/637 通过，0 失败。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- Draft PR #60 已存在；当前返工尚未推送，因此返工 exact-head CI 和最终人工验收尚无证据。开发代理未启动游戏。
+- Draft PR #60 的返工提交 `daceec6` 已通过 GitHub Actions run `31861016485` 的范围检测、Windows C++ 和 Ubuntu C++；最终人工验收尚无证据。开发代理未启动游戏。
 
 ## Alpha Hardening 当前实现
 
@@ -60,7 +60,7 @@
 
 ## 尚未完成
 
-- Alpha Hardening：提交/推送、Draft PR 更新、exact-head Windows/Ubuntu CI，以及用户按正常游玩流程完成一次最终验收。
+- Alpha Hardening：用户按正常游玩流程完成一次最终验收；通过前 PR #60 保持 Draft。
 - Alpha 完成报告与后续阶段入口决策只在上述门槛全部通过后形成。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。
