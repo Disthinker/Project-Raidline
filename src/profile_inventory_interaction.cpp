@@ -2,6 +2,52 @@
 
 #include <utility>
 
+#include "weapon_ammo_domain.h"
+
+std::optional<ProfileContextActionKind> queryProfileContextAction(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId instanceId,
+    bool inRaid)
+{
+    const AssetRecord *asset = profile.assets.find(instanceId);
+    if (asset == nullptr)
+    {
+        return std::nullopt;
+    }
+    const ItemDefinition &definition = content.item(asset->definitionId);
+    if (inRaid)
+    {
+        if (definition.category == ItemCategory::Medical &&
+            assetIsCarried(profile, instanceId) &&
+            asset->remainingCharges > 0)
+        {
+            return ProfileContextActionKind::UseMedkit;
+        }
+        return std::nullopt;
+    }
+    if (definition.category == ItemCategory::Magazine)
+    {
+        // Keep the affordance discoverable even when the magazine is empty or
+        // the Stash currently lacks room. Execution reports the domain reason.
+        return ProfileContextActionKind::UnloadMagazine;
+    }
+    if (definition.category == ItemCategory::Medical &&
+        asset->remainingCharges > 0 && profile.currentHealth < 100)
+    {
+        return ProfileContextActionKind::UseMedkit;
+    }
+    if (definition.category == ItemCategory::Weapon &&
+        queryWeaponAmmo(
+            profile,
+            content,
+            ChamberWeaponCommand{instanceId}).canCommit)
+    {
+        return ProfileContextActionKind::ChamberWeapon;
+    }
+    return std::nullopt;
+}
+
 bool profileDragSourceMatches(
     const ProfileState &profile,
     const ProfileDragSource &source) noexcept

@@ -43,7 +43,7 @@
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - EconomyDomain、ContentRegistry、SaveRepository、AlphaExtractionSession 与 AlphaHardening focused 37/37 通过。
-- 全量 CTest 637/637 通过，0 失败。
+- 全量 CTest 638/638 通过，0 失败。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
 - Draft PR #60 的返工提交 `daceec6` 已通过 GitHub Actions run `31861016485` 的范围检测、Windows C++ 和 Ubuntu C++；最终人工验收尚无证据。开发代理未启动游戏。
 
@@ -54,6 +54,7 @@
 - 固定供应内容加载校验 Alpha 25% 向下取整、最低 1 的回收价基线。
 - 双份损坏存档明确失败；Deploy 保存失败不交换 Profile、不进入 Raid。
 - Base `Tab` 与仓储 `E` 打开同一个“左侧角色/配装/随身容器，右侧 Stash”界面；Raid `Tab` 使用同一拖拽内核但不暴露 Stash、压弹或卸弹。
+- Base 弹匣右键菜单不再因空弹匣或 Stash 暂时无法接收弹药而被隐藏；菜单始终提供卸弹入口，执行时再显示成功或明确失败原因。Raid 右键弹匣明确提示拖到主武器换弹。
 - 拖动需超过 4 像素；原物留在原位，虚像跟随鼠标，绿色/蓝色/红色与 `MOVE/SWAP/MERGE/LOAD/INSTALL/BLOCKED` 同时表达真实领域预览。Ctrl=1、Shift=向上取半在按下时锁定，Ctrl+Shift 无操作。
 - Base 与 Raid 世界复用已批准主角资源；个人页显示同一资源的静态预览。左右移动复用六帧资源，上下移动与静止暂用静态图，RL-ANIM-001 的正式补全仍延期。
 - 用户已明确修订外部 Alpha 规格中“Raid 不允许拖匣到武器”的旧限制；GDD 资料库保持只读，本仓库仅记录该冲突与实现结果。

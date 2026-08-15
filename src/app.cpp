@@ -386,47 +386,23 @@ namespace
         const AssetRecord &asset,
         bool inRaid)
     {
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset.definitionId);
-        if (inRaid)
+        const auto action = queryProfileContextAction(
+            profile,
+            publishedContentRegistry(),
+            asset.instanceId,
+            inRaid);
+        if (!action.has_value())
         {
-            if (definition.category == ItemCategory::Medical &&
-                assetIsCarried(profile, asset.instanceId) &&
-                asset.remainingCharges > 0)
-            {
-                return "USE MEDKIT (5 SEC)";
-            }
             return std::nullopt;
         }
-        if (definition.category == ItemCategory::Magazine &&
-            !asset.magazineRounds.empty())
+        switch (*action)
         {
-            const WeaponAmmoPlan plan = queryWeaponAmmo(
-                profile,
-                publishedContentRegistry(),
-                UnloadMagazineCommand{
-                    asset.instanceId,
-                    ProfileContainerId::stash()});
-            if (plan.canCommit)
-            {
-                return "UNLOAD ALL TO STASH";
-            }
-        }
-        if (definition.category == ItemCategory::Medical &&
-            asset.remainingCharges > 0 && profile.currentHealth < 100)
-        {
-            return "USE MEDKIT";
-        }
-        if (definition.category == ItemCategory::Weapon)
-        {
-            const WeaponAmmoPlan plan = queryWeaponAmmo(
-                profile,
-                publishedContentRegistry(),
-                ChamberWeaponCommand{asset.instanceId});
-            if (plan.canCommit)
-            {
-                return "CHAMBER ROUND";
-            }
+        case ProfileContextActionKind::UnloadMagazine:
+            return "UNLOAD ALL TO STASH";
+        case ProfileContextActionKind::UseMedkit:
+            return inRaid ? "USE MEDKIT (5 SEC)" : "USE MEDKIT";
+        case ProfileContextActionKind::ChamberWeapon:
+            return "CHAMBER ROUND";
         }
         return std::nullopt;
     }
@@ -1927,11 +1903,20 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     }
     const auto hit = profileAssetHitAt(
         gameSession_.profile(), position, !inRaid);
-    if (!hit.has_value() || hit->asset == nullptr ||
-        !profileContextActionLabel(
+    if (!hit.has_value() || hit->asset == nullptr)
+    {
+        profileContextMenu_.reset();
+        return;
+    }
+    if (!profileContextActionLabel(
             gameSession_.profile(), *hit->asset, inRaid).has_value())
     {
         profileContextMenu_.reset();
+        if (inRaid && publishedContentRegistry()
+                .item(hit->asset->definitionId).category == ItemCategory::Magazine)
+        {
+            uiMessage_ = "DRAG MAGAZINE TO PRIMARY WEAPON TO RELOAD";
+        }
         return;
     }
     profileContextMenu_ = ProfileContextMenu{

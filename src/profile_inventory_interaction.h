@@ -59,6 +59,20 @@ struct ProfileDropRequest
     friend bool operator==(const ProfileDropRequest &, const ProfileDropRequest &) = default;
 };
 
+enum class ProfileContextActionKind
+{
+    UnloadMagazine,
+    UseMedkit,
+    ChamberWeapon
+};
+
+[[nodiscard]] std::optional<ProfileContextActionKind>
+queryProfileContextAction(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId instanceId,
+    bool inRaid);
+
 [[nodiscard]] bool profileDragSourceMatches(
     const ProfileState &profile,
     const ProfileDragSource &source) noexcept;

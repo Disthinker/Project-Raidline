@@ -132,3 +132,34 @@ TEST(ProfileInventoryInteractionTest, RevisionOrLocationChangeInvalidatesSource)
         ProfileContainerId::stash(), GridPosition{2, 1}};
     EXPECT_FALSE(profileDragSourceMatches(profile, source));
 }
+
+TEST(ProfileInventoryInteractionTest, EmptyBaseMagazineStillOffersUnloadAction)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "context-empty-magazine",
+        publishedContentRegistry());
+    AssetInstanceId magazine{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::magazine)
+        {
+            magazine = id;
+            break;
+        }
+    }
+    ASSERT_NE(magazine, 0U);
+    EXPECT_EQ(
+        queryProfileContextAction(
+            profile,
+            publishedContentRegistry(),
+            magazine,
+            false),
+        ProfileContextActionKind::UnloadMagazine);
+    EXPECT_EQ(
+        queryProfileContextAction(
+            profile,
+            publishedContentRegistry(),
+            magazine,
+            true),
+        std::nullopt);
+}
