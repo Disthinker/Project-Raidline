@@ -19,6 +19,7 @@
 #include "shot_resolution.h"
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
+#include "content_registry.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
 // GameplayWorld 根据这些定义自行生成稳定 instanceId。
@@ -34,6 +35,16 @@ struct EnemySpawn
     Vec2 position{};
     Vec2 size{50.0F, 50.0F};
     int maxHealth{3};
+};
+
+struct RaidWorldConfig
+{
+    Vec2 worldSize{1280.0F, 720.0F};
+    Vec2 playerSpawn{};
+    ContentRect extractionPoint;
+    std::vector<EnemySpawn> initialEnemies;
+    int playerMaximumHealth{100};
+    int playerCurrentHealth{100};
 };
 
 class GameplayWorld
@@ -60,6 +71,8 @@ public:
     GameplayWorld(
         std::vector<EnemySpawn> initialEnemies,
         int playerMaxHealth);
+
+    explicit GameplayWorld(RaidWorldConfig config);
 
     // 使用默认 10×6 背包。
     GameplayWorld(
@@ -138,6 +151,9 @@ public:
 
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
+    [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
+    [[nodiscard]] bool restorePlayerHealth(int amount);
 
     [[nodiscard]]
     bool markPlayerDead() noexcept;
@@ -232,6 +248,9 @@ private:
 
     ParticleSystem particleSystem_;
     int score_{0};
+    Vec2 worldSize_{1280.0F, 720.0F};
+    bool shotFiredLastUpdate_{};
+    bool alphaRaidWorld_{};
 
     void spawnGroundItem(
         ItemId definitionId,
@@ -247,4 +266,7 @@ private:
         ItemInstanceId instanceId) const noexcept;
 
     void tryPickupOne();
+
+    [[nodiscard]] float worldWidth() const noexcept;
+    [[nodiscard]] float worldHeight() const noexcept;
 };

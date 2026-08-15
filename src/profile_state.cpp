@@ -1,6 +1,9 @@
 #include "profile_state.h"
 
 #include <algorithm>
+#include <cmath>
+#include <bit>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -53,6 +56,11 @@ void hashInteger(std::uint64_t &hash, Integer value) noexcept
         hash *= 1099511628211ULL;
         unsignedValue >>= 8U;
     }
+}
+
+void hashFloat(std::uint64_t &hash, float value) noexcept
+{
+    hashInteger(hash, std::bit_cast<std::uint32_t>(value));
 }
 
 bool containerAccepts(
@@ -215,6 +223,8 @@ AssetInstanceId AssetRegistry::create(
         ItemOrientation::Degrees0,
         definition.maximumCharges,
         std::move(reliefBatchId),
+        {},
+        std::nullopt,
         std::move(location)};
     if (!records_.emplace(id, std::move(record)).second)
     {
@@ -347,6 +357,75 @@ std::optional<AssetInstanceId> equippedAsset(
     return std::nullopt;
 }
 
+std::optional<AssetInstanceId> installedMagazine(
+    const ProfileState &profile,
+    AssetInstanceId weaponAssetId) noexcept
+{
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        const auto *installed =
+            std::get_if<InstalledMagazineLocation>(&asset.location);
+        if (installed != nullptr &&
+            installed->weaponAssetId == weaponAssetId)
+        {
+            return id;
+        }
+    }
+    return std::nullopt;
+}
+
+bool assetIsCarried(
+    const ProfileState &profile,
+    AssetInstanceId instanceId) noexcept
+{
+    std::set<AssetInstanceId> visited;
+    AssetInstanceId current = instanceId;
+    while (current != 0 && visited.insert(current).second)
+    {
+        const AssetRecord *asset = profile.assets.find(current);
+        if (asset == nullptr)
+        {
+            return false;
+        }
+        if (std::holds_alternative<EquippedAssetLocation>(asset->location))
+        {
+            return true;
+        }
+        if (const auto *stored =
+                std::get_if<StoredAssetLocation>(&asset->location))
+        {
+            if (stored->container.kind == ProfileContainerKind::Stash)
+            {
+                return false;
+            }
+            current = stored->container.ownerAssetId;
+            continue;
+        }
+        if (const auto *installed =
+                std::get_if<InstalledMagazineLocation>(&asset->location))
+        {
+            current = installed->weaponAssetId;
+            continue;
+        }
+        return false;
+    }
+    return false;
+}
+
+std::vector<AssetInstanceId> carriedAssetIds(const ProfileState &profile)
+{
+    std::vector<AssetInstanceId> result;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(asset);
+        if (assetIsCarried(profile, id))
+        {
+            result.push_back(id);
+        }
+    }
+    return result;
+}
+
 std::optional<AssetInstanceId> profileAssetAtCell(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -417,13 +496,16 @@ ProfileValidationResult validateProfileState(
     const ContentRegistry &content)
 {
     if (profile.profileId.empty() || profile.revision == 0 ||
-        profile.assets.nextAssetId() == 0)
+        profile.assets.nextAssetId() == 0 ||
+        profile.currentHealth <= 0 || profile.currentHealth > 100)
     {
         return {false, "profile header is invalid"};
     }
 
     AssetInstanceId maximumId{};
     std::set<EquipmentSlotKind> occupiedSlots;
+    std::set<AssetInstanceId> installedWeaponIds;
+    std::set<AssetInstanceId> groundAssetIds;
     for (const auto &[id, asset] : profile.assets.records())
     {
         if (id == 0 || id != asset.instanceId)
@@ -449,6 +531,43 @@ ProfileValidationResult validateProfileState(
             return {false, "asset value is outside definition limits"};
         }
 
+        if (definition->category == ItemCategory::Magazine)
+        {
+            if (definition->magazineCapacity == 0 ||
+                asset.magazineRounds.size() > definition->magazineCapacity ||
+                !definition->compatibleAmmunitionDefinitionId.has_value())
+            {
+                return {false, "magazine state is invalid"};
+            }
+            for (const MagazineRoundRecord &round : asset.magazineRounds)
+            {
+                if (round.definitionId !=
+                        *definition->compatibleAmmunitionDefinitionId ||
+                    (round.reliefBatchId.has_value() &&
+                     round.reliefBatchId->empty()))
+                {
+                    return {false, "magazine contains incompatible ammunition"};
+                }
+            }
+        }
+        else if (!asset.magazineRounds.empty())
+        {
+            return {false, "non-magazine asset contains rounds"};
+        }
+
+        if (asset.chamberedRound.has_value())
+        {
+            if (definition->category != ItemCategory::Weapon ||
+                !definition->compatibleAmmunitionDefinitionId.has_value() ||
+                asset.chamberedRound->definitionId !=
+                    *definition->compatibleAmmunitionDefinitionId ||
+                (asset.chamberedRound->reliefBatchId.has_value() &&
+                 asset.chamberedRound->reliefBatchId->empty()))
+            {
+                return {false, "weapon chamber state is invalid"};
+            }
+        }
+
         if (const auto *equipped =
                 std::get_if<EquippedAssetLocation>(&asset.location))
         {
@@ -458,6 +577,47 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "equipment slot ownership is invalid"};
             }
+            continue;
+        }
+
+        if (const auto *installed =
+                std::get_if<InstalledMagazineLocation>(&asset.location))
+        {
+            const AssetRecord *weapon =
+                profile.assets.find(installed->weaponAssetId);
+            if (definition->category != ItemCategory::Magazine ||
+                weapon == nullptr ||
+                !installedWeaponIds.insert(installed->weaponAssetId).second)
+            {
+                return {false, "installed magazine ownership is invalid"};
+            }
+            const ItemDefinition *weaponDefinition{};
+            try
+            {
+                weaponDefinition = &content.item(weapon->definitionId);
+            }
+            catch (...)
+            {
+                return {false, "installed magazine weapon is unknown"};
+            }
+            if (!weaponDefinition->compatibleMagazineDefinitionId.has_value() ||
+                *weaponDefinition->compatibleMagazineDefinitionId !=
+                    definition->definitionId)
+            {
+                return {false, "installed magazine is incompatible"};
+            }
+            continue;
+        }
+
+        if (const auto *ground =
+                std::get_if<RaidGroundAssetLocation>(&asset.location))
+        {
+            if (!profile.pendingRaid.has_value() || ground->raidId.empty() ||
+                ground->raidId != profile.pendingRaid->raidId)
+            {
+                return {false, "Raid ground ownership is invalid"};
+            }
+            groundAssetIds.insert(id);
             continue;
         }
 
@@ -503,6 +663,84 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "asset high-water mark moved backward"};
     }
+
+
+    if (profile.pendingRaid.has_value())
+    {
+        const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        if (raid.raidId.empty() || raid.settlementId.empty() ||
+            raid.rulesVersion.empty() || raid.mapDefinitionId.value().empty() ||
+            raid.spawnExtractionPairId.empty() ||
+            raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
+            raid.startingHealth <= 0 || raid.startingHealth > 100 ||
+            raid.enemies.size() < 4 || raid.enemies.size() > 6 ||
+            raid.loot.size() < 6 || raid.loot.size() > 9)
+        {
+            return {false, "pending Raid header is invalid"};
+        }
+        std::set<AssetInstanceId> snapshotLoot;
+        for (const RaidLootSnapshot &loot : raid.loot)
+        {
+            const AssetRecord *asset = profile.assets.find(loot.assetId);
+            if (loot.assetId == 0 ||
+                !snapshotLoot.insert(loot.assetId).second ||
+                (asset != nullptr &&
+                 !groundAssetIds.contains(loot.assetId) &&
+                 !assetIsCarried(profile, loot.assetId)))
+            {
+                return {false, "pending Raid Loot ownership is invalid"};
+            }
+        }
+        for (AssetInstanceId groundAssetId : groundAssetIds)
+        {
+            if (!snapshotLoot.contains(groundAssetId))
+            {
+                return {false, "Raid ground asset is absent from snapshot"};
+            }
+        }
+        if (!std::isfinite(raid.playerSpawn.x) ||
+            !std::isfinite(raid.playerSpawn.y) ||
+            !std::isfinite(raid.extractionPoint.position.x) ||
+            !std::isfinite(raid.extractionPoint.position.y) ||
+            !std::isfinite(raid.extractionPoint.size.x) ||
+            !std::isfinite(raid.extractionPoint.size.y) ||
+            raid.extractionPoint.size.x <= 0.0F ||
+            raid.extractionPoint.size.y <= 0.0F)
+        {
+            return {false, "pending Raid geometry is invalid"};
+        }
+        for (const RaidEnemySnapshot &enemy : raid.enemies)
+        {
+            if (!std::isfinite(enemy.position.x) ||
+                !std::isfinite(enemy.position.y) ||
+                !std::isfinite(enemy.size.x) ||
+                !std::isfinite(enemy.size.y) ||
+                enemy.size.x <= 0.0F || enemy.size.y <= 0.0F ||
+                enemy.maximumHealth <= 0)
+            {
+                return {false, "pending Raid enemy is invalid"};
+            }
+        }
+        for (AssetInstanceId root : raid.carriedRootAssetIds)
+        {
+            const AssetRecord *asset = profile.assets.find(root);
+            if (asset == nullptr ||
+                !std::holds_alternative<EquippedAssetLocation>(asset->location))
+            {
+                return {false, "pending Raid carried root is invalid"};
+            }
+        }
+    }
+    else if (!groundAssetIds.empty())
+    {
+        return {false, "Raid ground asset exists without pending Raid"};
+    }
+
+    if (profile.lastRaidResult.has_value() &&
+        profile.lastRaidResult->settlementId.empty())
+    {
+        return {false, "last Raid result is invalid"};
+    }
     return {true, {}};
 }
 
@@ -513,6 +751,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.revision);
     hashInteger(hash, profile.currency);
     hashInteger(hash, static_cast<std::uint32_t>(profile.tutorial));
+    hashInteger(hash, profile.currentHealth);
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -522,6 +761,17 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, static_cast<std::uint32_t>(asset.orientation));
         hashInteger(hash, asset.remainingCharges);
         hashBytes(hash, asset.reliefBatchId.value_or(""));
+        for (const MagazineRoundRecord &round : asset.magazineRounds)
+        {
+            hashBytes(hash, round.definitionId.value());
+            hashBytes(hash, round.reliefBatchId.value_or(""));
+        }
+        hashBytes(hash, asset.chamberedRound.has_value()
+            ? asset.chamberedRound->definitionId.value()
+            : "");
+        hashBytes(hash, asset.chamberedRound.has_value()
+            ? asset.chamberedRound->reliefBatchId.value_or("")
+            : "");
         if (const auto *stored =
                 std::get_if<StoredAssetLocation>(&asset.location))
         {
@@ -532,16 +782,82 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, stored->origin.x);
             hashInteger(hash, stored->origin.y);
         }
-        else
+        else if (const auto *equipped =
+                     std::get_if<EquippedAssetLocation>(&asset.location))
         {
             hashInteger(hash, 1U);
-            hashInteger(hash, static_cast<std::uint32_t>(
-                std::get<EquippedAssetLocation>(asset.location).slot));
+            hashInteger(hash, static_cast<std::uint32_t>(equipped->slot));
+        }
+        else if (const auto *installed =
+                     std::get_if<InstalledMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash, 2U);
+            hashInteger(hash, installed->weaponAssetId);
+        }
+        else
+        {
+            const auto &ground = std::get<RaidGroundAssetLocation>(asset.location);
+            hashInteger(hash, 3U);
+            hashBytes(hash, ground.raidId);
+            hashInteger(hash, ground.lootSlotIndex);
         }
     }
     for (const std::string &transaction : profile.committedTransactions)
     {
         hashBytes(hash, transaction);
+    }
+    for (const std::string &settlement : profile.committedSettlements)
+    {
+        hashBytes(hash, settlement);
+    }
+    if (profile.pendingRaid.has_value())
+    {
+        const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        hashBytes(hash, raid.raidId);
+        hashBytes(hash, raid.settlementId);
+        hashBytes(hash, raid.rulesVersion);
+        hashBytes(hash, raid.mapDefinitionId.value());
+        hashInteger(hash, raid.seed);
+        hashBytes(hash, raid.spawnExtractionPairId);
+        hashBytes(hash, raid.enemyDeploymentId.value());
+        hashFloat(hash, raid.playerSpawn.x);
+        hashFloat(hash, raid.playerSpawn.y);
+        hashFloat(hash, raid.extractionPoint.position.x);
+        hashFloat(hash, raid.extractionPoint.position.y);
+        hashFloat(hash, raid.extractionPoint.size.x);
+        hashFloat(hash, raid.extractionPoint.size.y);
+        for (const RaidEnemySnapshot &enemy : raid.enemies)
+        {
+            hashFloat(hash, enemy.position.x);
+            hashFloat(hash, enemy.position.y);
+            hashFloat(hash, enemy.size.x);
+            hashFloat(hash, enemy.size.y);
+            hashInteger(hash, enemy.maximumHealth);
+        }
+        for (const RaidLootSnapshot &loot : raid.loot)
+        {
+            hashInteger(hash, loot.assetId);
+            hashInteger(hash, loot.slotIndex);
+            hashFloat(hash, loot.position.x);
+            hashFloat(hash, loot.position.y);
+        }
+        for (AssetInstanceId root : raid.carriedRootAssetIds)
+        {
+            hashInteger(hash, root);
+        }
+        hashInteger(hash, raid.startingHealth);
+    }
+    if (profile.lastRaidResult.has_value())
+    {
+        hashBytes(hash, profile.lastRaidResult->settlementId);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            profile.lastRaidResult->outcome));
+        for (const ItemDefinitionId &id :
+             profile.lastRaidResult->returnedItemDefinitionIds)
+        {
+            hashBytes(hash, id.value());
+        }
+        hashInteger(hash, profile.lastRaidResult->currencyDelta);
     }
     return hash;
 }

@@ -61,10 +61,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "core-alpha-content-1");
+    EXPECT_EQ(registry.contentVersion(), "core-alpha-content-2");
     ASSERT_EQ(registry.items().size(), 11U);
-    ASSERT_EQ(registry.lootTables().size(), 1U);
-    ASSERT_EQ(registry.enemyDeployments().size(), 1U);
+    ASSERT_EQ(registry.lootTables().size(), 2U);
+    ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
 
     const ItemDefinition &ammunition = registry.item(
@@ -88,6 +88,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FLOAT_EQ(map.worldSize.y, 720.0F);
     EXPECT_FLOAT_EQ(map.playerSpawn.x, 640.0F);
     EXPECT_FLOAT_EQ(map.playerSpawn.y, 360.0F);
+    EXPECT_EQ(map.spawnExtractionPairs.size(), 3U);
+    EXPECT_EQ(map.raidEnemyDeploymentIds.size(), 3U);
+    EXPECT_EQ(map.raidLootSlots.size(), 10U);
+    EXPECT_EQ(map.raidLootTableId.value(), "loot.raid.alpha");
     EXPECT_EQ(map.defaultInventorySize.width, 10);
     EXPECT_EQ(map.defaultInventorySize.height, 6);
     EXPECT_EQ(map.groundItems.size(), 6U);

@@ -22,12 +22,22 @@ namespace
 }
 
 Player::Player(float x, float y, int maxHealth)
+    : Player{x, y, maxHealth, maxHealth}
+{
+}
+
+Player::Player(float x, float y, int maxHealth, int currentHealth)
     : position_{x, y},
       movementAnimator_{
           makePlayerMoveClip(),
           AnimationPlayMode::Loop},
-      health_{maxHealth}
+      health_{maxHealth, currentHealth}
 {
+}
+
+int Player::restoreHealth(int amount)
+{
+    return health_.restore(amount);
 }
 
 void Player::update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight)

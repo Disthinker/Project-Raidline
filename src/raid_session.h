@@ -14,6 +14,7 @@ struct RaidSessionConfig
 {
     float raidDurationSeconds{180.0F};
     float extractionDurationSeconds{3.0F};
+    bool hardTimeLimit{true};
 };
 
 class RaidSession

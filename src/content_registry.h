@@ -77,6 +77,20 @@ struct RaidRuleDefinition
     float extractionDurationSeconds{};
 };
 
+struct SpawnExtractionPairDefinition
+{
+    std::string id;
+    Vec2 playerSpawn{};
+    ContentRect extractionPoint;
+};
+
+struct RaidLootSlotDefinition
+{
+    std::string id;
+    std::string route;
+    Vec2 position{};
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -91,6 +105,10 @@ struct MapDefinition
     RaidRuleDefinition raidRules;
     LootTableDefinitionId storageLootTableId;
     EnemyDeploymentDefinitionId enemyDeploymentId;
+    std::vector<SpawnExtractionPairDefinition> spawnExtractionPairs;
+    std::vector<EnemyDeploymentDefinitionId> raidEnemyDeploymentIds;
+    std::vector<RaidLootSlotDefinition> raidLootSlots;
+    LootTableDefinitionId raidLootTableId;
 };
 
 class ContentRegistry

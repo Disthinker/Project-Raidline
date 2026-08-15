@@ -165,6 +165,13 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_SPACE:
         return GameAction::Fire;
 
+    case SDL_SCANCODE_R:
+        return GameAction::Reload;
+
+    case SDL_SCANCODE_5:
+    case SDL_SCANCODE_KP_5:
+        return GameAction::Heal;
+
     case SDL_SCANCODE_LSHIFT:
         return GameAction::Dodge;
 

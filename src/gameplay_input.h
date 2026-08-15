@@ -20,4 +20,9 @@ struct GameplayInput
 
     // 只在 F 从未按下变为按下的这一帧为 true。
     bool interactJustPressed{};
+
+    bool reloadJustPressed{};
+    bool healJustPressed{};
+    bool quitRaidJustPressed{};
+    bool inventoryOpen{};
 };

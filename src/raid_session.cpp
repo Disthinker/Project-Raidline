@@ -10,8 +10,9 @@ RaidSession::RaidSession(
       raidTimeRemaining_{
           config.raidDurationSeconds}
 {
-    if (!std::isfinite(config_.raidDurationSeconds) ||
-        config_.raidDurationSeconds <= 0.0F ||
+    if ((config_.hardTimeLimit &&
+         (!std::isfinite(config_.raidDurationSeconds) ||
+          config_.raidDurationSeconds <= 0.0F)) ||
         !std::isfinite(config_.extractionDurationSeconds) ||
         config_.extractionDurationSeconds <= 0.0F)
     {
@@ -68,16 +69,30 @@ void RaidSession::update(
 
         // Whichever event occurs first within this update owns the terminal
         // result. An exact tie intentionally belongs to raid timeout.
-        if (extractionTimeRemaining < raidTimeRemaining_ &&
+        if ((!config_.hardTimeLimit ||
+             extractionTimeRemaining < raidTimeRemaining_) &&
             deltaTime >= extractionTimeRemaining)
         {
             extractionTimeElapsed_ =
                 config_.extractionDurationSeconds;
-            raidTimeRemaining_ -=
-                extractionTimeRemaining;
+            if (config_.hardTimeLimit)
+            {
+                raidTimeRemaining_ -= extractionTimeRemaining;
+            }
             state_ = RaidSessionState::Extracted;
             return;
         }
+    }
+
+    if (!config_.hardTimeLimit)
+    {
+        if (state_ == RaidSessionState::Extracting)
+        {
+            extractionTimeElapsed_ = std::min(
+                config_.extractionDurationSeconds,
+                extractionTimeElapsed_ + deltaTime);
+        }
+        return;
     }
 
     const float appliedTime =

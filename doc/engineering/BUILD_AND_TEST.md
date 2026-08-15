@@ -36,7 +36,9 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/content-registry-v1` 从 `origin/main@1837928` 引入锁定的 `nlohmann-json` 3.12.0 header-only overlay，绕开旧 VS vcpkg 对已下线 MSYS2 runtime 的 pkg-config 下载，不更新其他依赖。Windows Debug 重新配置和 70 步全目标构建成功；DefinitionId/Registry/物品/Loot/GameplayWorld/GameSession/GameFlow focused 134/134、全量 CTest 574/574 通过。发布资源逻辑引用与物理文件存在性均由自动化覆盖；Draft PR #57 实现/初始证据 head `3a12385` 的范围检测、Windows、Ubuntu CI 全部成功。本迁移不改变可见行为，开发代理不启动游戏，人工窗口验收不适用。
 
-`codex/core-alpha-persistent-base` 从已包含 PR #57 的 `origin/main@14cf79b` 重新配置并完成 120 步全目标构建。Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70、存档恢复专项 9/9、全量 CTest 601/601 通过，0 失败；`Project_Raidline.exe` 已生成但未由开发代理启动。精确 head CI 与用户真实窗口验收等待 Draft PR 阶段执行。
+`codex/core-alpha-persistent-base` 从已包含 PR #57 的 `origin/main@14cf79b` 重新配置并完成 120 步全目标构建。Content/Profile/Inventory/Economy/Base/Persistence/PersistentSession/Input focused 70/70、存档恢复专项 9/9、全量 CTest 601/601 通过，0 失败；精确 head CI 与用户 6/6 真实窗口验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。开发代理未启动游戏。
+
+`codex/core-alpha-extraction-loop` 从 `origin/main@b1ea3c3` 创建。领域合同提交 `2d9b96d` 与端到端实现提交 `66f3120` 已通过 Windows Debug 构建；InventoryDomain/RaidLifecycle/AlphaExtractionSession focused 17/17、全量 CTest 620/620 通过，0 失败。PR #59 head `0b495f7` 的范围检测、Windows 与 Ubuntu CI 全部成功。用户使用当前 Windows Debug 可执行文件完成第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏。
 
 ## 按风险选择证据
 

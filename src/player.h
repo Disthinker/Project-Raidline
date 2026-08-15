@@ -11,6 +11,7 @@ class Player
 {
 public:
     Player(float x, float y, int maxHealth = 3);
+    Player(float x, float y, int maxHealth, int currentHealth);
 
     void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight);
 
@@ -22,6 +23,7 @@ public:
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);
+    [[nodiscard]] int restoreHealth(int amount);
 
     [[nodiscard]] bool isImpactSlowed() const noexcept;
     [[nodiscard]] float impactSlowRemaining() const noexcept;
