@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 已进入 main；Extraction Loop 端到端代码、本地自动化、精确 head CI 与用户验收完成，PR #59 等待显式合并授权
+状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 本地实现和自动化完成，等待 PR/CI 与最终集中人工验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-当前接受基线：`origin/main@b1ea3c3`（Slice 0 原始实施基线为 `61718f6`）
+当前接受基线：`origin/main@ed45baa`（Slice 0 原始实施基线为 `61718f6`）
 
-当前实施分支：`codex/core-alpha-extraction-loop`
+当前实施分支：`codex/core-alpha-hardening`
 
 ## 1. 目标与完成定义
 
@@ -29,7 +29,8 @@
 - Content Registry v1 从干净的 `origin/main@1837928` 创建，本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过；PR #57 已以 merge commit `14cf79b` 进入 main。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
 - Persistent Base 从干净的 `origin/main@14cf79b` 创建；Windows Debug 120 步构建、focused 70/70、全量 CTest 601/601、exact-head CI 与用户 6/6 集中验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。
-- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；领域合同 `2d9b96d` 与端到端实现 `66f3120` 已完成，Windows Debug 构建、focused 17/17、全量 CTest 620/620、PR #59 精确 head CI 与用户 7/7 集中验收通过，等待显式合并授权。
+- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；Windows Debug 构建、focused 17/17、全量 CTest 620/620、PR #59 精确 head CI 与用户 7/7 集中验收通过，并以 merge commit `ed45baa` 进入 main。
+- Alpha Hardening 从干净的 `origin/main@ed45baa` 创建；恢复/救济修复、内容合同、10 局长序列和三配置自动化已完成，本地 focused 37/37、全量 CTest 627/627 通过。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -129,7 +130,7 @@ Project_Raidline.exe
 
 ## 6. Persistent Base 宏切片
 
-依赖：`origin/main@14cf79b`。已接受计划证据：`doc/exec-plans/active/core-alpha-persistent-base.md`。
+依赖：`origin/main@14cf79b`。已接受计划证据：`doc/exec-plans/completed/core-alpha-persistent-base.md`。
 
 禁止范围：不实现真实 Raid Deploy、弹匣内容/枪膛、Raid 换弹、100 HP/治疗动作、RaidSnapshot、全损结算或移除 Timeout；不扩展三槽之外装备。
 
@@ -143,7 +144,7 @@ Project_Raidline.exe
 
 ## 7. Extraction Loop 宏切片
 
-依赖：Persistent Base 已由 PR #58 合入 `origin/main@b1ea3c3`。活动计划：`doc/exec-plans/active/core-alpha-extraction-loop.md`。
+依赖：Persistent Base 已由 PR #58 合入 `origin/main@b1ea3c3`。已接受计划证据：`doc/exec-plans/completed/core-alpha-extraction-loop.md`。
 
 禁止范围：不实现特殊弹、完整逻辑弹道重做、耐久/故障、防具/部位/复杂伤势、多地图、高危、特殊撤离、增援、尸体搜索或寻回。
 
@@ -157,7 +158,7 @@ Project_Raidline.exe
 
 ## 8. Alpha Hardening 宏切片
 
-依赖：Extraction Loop 接受并合入 main。
+依赖：Extraction Loop 已由 PR #59 合入 `origin/main@ed45baa`。活动计划：`doc/exec-plans/active/core-alpha-hardening.md`。
 
 禁止范围：不通过增加敌人刷新、倒计时、高危、任务或复杂伤势掩盖节奏问题。
 
@@ -200,6 +201,10 @@ Project_Raidline.exe
 - [x] PR #59 精确代码 head `864f12e` 的范围检测、Windows 与 Ubuntu CI 全部成功。
 - [x] 用户使用当前 Windows Debug 可执行文件完成 Extraction Loop 第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏。
 - [x] 验收记录随证据提交进入 PR #59；最终 CI 成功后由 Release Control 转为 Ready，合并仍需显式授权。
+- [x] PR #59 已以 merge commit `ed45baa` 进入 main；从该接受基线建立 `codex/core-alpha-hardening`。
+- [x] Hardening 修复装入弹匣/枪膛弹药未计入最低出击能力的问题，并确保 pending Raid 的恢复备份不能绕过异常退出全损。
+- [x] Hardening focused 37/37、全量 CTest 627/627 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档和 Deploy 保存失败均有自动化证据。
+- [ ] Hardening exact-head Windows/Ubuntu CI、GDD 1–8 集中人工验收与 Alpha 完成报告。
 
 最后更新：2026-08-15。
 

@@ -35,8 +35,8 @@
 
 | 任务 | 状态 |
 | --- | --- |
-| PR #55 / #54 / #56 / #57 / #58 | 已进入 `origin/main@b1ea3c3` |
-| Extraction Loop | PR #59 当前分支 `2d9b96d` + `66f3120` 已完成端到端实现；本地 620/620、精确 head CI 与用户 7/7 集中验收通过，等待显式合并授权 |
-| Alpha Hardening | 等待 Extraction Loop 接受 |
+| PR #55 / #54 / #56 / #57 / #58 / #59 | 已进入 `origin/main@ed45baa` |
+| Extraction Loop | PR #59 已以 merge commit `ed45baa` 进入 main；本地 620/620、精确 head CI 与用户 7/7 集中验收均已通过 |
+| Alpha Hardening | 当前分支已修复救济弹药统计和 pending 备份绕过问题；focused 37/37、全量 627/627 通过，等待 PR/CI 与最终人工验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/core-alpha-extraction-loop.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/core-alpha-hardening.md`。

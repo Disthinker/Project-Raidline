@@ -415,4 +415,3 @@ TEST(AlphaHardeningTest, DeploySaveFailureDoesNotEnterRaidOrMutateProfile)
     EXPECT_EQ(session.state(), GameSessionState::BetweenRaids);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
-

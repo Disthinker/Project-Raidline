@@ -4,9 +4,9 @@
 
 ## Git 与交付基线
 
-- `origin/main@b1ea3c3` 已包含 Core Extraction Alpha Slice 0、RL-INV-003、Build Module Foundation、Content Registry v1 和 PR #58 Persistent Base；各 feature head 的 Windows/Ubuntu CI 与对应人工门槛均已通过。
-- 当前开发分支：`codex/core-alpha-extraction-loop`，从干净的 `origin/main@b1ea3c3` 创建；领域合同提交为 `2d9b96d`，端到端实现提交为 `66f3120`。
-- 当前活动计划：`doc/exec-plans/active/core-alpha-extraction-loop.md`。
+- `origin/main@ed45baa` 已包含 Core Extraction Alpha Slice 0、RL-INV-003、Build Module Foundation、Content Registry v1、Persistent Base 和 Extraction Loop；各已接受 feature head 的 Windows/Ubuntu CI 与对应人工门槛均已通过。
+- 当前开发分支：`codex/core-alpha-hardening`，从干净的 `origin/main@ed45baa` 创建。
+- 当前活动计划：`doc/exec-plans/active/core-alpha-hardening.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
@@ -14,8 +14,8 @@
 当前唯一里程碑是 **Core Extraction Alpha**，唯一范围合同是外部 GDD 的 `05_Core_Extraction_Alpha_首阶段功能规格.md`。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
-2. **Extraction Loop**：领域、服务、模拟和客户端代码已在当前分支完成；本地自动化、exact-head CI 与用户集中真实窗口验收均通过，PR #59 已满足 Ready 门槛并等待显式合并授权。
-3. **Alpha Hardening**：等待 Extraction Loop 接受后进行连续多局、跨进程恢复组合、平衡和完整 Alpha 验收。
+2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
+3. **Alpha Hardening**：恢复/救济缺陷修复、内容合同和自动化长序列已在当前分支完成；本地门槛通过，等待提交、exact-head CI 与最终集中人工验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -27,7 +27,7 @@
 - 四个生产库、唯一业务源码编译所有权、强类型 DefinitionId、版本化 JSON ContentRegistry 和仓库本地 nlohmann-json overlay。
 - Persistent Base 的长期 Profile、唯一 AssetRegistry、Stash/三槽配装、固定经济/救济、可行走三设施 Base、首次环境目标链和原子存档。
 
-## Extraction Loop 当前实现
+## 已接受的 Extraction Loop
 
 - `ProfileState::AssetRegistry` 在 Base、Deploy、Raid Loot 与 Settlement 全程唯一拥有资产；装备根、容器子资产、已安装弹匣和 Raid 地面位置均使用稳定实例 ID。
 - content v2 提供一张固定 Alpha 地图的 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽；每局冻结 6～9 个有效 Loot，PCG32 命名随机流结果写入 pending Raid 快照。
@@ -41,15 +41,22 @@
 ## 当前自动化证据
 
 - Windows Debug 当前树构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 17/17 通过。
-- 全量 CTest 620/620 通过，0 失败。
-- PR #59 head `0b495f7` 的 GitHub 范围检测、Windows 与 Ubuntu CI 全部成功。
-- 用户使用当前 Windows Debug 可执行文件完成第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏替代该证据。
+- EconomyDomain、ContentRegistry、SaveRepository、AlphaExtractionSession 与 AlphaHardening focused 37/37 通过。
+- 全量 CTest 627/627 通过，0 失败。
+- 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
+- 当前分支尚未建立 PR，因此 exact-head CI 和最终人工验收尚无证据；开发代理未启动游戏。
+
+## Alpha Hardening 当前实现
+
+- 最低出击能力与救济资格统一统计散装弹药、弹匣有序弹药和枪膛弹药，避免已有 30 发可用弹药时误发救济。
+- 保存 pending Raid 时同步同一已校验候选到恢复备份；主档损坏后从备份恢复仍保留原 pending/Settlement ID，并按异常退出全损一次。
+- 固定供应内容加载校验 Alpha 25% 向下取整、最低 1 的回收价基线。
+- 双份损坏存档明确失败；Deploy 保存失败不交换 Profile、不进入 Raid。
 
 ## 尚未完成
 
-- Extraction Loop：PR #59 已满足自动化、CI 与人工门槛，等待显式合并授权；进入 main 前仍不属于接受基线。
-- Alpha Hardening：连续多局、损坏恢复组合、跨进程长序列、平衡与 Alpha 完成报告。
+- Alpha Hardening：提交/推送、Draft PR、exact-head Windows/Ubuntu CI、GDD 1–8 集中人工验收及四项产品判断。
+- Alpha 完成报告与后续阶段入口决策只在上述门槛全部通过后形成。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。
 - 正式攻击动画及所有新正式美术/音频生产。
