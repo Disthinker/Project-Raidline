@@ -1,0 +1,88 @@
+# Core Extraction Alpha：Hardening ExecPlan
+
+## 1. 产品结果与完成定义
+
+本宏切片把已经接受的 Persistent Base 与 Extraction Loop 收束为可长期反复运行的 Core Extraction Alpha 候选版。工作只处理稳定性、恢复一致性、内容合同、连续多局与发布证据；不扩大玩法范围。
+
+完成门槛：
+
+- 连续 10 次混合成功/失败 Raid 及至少 3 次跨进程重载后，Profile、资产 ID 高水位、所有权、弹药、货币和 Settlement 仍合法且无重复提交。
+- 主档/备份的有效、缺失、损坏及 pending Raid 组合均有确定结果；从安全备份恢复也不能绕过未结算 Raid 的异常失败。
+- 最低出击能力查询统计散装、弹匣和枪膛中的兼容弹药，不误发救济；救济资产的来源标签在拆分、压弹、卸弹和失败结算中保持。
+- Alpha 固定供应满足 25% 向下取整且最低 1 的回收基线，所有当前可达购买/拆分/压卸弹/回收路径无正收益。
+- 三组出生/撤离和三组敌人部署均可由稳定 seed 选中；6～9 个 Loot 快照覆盖中央、外围和资源路线，保存重载不重抽。
+- focused、全量 CTest、Windows/Ubuntu exact-head CI 通过；最后由用户执行集中真实窗口验收，开发代理不启动游戏。
+
+## 2. 基线、依赖与排除
+
+- 基线：`origin/main@ed45baa`，PR #59 已通过自动化与用户 7/7 验收并合入。
+- 分支：`codex/core-alpha-hardening`。
+- 唯一范围合同：外部只读 GDD `05_Core_Extraction_Alpha_首阶段功能规格.md`。
+- 已接受依赖：PR #58 Persistent Base、PR #59 Extraction Loop。
+- 不实现多地图、高危、刷新敌人、特殊撤离、部位/复杂伤势、耐久/故障、任务、基地成长、最终逻辑弹道替换或正式美术/音频。
+- Week29 分支与正式 Grab/Scratch/Bite 美术继续暂停；不生成、发布、接入资源，也不修改美术 manifest。
+
+## 3. 审计结论与修复范围
+
+可复用：唯一 AssetRegistry、revision/事务、原子领域候选、schema v2、pending Raid、幂等 Settlement、PCG32 命名流、三配置 MapDefinition、固定经济与救济来源标签。
+
+需要修复：
+
+- `hasMinimumRaidCapability` 与 `isReliefEligible` 只统计散装弹药，未统计弹匣和枪膛，可能在已经具备 30 发可用弹药时误发救济。
+- Deploy 保存时滚动备份仍是出击前状态；若随后主档损坏，从备份恢复会看不到 pending Raid，从而绕过异常退出全损。
+- 价格基线、恢复矩阵、十局跨进程序列和三配置可达性缺少一个统一的 Alpha 完成门槛。
+
+停止扩展：V0 180 秒 Timeout、实体 Projectile 和旧 `ItemInstance` 仅保留在兼容路径，不为 Alpha 增加消费者。
+
+## 4. 实施步骤与退出条件
+
+1. **恢复与救济合同**
+   - 最低能力查询统一统计合法散装弹、弹匣弹和枪膛弹。
+   - 保存 pending Raid 时把同一已校验候选同步为恢复备份；主档损坏后恢复该 pending 状态并使用原 Settlement ID 异常失败。
+   - 退出条件：误发救济回归、pending 主档损坏恢复及 Deploy 保存失败原子性测试通过。
+
+2. **内容与长序列门槛**
+   - 校验固定供应的 Alpha 回收价格基线；验证三路线插槽与三组配置可达。
+   - 增加 10 局成功/死亡/主动退出/异常退出混合序列，至少 3 次保存后重新加载，并持续验证 Profile 指纹、资产所有权、高水位、货币和幂等记录。
+   - 退出条件：新 Hardening focused test 全部通过，不需要测试专用生产框架。
+
+3. **发布证据与人工验收**
+   - Windows Debug 增量构建、focused、全量 CTest、架构边界检查、exact-head CI。
+   - 更新项目状态、风险和 Alpha 总计划，归档已接受的 Persistent Base 与 Extraction Loop 计划。
+   - 自动化与 CI 完成后才交给用户执行 GDD 1–8 清单及四项产品判断。
+
+## 5. 自动化门槛
+
+- Economy：散装/弹匣/枪膛能力等价；缺件补齐成本正确；救济幂等且来源不可洗白；当前供应回收价严格符合 Alpha 基线。
+- Persistence：schema v2 往返、v1 迁移、主档/备份有效/缺失/损坏矩阵、pending 备份恢复、两份损坏明确失败、保存失败不交换内存状态。
+- Lifecycle：10 局混合结果、3 次以上重载、四类结果、重复 Settlement、失败后救济再出击、成功 Loot 保留；每次提交后 Profile 验证通过。
+- Map：稳定 seed 可覆盖三组出生撤离和三组部署；每个快照 6～9 Loot 且三路线至少各一；序列化往返指纹不变。
+- Architecture：`raidline_domain`/`raidline_simulation` 保持 SDL-free，业务源码只进入一个生产库。
+
+## 6. 提交、PR 与回滚
+
+- 提交 1：ExecPlan、恢复/救济/内容合同及 focused tests。
+- 提交 2：长序列与恢复组合、项目状态和验收证据。
+- 同一 Hardening PR 只收束 Alpha，不夹带后续产品系统。
+- 若 pending 备份策略回归，可单独回滚 Persistence 提交；领域查询和测试不依赖客户端。若长序列暴露资产不变量问题，PR 保持 Draft，不以文档声明替代修复。
+- 不自动合并；用户明确授权后才由 Release Control 合入。
+
+## 7. 集中人工验收（自动化及 CI 后由用户执行）
+
+1. 新档忽略提示，自行完成仓储、配装/弹药和出击。
+2. Raid 内完成换弹、治疗、Loot 整理和撤离。
+3. 成功后确认位置与资产保留，出售 Loot、补给并再次出击。
+4. 分别验证死亡、主动退出和强制关闭重开只失败结算一次；连续失败后可用救济恢复最低出击能力。
+5. 空手、无弹或不完整配装可经二次确认进入；非法所有权或存档失败必须阻止进入。
+6. 连续完成 10 次混合成功/失败 Raid，期间至少 3 次完整退出并重开，无复制、吞失、死档或流程卡死。
+7. 三种地图配置至少各体验一次，比较中央、外围和资源支路。
+8. 清敌后可安全搜索，无倒计时和敌人刷新；若节奏偏弱只记录为后续数据平衡，不扩展 Alpha 系统。
+
+最终由用户判断：继续出击吸引力、失败惩罚、整备摩擦和固定地图路线取舍是否成立。
+
+## 8. 进度记录
+
+- 2026-08-15：用户以“下一步”授权执行已公布的合并步骤；PR #59 以 merge commit `ed45baa` 进入 main。
+- 2026-08-15：从干净的 `origin/main@ed45baa` 创建 `codex/core-alpha-hardening`；重新读取唯一 Alpha 范围合同并完成恢复、救济、经济和长序列差距审计。
+- 2026-08-15：修复弹匣/枪膛弹药未计入最低出击能力，以及 pending Raid 主档损坏后旧备份绕过全损的问题；增加 Alpha 价格基线、双损坏存档、Deploy 保存失败和专用 Hardening 自动化。
+- 2026-08-15：Windows Debug 全目标构建成功；focused 37/37、全量 CTest 627/627 通过，`Project_Raidline.exe` 已生成但开发代理未启动游戏。

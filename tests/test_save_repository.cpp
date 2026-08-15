@@ -276,3 +276,28 @@ TEST(SaveRepositoryTest, UnsupportedContentVersionIsRejected)
     EXPECT_EQ(result.status, SaveLoadStatus::Failed);
     EXPECT_FALSE(result.profile.has_value());
 }
+
+TEST(SaveRepositoryTest, CorruptPrimaryAndBackupFailExplicitly)
+{
+    TemporarySaveDirectory temporary;
+    SaveRepository repository{temporary.path()};
+    ProfileState profile = makeNewAlphaProfile(
+        "save-double-corrupt",
+        publishedContentRegistry());
+    ASSERT_TRUE(repository.save(
+        profile,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    for (const std::filesystem::path &path : {
+             repository.primaryPath(),
+             repository.backupPath()})
+    {
+        std::ofstream corrupt(path, std::ios::trunc);
+        corrupt << "corrupt";
+    }
+
+    const SaveLoadResult result = repository.load(
+        publishedContentRegistry());
+    EXPECT_EQ(result.status, SaveLoadStatus::Failed);
+    EXPECT_FALSE(result.profile.has_value());
+}

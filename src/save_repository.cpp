@@ -721,8 +721,27 @@ SaveWriteResult SaveRepository::save(
         isValidEnvelope(primaryPath_, publishedContentRegistry());
     const bool validBackup =
         isValidEnvelope(backupPath_, publishedContentRegistry());
-    bool installInitialBackup = false;
-    if (validPrimary)
+    const bool mirrorPendingRaid = profile.pendingRaid.has_value();
+    bool installCandidateBackup = false;
+    if (mirrorPendingRaid)
+    {
+        error.clear();
+        std::filesystem::copy_file(
+            temporaryPath_,
+            backupTemporaryPath_,
+            std::filesystem::copy_options::overwrite_existing,
+            error);
+        if (error || !isValidEnvelope(
+                         backupTemporaryPath_,
+                         publishedContentRegistry()))
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            std::filesystem::remove(backupTemporaryPath_, error);
+            return {false, "pending Raid recovery backup could not be prepared"};
+        }
+        installCandidateBackup = true;
+    }
+    else if (validPrimary)
     {
         std::filesystem::copy_file(
             primaryPath_,
@@ -760,7 +779,7 @@ SaveWriteResult SaveRepository::save(
             std::filesystem::remove(backupTemporaryPath_, error);
             return {false, "initial safe backup could not be created"};
         }
-        installInitialBackup = true;
+        installCandidateBackup = true;
     }
 
     if (!atomicReplace(temporaryPath_, primaryPath_))
@@ -769,7 +788,7 @@ SaveWriteResult SaveRepository::save(
         std::filesystem::remove(backupTemporaryPath_, error);
         return {false, "primary save could not be atomically replaced"};
     }
-    if (installInitialBackup &&
+    if (installCandidateBackup &&
         !atomicReplace(backupTemporaryPath_, backupPath_))
     {
         std::filesystem::remove(backupTemporaryPath_, error);

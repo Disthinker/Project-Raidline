@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <tuple>
 
 #include "alpha_content_ids.h"
@@ -201,4 +202,38 @@ TEST(AlphaExtractionSessionTest, ReopeningPendingRaidCommitsAbnormalFailure)
               RaidResultOutcome::AbnormalQuit);
     EXPECT_FALSE(equippedAsset(
         reopened.profile(), EquipmentSlotKind::PrimaryWeapon).has_value());
+}
+
+TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPendingRaidAsFailure)
+{
+    TemporarySaveDirectory temporary;
+    {
+        GameSession first;
+        first.configurePersistence(temporary.path());
+        ASSERT_TRUE(first.startNewProfile("alpha-session-corrupt-pending"));
+        prepareArmedLoadout(first);
+        ASSERT_TRUE(first.deployAlpha(55771));
+        ASSERT_TRUE(first.profile().pendingRaid.has_value());
+    }
+
+    std::ofstream corrupt(
+        temporary.path() / "profile.json",
+        std::ios::trunc);
+    corrupt << "{corrupt";
+    corrupt.close();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+
+    EXPECT_EQ(reopened.lastSaveLoadStatus(), SaveLoadStatus::RecoveredBackup);
+    EXPECT_TRUE(reopened.recoveredAbandonedRaid());
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+    ASSERT_TRUE(reopened.profile().lastRaidResult.has_value());
+    EXPECT_EQ(
+        reopened.profile().lastRaidResult->outcome,
+        RaidResultOutcome::AbnormalQuit);
+    EXPECT_FALSE(equippedAsset(
+        reopened.profile(),
+        EquipmentSlotKind::PrimaryWeapon).has_value());
 }

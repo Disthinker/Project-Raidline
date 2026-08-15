@@ -33,6 +33,53 @@ bool hasChildren(const ProfileState &profile, AssetInstanceId ownerId) noexcept
     return false;
 }
 
+struct RaidCapabilityInventory
+{
+    bool weapon{};
+    bool magazine{};
+    std::uint64_t ammunition{};
+};
+
+RaidCapabilityInventory raidCapabilityInventory(
+    const ProfileState &profile,
+    const ContentRegistry &content)
+{
+    RaidCapabilityInventory result;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (std::holds_alternative<RaidGroundAssetLocation>(asset.location))
+        {
+            continue;
+        }
+
+        const ItemDefinition &definition = content.item(asset.definitionId);
+        result.weapon = result.weapon ||
+            (definition.equipmentSlot == EquipmentSlotKind::PrimaryWeapon &&
+             definition.compatibleMagazineDefinitionId ==
+                 alpha_content::magazine);
+        result.magazine = result.magazine ||
+            definition.definitionId == alpha_content::magazine;
+        if (definition.definitionId == alpha_content::ammunition)
+        {
+            result.ammunition += asset.quantity;
+        }
+        for (const MagazineRoundRecord &round : asset.magazineRounds)
+        {
+            if (round.definitionId == alpha_content::ammunition)
+            {
+                ++result.ammunition;
+            }
+        }
+        if (asset.chamberedRound.has_value() &&
+            asset.chamberedRound->definitionId == alpha_content::ammunition)
+        {
+            ++result.ammunition;
+        }
+    }
+    return result;
+}
+
 bool createFirstFit(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -241,32 +288,17 @@ bool hasMinimumRaidCapability(
     const ProfileState &profile,
     const ContentRegistry &content) noexcept
 {
-    bool weapon{};
-    bool magazine{};
-    std::uint64_t ammunition{};
     try
     {
-        for (const auto &[id, asset] : profile.assets.records())
-        {
-            static_cast<void>(id);
-            const ItemDefinition &definition = content.item(asset.definitionId);
-            weapon = weapon ||
-                (definition.equipmentSlot == EquipmentSlotKind::PrimaryWeapon &&
-                 definition.compatibleMagazineDefinitionId ==
-                     alpha_content::magazine);
-            magazine = magazine ||
-                definition.definitionId == alpha_content::magazine;
-            if (definition.definitionId == alpha_content::ammunition)
-            {
-                ammunition += asset.quantity;
-            }
-        }
+        const RaidCapabilityInventory inventory =
+            raidCapabilityInventory(profile, content);
+        return inventory.weapon && inventory.magazine &&
+               inventory.ammunition >= 30;
     }
     catch (...)
     {
         return false;
     }
-    return weapon && magazine && ammunition >= 30;
 }
 
 bool isReliefEligible(
@@ -278,37 +310,23 @@ bool isReliefEligible(
         return false;
     }
 
-    bool weapon{};
-    bool magazine{};
-    std::uint64_t ammunition{};
     try
     {
-        for (const auto &[id, asset] : profile.assets.records())
-        {
-            static_cast<void>(id);
-            const ItemDefinition &definition = content.item(asset.definitionId);
-            weapon = weapon ||
-                definition.definitionId == alpha_content::rifle;
-            magazine = magazine ||
-                definition.definitionId == alpha_content::magazine;
-            if (definition.definitionId == alpha_content::ammunition)
-            {
-                ammunition += asset.quantity;
-            }
-        }
+        const RaidCapabilityInventory inventory =
+            raidCapabilityInventory(profile, content);
 
         std::uint64_t required{};
-        if (!weapon)
+        if (!inventory.weapon)
         {
             required += content.item(alpha_content::rifle).marketBuyPrice;
         }
-        if (!magazine)
+        if (!inventory.magazine)
         {
             required += content.item(alpha_content::magazine).marketBuyPrice;
         }
-        if (ammunition < 30)
+        if (inventory.ammunition < 30)
         {
-            required += (30 - ammunition) *
+            required += (30 - inventory.ammunition) *
                 content.item(alpha_content::ammunition).marketBuyPrice;
         }
         return required > profile.currency;

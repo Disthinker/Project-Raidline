@@ -417,6 +417,10 @@ raidline_add_test(
     tests/test_alpha_extraction_session.cpp
     raidline::services)
 raidline_add_test(
+    AlphaHardeningTest
+    tests/test_alpha_hardening.cpp
+    raidline::services)
+raidline_add_test(
     PersistentSessionTest
     tests/test_persistent_session.cpp
     raidline::services)
