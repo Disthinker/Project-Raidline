@@ -1716,6 +1716,23 @@ void App::handleProfileInventoryUiEvent(
         const AssetRecord &asset = *hit->asset;
         const ItemDefinition &definition =
             publishedContentRegistry().item(asset.definitionId);
+        if (const auto equipmentTarget = queryProfileQuickEquipTarget(
+                profile,
+                publishedContentRegistry(),
+                asset.instanceId))
+        {
+            executeProfileDrop(
+                ProfileDropRequest{
+                    ProfileDragSource{
+                        asset.instanceId,
+                        profile.revision,
+                        asset.location,
+                        0,
+                        asset.orientation},
+                    *equipmentTarget},
+                false);
+            return;
+        }
         std::vector<ProfileContainerId> destinations;
         if (const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
             stored != nullptr && stored->container.kind == ProfileContainerKind::Stash)

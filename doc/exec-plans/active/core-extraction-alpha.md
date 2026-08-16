@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹和奔跑修订，本地实现、自动化与功能 head CI 完成，等待最终集中人工验收
+状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹、奔跑和空栏位快速装备修订，本地实现与自动化完成，等待新 head CI 及最终集中人工验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -30,7 +30,7 @@
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
 - Persistent Base 从干净的 `origin/main@14cf79b` 创建；Windows Debug 120 步构建、focused 70/70、全量 CTest 601/601、exact-head CI 与用户 6/6 集中验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。
 - Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；Windows Debug 构建、focused 17/17、全量 CTest 620/620、PR #59 精确 head CI 与用户 7/7 集中验收通过，并以 merge commit `ed45baa` 进入 main。
-- Alpha Hardening 从干净的 `origin/main@ed45baa` 创建；恢复/救济修复、内容合同、10 局长序列、三配置自动化、库存/角色显示返工、退出回滚及 Raid 压卸弹/奔跑已完成，本地全目标构建与全量 CTest 644/644 通过。
+- Alpha Hardening 从干净的 `origin/main@ed45baa` 创建；恢复/救济修复、内容合同、10 局长序列、三配置自动化、库存/角色显示返工、退出回滚、Raid 压卸弹/奔跑及空栏位快速装备已完成，本地全目标构建与全量 CTest 645/645 通过。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -203,7 +203,7 @@ Project_Raidline.exe
 - [x] 验收记录随证据提交进入 PR #59；最终 CI 成功后由 Release Control 转为 Ready，合并仍需显式授权。
 - [x] PR #59 已以 merge commit `ed45baa` 进入 main；从该接受基线建立 `codex/core-alpha-hardening`。
 - [x] Hardening 修复装入弹匣/枪膛弹药未计入最低出击能力的问题，并最终按用户修订将关闭程序处理改为精确出击前存档回滚。
-- [x] Hardening 全量 CTest 644/644 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档、Deploy 保存失败、统一库存交互、Raid 压卸弹及奔跑均有自动化证据。
+- [x] Hardening 全量 CTest 645/645 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档、Deploy 保存失败、统一库存交互、Raid 压卸弹、奔跑及空栏位快速装备均有自动化证据。
 - [x] Hardening 返工提交 `daceec6` 的 Windows/Ubuntu CI（run `31861016485`）通过。
 - [ ] 用户按正常游玩流程完成最终验收与 Alpha 完成报告。
 

@@ -2,7 +2,34 @@
 
 #include <utility>
 
+#include "inventory_domain.h"
 #include "weapon_ammo_domain.h"
+
+std::optional<EquipmentSlotTarget> queryProfileQuickEquipTarget(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId instanceId)
+{
+    const AssetRecord *asset = profile.assets.find(instanceId);
+    if (asset == nullptr)
+    {
+        return std::nullopt;
+    }
+    const ItemDefinition &definition = content.item(asset->definitionId);
+    if (!definition.equipmentSlot.has_value() ||
+        equippedAsset(profile, *definition.equipmentSlot).has_value())
+    {
+        return std::nullopt;
+    }
+    const InventoryEquipCommand command{
+        instanceId,
+        *definition.equipmentSlot};
+    if (!queryInventory(profile, content, command).canCommit)
+    {
+        return std::nullopt;
+    }
+    return EquipmentSlotTarget{*definition.equipmentSlot};
+}
 
 std::optional<ProfileContextActionKind> queryProfileContextAction(
     const ProfileState &profile,

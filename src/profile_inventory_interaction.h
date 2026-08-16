@@ -40,6 +40,14 @@ using ProfileDropTarget = std::variant<
     MagazineLoadTarget,
     WeaponInstallTarget>;
 
+// Returns an equipment target only when the asset declares a compatible slot,
+// that slot is empty, and the authoritative inventory query accepts the move.
+[[nodiscard]] std::optional<EquipmentSlotTarget>
+queryProfileQuickEquipTarget(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId instanceId);
+
 struct ProfileDragSource
 {
     AssetInstanceId instanceId{};

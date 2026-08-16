@@ -14,6 +14,20 @@ InventoryPointerItemGeometry geometry()
         true,
         MousePosition{1.25F, 0.25F}};
 }
+
+AssetInstanceId findDefinition(
+    const ProfileState &profile,
+    ItemDefinitionId definitionId)
+{
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == definitionId)
+        {
+            return id;
+        }
+    }
+    return 0;
+}
 }
 
 TEST(ProfileInventoryInteractionTest, ClickWithoutDragDoesNotCreateRequest)
@@ -204,4 +218,47 @@ TEST(ProfileInventoryInteractionTest, MagazineUnloadActionRemainsDiscoverable)
             magazine,
             true),
         ProfileContextActionKind::UnloadMagazine);
+}
+
+TEST(ProfileInventoryInteractionTest, QuickTransferEquipsOnlyIntoEmptyCompatibleSlot)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "quick-equip-profile",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = findDefinition(
+        profile, alpha_content::rifle);
+    const AssetInstanceId ammunition = findDefinition(
+        profile, alpha_content::ammunition);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(ammunition, 0U);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    EXPECT_EQ(
+        queryProfileQuickEquipTarget(
+            profile,
+            publishedContentRegistry(),
+            rifle),
+        (std::optional<EquipmentSlotTarget>{
+            EquipmentSlotTarget{EquipmentSlotKind::PrimaryWeapon}}));
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_EQ(
+        queryProfileQuickEquipTarget(
+            profile,
+            publishedContentRegistry(),
+            ammunition),
+        std::nullopt);
+
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            rifle,
+            EquipmentSlotKind::PrimaryWeapon},
+        CommandContext{profile.revision, "quick-equip-rifle"}).succeeded);
+    EXPECT_EQ(
+        queryProfileQuickEquipTarget(
+            profile,
+            publishedContentRegistry(),
+            rifle),
+        std::nullopt);
 }
