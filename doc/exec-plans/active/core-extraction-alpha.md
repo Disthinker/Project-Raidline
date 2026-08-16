@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹和奔跑修订，本地实现和自动化完成，等待新 head CI 与最终集中人工验收
+状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹和奔跑修订，本地实现、自动化与功能 head CI 完成，等待最终集中人工验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 

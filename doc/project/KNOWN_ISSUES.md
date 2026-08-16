@@ -9,7 +9,7 @@
 | RL-INV-001 | 背包物品合法位置缺少完整原子交换 | PR #58 已合入；新 InventoryDomain 与用户人工验收通过。旧 V0 inventory 仅保留历史回归 |
 | RL-INV-002 | Ctrl/Shift 数量选择后的拖拽锁定不完整 | PR #58 的点击脚手架已在 PR #60 返工：按下锁定数量、超过 4 像素开始拖动、释放提交；exact-head CI 通过，等待最终人工验收 |
 | RL-INV-003 | 同定义弹药堆叠与 60 发上限 | PR #54 已合入并完成人工验收 |
-| RL-UI-001 | Alpha Profile 库存回归为点击来源/目标和验收按钮，Base 缺角色图；Raid 缺压卸弹和奔跑，弹匣右键入口会被执行预查询错误隐藏 | PR #60 已改为共享拖拽、领域预览、稳定右键动作和批准角色资源；Raid 支持限时压卸弹及 Shift 奔跑；本地 644/644 通过，等待新 head CI 与人工验收 |
+| RL-UI-001 | Alpha Profile 库存回归为点击来源/目标和验收按钮，Base 缺角色图；Raid 缺压卸弹和奔跑，弹匣右键入口会被执行预查询错误隐藏 | PR #60 已改为共享拖拽、领域预览、稳定右键动作和批准角色资源；Raid 支持限时压卸弹及 Shift 奔跑；本地 644/644 与功能 head CI 通过，等待人工验收 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | Alpha 只保留 HitResult 边界；App 不得猜测 |
 | RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 最终射击手感后移，不在 V0 表现适配器顺带扩张 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
@@ -38,6 +38,6 @@
 | --- | --- |
 | PR #55 / #54 / #56 / #57 / #58 / #59 | 已进入 `origin/main@ed45baa` |
 | Extraction Loop | PR #59 已以 merge commit `ed45baa` 进入 main；本地 620/620、精确 head CI 与用户 7/7 集中验收均已通过 |
-| Alpha Hardening | 当前分支已完成恢复/救济修复、库存/角色显示返工、Raid 压卸弹/奔跑和进程退出回滚；Windows Debug 全目标、全量 644/644 通过，等待新 head CI 与最终正常游玩验收 |
+| Alpha Hardening | 当前分支已完成恢复/救济修复、库存/角色显示返工、Raid 压卸弹/奔跑和进程退出回滚；Windows Debug 全目标、全量 644/644 与功能 head CI 通过，等待最终正常游玩验收 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/core-alpha-hardening.md`。

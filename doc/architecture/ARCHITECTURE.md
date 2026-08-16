@@ -160,7 +160,7 @@ Content Registry 的当前落地边界：
 1. `codex/build-module-foundation`：已由 PR #56 进入 main，建立四个库目标并消除重复业务源码编译。
 2. `codex/content-registry-v1`：已由 PR #57 以 merge commit `14cf79b` 进入 main。
 3. `codex/core-alpha-persistent-base`：已由 PR #58 以 merge commit `b1ea3c3` 进入 main，交付 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1。
-4. `codex/core-alpha-extraction-loop`：已在当前分支完成 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement；等待 CI 与用户验收后接受。
+4. `codex/core-alpha-extraction-loop`：已由 PR #59 以 merge commit `ed45baa` 进入 main，交付 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement。
 5. `codex/core-alpha-hardening`：连续多局、进程退出回滚、损坏恢复、平衡和 Alpha 完整验收。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。
