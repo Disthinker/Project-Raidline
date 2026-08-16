@@ -53,8 +53,8 @@ struct InventoryPointerEvent
         const InventoryPointerEvent &) = default;
 };
 
-// Ctrl+左键使用点击位置。App 先刷新 hover，再解析源格，因此
-// 界面打开后无需先晃动鼠标。
+// F 在按键事件到达时采样当前鼠标位置；Ctrl+右键使用点击位置。
+// App 先刷新 hover，再解析源格，因此界面打开后无需先晃动鼠标。
 struct InventoryQuickTransferEvent
 {
     std::optional<MousePosition> pointerPosition;
@@ -292,21 +292,21 @@ struct InventoryQuickTransferRequest
         const InventoryQuickTransferRequest &) = default;
 };
 
-enum class InventoryPrimaryPressAction
+enum class InventoryPartialTransferMode
 {
-    BeginWholeDrag,
-    BeginHalfDrag,
-    QuickTransfer,
-    Ignore
+    One,
+    Half
 };
 
 [[nodiscard]]
-InventoryPrimaryPressAction decideInventoryPrimaryPressAction(
+std::optional<InventoryPartialTransferMode>
+decideInventoryPartialTransferMode(
     bool controlPressed,
     bool shiftPressed) noexcept;
 
 [[nodiscard]]
 std::uint32_t inventoryPartialTransferQuantity(
+    InventoryPartialTransferMode mode,
     std::uint32_t availableQuantity) noexcept;
 
 // 快捷转移只在双容器界面、Idle 且存在 hover 时产生请求。

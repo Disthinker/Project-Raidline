@@ -215,31 +215,33 @@ decideInventoryQuickTransfer(
         *hoveredLocation};
 }
 
-InventoryPrimaryPressAction decideInventoryPrimaryPressAction(
+std::optional<InventoryPartialTransferMode>
+decideInventoryPartialTransferMode(
     bool controlPressed,
     bool shiftPressed) noexcept
 {
-    if (controlPressed && shiftPressed)
+    if (controlPressed == shiftPressed)
     {
-        return InventoryPrimaryPressAction::Ignore;
+        return std::nullopt;
     }
-    if (controlPressed)
-    {
-        return InventoryPrimaryPressAction::QuickTransfer;
-    }
-    if (shiftPressed)
-    {
-        return InventoryPrimaryPressAction::BeginHalfDrag;
-    }
-    return InventoryPrimaryPressAction::BeginWholeDrag;
+
+    return controlPressed
+        ? InventoryPartialTransferMode::One
+        : InventoryPartialTransferMode::Half;
 }
 
 std::uint32_t inventoryPartialTransferQuantity(
+    InventoryPartialTransferMode mode,
     std::uint32_t availableQuantity) noexcept
 {
     if (availableQuantity == 0)
     {
         return 0;
+    }
+
+    if (mode == InventoryPartialTransferMode::One)
+    {
+        return 1;
     }
 
     return availableQuantity / 2 +
