@@ -50,6 +50,15 @@ TEST(RaidActionTest, TimedActionCompletesOrInterruptsWithoutPartialCommit)
     EXPECT_EQ(state.update(2.0F, false), RaidActionAdvance::Completed);
     ASSERT_TRUE(state.takeCompleted().has_value());
 
+    ASSERT_TRUE(state.start(LoadMagazineRaidAction{
+        2,
+        5,
+        4,
+        0.0F,
+        0.8F}));
+    EXPECT_EQ(state.update(0.8F, false), RaidActionAdvance::Completed);
+    ASSERT_TRUE(state.takeCompleted().has_value());
+
     ASSERT_TRUE(state.start(UnloadMagazineRaidAction{
         3,
         ProfileContainerId::compartment(4, 0),

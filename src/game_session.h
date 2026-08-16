@@ -89,6 +89,10 @@ public:
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,
         AssetInstanceId magazineAssetId);
+    [[nodiscard]] bool startAlphaLoadMagazine(
+        AssetInstanceId ammunitionAssetId,
+        AssetInstanceId magazineAssetId,
+        std::uint32_t quantity);
     [[nodiscard]] bool startAlphaUnloadMagazine(
         AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);

@@ -10,6 +10,7 @@ namespace
     constexpr float kPlayerMoveFrameDuration{0.09f};
     constexpr float kImpactSlowDurationSeconds{0.18F};
     constexpr float kImpactSlowTimeMultiplier{0.28F};
+    constexpr float kSprintSpeedMultiplier{1.5F};
     constexpr float kTimerEpsilon{0.00001F};
 
     AnimationClip makePlayerMoveClip()
@@ -101,8 +102,10 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         direction.y /= length;
         facingDirection_ = direction;
         // 归一化方向更新
-        position_.x += direction.x * speed_ * effectiveDeltaTime;
-        position_.y += direction.y * speed_ * effectiveDeltaTime;
+        const float movementSpeed = speed_ *
+            (input.sprint ? kSprintSpeedMultiplier : 1.0F);
+        position_.x += direction.x * movementSpeed * effectiveDeltaTime;
+        position_.y += direction.y * movementSpeed * effectiveDeltaTime;
 
         movementAnimator_.update(effectiveDeltaTime);
     }

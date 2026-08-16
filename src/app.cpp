@@ -895,6 +895,8 @@ GameplayInput App::makeGameplayInput() const
         input_.isActionPressed(
             GameAction::MoveRight);
 
+    input.sprint = input_.isShiftPressed();
+
     input.fireJustPressed =
         input_.wasActionJustPressed(
             GameAction::Fire) ||
@@ -1044,7 +1046,7 @@ void App::handleMainMenuCommand(MainMenuCommand command)
             return;
         }
         uiMessage_ = gameSession_.recoveredAbandonedRaid()
-            ? "UNFINISHED RAID SETTLED AS FAILURE"
+            ? "UNFINISHED RAID RESTORED TO BASE"
             : gameSession_.lastSaveLoadStatus() ==
                     SaveLoadStatus::RecoveredBackup
                 ? "RECOVERED SAFE BACKUP"
@@ -1988,7 +1990,18 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
             {
                 if (inRaid)
                 {
-                    uiMessage_ = "RAID AMMO PACKING IS NOT AVAILABLE";
+                    if (gameSession_.startAlphaLoadMagazine(
+                            request.source.instanceId,
+                            target.magazineAssetId,
+                            request.source.quantity))
+                    {
+                        uiMessage_ = "MAGAZINE PACKING STARTED";
+                        closeInventory();
+                    }
+                    else
+                    {
+                        uiMessage_ = "AMMUNITION CANNOT BE LOADED";
+                    }
                     return;
                 }
                 const WeaponAmmoReceipt receipt =
@@ -2869,8 +2882,8 @@ void App::update(float deltaTime)
 
     GameplayInput gameplayInput{};
 
-    // 背包打开时世界仍继续 update，
-    // 但玩家移动、射击和拾取输入全部屏蔽。
+    // 背包打开时世界仍继续 update；保留移动/奔跑，屏蔽战斗、
+    // 快捷动作、退出和世界交互输入。
     if (gameSession_.world().raidSession().isActive())
     {
         gameplayInput =
@@ -3012,10 +3025,10 @@ void App::renderDebugText()
     }
     else if (
         input_.isActionPressed(
-            GameAction::Dodge))
+            GameAction::Sprint))
     {
         actionText =
-            "Action: Dodge";
+            "Action: Sprint";
     }
 
     SDL_RenderDebugText(
@@ -3305,6 +3318,9 @@ void App::renderDebugText()
                     using Action = std::decay_t<decltype(action)>;
                     if constexpr (std::is_same_v<Action, ReloadRaidAction>)
                         return "RELOADING";
+                    if constexpr (
+                        std::is_same_v<Action, LoadMagazineRaidAction>)
+                        return "PACKING MAGAZINE";
                     if constexpr (std::is_same_v<Action, HealRaidAction>)
                         return "HEALING";
                     if constexpr (
@@ -3324,7 +3340,7 @@ void App::renderDebugText()
         {
             SDL_RenderDebugText(
                 renderer_, 980.0F, 116.0F,
-                "R RELOAD | 5 QUICK MED | TAB INVENTORY");
+                "SHIFT SPRINT | R RELOAD | 5 MED | TAB INVENTORY");
         }
         if (!uiMessage_.empty())
         {
@@ -5425,7 +5441,7 @@ void App::renderMainMenu()
     {
         SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
         SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(renderer_, 468.0F, 400.0F, "RAID: R RELOAD  5 MED  TAB INVENTORY  ESC ABANDON/CLOSE");
+        SDL_RenderDebugText(renderer_, 430.0F, 400.0F, "RAID: SHIFT SPRINT  R RELOAD  5 MED  TAB INVENTORY  ESC ABANDON/CLOSE");
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
@@ -5754,7 +5770,7 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                 }
                 else if constexpr (std::is_same_v<Target, MagazineLoadTarget>)
                 {
-                    const bool allowed = !inRaid && queryWeaponAmmo(
+                    const bool allowed = queryWeaponAmmo(
                         profile,
                         publishedContentRegistry(),
                         LoadMagazineCommand{
@@ -6200,7 +6216,7 @@ void App::renderBaseDeployment()
         442.0F,
         402.0F,
         capable
-            ? "DEPLOY SAVES A PENDING RAID BEFORE ENTERING"
+            ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
             : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");

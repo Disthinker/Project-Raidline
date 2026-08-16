@@ -1,5 +1,7 @@
 # Core Extraction Alpha：Extraction Loop ExecPlan
 
+> 历史合同说明：本文记录 PR #59 完成时的实现与验收。2026-08-16 用户将“进程关闭/异常退出全损”修订为“恢复出击前 Profile”；当前权威合同与实现见 `doc/architecture/INVARIANTS.md` 和活动 Hardening ExecPlan。本文其余旧表述保留为历史证据，不得作为当前实现依据。
+
 ## 1. 产品结果与完成定义
 
 本宏切片把已接受的 Persistent Base 与固定 Raid 连接成第一个真实资产闭环：玩家在 Base 装填弹匣、安装主武器/胸挂/背包和医疗物资，持久化 Deploy 后进入一张无硬时限的固定地图；射击消耗枪膛/弹匣，换弹只访问胸挂，治疗消耗真实 Medkit，Loot 进入真实随身容器；撤离保留全部合法随身资产，死亡、主动退出或异常退出全损，结算只发生一次并可继续下一局。

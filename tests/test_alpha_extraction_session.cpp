@@ -258,6 +258,63 @@ TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
     EXPECT_EQ(carriedLooseAmmunition(session.profile()), 20U);
 }
 
+TEST(AlphaExtractionSessionTest, RaidMagazinePackingIsInterruptibleAndAtomic)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-pack-magazine"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId backpack = *equippedAsset(
+        session.profile(), EquipmentSlotKind::Backpack);
+    const auto magazines = assets(session.profile(), alpha_content::magazine);
+    const auto ammunition = assets(session.profile(), alpha_content::ammunition);
+    const auto target = std::find_if(
+        magazines.begin(),
+        magazines.end(),
+        [&session](AssetInstanceId id)
+        {
+            return assetIsCarried(session.profile(), id) &&
+                   magazineRoundCount(session.profile(), id) == 20U;
+        });
+    const auto source = std::find_if(
+        ammunition.begin(),
+        ammunition.end(),
+        [&session](AssetInstanceId id)
+        {
+            const AssetRecord *asset = session.profile().assets.find(id);
+            return asset != nullptr && asset->quantity >= 5;
+        });
+    ASSERT_NE(target, magazines.end());
+    ASSERT_NE(source, ammunition.end());
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            *source,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "carry-loose-ammunition").succeeded);
+    ASSERT_TRUE(session.deployAlpha(3322));
+
+    const std::uint64_t beforeInterrupted =
+        profileStateFingerprint(session.profile());
+    const std::uint32_t sourceBefore =
+        session.profile().assets.find(*source)->quantity;
+    ASSERT_TRUE(session.startAlphaLoadMagazine(*source, *target, 5));
+    GameplayInput inventoryOpened{};
+    inventoryOpened.inventoryOpen = true;
+    session.update(inventoryOpened, 0.5F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupted);
+
+    ASSERT_TRUE(session.startAlphaLoadMagazine(*source, *target, 0));
+    session.update(GameplayInput{}, 2.0F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(magazineRoundCount(session.profile(), *target), 30U);
+    EXPECT_EQ(session.profile().assets.find(*source)->quantity,
+              sourceBefore - 10U);
+}
+
 TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)
 {
     GameSession session;
@@ -279,39 +336,70 @@ TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)
         session.profile(), EquipmentSlotKind::PrimaryWeapon).has_value());
 }
 
-TEST(AlphaExtractionSessionTest, ReopeningPendingRaidCommitsAbnormalFailure)
+TEST(AlphaExtractionSessionTest, ClosingDuringRaidRestoresExactPreRaidProfile)
 {
     TemporarySaveDirectory temporary;
+    std::uint64_t preRaidFingerprint{};
+    AssetInstanceId rifle{};
     {
         GameSession first;
         first.configurePersistence(temporary.path());
         ASSERT_TRUE(first.startNewProfile("alpha-session-abnormal"));
         prepareArmedLoadout(first);
+        rifle = assets(first.profile(), alpha_content::rifle).front();
+        preRaidFingerprint = profileStateFingerprint(first.profile());
         ASSERT_TRUE(first.deployAlpha(44771));
         ASSERT_TRUE(first.profile().pendingRaid.has_value());
+        const AssetInstanceId chest = *equippedAsset(
+            first.profile(), EquipmentSlotKind::ChestRig);
+        const AssetInstanceId installed = *installedMagazine(
+            first.profile(), rifle);
+        const auto magazines = assets(first.profile(), alpha_content::magazine);
+        const auto spare = std::find_if(
+            magazines.begin(),
+            magazines.end(),
+            [installed, &first](AssetInstanceId id)
+            {
+                return id != installed && assetIsCarried(first.profile(), id);
+            });
+        ASSERT_NE(spare, magazines.end());
+        ASSERT_TRUE(first.executeProfileInventory(
+            InventoryMoveCommand{
+                *spare,
+                0,
+                StoredAssetLocation{
+                    ProfileContainerId::compartment(chest, 0),
+                    GridPosition{0, 0}},
+                ItemOrientation::Degrees0},
+            "raid-rearrange-before-close").succeeded);
+        GameplayInput fire{};
+        fire.fireJustPressed = true;
+        fire.firePressed = true;
+        first.update(fire, 0.0F);
+        EXPECT_NE(profileStateFingerprint(first.profile()), preRaidFingerprint);
     }
 
     GameSession reopened;
     reopened.configurePersistence(temporary.path());
     ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
 
-    EXPECT_TRUE(reopened.recoveredAbandonedRaid());
+    EXPECT_FALSE(reopened.recoveredAbandonedRaid());
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
-    ASSERT_TRUE(reopened.profile().lastRaidResult.has_value());
-    EXPECT_EQ(reopened.profile().lastRaidResult->outcome,
-              RaidResultOutcome::AbnormalQuit);
-    EXPECT_FALSE(equippedAsset(
-        reopened.profile(), EquipmentSlotKind::PrimaryWeapon).has_value());
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), preRaidFingerprint);
+    EXPECT_EQ(equippedAsset(
+        reopened.profile(), EquipmentSlotKind::PrimaryWeapon), rifle);
 }
 
-TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPendingRaidAsFailure)
+TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPreRaidBackup)
 {
     TemporarySaveDirectory temporary;
+    std::uint64_t preRaidFingerprint{};
     {
         GameSession first;
         first.configurePersistence(temporary.path());
         ASSERT_TRUE(first.startNewProfile("alpha-session-corrupt-pending"));
         prepareArmedLoadout(first);
+        preRaidFingerprint = profileStateFingerprint(first.profile());
         ASSERT_TRUE(first.deployAlpha(55771));
         ASSERT_TRUE(first.profile().pendingRaid.has_value());
     }
@@ -327,13 +415,7 @@ TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPendingRaidAsFailure)
     ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
 
     EXPECT_EQ(reopened.lastSaveLoadStatus(), SaveLoadStatus::RecoveredBackup);
-    EXPECT_TRUE(reopened.recoveredAbandonedRaid());
+    EXPECT_FALSE(reopened.recoveredAbandonedRaid());
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
-    ASSERT_TRUE(reopened.profile().lastRaidResult.has_value());
-    EXPECT_EQ(
-        reopened.profile().lastRaidResult->outcome,
-        RaidResultOutcome::AbnormalQuit);
-    EXPECT_FALSE(equippedAsset(
-        reopened.profile(),
-        EquipmentSlotKind::PrimaryWeapon).has_value());
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), preRaidFingerprint);
 }

@@ -35,7 +35,7 @@ namespace
             GameAction::Fire,
             GameAction::Reload,
             GameAction::Heal,
-            GameAction::Dodge,
+            GameAction::Sprint,
             GameAction::Interact,
             GameAction::ToggleInventory,
             GameAction::InventoryCancel,
@@ -124,7 +124,7 @@ TEST(
 
     EXPECT_FALSE(
         input.isActionPressed(
-            GameAction::Dodge));
+            GameAction::Sprint));
 
     EXPECT_FALSE(
         input.isActionPressed(
@@ -604,18 +604,21 @@ TEST(InputSystemTest, EitherShiftKeyTracksModifierSnapshot)
             SDL_SCANCODE_RSHIFT));
 
     EXPECT_TRUE(input.isShiftPressed());
+    EXPECT_TRUE(input.isActionPressed(GameAction::Sprint));
 
     input.handleEvent(
         makeKeyEvent(
             SDL_EVENT_KEY_UP,
             SDL_SCANCODE_LSHIFT));
     EXPECT_TRUE(input.isShiftPressed());
+    EXPECT_TRUE(input.isActionPressed(GameAction::Sprint));
 
     input.handleEvent(
         makeKeyEvent(
             SDL_EVENT_KEY_UP,
             SDL_SCANCODE_RSHIFT));
     EXPECT_FALSE(input.isShiftPressed());
+    EXPECT_FALSE(input.isActionPressed(GameAction::Sprint));
 }
 
 TEST(InputSystemTest, PrimaryPointerDownCreatesHeldAndEdgeState)

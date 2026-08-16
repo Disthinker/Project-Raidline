@@ -231,6 +231,11 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
         {
             consumeOneRound(profile, cycle);
         }
+        const std::uint64_t preRaidFingerprint =
+            profileStateFingerprint(profile);
+        ASSERT_TRUE(repository.save(
+            profile,
+            publishedContentRegistry().contentVersion()).succeeded);
 
         const std::string suffix = std::to_string(cycle);
         const std::string settlementId =
@@ -248,9 +253,6 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
                 "hardening-deploy-" + suffix});
         ASSERT_TRUE(deployed.succeeded) << deployed.message;
         expectValid(profile);
-        ASSERT_TRUE(repository.save(
-            profile,
-            publishedContentRegistry().contentVersion()).succeeded);
 
         RaidResultOutcome outcome = RaidResultOutcome::Extracted;
         if (cycle % 2 != 0)
@@ -271,14 +273,15 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
 
         if (outcome == RaidResultOutcome::AbnormalQuit)
         {
-            const std::uint64_t pendingFingerprint =
-                profileStateFingerprint(profile);
             const SaveLoadResult reopened = repository.load(
                 publishedContentRegistry());
             ASSERT_TRUE(reopened.profile.has_value()) << reopened.message;
             profile = *reopened.profile;
-            EXPECT_EQ(profileStateFingerprint(profile), pendingFingerprint);
+            EXPECT_EQ(profileStateFingerprint(profile), preRaidFingerprint);
+            EXPECT_FALSE(profile.pendingRaid.has_value());
+            expectValid(profile);
             ++reloadCount;
+            continue;
         }
         else if (outcome == RaidResultOutcome::Extracted)
         {
@@ -337,7 +340,7 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
     }
 
     EXPECT_GE(reloadCount, 3U);
-    EXPECT_EQ(profile.committedSettlements.size(), 10U);
+    EXPECT_EQ(profile.committedSettlements.size(), 9U);
     expectValid(profile);
 }
 

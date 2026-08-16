@@ -13,6 +13,15 @@ struct ReloadRaidAction
     float durationSeconds{2.0F};
 };
 
+struct LoadMagazineRaidAction
+{
+    AssetInstanceId magazineAssetId{};
+    AssetInstanceId ammunitionAssetId{};
+    std::uint32_t quantity{};
+    float elapsedSeconds{};
+    float durationSeconds{0.5F};
+};
+
 struct HealRaidAction
 {
     AssetInstanceId medkitAssetId{};
@@ -36,6 +45,7 @@ struct ExtractRaidAction
 
 using RaidAction = std::variant<
     ReloadRaidAction,
+    LoadMagazineRaidAction,
     HealRaidAction,
     UnloadMagazineRaidAction,
     ExtractRaidAction>;
