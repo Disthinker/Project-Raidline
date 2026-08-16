@@ -89,6 +89,8 @@ public:
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,
         AssetInstanceId magazineAssetId);
+    [[nodiscard]] bool startAlphaUnloadMagazine(
+        AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;

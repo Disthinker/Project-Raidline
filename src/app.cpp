@@ -398,7 +398,9 @@ namespace
         switch (*action)
         {
         case ProfileContextActionKind::UnloadMagazine:
-            return "UNLOAD ALL TO STASH";
+            return inRaid
+                ? "UNLOAD MAGAZINE (3 SEC)"
+                : "UNLOAD ALL TO STASH";
         case ProfileContextActionKind::UseMedkit:
             return inRaid ? "USE MEDKIT (5 SEC)" : "USE MEDKIT";
         case ProfileContextActionKind::ChamberWeapon:
@@ -1912,11 +1914,6 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
             gameSession_.profile(), *hit->asset, inRaid).has_value())
     {
         profileContextMenu_.reset();
-        if (inRaid && publishedContentRegistry()
-                .item(hit->asset->definitionId).category == ItemCategory::Magazine)
-        {
-            uiMessage_ = "DRAG MAGAZINE TO PRIMARY WEAPON TO RELOAD";
-        }
         return;
     }
     profileContextMenu_ = ProfileContextMenu{
@@ -2054,7 +2051,19 @@ void App::executeProfileContextAction(bool inRaid)
         .item(asset->definitionId).category;
     if (inRaid)
     {
-        if (category == ItemCategory::Medical &&
+        if (category == ItemCategory::Magazine)
+        {
+            if (gameSession_.startAlphaUnloadMagazine(id))
+            {
+                uiMessage_ = "MAGAZINE UNLOAD STARTED (3 SEC)";
+                closeInventory();
+            }
+            else
+            {
+                uiMessage_ = "MAGAZINE EMPTY OR NO CARRIED SPACE";
+            }
+        }
+        else if (category == ItemCategory::Medical &&
             gameSession_.startAlphaHeal(id))
         {
             uiMessage_ = "MEDKIT ACTION STARTED (5 SEC)";
@@ -3298,6 +3307,9 @@ void App::renderDebugText()
                         return "RELOADING";
                     if constexpr (std::is_same_v<Action, HealRaidAction>)
                         return "HEALING";
+                    if constexpr (
+                        std::is_same_v<Action, UnloadMagazineRaidAction>)
+                        return "UNLOADING MAGAZINE";
                     return "EXTRACTING";
                 },
                 *gameSession_.raidActionState().active());

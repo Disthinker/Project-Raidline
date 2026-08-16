@@ -104,6 +104,20 @@ void prepareArmedLoadout(GameSession &session)
         FireWeaponCommand{rifles[0]},
         "alpha-chamber-round").succeeded);
 }
+
+std::uint32_t carriedLooseAmmunition(const ProfileState &profile)
+{
+    std::uint32_t total{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::ammunition &&
+            assetIsCarried(profile, id))
+        {
+            total += asset.quantity;
+        }
+    }
+    return total;
+}
 }
 
 TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
@@ -202,6 +216,46 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(installedMagazine(session.profile(), rifle), *target);
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
+}
+
+TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-unload-magazine"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId installed = *installedMagazine(
+        session.profile(), rifle);
+    const auto magazines = assets(session.profile(), alpha_content::magazine);
+    const auto target = std::find_if(
+        magazines.begin(),
+        magazines.end(),
+        [installed, &session](AssetInstanceId id)
+        {
+            return id != installed &&
+                   assetIsCarried(session.profile(), id) &&
+                   magazineRoundCount(session.profile(), id) == 20U;
+        });
+    ASSERT_NE(target, magazines.end());
+    ASSERT_TRUE(session.deployAlpha(3321));
+    ASSERT_EQ(carriedLooseAmmunition(session.profile()), 0U);
+
+    const std::uint64_t beforeInterrupted =
+        profileStateFingerprint(session.profile());
+    ASSERT_TRUE(session.startAlphaUnloadMagazine(*target));
+    GameplayInput inventoryOpened{};
+    inventoryOpened.inventoryOpen = true;
+    session.update(inventoryOpened, 1.0F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupted);
+    EXPECT_EQ(magazineRoundCount(session.profile(), *target), 20U);
+
+    ASSERT_TRUE(session.startAlphaUnloadMagazine(*target));
+    session.update(GameplayInput{}, 3.0F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(magazineRoundCount(session.profile(), *target), 0U);
+    EXPECT_EQ(carriedLooseAmmunition(session.profile()), 20U);
 }
 
 TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)

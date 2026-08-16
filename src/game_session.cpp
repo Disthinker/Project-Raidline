@@ -380,6 +380,25 @@ bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
         HealRaidAction{medkitAssetId, 0.0F, 5.0F});
 }
 
+bool GameSession::startAlphaUnloadMagazine(
+    AssetInstanceId magazineAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        return false;
+    }
+    const auto destination = selectRaidMagazineUnloadDestination(
+        profile_,
+        publishedContentRegistry(),
+        magazineAssetId);
+    return destination.has_value() && raidActionState_.start(
+        UnloadMagazineRaidAction{
+            magazineAssetId,
+            *destination,
+            0.0F,
+            3.0F});
+}
+
 bool GameSession::alphaRaidActive() const noexcept
 {
     return alphaRaidActive_;
@@ -685,6 +704,13 @@ void GameSession::updateAlphaRaid(
                         return input.firePressed || input.fireJustPressed ||
                                input.reloadJustPressed;
                     }
+                    else if constexpr (
+                        std::is_same_v<Action, UnloadMagazineRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
+                    }
                     else
                     {
                         return false;
@@ -745,6 +771,30 @@ void GameSession::updateAlphaRaid(
                             world_->restorePlayerHealth(receipt.healedAmount));
                     }
                     else if (!receipt.succeeded)
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *unload =
+                             std::get_if<UnloadMagazineRaidAction>(&*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+                        candidate,
+                        publishedContentRegistry(),
+                        UnloadMagazineCommand{
+                            unload->magazineAssetId,
+                            unload->destination},
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("unload-magazine")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate),
+                            false));
+                    }
+                    else
                     {
                         persistenceMessage_ = receipt.message;
                     }

@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "profile_inventory_interaction.h"
 #include "alpha_content_ids.h"
+#include "inventory_domain.h"
+#include "profile_inventory_interaction.h"
 
 namespace
 {
@@ -133,7 +134,7 @@ TEST(ProfileInventoryInteractionTest, RevisionOrLocationChangeInvalidatesSource)
     EXPECT_FALSE(profileDragSourceMatches(profile, source));
 }
 
-TEST(ProfileInventoryInteractionTest, EmptyBaseMagazineStillOffersUnloadAction)
+TEST(ProfileInventoryInteractionTest, MagazineUnloadActionRemainsDiscoverable)
 {
     ProfileState profile = makeNewAlphaProfile(
         "context-empty-magazine",
@@ -162,4 +163,45 @@ TEST(ProfileInventoryInteractionTest, EmptyBaseMagazineStillOffersUnloadAction)
             magazine,
             true),
         std::nullopt);
+
+    const auto backpack = equippedAsset(
+        profile, EquipmentSlotKind::Backpack);
+    ASSERT_FALSE(backpack.has_value());
+    const auto backpacks = [&profile]
+    {
+        std::vector<AssetInstanceId> result;
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (asset.definitionId == alpha_content::backpack)
+            {
+                result.push_back(id);
+            }
+        }
+        return result;
+    }();
+    ASSERT_FALSE(backpacks.empty());
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            backpacks.front(), EquipmentSlotKind::Backpack},
+        CommandContext{profile.revision, "context-equip-pack"}).succeeded);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            magazine,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpacks.front(), 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "context-carry-magazine"}).succeeded);
+    EXPECT_EQ(
+        queryProfileContextAction(
+            profile,
+            publishedContentRegistry(),
+            magazine,
+            true),
+        ProfileContextActionKind::UnloadMagazine);
 }

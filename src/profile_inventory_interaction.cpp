@@ -18,6 +18,13 @@ std::optional<ProfileContextActionKind> queryProfileContextAction(
     const ItemDefinition &definition = content.item(asset->definitionId);
     if (inRaid)
     {
+        if (definition.category == ItemCategory::Magazine &&
+            assetIsCarried(profile, instanceId))
+        {
+            // Keep the Raid affordance visible for empty magazines and full
+            // packs as well; action start reports why it cannot proceed.
+            return ProfileContextActionKind::UnloadMagazine;
+        }
         if (definition.category == ItemCategory::Medical &&
             assetIsCarried(profile, instanceId) &&
             asset->remainingCharges > 0)

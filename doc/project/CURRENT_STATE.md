@@ -1,6 +1,6 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-15。
+最后核对：2026-08-16。
 
 ## Git 与交付基线
 
@@ -15,7 +15,7 @@
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
-3. **Alpha Hardening**：恢复/救济缺陷、内容合同、自动化长序列及玩家反馈触发的库存/角色显示返工已在当前分支完成；本地门槛与 PR #60 exact-head CI 通过，等待最终正常游玩验收。
+3. **Alpha Hardening**：恢复/救济缺陷、内容合同、自动化长序列及玩家反馈触发的库存/角色显示返工已在当前分支完成；Raid 弹匣右键卸弹修订已通过本地门槛，等待新 head CI 与最终正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -33,7 +33,7 @@
 - content v2 提供一张固定 Alpha 地图的 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽；每局冻结 6～9 个有效 Loot，PCG32 命名随机流结果写入 pending Raid 快照。
 - schema v2 保存当前 HP、弹匣有序弹药、枪膛、pending Raid、Settlement 幂等记录和最近 RaidResult；schema v1 可显式迁移。
 - Base 与 Raid 共用按住拖拽库存交互；格子移动/交换/堆叠/配装均由领域预览和命令提交。Base 可将弹药拖到弹匣压弹、将弹匣拖到武器安装并按条件自动上膛；Raid 可拖动指定弹匣到武器并执行 2 秒换弹。
-- 卸弹、显式上膛和 Medkit 使用移入右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。`F`/`Ctrl+右键` 仅保留为 Base 快速转移捷径。
+- 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 仅保留为 Base 快速转移捷径。
 - 玩家为 100 HP；Medkit 每件 3 次、每次恢复最多 30 HP，Raid 内治疗 5 秒且中断不消耗。
 - Alpha Raid 无硬时限；E 拾取真实 Loot，随身库存可移动和整理，打开时禁止射击/换弹/开始治疗但允许普通移动。
 - 3 秒撤离成功保留合法随身资产与 HP；死亡、主动退出和异常退出全损并恢复 100 HP。所有结果使用唯一 Settlement ID 幂等提交。
@@ -43,9 +43,9 @@
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - EconomyDomain、ContentRegistry、SaveRepository、AlphaExtractionSession 与 AlphaHardening focused 37/37 通过。
-- 全量 CTest 638/638 通过，0 失败。
+- 全量 CTest 640/640 通过，0 失败。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- Draft PR #60 的返工提交 `daceec6` 已通过 GitHub Actions run `31861016485` 的范围检测、Windows C++ 和 Ubuntu C++；最终人工验收尚无证据。开发代理未启动游戏。
+- Draft PR #60 的既有代码 head `6595eb3` 已通过 GitHub Actions run `31862188556` 的范围检测、Windows C++ 和 Ubuntu C++；Raid 卸弹新 head 的 CI 尚待推送后执行。最终人工验收尚无证据，开发代理未启动游戏。
 
 ## Alpha Hardening 当前实现
 
@@ -53,11 +53,11 @@
 - 保存 pending Raid 时同步同一已校验候选到恢复备份；主档损坏后从备份恢复仍保留原 pending/Settlement ID，并按异常退出全损一次。
 - 固定供应内容加载校验 Alpha 25% 向下取整、最低 1 的回收价基线。
 - 双份损坏存档明确失败；Deploy 保存失败不交换 Profile、不进入 Raid。
-- Base `Tab` 与仓储 `E` 打开同一个“左侧角色/配装/随身容器，右侧 Stash”界面；Raid `Tab` 使用同一拖拽内核但不暴露 Stash、压弹或卸弹。
-- Base 弹匣右键菜单不再因空弹匣或 Stash 暂时无法接收弹药而被隐藏；菜单始终提供卸弹入口，执行时再显示成功或明确失败原因。Raid 右键弹匣明确提示拖到主武器换弹。
+- Base `Tab` 与仓储 `E` 打开同一个“左侧角色/配装/随身容器，右侧 Stash”界面；Raid `Tab` 使用同一拖拽内核，不暴露 Stash 或 Raid 内压弹。
+- Base 与 Raid 的弹匣右键菜单都保持卸弹入口可发现。Base 即时卸入 Stash；Raid 关闭库存并启动 3 秒动作，优先卸入背包、再尝试胸挂通用格。空弹匣、随身空间不足或中断均不改变 Profile。
 - 拖动需超过 4 像素；原物留在原位，虚像跟随鼠标，绿色/蓝色/红色与 `MOVE/SWAP/MERGE/LOAD/INSTALL/BLOCKED` 同时表达真实领域预览。Ctrl=1、Shift=向上取半在按下时锁定，Ctrl+Shift 无操作。
 - Base 与 Raid 世界复用已批准主角资源；个人页显示同一资源的静态预览。左右移动复用六帧资源，上下移动与静止暂用静态图，RL-ANIM-001 的正式补全仍延期。
-- 用户已明确修订外部 Alpha 规格中“Raid 不允许拖匣到武器”的旧限制；GDD 资料库保持只读，本仓库仅记录该冲突与实现结果。
+- 用户已明确修订外部 Alpha 规格中“Raid 不允许拖匣到武器”和“Raid 不允许卸弹”的旧限制；GDD 资料库保持只读，本仓库仅记录冲突与实现结果。
 
 ## 尚未完成
 
