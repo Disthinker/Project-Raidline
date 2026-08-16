@@ -249,39 +249,31 @@ TEST(InventoryQuickTransferTest, ContainerIdleHoverCreatesRequest)
             InventoryQuickTransferRequest{hovered}}));
 }
 
-TEST(InventoryPartialTransferTest, ModifierChoiceIsExclusive)
+TEST(InventoryShortcutTest, ModifierMappingIsExclusive)
 {
     EXPECT_EQ(
-        decideInventoryPartialTransferMode(true, false),
-        InventoryPartialTransferMode::One);
+        decideInventoryPrimaryPressAction(true, false),
+        InventoryPrimaryPressAction::QuickTransfer);
     EXPECT_EQ(
-        decideInventoryPartialTransferMode(false, true),
-        InventoryPartialTransferMode::Half);
+        decideInventoryPrimaryPressAction(false, true),
+        InventoryPrimaryPressAction::BeginHalfDrag);
     EXPECT_EQ(
-        decideInventoryPartialTransferMode(false, false),
-        std::nullopt);
+        decideInventoryPrimaryPressAction(false, false),
+        InventoryPrimaryPressAction::BeginWholeDrag);
     EXPECT_EQ(
-        decideInventoryPartialTransferMode(true, true),
-        std::nullopt);
+        decideInventoryPrimaryPressAction(true, true),
+        InventoryPrimaryPressAction::Ignore);
 }
 
 TEST(InventoryPartialTransferTest, HalfRoundsOddQuantityUp)
 {
     EXPECT_EQ(
-        inventoryPartialTransferQuantity(
-            InventoryPartialTransferMode::Half,
-            5),
+        inventoryPartialTransferQuantity(5),
         3U);
     EXPECT_EQ(
-        inventoryPartialTransferQuantity(
-            InventoryPartialTransferMode::Half,
-            6),
+        inventoryPartialTransferQuantity(6),
         3U);
-    EXPECT_EQ(
-        inventoryPartialTransferQuantity(
-            InventoryPartialTransferMode::One,
-            60),
-        1U);
+    EXPECT_EQ(inventoryPartialTransferQuantity(0), 0U);
 }
 
 TEST(InventoryPartialTransferTest, QuantitySelectionUsesTheSharedDragThreshold)

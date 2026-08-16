@@ -599,16 +599,31 @@ namespace
         bool shiftPressed) noexcept
     {
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            (controlPressed || shiftPressed))
+            event.button.button == SDL_BUTTON_LEFT)
         {
-            return InventoryUiEvent{
-                InventoryPartialTransferEvent{
-                    MousePosition{
-                        event.button.x,
-                        event.button.y},
-                    controlPressed,
-                    shiftPressed}};
+            switch (decideInventoryPrimaryPressAction(
+                controlPressed,
+                shiftPressed))
+            {
+            case InventoryPrimaryPressAction::QuickTransfer:
+                return InventoryUiEvent{
+                    InventoryQuickTransferEvent{
+                        MousePosition{
+                            event.button.x,
+                            event.button.y}}};
+            case InventoryPrimaryPressAction::BeginHalfDrag:
+                return InventoryUiEvent{
+                    InventoryPartialTransferEvent{
+                        MousePosition{
+                            event.button.x,
+                            event.button.y},
+                        false,
+                        true}};
+            case InventoryPrimaryPressAction::Ignore:
+                return std::nullopt;
+            case InventoryPrimaryPressAction::BeginWholeDrag:
+                break;
+            }
         }
 
         const std::optional<InventoryPointerEvent> pointerEvent =
@@ -625,35 +640,6 @@ namespace
         {
             return InventoryUiEvent{
                 InventoryRotateEvent{}};
-        }
-
-        if (event.type == SDL_EVENT_KEY_DOWN &&
-            event.key.scancode == SDL_SCANCODE_F &&
-            !event.key.repeat)
-        {
-            float pointerX{};
-            float pointerY{};
-            static_cast<void>(
-                SDL_GetMouseState(
-                    &pointerX,
-                    &pointerY));
-
-            return InventoryUiEvent{
-                InventoryQuickTransferEvent{
-                    MousePosition{
-                        pointerX,
-                        pointerY}}};
-        }
-
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-            event.button.button == SDL_BUTTON_RIGHT &&
-            controlPressed)
-        {
-            return InventoryUiEvent{
-                InventoryQuickTransferEvent{
-                    MousePosition{
-                        event.button.x,
-                        event.button.y}}};
         }
 
         return std::nullopt;
@@ -1785,7 +1771,7 @@ void App::handleProfileInventoryUiEvent(
 
     auto beginPress = [&](MousePosition position, bool control, bool shift)
     {
-        if (control && shift)
+        if (control)
         {
             return;
         }
@@ -1799,13 +1785,9 @@ void App::handleProfileInventoryUiEvent(
             publishedContentRegistry().item(hit->asset->definitionId);
         const InventoryFootprint footprint = inventoryFootprint(
             definition, hit->asset->orientation);
-        std::uint32_t quantity{};
-        if (control != shift)
-        {
-            quantity = control
-                ? 1U
-                : (hit->asset->quantity + 1U) / 2U;
-        }
+        const std::uint32_t quantity = shift
+            ? inventoryPartialTransferQuantity(hit->asset->quantity)
+            : 0U;
         const MousePosition grabOffset{
             std::clamp(
                 (position.x - hit->bounds.x) / hit->cellSize,
@@ -2471,12 +2453,10 @@ void App::handleInventoryQuickTransferEvent(
 void App::handleInventoryPartialTransferEvent(
     const InventoryPartialTransferEvent &event)
 {
-    const std::optional<InventoryPartialTransferMode> mode =
-        decideInventoryPartialTransferMode(
+    if (decideInventoryPrimaryPressAction(
             event.controlPressed,
-            event.shiftPressed);
-
-    if (!mode.has_value())
+            event.shiftPressed) !=
+        InventoryPrimaryPressAction::BeginHalfDrag)
     {
         return;
     }
@@ -2518,9 +2498,7 @@ void App::handleInventoryPartialTransferEvent(
     }
 
     const std::uint32_t requestedQuantity =
-        inventoryPartialTransferQuantity(
-            *mode,
-            *availableQuantity);
+        inventoryPartialTransferQuantity(*availableQuantity);
 
     const auto &placedItems = source.placedItems();
     const auto placedIt = std::find_if(
@@ -3462,7 +3440,7 @@ void App::renderDebugText()
             renderer_,
             20.0f,
             212.0f,
-            "Quick Transfer: F / Ctrl+Right Click");
+            "Quick Transfer: Ctrl+Left Click");
     }
 
     const std::optional<InventoryItemSelection> selected =
@@ -4038,7 +4016,7 @@ void App::renderInventoryOverlay()
         itemCountText.c_str());
 
     const char *controlText =
-        "Drag | Ctrl+LMB: 1 | Shift+LMB: half | R: rotate";
+        "Drag | Ctrl+LMB: quick | Shift+drag: half | R: rotate";
 
     SDL_RenderDebugText(
         renderer_,
@@ -5995,7 +5973,9 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     SDL_RenderDebugText(renderer_, 42.0F, 366.0F, health.c_str());
     SDL_RenderDebugText(
         renderer_, 42.0F, 642.0F,
-        "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
+        includeStash
+            ? "DRAG: MOVE | CTRL+LMB: QUICK | SHIFT+DRAG: HALF | R: ROTATE"
+            : "DRAG: MOVE | SHIFT+DRAG: HALF | R: ROTATE");
     SDL_RenderDebugText(
         renderer_, 42.0F, 664.0F,
         inRaid ? "RMB MEDKIT | TAB/ESC CLOSE"
