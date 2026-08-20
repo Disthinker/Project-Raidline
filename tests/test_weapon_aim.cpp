@@ -50,4 +50,3 @@ TEST(WeaponAimStateTest, AdsProgressAndRangeProjectionAreDeterministic)
     EXPECT_TRUE(aim.beyondMaximumRange());
     EXPECT_FLOAT_EQ(aim.damageMultiplier(), 0.25F);
 }
-

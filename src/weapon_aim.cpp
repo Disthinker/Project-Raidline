@@ -157,4 +157,3 @@ float WeaponAimState::recoilOffsetDegrees() const noexcept
 {
     return recoilOffsetDegrees_;
 }
-
