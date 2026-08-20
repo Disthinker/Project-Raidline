@@ -178,6 +178,8 @@ endfunction()
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
     src/alpha_content_ids.h
+    src/combat_damage_domain.cpp
+    src/combat_damage_domain.h
     src/content_registry.cpp
     src/content_registry.h
     src/definition_id.h
@@ -352,6 +354,10 @@ function(raidline_add_test target source module)
 endfunction()
 
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
+raidline_add_test(
+    CombatDamageDomainTest
+    tests/test_combat_damage_domain.cpp
+    raidline::domain)
 raidline_add_test(
     InputSystemTest
     tests/test_input_system.cpp

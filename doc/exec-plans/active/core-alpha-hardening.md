@@ -1,5 +1,7 @@
 # Core Extraction Alpha：Hardening ExecPlan
 
+状态：已完成并由 PR #60 以 merge commit `50849d5` 进入 main。
+
 ## 1. 产品结果与完成定义
 
 本宏切片把已经接受的 Persistent Base 与 Extraction Loop 收束为可长期反复运行的 Core Extraction Alpha 候选版。除稳定性、恢复一致性、内容合同、连续多局与发布证据外，还收束用户验收发现的库存交互和角色显示回归；这属于已承诺 Alpha 能力的可玩性修复，不扩大系统范围。
@@ -111,3 +113,4 @@
 - 2026-08-16：用户追加要求关闭程序后恢复出击前存档、Raid 内允许压弹并支持奔跑。Deploy 改为保留精确磁盘回滚点，Raid 命令不再覆盖该存档；旧 pending 存档无损迁回 Base。新增限时原子压弹和左右 Shift 1.5 倍奔跑；focused 92/92、全量 CTest 644/644 通过，开发代理未启动游戏。
 - 2026-08-16：功能提交 `db0935d` 推送到 Draft PR #60；GitHub Actions run `31919983014` 的范围检测、Windows C++ 和 Ubuntu C++ 全部通过。PR 保持 Draft，等待用户最终正常游玩验收。
 - 2026-08-16：撤销 `Ctrl+左键` 快速转移改动，恢复 `F`/`Ctrl+右键` 快速转移以及 `Ctrl` 单件、`Shift` 半数拖拽；快速转移可穿戴物品时，若兼容栏位为空且领域查询允许则优先快速装备，栏位占用时回退原容器转移。focused 16/16、Windows Debug 全目标与全量 CTest 645/645 通过，开发代理未启动游戏。
+- 2026-08-20：用户确认最终正常游玩验收通过；PR #60 以 merge commit `50849d5` 进入 main，Core Extraction Alpha 正式成为接受基线。

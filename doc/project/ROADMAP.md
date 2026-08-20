@@ -1,6 +1,6 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-16。
+最后核对：2026-08-20。
 
 ## 当前目标与交付节奏
 
@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | Persistent Base | 新游戏→可行走 Base→整理/配装→买卖/救济→退出重开保持 | Profile、AssetRegistry、Inventory/Equipment、Economy/Relief、schema v1 | 已由 PR #58 接受并进入 main |
 | Extraction Loop | 整备弹药→Raid 战斗/治疗/Loot→撤离或全损→结算→再次出击 | WeaponAmmo、Action、Health/Medical、RaidSnapshot、Settlement、schema v2 | PR #59 已接受并进入 main |
-| Alpha Hardening | 连续多局、退出回滚、损坏恢复、三组路线配置、可正常游玩的统一库存与完整产品验收 | 稳定性、恢复、领域驱动交互、平衡、发布证据 | Raid 压卸弹、奔跑、出击前存档回滚及空栏位快速装备后本地 Windows Debug 全目标与 645/645 通过；等待新 head CI 与最终人工验收 |
+| Alpha Hardening | 连续多局、退出回滚、损坏恢复、三组路线配置、可正常游玩的统一库存与完整产品验收 | 稳定性、恢复、领域驱动交互、平衡、发布证据 | PR #60 已进入 main；本地 645/645、精确 head CI 与用户最终正常游玩验收通过 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
@@ -43,6 +43,8 @@
 | Release Candidate | 形成可发布 Windows 产品 | 正式美术/音频、性能、可访问性、本地化、打包、诊断和迁移演练 |
 
 ## 不混写边界
+
+- 当前首个 Survival Loadout 切片只实现头/躯干/腿命中、头盔/护甲、防护耐久和领域反馈；不同时实现流血、骨折、内伤、维修、武器故障、特殊弹、贯穿、断肢或战术电子。
 
 - `codex/core-alpha-hardening` 只收束 Alpha 稳定性、恢复、内容合同和验收证据；不提前实现特殊弹、部位、复杂伤势、耐久、多地图、高危或长期系统。
 - Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
