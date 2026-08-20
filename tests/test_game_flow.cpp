@@ -100,7 +100,7 @@ TEST(GameFlowTest, NonRaidScreensFreezePreparedWorld)
             .raidTimeRemaining(),
         originalTime);
     EXPECT_TRUE(
-        flow.gameSession().world().projectiles().empty());
+        flow.gameSession().world().logicalBallistics().empty());
     EXPECT_FLOAT_EQ(
         flow.gameSession().world().enemies().front().position().x,
         originalEnemyPosition.x);
@@ -183,7 +183,7 @@ TEST(GameFlowTest, DeathResultReturnsToBaseAndDeploysFreshRaid)
             .raidTimeRemaining(),
         resultTime);
     EXPECT_TRUE(
-        flow.gameSession().world().projectiles().empty());
+        flow.gameSession().world().logicalBallistics().empty());
 
     ASSERT_TRUE(flow.returnToBase());
     EXPECT_EQ(flow.state(), GameFlowState::Base);

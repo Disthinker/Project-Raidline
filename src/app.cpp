@@ -5183,34 +5183,41 @@ void App::renderShotPresentations()
     {
         const Vec2 center = shot.center;
         const Vec2 direction = shot.direction;
+        const float trailLength = std::min(
+            38.0F,
+            std::max(0.0F, shot.distanceTravelled));
+        if (trailLength <= 0.0F)
+        {
+            continue;
+        }
 
         SDL_SetRenderDrawColor(renderer_, 255, 72, 8, 115);
         SDL_RenderLine(
             renderer_,
-            center.x - direction.x * 38.0F,
-            center.y - direction.y * 38.0F,
-            center.x - direction.x * 18.0F,
-            center.y - direction.y * 18.0F);
+            center.x - direction.x * trailLength,
+            center.y - direction.y * trailLength,
+            center.x - direction.x * trailLength * 0.45F,
+            center.y - direction.y * trailLength * 0.45F);
 
         SDL_SetRenderDrawColor(renderer_, 255, 164, 24, 225);
         SDL_RenderLine(
             renderer_,
-            center.x - direction.x * 20.0F,
-            center.y - direction.y * 20.0F,
-            center.x - direction.x * 3.0F,
-            center.y - direction.y * 3.0F);
+            center.x - direction.x * trailLength * 0.55F,
+            center.y - direction.y * trailLength * 0.55F,
+            center.x,
+            center.y);
 
         const SDL_FRect farEmber{
-            center.x - direction.x * 29.0F - 0.75F,
-            center.y - direction.y * 29.0F - 0.75F,
+            center.x - direction.x * trailLength * 0.75F - 0.75F,
+            center.y - direction.y * trailLength * 0.75F - 0.75F,
             1.5F,
             1.5F};
         SDL_SetRenderDrawColor(renderer_, 255, 104, 8, 145);
         SDL_RenderFillRect(renderer_, &farEmber);
 
         const SDL_FRect nearEmber{
-            center.x - direction.x * 12.0F - 1.0F,
-            center.y - direction.y * 12.0F - 1.0F,
+            center.x - direction.x * trailLength * 0.3F - 1.0F,
+            center.y - direction.y * trailLength * 0.3F - 1.0F,
             2.0F,
             2.0F};
         SDL_SetRenderDrawColor(renderer_, 255, 196, 48, 235);
@@ -5227,10 +5234,10 @@ void App::renderShotPresentations()
         SDL_SetRenderDrawColor(renderer_, 255, 236, 136, 255);
         SDL_RenderLine(
             renderer_,
-            center.x - direction.x * 2.0F,
-            center.y - direction.y * 2.0F,
-            center.x + direction.x * 3.0F,
-            center.y + direction.y * 3.0F);
+            center.x - direction.x * std::min(2.0F, trailLength),
+            center.y - direction.y * std::min(2.0F, trailLength),
+            center.x,
+            center.y);
 
         const SDL_FRect core{
             center.x - 1.5F,

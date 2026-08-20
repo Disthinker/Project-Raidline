@@ -12,9 +12,14 @@ namespace
         Vec2 size = Vec2{10.0F, 10.0F},
         int damage = 1)
     {
+        const Vec2 center{
+            position.x + size.x / 2.0F,
+            position.y + size.y / 2.0F};
         return ShotCollisionCandidate{
             shotId,
-            Rect{position, size},
+            center,
+            center,
+            std::max(size.x, size.y),
             damage};
     }
 }
@@ -224,4 +229,47 @@ TEST(HitResolutionTest, InvalidCandidateCannotDamageOrBeConsumed)
     EXPECT_EQ(enemies[0].health(), 3);
     EXPECT_TRUE(result.hits.empty());
     EXPECT_TRUE(result.consumedShotIds.empty());
+}
+
+TEST(HitResolutionTest, ContinuousSweepHitsThinTargetWithoutTunnelling)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        ShotCollisionCandidate{
+            9,
+            Vec2{0.0F, 50.0F},
+            Vec2{300.0F, 50.0F},
+            2.0F,
+            1}};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{149.0F, 45.0F}, Vec2{2.0F, 10.0F}}};
+
+    const HitResolutionResult result =
+        resolveShotEnemyHits(shots, enemies);
+
+    EXPECT_TRUE(enemies.empty());
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.hits[0].shotId, 9U);
+    EXPECT_NEAR(result.hits[0].position.x, 149.0F, 0.001F);
+}
+
+TEST(HitResolutionTest, ContinuousSweepChoosesNearestTarget)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        ShotCollisionCandidate{
+            10,
+            Vec2{0.0F, 50.0F},
+            Vec2{300.0F, 50.0F},
+            2.0F,
+            1}};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{200.0F, 45.0F}, Vec2{10.0F, 10.0F}},
+        Enemy{Vec2{100.0F, 45.0F}, Vec2{10.0F, 10.0F}}};
+
+    const HitResolutionResult result =
+        resolveShotEnemyHits(shots, enemies);
+
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_FLOAT_EQ(enemies[0].position().x, 200.0F);
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_NEAR(result.hits[0].position.x, 100.0F, 0.001F);
 }
