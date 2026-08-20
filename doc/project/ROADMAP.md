@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、基础防具/命中部位、战地医疗与武器状态已由 PR #60～#63 接受。当前产品目标进入 **Survival Loadout：多武器配装与切换**；范围合同见 `doc/exec-plans/active/survival-loadout-multi-weapon-switching.md`，外部 GDD 继续只读。
+Core Extraction Alpha、基础防具/命中部位、战地医疗、武器状态与多武器切换已由 PR #60～#64 接受。当前产品目标进入 **Survival Loadout：防具维护**；范围合同见 `doc/exec-plans/active/survival-loadout-armor-maintenance.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -24,6 +24,7 @@ Core Extraction Alpha、基础防具/命中部位、战地医疗与武器状态�
 | 基础防具与命中部位 | PR #61 / merge commit `733b597` |
 | 流血、疼痛与战地医疗 | PR #62 / merge commit `ea918ab` |
 | 武器耐久、故障与维护 | PR #63 / merge commit `b8ddbe3` |
+| 多武器配装与切换 | PR #64 / merge commit `4c16596` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -40,7 +41,8 @@ Core Extraction Alpha、基础防具/命中部位、战地医疗与武器状态�
 | 基础防具与命中部位 | 五槽配装、头盔/护甲减伤与损耗、头/躯干/腿伤害差异、爆头专用反馈 | CombatDamage、ProfileCombat、实例耐久、schema v3、领域驱动 HitResult | PR #61 已接受并进入 main |
 | 流血、疼痛与战地医疗 | 伤势持续压力、胸挂医疗取舍、Raid 医疗轮盘与 Base 治疗 | MedicalStatus、类型化医疗能力、限时动作、schema v4、疼痛刺激 | PR #62 已接受并进入 main |
 | 武器耐久、故障与维护 | 成功击发产生磨损，低耐久可能卡壳；玩家在战斗中清障，并在 Base/Raid 消耗维护包 | WeaponCondition、Stovepipe、输入手势、MaintenanceDomain、schema v5 | PR #63 已通过 CI 和用户验收，以 `b8ddbe3` 进入 main |
-| 多武器配装与切换 | 两把长枪与手枪独立配装；Raid 中限时切换并保持各自弹药、耐久和故障 | 兼容槽集合、WeaponUse、当前武器运行时、schema v6 | Windows Debug 全目标与 709 项 CTest 已完成，待 PR/CI/用户验收 |
+| 多武器配装与切换 | 两把长枪与手枪独立配装；Raid 中限时切换并保持各自弹药、耐久和故障 | 兼容槽集合、WeaponUse、当前武器运行时、schema v6 | PR #64 已通过 CI 和用户验收，以 `4c16596` 进入 main |
+| 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修必须原地并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | Windows Debug 全目标与 718 项 CTest 已完成，待 PR/CI/用户验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
@@ -57,7 +59,7 @@ Core Extraction Alpha、基础防具/命中部位、战地医疗与武器状态�
 
 ## 不混写边界
 
-- 当前多武器切片只实现两长枪槽、手枪槽、基础 Pistol/弹匣和限时切换；不同时实现快速近战、射击模式循环、组件、改枪台、特殊弹、战术电子或新正式美术。
+- 当前防具维护切片只实现自助甲修包、材质成本和 Base/Raid 维修；不同时实现维修 NPC、WorldClock、组件耐久、改枪台、插板、面罩、特殊弹、战术电子或新正式美术。
 
 - `codex/core-alpha-hardening` 只收束 Alpha 稳定性、恢复、内容合同和验收证据；不提前实现特殊弹、部位、复杂伤势、耐久、多地图、高危或长期系统。
 - Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
