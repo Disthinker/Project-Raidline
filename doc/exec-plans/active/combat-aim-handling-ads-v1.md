@@ -1,6 +1,6 @@
 # Combat：准星操控与基础开镜 v1 ExecPlan
 
-状态：本地实现与自动化完成，待 exact-head CI 和用户正常游玩验收
+状态：本地自动化与 exact-head CI 完成，待用户正常游玩验收
 
 基线：`origin/main@7877d71`（PR #66 已通过用户正常游玩验收并合入）
 
@@ -64,4 +64,5 @@
 - 2026-08-20：从精确主线建立本分支，冻结五项武器属性、实际准星、基础开镜、奔跑举枪、射程与换弹开镜范围。
 - 2026-08-20：完成 SDL 无关 `WeaponAimState`、五项属性确定性映射、实际准星驱动、稳定性随机散布、连续开火扩散、基础 ADS、奔跑举枪、射程减伤与表现接线。
 - 2026-08-20：Visual Studio Developer Shell、x64 host/x64 target 下 Windows Debug 全目标构建成功；全量 CTest 734/734 通过。开发代理未启动游戏。
-- 下一门槛：形成可审查提交与 Draft PR，通过 exact-head Windows/Ubuntu CI 后交给用户正常游玩验收。
+- 2026-08-20：建立 Draft PR #67；代码提交 `92f6d94` 的 exact-head Windows/Ubuntu CI 全部通过。
+- 下一门槛：用户按正常游玩流程完成射击手感验收；通过后再转 Ready 并按用户授权合入。

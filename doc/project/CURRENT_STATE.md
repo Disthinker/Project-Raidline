@@ -58,7 +58,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat 逻辑弹道 v1
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- 当前准星操控切片已在 Visual Studio Developer Shell、x64 host/x64 target 下完成 Windows Debug 全目标构建；全量 CTest 734/734 通过。开发代理未启动游戏。
+- 当前准星操控切片已在 Visual Studio Developer Shell、x64 host/x64 target 下完成 Windows Debug 全目标构建；全量 CTest 734/734 与 PR #67 代码提交 `92f6d94` 的 exact-head Windows/Ubuntu CI 通过。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -139,7 +139,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat 逻辑弹道 v1
 
 ## 尚未完成
 
-- 准星操控与基础开镜 v1：建立 Draft PR，完成 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 准星操控与基础开镜 v1：PR #67 已通过代码提交 exact-head Windows/Ubuntu CI，待用户正常游玩验收。
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。

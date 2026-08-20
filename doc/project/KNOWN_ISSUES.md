@@ -18,7 +18,7 @@
 | RL-ARMOR-001 | 防具受损后缺少资源化维修与 Raid 风险动作 | PR #65 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `755fa00` 进入 main |
 | RL-WEAPON-002 | Misfire/Double Feed 需要可保存的动态 Raid 地面弹药所有权 | 当前只启用不需要创建/抛出弹药资产的 Stovepipe；待 Raid 地面任意资产合同建立后独立扩展，禁止吞弹或凭空造弹 |
 | RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | PR #66 已完成非实体逻辑飞行、冻结终点、连续扫掠和 World HitResult，并通过 CI 与用户验收后以 `7877d71` 合入 main |
-| RL-COMBAT-005 | 实际准星、稳定性随机散布、连续射击扩散与基础开镜未形成统一手感合同 | 当前分支已完成五项武器属性、实际准星、确定性随机散布、连续扩散、基础 ADS、奔跑举枪和射程反馈；Windows Debug 全目标与 734/734 CTest 通过，待 CI 和用户验收 |
+| RL-COMBAT-005 | 实际准星、稳定性随机散布、连续射击扩散与基础开镜未形成统一手感合同 | Draft PR #67 已完成五项武器属性、实际准星、确定性随机散布、连续扩散、基础 ADS、奔跑举枪和射程反馈；本地 734/734 与代码提交 exact-head CI 通过，待用户验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -53,6 +53,6 @@
 | Survival Loadout：多武器配装与切换 | PR #64 已通过 CI 和用户验收，以 merge commit `4c16596` 进入 main |
 | Survival Loadout：防具维护 | PR #65 已通过 CI 与用户验收，以 merge commit `755fa00` 进入 main |
 | Combat：逻辑弹道与落点反馈 v1 | PR #66 已通过 CI 和用户验收，以 merge commit `7877d71` 进入 main |
-| Combat：准星操控与基础开镜 v1 | 本地实现、Windows Debug 全目标与 734/734 CTest 已完成，待 Draft PR、exact-head CI 与用户正常游玩验收 |
+| Combat：准星操控与基础开镜 v1 | Draft PR #67；本地 734/734 与代码提交 exact-head CI 通过，待用户正常游玩验收 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-aim-handling-ads-v1.md`。
