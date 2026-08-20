@@ -15,6 +15,8 @@ struct GameplayInput
 
     bool fireJustPressed{};
     bool firePressed{};
+    bool aimDownSights{};
+    bool forceMaximumWeaponSpread{};
 
     // World-space pointer aim. Absence preserves the movement/previous facing
     // direction so the Space-key regression path remains available.

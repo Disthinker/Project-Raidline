@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <tuple>
@@ -210,6 +211,189 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
 }
 
+TEST(AlphaExtractionSessionTest, SprintFireWaitsForReadyAndConsumesOneRound)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-sprint-fire"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId magazine = *installedMagazine(
+        session.profile(), rifle);
+    ASSERT_TRUE(session.deployAlpha(90820));
+    const std::size_t roundsBefore = magazineRoundCount(
+        session.profile(), magazine);
+
+    GameplayInput sprintFire{};
+    sprintFire.moveRight = true;
+    sprintFire.sprint = true;
+    sprintFire.fireJustPressed = true;
+    sprintFire.firePressed = true;
+    session.update(sprintFire, 0.0F);
+
+    EXPECT_FALSE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine),
+        roundsBefore);
+
+    GameplayInput heldSprint{};
+    heldSprint.moveRight = true;
+    heldSprint.sprint = true;
+    session.update(heldSprint, 0.30F);
+
+    EXPECT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine),
+        roundsBefore - 1U);
+}
+
+TEST(AlphaExtractionSessionTest, AdsSlowsMovementAndKeepsLowPowerWeakTracer)
+{
+    GameSession hipSession;
+    ASSERT_TRUE(hipSession.startNewProfile("alpha-session-hip-move"));
+    prepareArmedLoadout(hipSession);
+    ASSERT_TRUE(hipSession.deployAlpha(90821));
+    const float hipStart = hipSession.world().player().position().x;
+    GameplayInput hipMove{};
+    hipMove.moveRight = true;
+    hipSession.update(hipMove, 0.20F);
+    const float hipDistance =
+        hipSession.world().player().position().x - hipStart;
+
+    GameSession adsSession;
+    ASSERT_TRUE(adsSession.startNewProfile("alpha-session-ads-move"));
+    prepareArmedLoadout(adsSession);
+    ASSERT_TRUE(adsSession.deployAlpha(90822));
+    const float adsStart = adsSession.world().player().position().x;
+    GameplayInput adsMove{};
+    adsMove.moveRight = true;
+    adsMove.aimDownSights = true;
+    adsMove.aimWorldPosition = Vec2{1100.0F, 360.0F};
+    adsSession.update(adsMove, 0.20F);
+    const float adsDistance =
+        adsSession.world().player().position().x - adsStart;
+
+    EXPECT_GT(adsDistance, 0.0F);
+    EXPECT_LT(adsDistance, hipDistance);
+    EXPECT_GT(adsSession.world().weaponAimDownSightsProgress(), 0.0F);
+
+    GameplayInput adsFire = adsMove;
+    adsFire.moveRight = false;
+    adsFire.fireJustPressed = true;
+    adsFire.firePressed = true;
+    adsSession.update(adsFire, 0.0F);
+    ASSERT_TRUE(adsSession.world().shotFiredLastUpdate());
+    const auto shots = adsSession.world().shotPresentationSnapshots();
+    ASSERT_FALSE(shots.empty());
+    EXPECT_EQ(shots.back().tracerStyle, TracerStyle::Weak);
+}
+
+TEST(AlphaExtractionSessionTest, ReloadRetainsAdsAndLocksMaximumSpread)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-reload-ads"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(90823));
+
+    GameplayInput reload{};
+    reload.reloadJustPressed = true;
+    reload.aimDownSights = true;
+    reload.aimWorldPosition = Vec2{1000.0F, 360.0F};
+    session.update(reload, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+
+    GameplayInput keepAiming{};
+    keepAiming.aimDownSights = true;
+    keepAiming.aimWorldPosition = Vec2{1000.0F, 360.0F};
+    session.update(keepAiming, 0.20F);
+
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    EXPECT_GT(session.world().weaponAimDownSightsProgress(), 0.0F);
+    const WeaponHandlingParameters handling =
+        deriveWeaponHandling(*rifle.weaponUse);
+    const float expectedMaximum = handling.maximumSpreadDegrees * std::lerp(
+        1.0F,
+        handling.aimDownSightsStabilityMultiplier,
+        session.world().weaponAimDownSightsProgress());
+    EXPECT_FLOAT_EQ(
+        session.world().weaponSpreadDegrees(),
+        expectedMaximum);
+    EXPECT_TRUE(session.raidActionState().active().has_value());
+}
+
+TEST(AlphaExtractionSessionTest,
+     DeveloperWeaponTuningIsRuntimeOnlyAndResettable)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-developer-tuning"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(90824));
+
+    const std::uint64_t fingerprint = profileStateFingerprint(session.profile());
+    const ProfileRevision revision = session.profile().revision;
+    const auto defaults = session.developerWeaponTuning();
+    ASSERT_TRUE(defaults.has_value());
+    EXPECT_FALSE(defaults->overridden);
+
+    ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::Stability,
+        1,
+        false));
+    ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::MaximumReticleSpeed,
+        1,
+        true));
+
+    const auto tuned = session.developerWeaponTuning();
+    ASSERT_TRUE(tuned.has_value());
+    EXPECT_TRUE(tuned->overridden);
+    EXPECT_EQ(tuned->weaponAssetId, defaults->weaponAssetId);
+    EXPECT_EQ(tuned->weaponUse.stability, defaults->weaponUse.stability + 1U);
+    EXPECT_LT(
+        tuned->handling.maximumSpreadDegrees,
+        defaults->handling.maximumSpreadDegrees);
+    EXPECT_FLOAT_EQ(
+        tuned->handling.maximumReticleSpeed,
+        defaults->handling.maximumReticleSpeed + 50.0F);
+    EXPECT_EQ(session.profile().revision, revision);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+
+    ASSERT_TRUE(session.resetDeveloperWeaponTuning());
+    const auto reset = session.developerWeaponTuning();
+    ASSERT_TRUE(reset.has_value());
+    EXPECT_FALSE(reset->overridden);
+    EXPECT_EQ(reset->weaponUse, defaults->weaponUse);
+    EXPECT_FLOAT_EQ(
+        reset->handling.maximumReticleSpeed,
+        defaults->handling.maximumReticleSpeed);
+    EXPECT_EQ(session.profile().revision, revision);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    EXPECT_FALSE(session.resetDeveloperWeaponTuning());
+}
+
+TEST(AlphaExtractionSessionTest, DeveloperWeaponTuningRejectsInvalidAccess)
+{
+    GameSession session;
+    EXPECT_FALSE(session.developerWeaponTuning().has_value());
+    EXPECT_FALSE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::Accuracy,
+        1,
+        false));
+
+    ASSERT_TRUE(session.startNewProfile("alpha-session-invalid-tuning"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(90825));
+    EXPECT_FALSE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::Accuracy,
+        0,
+        false));
+    EXPECT_FALSE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::Count,
+        1,
+        false));
+}
+
 TEST(AlphaExtractionSessionTest, DeploySelectsFirstOccupiedWeaponSlot)
 {
     GameSession secondarySession;
@@ -294,7 +478,7 @@ TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMod
         std::get_if<WeaponSwitchRaidAction>(
             &*session.raidActionState().active()),
         nullptr);
-    session.update(GameplayInput{}, 0.34F);
+    session.update(GameplayInput{}, 0.36F);
     EXPECT_EQ(session.activeAlphaWeapon(), loadout.rifle);
     session.update(GameplayInput{}, 0.02F);
     EXPECT_EQ(session.activeAlphaWeapon(), loadout.pistol);

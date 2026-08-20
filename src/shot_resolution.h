@@ -54,7 +54,14 @@ struct ShotResolution
 enum class HitTargetKind
 {
     Enemy,
-    World,
+    Obstacle,
+    Ground,
+};
+
+enum class TracerStyle
+{
+    None,
+    Weak,
 };
 
 // Damage and presentation consumers receive this result instead of inspecting
@@ -62,7 +69,7 @@ enum class HitTargetKind
 struct HitResult
 {
     ShotId shotId{kInvalidShotId};
-    HitTargetKind targetKind{HitTargetKind::World};
+    HitTargetKind targetKind{HitTargetKind::Ground};
     Vec2 position{};
     int damageApplied{};
     bool targetKilled{false};
@@ -80,6 +87,9 @@ struct ShotPresentationSnapshot
     Vec2 direction{};
     Vec2 impactPosition{};
     float distanceTravelled{};
+    TracerStyle tracerStyle{TracerStyle::Weak};
+    float tracerLength{34.0F};
+    float tracerOpacity{0.42F};
 };
 
 [[nodiscard]]

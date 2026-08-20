@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "enemy.h"
@@ -17,6 +18,14 @@ struct ShotCollisionCandidate
     int damage{};
 };
 
+using BallisticBlockerId = std::uint64_t;
+
+struct BallisticBlocker
+{
+    BallisticBlockerId id{};
+    Rect bounds{};
+};
+
 struct HitResolutionResult
 {
     std::vector<HitResult> hits;
@@ -28,3 +37,9 @@ struct HitResolutionResult
 HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,
     std::vector<Enemy> &enemies);
+
+[[nodiscard]]
+HitResolutionResult resolveShotHits(
+    const std::vector<ShotCollisionCandidate> &shots,
+    std::vector<Enemy> &enemies,
+    const std::vector<BallisticBlocker> &blockers);

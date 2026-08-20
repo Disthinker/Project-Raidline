@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <stdexcept>
 
 #include "content_registry.h"
@@ -33,6 +34,45 @@ namespace
             "pistol",
             "rifle",
             "ammo_9mm"};
+}
+
+WeaponHandlingParameters deriveWeaponHandling(
+    const WeaponUseDefinition &definition) noexcept
+{
+    const auto attribute = [](std::uint32_t value)
+    {
+        return static_cast<float>(std::min(value, 100U));
+    };
+    const float recoilControl = attribute(definition.recoilControl);
+    const float stability = attribute(definition.stability);
+    const float handling = attribute(definition.handlingSpeed);
+    const float ergonomics = attribute(definition.ergonomics);
+    const float accuracy = attribute(definition.accuracy);
+
+    const float minimumSpread = 1.60F - 0.014F * accuracy;
+    const float maximumSpread = 12.0F - 0.09F * stability;
+    const float switchDuration = 0.95F - 0.007F * handling;
+
+    return WeaponHandlingParameters{
+        switchDuration,
+        std::clamp(switchDuration * 0.30F, 0.12F, 0.25F),
+        1400.0F,
+        900.0F + 22.0F * ergonomics,
+        720.0F - 5.8F * recoilControl,
+        1000.0F + 24.0F * ergonomics,
+        0.12F,
+        minimumSpread,
+        std::max(minimumSpread, maximumSpread),
+        1.15F,
+        0.16F,
+        3.0F + 0.24F * handling,
+        0.50F - 0.0035F * ergonomics,
+        0.65F,
+        0.55F,
+        0.70F,
+        0.35F,
+        34.0F,
+        0.42F};
 }
 
 bool isWeaponEquipmentSlot(EquipmentSlotKind slot) noexcept

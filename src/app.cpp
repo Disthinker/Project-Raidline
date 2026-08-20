@@ -1086,6 +1086,8 @@ GameplayInput App::makeGameplayInput() const
             GameAction::Fire) ||
         input_.isPrimaryPointerPressed();
 
+    input.aimDownSights = input_.isSecondaryPointerPressed();
+
     input.aimWorldPosition =
         pointerWorldPosition_;
 
@@ -2856,6 +2858,8 @@ void App::processEvents()
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
     pendingScreenConfirm_ = false;
+    developerWeaponPanelBlocksGameplayThisFrame_ =
+        developerWeaponPanelOpen_;
 
     SDL_Event event;
     while (SDL_PollEvent(&event))
@@ -2870,6 +2874,8 @@ void App::processEvents()
             profileContextMenu_.reset();
             medicalWheelOpen_ = false;
             medicalWheelOptions_.clear();
+            developerWeaponPanelOpen_ = false;
+            developerWeaponPanelBlocksGameplayThisFrame_ = true;
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
@@ -2881,6 +2887,7 @@ void App::processEvents()
                 event.motion.y};
             if (gameFlow_.state() == GameFlowState::Raid &&
                 !inventoryOverlayState_.isOpen() &&
+                !developerWeaponPanelOpen_ &&
                 previousPointer.has_value() &&
                 gameSession_.observeAlphaWeaponClearMotion(Vec2{
                     pointerWorldPosition_->x - previousPointer->x,
@@ -2902,7 +2909,85 @@ void App::processEvents()
             running_ = false;
         }
 
-        else if (gameFlow_.state() == GameFlowState::MainMenu)
+        if (gameFlow_.state() == GameFlowState::Raid &&
+            gameSession_.alphaRaidActive())
+        {
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                event.key.scancode == SDL_SCANCODE_F10)
+            {
+                developerWeaponPanelOpen_ = !developerWeaponPanelOpen_;
+                developerWeaponPanelBlocksGameplayThisFrame_ = true;
+                input_.suppressPrimaryPointerUntilRelease();
+                if (developerWeaponPanelOpen_)
+                {
+                    closeInventory();
+                    medicalWheelOpen_ = false;
+                    medicalWheelOptions_.clear();
+                    profileContextMenu_.reset();
+                    raidQuitArmed_ = false;
+                    uiMessage_ = "DEVELOPER WEAPON TUNING OPEN";
+                }
+                else
+                {
+                    uiMessage_ = "DEVELOPER WEAPON TUNING CLOSED";
+                }
+                continue;
+            }
+
+            if (developerWeaponPanelOpen_)
+            {
+                if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
+                {
+                    constexpr std::size_t parameterCount{
+                        static_cast<std::size_t>(
+                            DeveloperWeaponParameter::Count)};
+                    switch (event.key.scancode)
+                    {
+                    case SDL_SCANCODE_UP:
+                        developerWeaponParameterIndex_ =
+                            (developerWeaponParameterIndex_ +
+                             parameterCount - 1U) %
+                            parameterCount;
+                        break;
+                    case SDL_SCANCODE_DOWN:
+                        developerWeaponParameterIndex_ =
+                            (developerWeaponParameterIndex_ + 1U) %
+                            parameterCount;
+                        break;
+                    case SDL_SCANCODE_LEFT:
+                    case SDL_SCANCODE_RIGHT:
+                    {
+                        const int direction =
+                            event.key.scancode == SDL_SCANCODE_RIGHT ? 1 : -1;
+                        if (gameSession_.adjustDeveloperWeaponTuning(
+                                static_cast<DeveloperWeaponParameter>(
+                                    developerWeaponParameterIndex_),
+                                direction,
+                                input_.isShiftPressed()))
+                        {
+                            uiMessage_ = "RUNTIME WEAPON TUNING UPDATED";
+                        }
+                        break;
+                    }
+                    case SDL_SCANCODE_R:
+                        uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
+                            ? "RUNTIME WEAPON TUNING RESET"
+                            : "WEAPON ALREADY USES CONTENT DEFAULTS";
+                        break;
+                    case SDL_SCANCODE_ESCAPE:
+                        developerWeaponPanelOpen_ = false;
+                        uiMessage_ = "DEVELOPER WEAPON TUNING CLOSED";
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                developerWeaponPanelBlocksGameplayThisFrame_ = true;
+                continue;
+            }
+        }
+
+        if (gameFlow_.state() == GameFlowState::MainMenu)
         {
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
@@ -3028,6 +3113,11 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
+    if (gameFlow_.state() != GameFlowState::Raid)
+    {
+        developerWeaponPanelOpen_ = false;
+        developerWeaponPanelBlocksGameplayThisFrame_ = false;
+    }
     const bool screenConfirm =
         pendingScreenConfirm_ ||
         input_.wasActionJustPressed(
@@ -3077,9 +3167,11 @@ void App::update(float deltaTime)
     const InventoryFrameInputDecision inputDecision =
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
+            !developerWeaponPanelBlocksGameplayThisFrame_ &&
             raidAcceptsInventoryInput &&
                 input_.wasActionJustPressed(
-                GameAction::ToggleInventory),
+                    GameAction::ToggleInventory),
+            !developerWeaponPanelBlocksGameplayThisFrame_ &&
             input_.wasActionJustPressed(
                 GameAction::InventoryCancel));
 
@@ -3168,6 +3260,10 @@ void App::update(float deltaTime)
     }
 
     gameplayInput.inventoryOpen = inventoryOverlayState_.isOpen();
+    if (developerWeaponPanelBlocksGameplayThisFrame_)
+    {
+        gameplayInput = GameplayInput{};
+    }
     if (inventoryOverlayState_.isOpen())
     {
         gameplayInput.fireJustPressed = false;
@@ -3180,7 +3276,8 @@ void App::update(float deltaTime)
     }
     if (gameSession_.world().isAlphaRaidWorld() &&
         gameSession_.world().raidSession().isActive() &&
-        !inventoryOverlayState_.isOpen())
+        !inventoryOverlayState_.isOpen() &&
+        !developerWeaponPanelOpen_)
     {
         if (input_.wasActionJustPressed(GameAction::Heal) &&
             !gameSession_.raidActionState().active().has_value())
@@ -3296,6 +3393,11 @@ void App::update(float deltaTime)
         inventoryOverlayState_.isOpen())
     {
         closeInventory();
+    }
+    if (!gameFlow_.isRaidScreen() ||
+        gameSession_.world().raidSession().isTerminal())
+    {
+        developerWeaponPanelOpen_ = false;
     }
 }
 
@@ -3709,7 +3811,7 @@ void App::renderDebugText()
         {
             SDL_RenderDebugText(
                 renderer_, 980.0F, 116.0F,
-                "SHIFT SPRINT | R RELOAD | 5 MED | TAB INVENTORY");
+                "LMB FIRE | RMB AIM | SHIFT SPRINT | R RELOAD");
         }
         const ProfileState &profile = gameSession_.profile();
         const char *bleed = profile.medicalStatus.bleeding ==
@@ -3729,6 +3831,9 @@ void App::renderDebugText()
                 : "");
         SDL_RenderDebugText(
             renderer_, 980.0F, 132.0F, medicalStatus.c_str());
+        SDL_RenderDebugText(
+            renderer_, 980.0F, 148.0F,
+            "F10 RUNTIME WEAPON TUNING");
 
         for (std::size_t index = 0; index < kWeaponEquipmentSlots.size(); ++index)
         {
@@ -5181,17 +5286,26 @@ void App::renderShotPresentations()
         const ShotPresentationSnapshot &shot :
         gameSession_.world().shotPresentationSnapshots())
     {
+        if (shot.tracerStyle == TracerStyle::None)
+        {
+            continue;
+        }
         const Vec2 center = shot.center;
         const Vec2 direction = shot.direction;
         const float trailLength = std::min(
-            38.0F,
+            shot.tracerLength,
             std::max(0.0F, shot.distanceTravelled));
         if (trailLength <= 0.0F)
         {
             continue;
         }
 
-        SDL_SetRenderDrawColor(renderer_, 255, 72, 8, 115);
+        const Uint8 opacity = static_cast<Uint8>(std::clamp(
+            std::lround(shot.tracerOpacity * 255.0F),
+            0L,
+            255L));
+        SDL_SetRenderDrawColor(
+            renderer_, 255, 94, 24, opacity / 2U);
         SDL_RenderLine(
             renderer_,
             center.x - direction.x * trailLength,
@@ -5199,7 +5313,7 @@ void App::renderShotPresentations()
             center.x - direction.x * trailLength * 0.45F,
             center.y - direction.y * trailLength * 0.45F);
 
-        SDL_SetRenderDrawColor(renderer_, 255, 164, 24, 225);
+        SDL_SetRenderDrawColor(renderer_, 255, 176, 48, opacity);
         SDL_RenderLine(
             renderer_,
             center.x - direction.x * trailLength * 0.55F,
@@ -5212,7 +5326,8 @@ void App::renderShotPresentations()
             center.y - direction.y * trailLength * 0.75F - 0.75F,
             1.5F,
             1.5F};
-        SDL_SetRenderDrawColor(renderer_, 255, 104, 8, 145);
+        SDL_SetRenderDrawColor(
+            renderer_, 255, 116, 24, opacity / 2U);
         SDL_RenderFillRect(renderer_, &farEmber);
 
         const SDL_FRect nearEmber{
@@ -5220,7 +5335,7 @@ void App::renderShotPresentations()
             center.y - direction.y * trailLength * 0.3F - 1.0F,
             2.0F,
             2.0F};
-        SDL_SetRenderDrawColor(renderer_, 255, 196, 48, 235);
+        SDL_SetRenderDrawColor(renderer_, 255, 202, 72, opacity);
         SDL_RenderFillRect(renderer_, &nearEmber);
 
         const SDL_FRect glow{
@@ -5228,10 +5343,11 @@ void App::renderShotPresentations()
             center.y - 2.5F,
             5.0F,
             5.0F};
-        SDL_SetRenderDrawColor(renderer_, 255, 176, 32, 135);
+        SDL_SetRenderDrawColor(
+            renderer_, 255, 176, 48, opacity / 2U);
         SDL_RenderFillRect(renderer_, &glow);
 
-        SDL_SetRenderDrawColor(renderer_, 255, 236, 136, 255);
+        SDL_SetRenderDrawColor(renderer_, 255, 236, 136, opacity);
         SDL_RenderLine(
             renderer_,
             center.x - direction.x * std::min(2.0F, trailLength),
@@ -5251,6 +5367,33 @@ void App::renderShotPresentations()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+void App::renderBallisticBlockers()
+{
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    for (const BallisticBlocker &blocker :
+         gameSession_.world().ballisticBlockers())
+    {
+        const SDL_FRect bounds{
+            blocker.bounds.position.x,
+            blocker.bounds.position.y,
+            blocker.bounds.size.x,
+            blocker.bounds.size.y};
+        SDL_SetRenderDrawColor(renderer_, 44, 48, 43, 235);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 126, 112, 82, 255);
+        SDL_RenderRect(renderer_, &bounds);
+
+        const SDL_FRect inset{
+            bounds.x + 4.0F,
+            bounds.y + 4.0F,
+            std::max(0.0F, bounds.w - 8.0F),
+            std::max(0.0F, bounds.h - 8.0F)};
+        SDL_SetRenderDrawColor(renderer_, 71, 76, 67, 220);
+        SDL_RenderRect(renderer_, &inset);
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::syncSystemCursorVisibility() noexcept
 {
     const bool shouldHide =
@@ -5258,6 +5401,7 @@ void App::syncSystemCursorVisibility() noexcept
         gameSession_.world().raidSession().isActive() &&
         !inventoryOverlayState_.isOpen() &&
         !medicalWheelOpen_ &&
+        !developerWeaponPanelOpen_ &&
         pointerWorldPosition_.has_value();
 
     if (shouldHide == systemCursorHidden_)
@@ -5285,20 +5429,26 @@ void App::renderAimCrosshair()
     if (!pointerWorldPosition_.has_value() ||
         inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
+        developerWeaponPanelOpen_ ||
         !gameSession_.world().raidSession().isActive())
     {
         return;
     }
 
     const float feedbackRadius =
-        6.0F +
-        gameSession_.world().weaponVisualRecoilPixels() +
-        gameSession_.world().weaponSpreadDegrees() * 1.5F;
+        6.0F + gameSession_.world().weaponSpreadDegrees() * 1.5F;
     constexpr float kArmLength{7.0F};
-    const Vec2 center = *pointerWorldPosition_;
+    const Vec2 center = gameSession_.world().weaponAimWorldPosition();
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+    if (gameSession_.world().weaponAimBeyondMaximumRange())
+    {
+        SDL_SetRenderDrawColor(renderer_, 232, 62, 52, 235);
+    }
+    else
+    {
+        SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+    }
     SDL_RenderLine(
         renderer_,
         center.x - feedbackRadius - kArmLength,
@@ -6053,7 +6203,8 @@ void App::renderMainMenu()
     {
         SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
         SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(renderer_, 430.0F, 400.0F, "RAID: SHIFT SPRINT  R RELOAD  5 MED  TAB INVENTORY  ESC ABANDON/CLOSE");
+        SDL_RenderDebugText(renderer_, 466.0F, 400.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
+        SDL_RenderDebugText(renderer_, 458.0F, 424.0F, "SHIFT SPRINT  TAB INVENTORY  ESC ABANDON/CLOSE");
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
@@ -6687,6 +6838,181 @@ void App::renderMedicalWheel()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+void App::renderDeveloperWeaponPanel()
+{
+    if (!developerWeaponPanelOpen_)
+    {
+        return;
+    }
+
+    const std::optional<DeveloperWeaponTuningSnapshot> tuning =
+        gameSession_.developerWeaponTuning();
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
+    SDL_SetRenderDrawColor(renderer_, 4, 7, 8, 175);
+    SDL_RenderFillRect(renderer_, &shade);
+    const SDL_FRect panel{250.0F, 72.0F, 780.0F, 576.0F};
+    SDL_SetRenderDrawColor(renderer_, 14, 24, 27, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 92, 178, 173, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
+    SDL_RenderDebugText(
+        renderer_, panel.x + 22.0F, panel.y + 18.0F,
+        "DEVELOPER WEAPON TUNING - RUNTIME ONLY");
+    if (!tuning.has_value())
+    {
+        SDL_RenderDebugText(
+            renderer_, panel.x + 22.0F, panel.y + 52.0F,
+            "NO ACTIVE WEAPON");
+        SDL_RenderDebugText(
+            renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
+            "F10 / ESC CLOSE");
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+
+    const std::string weaponLine = fmt::format(
+        "{} | ASSET {} | {}",
+        tuning->weaponDefinitionId.value(),
+        tuning->weaponAssetId,
+        tuning->overridden ? "OVERRIDDEN" : "CONTENT DEFAULT");
+    SDL_RenderDebugText(
+        renderer_, panel.x + 22.0F, panel.y + 38.0F,
+        weaponLine.c_str());
+    SDL_RenderDebugText(
+        renderer_, panel.x + 22.0F, panel.y + 54.0F,
+        "CHANGES ARE NOT SAVED");
+
+    constexpr std::array<const char *,
+        static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
+        "Recoil control", "Stability", "Handling speed", "Ergonomics",
+        "Accuracy", "Shot interval", "Base damage", "Effective range",
+        "Maximum range", "Maximum reticle speed", "Spread per shot",
+        "Recoil lateral ratio", "Moving spread fraction",
+        "ADS accuracy multiplier", "ADS stability multiplier",
+        "Weak tracer length", "Weak tracer opacity"};
+
+    const WeaponUseDefinition &weapon = tuning->weaponUse;
+    const WeaponHandlingParameters &handling = tuning->handling;
+    for (std::size_t index{}; index < labels.size(); ++index)
+    {
+        const DeveloperWeaponParameter parameter =
+            static_cast<DeveloperWeaponParameter>(index);
+        std::string value;
+        switch (parameter)
+        {
+        case DeveloperWeaponParameter::RecoilControl:
+            value = fmt::format(
+                "{}  (recoil speed {:.1f})",
+                weapon.recoilControl,
+                handling.recoilInitialSpeed);
+            break;
+        case DeveloperWeaponParameter::Stability:
+            value = fmt::format(
+                "{}  (max spread {:.2f} deg)",
+                weapon.stability,
+                handling.maximumSpreadDegrees);
+            break;
+        case DeveloperWeaponParameter::HandlingSpeed:
+            value = fmt::format(
+                "{}  (recovery {:.2f} deg/s)",
+                weapon.handlingSpeed,
+                handling.spreadRecoveryDegreesPerSecond);
+            break;
+        case DeveloperWeaponParameter::Ergonomics:
+            value = fmt::format(
+                "{}  (control accel {:.0f})",
+                weapon.ergonomics,
+                handling.reticleControlAcceleration);
+            break;
+        case DeveloperWeaponParameter::Accuracy:
+            value = fmt::format(
+                "{}  (min spread {:.2f} deg)",
+                weapon.accuracy,
+                handling.minimumSpreadDegrees);
+            break;
+        case DeveloperWeaponParameter::ShotInterval:
+            value = fmt::format("{:.3f} s", weapon.shotIntervalSeconds);
+            break;
+        case DeveloperWeaponParameter::BaseDamage:
+            value = fmt::format("{}", weapon.baseDamage);
+            break;
+        case DeveloperWeaponParameter::EffectiveRange:
+            value = fmt::format("{:.0f} px", weapon.effectiveRange);
+            break;
+        case DeveloperWeaponParameter::MaximumRange:
+            value = fmt::format("{:.0f} px", weapon.maximumRange);
+            break;
+        case DeveloperWeaponParameter::MaximumReticleSpeed:
+            value = fmt::format("{:.0f} px/s", handling.maximumReticleSpeed);
+            break;
+        case DeveloperWeaponParameter::SpreadPerShot:
+            value = fmt::format("{:.2f} deg", handling.spreadPerShotDegrees);
+            break;
+        case DeveloperWeaponParameter::RecoilLateralRatio:
+            value = fmt::format("{:.2f}", handling.recoilLateralRatio);
+            break;
+        case DeveloperWeaponParameter::MovingSpreadFraction:
+            value = fmt::format("{:.2f}", handling.movingSpreadFraction);
+            break;
+        case DeveloperWeaponParameter::AdsAccuracyMultiplier:
+            value = fmt::format(
+                "{:.2f}", handling.aimDownSightsAccuracyMultiplier);
+            break;
+        case DeveloperWeaponParameter::AdsStabilityMultiplier:
+            value = fmt::format(
+                "{:.2f}", handling.aimDownSightsStabilityMultiplier);
+            break;
+        case DeveloperWeaponParameter::WeakTracerLength:
+            value = fmt::format("{:.0f} px", handling.weakTracerLength);
+            break;
+        case DeveloperWeaponParameter::WeakTracerOpacity:
+            value = fmt::format("{:.2f}", handling.weakTracerOpacity);
+            break;
+        case DeveloperWeaponParameter::Count:
+            break;
+        }
+
+        const float rowY = panel.y + 68.0F +
+            static_cast<float>(index) * 25.0F;
+        if (index == developerWeaponParameterIndex_)
+        {
+            const SDL_FRect selected{
+                panel.x + 14.0F,
+                rowY - 6.0F,
+                panel.w - 28.0F,
+                22.0F};
+            SDL_SetRenderDrawColor(renderer_, 42, 94, 91, 235);
+            SDL_RenderFillRect(renderer_, &selected);
+            SDL_SetRenderDrawColor(renderer_, 136, 226, 207, 255);
+            SDL_RenderRect(renderer_, &selected);
+        }
+        SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
+        const std::string row = fmt::format(
+            "{} {:<27} {}",
+            index == developerWeaponParameterIndex_ ? ">" : " ",
+            labels[index],
+            value);
+        SDL_RenderDebugText(
+            renderer_, panel.x + 24.0F, rowY, row.c_str());
+    }
+
+    const std::string derived = fmt::format(
+        "RECOIL DECEL {:.0f} | ADS {:.2f}s | MOVE {:.2f}x",
+        handling.recoilDeceleration,
+        handling.aimDownSightsDurationSeconds,
+        handling.aimDownSightsMovementMultiplier);
+    SDL_RenderDebugText(
+        renderer_, panel.x + 22.0F, panel.y + panel.h - 58.0F,
+        derived.c_str());
+    SDL_RenderDebugText(
+        renderer_, panel.x + 22.0F, panel.y + panel.h - 34.0F,
+        "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET | F10/ESC CLOSE");
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderProfileInventory(bool includeStash, bool inRaid)
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -7099,6 +7425,7 @@ void App::renderRaidScreen()
 {
     renderBackground();
     renderExtractionPoint();
+    renderBallisticBlockers();
     if (!gameSession_.world().isAlphaRaidWorld())
     {
         renderStorageCabinet();
@@ -7132,8 +7459,9 @@ void App::renderRaidScreen()
         renderStashOverlay();
     }
 
-    // 调试信息保持在最上层。
+    // 常驻调试信息位于世界 UI 上方；模态调参面板最后绘制。
     renderDebugText();
+    renderDeveloperWeaponPanel();
 }
 
 void App::render()

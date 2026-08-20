@@ -1,6 +1,6 @@
 # Combat：逻辑弹道与落点反馈 v1 ExecPlan
 
-状态：本地实现与自动化完成，待 exact-head CI 和用户正常游玩验收
+状态：已接受并合入 main（PR #66，merge commit `7877d71`）
 
 基线：`origin/main@755fa00`（PR #65 已通过用户正常游玩验收并合入）
 
@@ -61,4 +61,4 @@
 - 2026-08-20：`LogicalBallisticFlight`、冻结终点、连续扫掠、World HitResult、已飞轨迹投影与旧 Projectile 生产路径退场完成首轮接线。
 - 2026-08-20：专项目标编译成功；ShotResolution/LogicalBallistics/HitResolution/GameplayWorld/GameFlow 及相邻领域/会话回归 175/175 通过，开发代理未启动游戏。
 - 2026-08-20：Visual Studio Developer Shell、x64 host/x64 target 下 Windows Debug 全目标构建成功；全量 CTest 721/721 通过。
-- 下一门槛：形成可审查提交与 Draft PR，通过 exact-head Windows/Ubuntu CI 后交给用户正常游玩验收。
+- 2026-08-20：PR #66 exact-head Windows/Ubuntu CI 与用户正常游玩验收通过，以 merge commit `7877d71` 合入 main。

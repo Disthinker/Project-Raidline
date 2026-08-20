@@ -13,6 +13,15 @@ void InputSystem::handleEvent(
         primaryPointerPressed_ = false;
         primaryPointerJustPressed_ = false;
         primaryPointerSuppressedUntilRelease_ = false;
+        secondaryPointerPressed_ = false;
+        return;
+    }
+
+    if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+         event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+        event.button.button == SDL_BUTTON_RIGHT)
+    {
+        secondaryPointerPressed_ = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         return;
     }
 
@@ -143,6 +152,11 @@ bool InputSystem::isPrimaryPointerPressed() const noexcept
 bool InputSystem::wasPrimaryPointerJustPressed() const noexcept
 {
     return primaryPointerJustPressed_;
+}
+
+bool InputSystem::isSecondaryPointerPressed() const noexcept
+{
+    return secondaryPointerPressed_;
 }
 
 void InputSystem::suppressPrimaryPointerUntilRelease() noexcept

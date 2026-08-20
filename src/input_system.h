@@ -62,6 +62,9 @@ public:
     [[nodiscard]]
     bool wasPrimaryPointerJustPressed() const noexcept;
 
+    [[nodiscard]]
+    bool isSecondaryPointerPressed() const noexcept;
+
     // A UI layer calls this after consuming a left click. If the physical
     // button is still held, gameplay remains suppressed until its matching up.
     void suppressPrimaryPointerUntilRelease() noexcept;
@@ -86,6 +89,7 @@ private:
     bool primaryPointerPressed_{};
     bool primaryPointerJustPressed_{};
     bool primaryPointerSuppressedUntilRelease_{};
+    bool secondaryPointerPressed_{};
 
     [[nodiscard]]
     std::optional<GameAction>

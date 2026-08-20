@@ -82,6 +82,14 @@ HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,
     std::vector<Enemy> &enemies)
 {
+    return resolveShotHits(shots, enemies, {});
+}
+
+HitResolutionResult resolveShotHits(
+    const std::vector<ShotCollisionCandidate> &shots,
+    std::vector<Enemy> &enemies,
+    const std::vector<BallisticBlocker> &blockers)
+{
     HitResolutionResult result{};
 
     for (const ShotCollisionCandidate &shot : shots)
@@ -99,8 +107,28 @@ HitResolutionResult resolveShotEnemyHits(
             continue;
         }
 
-        std::optional<std::size_t> targetIndex;
+        std::optional<std::size_t> enemyIndex;
+        std::optional<std::size_t> blockerIndex;
         float targetFraction = std::numeric_limits<float>::infinity();
+
+        // Blockers are considered first and therefore win an exact tie. This
+        // prevents an enemy whose bounds touch a wall from being hit through it.
+        for (std::size_t index = 0; index < blockers.size(); ++index)
+        {
+            const std::optional<float> fraction = firstIntersectionFraction(
+                shot.start,
+                shot.end,
+                blockers[index].bounds,
+                shot.collisionExtent);
+            if (!fraction.has_value() || *fraction >= targetFraction)
+            {
+                continue;
+            }
+            blockerIndex = index;
+            enemyIndex.reset();
+            targetFraction = *fraction;
+        }
+
         for (std::size_t index = 0; index < enemies.size(); ++index)
         {
             const Enemy &enemy = enemies[index];
@@ -119,16 +147,15 @@ HitResolutionResult resolveShotEnemyHits(
                 continue;
             }
 
-            targetIndex = index;
+            enemyIndex = index;
+            blockerIndex.reset();
             targetFraction = *fraction;
         }
 
-        if (!targetIndex.has_value())
+        if (!enemyIndex.has_value() && !blockerIndex.has_value())
         {
             continue;
         }
-
-        Enemy &enemy = enemies[*targetIndex];
 
         const Vec2 sweepDelta{
             shot.end.x - shot.start.x,
@@ -136,6 +163,22 @@ HitResolutionResult resolveShotEnemyHits(
         const Vec2 collisionCenter{
             shot.start.x + sweepDelta.x * targetFraction,
             shot.start.y + sweepDelta.y * targetFraction};
+
+        result.consumedShotIds.push_back(shot.shotId);
+        if (blockerIndex.has_value())
+        {
+            result.hits.push_back(HitResult{
+                shot.shotId,
+                HitTargetKind::Obstacle,
+                collisionCenter,
+                0,
+                false,
+                HitRegion::Torso,
+                HitSemantic::Normal});
+            continue;
+        }
+
+        Enemy &enemy = enemies[*enemyIndex];
         const Rect enemyBounds = enemy.bounds();
         const Vec2 hitPosition{
             std::clamp(
@@ -161,7 +204,6 @@ HitResolutionResult resolveShotEnemyHits(
             continue;
         }
 
-        result.consumedShotIds.push_back(shot.shotId);
         const bool killed = enemy.takeDamage(damage.damageApplied);
 
         result.hits.push_back(

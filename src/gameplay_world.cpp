@@ -19,8 +19,6 @@ namespace
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
-    constexpr int kLegacyShotDamage{1};
-
     constexpr int kScorePerEnemy{100};
 
     float distanceToWorldBoundary(
@@ -75,7 +73,7 @@ namespace
                 EnemySpawn{
                     enemy.position,
                     enemy.size,
-                    enemy.maximumHealth});
+                    3});
         }
         return result;
     }
@@ -251,6 +249,21 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     worldSize_ = config.worldSize;
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
+    ballisticBlockers_ = std::move(config.ballisticBlockers);
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
+    {
+        if (blocker.id == 0 ||
+            !std::isfinite(blocker.bounds.position.x) ||
+            !std::isfinite(blocker.bounds.position.y) ||
+            !std::isfinite(blocker.bounds.size.x) ||
+            !std::isfinite(blocker.bounds.size.y) ||
+            blocker.bounds.size.x <= 0.0F ||
+            blocker.bounds.size.y <= 0.0F)
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig ballistic blocker is invalid"};
+        }
+    }
     player_ = Player{
         config.playerSpawn.x,
         config.playerSpawn.y,
@@ -540,21 +553,37 @@ void GameplayWorld::update(
     const bool controlsSuppressedAtFrameStart =
         player_.isControlled();
 
+    const Vec2 playerPositionBeforeMovement = player_.position();
     player_.update(
         input,
         deltaTime,
         worldWidth(),
         worldHeight());
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
+    {
+        if (isCollision(playerBounds(player_), blocker.bounds))
+        {
+            static_cast<void>(
+                player_.setPosition(playerPositionBeforeMovement));
+            break;
+        }
+    }
 
+    const Vec2 centerAfterMovement = playerCenter(player_);
+    Vec2 desiredAimPosition{
+        centerAfterMovement.x + player_.facingDirection().x * 400.0F,
+        centerAfterMovement.y + player_.facingDirection().y * 400.0F};
     if (input.aimWorldPosition.has_value())
     {
-        const Vec2 center = playerCenter(player_);
-        static_cast<void>(
-            player_.faceDirection(
-                Vec2{
-                    input.aimWorldPosition->x - center.x,
-                    input.aimWorldPosition->y - center.y}));
+        desiredAimPosition = *input.aimWorldPosition;
     }
+    weaponAim_.update(
+        desiredAimPosition,
+        centerAfterMovement,
+        worldSize_,
+        input.aimDownSights,
+        deltaTime);
+    static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     raidSession_.update(
@@ -724,9 +753,15 @@ void GameplayWorld::update(
     const std::optional<ShotSpec> shot =
         weaponFire_.update(
             !controlsSuppressed &&
+                !input.sprint &&
                 (input.firePressed || input.fireJustPressed),
-            player_.facingDirection(),
-            deltaTime);
+            weaponAim_.actualDirection(),
+            deltaTime,
+            WeaponFireContext{
+                player_.isMoving(),
+                weaponAim_.aimDownSightsProgress(),
+                weaponAim_.rangeSpreadFactor(),
+                input.forceMaximumWeaponSpread});
 
     if (shot.has_value())
     {
@@ -744,22 +779,9 @@ void GameplayWorld::update(
             shotOrigin,
             shot->direction,
             worldSize_);
-        float requestedDistance = boundaryDistance;
-        if (input.aimWorldPosition.has_value())
-        {
-            const Vec2 aimOffset{
-                input.aimWorldPosition->x - center.x,
-                input.aimWorldPosition->y - center.y};
-            const float pointerDistance = std::sqrt(
-                aimOffset.x * aimOffset.x +
-                aimOffset.y * aimOffset.y);
-            requestedDistance = std::max(
-                kLegacyShotExtent,
-                pointerDistance - muzzleDistance);
-        }
         const float maximumDistance = std::max(
             0.001F,
-            std::min(boundaryDistance, requestedDistance));
+            std::min(boundaryDistance, weaponMaximumRange_));
 
         const ShotResolution resolution = resolveShotCommand(
             ShotCommand{
@@ -768,7 +790,11 @@ void GameplayWorld::update(
                 shot->direction,
                 kLegacyShotSpeed,
                 kLegacyShotExtent,
-                kLegacyShotDamage,
+                std::max(
+                    1,
+                    static_cast<int>(std::lround(
+                        static_cast<float>(weaponBaseDamage_) *
+                        weaponAim_.damageMultiplier()))),
                 maximumDistance});
 
         if (!resolution.accepted())
@@ -776,7 +802,12 @@ void GameplayWorld::update(
             std::terminate();
         }
 
-        logicalBallistics_.emplace_back(resolution);
+        logicalBallistics_.emplace_back(
+            resolution,
+            weaponTracerStyle_,
+            weaponTracerLength_,
+            weaponTracerOpacity_);
+        weaponAim_.applyShotRecoil(shotOrigin);
         ++nextShotId_;
     }
 
@@ -794,9 +825,10 @@ void GameplayWorld::update(
                 flight.damage()});
     }
 
-    HitResolutionResult hitResult = resolveShotEnemyHits(
+    HitResolutionResult hitResult = resolveShotHits(
         collisionCandidates,
-        enemies_);
+        enemies_,
+        ballisticBlockers_);
 
     std::erase_if(
         logicalBallistics_,
@@ -818,7 +850,7 @@ void GameplayWorld::update(
         hitResult.hits.push_back(
             HitResult{
                 flight.shotId(),
-                HitTargetKind::World,
+                HitTargetKind::Ground,
                 flight.impactPosition(),
                 0,
                 false,
@@ -883,7 +915,10 @@ GameplayWorld::shotPresentationSnapshots() const
                 flight.currentPosition(),
                 flight.direction(),
                 flight.impactPosition(),
-                flight.distanceTravelled()});
+                flight.distanceTravelled(),
+                flight.tracerStyle(),
+                flight.tracerLength(),
+                flight.tracerOpacity()});
     }
 
     return snapshots;
@@ -893,6 +928,12 @@ const std::vector<Enemy> &
 GameplayWorld::enemies() const
 {
     return enemies_;
+}
+
+const std::vector<BallisticBlocker> &
+GameplayWorld::ballisticBlockers() const noexcept
+{
+    return ballisticBlockers_;
 }
 
 const std::vector<Particle> &
@@ -956,7 +997,32 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
-    return weaponFire_.visualRecoilPixels();
+    const Vec2 velocity = weaponAim_.recoilVelocity();
+    return std::min(
+        18.0F,
+        std::sqrt(
+            velocity.x * velocity.x + velocity.y * velocity.y) *
+            0.02F);
+}
+
+Vec2 GameplayWorld::weaponAimWorldPosition() const noexcept
+{
+    return weaponAim_.actualWorldPosition();
+}
+
+Vec2 GameplayWorld::weaponAimDirection() const noexcept
+{
+    return weaponAim_.actualDirection();
+}
+
+float GameplayWorld::weaponAimDownSightsProgress() const noexcept
+{
+    return weaponAim_.aimDownSightsProgress();
+}
+
+bool GameplayWorld::weaponAimBeyondMaximumRange() const noexcept
+{
+    return weaponAim_.beyondMaximumRange();
 }
 
 const std::vector<HitResult> &
@@ -973,15 +1039,50 @@ bool GameplayWorld::shotFiredLastUpdate() const noexcept
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition)
 {
-    weaponFire_ = WeaponFireState{WeaponFireConfig{
+    const WeaponHandlingParameters handling =
+        deriveWeaponHandling(definition);
+    configureWeaponFire(definition, handling, false);
+}
+
+void GameplayWorld::configureWeaponFire(
+    const WeaponUseDefinition &definition,
+    const WeaponHandlingParameters &handling,
+    bool preserveTransientState)
+{
+    const WeaponFireConfig fireConfig{
         definition.shotIntervalSeconds,
-        definition.spreadPerShotDegrees,
-        definition.maximumSpreadDegrees,
-        definition.recoveryDelaySeconds,
-        definition.spreadRecoveryDegreesPerSecond,
-        definition.visualRecoilPerShot,
-        definition.maximumVisualRecoil,
-        definition.visualRecoilRecoveryPerSecond}};
+        handling.minimumSpreadDegrees,
+        handling.maximumSpreadDegrees,
+        handling.spreadPerShotDegrees,
+        handling.recoveryDelaySeconds,
+        handling.spreadRecoveryDegreesPerSecond,
+        handling.aimDownSightsAccuracyMultiplier,
+        handling.aimDownSightsStabilityMultiplier,
+        handling.movingSpreadFraction};
+    const WeaponAimConfig aimConfig{
+        handling.maximumReticleSpeed,
+        handling.reticleControlAcceleration,
+        handling.recoilInitialSpeed,
+        handling.recoilDeceleration,
+        handling.recoilLateralRatio,
+        handling.aimDownSightsDurationSeconds,
+        definition.effectiveRange,
+        definition.maximumRange};
+    if (preserveTransientState)
+    {
+        weaponFire_.reconfigure(fireConfig);
+        weaponAim_.reconfigure(aimConfig);
+    }
+    else
+    {
+        weaponFire_ = WeaponFireState{fireConfig};
+        weaponAim_ = WeaponAimState{aimConfig};
+    }
+    weaponBaseDamage_ = definition.baseDamage;
+    weaponMaximumRange_ = definition.maximumRange;
+    weaponTracerStyle_ = TracerStyle::Weak;
+    weaponTracerLength_ = handling.weakTracerLength;
+    weaponTracerOpacity_ = handling.weakTracerOpacity;
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept

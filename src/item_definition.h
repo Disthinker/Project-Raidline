@@ -151,21 +151,50 @@ struct ArmorProtectionDefinition
 
 struct WeaponUseDefinition
 {
-    std::uint32_t switchDurationMs{};
     bool automaticFire{};
     float shotIntervalSeconds{};
-    float spreadPerShotDegrees{};
-    float maximumSpreadDegrees{};
-    float recoveryDelaySeconds{};
-    float spreadRecoveryDegreesPerSecond{};
-    float visualRecoilPerShot{};
-    float maximumVisualRecoil{};
-    float visualRecoilRecoveryPerSecond{};
+    std::uint32_t recoilControl{};
+    std::uint32_t stability{};
+    std::uint32_t handlingSpeed{};
+    std::uint32_t ergonomics{};
+    std::uint32_t accuracy{};
+    int baseDamage{};
+    float effectiveRange{};
+    float maximumRange{};
 
     friend bool operator==(
         const WeaponUseDefinition &,
         const WeaponUseDefinition &) = default;
 };
+
+// One deterministic interpretation of the five player-facing weapon
+// attributes. Content stores the stable semantic values above; simulation and
+// services consume these derived units instead of reinterpreting attributes.
+struct WeaponHandlingParameters
+{
+    float switchDurationSeconds{};
+    float sprintReadyDurationSeconds{};
+    float maximumReticleSpeed{};
+    float reticleControlAcceleration{};
+    float recoilInitialSpeed{};
+    float recoilDeceleration{};
+    float recoilLateralRatio{};
+    float minimumSpreadDegrees{};
+    float maximumSpreadDegrees{};
+    float spreadPerShotDegrees{};
+    float recoveryDelaySeconds{};
+    float spreadRecoveryDegreesPerSecond{};
+    float aimDownSightsDurationSeconds{};
+    float aimDownSightsMovementMultiplier{};
+    float aimDownSightsAccuracyMultiplier{};
+    float aimDownSightsStabilityMultiplier{};
+    float movingSpreadFraction{};
+    float weakTracerLength{};
+    float weakTracerOpacity{};
+};
+
+[[nodiscard]] WeaponHandlingParameters deriveWeaponHandling(
+    const WeaponUseDefinition &definition) noexcept;
 
 enum class ContainerPocketKind
 {

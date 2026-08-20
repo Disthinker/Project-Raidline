@@ -305,6 +305,8 @@ add_library(raidline_simulation STATIC
     src/storage_cabinet.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/weapon_aim.cpp
+    src/weapon_aim.h
     src/weapon_clear_gesture.cpp
     src/weapon_clear_gesture.h
 )
@@ -416,6 +418,10 @@ raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
 raidline_add_test(
     WeaponFireTest
     tests/test_weapon_fire.cpp
+    raidline::simulation)
+raidline_add_test(
+    WeaponAimTest
+    tests/test_weapon_aim.cpp
     raidline::simulation)
 raidline_add_test(
     ShotResolutionTest

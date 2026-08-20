@@ -202,6 +202,7 @@ bool GameSession::startNewProfile(std::string profileId)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
     recoveredAbandonedRaid_ = false;
     state_ = GameSessionState::BetweenRaids;
@@ -248,6 +249,7 @@ bool GameSession::continueProfile()
         recoveredAbandonedRaid_ = true;
     }
     profile_ = std::move(candidate);
+    developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
     raidNumber_ = profile_.committedSettlements.size() + 1U;
@@ -296,14 +298,29 @@ bool GameSession::deployAlpha(std::uint64_t seed)
                 enemy.size,
                 enemy.maximumHealth});
         }
+        const MapDefinition &map =
+            publishedContentRegistry().map(snapshot.mapDefinitionId);
+        std::vector<BallisticBlocker> blockers;
+        blockers.reserve(map.ballisticBlockers.size());
+        for (std::size_t index = 0;
+             index < map.ballisticBlockers.size();
+             ++index)
+        {
+            const BallisticBlockerDefinition &definition =
+                map.ballisticBlockers[index];
+            blockers.push_back(BallisticBlocker{
+                static_cast<BallisticBlockerId>(index + 1U),
+                Rect{definition.bounds.position, definition.bounds.size}});
+        }
         candidateWorld = std::make_unique<GameplayWorld>(RaidWorldConfig{
-            publishedContentRegistry().map(snapshot.mapDefinitionId).worldSize,
+            map.worldSize,
             snapshot.playerSpawn,
             snapshot.extractionPoint,
             std::move(enemies),
             100,
             candidate.currentHealth,
-            true});
+            true,
+            std::move(blockers)});
     }
     catch (const std::exception &error)
     {
@@ -343,6 +360,8 @@ bool GameSession::deployAlpha(std::uint64_t seed)
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    sprintFireIntentPending_ = false;
+    sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
     synchronizeActiveAlphaWeapon();
@@ -575,8 +594,9 @@ bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
             activeWeaponSlot_,
             targetSlot,
             0.0F,
-            static_cast<float>(definition.weaponUse->switchDurationMs) /
-                1000.0F / handlingMultiplier});
+            deriveWeaponHandling(*definition.weaponUse)
+                    .switchDurationSeconds /
+                handlingMultiplier});
     }
     catch (...)
     {
@@ -667,6 +687,326 @@ std::optional<AssetInstanceId> GameSession::activeAlphaWeapon() const noexcept
     return isWeaponEquipmentSlot(activeWeaponSlot_)
         ? equippedAsset(profile_, activeWeaponSlot_)
         : std::nullopt;
+}
+
+std::optional<DeveloperWeaponTuningSnapshot>
+GameSession::developerWeaponTuning() const
+{
+    if (!alphaRaidActive_)
+    {
+        return std::nullopt;
+    }
+    const std::optional<AssetInstanceId> weapon = activeAlphaWeapon();
+    if (!weapon.has_value())
+    {
+        return std::nullopt;
+    }
+    const AssetRecord *asset = profile_.assets.find(*weapon);
+    if (asset == nullptr)
+    {
+        return std::nullopt;
+    }
+
+    try
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.weaponUse.has_value())
+        {
+            return std::nullopt;
+        }
+        if (const auto index = developerWeaponOverrideIndex(*weapon))
+        {
+            const DeveloperWeaponOverride &entry =
+                developerWeaponOverrides_[*index];
+            return DeveloperWeaponTuningSnapshot{
+                *weapon,
+                asset->definitionId,
+                entry.weaponUse,
+                effectiveDeveloperHandling(entry),
+                true};
+        }
+        return DeveloperWeaponTuningSnapshot{
+            *weapon,
+            asset->definitionId,
+            *definition.weaponUse,
+            deriveWeaponHandling(*definition.weaponUse),
+            false};
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+}
+
+bool GameSession::adjustDeveloperWeaponTuning(
+    DeveloperWeaponParameter parameter,
+    int direction,
+    bool coarseStep)
+{
+    if (!alphaRaidActive_ || world_ == nullptr ||
+        !world_->raidSession().isActive() ||
+        (direction != -1 && direction != 1) ||
+        parameter == DeveloperWeaponParameter::Count)
+    {
+        return false;
+    }
+    const std::optional<AssetInstanceId> weapon = activeAlphaWeapon();
+    if (!weapon.has_value())
+    {
+        return false;
+    }
+    const AssetRecord *asset = profile_.assets.find(*weapon);
+    if (asset == nullptr)
+    {
+        return false;
+    }
+
+    const ItemDefinition *definition{};
+    try
+    {
+        definition = &publishedContentRegistry().item(asset->definitionId);
+    }
+    catch (...)
+    {
+        return false;
+    }
+    if (!definition->weaponUse.has_value())
+    {
+        return false;
+    }
+
+    std::optional<std::size_t> index =
+        developerWeaponOverrideIndex(*weapon);
+    const bool createdOverride = !index.has_value();
+    if (!index.has_value())
+    {
+        developerWeaponOverrides_.push_back(DeveloperWeaponOverride{
+            *weapon,
+            *definition->weaponUse,
+            {}});
+        index = developerWeaponOverrides_.size() - 1U;
+    }
+    DeveloperWeaponOverride &entry = developerWeaponOverrides_[*index];
+    const DeveloperWeaponOverride previousEntry = entry;
+    const WeaponHandlingParameters previousHandling =
+        effectiveDeveloperHandling(entry);
+
+    const auto adjustFloat = [direction](
+                                 float value,
+                                 float fineStep,
+                                 float coarse,
+                                 float minimum,
+                                 float maximum,
+                                 bool useCoarse)
+    {
+        return std::clamp(
+            value + static_cast<float>(direction) *
+                        (useCoarse ? coarse : fineStep),
+            minimum,
+            maximum);
+    };
+    const auto adjustAttribute = [direction, coarseStep](std::uint32_t value)
+    {
+        const int step = coarseStep ? 5 : 1;
+        return static_cast<std::uint32_t>(std::clamp(
+            static_cast<int>(value) + direction * step,
+            0,
+            100));
+    };
+
+    switch (parameter)
+    {
+    case DeveloperWeaponParameter::RecoilControl:
+        entry.weaponUse.recoilControl =
+            adjustAttribute(entry.weaponUse.recoilControl);
+        break;
+    case DeveloperWeaponParameter::Stability:
+        entry.weaponUse.stability =
+            adjustAttribute(entry.weaponUse.stability);
+        break;
+    case DeveloperWeaponParameter::HandlingSpeed:
+        entry.weaponUse.handlingSpeed =
+            adjustAttribute(entry.weaponUse.handlingSpeed);
+        break;
+    case DeveloperWeaponParameter::Ergonomics:
+        entry.weaponUse.ergonomics =
+            adjustAttribute(entry.weaponUse.ergonomics);
+        break;
+    case DeveloperWeaponParameter::Accuracy:
+        entry.weaponUse.accuracy =
+            adjustAttribute(entry.weaponUse.accuracy);
+        break;
+    case DeveloperWeaponParameter::ShotInterval:
+        entry.weaponUse.shotIntervalSeconds = adjustFloat(
+            entry.weaponUse.shotIntervalSeconds,
+            0.01F,
+            0.05F,
+            0.03F,
+            2.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::BaseDamage:
+        entry.weaponUse.baseDamage = std::clamp(
+            entry.weaponUse.baseDamage + direction * (coarseStep ? 5 : 1),
+            1,
+            1000);
+        break;
+    case DeveloperWeaponParameter::EffectiveRange:
+        entry.weaponUse.effectiveRange = adjustFloat(
+            entry.weaponUse.effectiveRange,
+            10.0F,
+            50.0F,
+            25.0F,
+            entry.weaponUse.maximumRange,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::MaximumRange:
+        entry.weaponUse.maximumRange = adjustFloat(
+            entry.weaponUse.maximumRange,
+            10.0F,
+            50.0F,
+            entry.weaponUse.effectiveRange,
+            5000.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::MaximumReticleSpeed:
+        entry.hidden.maximumReticleSpeed = adjustFloat(
+            previousHandling.maximumReticleSpeed,
+            10.0F,
+            50.0F,
+            50.0F,
+            3000.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::SpreadPerShot:
+        entry.hidden.spreadPerShotDegrees = adjustFloat(
+            previousHandling.spreadPerShotDegrees,
+            0.05F,
+            0.25F,
+            0.0F,
+            30.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::RecoilLateralRatio:
+        entry.hidden.recoilLateralRatio = adjustFloat(
+            previousHandling.recoilLateralRatio,
+            0.01F,
+            0.05F,
+            0.0F,
+            1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::MovingSpreadFraction:
+        entry.hidden.movingSpreadFraction = adjustFloat(
+            previousHandling.movingSpreadFraction,
+            0.01F,
+            0.05F,
+            0.0F,
+            1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::AdsAccuracyMultiplier:
+        entry.hidden.adsAccuracyMultiplier = adjustFloat(
+            previousHandling.aimDownSightsAccuracyMultiplier,
+            0.01F,
+            0.05F,
+            0.1F,
+            1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::AdsStabilityMultiplier:
+        entry.hidden.adsStabilityMultiplier = adjustFloat(
+            previousHandling.aimDownSightsStabilityMultiplier,
+            0.01F,
+            0.05F,
+            0.1F,
+            1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::WeakTracerLength:
+        entry.hidden.weakTracerLength = adjustFloat(
+            previousHandling.weakTracerLength,
+            1.0F,
+            5.0F,
+            0.0F,
+            200.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::WeakTracerOpacity:
+        entry.hidden.weakTracerOpacity = adjustFloat(
+            previousHandling.weakTracerOpacity,
+            0.01F,
+            0.05F,
+            0.0F,
+            1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::Count:
+        return false;
+    }
+
+    if (entry == previousEntry)
+    {
+        if (createdOverride)
+        {
+            developerWeaponOverrides_.pop_back();
+        }
+        return false;
+    }
+
+    world_->configureWeaponFire(
+        entry.weaponUse,
+        effectiveDeveloperHandling(entry),
+        true);
+    configuredWeaponAssetId_ = *weapon;
+    return true;
+}
+
+bool GameSession::resetDeveloperWeaponTuning()
+{
+    if (!alphaRaidActive_ || world_ == nullptr)
+    {
+        return false;
+    }
+    const std::optional<AssetInstanceId> weapon = activeAlphaWeapon();
+    if (!weapon.has_value())
+    {
+        return false;
+    }
+    const std::optional<std::size_t> index =
+        developerWeaponOverrideIndex(*weapon);
+    if (!index.has_value())
+    {
+        return false;
+    }
+    const AssetRecord *asset = profile_.assets.find(*weapon);
+    if (asset == nullptr)
+    {
+        return false;
+    }
+    try
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.weaponUse.has_value())
+        {
+            return false;
+        }
+        developerWeaponOverrides_.erase(
+            developerWeaponOverrides_.begin() +
+            static_cast<std::ptrdiff_t>(*index));
+        world_->configureWeaponFire(
+            *definition.weaponUse,
+            deriveWeaponHandling(*definition.weaponUse),
+            true);
+        configuredWeaponAssetId_ = *weapon;
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 InventoryReceipt GameSession::executeProfileInventory(
@@ -1023,6 +1363,7 @@ void GameSession::updateAlphaRaid(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
     bool automaticFire{};
+    std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
         const AssetRecord *weaponAsset = profile_.assets.find(*weapon);
@@ -1034,6 +1375,11 @@ void GameSession::updateAlphaRaid(
                     publishedContentRegistry().item(weaponAsset->definitionId);
                 automaticFire = definition.weaponUse.has_value() &&
                     definition.weaponUse->automaticFire;
+                if (definition.weaponUse.has_value())
+                {
+                    weaponHandling = deriveWeaponHandling(
+                        *definition.weaponUse);
+                }
             }
             catch (...)
             {
@@ -1049,6 +1395,8 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
+        sprintFireIntentPending_ = false;
+        sprintFireReadyRemaining_ = 0.0F;
     }
     if (fireSuppressedUntilRelease_)
     {
@@ -1073,6 +1421,63 @@ void GameSession::updateAlphaRaid(
             sprintSuppressedUntilRelease_ = false;
         }
     }
+
+    const bool directFireIntent =
+        simulationInput.fireJustPressed ||
+        (automaticFire && simulationInput.firePressed);
+    if (simulationInput.sprint && directFireIntent &&
+        weaponHandling.has_value() && !input.inventoryOpen &&
+        !raidActionState_.active().has_value())
+    {
+        sprintFireIntentPending_ = true;
+        sprintFireReadyRemaining_ =
+            weaponHandling->sprintReadyDurationSeconds;
+        sprintSuppressedUntilRelease_ = true;
+        simulationInput.sprint = false;
+        simulationInput.fireJustPressed = false;
+        simulationInput.firePressed = false;
+    }
+    else if (sprintFireIntentPending_)
+    {
+        if (!weapon.has_value() || input.inventoryOpen ||
+            raidActionState_.active().has_value() ||
+            world_->player().isControlled())
+        {
+            sprintFireIntentPending_ = false;
+            sprintFireReadyRemaining_ = 0.0F;
+        }
+        else
+        {
+            simulationInput.sprint = false;
+            if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+            {
+                sprintFireReadyRemaining_ = std::max(
+                    0.0F,
+                    sprintFireReadyRemaining_ - deltaTime);
+            }
+            if (sprintFireReadyRemaining_ <= 0.0F)
+            {
+                simulationInput.fireJustPressed = true;
+                simulationInput.firePressed = false;
+                sprintFireIntentPending_ = false;
+            }
+            else
+            {
+                simulationInput.fireJustPressed = false;
+                simulationInput.firePressed = false;
+            }
+        }
+    }
+
+    if (simulationInput.sprint)
+    {
+        simulationInput.aimDownSights = false;
+    }
+    else if (simulationInput.aimDownSights && weaponHandling.has_value())
+    {
+        simulationInput.movementSpeedMultiplier *=
+            weaponHandling->aimDownSightsMovementMultiplier;
+    }
     if (hasPain(profile_.medicalStatus) &&
         !painIsSuppressed(profile_.medicalStatus))
     {
@@ -1080,6 +1485,9 @@ void GameSession::updateAlphaRaid(
     }
     if (raidActionState_.active().has_value())
     {
+        simulationInput.forceMaximumWeaponSpread =
+            std::holds_alternative<ReloadRaidAction>(
+                *raidActionState_.active());
         const bool slowMovement = std::visit(
             [](const auto &action)
             {
@@ -1103,7 +1511,8 @@ void GameSession::updateAlphaRaid(
     if (weapon.has_value() &&
         !raidActionState_.active().has_value() &&
         !input.inventoryOpen &&
-        (input.fireJustPressed || (automaticFire && input.firePressed)))
+        (simulationInput.fireJustPressed ||
+         (automaticFire && simulationInput.firePressed)))
     {
         ProfileState candidate = profile_;
         Pcg32 faultRandom{
@@ -1728,6 +2137,8 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    sprintFireIntentPending_ = false;
+    sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
     alphaRaidActive_ = false;
@@ -1785,13 +2196,81 @@ void GameSession::synchronizeActiveAlphaWeapon()
             publishedContentRegistry().item(asset->definitionId);
         if (definition.weaponUse.has_value())
         {
-            world_->configureWeaponFire(*definition.weaponUse);
+            if (const auto index = developerWeaponOverrideIndex(*active))
+            {
+                const DeveloperWeaponOverride &entry =
+                    developerWeaponOverrides_[*index];
+                world_->configureWeaponFire(
+                    entry.weaponUse,
+                    effectiveDeveloperHandling(entry),
+                    false);
+            }
+            else
+            {
+                world_->configureWeaponFire(*definition.weaponUse);
+            }
         }
     }
     catch (...)
     {
         configuredWeaponAssetId_.reset();
     }
+}
+
+std::optional<std::size_t>
+GameSession::developerWeaponOverrideIndex(
+    AssetInstanceId weaponAssetId) const noexcept
+{
+    for (std::size_t index{}; index < developerWeaponOverrides_.size(); ++index)
+    {
+        if (developerWeaponOverrides_[index].weaponAssetId == weaponAssetId)
+        {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
+WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
+    const DeveloperWeaponOverride &override) const noexcept
+{
+    WeaponHandlingParameters handling = deriveWeaponHandling(override.weaponUse);
+    const DeveloperWeaponHiddenOverrides &hidden = override.hidden;
+    if (hidden.maximumReticleSpeed.has_value())
+    {
+        handling.maximumReticleSpeed = *hidden.maximumReticleSpeed;
+    }
+    if (hidden.spreadPerShotDegrees.has_value())
+    {
+        handling.spreadPerShotDegrees = *hidden.spreadPerShotDegrees;
+    }
+    if (hidden.recoilLateralRatio.has_value())
+    {
+        handling.recoilLateralRatio = *hidden.recoilLateralRatio;
+    }
+    if (hidden.movingSpreadFraction.has_value())
+    {
+        handling.movingSpreadFraction = *hidden.movingSpreadFraction;
+    }
+    if (hidden.adsAccuracyMultiplier.has_value())
+    {
+        handling.aimDownSightsAccuracyMultiplier =
+            *hidden.adsAccuracyMultiplier;
+    }
+    if (hidden.adsStabilityMultiplier.has_value())
+    {
+        handling.aimDownSightsStabilityMultiplier =
+            *hidden.adsStabilityMultiplier;
+    }
+    if (hidden.weakTracerLength.has_value())
+    {
+        handling.weakTracerLength = *hidden.weakTracerLength;
+    }
+    if (hidden.weakTracerOpacity.has_value())
+    {
+        handling.weakTracerOpacity = *hidden.weakTracerOpacity;
+    }
+    return handling;
 }
 
 std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const

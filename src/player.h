@@ -16,6 +16,7 @@ public:
     void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight);
 
     Vec2 position() const;
+    [[nodiscard]] bool setPosition(Vec2 position) noexcept;
     float size() const;
     Vec2 facingDirection() const;
     [[nodiscard]] bool faceDirection(Vec2 direction) noexcept;

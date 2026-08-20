@@ -102,6 +102,24 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousMultiWeaponContentVersion)
         nullptr);
 }
 
+TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousArmorMaintenanceContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-aim-content-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "survival-loadout-content-5",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+}
+
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
 {
     ProfileState profile = makeNewAlphaProfile(

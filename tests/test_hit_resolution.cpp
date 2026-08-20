@@ -273,3 +273,57 @@ TEST(HitResolutionTest, ContinuousSweepChoosesNearestTarget)
     ASSERT_EQ(result.hits.size(), 1U);
     EXPECT_NEAR(result.hits[0].position.x, 100.0F, 0.001F);
 }
+
+TEST(HitResolutionTest, NearestObstacleConsumesShotBeforeEnemy)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        ShotCollisionCandidate{
+            11,
+            Vec2{0.0F, 50.0F},
+            Vec2{300.0F, 50.0F},
+            2.0F,
+            4}};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{200.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}};
+    const std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{1, Rect{Vec2{100.0F, 30.0F}, Vec2{20.0F, 40.0F}}}};
+
+    const HitResolutionResult result = resolveShotHits(
+        shots,
+        enemies,
+        blockers);
+
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(enemies.front().health(), 5);
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.hits.front().targetKind, HitTargetKind::Obstacle);
+    EXPECT_EQ(result.hits.front().damageApplied, 0);
+    ASSERT_EQ(result.consumedShotIds.size(), 1U);
+    EXPECT_EQ(result.consumedShotIds.front(), 11U);
+    EXPECT_NEAR(result.hits.front().position.x, 99.0F, 0.001F);
+}
+
+TEST(HitResolutionTest, NearestEnemyStillWinsWhenObstacleIsBehind)
+{
+    const std::vector<ShotCollisionCandidate> shots{
+        ShotCollisionCandidate{
+            12,
+            Vec2{0.0F, 50.0F},
+            Vec2{300.0F, 50.0F},
+            2.0F,
+            2}};
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{80.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}};
+    const std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{1, Rect{Vec2{180.0F, 30.0F}, Vec2{20.0F, 40.0F}}}};
+
+    const HitResolutionResult result = resolveShotHits(
+        shots,
+        enemies,
+        blockers);
+
+    ASSERT_EQ(result.hits.size(), 1U);
+    EXPECT_EQ(result.hits.front().targetKind, HitTargetKind::Enemy);
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(enemies.front().health(), 3);
+}

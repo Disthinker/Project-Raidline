@@ -106,6 +106,9 @@ private:
     bool medicalWheelOpen_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
+    bool developerWeaponPanelOpen_{};
+    bool developerWeaponPanelBlocksGameplayThisFrame_{};
+    std::size_t developerWeaponParameterIndex_{};
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -225,6 +228,7 @@ private:
     void renderProfileDragFeedback(bool includeStash, bool inRaid);
     void renderProfileContextMenu(bool inRaid);
     void renderMedicalWheel();
+    void renderDeveloperWeaponPanel();
     void renderPlayerAvatar(
         Vec2 position,
         Vec2 bodySize,
@@ -238,6 +242,7 @@ private:
     void renderBackground();
     void renderExtractionPoint();
     void renderStorageCabinet();
+    void renderBallisticBlockers();
     void renderGroundItems();
     void renderAlphaRaidLoot();
     void renderEnemyAttackTelegraphs();

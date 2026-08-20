@@ -131,6 +131,16 @@ Vec2 Player::position() const
     return position_;
 }
 
+bool Player::setPosition(Vec2 position) noexcept
+{
+    if (!std::isfinite(position.x) || !std::isfinite(position.y))
+    {
+        return false;
+    }
+    position_ = position;
+    return true;
+}
+
 float Player::size() const
 {
     return size_;

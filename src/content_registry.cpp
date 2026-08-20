@@ -132,6 +132,22 @@ namespace
         return static_cast<std::uint32_t>(signedValue);
     }
 
+    std::uint32_t requiredWeaponAttribute(
+        const Json &parent,
+        std::string_view field)
+    {
+        if (!parent.contains(std::string{field}))
+        {
+            fail(std::string{field} + " is required");
+        }
+        const std::uint32_t value = optionalUint(parent, field);
+        if (value > 100U)
+        {
+            fail(std::string{field} + " must be between 0 and 100");
+        }
+        return value;
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -364,18 +380,16 @@ namespace
             fail("weapon_use must be an object");
         }
         return WeaponUseDefinition{
-            requiredPositiveUint(*found, "switch_duration_ms"),
             requiredBool(*found, "automatic_fire"),
             requiredFiniteFloat(*found, "shot_interval_seconds", true),
-            requiredFiniteFloat(*found, "spread_per_shot_degrees", true),
-            requiredFiniteFloat(*found, "maximum_spread_degrees", true),
-            requiredFiniteFloat(*found, "recovery_delay_seconds", true),
-            requiredFiniteFloat(
-                *found, "spread_recovery_degrees_per_second", true),
-            requiredFiniteFloat(*found, "visual_recoil_per_shot", true),
-            requiredFiniteFloat(*found, "maximum_visual_recoil", true),
-            requiredFiniteFloat(
-                *found, "visual_recoil_recovery_per_second", true)};
+            requiredWeaponAttribute(*found, "recoil_control"),
+            requiredWeaponAttribute(*found, "stability"),
+            requiredWeaponAttribute(*found, "handling_speed"),
+            requiredWeaponAttribute(*found, "ergonomics"),
+            requiredWeaponAttribute(*found, "accuracy"),
+            requiredPositiveInt(*found, "base_damage"),
+            requiredFiniteFloat(*found, "effective_range", true),
+            requiredFiniteFloat(*found, "maximum_range", true)};
     }
 
     std::optional<ArmorProtectionDefinition> parseArmorProtection(
@@ -604,6 +618,16 @@ namespace
                    outer.position.x + outer.size.x &&
                inner.position.y + inner.size.y <=
                    outer.position.y + outer.size.y;
+    }
+
+    bool rectsOverlap(
+        const ContentRect &first,
+        const ContentRect &second) noexcept
+    {
+        return first.position.x < second.position.x + second.size.x &&
+               first.position.x + first.size.x > second.position.x &&
+               first.position.y < second.position.y + second.size.y &&
+               first.position.y + first.size.y > second.position.y;
     }
 
     template <typename Id, typename Definition>
@@ -879,8 +903,10 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.compatibleEquipmentSlots.empty() ||
                     definition.equipmentSlot.has_value() ||
                     !definition.compatibleMagazineDefinitionId.has_value() ||
-                    use.spreadPerShotDegrees > use.maximumSpreadDegrees ||
-                    use.visualRecoilPerShot > use.maximumVisualRecoil)
+                    use.recoilControl > 100U || use.stability > 100U ||
+                    use.handlingSpeed > 100U || use.ergonomics > 100U ||
+                    use.accuracy > 100U ||
+                    use.effectiveRange > use.maximumRange)
                 {
                     fail("weapon use capability is invalid");
                 }
@@ -1117,6 +1143,25 @@ ContentRegistry ContentRegistry::fromJson(
             definition.defaultInventorySize =
                 parseGridSize(mapValue, "default_inventory");
 
+            if (mapValue.contains("ballistic_blockers"))
+            {
+                std::set<std::string> blockerIds;
+                for (const Json &blockerValue :
+                     requiredArray(mapValue, "ballistic_blockers"))
+                {
+                    BallisticBlockerDefinition blocker{
+                        requiredString(blockerValue, "id"),
+                        parseRect(blockerValue, "bounds")};
+                    if (blocker.id.empty() ||
+                        !blockerIds.insert(blocker.id).second)
+                    {
+                        fail("map ballistic blocker IDs must be unique");
+                    }
+                    definition.ballisticBlockers.push_back(
+                        std::move(blocker));
+                }
+            }
+
             for (const Json &groundValue :
                  requiredArray(mapValue, "ground_items"))
             {
@@ -1251,6 +1296,15 @@ ContentRegistry ContentRegistry::fromJson(
                 }
             }
 
+            for (const BallisticBlockerDefinition &blocker :
+                 definition.ballisticBlockers)
+            {
+                if (!rectInside(blocker.bounds, definition.walkableBounds))
+                {
+                    fail("map ballistic blocker is outside walkable bounds");
+                }
+            }
+
 
             if (!definition.spawnExtractionPairs.empty())
             {
@@ -1303,11 +1357,22 @@ ContentRegistry ContentRegistry::fromJson(
                     for (const EnemySpawnDefinition &enemy :
                          alphaDeployment.enemies)
                     {
+                        const ContentRect enemyBounds{
+                            enemy.position,
+                            enemy.size};
                         if (!rectInside(
-                                ContentRect{enemy.position, enemy.size},
+                                enemyBounds,
                                 definition.walkableBounds))
                         {
                             fail("Alpha enemy deployment is outside map bounds");
+                        }
+                        for (const BallisticBlockerDefinition &blocker :
+                             definition.ballisticBlockers)
+                        {
+                            if (rectsOverlap(enemyBounds, blocker.bounds))
+                            {
+                                fail("Alpha enemy deployment overlaps a ballistic blocker");
+                            }
                         }
                     }
                 }
@@ -1318,11 +1383,20 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.enemyDeploymentId);
             for (const EnemySpawnDefinition &enemy : deployment.enemies)
             {
+                const ContentRect enemyBounds{enemy.position, enemy.size};
                 if (!rectInside(
-                        ContentRect{enemy.position, enemy.size},
+                        enemyBounds,
                         definition.walkableBounds))
                 {
                     fail("map enemy deployment is outside walkable bounds");
+                }
+                for (const BallisticBlockerDefinition &blocker :
+                     definition.ballisticBlockers)
+                {
+                    if (rectsOverlap(enemyBounds, blocker.bounds))
+                    {
+                        fail("map enemy deployment overlaps a ballistic blocker");
+                    }
                 }
             }
 

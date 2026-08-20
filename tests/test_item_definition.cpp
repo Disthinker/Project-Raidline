@@ -332,3 +332,40 @@ TEST(ItemDefinitionTest, ClockwiseOrientationCyclesBackToZero)
     orientation = rotatedClockwise(orientation);
     EXPECT_EQ(orientation, ItemOrientation::Degrees0);
 }
+
+TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
+{
+    WeaponUseDefinition baseline{
+        false, 0.20F, 50U, 50U, 50U, 50U, 50U, 4, 400.0F, 700.0F};
+
+    WeaponUseDefinition improved = baseline;
+    improved.recoilControl = 90U;
+    improved.stability = 90U;
+    improved.handlingSpeed = 90U;
+    improved.ergonomics = 90U;
+    improved.accuracy = 90U;
+
+    const WeaponHandlingParameters base = deriveWeaponHandling(baseline);
+    const WeaponHandlingParameters better = deriveWeaponHandling(improved);
+    EXPECT_LT(better.recoilInitialSpeed, base.recoilInitialSpeed);
+    EXPECT_LT(better.maximumSpreadDegrees, base.maximumSpreadDegrees);
+    EXPECT_LT(better.switchDurationSeconds, base.switchDurationSeconds);
+    EXPECT_GT(
+        better.spreadRecoveryDegreesPerSecond,
+        base.spreadRecoveryDegreesPerSecond);
+    EXPECT_LT(
+        better.aimDownSightsDurationSeconds,
+        base.aimDownSightsDurationSeconds);
+    EXPECT_GT(
+        better.reticleControlAcceleration,
+        base.reticleControlAcceleration);
+    EXPECT_GT(
+        better.recoilDeceleration,
+        base.recoilDeceleration);
+    EXPECT_LT(better.minimumSpreadDegrees, base.minimumSpreadDegrees);
+    EXPECT_FLOAT_EQ(base.maximumReticleSpeed, 1400.0F);
+    EXPECT_FLOAT_EQ(better.maximumReticleSpeed, 1400.0F);
+    EXPECT_FLOAT_EQ(
+        better.spreadPerShotDegrees,
+        base.spreadPerShotDegrees);
+}

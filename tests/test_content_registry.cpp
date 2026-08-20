@@ -62,7 +62,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-5");
+    EXPECT_EQ(registry.contentVersion(), "combat-aim-content-6");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
@@ -83,7 +83,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
               WeaponMalfunctionType::Stovepipe);
     ASSERT_TRUE(rifle.weaponUse.has_value());
     EXPECT_TRUE(rifle.weaponUse->automaticFire);
-    EXPECT_EQ(rifle.weaponUse->switchDurationMs, 650U);
+    EXPECT_EQ(rifle.weaponUse->recoilControl, 42U);
+    EXPECT_EQ(rifle.weaponUse->stability, 66U);
+    EXPECT_EQ(rifle.weaponUse->handlingSpeed, 46U);
+    EXPECT_EQ(rifle.weaponUse->ergonomics, 75U);
+    EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
+    EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 750.0F);
     EXPECT_TRUE(itemCanEquipInSlot(
         rifle, EquipmentSlotKind::PrimaryWeapon));
     EXPECT_TRUE(itemCanEquipInSlot(
@@ -95,7 +102,12 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_TRUE(pistol.weaponCondition.has_value());
     ASSERT_TRUE(pistol.weaponUse.has_value());
     EXPECT_FALSE(pistol.weaponUse->automaticFire);
-    EXPECT_EQ(pistol.weaponUse->switchDurationMs, 350U);
+    EXPECT_EQ(pistol.weaponUse->recoilControl, 55U);
+    EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
+    EXPECT_EQ(pistol.weaponUse->ergonomics, 85U);
+    EXPECT_LT(
+        deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,
+        deriveWeaponHandling(*rifle.weaponUse).switchDurationSeconds);
     EXPECT_TRUE(itemCanEquipInSlot(
         pistol, EquipmentSlotKind::Sidearm));
     EXPECT_FALSE(itemCanEquipInSlot(
@@ -177,6 +189,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(map.defaultInventorySize.width, 10);
     EXPECT_EQ(map.defaultInventorySize.height, 6);
     EXPECT_EQ(map.groundItems.size(), 6U);
+    ASSERT_EQ(map.ballisticBlockers.size(), 3U);
+    EXPECT_EQ(map.ballisticBlockers.front().id, "central_barrier");
+    EXPECT_FLOAT_EQ(
+        map.ballisticBlockers.front().bounds.position.x,
+        570.0F);
     EXPECT_FLOAT_EQ(map.storageCabinet.bounds.position.x, 960.0F);
     EXPECT_FLOAT_EQ(map.storageCabinet.bounds.position.y, 296.0F);
     EXPECT_EQ(map.storageCabinet.inventorySize.width, 6);
@@ -303,8 +320,8 @@ TEST(ContentRegistryTest, RejectsWeaponUseOutsideConfiguredBounds)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"spread_per_shot_degrees\": 1.5,\"maximum_spread_degrees\": 8.0",
-        "\"spread_per_shot_degrees\": 9.0,\"maximum_spread_degrees\": 8.0");
+        "\"accuracy\": 58",
+        "\"accuracy\": 101");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);
@@ -393,6 +410,17 @@ TEST(ContentRegistryTest, RejectsDisconnectedOrOutOfBoundsMapAnchor)
         publishedJsonCopy(),
         "\"player_spawn\": {\"x\": 640, \"y\": 360}",
         "\"player_spawn\": {\"x\": 1400, \"y\": 360}");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsEnemySpawnInsideBallisticBlocker)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"id\": \"central_barrier\", \"bounds\": {\"position\": {\"x\": 570, \"y\": 390}, \"size\": {\"x\": 140, \"y\": 36}}}",
+        "{\"id\": \"central_barrier\", \"bounds\": {\"position\": {\"x\": 650, \"y\": 330}, \"size\": {\"x\": 50, \"y\": 50}}}");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);
