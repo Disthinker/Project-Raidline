@@ -256,7 +256,7 @@
         "effect": "suppress_pain",
         "action_duration_ms": 2000,
         "effect_magnitude": 180000,
-        "slow_movement": false
+        "slow_movement": true
       }
     },
     {

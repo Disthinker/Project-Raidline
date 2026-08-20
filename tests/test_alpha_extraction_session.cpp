@@ -218,7 +218,7 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
 }
 
-TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceMovementInterruptIsAtomic)
+TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
 {
     GameSession session;
     ASSERT_TRUE(session.startNewProfile("alpha-session-maintenance"));
@@ -246,13 +246,18 @@ TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceMovementInterruptIsAtomic)
     EXPECT_EQ(session.profile().assets.find(rifle)->currentDurability, 9990U);
 
     ASSERT_TRUE(session.startAlphaWeaponMaintenance(kit, rifle));
-    const std::uint64_t beforeInterrupt =
+    const std::uint64_t beforeMovement =
         profileStateFingerprint(session.profile());
+    const float positionBefore = session.world().player().position().x;
     GameplayInput movement{};
     movement.moveRight = true;
     session.update(movement, 0.1F);
-    EXPECT_FALSE(session.raidActionState().active().has_value());
-    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupt);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        10.8F,
+        0.001F);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeMovement);
     EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 2500U);
 
 }
@@ -439,7 +444,15 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
     ASSERT_TRUE(session.deployAlpha(93431));
     ASSERT_TRUE(session.startAlphaMedical(medkit));
 
-    session.update(GameplayInput{}, 0.2F);
+    const float positionBefore = session.world().player().position().x;
+    GameplayInput slowMovement{};
+    slowMovement.moveRight = true;
+    session.update(slowMovement, 0.2F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        21.6F,
+        0.001F);
     EXPECT_EQ(session.profile().currentHealth, 41);
     EXPECT_EQ(session.world().player().health(), 41);
     EXPECT_EQ(

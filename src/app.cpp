@@ -5952,7 +5952,8 @@ void App::renderProfileAsset(
     const AssetRecord &asset,
     const SDL_FRect &bounds,
     float cellSize,
-    Uint8 alpha)
+    Uint8 alpha,
+    bool showWeaponCondition)
 {
     const ItemDefinition &definition =
         publishedContentRegistry().item(asset.definitionId);
@@ -6025,7 +6026,7 @@ void App::renderProfileAsset(
     SDL_SetRenderDrawColor(renderer_, 214, 220, 214, alpha);
     SDL_RenderRect(renderer_, &bounds);
     renderItemQuantityBadge(renderer_, bounds, asset.quantity);
-    if (definition.weaponCondition.has_value())
+    if (showWeaponCondition && definition.weaponCondition.has_value())
     {
         const std::string condition = fmt::format(
             "D {:.2f}/{:.2f}",
@@ -6487,13 +6488,29 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                 const SDL_FRect itemBounds{
                     bounds.x + 4.0F, bounds.y + 22.0F,
                     bounds.w - 8.0F, bounds.h - 26.0F};
-                renderProfileAsset(*asset, itemBounds, kBasePocketCellSize);
+                renderProfileAsset(
+                    *asset,
+                    itemBounds,
+                    kBasePocketCellSize,
+                    255,
+                    false);
                 if (asset->currentMaximumDurability > 0)
                 {
-                    const std::string durability = fmt::format(
-                        "DUR {}/{}",
-                        asset->currentDurability,
-                        asset->currentMaximumDurability);
+                    const ItemDefinition &definition =
+                        publishedContentRegistry().item(asset->definitionId);
+                    const std::string durability =
+                        definition.weaponCondition.has_value()
+                            ? fmt::format(
+                                  "DUR {:.2f}/{:.2f}",
+                                  static_cast<float>(
+                                      asset->currentDurability) / 100.0F,
+                                  static_cast<float>(
+                                      asset->currentMaximumDurability) /
+                                      100.0F)
+                            : fmt::format(
+                                  "DUR {}/{}",
+                                  asset->currentDurability,
+                                  asset->currentMaximumDurability);
                     SDL_RenderDebugText(
                         renderer_,
                         bounds.x + 7.0F,

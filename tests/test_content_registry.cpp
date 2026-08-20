@@ -89,6 +89,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(maintenance.weaponMaintenance->capacityCenti, 2500U);
     EXPECT_EQ(maintenance.weaponMaintenance->raidActionDurationMs, 8000U);
 
+    const ItemDefinition &painkiller = registry.item(
+        alpha_content::painkiller);
+    ASSERT_TRUE(painkiller.medicalUse.has_value());
+    EXPECT_TRUE(painkiller.medicalUse->slowMovement);
+
     const ItemDefinition &chestRig = registry.item(
         ItemDefinitionId{"item.container.chest_rig_small"});
     EXPECT_EQ(chestRig.id, ItemId::Count);

@@ -921,9 +921,18 @@ void GameSession::updateAlphaRaid(
     }
     if (raidActionState_.active().has_value())
     {
-        if (const auto *medical = std::get_if<MedicalRaidAction>(
-                &*raidActionState_.active());
-            medical != nullptr && medical->slowMovement)
+        const bool slowMovement = std::visit(
+            [](const auto &action)
+            {
+                using Action = std::decay_t<decltype(action)>;
+                if constexpr (std::is_same_v<Action, MedicalRaidAction>)
+                {
+                    return action.slowMovement;
+                }
+                return std::is_same_v<Action, WeaponMaintenanceRaidAction>;
+            },
+            *raidActionState_.active());
+        if (slowMovement)
         {
             simulationInput.movementSpeedMultiplier *= 0.45F;
             simulationInput.sprint = false;
@@ -1019,11 +1028,9 @@ void GameSession::updateAlphaRaid(
         const bool controlled = world_->player().isControlled();
         const bool tookDamage = lastIncomingDamage_.has_value() &&
             lastIncomingDamage_->damageApplied > 0;
-        const bool moving = input.moveUp || input.moveDown ||
-            input.moveLeft || input.moveRight;
         const bool interrupted = controlled || input.inventoryOpen ||
             std::visit(
-                [&input, tookDamage, moving](const auto &action)
+                [&input, tookDamage](const auto &action)
                 {
                     using Action = std::decay_t<decltype(action)>;
                     if constexpr (std::is_same_v<Action, ReloadRaidAction>)
@@ -1059,7 +1066,7 @@ void GameSession::updateAlphaRaid(
                     else if constexpr (
                         std::is_same_v<Action, WeaponMaintenanceRaidAction>)
                     {
-                        return moving || tookDamage || input.sprint ||
+                        return tookDamage || input.sprint ||
                                input.firePressed || input.fireJustPressed ||
                                input.reloadJustPressed ||
                                input.healJustPressed;
