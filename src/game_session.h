@@ -42,8 +42,10 @@ enum class DeveloperWeaponParameter
     EffectiveRange,
     MaximumRange,
     MaximumReticleSpeed,
+    ReticleControlAcceleration,
     SpreadPerShot,
     RecoilLateralRatio,
+    RecoilBendDuration,
     MovingSpreadFraction,
     AdsAccuracyMultiplier,
     AdsStabilityMultiplier,
@@ -223,8 +225,10 @@ private:
     struct DeveloperWeaponHiddenOverrides
     {
         std::optional<float> maximumReticleSpeed;
+        std::optional<float> reticleControlAcceleration;
         std::optional<float> spreadPerShotDegrees;
         std::optional<float> recoilLateralRatio;
+        std::optional<float> recoilBendDurationSeconds;
         std::optional<float> movingSpreadFraction;
         std::optional<float> adsAccuracyMultiplier;
         std::optional<float> adsStabilityMultiplier;

@@ -9,11 +9,13 @@
 #include <SDL3/SDL.h>
 
 #include "game_flow.h"
+#include "combat_audio.h"
 #include "gameplay_input.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
 #include "profile_inventory_interaction.h"
+#include "raid_pointer_capture.h"
 #include "texture.h"
 
 enum class MainMenuCommand
@@ -77,6 +79,10 @@ private:
     bool pendingBaseRotate_{};
     std::optional<Vec2> pointerWorldPosition_;
     bool systemCursorHidden_{false};
+    bool relativeMouseModeActive_{false};
+    bool windowHasInputFocus_{true};
+    Vec2 pendingRelativeAimMotion_{};
+    CombatAudioOutput combatAudio_;
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -205,7 +211,7 @@ private:
     void closeInventory() noexcept;
 
     void render();
-    void syncSystemCursorVisibility() noexcept;
+    void syncRaidPointerCapture() noexcept;
     void renderMainMenu();
     void renderBase();
     void renderBaseWorld();

@@ -1013,6 +1013,15 @@ bool App::initialize()
         return false;
     }
 
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+    {
+        fmt::print("SDL audio unavailable: {}\n", SDL_GetError());
+    }
+    else if (!combatAudio_.initialize())
+    {
+        fmt::print("Combat audio output unavailable: {}\n", SDL_GetError());
+    }
+
     char *preferencePath = SDL_GetPrefPath(
         "Disthinker",
         "Project Raidline");
@@ -1090,6 +1099,20 @@ GameplayInput App::makeGameplayInput() const
 
     input.aimWorldPosition =
         pointerWorldPosition_;
+
+    if (relativeMouseModeActive_ &&
+        !inventoryOverlayState_.isOpen() &&
+        !medicalWheelOpen_ &&
+        !developerWeaponPanelOpen_)
+    {
+        input.aimMotionDelta = pendingRelativeAimMotion_;
+    }
+    else if (gameFlow_.isRaidScreen())
+    {
+        // Modal UI freezes aim. It must not feed restored absolute cursor
+        // coordinates back into the relative aiming simulation.
+        input.aimMotionDelta = Vec2{};
+    }
 
     input.interactJustPressed =
         input_.wasActionJustPressed(
@@ -2866,9 +2889,23 @@ void App::processEvents()
     {
         input_.handleEvent(event);
 
+        if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED)
+        {
+            windowHasInputFocus_ = true;
+        }
         if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE ||
             event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
         {
+            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+            {
+                windowHasInputFocus_ = false;
+                static_cast<void>(
+                    SDL_SetWindowRelativeMouseMode(window_, false));
+                relativeMouseModeActive_ = false;
+                pendingRelativeAimMotion_ = Vec2{};
+                static_cast<void>(SDL_ShowCursor());
+                systemCursorHidden_ = false;
+            }
             inventoryInteraction_.cancelPointerGesture();
             profileInventoryInteraction_.cancelPointerGesture();
             profileContextMenu_.reset();
@@ -2880,18 +2917,30 @@ void App::processEvents()
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
-            const std::optional<Vec2> previousPointer =
-                pointerWorldPosition_;
-            pointerWorldPosition_ = Vec2{
-                event.motion.x,
-                event.motion.y};
+            Vec2 motion{event.motion.xrel, event.motion.yrel};
+            if (relativeMouseModeActive_)
+            {
+                pendingRelativeAimMotion_.x += motion.x;
+                pendingRelativeAimMotion_.y += motion.y;
+            }
+            else
+            {
+                const std::optional<Vec2> previousPointer =
+                    pointerWorldPosition_;
+                pointerWorldPosition_ = Vec2{
+                    event.motion.x,
+                    event.motion.y};
+                if (previousPointer.has_value())
+                {
+                    motion = Vec2{
+                        pointerWorldPosition_->x - previousPointer->x,
+                        pointerWorldPosition_->y - previousPointer->y};
+                }
+            }
             if (gameFlow_.state() == GameFlowState::Raid &&
                 !inventoryOverlayState_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
-                previousPointer.has_value() &&
-                gameSession_.observeAlphaWeaponClearMotion(Vec2{
-                    pointerWorldPosition_->x - previousPointer->x,
-                    pointerWorldPosition_->y - previousPointer->y}))
+                gameSession_.observeAlphaWeaponClearMotion(motion))
             {
                 uiMessage_ = "WEAPON MALFUNCTION CLEARED";
             }
@@ -2899,9 +2948,12 @@ void App::processEvents()
         else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                  event.type == SDL_EVENT_MOUSE_BUTTON_UP)
         {
-            pointerWorldPosition_ = Vec2{
-                event.button.x,
-                event.button.y};
+            if (!relativeMouseModeActive_)
+            {
+                pointerWorldPosition_ = Vec2{
+                    event.button.x,
+                    event.button.y};
+            }
         }
 
         if (event.type == SDL_EVENT_QUIT)
@@ -3263,6 +3315,9 @@ void App::update(float deltaTime)
     if (developerWeaponPanelBlocksGameplayThisFrame_)
     {
         gameplayInput = GameplayInput{};
+        gameplayInput.aimWorldPosition =
+            gameSession_.world().weaponAimWorldPosition();
+        gameplayInput.aimMotionDelta = Vec2{};
     }
     if (inventoryOverlayState_.isOpen())
     {
@@ -3360,6 +3415,30 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+
+    if (gameSession_.world().shotFiredLastUpdate())
+    {
+        const auto tuning = gameSession_.developerWeaponTuning();
+        combatAudio_.play(
+            tuning.has_value() && tuning->weaponUse.automaticFire
+                ? CombatAudioCue::RifleShot
+                : CombatAudioCue::PistolShot);
+    }
+    for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
+    {
+        switch (hit.targetKind)
+        {
+        case HitTargetKind::Enemy:
+            combatAudio_.play(CombatAudioCue::EnemyImpact);
+            break;
+        case HitTargetKind::Obstacle:
+            combatAudio_.play(CombatAudioCue::ObstacleImpact);
+            break;
+        case HitTargetKind::Ground:
+            combatAudio_.play(CombatAudioCue::GroundImpact);
+            break;
+        }
+    }
 
     specialHitFeedbackRemaining_ = std::max(
         0.0F,
@@ -5394,22 +5473,27 @@ void App::renderBallisticBlockers()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::syncSystemCursorVisibility() noexcept
+void App::syncRaidPointerCapture() noexcept
 {
-    const bool shouldHide =
-        gameFlow_.isRaidScreen() &&
-        gameSession_.world().raidSession().isActive() &&
-        !inventoryOverlayState_.isOpen() &&
-        !medicalWheelOpen_ &&
-        !developerWeaponPanelOpen_ &&
-        pointerWorldPosition_.has_value();
+    const bool shouldCapture = shouldCaptureRaidPointer(
+        RaidPointerCaptureContext{
+            gameFlow_.isRaidScreen(),
+            gameSession_.world().raidSession().isActive(),
+            inventoryOverlayState_.isOpen(),
+            medicalWheelOpen_,
+            developerWeaponPanelOpen_,
+            windowHasInputFocus_});
 
-    if (shouldHide == systemCursorHidden_)
+    if (shouldCapture != relativeMouseModeActive_)
     {
-        return;
+        if (SDL_SetWindowRelativeMouseMode(window_, shouldCapture))
+        {
+            relativeMouseModeActive_ = shouldCapture;
+            pendingRelativeAimMotion_ = Vec2{};
+        }
     }
 
-    if (shouldHide)
+    if (relativeMouseModeActive_ && !systemCursorHidden_)
     {
         if (SDL_HideCursor())
         {
@@ -5418,7 +5502,7 @@ void App::syncSystemCursorVisibility() noexcept
         return;
     }
 
-    if (SDL_ShowCursor())
+    if (!relativeMouseModeActive_ && systemCursorHidden_ && SDL_ShowCursor())
     {
         systemCursorHidden_ = false;
     }
@@ -5426,8 +5510,7 @@ void App::syncSystemCursorVisibility() noexcept
 
 void App::renderAimCrosshair()
 {
-    if (!pointerWorldPosition_.has_value() ||
-        inventoryOverlayState_.isOpen() ||
+    if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
         developerWeaponPanelOpen_ ||
         !gameSession_.world().raidSession().isActive())
@@ -6851,7 +6934,7 @@ void App::renderDeveloperWeaponPanel()
     const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
     SDL_SetRenderDrawColor(renderer_, 4, 7, 8, 175);
     SDL_RenderFillRect(renderer_, &shade);
-    const SDL_FRect panel{250.0F, 72.0F, 780.0F, 576.0F};
+    const SDL_FRect panel{230.0F, 35.0F, 820.0F, 650.0F};
     SDL_SetRenderDrawColor(renderer_, 14, 24, 27, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 92, 178, 173, 255);
@@ -6889,8 +6972,9 @@ void App::renderDeveloperWeaponPanel()
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
         "Recoil control", "Stability", "Handling speed", "Ergonomics",
         "Accuracy", "Shot interval", "Base damage", "Effective range",
-        "Maximum range", "Maximum reticle speed", "Spread per shot",
-        "Recoil lateral ratio", "Moving spread fraction",
+        "Maximum range", "Maximum reticle speed", "Reticle control accel",
+        "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
+        "Moving spread fraction",
         "ADS accuracy multiplier", "ADS stability multiplier",
         "Weak tracer length", "Weak tracer opacity"};
 
@@ -6948,11 +7032,19 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MaximumReticleSpeed:
             value = fmt::format("{:.0f} px/s", handling.maximumReticleSpeed);
             break;
+        case DeveloperWeaponParameter::ReticleControlAcceleration:
+            value = fmt::format(
+                "{:.0f} px/s2", handling.reticleControlAcceleration);
+            break;
         case DeveloperWeaponParameter::SpreadPerShot:
             value = fmt::format("{:.2f} deg", handling.spreadPerShotDegrees);
             break;
         case DeveloperWeaponParameter::RecoilLateralRatio:
             value = fmt::format("{:.2f}", handling.recoilLateralRatio);
+            break;
+        case DeveloperWeaponParameter::RecoilBendDuration:
+            value = fmt::format(
+                "{:.3f} s", handling.recoilBendDurationSeconds);
             break;
         case DeveloperWeaponParameter::MovingSpreadFraction:
             value = fmt::format("{:.2f}", handling.movingSpreadFraction);
@@ -6976,7 +7068,7 @@ void App::renderDeveloperWeaponPanel()
         }
 
         const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 25.0F;
+            static_cast<float>(index) * 24.0F;
         if (index == developerWeaponParameterIndex_)
         {
             const SDL_FRect selected{
@@ -7466,7 +7558,7 @@ void App::renderRaidScreen()
 
 void App::render()
 {
-    syncSystemCursorVisibility();
+    syncRaidPointerCapture();
 
     SDL_SetRenderDrawColor(
         renderer_,
@@ -7502,7 +7594,14 @@ void App::render()
 
 void App::shutdown()
 {
+    if (window_ != nullptr)
+    {
+        static_cast<void>(
+            SDL_SetWindowRelativeMouseMode(window_, false));
+    }
+    relativeMouseModeActive_ = false;
     static_cast<void>(SDL_ShowCursor());
+    combatAudio_.shutdown();
     systemCursorHidden_ = false;
 
     // 所有 SDL_Texture 必须在 Renderer 之前释放。
@@ -7561,6 +7660,7 @@ int App::run()
         processEvents();
         update(deltaTime);
         render();
+        pendingRelativeAimMotion_ = Vec2{};
         input_.endFrame();
     }
     shutdown();

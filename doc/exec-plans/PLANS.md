@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/survival-loadout-armor-maintenance.md`。Persistent Base、Extraction Loop、Alpha Hardening、基础防具/命中部位、战地医疗、武器状态与多武器切换已分别由 PR #58～#64 接受；旧活动文档保留交付证据。
+当前实现计划：`active/combat-input-capture-audio-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout 与 Combat PR #66～#67 已接受；旧活动文档保留交付证据。

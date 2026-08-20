@@ -22,6 +22,10 @@ struct GameplayInput
     // direction so the Space-key regression path remains available.
     std::optional<Vec2> aimWorldPosition;
 
+    // SDL relative mouse motion is an explicit per-frame delta. Simulation
+    // tests and legacy callers may keep using the absolute position above.
+    std::optional<Vec2> aimMotionDelta;
+
     // 只在 F 从未按下变为按下的这一帧为 true。
     bool interactJustPressed{};
 

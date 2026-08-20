@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "combat-aim-content-6",
+  "content_version": "combat-input-content-7",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -79,7 +79,7 @@
         "recoil_control": 55,
         "stability": 58,
         "handling_speed": 82,
-        "ergonomics": 85,
+        "ergonomics": 100,
         "accuracy": 58,
         "base_damage": 4,
         "effective_range": 280.0,
@@ -119,7 +119,7 @@
         "recoil_control": 42,
         "stability": 66,
         "handling_speed": 46,
-        "ergonomics": 75,
+        "ergonomics": 100,
         "accuracy": 72,
         "base_damage": 4,
         "effective_range": 500.0,

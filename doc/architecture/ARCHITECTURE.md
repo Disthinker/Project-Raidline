@@ -113,7 +113,7 @@ SessionProjection snapshot() const;
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
-- `WeaponAimState` 独立保存实际准星世界位置、上次鼠标输入、可推移控制目标、玩家控制速度、后坐力速度、ADS 进度与命名 PCG32 随机状态。鼠标位移推动控制目标，准星从当前 P 按速度/加速度上限向新目标 B 运动；击发直接刷新一次径向后坐力速度并同步推移准星/目标，以反向加速度只让后坐力速度减到零，不累加无界角偏移，也不把准星位置自动拉回旧点。
+- `WeaponAimState` 独立保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度、后坐力当前速度/目标方向、短弯曲阶段、ADS 进度与命名 PCG32 随机状态。绝对输入用于测试/初始化，Active Raid 的 SDL client 提交每帧相对鼠标位移；准星从当前 P 按速度/加速度上限向新目标 B 运动。击发立即刷新一份径向初速，再连续弯向有界随机角度并减速到零；不累加无界冲量，也不把准星位置自动拉回旧点。
 - 实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发。精准度控制最小散布，稳定性控制最大散布，操控速度控制停火收缩，连续开火逐发扩大散布；App 不得把鼠标点或准星图形当成命中权威。
 - WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数。基础 ADS、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。F10 开发面板的按武器实例覆盖仅存在于当前 GameSession 进程，不修改 ContentRegistry、ProfileRevision、存档或结算。
 - Alpha 当前合同保持：
@@ -129,6 +129,8 @@ WeaponAim/WeaponFire/Ammo
 
 生产射击使用非场景实体的 `LogicalBallisticFlight` 从枪口推进到武器最大射程或世界边界，每帧只连续扫掠已经飞过的线段。最近敌人形成 `Enemy`，最近数据化障碍形成 `Obstacle`，无接触到达最大距离形成一次 `Ground`；准星位置不再充当地面终点。Weak/None 曳光只投影已飞区段。WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型；命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
 
+SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗口相对鼠标模式，并将 `xrel/yrel` 翻译为 `GameplayInput::aimMotionDelta`；simulation 不读取 SDL 光标状态。临时 `CombatAudioOutput` 根据成功击发和 `HitResult` 生成/混合短 cue，音频不可反向驱动命中、伤害或弹药消费。
+
 ## 内容定义
 
 - 内容定义目标格式为版本化 JSON，并由 `nlohmann_json` 读取。
@@ -140,7 +142,7 @@ WeaponAim/WeaponFire/Ammo
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署、首图常量与基础弹道障碍的单一内容输入；当前内容版本为 `combat-aim-content-6`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署、首图常量与基础弹道障碍的单一内容输入；当前内容版本为 `combat-input-content-7`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -149,7 +151,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。当前 V0 没有需兼容的更早正式玩家存档。
+- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`combat-input-content-7` 只调整内容参数并继续显式读取 schema v6 的 `combat-aim-content-6` 存档。当前 V0 没有需兼容的更早正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。

@@ -335,12 +335,15 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/combat_audio.cpp
+    src/combat_audio.h
     src/input_system.cpp
     src/input_system.h
     src/inventory_interaction.cpp
     src/inventory_interaction.h
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
+    src/raid_pointer_capture.h
     src/texture.cpp
     src/texture.h
 )
@@ -413,6 +416,10 @@ raidline_add_test(
 raidline_add_test(
     InputSystemTest
     tests/test_input_system.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    CombatAudioTest
+    tests/test_combat_audio.cpp
     raidline::sdl_client)
 raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
 raidline_add_test(

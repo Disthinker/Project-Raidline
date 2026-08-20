@@ -873,10 +873,19 @@ bool GameSession::adjustDeveloperWeaponTuning(
     case DeveloperWeaponParameter::MaximumReticleSpeed:
         entry.hidden.maximumReticleSpeed = adjustFloat(
             previousHandling.maximumReticleSpeed,
-            10.0F,
+            25.0F,
+            100.0F,
             50.0F,
-            50.0F,
-            3000.0F,
+            5000.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::ReticleControlAcceleration:
+        entry.hidden.reticleControlAcceleration = adjustFloat(
+            previousHandling.reticleControlAcceleration,
+            100.0F,
+            500.0F,
+            100.0F,
+            20000.0F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::SpreadPerShot:
@@ -895,6 +904,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.05F,
             0.0F,
             1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::RecoilBendDuration:
+        entry.hidden.recoilBendDurationSeconds = adjustFloat(
+            previousHandling.recoilBendDurationSeconds,
+            0.005F,
+            0.025F,
+            0.005F,
+            0.25F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::MovingSpreadFraction:
@@ -2240,6 +2258,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     {
         handling.maximumReticleSpeed = *hidden.maximumReticleSpeed;
     }
+    if (hidden.reticleControlAcceleration.has_value())
+    {
+        handling.reticleControlAcceleration =
+            *hidden.reticleControlAcceleration;
+    }
     if (hidden.spreadPerShotDegrees.has_value())
     {
         handling.spreadPerShotDegrees = *hidden.spreadPerShotDegrees;
@@ -2247,6 +2270,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.recoilLateralRatio.has_value())
     {
         handling.recoilLateralRatio = *hidden.recoilLateralRatio;
+    }
+    if (hidden.recoilBendDurationSeconds.has_value())
+    {
+        handling.recoilBendDurationSeconds =
+            *hidden.recoilBendDurationSeconds;
     }
     if (hidden.movingSpreadFraction.has_value())
     {

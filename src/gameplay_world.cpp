@@ -582,7 +582,8 @@ void GameplayWorld::update(
         centerAfterMovement,
         worldSize_,
         input.aimDownSights,
-        deltaTime);
+        deltaTime,
+        input.aimMotionDelta);
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
@@ -997,7 +998,7 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
-    const Vec2 velocity = weaponAim_.recoilVelocity();
+    const Vec2 velocity = weaponAim_.recoilPresentationVelocity();
     return std::min(
         18.0F,
         std::sqrt(
@@ -1065,6 +1066,7 @@ void GameplayWorld::configureWeaponFire(
         handling.recoilInitialSpeed,
         handling.recoilDeceleration,
         handling.recoilLateralRatio,
+        handling.recoilBendDurationSeconds,
         handling.aimDownSightsDurationSeconds,
         definition.effectiveRange,
         definition.maximumRange};

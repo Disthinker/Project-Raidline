@@ -342,8 +342,16 @@ TEST(AlphaExtractionSessionTest,
         false));
     ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
         DeveloperWeaponParameter::MaximumReticleSpeed,
-        1,
+        -1,
         true));
+    ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::ReticleControlAcceleration,
+        1,
+        false));
+    ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::RecoilBendDuration,
+        1,
+        false));
 
     const auto tuned = session.developerWeaponTuning();
     ASSERT_TRUE(tuned.has_value());
@@ -355,7 +363,13 @@ TEST(AlphaExtractionSessionTest,
         defaults->handling.maximumSpreadDegrees);
     EXPECT_FLOAT_EQ(
         tuned->handling.maximumReticleSpeed,
-        defaults->handling.maximumReticleSpeed + 50.0F);
+        defaults->handling.maximumReticleSpeed - 100.0F);
+    EXPECT_FLOAT_EQ(
+        tuned->handling.reticleControlAcceleration,
+        defaults->handling.reticleControlAcceleration + 100.0F);
+    EXPECT_FLOAT_EQ(
+        tuned->handling.recoilBendDurationSeconds,
+        defaults->handling.recoilBendDurationSeconds + 0.005F);
     EXPECT_EQ(session.profile().revision, revision);
     EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
 
