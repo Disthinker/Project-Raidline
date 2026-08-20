@@ -103,6 +103,9 @@ public:
     [[nodiscard]] bool startAlphaWeaponMaintenance(
         AssetInstanceId kitAssetId,
         AssetInstanceId weaponAssetId);
+    [[nodiscard]] bool startAlphaArmorMaintenance(
+        AssetInstanceId kitAssetId,
+        AssetInstanceId armorAssetId);
     [[nodiscard]] bool startAlphaWeaponSwitch(EquipmentSlotKind targetSlot);
     [[nodiscard]] bool observeAlphaWeaponClearMotion(Vec2 delta);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
@@ -134,6 +137,10 @@ public:
     [[nodiscard]] WeaponMaintenanceReceipt executeBaseWeaponMaintenance(
         AssetInstanceId kitAssetId,
         AssetInstanceId weaponAssetId,
+        std::string transactionId);
+    [[nodiscard]] ArmorMaintenanceReceipt executeBaseArmorMaintenance(
+        AssetInstanceId kitAssetId,
+        AssetInstanceId armorAssetId,
         std::string transactionId);
 
     [[nodiscard]] const RaidActionState &raidActionState() const noexcept;

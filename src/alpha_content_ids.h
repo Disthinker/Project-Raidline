@@ -17,6 +17,8 @@ inline const ItemDefinitionId tourniquet{"item.medical.tourniquet_basic"};
 inline const ItemDefinitionId painkiller{"item.medical.painkiller_basic"};
 inline const ItemDefinitionId weaponMaintenanceKit{
     "item.maintenance.weapon_kit_basic"};
+inline const ItemDefinitionId armorMaintenanceKit{
+    "item.maintenance.armor_kit_basic"};
 inline const ItemDefinitionId helmet{"item.protective_gear.helmet_basic"};
 inline const ItemDefinitionId bodyArmor{"item.protective_gear.body_armor_basic"};
 inline const ItemDefinitionId lootCola{"item.loot.cola_basic"};

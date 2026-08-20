@@ -155,3 +155,116 @@ TEST(MaintenanceDomainTest, RaidRepairAtMaximumFloorCanRestoreCurrentOnly)
     EXPECT_EQ(profile.assets.find(rifle)->currentDurability, 2000U);
     EXPECT_EQ(receipt.restoredDurabilityCenti, 1000U);
 }
+
+TEST(MaintenanceDomainTest, BaseArmorRepairUsesSoftMaterialCostAndMaximumLoss)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "armor-maintenance-base", publishedContentRegistry());
+    const AssetInstanceId armor = firstAsset(
+        profile, alpha_content::bodyArmor);
+    const AssetInstanceId kit = firstAsset(
+        profile, alpha_content::armorMaintenanceKit);
+    profile.assets.findMutable(armor)->currentDurability = 50;
+
+    const ArmorMaintenanceReceipt receipt = executeArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, armor, MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Base},
+        CommandContext{profile.revision, "base-armor-maintenance"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.restoredDurability, 50U);
+    EXPECT_EQ(receipt.consumedCapacityCenti, 5000U);
+    EXPECT_EQ(receipt.currentMaximumBefore, 120U);
+    EXPECT_EQ(receipt.currentMaximumAfter, 115U);
+    EXPECT_EQ(profile.assets.find(armor)->currentDurability, 100U);
+    EXPECT_EQ(profile.assets.find(armor)->currentMaximumDurability, 115U);
+    EXPECT_EQ(profile.assets.find(kit), nullptr);
+}
+
+TEST(MaintenanceDomainTest, RaidArmorRepairUsesCompositeCostAndSixSecondPlan)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "armor-maintenance-raid", publishedContentRegistry());
+    const AssetInstanceId helmet = firstAsset(
+        profile, alpha_content::helmet);
+    const AssetInstanceId kit = firstAsset(
+        profile, alpha_content::armorMaintenanceKit);
+    profile.assets.findMutable(helmet)->currentDurability = 60;
+
+    const ArmorMaintenancePlan plan = queryArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, helmet, MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Raid});
+
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.actionDurationMs, 6000U);
+    EXPECT_EQ(plan.restoredDurability, 33U);
+    EXPECT_EQ(plan.consumedCapacityCenti, 4950U);
+    EXPECT_EQ(plan.currentMaximumAfter, 93U);
+}
+
+TEST(MaintenanceDomainTest, ArmorRepairAtMaximumFloorRestoresWithoutFurtherLoss)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "armor-maintenance-floor", publishedContentRegistry());
+    const AssetInstanceId armor = firstAsset(
+        profile, alpha_content::bodyArmor);
+    const AssetInstanceId kit = firstAsset(
+        profile, alpha_content::armorMaintenanceKit);
+    AssetRecord *record = profile.assets.findMutable(armor);
+    record->currentMaximumDurability = 24;
+    record->currentDurability = 10;
+
+    const ArmorMaintenanceReceipt receipt = executeArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, armor, MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Raid},
+        CommandContext{profile.revision, "floor-armor-maintenance"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.restoredDurability, 14U);
+    EXPECT_EQ(receipt.currentMaximumAfter, 24U);
+    EXPECT_EQ(profile.assets.find(armor)->currentDurability, 24U);
+}
+
+TEST(MaintenanceDomainTest, ArmorMaintenanceRejectionPreservesProfile)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "armor-maintenance-reject", publishedContentRegistry());
+    const AssetInstanceId helmet = firstAsset(
+        profile, alpha_content::helmet);
+    const AssetInstanceId kit = firstAsset(
+        profile, alpha_content::armorMaintenanceKit);
+    profile.assets.findMutable(helmet)->currentDurability = 90;
+    profile.assets.findMutable(kit)->remainingCharges = 149;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const AssetInstanceId nextId = profile.assets.nextAssetId();
+
+    const ArmorMaintenanceReceipt receipt = executeArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, helmet, MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Base},
+        CommandContext{profile.revision, "insufficient-armor-maintenance"});
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    EXPECT_EQ(profile.assets.nextAssetId(), nextId);
+
+    const ArmorMaintenancePlan carried = queryArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, helmet, MaintenanceAccess::CarriedOnly,
+            MaintenanceLocation::Raid});
+    EXPECT_FALSE(carried.canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}

@@ -1,6 +1,6 @@
 # Survival Loadout：多武器配装与切换 ExecPlan
 
-状态：候选冻结中
+状态：已接受（PR #64 / merge commit `4c16596`）
 
 基线：`origin/main@b8ddbe3`（PR #63 已通过 exact-head CI 和用户正常游玩验收并合入）
 
@@ -65,4 +65,5 @@
 - 2026-08-20：PR #63 通过最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
 - 2026-08-20：从干净的 `origin/main@b8ddbe3` 创建本分支，完成 GDD/仓库差距与单武器假设消费者审计。
 - 2026-08-20：完成七槽兼容、Pistol/15 发弹匣、content v4、schema v6、三武器根生命周期、限时切换、当前实例消费、HUD/库存投影和存档迁移；Windows Debug 全目标构建成功，709 项 CTest 已覆盖新增闭环。
-- 下一门槛：形成可审查提交并推送 Draft PR，等待 exact-head Windows/Ubuntu CI；CI 通过后交用户进行正常游玩验收。
+- 2026-08-20：形成三个可回滚提交并推送 Draft PR #64；精确 head `b20a85d` 的 Windows/Ubuntu CI 全部通过。
+- 2026-08-20：用户完成正常游玩验收；PR #64 以 merge commit `4c16596` 合入 main。

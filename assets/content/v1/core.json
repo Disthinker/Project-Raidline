@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "survival-loadout-content-4",
+  "content_version": "survival-loadout-content-5",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -337,6 +337,32 @@
       }
     },
     {
+      "id": "item.maintenance.armor_kit_basic",
+      "display_name": "Armor Repair Kit",
+      "category": "maintenance",
+      "inventory": {"width": 1, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 64},
+        "pickup_size": {"x": 48, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_armor_maintenance.png",
+      "world_texture": "items/world/unpublished_armor_maintenance.png",
+      "market_buy_price": 100,
+      "market_recycle_price": 25,
+      "maximum_charges": 5000,
+      "armor_maintenance": {
+        "capacity_centi": 5000,
+        "raid_action_duration_ms": 6000,
+        "base_maximum_loss_basis_points": 1000,
+        "raid_maximum_loss_basis_points": 2000,
+        "soft_cost_per_durability_centi": 100,
+        "composite_cost_per_durability_centi": 150,
+        "metal_cost_per_durability_centi": 200
+      }
+    },
+    {
       "id": "item.protective_gear.helmet_basic",
       "display_name": "Basic Helmet",
       "category": "protective_gear",
@@ -352,6 +378,7 @@
       "equipment_slot": "helmet",
       "armor": {
         "coverage": "head",
+        "material": "composite",
         "protection_requirement": 3,
         "maximum_durability": 100,
         "durability_loss_basis_points": 10000
@@ -375,6 +402,7 @@
       "equipment_slot": "body_armor",
       "armor": {
         "coverage": "torso",
+        "material": "soft",
         "protection_requirement": 4,
         "maximum_durability": 120,
         "durability_loss_basis_points": 12500

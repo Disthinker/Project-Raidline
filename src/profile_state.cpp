@@ -342,6 +342,7 @@ ProfileState makeNewAlphaProfile(
     placeNewAsset(profile, content, alpha_content::helmet);
     placeNewAsset(profile, content, alpha_content::bodyArmor);
     placeNewAsset(profile, content, alpha_content::weaponMaintenanceKit);
+    placeNewAsset(profile, content, alpha_content::armorMaintenanceKit);
 
     const ProfileValidationResult validation =
         validateProfileState(profile, content);

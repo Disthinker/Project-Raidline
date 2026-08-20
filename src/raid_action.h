@@ -59,6 +59,14 @@ struct WeaponMaintenanceRaidAction
     float durationSeconds{};
 };
 
+struct ArmorMaintenanceRaidAction
+{
+    AssetInstanceId kitAssetId{};
+    AssetInstanceId armorAssetId{};
+    float elapsedSeconds{};
+    float durationSeconds{};
+};
+
 struct WeaponSwitchRaidAction
 {
     EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
@@ -80,6 +88,7 @@ using RaidAction = std::variant<
     MedicalRaidAction,
     UnloadMagazineRaidAction,
     WeaponMaintenanceRaidAction,
+    ArmorMaintenanceRaidAction,
     WeaponSwitchRaidAction,
     ExtractRaidAction>;
 

@@ -464,6 +464,81 @@ TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
 
 }
 
+TEST(AlphaExtractionSessionTest, RaidArmorMaintenanceAllowsSlowMovementAndRemainsAtomic)
+{
+    TemporarySaveDirectory directory;
+    ProfileState profile = makeNewAlphaProfile(
+        "alpha-session-armor-maintenance", publishedContentRegistry());
+    const AssetInstanceId armor = assets(
+        profile, alpha_content::bodyArmor).front();
+    profile.assets.findMutable(armor)->currentDurability = 60;
+    SaveRepository repository{directory.path()};
+    ASSERT_TRUE(repository.save(
+        profile, publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile());
+    prepareArmedLoadout(session);
+    const AssetInstanceId backpack = assets(
+        session.profile(), alpha_content::backpack).front();
+    const AssetInstanceId kit = assets(
+        session.profile(), alpha_content::armorMaintenanceKit).front();
+    equip(session, armor, EquipmentSlotKind::BodyArmor,
+          "armor-maintenance-equip");
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            kit,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "armor-maintenance-carry-kit").succeeded);
+    ASSERT_TRUE(session.deployAlpha(90819));
+
+    const float positionBefore = session.world().player().position().x;
+    ASSERT_TRUE(session.startAlphaArmorMaintenance(kit, armor));
+    const std::uint64_t beforeMovement =
+        profileStateFingerprint(session.profile());
+    GameplayInput movement{};
+    movement.moveRight = true;
+    session.update(movement, 0.1F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        10.8F,
+        0.001F);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeMovement);
+    EXPECT_EQ(session.profile().assets.find(armor)->currentDurability, 60U);
+    EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 5000U);
+
+    GameplayInput fire{};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    const auto weapon = session.activeAlphaWeapon();
+    ASSERT_TRUE(weapon.has_value());
+    const std::uint32_t weaponConditionBefore =
+        session.profile().assets.find(*weapon)->currentDurability;
+    session.update(fire, 0.1F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(
+        session.profile().assets.find(*weapon)->currentDurability,
+        weaponConditionBefore);
+    EXPECT_EQ(session.profile().assets.find(armor)->currentDurability, 60U);
+    EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 5000U);
+
+    session.update(GameplayInput{}, 0.0F);
+    ASSERT_TRUE(session.startAlphaArmorMaintenance(kit, armor));
+    session.update(GameplayInput{}, 6.0F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(session.profile().assets.find(armor)->currentDurability, 110U);
+    EXPECT_EQ(
+        session.profile().assets.find(armor)->currentMaximumDurability,
+        110U);
+    EXPECT_EQ(session.profile().assets.find(kit), nullptr);
+}
+
 TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
 {
     GameSession session;

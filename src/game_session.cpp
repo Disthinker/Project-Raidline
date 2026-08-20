@@ -518,6 +518,30 @@ bool GameSession::startAlphaWeaponMaintenance(
             static_cast<float>(plan.actionDurationMs) / 1000.0F});
 }
 
+bool GameSession::startAlphaArmorMaintenance(
+    AssetInstanceId kitAssetId,
+    AssetInstanceId armorAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        return false;
+    }
+    const ArmorMaintenancePlan plan = queryArmorMaintenance(
+        profile_,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kitAssetId,
+            armorAssetId,
+            MaintenanceAccess::CarriedOnly,
+            MaintenanceLocation::Raid});
+    return plan.canCommit && raidActionState_.start(
+        ArmorMaintenanceRaidAction{
+            kitAssetId,
+            armorAssetId,
+            0.0F,
+            static_cast<float>(plan.actionDurationMs) / 1000.0F});
+}
+
 bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
 {
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
@@ -836,6 +860,38 @@ WeaponMaintenanceReceipt GameSession::executeBaseWeaponMaintenance(
     return receipt;
 }
 
+ArmorMaintenanceReceipt GameSession::executeBaseArmorMaintenance(
+    AssetInstanceId kitAssetId,
+    AssetInstanceId armorAssetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    ArmorMaintenanceReceipt receipt = executeArmorMaintenance(
+        candidate,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kitAssetId,
+            armorAssetId,
+            MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Base},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return ArmorMaintenanceReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision};
+    }
+    return receipt;
+}
+
 const RaidActionState &GameSession::raidActionState() const noexcept
 {
     return raidActionState_;
@@ -909,6 +965,8 @@ void GameSession::updateAlphaRaid(
                 std::holds_alternative<MedicalRaidAction>(
                     *raidActionState_.active()) ||
                 std::holds_alternative<WeaponMaintenanceRaidAction>(
+                    *raidActionState_.active()) ||
+                std::holds_alternative<ArmorMaintenanceRaidAction>(
                     *raidActionState_.active());
             raidActionState_.cancel();
         }
@@ -1030,7 +1088,8 @@ void GameSession::updateAlphaRaid(
                 {
                     return action.slowMovement;
                 }
-                return std::is_same_v<Action, WeaponMaintenanceRaidAction>;
+                return std::is_same_v<Action, WeaponMaintenanceRaidAction> ||
+                       std::is_same_v<Action, ArmorMaintenanceRaidAction>;
             },
             *raidActionState_.active());
         if (slowMovement)
@@ -1173,6 +1232,14 @@ void GameSession::updateAlphaRaid(
                                input.healJustPressed;
                     }
                     else if constexpr (
+                        std::is_same_v<Action, ArmorMaintenanceRaidAction>)
+                    {
+                        return tookDamage || input.sprint || input.firePressed ||
+                               input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
+                    }
+                    else if constexpr (
                         std::is_same_v<Action, WeaponSwitchRaidAction>)
                     {
                         return input.sprint || input.firePressed ||
@@ -1190,6 +1257,8 @@ void GameSession::updateAlphaRaid(
             std::holds_alternative<MedicalRaidAction>(
                 *raidActionState_.active()) ||
             std::holds_alternative<WeaponMaintenanceRaidAction>(
+                *raidActionState_.active()) ||
+            std::holds_alternative<ArmorMaintenanceRaidAction>(
                 *raidActionState_.active()) ||
             std::holds_alternative<WeaponSwitchRaidAction>(
                 *raidActionState_.active());
@@ -1375,6 +1444,33 @@ void GameSession::updateAlphaRaid(
                         static_cast<void>(commitProfileCandidate(
                             std::move(candidate), false));
                         weaponClearGesture_.reset();
+                    }
+                    else
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *maintenance =
+                             std::get_if<ArmorMaintenanceRaidAction>(
+                                 &*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const ArmorMaintenanceReceipt receipt =
+                        executeArmorMaintenance(
+                            candidate,
+                            publishedContentRegistry(),
+                            ArmorMaintenanceCommand{
+                                maintenance->kitAssetId,
+                                maintenance->armorAssetId,
+                                MaintenanceAccess::CarriedOnly,
+                                MaintenanceLocation::Raid},
+                            CommandContext{
+                                profile_.revision,
+                                nextRaidTransaction("armor-maintenance")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate), false));
                     }
                     else
                     {

@@ -426,8 +426,11 @@ namespace
         const AssetRecord *dragged = draggedAssetId.has_value()
             ? profile.assets.find(*draggedAssetId)
             : nullptr;
-        const ItemCategory draggedCategory = dragged != nullptr
-            ? publishedContentRegistry().item(dragged->definitionId).category
+        const ItemDefinition *draggedDefinition = dragged != nullptr
+            ? &publishedContentRegistry().item(dragged->definitionId)
+            : nullptr;
+        const ItemCategory draggedCategory = draggedDefinition != nullptr
+            ? draggedDefinition->category
             : ItemCategory::Loot;
         for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
         {
@@ -441,7 +444,8 @@ namespace
                 {
                     return WeaponInstallTarget{*weapon};
                 }
-                if (draggedCategory == ItemCategory::Maintenance)
+                if (draggedDefinition != nullptr &&
+                    draggedDefinition->weaponMaintenance.has_value())
                 {
                     return WeaponMaintenanceTarget{*weapon};
                 }
@@ -462,10 +466,17 @@ namespace
             {
                 return WeaponInstallTarget{hit->asset->instanceId};
             }
-            if (draggedCategory == ItemCategory::Maintenance &&
+            if (draggedDefinition != nullptr &&
+                draggedDefinition->weaponMaintenance.has_value() &&
                 category == ItemCategory::Weapon)
             {
                 return WeaponMaintenanceTarget{hit->asset->instanceId};
+            }
+            if (draggedDefinition != nullptr &&
+                draggedDefinition->armorMaintenance.has_value() &&
+                category == ItemCategory::ProtectiveGear)
+            {
+                return ArmorMaintenanceTarget{hit->asset->instanceId};
             }
         }
 
@@ -568,11 +579,13 @@ namespace
         return std::nullopt;
     }
 
-    const std::array<ItemDefinitionId, 12> &fixedSupplyIds()
+    const std::array<ItemDefinitionId, 15> &fixedSupplyIds()
     {
-        static const std::array<ItemDefinitionId, 12> ids{
+        static const std::array<ItemDefinitionId, 15> ids{
             alpha_content::rifle,
+            alpha_content::pistol,
             alpha_content::magazine,
+            alpha_content::pistolMagazine,
             alpha_content::ammunition,
             alpha_content::helmet,
             alpha_content::bodyArmor,
@@ -582,7 +595,8 @@ namespace
             alpha_content::bandage,
             alpha_content::tourniquet,
             alpha_content::painkiller,
-            alpha_content::weaponMaintenanceKit};
+            alpha_content::weaponMaintenanceKit,
+            alpha_content::armorMaintenanceKit};
         return ids;
     }
 
@@ -1426,9 +1440,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         for (std::size_t index = 0; index < supply.size(); ++index)
         {
             const SDL_FRect row{
-                76.0F + static_cast<float>(index / 6U) * 232.0F,
-                164.0F + static_cast<float>(index % 6U) * 46.0F,
-                220.0F,
+                76.0F + static_cast<float>(index / 5U) * 184.0F,
+                164.0F + static_cast<float>(index % 5U) * 46.0F,
+                176.0F,
                 40.0F};
             if (!contains(row, click.position))
             {
@@ -2224,7 +2238,8 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     ? "MAGAZINE INSTALLED"
                     : receipt.message;
             }
-            else
+            else if constexpr (
+                std::is_same_v<Target, WeaponMaintenanceTarget>)
             {
                 if (inRaid)
                 {
@@ -2251,6 +2266,35 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                           "WEAPON RESTORED {:.2f}",
                           static_cast<float>(
                               receipt.restoredDurabilityCenti) / 100.0F)
+                    : receipt.message;
+            }
+            else
+            {
+                if (inRaid)
+                {
+                    if (gameSession_.startAlphaArmorMaintenance(
+                            request.source.instanceId,
+                            target.armorAssetId))
+                    {
+                        uiMessage_ = "ARMOR REPAIR STARTED (6 SEC)";
+                        closeInventory();
+                    }
+                    else
+                    {
+                        uiMessage_ = "ARMOR CANNOT BE REPAIRED";
+                    }
+                    return;
+                }
+                const ArmorMaintenanceReceipt receipt =
+                    gameSession_.executeBaseArmorMaintenance(
+                        request.source.instanceId,
+                        target.armorAssetId,
+                        nextProfileTransactionId("base-armor-maintenance"));
+                uiMessage_ = receipt.succeeded
+                    ? fmt::format(
+                          "ARMOR RESTORED {} | MAX {}",
+                          receipt.restoredDurability,
+                          receipt.currentMaximumAfter)
                     : receipt.message;
             }
         },
@@ -3645,6 +3689,9 @@ void App::renderDebugText()
                     if constexpr (
                         std::is_same_v<Action, WeaponMaintenanceRaidAction>)
                         return "MAINTAINING WEAPON";
+                    if constexpr (
+                        std::is_same_v<Action, ArmorMaintenanceRaidAction>)
+                        return "REPAIRING ARMOR";
                     if constexpr (
                         std::is_same_v<Action, WeaponSwitchRaidAction>)
                         return "SWITCHING WEAPON";
@@ -6189,7 +6236,18 @@ void App::renderProfileAsset(
             renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
             condition.c_str());
     }
-    else if (definition.weaponMaintenance.has_value())
+    else if (showWeaponCondition && definition.armorProtection.has_value())
+    {
+        const std::string condition = fmt::format(
+            "D {}/{}",
+            asset.currentDurability,
+            asset.currentMaximumDurability);
+        SDL_RenderDebugText(
+            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
+            condition.c_str());
+    }
+    else if (definition.weaponMaintenance.has_value() ||
+             definition.armorMaintenance.has_value())
     {
         const std::string capacity = fmt::format(
             "KIT {:.2f}",
@@ -6387,7 +6445,8 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                         : ProfileDropFeedbackKind::Invalid;
                     feedback.label = allowed ? "INSTALL" : "BLOCKED";
                 }
-                else
+                else if constexpr (
+                    std::is_same_v<Target, WeaponMaintenanceTarget>)
                 {
                     const WeaponMaintenancePlan plan =
                         queryWeaponMaintenance(
@@ -6402,6 +6461,25 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                                 inRaid
                                     ? MaintenanceLocation::Raid
                                     : MaintenanceLocation::Base});
+                    feedback.kind = plan.canCommit
+                        ? ProfileDropFeedbackKind::Special
+                        : ProfileDropFeedbackKind::Invalid;
+                    feedback.label = plan.canCommit ? "REPAIR" : "BLOCKED";
+                }
+                else
+                {
+                    const ArmorMaintenancePlan plan = queryArmorMaintenance(
+                        profile,
+                        publishedContentRegistry(),
+                        ArmorMaintenanceCommand{
+                            source->instanceId,
+                            typedTarget.armorAssetId,
+                            inRaid
+                                ? MaintenanceAccess::CarriedOnly
+                                : MaintenanceAccess::AnyOwned,
+                            inRaid
+                                ? MaintenanceLocation::Raid
+                                : MaintenanceLocation::Base});
                     feedback.kind = plan.canCommit
                         ? ProfileDropFeedbackKind::Special
                         : ProfileDropFeedbackKind::Invalid;
@@ -6458,9 +6536,14 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                     {
                         id = typedTarget.weaponAssetId;
                     }
-                    else
+                    else if constexpr (
+                        std::is_same_v<Target, WeaponMaintenanceTarget>)
                     {
                         id = typedTarget.weaponAssetId;
+                    }
+                    else
+                    {
+                        id = typedTarget.armorAssetId;
                     }
                     if (const AssetRecord *targetAsset = profile.assets.find(id))
                     {
@@ -6814,9 +6897,9 @@ void App::renderBaseSupply()
         const ItemDefinition &definition =
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
-            76.0F + static_cast<float>(index / 6U) * 232.0F,
-            164.0F + static_cast<float>(index % 6U) * 46.0F,
-            220.0F,
+            76.0F + static_cast<float>(index / 5U) * 184.0F,
+            164.0F + static_cast<float>(index % 5U) * 46.0F,
+            176.0F,
             40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
         SDL_RenderFillRect(renderer_, &row);
@@ -6825,7 +6908,7 @@ void App::renderBaseSupply()
         const std::uint32_t quantity =
             supply[index] == alpha_content::ammunition ? 30U : 1U;
         const std::string supplyName = definition.displayName.substr(
-            0, std::min<std::size_t>(definition.displayName.size(), 15U));
+            0, std::min<std::size_t>(definition.displayName.size(), 10U));
         const std::string label = fmt::format(
             "BUY {} x{} | {}",
             supplyName,
