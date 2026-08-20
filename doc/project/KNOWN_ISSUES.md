@@ -15,9 +15,9 @@
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |
 | RL-WEAPON-001 | 武器缺少耐久、故障、清障和维护闭环 | PR #63 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main |
 | RL-WEAPON-003 | 生产 Raid 仍假设只有一个主武器实例 | PR #64 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `4c16596` 进入 main |
-| RL-ARMOR-001 | 防具受损后缺少资源化维修与 Raid 风险动作 | Draft PR #65 已实现材质成本、50 点甲修包、Base 即时维修与 Raid 六秒缓慢移动维修；Windows Debug 全目标和 718 项 CTest 已完成，待反馈提交 exact-head CI 与用户复验 |
+| RL-ARMOR-001 | 防具受损后缺少资源化维修与 Raid 风险动作 | PR #65 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `755fa00` 进入 main |
 | RL-WEAPON-002 | Misfire/Double Feed 需要可保存的动态 Raid 地面弹药所有权 | 当前只启用不需要创建/抛出弹药资产的 Stovepipe；待 Raid 地面任意资产合同建立后独立扩展，禁止吞弹或凭空造弹 |
-| RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 最终射击手感后移，不在 V0 表现适配器顺带扩张 |
+| RL-COMBAT-004 | 击发时未冻结最终准星落点且缺地面命中粒子 | 当前分支已完成非实体逻辑飞行、冻结终点、连续扫掠和 World HitResult；Windows Debug 全目标与 721/721 CTest 通过，待 CI 和用户验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -33,7 +33,7 @@
 
 - `src/app.cpp` 与 `GameplayWorld` 仍偏大，继续按 Base/Raid 消费者迁移，禁止一次性无行为重写。
 - V0 `ItemId`/`ItemInstance`、3 HP、180 秒 Timeout、无限弹和旧 RaidSettlement 只服务历史测试路径；生产 Alpha 已绕过，但删除前仍需完整回归证明。
-- 当前 Projectile 只可作为短期空间表现适配器；WeaponAmmo、伤害、存档和 UI 不得依赖该类型。
+- 当前分支已从生产路径移除 Projectile；仍需通过完整回归与 CI 证明历史 V0 测试消费者安全退场，且不得重新建立 WeaponAmmo、伤害、存档或 UI 依赖。
 - Extraction Loop 使用代码 fallback 表现；正式美术、音频、manifest 与 runtime 资源发布仍在用户重新授权前暂停。
 - RL-COMBAT-002 肢体破坏/血液/击退/碎块和 RL-COMBAT-003 尸体残留均不在 Alpha。
 - Week29 分支无 PR、未进 main；代码可独立整理，正式攻击动画继续暂停。
@@ -49,6 +49,7 @@
 | Survival Loadout：流血、疼痛与战地医疗 | PR #62 已通过 CI 与用户验收，以 merge commit `ea918ab` 进入 main |
 | Survival Loadout：武器耐久、故障与维护 | PR #63 已通过 CI 与用户验收，以 merge commit `b8ddbe3` 进入 main |
 | Survival Loadout：多武器配装与切换 | PR #64 已通过 CI 和用户验收，以 merge commit `4c16596` 进入 main |
-| Survival Loadout：防具维护 | Draft PR #65 实施中；Windows Debug 全目标与 718 项 CTest 已完成，待反馈提交 exact-head CI 与用户正常游玩复验 |
+| Survival Loadout：防具维护 | PR #65 已通过 CI 与用户验收，以 merge commit `755fa00` 进入 main |
+| Combat：逻辑弹道与落点反馈 v1 | 本地实现与 721/721 CTest 已完成，待 Draft PR、exact-head CI 与用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/survival-loadout-multi-weapon-switching.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-logical-ballistics-feedback-v1.md`。

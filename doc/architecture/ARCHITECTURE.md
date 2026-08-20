@@ -124,7 +124,7 @@ WeaponFire/Ammo
   -> damage / feedback / App projection
 ```
 
-`Projectile` 只能作为 V0 适配器。WeaponAmmo、伤害、持久化和 App 不得要求该类型；命中部位、弱点、防护和穿透只能由未来扩展的 HitResult 表达。
+生产射击使用非场景实体的 `LogicalBallisticFlight` 推进冻结本发值；WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型。命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
 
 ## 内容定义
 
@@ -167,6 +167,7 @@ Content Registry 的当前落地边界：
 7. `codex/survival-loadout-bleeding-field-medical`：PR #62 / merge commit `ea918ab`，交付 MedicalStatus、四类医疗、schema v4 与 Raid/Base 医疗闭环。
 8. `codex/survival-loadout-durability-malfunction-repair`：PR #63 / merge commit `b8ddbe3`，交付整枪耐久、Stovepipe、清障、维护和 schema v5。
 9. `codex/survival-loadout-multi-weapon-switching`：PR #64 / merge commit `4c16596`，交付两长枪槽、手枪槽、WeaponUse、限时切换和 schema v6。
-10. `codex/survival-loadout-armor-maintenance`：当前分支，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
+10. `codex/survival-loadout-armor-maintenance`：PR #65 / merge commit `755fa00`，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
+11. `codex/combat-logical-ballistics-feedback-v1`：当前分支，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

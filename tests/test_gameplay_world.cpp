@@ -151,11 +151,11 @@ TEST(GameplayWorldTest, InitialPlayerHealthIsFull)
     EXPECT_FALSE(world.player().isDead());
 }
 
-// 初始 Projectile 集合为空
-TEST(GameplayWorldTest, InitialProjectilesEmpty)
+// 初始逻辑弹道集合为空。
+TEST(GameplayWorldTest, InitialLogicalBallisticsEmpty)
 {
     GameplayWorld world;
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
 }
 
 // Week28 正式 Raid 默认部署三个确定性 Enemy。
@@ -383,24 +383,24 @@ TEST(GameplayWorldTest, MoveRightUpdatesPlayerPosition)
     EXPECT_GT(world.player().position().x, 640.0f);
 }
 
-// Fire 生成 Projectile
-TEST(GameplayWorldTest, FireCreatesProjectile)
+// Fire 冻结一条非实体逻辑弹道。
+TEST(GameplayWorldTest, FireCreatesLogicalBallistic)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Projectile &projectile = world.projectiles()[0];
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const LogicalBallisticFlight &flight = world.logicalBallistics()[0];
 
-    EXPECT_FLOAT_EQ(projectile.position().x, 652.0f);
-    EXPECT_FLOAT_EQ(projectile.position().y, 352.0f);
-    EXPECT_FLOAT_EQ(projectile.width(), 8.0f);
-    EXPECT_FLOAT_EQ(projectile.height(), 8.0f);
-    EXPECT_FLOAT_EQ(projectile.velocity().x, 0.0F);
-    EXPECT_FLOAT_EQ(projectile.velocity().y, -1200.0F);
-    EXPECT_EQ(projectile.damage(), 1);
+    EXPECT_FLOAT_EQ(flight.currentPosition().x, 656.0f);
+    EXPECT_FLOAT_EQ(flight.currentPosition().y, 356.0f);
+    EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0f);
+    EXPECT_FLOAT_EQ(flight.direction().x, 0.0F);
+    EXPECT_FLOAT_EQ(flight.direction().y, -1.0F);
+    EXPECT_FLOAT_EQ(flight.speed(), 1200.0F);
+    EXPECT_EQ(flight.damage(), 1);
 }
 
 TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
@@ -417,42 +417,87 @@ TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
     EXPECT_FLOAT_EQ(snapshots[0].center.y, 356.0F);
     EXPECT_FLOAT_EQ(snapshots[0].direction.x, 0.0F);
     EXPECT_FLOAT_EQ(snapshots[0].direction.y, -1.0F);
+    EXPECT_FLOAT_EQ(snapshots[0].origin.x, snapshots[0].center.x);
+    EXPECT_FLOAT_EQ(snapshots[0].origin.y, snapshots[0].center.y);
+    EXPECT_FLOAT_EQ(snapshots[0].impactPosition.y, 0.0F);
+    EXPECT_FLOAT_EQ(snapshots[0].distanceTravelled, 0.0F);
 }
 
-// 不按 Fire 不生成 Projectile
-TEST(GameplayWorldTest, NoFireDoesNotCreateProjectile)
+TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{900.0F, 376.0F};
+
+    world.update(fire, 0.0F);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    const Vec2 frozenImpact =
+        world.logicalBallistics()[0].impactPosition();
+    EXPECT_FLOAT_EQ(frozenImpact.x, 900.0F);
+    EXPECT_FLOAT_EQ(frozenImpact.y, 376.0F);
+
+    GameplayInput retarget{};
+    retarget.aimWorldPosition = Vec2{200.0F, 100.0F};
+    world.update(retarget, 0.05F);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    EXPECT_FLOAT_EQ(
+        world.logicalBallistics()[0].impactPosition().x,
+        frozenImpact.x);
+    EXPECT_FLOAT_EQ(
+        world.logicalBallistics()[0].impactPosition().y,
+        frozenImpact.y);
+
+    world.update(GameplayInput{}, 0.20F);
+
+    EXPECT_TRUE(world.logicalBallistics().empty());
+    ASSERT_EQ(world.hitResultsLastUpdate().size(), 1U);
+    const HitResult &impact = world.hitResultsLastUpdate().front();
+    EXPECT_EQ(impact.targetKind, HitTargetKind::World);
+    EXPECT_EQ(impact.damageApplied, 0);
+    EXPECT_FLOAT_EQ(impact.position.x, frozenImpact.x);
+    EXPECT_FLOAT_EQ(impact.position.y, frozenImpact.y);
+    EXPECT_EQ(
+        world.particles().size(),
+        ParticleBurstConfig{}.particleCount);
+}
+
+// 不按 Fire 不生成逻辑弹道。
+TEST(GameplayWorldTest, NoFireDoesNotCreateLogicalBallistic)
 {
     GameplayWorld world;
     GameplayInput input{};
 
     world.update(input, 0.0f);
 
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
 }
 
-// Projectile 会随 deltaTime 向上移动
-TEST(GameplayWorldTest, ProjectileMovesAfterSpawn)
+// 逻辑弹道会随 deltaTime 向上推进。
+TEST(GameplayWorldTest, LogicalBallisticMovesAfterSpawn)
 {
     GameplayWorld world;
 
     GameplayInput fire = makeFireInput();
     world.update(fire, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const float initialY = world.projectiles()[0].position().y;
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const float initialY =
+        world.logicalBallistics()[0].currentPosition().y;
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    EXPECT_LT(world.projectiles()[0].position().y, initialY);
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    EXPECT_LT(
+        world.logicalBallistics()[0].currentPosition().y,
+        initialY);
 }
 
-// Projectile 命中 3 HP Enemy 后，Projectile 被消耗，
+// 逻辑弹道命中 3 HP Enemy 后被消耗，
 // Enemy 扣除 1 HP 但仍然保留。
 TEST(
     GameplayWorldTest,
-    ProjectileCanDamageMovingEnemyWithoutKillingIt)
+    LogicalBallisticCanDamageMovingEnemyWithoutKillingIt)
 {
     GameplayWorld world;
 
@@ -460,7 +505,7 @@ TEST(
     fire.aimWorldPosition = Vec2{625.0F, 125.0F};
     world.update(fire, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
     ASSERT_EQ(world.enemies().size(), 3u);
     EXPECT_EQ(world.enemies()[0].health(), 3);
 
@@ -468,14 +513,14 @@ TEST(
     constexpr float kSimulationStep{1.0F / 60.0F};
     constexpr int kMaximumFrames{20};
     int simulatedFrames{0};
-    while (!world.projectiles().empty() &&
+    while (!world.logicalBallistics().empty() &&
            simulatedFrames < kMaximumFrames)
     {
         world.update(noInput, kSimulationStep);
         ++simulatedFrames;
     }
 
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
     EXPECT_LT(simulatedFrames, kMaximumFrames);
 
     ASSERT_EQ(world.enemies().size(), 3u);
@@ -497,17 +542,17 @@ TEST(
     }
 }
 
-TEST(GameplayWorldTest, FastProjectileDoesNotTunnelThroughEnemyDuringLargeFrame)
+TEST(GameplayWorldTest, FastLogicalBallisticDoesNotTunnelDuringLargeFrame)
 {
     GameplayWorld world;
     world.update(makeFireInput(), 0.0F);
 
-    ASSERT_EQ(world.projectiles().size(), 1U);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
     ASSERT_EQ(world.enemies().size(), 3U);
 
     world.update(GameplayInput{}, 0.30F);
 
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
     ASSERT_EQ(world.enemies().size(), 3U);
     EXPECT_EQ(world.enemies()[0].health(), 2);
     EXPECT_EQ(
@@ -555,7 +600,7 @@ TEST(GameplayWorldTest, EnemyFirstApproachUsesNormalPursuitInsteadOfGrab)
 }
 
 // 右朝向射击
-TEST(GameplayWorldTest, FireAfterFacingRightMovesProjectileRight)
+TEST(GameplayWorldTest, FireAfterFacingRightMovesBallisticRight)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
@@ -563,21 +608,23 @@ TEST(GameplayWorldTest, FireAfterFacingRightMovesProjectileRight)
     input.moveRight = true;
     world.update(input, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 finalPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 finalPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
     EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
 }
 
 // 左朝向射击
-TEST(GameplayWorldTest, FireAfterFacingLeftMovesProjectileLeft)
+TEST(GameplayWorldTest, FireAfterFacingLeftMovesBallisticLeft)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
@@ -585,21 +632,23 @@ TEST(GameplayWorldTest, FireAfterFacingLeftMovesProjectileLeft)
     input.moveLeft = true;
     world.update(input, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 finalPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 finalPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
     EXPECT_LT(finalPosition.x, initialPosition.x);
 }
 
 // 下朝向射击
-TEST(GameplayWorldTest, FireAfterFacingDownMovesProjectileDown)
+TEST(GameplayWorldTest, FireAfterFacingDownMovesBallisticDown)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
@@ -607,14 +656,16 @@ TEST(GameplayWorldTest, FireAfterFacingDownMovesProjectileDown)
     input.moveDown = true;
     world.update(input, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 finalPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 finalPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     EXPECT_FLOAT_EQ(finalPosition.x, initialPosition.x);
     EXPECT_GT(finalPosition.y, initialPosition.y);
@@ -632,14 +683,16 @@ TEST(GameplayWorldTest, FireWithoutMovementUsesPreviousFacingDirection)
     GameplayInput fire = makeFireInput();
     world.update(fire, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 finalPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 finalPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
     EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
@@ -653,16 +706,21 @@ TEST(GameplayWorldTest, PointerAimControlsFacingAndShotWithoutMovement)
 
     world.update(input, 0.0F);
 
-    ASSERT_EQ(world.projectiles().size(), 1U);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
     EXPECT_FLOAT_EQ(world.player().position().x, 640.0F);
     EXPECT_FLOAT_EQ(world.player().position().y, 360.0F);
     EXPECT_FLOAT_EQ(world.player().facingDirection().x, 1.0F);
     EXPECT_FLOAT_EQ(world.player().facingDirection().y, 0.0F);
 
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
     world.update(GameplayInput{}, 0.01F);
-    EXPECT_GT(world.projectiles()[0].position().x, initialPosition.x);
-    EXPECT_FLOAT_EQ(world.projectiles()[0].position().y, initialPosition.y);
+    EXPECT_GT(
+        world.logicalBallistics()[0].currentPosition().x,
+        initialPosition.x);
+    EXPECT_FLOAT_EQ(
+        world.logicalBallistics()[0].currentPosition().y,
+        initialPosition.y);
 }
 
 TEST(GameplayWorldTest, PointerAimDoesNotChangeMovementDirection)
@@ -708,7 +766,7 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
 }
 
 // 斜向射击
-TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
+TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesBallisticDiagonally)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
@@ -717,28 +775,30 @@ TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesProjectileDiagonally)
     input.moveRight = true;
     world.update(input, 0.0f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 initialPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 initialPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
     world.update(noInput, 0.1f);
 
-    ASSERT_EQ(world.projectiles().size(), 1u);
-    const Vec2 finalPosition = world.projectiles()[0].position();
+    ASSERT_EQ(world.logicalBallistics().size(), 1u);
+    const Vec2 finalPosition =
+        world.logicalBallistics()[0].currentPosition();
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
     EXPECT_LT(finalPosition.y, initialPosition.y);
 }
 
 // 连续射击时，第一次可以立即射击
-TEST(GameplayWorldTest, HoldingFireCreatesFirstProjectileImmediately)
+TEST(GameplayWorldTest, HoldingFireCreatesFirstBallisticImmediately)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
 
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 }
 
 TEST(GameplayWorldTest, FireEdgeCreatesShotEvenIfReleasedWithinFrame)
@@ -750,54 +810,54 @@ TEST(GameplayWorldTest, FireEdgeCreatesShotEvenIfReleasedWithinFrame)
 
     world.update(input, 0.0F);
 
-    EXPECT_EQ(world.projectiles().size(), 1U);
+    EXPECT_EQ(world.logicalBallistics().size(), 1U);
 }
 
-// 按住 Fire 但冷却未结束时，不会再次创建 Projectile
-TEST(GameplayWorldTest, HoldingFireDoesNotCreateProjectileBeforeCooldownEnds)
+// 按住 Fire 但冷却未结束时，不会再次创建逻辑弹道。
+TEST(GameplayWorldTest, HoldingFireDoesNotCreateBallisticBeforeCooldownEnds)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 
     input.fireJustPressed = false;
     input.firePressed = true;
     world.update(input, 0.1f);
 
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 }
 
-// 按住 Fire 且冷却结束后，可以再次生成 Projectile
-TEST(GameplayWorldTest, HoldingFireCreatesAnotherProjectileAfterCooldownEnds)
+// 按住 Fire 且冷却结束后，可以再次生成逻辑弹道。
+TEST(GameplayWorldTest, HoldingFireCreatesAnotherBallisticAfterCooldownEnds)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 
     input.fireJustPressed = false;
     input.firePressed = true;
     world.update(input, 0.12f);
 
-    EXPECT_EQ(world.projectiles().size(), 2u);
+    EXPECT_EQ(world.logicalBallistics().size(), 2u);
 }
 
-// 冷却结束后，如果没有按 Fire，不会自动生成 Projectile
-TEST(GameplayWorldTest, NoFireDoesNotCreateProjectileAfterCooldownEnds)
+// 冷却结束后，如果没有按 Fire，不会自动生成逻辑弹道。
+TEST(GameplayWorldTest, NoFireDoesNotCreateBallisticAfterCooldownEnds)
 {
     GameplayWorld world;
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 
     GameplayInput noInput{};
     world.update(noInput, 0.12f);
 
-    EXPECT_EQ(world.projectiles().size(), 1u);
+    EXPECT_EQ(world.logicalBallistics().size(), 1u);
 }
 
 namespace
@@ -2094,8 +2154,8 @@ TEST(GameplayWorldRaidTest, ContinuousStayExtractsAndFreezesGameplay)
         RaidSessionState::Extracted);
     const Vec2 extractedPosition =
         world.player().position();
-    const std::size_t projectileCount =
-        world.projectiles().size();
+    const std::size_t ballisticCount =
+        world.logicalBallistics().size();
     ASSERT_EQ(world.groundItems().size(), 1U);
 
     GameplayInput terminalInput{};
@@ -2111,7 +2171,7 @@ TEST(GameplayWorldRaidTest, ContinuousStayExtractsAndFreezesGameplay)
     EXPECT_FLOAT_EQ(
         world.player().position().y,
         extractedPosition.y);
-    EXPECT_EQ(world.projectiles().size(), projectileCount);
+    EXPECT_EQ(world.logicalBallistics().size(), ballisticCount);
     EXPECT_EQ(world.groundItems().size(), 1U);
     EXPECT_TRUE(world.inventory().placedItems().empty());
 }
@@ -2209,7 +2269,7 @@ TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoes
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::PlayerDead);
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
 }
 
 TEST(GameplayWorldRaidTest, SurvivingBiteSuppressesMovementAndFire)
@@ -2237,7 +2297,7 @@ TEST(GameplayWorldRaidTest, SurvivingBiteSuppressesMovementAndFire)
     EXPECT_FLOAT_EQ(
         world.player().position().y,
         controlledPosition.y);
-    EXPECT_TRUE(world.projectiles().empty());
+    EXPECT_TRUE(world.logicalBallistics().empty());
     EXPECT_TRUE(world.player().isControlled());
 }
 

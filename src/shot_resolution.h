@@ -17,6 +17,7 @@ struct ShotCommand
     float speed{};
     float collisionExtent{};
     int damage{};
+    float maximumDistance{2048.0F};
 };
 
 enum class ShotResolutionStatus
@@ -28,11 +29,11 @@ enum class ShotResolutionStatus
     RejectedInvalidSpeed,
     RejectedInvalidCollisionExtent,
     RejectedInvalidDamage,
+    RejectedInvalidMaximumDistance,
 };
 
-// A domain result produced at successful fire time. The current V0 adapter
-// converts accepted results into legacy Projectile objects, but weapon,
-// damage, persistence and UI contracts consume these shot-domain values.
+// A domain result produced at successful fire time. It freezes all values
+// needed by the non-entity logical flight; later aim input cannot change it.
 struct ShotResolution
 {
     ShotResolutionStatus status{
@@ -43,6 +44,8 @@ struct ShotResolution
     Vec2 velocity{};
     float collisionExtent{};
     int damage{};
+    float maximumDistance{};
+    Vec2 impactPosition{};
 
     [[nodiscard]]
     bool accepted() const noexcept;
@@ -54,9 +57,8 @@ enum class HitTargetKind
     World,
 };
 
-// Damage and presentation consumers receive this result instead of
-// inspecting a Projectile. Hit regions and weak points can extend this value
-// later without being inferred by App.
+// Damage and presentation consumers receive this result instead of inspecting
+// a scene collision object. Hit semantics are never inferred by App.
 struct HitResult
 {
     ShotId shotId{kInvalidShotId};
@@ -73,8 +75,11 @@ struct HitResult
 struct ShotPresentationSnapshot
 {
     ShotId shotId{kInvalidShotId};
+    Vec2 origin{};
     Vec2 center{};
     Vec2 direction{};
+    Vec2 impactPosition{};
+    float distanceTravelled{};
 };
 
 [[nodiscard]]

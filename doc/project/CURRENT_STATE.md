@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@4c16596` 已包含完整 Core Extraction Alpha、基础防具/命中部位、战地医疗、武器状态以及多武器配装/切换；PR #64 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/survival-loadout-armor-maintenance`，从干净的 `origin/main@4c16596` 创建。
-- 当前活动计划：`doc/exec-plans/active/survival-loadout-armor-maintenance.md`。
+- `origin/main@755fa00` 已包含完整 Core Extraction Alpha、基础防具/命中部位、战地医疗、武器状态、多武器配装/切换及防具维护；PR #65 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/combat-logical-ballistics-feedback-v1`，从干净的 `origin/main@755fa00` 创建。
+- 当前活动计划：`doc/exec-plans/active/combat-logical-ballistics-feedback-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里程碑进入 **Survival Loadout：防具维护**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程碑进入 **Combat：逻辑弹道与落点反馈 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -20,7 +20,8 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 5. **流血、疼痛与战地医疗**：PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main。
 6. **武器耐久、故障与维护**：PR #63 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
 7. **多武器配装与切换**：PR #64 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `4c16596` 进入 main。
-8. **防具维护**：甲修包、材质维修成本、Base 即时维修、Raid 六秒缓慢移动维修与中断规则已接通；正在形成首个交付候选。
+8. **防具维护**：PR #65 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `755fa00` 进入 main。
+9. **逻辑弹道与落点反馈 v1**：非实体延迟飞行、冻结终点、连续扫掠与 World 命中反馈正在当前分支形成完整玩家闭环。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -28,7 +29,7 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 
 - `MainMenu → Base → Raid → RaidResult → Base` V0 流程和进程内多局会话。
 - RL-INV-001/002/003：原子交换、Ctrl/Shift 锁定数量拖拽、同定义堆叠合并与 60 发上限。
-- `ShotCommand → ShotResolution → HitResult` 窄边界；Projectile 只作为 GameplayWorld 内部 V0 表现适配器。
+- `ShotCommand → ShotResolution → HitResult` 窄边界；当前分支正在以非场景实体的 `LogicalBallisticFlight` 替换 GameplayWorld 内部 V0 Projectile 适配器。
 - 四个生产库、唯一业务源码编译所有权、强类型 DefinitionId、版本化 JSON ContentRegistry 和仓库本地 nlohmann-json overlay。
 - Persistent Base 的长期 Profile、唯一 AssetRegistry、Stash/三槽配装、固定经济/救济、可行走三设施 Base、首次环境目标链和原子存档。
 
@@ -54,7 +55,16 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
 - PR #63 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并合入 main。
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
-- 当前防具维护切片 Windows Debug 全目标构建成功；全量 CTest 已扩展到 718 项，focused 覆盖材质成本、Base/Raid 最大耐久损失、六秒完成、45% 缓慢移动、射击中断、旧 content v4 读取与 schema v6 往返。开发代理未启动游戏。
+- PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
+- 当前逻辑弹道切片已在 Visual Studio Developer Shell、x64 host/x64 target 下完成 Windows Debug 全目标构建；全量 CTest 721/721 通过。开发代理未启动游戏。
+
+## Combat 逻辑弹道与落点反馈 v1 当前实现
+
+- `ShotCommand` 新增最大飞行距离；`ShotResolution` 在成功击发时冻结规范化方向、速度、最大距离和最终落点，后续鼠标或角色移动不能修改本发。
+- `GameplayWorld` 不再创建可渲染/可碰撞的 Projectile 场景对象；`LogicalBallisticFlight` 只保存本发冻结值和已飞距离，不具有资产、场景或存档身份。
+- 弹道以现有 1200 世界单位/秒直线推进并返回本帧实际飞过的线段；命中解析连续扫掠、选择最近活目标，高速大帧不会因离散采样穿过薄目标。
+- 未命中敌人时，弹道到达冻结准星落点才产生一个 `World HitResult` 和代码 impact 粒子。App 的短轨迹钳制在已经飞过的区段，不能提前显示未来路径。
+- 普通命中与 World 命中不显示准星 X；爆头/弱点继续只由领域 `HitSemantic` 触发专用标记。没有生成、发布或接入新美术/音频，也未修改 manifest。
 
 ## Survival Loadout 防具维护切片当前实现
 
@@ -118,16 +128,17 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 
 ## 尚未完成
 
-- 防具维护：推送慢速移动反馈提交、通过 exact-head Windows/Ubuntu CI 并完成用户正常游玩复验。
+- 逻辑弹道与落点反馈 v1：建立 Draft PR，完成 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- Week29 代码反馈独立整理。
+- Week29 枪口与受伤代码反馈仍待按新投影边界独立整理；本切片不整体合并 Week29。
 - 正式攻击动画及所有新正式美术/音频生产。
 
 ## 明确停止扩展的 V0 合同
 
 - 3 HP、180 秒直接失败、V0 只读 Stash、无限弹和旧 RaidSettlement 不是产品终态，不得增加新消费者。
 - 生产 Alpha 只通过 Profile Deploy/Settlement 事务进入 Raid；不得重新引入 Profile 与 V0 库存的资产复制桥。
+- 生产射击不得重新引入可渲染/可碰撞 Projectile 场景实体；武器、伤害、存档和 App 只能消费射击领域值、逻辑飞行投影与 HitResult。
 - 普通命中最终不显示准星 X；爆头/弱点反馈等待命中部位领域合同，App 不得猜测。

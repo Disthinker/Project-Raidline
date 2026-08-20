@@ -484,7 +484,7 @@ TEST(EnemyTest, AttackMovementUsesStationaryNormalAndAttackTiers)
     EXPECT_FLOAT_EQ(grabEnemy.position().y, 213.85F);
 }
 
-TEST(EnemyTest, NonLethalProjectileDamageBrieflySlowsEnemyTime)
+TEST(EnemyTest, NonLethalRangedDamageBrieflySlowsEnemyTime)
 {
     Enemy enemy{
         Vec2{100.0F, 100.0F},

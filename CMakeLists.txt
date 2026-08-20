@@ -293,14 +293,14 @@ add_library(raidline_simulation STATIC
     src/ground_item.h
     src/hit_resolution.cpp
     src/hit_resolution.h
+    src/logical_ballistics.cpp
+    src/logical_ballistics.h
     src/particle.cpp
     src/particle.h
     src/particle_system.cpp
     src/particle_system.h
     src/player.cpp
     src/player.h
-    src/projectile.cpp
-    src/projectile.h
     src/storage_cabinet.cpp
     src/storage_cabinet.h
     src/weapon_fire.cpp
@@ -422,8 +422,8 @@ raidline_add_test(
     tests/test_shot_resolution.cpp
     raidline::domain)
 raidline_add_test(
-    ProjectileTest
-    tests/test_projectile.cpp
+    LogicalBallisticsTest
+    tests/test_logical_ballistics.cpp
     raidline::simulation)
 raidline_add_test(
     CollisionTest

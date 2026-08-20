@@ -4,16 +4,16 @@
 #include <vector>
 
 #include "enemy.h"
-#include "rect.h"
 #include "shot_resolution.h"
 #include "vec2.h"
 
-// A short-lived collision observation supplied by either the V0 Projectile
-// adapter or the future non-entity logical flight implementation.
+// A travelled logical segment supplied by the non-entity ballistic runtime.
 struct ShotCollisionCandidate
 {
     ShotId shotId{kInvalidShotId};
-    Rect bounds{};
+    Vec2 start{};
+    Vec2 end{};
+    float collisionExtent{};
     int damage{};
 };
 

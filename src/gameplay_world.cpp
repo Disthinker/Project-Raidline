@@ -16,14 +16,46 @@ namespace
 {
     constexpr float kLegacyShotSpeed{1200.0f};
     constexpr float kLegacyShotExtent{8.0f};
-    constexpr float kMaximumProjectileTravelPerStep{8.0F};
-    constexpr float kMaximumProjectileSubsteps{256.0F};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
     constexpr int kLegacyShotDamage{1};
 
     constexpr int kScorePerEnemy{100};
+
+    float distanceToWorldBoundary(
+        Vec2 origin,
+        Vec2 direction,
+        Vec2 worldSize) noexcept
+    {
+        float distance = std::numeric_limits<float>::infinity();
+        const auto consider = [&](float candidate)
+        {
+            if (std::isfinite(candidate) && candidate > 0.0F)
+            {
+                distance = std::min(distance, candidate);
+            }
+        };
+
+        if (direction.x > 0.0F)
+        {
+            consider((worldSize.x - origin.x) / direction.x);
+        }
+        else if (direction.x < 0.0F)
+        {
+            consider((0.0F - origin.x) / direction.x);
+        }
+        if (direction.y > 0.0F)
+        {
+            consider((worldSize.y - origin.y) / direction.y);
+        }
+        else if (direction.y < 0.0F)
+        {
+            consider((0.0F - origin.y) / direction.y);
+        }
+
+        return distance;
+    }
 
     const MapDefinition &defaultMap()
     {
@@ -708,6 +740,27 @@ void GameplayWorld::update(
             center.x + shot->direction.x * muzzleDistance,
             center.y + shot->direction.y * muzzleDistance};
 
+        const float boundaryDistance = distanceToWorldBoundary(
+            shotOrigin,
+            shot->direction,
+            worldSize_);
+        float requestedDistance = boundaryDistance;
+        if (input.aimWorldPosition.has_value())
+        {
+            const Vec2 aimOffset{
+                input.aimWorldPosition->x - center.x,
+                input.aimWorldPosition->y - center.y};
+            const float pointerDistance = std::sqrt(
+                aimOffset.x * aimOffset.x +
+                aimOffset.y * aimOffset.y);
+            requestedDistance = std::max(
+                kLegacyShotExtent,
+                pointerDistance - muzzleDistance);
+        }
+        const float maximumDistance = std::max(
+            0.001F,
+            std::min(boundaryDistance, requestedDistance));
+
         const ShotResolution resolution = resolveShotCommand(
             ShotCommand{
                 nextShotId_,
@@ -715,100 +768,70 @@ void GameplayWorld::update(
                 shot->direction,
                 kLegacyShotSpeed,
                 kLegacyShotExtent,
-                kLegacyShotDamage});
+                kLegacyShotDamage,
+                maximumDistance});
 
         if (!resolution.accepted())
         {
             std::terminate();
         }
 
-        projectiles_.emplace_back(
-            Vec2{
-                resolution.origin.x -
-                    resolution.collisionExtent / 2.0F,
-                resolution.origin.y -
-                    resolution.collisionExtent / 2.0F},
-            resolution.velocity,
-            resolution.collisionExtent,
-            resolution.collisionExtent,
-            resolution.damage,
-            resolution.shotId);
+        logicalBallistics_.emplace_back(resolution);
         ++nextShotId_;
     }
 
-    std::size_t projectileSubsteps{1U};
-    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    std::vector<ShotCollisionCandidate> collisionCandidates;
+    collisionCandidates.reserve(logicalBallistics_.size());
+    for (LogicalBallisticFlight &flight : logicalBallistics_)
     {
-        const float requestedSubsteps = std::ceil(
-            kLegacyShotSpeed * deltaTime /
-            kMaximumProjectileTravelPerStep);
-        projectileSubsteps = static_cast<std::size_t>(
-            std::clamp(
-                requestedSubsteps,
-                1.0F,
-                kMaximumProjectileSubsteps));
+        const LogicalBallisticAdvance advance = flight.advance(deltaTime);
+        collisionCandidates.push_back(
+            ShotCollisionCandidate{
+                flight.shotId(),
+                advance.start,
+                advance.end,
+                flight.collisionExtent(),
+                flight.damage()});
     }
 
-    const float projectileStepTime =
-        deltaTime /
-        static_cast<float>(projectileSubsteps);
-    HitResolutionResult hitResult{};
+    HitResolutionResult hitResult = resolveShotEnemyHits(
+        collisionCandidates,
+        enemies_);
 
-    for (
-        std::size_t step{0U};
-        step < projectileSubsteps && !projectiles_.empty();
-        ++step)
+    std::erase_if(
+        logicalBallistics_,
+        [&](const LogicalBallisticFlight &flight)
+        {
+            return std::find(
+                       hitResult.consumedShotIds.begin(),
+                       hitResult.consumedShotIds.end(),
+                       flight.shotId()) !=
+                   hitResult.consumedShotIds.end();
+        });
+
+    for (const LogicalBallisticFlight &flight : logicalBallistics_)
     {
-        for (Projectile &projectile : projectiles_)
+        if (!flight.reachedImpact())
         {
-            projectile.update(projectileStepTime);
+            continue;
         }
-
-        std::vector<ShotCollisionCandidate> collisionCandidates;
-        collisionCandidates.reserve(projectiles_.size());
-        for (const Projectile &projectile : projectiles_)
-        {
-            collisionCandidates.push_back(
-                ShotCollisionCandidate{
-                    projectile.shotId(),
-                    projectile.bounds(),
-                    projectile.damage()});
-        }
-
-        HitResolutionResult stepResult =
-            resolveShotEnemyHits(
-                collisionCandidates,
-                enemies_);
-        hitResult.hits.insert(
-            hitResult.hits.end(),
-            stepResult.hits.begin(),
-            stepResult.hits.end());
-        hitResult.enemiesKilled +=
-            stepResult.enemiesKilled;
-
-        std::erase_if(
-            projectiles_,
-            [&](const Projectile &projectile)
-            {
-                return std::find(
-                           stepResult.consumedShotIds.begin(),
-                           stepResult.consumedShotIds.end(),
-                           projectile.shotId()) !=
-                       stepResult.consumedShotIds.end();
-            });
-
-        projectiles_.erase(
-            std::remove_if(
-                projectiles_.begin(),
-                projectiles_.end(),
-                [this](const Projectile &projectile)
-                {
-                    return projectile.isOutside(
-                        worldWidth(),
-                        worldHeight());
-                }),
-            projectiles_.end());
+        hitResult.hits.push_back(
+            HitResult{
+                flight.shotId(),
+                HitTargetKind::World,
+                flight.impactPosition(),
+                0,
+                false,
+                HitRegion::Torso,
+                HitSemantic::Normal});
     }
+
+    std::erase_if(
+        logicalBallistics_,
+        [](const LogicalBallisticFlight &flight)
+        {
+            return flight.reachedImpact();
+        });
 
     // 每次有效命中都生成粒子，
     // 与本次命中是否致命无关。
@@ -839,39 +862,28 @@ GameplayWorld::player() const
     return player_;
 }
 
-const std::vector<Projectile> &
-GameplayWorld::projectiles() const
+const std::vector<LogicalBallisticFlight> &
+GameplayWorld::logicalBallistics() const
 {
-    return projectiles_;
+    return logicalBallistics_;
 }
 
 std::vector<ShotPresentationSnapshot>
 GameplayWorld::shotPresentationSnapshots() const
 {
     std::vector<ShotPresentationSnapshot> snapshots;
-    snapshots.reserve(projectiles_.size());
+    snapshots.reserve(logicalBallistics_.size());
 
-    for (const Projectile &projectile : projectiles_)
+    for (const LogicalBallisticFlight &flight : logicalBallistics_)
     {
-        const Vec2 velocity = projectile.velocity();
-        const float speed = std::sqrt(
-            velocity.x * velocity.x +
-            velocity.y * velocity.y);
-        const Vec2 direction =
-            std::isfinite(speed) && speed > 0.0F
-                ? Vec2{
-                      velocity.x / speed,
-                      velocity.y / speed}
-                : Vec2{};
         snapshots.push_back(
             ShotPresentationSnapshot{
-                projectile.shotId(),
-                Vec2{
-                    projectile.position().x +
-                        projectile.width() / 2.0F,
-                    projectile.position().y +
-                        projectile.height() / 2.0F},
-                direction});
+                flight.shotId(),
+                flight.origin(),
+                flight.currentPosition(),
+                flight.direction(),
+                flight.impactPosition(),
+                flight.distanceTravelled()});
     }
 
     return snapshots;

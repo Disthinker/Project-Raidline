@@ -14,7 +14,7 @@
 #include "loot_table.h"
 #include "particle_system.h"
 #include "player.h"
-#include "projectile.h"
+#include "logical_ballistics.h"
 #include "raid_session.h"
 #include "shot_resolution.h"
 #include "storage_cabinet.h"
@@ -111,13 +111,13 @@ public:
     const Player &player() const;
 
     [[nodiscard]]
-    // Test-only visibility into the temporary V0 flight adapter. App and
-    // domain consumers must use shot projections/results instead.
-    const std::vector<Projectile> &
-    projectiles() const;
+    // Test-only visibility into non-entity logical flight records. App and
+    // domain consumers use shot projections/results instead.
+    const std::vector<LogicalBallisticFlight> &
+    logicalBallistics() const;
 
-    // App consumes this read-only projection instead of the temporary V0
-    // Projectile adapter. It has no collision or damage authority.
+    // App consumes this read-only projection. It has no collision or damage
+    // authority and only describes the already-travelled presentation point.
     [[nodiscard]]
     std::vector<ShotPresentationSnapshot>
     shotPresentationSnapshots() const;
@@ -250,7 +250,7 @@ private:
 
     Player player_;
 
-    std::vector<Projectile> projectiles_;
+    std::vector<LogicalBallisticFlight> logicalBallistics_;
     ShotId nextShotId_{1};
     std::vector<Enemy> enemies_;
     EnemySquadCoordinator enemySquadCoordinator_;

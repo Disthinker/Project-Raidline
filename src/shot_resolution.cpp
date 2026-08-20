@@ -77,6 +77,14 @@ ShotResolution resolveShotCommand(
         return result;
     }
 
+    if (!std::isfinite(command.maximumDistance) ||
+        command.maximumDistance <= 0.0F)
+    {
+        result.status = ShotResolutionStatus::
+            RejectedInvalidMaximumDistance;
+        return result;
+    }
+
     const float inverseDirectionLength =
         1.0F / std::sqrt(directionLengthSquared);
     result.status = ShotResolutionStatus::Accepted;
@@ -89,6 +97,18 @@ ShotResolution resolveShotCommand(
         result.direction.y * command.speed};
     result.collisionExtent = command.collisionExtent;
     result.damage = command.damage;
+    result.maximumDistance = command.maximumDistance;
+    result.impactPosition = Vec2{
+        result.origin.x +
+            result.direction.x * result.maximumDistance,
+        result.origin.y +
+            result.direction.y * result.maximumDistance};
+    if (!isFinite(result.impactPosition))
+    {
+        result.status = ShotResolutionStatus::
+            RejectedInvalidMaximumDistance;
+        return result;
+    }
     return result;
 }
 
@@ -111,6 +131,8 @@ const char *shotResolutionStatusName(
         return "RejectedInvalidCollisionExtent";
     case ShotResolutionStatus::RejectedInvalidDamage:
         return "RejectedInvalidDamage";
+    case ShotResolutionStatus::RejectedInvalidMaximumDistance:
+        return "RejectedInvalidMaximumDistance";
     }
 
     return "Unknown";

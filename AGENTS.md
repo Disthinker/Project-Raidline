@@ -37,7 +37,7 @@ When sources conflict, record the conflict and follow the higher source. Do not 
 - Query before command. A rejected command leaves every participant unchanged. Multi-owner changes commit atomically.
 - Do not retain references, pointers, or iterators into `std::vector` across erase, insertion, reallocation, move, or transaction commit.
 - UI consumes domain results. Ordinary hit, headshot, weak point, armor, action, economy, deploy, and settlement facts must never be guessed from animations, colors, collision labels, or display names.
-- Core Extraction Alpha establishes `ShotCommand -> ShotResolution -> HitResult`. The current `Projectile` path is a temporary adapter only; weapon, damage, persistence, and App projections may not require that entity type.
+- `ShotCommand -> ShotResolution -> HitResult` 是稳定射击边界。生产路径使用非场景实体的短生命值逻辑飞行记录；不得重新让武器、伤害、持久化或 App 投影依赖可渲染/可碰撞 Projectile 类型。
 - Stable IDs are monotonic within their identity domain. Save formats are versioned, migrations are explicit, and Raid deploy/settlement uses a unique idempotency key.
 - Do not introduce an ECS, service locator, universal event bus, or framework without a current consumer and a measured need.
 - The target modular monolith uses `raidline_domain`, `raidline_simulation`, `raidline_services`, and `raidline_sdl_client`; introduce each target only through the accepted architecture migration sequence and keep domain/simulation SDL-free.
