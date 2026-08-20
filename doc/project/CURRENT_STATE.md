@@ -4,20 +4,21 @@
 
 ## Git 与交付基线
 
-- `origin/main@733b597` 已包含完整 Core Extraction Alpha 与 Survival Loadout 的基础防具/命中部位；PR #61 的精确 head CI 与用户正常游玩验收均已通过。
-- 当前开发分支：`codex/survival-loadout-bleeding-field-medical`，从干净的 `origin/main@733b597` 创建。
-- 当前活动计划：`doc/exec-plans/active/survival-loadout-bleeding-field-medical.md`。
+- `origin/main@ea918ab` 已包含完整 Core Extraction Alpha、基础防具/命中部位以及流血、疼痛与战地医疗；PR #62 的精确 head CI 与用户正常游玩验收均已通过。
+- 当前开发分支：`codex/survival-loadout-durability-malfunction-repair`，从干净的 `origin/main@ea918ab` 创建；交付使用 Draft PR #63。
+- 当前活动计划：`doc/exec-plans/active/survival-loadout-weapon-condition-maintenance.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 与首个 Survival Loadout 切片已接受。当前里程碑进入 **Survival Loadout：流血、疼痛与战地医疗**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha 与前两个 Survival Loadout 切片已接受。当前里程碑进入 **Survival Loadout：武器耐久、故障与维护**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
 3. **Alpha Hardening**：PR #60 已以 merge commit `50849d5` 进入 main；本地 645/645、精确 head CI 与用户最终正常游玩验收通过。
 4. **基础防具与命中部位**：PR #61 已由用户正常游玩验收，并以 merge commit `733b597` 进入 main。
-5. **流血、疼痛与战地医疗**：医疗领域、四类医疗内容、schema v4、Raid 动作、Base 治疗、医疗轮盘和初步敌人听觉已接通；正在完成全量回归与 PR 证据。
+5. **流血、疼痛与战地医疗**：PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main。
+6. **武器耐久、故障与维护**：whole-weapon 状态、Stovepipe、鼠标清障、Base/Raid 维护、schema v5 与库存拖放已经接通；正在冻结交付候选。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -47,9 +48,20 @@ Core Extraction Alpha 与首个 Survival Loadout 切片已接受。当前里程�
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
-- 当前医疗切片 focused 已通过：伤势概率、流血推进/1 HP 下限、四类医疗适用性、连续 Medkit、中断输入门控、叫声警觉、schema v4 往返及 v1～v3 迁移。
+- PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- 当前医疗切片 Windows Debug 全目标构建和全量 CTest 680/680 已通过；尚待 exact-head CI。开发代理未启动游戏。
+- 当前武器状态切片 Windows Debug 全目标构建与全量 CTest 697/697 已通过；新增 focused 覆盖射击磨损、可靠性分级、Stovepipe、清障、维护原子性、schema v5 与旧档迁移。Draft PR #63 初始候选的 exact-head Windows/Ubuntu CI 已通过；耐久显示与动作慢走反馈修订正在重新冻结候选。开发代理未启动游戏。
+
+## Survival Loadout 武器状态切片当前实现
+
+- 基础步枪以 0.01 精度保存 100.00 耐久；只有成功击发磨损 0.10。61～100 无随机故障，31～60、11～30、1～10 分别使用 0.5%、3%、12% 基础故障率；型号可靠性乘数和故障权重来自版本化内容定义。
+- 本切片只启用 Stovepipe：故障发生在成功击发后，子弹与耐久已经消耗，但不会自动送入下一发；故障时射击被领域拒绝且不改变 Profile。0 耐久武器不能消耗枪膛弹药。
+- 故障类型不直接显示；HUD 只报告通用 `MALFUNCTION`。玩家保持瞄准并在一秒内完成四次、每段至少 36 逻辑像素且夹角至少 120° 的鼠标反向扫动即可清障。射击、换弹、冲刺、库存和受控状态会重置手势，普通受伤不会。
+- 新增 25.00 容量的基础武器维护包。将维护包拖到武器：Base 即时恢复当前耐久且不损失最大耐久；Raid 启动 8 秒可中断维护，完成时按实际修复量损失 10% 当前最大耐久，最低不低于出厂上限的 20%。维护期间可以基础速度的 45% 缓慢移动；受伤、战斗、冲刺、库存或受控仍会中断，零进度、零消耗。
+- 武器未装备时由物品卡片显示耐久；装备到主武器栏位后，禁止内层物品卡片重复绘制，只保留栏位的单行精确耐久。
+- Medkit、Bandage、Tourniquet 和 Painkiller 在 Raid 内使用时均允许以基础速度的 45% 缓慢移动；预览与会话仍消费同一版本化医疗定义。
+- schema v5 保存武器当前/最大耐久与故障；schema v1～v4 为旧武器补全满耐久、无故障默认值。拒绝命令继续保证指纹、revision、货币和稳定 ID 高水位不变。
+- 维护包使用代码 fallback 表现；未生成、发布或接入正式资源，未修改美术 manifest。
 
 ## Survival Loadout 医疗切片当前实现
 
@@ -83,7 +95,9 @@ Core Extraction Alpha 与首个 Survival Loadout 切片已接受。当前里程�
 
 ## 尚未完成
 
-- 流血、疼痛与战地医疗：exact-head Windows/Ubuntu CI、用户正常游玩验收与 PR 接受。
+- 武器耐久、故障与维护：反馈修订的 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
+- 护甲维修、维修 NPC、组件级耐久和改枪台后续独立切片，不在当前武器闭环扩张。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。

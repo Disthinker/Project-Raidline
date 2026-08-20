@@ -104,10 +104,24 @@ struct AssetRecord
     std::optional<std::string> reliefBatchId;
     std::vector<MagazineRoundRecord> magazineRounds;
     std::optional<MagazineRoundRecord> chamberedRound;
+    WeaponMalfunctionType weaponMalfunction{WeaponMalfunctionType::None};
     AssetLocation location{StoredAssetLocation{
         ProfileContainerId::stash(),
         GridPosition{}}};
 };
+
+enum class WeaponReliabilityTier
+{
+    Reliable,
+    Worn,
+    HighRisk,
+    Critical,
+    Broken
+};
+
+[[nodiscard]] WeaponReliabilityTier weaponReliabilityTier(
+    const AssetRecord &weapon,
+    const ItemDefinition &definition) noexcept;
 
 class AssetRegistry
 {

@@ -263,6 +263,10 @@ namespace
         {
             return ItemCategory::ProtectiveGear;
         }
+        if (value == "maintenance")
+        {
+            return ItemCategory::Maintenance;
+        }
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -367,6 +371,67 @@ namespace
             requiredPositiveUint(*found, "action_duration_ms"),
             requiredPositiveUint(*found, "effect_magnitude"),
             requiredBool(*found, "slow_movement")};
+    }
+
+    std::optional<WeaponConditionDefinition> parseWeaponCondition(
+        const Json &item)
+    {
+        const auto found = item.find("weapon_condition");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("weapon_condition must be an object");
+        }
+        WeaponConditionDefinition result;
+        result.maximumDurabilityCenti = requiredPositiveUint(
+            *found, "maximum_durability_centi");
+        result.wearPerSuccessfulShotCenti = requiredPositiveUint(
+            *found, "wear_per_successful_shot_centi");
+        result.reliabilityMultiplierBasisPoints = requiredPositiveUint(
+            *found, "reliability_multiplier_basis_points");
+        for (const Json &entry : requiredArray(*found, "malfunctions"))
+        {
+            if (!entry.is_object())
+            {
+                fail("weapon malfunction entry must be an object");
+            }
+            const std::string typeName = requiredString(entry, "type");
+            WeaponMalfunctionType type{};
+            if (typeName == "stovepipe")
+            {
+                type = WeaponMalfunctionType::Stovepipe;
+            }
+            else
+            {
+                fail("weapon malfunction type is not supported: " + typeName);
+            }
+            result.malfunctionWeights.push_back(WeaponMalfunctionWeight{
+                type,
+                requiredPositiveUint(entry, "weight")});
+        }
+        return result;
+    }
+
+    std::optional<WeaponMaintenanceDefinition> parseWeaponMaintenance(
+        const Json &item)
+    {
+        const auto found = item.find("weapon_maintenance");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("weapon_maintenance must be an object");
+        }
+        return WeaponMaintenanceDefinition{
+            requiredPositiveUint(*found, "capacity_centi"),
+            requiredPositiveUint(*found, "raid_action_duration_ms"),
+            requiredPositiveUint(
+                *found, "raid_maximum_loss_basis_points")};
     }
 
     std::vector<ContainerCompartmentDefinition>
@@ -581,6 +646,8 @@ ContentRegistry ContentRegistry::fromJson(
             definition.armorProtection =
                 parseArmorProtection(itemValue);
             definition.medicalUse = parseMedicalUse(itemValue);
+            definition.weaponCondition = parseWeaponCondition(itemValue);
+            definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
 
             if (const auto ammunition =
                     optionalString(itemValue, "compatible_ammunition"))
@@ -652,6 +719,50 @@ ContentRegistry ContentRegistry::fromJson(
                      definition.maximumCharges > 0)
             {
                 fail("charged medical item requires medical capability");
+            }
+            if (definition.weaponCondition.has_value())
+            {
+                const WeaponConditionDefinition &condition =
+                    *definition.weaponCondition;
+                std::set<WeaponMalfunctionType> types;
+                std::uint64_t totalWeight{};
+                for (const WeaponMalfunctionWeight &malfunction :
+                     condition.malfunctionWeights)
+                {
+                    if (malfunction.type == WeaponMalfunctionType::None ||
+                        !types.insert(malfunction.type).second)
+                    {
+                        fail("weapon malfunction type is invalid or duplicated");
+                    }
+                    totalWeight += malfunction.weight;
+                }
+                if (definition.category != ItemCategory::Weapon ||
+                    !definition.compatibleMagazineDefinitionId.has_value() ||
+                    condition.maximumDurabilityCenti != 10000 ||
+                    condition.wearPerSuccessfulShotCenti >
+                        condition.maximumDurabilityCenti ||
+                    condition.reliabilityMultiplierBasisPoints < 7500 ||
+                    condition.reliabilityMultiplierBasisPoints > 15000 ||
+                    totalWeight == 0 ||
+                    totalWeight > std::numeric_limits<std::uint32_t>::max())
+                {
+                    fail("weapon condition capability is invalid");
+                }
+            }
+            if (definition.weaponMaintenance.has_value())
+            {
+                const WeaponMaintenanceDefinition &maintenance =
+                    *definition.weaponMaintenance;
+                if (definition.category != ItemCategory::Maintenance ||
+                    definition.maximumCharges != maintenance.capacityCenti ||
+                    maintenance.raidMaximumLossBasisPoints >= 10000)
+                {
+                    fail("weapon maintenance capability is invalid");
+                }
+            }
+            else if (definition.category == ItemCategory::Maintenance)
+            {
+                fail("maintenance item requires a maintenance capability");
             }
 
             const std::size_t index = registry.items_.size();

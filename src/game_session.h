@@ -17,6 +17,8 @@
 #include "raid_settlement.h"
 #include "save_repository.h"
 #include "stash.h"
+#include "maintenance_domain.h"
+#include "weapon_clear_gesture.h"
 
 enum class BaseFacilityKind;
 
@@ -98,6 +100,10 @@ public:
         AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
     [[nodiscard]] bool startAlphaMedical(AssetInstanceId medicalAssetId);
+    [[nodiscard]] bool startAlphaWeaponMaintenance(
+        AssetInstanceId kitAssetId,
+        AssetInstanceId weaponAssetId);
+    [[nodiscard]] bool observeAlphaWeaponClearMotion(Vec2 delta);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
@@ -120,6 +126,10 @@ public:
         std::string transactionId);
     [[nodiscard]] MedicalUseReceipt executeBaseMedical(
         AssetInstanceId medicalAssetId,
+        std::string transactionId);
+    [[nodiscard]] WeaponMaintenanceReceipt executeBaseWeaponMaintenance(
+        AssetInstanceId kitAssetId,
+        AssetInstanceId weaponAssetId,
         std::string transactionId);
 
     [[nodiscard]] const RaidActionState &raidActionState() const noexcept;
@@ -148,6 +158,9 @@ private:
     std::uint64_t raidCommandSequence_{};
     std::uint64_t medicalRandomSequence_{};
     std::uint64_t woundRandomSequence_{};
+    std::uint64_t weaponFaultSequence_{};
+    float raidElapsedSeconds_{};
+    WeaponClearGesture weaponClearGesture_;
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};

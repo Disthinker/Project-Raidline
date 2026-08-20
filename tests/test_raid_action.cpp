@@ -250,3 +250,20 @@ TEST(RaidActionTest, MagazineUnloadPrefersBackpackAndRejectsStashAsset)
         magazines[0]).has_value());
     EXPECT_EQ(profileStateFingerprint(profile), beforeCapacityQuery);
 }
+
+TEST(RaidActionTest, WeaponMaintenanceUsesEightSecondAtomicTimeline)
+{
+    RaidActionState state;
+    ASSERT_TRUE(state.start(WeaponMaintenanceRaidAction{
+        11, 12, 0.0F, 8.0F}));
+    EXPECT_EQ(state.update(7.5F, false), RaidActionAdvance::Running);
+    EXPECT_NEAR(state.progress(), 0.9375F, 0.0001F);
+    EXPECT_EQ(state.update(0.5F, false), RaidActionAdvance::Completed);
+    const std::optional<RaidAction> completed = state.takeCompleted();
+    ASSERT_TRUE(completed.has_value());
+    const auto *maintenance = std::get_if<WeaponMaintenanceRaidAction>(
+        &*completed);
+    ASSERT_NE(maintenance, nullptr);
+    EXPECT_EQ(maintenance->kitAssetId, 11U);
+    EXPECT_EQ(maintenance->weaponAssetId, 12U);
+}

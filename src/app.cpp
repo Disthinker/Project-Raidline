@@ -333,6 +333,15 @@ namespace
                 return WeaponInstallTarget{*weapon};
             }
         }
+        if (draggedCategory == ItemCategory::Maintenance &&
+            contains(equipmentSlotRect(EquipmentSlotKind::PrimaryWeapon), position))
+        {
+            if (const auto weapon = equippedAsset(
+                    profile, EquipmentSlotKind::PrimaryWeapon))
+            {
+                return WeaponMaintenanceTarget{*weapon};
+            }
+        }
         if (const auto hit = profileAssetHitAt(profile, position, includeStash);
             dragged != nullptr && hit.has_value())
         {
@@ -347,6 +356,11 @@ namespace
                 category == ItemCategory::Weapon)
             {
                 return WeaponInstallTarget{hit->asset->instanceId};
+            }
+            if (draggedCategory == ItemCategory::Maintenance &&
+                category == ItemCategory::Weapon)
+            {
+                return WeaponMaintenanceTarget{hit->asset->instanceId};
             }
         }
 
@@ -449,9 +463,9 @@ namespace
         return std::nullopt;
     }
 
-    const std::array<ItemDefinitionId, 11> &fixedSupplyIds()
+    const std::array<ItemDefinitionId, 12> &fixedSupplyIds()
     {
-        static const std::array<ItemDefinitionId, 11> ids{
+        static const std::array<ItemDefinitionId, 12> ids{
             alpha_content::rifle,
             alpha_content::magazine,
             alpha_content::ammunition,
@@ -462,7 +476,8 @@ namespace
             alpha_content::medkit,
             alpha_content::bandage,
             alpha_content::tourniquet,
-            alpha_content::painkiller};
+            alpha_content::painkiller,
+            alpha_content::weaponMaintenanceKit};
         return ids;
     }
 
@@ -1312,9 +1327,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         for (std::size_t index = 0; index < supply.size(); ++index)
         {
             const SDL_FRect row{
-                100.0F,
-                164.0F + static_cast<float>(index) * 46.0F,
-                430.0F,
+                76.0F + static_cast<float>(index / 6U) * 232.0F,
+                164.0F + static_cast<float>(index % 6U) * 46.0F,
+                220.0F,
                 40.0F};
             if (!contains(row, click.position))
             {
@@ -2074,7 +2089,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     ? "MAGAZINE LOADED"
                     : receipt.message;
             }
-            else
+            else if constexpr (std::is_same_v<Target, WeaponInstallTarget>)
             {
                 if (inRaid)
                 {
@@ -2099,6 +2114,35 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                         nextProfileTransactionId("base-install"));
                 uiMessage_ = receipt.succeeded
                     ? "MAGAZINE INSTALLED"
+                    : receipt.message;
+            }
+            else
+            {
+                if (inRaid)
+                {
+                    if (gameSession_.startAlphaWeaponMaintenance(
+                            request.source.instanceId,
+                            target.weaponAssetId))
+                    {
+                        uiMessage_ = "WEAPON MAINTENANCE STARTED (8 SEC)";
+                        closeInventory();
+                    }
+                    else
+                    {
+                        uiMessage_ = "WEAPON CANNOT BE MAINTAINED";
+                    }
+                    return;
+                }
+                const WeaponMaintenanceReceipt receipt =
+                    gameSession_.executeBaseWeaponMaintenance(
+                        request.source.instanceId,
+                        target.weaponAssetId,
+                        nextProfileTransactionId("base-weapon-maintenance"));
+                uiMessage_ = receipt.succeeded
+                    ? fmt::format(
+                          "WEAPON RESTORED {:.2f}",
+                          static_cast<float>(
+                              receipt.restoredDurabilityCenti) / 100.0F)
                     : receipt.message;
             }
         },
@@ -2678,9 +2722,20 @@ void App::processEvents()
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
+            const std::optional<Vec2> previousPointer =
+                pointerWorldPosition_;
             pointerWorldPosition_ = Vec2{
                 event.motion.x,
                 event.motion.y};
+            if (gameFlow_.state() == GameFlowState::Raid &&
+                !inventoryOverlayState_.isOpen() &&
+                previousPointer.has_value() &&
+                gameSession_.observeAlphaWeaponClearMotion(Vec2{
+                    pointerWorldPosition_->x - previousPointer->x,
+                    pointerWorldPosition_->y - previousPointer->y}))
+            {
+                uiMessage_ = "WEAPON MALFUNCTION CLEARED";
+            }
         }
         else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                  event.type == SDL_EVENT_MOUSE_BUTTON_UP)
@@ -3429,11 +3484,16 @@ void App::renderDebugText()
                 gameSession_.profile(),
                 *weapon);
             ammunitionText = fmt::format(
-                "Chamber {} | Magazine {}",
+                "Chamber {} | Magazine {} | Condition {:.2f}/{:.2f}{}",
                 record->chamberedRound.has_value() ? 1 : 0,
                 magazine.has_value()
                     ? magazineRoundCount(gameSession_.profile(), *magazine)
-                    : 0U);
+                    : 0U,
+                static_cast<float>(record->currentDurability) / 100.0F,
+                static_cast<float>(record->currentMaximumDurability) / 100.0F,
+                record->weaponMalfunction != WeaponMalfunctionType::None
+                    ? " | MALFUNCTION - SWEEP MOUSE"
+                    : "");
         }
         SDL_RenderDebugText(
             renderer_, 980.0F, 100.0F, ammunitionText.c_str());
@@ -3468,6 +3528,9 @@ void App::renderDebugText()
                     if constexpr (
                         std::is_same_v<Action, UnloadMagazineRaidAction>)
                         return "UNLOADING MAGAZINE";
+                    if constexpr (
+                        std::is_same_v<Action, WeaponMaintenanceRaidAction>)
+                        return "MAINTAINING WEAPON";
                     return "EXTRACTING";
                 },
                 *gameSession_.raidActionState().active());
@@ -5889,7 +5952,8 @@ void App::renderProfileAsset(
     const AssetRecord &asset,
     const SDL_FRect &bounds,
     float cellSize,
-    Uint8 alpha)
+    Uint8 alpha,
+    bool showWeaponCondition)
 {
     const ItemDefinition &definition =
         publishedContentRegistry().item(asset.definitionId);
@@ -5940,6 +6004,9 @@ void App::renderProfileAsset(
         case ItemCategory::ProtectiveGear:
             SDL_SetRenderDrawColor(renderer_, 70, 92, 112, alpha);
             break;
+        case ItemCategory::Maintenance:
+            SDL_SetRenderDrawColor(renderer_, 72, 112, 106, alpha);
+            break;
         default:
             SDL_SetRenderDrawColor(renderer_, 92, 80, 112, alpha);
             break;
@@ -5959,6 +6026,25 @@ void App::renderProfileAsset(
     SDL_SetRenderDrawColor(renderer_, 214, 220, 214, alpha);
     SDL_RenderRect(renderer_, &bounds);
     renderItemQuantityBadge(renderer_, bounds, asset.quantity);
+    if (showWeaponCondition && definition.weaponCondition.has_value())
+    {
+        const std::string condition = fmt::format(
+            "D {:.2f}/{:.2f}",
+            static_cast<float>(asset.currentDurability) / 100.0F,
+            static_cast<float>(asset.currentMaximumDurability) / 100.0F);
+        SDL_RenderDebugText(
+            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
+            condition.c_str());
+    }
+    else if (definition.weaponMaintenance.has_value())
+    {
+        const std::string capacity = fmt::format(
+            "KIT {:.2f}",
+            static_cast<float>(asset.remainingCharges) / 100.0F);
+        SDL_RenderDebugText(
+            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
+            capacity.c_str());
+    }
 }
 
 void App::renderProfileGrid(
@@ -6135,7 +6221,7 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                         : ProfileDropFeedbackKind::Invalid;
                     feedback.label = allowed ? "LOAD" : "BLOCKED";
                 }
-                else
+                else if constexpr (std::is_same_v<Target, WeaponInstallTarget>)
                 {
                     const bool allowed = queryWeaponAmmo(
                         profile,
@@ -6147,6 +6233,26 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                         ? ProfileDropFeedbackKind::Special
                         : ProfileDropFeedbackKind::Invalid;
                     feedback.label = allowed ? "INSTALL" : "BLOCKED";
+                }
+                else
+                {
+                    const WeaponMaintenancePlan plan =
+                        queryWeaponMaintenance(
+                            profile,
+                            publishedContentRegistry(),
+                            WeaponMaintenanceCommand{
+                                source->instanceId,
+                                typedTarget.weaponAssetId,
+                                inRaid
+                                    ? MaintenanceAccess::CarriedOnly
+                                    : MaintenanceAccess::AnyOwned,
+                                inRaid
+                                    ? MaintenanceLocation::Raid
+                                    : MaintenanceLocation::Base});
+                    feedback.kind = plan.canCommit
+                        ? ProfileDropFeedbackKind::Special
+                        : ProfileDropFeedbackKind::Invalid;
+                    feedback.label = plan.canCommit ? "REPAIR" : "BLOCKED";
                 }
             },
             *target);
@@ -6194,6 +6300,10 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                     if constexpr (std::is_same_v<Target, MagazineLoadTarget>)
                     {
                         id = typedTarget.magazineAssetId;
+                    }
+                    else if constexpr (std::is_same_v<Target, WeaponInstallTarget>)
+                    {
+                        id = typedTarget.weaponAssetId;
                     }
                     else
                     {
@@ -6378,13 +6488,29 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                 const SDL_FRect itemBounds{
                     bounds.x + 4.0F, bounds.y + 22.0F,
                     bounds.w - 8.0F, bounds.h - 26.0F};
-                renderProfileAsset(*asset, itemBounds, kBasePocketCellSize);
+                renderProfileAsset(
+                    *asset,
+                    itemBounds,
+                    kBasePocketCellSize,
+                    255,
+                    false);
                 if (asset->currentMaximumDurability > 0)
                 {
-                    const std::string durability = fmt::format(
-                        "DUR {}/{}",
-                        asset->currentDurability,
-                        asset->currentMaximumDurability);
+                    const ItemDefinition &definition =
+                        publishedContentRegistry().item(asset->definitionId);
+                    const std::string durability =
+                        definition.weaponCondition.has_value()
+                            ? fmt::format(
+                                  "DUR {:.2f}/{:.2f}",
+                                  static_cast<float>(
+                                      asset->currentDurability) / 100.0F,
+                                  static_cast<float>(
+                                      asset->currentMaximumDurability) /
+                                      100.0F)
+                            : fmt::format(
+                                  "DUR {}/{}",
+                                  asset->currentDurability,
+                                  asset->currentMaximumDurability);
                     SDL_RenderDebugText(
                         renderer_,
                         bounds.x + 7.0F,
@@ -6524,9 +6650,9 @@ void App::renderBaseSupply()
         const ItemDefinition &definition =
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
-            100.0F,
-            164.0F + static_cast<float>(index) * 46.0F,
-            430.0F,
+            76.0F + static_cast<float>(index / 6U) * 232.0F,
+            164.0F + static_cast<float>(index % 6U) * 46.0F,
+            220.0F,
             40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
         SDL_RenderFillRect(renderer_, &row);
@@ -6534,12 +6660,14 @@ void App::renderBaseSupply()
         SDL_RenderRect(renderer_, &row);
         const std::uint32_t quantity =
             supply[index] == alpha_content::ammunition ? 30U : 1U;
+        const std::string supplyName = definition.displayName.substr(
+            0, std::min<std::size_t>(definition.displayName.size(), 15U));
         const std::string label = fmt::format(
             "BUY {} x{} | {}",
-            definition.displayName,
+            supplyName,
             quantity,
             definition.marketBuyPrice * quantity);
-        SDL_RenderDebugText(renderer_, row.x + 10.0F, row.y + 16.0F, label.c_str());
+        SDL_RenderDebugText(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
     }
 
     SDL_RenderDebugText(renderer_, 650.0F, 138.0F, "STASH - SELECT TO RECYCLE");

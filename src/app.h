@@ -219,7 +219,8 @@ private:
         const AssetRecord &asset,
         const SDL_FRect &bounds,
         float cellSize,
-        Uint8 alpha = 255);
+        Uint8 alpha = 255,
+        bool showWeaponCondition = true);
     void renderProfileInventory(bool includeStash, bool inRaid);
     void renderProfileDragFeedback(bool includeStash, bool inRaid);
     void renderProfileContextMenu(bool inRaid);

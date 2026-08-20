@@ -218,6 +218,50 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
 }
 
+TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-maintenance"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId backpack = assets(
+        session.profile(), alpha_content::backpack).front();
+    const AssetInstanceId kit = assets(
+        session.profile(), alpha_content::weaponMaintenanceKit).front();
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            kit,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "maintenance-carry-kit").succeeded);
+    ASSERT_TRUE(session.deployAlpha(90818));
+
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        FireWeaponCommand{rifle},
+        "maintenance-wear-shot").succeeded);
+    EXPECT_EQ(session.profile().assets.find(rifle)->currentDurability, 9990U);
+
+    ASSERT_TRUE(session.startAlphaWeaponMaintenance(kit, rifle));
+    const std::uint64_t beforeMovement =
+        profileStateFingerprint(session.profile());
+    const float positionBefore = session.world().player().position().x;
+    GameplayInput movement{};
+    movement.moveRight = true;
+    session.update(movement, 0.1F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        10.8F,
+        0.001F);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeMovement);
+    EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 2500U);
+
+}
+
 TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
 {
     GameSession session;
@@ -400,7 +444,15 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
     ASSERT_TRUE(session.deployAlpha(93431));
     ASSERT_TRUE(session.startAlphaMedical(medkit));
 
-    session.update(GameplayInput{}, 0.2F);
+    const float positionBefore = session.world().player().position().x;
+    GameplayInput slowMovement{};
+    slowMovement.moveRight = true;
+    session.update(slowMovement, 0.2F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        21.6F,
+        0.001F);
     EXPECT_EQ(session.profile().currentHealth, 41);
     EXPECT_EQ(session.world().player().health(), 41);
     EXPECT_EQ(

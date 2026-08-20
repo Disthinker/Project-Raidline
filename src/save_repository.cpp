@@ -60,6 +60,26 @@ std::optional<ItemOrientation> parseOrientation(std::string_view value)
     return std::nullopt;
 }
 
+std::string malfunctionName(WeaponMalfunctionType malfunction)
+{
+    switch (malfunction)
+    {
+    case WeaponMalfunctionType::None:
+        return "none";
+    case WeaponMalfunctionType::Stovepipe:
+        return "stovepipe";
+    }
+    return "invalid";
+}
+
+std::optional<WeaponMalfunctionType> parseMalfunction(
+    std::string_view value)
+{
+    if (value == "none") return WeaponMalfunctionType::None;
+    if (value == "stovepipe") return WeaponMalfunctionType::Stovepipe;
+    return std::nullopt;
+}
+
 std::string slotName(EquipmentSlotKind slot)
 {
     switch (slot)
@@ -261,6 +281,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 asset.currentMaximumDurability;
             value["current_durability"] = asset.currentDurability;
         }
+        if (schemaVersion >= 5)
+        {
+            value["weapon_malfunction"] =
+                malfunctionName(asset.weaponMalfunction);
+        }
         assets.push_back(std::move(value));
     }
 
@@ -440,7 +465,7 @@ std::string serializeProfileEnvelope(
     std::uint32_t schemaVersion)
 {
     if (schemaVersion != 1 && schemaVersion != 2 &&
-        schemaVersion != 3 && schemaVersion != 4)
+        schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -478,9 +503,12 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion <= 2 &&
              contentVersion == "core-alpha-content-2") ||
             (schemaVersion == 3 &&
-             contentVersion == "survival-loadout-content-1");
+             contentVersion == "survival-loadout-content-1") ||
+            (schemaVersion == 4 &&
+             contentVersion == "survival-loadout-content-2");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
-             schemaVersion != 3 && schemaVersion != 4) ||
+             schemaVersion != 3 && schemaVersion != 4 &&
+             schemaVersion != 5) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -589,6 +617,27 @@ SaveLoadResult deserializeProfileEnvelope(
                         definition.armorProtection->maximumDurability;
                     asset.currentDurability = asset.currentMaximumDurability;
                 }
+            }
+            const ItemDefinition &assetDefinition =
+                content.item(asset.definitionId);
+            if (schemaVersion < 5 &&
+                assetDefinition.weaponCondition.has_value())
+            {
+                asset.currentMaximumDurability =
+                    assetDefinition.weaponCondition->maximumDurabilityCenti;
+                asset.currentDurability = asset.currentMaximumDurability;
+                asset.weaponMalfunction = WeaponMalfunctionType::None;
+            }
+            else if (schemaVersion >= 5)
+            {
+                const auto malfunction = parseMalfunction(
+                    value.at("weapon_malfunction").get<std::string>());
+                if (!malfunction.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "weapon malfunction is invalid"};
+                }
+                asset.weaponMalfunction = *malfunction;
             }
             if (value.contains("relief_batch_id"))
             {

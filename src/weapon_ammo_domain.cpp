@@ -336,6 +336,21 @@ WeaponAmmoReceipt applyFire(
         return failure(DomainErrorCode::IllegalDestination,
                        "asset is not a magazine-fed weapon", candidate.revision);
     }
+    if (definition.weaponCondition.has_value())
+    {
+        if (weapon->weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            return {true, false, DomainErrorCode::None,
+                    "weapon malfunction must be cleared", candidate.revision,
+                    WeaponAmmoResult::BlockedByMalfunction, std::nullopt};
+        }
+        if (weapon->currentDurability == 0)
+        {
+            return {true, false, DomainErrorCode::None,
+                    "weapon is broken", candidate.revision,
+                    WeaponAmmoResult::Broken, std::nullopt};
+        }
+    }
     const auto installed = installedMagazine(candidate, command.weaponAssetId);
     AssetRecord *magazine = installed.has_value()
         ? candidate.assets.findMutable(*installed)
@@ -360,9 +375,105 @@ WeaponAmmoReceipt applyFire(
 
     const ItemDefinitionId fired = weapon->chamberedRound->definitionId;
     weapon->chamberedRound.reset();
-    static_cast<void>(feed());
+
+    bool malfunctioned = false;
+    if (definition.weaponCondition.has_value())
+    {
+        const WeaponConditionDefinition &condition =
+            *definition.weaponCondition;
+        const WeaponReliabilityTier tier = weaponReliabilityTier(
+            *weapon, definition);
+        std::uint32_t baseChance{};
+        switch (tier)
+        {
+        case WeaponReliabilityTier::Reliable:
+            baseChance = 0;
+            break;
+        case WeaponReliabilityTier::Worn:
+            baseChance = 50;
+            break;
+        case WeaponReliabilityTier::HighRisk:
+            baseChance = 300;
+            break;
+        case WeaponReliabilityTier::Critical:
+            baseChance = 1200;
+            break;
+        case WeaponReliabilityTier::Broken:
+            baseChance = 10000;
+            break;
+        }
+        const std::uint32_t chance = static_cast<std::uint32_t>(std::min(
+            std::uint64_t{10000},
+            (static_cast<std::uint64_t>(baseChance) *
+             condition.reliabilityMultiplierBasisPoints) /
+                10000U));
+        if (!condition.malfunctionWeights.empty() &&
+            command.malfunctionRollBasisPoints % 10000U < chance)
+        {
+            std::uint32_t totalWeight{};
+            for (const WeaponMalfunctionWeight &entry :
+                 condition.malfunctionWeights)
+            {
+                totalWeight += entry.weight;
+            }
+            std::uint32_t selected = totalWeight == 0
+                ? 0U
+                : command.malfunctionTypeRoll % totalWeight;
+            for (const WeaponMalfunctionWeight &entry :
+                 condition.malfunctionWeights)
+            {
+                if (selected < entry.weight)
+                {
+                    weapon->weaponMalfunction = entry.type;
+                    malfunctioned = true;
+                    break;
+                }
+                selected -= entry.weight;
+            }
+        }
+        weapon->currentDurability =
+            weapon->currentDurability > condition.wearPerSuccessfulShotCenti
+                ? weapon->currentDurability -
+                    condition.wearPerSuccessfulShotCenti
+                : 0U;
+    }
+    if (!malfunctioned)
+    {
+        static_cast<void>(feed());
+    }
     return {true, false, DomainErrorCode::None, {}, candidate.revision,
-            WeaponAmmoResult::Fired, fired};
+            malfunctioned
+                ? WeaponAmmoResult::FiredAndMalfunctioned
+                : WeaponAmmoResult::Fired,
+            fired};
+}
+
+WeaponAmmoReceipt applyClearMalfunction(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const ClearWeaponMalfunctionCommand &command)
+{
+    AssetRecord *weapon = candidate.assets.findMutable(command.weaponAssetId);
+    if (weapon == nullptr)
+    {
+        return failure(DomainErrorCode::MissingAsset,
+                       "weapon does not exist", candidate.revision);
+    }
+    const ItemDefinition &definition = content.item(weapon->definitionId);
+    if (!definition.weaponCondition.has_value() ||
+        weapon->weaponMalfunction == WeaponMalfunctionType::None)
+    {
+        return failure(DomainErrorCode::InvalidQuantity,
+                       "weapon has no malfunction", candidate.revision);
+    }
+    weapon->weaponMalfunction = WeaponMalfunctionType::None;
+    const auto installed = installedMagazine(candidate, command.weaponAssetId);
+    AssetRecord *magazine = installed.has_value()
+        ? candidate.assets.findMutable(*installed)
+        : nullptr;
+    static_cast<void>(feedChamber(*weapon, magazine));
+    return {true, false, DomainErrorCode::None, {}, candidate.revision,
+            WeaponAmmoResult::MalfunctionCleared, std::nullopt};
 }
 
 WeaponAmmoReceipt apply(
@@ -386,8 +497,10 @@ WeaponAmmoReceipt apply(
                 return applyUninstall(candidate, content, typed);
             else if constexpr (std::is_same_v<Command, ChamberWeaponCommand>)
                 return applyChamber(candidate, content, typed);
-            else
+            else if constexpr (std::is_same_v<Command, FireWeaponCommand>)
                 return applyFire(candidate, content, typed);
+            else
+                return applyClearMalfunction(candidate, content, typed);
         },
         command);
 }
@@ -441,7 +554,9 @@ WeaponAmmoReceipt executeWeaponAmmo(
     {
         return receipt;
     }
-    if (receipt.result == WeaponAmmoResult::Dry)
+    if (receipt.result == WeaponAmmoResult::Dry ||
+        receipt.result == WeaponAmmoResult::BlockedByMalfunction ||
+        receipt.result == WeaponAmmoResult::Broken)
     {
         receipt.revision = profile.revision;
         return receipt;
