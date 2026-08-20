@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "combat_damage_domain.h"
 #include "definition_id.h"
 #include "vec2.h"
 
@@ -31,6 +32,7 @@ enum class ItemCategory
     Ammunition,
     Magazine,
     Container,
+    ProtectiveGear,
     Loot
 };
 
@@ -38,7 +40,21 @@ enum class EquipmentSlotKind
 {
     PrimaryWeapon,
     ChestRig,
-    Backpack
+    Backpack,
+    Helmet,
+    BodyArmor
+};
+
+struct ArmorProtectionDefinition
+{
+    HitRegion coverage{HitRegion::Torso};
+    int protectionRequirement{};
+    std::uint32_t maximumDurability{};
+    std::uint32_t durabilityLossBasisPoints{10000};
+
+    friend bool operator==(
+        const ArmorProtectionDefinition &,
+        const ArmorProtectionDefinition &) = default;
 };
 
 enum class ContainerPocketKind
@@ -118,6 +134,7 @@ struct ItemDefinition
         compatibleAmmunitionDefinitionId;
     std::optional<ItemDefinitionId>
         compatibleMagazineDefinitionId;
+    std::optional<ArmorProtectionDefinition> armorProtection;
 };
 
 constexpr std::size_t itemCount() noexcept

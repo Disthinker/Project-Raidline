@@ -71,6 +71,30 @@ namespace
     constexpr float kBaseStashY{132.0F};
     constexpr float kBaseStashCellSize{28.0F};
     constexpr float kBasePocketCellSize{28.0F};
+    constexpr std::array<EquipmentSlotKind, 5> kProfileEquipmentSlots{
+        EquipmentSlotKind::PrimaryWeapon,
+        EquipmentSlotKind::Helmet,
+        EquipmentSlotKind::BodyArmor,
+        EquipmentSlotKind::ChestRig,
+        EquipmentSlotKind::Backpack};
+
+    const char *equipmentSlotLabel(EquipmentSlotKind slot) noexcept
+    {
+        switch (slot)
+        {
+        case EquipmentSlotKind::PrimaryWeapon:
+            return "PRIMARY";
+        case EquipmentSlotKind::Helmet:
+            return "HELMET";
+        case EquipmentSlotKind::BodyArmor:
+            return "BODY ARMOR";
+        case EquipmentSlotKind::ChestRig:
+            return "CHEST RIG";
+        case EquipmentSlotKind::Backpack:
+            return "BACKPACK";
+        }
+        return "UNKNOWN";
+    }
 
     // Legacy click-page geometry remains only for the supply/deployment
     // adapters while Profile inventory uses drag-and-drop.
@@ -89,10 +113,14 @@ namespace
         {
         case EquipmentSlotKind::PrimaryWeapon:
             return SDL_FRect{214.0F, 96.0F, 366.0F, 82.0F};
+        case EquipmentSlotKind::Helmet:
+            return SDL_FRect{214.0F, 202.0F, 172.0F, 68.0F};
+        case EquipmentSlotKind::BodyArmor:
+            return SDL_FRect{408.0F, 202.0F, 172.0F, 68.0F};
         case EquipmentSlotKind::ChestRig:
-            return SDL_FRect{214.0F, 202.0F, 172.0F, 72.0F};
+            return SDL_FRect{214.0F, 286.0F, 172.0F, 68.0F};
         case EquipmentSlotKind::Backpack:
-            return SDL_FRect{408.0F, 202.0F, 172.0F, 72.0F};
+            return SDL_FRect{408.0F, 286.0F, 172.0F, 68.0F};
         }
         return SDL_FRect{};
     }
@@ -138,16 +166,16 @@ namespace
         {
             result.push_back({
                 ProfileContainerId::compartment(*chest, 0),
-                214.0F, 330.0F, kBasePocketCellSize, "MAG 1"});
+                214.0F, 390.0F, kBasePocketCellSize, "MAG 1"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 1),
-                258.0F, 330.0F, kBasePocketCellSize, "MAG 2"});
+                258.0F, 390.0F, kBasePocketCellSize, "MAG 2"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 2),
-                310.0F, 330.0F, kBasePocketCellSize, "UTIL 1"});
+                310.0F, 390.0F, kBasePocketCellSize, "UTIL 1"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 3),
-                354.0F, 330.0F, kBasePocketCellSize, "UTIL 2"});
+                354.0F, 390.0F, kBasePocketCellSize, "UTIL 2"});
         }
         if (const auto backpack = equippedAsset(
                 profile,
@@ -155,7 +183,7 @@ namespace
         {
             result.push_back({
                 ProfileContainerId::compartment(*backpack, 0),
-                214.0F, 456.0F, kBasePocketCellSize, "BACKPACK"});
+                214.0F, 490.0F, kBasePocketCellSize, "BACKPACK"});
         }
         return result;
     }
@@ -186,10 +214,7 @@ namespace
             }
         }
 
-        for (EquipmentSlotKind slot : {
-                 EquipmentSlotKind::PrimaryWeapon,
-                 EquipmentSlotKind::ChestRig,
-                 EquipmentSlotKind::Backpack})
+        for (EquipmentSlotKind slot : kProfileEquipmentSlots)
         {
             const SDL_FRect bounds = equipmentSlotRect(slot);
             if (contains(bounds, position))
@@ -325,10 +350,7 @@ namespace
             }
         }
 
-        for (EquipmentSlotKind slot : {
-                 EquipmentSlotKind::PrimaryWeapon,
-                 EquipmentSlotKind::ChestRig,
-                 EquipmentSlotKind::Backpack})
+        for (EquipmentSlotKind slot : kProfileEquipmentSlots)
         {
             if (contains(equipmentSlotRect(slot), position))
             {
@@ -409,12 +431,14 @@ namespace
         return std::nullopt;
     }
 
-    const std::array<ItemDefinitionId, 6> &fixedSupplyIds()
+    const std::array<ItemDefinitionId, 8> &fixedSupplyIds()
     {
-        static const std::array<ItemDefinitionId, 6> ids{
+        static const std::array<ItemDefinitionId, 8> ids{
             alpha_content::rifle,
             alpha_content::magazine,
             alpha_content::ammunition,
+            alpha_content::helmet,
+            alpha_content::bodyArmor,
             alpha_content::chestRig,
             alpha_content::backpack,
             alpha_content::medkit};
@@ -1268,9 +1292,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         {
             const SDL_FRect row{
                 100.0F,
-                164.0F + static_cast<float>(index) * 54.0F,
+                164.0F + static_cast<float>(index) * 46.0F,
                 430.0F,
-                44.0F};
+                40.0F};
             if (!contains(row, click.position))
             {
                 continue;
@@ -1345,10 +1369,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
     }
 
     const ProfileState &profile = gameSession_.profile();
-    for (EquipmentSlotKind slot : {
-             EquipmentSlotKind::PrimaryWeapon,
-             EquipmentSlotKind::ChestRig,
-             EquipmentSlotKind::Backpack})
+    for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         if (!contains(equipmentSlotRect(slot), click.position))
         {
@@ -2965,6 +2986,28 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+
+    specialHitFeedbackRemaining_ = std::max(
+        0.0F,
+        specialHitFeedbackRemaining_ - std::max(0.0F, deltaTime));
+    playerDamageFeedbackRemaining_ = std::max(
+        0.0F,
+        playerDamageFeedbackRemaining_ - std::max(0.0F, deltaTime));
+    for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
+    {
+        if (hit.semantic == HitSemantic::Normal)
+        {
+            continue;
+        }
+        specialHitSemantic_ = hit.semantic;
+        specialHitFeedbackRemaining_ = 0.18F;
+    }
+    if (gameSession_.lastIncomingDamage().has_value())
+    {
+        lastIncomingDamageReducedByArmor_ =
+            gameSession_.lastIncomingDamage()->armorReducedDamage;
+        playerDamageFeedbackRemaining_ = 0.28F;
+    }
 
     if (!gameFlow_.isRaidScreen())
     {
@@ -4908,7 +4951,72 @@ void App::renderAimCrosshair()
         center.y + feedbackRadius,
         center.x,
         center.y + feedbackRadius + kArmLength);
+    if (specialHitFeedbackRemaining_ > 0.0F)
+    {
+        const Uint8 red = specialHitSemantic_ == HitSemantic::WeakPoint
+            ? 246
+            : 250;
+        const Uint8 green = specialHitSemantic_ == HitSemantic::WeakPoint
+            ? 92
+            : 194;
+        const Uint8 blue = specialHitSemantic_ == HitSemantic::WeakPoint
+            ? 92
+            : 72;
+        SDL_SetRenderDrawColor(renderer_, red, green, blue, 245);
+        constexpr float kHitMarkHalfExtent{5.0F};
+        SDL_RenderLine(
+            renderer_,
+            center.x - kHitMarkHalfExtent,
+            center.y - kHitMarkHalfExtent,
+            center.x + kHitMarkHalfExtent,
+            center.y + kHitMarkHalfExtent);
+        SDL_RenderLine(
+            renderer_,
+            center.x + kHitMarkHalfExtent,
+            center.y - kHitMarkHalfExtent,
+            center.x - kHitMarkHalfExtent,
+            center.y + kHitMarkHalfExtent);
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
+void App::renderCombatFeedback()
+{
+    if (playerDamageFeedbackRemaining_ <= 0.0F ||
+        !gameSession_.world().raidSession().isActive())
+    {
+        return;
+    }
+
+    const float normalized = std::clamp(
+        playerDamageFeedbackRemaining_ / 0.28F,
+        0.0F,
+        1.0F);
+    const Uint8 alpha = static_cast<Uint8>(80.0F + normalized * 120.0F);
+    if (lastIncomingDamageReducedByArmor_)
+    {
+        SDL_SetRenderDrawColor(renderer_, 70, 160, 202, alpha);
+    }
+    else
+    {
+        SDL_SetRenderDrawColor(renderer_, 196, 42, 42, alpha);
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    constexpr float kEdgeThickness{14.0F};
+    const SDL_FRect top{0.0F, 0.0F, 1280.0F, kEdgeThickness};
+    const SDL_FRect bottom{0.0F, 720.0F - kEdgeThickness, 1280.0F, kEdgeThickness};
+    const SDL_FRect left{0.0F, 0.0F, kEdgeThickness, 720.0F};
+    const SDL_FRect right{1280.0F - kEdgeThickness, 0.0F, kEdgeThickness, 720.0F};
+    SDL_RenderFillRect(renderer_, &top);
+    SDL_RenderFillRect(renderer_, &bottom);
+    SDL_RenderFillRect(renderer_, &left);
+    SDL_RenderFillRect(renderer_, &right);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+
+    if (lastIncomingDamageReducedByArmor_)
+    {
+        SDL_RenderDebugText(renderer_, 594.0F, 42.0F, "ARMOR HIT");
+    }
 }
 
 void App::renderGroundItems()
@@ -5604,6 +5712,9 @@ void App::renderProfileAsset(
         case ItemCategory::Medical:
             SDL_SetRenderDrawColor(renderer_, 126, 68, 68, alpha);
             break;
+        case ItemCategory::ProtectiveGear:
+            SDL_SetRenderDrawColor(renderer_, 70, 92, 112, alpha);
+            break;
         default:
             SDL_SetRenderDrawColor(renderer_, 92, 80, 112, alpha);
             break;
@@ -5954,20 +6065,18 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     renderPlayerPreview(preview);
 
     const ProfileState &profile = gameSession_.profile();
-    for (EquipmentSlotKind slot : {
-             EquipmentSlotKind::PrimaryWeapon,
-             EquipmentSlotKind::ChestRig,
-             EquipmentSlotKind::Backpack})
+    for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         const SDL_FRect bounds = equipmentSlotRect(slot);
         SDL_SetRenderDrawColor(renderer_, 28, 42, 46, 255);
         SDL_RenderFillRect(renderer_, &bounds);
         SDL_SetRenderDrawColor(renderer_, 96, 126, 132, 255);
         SDL_RenderRect(renderer_, &bounds);
-        const char *label = slot == EquipmentSlotKind::PrimaryWeapon
-            ? "PRIMARY"
-            : slot == EquipmentSlotKind::ChestRig ? "CHEST RIG" : "BACKPACK";
-        SDL_RenderDebugText(renderer_, bounds.x + 7.0F, bounds.y + 7.0F, label);
+        SDL_RenderDebugText(
+            renderer_,
+            bounds.x + 7.0F,
+            bounds.y + 7.0F,
+            equipmentSlotLabel(slot));
         if (const auto id = equippedAsset(profile, slot))
         {
             if (const AssetRecord *asset = profile.assets.find(*id))
@@ -5976,6 +6085,18 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                     bounds.x + 4.0F, bounds.y + 22.0F,
                     bounds.w - 8.0F, bounds.h - 26.0F};
                 renderProfileAsset(*asset, itemBounds, kBasePocketCellSize);
+                if (asset->currentMaximumDurability > 0)
+                {
+                    const std::string durability = fmt::format(
+                        "DUR {}/{}",
+                        asset->currentDurability,
+                        asset->currentMaximumDurability);
+                    SDL_RenderDebugText(
+                        renderer_,
+                        bounds.x + 7.0F,
+                        bounds.y + bounds.h - 13.0F,
+                        durability.c_str());
+                }
             }
         }
     }
@@ -6097,9 +6218,9 @@ void App::renderBaseSupply()
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
             100.0F,
-            164.0F + static_cast<float>(index) * 54.0F,
+            164.0F + static_cast<float>(index) * 46.0F,
             430.0F,
-            44.0F};
+            40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
         SDL_RenderFillRect(renderer_, &row);
         SDL_SetRenderDrawColor(renderer_, 174, 158, 92, 255);
@@ -6178,20 +6299,17 @@ void App::renderBaseDeployment()
 
     const ProfileState &profile = gameSession_.profile();
     float y = 244.0F;
-    for (EquipmentSlotKind slot : {
-             EquipmentSlotKind::PrimaryWeapon,
-             EquipmentSlotKind::ChestRig,
-             EquipmentSlotKind::Backpack})
+    for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         const auto id = equippedAsset(profile, slot);
         const std::string name = id.has_value()
             ? publishedContentRegistry().item(
                   profile.assets.find(*id)->definitionId).displayName
             : "EMPTY";
-        const char *slotNameText = slot == EquipmentSlotKind::PrimaryWeapon
-            ? "PRIMARY"
-            : slot == EquipmentSlotKind::ChestRig ? "CHEST RIG" : "BACKPACK";
-        const std::string row = fmt::format("{}: {}", slotNameText, name);
+        const std::string row = fmt::format(
+            "{}: {}",
+            equipmentSlotLabel(slot),
+            name);
         SDL_RenderDebugText(renderer_, 480.0F, y, row.c_str());
         y += 34.0F;
     }
@@ -6226,12 +6344,12 @@ void App::renderBaseDeployment()
     SDL_RenderDebugText(
         renderer_,
         458.0F,
-        370.0F,
+        422.0F,
         fireStatus.c_str());
     SDL_RenderDebugText(
         renderer_,
         442.0F,
-        402.0F,
+        454.0F,
         capable
             ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
             : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
@@ -6325,6 +6443,7 @@ void App::renderRaidScreen()
     renderShotPresentations();
     renderParticles();
     renderAimCrosshair();
+    renderCombatFeedback();
 
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();

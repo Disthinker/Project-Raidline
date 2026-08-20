@@ -27,6 +27,8 @@ void equipAlphaLoadout(ProfileState &profile)
     for (const auto &[definitionId, slot, transaction] :
          std::vector<std::tuple<ItemDefinitionId, EquipmentSlotKind, std::string>>{
              {alpha_content::rifle, EquipmentSlotKind::PrimaryWeapon, "equip-rifle"},
+             {alpha_content::helmet, EquipmentSlotKind::Helmet, "equip-helmet"},
+             {alpha_content::bodyArmor, EquipmentSlotKind::BodyArmor, "equip-body-armor"},
              {alpha_content::chestRig, EquipmentSlotKind::ChestRig, "equip-chest"},
              {alpha_content::backpack, EquipmentSlotKind::Backpack, "equip-backpack"}})
     {
@@ -190,6 +192,12 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::Backpack).has_value());
+    EXPECT_FALSE(equippedAsset(
+        profile,
+        EquipmentSlotKind::Helmet).has_value());
+    EXPECT_FALSE(equippedAsset(
+        profile,
+        EquipmentSlotKind::BodyArmor).has_value());
     for (const auto &[id, asset] : profile.assets.records())
     {
         static_cast<void>(id);

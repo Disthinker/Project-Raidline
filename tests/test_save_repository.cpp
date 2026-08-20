@@ -38,7 +38,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV2RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV3RoundTripPreservesAuthoritativeState)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -78,7 +78,67 @@ TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
     EXPECT_FALSE(migrated.profile->pendingRaid.has_value());
 }
 
-TEST(SaveRepositoryTest, SchemaV2PreservesPendingRaidAndWeaponAmmunition)
+TEST(SaveRepositoryTest, SchemaV2MigratesArmorToFullDurability)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v2-armor-migration",
+        publishedContentRegistry());
+    const std::string text = serializeProfileEnvelope(
+        profile,
+        "core-alpha-content-2",
+        2);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        text,
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    for (const auto &[id, asset] : migrated.profile->assets.records())
+    {
+        static_cast<void>(id);
+        const ItemDefinition &definition = publishedContentRegistry().item(
+            asset.definitionId);
+        if (!definition.armorProtection.has_value())
+        {
+            continue;
+        }
+        EXPECT_EQ(
+            asset.currentMaximumDurability,
+            definition.armorProtection->maximumDurability);
+        EXPECT_EQ(asset.currentDurability, asset.currentMaximumDurability);
+    }
+}
+
+TEST(SaveRepositoryTest, SchemaV3PreservesArmorDurability)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-armor-durability",
+        publishedContentRegistry());
+    AssetRecord *armor{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::bodyArmor)
+        {
+            armor = profile.assets.findMutable(id);
+            break;
+        }
+    }
+    ASSERT_NE(armor, nullptr);
+    armor->currentMaximumDurability = 110;
+    armor->currentDurability = 37;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV3PreservesPendingRaidAndWeaponAmmunition)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-pending-raid",

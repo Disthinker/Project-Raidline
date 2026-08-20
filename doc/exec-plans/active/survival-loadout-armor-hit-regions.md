@@ -66,3 +66,7 @@
 
 - 2026-08-20：PR #60 合入 `origin/main@50849d5`，建立独立切片分支。
 - 2026-08-20：纯领域伤害解析完成；CombatDamageDomain focused 7/7 通过。
+- 2026-08-20：ProtectiveGear、Helmet/BodyArmor、实例耐久、固定供应与 schema v3 完成；v1/v2 迁移测试通过。
+- 2026-08-20：Base/Raid 五槽 UI、部署/结算装备根、敌人攻击观察、Profile HP/护甲原子结算及玩家射击三部位 HitResult 完成。
+- 2026-08-20：普通命中无 X，爆头/弱点专用标记与受击/护甲减伤边缘反馈完成；未启动游戏、未触碰美术生产或 manifest。
+- 2026-08-20：Windows Debug 全目标构建及全量 CTest 663/663 通过；下一门槛为 exact-head CI，再交用户正常游玩验收。

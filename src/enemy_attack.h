@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <optional>
 
+#include "combat_damage_domain.h"
 #include "vec2.h"
 
 enum class EnemyAttackType
@@ -44,8 +45,22 @@ struct EnemyAttackAdvance
     float lungeDistance{};
 };
 
+struct EnemyAttackCombatDamage
+{
+    int baseDamage{};
+    HitRegion region{HitRegion::Torso};
+    int penetration{};
+    int armorDamage{};
+    bool weakPoint{};
+};
+
 [[nodiscard]]
 EnemyAttackConfigSet defaultEnemyAttackConfigs();
+
+// Production combat semantics stay separate from the legacy three-HP
+// simulation adapter. GameSession resolves this result against Profile armor.
+[[nodiscard]] EnemyAttackCombatDamage enemyAttackCombatDamage(
+    EnemyAttackType type) noexcept;
 
 [[nodiscard]]
 const char *enemyAttackTypeName(

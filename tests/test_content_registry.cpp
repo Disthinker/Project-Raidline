@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "alpha_content_ids.h"
 #include "content_registry.h"
 
 namespace
@@ -61,8 +62,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "core-alpha-content-2");
-    ASSERT_EQ(registry.items().size(), 11U);
+    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-1");
+    ASSERT_EQ(registry.items().size(), 13U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -81,6 +82,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         chestRig.containerCompartments.front().pocketKind,
         ContainerPocketKind::MagazineOnly);
+
+    const ItemDefinition &helmet = registry.item(alpha_content::helmet);
+    ASSERT_TRUE(helmet.armorProtection.has_value());
+    EXPECT_EQ(helmet.equipmentSlot, EquipmentSlotKind::Helmet);
+    EXPECT_EQ(helmet.armorProtection->coverage, HitRegion::Head);
+    EXPECT_EQ(helmet.armorProtection->maximumDurability, 100U);
+
+    const ItemDefinition &bodyArmor = registry.item(alpha_content::bodyArmor);
+    ASSERT_TRUE(bodyArmor.armorProtection.has_value());
+    EXPECT_EQ(bodyArmor.equipmentSlot, EquipmentSlotKind::BodyArmor);
+    EXPECT_EQ(bodyArmor.armorProtection->coverage, HitRegion::Torso);
 
     const MapDefinition &map = defaultV0MapDefinition();
     EXPECT_EQ(map.id.value(), "map.v0.test");

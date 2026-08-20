@@ -200,6 +200,8 @@ add_library(raidline_domain STATIC
     src/loot_table.h
     src/profile_state.cpp
     src/profile_state.h
+    src/profile_combat_domain.cpp
+    src/profile_combat_domain.h
     src/raid_lifecycle.cpp
     src/raid_lifecycle.h
     src/raid_action.cpp
@@ -357,6 +359,10 @@ raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
 raidline_add_test(
     CombatDamageDomainTest
     tests/test_combat_damage_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    ProfileCombatDomainTest
+    tests/test_profile_combat_domain.cpp
     raidline::domain)
 raidline_add_test(
     InputSystemTest

@@ -2,9 +2,30 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "collision.h"
+
+namespace
+{
+    HitRegion hitRegionAt(
+        const Rect &target,
+        Vec2 hitPosition) noexcept
+    {
+        const float relativeY =
+            (hitPosition.y - target.position.y) / target.size.y;
+        if (relativeY < 0.25F)
+        {
+            return HitRegion::Head;
+        }
+        if (relativeY < 0.75F)
+        {
+            return HitRegion::Torso;
+        }
+        return HitRegion::Legs;
+    }
+}
 
 HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,
@@ -47,16 +68,34 @@ HitResolutionResult resolveShotEnemyHits(
                 shot.bounds.position.y +
                     shot.bounds.size.y / 2.0F};
 
+            const HitRegion region = hitRegionAt(
+                enemy.bounds(),
+                hitPosition);
+            const CombatDamageResolution damage = resolveCombatDamage(
+                CombatDamageCommand{
+                    shot.damage,
+                    region,
+                    0,
+                    0,
+                    false,
+                    std::nullopt});
+            if (!damage.resolved())
+            {
+                continue;
+            }
+
             const bool killed =
-                enemy.takeDamage(shot.damage);
+                enemy.takeDamage(damage.damageApplied);
 
             result.hits.push_back(
                 HitResult{
                     shot.shotId,
                     HitTargetKind::Enemy,
                     hitPosition,
-                    shot.damage,
-                    killed});
+                    damage.damageApplied,
+                    killed,
+                    damage.region,
+                    damage.semantic});
 
             if (killed)
             {

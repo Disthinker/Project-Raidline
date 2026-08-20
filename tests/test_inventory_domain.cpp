@@ -77,6 +77,41 @@ TEST(InventoryDomainTest, EquipmentCommandsUseStableLocations)
     EXPECT_TRUE(profile.committedTransactions.contains("equip-rifle"));
 }
 
+TEST(InventoryDomainTest, ProtectiveGearUsesDedicatedAtomicEquipmentSlots)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "inventory-armor",
+        publishedContentRegistry());
+    const AssetInstanceId helmet = firstAsset(profile, alpha_content::helmet);
+    const AssetInstanceId bodyArmor = firstAsset(
+        profile,
+        alpha_content::bodyArmor);
+
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{helmet, EquipmentSlotKind::Helmet},
+        CommandContext{profile.revision, "equip-helmet"}).succeeded);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{bodyArmor, EquipmentSlotKind::BodyArmor},
+        CommandContext{profile.revision, "equip-body-armor"}).succeeded);
+
+    EXPECT_EQ(equippedAsset(profile, EquipmentSlotKind::Helmet), helmet);
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::BodyArmor),
+        bodyArmor);
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const InventoryReceipt rejected = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{helmet, EquipmentSlotKind::BodyArmor},
+        CommandContext{profile.revision, "wrong-armor-slot"});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
 TEST(InventoryDomainTest, EqualFootprintAssetsSwapAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(

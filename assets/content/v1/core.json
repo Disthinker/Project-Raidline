@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "core-alpha-content-2",
+  "content_version": "survival-loadout-content-1",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -175,6 +175,52 @@
       "market_buy_price": 60,
       "market_recycle_price": 15,
       "maximum_charges": 3
+    },
+    {
+      "id": "item.protective_gear.helmet_basic",
+      "display_name": "Basic Helmet",
+      "category": "protective_gear",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_helmet.png",
+      "world_texture": "items/world/unpublished_helmet.png",
+      "equipment_slot": "helmet",
+      "armor": {
+        "coverage": "head",
+        "protection_requirement": 3,
+        "maximum_durability": 100,
+        "durability_loss_basis_points": 10000
+      },
+      "market_buy_price": 120,
+      "market_recycle_price": 30
+    },
+    {
+      "id": "item.protective_gear.body_armor_basic",
+      "display_name": "Basic Body Armor",
+      "category": "protective_gear",
+      "inventory": {"width": 2, "height": 3, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 96},
+        "pickup_size": {"x": 72, "y": 104}
+      },
+      "inventory_texture": "items/inventory/unpublished_body_armor.png",
+      "world_texture": "items/world/unpublished_body_armor.png",
+      "equipment_slot": "body_armor",
+      "armor": {
+        "coverage": "torso",
+        "protection_requirement": 4,
+        "maximum_durability": 120,
+        "durability_loss_basis_points": 12500
+      },
+      "market_buy_price": 160,
+      "market_recycle_price": 40
     },
     {
       "id": "item.loot.scrap_parts",

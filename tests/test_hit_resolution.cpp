@@ -81,7 +81,32 @@ TEST(HitResolutionTest, NonLethalHitProducesDomainResult)
     EXPECT_FLOAT_EQ(result.hits[0].position.y, 40.0F);
     EXPECT_EQ(result.hits[0].damageApplied, 2);
     EXPECT_FALSE(result.hits[0].targetKilled);
+    EXPECT_EQ(result.hits[0].region, HitRegion::Torso);
+    EXPECT_EQ(result.hits[0].semantic, HitSemantic::Normal);
     EXPECT_EQ(result.enemiesKilled, 0U);
+}
+
+TEST(HitResolutionTest, HeadAndLegHitsAreResolvedByDomainGeometry)
+{
+    std::vector<Enemy> headEnemies{
+        Enemy{Vec2{100.0F, 100.0F}, Vec2{40.0F, 80.0F}, Vec2{}, 10}};
+    const HitResolutionResult head = resolveShotEnemyHits(
+        {makeShot(7, Vec2{110.0F, 102.0F}, Vec2{8.0F, 8.0F}, 3)},
+        headEnemies);
+    ASSERT_EQ(head.hits.size(), 1U);
+    EXPECT_EQ(head.hits[0].region, HitRegion::Head);
+    EXPECT_EQ(head.hits[0].semantic, HitSemantic::Headshot);
+    EXPECT_EQ(head.hits[0].damageApplied, 6);
+
+    std::vector<Enemy> legEnemies{
+        Enemy{Vec2{100.0F, 100.0F}, Vec2{40.0F, 80.0F}, Vec2{}, 10}};
+    const HitResolutionResult legs = resolveShotEnemyHits(
+        {makeShot(8, Vec2{110.0F, 168.0F}, Vec2{8.0F, 8.0F}, 4)},
+        legEnemies);
+    ASSERT_EQ(legs.hits.size(), 1U);
+    EXPECT_EQ(legs.hits[0].region, HitRegion::Legs);
+    EXPECT_EQ(legs.hits[0].semantic, HitSemantic::Normal);
+    EXPECT_EQ(legs.hits[0].damageApplied, 3);
 }
 
 TEST(HitResolutionTest, OneShotHitsAtMostOneEnemy)

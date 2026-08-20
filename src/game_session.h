@@ -11,6 +11,7 @@
 #include "economy_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
+#include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
 #include "raid_settlement.h"
@@ -118,6 +119,8 @@ public:
         std::string transactionId);
 
     [[nodiscard]] const RaidActionState &raidActionState() const noexcept;
+    [[nodiscard]] const std::optional<CombatDamageResolution> &
+    lastIncomingDamage() const noexcept;
 
     [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
@@ -137,6 +140,7 @@ private:
     bool alphaRaidActive_{};
     bool recoveredAbandonedRaid_{};
     RaidActionState raidActionState_;
+    std::optional<CombatDamageResolution> lastIncomingDamage_;
     std::uint64_t raidCommandSequence_{};
 
     [[nodiscard]] bool commitProfileCandidate(
@@ -144,6 +148,7 @@ private:
         bool persist = true);
     void refreshLoadoutTutorial();
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
+    void applyAlphaIncomingDamage();
     [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;

@@ -45,6 +45,16 @@ struct RaidWorldConfig
     std::vector<EnemySpawn> initialEnemies;
     int playerMaximumHealth{100};
     int playerCurrentHealth{100};
+    bool deferPlayerDamageResolution{};
+};
+
+struct PlayerDamageObservation
+{
+    int baseDamage{};
+    HitRegion region{HitRegion::Torso};
+    int penetration{};
+    int armorDamage{};
+    bool weakPoint{};
 };
 
 class GameplayWorld
@@ -118,6 +128,9 @@ public:
     const std::vector<Particle> &
     particles() const;
 
+    [[nodiscard]] const std::vector<HitResult> &
+    hitResultsLastUpdate() const noexcept;
+
     [[nodiscard]]
     const std::vector<GroundItem> &
     groundItems() const noexcept;
@@ -162,6 +175,9 @@ public:
     // 转为 PlayerDead，避免出现 HP 为 0 但 Raid 仍活动的状态。
     [[nodiscard]]
     bool damagePlayer(int damage);
+
+    [[nodiscard]] std::vector<PlayerDamageObservation>
+    takePlayerDamageObservations();
 
     [[nodiscard]]
     bool canInteractWithContainer() const noexcept;
@@ -247,15 +263,22 @@ private:
     WeaponFireState weaponFire_;
 
     ParticleSystem particleSystem_;
+    std::vector<HitResult> hitResultsLastUpdate_;
     int score_{0};
     Vec2 worldSize_{1280.0F, 720.0F};
     bool shotFiredLastUpdate_{};
     bool alphaRaidWorld_{};
+    bool deferPlayerDamageResolution_{};
+    std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;
 
     void spawnGroundItem(
         ItemId definitionId,
         Vec2 position,
         std::uint32_t quantity);
+
+    [[nodiscard]] bool resolveEnemyAttackDamage(
+        EnemyAttackType type,
+        int legacyDamage);
 
     [[nodiscard]]
     std::optional<std::size_t>
