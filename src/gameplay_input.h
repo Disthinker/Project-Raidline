@@ -10,6 +10,7 @@ struct GameplayInput
     bool moveDown{};
     bool moveLeft{};
     bool moveRight{};
+    bool sprint{};
 
     bool fireJustPressed{};
     bool firePressed{};

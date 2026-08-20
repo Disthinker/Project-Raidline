@@ -196,3 +196,36 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
         EXPECT_FALSE(std::holds_alternative<RaidGroundAssetLocation>(asset.location));
     }
 }
+
+TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-rollback",
+        publishedContentRegistry());
+    equipAlphaLoadout(profile);
+    const auto rifle = equippedAsset(
+        profile, EquipmentSlotKind::PrimaryWeapon);
+    ASSERT_TRUE(rifle.has_value());
+    profile.currentHealth = 70;
+    ASSERT_TRUE(deploy(profile, 4481).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const std::vector<RaidLootSnapshot> generatedLoot =
+        profile.pendingRaid->loot;
+
+    const RaidRollbackReceipt rolledBack = rollbackPendingRaidToBase(
+        profile,
+        publishedContentRegistry());
+
+    ASSERT_TRUE(rolledBack.succeeded) << rolledBack.message;
+    EXPECT_FALSE(profile.pendingRaid.has_value());
+    EXPECT_EQ(profile.currentHealth, 70);
+    EXPECT_EQ(equippedAsset(
+        profile, EquipmentSlotKind::PrimaryWeapon), rifle);
+    EXPECT_FALSE(profile.lastRaidResult.has_value());
+    for (const RaidLootSnapshot &loot : generatedLoot)
+    {
+        EXPECT_EQ(profile.assets.find(loot.assetId), nullptr);
+    }
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+}

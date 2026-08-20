@@ -51,7 +51,7 @@ The active scope includes only the features enumerated in the Alpha scope contra
 - The first Raid has no hard time failure. The legacy 180-second timeout is scheduled for removal behind an explicit lifecycle contract.
 - Player health migrates from the V0 value to 100 HP only in the planned health/medical slice.
 - One fixed map is represented by data definitions and a frozen per-Raid snapshot.
-- Failure means full loss for death, active quit, or abnormal quit; settlement is idempotent.
+- Failure means full loss for death or explicit active quit; closing the program during a Raid restores the exact pre-Raid persisted Profile on the next launch. Legacy pending-Raid saves migrate back to Base without full loss.
 - Formal attack animations, new art/audio production, multi-map work, high-risk phase, armor, hit regions, penetration, durability, faults, complex injuries, quests, crafting, base building, population, and story content are excluded.
 
 ## Build, test, and evidence

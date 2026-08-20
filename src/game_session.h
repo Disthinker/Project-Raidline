@@ -86,6 +86,15 @@ public:
 
     [[nodiscard]] bool deployAlpha(std::uint64_t seed);
     [[nodiscard]] bool activeQuitAlphaRaid();
+    [[nodiscard]] bool startAlphaReload(
+        AssetInstanceId weaponAssetId,
+        AssetInstanceId magazineAssetId);
+    [[nodiscard]] bool startAlphaLoadMagazine(
+        AssetInstanceId ammunitionAssetId,
+        AssetInstanceId magazineAssetId,
+        std::uint32_t quantity);
+    [[nodiscard]] bool startAlphaUnloadMagazine(
+        AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;

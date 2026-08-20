@@ -343,6 +343,48 @@ RaidSettlementReceipt settlePendingRaid(
             profile.revision, outcome};
 }
 
+RaidRollbackReceipt rollbackPendingRaidToBase(
+    ProfileState &profile,
+    const ContentRegistry &content)
+{
+    if (!profile.pendingRaid.has_value())
+    {
+        return {false, RaidLifecycleError::MissingPendingRaid,
+                "no pending Raid can be rolled back", profile.revision};
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return {false, RaidLifecycleError::RevisionOverflow,
+                "profile revision cannot advance", profile.revision};
+    }
+
+    ProfileState candidate = profile;
+    const int startingHealth = candidate.pendingRaid->startingHealth;
+    std::set<AssetInstanceId> generatedLoot;
+    for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
+    {
+        generatedLoot.insert(loot.assetId);
+    }
+    for (AssetInstanceId assetId : generatedLoot)
+    {
+        static_cast<void>(candidate.assets.erase(assetId));
+    }
+    candidate.currentHealth = startingHealth;
+    candidate.pendingRaid.reset();
+    candidate.lastRaidResult.reset();
+    ++candidate.revision;
+
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return {false, RaidLifecycleError::InvalidProfile,
+                validation.message, profile.revision};
+    }
+    profile = std::move(candidate);
+    return {true, RaidLifecycleError::None, {}, profile.revision};
+}
+
 InventoryReceipt pickupRaidLoot(
     ProfileState &profile,
     const ContentRegistry &content,

@@ -228,15 +228,12 @@ bool GameSession::continueProfile()
     recoveredAbandonedRaid_ = false;
     if (candidate.pendingRaid.has_value())
     {
-        const std::string settlementId = candidate.pendingRaid->settlementId;
-        const RaidSettlementReceipt settled = settlePendingRaid(
+        const RaidRollbackReceipt rolledBack = rollbackPendingRaidToBase(
             candidate,
-            publishedContentRegistry(),
-            settlementId,
-            RaidResultOutcome::AbnormalQuit);
-        if (!settled.succeeded)
+            publishedContentRegistry());
+        if (!rolledBack.succeeded)
         {
-            persistenceMessage_ = settled.message;
+            persistenceMessage_ = rolledBack.message;
             return false;
         }
         const SaveWriteResult saved = saveRepository_->save(
@@ -311,10 +308,24 @@ bool GameSession::deployAlpha(std::uint64_t seed)
         persistenceMessage_ = error.what();
         return false;
     }
-    if (!commitProfileCandidate(std::move(candidate)))
+    std::string saveMessage;
+    if (saveRepository_.has_value())
+    {
+        const SaveWriteResult saved = saveRepository_->save(
+            profile_,
+            publishedContentRegistry().contentVersion());
+        if (!saved.succeeded)
+        {
+            persistenceMessage_ = saved.message;
+            return false;
+        }
+        saveMessage = saved.message;
+    }
+    if (!commitProfileCandidate(std::move(candidate), false))
     {
         return false;
     }
+    persistenceMessage_ = std::move(saveMessage);
     world_.swap(candidateWorld);
     settlement_ = RaidSettlement{};
     state_ = GameSessionState::InRaid;
@@ -328,6 +339,83 @@ bool GameSession::deployAlpha(std::uint64_t seed)
 bool GameSession::activeQuitAlphaRaid()
 {
     return alphaRaidActive_ && settleAlphaRaid(RaidResultOutcome::ActiveQuit);
+}
+
+bool GameSession::startAlphaReload(
+    AssetInstanceId weaponAssetId,
+    AssetInstanceId magazineAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+        equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon) !=
+            std::optional<AssetInstanceId>{weaponAssetId} ||
+        !assetIsCarried(profile_, magazineAssetId))
+    {
+        return false;
+    }
+    const WeaponAmmoPlan plan = queryWeaponAmmo(
+        profile_,
+        publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{
+            weaponAssetId,
+            magazineAssetId});
+    return plan.canCommit && raidActionState_.start(
+        ReloadRaidAction{
+            weaponAssetId,
+            magazineAssetId,
+            0.0F,
+            2.0F});
+}
+
+bool GameSession::startAlphaLoadMagazine(
+    AssetInstanceId ammunitionAssetId,
+    AssetInstanceId magazineAssetId,
+    std::uint32_t quantity)
+{
+    const AssetRecord *ammunition = profile_.assets.find(ammunitionAssetId);
+    const AssetRecord *magazine = profile_.assets.find(magazineAssetId);
+    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+        ammunition == nullptr || magazine == nullptr ||
+        !assetIsCarried(profile_, ammunitionAssetId) ||
+        !assetIsCarried(profile_, magazineAssetId))
+    {
+        return false;
+    }
+    const WeaponAmmoPlan plan = queryWeaponAmmo(
+        profile_,
+        publishedContentRegistry(),
+        LoadMagazineCommand{
+            magazineAssetId,
+            ammunitionAssetId,
+            quantity});
+    if (!plan.canCommit)
+    {
+        return false;
+    }
+    try
+    {
+        const std::uint32_t capacity = publishedContentRegistry()
+            .item(magazine->definitionId).magazineCapacity;
+        const std::uint32_t available = capacity - static_cast<std::uint32_t>(
+            magazine->magazineRounds.size());
+        const std::uint32_t requested = quantity == 0
+            ? std::min(available, ammunition->quantity)
+            : quantity;
+        const float duration = std::clamp(
+            static_cast<float>(requested) * 0.2F,
+            0.5F,
+            6.0F);
+        return raidActionState_.start(
+            LoadMagazineRaidAction{
+                magazineAssetId,
+                ammunitionAssetId,
+                quantity,
+                0.0F,
+                duration});
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
@@ -353,6 +441,25 @@ bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
     }
     return raidActionState_.start(
         HealRaidAction{medkitAssetId, 0.0F, 5.0F});
+}
+
+bool GameSession::startAlphaUnloadMagazine(
+    AssetInstanceId magazineAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        return false;
+    }
+    const auto destination = selectRaidMagazineUnloadDestination(
+        profile_,
+        publishedContentRegistry(),
+        magazineAssetId);
+    return destination.has_value() && raidActionState_.start(
+        UnloadMagazineRaidAction{
+            magazineAssetId,
+            *destination,
+            0.0F,
+            3.0F});
 }
 
 bool GameSession::alphaRaidActive() const noexcept
@@ -385,7 +492,7 @@ InventoryReceipt GameSession::executeProfileInventory(
     {
         return receipt;
     }
-    if (saveRepository_.has_value())
+    if (!alphaRaidActive_ && saveRepository_.has_value())
     {
         const SaveWriteResult result = saveRepository_->save(
             candidate,
@@ -403,7 +510,10 @@ InventoryReceipt GameSession::executeProfileInventory(
     }
     profile_ = std::move(candidate);
     persistenceMessage_ = std::move(saveMessage);
-    refreshLoadoutTutorial();
+    if (!alphaRaidActive_)
+    {
+        refreshLoadoutTutorial();
+    }
     return receipt;
 }
 
@@ -458,7 +568,9 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     {
         return receipt;
     }
-    if (!commitProfileCandidate(std::move(candidate)))
+    if (!commitProfileCandidate(
+            std::move(candidate),
+            !alphaRaidActive_))
     {
         return WeaponAmmoReceipt{
             false,
@@ -554,8 +666,7 @@ void GameSession::updateAlphaRaid(
                     publishedContentRegistry(),
                     *weapon))
             {
-                static_cast<void>(raidActionState_.start(
-                    ReloadRaidAction{*weapon, *magazine, 0.0F, 2.0F}));
+                static_cast<void>(startAlphaReload(*weapon, *magazine));
             }
         }
         else if (input.healJustPressed)
@@ -656,10 +767,24 @@ void GameSession::updateAlphaRaid(
                         return input.firePressed || input.fireJustPressed ||
                                input.healJustPressed;
                     }
+                    else if constexpr (
+                        std::is_same_v<Action, LoadMagazineRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
+                    }
                     else if constexpr (std::is_same_v<Action, HealRaidAction>)
                     {
                         return input.firePressed || input.fireJustPressed ||
                                input.reloadJustPressed;
+                    }
+                    else if constexpr (
+                        std::is_same_v<Action, UnloadMagazineRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
                     }
                     else
                     {
@@ -683,12 +808,37 @@ void GameSession::updateAlphaRaid(
                     const WeaponAmmoReceipt receipt = executeWeaponAmmo(
                         candidate,
                         publishedContentRegistry(),
-                        InstallMagazineCommand{
+                        InstallMagazineAndChamberCommand{
                             reload->weaponAssetId,
                             reload->magazineAssetId},
                         CommandContext{
                             profile_.revision,
                             nextRaidTransaction("reload")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate),
+                            false));
+                    }
+                    else
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *load =
+                             std::get_if<LoadMagazineRaidAction>(&*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+                        candidate,
+                        publishedContentRegistry(),
+                        LoadMagazineCommand{
+                            load->magazineAssetId,
+                            load->ammunitionAssetId,
+                            load->quantity},
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("load-magazine")});
                     if (receipt.succeeded)
                     {
                         static_cast<void>(commitProfileCandidate(
@@ -721,6 +871,30 @@ void GameSession::updateAlphaRaid(
                             world_->restorePlayerHealth(receipt.healedAmount));
                     }
                     else if (!receipt.succeeded)
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *unload =
+                             std::get_if<UnloadMagazineRaidAction>(&*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+                        candidate,
+                        publishedContentRegistry(),
+                        UnloadMagazineCommand{
+                            unload->magazineAssetId,
+                            unload->destination},
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("unload-magazine")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate),
+                            false));
+                    }
+                    else
                     {
                         persistenceMessage_ = receipt.message;
                     }

@@ -103,7 +103,7 @@ SessionProjection snapshot() const;
 - 命令返回 receipt 与明确领域事实；UI 不读取或持有可变领域对象。
 - 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
 - Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
-- Raid 帧内模拟不每帧保存；Deploy 先保存完整 pending Raid 和本局生成资产，终局再以同一 SettlementId 原子提交。
+- Raid 帧内模拟不每帧保存；Deploy 先原子保存精确的出击前 Profile，再仅在内存建立 pending Raid 和本局生成资产。正式终局以同一 SettlementId 原子提交；进程关闭或异常退出后重新加载磁盘上的出击前 Profile。
 - 当前 GridInventory 适配器的整堆拖拽预览与提交共用同一领域规则：空目标保持 transform/transfer，同定义未满堆按上限部分填满；拒绝时源、目标、高水位和 ID 序列不变。Ctrl/Shift 数量拖拽继续使用独立的精确数量原子合同。
 
 ## 动作、模拟、射击与随机
@@ -151,7 +151,7 @@ Content Registry 的当前落地边界：
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
 - 设置与档案分文件保存。Steam 云存档以后只同步本地档案文件，不进入领域模型。
 - 迁移只能逐版本执行；失败时保留原文件并尝试最近有效备份。未知定义、重复实例 ID、坏引用和高水位倒退均拒绝加载。
-- Alpha 不支持 Raid 中途续玩。加载到 pending Raid 时按同一 SettlementId 幂等提交失败；未来续玩通过新增活动快照版本实现。
+- Alpha 不支持 Raid 中途续玩。新部署不会把 pending Raid 写入磁盘；加载旧版本遗留的 pending Raid 时清理本局生成 Loot、恢复入场状态并返回 Base，不生成失败结算。未来续玩通过新增活动快照版本实现。
 
 ## 迁移顺序
 
@@ -160,7 +160,7 @@ Content Registry 的当前落地边界：
 1. `codex/build-module-foundation`：已由 PR #56 进入 main，建立四个库目标并消除重复业务源码编译。
 2. `codex/content-registry-v1`：已由 PR #57 以 merge commit `14cf79b` 进入 main。
 3. `codex/core-alpha-persistent-base`：已由 PR #58 以 merge commit `b1ea3c3` 进入 main，交付 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1。
-4. `codex/core-alpha-extraction-loop`：已在当前分支完成 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement；等待 CI 与用户验收后接受。
-5. `codex/core-alpha-hardening`：连续多局、异常退出、损坏恢复、平衡和 Alpha 完整验收。
+4. `codex/core-alpha-extraction-loop`：已由 PR #59 以 merge commit `ed45baa` 进入 main，交付 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement。
+5. `codex/core-alpha-hardening`：连续多局、进程退出回滚、损坏恢复、平衡和 Alpha 完整验收。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

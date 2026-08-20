@@ -31,6 +31,23 @@ TEST(PlayerTest, MoveUpChangesYPosition)
     EXPECT_LT(player.position().y, 100.0f);
 }
 
+TEST(PlayerTest, SprintMovesFiftyPercentFartherThanNormalMovement)
+{
+    GameplayInput normalInput{};
+    normalInput.moveRight = true;
+    GameplayInput sprintInput = normalInput;
+    sprintInput.sprint = true;
+
+    Player normalPlayer(100.0F, 100.0F);
+    Player sprintingPlayer(100.0F, 100.0F);
+    normalPlayer.update(normalInput, 0.5F, 1280.0F, 720.0F);
+    sprintingPlayer.update(sprintInput, 0.5F, 1280.0F, 720.0F);
+
+    const float normalDistance = normalPlayer.position().x - 100.0F;
+    const float sprintDistance = sprintingPlayer.position().x - 100.0F;
+    EXPECT_FLOAT_EQ(sprintDistance, normalDistance * 1.5F);
+}
+
 // 移动距离与 deltaTime 成比例
 TEST(PlayerTest, MovementScalesWithDeltaTime)
 {

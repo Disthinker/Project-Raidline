@@ -36,7 +36,7 @@
 - `GameFlow` 只拥有屏幕级状态；`GameSession` 是长期组合根。
 - `BaseWorld` 与 `GameplayWorld` 互斥运行。Base 不推进敌人、Loot、战斗或 Raid 生命周期。
 - Base 场景、设施对象与 UI 不拥有 Stash、装备、货币或唯一资产。
-- Core Extraction Alpha 中时间不能产生 Raid 失败；只有撤离、死亡、主动退出或异常退出失败能终结 Raid。
+- Core Extraction Alpha 中时间不能产生 Raid 失败；只有撤离、死亡或玩家主动放弃能终结并结算 Raid。关闭程序或异常退出不结算，重新进入时必须恢复出击前持久化 Profile。
 - Loot 和敌人部署在 Raid 创建时一次生成并保存快照；搜索、重载、接近和击杀不得重抽或补充。
 - Raid 快照中的 Loot 实例 ID 是生成审计记录；拾取后可以通过合法堆叠或装填消耗该实例，但任一仍在 Raid 地面的资产必须继续能追溯到快照。
 

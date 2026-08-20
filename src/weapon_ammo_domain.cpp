@@ -204,6 +204,51 @@ WeaponAmmoReceipt applyInstall(
             WeaponAmmoResult::Installed, std::nullopt};
 }
 
+bool feedChamber(
+    AssetRecord &weapon,
+    AssetRecord *magazine)
+{
+    if (weapon.chamberedRound.has_value() || magazine == nullptr ||
+        magazine->magazineRounds.empty())
+    {
+        return false;
+    }
+    weapon.chamberedRound = magazine->magazineRounds.front();
+    magazine->magazineRounds.erase(magazine->magazineRounds.begin());
+    return true;
+}
+
+WeaponAmmoReceipt applyInstallAndChamber(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const InstallMagazineAndChamberCommand &command)
+{
+    WeaponAmmoReceipt receipt = applyInstall(
+        candidate,
+        content,
+        InstallMagazineCommand{
+            command.weaponAssetId,
+            command.magazineAssetId});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+
+    AssetRecord *weapon = candidate.assets.findMutable(command.weaponAssetId);
+    AssetRecord *magazine = candidate.assets.findMutable(command.magazineAssetId);
+    if (weapon == nullptr || magazine == nullptr)
+    {
+        return failure(DomainErrorCode::MissingAsset,
+                       "weapon or magazine disappeared during installation",
+                       candidate.revision);
+    }
+    if (feedChamber(*weapon, magazine))
+    {
+        receipt.result = WeaponAmmoResult::InstalledAndChambered;
+    }
+    return receipt;
+}
+
 WeaponAmmoReceipt applyUninstall(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -217,21 +262,60 @@ WeaponAmmoReceipt applyUninstall(
     }
     AssetRecord *magazine = candidate.assets.findMutable(*installed);
     const ItemDefinition &definition = content.item(magazine->definitionId);
-    const auto origin = findFirstProfileFit(
-        candidate,
-        content,
-        command.destination,
-        definition,
-        magazine->orientation,
-        magazine->instanceId);
-    if (!origin.has_value())
+    if (!canUseItemOrientation(definition, command.destinationOrientation))
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+                       "requested orientation is not supported",
+                       candidate.revision);
+    }
+    magazine->location = command.destination;
+    magazine->orientation = command.destinationOrientation;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
     {
         return failure(DomainErrorCode::Capacity,
-                       "destination cannot hold magazine", candidate.revision);
+                       validation.message, candidate.revision);
     }
-    magazine->location = StoredAssetLocation{command.destination, *origin};
     return {true, false, DomainErrorCode::None, {}, candidate.revision,
             WeaponAmmoResult::Uninstalled, std::nullopt};
+}
+
+WeaponAmmoReceipt applyChamber(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const ChamberWeaponCommand &command)
+{
+    AssetRecord *weapon = candidate.assets.findMutable(command.weaponAssetId);
+    if (weapon == nullptr)
+    {
+        return failure(DomainErrorCode::MissingAsset,
+                       "weapon does not exist", candidate.revision);
+    }
+    const ItemDefinition &definition = content.item(weapon->definitionId);
+    if (definition.category != ItemCategory::Weapon ||
+        !definition.compatibleMagazineDefinitionId.has_value())
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+                       "asset is not a magazine-fed weapon",
+                       candidate.revision);
+    }
+    if (weapon->chamberedRound.has_value())
+    {
+        return failure(DomainErrorCode::InvalidQuantity,
+                       "weapon is already chambered", candidate.revision);
+    }
+    const auto installed = installedMagazine(candidate, command.weaponAssetId);
+    AssetRecord *magazine = installed.has_value()
+        ? candidate.assets.findMutable(*installed)
+        : nullptr;
+    if (!feedChamber(*weapon, magazine))
+    {
+        return failure(DomainErrorCode::InvalidQuantity,
+                       "no round is available to chamber", candidate.revision);
+    }
+    return {true, false, DomainErrorCode::None, {}, candidate.revision,
+            WeaponAmmoResult::Chambered, std::nullopt};
 }
 
 WeaponAmmoReceipt applyFire(
@@ -258,13 +342,7 @@ WeaponAmmoReceipt applyFire(
         : nullptr;
     const auto feed = [&weapon, &magazine]()
     {
-        if (magazine == nullptr || magazine->magazineRounds.empty())
-        {
-            return false;
-        }
-        weapon->chamberedRound = magazine->magazineRounds.front();
-        magazine->magazineRounds.erase(magazine->magazineRounds.begin());
-        return true;
+        return feedChamber(*weapon, magazine);
     };
 
     if (!weapon->chamberedRound.has_value())
@@ -302,13 +380,32 @@ WeaponAmmoReceipt apply(
                 return applyUnload(candidate, content, typed);
             else if constexpr (std::is_same_v<Command, InstallMagazineCommand>)
                 return applyInstall(candidate, content, typed);
+            else if constexpr (std::is_same_v<Command, InstallMagazineAndChamberCommand>)
+                return applyInstallAndChamber(candidate, content, typed);
             else if constexpr (std::is_same_v<Command, UninstallMagazineCommand>)
                 return applyUninstall(candidate, content, typed);
+            else if constexpr (std::is_same_v<Command, ChamberWeaponCommand>)
+                return applyChamber(candidate, content, typed);
             else
                 return applyFire(candidate, content, typed);
         },
         command);
 }
+}
+
+WeaponAmmoPlan queryWeaponAmmo(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const WeaponAmmoCommand &command)
+{
+    ProfileState candidate = profile;
+    const WeaponAmmoReceipt receipt = apply(candidate, content, command);
+    return WeaponAmmoPlan{
+        receipt.succeeded,
+        receipt.error,
+        receipt.message,
+        profile.revision,
+        receipt.result};
 }
 
 WeaponAmmoReceipt executeWeaponAmmo(
@@ -370,4 +467,3 @@ std::size_t magazineRoundCount(
     const AssetRecord *magazine = profile.assets.find(magazineAssetId);
     return magazine == nullptr ? 0U : magazine->magazineRounds.size();
 }
-

@@ -4,6 +4,24 @@
 
 #include "alpha_content_ids.h"
 #include "economy_domain.h"
+#include "weapon_ammo_domain.h"
+
+namespace
+{
+AssetInstanceId firstAsset(
+    const ProfileState &profile,
+    const ItemDefinitionId &definitionId)
+{
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == definitionId)
+        {
+            return id;
+        }
+    }
+    return 0;
+}
+}
 
 TEST(EconomyDomainTest, FixedSupplyCreatesRealAssetsAndDebitsCurrency)
 {
@@ -105,4 +123,51 @@ TEST(EconomyDomainTest, ReliefIsConditionalSingleBatchAndNotRecyclable)
         CommandContext{profile.revision, "sell-relief"});
     EXPECT_FALSE(recycle.succeeded);
     EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(EconomyDomainTest, LoadedAndChamberedRoundsCountTowardRaidCapability)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "economy-loaded-capability",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(magazine, 0U);
+    ASSERT_NE(ammunition, 0U);
+
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 30},
+        CommandContext{profile.revision, "load-capability-magazine"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{rifle, magazine},
+        CommandContext{profile.revision, "install-capability-magazine"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "chamber-capability-round"}).succeeded);
+
+    std::vector<AssetInstanceId> looseAmmunition;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::ammunition)
+        {
+            looseAmmunition.push_back(id);
+        }
+    }
+    for (const AssetInstanceId id : looseAmmunition)
+    {
+        ASSERT_TRUE(profile.assets.erase(id));
+    }
+
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 29U);
+    ASSERT_TRUE(profile.assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_TRUE(hasMinimumRaidCapability(profile, publishedContentRegistry()));
+    EXPECT_FALSE(isReliefEligible(profile, publishedContentRegistry()));
 }

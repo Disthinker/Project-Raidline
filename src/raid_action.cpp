@@ -217,6 +217,65 @@ std::optional<AssetInstanceId> selectQuickMedkit(
     return std::nullopt;
 }
 
+std::optional<ProfileContainerId> selectRaidMagazineUnloadDestination(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId magazineAssetId) noexcept
+{
+    if (!assetIsCarried(profile, magazineAssetId))
+    {
+        return std::nullopt;
+    }
+    try
+    {
+        // Loose ammunition prefers the backpack. General chest-rig pockets
+        // remain a deterministic fallback when no backpack placement fits.
+        for (EquipmentSlotKind slot : {
+                 EquipmentSlotKind::Backpack,
+                 EquipmentSlotKind::ChestRig})
+        {
+            const auto containerAssetId = equippedAsset(profile, slot);
+            if (!containerAssetId.has_value())
+            {
+                continue;
+            }
+            const AssetRecord *container = profile.assets.find(*containerAssetId);
+            if (container == nullptr)
+            {
+                continue;
+            }
+            const ItemDefinition &definition = content.item(container->definitionId);
+            for (std::size_t index = 0;
+                 index < definition.containerCompartments.size();
+                 ++index)
+            {
+                if (definition.containerCompartments[index].pocketKind !=
+                    ContainerPocketKind::General)
+                {
+                    continue;
+                }
+                const ProfileContainerId destination =
+                    ProfileContainerId::compartment(
+                        *containerAssetId,
+                        static_cast<std::uint32_t>(index));
+                if (queryWeaponAmmo(
+                        profile,
+                        content,
+                        UnloadMagazineCommand{
+                            magazineAssetId,
+                            destination}).canCommit)
+                {
+                    return destination;
+                }
+            }
+        }
+    }
+    catch (...)
+    {
+    }
+    return std::nullopt;
+}
+
 HealReceipt executeHeal(
     ProfileState &profile,
     const ContentRegistry &content,

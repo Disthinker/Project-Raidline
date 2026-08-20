@@ -117,3 +117,108 @@ TEST(WeaponAmmoDomainTest, RejectedCommandDoesNotMutateProfile)
     EXPECT_FALSE(result.succeeded);
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
+
+TEST(WeaponAmmoDomainTest, InstallAndChamberIsOneAtomicCommand)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-prepare",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 12},
+        CommandContext{profile.revision, "prepare-load"}).succeeded);
+
+    const WeaponAmmoPlan plan = queryWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{rifle, magazine});
+    EXPECT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.result, WeaponAmmoResult::InstalledAndChambered);
+    const std::uint64_t before = profileStateFingerprint(profile);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        CommandContext{profile.revision, "prepare-weapon"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.result, WeaponAmmoResult::InstalledAndChambered);
+    EXPECT_EQ(installedMagazine(profile, rifle), magazine);
+    EXPECT_TRUE(profile.assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 11U);
+}
+
+TEST(WeaponAmmoDomainTest, ChamberCommandNeverFiresAnExistingRound)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-explicit-chamber",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 3},
+        CommandContext{profile.revision, "explicit-load"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{rifle, magazine},
+        CommandContext{profile.revision, "explicit-install"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        ChamberWeaponCommand{rifle},
+        CommandContext{profile.revision, "explicit-chamber"}).succeeded);
+
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const WeaponAmmoReceipt repeated = executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        ChamberWeaponCommand{rifle},
+        CommandContext{profile.revision, "do-not-fire"});
+    EXPECT_FALSE(repeated.succeeded);
+    EXPECT_EQ(repeated.error, DomainErrorCode::InvalidQuantity);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 2U);
+}
+
+TEST(WeaponAmmoDomainTest, InstalledMagazineCanUninstallToExactCell)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-uninstall",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{rifle, magazine},
+        CommandContext{profile.revision, "uninstall-setup"}).succeeded);
+    const StoredAssetLocation destination{
+        ProfileContainerId::stash(), GridPosition{18, 10}};
+
+    const WeaponAmmoPlan plan = queryWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        UninstallMagazineCommand{
+            rifle, destination, ItemOrientation::Degrees0});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        UninstallMagazineCommand{
+            rifle, destination, ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "uninstall-exact"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_FALSE(installedMagazine(profile, rifle).has_value());
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(profile.assets.find(magazine)->location),
+        destination);
+}

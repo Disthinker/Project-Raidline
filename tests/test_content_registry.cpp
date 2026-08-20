@@ -173,6 +173,17 @@ TEST(ContentRegistryTest, RejectsInvalidItemFootprint)
         ContentRegistryError);
 }
 
+TEST(ContentRegistryTest, RejectsFixedSupplyOutsideAlphaRecycleBaseline)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"market_buy_price\": 300,\n      \"market_recycle_price\": 75",
+        "\"market_buy_price\": 300,\n      \"market_recycle_price\": 76");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, RejectsUnknownLootItemReference)
 {
     const std::string invalid = replaceFirst(

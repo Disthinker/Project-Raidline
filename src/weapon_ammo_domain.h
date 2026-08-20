@@ -24,10 +24,22 @@ struct InstallMagazineCommand
     AssetInstanceId magazineAssetId{};
 };
 
+struct InstallMagazineAndChamberCommand
+{
+    AssetInstanceId weaponAssetId{};
+    AssetInstanceId magazineAssetId{};
+};
+
 struct UninstallMagazineCommand
 {
     AssetInstanceId weaponAssetId{};
-    ProfileContainerId destination{ProfileContainerId::stash()};
+    StoredAssetLocation destination;
+    ItemOrientation destinationOrientation{ItemOrientation::Degrees0};
+};
+
+struct ChamberWeaponCommand
+{
+    AssetInstanceId weaponAssetId{};
 };
 
 struct FireWeaponCommand
@@ -39,7 +51,9 @@ using WeaponAmmoCommand = std::variant<
     LoadMagazineCommand,
     UnloadMagazineCommand,
     InstallMagazineCommand,
+    InstallMagazineAndChamberCommand,
     UninstallMagazineCommand,
+    ChamberWeaponCommand,
     FireWeaponCommand>;
 
 enum class WeaponAmmoResult
@@ -47,6 +61,7 @@ enum class WeaponAmmoResult
     Loaded,
     Unloaded,
     Installed,
+    InstalledAndChambered,
     Uninstalled,
     Chambered,
     Fired,
@@ -64,6 +79,20 @@ struct WeaponAmmoReceipt
     std::optional<ItemDefinitionId> firedAmmunitionDefinitionId;
 };
 
+struct WeaponAmmoPlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    WeaponAmmoResult result{WeaponAmmoResult::Dry};
+};
+
+[[nodiscard]] WeaponAmmoPlan queryWeaponAmmo(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const WeaponAmmoCommand &command);
+
 [[nodiscard]] WeaponAmmoReceipt executeWeaponAmmo(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -73,4 +102,3 @@ struct WeaponAmmoReceipt
 [[nodiscard]] std::size_t magazineRoundCount(
     const ProfileState &profile,
     AssetInstanceId magazineAssetId) noexcept;
-

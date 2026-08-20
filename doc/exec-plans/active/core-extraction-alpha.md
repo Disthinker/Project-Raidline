@@ -1,12 +1,12 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 已进入 main；Extraction Loop 端到端代码、本地自动化、精确 head CI 与用户验收完成，PR #59 等待显式合并授权
+状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹、奔跑和空栏位快速装备修订，本地实现与自动化完成，等待新 head CI 及最终集中人工验收
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-当前接受基线：`origin/main@b1ea3c3`（Slice 0 原始实施基线为 `61718f6`）
+当前接受基线：`origin/main@ed45baa`（Slice 0 原始实施基线为 `61718f6`）
 
-当前实施分支：`codex/core-alpha-extraction-loop`
+当前实施分支：`codex/core-alpha-hardening`
 
 ## 1. 目标与完成定义
 
@@ -20,7 +20,7 @@
 - 所有唯一资产在任一时刻只有一个权威位置；失败事务不复制、不吞物、不部分提交。
 - 弹药从散装、弹匣、枪膛到击发守恒。
 - 主存档、滚动安全备份、迁移和未结算 Raid 幂等失败可跨进程复现。
-- 自动化覆盖所有权、失败原子性、存档往返、成功/失败结算、异常退出和连续多局；真实窗口覆盖完整玩家闭环。
+- 自动化覆盖所有权、失败原子性、存档往返、成功/失败结算、进程退出回滚和连续多局；真实窗口覆盖完整玩家闭环。
 
 ## 2. 已验证基线与依赖
 
@@ -29,7 +29,8 @@
 - Content Registry v1 从干净的 `origin/main@1837928` 创建，本地 Windows Debug 70 步构建、focused 134/134 与全量 574/574 通过；PR #57 已以 merge commit `14cf79b` 进入 main。
 - Week29 `6c23389` 未进入 main，且 GitHub 无对应 PR；正式 Grab/Scratch/Bite 图像、runtime PNG 与 manifest 发布均不存在，生产保持暂停。
 - Persistent Base 从干净的 `origin/main@14cf79b` 创建；Windows Debug 120 步构建、focused 70/70、全量 CTest 601/601、exact-head CI 与用户 6/6 集中验收通过，PR #58 已以 merge commit `b1ea3c3` 进入 main。
-- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；领域合同 `2d9b96d` 与端到端实现 `66f3120` 已完成，Windows Debug 构建、focused 17/17、全量 CTest 620/620、PR #59 精确 head CI 与用户 7/7 集中验收通过，等待显式合并授权。
+- Extraction Loop 从干净的 `origin/main@b1ea3c3` 创建；Windows Debug 构建、focused 17/17、全量 CTest 620/620、PR #59 精确 head CI 与用户 7/7 集中验收通过，并以 merge commit `ed45baa` 进入 main。
+- Alpha Hardening 从干净的 `origin/main@ed45baa` 创建；恢复/救济修复、内容合同、10 局长序列、三配置自动化、库存/角色显示返工、退出回滚、Raid 压卸弹/奔跑及空栏位快速装备已完成，本地全目标构建与全量 CTest 645/645 通过。
 
 ## 3. V0 → Core Extraction Alpha 差距矩阵
 
@@ -84,7 +85,7 @@ Project_Raidline.exe
 - `MapDefinition` 是不可变定义；`RaidSessionSnapshot` 保存 `MapId`、种子、成对出生/撤离、Loot 与敌人部署一次抽取结果及唯一结算 ID。
 - `SettlementDomain` 从 Raid 快照和资产位置生成一次性结果；成功带回，失败全损；同一结算 ID 重放得到同一已提交结果。
 - `EconomyDomain` 只处理固定供应、回收、普通货币和救济资格；不创建库存刷新、商人等级或任务状态。
-- `Persistence` 的第一个正式跨进程格式为 schema v1；保存稳定 ID、命名字符串定义 ID、实例字段、所有权关系、货币、标志、版本、高水位、幂等键和 pending Raid。使用候选状态、临时文件、回读校验、安全备份与平台原子替换。
+- `Persistence` 的第一个正式跨进程格式为 schema v1；保存稳定 ID、命名字符串定义 ID、实例字段、所有权关系、货币、标志、版本、高水位和幂等键。Alpha Deploy 保留精确出击前磁盘快照，pending Raid 仅在内存运行；旧 schema v2 pending 存档通过显式回滚迁回 Base。保存继续使用候选状态、临时文件、回读校验、安全备份与平台原子替换。
 - 内容定义使用版本化 JSON 和命名字符串 ID；加载时验证重复 ID、非法引用、容器循环、价格套利、地图连通性和缺失资源。Alpha 不承诺热更新或公开 Mod API。
 - App 发送带 `expectedRevision` 与 `transactionId` 的领域命令，读取 receipt、领域事实和只读 projection。拒绝命令保持状态哈希、高水位和货币不变；不建立全局事件总线。
 - 模拟使用固定 60 Hz 步长；随机使用跨编译器稳定的 PCG32 与命名随机流，最终地图/Loot/部署选择写入 Raid 快照。
@@ -129,7 +130,7 @@ Project_Raidline.exe
 
 ## 6. Persistent Base 宏切片
 
-依赖：`origin/main@14cf79b`。已接受计划证据：`doc/exec-plans/active/core-alpha-persistent-base.md`。
+依赖：`origin/main@14cf79b`。已接受计划证据：`doc/exec-plans/completed/core-alpha-persistent-base.md`。
 
 禁止范围：不实现真实 Raid Deploy、弹匣内容/枪膛、Raid 换弹、100 HP/治疗动作、RaidSnapshot、全损结算或移除 Timeout；不扩展三槽之外装备。
 
@@ -143,11 +144,11 @@ Project_Raidline.exe
 
 ## 7. Extraction Loop 宏切片
 
-依赖：Persistent Base 已由 PR #58 合入 `origin/main@b1ea3c3`。活动计划：`doc/exec-plans/active/core-alpha-extraction-loop.md`。
+依赖：Persistent Base 已由 PR #58 合入 `origin/main@b1ea3c3`。已接受计划证据：`doc/exec-plans/completed/core-alpha-extraction-loop.md`。
 
 禁止范围：不实现特殊弹、完整逻辑弹道重做、耐久/故障、防具/部位/复杂伤势、多地图、高危、特殊撤离、增援、尸体搜索或寻回。
 
-交付：弹匣有序内容、枪膛、Base 压卸弹、胸挂 R 换弹、真实消耗；100 HP、Medkit 与 Action；Raid 随身库存；三组出生撤离、三组敌人部署、一次性 Loot 快照；无硬时限；成功带回、死亡/主动/异常退出全损；RaidResult 与幂等 pending Raid。
+交付：弹匣有序内容、枪膛、Base 即时压卸弹、Raid 限时压卸弹、胸挂 R 换弹、真实消耗；100 HP、Medkit 与 Action；Raid 随身库存及 Shift 奔跑；三组出生撤离、三组敌人部署、一次性 Loot 快照；无硬时限；成功带回、死亡/主动退出全损，关闭程序回滚出击前状态；RaidResult 与幂等结算。
 
 自动化：弹药守恒；动作任意提交点合法；治疗次数；固定种子快照；地图配置可达；时间不失败；Deploy/成功/失败/重载只结算一次；生产 Alpha 绕过 V0 ItemId/ItemInstance 后的全量回归。
 
@@ -157,7 +158,7 @@ Project_Raidline.exe
 
 ## 8. Alpha Hardening 宏切片
 
-依赖：Extraction Loop 接受并合入 main。
+依赖：Extraction Loop 已由 PR #59 合入 `origin/main@ed45baa`。活动计划：`doc/exec-plans/active/core-alpha-hardening.md`。
 
 禁止范围：不通过增加敌人刷新、倒计时、高危、任务或复杂伤势掩盖节奏问题。
 
@@ -200,8 +201,13 @@ Project_Raidline.exe
 - [x] PR #59 精确代码 head `864f12e` 的范围检测、Windows 与 Ubuntu CI 全部成功。
 - [x] 用户使用当前 Windows Debug 可执行文件完成 Extraction Loop 第 8 节集中真实窗口验收，7/7 通过且未报告偏差；开发代理未启动游戏。
 - [x] 验收记录随证据提交进入 PR #59；最终 CI 成功后由 Release Control 转为 Ready，合并仍需显式授权。
+- [x] PR #59 已以 merge commit `ed45baa` 进入 main；从该接受基线建立 `codex/core-alpha-hardening`。
+- [x] Hardening 修复装入弹匣/枪膛弹药未计入最低出击能力的问题，并最终按用户修订将关闭程序处理改为精确出击前存档回滚。
+- [x] Hardening 全量 CTest 645/645 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档、Deploy 保存失败、统一库存交互、Raid 压卸弹、奔跑及空栏位快速装备均有自动化证据。
+- [x] Hardening 返工提交 `daceec6` 的 Windows/Ubuntu CI（run `31861016485`）通过。
+- [ ] 用户按正常游玩流程完成最终验收与 Alpha 完成报告。
 
-最后更新：2026-08-15。
+最后更新：2026-08-16。
 
 ### 2026-08-14 Slice 0 证据
 

@@ -120,3 +120,44 @@ TEST(PersistentSessionTest, SaveFailureDoesNotSwapCandidateIntoMemory)
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
+
+TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
+{
+    SessionSaveDirectory temporary;
+    ProfileState legacy = makeNewAlphaProfile(
+        "legacy-pending-profile",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = findDefinition(
+        legacy, alpha_content::rifle);
+    ASSERT_TRUE(executeInventory(
+        legacy,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::PrimaryWeapon},
+        CommandContext{legacy.revision, "legacy-equip-rifle"}).succeeded);
+    ASSERT_TRUE(executeDeploy(
+        legacy,
+        publishedContentRegistry(),
+        DeployCommand{
+            "legacy-pending-raid",
+            "legacy-pending-settlement",
+            88771,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{legacy.revision, "legacy-deploy"}).succeeded);
+    ASSERT_TRUE(legacy.pendingRaid.has_value());
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        legacy,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+
+    EXPECT_TRUE(reopened.recoveredAbandonedRaid());
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+    EXPECT_EQ(equippedAsset(
+        reopened.profile(), EquipmentSlotKind::PrimaryWeapon), rifle);
+    EXPECT_TRUE(reopened.profile().committedSettlements.empty());
+    EXPECT_FALSE(reopened.profile().lastRaidResult.has_value());
+}

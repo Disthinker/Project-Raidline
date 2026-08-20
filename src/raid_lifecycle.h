@@ -43,6 +43,14 @@ struct RaidSettlementReceipt
     RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
 };
 
+struct RaidRollbackReceipt
+{
+    bool succeeded{};
+    RaidLifecycleError error{RaidLifecycleError::None};
+    std::string message;
+    ProfileRevision revision{};
+};
+
 [[nodiscard]] DeployReceipt executeDeploy(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -55,9 +63,14 @@ struct RaidSettlementReceipt
     std::string_view settlementId,
     RaidResultOutcome outcome);
 
+// Compatibility recovery for saves written by builds that persisted a
+// pending Raid. New deployments keep the exact pre-Raid Profile on disk.
+[[nodiscard]] RaidRollbackReceipt rollbackPendingRaidToBase(
+    ProfileState &profile,
+    const ContentRegistry &content);
+
 [[nodiscard]] InventoryReceipt pickupRaidLoot(
     ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId assetId,
     const CommandContext &context);
-

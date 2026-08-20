@@ -515,10 +515,15 @@ ContentRegistry ContentRegistry::fromJson(
                     ItemDefinitionId{*magazine};
             }
 
-            if (definition.marketRecyclePrice > definition.marketBuyPrice &&
-                definition.marketBuyPrice != 0)
+            if (definition.marketBuyPrice != 0)
             {
-                fail("item recycle price exceeds buy price");
+                const std::uint32_t expectedRecyclePrice = std::max(
+                    1U,
+                    definition.marketBuyPrice / 4U);
+                if (definition.marketRecyclePrice != expectedRecyclePrice)
+                {
+                    fail("fixed supply recycle price violates Alpha baseline");
+                }
             }
 
             if (definition.worldRenderSize.x <= 0.0F ||

@@ -13,11 +13,28 @@ struct ReloadRaidAction
     float durationSeconds{2.0F};
 };
 
+struct LoadMagazineRaidAction
+{
+    AssetInstanceId magazineAssetId{};
+    AssetInstanceId ammunitionAssetId{};
+    std::uint32_t quantity{};
+    float elapsedSeconds{};
+    float durationSeconds{0.5F};
+};
+
 struct HealRaidAction
 {
     AssetInstanceId medkitAssetId{};
     float elapsedSeconds{};
     float durationSeconds{5.0F};
+};
+
+struct UnloadMagazineRaidAction
+{
+    AssetInstanceId magazineAssetId{};
+    ProfileContainerId destination;
+    float elapsedSeconds{};
+    float durationSeconds{3.0F};
 };
 
 struct ExtractRaidAction
@@ -28,7 +45,9 @@ struct ExtractRaidAction
 
 using RaidAction = std::variant<
     ReloadRaidAction,
+    LoadMagazineRaidAction,
     HealRaidAction,
+    UnloadMagazineRaidAction,
     ExtractRaidAction>;
 
 enum class RaidActionAdvance
@@ -81,6 +100,12 @@ enum class HealAccess
 [[nodiscard]] std::optional<AssetInstanceId> selectQuickMedkit(
     const ProfileState &profile,
     const ContentRegistry &content) noexcept;
+
+[[nodiscard]] std::optional<ProfileContainerId>
+selectRaidMagazineUnloadDestination(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId magazineAssetId) noexcept;
 
 [[nodiscard]] HealReceipt executeHeal(
     ProfileState &profile,

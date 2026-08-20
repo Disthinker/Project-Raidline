@@ -84,8 +84,14 @@ void InputSystem::handleEvent(
         return;
     }
 
-    pressedActions_.erase(
-        *action);
+    for (SDL_Scancode pressedScancode : pressedScancodes_)
+    {
+        if (mapScancodeToAction(pressedScancode) == action)
+        {
+            return;
+        }
+    }
+    pressedActions_.erase(*action);
 }
 
 bool InputSystem::isActionPressed(
@@ -173,7 +179,8 @@ InputSystem::mapScancodeToAction(
         return GameAction::Heal;
 
     case SDL_SCANCODE_LSHIFT:
-        return GameAction::Dodge;
+    case SDL_SCANCODE_RSHIFT:
+        return GameAction::Sprint;
 
     case SDL_SCANCODE_E:
     case SDL_SCANCODE_F:

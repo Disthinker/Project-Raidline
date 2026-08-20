@@ -15,7 +15,7 @@ enum class GameAction
     Fire,
     Reload,
     Heal,
-    Dodge,
+    Sprint,
     Interact,
 
     // 背包开关。

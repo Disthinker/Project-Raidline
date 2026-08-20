@@ -13,6 +13,7 @@
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
+#include "profile_inventory_interaction.h"
 #include "texture.h"
 
 enum class MainMenuCommand
@@ -35,6 +36,12 @@ struct ProfileAssetSelection
     AssetInstanceId instanceId{};
     std::uint32_t quantity{};
     ItemOrientation orientation{ItemOrientation::Degrees0};
+};
+
+struct ProfileContextMenu
+{
+    AssetInstanceId instanceId{};
+    MousePosition position{};
 };
 
 class App
@@ -75,10 +82,17 @@ private:
     InventoryInteractionState
         inventoryInteraction_;
 
+    ProfileInventoryInteractionState
+        profileInventoryInteraction_;
+
     std::vector<InventoryUiEvent>
         pendingInventoryUiEvents_;
 
+    std::vector<MousePosition>
+        pendingProfileRightClicks_;
+
     std::optional<ProfileAssetSelection> profileAssetSelection_;
+    std::optional<ProfileContextMenu> profileContextMenu_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
@@ -110,6 +124,12 @@ private:
     void updateBase(float deltaTime);
     void handleBasePointerClick(const BasePointerClick &click);
     void handleRaidProfileClick(const BasePointerClick &click);
+    void handleProfileInventoryUiEvent(
+        const InventoryUiEvent &event,
+        bool inRaid);
+    void handleProfileRightClick(MousePosition position, bool inRaid);
+    void executeProfileDrop(const ProfileDropRequest &request, bool inRaid);
+    void executeProfileContextAction(bool inRaid);
     [[nodiscard]] bool tryDeployFromBase();
 
     [[nodiscard]] std::string nextProfileTransactionId(
@@ -188,7 +208,18 @@ private:
     void renderProfileAsset(
         const AssetRecord &asset,
         const SDL_FRect &bounds,
-        float cellSize);
+        float cellSize,
+        Uint8 alpha = 255);
+    void renderProfileInventory(bool includeStash, bool inRaid);
+    void renderProfileDragFeedback(bool includeStash, bool inRaid);
+    void renderProfileContextMenu(bool inRaid);
+    void renderPlayerAvatar(
+        Vec2 position,
+        Vec2 bodySize,
+        Vec2 facingDirection,
+        bool moving,
+        std::size_t animationFrame);
+    void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
     void renderScreenPrimaryButton(
         const char *label);
