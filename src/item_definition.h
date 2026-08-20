@@ -33,7 +33,49 @@ enum class ItemCategory
     Magazine,
     Container,
     ProtectiveGear,
+    Maintenance,
     Loot
+};
+
+enum class WeaponMalfunctionType
+{
+    None,
+    Stovepipe
+};
+
+struct WeaponMalfunctionWeight
+{
+    WeaponMalfunctionType type{WeaponMalfunctionType::Stovepipe};
+    std::uint32_t weight{};
+
+    friend bool operator==(
+        const WeaponMalfunctionWeight &,
+        const WeaponMalfunctionWeight &) = default;
+};
+
+struct WeaponConditionDefinition
+{
+    // Weapon condition uses fixed-point centi-durability units. 10000 is
+    // displayed as 100.00 durability and avoids cross-platform float drift.
+    std::uint32_t maximumDurabilityCenti{};
+    std::uint32_t wearPerSuccessfulShotCenti{};
+    std::uint32_t reliabilityMultiplierBasisPoints{10000};
+    std::vector<WeaponMalfunctionWeight> malfunctionWeights;
+
+    friend bool operator==(
+        const WeaponConditionDefinition &,
+        const WeaponConditionDefinition &) = default;
+};
+
+struct WeaponMaintenanceDefinition
+{
+    std::uint32_t capacityCenti{};
+    std::uint32_t raidActionDurationMs{};
+    std::uint32_t raidMaximumLossBasisPoints{};
+
+    friend bool operator==(
+        const WeaponMaintenanceDefinition &,
+        const WeaponMaintenanceDefinition &) = default;
 };
 
 enum class MedicalItemEffect
@@ -156,6 +198,8 @@ struct ItemDefinition
         compatibleMagazineDefinitionId;
     std::optional<ArmorProtectionDefinition> armorProtection;
     std::optional<MedicalUseDefinition> medicalUse;
+    std::optional<WeaponConditionDefinition> weaponCondition;
+    std::optional<WeaponMaintenanceDefinition> weaponMaintenance;
 };
 
 constexpr std::size_t itemCount() noexcept

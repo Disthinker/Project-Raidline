@@ -218,6 +218,45 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
 }
 
+TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceMovementInterruptIsAtomic)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-maintenance"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId backpack = assets(
+        session.profile(), alpha_content::backpack).front();
+    const AssetInstanceId kit = assets(
+        session.profile(), alpha_content::weaponMaintenanceKit).front();
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            kit,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "maintenance-carry-kit").succeeded);
+    ASSERT_TRUE(session.deployAlpha(90818));
+
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        FireWeaponCommand{rifle},
+        "maintenance-wear-shot").succeeded);
+    EXPECT_EQ(session.profile().assets.find(rifle)->currentDurability, 9990U);
+
+    ASSERT_TRUE(session.startAlphaWeaponMaintenance(kit, rifle));
+    const std::uint64_t beforeInterrupt =
+        profileStateFingerprint(session.profile());
+    GameplayInput movement{};
+    movement.moveRight = true;
+    session.update(movement, 0.1F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupt);
+    EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 2500U);
+
+}
+
 TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
 {
     GameSession session;

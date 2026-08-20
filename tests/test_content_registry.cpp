@@ -62,8 +62,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-2");
-    ASSERT_EQ(registry.items().size(), 16U);
+    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-3");
+    ASSERT_EQ(registry.items().size(), 17U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -73,6 +73,21 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(ammunition.id, ItemId::Ammo9mm);
     EXPECT_EQ(ammunition.maxStackSize, 60U);
     EXPECT_EQ(ammunition.marketBuyPrice, 1U);
+
+    const ItemDefinition &rifle = registry.item(alpha_content::rifle);
+    ASSERT_TRUE(rifle.weaponCondition.has_value());
+    EXPECT_EQ(rifle.weaponCondition->maximumDurabilityCenti, 10000U);
+    EXPECT_EQ(rifle.weaponCondition->wearPerSuccessfulShotCenti, 10U);
+    ASSERT_EQ(rifle.weaponCondition->malfunctionWeights.size(), 1U);
+    EXPECT_EQ(rifle.weaponCondition->malfunctionWeights.front().type,
+              WeaponMalfunctionType::Stovepipe);
+
+    const ItemDefinition &maintenance = registry.item(
+        alpha_content::weaponMaintenanceKit);
+    ASSERT_TRUE(maintenance.weaponMaintenance.has_value());
+    EXPECT_EQ(maintenance.category, ItemCategory::Maintenance);
+    EXPECT_EQ(maintenance.weaponMaintenance->capacityCenti, 2500U);
+    EXPECT_EQ(maintenance.weaponMaintenance->raidActionDurationMs, 8000U);
 
     const ItemDefinition &chestRig = registry.item(
         ItemDefinitionId{"item.container.chest_rig_small"});
@@ -209,6 +224,28 @@ TEST(ContentRegistryTest, RejectsUnsupportedMedicalEffect)
         publishedJsonCopy(),
         "\"effect\": \"stop_light_bleeding\"",
         "\"effect\": \"cure_everything\"");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidWeaponReliabilityMultiplier)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"reliability_multiplier_basis_points\": 10000",
+        "\"reliability_multiplier_basis_points\": 20000");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsMaintenanceCapacityMismatch)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"capacity_centi\": 2500",
+        "\"capacity_centi\": 2400");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

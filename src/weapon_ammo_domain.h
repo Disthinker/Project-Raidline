@@ -45,6 +45,16 @@ struct ChamberWeaponCommand
 struct FireWeaponCommand
 {
     AssetInstanceId weaponAssetId{};
+    // Stable rolls supplied by the session. Values are interpreted modulo the
+    // applicable bound so tests and save-compatible simulations never depend
+    // on a platform RNG implementation.
+    std::uint32_t malfunctionRollBasisPoints{9999U};
+    std::uint32_t malfunctionTypeRoll{};
+};
+
+struct ClearWeaponMalfunctionCommand
+{
+    AssetInstanceId weaponAssetId{};
 };
 
 using WeaponAmmoCommand = std::variant<
@@ -54,7 +64,8 @@ using WeaponAmmoCommand = std::variant<
     InstallMagazineAndChamberCommand,
     UninstallMagazineCommand,
     ChamberWeaponCommand,
-    FireWeaponCommand>;
+    FireWeaponCommand,
+    ClearWeaponMalfunctionCommand>;
 
 enum class WeaponAmmoResult
 {
@@ -65,6 +76,10 @@ enum class WeaponAmmoResult
     Uninstalled,
     Chambered,
     Fired,
+    FiredAndMalfunctioned,
+    BlockedByMalfunction,
+    Broken,
+    MalfunctionCleared,
     Dry
 };
 

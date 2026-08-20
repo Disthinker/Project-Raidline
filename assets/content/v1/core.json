@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "survival-loadout-content-2",
+  "content_version": "survival-loadout-content-3",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -79,7 +79,15 @@
       "market_buy_price": 300,
       "market_recycle_price": 75,
       "compatible_ammunition": "item.ammunition.9mm_basic",
-      "compatible_magazine": "item.magazine.9mm_30"
+      "compatible_magazine": "item.magazine.9mm_30",
+      "weapon_condition": {
+        "maximum_durability_centi": 10000,
+        "wear_per_successful_shot_centi": 10,
+        "reliability_multiplier_basis_points": 10000,
+        "malfunctions": [
+          {"type": "stovepipe", "weight": 100}
+        ]
+      }
     },
     {
       "id": "item.ammunition.9mm_basic",
@@ -249,6 +257,28 @@
         "action_duration_ms": 2000,
         "effect_magnitude": 180000,
         "slow_movement": false
+      }
+    },
+    {
+      "id": "item.maintenance.weapon_kit_basic",
+      "display_name": "Weapon Maintenance Kit",
+      "category": "maintenance",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_weapon_maintenance.png",
+      "world_texture": "items/world/unpublished_weapon_maintenance.png",
+      "market_buy_price": 80,
+      "market_recycle_price": 20,
+      "maximum_charges": 2500,
+      "weapon_maintenance": {
+        "capacity_centi": 2500,
+        "raid_action_duration_ms": 8000,
+        "raid_maximum_loss_basis_points": 1000
       }
     },
     {

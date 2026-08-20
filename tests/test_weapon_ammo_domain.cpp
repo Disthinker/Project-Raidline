@@ -222,3 +222,99 @@ TEST(WeaponAmmoDomainTest, InstalledMagazineCanUninstallToExactCell)
         std::get<StoredAssetLocation>(profile.assets.find(magazine)->location),
         destination);
 }
+
+TEST(WeaponAmmoDomainTest, SuccessfulShotWearsWeaponWithoutReliableTierFault)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-condition-wear", publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 3},
+        CommandContext{profile.revision, "wear-load"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        CommandContext{profile.revision, "wear-install"}).succeeded);
+
+    const WeaponAmmoReceipt fired = executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        FireWeaponCommand{rifle, 0, 0},
+        CommandContext{profile.revision, "wear-fire"});
+
+    ASSERT_TRUE(fired.succeeded);
+    EXPECT_EQ(fired.result, WeaponAmmoResult::Fired);
+    EXPECT_EQ(profile.assets.find(rifle)->currentDurability, 9990U);
+    EXPECT_EQ(profile.assets.find(rifle)->weaponMalfunction,
+              WeaponMalfunctionType::None);
+}
+
+TEST(WeaponAmmoDomainTest, StovepipeConsumesShotBlocksFireAndClearsByCommand)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-condition-stovepipe", publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 3},
+        CommandContext{profile.revision, "fault-load"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        CommandContext{profile.revision, "fault-install"}).succeeded);
+    profile.assets.findMutable(rifle)->currentDurability = 3000;
+
+    const WeaponAmmoReceipt fired = executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        FireWeaponCommand{rifle, 0, 0},
+        CommandContext{profile.revision, "fault-fire"});
+    ASSERT_TRUE(fired.succeeded);
+    EXPECT_EQ(fired.result, WeaponAmmoResult::FiredAndMalfunctioned);
+    EXPECT_EQ(profile.assets.find(rifle)->currentDurability, 2990U);
+    EXPECT_FALSE(profile.assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 2U);
+    EXPECT_EQ(profile.assets.find(rifle)->weaponMalfunction,
+              WeaponMalfunctionType::Stovepipe);
+
+    const std::uint64_t blockedFingerprint = profileStateFingerprint(profile);
+    const ProfileRevision blockedRevision = profile.revision;
+    const WeaponAmmoReceipt blocked = executeWeaponAmmo(
+        profile, publishedContentRegistry(), FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "blocked-fire"});
+    ASSERT_TRUE(blocked.succeeded);
+    EXPECT_EQ(blocked.result, WeaponAmmoResult::BlockedByMalfunction);
+    EXPECT_EQ(profileStateFingerprint(profile), blockedFingerprint);
+    EXPECT_EQ(profile.revision, blockedRevision);
+
+    const WeaponAmmoReceipt cleared = executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        ClearWeaponMalfunctionCommand{rifle},
+        CommandContext{profile.revision, "clear-fault"});
+    ASSERT_TRUE(cleared.succeeded);
+    EXPECT_EQ(cleared.result, WeaponAmmoResult::MalfunctionCleared);
+    EXPECT_EQ(profile.assets.find(rifle)->weaponMalfunction,
+              WeaponMalfunctionType::None);
+    EXPECT_TRUE(profile.assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 1U);
+}
+
+TEST(WeaponAmmoDomainTest, BrokenWeaponCannotConsumeChamberedRound)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-condition-broken", publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    profile.assets.findMutable(rifle)->currentDurability = 0;
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const WeaponAmmoReceipt result = executeWeaponAmmo(
+        profile, publishedContentRegistry(), FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "broken-fire"});
+
+    ASSERT_TRUE(result.succeeded);
+    EXPECT_EQ(result.result, WeaponAmmoResult::Broken);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}

@@ -11,8 +11,8 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
 
     EXPECT_EQ(profile.currency, 200U);
     EXPECT_EQ(profile.revision, 1U);
-    EXPECT_EQ(profile.assets.records().size(), 15U);
-    EXPECT_EQ(profile.assets.nextAssetId(), 16U);
+    EXPECT_EQ(profile.assets.records().size(), 16U);
+    EXPECT_EQ(profile.assets.nextAssetId(), 17U);
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
@@ -25,6 +25,7 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     std::size_t medkits{};
     std::size_t protectiveGear{};
     std::size_t fieldMedical{};
+    std::size_t maintenanceKits{};
     for (const auto &[id, asset] : profile.assets.records())
     {
         static_cast<void>(id);
@@ -54,12 +55,24 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
         {
             ++fieldMedical;
         }
+        if (asset.definitionId == alpha_content::rifle)
+        {
+            EXPECT_EQ(asset.currentMaximumDurability, 10000U);
+            EXPECT_EQ(asset.currentDurability, 10000U);
+            EXPECT_EQ(asset.weaponMalfunction, WeaponMalfunctionType::None);
+        }
+        if (asset.definitionId == alpha_content::weaponMaintenanceKit)
+        {
+            ++maintenanceKits;
+            EXPECT_EQ(asset.remainingCharges, 2500U);
+        }
     }
     EXPECT_EQ(ammunition, 90U);
     EXPECT_EQ(magazines, 3U);
     EXPECT_EQ(medkits, 2U);
     EXPECT_EQ(protectiveGear, 2U);
     EXPECT_EQ(fieldMedical, 3U);
+    EXPECT_EQ(maintenanceKits, 1U);
 }
 
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)

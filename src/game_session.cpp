@@ -338,6 +338,9 @@ bool GameSession::deployAlpha(std::uint64_t seed)
     medicalTickAccumulatorSeconds_ = 0.0F;
     medicalRandomSequence_ = 0;
     woundRandomSequence_ = 0;
+    weaponFaultSequence_ = 0;
+    raidElapsedSeconds_ = 0.0F;
+    weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
     return true;
@@ -486,6 +489,65 @@ bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
             : 0,
         0.0F,
         static_cast<float>(plan.durationMs) / 1000.0F});
+}
+
+bool GameSession::startAlphaWeaponMaintenance(
+    AssetInstanceId kitAssetId,
+    AssetInstanceId weaponAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        return false;
+    }
+    const WeaponMaintenancePlan plan = queryWeaponMaintenance(
+        profile_,
+        publishedContentRegistry(),
+        WeaponMaintenanceCommand{
+            kitAssetId,
+            weaponAssetId,
+            MaintenanceAccess::CarriedOnly,
+            MaintenanceLocation::Raid});
+    return plan.canCommit && raidActionState_.start(
+        WeaponMaintenanceRaidAction{
+            kitAssetId,
+            weaponAssetId,
+            0.0F,
+            static_cast<float>(plan.actionDurationMs) / 1000.0F});
+}
+
+bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        weaponClearGesture_.reset();
+        return false;
+    }
+    const auto weapon = equippedAsset(
+        profile_, EquipmentSlotKind::PrimaryWeapon);
+    const AssetRecord *record = weapon.has_value()
+        ? profile_.assets.find(*weapon)
+        : nullptr;
+    if (record == nullptr ||
+        record->weaponMalfunction == WeaponMalfunctionType::None)
+    {
+        weaponClearGesture_.reset();
+        return false;
+    }
+    if (!weaponClearGesture_.observe(delta, raidElapsedSeconds_))
+    {
+        return false;
+    }
+    ProfileState candidate = profile_;
+    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+        candidate,
+        publishedContentRegistry(),
+        ClearWeaponMalfunctionCommand{*weapon},
+        CommandContext{
+            profile_.revision,
+            nextRaidTransaction("clear-malfunction")});
+    weaponClearGesture_.reset();
+    return receipt.succeeded &&
+           commitProfileCandidate(std::move(candidate), false);
 }
 
 bool GameSession::startAlphaUnloadMagazine(
@@ -689,6 +751,35 @@ MedicalUseReceipt GameSession::executeBaseMedical(
     return receipt;
 }
 
+WeaponMaintenanceReceipt GameSession::executeBaseWeaponMaintenance(
+    AssetInstanceId kitAssetId,
+    AssetInstanceId weaponAssetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    WeaponMaintenanceReceipt receipt = executeWeaponMaintenance(
+        candidate,
+        publishedContentRegistry(),
+        WeaponMaintenanceCommand{
+            kitAssetId,
+            weaponAssetId,
+            MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Base},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 const RaidActionState &GameSession::raidActionState() const noexcept
 {
     return raidActionState_;
@@ -715,6 +806,10 @@ void GameSession::updateAlphaRaid(
     float deltaTime)
 {
     lastIncomingDamage_.reset();
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        raidElapsedSeconds_ += deltaTime;
+    }
     if (!profile_.pendingRaid.has_value())
     {
         alphaRaidActive_ = false;
@@ -736,6 +831,12 @@ void GameSession::updateAlphaRaid(
     {
         static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
         return;
+    }
+    if (input.inventoryOpen || input.sprint || input.firePressed ||
+        input.fireJustPressed || input.reloadJustPressed ||
+        input.healJustPressed || world_->player().isControlled())
+    {
+        weaponClearGesture_.reset();
     }
 
     const auto weapon = equippedAsset(
@@ -836,10 +937,16 @@ void GameSession::updateAlphaRaid(
         (input.firePressed || input.fireJustPressed))
     {
         ProfileState candidate = profile_;
+        Pcg32 faultRandom{
+            profile_.pendingRaid->seed ^ 0x776561706f6e2d66ULL,
+            weaponFaultSequence_ + 0x6661756c742d726fULL};
         WeaponAmmoReceipt fire = executeWeaponAmmo(
             candidate,
             publishedContentRegistry(),
-            FireWeaponCommand{*weapon},
+            FireWeaponCommand{
+                *weapon,
+                faultRandom.bounded(10000U),
+                faultRandom.next()},
             CommandContext{
                 profile_.revision,
                 nextRaidTransaction("fire")});
@@ -851,7 +958,9 @@ void GameSession::updateAlphaRaid(
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
         }
-        else if (fire.succeeded && fire.result == WeaponAmmoResult::Fired)
+        else if (fire.succeeded &&
+                 (fire.result == WeaponAmmoResult::Fired ||
+                  fire.result == WeaponAmmoResult::FiredAndMalfunctioned))
         {
             firedCandidate = std::move(candidate);
         }
@@ -877,6 +986,16 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(commitProfileCandidate(
             std::move(*firedCandidate),
             false));
+        ++weaponFaultSequence_;
+        const AssetRecord *currentWeapon = weapon.has_value()
+            ? profile_.assets.find(*weapon)
+            : nullptr;
+        if (currentWeapon != nullptr &&
+            currentWeapon->weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            weaponClearGesture_.reset();
+            persistenceMessage_ = "weapon malfunction";
+        }
     }
 
     applyAlphaIncomingDamage();
@@ -898,9 +1017,13 @@ void GameSession::updateAlphaRaid(
     if (raidActionState_.active().has_value())
     {
         const bool controlled = world_->player().isControlled();
+        const bool tookDamage = lastIncomingDamage_.has_value() &&
+            lastIncomingDamage_->damageApplied > 0;
+        const bool moving = input.moveUp || input.moveDown ||
+            input.moveLeft || input.moveRight;
         const bool interrupted = controlled || input.inventoryOpen ||
             std::visit(
-                [&input](const auto &action)
+                [&input, tookDamage, moving](const auto &action)
                 {
                     using Action = std::decay_t<decltype(action)>;
                     if constexpr (std::is_same_v<Action, ReloadRaidAction>)
@@ -933,16 +1056,26 @@ void GameSession::updateAlphaRaid(
                                input.reloadJustPressed ||
                                input.healJustPressed;
                     }
+                    else if constexpr (
+                        std::is_same_v<Action, WeaponMaintenanceRaidAction>)
+                    {
+                        return moving || tookDamage || input.sprint ||
+                               input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
+                    }
                     else
                     {
                         return false;
                     }
                 },
                 *raidActionState_.active());
-        const bool medicalWasActive =
+        const bool suppressCombatAfterInterrupt =
             std::holds_alternative<MedicalRaidAction>(
+                *raidActionState_.active()) ||
+            std::holds_alternative<WeaponMaintenanceRaidAction>(
                 *raidActionState_.active());
-        if (interrupted && medicalWasActive)
+        if (interrupted && suppressCombatAfterInterrupt)
         {
             fireSuppressedUntilRelease_ =
                 fireSuppressedUntilRelease_ || input.firePressed ||
@@ -1096,6 +1229,34 @@ void GameSession::updateAlphaRaid(
                         static_cast<void>(commitProfileCandidate(
                             std::move(candidate),
                             false));
+                    }
+                    else
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *maintenance =
+                             std::get_if<WeaponMaintenanceRaidAction>(
+                                 &*completed))
+                {
+                    ProfileState candidate = profile_;
+                    const WeaponMaintenanceReceipt receipt =
+                        executeWeaponMaintenance(
+                            candidate,
+                            publishedContentRegistry(),
+                            WeaponMaintenanceCommand{
+                                maintenance->kitAssetId,
+                                maintenance->weaponAssetId,
+                                MaintenanceAccess::CarriedOnly,
+                                MaintenanceLocation::Raid},
+                            CommandContext{
+                                profile_.revision,
+                                nextRaidTransaction("weapon-maintenance")});
+                    if (receipt.succeeded)
+                    {
+                        static_cast<void>(commitProfileCandidate(
+                            std::move(candidate), false));
+                        weaponClearGesture_.reset();
                     }
                     else
                     {
@@ -1337,6 +1498,8 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         return false;
     }
     raidActionState_.cancel();
+    weaponClearGesture_.reset();
+    raidElapsedSeconds_ = 0.0F;
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;

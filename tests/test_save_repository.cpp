@@ -38,7 +38,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV4RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV5RoundTripPreservesAuthoritativeState)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -243,6 +243,65 @@ TEST(SaveRepositoryTest, SchemaV3MigratesMedicalStateToHealthyDefaults)
 
     ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
     EXPECT_EQ(migrated.profile->medicalStatus, MedicalStatusState{});
+}
+
+TEST(SaveRepositoryTest, SchemaV5PreservesWeaponConditionAndMalfunction)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v5-weapon-condition", publishedContentRegistry());
+    AssetRecord *rifle{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::rifle)
+        {
+            rifle = profile.assets.findMutable(id);
+            break;
+        }
+    }
+    ASSERT_NE(rifle, nullptr);
+    rifle->currentMaximumDurability = 8750;
+    rifle->currentDurability = 4321;
+    rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV4MigratesWeaponConditionToFactoryState)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v4-weapon-migration", publishedContentRegistry());
+    AssetRecord *rifle{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::rifle)
+        {
+            rifle = profile.assets.findMutable(id);
+            break;
+        }
+    }
+    ASSERT_NE(rifle, nullptr);
+    rifle->currentDurability = 1234;
+    rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, "survival-loadout-content-2", 4),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    const AssetRecord *loadedRifle = migrated.profile->assets.find(
+        rifle->instanceId);
+    ASSERT_NE(loadedRifle, nullptr);
+    EXPECT_EQ(loadedRifle->currentMaximumDurability, 10000U);
+    EXPECT_EQ(loadedRifle->currentDurability, 10000U);
+    EXPECT_EQ(loadedRifle->weaponMalfunction, WeaponMalfunctionType::None);
 }
 
 TEST(SaveRepositoryTest, FirstSuccessfulSaveAlsoCreatesRecoveryBackup)

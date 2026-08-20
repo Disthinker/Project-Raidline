@@ -207,6 +207,8 @@ add_library(raidline_domain STATIC
     src/inventory_transfer.h
     src/loot_table.cpp
     src/loot_table.h
+    src/maintenance_domain.cpp
+    src/maintenance_domain.h
     src/medical_domain.cpp
     src/medical_domain.h
     src/medical_types.h
@@ -279,6 +281,8 @@ add_library(raidline_simulation STATIC
     src/storage_cabinet.h
     src/weapon_fire.cpp
     src/weapon_fire.h
+    src/weapon_clear_gesture.cpp
+    src/weapon_clear_gesture.h
 )
 raidline_configure_library(raidline_simulation)
 target_link_libraries(raidline_simulation PUBLIC raidline::domain)
@@ -496,6 +500,10 @@ raidline_add_test(
     tests/test_weapon_ammo_domain.cpp
     raidline::domain)
 raidline_add_test(
+    MaintenanceDomainTest
+    tests/test_maintenance_domain.cpp
+    raidline::domain)
+raidline_add_test(
     RaidActionTest
     tests/test_raid_action.cpp
     raidline::domain)
@@ -506,6 +514,10 @@ raidline_add_test(
 raidline_add_test(
     BaseWorldTest
     tests/test_base_world.cpp
+    raidline::simulation)
+raidline_add_test(
+    WeaponClearGestureTest
+    tests/test_weapon_clear_gesture.cpp
     raidline::simulation)
 raidline_add_test(
     SaveRepositoryTest

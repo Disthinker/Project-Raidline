@@ -4,6 +4,7 @@
 #include <variant>
 
 #include "weapon_ammo_domain.h"
+#include "maintenance_domain.h"
 #include "medical_domain.h"
 
 struct ReloadRaidAction
@@ -50,6 +51,14 @@ struct UnloadMagazineRaidAction
     float durationSeconds{3.0F};
 };
 
+struct WeaponMaintenanceRaidAction
+{
+    AssetInstanceId kitAssetId{};
+    AssetInstanceId weaponAssetId{};
+    float elapsedSeconds{};
+    float durationSeconds{};
+};
+
 struct ExtractRaidAction
 {
     float elapsedSeconds{};
@@ -62,6 +71,7 @@ using RaidAction = std::variant<
     HealRaidAction,
     MedicalRaidAction,
     UnloadMagazineRaidAction,
+    WeaponMaintenanceRaidAction,
     ExtractRaidAction>;
 
 enum class RaidActionAdvance

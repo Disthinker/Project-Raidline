@@ -253,13 +253,18 @@ AssetInstanceId AssetRegistry::create(
         definition.maximumCharges,
         definition.armorProtection.has_value()
             ? definition.armorProtection->maximumDurability
-            : 0U,
+            : definition.weaponCondition.has_value()
+                ? definition.weaponCondition->maximumDurabilityCenti
+                : 0U,
         definition.armorProtection.has_value()
             ? definition.armorProtection->maximumDurability
-            : 0U,
+            : definition.weaponCondition.has_value()
+                ? definition.weaponCondition->maximumDurabilityCenti
+                : 0U,
         std::move(reliefBatchId),
         {},
         std::nullopt,
+        WeaponMalfunctionType::None,
         std::move(location)};
     if (!records_.emplace(id, std::move(record)).second)
     {
@@ -331,6 +336,7 @@ ProfileState makeNewAlphaProfile(
     placeNewAsset(profile, content, alpha_content::painkiller);
     placeNewAsset(profile, content, alpha_content::helmet);
     placeNewAsset(profile, content, alpha_content::bodyArmor);
+    placeNewAsset(profile, content, alpha_content::weaponMaintenanceKit);
 
     const ProfileValidationResult validation =
         validateProfileState(profile, content);
@@ -585,10 +591,29 @@ ProfileValidationResult validateProfileState(
                 return {false, "armor durability is outside definition limits"};
             }
         }
-        else if (asset.currentMaximumDurability != 0 ||
-                 asset.currentDurability != 0)
+        else if (definition->weaponCondition.has_value())
         {
-            return {false, "non-armor asset contains durability"};
+            if (asset.currentMaximumDurability == 0 ||
+                asset.currentMaximumDurability >
+                    definition->weaponCondition->maximumDurabilityCenti ||
+                asset.currentDurability > asset.currentMaximumDurability)
+            {
+                return {false, "weapon durability is outside definition limits"};
+            }
+        }
+        else if (asset.currentMaximumDurability != 0 ||
+                 asset.currentDurability != 0 ||
+                 asset.weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            return {false, "non-durable asset contains weapon state"};
+        }
+        if (asset.weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            if (!definition->weaponCondition.has_value() ||
+                asset.weaponMalfunction != WeaponMalfunctionType::Stovepipe)
+            {
+                return {false, "weapon malfunction is outside definition limits"};
+            }
         }
 
         if (definition->category == ItemCategory::Magazine)
@@ -829,6 +854,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, asset.remainingCharges);
         hashInteger(hash, asset.currentMaximumDurability);
         hashInteger(hash, asset.currentDurability);
+        hashInteger(hash, static_cast<std::uint32_t>(asset.weaponMalfunction));
         hashBytes(hash, asset.reliefBatchId.value_or(""));
         for (const MagazineRoundRecord &round : asset.magazineRounds)
         {
@@ -935,4 +961,23 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, profile.lastRaidResult->currencyDelta);
     }
     return hash;
+}
+
+WeaponReliabilityTier weaponReliabilityTier(
+    const AssetRecord &weapon,
+    const ItemDefinition &definition) noexcept
+{
+    if (!definition.weaponCondition.has_value() ||
+        weapon.currentDurability == 0)
+    {
+        return WeaponReliabilityTier::Broken;
+    }
+    const std::uint32_t points = weapon.currentDurability / 100U;
+    if (points >= 61U)
+        return WeaponReliabilityTier::Reliable;
+    if (points >= 31U)
+        return WeaponReliabilityTier::Worn;
+    if (points >= 11U)
+        return WeaponReliabilityTier::HighRisk;
+    return WeaponReliabilityTier::Critical;
 }
