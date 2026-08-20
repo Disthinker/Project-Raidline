@@ -62,6 +62,41 @@ TEST(WeaponAimStateTest, RecoilMovesOutwardAndDecelerates)
     EXPECT_FALSE(aim.recoilActive());
 }
 
+TEST(WeaponAimStateTest, StationaryMouseDoesNotAutomaticallyRecoverRecoil)
+{
+    WeaponAimState aim{WeaponAimConfig{
+        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F,
+        0.25F, 100.0F, 500.0F}};
+    constexpr Vec2 originalAim{400.0F, 100.0F};
+    aim.update(originalAim, kOrigin, kWorld, false, 0.0F);
+    aim.applyShotRecoil(kOrigin);
+    aim.update(originalAim, kOrigin, kWorld, false, 1.0F);
+
+    ASSERT_FALSE(aim.recoilActive());
+    const Vec2 displaced = aim.actualWorldPosition();
+    EXPECT_GT(displaced.x, originalAim.x + 1.0F);
+    EXPECT_NEAR(aim.targetWorldPosition().x, displaced.x, 0.01F);
+
+    aim.update(originalAim, kOrigin, kWorld, false, 1.0F);
+    EXPECT_NEAR(aim.actualWorldPosition().x, displaced.x, 0.01F);
+    EXPECT_NEAR(aim.actualWorldPosition().y, displaced.y, 0.01F);
+}
+
+TEST(WeaponAimStateTest, OpposingMouseMotionRecoversDisplacedReticle)
+{
+    WeaponAimState aim{WeaponAimConfig{
+        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F,
+        0.25F, 100.0F, 500.0F}};
+    constexpr Vec2 originalAim{400.0F, 100.0F};
+    aim.update(originalAim, kOrigin, kWorld, false, 0.0F);
+    aim.applyShotRecoil(kOrigin);
+    aim.update(originalAim, kOrigin, kWorld, false, 1.0F);
+    const float displacedX = aim.actualWorldPosition().x;
+
+    aim.update(Vec2{350.0F, 100.0F}, kOrigin, kWorld, false, 0.5F);
+    EXPECT_LT(aim.actualWorldPosition().x, displacedX);
+}
+
 TEST(WeaponAimStateTest, NewShotRefreshesInsteadOfStackingRecoil)
 {
     WeaponAimState aim{WeaponAimConfig{

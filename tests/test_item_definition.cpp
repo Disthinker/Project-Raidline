@@ -363,6 +363,8 @@ TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
         better.recoilDeceleration,
         base.recoilDeceleration);
     EXPECT_LT(better.minimumSpreadDegrees, base.minimumSpreadDegrees);
+    EXPECT_FLOAT_EQ(base.maximumReticleSpeed, 1400.0F);
+    EXPECT_FLOAT_EQ(better.maximumReticleSpeed, 1400.0F);
     EXPECT_FLOAT_EQ(
         better.spreadPerShotDegrees,
         base.spreadPerShotDegrees);

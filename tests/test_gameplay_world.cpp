@@ -802,6 +802,34 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
     EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
 }
 
+TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput fire = makeFireInput();
+    constexpr Vec2 pointer{1000.0F, 376.0F};
+    fire.aimWorldPosition = pointer;
+    world.update(fire, 0.0F);
+    const float originalAimX = world.weaponAimWorldPosition().x;
+
+    GameplayInput stationary{};
+    stationary.aimWorldPosition = pointer;
+    world.update(stationary, 1.0F);
+    const float displacedAimX = world.weaponAimWorldPosition().x;
+    ASSERT_GT(displacedAimX, originalAimX + 1.0F);
+
+    world.update(stationary, 1.0F);
+    EXPECT_NEAR(world.weaponAimWorldPosition().x, displacedAimX, 0.01F);
+
+    GameplayInput counterMove{};
+    counterMove.aimWorldPosition = Vec2{950.0F, 376.0F};
+    world.update(counterMove, 0.5F);
+    EXPECT_LT(world.weaponAimWorldPosition().x, displacedAimX);
+}
+
 // 斜向射击
 TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesBallisticDiagonally)
 {

@@ -7,7 +7,7 @@
 
 struct WeaponAimConfig
 {
-    float maximumReticleSpeed{720.0F};
+    float maximumReticleSpeed{1400.0F};
     float controlAcceleration{1800.0F};
     float recoilInitialSpeed{420.0F};
     float recoilDeceleration{2200.0F};
@@ -54,6 +54,7 @@ private:
     WeaponAimConfig config_;
     Vec2 currentWorldPosition_{};
     Vec2 targetWorldPosition_{};
+    Vec2 inputWorldPosition_{};
     Vec2 shootingOrigin_{};
     Vec2 worldSize_{};
     Vec2 controlVelocity_{};

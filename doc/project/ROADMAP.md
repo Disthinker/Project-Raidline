@@ -46,7 +46,7 @@ Core Extraction Alpha、Survival Loadout 已交付切片与 Combat 逻辑弹道 
 | 多武器配装与切换 | 两把长枪与手枪独立配装；Raid 中限时切换并保持各自弹药、耐久和故障 | 兼容槽集合、WeaponUse、当前武器运行时、schema v6 | PR #64 已通过 CI 和用户验收，以 `4c16596` 进入 main |
 | 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修允许 45% 缓慢移动并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | PR #65 已通过 CI 和用户验收，以 `755fa00` 进入 main |
 | 逻辑弹道与落点反馈 v1 | 本发落点冻结、短促飞行延迟、连续扫掠、敌人/地面到达反馈 | ShotResolution、LogicalBallisticFlight、HitResult、只读轨迹投影 | PR #66 已通过 CI 和用户验收，以 `7877d71` 进入 main |
-| 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、刷新式后坐力、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | Draft PR #67 新版实现；Windows Debug、174 项 focused tests 与全量 CTest 742/742 通过，待 exact-head CI 和用户验收 |
+| 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | Draft PR #67 已修正自动回正与默认操控参数；Windows Debug、163 项 focused tests 与全量 CTest 745/745 通过，待新 exact-head CI 和用户复验 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

@@ -56,7 +56,7 @@ WeaponHandlingParameters deriveWeaponHandling(
     return WeaponHandlingParameters{
         switchDuration,
         std::clamp(switchDuration * 0.30F, 0.12F, 0.25F),
-        720.0F,
+        1400.0F,
         900.0F + 22.0F * ergonomics,
         720.0F - 5.8F * recoilControl,
         1000.0F + 24.0F * ergonomics,

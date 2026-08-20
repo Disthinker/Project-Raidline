@@ -83,10 +83,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
               WeaponMalfunctionType::Stovepipe);
     ASSERT_TRUE(rifle.weaponUse.has_value());
     EXPECT_TRUE(rifle.weaponUse->automaticFire);
-    EXPECT_EQ(rifle.weaponUse->recoilControl, 58U);
+    EXPECT_EQ(rifle.weaponUse->recoilControl, 42U);
     EXPECT_EQ(rifle.weaponUse->stability, 66U);
     EXPECT_EQ(rifle.weaponUse->handlingSpeed, 46U);
-    EXPECT_EQ(rifle.weaponUse->ergonomics, 55U);
+    EXPECT_EQ(rifle.weaponUse->ergonomics, 75U);
     EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
     EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
     EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
@@ -102,7 +102,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_TRUE(pistol.weaponCondition.has_value());
     ASSERT_TRUE(pistol.weaponUse.has_value());
     EXPECT_FALSE(pistol.weaponUse->automaticFire);
+    EXPECT_EQ(pistol.weaponUse->recoilControl, 55U);
     EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
+    EXPECT_EQ(pistol.weaponUse->ergonomics, 85U);
     EXPECT_LT(
         deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,
         deriveWeaponHandling(*rifle.weaponUse).switchDurationSeconds);

@@ -102,7 +102,7 @@ void WeaponAimState::update(
         return;
     }
 
-    targetWorldPosition_ = Vec2{
+    const Vec2 clampedInputPosition{
         std::clamp(targetWorldPosition.x, 0.0F, worldSize.x),
         std::clamp(targetWorldPosition.y, 0.0F, worldSize.y)};
     shootingOrigin_ = shootingOrigin;
@@ -110,6 +110,8 @@ void WeaponAimState::update(
 
     if (!initialized_)
     {
+        inputWorldPosition_ = clampedInputPosition;
+        targetWorldPosition_ = clampedInputPosition;
         currentWorldPosition_ = targetWorldPosition_;
         lastDirection_ = normalizedOr(
             Vec2{
@@ -117,6 +119,24 @@ void WeaponAimState::update(
                 currentWorldPosition_.y - shootingOrigin_.y},
             lastDirection_);
         initialized_ = true;
+    }
+    else
+    {
+        // Mouse motion moves the reticle destination by the same delta. It is
+        // deliberately not treated as a permanent absolute return point:
+        // recoil may displace the reticle, and recovering that displacement
+        // requires an opposing mouse movement from the player.
+        targetWorldPosition_.x = std::clamp(
+            targetWorldPosition_.x +
+                clampedInputPosition.x - inputWorldPosition_.x,
+            0.0F,
+            worldSize_.x);
+        targetWorldPosition_.y = std::clamp(
+            targetWorldPosition_.y +
+                clampedInputPosition.y - inputWorldPosition_.y,
+            0.0F,
+            worldSize_.y);
+        inputWorldPosition_ = clampedInputPosition;
     }
 
     float remaining = deltaTime;
@@ -167,10 +187,26 @@ void WeaponAimState::advanceStep(float deltaTime) noexcept
         Vec2{},
         config_.recoilDeceleration * deltaTime);
 
+    const Vec2 recoilDisplacement{
+        recoilVelocity_.x * deltaTime,
+        recoilVelocity_.y * deltaTime};
+
+    // Recoil moves both the reticle and its control destination. Otherwise a
+    // stationary absolute mouse position would become an automatic recovery
+    // spring after every shot.
+    targetWorldPosition_.x = std::clamp(
+        targetWorldPosition_.x + recoilDisplacement.x,
+        0.0F,
+        worldSize_.x);
+    targetWorldPosition_.y = std::clamp(
+        targetWorldPosition_.y + recoilDisplacement.y,
+        0.0F,
+        worldSize_.y);
+
     currentWorldPosition_.x +=
-        (controlVelocity_.x + recoilVelocity_.x) * deltaTime;
+        controlVelocity_.x * deltaTime + recoilDisplacement.x;
     currentWorldPosition_.y +=
-        (controlVelocity_.y + recoilVelocity_.y) * deltaTime;
+        controlVelocity_.y * deltaTime + recoilDisplacement.y;
     currentWorldPosition_.x = std::clamp(
         currentWorldPosition_.x, 0.0F, worldSize_.x);
     currentWorldPosition_.y = std::clamp(
