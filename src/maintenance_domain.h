@@ -64,4 +64,3 @@ struct WeaponMaintenanceReceipt
     const ContentRegistry &content,
     const WeaponMaintenanceCommand &command,
     const CommandContext &context);
-

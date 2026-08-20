@@ -1,6 +1,6 @@
 # Survival Loadout：流血、疼痛与战地医疗 ExecPlan
 
-状态：实施中
+状态：已接受
 
 基线：`origin/main@733b597`（PR #61 已由用户验收并合入）
 
@@ -78,4 +78,4 @@ Raid 中按住 `5` 打开医疗轮盘，指向物品并释放后开始动作；�
 - 2026-08-20：Scratch/Bite 伤势判定、流血推进、疼痛惩罚、叫声刺激、Base/Raid 结算规则接通。
 - 2026-08-20：四类医疗、连续 Medkit、右键操作与按住 `5` 医疗轮盘接通；未启动游戏，未触碰正式美术/音频生产或 manifest。
 - 2026-08-20：Windows Debug 全目标构建成功，全量 CTest 680/680 通过，`git diff --check` 无错误；开发代理未启动游戏。
-- 下一门槛：提交并推送冻结候选、通过精确 head Windows/Ubuntu CI，再交用户正常游玩验收。
+- 2026-08-20：精确 head Windows/Ubuntu CI 与用户正常游玩验收通过；PR #62 以 merge commit `ea918ab` 合入 main。

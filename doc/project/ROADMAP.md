@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 与基础防具/命中部位已由 PR #60、#61 接受。当前产品目标进入 **Survival Loadout：流血、疼痛与战地医疗**；范围合同见 `doc/exec-plans/active/survival-loadout-bleeding-field-medical.md`，外部 GDD 继续只读。
+Core Extraction Alpha、基础防具/命中部位与战地医疗已由 PR #60～#62 接受。当前产品目标进入 **Survival Loadout：武器耐久、故障与维护**；范围合同见 `doc/exec-plans/active/survival-loadout-weapon-condition-maintenance.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -22,6 +22,7 @@ Core Extraction Alpha 与基础防具/命中部位已由 PR #60、#61 接受。�
 | Extraction Loop | PR #59 / merge commit `ed45baa` |
 | Alpha Hardening | PR #60 / merge commit `50849d5` |
 | 基础防具与命中部位 | PR #61 / merge commit `733b597` |
+| 流血、疼痛与战地医疗 | PR #62 / merge commit `ea918ab` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -36,7 +37,8 @@ Core Extraction Alpha 与基础防具/命中部位已由 PR #60、#61 接受。�
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
 | 基础防具与命中部位 | 五槽配装、头盔/护甲减伤与损耗、头/躯干/腿伤害差异、爆头专用反馈 | CombatDamage、ProfileCombat、实例耐久、schema v3、领域驱动 HitResult | PR #61 已接受并进入 main |
-| 流血、疼痛与战地医疗 | 伤势持续压力、胸挂医疗取舍、Raid 医疗轮盘与 Base 治疗 | MedicalStatus、类型化医疗能力、限时动作、schema v4、疼痛刺激 | 当前分支实施中；focused 通过，待全量 CI 和用户验收 |
+| 流血、疼痛与战地医疗 | 伤势持续压力、胸挂医疗取舍、Raid 医疗轮盘与 Base 治疗 | MedicalStatus、类型化医疗能力、限时动作、schema v4、疼痛刺激 | PR #62 已接受并进入 main |
+| 武器耐久、故障与维护 | 成功击发产生磨损，低耐久可能卡壳；玩家在战斗中清障，并在 Base/Raid 消耗维护包 | WeaponCondition、Stovepipe、输入手势、MaintenanceDomain、schema v5 | 本地全目标与 697/697 通过，待 PR/CI/用户验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
@@ -53,7 +55,7 @@ Core Extraction Alpha 与基础防具/命中部位已由 PR #60、#61 接受。�
 
 ## 不混写边界
 
-- 当前医疗切片只实现轻/重流血、疼痛与四类首轮医疗；不同时实现骨折、内伤、手术、医疗 NPC、维修、武器故障、特殊弹、贯穿、断肢或战术电子。
+- 当前武器状态切片只实现整枪耐久、Stovepipe、清障和消耗品维护；不同时实现护甲维修、Misfire/Double Feed、组件耐久、维修 NPC、改枪、特殊弹、贯穿、断肢或战术电子。
 
 - `codex/core-alpha-hardening` 只收束 Alpha 稳定性、恢复、内容合同和验收证据；不提前实现特殊弹、部位、复杂伤势、耐久、多地图、高危或长期系统。
 - Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
