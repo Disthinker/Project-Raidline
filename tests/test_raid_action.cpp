@@ -281,3 +281,19 @@ TEST(RaidActionTest, WeaponMaintenanceUsesEightSecondAtomicTimeline)
     EXPECT_EQ(maintenance->kitAssetId, 11U);
     EXPECT_EQ(maintenance->weaponAssetId, 12U);
 }
+
+TEST(RaidActionTest, ArmorMaintenanceUsesSixSecondAtomicTimeline)
+{
+    RaidActionState state;
+    ASSERT_TRUE(state.start(ArmorMaintenanceRaidAction{
+        11, 12, 0.0F, 6.0F}));
+    EXPECT_EQ(state.update(5.5F, false), RaidActionAdvance::Running);
+    EXPECT_EQ(state.update(0.5F, false), RaidActionAdvance::Completed);
+    const std::optional<RaidAction> completed = state.takeCompleted();
+    ASSERT_TRUE(completed.has_value());
+    const auto *maintenance = std::get_if<ArmorMaintenanceRaidAction>(
+        &*completed);
+    ASSERT_NE(maintenance, nullptr);
+    EXPECT_EQ(maintenance->kitAssetId, 11U);
+    EXPECT_EQ(maintenance->armorAssetId, 12U);
+}

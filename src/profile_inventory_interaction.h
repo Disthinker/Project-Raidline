@@ -42,12 +42,21 @@ struct WeaponMaintenanceTarget
                            const WeaponMaintenanceTarget &) = default;
 };
 
+struct ArmorMaintenanceTarget
+{
+    AssetInstanceId armorAssetId{};
+
+    friend bool operator==(const ArmorMaintenanceTarget &,
+                           const ArmorMaintenanceTarget &) = default;
+};
+
 using ProfileDropTarget = std::variant<
     StoredCellTarget,
     EquipmentSlotTarget,
     MagazineLoadTarget,
     WeaponInstallTarget,
-    WeaponMaintenanceTarget>;
+    WeaponMaintenanceTarget,
+    ArmorMaintenanceTarget>;
 
 // Returns an equipment target only when the asset declares a compatible slot,
 // that slot is empty, and the authoritative inventory query accepts the move.
