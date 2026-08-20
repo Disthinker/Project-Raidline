@@ -4,21 +4,22 @@
 
 ## Git 与交付基线
 
-- `origin/main@ea918ab` 已包含完整 Core Extraction Alpha、基础防具/命中部位以及流血、疼痛与战地医疗；PR #62 的精确 head CI 与用户正常游玩验收均已通过。
-- 当前开发分支：`codex/survival-loadout-durability-malfunction-repair`，从干净的 `origin/main@ea918ab` 创建；交付使用 Draft PR #63。
-- 当前活动计划：`doc/exec-plans/active/survival-loadout-weapon-condition-maintenance.md`。
+- `origin/main@b8ddbe3` 已包含完整 Core Extraction Alpha、基础防具/命中部位、战地医疗以及武器耐久/故障/维护；PR #63 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/survival-loadout-multi-weapon-switching`，从干净的 `origin/main@b8ddbe3` 创建。
+- 当前活动计划：`doc/exec-plans/active/survival-loadout-multi-weapon-switching.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 与前两个 Survival Loadout 切片已接受。当前里程碑进入 **Survival Loadout：武器耐久、故障与维护**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha 与前三个 Survival Loadout 切片已接受。当前里程碑进入 **Survival Loadout：多武器配装与切换**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
 3. **Alpha Hardening**：PR #60 已以 merge commit `50849d5` 进入 main；本地 645/645、精确 head CI 与用户最终正常游玩验收通过。
 4. **基础防具与命中部位**：PR #61 已由用户正常游玩验收，并以 merge commit `733b597` 进入 main。
 5. **流血、疼痛与战地医疗**：PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main。
-6. **武器耐久、故障与维护**：whole-weapon 状态、Stovepipe、鼠标清障、Base/Raid 维护、schema v5 与库存拖放已经接通；正在冻结交付候选。
+6. **武器耐久、故障与维护**：PR #63 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
+7. **多武器配装与切换**：两个长枪槽、独立手枪槽、基础 Pistol、15 发手枪弹匣、`1/2/3` 限时切换及当前武器消费边界已接通；正在冻结首个交付候选。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -50,7 +51,17 @@ Core Extraction Alpha 与前两个 Survival Loadout 切片已接受。当前里�
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- 当前武器状态切片 Windows Debug 全目标构建与全量 CTest 697/697 已通过；新增 focused 覆盖射击磨损、可靠性分级、Stovepipe、清障、维护原子性、schema v5 与旧档迁移。Draft PR #63 初始候选的 exact-head Windows/Ubuntu CI 已通过；耐久显示与动作慢走反馈修订正在重新冻结候选。开发代理未启动游戏。
+- PR #63 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并合入 main。
+- 当前多武器切片 Windows Debug 全目标构建成功；全量 CTest 已扩展到 709 项，新增 focused 覆盖三槽兼容、切换耗时/中断、Rifle 自动射击、Pistol 半自动射击、当前武器换弹、三武器根生命周期、schema v5→v6 迁移和弹匣不互换。开发代理未启动游戏。
+
+## Survival Loadout 多武器切片当前实现
+
+- Equipment 扩展为第一长枪、第二长枪、手枪、头盔、护甲、胸挂和背包七槽。武器定义声明兼容槽集合；快速装备按稳定顺序选择第一个空兼容槽，显式拖放继续使用 InventoryDomain 原子查询与提交。
+- 新 Profile 提供基础 Pistol 与两只 15 发手枪弹匣。Pistol 与 Rifle 共用当前 9mm 普通弹，但两类弹匣不能互换；Pistol 使用已批准既有资源，未发布手枪弹匣继续使用代码 fallback，未修改美术 manifest。
+- Raid 以第一长枪→第二长枪→手枪的顺序选择首把可用武器。`1/2/3` 触发 0.65 秒长枪或 0.35 秒手枪切换；切换期间可普通移动，冲刺、射击、换弹、治疗或受控会中断且不会改变当前槽。
+- Rifle 保持按住自动射击，Pistol 只消费新的射击边沿。射击配置、切换耗时、磨损、弹匣、枪膛、故障和维护均按当前武器实例/内容定义解析，不再由 App 假设主武器槽。
+- Base/Raid 共用七槽页面，三个武器槽分别显示自己的枪膛、弹匣和耐久；Raid HUD 提供 `1/2/3` 当前高亮。拖匣、卸匣、换弹、清障和状态显示均指向正确武器实例。
+- content v4 增加类型化 WeaponUse；schema v6 保存新装备槽并继续读取 v1～v5。旧 v5 中尚无耐久的 Pistol 会迁移到合法出厂状态，已保存的 Rifle 耐久/故障不被覆盖。
 
 ## Survival Loadout 武器状态切片当前实现
 
@@ -95,7 +106,7 @@ Core Extraction Alpha 与前两个 Survival Loadout 切片已接受。当前里�
 
 ## 尚未完成
 
-- 武器耐久、故障与维护：反馈修订的 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 多武器配装与切换：提交、Draft PR、exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - 护甲维修、维修 NPC、组件级耐久和改枪台后续独立切片，不在当前武器闭环扩张。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。

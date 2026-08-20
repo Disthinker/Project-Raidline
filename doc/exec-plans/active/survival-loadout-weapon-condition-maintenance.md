@@ -1,6 +1,6 @@
 # Survival Loadout：武器耐久、故障与维护 ExecPlan
 
-状态：实施中
+状态：已接受（PR #63 / merge commit `b8ddbe3`）
 
 基线：`origin/main@ea918ab`（PR #62 已由用户验收并合入）
 
