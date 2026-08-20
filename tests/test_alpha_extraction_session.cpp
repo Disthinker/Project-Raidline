@@ -105,6 +105,66 @@ void prepareArmedLoadout(GameSession &session)
         "alpha-chamber-round").succeeded);
 }
 
+struct MultiWeaponLoadout
+{
+    AssetInstanceId rifle{};
+    AssetInstanceId pistol{};
+    AssetInstanceId pistolMagazine{};
+    AssetInstanceId sparePistolMagazine{};
+};
+
+void prepareMultiWeaponLoadout(
+    GameSession &session,
+    MultiWeaponLoadout &result)
+{
+    prepareArmedLoadout(session);
+    const auto rifles = assets(session.profile(), alpha_content::rifle);
+    const auto pistols = assets(session.profile(), alpha_content::pistol);
+    const auto pistolMagazines = assets(
+        session.profile(), alpha_content::pistolMagazine);
+    const auto ammunition = assets(
+        session.profile(), alpha_content::ammunition);
+    const auto backpacks = assets(
+        session.profile(), alpha_content::backpack);
+    ASSERT_EQ(rifles.size(), 1U);
+    ASSERT_EQ(pistols.size(), 1U);
+    ASSERT_EQ(pistolMagazines.size(), 2U);
+    ASSERT_FALSE(ammunition.empty());
+    ASSERT_EQ(backpacks.size(), 1U);
+
+    equip(session, pistols[0], EquipmentSlotKind::Sidearm,
+          "alpha-equip-pistol");
+    const WeaponAmmoReceipt loadedFirstPistolMagazine =
+        session.executeProfileWeaponAmmo(
+            LoadMagazineCommand{pistolMagazines[0], ammunition.front(), 5},
+            "alpha-load-pistol-five");
+    ASSERT_TRUE(loadedFirstPistolMagazine.succeeded)
+        << loadedFirstPistolMagazine.message;
+    const WeaponAmmoReceipt loadedSecondPistolMagazine =
+        session.executeProfileWeaponAmmo(
+            LoadMagazineCommand{pistolMagazines[1], ammunition.front(), 7},
+            "alpha-load-pistol-seven");
+    ASSERT_TRUE(loadedSecondPistolMagazine.succeeded)
+        << loadedSecondPistolMagazine.message;
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        InstallMagazineCommand{pistols[0], pistolMagazines[0]},
+        "alpha-install-pistol-mag").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        ChamberWeaponCommand{pistols[0]},
+        "alpha-chamber-pistol").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            pistolMagazines[1],
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpacks[0], 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "alpha-carry-spare-pistol-mag").succeeded);
+    result = MultiWeaponLoadout{
+        rifles[0], pistols[0], pistolMagazines[0], pistolMagazines[1]};
+}
+
 std::uint32_t carriedLooseAmmunition(const ProfileState &profile)
 {
     std::uint32_t total{};
@@ -150,6 +210,40 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
 }
 
+TEST(AlphaExtractionSessionTest, DeploySelectsFirstOccupiedWeaponSlot)
+{
+    GameSession secondarySession;
+    ASSERT_TRUE(secondarySession.startNewProfile(
+        "alpha-session-secondary-start"));
+    const AssetInstanceId rifle = assets(
+        secondarySession.profile(), alpha_content::rifle).front();
+    const AssetInstanceId pistol = assets(
+        secondarySession.profile(), alpha_content::pistol).front();
+    equip(
+        secondarySession, rifle, EquipmentSlotKind::SecondaryWeapon,
+        "equip-secondary-start");
+    equip(
+        secondarySession, pistol, EquipmentSlotKind::Sidearm,
+        "equip-sidearm-fallback");
+    ASSERT_TRUE(secondarySession.deployAlpha(77120));
+    EXPECT_EQ(
+        secondarySession.activeAlphaWeaponSlot(),
+        EquipmentSlotKind::SecondaryWeapon);
+
+    GameSession sidearmSession;
+    ASSERT_TRUE(sidearmSession.startNewProfile(
+        "alpha-session-sidearm-start"));
+    const AssetInstanceId sidearm = assets(
+        sidearmSession.profile(), alpha_content::pistol).front();
+    equip(
+        sidearmSession, sidearm, EquipmentSlotKind::Sidearm,
+        "equip-only-sidearm");
+    ASSERT_TRUE(sidearmSession.deployAlpha(77121));
+    EXPECT_EQ(
+        sidearmSession.activeAlphaWeaponSlot(),
+        EquipmentSlotKind::Sidearm);
+}
+
 TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSeconds)
 {
     GameSession session;
@@ -170,6 +264,114 @@ TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSecon
     ASSERT_TRUE(installed.has_value());
     EXPECT_NE(*installed, original);
     EXPECT_EQ(magazineRoundCount(session.profile(), *installed), 20U);
+}
+
+TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMode)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-multi-weapon"));
+    MultiWeaponLoadout loadout;
+    prepareMultiWeaponLoadout(session, loadout);
+    const std::uint32_t rifleDurabilityBefore =
+        session.profile().assets.find(loadout.rifle)->currentDurability;
+    const std::uint32_t pistolDurabilityBefore =
+        session.profile().assets.find(loadout.pistol)->currentDurability;
+    ASSERT_TRUE(session.deployAlpha(77123));
+
+    EXPECT_EQ(
+        session.activeAlphaWeaponSlot(), EquipmentSlotKind::PrimaryWeapon);
+    EXPECT_EQ(session.activeAlphaWeapon(), loadout.rifle);
+    EXPECT_FALSE(session.startAlphaWeaponSwitch(
+        EquipmentSlotKind::PrimaryWeapon));
+    EXPECT_FALSE(session.startAlphaWeaponSwitch(
+        EquipmentSlotKind::SecondaryWeapon));
+
+    GameplayInput selectPistol{};
+    selectPistol.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    session.update(selectPistol, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NE(
+        std::get_if<WeaponSwitchRaidAction>(
+            &*session.raidActionState().active()),
+        nullptr);
+    session.update(GameplayInput{}, 0.34F);
+    EXPECT_EQ(session.activeAlphaWeapon(), loadout.rifle);
+    session.update(GameplayInput{}, 0.02F);
+    EXPECT_EQ(session.activeAlphaWeapon(), loadout.pistol);
+
+    const std::size_t pistolRoundsBefore = magazineRoundCount(
+        session.profile(), loadout.pistolMagazine);
+    GameplayInput firstPistolShot{};
+    firstPistolShot.fireJustPressed = true;
+    firstPistolShot.firePressed = true;
+    session.update(firstPistolShot, 0.0F);
+    EXPECT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), loadout.pistolMagazine),
+        pistolRoundsBefore - 1U);
+    EXPECT_EQ(
+        session.profile().assets.find(loadout.rifle)->currentDurability,
+        rifleDurabilityBefore);
+    EXPECT_LT(
+        session.profile().assets.find(loadout.pistol)->currentDurability,
+        pistolDurabilityBefore);
+
+    GameplayInput heldPistolTrigger{};
+    heldPistolTrigger.firePressed = true;
+    session.update(heldPistolTrigger, 0.5F);
+    EXPECT_FALSE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), loadout.pistolMagazine),
+        pistolRoundsBefore - 1U);
+
+    ASSERT_TRUE(session.startAlphaReload(
+        loadout.pistol, loadout.sparePistolMagazine));
+    session.update(GameplayInput{}, 2.0F);
+    EXPECT_EQ(
+        installedMagazine(session.profile(), loadout.pistol),
+        loadout.sparePistolMagazine);
+    EXPECT_TRUE(
+        session.profile().assets.find(loadout.pistol)->chamberedRound.has_value());
+
+    GameplayInput selectRifle{};
+    selectRifle.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
+    session.update(selectRifle, 0.0F);
+    session.update(GameplayInput{}, 0.66F);
+    EXPECT_EQ(session.activeAlphaWeapon(), loadout.rifle);
+
+    GameplayInput rifleTrigger{};
+    rifleTrigger.fireJustPressed = true;
+    rifleTrigger.firePressed = true;
+    session.update(rifleTrigger, 0.0F);
+    ASSERT_TRUE(session.world().shotFiredLastUpdate());
+    rifleTrigger.fireJustPressed = false;
+    session.update(rifleTrigger, 0.2F);
+    EXPECT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_LT(
+        session.profile().assets.find(loadout.rifle)->currentDurability,
+        rifleDurabilityBefore);
+}
+
+TEST(AlphaExtractionSessionTest, SprintInterruptsWeaponSwitchWithoutChangingSlot)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-switch-interrupt"));
+    MultiWeaponLoadout loadout;
+    prepareMultiWeaponLoadout(session, loadout);
+    ASSERT_TRUE(session.deployAlpha(77124));
+
+    GameplayInput selectPistol{};
+    selectPistol.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    session.update(selectPistol, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    GameplayInput sprint{};
+    sprint.moveRight = true;
+    sprint.sprint = true;
+    session.update(sprint, 0.1F);
+
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_EQ(
+        session.activeAlphaWeaponSlot(), EquipmentSlotKind::PrimaryWeapon);
 }
 
 TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSeconds)

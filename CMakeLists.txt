@@ -41,6 +41,30 @@ string(
     ""
     RAIDLINE_PUBLISHED_CONTENT_JSON
     "${RAIDLINE_PUBLISHED_CONTENT_JSON}")
+# MSVC limits one source string token to roughly 16 KiB. Keep each generated
+# token comfortably below that ceiling while relying on standard adjacent
+# string-literal concatenation to expose one immutable string_view.
+string(LENGTH "${RAIDLINE_PUBLISHED_CONTENT_JSON}" RAIDLINE_CONTENT_LENGTH)
+set(RAIDLINE_PUBLISHED_CONTENT_LITERALS "")
+set(RAIDLINE_CONTENT_OFFSET 0)
+while(RAIDLINE_CONTENT_OFFSET LESS RAIDLINE_CONTENT_LENGTH)
+    math(EXPR RAIDLINE_CONTENT_REMAINING
+        "${RAIDLINE_CONTENT_LENGTH} - ${RAIDLINE_CONTENT_OFFSET}")
+    if(RAIDLINE_CONTENT_REMAINING GREATER 8000)
+        set(RAIDLINE_CONTENT_CHUNK_LENGTH 8000)
+    else()
+        set(RAIDLINE_CONTENT_CHUNK_LENGTH ${RAIDLINE_CONTENT_REMAINING})
+    endif()
+    string(SUBSTRING
+        "${RAIDLINE_PUBLISHED_CONTENT_JSON}"
+        ${RAIDLINE_CONTENT_OFFSET}
+        ${RAIDLINE_CONTENT_CHUNK_LENGTH}
+        RAIDLINE_CONTENT_CHUNK)
+    string(APPEND RAIDLINE_PUBLISHED_CONTENT_LITERALS
+        "R\"raidline_content(${RAIDLINE_CONTENT_CHUNK})raidline_content\"\n    ")
+    math(EXPR RAIDLINE_CONTENT_OFFSET
+        "${RAIDLINE_CONTENT_OFFSET} + ${RAIDLINE_CONTENT_CHUNK_LENGTH}")
+endwhile()
 configure_file(
     src/published_content_json.h.in
     generated/published_content_json.h

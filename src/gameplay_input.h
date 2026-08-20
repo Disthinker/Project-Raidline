@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "item_definition.h"
 #include "vec2.h"
 
 struct GameplayInput
@@ -24,6 +25,7 @@ struct GameplayInput
 
     bool reloadJustPressed{};
     bool healJustPressed{};
+    std::optional<EquipmentSlotKind> weaponSlotJustPressed;
     bool quitRaidJustPressed{};
     bool inventoryOpen{};
     float movementSpeedMultiplier{1.0F};

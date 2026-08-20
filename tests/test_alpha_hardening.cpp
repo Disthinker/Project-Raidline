@@ -110,16 +110,27 @@ void prepareRaid(ProfileState &profile, int cycle)
     ASSERT_TRUE(hasMinimumRaidCapability(
         profile,
         publishedContentRegistry()));
+    ItemDefinitionId weaponDefinition = alpha_content::rifle;
+    EquipmentSlotKind weaponSlot = EquipmentSlotKind::PrimaryWeapon;
+    if (assets(profile, weaponDefinition).empty())
+    {
+        weaponDefinition = alpha_content::pistol;
+        weaponSlot = EquipmentSlotKind::Sidearm;
+    }
     equipIfMissing(
         profile,
-        alpha_content::rifle,
-        EquipmentSlotKind::PrimaryWeapon,
-        "hardening-equip-rifle-" + suffix);
-    equipIfMissing(
-        profile,
-        alpha_content::chestRig,
-        EquipmentSlotKind::ChestRig,
-        "hardening-equip-chest-" + suffix);
+        weaponDefinition,
+        weaponSlot,
+        "hardening-equip-weapon-" + suffix);
+    if (!equippedAsset(profile, EquipmentSlotKind::ChestRig).has_value() &&
+        !assets(profile, alpha_content::chestRig).empty())
+    {
+        equipIfMissing(
+            profile,
+            alpha_content::chestRig,
+            EquipmentSlotKind::ChestRig,
+            "hardening-equip-chest-" + suffix);
+    }
     if (!equippedAsset(profile, EquipmentSlotKind::Backpack).has_value())
     {
         const auto backpacks = assets(profile, alpha_content::backpack);
@@ -133,12 +144,14 @@ void prepareRaid(ProfileState &profile, int cycle)
         }
     }
 
-    const AssetInstanceId rifle = *equippedAsset(
-        profile,
-        EquipmentSlotKind::PrimaryWeapon);
-    if (!installedMagazine(profile, rifle).has_value())
+    const AssetInstanceId weapon = *equippedAsset(profile, weaponSlot);
+    if (!installedMagazine(profile, weapon).has_value())
     {
-        const auto magazines = assets(profile, alpha_content::magazine);
+        const ItemDefinition &definition = publishedContentRegistry().item(
+            weaponDefinition);
+        ASSERT_TRUE(definition.compatibleMagazineDefinitionId.has_value());
+        const auto magazines = assets(
+            profile, *definition.compatibleMagazineDefinitionId);
         const auto found = std::find_if(
             magazines.begin(),
             magazines.end(),
@@ -156,7 +169,7 @@ void prepareRaid(ProfileState &profile, int cycle)
             const WeaponAmmoReceipt loaded = executeWeaponAmmo(
                 profile,
                 publishedContentRegistry(),
-                LoadMagazineCommand{magazine, ammunition.front(), 30},
+                LoadMagazineCommand{magazine, ammunition.front(), 0},
                 CommandContext{
                     profile.revision,
                     "hardening-load-magazine-" + suffix});
@@ -165,7 +178,7 @@ void prepareRaid(ProfileState &profile, int cycle)
         const WeaponAmmoReceipt installed = executeWeaponAmmo(
             profile,
             publishedContentRegistry(),
-            InstallMagazineCommand{rifle, magazine},
+            InstallMagazineCommand{weapon, magazine},
             CommandContext{
                 profile.revision,
                 "hardening-install-magazine-" + suffix});
@@ -175,14 +188,24 @@ void prepareRaid(ProfileState &profile, int cycle)
 
 void consumeOneRound(ProfileState &profile, int cycle)
 {
-    const AssetInstanceId rifle = *equippedAsset(
-        profile,
-        EquipmentSlotKind::PrimaryWeapon);
+    std::optional<AssetInstanceId> weapon;
+    for (const EquipmentSlotKind slot : {
+             EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::SecondaryWeapon,
+             EquipmentSlotKind::Sidearm})
+    {
+        if (const auto candidate = equippedAsset(profile, slot))
+        {
+            weapon = candidate;
+            break;
+        }
+    }
+    ASSERT_TRUE(weapon.has_value());
     const std::uint64_t before = ammunitionCount(profile);
     WeaponAmmoReceipt fired = executeWeaponAmmo(
         profile,
         publishedContentRegistry(),
-        FireWeaponCommand{rifle},
+        FireWeaponCommand{*weapon},
         CommandContext{
             profile.revision,
             "hardening-fire-a-" + std::to_string(cycle)});
@@ -192,7 +215,7 @@ void consumeOneRound(ProfileState &profile, int cycle)
         fired = executeWeaponAmmo(
             profile,
             publishedContentRegistry(),
-            FireWeaponCommand{rifle},
+            FireWeaponCommand{*weapon},
             CommandContext{
                 profile.revision,
                 "hardening-fire-b-" + std::to_string(cycle)});

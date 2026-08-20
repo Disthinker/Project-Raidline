@@ -27,6 +27,7 @@ void equipAlphaLoadout(ProfileState &profile)
     for (const auto &[definitionId, slot, transaction] :
          std::vector<std::tuple<ItemDefinitionId, EquipmentSlotKind, std::string>>{
              {alpha_content::rifle, EquipmentSlotKind::PrimaryWeapon, "equip-rifle"},
+             {alpha_content::pistol, EquipmentSlotKind::Sidearm, "equip-pistol"},
              {alpha_content::helmet, EquipmentSlotKind::Helmet, "equip-helmet"},
              {alpha_content::bodyArmor, EquipmentSlotKind::BodyArmor, "equip-body-armor"},
              {alpha_content::chestRig, EquipmentSlotKind::ChestRig, "equip-chest"},
@@ -79,6 +80,53 @@ TEST(RaidLifecycleTest, DeployCreatesDeterministicFiniteSnapshot)
     EXPECT_GE(first.pendingRaid->enemies.size(), 4U);
     EXPECT_LE(first.pendingRaid->enemies.size(), 6U);
     EXPECT_TRUE(validateProfileState(first, publishedContentRegistry()).valid);
+}
+
+TEST(RaidLifecycleTest, DeploySnapshotTracksAllThreeWeaponRoots)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-multi-weapon",
+        publishedContentRegistry());
+    equipAlphaLoadout(profile);
+    const ItemDefinition &rifleDefinition = publishedContentRegistry().item(
+        alpha_content::rifle);
+    const auto origin = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::stash(),
+        rifleDefinition,
+        ItemOrientation::Degrees0,
+        std::nullopt);
+    ASSERT_TRUE(origin.has_value());
+    const AssetInstanceId secondRifle = profile.assets.create(
+        rifleDefinition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin});
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            secondRifle, EquipmentSlotKind::SecondaryWeapon},
+        CommandContext{profile.revision, "equip-second-rifle"}).succeeded);
+    const AssetInstanceId primary = *equippedAsset(
+        profile, EquipmentSlotKind::PrimaryWeapon);
+    const AssetInstanceId sidearm = *equippedAsset(
+        profile, EquipmentSlotKind::Sidearm);
+
+    ASSERT_TRUE(deploy(profile, 77125).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const auto &roots = profile.pendingRaid->carriedRootAssetIds;
+    EXPECT_NE(std::find(roots.begin(), roots.end(), primary), roots.end());
+    EXPECT_NE(std::find(roots.begin(), roots.end(), secondRifle), roots.end());
+    EXPECT_NE(std::find(roots.begin(), roots.end(), sidearm), roots.end());
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::PrimaryWeapon), primary);
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::SecondaryWeapon),
+        secondRifle);
+    EXPECT_EQ(equippedAsset(profile, EquipmentSlotKind::Sidearm), sidearm);
 }
 
 TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
@@ -192,6 +240,9 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
+    EXPECT_FALSE(equippedAsset(
+        profile,
+        EquipmentSlotKind::Sidearm).has_value());
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::ChestRig).has_value());

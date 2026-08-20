@@ -262,8 +262,7 @@ InventoryReceipt applyEquip(
             candidate.revision);
     }
     const ItemDefinition &definition = content.item(source->definitionId);
-    if (!definition.equipmentSlot.has_value() ||
-        *definition.equipmentSlot != command.slot)
+    if (!itemCanEquipInSlot(definition, command.slot))
     {
         return failure(
             DomainErrorCode::IncompatibleEquipment,

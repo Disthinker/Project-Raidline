@@ -167,6 +167,7 @@ public:
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    void configureWeaponFire(const WeaponUseDefinition &definition);
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 

@@ -202,6 +202,8 @@ DeployReceipt executeDeploy(
     }
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::SecondaryWeapon,
+             EquipmentSlotKind::Sidearm,
              EquipmentSlotKind::ChestRig,
              EquipmentSlotKind::Backpack,
              EquipmentSlotKind::Helmet,

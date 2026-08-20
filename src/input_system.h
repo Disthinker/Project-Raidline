@@ -15,6 +15,9 @@ enum class GameAction
     Fire,
     Reload,
     Heal,
+    SelectWeapon1,
+    SelectWeapon2,
+    SelectWeapon3,
     Sprint,
     Interact,
 
