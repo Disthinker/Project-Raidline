@@ -45,6 +45,19 @@ TEST(SaveRepositoryTest, SchemaV6RoundTripPreservesAuthoritativeState)
     ProfileState profile = makeNewAlphaProfile(
         "save-test",
         publishedContentRegistry());
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::armorMaintenanceKit)
+        {
+            profile.assets.findMutable(id)->remainingCharges = 3210;
+        }
+        if (asset.definitionId == alpha_content::bodyArmor)
+        {
+            AssetRecord *armor = profile.assets.findMutable(id);
+            armor->currentMaximumDurability = 111;
+            armor->currentDurability = 72;
+        }
+    }
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     ASSERT_TRUE(repository.save(
@@ -55,6 +68,38 @@ TEST(SaveRepositoryTest, SchemaV6RoundTripPreservesAuthoritativeState)
     ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
     ASSERT_TRUE(loaded.profile.has_value());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousMultiWeaponContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-content-migration",
+        publishedContentRegistry());
+    AssetInstanceId armorKit{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::armorMaintenanceKit)
+        {
+            armorKit = id;
+            break;
+        }
+    }
+    ASSERT_NE(armorKit, 0U);
+    ASSERT_TRUE(profile.assets.erase(armorKit));
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "survival-loadout-content-4",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+    EXPECT_EQ(
+        loaded.profile->assets.find(armorKit),
+        nullptr);
 }
 
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)

@@ -404,11 +404,22 @@ namespace
         {
             fail("armor coverage is not supported: " + coverage);
         }
+        const std::string materialName = requiredString(*found, "material");
+        ArmorMaterial material{};
+        if (materialName == "soft")
+            material = ArmorMaterial::Soft;
+        else if (materialName == "composite")
+            material = ArmorMaterial::Composite;
+        else if (materialName == "metal")
+            material = ArmorMaterial::Metal;
+        else
+            fail("armor material is not supported: " + materialName);
         return ArmorProtectionDefinition{
             region,
             requiredPositiveInt(*found, "protection_requirement"),
             requiredPositiveUint(*found, "maximum_durability"),
-            requiredPositiveUint(*found, "durability_loss_basis_points")};
+            requiredPositiveUint(*found, "durability_loss_basis_points"),
+            material};
     }
 
     std::optional<MedicalUseDefinition> parseMedicalUse(
@@ -502,6 +513,33 @@ namespace
             requiredPositiveUint(*found, "raid_action_duration_ms"),
             requiredPositiveUint(
                 *found, "raid_maximum_loss_basis_points")};
+    }
+
+    std::optional<ArmorMaintenanceDefinition> parseArmorMaintenance(
+        const Json &item)
+    {
+        const auto found = item.find("armor_maintenance");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("armor_maintenance must be an object");
+        }
+        return ArmorMaintenanceDefinition{
+            requiredPositiveUint(*found, "capacity_centi"),
+            requiredPositiveUint(*found, "raid_action_duration_ms"),
+            requiredPositiveUint(
+                *found, "base_maximum_loss_basis_points"),
+            requiredPositiveUint(
+                *found, "raid_maximum_loss_basis_points"),
+            requiredPositiveUint(
+                *found, "soft_cost_per_durability_centi"),
+            requiredPositiveUint(
+                *found, "composite_cost_per_durability_centi"),
+            requiredPositiveUint(
+                *found, "metal_cost_per_durability_centi")};
     }
 
     std::vector<ContainerCompartmentDefinition>
@@ -720,6 +758,7 @@ ContentRegistry ContentRegistry::fromJson(
             definition.medicalUse = parseMedicalUse(itemValue);
             definition.weaponCondition = parseWeaponCondition(itemValue);
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
+            definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
 
             if (definition.equipmentSlot.has_value() &&
@@ -870,7 +909,28 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("weapon maintenance capability is invalid");
                 }
             }
-            else if (definition.category == ItemCategory::Maintenance)
+            if (definition.armorMaintenance.has_value())
+            {
+                const ArmorMaintenanceDefinition &maintenance =
+                    *definition.armorMaintenance;
+                if (definition.category != ItemCategory::Maintenance ||
+                    definition.maximumCharges != maintenance.capacityCenti ||
+                    maintenance.baseMaximumLossBasisPoints >= 10000 ||
+                    maintenance.raidMaximumLossBasisPoints >= 10000 ||
+                    maintenance.raidMaximumLossBasisPoints <
+                        maintenance.baseMaximumLossBasisPoints)
+                {
+                    fail("armor maintenance capability is invalid");
+                }
+            }
+            if (definition.weaponMaintenance.has_value() &&
+                definition.armorMaintenance.has_value())
+            {
+                fail("maintenance item cannot mix capabilities");
+            }
+            if (definition.category == ItemCategory::Maintenance &&
+                !definition.weaponMaintenance.has_value() &&
+                !definition.armorMaintenance.has_value())
             {
                 fail("maintenance item requires a maintenance capability");
             }

@@ -62,8 +62,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-4");
-    ASSERT_EQ(registry.items().size(), 18U);
+    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-5");
+    ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -117,6 +117,20 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(maintenance.weaponMaintenance->capacityCenti, 2500U);
     EXPECT_EQ(maintenance.weaponMaintenance->raidActionDurationMs, 8000U);
 
+    const ItemDefinition &armorMaintenance = registry.item(
+        alpha_content::armorMaintenanceKit);
+    ASSERT_TRUE(armorMaintenance.armorMaintenance.has_value());
+    EXPECT_FALSE(armorMaintenance.weaponMaintenance.has_value());
+    EXPECT_EQ(armorMaintenance.armorMaintenance->capacityCenti, 5000U);
+    EXPECT_EQ(
+        armorMaintenance.armorMaintenance->raidActionDurationMs, 6000U);
+    EXPECT_EQ(
+        armorMaintenance.armorMaintenance->softCostPerDurabilityCenti,
+        100U);
+    EXPECT_EQ(
+        armorMaintenance.armorMaintenance->compositeCostPerDurabilityCenti,
+        150U);
+
     const ItemDefinition &painkiller = registry.item(
         alpha_content::painkiller);
     ASSERT_TRUE(painkiller.medicalUse.has_value());
@@ -136,6 +150,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(helmet.equipmentSlot, EquipmentSlotKind::Helmet);
     EXPECT_EQ(helmet.armorProtection->coverage, HitRegion::Head);
     EXPECT_EQ(helmet.armorProtection->maximumDurability, 100U);
+    EXPECT_EQ(helmet.armorProtection->material, ArmorMaterial::Composite);
 
     const ItemDefinition &bodyArmor = registry.item(alpha_content::bodyArmor);
     ASSERT_TRUE(bodyArmor.armorProtection.has_value());
@@ -301,6 +316,28 @@ TEST(ContentRegistryTest, RejectsMaintenanceCapacityMismatch)
         publishedJsonCopy(),
         "\"capacity_centi\": 2500",
         "\"capacity_centi\": 2400");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnsupportedArmorMaterial)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"material\": \"composite\"",
+        "\"material\": \"unknown\"");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsArmorMaintenanceWithInvertedMaximumLoss)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"raid_maximum_loss_basis_points\": 2000",
+        "\"raid_maximum_loss_basis_points\": 500");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

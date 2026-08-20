@@ -11,8 +11,8 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
 
     EXPECT_EQ(profile.currency, 200U);
     EXPECT_EQ(profile.revision, 1U);
-    EXPECT_EQ(profile.assets.records().size(), 19U);
-    EXPECT_EQ(profile.assets.nextAssetId(), 20U);
+    EXPECT_EQ(profile.assets.records().size(), 20U);
+    EXPECT_EQ(profile.assets.nextAssetId(), 21U);
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
@@ -79,13 +79,18 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
             ++maintenanceKits;
             EXPECT_EQ(asset.remainingCharges, 2500U);
         }
+        if (asset.definitionId == alpha_content::armorMaintenanceKit)
+        {
+            ++maintenanceKits;
+            EXPECT_EQ(asset.remainingCharges, 5000U);
+        }
     }
     EXPECT_EQ(ammunition, 90U);
     EXPECT_EQ(magazines, 3U);
     EXPECT_EQ(medkits, 2U);
     EXPECT_EQ(protectiveGear, 2U);
     EXPECT_EQ(fieldMedical, 3U);
-    EXPECT_EQ(maintenanceKits, 1U);
+    EXPECT_EQ(maintenanceKits, 2U);
     EXPECT_EQ(pistols, 1U);
     EXPECT_EQ(pistolMagazines, 2U);
 }

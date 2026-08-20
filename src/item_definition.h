@@ -78,6 +78,30 @@ struct WeaponMaintenanceDefinition
         const WeaponMaintenanceDefinition &) = default;
 };
 
+enum class ArmorMaterial
+{
+    Soft,
+    Composite,
+    Metal
+};
+
+struct ArmorMaintenanceDefinition
+{
+    // Repair-point capacity is stored in centi-points so material costs can
+    // express 1.00/1.50/2.00 without floating-point drift.
+    std::uint32_t capacityCenti{};
+    std::uint32_t raidActionDurationMs{};
+    std::uint32_t baseMaximumLossBasisPoints{};
+    std::uint32_t raidMaximumLossBasisPoints{};
+    std::uint32_t softCostPerDurabilityCenti{};
+    std::uint32_t compositeCostPerDurabilityCenti{};
+    std::uint32_t metalCostPerDurabilityCenti{};
+
+    friend bool operator==(
+        const ArmorMaintenanceDefinition &,
+        const ArmorMaintenanceDefinition &) = default;
+};
+
 enum class MedicalItemEffect
 {
     RestoreHealth,
@@ -118,6 +142,7 @@ struct ArmorProtectionDefinition
     int protectionRequirement{};
     std::uint32_t maximumDurability{};
     std::uint32_t durabilityLossBasisPoints{10000};
+    ArmorMaterial material{ArmorMaterial::Composite};
 
     friend bool operator==(
         const ArmorProtectionDefinition &,
@@ -224,6 +249,7 @@ struct ItemDefinition
     std::optional<MedicalUseDefinition> medicalUse;
     std::optional<WeaponConditionDefinition> weaponCondition;
     std::optional<WeaponMaintenanceDefinition> weaponMaintenance;
+    std::optional<ArmorMaintenanceDefinition> armorMaintenance;
     std::optional<WeaponUseDefinition> weaponUse;
 };
 
