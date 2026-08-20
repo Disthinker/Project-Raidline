@@ -36,6 +36,26 @@ enum class ItemCategory
     Loot
 };
 
+enum class MedicalItemEffect
+{
+    RestoreHealth,
+    StopLightBleeding,
+    StopAnyBleeding,
+    SuppressPain
+};
+
+struct MedicalUseDefinition
+{
+    MedicalItemEffect effect{MedicalItemEffect::RestoreHealth};
+    std::uint32_t actionDurationMs{};
+    std::uint32_t effectMagnitude{};
+    bool slowMovement{};
+
+    friend bool operator==(
+        const MedicalUseDefinition &,
+        const MedicalUseDefinition &) = default;
+};
+
 enum class EquipmentSlotKind
 {
     PrimaryWeapon,
@@ -135,6 +155,7 @@ struct ItemDefinition
     std::optional<ItemDefinitionId>
         compatibleMagazineDefinitionId;
     std::optional<ArmorProtectionDefinition> armorProtection;
+    std::optional<MedicalUseDefinition> medicalUse;
 };
 
 constexpr std::size_t itemCount() noexcept

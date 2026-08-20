@@ -62,8 +62,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-1");
-    ASSERT_EQ(registry.items().size(), 13U);
+    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-2");
+    ASSERT_EQ(registry.items().size(), 16U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -93,6 +93,13 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_TRUE(bodyArmor.armorProtection.has_value());
     EXPECT_EQ(bodyArmor.equipmentSlot, EquipmentSlotKind::BodyArmor);
     EXPECT_EQ(bodyArmor.armorProtection->coverage, HitRegion::Torso);
+
+    const ItemDefinition &bandage = registry.item(alpha_content::bandage);
+    ASSERT_TRUE(bandage.medicalUse.has_value());
+    EXPECT_EQ(
+        bandage.medicalUse->effect,
+        MedicalItemEffect::StopLightBleeding);
+    EXPECT_EQ(bandage.medicalUse->actionDurationMs, 2000U);
 
     const MapDefinition &map = defaultV0MapDefinition();
     EXPECT_EQ(map.id.value(), "map.v0.test");
@@ -189,8 +196,19 @@ TEST(ContentRegistryTest, RejectsFixedSupplyOutsideAlphaRecycleBaseline)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"market_buy_price\": 300,\n      \"market_recycle_price\": 75",
-        "\"market_buy_price\": 300,\n      \"market_recycle_price\": 76");
+        "\"market_buy_price\": 300,\"market_recycle_price\": 75",
+        "\"market_buy_price\": 300,\"market_recycle_price\": 76");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnsupportedMedicalEffect)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"effect\": \"stop_light_bleeding\"",
+        "\"effect\": \"cure_everything\"");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

@@ -284,6 +284,20 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     }
 
     payload["current_health"] = profile.currentHealth;
+    if (schemaVersion >= 4)
+    {
+        payload["medical_status"] = {
+            {"bleeding", static_cast<std::uint32_t>(
+                profile.medicalStatus.bleeding)},
+            {"light_bleeding_remaining_ms",
+                profile.medicalStatus.lightBleedingRemainingMs},
+            {"bleeding_damage_remaining_ms",
+                profile.medicalStatus.bleedingDamageRemainingMs},
+            {"painkiller_remaining_ms",
+                profile.medicalStatus.painkillerRemainingMs},
+            {"pain_scream_remaining_ms",
+                profile.medicalStatus.painScreamRemainingMs}};
+    }
     payload["committed_settlements"] = Json::array();
     for (const std::string &settlement : profile.committedSettlements)
     {
@@ -325,6 +339,20 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"loot", std::move(loot)},
             {"carried_root_asset_ids", raid.carriedRootAssetIds},
             {"starting_health", raid.startingHealth}};
+        if (schemaVersion >= 4)
+        {
+            payload["pending_raid"]["starting_medical_status"] = {
+                {"bleeding", static_cast<std::uint32_t>(
+                    raid.startingMedicalStatus.bleeding)},
+                {"light_bleeding_remaining_ms",
+                    raid.startingMedicalStatus.lightBleedingRemainingMs},
+                {"bleeding_damage_remaining_ms",
+                    raid.startingMedicalStatus.bleedingDamageRemainingMs},
+                {"painkiller_remaining_ms",
+                    raid.startingMedicalStatus.painkillerRemainingMs},
+                {"pain_scream_remaining_ms",
+                    raid.startingMedicalStatus.painScreamRemainingMs}};
+        }
     }
     else
     {
@@ -411,7 +439,8 @@ std::string serializeProfileEnvelope(
     std::string_view contentVersion,
     std::uint32_t schemaVersion)
 {
-    if (schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3)
+    if (schemaVersion != 1 && schemaVersion != 2 &&
+        schemaVersion != 3 && schemaVersion != 4)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -447,8 +476,11 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 1 &&
              contentVersion == "core-alpha-content-1") ||
             (schemaVersion <= 2 &&
-             contentVersion == "core-alpha-content-2");
-        if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3) ||
+             contentVersion == "core-alpha-content-2") ||
+            (schemaVersion == 3 &&
+             contentVersion == "survival-loadout-content-1");
+        if ((schemaVersion != 1 && schemaVersion != 2 &&
+             schemaVersion != 3 && schemaVersion != 4) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -477,6 +509,28 @@ SaveLoadResult deserializeProfileEnvelope(
         profile.currentHealth = schemaVersion >= 2
             ? payload.at("current_health").get<int>()
             : 100;
+        if (schemaVersion >= 4)
+        {
+            const Json &medical = payload.at("medical_status");
+            const std::uint32_t bleeding =
+                medical.at("bleeding").get<std::uint32_t>();
+            if (bleeding > static_cast<std::uint32_t>(
+                    BleedingSeverity::Heavy))
+            {
+                return {SaveLoadStatus::Failed, std::nullopt,
+                        "bleeding severity is invalid"};
+            }
+            profile.medicalStatus = MedicalStatusState{
+                static_cast<BleedingSeverity>(bleeding),
+                medical.at("light_bleeding_remaining_ms")
+                    .get<std::uint32_t>(),
+                medical.at("bleeding_damage_remaining_ms")
+                    .get<std::uint32_t>(),
+                medical.at("painkiller_remaining_ms")
+                    .get<std::uint32_t>(),
+                medical.at("pain_scream_remaining_ms")
+                    .get<std::uint32_t>()};
+        }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
 
@@ -657,6 +711,28 @@ SaveLoadResult deserializeProfileEnvelope(
                 value.at("carried_root_asset_ids")
                     .get<std::vector<AssetInstanceId>>();
             raid.startingHealth = value.at("starting_health").get<int>();
+            if (schemaVersion >= 4)
+            {
+                const Json &medical = value.at("starting_medical_status");
+                const std::uint32_t bleeding =
+                    medical.at("bleeding").get<std::uint32_t>();
+                if (bleeding > static_cast<std::uint32_t>(
+                        BleedingSeverity::Heavy))
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "starting bleeding severity is invalid"};
+                }
+                raid.startingMedicalStatus = MedicalStatusState{
+                    static_cast<BleedingSeverity>(bleeding),
+                    medical.at("light_bleeding_remaining_ms")
+                        .get<std::uint32_t>(),
+                    medical.at("bleeding_damage_remaining_ms")
+                        .get<std::uint32_t>(),
+                    medical.at("painkiller_remaining_ms")
+                        .get<std::uint32_t>(),
+                    medical.at("pain_scream_remaining_ms")
+                        .get<std::uint32_t>()};
+            }
             profile.pendingRaid = std::move(raid);
         }
 

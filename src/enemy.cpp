@@ -508,6 +508,14 @@ bool Enemy::takeDamage(int damage)
   return killed;
 }
 
+void Enemy::hearTarget(Vec2 targetPosition) noexcept
+{
+  if (!isDead())
+  {
+    ai_.hearTarget(targetPosition);
+  }
+}
+
 bool Enemy::isImpactSlowed() const noexcept
 {
   return impactSlowRemaining_ > 0.0F;

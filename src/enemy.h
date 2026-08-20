@@ -106,6 +106,7 @@ public:
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);
+    void hearTarget(Vec2 targetPosition) noexcept;
 
     [[nodiscard]] bool isImpactSlowed() const noexcept;
     [[nodiscard]] float impactSlowRemaining() const noexcept;

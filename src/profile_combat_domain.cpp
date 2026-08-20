@@ -98,6 +98,12 @@ namespace
             0,
             healthBefore - resolution.damageApplied);
 
+        WoundRollResult wound;
+        if (resolution.damageApplied > 0)
+        {
+            wound = applyWoundRoll(candidate.medicalStatus, command.wound);
+        }
+
         if (armorAssetId.has_value() &&
             resolution.armorDurabilityLoss > 0)
         {
@@ -122,7 +128,8 @@ namespace
             resolution,
             armorAssetId,
             healthBefore,
-            candidate.currentHealth};
+            candidate.currentHealth,
+            wound};
     }
 }
 
@@ -139,7 +146,8 @@ IncomingDamagePlan queryIncomingDamage(
         receipt.message,
         profile.revision,
         receipt.resolution,
-        receipt.armorAssetId};
+        receipt.armorAssetId,
+        receipt.wound};
 }
 
 IncomingDamageReceipt executeIncomingDamage(

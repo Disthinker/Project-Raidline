@@ -38,7 +38,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV3RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV4RoundTripPreservesAuthoritativeState)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -109,7 +109,7 @@ TEST(SaveRepositoryTest, SchemaV2MigratesArmorToFullDurability)
     }
 }
 
-TEST(SaveRepositoryTest, SchemaV3PreservesArmorDurability)
+TEST(SaveRepositoryTest, SchemaV4PreservesArmorDurability)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-armor-durability",
@@ -138,7 +138,7 @@ TEST(SaveRepositoryTest, SchemaV3PreservesArmorDurability)
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
-TEST(SaveRepositoryTest, SchemaV3PreservesPendingRaidAndWeaponAmmunition)
+TEST(SaveRepositoryTest, SchemaV4PreservesPendingRaidWeaponAndMedicalState)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-pending-raid",
@@ -195,6 +195,18 @@ TEST(SaveRepositoryTest, SchemaV3PreservesPendingRaidAndWeaponAmmunition)
             7319,
             MapDefinitionId{"map.v0.test"}},
         CommandContext{profile.revision, "save-deploy"}).succeeded);
+    profile.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Heavy,
+        0,
+        275,
+        123000,
+        19000};
+    profile.pendingRaid->startingMedicalStatus = MedicalStatusState{
+        BleedingSeverity::Light,
+        32000,
+        800,
+        0,
+        17000};
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -209,6 +221,28 @@ TEST(SaveRepositoryTest, SchemaV3PreservesPendingRaidAndWeaponAmmunition)
     EXPECT_EQ(installedMagazine(*loaded.profile, rifle), magazine);
     EXPECT_EQ(magazineRoundCount(*loaded.profile, magazine), 29U);
     EXPECT_TRUE(loaded.profile->assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_EQ(loaded.profile->medicalStatus, profile.medicalStatus);
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->startingMedicalStatus,
+        profile.pendingRaid->startingMedicalStatus);
+}
+
+TEST(SaveRepositoryTest, SchemaV3MigratesMedicalStateToHealthyDefaults)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v3-medical-migration",
+        publishedContentRegistry());
+    const std::string text = serializeProfileEnvelope(
+        profile,
+        "survival-loadout-content-1",
+        3);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        text,
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->medicalStatus, MedicalStatusState{});
 }
 
 TEST(SaveRepositoryTest, FirstSuccessfulSaveAlsoCreatesRecoveryBackup)

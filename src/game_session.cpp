@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base_world.h"
+#include "stable_random.h"
 
 GameSession::GameSession()
     : profile_{makeNewAlphaProfile(
@@ -334,6 +335,11 @@ bool GameSession::deployAlpha(std::uint64_t seed)
     alphaRaidActive_ = true;
     recoveredAbandonedRaid_ = false;
     raidActionState_.cancel();
+    medicalTickAccumulatorSeconds_ = 0.0F;
+    medicalRandomSequence_ = 0;
+    woundRandomSequence_ = 0;
+    fireSuppressedUntilRelease_ = false;
+    sprintSuppressedUntilRelease_ = false;
     return true;
 }
 
@@ -359,12 +365,17 @@ bool GameSession::startAlphaReload(
         InstallMagazineAndChamberCommand{
             weaponAssetId,
             magazineAssetId});
+    const float handlingMultiplier =
+        hasPain(profile_.medicalStatus) &&
+                !painIsSuppressed(profile_.medicalStatus)
+            ? 0.9F
+            : 1.0F;
     return plan.canCommit && raidActionState_.start(
         ReloadRaidAction{
             weaponAssetId,
             magazineAssetId,
             0.0F,
-            2.0F});
+            2.0F / handlingMultiplier});
 }
 
 bool GameSession::startAlphaLoadMagazine(
@@ -405,13 +416,18 @@ bool GameSession::startAlphaLoadMagazine(
             static_cast<float>(requested) * 0.2F,
             0.5F,
             6.0F);
+        const float handlingMultiplier =
+            hasPain(profile_.medicalStatus) &&
+                    !painIsSuppressed(profile_.medicalStatus)
+                ? 0.9F
+                : 1.0F;
         return raidActionState_.start(
             LoadMagazineRaidAction{
                 magazineAssetId,
                 ammunitionAssetId,
                 quantity,
                 0.0F,
-                duration});
+                duration / handlingMultiplier});
     }
     catch (...)
     {
@@ -422,26 +438,54 @@ bool GameSession::startAlphaLoadMagazine(
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 {
     const AssetRecord *asset = profile_.assets.find(medkitAssetId);
-    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
-        asset == nullptr || !assetIsCarried(profile_, medkitAssetId) ||
-        asset->remainingCharges == 0 || world_->player().health() >= 100)
+    if (asset == nullptr)
     {
         return false;
     }
     try
     {
-        if (publishedContentRegistry().item(asset->definitionId).category !=
-            ItemCategory::Medical)
-        {
-            return false;
-        }
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        return definition.medicalUse.has_value() &&
+               definition.medicalUse->effect ==
+                   MedicalItemEffect::RestoreHealth &&
+               startAlphaMedical(medkitAssetId);
     }
     catch (...)
     {
         return false;
     }
-    return raidActionState_.start(
-        HealRaidAction{medkitAssetId, 0.0F, 5.0F});
+}
+
+bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    {
+        return false;
+    }
+    const MedicalUsePlan plan = queryMedicalUse(
+        profile_,
+        publishedContentRegistry(),
+        medicalAssetId,
+        MedicalAccess::CarriedOnly);
+    const AssetRecord *asset = profile_.assets.find(medicalAssetId);
+    if (!plan.canCommit || asset == nullptr)
+    {
+        return false;
+    }
+    const ItemDefinition &definition = publishedContentRegistry().item(
+        asset->definitionId);
+    return plan.canCommit && raidActionState_.start(MedicalRaidAction{
+        medicalAssetId,
+        plan.effect,
+        plan.slowMovement,
+        false,
+        0,
+        plan.effect == MedicalUseEffect::RestoreHealth
+            ? static_cast<int>(definition.medicalUse->effectMagnitude)
+            : 0,
+        0.0F,
+        static_cast<float>(plan.durationMs) / 1000.0F});
 }
 
 bool GameSession::startAlphaUnloadMagazine(
@@ -455,12 +499,17 @@ bool GameSession::startAlphaUnloadMagazine(
         profile_,
         publishedContentRegistry(),
         magazineAssetId);
+    const float handlingMultiplier =
+        hasPain(profile_.medicalStatus) &&
+                !painIsSuppressed(profile_.medicalStatus)
+            ? 0.9F
+            : 1.0F;
     return destination.has_value() && raidActionState_.start(
         UnloadMagazineRaidAction{
             magazineAssetId,
             *destination,
             0.0F,
-            3.0F});
+            3.0F / handlingMultiplier});
 }
 
 bool GameSession::alphaRaidActive() const noexcept
@@ -613,6 +662,33 @@ HealReceipt GameSession::executeBaseHeal(
     return receipt;
 }
 
+MedicalUseReceipt GameSession::executeBaseMedical(
+    AssetInstanceId medicalAssetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    MedicalUseReceipt receipt = executeMedicalUse(
+        candidate,
+        publishedContentRegistry(),
+        medicalAssetId,
+        MedicalAccess::AnyOwned,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return MedicalUseReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision};
+    }
+    return receipt;
+}
+
 const RaidActionState &GameSession::raidActionState() const noexcept
 {
     return raidActionState_;
@@ -679,12 +755,28 @@ void GameSession::updateAlphaRaid(
         }
         else if (input.healJustPressed)
         {
-            if (const auto medkit = selectQuickMedkit(
-                    profile_,
-                    publishedContentRegistry()))
+            MedicalUseEffect preferred = MedicalUseEffect::RestoreHealth;
+            if (profile_.medicalStatus.bleeding == BleedingSeverity::Heavy)
             {
-                static_cast<void>(raidActionState_.start(
-                    HealRaidAction{*medkit, 0.0F, 5.0F}));
+                preferred = MedicalUseEffect::StopAnyBleeding;
+            }
+            else if (profile_.medicalStatus.bleeding == BleedingSeverity::Light)
+            {
+                preferred = MedicalUseEffect::StopLightBleeding;
+            }
+            if (const auto medical = selectQuickMedicalAsset(
+                    profile_, publishedContentRegistry(), preferred))
+            {
+                static_cast<void>(startAlphaMedical(*medical));
+            }
+            else if (preferred == MedicalUseEffect::StopLightBleeding)
+            {
+                if (const auto medical = selectQuickMedicalAsset(
+                        profile_, publishedContentRegistry(),
+                        MedicalUseEffect::StopAnyBleeding))
+                {
+                    static_cast<void>(startAlphaMedical(*medical));
+                }
             }
         }
     }
@@ -697,6 +789,44 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
+    }
+    if (fireSuppressedUntilRelease_)
+    {
+        if (input.firePressed)
+        {
+            simulationInput.fireJustPressed = false;
+            simulationInput.firePressed = false;
+        }
+        else
+        {
+            fireSuppressedUntilRelease_ = false;
+        }
+    }
+    if (sprintSuppressedUntilRelease_)
+    {
+        if (input.sprint)
+        {
+            simulationInput.sprint = false;
+        }
+        else
+        {
+            sprintSuppressedUntilRelease_ = false;
+        }
+    }
+    if (hasPain(profile_.medicalStatus) &&
+        !painIsSuppressed(profile_.medicalStatus))
+    {
+        simulationInput.movementSpeedMultiplier *= 0.9F;
+    }
+    if (raidActionState_.active().has_value())
+    {
+        if (const auto *medical = std::get_if<MedicalRaidAction>(
+                &*raidActionState_.active());
+            medical != nullptr && medical->slowMovement)
+        {
+            simulationInput.movementSpeedMultiplier *= 0.45F;
+            simulationInput.sprint = false;
+        }
     }
 
     std::optional<ProfileState> firedCandidate;
@@ -750,6 +880,7 @@ void GameSession::updateAlphaRaid(
     }
 
     applyAlphaIncomingDamage();
+    advanceAlphaMedicalStatus(deltaTime);
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
@@ -790,6 +921,12 @@ void GameSession::updateAlphaRaid(
                                input.reloadJustPressed;
                     }
                     else if constexpr (
+                        std::is_same_v<Action, MedicalRaidAction>)
+                    {
+                        return input.firePressed || input.fireJustPressed ||
+                               input.reloadJustPressed || input.sprint;
+                    }
+                    else if constexpr (
                         std::is_same_v<Action, UnloadMagazineRaidAction>)
                     {
                         return input.firePressed || input.fireJustPressed ||
@@ -802,6 +939,31 @@ void GameSession::updateAlphaRaid(
                     }
                 },
                 *raidActionState_.active());
+        const bool medicalWasActive =
+            std::holds_alternative<MedicalRaidAction>(
+                *raidActionState_.active());
+        if (interrupted && medicalWasActive)
+        {
+            fireSuppressedUntilRelease_ =
+                fireSuppressedUntilRelease_ || input.firePressed ||
+                input.fireJustPressed;
+            sprintSuppressedUntilRelease_ =
+                sprintSuppressedUntilRelease_ || input.sprint;
+        }
+        if (!interrupted)
+        {
+            if (RaidAction *active = raidActionState_.activeMutable())
+            {
+                if (auto *medical = std::get_if<MedicalRaidAction>(active);
+                    medical != nullptr &&
+                    !advanceContinuousHealing(*medical, deltaTime))
+                {
+                    raidActionState_.cancel();
+                    state_ = GameSessionState::SettlementBlocked;
+                    return;
+                }
+            }
+        }
         const RaidActionAdvance advance = raidActionState_.update(
             deltaTime,
             interrupted);
@@ -885,6 +1047,37 @@ void GameSession::updateAlphaRaid(
                         persistenceMessage_ = receipt.message;
                     }
                 }
+                else if (const auto *medical =
+                             std::get_if<MedicalRaidAction>(&*completed))
+                {
+                    if (medical->effect == MedicalUseEffect::RestoreHealth)
+                    {
+                        return;
+                    }
+                    ProfileState candidate = profile_;
+                    candidate.currentHealth = world_->player().health();
+                    const MedicalUseReceipt receipt = executeMedicalUse(
+                        candidate,
+                        publishedContentRegistry(),
+                        medical->medicalAssetId,
+                        MedicalAccess::CarriedOnly,
+                        CommandContext{
+                            profile_.revision,
+                            nextRaidTransaction("medical")});
+                    if (receipt.succeeded && commitProfileCandidate(
+                            std::move(candidate), false))
+                    {
+                        if (receipt.healedAmount > 0)
+                        {
+                            static_cast<void>(world_->restorePlayerHealth(
+                                receipt.healedAmount));
+                        }
+                    }
+                    else if (!receipt.succeeded)
+                    {
+                        persistenceMessage_ = receipt.message;
+                    }
+                }
                 else if (const auto *unload =
                              std::get_if<UnloadMagazineRaidAction>(&*completed))
                 {
@@ -940,6 +1133,137 @@ void GameSession::updateAlphaRaid(
     }
 }
 
+bool GameSession::advanceContinuousHealing(
+    MedicalRaidAction &action,
+    float deltaTime)
+{
+    if (action.effect != MedicalUseEffect::RestoreHealth ||
+        !std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    {
+        return true;
+    }
+    const float nextElapsed = std::min(
+        action.durationSeconds,
+        action.elapsedSeconds + deltaTime);
+    const int targetHealing = static_cast<int>(std::floor(
+        static_cast<float>(action.maximumHealing) *
+        (nextElapsed / action.durationSeconds) + 0.0001F));
+    const int requested = std::min(
+        std::max(0, targetHealing - action.healedAmount),
+        100 - world_->player().health());
+    if (requested <= 0)
+    {
+        return true;
+    }
+
+    if (!action.chargeConsumed)
+    {
+        ProfileState candidate = profile_;
+        candidate.currentHealth = world_->player().health();
+        const MedicalUseReceipt consumed = beginContinuousHealing(
+            candidate,
+            publishedContentRegistry(),
+            action.medicalAssetId,
+            MedicalAccess::CarriedOnly,
+            CommandContext{
+                profile_.revision,
+                nextRaidTransaction("medical-heal-start")});
+        if (!consumed.succeeded ||
+            !commitProfileCandidate(std::move(candidate), false))
+        {
+            persistenceMessage_ = consumed.message.empty()
+                ? "medical charge could not be committed"
+                : consumed.message;
+            return false;
+        }
+        action.chargeConsumed = true;
+    }
+
+    ProfileState candidate = profile_;
+    if (candidate.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        persistenceMessage_ = "continuous healing revision overflow";
+        return false;
+    }
+    candidate.currentHealth = std::min(
+        100,
+        world_->player().health() + requested);
+    ++candidate.revision;
+    const ProfileValidationResult validation = validateProfileState(
+        candidate,
+        publishedContentRegistry());
+    if (!validation.valid ||
+        !commitProfileCandidate(std::move(candidate), false))
+    {
+        persistenceMessage_ = validation.message.empty()
+            ? "continuous healing could not be committed"
+            : validation.message;
+        return false;
+    }
+    const int restored = world_->restorePlayerHealth(requested)
+        ? requested
+        : 0;
+    if (restored != requested)
+    {
+        persistenceMessage_ = "continuous healing world sync failed";
+        return false;
+    }
+    action.healedAmount += restored;
+    return true;
+}
+
+void GameSession::advanceAlphaMedicalStatus(float deltaTime)
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F ||
+        (!hasPain(profile_.medicalStatus) &&
+         profile_.medicalStatus.painkillerRemainingMs == 0))
+    {
+        return;
+    }
+    medicalTickAccumulatorSeconds_ = std::min(
+        1.0F,
+        medicalTickAccumulatorSeconds_ + deltaTime);
+    while (medicalTickAccumulatorSeconds_ >= 0.1F)
+    {
+        medicalTickAccumulatorSeconds_ -= 0.1F;
+        ProfileState candidate = profile_;
+        ++medicalRandomSequence_;
+        Pcg32 random{
+            candidate.pendingRaid->seed ^ medicalRandomSequence_,
+            0x7061696e2d736372ULL};
+        const MedicalAdvanceResult advanced = advanceMedicalStatus(
+            candidate.medicalStatus,
+            candidate.currentHealth,
+            100,
+            15000U + random.bounded(10001U));
+        if (candidate.medicalStatus == profile_.medicalStatus &&
+            candidate.currentHealth == profile_.currentHealth)
+        {
+            continue;
+        }
+        if (candidate.revision == std::numeric_limits<ProfileRevision>::max())
+        {
+            state_ = GameSessionState::SettlementBlocked;
+            persistenceMessage_ = "medical status revision overflow";
+            return;
+        }
+        ++candidate.revision;
+        if (!commitProfileCandidate(std::move(candidate), false))
+        {
+            state_ = GameSessionState::SettlementBlocked;
+            return;
+        }
+        if (advanced.healthLost > 0)
+        {
+            static_cast<void>(world_->damagePlayer(advanced.healthLost));
+        }
+        if (advanced.screamed)
+        {
+            world_->emitPlayerNoise(300.0F);
+        }
+    }
+}
+
 void GameSession::applyAlphaIncomingDamage()
 {
     for (const PlayerDamageObservation &observation :
@@ -951,6 +1275,10 @@ void GameSession::applyAlphaIncomingDamage()
         }
 
         ProfileState candidate = profile_;
+        const std::uint64_t woundSequence = ++woundRandomSequence_;
+        Pcg32 woundRandom{
+            profile_.pendingRaid->seed ^ woundSequence,
+            0x776f756e642d726fULL};
         const IncomingDamageReceipt receipt = executeIncomingDamage(
             candidate,
             publishedContentRegistry(),
@@ -959,7 +1287,11 @@ void GameSession::applyAlphaIncomingDamage()
                 observation.region,
                 observation.penetration,
                 observation.armorDamage,
-                observation.weakPoint},
+                observation.weakPoint,
+                WoundRollCommand{
+                    observation.woundSource,
+                    woundRandom.bounded(10000U),
+                    15000U + woundRandom.bounded(10001U)}},
             CommandContext{
                 profile_.revision,
                 nextRaidTransaction("incoming-damage")});
@@ -1005,6 +1337,9 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         return false;
     }
     raidActionState_.cancel();
+    medicalTickAccumulatorSeconds_ = 0.0F;
+    fireSuppressedUntilRelease_ = false;
+    sprintSuppressedUntilRelease_ = false;
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
     return true;

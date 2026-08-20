@@ -341,6 +341,17 @@ TEST(EnemyAiStateTest, StartingGrabConsumesArmAndStartsLongCooldown)
         4.0F);
 }
 
+TEST(EnemyAiStateTest, AudibleTargetImmediatelyCreatesAlertMemory)
+{
+    EnemyAiState ai;
+    ai.hearTarget(Vec2{120.0F, 80.0F});
+
+    EXPECT_EQ(ai.awarenessState(), EnemyAwarenessState::Alerted);
+    ASSERT_TRUE(ai.lastKnownTargetPosition().has_value());
+    EXPECT_FLOAT_EQ(ai.lastKnownTargetPosition()->x, 120.0F);
+    EXPECT_FLOAT_EQ(ai.searchTimeRemaining(), ai.config().searchMemoryDuration);
+}
+
 TEST(EnemyAiStateTest, InvalidThresholdOrSpeedOrderingIsRejected)
 {
     EnemyAiConfig config;

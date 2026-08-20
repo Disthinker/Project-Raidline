@@ -97,6 +97,7 @@ public:
     [[nodiscard]] bool startAlphaUnloadMagazine(
         AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
+    [[nodiscard]] bool startAlphaMedical(AssetInstanceId medicalAssetId);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
@@ -116,6 +117,9 @@ public:
 
     [[nodiscard]] HealReceipt executeBaseHeal(
         AssetInstanceId medkitAssetId,
+        std::string transactionId);
+    [[nodiscard]] MedicalUseReceipt executeBaseMedical(
+        AssetInstanceId medicalAssetId,
         std::string transactionId);
 
     [[nodiscard]] const RaidActionState &raidActionState() const noexcept;
@@ -142,6 +146,11 @@ private:
     RaidActionState raidActionState_;
     std::optional<CombatDamageResolution> lastIncomingDamage_;
     std::uint64_t raidCommandSequence_{};
+    std::uint64_t medicalRandomSequence_{};
+    std::uint64_t woundRandomSequence_{};
+    float medicalTickAccumulatorSeconds_{};
+    bool fireSuppressedUntilRelease_{};
+    bool sprintSuppressedUntilRelease_{};
 
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
@@ -149,6 +158,10 @@ private:
     void refreshLoadoutTutorial();
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
     void applyAlphaIncomingDamage();
+    void advanceAlphaMedicalStatus(float deltaTime);
+    [[nodiscard]] bool advanceContinuousHealing(
+        MedicalRaidAction &action,
+        float deltaTime);
     [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;

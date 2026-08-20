@@ -87,6 +87,11 @@ const std::optional<RaidAction> &RaidActionState::active() const noexcept
     return active_;
 }
 
+RaidAction *RaidActionState::activeMutable() noexcept
+{
+    return active_.has_value() ? &*active_ : nullptr;
+}
+
 std::optional<RaidAction> RaidActionState::takeCompleted() noexcept
 {
     std::optional<RaidAction> result = std::move(completed_);
@@ -204,6 +209,9 @@ std::optional<AssetInstanceId> selectQuickMedkit(
             {
                 if (content.item(asset->definitionId).category ==
                         ItemCategory::Medical &&
+                    content.item(asset->definitionId).medicalUse.has_value() &&
+                    content.item(asset->definitionId).medicalUse->effect ==
+                        MedicalItemEffect::RestoreHealth &&
                     asset->remainingCharges > 0)
                 {
                     return asset->instanceId;

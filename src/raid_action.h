@@ -4,6 +4,7 @@
 #include <variant>
 
 #include "weapon_ammo_domain.h"
+#include "medical_domain.h"
 
 struct ReloadRaidAction
 {
@@ -29,6 +30,18 @@ struct HealRaidAction
     float durationSeconds{5.0F};
 };
 
+struct MedicalRaidAction
+{
+    AssetInstanceId medicalAssetId{};
+    MedicalUseEffect effect{MedicalUseEffect::RestoreHealth};
+    bool slowMovement{};
+    bool chargeConsumed{};
+    int healedAmount{};
+    int maximumHealing{};
+    float elapsedSeconds{};
+    float durationSeconds{};
+};
+
 struct UnloadMagazineRaidAction
 {
     AssetInstanceId magazineAssetId{};
@@ -47,6 +60,7 @@ using RaidAction = std::variant<
     ReloadRaidAction,
     LoadMagazineRaidAction,
     HealRaidAction,
+    MedicalRaidAction,
     UnloadMagazineRaidAction,
     ExtractRaidAction>;
 
@@ -68,6 +82,7 @@ public:
     void cancel() noexcept;
 
     [[nodiscard]] const std::optional<RaidAction> &active() const noexcept;
+    [[nodiscard]] RaidAction *activeMutable() noexcept;
     [[nodiscard]] std::optional<RaidAction> takeCompleted() noexcept;
     [[nodiscard]] float progress() const noexcept;
 

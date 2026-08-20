@@ -14,6 +14,35 @@ namespace
 {
 constexpr InventoryGridSize kStashSize{20, 12};
 
+bool validMedicalStatus(const MedicalStatusState &status) noexcept
+{
+    if (status.painkillerRemainingMs > 180000)
+    {
+        return false;
+    }
+    switch (status.bleeding)
+    {
+    case BleedingSeverity::None:
+        return status.lightBleedingRemainingMs == 0 &&
+               status.bleedingDamageRemainingMs == 0 &&
+               status.painScreamRemainingMs == 0;
+    case BleedingSeverity::Light:
+        return status.lightBleedingRemainingMs > 0 &&
+               status.lightBleedingRemainingMs <= 40000 &&
+               status.bleedingDamageRemainingMs > 0 &&
+               status.bleedingDamageRemainingMs <= 1000 &&
+               status.painScreamRemainingMs > 0 &&
+               status.painScreamRemainingMs <= 25000;
+    case BleedingSeverity::Heavy:
+        return status.lightBleedingRemainingMs == 0 &&
+               status.bleedingDamageRemainingMs > 0 &&
+               status.bleedingDamageRemainingMs <= 500 &&
+               status.painScreamRemainingMs > 0 &&
+               status.painScreamRemainingMs <= 25000;
+    }
+    return false;
+}
+
 bool overlaps(
     GridPosition leftOrigin,
     InventoryFootprint left,
@@ -297,6 +326,9 @@ ProfileState makeNewAlphaProfile(
     {
         placeNewAsset(profile, content, alpha_content::medkit);
     }
+    placeNewAsset(profile, content, alpha_content::bandage);
+    placeNewAsset(profile, content, alpha_content::tourniquet);
+    placeNewAsset(profile, content, alpha_content::painkiller);
     placeNewAsset(profile, content, alpha_content::helmet);
     placeNewAsset(profile, content, alpha_content::bodyArmor);
 
@@ -510,6 +542,10 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "profile header is invalid"};
     }
+    if (!validMedicalStatus(profile.medicalStatus))
+    {
+        return {false, "profile medical status is invalid"};
+    }
 
     AssetInstanceId maximumId{};
     std::set<EquipmentSlotKind> occupiedSlots;
@@ -697,6 +733,7 @@ ProfileValidationResult validateProfileState(
             raid.spawnExtractionPairId.empty() ||
             raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
+            !validMedicalStatus(raid.startingMedicalStatus) ||
             raid.enemies.size() < 4 || raid.enemies.size() > 6 ||
             raid.loot.size() < 6 || raid.loot.size() > 9)
         {
@@ -776,6 +813,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.currency);
     hashInteger(hash, static_cast<std::uint32_t>(profile.tutorial));
     hashInteger(hash, profile.currentHealth);
+    hashInteger(hash, static_cast<std::uint32_t>(
+        profile.medicalStatus.bleeding));
+    hashInteger(hash, profile.medicalStatus.lightBleedingRemainingMs);
+    hashInteger(hash, profile.medicalStatus.bleedingDamageRemainingMs);
+    hashInteger(hash, profile.medicalStatus.painkillerRemainingMs);
+    hashInteger(hash, profile.medicalStatus.painScreamRemainingMs);
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -872,6 +915,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, root);
         }
         hashInteger(hash, raid.startingHealth);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.startingMedicalStatus.bleeding));
+        hashInteger(hash, raid.startingMedicalStatus.lightBleedingRemainingMs);
+        hashInteger(hash, raid.startingMedicalStatus.bleedingDamageRemainingMs);
+        hashInteger(hash, raid.startingMedicalStatus.painkillerRemainingMs);
+        hashInteger(hash, raid.startingMedicalStatus.painScreamRemainingMs);
     }
     if (profile.lastRaidResult.has_value())
     {

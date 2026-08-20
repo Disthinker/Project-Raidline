@@ -315,6 +315,18 @@ void EnemyAiState::recordAttackStarted(
     }
 }
 
+void EnemyAiState::hearTarget(Vec2 targetPosition) noexcept
+{
+    if (!std::isfinite(targetPosition.x) ||
+        !std::isfinite(targetPosition.y))
+    {
+        return;
+    }
+    awarenessState_ = EnemyAwarenessState::Alerted;
+    lastKnownTargetPosition_ = targetPosition;
+    searchTimeRemaining_ = config_.searchMemoryDuration;
+}
+
 void EnemyAiState::reset() noexcept
 {
     grabCooldownRemaining_ = 0.0F;

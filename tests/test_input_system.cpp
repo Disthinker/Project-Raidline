@@ -46,6 +46,7 @@ namespace
         {
             EXPECT_FALSE(input.isActionPressed(action));
             EXPECT_FALSE(input.wasActionJustPressed(action));
+            EXPECT_FALSE(input.wasActionJustReleased(action));
         }
     }
 }
@@ -230,6 +231,19 @@ TEST(InputSystemTest, RaidResourceKeysMapToReloadAndHeal)
 
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Reload));
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Heal));
+}
+
+TEST(InputSystemTest, HealReleaseIsReportedForOneFrame)
+{
+    InputSystem input;
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_5));
+    input.endFrame();
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_UP, SDL_SCANCODE_5));
+
+    EXPECT_FALSE(input.isActionPressed(GameAction::Heal));
+    EXPECT_TRUE(input.wasActionJustReleased(GameAction::Heal));
+    input.endFrame();
+    EXPECT_FALSE(input.wasActionJustReleased(GameAction::Heal));
 }
 
 TEST(

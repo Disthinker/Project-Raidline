@@ -96,6 +96,8 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
         loot,
         CommandContext{profile.revision, "pickup-first-loot"}).succeeded);
     ASSERT_TRUE(assetIsCarried(profile, loot));
+    profile.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Heavy, 0, 400, 0, 18000};
 
     const RaidSettlementReceipt settled = settlePendingRaid(
         profile,
@@ -105,6 +107,7 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
     ASSERT_TRUE(settled.succeeded) << settled.message;
     EXPECT_FALSE(profile.pendingRaid.has_value());
     EXPECT_NE(profile.assets.find(loot), nullptr);
+    EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::Heavy);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const RaidSettlementReceipt repeated = settlePendingRaid(
@@ -173,6 +176,8 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
         publishedContentRegistry());
     equipAlphaLoadout(profile);
     profile.currentHealth = 25;
+    profile.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Light, 22000, 700, 0, 16000};
     ASSERT_TRUE(deploy(profile, 4471).succeeded);
 
     const RaidSettlementReceipt settled = settlePendingRaid(
@@ -183,6 +188,7 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
     ASSERT_TRUE(settled.succeeded) << settled.message;
     EXPECT_FALSE(profile.pendingRaid.has_value());
     EXPECT_EQ(profile.currentHealth, 100);
+    EXPECT_EQ(profile.medicalStatus, MedicalStatusState{});
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
@@ -215,6 +221,9 @@ TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
         profile, EquipmentSlotKind::PrimaryWeapon);
     ASSERT_TRUE(rifle.has_value());
     profile.currentHealth = 70;
+    profile.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Light, 31000, 900, 0, 17000};
+    const MedicalStatusState entryMedical = profile.medicalStatus;
     ASSERT_TRUE(deploy(profile, 4481).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
     const std::vector<RaidLootSnapshot> generatedLoot =
@@ -227,6 +236,7 @@ TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
     ASSERT_TRUE(rolledBack.succeeded) << rolledBack.message;
     EXPECT_FALSE(profile.pendingRaid.has_value());
     EXPECT_EQ(profile.currentHealth, 70);
+    EXPECT_EQ(profile.medicalStatus, entryMedical);
     EXPECT_EQ(equippedAsset(
         profile, EquipmentSlotKind::PrimaryWeapon), rifle);
     EXPECT_FALSE(profile.lastRaidResult.has_value());

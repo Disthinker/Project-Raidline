@@ -337,6 +337,38 @@ namespace
             requiredPositiveUint(*found, "durability_loss_basis_points")};
     }
 
+    std::optional<MedicalUseDefinition> parseMedicalUse(
+        const Json &item)
+    {
+        const auto found = item.find("medical_use");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("medical_use must be an object");
+        }
+        const std::string effectName = requiredString(*found, "effect");
+        MedicalItemEffect effect{};
+        if (effectName == "restore_health")
+            effect = MedicalItemEffect::RestoreHealth;
+        else if (effectName == "stop_light_bleeding")
+            effect = MedicalItemEffect::StopLightBleeding;
+        else if (effectName == "stop_any_bleeding")
+            effect = MedicalItemEffect::StopAnyBleeding;
+        else if (effectName == "suppress_pain")
+            effect = MedicalItemEffect::SuppressPain;
+        else
+            fail("medical effect is not supported: " + effectName);
+
+        return MedicalUseDefinition{
+            effect,
+            requiredPositiveUint(*found, "action_duration_ms"),
+            requiredPositiveUint(*found, "effect_magnitude"),
+            requiredBool(*found, "slow_movement")};
+    }
+
     std::vector<ContainerCompartmentDefinition>
     parseContainerCompartments(const Json &item)
     {
@@ -548,6 +580,7 @@ ContentRegistry ContentRegistry::fromJson(
                 optionalUint(itemValue, "magazine_capacity");
             definition.armorProtection =
                 parseArmorProtection(itemValue);
+            definition.medicalUse = parseMedicalUse(itemValue);
 
             if (const auto ammunition =
                     optionalString(itemValue, "compatible_ammunition"))
@@ -595,6 +628,30 @@ ContentRegistry ContentRegistry::fromJson(
             else if (definition.category == ItemCategory::ProtectiveGear)
             {
                 fail("protective gear requires armor capability");
+            }
+            if (definition.medicalUse.has_value())
+            {
+                if (definition.category != ItemCategory::Medical ||
+                    definition.maximumCharges == 0)
+                {
+                    fail("medical capability requires charged medical item");
+                }
+                const MedicalUseDefinition &medical = *definition.medicalUse;
+                if (medical.effect == MedicalItemEffect::RestoreHealth &&
+                    medical.effectMagnitude > 100)
+                {
+                    fail("medical healing magnitude is invalid");
+                }
+                if (medical.effect == MedicalItemEffect::SuppressPain &&
+                    medical.effectMagnitude < medical.actionDurationMs)
+                {
+                    fail("pain suppression duration is invalid");
+                }
+            }
+            else if (definition.category == ItemCategory::Medical &&
+                     definition.maximumCharges > 0)
+            {
+                fail("charged medical item requires medical capability");
             }
 
             const std::size_t index = registry.items_.size();
