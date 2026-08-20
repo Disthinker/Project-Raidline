@@ -347,18 +347,23 @@ TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
 
     const WeaponHandlingParameters base = deriveWeaponHandling(baseline);
     const WeaponHandlingParameters better = deriveWeaponHandling(improved);
-    EXPECT_LT(better.aimRecoilDegreesPerShot, base.aimRecoilDegreesPerShot);
-    EXPECT_LT(better.spreadPerShotDegrees, base.spreadPerShotDegrees);
+    EXPECT_LT(better.recoilInitialSpeed, base.recoilInitialSpeed);
+    EXPECT_LT(better.maximumSpreadDegrees, base.maximumSpreadDegrees);
     EXPECT_LT(better.switchDurationSeconds, base.switchDurationSeconds);
     EXPECT_GT(
-        better.maximumAimFollowDegreesPerSecond,
-        base.maximumAimFollowDegreesPerSecond);
+        better.spreadRecoveryDegreesPerSecond,
+        base.spreadRecoveryDegreesPerSecond);
     EXPECT_LT(
         better.aimDownSightsDurationSeconds,
         base.aimDownSightsDurationSeconds);
     EXPECT_GT(
-        better.spreadRecoveryDegreesPerSecond,
-        base.spreadRecoveryDegreesPerSecond);
+        better.reticleControlAcceleration,
+        base.reticleControlAcceleration);
+    EXPECT_GT(
+        better.recoilDeceleration,
+        base.recoilDeceleration);
     EXPECT_LT(better.minimumSpreadDegrees, base.minimumSpreadDegrees);
-    EXPECT_LT(better.maximumSpreadDegrees, base.maximumSpreadDegrees);
+    EXPECT_FLOAT_EQ(
+        better.spreadPerShotDegrees,
+        base.spreadPerShotDegrees);
 }

@@ -187,6 +187,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(map.defaultInventorySize.width, 10);
     EXPECT_EQ(map.defaultInventorySize.height, 6);
     EXPECT_EQ(map.groundItems.size(), 6U);
+    ASSERT_EQ(map.ballisticBlockers.size(), 3U);
+    EXPECT_EQ(map.ballisticBlockers.front().id, "central_barrier");
+    EXPECT_FLOAT_EQ(
+        map.ballisticBlockers.front().bounds.position.x,
+        570.0F);
     EXPECT_FLOAT_EQ(map.storageCabinet.bounds.position.x, 960.0F);
     EXPECT_FLOAT_EQ(map.storageCabinet.bounds.position.y, 296.0F);
     EXPECT_EQ(map.storageCabinet.inventorySize.width, 6);
@@ -403,6 +408,17 @@ TEST(ContentRegistryTest, RejectsDisconnectedOrOutOfBoundsMapAnchor)
         publishedJsonCopy(),
         "\"player_spawn\": {\"x\": 640, \"y\": 360}",
         "\"player_spawn\": {\"x\": 1400, \"y\": 360}");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsEnemySpawnInsideBallisticBlocker)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"id\": \"central_barrier\", \"bounds\": {\"position\": {\"x\": 570, \"y\": 390}, \"size\": {\"x\": 140, \"y\": 36}}}",
+        "{\"id\": \"central_barrier\", \"bounds\": {\"position\": {\"x\": 650, \"y\": 330}, \"size\": {\"x\": 50, \"y\": 50}}}");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

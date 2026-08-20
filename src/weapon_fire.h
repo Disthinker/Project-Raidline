@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "stable_random.h"
 #include "vec2.h"
 
 struct WeaponFireConfig
@@ -16,7 +17,7 @@ struct WeaponFireConfig
     float aimDownSightsAccuracyMultiplier{0.55F};
     float aimDownSightsStabilityMultiplier{0.70F};
     float movingSpreadFraction{0.35F};
-    std::uint32_t spreadSeed{0x6D2B79F5U};
+    std::uint64_t spreadSeed{0x737072656164ULL};
 };
 
 struct WeaponFireContext
@@ -41,6 +42,8 @@ public:
     WeaponFireState();
     explicit WeaponFireState(WeaponFireConfig config);
 
+    void reconfigure(WeaponFireConfig config);
+
     [[nodiscard]] std::optional<ShotSpec> update(
         bool triggerPressed,
         Vec2 baseAimDirection,
@@ -55,7 +58,7 @@ private:
     float cooldownRemaining_{};
     float spreadDegrees_{};
     float recoveryDelayRemaining_{};
-    std::uint32_t randomState_{};
+    Pcg32 random_;
     std::uint32_t burstShotCount_{};
 
     void recover(float deltaTime, float targetSpread) noexcept;

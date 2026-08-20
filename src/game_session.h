@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "economy_domain.h"
 #include "gameplay_world.h"
@@ -27,6 +28,37 @@ enum class GameSessionState
     InRaid,
     SettlementBlocked,
     BetweenRaids,
+};
+
+enum class DeveloperWeaponParameter
+{
+    RecoilControl,
+    Stability,
+    HandlingSpeed,
+    Ergonomics,
+    Accuracy,
+    ShotInterval,
+    BaseDamage,
+    EffectiveRange,
+    MaximumRange,
+    MaximumReticleSpeed,
+    SpreadPerShot,
+    RecoilLateralRatio,
+    MovingSpreadFraction,
+    AdsAccuracyMultiplier,
+    AdsStabilityMultiplier,
+    WeakTracerLength,
+    WeakTracerOpacity,
+    Count,
+};
+
+struct DeveloperWeaponTuningSnapshot
+{
+    AssetInstanceId weaponAssetId{};
+    ItemDefinitionId weaponDefinitionId;
+    WeaponUseDefinition weaponUse;
+    WeaponHandlingParameters handling;
+    bool overridden{};
 };
 
 // 当前会话组合根。ProfileState 是新版 Base 的跨进程权威状态；旧 Stash、
@@ -116,6 +148,14 @@ public:
     [[nodiscard]] std::optional<AssetInstanceId>
     activeAlphaWeapon() const noexcept;
 
+    [[nodiscard]] std::optional<DeveloperWeaponTuningSnapshot>
+    developerWeaponTuning() const;
+    [[nodiscard]] bool adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter parameter,
+        int direction,
+        bool coarseStep);
+    [[nodiscard]] bool resetDeveloperWeaponTuning();
+
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
         std::string transactionId);
@@ -180,6 +220,35 @@ private:
     EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};
     std::optional<AssetInstanceId> configuredWeaponAssetId_;
 
+    struct DeveloperWeaponHiddenOverrides
+    {
+        std::optional<float> maximumReticleSpeed;
+        std::optional<float> spreadPerShotDegrees;
+        std::optional<float> recoilLateralRatio;
+        std::optional<float> movingSpreadFraction;
+        std::optional<float> adsAccuracyMultiplier;
+        std::optional<float> adsStabilityMultiplier;
+        std::optional<float> weakTracerLength;
+        std::optional<float> weakTracerOpacity;
+
+        friend bool operator==(
+            const DeveloperWeaponHiddenOverrides &,
+            const DeveloperWeaponHiddenOverrides &) = default;
+    };
+
+    struct DeveloperWeaponOverride
+    {
+        AssetInstanceId weaponAssetId{};
+        WeaponUseDefinition weaponUse;
+        DeveloperWeaponHiddenOverrides hidden;
+
+        friend bool operator==(
+            const DeveloperWeaponOverride &,
+            const DeveloperWeaponOverride &) = default;
+    };
+
+    std::vector<DeveloperWeaponOverride> developerWeaponOverrides_;
+
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
         bool persist = true);
@@ -188,6 +257,10 @@ private:
     void applyAlphaIncomingDamage();
     void advanceAlphaMedicalStatus(float deltaTime);
     void synchronizeActiveAlphaWeapon();
+    [[nodiscard]] std::optional<std::size_t>
+    developerWeaponOverrideIndex(AssetInstanceId weaponAssetId) const noexcept;
+    [[nodiscard]] WeaponHandlingParameters effectiveDeveloperHandling(
+        const DeveloperWeaponOverride &override) const noexcept;
     [[nodiscard]] bool advanceContinuousHealing(
         MedicalRaidAction &action,
         float deltaTime);

@@ -13,6 +13,31 @@ namespace
         return std::isfinite(value) && value >= 0.0F;
     }
 
+    void validateConfig(const WeaponFireConfig &config)
+    {
+        if (!std::isfinite(config.shotInterval) ||
+            config.shotInterval <= 0.0F ||
+            !finiteNonNegative(config.minimumSpreadDegrees) ||
+            !finiteNonNegative(config.maximumSpreadDegrees) ||
+            config.minimumSpreadDegrees > config.maximumSpreadDegrees ||
+            !finiteNonNegative(config.spreadPerShotDegrees) ||
+            !finiteNonNegative(config.recoveryDelay) ||
+            !finiteNonNegative(config.spreadRecoveryDegreesPerSecond) ||
+            !std::isfinite(config.aimDownSightsAccuracyMultiplier) ||
+            config.aimDownSightsAccuracyMultiplier <= 0.0F ||
+            config.aimDownSightsAccuracyMultiplier > 1.0F ||
+            !std::isfinite(config.aimDownSightsStabilityMultiplier) ||
+            config.aimDownSightsStabilityMultiplier <= 0.0F ||
+            config.aimDownSightsStabilityMultiplier > 1.0F ||
+            !std::isfinite(config.movingSpreadFraction) ||
+            config.movingSpreadFraction < 0.0F ||
+            config.movingSpreadFraction > 1.0F)
+        {
+            throw std::invalid_argument{
+                "WeaponFireConfig values are inconsistent"};
+        }
+    }
+
     bool validDirection(Vec2 direction)
     {
         const float lengthSquared =
@@ -46,27 +71,21 @@ WeaponFireState::WeaponFireState()
 WeaponFireState::WeaponFireState(WeaponFireConfig config)
     : config_{config},
       spreadDegrees_{config.minimumSpreadDegrees},
-      randomState_{config.spreadSeed == 0U ? 0x6D2B79F5U : config.spreadSeed}
+      random_{
+          config.spreadSeed == 0U ? 0x737072656164ULL : config.spreadSeed,
+          0x776561706f6e2d73ULL}
 {
-    if (!std::isfinite(config_.shotInterval) || config_.shotInterval <= 0.0F ||
-        !finiteNonNegative(config_.minimumSpreadDegrees) ||
-        !finiteNonNegative(config_.maximumSpreadDegrees) ||
-        config_.minimumSpreadDegrees > config_.maximumSpreadDegrees ||
-        !finiteNonNegative(config_.spreadPerShotDegrees) ||
-        !finiteNonNegative(config_.recoveryDelay) ||
-        !finiteNonNegative(config_.spreadRecoveryDegreesPerSecond) ||
-        !std::isfinite(config_.aimDownSightsAccuracyMultiplier) ||
-        config_.aimDownSightsAccuracyMultiplier <= 0.0F ||
-        config_.aimDownSightsAccuracyMultiplier > 1.0F ||
-        !std::isfinite(config_.aimDownSightsStabilityMultiplier) ||
-        config_.aimDownSightsStabilityMultiplier <= 0.0F ||
-        config_.aimDownSightsStabilityMultiplier > 1.0F ||
-        !std::isfinite(config_.movingSpreadFraction) ||
-        config_.movingSpreadFraction < 0.0F ||
-        config_.movingSpreadFraction > 1.0F)
-    {
-        throw std::invalid_argument{"WeaponFireConfig values are inconsistent"};
-    }
+    validateConfig(config_);
+}
+
+void WeaponFireState::reconfigure(WeaponFireConfig config)
+{
+    validateConfig(config);
+    config_ = config;
+    spreadDegrees_ = std::clamp(
+        spreadDegrees_,
+        config_.minimumSpreadDegrees,
+        config_.maximumSpreadDegrees);
 }
 
 std::optional<ShotSpec> WeaponFireState::update(
@@ -88,21 +107,27 @@ std::optional<ShotSpec> WeaponFireState::update(
         context.rangeSpreadFactor, 0.0F, 1.0F);
     const float adsAccuracy = std::lerp(
         1.0F, config_.aimDownSightsAccuracyMultiplier, adsProgress);
+    const float effectiveMaximumSpread = std::max(
+        config_.minimumSpreadDegrees * adsAccuracy,
+        config_.maximumSpreadDegrees * std::lerp(
+            1.0F,
+            config_.aimDownSightsStabilityMultiplier,
+            adsProgress));
     float targetSpread = config_.minimumSpreadDegrees * adsAccuracy;
     if (context.moving)
     {
         targetSpread +=
-            (config_.maximumSpreadDegrees - targetSpread) *
+            (effectiveMaximumSpread - targetSpread) *
             config_.movingSpreadFraction;
     }
     targetSpread +=
-        (config_.maximumSpreadDegrees - targetSpread) * rangeFactor;
+        (effectiveMaximumSpread - targetSpread) * rangeFactor;
     targetSpread = std::clamp(
-        targetSpread, 0.0F, config_.maximumSpreadDegrees);
+        targetSpread, 0.0F, effectiveMaximumSpread);
 
     if (context.forceMaximumSpread)
     {
-        spreadDegrees_ = config_.maximumSpreadDegrees;
+        spreadDegrees_ = effectiveMaximumSpread;
         recoveryDelayRemaining_ = config_.recoveryDelay;
     }
     else
@@ -133,12 +158,8 @@ std::optional<ShotSpec> WeaponFireState::update(
     cooldownRemaining_ = config_.shotInterval;
     recoveryDelayRemaining_ = config_.recoveryDelay;
     spreadDegrees_ = std::min(
-        config_.maximumSpreadDegrees,
-        spreadDegrees_ + config_.spreadPerShotDegrees *
-            std::lerp(
-                1.0F,
-                config_.aimDownSightsStabilityMultiplier,
-                adsProgress));
+        effectiveMaximumSpread,
+        spreadDegrees_ + config_.spreadPerShotDegrees);
     ++burstShotCount_;
 
     return ShotSpec{rotated(normalized(baseAimDirection), offset), offset};
@@ -178,12 +199,8 @@ void WeaponFireState::recover(float deltaTime, float targetSpread) noexcept
 
 float WeaponFireState::nextSignedUnit() noexcept
 {
-    randomState_ ^= randomState_ << 13U;
-    randomState_ ^= randomState_ >> 17U;
-    randomState_ ^= randomState_ << 5U;
-
-    constexpr float kMaximum24BitValue{16777215.0F};
-    const float unit = static_cast<float>(
-        randomState_ & 0x00FFFFFFU) / kMaximum24BitValue;
-    return unit * 2.0F - 1.0F;
+    constexpr double denominator{4294967295.0};
+    const double unit =
+        static_cast<double>(random_.next()) / denominator;
+    return static_cast<float>(unit * 2.0 - 1.0);
 }

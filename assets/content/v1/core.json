@@ -516,6 +516,11 @@
       },
       "player_spawn": {"x": 640, "y": 360},
       "default_inventory": {"width": 10, "height": 6},
+      "ballistic_blockers": [
+        {"id": "central_barrier", "bounds": {"position": {"x": 570, "y": 390}, "size": {"x": 140, "y": 36}}},
+        {"id": "east_vehicle", "bounds": {"position": {"x": 900, "y": 245}, "size": {"x": 132, "y": 62}}},
+        {"id": "south_crates", "bounds": {"position": {"x": 460, "y": 500}, "size": {"x": 108, "y": 46}}}
+      ],
       "ground_items": [
         {"item": "item.loot.cola_basic", "position": {"x": 720, "y": 380}, "quantity": 1},
         {"item": "item.medical.medkit_basic", "position": {"x": 520, "y": 420}, "quantity": 1},

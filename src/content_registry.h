@@ -91,6 +91,12 @@ struct RaidLootSlotDefinition
     Vec2 position{};
 };
 
+struct BallisticBlockerDefinition
+{
+    std::string id;
+    ContentRect bounds;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -99,6 +105,7 @@ struct MapDefinition
     ContentRect walkableBounds;
     Vec2 playerSpawn{};
     ContentGridSize defaultInventorySize;
+    std::vector<BallisticBlockerDefinition> ballisticBlockers;
     std::vector<GroundItemDefinition> groundItems;
     StorageCabinetDefinition storageCabinet;
     ContentRect extractionPoint;

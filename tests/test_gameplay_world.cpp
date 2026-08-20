@@ -462,7 +462,7 @@ TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
     ASSERT_EQ(world.logicalBallistics().size(), 1U);
     const Vec2 frozenImpact =
         world.logicalBallistics()[0].impactPosition();
-    EXPECT_FLOAT_EQ(frozenImpact.x, 900.0F);
+    EXPECT_FLOAT_EQ(frozenImpact.x, 1280.0F);
     EXPECT_FLOAT_EQ(frozenImpact.y, 376.0F);
 
     GameplayInput retarget{};
@@ -476,12 +476,12 @@ TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
         world.logicalBallistics()[0].impactPosition().y,
         frozenImpact.y);
 
-    world.update(GameplayInput{}, 0.20F);
+    world.update(GameplayInput{}, 0.60F);
 
     EXPECT_TRUE(world.logicalBallistics().empty());
     ASSERT_EQ(world.hitResultsLastUpdate().size(), 1U);
     const HitResult &impact = world.hitResultsLastUpdate().front();
-    EXPECT_EQ(impact.targetKind, HitTargetKind::World);
+    EXPECT_EQ(impact.targetKind, HitTargetKind::Ground);
     EXPECT_EQ(impact.damageApplied, 0);
     EXPECT_FLOAT_EQ(impact.position.x, frozenImpact.x);
     EXPECT_FLOAT_EQ(impact.position.y, frozenImpact.y);
@@ -798,7 +798,8 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
         world.weaponSpreadDegrees(),
         deriveWeaponHandling(*rifle.weaponUse).minimumSpreadDegrees,
         0.0001F);
-    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), recoil);
+    EXPECT_LT(world.weaponVisualRecoilPixels(), recoil);
+    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
 }
 
 // 斜向射击
@@ -2283,6 +2284,43 @@ TEST(GameplayWorldRaidTest, AlphaWorldPublishesDamageInsteadOfGuessingArmor)
     EXPECT_EQ(observations.front().region, HitRegion::Torso);
     EXPECT_EQ(observations.front().penetration, 1);
     EXPECT_EQ(observations.front().armorDamage, 2);
+}
+
+TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
+{
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{660.0F, 300.0F}, Vec2{60.0F, 80.0F}}}}}};
+
+    const Vec2 start = world.player().position();
+    GameplayInput move{};
+    move.moveRight = true;
+    world.update(move, 0.20F);
+    EXPECT_FLOAT_EQ(world.player().position().x, start.x);
+    EXPECT_FLOAT_EQ(world.player().position().y, start.y);
+
+    GameplayInput fire{};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    fire.aimWorldPosition = Vec2{900.0F, 336.0F};
+    world.update(fire, 0.0F);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+
+    world.update(GameplayInput{}, 0.10F);
+    EXPECT_TRUE(world.logicalBallistics().empty());
+    ASSERT_EQ(world.hitResultsLastUpdate().size(), 1U);
+    EXPECT_EQ(
+        world.hitResultsLastUpdate().front().targetKind,
+        HitTargetKind::Obstacle);
+    EXPECT_EQ(world.hitResultsLastUpdate().front().damageApplied, 0);
 }
 
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)

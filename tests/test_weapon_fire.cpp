@@ -79,6 +79,13 @@ TEST(WeaponFireStateTest, AdsImprovesAccuracyAndStability)
         true, Vec2{1.0F, 0.0F}, 0.12F, ads);
     ASSERT_TRUE(hipSecond.has_value());
     ASSERT_TRUE(aimedSecond.has_value());
+    for (int index = 0; index < 10; ++index)
+    {
+        ASSERT_TRUE(hip.update(
+            true, Vec2{1.0F, 0.0F}, 0.12F));
+        ASSERT_TRUE(aimed.update(
+            true, Vec2{1.0F, 0.0F}, 0.12F, ads));
+    }
     EXPECT_LT(aimed.spreadDegrees(), hip.spreadDegrees());
 }
 

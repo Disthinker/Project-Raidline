@@ -174,8 +174,11 @@ struct WeaponHandlingParameters
 {
     float switchDurationSeconds{};
     float sprintReadyDurationSeconds{};
-    float maximumAimFollowDegreesPerSecond{};
-    float aimRecoilDegreesPerShot{};
+    float maximumReticleSpeed{};
+    float reticleControlAcceleration{};
+    float recoilInitialSpeed{};
+    float recoilDeceleration{};
+    float recoilLateralRatio{};
     float minimumSpreadDegrees{};
     float maximumSpreadDegrees{};
     float spreadPerShotDegrees{};
@@ -185,6 +188,9 @@ struct WeaponHandlingParameters
     float aimDownSightsMovementMultiplier{};
     float aimDownSightsAccuracyMultiplier{};
     float aimDownSightsStabilityMultiplier{};
+    float movingSpreadFraction{};
+    float weakTracerLength{};
+    float weakTracerOpacity{};
 };
 
 [[nodiscard]] WeaponHandlingParameters deriveWeaponHandling(

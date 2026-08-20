@@ -23,7 +23,8 @@ namespace
 
 TEST(LogicalBallisticsTest, StoresFrozenAcceptedShot)
 {
-    const LogicalBallisticFlight flight{acceptedShot()};
+    const LogicalBallisticFlight flight{
+        acceptedShot(), TracerStyle::Weak, 24.0F, 0.30F};
 
     EXPECT_EQ(flight.shotId(), 17U);
     EXPECT_FLOAT_EQ(flight.origin().x, 100.0F);
@@ -36,6 +37,9 @@ TEST(LogicalBallisticsTest, StoresFrozenAcceptedShot)
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0F);
     EXPECT_FLOAT_EQ(flight.maximumDistance(), 250.0F);
     EXPECT_EQ(flight.damage(), 2);
+    EXPECT_EQ(flight.tracerStyle(), TracerStyle::Weak);
+    EXPECT_FLOAT_EQ(flight.tracerLength(), 24.0F);
+    EXPECT_FLOAT_EQ(flight.tracerOpacity(), 0.30F);
     EXPECT_FALSE(flight.reachedImpact());
 }
 

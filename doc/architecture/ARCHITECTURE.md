@@ -113,8 +113,9 @@ SessionProjection snapshot() const;
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
-- `WeaponAimState` 独立保存实际准星方向、鼠标目标方向、距离、ADS 进度和持久后坐力偏移。实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发，稳定性和连续开火只改变散布，不能绕过实际准星边界。
-- WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数，App 只消费投影。基础 ADS、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。
+- `WeaponAimState` 独立保存实际准星世界位置、鼠标目标位置、玩家控制速度、后坐力速度、ADS 进度与命名 PCG32 随机状态。准星从当前 P 按速度/加速度上限向新目标 B 运动；击发直接刷新一次径向后坐力速度并以反向加速度减到零，不累加无界角偏移，也不把准星位置自动拉回旧点。
+- 实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发。精准度控制最小散布，稳定性控制最大散布，操控速度控制停火收缩，连续开火逐发扩大散布；App 不得把鼠标点或准星图形当成命中权威。
+- WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数。基础 ADS、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。F10 开发面板的按武器实例覆盖仅存在于当前 GameSession 进程，不修改 ContentRegistry、ProfileRevision、存档或结算。
 - Alpha 当前合同保持：
 
 ```text
@@ -126,7 +127,7 @@ WeaponAim/WeaponFire/Ammo
   -> damage / feedback / App projection
 ```
 
-生产射击使用非场景实体的 `LogicalBallisticFlight` 推进冻结本发值；WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型。命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
+生产射击使用非场景实体的 `LogicalBallisticFlight` 从枪口推进到武器最大射程或世界边界，每帧只连续扫掠已经飞过的线段。最近敌人形成 `Enemy`，最近数据化障碍形成 `Obstacle`，无接触到达最大距离形成一次 `Ground`；准星位置不再充当地面终点。Weak/None 曳光只投影已飞区段。WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型；命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
 
 ## 内容定义
 
@@ -139,9 +140,9 @@ WeaponAim/WeaponFire/Ammo
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署和首图常量的单一内容输入；当前内容版本为 `combat-aim-content-6`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署、首图常量与基础弹道障碍的单一内容输入；当前内容版本为 `combat-aim-content-6`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
-- v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
+- v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
 - `ItemId`、V0 `ItemInstance` 和纹理数组只允许存在于历史 V0 回归路径；生产 Alpha 的 Profile、Raid 和存档只保存稳定 `ItemDefinitionId`。旧枚举按消费者安全退场，不得新增用途。
 - Windows 内置 vcpkg 的旧 MSYS2 pkg-config 下载已失效；仓库提供只安装官方 3.12.0 单头文件和 CMake target 的 `nlohmann-json` overlay，使 Windows/Ubuntu 使用同一锁定依赖而不更新整套工具链。
@@ -171,6 +172,6 @@ Content Registry 的当前落地边界：
 9. `codex/survival-loadout-multi-weapon-switching`：PR #64 / merge commit `4c16596`，交付两长枪槽、手枪槽、WeaponUse、限时切换和 schema v6。
 10. `codex/survival-loadout-armor-maintenance`：PR #65 / merge commit `755fa00`，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
 11. `codex/combat-logical-ballistics-feedback-v1`：PR #66 / merge commit `7877d71`，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
-12. `codex/combat-aim-handling-ads-v1`：当前分支，交付实际准星、五项武器属性、稳定性随机散布、连续开火扩散、基础 ADS、奔跑举枪与射程反馈。
+12. `codex/combat-aim-handling-ads-v1`：当前分支，交付位置/速度/加速度准星、刷新式后坐力、五项武器属性、随机散布、最大距离逻辑弹道、基础障碍/弱曳光、基础 ADS、奔跑举枪、射程反馈与 F10 运行时调参。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

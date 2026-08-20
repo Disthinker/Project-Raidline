@@ -21,6 +21,7 @@
 #include "weapon_fire.h"
 #include "weapon_aim.h"
 #include "content_registry.h"
+#include "hit_resolution.h"
 #include "medical_types.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
@@ -48,6 +49,7 @@ struct RaidWorldConfig
     int playerMaximumHealth{100};
     int playerCurrentHealth{100};
     bool deferPlayerDamageResolution{};
+    std::vector<BallisticBlocker> ballisticBlockers;
 };
 
 struct PlayerDamageObservation
@@ -128,6 +130,10 @@ public:
     enemies() const;
 
     [[nodiscard]]
+    const std::vector<BallisticBlocker> &
+    ballisticBlockers() const noexcept;
+
+    [[nodiscard]]
     const std::vector<Particle> &
     particles() const;
 
@@ -173,6 +179,10 @@ public:
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     void configureWeaponFire(const WeaponUseDefinition &definition);
+    void configureWeaponFire(
+        const WeaponUseDefinition &definition,
+        const WeaponHandlingParameters &handling,
+        bool preserveTransientState);
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 
@@ -258,6 +268,7 @@ private:
     std::vector<LogicalBallisticFlight> logicalBallistics_;
     ShotId nextShotId_{1};
     std::vector<Enemy> enemies_;
+    std::vector<BallisticBlocker> ballisticBlockers_;
     EnemySquadCoordinator enemySquadCoordinator_;
 
     std::vector<GroundItem> groundItems_;
@@ -274,6 +285,10 @@ private:
     WeaponFireState weaponFire_;
     WeaponAimState weaponAim_;
     int weaponBaseDamage_{kDefaultWeaponDamage};
+    float weaponMaximumRange_{2048.0F};
+    TracerStyle weaponTracerStyle_{TracerStyle::Weak};
+    float weaponTracerLength_{34.0F};
+    float weaponTracerOpacity_{0.42F};
 
     ParticleSystem particleSystem_;
     std::vector<HitResult> hitResultsLastUpdate_;
