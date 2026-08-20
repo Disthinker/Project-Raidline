@@ -103,6 +103,9 @@ private:
     HitSemantic specialHitSemantic_{HitSemantic::Normal};
     float playerDamageFeedbackRemaining_{};
     bool lastIncomingDamageReducedByArmor_{};
+    bool medicalWheelOpen_{};
+    std::vector<AssetInstanceId> medicalWheelOptions_;
+    std::size_t medicalWheelSelectedIndex_{};
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -134,6 +137,9 @@ private:
     void handleProfileRightClick(MousePosition position, bool inRaid);
     void executeProfileDrop(const ProfileDropRequest &request, bool inRaid);
     void executeProfileContextAction(bool inRaid);
+    void openMedicalWheel();
+    void updateMedicalWheelSelection();
+    void commitMedicalWheelSelection();
     [[nodiscard]] bool tryDeployFromBase();
 
     [[nodiscard]] std::string nextProfileTransactionId(
@@ -217,6 +223,7 @@ private:
     void renderProfileInventory(bool includeStash, bool inRaid);
     void renderProfileDragFeedback(bool includeStash, bool inRaid);
     void renderProfileContextMenu(bool inRaid);
+    void renderMedicalWheel();
     void renderPlayerAvatar(
         Vec2 position,
         Vec2 bodySize,

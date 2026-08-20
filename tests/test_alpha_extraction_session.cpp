@@ -365,6 +365,91 @@ TEST(AlphaExtractionSessionTest, EnemyHitAtomicallyUpdatesProfileArmorAndWorldHe
     EXPECT_TRUE(helmetAfter < helmetBefore || bodyAfter < bodyBefore);
 }
 
+TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
+{
+    TemporarySaveDirectory temporary;
+    GameSession loadout;
+    ASSERT_TRUE(loadout.startNewProfile("alpha-session-continuous-medkit"));
+    prepareArmedLoadout(loadout);
+    const AssetInstanceId chest = *equippedAsset(
+        loadout.profile(), EquipmentSlotKind::ChestRig);
+    const AssetInstanceId medkit = assets(
+        loadout.profile(), alpha_content::medkit).front();
+    ASSERT_TRUE(loadout.executeProfileInventory(
+        InventoryMoveCommand{
+            medkit,
+            0,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(chest, 2),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "carry-continuous-medkit").succeeded);
+
+    ProfileState wounded = loadout.profile();
+    wounded.currentHealth = 40;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        wounded,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile());
+    const std::uint32_t chargesBefore =
+        session.profile().assets.find(medkit)->remainingCharges;
+    ASSERT_TRUE(session.deployAlpha(93431));
+    ASSERT_TRUE(session.startAlphaMedical(medkit));
+
+    session.update(GameplayInput{}, 0.2F);
+    EXPECT_EQ(session.profile().currentHealth, 41);
+    EXPECT_EQ(session.world().player().health(), 41);
+    EXPECT_EQ(
+        session.profile().assets.find(medkit)->remainingCharges,
+        chargesBefore - 1U);
+
+    GameplayInput heldFire{};
+    heldFire.fireJustPressed = true;
+    heldFire.firePressed = true;
+    session.update(heldFire, 0.0F);
+    EXPECT_FALSE(session.raidActionState().active().has_value());
+    EXPECT_FALSE(session.world().shotFiredLastUpdate());
+
+    heldFire.fireJustPressed = false;
+    session.update(heldFire, 0.0F);
+    EXPECT_FALSE(session.world().shotFiredLastUpdate());
+
+    session.update(GameplayInput{}, 0.0F);
+    heldFire.fireJustPressed = true;
+    session.update(heldFire, 0.0F);
+    EXPECT_TRUE(session.world().shotFiredLastUpdate());
+}
+
+TEST(AlphaExtractionSessionTest, BaseFreezesBleedingAndPainkillerTimers)
+{
+    TemporarySaveDirectory temporary;
+    ProfileState profile = makeNewAlphaProfile(
+        "alpha-session-base-medical-freeze",
+        publishedContentRegistry());
+    profile.currentHealth = 72;
+    profile.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Light, 31000, 650, 120000, 17000};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        profile,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile());
+    const MedicalStatusState before = session.profile().medicalStatus;
+    const int healthBefore = session.profile().currentHealth;
+
+    session.update(GameplayInput{}, 30.0F);
+
+    EXPECT_EQ(session.profile().medicalStatus, before);
+    EXPECT_EQ(session.profile().currentHealth, healthBefore);
+}
+
 TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)
 {
     GameSession session;

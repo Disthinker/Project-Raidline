@@ -55,8 +55,8 @@ Project_Raidline.exe
 
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
-- 三槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 当前 HP、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
+- 五槽 Equipment、Economy、引导标志和已提交事务凭证；
+- 当前 HP、MedicalStatus、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
 
 Persistent Base 已实例化资产、三槽装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算。未启用的长期系统只通过后续显式迁移加入。
 
@@ -108,9 +108,9 @@ SessionProjection snapshot() const;
 
 ## 动作、模拟、射击与随机
 
-- Action 使用类型安全的状态变体。换弹、治疗、撤离、维修等拥有各自前置条件、阶段和提交点，只共享窄时间线工具。
+- Action 使用类型安全的状态变体。换弹、医疗、撤离、维修等拥有各自前置条件、阶段和提交点，只共享窄时间线工具。Medkit 的首个实际治疗点原子消耗一次，部分治疗在中断后保留；止血与止痛在动作完成点提交。
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
-- 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；最终选择结果写入 RaidSnapshot。
+- 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
 - Alpha 当前合同保持：
 
@@ -136,7 +136,7 @@ WeaponFire/Ammo
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha 弹匣/胸挂/背包/Medkit/Loot、装备槽、容器分区、价格、默认柜体 Loot、默认敌人部署和 V0 首图常量的单一内容输入；CMake 配置时嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha 弹匣/容器/防具/四类医疗/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署和首图常量的单一内容输入；CMake 配置时压缩行空白并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -145,7 +145,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地了第一个跨进程 schema v1；Extraction Loop 已升级到 schema v2，并提供 v1→v2 显式迁移。当前 V0 没有需要兼容的正式玩家存档。
+- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具切片升级到 v3，医疗切片升级到 v4；加载时为旧版本逐步补全弹药/结算、耐久与健康医疗默认值。当前 V0 没有需兼容的更早正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -162,5 +162,7 @@ Content Registry 的当前落地边界：
 3. `codex/core-alpha-persistent-base`：已由 PR #58 以 merge commit `b1ea3c3` 进入 main，交付 Profile/AssetRegistry、原子库存/配装、可步行 Base、经济/救济和 schema v1。
 4. `codex/core-alpha-extraction-loop`：已由 PR #59 以 merge commit `ed45baa` 进入 main，交付 WeaponAmmo、Medical、RaidSnapshot、无硬时限、schema v2 和幂等 Settlement。
 5. `codex/core-alpha-hardening`：连续多局、进程退出回滚、损坏恢复、平衡和 Alpha 完整验收。
+6. `codex/survival-loadout-armor-hit-regions`：PR #61 / merge commit `733b597`，交付五槽、防具耐久、三部位命中和 schema v3。
+7. `codex/survival-loadout-bleeding-field-medical`：当前分支，交付 MedicalStatus、四类医疗、schema v4 与 Raid/Base 医疗闭环。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

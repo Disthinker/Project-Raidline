@@ -5,6 +5,7 @@
 
 #include "combat_damage_domain.h"
 #include "inventory_domain.h"
+#include "medical_domain.h"
 #include "profile_state.h"
 
 struct IncomingDamageCommand
@@ -14,6 +15,7 @@ struct IncomingDamageCommand
     int penetration{};
     int armorDamage{};
     bool weakPoint{};
+    WoundRollCommand wound;
 };
 
 struct IncomingDamagePlan
@@ -24,6 +26,7 @@ struct IncomingDamagePlan
     ProfileRevision revision{};
     CombatDamageResolution resolution;
     std::optional<AssetInstanceId> armorAssetId;
+    WoundRollResult wound;
 };
 
 struct IncomingDamageReceipt
@@ -37,6 +40,7 @@ struct IncomingDamageReceipt
     std::optional<AssetInstanceId> armorAssetId;
     int healthBefore{};
     int healthAfter{};
+    WoundRollResult wound;
 };
 
 [[nodiscard]] IncomingDamagePlan queryIncomingDamage(

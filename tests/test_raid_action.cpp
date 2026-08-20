@@ -59,6 +59,18 @@ TEST(RaidActionTest, TimedActionCompletesOrInterruptsWithoutPartialCommit)
     EXPECT_EQ(state.update(0.8F, false), RaidActionAdvance::Completed);
     ASSERT_TRUE(state.takeCompleted().has_value());
 
+    ASSERT_TRUE(state.start(MedicalRaidAction{
+        9,
+        MedicalUseEffect::StopAnyBleeding,
+        true,
+        false,
+        0,
+        0,
+        0.0F,
+        4.0F}));
+    EXPECT_EQ(state.update(4.0F, false), RaidActionAdvance::Completed);
+    ASSERT_TRUE(state.takeCompleted().has_value());
+
     ASSERT_TRUE(state.start(UnloadMagazineRaidAction{
         3,
         ProfileContainerId::compartment(4, 0),

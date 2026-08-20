@@ -7,6 +7,7 @@ void InputSystem::handleEvent(
     {
         pressedActions_.clear();
         justPressedActions_.clear();
+        justReleasedActions_.clear();
         pressedScancodes_.clear();
         primaryPointerPhysicallyPressed_ = false;
         primaryPointerPressed_ = false;
@@ -91,6 +92,10 @@ void InputSystem::handleEvent(
             return;
         }
     }
+    if (isActionPressed(*action))
+    {
+        justReleasedActions_.insert(*action);
+    }
     pressedActions_.erase(*action);
 }
 
@@ -106,6 +111,12 @@ bool InputSystem::wasActionJustPressed(
 {
     return justPressedActions_.find(action) !=
            justPressedActions_.end();
+}
+
+bool InputSystem::wasActionJustReleased(
+    GameAction action) const
+{
+    return justReleasedActions_.contains(action);
 }
 
 bool InputSystem::isControlPressed() const noexcept
@@ -147,6 +158,7 @@ void InputSystem::endFrame()
     // justPressed 只保留一帧。
     // pressed 状态等到对应 KeyUp 才清除。
     justPressedActions_.clear();
+    justReleasedActions_.clear();
     primaryPointerJustPressed_ = false;
 }
 

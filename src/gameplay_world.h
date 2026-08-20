@@ -20,6 +20,7 @@
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
 #include "content_registry.h"
+#include "medical_types.h"
 
 // 用于配置 GameplayWorld 初始地面物品。
 // GameplayWorld 根据这些定义自行生成稳定 instanceId。
@@ -55,6 +56,7 @@ struct PlayerDamageObservation
     int penetration{};
     int armorDamage{};
     bool weakPoint{};
+    WoundSource woundSource{WoundSource::None};
 };
 
 class GameplayWorld
@@ -178,6 +180,8 @@ public:
 
     [[nodiscard]] std::vector<PlayerDamageObservation>
     takePlayerDamageObservations();
+
+    void emitPlayerNoise(float radius) noexcept;
 
     [[nodiscard]]
     bool canInteractWithContainer() const noexcept;

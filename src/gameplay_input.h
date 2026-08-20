@@ -26,4 +26,5 @@ struct GameplayInput
     bool healJustPressed{};
     bool quitRaidJustPressed{};
     bool inventoryOpen{};
+    float movementSpeedMultiplier{1.0F};
 };

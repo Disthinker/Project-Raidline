@@ -11,6 +11,7 @@
 
 #include "content_registry.h"
 #include "grid_inventory.h"
+#include "medical_types.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -181,6 +182,7 @@ struct PendingRaidSnapshot
     std::vector<RaidLootSnapshot> loot;
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
+    MedicalStatusState startingMedicalStatus;
 };
 
 struct LastRaidResult
@@ -198,6 +200,7 @@ struct ProfileState
     std::uint32_t currency{};
     TutorialProgress tutorial{TutorialProgress::FindStorage};
     int currentHealth{100};
+    MedicalStatusState medicalStatus;
     AssetRegistry assets;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;

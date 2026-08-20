@@ -103,7 +103,8 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         facingDirection_ = direction;
         // 归一化方向更新
         const float movementSpeed = speed_ *
-            (input.sprint ? kSprintSpeedMultiplier : 1.0F);
+            (input.sprint ? kSprintSpeedMultiplier : 1.0F) *
+            std::clamp(input.movementSpeedMultiplier, 0.0F, 1.0F);
         position_.x += direction.x * movementSpeed * effectiveDeltaTime;
         position_.y += direction.y * movementSpeed * effectiveDeltaTime;
 

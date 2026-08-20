@@ -424,16 +424,34 @@ namespace
                 ? "UNLOAD MAGAZINE (3 SEC)"
                 : "UNLOAD ALL TO STASH";
         case ProfileContextActionKind::UseMedkit:
-            return inRaid ? "USE MEDKIT (5 SEC)" : "USE MEDKIT";
+        {
+            const MedicalUsePlan plan = queryMedicalUse(
+                profile,
+                publishedContentRegistry(),
+                asset.instanceId,
+                inRaid ? MedicalAccess::CarriedOnly : MedicalAccess::AnyOwned);
+            switch (plan.effect)
+            {
+            case MedicalUseEffect::RestoreHealth:
+                return inRaid ? "USE MEDKIT (5 SEC)" : "USE MEDKIT";
+            case MedicalUseEffect::StopLightBleeding:
+                return inRaid ? "APPLY BANDAGE (2 SEC)" : "APPLY BANDAGE";
+            case MedicalUseEffect::StopAnyBleeding:
+                return inRaid ? "APPLY TOURNIQUET (4 SEC)" : "APPLY TOURNIQUET";
+            case MedicalUseEffect::SuppressPain:
+                return inRaid ? "TAKE PAINKILLER (2 SEC)" : "TAKE PAINKILLER";
+            }
+            return std::nullopt;
+        }
         case ProfileContextActionKind::ChamberWeapon:
             return "CHAMBER ROUND";
         }
         return std::nullopt;
     }
 
-    const std::array<ItemDefinitionId, 8> &fixedSupplyIds()
+    const std::array<ItemDefinitionId, 11> &fixedSupplyIds()
     {
-        static const std::array<ItemDefinitionId, 8> ids{
+        static const std::array<ItemDefinitionId, 11> ids{
             alpha_content::rifle,
             alpha_content::magazine,
             alpha_content::ammunition,
@@ -441,7 +459,10 @@ namespace
             alpha_content::bodyArmor,
             alpha_content::chestRig,
             alpha_content::backpack,
-            alpha_content::medkit};
+            alpha_content::medkit,
+            alpha_content::bandage,
+            alpha_content::tourniquet,
+            alpha_content::painkiller};
         return ids;
     }
 
@@ -2115,14 +2136,21 @@ void App::executeProfileContextAction(bool inRaid)
             }
         }
         else if (category == ItemCategory::Medical &&
-            gameSession_.startAlphaHeal(id))
+            gameSession_.startAlphaMedical(id))
         {
-            uiMessage_ = "MEDKIT ACTION STARTED (5 SEC)";
+            const MedicalUsePlan plan = queryMedicalUse(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                id,
+                MedicalAccess::CarriedOnly);
+            uiMessage_ = fmt::format(
+                "MEDICAL ACTION STARTED ({:.1f} SEC)",
+                static_cast<float>(plan.durationMs) / 1000.0F);
             closeInventory();
         }
         else
         {
-            uiMessage_ = "MEDKIT CANNOT BE USED";
+            uiMessage_ = "MEDICAL ITEM CANNOT BE USED";
         }
         return;
     }
@@ -2136,10 +2164,12 @@ void App::executeProfileContextAction(bool inRaid)
     }
     if (category == ItemCategory::Medical)
     {
-        const HealReceipt receipt = gameSession_.executeBaseHeal(
-            id, nextProfileTransactionId("base-heal"));
+        const MedicalUseReceipt receipt = gameSession_.executeBaseMedical(
+            id, nextProfileTransactionId("base-medical"));
         uiMessage_ = receipt.succeeded
-            ? fmt::format("HEALED {} HP", receipt.healedAmount)
+            ? receipt.healedAmount > 0
+                ? fmt::format("HEALED {} HP", receipt.healedAmount)
+                : "MEDICAL EFFECT APPLIED"
             : receipt.message;
         return;
     }
@@ -2642,6 +2672,8 @@ void App::processEvents()
             inventoryInteraction_.cancelPointerGesture();
             profileInventoryInteraction_.cancelPointerGesture();
             profileContextMenu_.reset();
+            medicalWheelOpen_ = false;
+            medicalWheelOptions_.clear();
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
@@ -2937,6 +2969,42 @@ void App::update(float deltaTime)
         gameplayInput.healJustPressed = false;
         gameplayInput.quitRaidJustPressed = false;
         gameplayInput.interactJustPressed = false;
+    }
+    if (gameSession_.world().isAlphaRaidWorld() &&
+        gameSession_.world().raidSession().isActive() &&
+        !inventoryOverlayState_.isOpen())
+    {
+        if (input_.wasActionJustPressed(GameAction::Heal) &&
+            !gameSession_.raidActionState().active().has_value())
+        {
+            openMedicalWheel();
+            gameplayInput.healJustPressed = false;
+        }
+        if (medicalWheelOpen_)
+        {
+            updateMedicalWheelSelection();
+            gameplayInput.fireJustPressed = false;
+            gameplayInput.firePressed = false;
+            gameplayInput.reloadJustPressed = false;
+            gameplayInput.interactJustPressed = false;
+            gameplayInput.healJustPressed = false;
+            if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+            {
+                medicalWheelOpen_ = false;
+                medicalWheelOptions_.clear();
+                gameplayInput.quitRaidJustPressed = false;
+                uiMessage_ = "MEDICAL SELECTION CANCELLED";
+            }
+            else if (input_.wasActionJustReleased(GameAction::Heal))
+            {
+                commitMedicalWheelSelection();
+            }
+        }
+    }
+    else
+    {
+        medicalWheelOpen_ = false;
+        medicalWheelOptions_.clear();
     }
     if (inputDecision.controlAction != InventoryFrameControlAction::None)
     {
@@ -3383,6 +3451,20 @@ void App::renderDebugText()
                         return "PACKING MAGAZINE";
                     if constexpr (std::is_same_v<Action, HealRaidAction>)
                         return "HEALING";
+                    if constexpr (std::is_same_v<Action, MedicalRaidAction>)
+                    {
+                        switch (action.effect)
+                        {
+                        case MedicalUseEffect::RestoreHealth:
+                            return "HEALING";
+                        case MedicalUseEffect::StopLightBleeding:
+                            return "BANDAGING";
+                        case MedicalUseEffect::StopAnyBleeding:
+                            return "APPLYING TOURNIQUET";
+                        case MedicalUseEffect::SuppressPain:
+                            return "TAKING PAINKILLER";
+                        }
+                    }
                     if constexpr (
                         std::is_same_v<Action, UnloadMagazineRaidAction>)
                         return "UNLOADING MAGAZINE";
@@ -3402,6 +3484,24 @@ void App::renderDebugText()
                 renderer_, 980.0F, 116.0F,
                 "SHIFT SPRINT | R RELOAD | 5 MED | TAB INVENTORY");
         }
+        const ProfileState &profile = gameSession_.profile();
+        const char *bleed = profile.medicalStatus.bleeding ==
+                BleedingSeverity::Heavy
+            ? "HEAVY BLEED"
+            : profile.medicalStatus.bleeding == BleedingSeverity::Light
+                ? "LIGHT BLEED"
+                : "NO BLEED";
+        const std::string medicalStatus = fmt::format(
+            "HP {} | {}{}",
+            profile.currentHealth,
+            bleed,
+            hasPain(profile.medicalStatus)
+                ? painIsSuppressed(profile.medicalStatus)
+                    ? " | PAIN SUPPRESSED"
+                    : " | PAIN -10%"
+                : "");
+        SDL_RenderDebugText(
+            renderer_, 980.0F, 132.0F, medicalStatus.c_str());
         if (!uiMessage_.empty())
         {
             SDL_RenderDebugText(
@@ -4887,6 +4987,7 @@ void App::syncSystemCursorVisibility() noexcept
         gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive() &&
         !inventoryOverlayState_.isOpen() &&
+        !medicalWheelOpen_ &&
         pointerWorldPosition_.has_value();
 
     if (shouldHide == systemCursorHidden_)
@@ -4913,6 +5014,7 @@ void App::renderAimCrosshair()
 {
     if (!pointerWorldPosition_.has_value() ||
         inventoryOverlayState_.isOpen() ||
+        medicalWheelOpen_ ||
         !gameSession_.world().raidSession().isActive())
     {
         return;
@@ -4978,6 +5080,121 @@ void App::renderAimCrosshair()
             center.y + kHitMarkHalfExtent);
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
+void App::openMedicalWheel()
+{
+    medicalWheelOptions_.clear();
+    medicalWheelSelectedIndex_ = 0;
+    const ProfileState &profile = gameSession_.profile();
+    const auto chest = equippedAsset(profile, EquipmentSlotKind::ChestRig);
+    if (!chest.has_value())
+    {
+        uiMessage_ = "NO CHEST RIG MEDICAL ITEM";
+        return;
+    }
+
+    std::array<const AssetRecord *, 4> best{};
+    const AssetRecord *chestAsset = profile.assets.find(*chest);
+    if (chestAsset == nullptr)
+    {
+        return;
+    }
+    const ItemDefinition &chestDefinition = publishedContentRegistry().item(
+        chestAsset->definitionId);
+    for (std::size_t compartment = 0;
+         compartment < chestDefinition.containerCompartments.size();
+         ++compartment)
+    {
+        if (chestDefinition.containerCompartments[compartment].pocketKind !=
+            ContainerPocketKind::General)
+        {
+            continue;
+        }
+        for (const AssetRecord *asset : assetsInContainer(
+                 profile,
+                 ProfileContainerId::compartment(
+                     *chest,
+                     static_cast<std::uint32_t>(compartment))))
+        {
+            const ItemDefinition &definition = publishedContentRegistry().item(
+                asset->definitionId);
+            if (!definition.medicalUse.has_value() ||
+                asset->remainingCharges == 0)
+            {
+                continue;
+            }
+            const std::size_t index = static_cast<std::size_t>(
+                definition.medicalUse->effect);
+            if (index >= best.size())
+            {
+                continue;
+            }
+            if (best[index] == nullptr ||
+                asset->remainingCharges < best[index]->remainingCharges ||
+                (asset->remainingCharges == best[index]->remainingCharges &&
+                 asset->instanceId < best[index]->instanceId))
+            {
+                best[index] = asset;
+            }
+        }
+    }
+    for (const AssetRecord *asset : best)
+    {
+        if (asset != nullptr)
+        {
+            medicalWheelOptions_.push_back(asset->instanceId);
+        }
+    }
+    medicalWheelOpen_ = !medicalWheelOptions_.empty();
+    if (!medicalWheelOpen_)
+    {
+        uiMessage_ = "NO CHEST RIG MEDICAL ITEM";
+    }
+}
+
+void App::updateMedicalWheelSelection()
+{
+    if (!medicalWheelOpen_ || medicalWheelOptions_.empty() ||
+        !pointerWorldPosition_.has_value())
+    {
+        return;
+    }
+    constexpr Vec2 center{640.0F, 360.0F};
+    const float dx = pointerWorldPosition_->x - center.x;
+    const float dy = pointerWorldPosition_->y - center.y;
+    if (dx * dx + dy * dy < 30.0F * 30.0F)
+    {
+        return;
+    }
+    constexpr float pi = 3.14159265358979323846F;
+    float angle = std::atan2(dy, dx) + pi;
+    const float sector = 2.0F * pi /
+        static_cast<float>(medicalWheelOptions_.size());
+    medicalWheelSelectedIndex_ = static_cast<std::size_t>(
+        std::floor((angle + sector * 0.5F) / sector)) %
+        medicalWheelOptions_.size();
+}
+
+void App::commitMedicalWheelSelection()
+{
+    if (!medicalWheelOpen_ || medicalWheelOptions_.empty())
+    {
+        medicalWheelOpen_ = false;
+        return;
+    }
+    const AssetInstanceId selected =
+        medicalWheelOptions_[medicalWheelSelectedIndex_];
+    medicalWheelOpen_ = false;
+    medicalWheelOptions_.clear();
+    if (gameSession_.startAlphaMedical(selected))
+    {
+        uiMessage_ = "MEDICAL ACTION STARTED";
+    }
+    else
+    {
+        uiMessage_ = "SELECTED MEDICAL ITEM IS NOT APPLICABLE";
+    }
 }
 
 void App::renderCombatFeedback()
@@ -5682,6 +5899,14 @@ void App::renderProfileAsset(
     {
         texture = &inventoryItemTextures_[static_cast<std::size_t>(*legacy)];
     }
+    else if (definition.category == ItemCategory::Medical &&
+             definition.visualAssetsPublished)
+    {
+        // The first medical slice deliberately reuses the already approved
+        // Medkit placeholder until formal item art is authorized.
+        texture = &inventoryItemTextures_[
+            static_cast<std::size_t>(ItemId::Medkit)];
+    }
 
     if (texture != nullptr && texture->valid())
     {
@@ -6040,6 +6265,75 @@ void App::renderProfileContextMenu(bool inRaid)
     SDL_RenderDebugText(renderer_, menu.x + 12.0F, menu.y + 18.0F, *label);
 }
 
+void App::renderMedicalWheel()
+{
+    if (!medicalWheelOpen_ || medicalWheelOptions_.empty())
+    {
+        return;
+    }
+    constexpr float pi = 3.14159265358979323846F;
+    constexpr Vec2 center{640.0F, 360.0F};
+    constexpr float radius{118.0F};
+    const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 4, 8, 10, 150);
+    SDL_RenderFillRect(renderer_, &shade);
+    SDL_RenderDebugText(renderer_, 560.0F, 246.0F,
+                        "HOLD 5 / POINT / RELEASE");
+
+    const ProfileState &profile = gameSession_.profile();
+    const float sector = 2.0F * pi /
+        static_cast<float>(medicalWheelOptions_.size());
+    for (std::size_t index = 0; index < medicalWheelOptions_.size(); ++index)
+    {
+        const AssetRecord *asset = profile.assets.find(
+            medicalWheelOptions_[index]);
+        if (asset == nullptr)
+        {
+            continue;
+        }
+        const ItemDefinition &definition = publishedContentRegistry().item(
+            asset->definitionId);
+        const MedicalUsePlan plan = queryMedicalUse(
+            profile,
+            publishedContentRegistry(),
+            asset->instanceId,
+            MedicalAccess::CarriedOnly);
+        const float angle = static_cast<float>(index) * sector - pi;
+        const SDL_FRect option{
+            center.x + std::cos(angle) * radius - 78.0F,
+            center.y + std::sin(angle) * radius - 28.0F,
+            156.0F,
+            56.0F};
+        const bool selected = index == medicalWheelSelectedIndex_;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            plan.canCommit ? selected ? 42 : 24 : 78,
+            plan.canCommit ? selected ? 118 : 72 : 34,
+            plan.canCommit ? selected ? 126 : 78 : 34,
+            245);
+        SDL_RenderFillRect(renderer_, &option);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            plan.canCommit ? selected ? 145 : 88 : 210,
+            plan.canCommit ? selected ? 235 : 168 : 82,
+            plan.canCommit ? selected ? 225 : 180 : 82,
+            255);
+        SDL_RenderRect(renderer_, &option);
+        SDL_RenderDebugText(
+            renderer_, option.x + 8.0F, option.y + 11.0F,
+            definition.displayName.c_str());
+        const std::string charges = fmt::format(
+            "{} | {} charge(s)",
+            plan.canCommit ? "READY" : "NOT NEEDED",
+            asset->remainingCharges);
+        SDL_RenderDebugText(
+            renderer_, option.x + 8.0F, option.y + 31.0F,
+            charges.c_str());
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderProfileInventory(bool includeStash, bool inRaid)
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -6131,12 +6425,25 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
 
     const std::string health = fmt::format("HP {}/100", profile.currentHealth);
     SDL_RenderDebugText(renderer_, 42.0F, 366.0F, health.c_str());
+    const char *bleeding = profile.medicalStatus.bleeding == BleedingSeverity::Heavy
+        ? "HEAVY BLEEDING"
+        : profile.medicalStatus.bleeding == BleedingSeverity::Light
+            ? "LIGHT BLEEDING"
+            : "NO BLEEDING";
+    std::string medical = bleeding;
+    if (hasPain(profile.medicalStatus))
+    {
+        medical += painIsSuppressed(profile.medicalStatus)
+            ? " | PAIN SUPPRESSED"
+            : " | PAIN";
+    }
+    SDL_RenderDebugText(renderer_, 42.0F, 382.0F, medical.c_str());
     SDL_RenderDebugText(
         renderer_, 42.0F, 642.0F,
         "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
     SDL_RenderDebugText(
         renderer_, 42.0F, 664.0F,
-        inRaid ? "RMB MEDKIT | TAB/ESC CLOSE"
+        inRaid ? "RMB MEDICAL ITEM | TAB/ESC CLOSE"
                : "RMB: ITEM ACTION | TAB/ESC CLOSE");
     if (!uiMessage_.empty())
     {
@@ -6447,6 +6754,7 @@ void App::renderRaidScreen()
 
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
+    renderMedicalWheel();
 
     if (gameSession_.world().raidSession().isTerminal() ||
         gameFlow_.state() == GameFlowState::RaidResult)

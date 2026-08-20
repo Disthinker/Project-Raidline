@@ -32,6 +32,15 @@ set_property(
 file(READ
     "${RAIDLINE_PUBLISHED_CONTENT_FILE}"
     RAIDLINE_PUBLISHED_CONTENT_JSON)
+# Keep the generated C++ literal below MSVC's per-literal size ceiling. JSON
+# strings cannot contain raw newlines, so stripping line indentation preserves
+# the exact parsed content while avoiding a second runtime file dependency.
+string(
+    REGEX REPLACE
+    "[\r\n]+[ \t]*"
+    ""
+    RAIDLINE_PUBLISHED_CONTENT_JSON
+    "${RAIDLINE_PUBLISHED_CONTENT_JSON}")
 configure_file(
     src/published_content_json.h.in
     generated/published_content_json.h
@@ -198,6 +207,9 @@ add_library(raidline_domain STATIC
     src/inventory_transfer.h
     src/loot_table.cpp
     src/loot_table.h
+    src/medical_domain.cpp
+    src/medical_domain.h
+    src/medical_types.h
     src/profile_state.cpp
     src/profile_state.h
     src/profile_combat_domain.cpp
@@ -363,6 +375,10 @@ raidline_add_test(
 raidline_add_test(
     ProfileCombatDomainTest
     tests/test_profile_combat_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    MedicalDomainTest
+    tests/test_medical_domain.cpp
     raidline::domain)
 raidline_add_test(
     InputSystemTest

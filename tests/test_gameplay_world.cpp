@@ -2241,6 +2241,21 @@ TEST(GameplayWorldRaidTest, SurvivingBiteSuppressesMovementAndFire)
     EXPECT_TRUE(world.player().isControlled());
 }
 
+TEST(GameplayWorldTest, PlayerNoiseAlertsOnlyEnemiesInsideRadius)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{650.0F, 370.0F}, Vec2{50.0F, 50.0F}, 3},
+            EnemySpawn{Vec2{1100.0F, 650.0F}, Vec2{50.0F, 50.0F}, 3}},
+        100};
+
+    world.emitPlayerNoise(300.0F);
+
+    ASSERT_EQ(world.enemies().size(), 2U);
+    EXPECT_EQ(world.enemies()[0].awarenessState(), EnemyAwarenessState::Alerted);
+    EXPECT_EQ(world.enemies()[1].awarenessState(), EnemyAwarenessState::Unaware);
+}
+
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)
 {
     GameplayWorld world;

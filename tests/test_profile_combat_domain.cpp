@@ -138,3 +138,25 @@ TEST(ProfileCombatDomainTest, TransactionIsIdempotent)
     EXPECT_TRUE(repeated.idempotent);
     EXPECT_EQ(profileStateFingerprint(profile), afterFirst);
 }
+
+TEST(ProfileCombatDomainTest, EffectiveBiteAtomicallyAppliesHeavyBleeding)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("bite-wound", content);
+    const IncomingDamageReceipt receipt = executeIncomingDamage(
+        profile,
+        content,
+        IncomingDamageCommand{
+            18,
+            HitRegion::Head,
+            1,
+            3,
+            false,
+            WoundRollCommand{WoundSource::Bite, 7499, 20000}},
+        CommandContext{profile.revision, "bite-wound"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(receipt.wound.applied);
+    EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::Heavy);
+    EXPECT_EQ(profile.currentHealth, 64);
+}

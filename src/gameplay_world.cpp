@@ -1022,6 +1022,26 @@ GameplayWorld::takePlayerDamageObservations()
     return observations;
 }
 
+void GameplayWorld::emitPlayerNoise(float radius) noexcept
+{
+    if (!raidSession_.isActive() || !std::isfinite(radius) || radius <= 0.0F)
+    {
+        return;
+    }
+    const Vec2 source = playerCenter(player_);
+    const float radiusSquared = radius * radius;
+    for (Enemy &enemy : enemies_)
+    {
+        const Vec2 center = enemyCenter(enemy);
+        const float dx = center.x - source.x;
+        const float dy = center.y - source.y;
+        if (dx * dx + dy * dy <= radiusSquared)
+        {
+            enemy.hearTarget(source);
+        }
+    }
+}
+
 bool GameplayWorld::resolveEnemyAttackDamage(
     EnemyAttackType type,
     int legacyDamage)
@@ -1042,7 +1062,12 @@ bool GameplayWorld::resolveEnemyAttackDamage(
             damage.region,
             damage.penetration,
             damage.armorDamage,
-            damage.weakPoint});
+            damage.weakPoint,
+            type == EnemyAttackType::Scratch
+                ? WoundSource::Scratch
+                : type == EnemyAttackType::Bite
+                    ? WoundSource::Bite
+                    : WoundSource::None});
     return false;
 }
 

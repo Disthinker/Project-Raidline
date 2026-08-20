@@ -194,6 +194,7 @@ DeployReceipt executeDeploy(
     snapshot.playerSpawn = pair.playerSpawn;
     snapshot.extractionPoint = pair.extractionPoint;
     snapshot.startingHealth = candidate.currentHealth;
+    snapshot.startingMedicalStatus = candidate.medicalStatus;
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
     {
         snapshot.enemies.push_back(
@@ -321,6 +322,7 @@ RaidSettlementReceipt settlePendingRaid(
     if (outcome != RaidResultOutcome::Extracted)
     {
         candidate.currentHealth = 100;
+        candidate.medicalStatus = MedicalStatusState{};
     }
     candidate.pendingRaid.reset();
     candidate.committedSettlements.insert(id);
@@ -362,6 +364,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
 
     ProfileState candidate = profile;
     const int startingHealth = candidate.pendingRaid->startingHealth;
+    const MedicalStatusState startingMedicalStatus =
+        candidate.pendingRaid->startingMedicalStatus;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -372,6 +376,7 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         static_cast<void>(candidate.assets.erase(assetId));
     }
     candidate.currentHealth = startingHealth;
+    candidate.medicalStatus = startingMedicalStatus;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

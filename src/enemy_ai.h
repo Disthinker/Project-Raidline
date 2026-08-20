@@ -82,6 +82,8 @@ public:
     void recordAttackStarted(
         EnemyAttackType type) noexcept;
 
+    void hearTarget(Vec2 targetPosition) noexcept;
+
     void reset() noexcept;
 
     [[nodiscard]]

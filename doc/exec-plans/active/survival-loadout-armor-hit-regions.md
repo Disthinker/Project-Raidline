@@ -1,6 +1,6 @@
 # Survival Loadout：基础防具与命中部位 ExecPlan
 
-状态：实施中
+状态：已接受；PR #61 已由用户验收并以 merge commit `733b597` 合入 main
 
 基线：`origin/main@50849d5`
 
@@ -70,3 +70,4 @@
 - 2026-08-20：Base/Raid 五槽 UI、部署/结算装备根、敌人攻击观察、Profile HP/护甲原子结算及玩家射击三部位 HitResult 完成。
 - 2026-08-20：普通命中无 X，爆头/弱点专用标记与受击/护甲减伤边缘反馈完成；未启动游戏、未触碰美术生产或 manifest。
 - 2026-08-20：Windows Debug 全目标构建及全量 CTest 663/663 通过；下一门槛为 exact-head CI，再交用户正常游玩验收。
+- 2026-08-20：exact-head CI 与用户正常游玩验收通过；PR #61 以 merge commit `733b597` 合入 main。

@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "inventory_domain.h"
+#include "medical_domain.h"
 #include "weapon_ammo_domain.h"
 
 std::optional<EquipmentSlotTarget> queryProfileQuickEquipTarget(
@@ -53,8 +54,11 @@ std::optional<ProfileContextActionKind> queryProfileContextAction(
             return ProfileContextActionKind::UnloadMagazine;
         }
         if (definition.category == ItemCategory::Medical &&
-            assetIsCarried(profile, instanceId) &&
-            asset->remainingCharges > 0)
+            queryMedicalUse(
+                profile,
+                content,
+                instanceId,
+                MedicalAccess::CarriedOnly).canCommit)
         {
             return ProfileContextActionKind::UseMedkit;
         }
@@ -67,7 +71,11 @@ std::optional<ProfileContextActionKind> queryProfileContextAction(
         return ProfileContextActionKind::UnloadMagazine;
     }
     if (definition.category == ItemCategory::Medical &&
-        asset->remainingCharges > 0 && profile.currentHealth < 100)
+        queryMedicalUse(
+            profile,
+            content,
+            instanceId,
+            MedicalAccess::AnyOwned).canCommit)
     {
         return ProfileContextActionKind::UseMedkit;
     }

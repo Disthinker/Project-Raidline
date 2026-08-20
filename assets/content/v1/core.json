@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "survival-loadout-content-1",
+  "content_version": "survival-loadout-content-2",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -174,7 +174,82 @@
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
       "market_buy_price": 60,
       "market_recycle_price": 15,
-      "maximum_charges": 3
+      "maximum_charges": 3,
+      "medical_use": {
+        "effect": "restore_health",
+        "action_duration_ms": 5000,
+        "effect_magnitude": 30,
+        "slow_movement": true
+      }
+    },
+    {
+      "id": "item.medical.bandage_basic",
+      "display_name": "Bandage",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_buy_price": 20,
+      "market_recycle_price": 5,
+      "maximum_charges": 1,
+      "medical_use": {
+        "effect": "stop_light_bleeding",
+        "action_duration_ms": 2000,
+        "effect_magnitude": 1,
+        "slow_movement": true
+      }
+    },
+    {
+      "id": "item.medical.tourniquet_basic",
+      "display_name": "Tourniquet",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_buy_price": 40,
+      "market_recycle_price": 10,
+      "maximum_charges": 1,
+      "medical_use": {
+        "effect": "stop_any_bleeding",
+        "action_duration_ms": 4000,
+        "effect_magnitude": 1,
+        "slow_movement": true
+      }
+    },
+    {
+      "id": "item.medical.painkiller_basic",
+      "display_name": "Painkiller",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_buy_price": 40,
+      "market_recycle_price": 10,
+      "maximum_charges": 3,
+      "medical_use": {
+        "effect": "suppress_pain",
+        "action_duration_ms": 2000,
+        "effect_magnitude": 180000,
+        "slow_movement": false
+      }
     },
     {
       "id": "item.protective_gear.helmet_basic",

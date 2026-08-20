@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/core-alpha-hardening.md`。Persistent Base 与 Extraction Loop 已分别由 PR #58、PR #59 接受并归档；Content Registry v1 已归档在 `completed/content-registry-v1.md`。
+当前实现计划：`active/survival-loadout-bleeding-field-medical.md`。Persistent Base、Extraction Loop、Alpha Hardening 与基础防具/命中部位已分别由 PR #58～#61 接受；旧活动文档保留交付证据。

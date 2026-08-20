@@ -11,8 +11,8 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
 
     EXPECT_EQ(profile.currency, 200U);
     EXPECT_EQ(profile.revision, 1U);
-    EXPECT_EQ(profile.assets.records().size(), 12U);
-    EXPECT_EQ(profile.assets.nextAssetId(), 13U);
+    EXPECT_EQ(profile.assets.records().size(), 15U);
+    EXPECT_EQ(profile.assets.nextAssetId(), 16U);
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
@@ -24,6 +24,7 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     std::size_t magazines{};
     std::size_t medkits{};
     std::size_t protectiveGear{};
+    std::size_t fieldMedical{};
     for (const auto &[id, asset] : profile.assets.records())
     {
         static_cast<void>(id);
@@ -47,11 +48,18 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
             EXPECT_GT(asset.currentMaximumDurability, 0U);
             EXPECT_EQ(asset.currentDurability, asset.currentMaximumDurability);
         }
+        if (asset.definitionId == alpha_content::bandage ||
+            asset.definitionId == alpha_content::tourniquet ||
+            asset.definitionId == alpha_content::painkiller)
+        {
+            ++fieldMedical;
+        }
     }
     EXPECT_EQ(ammunition, 90U);
     EXPECT_EQ(magazines, 3U);
     EXPECT_EQ(medkits, 2U);
     EXPECT_EQ(protectiveGear, 2U);
+    EXPECT_EQ(fieldMedical, 3U);
 }
 
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)
@@ -76,4 +84,18 @@ TEST(ProfileStateTest, FingerprintChangesWithAuthoritativeState)
     const std::uint64_t before = profileStateFingerprint(profile);
     ++profile.currency;
     EXPECT_NE(profileStateFingerprint(profile), before);
+}
+
+TEST(ProfileStateTest, InvalidMedicalTimerCombinationIsRejected)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-medical-invalid",
+        publishedContentRegistry());
+    profile.medicalStatus.bleeding = BleedingSeverity::Heavy;
+
+    const ProfileValidationResult result = validateProfileState(
+        profile,
+        publishedContentRegistry());
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("medical"), std::string::npos);
 }
