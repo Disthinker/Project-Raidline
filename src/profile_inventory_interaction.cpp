@@ -12,24 +12,22 @@ std::optional<EquipmentSlotTarget> queryProfileQuickEquipTarget(
     AssetInstanceId instanceId)
 {
     const AssetRecord *asset = profile.assets.find(instanceId);
-    if (asset == nullptr)
+    if (asset == nullptr ||
+        !std::holds_alternative<StoredAssetLocation>(asset->location))
     {
         return std::nullopt;
     }
     const ItemDefinition &definition = content.item(asset->definitionId);
-    if (!definition.equipmentSlot.has_value() ||
-        equippedAsset(profile, *definition.equipmentSlot).has_value())
+    for (EquipmentSlotKind slot : itemEquipmentSlots(definition))
     {
-        return std::nullopt;
+        const InventoryEquipCommand command{instanceId, slot};
+        if (!equippedAsset(profile, slot).has_value() &&
+            queryInventory(profile, content, command).canCommit)
+        {
+            return EquipmentSlotTarget{slot};
+        }
     }
-    const InventoryEquipCommand command{
-        instanceId,
-        *definition.equipmentSlot};
-    if (!queryInventory(profile, content, command).canCommit)
-    {
-        return std::nullopt;
-    }
-    return EquipmentSlotTarget{*definition.equipmentSlot};
+    return std::nullopt;
 }
 
 std::optional<ProfileContextActionKind> queryProfileContextAction(

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "survival-loadout-content-3",
+  "content_version": "survival-loadout-content-4",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -59,7 +59,32 @@
         "pickup_size": {"x": 72, "y": 48}
       },
       "inventory_texture": "items/inventory/item_pistol_basic_v1_128x64.png",
-      "world_texture": "items/world/item_pistol_basic_v1_64x32.png"
+      "world_texture": "items/world/item_pistol_basic_v1_64x32.png",
+      "equipment_slots": ["sidearm"],
+      "market_buy_price": 180,
+      "market_recycle_price": 45,
+      "compatible_ammunition": "item.ammunition.9mm_basic",
+      "compatible_magazine": "item.magazine.9mm_15_pistol",
+      "weapon_condition": {
+        "maximum_durability_centi": 10000,
+        "wear_per_successful_shot_centi": 8,
+        "reliability_multiplier_basis_points": 9000,
+        "malfunctions": [
+          {"type": "stovepipe", "weight": 100}
+        ]
+      },
+      "weapon_use": {
+        "switch_duration_ms": 350,
+        "automatic_fire": false,
+        "shot_interval_seconds": 0.25,
+        "spread_per_shot_degrees": 1.5,
+        "maximum_spread_degrees": 8.0,
+        "recovery_delay_seconds": 0.12,
+        "spread_recovery_degrees_per_second": 14.0,
+        "visual_recoil_per_shot": 4.0,
+        "maximum_visual_recoil": 10.0,
+        "visual_recoil_recovery_per_second": 50.0
+      }
     },
     {
       "id": "item.weapon.rifle_basic",
@@ -75,7 +100,7 @@
       },
       "inventory_texture": "items/inventory/item_rifle_basic_v1_256x128.png",
       "world_texture": "items/world/item_rifle_basic_v1_128x64.png",
-      "equipment_slot": "primary_weapon",
+      "equipment_slots": ["primary_weapon", "secondary_weapon"],
       "market_buy_price": 300,
       "market_recycle_price": 75,
       "compatible_ammunition": "item.ammunition.9mm_basic",
@@ -87,6 +112,18 @@
         "malfunctions": [
           {"type": "stovepipe", "weight": 100}
         ]
+      },
+      "weapon_use": {
+        "switch_duration_ms": 650,
+        "automatic_fire": true,
+        "shot_interval_seconds": 0.12,
+        "spread_per_shot_degrees": 1.0,
+        "maximum_spread_degrees": 6.0,
+        "recovery_delay_seconds": 0.10,
+        "spread_recovery_degrees_per_second": 12.0,
+        "visual_recoil_per_shot": 3.0,
+        "maximum_visual_recoil": 9.0,
+        "visual_recoil_recovery_per_second": 45.0
       }
     },
     {
@@ -122,6 +159,24 @@
       "market_buy_price": 30,
       "market_recycle_price": 7,
       "magazine_capacity": 30,
+      "compatible_ammunition": "item.ammunition.9mm_basic"
+    },
+    {
+      "id": "item.magazine.9mm_15_pistol",
+      "display_name": "15-round Pistol Magazine",
+      "category": "magazine",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 40, "y": 40}
+      },
+      "inventory_texture": "items/inventory/unpublished_pistol_magazine.png",
+      "world_texture": "items/world/unpublished_pistol_magazine.png",
+      "market_buy_price": 20,
+      "market_recycle_price": 5,
+      "magazine_capacity": 15,
       "compatible_ammunition": "item.ammunition.9mm_basic"
     },
     {

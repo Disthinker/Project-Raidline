@@ -101,11 +101,16 @@ struct MedicalUseDefinition
 enum class EquipmentSlotKind
 {
     PrimaryWeapon,
+    SecondaryWeapon,
+    Sidearm,
     ChestRig,
     Backpack,
     Helmet,
     BodyArmor
 };
+
+[[nodiscard]] bool isWeaponEquipmentSlot(
+    EquipmentSlotKind slot) noexcept;
 
 struct ArmorProtectionDefinition
 {
@@ -117,6 +122,24 @@ struct ArmorProtectionDefinition
     friend bool operator==(
         const ArmorProtectionDefinition &,
         const ArmorProtectionDefinition &) = default;
+};
+
+struct WeaponUseDefinition
+{
+    std::uint32_t switchDurationMs{};
+    bool automaticFire{};
+    float shotIntervalSeconds{};
+    float spreadPerShotDegrees{};
+    float maximumSpreadDegrees{};
+    float recoveryDelaySeconds{};
+    float spreadRecoveryDegreesPerSecond{};
+    float visualRecoilPerShot{};
+    float maximumVisualRecoil{};
+    float visualRecoilRecoveryPerSecond{};
+
+    friend bool operator==(
+        const WeaponUseDefinition &,
+        const WeaponUseDefinition &) = default;
 };
 
 enum class ContainerPocketKind
@@ -186,6 +209,7 @@ struct ItemDefinition
     // not consume; Profile/Inventory code branches on these typed values,
     // never on display names.
     std::optional<EquipmentSlotKind> equipmentSlot;
+    std::vector<EquipmentSlotKind> compatibleEquipmentSlots;
     std::vector<ContainerCompartmentDefinition>
         containerCompartments;
     std::uint32_t marketBuyPrice{};
@@ -200,7 +224,15 @@ struct ItemDefinition
     std::optional<MedicalUseDefinition> medicalUse;
     std::optional<WeaponConditionDefinition> weaponCondition;
     std::optional<WeaponMaintenanceDefinition> weaponMaintenance;
+    std::optional<WeaponUseDefinition> weaponUse;
 };
+
+[[nodiscard]] bool itemCanEquipInSlot(
+    const ItemDefinition &definition,
+    EquipmentSlotKind slot) noexcept;
+
+[[nodiscard]] std::vector<EquipmentSlotKind> itemEquipmentSlots(
+    const ItemDefinition &definition);
 
 constexpr std::size_t itemCount() noexcept
 {

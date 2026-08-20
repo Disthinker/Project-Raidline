@@ -86,6 +86,10 @@ std::string slotName(EquipmentSlotKind slot)
     {
     case EquipmentSlotKind::PrimaryWeapon:
         return "primary_weapon";
+    case EquipmentSlotKind::SecondaryWeapon:
+        return "secondary_weapon";
+    case EquipmentSlotKind::Sidearm:
+        return "sidearm";
     case EquipmentSlotKind::ChestRig:
         return "chest_rig";
     case EquipmentSlotKind::Backpack:
@@ -101,6 +105,8 @@ std::string slotName(EquipmentSlotKind slot)
 std::optional<EquipmentSlotKind> parseSlot(std::string_view value)
 {
     if (value == "primary_weapon") return EquipmentSlotKind::PrimaryWeapon;
+    if (value == "secondary_weapon") return EquipmentSlotKind::SecondaryWeapon;
+    if (value == "sidearm") return EquipmentSlotKind::Sidearm;
     if (value == "chest_rig") return EquipmentSlotKind::ChestRig;
     if (value == "backpack") return EquipmentSlotKind::Backpack;
     if (value == "helmet") return EquipmentSlotKind::Helmet;
@@ -465,7 +471,8 @@ std::string serializeProfileEnvelope(
     std::uint32_t schemaVersion)
 {
     if (schemaVersion != 1 && schemaVersion != 2 &&
-        schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5)
+        schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
+        schemaVersion != 6)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -505,10 +512,12 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 3 &&
              contentVersion == "survival-loadout-content-1") ||
             (schemaVersion == 4 &&
-             contentVersion == "survival-loadout-content-2");
+             contentVersion == "survival-loadout-content-2") ||
+            (schemaVersion == 5 &&
+             contentVersion == "survival-loadout-content-3");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
-             schemaVersion != 5) ||
+             schemaVersion != 5 && schemaVersion != 6) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -638,6 +647,19 @@ SaveLoadResult deserializeProfileEnvelope(
                             "weapon malfunction is invalid"};
                 }
                 asset.weaponMalfunction = *malfunction;
+            }
+            if (schemaVersion < 6 &&
+                assetDefinition.weaponCondition.has_value() &&
+                asset.currentMaximumDurability == 0)
+            {
+                // Schema v5 could contain legacy weapon instances that only
+                // became durable production weapons in content v4 (the
+                // pistol). Give those instances the new definition baseline
+                // without overwriting condition already persisted by v5.
+                asset.currentMaximumDurability =
+                    assetDefinition.weaponCondition->maximumDurabilityCenti;
+                asset.currentDurability = asset.currentMaximumDurability;
+                asset.weaponMalfunction = WeaponMalfunctionType::None;
             }
             if (value.contains("relief_batch_id"))
             {

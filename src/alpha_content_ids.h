@@ -5,7 +5,9 @@
 namespace alpha_content
 {
 inline const ItemDefinitionId rifle{"item.weapon.rifle_basic"};
+inline const ItemDefinitionId pistol{"item.weapon.pistol_basic"};
 inline const ItemDefinitionId magazine{"item.magazine.9mm_30"};
+inline const ItemDefinitionId pistolMagazine{"item.magazine.9mm_15_pistol"};
 inline const ItemDefinitionId ammunition{"item.ammunition.9mm_basic"};
 inline const ItemDefinitionId chestRig{"item.container.chest_rig_small"};
 inline const ItemDefinitionId backpack{"item.container.backpack_small"};

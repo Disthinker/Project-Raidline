@@ -77,6 +77,38 @@ TEST(InventoryDomainTest, EquipmentCommandsUseStableLocations)
     EXPECT_TRUE(profile.committedTransactions.contains("equip-rifle"));
 }
 
+TEST(InventoryDomainTest, LongGunAndSidearmUseDistinctCompatibleSlots)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "inventory-multi-weapon",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId pistol = firstAsset(profile, alpha_content::pistol);
+
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{rifle, EquipmentSlotKind::SecondaryWeapon},
+        CommandContext{profile.revision, "equip-secondary"}).succeeded);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{pistol, EquipmentSlotKind::Sidearm},
+        CommandContext{profile.revision, "equip-sidearm"}).succeeded);
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::SecondaryWeapon), rifle);
+    EXPECT_EQ(equippedAsset(profile, EquipmentSlotKind::Sidearm), pistol);
+
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const InventoryReceipt rejected = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{pistol, EquipmentSlotKind::PrimaryWeapon},
+        CommandContext{profile.revision, "wrong-sidearm-slot"});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
 TEST(InventoryDomainTest, ProtectiveGearUsesDedicatedAtomicEquipmentSlots)
 {
     ProfileState profile = makeNewAlphaProfile(

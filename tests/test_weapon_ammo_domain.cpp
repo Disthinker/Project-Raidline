@@ -118,6 +118,52 @@ TEST(WeaponAmmoDomainTest, RejectedCommandDoesNotMutateProfile)
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
+TEST(WeaponAmmoDomainTest, RifleAndPistolMagazinesNeverInterchange)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-caliber-family",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId pistol = firstAsset(profile, alpha_content::pistol);
+    const AssetInstanceId rifleMagazine = firstAsset(
+        profile, alpha_content::magazine);
+    const AssetInstanceId pistolMagazine = firstAsset(
+        profile, alpha_content::pistolMagazine);
+    const AssetInstanceId ammunition = firstAsset(
+        profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        LoadMagazineCommand{pistolMagazine, ammunition, 3},
+        CommandContext{profile.revision, "load-pistol-magazine"}).succeeded);
+
+    const std::uint64_t before = profileStateFingerprint(profile);
+    EXPECT_FALSE(queryWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{rifle, pistolMagazine}).canCommit);
+    EXPECT_FALSE(queryWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineCommand{pistol, rifleMagazine}).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{pistol, pistolMagazine},
+        CommandContext{profile.revision, "install-pistol-magazine"})
+        .succeeded);
+    const WeaponAmmoReceipt fired = executeWeaponAmmo(
+        profile,
+        publishedContentRegistry(),
+        FireWeaponCommand{pistol},
+        CommandContext{profile.revision, "fire-pistol"});
+    ASSERT_TRUE(fired.succeeded);
+    EXPECT_EQ(fired.result, WeaponAmmoResult::Fired);
+    EXPECT_EQ(profile.assets.find(pistol)->currentDurability, 9992U);
+}
+
 TEST(WeaponAmmoDomainTest, InstallAndChamberIsOneAtomicCommand)
 {
     ProfileState profile = makeNewAlphaProfile(

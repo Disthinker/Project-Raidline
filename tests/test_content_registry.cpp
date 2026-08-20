@@ -62,8 +62,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-3");
-    ASSERT_EQ(registry.items().size(), 17U);
+    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-4");
+    ASSERT_EQ(registry.items().size(), 18U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
     ASSERT_EQ(registry.maps().size(), 1U);
@@ -81,6 +81,34 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_EQ(rifle.weaponCondition->malfunctionWeights.size(), 1U);
     EXPECT_EQ(rifle.weaponCondition->malfunctionWeights.front().type,
               WeaponMalfunctionType::Stovepipe);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    EXPECT_TRUE(rifle.weaponUse->automaticFire);
+    EXPECT_EQ(rifle.weaponUse->switchDurationMs, 650U);
+    EXPECT_TRUE(itemCanEquipInSlot(
+        rifle, EquipmentSlotKind::PrimaryWeapon));
+    EXPECT_TRUE(itemCanEquipInSlot(
+        rifle, EquipmentSlotKind::SecondaryWeapon));
+    EXPECT_FALSE(itemCanEquipInSlot(
+        rifle, EquipmentSlotKind::Sidearm));
+
+    const ItemDefinition &pistol = registry.item(alpha_content::pistol);
+    ASSERT_TRUE(pistol.weaponCondition.has_value());
+    ASSERT_TRUE(pistol.weaponUse.has_value());
+    EXPECT_FALSE(pistol.weaponUse->automaticFire);
+    EXPECT_EQ(pistol.weaponUse->switchDurationMs, 350U);
+    EXPECT_TRUE(itemCanEquipInSlot(
+        pistol, EquipmentSlotKind::Sidearm));
+    EXPECT_FALSE(itemCanEquipInSlot(
+        pistol, EquipmentSlotKind::PrimaryWeapon));
+    EXPECT_EQ(
+        pistol.compatibleMagazineDefinitionId,
+        alpha_content::pistolMagazine);
+
+    const ItemDefinition &pistolMagazine = registry.item(
+        alpha_content::pistolMagazine);
+    EXPECT_EQ(pistolMagazine.category, ItemCategory::Magazine);
+    EXPECT_EQ(pistolMagazine.magazineCapacity, 15U);
+    EXPECT_FALSE(pistolMagazine.visualAssetsPublished);
 
     const ItemDefinition &maintenance = registry.item(
         alpha_content::weaponMaintenanceKit);
@@ -240,6 +268,28 @@ TEST(ContentRegistryTest, RejectsInvalidWeaponReliabilityMultiplier)
         publishedJsonCopy(),
         "\"reliability_multiplier_basis_points\": 10000",
         "\"reliability_multiplier_basis_points\": 20000");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsDuplicateWeaponEquipmentSlot)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"equipment_slots\": [\"primary_weapon\", \"secondary_weapon\"]",
+        "\"equipment_slots\": [\"primary_weapon\", \"primary_weapon\"]");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsWeaponUseOutsideConfiguredBounds)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"spread_per_shot_degrees\": 1.5,\"maximum_spread_degrees\": 8.0",
+        "\"spread_per_shot_degrees\": 9.0,\"maximum_spread_degrees\": 8.0");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

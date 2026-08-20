@@ -1,5 +1,6 @@
 #include "item_definition.h"
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 
@@ -32,6 +33,41 @@ namespace
             "pistol",
             "rifle",
             "ammo_9mm"};
+}
+
+bool isWeaponEquipmentSlot(EquipmentSlotKind slot) noexcept
+{
+    return slot == EquipmentSlotKind::PrimaryWeapon ||
+           slot == EquipmentSlotKind::SecondaryWeapon ||
+           slot == EquipmentSlotKind::Sidearm;
+}
+
+bool itemCanEquipInSlot(
+    const ItemDefinition &definition,
+    EquipmentSlotKind slot) noexcept
+{
+    if (definition.equipmentSlot == slot)
+    {
+        return true;
+    }
+    return std::find(
+               definition.compatibleEquipmentSlots.begin(),
+               definition.compatibleEquipmentSlots.end(),
+               slot) != definition.compatibleEquipmentSlots.end();
+}
+
+std::vector<EquipmentSlotKind> itemEquipmentSlots(
+    const ItemDefinition &definition)
+{
+    std::vector<EquipmentSlotKind> result =
+        definition.compatibleEquipmentSlots;
+    if (definition.equipmentSlot.has_value() &&
+        std::find(result.begin(), result.end(), *definition.equipmentSlot) ==
+            result.end())
+    {
+        result.insert(result.begin(), *definition.equipmentSlot);
+    }
+    return result;
 }
 
 const ItemDefinitionCatalog &

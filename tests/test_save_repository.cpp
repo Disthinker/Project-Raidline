@@ -38,7 +38,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV5RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV6RoundTripPreservesAuthoritativeState)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -245,7 +245,7 @@ TEST(SaveRepositoryTest, SchemaV3MigratesMedicalStateToHealthyDefaults)
     EXPECT_EQ(migrated.profile->medicalStatus, MedicalStatusState{});
 }
 
-TEST(SaveRepositoryTest, SchemaV5PreservesWeaponConditionAndMalfunction)
+TEST(SaveRepositoryTest, SchemaV6PreservesWeaponConditionAndMalfunction)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-v5-weapon-condition", publishedContentRegistry());
@@ -271,6 +271,94 @@ TEST(SaveRepositoryTest, SchemaV5PreservesWeaponConditionAndMalfunction)
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV5MigratesNewlyDurablePistolOnly)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v5-pistol-migration", publishedContentRegistry());
+    AssetRecord *rifle{};
+    AssetRecord *pistol{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::rifle)
+        {
+            rifle = profile.assets.findMutable(id);
+        }
+        else if (asset.definitionId == alpha_content::pistol)
+        {
+            pistol = profile.assets.findMutable(id);
+        }
+    }
+    ASSERT_NE(rifle, nullptr);
+    ASSERT_NE(pistol, nullptr);
+    rifle->currentMaximumDurability = 8750;
+    rifle->currentDurability = 4321;
+    rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+    pistol->currentMaximumDurability = 0;
+    pistol->currentDurability = 0;
+    pistol->weaponMalfunction = WeaponMalfunctionType::None;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, "survival-loadout-content-3", 5),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    const AssetRecord *loadedRifle = loaded.profile->assets.find(
+        rifle->instanceId);
+    const AssetRecord *loadedPistol = loaded.profile->assets.find(
+        pistol->instanceId);
+    ASSERT_NE(loadedRifle, nullptr);
+    ASSERT_NE(loadedPistol, nullptr);
+    EXPECT_EQ(loadedRifle->currentMaximumDurability, 8750U);
+    EXPECT_EQ(loadedRifle->currentDurability, 4321U);
+    EXPECT_EQ(
+        loadedRifle->weaponMalfunction,
+        WeaponMalfunctionType::Stovepipe);
+    EXPECT_EQ(loadedPistol->currentMaximumDurability, 10000U);
+    EXPECT_EQ(loadedPistol->currentDurability, 10000U);
+    EXPECT_EQ(
+        loadedPistol->weaponMalfunction,
+        WeaponMalfunctionType::None);
+}
+
+TEST(SaveRepositoryTest, SchemaV6RoundTripsNewWeaponSlots)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-weapon-slots", publishedContentRegistry());
+    AssetInstanceId rifle{};
+    AssetInstanceId pistol{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::rifle) rifle = id;
+        if (asset.definitionId == alpha_content::pistol) pistol = id;
+    }
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(pistol, 0U);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{rifle, EquipmentSlotKind::SecondaryWeapon},
+        CommandContext{profile.revision, "save-equip-secondary"}).succeeded);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{pistol, EquipmentSlotKind::Sidearm},
+        CommandContext{profile.revision, "save-equip-sidearm"}).succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(
+        equippedAsset(*loaded.profile, EquipmentSlotKind::SecondaryWeapon),
+        rifle);
+    EXPECT_EQ(
+        equippedAsset(*loaded.profile, EquipmentSlotKind::Sidearm),
+        pistol);
 }
 
 TEST(SaveRepositoryTest, SchemaV4MigratesWeaponConditionToFactoryState)

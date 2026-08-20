@@ -319,11 +319,16 @@ ProfileState makeNewAlphaProfile(
     profile.currency = 200;
 
     placeNewAsset(profile, content, alpha_content::rifle);
+    placeNewAsset(profile, content, alpha_content::pistol);
     placeNewAsset(profile, content, alpha_content::chestRig);
     placeNewAsset(profile, content, alpha_content::backpack);
     for (int index = 0; index < 3; ++index)
     {
         placeNewAsset(profile, content, alpha_content::magazine);
+    }
+    for (int index = 0; index < 2; ++index)
+    {
+        placeNewAsset(profile, content, alpha_content::pistolMagazine);
     }
     placeNewAsset(profile, content, alpha_content::ammunition, 60);
     placeNewAsset(profile, content, alpha_content::ammunition, 30);
@@ -656,8 +661,7 @@ ProfileValidationResult validateProfileState(
         if (const auto *equipped =
                 std::get_if<EquippedAssetLocation>(&asset.location))
         {
-            if (!definition->equipmentSlot.has_value() ||
-                *definition->equipmentSlot != equipped->slot ||
+            if (!itemCanEquipInSlot(*definition, equipped->slot) ||
                 !occupiedSlots.insert(equipped->slot).second)
             {
                 return {false, "equipment slot ownership is invalid"};

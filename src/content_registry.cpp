@@ -276,36 +276,106 @@ namespace
              std::string{value});
     }
 
+    EquipmentSlotKind parseEquipmentSlotName(std::string_view value)
+    {
+        if (value == "primary_weapon")
+        {
+            return EquipmentSlotKind::PrimaryWeapon;
+        }
+        if (value == "secondary_weapon")
+        {
+            return EquipmentSlotKind::SecondaryWeapon;
+        }
+        if (value == "sidearm")
+        {
+            return EquipmentSlotKind::Sidearm;
+        }
+        if (value == "chest_rig")
+        {
+            return EquipmentSlotKind::ChestRig;
+        }
+        if (value == "backpack")
+        {
+            return EquipmentSlotKind::Backpack;
+        }
+        if (value == "helmet")
+        {
+            return EquipmentSlotKind::Helmet;
+        }
+        if (value == "body_armor")
+        {
+            return EquipmentSlotKind::BodyArmor;
+        }
+        fail("equipment slot is not supported: " + std::string{value});
+    }
+
     std::optional<EquipmentSlotKind> parseEquipmentSlot(
         const Json &item)
     {
         const std::optional<std::string> value =
             optionalString(item, "equipment_slot");
-        if (!value.has_value())
+        return value.has_value()
+            ? std::optional<EquipmentSlotKind>{parseEquipmentSlotName(*value)}
+            : std::nullopt;
+    }
+
+    std::vector<EquipmentSlotKind> parseEquipmentSlots(const Json &item)
+    {
+        const auto found = item.find("equipment_slots");
+        if (found == item.end())
+        {
+            return {};
+        }
+        if (!found->is_array())
+        {
+            fail("equipment_slots must be an array");
+        }
+        std::vector<EquipmentSlotKind> result;
+        for (const Json &entry : *found)
+        {
+            if (!entry.is_string())
+            {
+                fail("equipment_slots entries must be strings");
+            }
+            const EquipmentSlotKind slot = parseEquipmentSlotName(
+                entry.get<std::string>());
+            if (std::find(result.begin(), result.end(), slot) != result.end())
+            {
+                fail("equipment_slots contains a duplicate");
+            }
+            result.push_back(slot);
+        }
+        if (result.empty())
+        {
+            fail("equipment_slots must not be empty");
+        }
+        return result;
+    }
+
+    std::optional<WeaponUseDefinition> parseWeaponUse(const Json &item)
+    {
+        const auto found = item.find("weapon_use");
+        if (found == item.end())
         {
             return std::nullopt;
         }
-        if (*value == "primary_weapon")
+        if (!found->is_object())
         {
-            return EquipmentSlotKind::PrimaryWeapon;
+            fail("weapon_use must be an object");
         }
-        if (*value == "chest_rig")
-        {
-            return EquipmentSlotKind::ChestRig;
-        }
-        if (*value == "backpack")
-        {
-            return EquipmentSlotKind::Backpack;
-        }
-        if (*value == "helmet")
-        {
-            return EquipmentSlotKind::Helmet;
-        }
-        if (*value == "body_armor")
-        {
-            return EquipmentSlotKind::BodyArmor;
-        }
-        fail("equipment_slot is not supported: " + *value);
+        return WeaponUseDefinition{
+            requiredPositiveUint(*found, "switch_duration_ms"),
+            requiredBool(*found, "automatic_fire"),
+            requiredFiniteFloat(*found, "shot_interval_seconds", true),
+            requiredFiniteFloat(*found, "spread_per_shot_degrees", true),
+            requiredFiniteFloat(*found, "maximum_spread_degrees", true),
+            requiredFiniteFloat(*found, "recovery_delay_seconds", true),
+            requiredFiniteFloat(
+                *found, "spread_recovery_degrees_per_second", true),
+            requiredFiniteFloat(*found, "visual_recoil_per_shot", true),
+            requiredFiniteFloat(*found, "maximum_visual_recoil", true),
+            requiredFiniteFloat(
+                *found, "visual_recoil_recovery_per_second", true)};
     }
 
     std::optional<ArmorProtectionDefinition> parseArmorProtection(
@@ -633,6 +703,8 @@ ContentRegistry ContentRegistry::fromJson(
                 std::move(worldTexture)};
 
             definition.equipmentSlot = parseEquipmentSlot(itemValue);
+            definition.compatibleEquipmentSlots =
+                parseEquipmentSlots(itemValue);
             definition.containerCompartments =
                 parseContainerCompartments(itemValue);
             definition.marketBuyPrice =
@@ -648,6 +720,18 @@ ContentRegistry ContentRegistry::fromJson(
             definition.medicalUse = parseMedicalUse(itemValue);
             definition.weaponCondition = parseWeaponCondition(itemValue);
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
+            definition.weaponUse = parseWeaponUse(itemValue);
+
+            if (definition.equipmentSlot.has_value() &&
+                !definition.compatibleEquipmentSlots.empty())
+            {
+                fail("item cannot mix equipment_slot and equipment_slots");
+            }
+            if (!definition.compatibleEquipmentSlots.empty() &&
+                definition.category != ItemCategory::Weapon)
+            {
+                fail("only weapons may declare equipment_slots");
+            }
 
             if (const auto ammunition =
                     optionalString(itemValue, "compatible_ammunition"))
@@ -748,6 +832,32 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     fail("weapon condition capability is invalid");
                 }
+            }
+            if (definition.weaponUse.has_value())
+            {
+                const WeaponUseDefinition &use = *definition.weaponUse;
+                if (definition.category != ItemCategory::Weapon ||
+                    definition.compatibleEquipmentSlots.empty() ||
+                    definition.equipmentSlot.has_value() ||
+                    !definition.compatibleMagazineDefinitionId.has_value() ||
+                    use.spreadPerShotDegrees > use.maximumSpreadDegrees ||
+                    use.visualRecoilPerShot > use.maximumVisualRecoil)
+                {
+                    fail("weapon use capability is invalid");
+                }
+                for (EquipmentSlotKind slot :
+                     definition.compatibleEquipmentSlots)
+                {
+                    if (!isWeaponEquipmentSlot(slot))
+                    {
+                        fail("weapon declares a non-weapon equipment slot");
+                    }
+                }
+            }
+            else if (definition.category == ItemCategory::Weapon &&
+                     definition.weaponCondition.has_value())
+            {
+                fail("durable weapon requires a weapon use capability");
             }
             if (definition.weaponMaintenance.has_value())
             {

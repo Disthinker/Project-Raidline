@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <type_traits>
+#include <vector>
 
 #include "alpha_content_ids.h"
 
@@ -45,6 +46,8 @@ RaidCapabilityInventory raidCapabilityInventory(
     const ContentRegistry &content)
 {
     RaidCapabilityInventory result;
+    std::vector<ItemDefinitionId> compatibleMagazineDefinitions;
+    std::vector<ItemDefinitionId> ownedMagazineDefinitions;
     for (const auto &[id, asset] : profile.assets.records())
     {
         static_cast<void>(id);
@@ -54,13 +57,18 @@ RaidCapabilityInventory raidCapabilityInventory(
         }
 
         const ItemDefinition &definition = content.item(asset.definitionId);
-        result.weapon = result.weapon ||
-            (definition.equipmentSlot == EquipmentSlotKind::PrimaryWeapon &&
-             definition.compatibleMagazineDefinitionId ==
-                 alpha_content::magazine);
-        result.magazine = result.magazine ||
-            definition.definitionId == alpha_content::magazine;
-        if (definition.definitionId == alpha_content::ammunition)
+        if (definition.category == ItemCategory::Weapon &&
+            definition.compatibleMagazineDefinitionId.has_value())
+        {
+            result.weapon = true;
+            compatibleMagazineDefinitions.push_back(
+                *definition.compatibleMagazineDefinitionId);
+        }
+        if (definition.category == ItemCategory::Magazine)
+        {
+            ownedMagazineDefinitions.push_back(definition.definitionId);
+        }
+        if (definition.category == ItemCategory::Ammunition)
         {
             result.ammunition += asset.quantity;
         }
@@ -77,6 +85,16 @@ RaidCapabilityInventory raidCapabilityInventory(
             ++result.ammunition;
         }
     }
+    result.magazine = std::any_of(
+        ownedMagazineDefinitions.begin(),
+        ownedMagazineDefinitions.end(),
+        [&compatibleMagazineDefinitions](const ItemDefinitionId &owned)
+        {
+            return std::find(
+                       compatibleMagazineDefinitions.begin(),
+                       compatibleMagazineDefinitions.end(),
+                       owned) != compatibleMagazineDefinitions.end();
+        });
     return result;
 }
 

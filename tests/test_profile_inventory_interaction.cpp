@@ -262,3 +262,48 @@ TEST(ProfileInventoryInteractionTest, QuickTransferEquipsOnlyIntoEmptyCompatible
             rifle),
         std::nullopt);
 }
+
+TEST(ProfileInventoryInteractionTest, QuickEquipUsesSecondLongGunThenSidearmSlot)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "quick-equip-multi-weapon",
+        publishedContentRegistry());
+    const AssetInstanceId firstRifle = findDefinition(
+        profile, alpha_content::rifle);
+    const AssetInstanceId pistol = findDefinition(
+        profile, alpha_content::pistol);
+    ASSERT_NE(firstRifle, 0U);
+    ASSERT_NE(pistol, 0U);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            firstRifle, EquipmentSlotKind::PrimaryWeapon},
+        CommandContext{profile.revision, "quick-equip-first-rifle"})
+        .succeeded);
+
+    const ItemDefinition &rifleDefinition = publishedContentRegistry().item(
+        alpha_content::rifle);
+    const auto origin = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::stash(),
+        rifleDefinition,
+        ItemOrientation::Degrees0,
+        std::nullopt);
+    ASSERT_TRUE(origin.has_value());
+    const AssetInstanceId secondRifle = profile.assets.create(
+        rifleDefinition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin});
+
+    EXPECT_EQ(
+        queryProfileQuickEquipTarget(
+            profile, publishedContentRegistry(), secondRifle),
+        (std::optional<EquipmentSlotTarget>{
+            EquipmentSlotTarget{EquipmentSlotKind::SecondaryWeapon}}));
+    EXPECT_EQ(
+        queryProfileQuickEquipTarget(
+            profile, publishedContentRegistry(), pistol),
+        (std::optional<EquipmentSlotTarget>{
+            EquipmentSlotTarget{EquipmentSlotKind::Sidearm}}));
+}
