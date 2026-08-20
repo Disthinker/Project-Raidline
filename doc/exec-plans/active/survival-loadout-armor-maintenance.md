@@ -1,6 +1,6 @@
 # Survival Loadout：防具维护 ExecPlan
 
-状态：实施中
+状态：已接受；PR #65 / merge commit `755fa00`
 
 基线：`origin/main@4c16596`（PR #64 已通过用户正常游玩验收并合入）
 
@@ -69,4 +69,5 @@
 - 2026-08-20：Windows Debug 全目标构建成功；focused 74/74、全量 CTest 718/718 通过。开发代理未启动游戏，未触碰正式美术/音频或 manifest。
 - 2026-08-20：用户将 Raid 防具维修修订为允许 45% 缓慢移动；该决定覆盖外部只读 GDD 的原地维修描述，GDD 资料库未修改。
 - 2026-08-20：慢速移动修订完成专项构建与 5/5 维修回归，随后 Windows Debug 全目标和 CTest 718/718 再次通过；人工游玩复验继续由用户执行。
-- 下一门槛：将慢速移动反馈提交并推送到 Draft PR #65，等待 exact-head Windows/Ubuntu CI；CI 通过后交用户正常游玩复验。
+- 2026-08-20：反馈提交 `a65a984` 的 exact-head Windows/Ubuntu CI 与用户正常游玩复验通过；PR #65 以 merge commit `755fa00` 合入 main。
+- 最终结果：防具维护闭环已接受；后续 NPC 维修、组件耐久和改枪台继续保持独立切片。
