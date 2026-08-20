@@ -464,7 +464,7 @@ TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
 
 }
 
-TEST(AlphaExtractionSessionTest, RaidArmorMaintenanceIsStationaryInterruptibleAndAtomic)
+TEST(AlphaExtractionSessionTest, RaidArmorMaintenanceAllowsSlowMovementAndRemainsAtomic)
 {
     TemporarySaveDirectory directory;
     ProfileState profile = makeNewAlphaProfile(
@@ -499,15 +499,20 @@ TEST(AlphaExtractionSessionTest, RaidArmorMaintenanceIsStationaryInterruptibleAn
 
     const float positionBefore = session.world().player().position().x;
     ASSERT_TRUE(session.startAlphaArmorMaintenance(kit, armor));
+    const std::uint64_t beforeMovement =
+        profileStateFingerprint(session.profile());
     GameplayInput movement{};
     movement.moveRight = true;
     session.update(movement, 0.1F);
-    EXPECT_FALSE(session.raidActionState().active().has_value());
-    EXPECT_GT(session.world().player().position().x, positionBefore);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_NEAR(
+        session.world().player().position().x - positionBefore,
+        10.8F,
+        0.001F);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeMovement);
     EXPECT_EQ(session.profile().assets.find(armor)->currentDurability, 60U);
     EXPECT_EQ(session.profile().assets.find(kit)->remainingCharges, 5000U);
 
-    ASSERT_TRUE(session.startAlphaArmorMaintenance(kit, armor));
     GameplayInput fire{};
     fire.fireJustPressed = true;
     fire.firePressed = true;

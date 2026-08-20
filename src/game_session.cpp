@@ -1088,7 +1088,8 @@ void GameSession::updateAlphaRaid(
                 {
                     return action.slowMovement;
                 }
-                return std::is_same_v<Action, WeaponMaintenanceRaidAction>;
+                return std::is_same_v<Action, WeaponMaintenanceRaidAction> ||
+                       std::is_same_v<Action, ArmorMaintenanceRaidAction>;
             },
             *raidActionState_.active());
         if (slowMovement)
@@ -1233,9 +1234,7 @@ void GameSession::updateAlphaRaid(
                     else if constexpr (
                         std::is_same_v<Action, ArmorMaintenanceRaidAction>)
                     {
-                        return tookDamage || input.moveUp || input.moveDown ||
-                               input.moveLeft || input.moveRight ||
-                               input.sprint || input.firePressed ||
+                        return tookDamage || input.sprint || input.firePressed ||
                                input.fireJustPressed ||
                                input.reloadJustPressed ||
                                input.healJustPressed;

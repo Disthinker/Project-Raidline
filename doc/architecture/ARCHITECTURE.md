@@ -108,7 +108,7 @@ SessionProjection snapshot() const;
 
 ## 动作、模拟、射击与随机
 
-- Action 使用类型安全的状态变体。换弹、切换武器、医疗、撤离、武器维护与防具维护拥有各自前置条件、阶段和提交点，只共享窄时间线工具。Medkit 的首个实际治疗点原子消耗一次，部分治疗在中断后保留；止血与止痛在动作完成点提交。防具维护必须原地，完成前不产生部分修复或点数消耗。
+- Action 使用类型安全的状态变体。换弹、切换武器、医疗、撤离、武器维护与防具维护拥有各自前置条件、阶段和提交点，只共享窄时间线工具。Medkit 的首个实际治疗点原子消耗一次，部分治疗在中断后保留；止血与止痛在动作完成点提交。防具维护允许以基础速度的 45% 缓慢移动，完成前不产生部分修复或点数消耗。
 - 当前武器选择是 Raid 运行时的装备槽值，不复制资产也不进入不可续玩的 pending Raid 存档。弹药、枪膛、耐久与故障仍只保存在对应 AssetRecord；切换完成后重建射击表现瞬态，射击/换弹/清障必须查询当前实例。
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
@@ -167,6 +167,6 @@ Content Registry 的当前落地边界：
 7. `codex/survival-loadout-bleeding-field-medical`：PR #62 / merge commit `ea918ab`，交付 MedicalStatus、四类医疗、schema v4 与 Raid/Base 医疗闭环。
 8. `codex/survival-loadout-durability-malfunction-repair`：PR #63 / merge commit `b8ddbe3`，交付整枪耐久、Stovepipe、清障、维护和 schema v5。
 9. `codex/survival-loadout-multi-weapon-switching`：PR #64 / merge commit `4c16596`，交付两长枪槽、手枪槽、WeaponUse、限时切换和 schema v6。
-10. `codex/survival-loadout-armor-maintenance`：当前分支，交付防具材质、甲修点数、Base/Raid 原子维修与六秒原地动作；复用 schema v6 已有耐久/charge 字段。
+10. `codex/survival-loadout-armor-maintenance`：当前分支，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

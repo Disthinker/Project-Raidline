@@ -42,7 +42,7 @@ Core Extraction Alpha、基础防具/命中部位、战地医疗、武器状态�
 | 流血、疼痛与战地医疗 | 伤势持续压力、胸挂医疗取舍、Raid 医疗轮盘与 Base 治疗 | MedicalStatus、类型化医疗能力、限时动作、schema v4、疼痛刺激 | PR #62 已接受并进入 main |
 | 武器耐久、故障与维护 | 成功击发产生磨损，低耐久可能卡壳；玩家在战斗中清障，并在 Base/Raid 消耗维护包 | WeaponCondition、Stovepipe、输入手势、MaintenanceDomain、schema v5 | PR #63 已通过 CI 和用户验收，以 `b8ddbe3` 进入 main |
 | 多武器配装与切换 | 两把长枪与手枪独立配装；Raid 中限时切换并保持各自弹药、耐久和故障 | 兼容槽集合、WeaponUse、当前武器运行时、schema v6 | PR #64 已通过 CI 和用户验收，以 `4c16596` 进入 main |
-| 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修必须原地并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | Windows Debug 全目标与 718 项 CTest 已完成，待 PR/CI/用户验收 |
+| 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修允许 45% 缓慢移动并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | Windows Debug 全目标与 718 项 CTest 已完成，待 PR/CI/用户验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

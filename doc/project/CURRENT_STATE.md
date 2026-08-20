@@ -20,7 +20,7 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 5. **流血、疼痛与战地医疗**：PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main。
 6. **武器耐久、故障与维护**：PR #63 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
 7. **多武器配装与切换**：PR #64 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `4c16596` 进入 main。
-8. **防具维护**：甲修包、材质维修成本、Base 即时维修、Raid 六秒原地维修与中断规则已接通；正在形成首个交付候选。
+8. **防具维护**：甲修包、材质维修成本、Base 即时维修、Raid 六秒缓慢移动维修与中断规则已接通；正在形成首个交付候选。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -54,13 +54,13 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
 - PR #63 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并合入 main。
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
-- 当前防具维护切片 Windows Debug 全目标构建成功；全量 CTest 已扩展到 718 项，focused 覆盖材质成本、Base/Raid 最大耐久损失、六秒完成、移动/射击中断、旧 content v4 读取与 schema v6 往返。开发代理未启动游戏。
+- 当前防具维护切片 Windows Debug 全目标构建成功；全量 CTest 已扩展到 718 项，focused 覆盖材质成本、Base/Raid 最大耐久损失、六秒完成、45% 缓慢移动、射击中断、旧 content v4 读取与 schema v6 往返。开发代理未启动游戏。
 
 ## Survival Loadout 防具维护切片当前实现
 
 - content v5 新增基础甲修包与类型化 ArmorMaintenance；容量 50.00 点，占 `1x2`。基础头盔为复合材料、基础护甲为软质材料，每恢复 1 点分别消耗 1.50/1.00 维修点；金属材料合同预留 2.00 点且已有领域覆盖。
 - `queryArmorMaintenance` 同时计划实际恢复、点数消耗、当前最大耐久变化和动作时长；`executeArmorMaintenance` 在候选 Profile 中原子提交，失败不改变 revision、指纹或稳定 ID 高水位。
-- Base 可将甲修包拖到任意合法自有防具即时维修；Raid 可维修装备槽或随身容器中的防具，关闭库存后执行六秒原地动作。移动同帧中断并正常移动，战斗/冲刺/受伤/控制中断且零修复零消耗。
+- Base 可将甲修包拖到任意合法自有防具即时维修；Raid 可维修装备槽或随身容器中的防具，关闭库存后执行六秒动作。期间可按基础速度的 45% 缓慢移动；战斗/冲刺/受伤/库存/控制中断且零修复零消耗。该移动规则是用户对外部只读 GDD 原地维修描述的最新修订。
 - 固定供应新增甲修包，并收束 PR #64 已声明但客户端列表漏列的 Pistol/15 发弹匣；供应按钮改为三列五行，避免与右侧 Stash 回收区重叠。
 - Base/Raid 每恢复 1 点分别按 10%/20% 降低当前最大耐久，最低保留出厂最大耐久的 20%；点数不足时自动选择能够完整支付的最大整数修复量，零耐久防具可恢复。
 - schema 继续为 v6：既有字段已保存防具当前/最大耐久与甲修包剩余点数；加载显式接受 PR #64 的 `survival-loadout-content-4` 档案，不为空结构变化增加版本。
@@ -118,7 +118,7 @@ Core Extraction Alpha 与前四个 Survival Loadout 切片已接受。当前里�
 
 ## 尚未完成
 
-- 防具维护：提交、Draft PR、exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 防具维护：推送慢速移动反馈提交、通过 exact-head Windows/Ubuntu CI 并完成用户正常游玩复验。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
