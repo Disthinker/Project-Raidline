@@ -343,6 +343,8 @@ bool GameSession::deployAlpha(std::uint64_t seed)
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    sprintFireIntentPending_ = false;
+    sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
     synchronizeActiveAlphaWeapon();
@@ -575,8 +577,9 @@ bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
             activeWeaponSlot_,
             targetSlot,
             0.0F,
-            static_cast<float>(definition.weaponUse->switchDurationMs) /
-                1000.0F / handlingMultiplier});
+            deriveWeaponHandling(*definition.weaponUse)
+                    .switchDurationSeconds /
+                handlingMultiplier});
     }
     catch (...)
     {
@@ -1023,6 +1026,7 @@ void GameSession::updateAlphaRaid(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
     bool automaticFire{};
+    std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
         const AssetRecord *weaponAsset = profile_.assets.find(*weapon);
@@ -1034,6 +1038,11 @@ void GameSession::updateAlphaRaid(
                     publishedContentRegistry().item(weaponAsset->definitionId);
                 automaticFire = definition.weaponUse.has_value() &&
                     definition.weaponUse->automaticFire;
+                if (definition.weaponUse.has_value())
+                {
+                    weaponHandling = deriveWeaponHandling(
+                        *definition.weaponUse);
+                }
             }
             catch (...)
             {
@@ -1049,6 +1058,8 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
+        sprintFireIntentPending_ = false;
+        sprintFireReadyRemaining_ = 0.0F;
     }
     if (fireSuppressedUntilRelease_)
     {
@@ -1073,6 +1084,63 @@ void GameSession::updateAlphaRaid(
             sprintSuppressedUntilRelease_ = false;
         }
     }
+
+    const bool directFireIntent =
+        simulationInput.fireJustPressed ||
+        (automaticFire && simulationInput.firePressed);
+    if (simulationInput.sprint && directFireIntent &&
+        weaponHandling.has_value() && !input.inventoryOpen &&
+        !raidActionState_.active().has_value())
+    {
+        sprintFireIntentPending_ = true;
+        sprintFireReadyRemaining_ =
+            weaponHandling->sprintReadyDurationSeconds;
+        sprintSuppressedUntilRelease_ = true;
+        simulationInput.sprint = false;
+        simulationInput.fireJustPressed = false;
+        simulationInput.firePressed = false;
+    }
+    else if (sprintFireIntentPending_)
+    {
+        if (!weapon.has_value() || input.inventoryOpen ||
+            raidActionState_.active().has_value() ||
+            world_->player().isControlled())
+        {
+            sprintFireIntentPending_ = false;
+            sprintFireReadyRemaining_ = 0.0F;
+        }
+        else
+        {
+            simulationInput.sprint = false;
+            if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+            {
+                sprintFireReadyRemaining_ = std::max(
+                    0.0F,
+                    sprintFireReadyRemaining_ - deltaTime);
+            }
+            if (sprintFireReadyRemaining_ <= 0.0F)
+            {
+                simulationInput.fireJustPressed = true;
+                simulationInput.firePressed = false;
+                sprintFireIntentPending_ = false;
+            }
+            else
+            {
+                simulationInput.fireJustPressed = false;
+                simulationInput.firePressed = false;
+            }
+        }
+    }
+
+    if (simulationInput.sprint)
+    {
+        simulationInput.aimDownSights = false;
+    }
+    else if (simulationInput.aimDownSights && weaponHandling.has_value())
+    {
+        simulationInput.movementSpeedMultiplier *=
+            weaponHandling->aimDownSightsMovementMultiplier;
+    }
     if (hasPain(profile_.medicalStatus) &&
         !painIsSuppressed(profile_.medicalStatus))
     {
@@ -1080,6 +1148,9 @@ void GameSession::updateAlphaRaid(
     }
     if (raidActionState_.active().has_value())
     {
+        simulationInput.forceMaximumWeaponSpread =
+            std::holds_alternative<ReloadRaidAction>(
+                *raidActionState_.active());
         const bool slowMovement = std::visit(
             [](const auto &action)
             {
@@ -1103,7 +1174,8 @@ void GameSession::updateAlphaRaid(
     if (weapon.has_value() &&
         !raidActionState_.active().has_value() &&
         !input.inventoryOpen &&
-        (input.fireJustPressed || (automaticFire && input.firePressed)))
+        (simulationInput.fireJustPressed ||
+         (automaticFire && simulationInput.firePressed)))
     {
         ProfileState candidate = profile_;
         Pcg32 faultRandom{
@@ -1728,6 +1800,8 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    sprintFireIntentPending_ = false;
+    sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
     alphaRaidActive_ = false;

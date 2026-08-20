@@ -132,6 +132,22 @@ namespace
         return static_cast<std::uint32_t>(signedValue);
     }
 
+    std::uint32_t requiredWeaponAttribute(
+        const Json &parent,
+        std::string_view field)
+    {
+        if (!parent.contains(std::string{field}))
+        {
+            fail(std::string{field} + " is required");
+        }
+        const std::uint32_t value = optionalUint(parent, field);
+        if (value > 100U)
+        {
+            fail(std::string{field} + " must be between 0 and 100");
+        }
+        return value;
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -364,18 +380,16 @@ namespace
             fail("weapon_use must be an object");
         }
         return WeaponUseDefinition{
-            requiredPositiveUint(*found, "switch_duration_ms"),
             requiredBool(*found, "automatic_fire"),
             requiredFiniteFloat(*found, "shot_interval_seconds", true),
-            requiredFiniteFloat(*found, "spread_per_shot_degrees", true),
-            requiredFiniteFloat(*found, "maximum_spread_degrees", true),
-            requiredFiniteFloat(*found, "recovery_delay_seconds", true),
-            requiredFiniteFloat(
-                *found, "spread_recovery_degrees_per_second", true),
-            requiredFiniteFloat(*found, "visual_recoil_per_shot", true),
-            requiredFiniteFloat(*found, "maximum_visual_recoil", true),
-            requiredFiniteFloat(
-                *found, "visual_recoil_recovery_per_second", true)};
+            requiredWeaponAttribute(*found, "recoil_control"),
+            requiredWeaponAttribute(*found, "stability"),
+            requiredWeaponAttribute(*found, "handling_speed"),
+            requiredWeaponAttribute(*found, "ergonomics"),
+            requiredWeaponAttribute(*found, "accuracy"),
+            requiredPositiveInt(*found, "base_damage"),
+            requiredFiniteFloat(*found, "effective_range", true),
+            requiredFiniteFloat(*found, "maximum_range", true)};
     }
 
     std::optional<ArmorProtectionDefinition> parseArmorProtection(
@@ -879,8 +893,10 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.compatibleEquipmentSlots.empty() ||
                     definition.equipmentSlot.has_value() ||
                     !definition.compatibleMagazineDefinitionId.has_value() ||
-                    use.spreadPerShotDegrees > use.maximumSpreadDegrees ||
-                    use.visualRecoilPerShot > use.maximumVisualRecoil)
+                    use.recoilControl > 100U || use.stability > 100U ||
+                    use.handlingSpeed > 100U || use.ergonomics > 100U ||
+                    use.accuracy > 100U ||
+                    use.effectiveRange > use.maximumRange)
                 {
                     fail("weapon use capability is invalid");
                 }

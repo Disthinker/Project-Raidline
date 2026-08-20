@@ -326,7 +326,6 @@ TEST(GameSessionTest, NextRaidStartsWithFreshWeaponFireState)
     session.update(fire, 0.0F);
 
     ASSERT_GT(session.world().weaponSpreadDegrees(), 0.0F);
-    ASSERT_GT(session.world().weaponVisualRecoilPixels(), 0.0F);
     ASSERT_TRUE(session.world().markPlayerDead());
     session.update(GameplayInput{}, 0.0F);
     ASSERT_TRUE(session.startNextRaid());

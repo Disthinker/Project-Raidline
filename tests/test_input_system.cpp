@@ -705,6 +705,10 @@ TEST(InputSystemTest, FocusLossClearsKeyboardAndPointerState)
         makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_W));
     input.handleEvent(
         makePrimaryPointerEvent(SDL_EVENT_MOUSE_BUTTON_DOWN));
+    SDL_Event secondary{};
+    secondary.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    secondary.button.button = SDL_BUTTON_RIGHT;
+    input.handleEvent(secondary);
 
     SDL_Event focusLost{};
     focusLost.type = SDL_EVENT_WINDOW_FOCUS_LOST;
@@ -712,6 +716,7 @@ TEST(InputSystemTest, FocusLossClearsKeyboardAndPointerState)
 
     EXPECT_FALSE(input.isActionPressed(GameAction::MoveUp));
     EXPECT_FALSE(input.isPrimaryPointerPressed());
+    EXPECT_FALSE(input.isSecondaryPointerPressed());
     EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
 }
 
@@ -724,8 +729,13 @@ TEST(InputSystemTest, RightPointerButtonDoesNotArmPrimaryFire)
 
     input.handleEvent(event);
 
+    EXPECT_TRUE(input.isSecondaryPointerPressed());
     EXPECT_FALSE(input.isPrimaryPointerPressed());
     EXPECT_FALSE(input.wasPrimaryPointerJustPressed());
+
+    event.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    input.handleEvent(event);
+    EXPECT_FALSE(input.isSecondaryPointerPressed());
 }
 
 TEST(InputSystemTest, PointerSuppressionDoesNotClearSpaceFire)

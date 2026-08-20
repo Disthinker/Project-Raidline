@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "survival-loadout-content-5",
+  "content_version": "combat-aim-content-6",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -74,16 +74,16 @@
         ]
       },
       "weapon_use": {
-        "switch_duration_ms": 350,
         "automatic_fire": false,
         "shot_interval_seconds": 0.25,
-        "spread_per_shot_degrees": 1.5,
-        "maximum_spread_degrees": 8.0,
-        "recovery_delay_seconds": 0.12,
-        "spread_recovery_degrees_per_second": 14.0,
-        "visual_recoil_per_shot": 4.0,
-        "maximum_visual_recoil": 10.0,
-        "visual_recoil_recovery_per_second": 50.0
+        "recoil_control": 72,
+        "stability": 58,
+        "handling_speed": 82,
+        "ergonomics": 74,
+        "accuracy": 58,
+        "base_damage": 4,
+        "effective_range": 280.0,
+        "maximum_range": 450.0
       }
     },
     {
@@ -114,16 +114,16 @@
         ]
       },
       "weapon_use": {
-        "switch_duration_ms": 650,
         "automatic_fire": true,
         "shot_interval_seconds": 0.12,
-        "spread_per_shot_degrees": 1.0,
-        "maximum_spread_degrees": 6.0,
-        "recovery_delay_seconds": 0.10,
-        "spread_recovery_degrees_per_second": 12.0,
-        "visual_recoil_per_shot": 3.0,
-        "maximum_visual_recoil": 9.0,
-        "visual_recoil_recovery_per_second": 45.0
+        "recoil_control": 58,
+        "stability": 66,
+        "handling_speed": 46,
+        "ergonomics": 55,
+        "accuracy": 72,
+        "base_damage": 4,
+        "effective_range": 500.0,
+        "maximum_range": 750.0
       }
     },
     {
@@ -469,39 +469,39 @@
     {
       "id": "enemy_deployment.v0.default",
       "enemies": [
-        {"position": {"x": 600, "y": 100}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 350, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 930, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 3}
+        {"position": {"x": 600, "y": 100}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 350, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 930, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
       ]
     },
     {
       "id": "enemy_deployment.alpha.central_pressure",
       "enemies": [
-        {"position": {"x": 500, "y": 270}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 650, "y": 330}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 790, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 610, "y": 460}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 860, "y": 450}, "size": {"x": 50, "y": 50}, "maximum_health": 3}
+        {"position": {"x": 500, "y": 270}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 650, "y": 330}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 790, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 610, "y": 460}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 860, "y": 450}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
       ]
     },
     {
       "id": "enemy_deployment.alpha.route_blockade",
       "enemies": [
-        {"position": {"x": 330, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 570, "y": 180}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 850, "y": 160}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 980, "y": 350}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 760, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 3}
+        {"position": {"x": 330, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 570, "y": 180}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 850, "y": 160}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 980, "y": 350}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 760, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
       ]
     },
     {
       "id": "enemy_deployment.alpha.resource_pressure",
       "enemies": [
-        {"position": {"x": 360, "y": 520}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 520, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 700, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 900, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 3},
-        {"position": {"x": 1030, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 3}
+        {"position": {"x": 360, "y": 520}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 520, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 700, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 900, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1030, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
       ]
     }
   ],

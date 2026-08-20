@@ -80,6 +80,7 @@ struct ShotPresentationSnapshot
     Vec2 direction{};
     Vec2 impactPosition{};
     float distanceTravelled{};
+    bool tracerVisible{true};
 };
 
 [[nodiscard]]

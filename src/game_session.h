@@ -175,6 +175,8 @@ private:
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};
+    bool sprintFireIntentPending_{};
+    float sprintFireReadyRemaining_{};
     EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};
     std::optional<AssetInstanceId> configuredWeaponAssetId_;
 

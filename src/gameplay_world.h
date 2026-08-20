@@ -19,6 +19,7 @@
 #include "shot_resolution.h"
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
+#include "weapon_aim.h"
 #include "content_registry.h"
 #include "medical_types.h"
 
@@ -166,6 +167,10 @@ public:
 
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
+    [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
+    [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
+    [[nodiscard]] float weaponAimDownSightsProgress() const noexcept;
+    [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     void configureWeaponFire(const WeaponUseDefinition &definition);
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
@@ -265,7 +270,10 @@ private:
     ItemInstanceId nextItemInstanceId_{1};
     SeededLootRandomSource lootRandom_;
 
+    static constexpr int kDefaultWeaponDamage{1};
     WeaponFireState weaponFire_;
+    WeaponAimState weaponAim_;
+    int weaponBaseDamage_{kDefaultWeaponDamage};
 
     ParticleSystem particleSystem_;
     std::vector<HitResult> hitResultsLastUpdate_;

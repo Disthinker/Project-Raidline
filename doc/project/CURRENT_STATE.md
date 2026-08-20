@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@755fa00` 已包含完整 Core Extraction Alpha、基础防具/命中部位、战地医疗、武器状态、多武器配装/切换及防具维护；PR #65 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/combat-logical-ballistics-feedback-v1`，从干净的 `origin/main@755fa00` 创建。
-- 当前活动计划：`doc/exec-plans/active/combat-logical-ballistics-feedback-v1.md`。
+- `origin/main@7877d71` 已包含完整 Core Extraction Alpha、Survival Loadout 已接受切片，以及 Combat 逻辑弹道与落点反馈 v1；PR #66 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/combat-aim-handling-ads-v1`，从干净的 `origin/main@7877d71` 创建。
+- 当前活动计划：`doc/exec-plans/active/combat-aim-handling-ads-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程碑进入 **Combat：逻辑弹道与落点反馈 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片与 Combat 逻辑弹道 v1 已接受。当前里程碑进入 **Combat：准星操控与基础开镜 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -21,7 +21,8 @@ Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程�
 6. **武器耐久、故障与维护**：PR #63 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
 7. **多武器配装与切换**：PR #64 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `4c16596` 进入 main。
 8. **防具维护**：PR #65 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `755fa00` 进入 main。
-9. **逻辑弹道与落点反馈 v1**：非实体延迟飞行、冻结终点、连续扫掠与 World 命中反馈正在当前分支形成完整玩家闭环。
+9. **逻辑弹道与落点反馈 v1**：PR #66 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `7877d71` 进入 main。
+10. **准星操控与基础开镜 v1**：实际准星、稳定性随机散布、五项武器属性、基础开镜、奔跑举枪与射程反馈正在当前分支形成完整玩家闭环。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -29,7 +30,7 @@ Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程�
 
 - `MainMenu → Base → Raid → RaidResult → Base` V0 流程和进程内多局会话。
 - RL-INV-001/002/003：原子交换、Ctrl/Shift 锁定数量拖拽、同定义堆叠合并与 60 发上限。
-- `ShotCommand → ShotResolution → HitResult` 窄边界；当前分支正在以非场景实体的 `LogicalBallisticFlight` 替换 GameplayWorld 内部 V0 Projectile 适配器。
+- `ShotCommand → ShotResolution → HitResult` 窄边界；生产路径已使用非场景实体的 `LogicalBallisticFlight`，冻结本发并连续扫掠目标。
 - 四个生产库、唯一业务源码编译所有权、强类型 DefinitionId、版本化 JSON ContentRegistry 和仓库本地 nlohmann-json overlay。
 - Persistent Base 的长期 Profile、唯一 AssetRegistry、Stash/三槽配装、固定经济/救济、可行走三设施 Base、首次环境目标链和原子存档。
 
@@ -56,7 +57,8 @@ Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程�
 - PR #63 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并合入 main。
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
-- 当前逻辑弹道切片已在 Visual Studio Developer Shell、x64 host/x64 target 下完成 Windows Debug 全目标构建；全量 CTest 721/721 通过。开发代理未启动游戏。
+- PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
+- 当前准星操控切片已在 Visual Studio Developer Shell、x64 host/x64 target 下完成 Windows Debug 全目标构建；全量 CTest 734/734 通过。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -65,6 +67,15 @@ Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程�
 - 弹道以现有 1200 世界单位/秒直线推进并返回本帧实际飞过的线段；命中解析连续扫掠、选择最近活目标，高速大帧不会因离散采样穿过薄目标。
 - 未命中敌人时，弹道到达冻结准星落点才产生一个 `World HitResult` 和代码 impact 粒子。App 的短轨迹钳制在已经飞过的区段，不能提前显示未来路径。
 - 普通命中与 World 命中不显示准星 X；爆头/弱点继续只由领域 `HitSemantic` 触发专用标记。没有生成、发布或接入新美术/音频，也未修改 manifest。
+
+## Combat 准星操控与基础开镜 v1 当前实现
+
+- 武器实际准星以受 `handlingSpeed` 限制的最大角速度追随鼠标；玩家朝向、准星表现和成功击发都消费同一个实际准星，而不是原始鼠标点。
+- 实际准星只确定总体射击方向；每发在当前散布圆锥内使用确定性随机偏移冻结最终方向。`stability` 决定连续击发的散布增长，`accuracy` 决定最小/最大散布，普通移动与距离会进一步放大散布。
+- `recoilControl` 决定击发时准星中心跳动；跳动不会随时间自动回中，必须用鼠标反向修正。停火后只恢复散布，不自动抹除准星中心偏移。
+- 按住鼠标右键基础开镜；开镜降低移动速度并改善散布/稳定性。开镜击发不显示普通短轨迹；换弹保持开镜输入，但在换弹期间把散布锁定到最大。
+- 奔跑不能直接击发；奔跑中按射击会先结束奔跑，经过由操控速度决定的短促举枪准备后只提交一次原射击意图，准备完成前不消耗弹药。
+- 超过有效射程后散布逐渐恶化；超过最大射程时准星变红，命中只保留 25% 基础伤害。五项属性、基础伤害和射程来自版本化 WeaponUse 内容定义，App 不按名称猜测。
 
 ## Survival Loadout 防具维护切片当前实现
 
@@ -128,7 +139,8 @@ Core Extraction Alpha 与五个 Survival Loadout 切片已接受。当前里程�
 
 ## 尚未完成
 
-- 逻辑弹道与落点反馈 v1：建立 Draft PR，完成 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 准星操控与基础开镜 v1：建立 Draft PR，完成 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。

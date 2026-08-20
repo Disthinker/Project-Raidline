@@ -19,8 +19,6 @@ namespace
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
-    constexpr int kLegacyShotDamage{1};
-
     constexpr int kScorePerEnemy{100};
 
     float distanceToWorldBoundary(
@@ -75,7 +73,7 @@ namespace
                 EnemySpawn{
                     enemy.position,
                     enemy.size,
-                    enemy.maximumHealth});
+                    3});
         }
         return result;
     }
@@ -546,15 +544,24 @@ void GameplayWorld::update(
         worldWidth(),
         worldHeight());
 
+    const Vec2 centerAfterMovement = playerCenter(player_);
+    Vec2 desiredAimDirection = player_.facingDirection();
+    float desiredAimDistance{};
     if (input.aimWorldPosition.has_value())
     {
-        const Vec2 center = playerCenter(player_);
-        static_cast<void>(
-            player_.faceDirection(
-                Vec2{
-                    input.aimWorldPosition->x - center.x,
-                    input.aimWorldPosition->y - center.y}));
+        desiredAimDirection = Vec2{
+            input.aimWorldPosition->x - centerAfterMovement.x,
+            input.aimWorldPosition->y - centerAfterMovement.y};
+        desiredAimDistance = std::sqrt(
+            desiredAimDirection.x * desiredAimDirection.x +
+            desiredAimDirection.y * desiredAimDirection.y);
     }
+    weaponAim_.update(
+        desiredAimDirection,
+        desiredAimDistance,
+        input.aimDownSights,
+        deltaTime);
+    static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     raidSession_.update(
@@ -724,9 +731,15 @@ void GameplayWorld::update(
     const std::optional<ShotSpec> shot =
         weaponFire_.update(
             !controlsSuppressed &&
+                !input.sprint &&
                 (input.firePressed || input.fireJustPressed),
-            player_.facingDirection(),
-            deltaTime);
+            weaponAim_.actualDirection(),
+            deltaTime,
+            WeaponFireContext{
+                player_.isMoving(),
+                weaponAim_.aimDownSightsProgress(),
+                weaponAim_.rangeSpreadFactor(),
+                input.forceMaximumWeaponSpread});
 
     if (shot.has_value())
     {
@@ -744,19 +757,11 @@ void GameplayWorld::update(
             shotOrigin,
             shot->direction,
             worldSize_);
-        float requestedDistance = boundaryDistance;
-        if (input.aimWorldPosition.has_value())
-        {
-            const Vec2 aimOffset{
-                input.aimWorldPosition->x - center.x,
-                input.aimWorldPosition->y - center.y};
-            const float pointerDistance = std::sqrt(
-                aimOffset.x * aimOffset.x +
-                aimOffset.y * aimOffset.y);
-            requestedDistance = std::max(
-                kLegacyShotExtent,
-                pointerDistance - muzzleDistance);
-        }
+        const float requestedDistance = input.aimWorldPosition.has_value()
+            ? std::max(
+                  kLegacyShotExtent,
+                  weaponAim_.aimDistance() - muzzleDistance)
+            : boundaryDistance;
         const float maximumDistance = std::max(
             0.001F,
             std::min(boundaryDistance, requestedDistance));
@@ -768,7 +773,11 @@ void GameplayWorld::update(
                 shot->direction,
                 kLegacyShotSpeed,
                 kLegacyShotExtent,
-                kLegacyShotDamage,
+                std::max(
+                    1,
+                    static_cast<int>(std::lround(
+                        static_cast<float>(weaponBaseDamage_) *
+                        weaponAim_.damageMultiplier()))),
                 maximumDistance});
 
         if (!resolution.accepted())
@@ -776,7 +785,10 @@ void GameplayWorld::update(
             std::terminate();
         }
 
-        logicalBallistics_.emplace_back(resolution);
+        logicalBallistics_.emplace_back(
+            resolution,
+            !input.aimDownSights);
+        weaponAim_.applyShotRecoil();
         ++nextShotId_;
     }
 
@@ -883,7 +895,8 @@ GameplayWorld::shotPresentationSnapshots() const
                 flight.currentPosition(),
                 flight.direction(),
                 flight.impactPosition(),
-                flight.distanceTravelled()});
+                flight.distanceTravelled(),
+                flight.tracerVisible()});
     }
 
     return snapshots;
@@ -956,7 +969,31 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
-    return weaponFire_.visualRecoilPixels();
+    return std::abs(weaponAim_.recoilOffsetDegrees()) * 1.5F;
+}
+
+Vec2 GameplayWorld::weaponAimWorldPosition() const noexcept
+{
+    const Vec2 center = playerCenter(player_);
+    const Vec2 direction = weaponAim_.actualDirection();
+    return Vec2{
+        center.x + direction.x * weaponAim_.aimDistance(),
+        center.y + direction.y * weaponAim_.aimDistance()};
+}
+
+Vec2 GameplayWorld::weaponAimDirection() const noexcept
+{
+    return weaponAim_.actualDirection();
+}
+
+float GameplayWorld::weaponAimDownSightsProgress() const noexcept
+{
+    return weaponAim_.aimDownSightsProgress();
+}
+
+bool GameplayWorld::weaponAimBeyondMaximumRange() const noexcept
+{
+    return weaponAim_.beyondMaximumRange();
 }
 
 const std::vector<HitResult> &
@@ -973,15 +1010,24 @@ bool GameplayWorld::shotFiredLastUpdate() const noexcept
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition)
 {
+    const WeaponHandlingParameters handling =
+        deriveWeaponHandling(definition);
     weaponFire_ = WeaponFireState{WeaponFireConfig{
         definition.shotIntervalSeconds,
-        definition.spreadPerShotDegrees,
-        definition.maximumSpreadDegrees,
-        definition.recoveryDelaySeconds,
-        definition.spreadRecoveryDegreesPerSecond,
-        definition.visualRecoilPerShot,
-        definition.maximumVisualRecoil,
-        definition.visualRecoilRecoveryPerSecond}};
+        handling.minimumSpreadDegrees,
+        handling.maximumSpreadDegrees,
+        handling.spreadPerShotDegrees,
+        handling.recoveryDelaySeconds,
+        handling.spreadRecoveryDegreesPerSecond,
+        handling.aimDownSightsAccuracyMultiplier,
+        handling.aimDownSightsStabilityMultiplier}};
+    weaponAim_ = WeaponAimState{WeaponAimConfig{
+        handling.maximumAimFollowDegreesPerSecond,
+        handling.aimRecoilDegreesPerShot,
+        handling.aimDownSightsDurationSeconds,
+        definition.effectiveRange,
+        definition.maximumRange}};
+    weaponBaseDamage_ = definition.baseDamage;
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept

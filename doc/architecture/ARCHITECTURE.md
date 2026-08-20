@@ -1,6 +1,6 @@
 # Project Raidline 完整版目标架构
 
-最后核对：2026-08-15。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
+最后核对：2026-08-20。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及 Core Extraction Alpha 从 V0 向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
 
 ## 架构原则
 
@@ -113,13 +113,15 @@ SessionProjection snapshot() const;
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
+- `WeaponAimState` 独立保存实际准星方向、鼠标目标方向、距离、ADS 进度和持久后坐力偏移。实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发，稳定性和连续开火只改变散布，不能绕过实际准星边界。
+- WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数，App 只消费投影。基础 ADS、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。
 - Alpha 当前合同保持：
 
 ```text
-WeaponFire/Ammo
+WeaponAim/WeaponFire/Ammo
   -> ShotCommand
   -> ShotResolution
-  -> temporary V0 flight adapter
+  -> LogicalBallisticFlight
   -> HitResult
   -> damage / feedback / App projection
 ```
@@ -137,7 +139,7 @@ WeaponFire/Ammo
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署和首图常量的单一内容输入；当前内容版本为 `survival-loadout-content-5`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署和首图常量的单一内容输入；当前内容版本为 `combat-aim-content-6`。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -168,6 +170,7 @@ Content Registry 的当前落地边界：
 8. `codex/survival-loadout-durability-malfunction-repair`：PR #63 / merge commit `b8ddbe3`，交付整枪耐久、Stovepipe、清障、维护和 schema v5。
 9. `codex/survival-loadout-multi-weapon-switching`：PR #64 / merge commit `4c16596`，交付两长枪槽、手枪槽、WeaponUse、限时切换和 schema v6。
 10. `codex/survival-loadout-armor-maintenance`：PR #65 / merge commit `755fa00`，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
-11. `codex/combat-logical-ballistics-feedback-v1`：当前分支，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
+11. `codex/combat-logical-ballistics-feedback-v1`：PR #66 / merge commit `7877d71`，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
+12. `codex/combat-aim-handling-ads-v1`：当前分支，交付实际准星、五项武器属性、稳定性随机散布、连续开火扩散、基础 ADS、奔跑举枪与射程反馈。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

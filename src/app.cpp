@@ -1086,6 +1086,8 @@ GameplayInput App::makeGameplayInput() const
             GameAction::Fire) ||
         input_.isPrimaryPointerPressed();
 
+    input.aimDownSights = input_.isSecondaryPointerPressed();
+
     input.aimWorldPosition =
         pointerWorldPosition_;
 
@@ -3709,7 +3711,7 @@ void App::renderDebugText()
         {
             SDL_RenderDebugText(
                 renderer_, 980.0F, 116.0F,
-                "SHIFT SPRINT | R RELOAD | 5 MED | TAB INVENTORY");
+                "LMB FIRE | RMB AIM | SHIFT SPRINT | R RELOAD");
         }
         const ProfileState &profile = gameSession_.profile();
         const char *bleed = profile.medicalStatus.bleeding ==
@@ -5181,6 +5183,10 @@ void App::renderShotPresentations()
         const ShotPresentationSnapshot &shot :
         gameSession_.world().shotPresentationSnapshots())
     {
+        if (!shot.tracerVisible)
+        {
+            continue;
+        }
         const Vec2 center = shot.center;
         const Vec2 direction = shot.direction;
         const float trailLength = std::min(
@@ -5291,14 +5297,19 @@ void App::renderAimCrosshair()
     }
 
     const float feedbackRadius =
-        6.0F +
-        gameSession_.world().weaponVisualRecoilPixels() +
-        gameSession_.world().weaponSpreadDegrees() * 1.5F;
+        6.0F + gameSession_.world().weaponSpreadDegrees() * 1.5F;
     constexpr float kArmLength{7.0F};
-    const Vec2 center = *pointerWorldPosition_;
+    const Vec2 center = gameSession_.world().weaponAimWorldPosition();
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+    if (gameSession_.world().weaponAimBeyondMaximumRange())
+    {
+        SDL_SetRenderDrawColor(renderer_, 232, 62, 52, 235);
+    }
+    else
+    {
+        SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+    }
     SDL_RenderLine(
         renderer_,
         center.x - feedbackRadius - kArmLength,
@@ -6053,7 +6064,8 @@ void App::renderMainMenu()
     {
         SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
         SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(renderer_, 430.0F, 400.0F, "RAID: SHIFT SPRINT  R RELOAD  5 MED  TAB INVENTORY  ESC ABANDON/CLOSE");
+        SDL_RenderDebugText(renderer_, 466.0F, 400.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
+        SDL_RenderDebugText(renderer_, 458.0F, 424.0F, "SHIFT SPRINT  TAB INVENTORY  ESC ABANDON/CLOSE");
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);

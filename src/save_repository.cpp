@@ -516,7 +516,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 5 &&
              contentVersion == "survival-loadout-content-3") ||
             (schemaVersion == 6 &&
-             contentVersion == "survival-loadout-content-4");
+             (contentVersion == "survival-loadout-content-4" ||
+              contentVersion == "survival-loadout-content-5"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6) ||

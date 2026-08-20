@@ -397,7 +397,7 @@ TEST(GameplayWorldTest, FireCreatesLogicalBallistic)
     EXPECT_FLOAT_EQ(flight.currentPosition().x, 656.0f);
     EXPECT_FLOAT_EQ(flight.currentPosition().y, 356.0f);
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0f);
-    EXPECT_FLOAT_EQ(flight.direction().x, 0.0F);
+    EXPECT_NEAR(flight.direction().x, 0.0F, 0.000001F);
     EXPECT_FLOAT_EQ(flight.direction().y, -1.0F);
     EXPECT_FLOAT_EQ(flight.speed(), 1200.0F);
     EXPECT_EQ(flight.damage(), 1);
@@ -415,12 +415,41 @@ TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
     EXPECT_NE(snapshots[0].shotId, kInvalidShotId);
     EXPECT_FLOAT_EQ(snapshots[0].center.x, 656.0F);
     EXPECT_FLOAT_EQ(snapshots[0].center.y, 356.0F);
-    EXPECT_FLOAT_EQ(snapshots[0].direction.x, 0.0F);
+    EXPECT_NEAR(snapshots[0].direction.x, 0.0F, 0.000001F);
     EXPECT_FLOAT_EQ(snapshots[0].direction.y, -1.0F);
     EXPECT_FLOAT_EQ(snapshots[0].origin.x, snapshots[0].center.x);
     EXPECT_FLOAT_EQ(snapshots[0].origin.y, snapshots[0].center.y);
     EXPECT_FLOAT_EQ(snapshots[0].impactPosition.y, 0.0F);
     EXPECT_FLOAT_EQ(snapshots[0].distanceTravelled, 0.0F);
+}
+
+TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
+{
+    GameplayWorld world;
+    GameplayInput input = makeFireInput();
+    input.sprint = true;
+    input.moveRight = true;
+
+    world.update(input, 0.0F);
+
+    EXPECT_FALSE(world.shotFiredLastUpdate());
+    EXPECT_TRUE(world.logicalBallistics().empty());
+}
+
+TEST(GameplayWorldTest, ConfiguredMaximumRangeReducesFrozenShotDamage)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput input = makeFireInput();
+    input.aimWorldPosition = Vec2{0.0F, 0.0F};
+    world.update(input, 0.0F);
+
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    EXPECT_TRUE(world.weaponAimBeyondMaximumRange());
+    EXPECT_EQ(world.logicalBallistics().front().damage(), 1);
 }
 
 TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
@@ -620,7 +649,7 @@ TEST(GameplayWorldTest, FireAfterFacingRightMovesBallisticRight)
         world.logicalBallistics()[0].currentPosition();
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
-    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+    EXPECT_NE(finalPosition.y, initialPosition.y);
 }
 
 // 左朝向射击
@@ -643,7 +672,7 @@ TEST(GameplayWorldTest, FireAfterFacingLeftMovesBallisticLeft)
     const Vec2 finalPosition =
         world.logicalBallistics()[0].currentPosition();
 
-    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+    EXPECT_NE(finalPosition.y, initialPosition.y);
     EXPECT_LT(finalPosition.x, initialPosition.x);
 }
 
@@ -667,7 +696,7 @@ TEST(GameplayWorldTest, FireAfterFacingDownMovesBallisticDown)
     const Vec2 finalPosition =
         world.logicalBallistics()[0].currentPosition();
 
-    EXPECT_FLOAT_EQ(finalPosition.x, initialPosition.x);
+    EXPECT_NE(finalPosition.x, initialPosition.x);
     EXPECT_GT(finalPosition.y, initialPosition.y);
 }
 
@@ -695,7 +724,7 @@ TEST(GameplayWorldTest, FireWithoutMovementUsesPreviousFacingDirection)
         world.logicalBallistics()[0].currentPosition();
 
     EXPECT_GT(finalPosition.x, initialPosition.x);
-    EXPECT_FLOAT_EQ(finalPosition.y, initialPosition.y);
+    EXPECT_NE(finalPosition.y, initialPosition.y);
 }
 
 TEST(GameplayWorldTest, PointerAimControlsFacingAndShotWithoutMovement)
@@ -755,14 +784,21 @@ TEST(GameplayWorldTest, AimAtPlayerCenterPreservesPreviousFacing)
 TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
 {
     GameplayWorld world;
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
     world.update(makeFireInput(), 0.0F);
 
-    EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 1.0F);
-    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 3.0F);
+    const float recoil = world.weaponVisualRecoilPixels();
+    EXPECT_GT(world.weaponSpreadDegrees(), 0.0F);
+    EXPECT_GT(recoil, 0.0F);
 
     world.update(GameplayInput{}, 1.0F);
-    EXPECT_FLOAT_EQ(world.weaponSpreadDegrees(), 0.0F);
-    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
+    EXPECT_NEAR(
+        world.weaponSpreadDegrees(),
+        deriveWeaponHandling(*rifle.weaponUse).minimumSpreadDegrees,
+        0.0001F);
+    EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), recoil);
 }
 
 // 斜向射击

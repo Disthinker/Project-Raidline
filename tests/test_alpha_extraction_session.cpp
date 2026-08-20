@@ -210,6 +210,111 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
 }
 
+TEST(AlphaExtractionSessionTest, SprintFireWaitsForReadyAndConsumesOneRound)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-sprint-fire"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId magazine = *installedMagazine(
+        session.profile(), rifle);
+    ASSERT_TRUE(session.deployAlpha(90820));
+    const std::size_t roundsBefore = magazineRoundCount(
+        session.profile(), magazine);
+
+    GameplayInput sprintFire{};
+    sprintFire.moveRight = true;
+    sprintFire.sprint = true;
+    sprintFire.fireJustPressed = true;
+    sprintFire.firePressed = true;
+    session.update(sprintFire, 0.0F);
+
+    EXPECT_FALSE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine),
+        roundsBefore);
+
+    GameplayInput heldSprint{};
+    heldSprint.moveRight = true;
+    heldSprint.sprint = true;
+    session.update(heldSprint, 0.30F);
+
+    EXPECT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine),
+        roundsBefore - 1U);
+}
+
+TEST(AlphaExtractionSessionTest, AdsSlowsMovementAndSuppressesTracer)
+{
+    GameSession hipSession;
+    ASSERT_TRUE(hipSession.startNewProfile("alpha-session-hip-move"));
+    prepareArmedLoadout(hipSession);
+    ASSERT_TRUE(hipSession.deployAlpha(90821));
+    const float hipStart = hipSession.world().player().position().x;
+    GameplayInput hipMove{};
+    hipMove.moveRight = true;
+    hipSession.update(hipMove, 0.20F);
+    const float hipDistance =
+        hipSession.world().player().position().x - hipStart;
+
+    GameSession adsSession;
+    ASSERT_TRUE(adsSession.startNewProfile("alpha-session-ads-move"));
+    prepareArmedLoadout(adsSession);
+    ASSERT_TRUE(adsSession.deployAlpha(90822));
+    const float adsStart = adsSession.world().player().position().x;
+    GameplayInput adsMove{};
+    adsMove.moveRight = true;
+    adsMove.aimDownSights = true;
+    adsMove.aimWorldPosition = Vec2{1100.0F, 360.0F};
+    adsSession.update(adsMove, 0.20F);
+    const float adsDistance =
+        adsSession.world().player().position().x - adsStart;
+
+    EXPECT_GT(adsDistance, 0.0F);
+    EXPECT_LT(adsDistance, hipDistance);
+    EXPECT_GT(adsSession.world().weaponAimDownSightsProgress(), 0.0F);
+
+    GameplayInput adsFire = adsMove;
+    adsFire.moveRight = false;
+    adsFire.fireJustPressed = true;
+    adsFire.firePressed = true;
+    adsSession.update(adsFire, 0.20F);
+    ASSERT_TRUE(adsSession.world().shotFiredLastUpdate());
+    const auto shots = adsSession.world().shotPresentationSnapshots();
+    ASSERT_FALSE(shots.empty());
+    EXPECT_FALSE(shots.back().tracerVisible);
+}
+
+TEST(AlphaExtractionSessionTest, ReloadRetainsAdsAndLocksMaximumSpread)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-reload-ads"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(90823));
+
+    GameplayInput reload{};
+    reload.reloadJustPressed = true;
+    reload.aimDownSights = true;
+    reload.aimWorldPosition = Vec2{1000.0F, 360.0F};
+    session.update(reload, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+
+    GameplayInput keepAiming{};
+    keepAiming.aimDownSights = true;
+    keepAiming.aimWorldPosition = Vec2{1000.0F, 360.0F};
+    session.update(keepAiming, 0.20F);
+
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    EXPECT_GT(session.world().weaponAimDownSightsProgress(), 0.0F);
+    EXPECT_FLOAT_EQ(
+        session.world().weaponSpreadDegrees(),
+        deriveWeaponHandling(*rifle.weaponUse).maximumSpreadDegrees);
+    EXPECT_TRUE(session.raidActionState().active().has_value());
+}
+
 TEST(AlphaExtractionSessionTest, DeploySelectsFirstOccupiedWeaponSlot)
 {
     GameSession secondarySession;
@@ -294,7 +399,7 @@ TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMod
         std::get_if<WeaponSwitchRaidAction>(
             &*session.raidActionState().active()),
         nullptr);
-    session.update(GameplayInput{}, 0.34F);
+    session.update(GameplayInput{}, 0.36F);
     EXPECT_EQ(session.activeAlphaWeapon(), loadout.rifle);
     session.update(GameplayInput{}, 0.02F);
     EXPECT_EQ(session.activeAlphaWeapon(), loadout.pistol);

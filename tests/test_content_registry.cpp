@@ -62,7 +62,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "survival-loadout-content-5");
+    EXPECT_EQ(registry.contentVersion(), "combat-aim-content-6");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
@@ -83,7 +83,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
               WeaponMalfunctionType::Stovepipe);
     ASSERT_TRUE(rifle.weaponUse.has_value());
     EXPECT_TRUE(rifle.weaponUse->automaticFire);
-    EXPECT_EQ(rifle.weaponUse->switchDurationMs, 650U);
+    EXPECT_EQ(rifle.weaponUse->recoilControl, 58U);
+    EXPECT_EQ(rifle.weaponUse->stability, 66U);
+    EXPECT_EQ(rifle.weaponUse->handlingSpeed, 46U);
+    EXPECT_EQ(rifle.weaponUse->ergonomics, 55U);
+    EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
+    EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 750.0F);
     EXPECT_TRUE(itemCanEquipInSlot(
         rifle, EquipmentSlotKind::PrimaryWeapon));
     EXPECT_TRUE(itemCanEquipInSlot(
@@ -95,7 +102,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_TRUE(pistol.weaponCondition.has_value());
     ASSERT_TRUE(pistol.weaponUse.has_value());
     EXPECT_FALSE(pistol.weaponUse->automaticFire);
-    EXPECT_EQ(pistol.weaponUse->switchDurationMs, 350U);
+    EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
+    EXPECT_LT(
+        deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,
+        deriveWeaponHandling(*rifle.weaponUse).switchDurationSeconds);
     EXPECT_TRUE(itemCanEquipInSlot(
         pistol, EquipmentSlotKind::Sidearm));
     EXPECT_FALSE(itemCanEquipInSlot(
@@ -303,8 +313,8 @@ TEST(ContentRegistryTest, RejectsWeaponUseOutsideConfiguredBounds)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"spread_per_shot_degrees\": 1.5,\"maximum_spread_degrees\": 8.0",
-        "\"spread_per_shot_degrees\": 9.0,\"maximum_spread_degrees\": 8.0");
+        "\"accuracy\": 58",
+        "\"accuracy\": 101");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

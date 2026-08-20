@@ -5,7 +5,8 @@
 #include <stdexcept>
 
 LogicalBallisticFlight::LogicalBallisticFlight(
-    const ShotResolution &resolution)
+    const ShotResolution &resolution,
+    bool tracerVisible)
     : shotId_{resolution.shotId},
       origin_{resolution.origin},
       currentPosition_{resolution.origin},
@@ -16,7 +17,8 @@ LogicalBallisticFlight::LogicalBallisticFlight(
           resolution.velocity.y * resolution.velocity.y)},
       collisionExtent_{resolution.collisionExtent},
       maximumDistance_{resolution.maximumDistance},
-      damage_{resolution.damage}
+      damage_{resolution.damage},
+      tracerVisible_{tracerVisible}
 {
     if (!resolution.accepted() ||
         !std::isfinite(speed_) || speed_ <= 0.0F ||
@@ -117,4 +119,9 @@ int LogicalBallisticFlight::damage() const noexcept
 bool LogicalBallisticFlight::reachedImpact() const noexcept
 {
     return distanceTravelled_ >= maximumDistance_;
+}
+
+bool LogicalBallisticFlight::tracerVisible() const noexcept
+{
+    return tracerVisible_;
 }
