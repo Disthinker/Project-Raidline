@@ -80,6 +80,20 @@ TEST(RaidActionTest, TimedActionCompletesOrInterruptsWithoutPartialCommit)
     const auto unloaded = state.takeCompleted();
     ASSERT_TRUE(unloaded.has_value());
     EXPECT_NE(std::get_if<UnloadMagazineRaidAction>(&*unloaded), nullptr);
+
+    ASSERT_TRUE(state.start(WeaponSwitchRaidAction{
+        EquipmentSlotKind::PrimaryWeapon,
+        EquipmentSlotKind::Sidearm,
+        0.0F,
+        0.35F}));
+    EXPECT_EQ(state.update(0.34F, false), RaidActionAdvance::Running);
+    EXPECT_EQ(state.update(0.01F, false), RaidActionAdvance::Completed);
+    const auto switched = state.takeCompleted();
+    ASSERT_TRUE(switched.has_value());
+    const auto *weaponSwitch = std::get_if<WeaponSwitchRaidAction>(&*switched);
+    ASSERT_NE(weaponSwitch, nullptr);
+    EXPECT_EQ(weaponSwitch->sourceSlot, EquipmentSlotKind::PrimaryWeapon);
+    EXPECT_EQ(weaponSwitch->targetSlot, EquipmentSlotKind::Sidearm);
 }
 
 TEST(RaidActionTest, ReloadSelectsFullestCompatibleChestMagazine)

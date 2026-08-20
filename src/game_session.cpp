@@ -343,6 +343,9 @@ bool GameSession::deployAlpha(std::uint64_t seed)
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
+    configuredWeaponAssetId_.reset();
+    synchronizeActiveAlphaWeapon();
     return true;
 }
 
@@ -356,7 +359,7 @@ bool GameSession::startAlphaReload(
     AssetInstanceId magazineAssetId)
 {
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
-        equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon) !=
+        activeAlphaWeapon() !=
             std::optional<AssetInstanceId>{weaponAssetId} ||
         !assetIsCarried(profile_, magazineAssetId))
     {
@@ -515,6 +518,48 @@ bool GameSession::startAlphaWeaponMaintenance(
             static_cast<float>(plan.actionDurationMs) / 1000.0F});
 }
 
+bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
+{
+    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+        !isWeaponEquipmentSlot(targetSlot) ||
+        targetSlot == activeWeaponSlot_)
+    {
+        return false;
+    }
+    const auto target = equippedAsset(profile_, targetSlot);
+    const AssetRecord *asset = target.has_value()
+        ? profile_.assets.find(*target)
+        : nullptr;
+    if (asset == nullptr)
+    {
+        return false;
+    }
+    try
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.weaponUse.has_value())
+        {
+            return false;
+        }
+        const float handlingMultiplier =
+            hasPain(profile_.medicalStatus) &&
+                    !painIsSuppressed(profile_.medicalStatus)
+                ? 0.9F
+                : 1.0F;
+        return raidActionState_.start(WeaponSwitchRaidAction{
+            activeWeaponSlot_,
+            targetSlot,
+            0.0F,
+            static_cast<float>(definition.weaponUse->switchDurationMs) /
+                1000.0F / handlingMultiplier});
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 {
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
@@ -522,8 +567,7 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
         weaponClearGesture_.reset();
         return false;
     }
-    const auto weapon = equippedAsset(
-        profile_, EquipmentSlotKind::PrimaryWeapon);
+    const auto weapon = activeAlphaWeapon();
     const AssetRecord *record = weapon.has_value()
         ? profile_.assets.find(*weapon)
         : nullptr;
@@ -587,6 +631,18 @@ bool GameSession::recoveredAbandonedRaid() const noexcept
 const ProfileState &GameSession::profile() const noexcept
 {
     return profile_;
+}
+
+EquipmentSlotKind GameSession::activeAlphaWeaponSlot() const noexcept
+{
+    return activeWeaponSlot_;
+}
+
+std::optional<AssetInstanceId> GameSession::activeAlphaWeapon() const noexcept
+{
+    return isWeaponEquipmentSlot(activeWeaponSlot_)
+        ? equippedAsset(profile_, activeWeaponSlot_)
+        : std::nullopt;
 }
 
 InventoryReceipt GameSession::executeProfileInventory(
@@ -816,6 +872,7 @@ void GameSession::updateAlphaRaid(
         state_ = GameSessionState::BetweenRaids;
         return;
     }
+    synchronizeActiveAlphaWeapon();
     if (input.quitRaidJustPressed && alphaRaidActive_)
     {
         static_cast<void>(activeQuitAlphaRaid());
@@ -834,14 +891,35 @@ void GameSession::updateAlphaRaid(
     }
     if (input.inventoryOpen || input.sprint || input.firePressed ||
         input.fireJustPressed || input.reloadJustPressed ||
-        input.healJustPressed || world_->player().isControlled())
+        input.healJustPressed || input.weaponSlotJustPressed.has_value() ||
+        world_->player().isControlled())
     {
         weaponClearGesture_.reset();
     }
 
-    const auto weapon = equippedAsset(
-        profile_,
-        EquipmentSlotKind::PrimaryWeapon);
+    if (input.weaponSlotJustPressed.has_value() &&
+        isWeaponEquipmentSlot(*input.weaponSlotJustPressed) &&
+        *input.weaponSlotJustPressed != activeWeaponSlot_ &&
+        equippedAsset(profile_, *input.weaponSlotJustPressed).has_value())
+    {
+        bool interruptOnly{};
+        if (raidActionState_.active().has_value())
+        {
+            interruptOnly =
+                std::holds_alternative<MedicalRaidAction>(
+                    *raidActionState_.active()) ||
+                std::holds_alternative<WeaponMaintenanceRaidAction>(
+                    *raidActionState_.active());
+            raidActionState_.cancel();
+        }
+        if (!interruptOnly)
+        {
+            static_cast<void>(startAlphaWeaponSwitch(
+                *input.weaponSlotJustPressed));
+        }
+    }
+
+    const auto weapon = activeAlphaWeapon();
     if (!raidActionState_.active().has_value() && !input.inventoryOpen)
     {
         if (input.reloadJustPressed && weapon.has_value())
@@ -886,6 +964,29 @@ void GameSession::updateAlphaRaid(
     simulationInput.reloadJustPressed = false;
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
+    bool automaticFire{};
+    if (weapon.has_value())
+    {
+        const AssetRecord *weaponAsset = profile_.assets.find(*weapon);
+        if (weaponAsset != nullptr)
+        {
+            try
+            {
+                const ItemDefinition &definition =
+                    publishedContentRegistry().item(weaponAsset->definitionId);
+                automaticFire = definition.weaponUse.has_value() &&
+                    definition.weaponUse->automaticFire;
+            }
+            catch (...)
+            {
+                automaticFire = false;
+            }
+        }
+    }
+    if (!automaticFire)
+    {
+        simulationInput.firePressed = false;
+    }
     if (input.inventoryOpen || raidActionState_.active().has_value())
     {
         simulationInput.fireJustPressed = false;
@@ -943,7 +1044,7 @@ void GameSession::updateAlphaRaid(
     if (weapon.has_value() &&
         !raidActionState_.active().has_value() &&
         !input.inventoryOpen &&
-        (input.firePressed || input.fireJustPressed))
+        (input.fireJustPressed || (automaticFire && input.firePressed)))
     {
         ProfileState candidate = profile_;
         Pcg32 faultRandom{
@@ -1071,6 +1172,14 @@ void GameSession::updateAlphaRaid(
                                input.reloadJustPressed ||
                                input.healJustPressed;
                     }
+                    else if constexpr (
+                        std::is_same_v<Action, WeaponSwitchRaidAction>)
+                    {
+                        return input.sprint || input.firePressed ||
+                               input.fireJustPressed ||
+                               input.reloadJustPressed ||
+                               input.healJustPressed;
+                    }
                     else
                     {
                         return false;
@@ -1081,6 +1190,8 @@ void GameSession::updateAlphaRaid(
             std::holds_alternative<MedicalRaidAction>(
                 *raidActionState_.active()) ||
             std::holds_alternative<WeaponMaintenanceRaidAction>(
+                *raidActionState_.active()) ||
+            std::holds_alternative<WeaponSwitchRaidAction>(
                 *raidActionState_.active());
         if (interrupted && suppressCombatAfterInterrupt)
         {
@@ -1268,6 +1379,17 @@ void GameSession::updateAlphaRaid(
                     else
                     {
                         persistenceMessage_ = receipt.message;
+                    }
+                }
+                else if (const auto *weaponSwitch =
+                             std::get_if<WeaponSwitchRaidAction>(&*completed))
+                {
+                    if (equippedAsset(profile_, weaponSwitch->targetSlot)
+                            .has_value())
+                    {
+                        activeWeaponSlot_ = weaponSwitch->targetSlot;
+                        configuredWeaponAssetId_.reset();
+                        synchronizeActiveAlphaWeapon();
                     }
                 }
             }
@@ -1510,6 +1632,8 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
+    activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
+    configuredWeaponAssetId_.reset();
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
     return true;
@@ -1523,6 +1647,55 @@ std::string GameSession::nextRaidTransaction(std::string_view prefix)
              ? profile_.pendingRaid->raidId
              : profile_.profileId) + ":" +
         std::to_string(raidCommandSequence_);
+}
+
+void GameSession::synchronizeActiveAlphaWeapon()
+{
+    std::optional<AssetInstanceId> active = activeAlphaWeapon();
+    if (!active.has_value())
+    {
+        for (EquipmentSlotKind slot : {
+                 EquipmentSlotKind::PrimaryWeapon,
+                 EquipmentSlotKind::SecondaryWeapon,
+                 EquipmentSlotKind::Sidearm})
+        {
+            if (const auto candidate = equippedAsset(profile_, slot))
+            {
+                activeWeaponSlot_ = slot;
+                active = candidate;
+                break;
+            }
+        }
+    }
+    if (configuredWeaponAssetId_ == active)
+    {
+        return;
+    }
+    configuredWeaponAssetId_ = active;
+    weaponClearGesture_.reset();
+    if (!active.has_value())
+    {
+        return;
+    }
+    const AssetRecord *asset = profile_.assets.find(*active);
+    if (asset == nullptr)
+    {
+        configuredWeaponAssetId_.reset();
+        return;
+    }
+    try
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (definition.weaponUse.has_value())
+        {
+            world_->configureWeaponFire(*definition.weaponUse);
+        }
+    }
+    catch (...)
+    {
+        configuredWeaponAssetId_.reset();
+    }
 }
 
 std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
@@ -1580,8 +1753,12 @@ bool GameSession::commitProfileCandidate(
 
 void GameSession::refreshLoadoutTutorial()
 {
+    const bool hasWeapon =
+        equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon).has_value() ||
+        equippedAsset(profile_, EquipmentSlotKind::SecondaryWeapon).has_value() ||
+        equippedAsset(profile_, EquipmentSlotKind::Sidearm).has_value();
     if (profile_.tutorial != TutorialProgress::PrepareLoadout ||
-        !equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon).has_value() ||
+        !hasWeapon ||
         profile_.revision == std::numeric_limits<ProfileRevision>::max())
     {
         return;

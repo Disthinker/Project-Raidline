@@ -71,8 +71,14 @@ namespace
     constexpr float kBaseStashY{132.0F};
     constexpr float kBaseStashCellSize{28.0F};
     constexpr float kBasePocketCellSize{28.0F};
-    constexpr std::array<EquipmentSlotKind, 5> kProfileEquipmentSlots{
+    constexpr std::array<EquipmentSlotKind, 3> kWeaponEquipmentSlots{
         EquipmentSlotKind::PrimaryWeapon,
+        EquipmentSlotKind::SecondaryWeapon,
+        EquipmentSlotKind::Sidearm};
+    constexpr std::array<EquipmentSlotKind, 7> kProfileEquipmentSlots{
+        EquipmentSlotKind::PrimaryWeapon,
+        EquipmentSlotKind::SecondaryWeapon,
+        EquipmentSlotKind::Sidearm,
         EquipmentSlotKind::Helmet,
         EquipmentSlotKind::BodyArmor,
         EquipmentSlotKind::ChestRig,
@@ -83,7 +89,11 @@ namespace
         switch (slot)
         {
         case EquipmentSlotKind::PrimaryWeapon:
-            return "PRIMARY";
+            return "1 LONG GUN";
+        case EquipmentSlotKind::SecondaryWeapon:
+            return "2 LONG GUN";
+        case EquipmentSlotKind::Sidearm:
+            return "3 SIDEARM";
         case EquipmentSlotKind::Helmet:
             return "HELMET";
         case EquipmentSlotKind::BodyArmor:
@@ -112,22 +122,106 @@ namespace
         switch (slot)
         {
         case EquipmentSlotKind::PrimaryWeapon:
-            return SDL_FRect{214.0F, 96.0F, 366.0F, 82.0F};
+            return SDL_FRect{214.0F, 96.0F, 366.0F, 64.0F};
+        case EquipmentSlotKind::SecondaryWeapon:
+            return SDL_FRect{214.0F, 166.0F, 366.0F, 64.0F};
+        case EquipmentSlotKind::Sidearm:
+            return SDL_FRect{214.0F, 236.0F, 172.0F, 58.0F};
         case EquipmentSlotKind::Helmet:
-            return SDL_FRect{214.0F, 202.0F, 172.0F, 68.0F};
+            return SDL_FRect{408.0F, 236.0F, 172.0F, 58.0F};
         case EquipmentSlotKind::BodyArmor:
-            return SDL_FRect{408.0F, 202.0F, 172.0F, 68.0F};
+            return SDL_FRect{214.0F, 300.0F, 172.0F, 58.0F};
         case EquipmentSlotKind::ChestRig:
-            return SDL_FRect{214.0F, 286.0F, 172.0F, 68.0F};
+            return SDL_FRect{408.0F, 300.0F, 172.0F, 58.0F};
         case EquipmentSlotKind::Backpack:
-            return SDL_FRect{408.0F, 286.0F, 172.0F, 68.0F};
+            return SDL_FRect{214.0F, 364.0F, 366.0F, 54.0F};
         }
         return SDL_FRect{};
     }
 
-    SDL_FRect installedMagazineRect() noexcept
+    SDL_FRect installedMagazineRect(EquipmentSlotKind slot) noexcept
     {
-        return SDL_FRect{502.0F, 110.0F, 64.0F, 54.0F};
+        const SDL_FRect weaponSlot = equipmentSlotRect(slot);
+        return SDL_FRect{
+            weaponSlot.x + weaponSlot.w - 58.0F,
+            weaponSlot.y + 20.0F,
+            50.0F,
+            weaponSlot.h - 26.0F};
+    }
+
+    std::optional<std::pair<EquipmentSlotKind, AssetInstanceId>>
+    firstEquippedWeapon(const ProfileState &profile) noexcept
+    {
+        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
+        {
+            if (const auto weapon = equippedAsset(profile, slot))
+            {
+                return std::pair{slot, *weapon};
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::optional<EquipmentSlotKind> equippedWeaponSlot(
+        const ProfileState &profile,
+        AssetInstanceId weaponAssetId) noexcept
+    {
+        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
+        {
+            if (equippedAsset(profile, slot) == weaponAssetId)
+            {
+                return slot;
+            }
+        }
+        return std::nullopt;
+    }
+
+    struct WeaponReadiness
+    {
+        bool hasWeapon{};
+        bool hasChamberedRound{};
+        std::size_t compatibleMagazineRounds{};
+    };
+
+    WeaponReadiness weaponReadiness(const ProfileState &profile)
+    {
+        WeaponReadiness result;
+        std::vector<ItemDefinitionId> compatibleMagazines;
+        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
+        {
+            const auto weapon = equippedAsset(profile, slot);
+            if (!weapon.has_value())
+            {
+                continue;
+            }
+            const AssetRecord *asset = profile.assets.find(*weapon);
+            if (asset == nullptr)
+            {
+                continue;
+            }
+            result.hasWeapon = true;
+            result.hasChamberedRound = result.hasChamberedRound ||
+                asset->chamberedRound.has_value();
+            const ItemDefinition &definition =
+                publishedContentRegistry().item(asset->definitionId);
+            if (definition.compatibleMagazineDefinitionId.has_value())
+            {
+                compatibleMagazines.push_back(
+                    *definition.compatibleMagazineDefinitionId);
+            }
+        }
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (assetIsCarried(profile, id) &&
+                std::find(
+                    compatibleMagazines.begin(),
+                    compatibleMagazines.end(),
+                    asset.definitionId) != compatibleMagazines.end())
+            {
+                result.compatibleMagazineRounds += asset.magazineRounds.size();
+            }
+        }
+        return result;
     }
 
     bool contains(const SDL_FRect &rect, MousePosition point) noexcept
@@ -166,16 +260,16 @@ namespace
         {
             result.push_back({
                 ProfileContainerId::compartment(*chest, 0),
-                214.0F, 390.0F, kBasePocketCellSize, "MAG 1"});
+                214.0F, 442.0F, kBasePocketCellSize, "MAG 1"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 1),
-                258.0F, 390.0F, kBasePocketCellSize, "MAG 2"});
+                258.0F, 442.0F, kBasePocketCellSize, "MAG 2"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 2),
-                310.0F, 390.0F, kBasePocketCellSize, "UTIL 1"});
+                310.0F, 442.0F, kBasePocketCellSize, "UTIL 1"});
             result.push_back({
                 ProfileContainerId::compartment(*chest, 3),
-                354.0F, 390.0F, kBasePocketCellSize, "UTIL 2"});
+                354.0F, 442.0F, kBasePocketCellSize, "UTIL 2"});
         }
         if (const auto backpack = equippedAsset(
                 profile,
@@ -183,7 +277,7 @@ namespace
         {
             result.push_back({
                 ProfileContainerId::compartment(*backpack, 0),
-                214.0F, 490.0F, kBasePocketCellSize, "BACKPACK"});
+                214.0F, 520.0F, kBasePocketCellSize, "BACKPACK"});
         }
         return result;
     }
@@ -202,14 +296,19 @@ namespace
         MousePosition position,
         bool includeStash)
     {
-        if (const auto weapon = equippedAsset(
-                profile, EquipmentSlotKind::PrimaryWeapon))
+        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
         {
+            const auto weapon = equippedAsset(profile, slot);
+            if (!weapon.has_value())
+            {
+                continue;
+            }
             if (const auto magazine = installedMagazine(profile, *weapon);
-                magazine.has_value() && contains(installedMagazineRect(), position))
+                magazine.has_value() &&
+                contains(installedMagazineRect(slot), position))
             {
                 return ProfileAssetHit{
-                    profile.assets.find(*magazine), installedMagazineRect(),
+                    profile.assets.find(*magazine), installedMagazineRect(slot),
                     kBasePocketCellSize, GridPosition{}, GridPosition{}};
             }
         }
@@ -306,7 +405,13 @@ namespace
         }
         if (std::holds_alternative<InstalledMagazineLocation>(asset.location))
         {
-            return installedMagazineRect();
+            const auto &installed = std::get<InstalledMagazineLocation>(
+                asset.location);
+            if (const auto slot = equippedWeaponSlot(
+                    profile, installed.weaponAssetId))
+            {
+                return installedMagazineRect(*slot);
+            }
         }
         return std::nullopt;
     }
@@ -324,22 +429,22 @@ namespace
         const ItemCategory draggedCategory = dragged != nullptr
             ? publishedContentRegistry().item(dragged->definitionId).category
             : ItemCategory::Loot;
-        if (draggedCategory == ItemCategory::Magazine &&
-            contains(equipmentSlotRect(EquipmentSlotKind::PrimaryWeapon), position))
+        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
         {
-            if (const auto weapon = equippedAsset(
-                    profile, EquipmentSlotKind::PrimaryWeapon))
+            if (!contains(equipmentSlotRect(slot), position))
             {
-                return WeaponInstallTarget{*weapon};
+                continue;
             }
-        }
-        if (draggedCategory == ItemCategory::Maintenance &&
-            contains(equipmentSlotRect(EquipmentSlotKind::PrimaryWeapon), position))
-        {
-            if (const auto weapon = equippedAsset(
-                    profile, EquipmentSlotKind::PrimaryWeapon))
+            if (const auto weapon = equippedAsset(profile, slot))
             {
-                return WeaponMaintenanceTarget{*weapon};
+                if (draggedCategory == ItemCategory::Magazine)
+                {
+                    return WeaponInstallTarget{*weapon};
+                }
+                if (draggedCategory == ItemCategory::Maintenance)
+                {
+                    return WeaponMaintenanceTarget{*weapon};
+                }
             }
         }
         if (const auto hit = profileAssetHitAt(profile, position, includeStash);
@@ -978,6 +1083,18 @@ GameplayInput App::makeGameplayInput() const
         input_.wasActionJustPressed(GameAction::Reload);
     input.healJustPressed =
         input_.wasActionJustPressed(GameAction::Heal);
+    if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
+    {
+        input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
+    }
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon2))
+    {
+        input.weaponSlotJustPressed = EquipmentSlotKind::SecondaryWeapon;
+    }
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon3))
+    {
+        input.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    }
     input.quitRaidJustPressed =
         input_.wasActionJustPressed(GameAction::InventoryCancel);
 
@@ -1021,28 +1138,10 @@ bool App::handleScreenConfirm()
 bool App::tryDeployFromBase()
 {
     const ProfileState &profile = gameSession_.profile();
-    const auto weapon = equippedAsset(
-        profile,
-        EquipmentSlotKind::PrimaryWeapon);
-    std::size_t usableRounds{};
-    if (weapon.has_value())
-    {
-        const AssetRecord *record = profile.assets.find(*weapon);
-        if (record != nullptr && record->chamberedRound.has_value())
-        {
-            ++usableRounds;
-        }
-        for (const auto &[id, asset] : profile.assets.records())
-        {
-            if (assetIsCarried(profile, id) &&
-                publishedContentRegistry().item(asset.definitionId).category ==
-                    ItemCategory::Magazine)
-            {
-                usableRounds += asset.magazineRounds.size();
-            }
-        }
-    }
-    const bool unsafe = !weapon.has_value() || usableRounds == 0;
+    const WeaponReadiness readiness = weaponReadiness(profile);
+    const std::size_t usableRounds = readiness.compatibleMagazineRounds +
+        (readiness.hasChamberedRound ? 1U : 0U);
+    const bool unsafe = !readiness.hasWeapon || usableRounds == 0;
     if (unsafe && !deploymentWarningArmed_)
     {
         deploymentWarningArmed_ = true;
@@ -1443,26 +1542,24 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         }
         if (actionIndex == 3)
         {
-            const auto weapon = equippedAsset(
-                profile,
-                EquipmentSlotKind::PrimaryWeapon);
+            const auto weapon = firstEquippedWeapon(profile);
             if (!weapon.has_value())
             {
-                uiMessage_ = "NO PRIMARY WEAPON EQUIPPED";
+                uiMessage_ = "NO WEAPON EQUIPPED";
                 return;
             }
-            const AssetRecord *record = profile.assets.find(*weapon);
+            const AssetRecord *record = profile.assets.find(weapon->second);
             if (record->chamberedRound.has_value())
             {
-                uiMessage_ = "PRIMARY WEAPON ALREADY CHAMBERED";
+                uiMessage_ = "WEAPON ALREADY CHAMBERED";
                 return;
             }
             const WeaponAmmoReceipt receipt =
                 gameSession_.executeProfileWeaponAmmo(
-                    ChamberWeaponCommand{*weapon},
+                    ChamberWeaponCommand{weapon->second},
                     nextProfileTransactionId("base-chamber"));
             uiMessage_ = receipt.result == WeaponAmmoResult::Chambered
-                ? "PRIMARY WEAPON CHAMBERED"
+                ? "WEAPON CHAMBERED"
                 : receipt.message.empty() ? "NO ROUND AVAILABLE" : receipt.message;
             return;
         }
@@ -1533,12 +1630,23 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         }
         if (actionIndex == 2)
         {
-            const auto weapon = equippedAsset(
-                profile,
-                EquipmentSlotKind::PrimaryWeapon);
+            std::optional<AssetInstanceId> weapon;
+            for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
+            {
+                const auto candidate = equippedAsset(profile, slot);
+                if (candidate.has_value() && queryWeaponAmmo(
+                        profile,
+                        publishedContentRegistry(),
+                        InstallMagazineCommand{*candidate, selected->instanceId})
+                        .canCommit)
+                {
+                    weapon = candidate;
+                    break;
+                }
+            }
             if (!weapon.has_value())
             {
-                uiMessage_ = "EQUIP A PRIMARY WEAPON FIRST";
+                uiMessage_ = "NO COMPATIBLE EQUIPPED WEAPON";
                 return;
             }
             const WeaponAmmoReceipt receipt =
@@ -3022,6 +3130,7 @@ void App::update(float deltaTime)
         gameplayInput.firePressed = false;
         gameplayInput.reloadJustPressed = false;
         gameplayInput.healJustPressed = false;
+        gameplayInput.weaponSlotJustPressed.reset();
         gameplayInput.quitRaidJustPressed = false;
         gameplayInput.interactJustPressed = false;
     }
@@ -3034,6 +3143,7 @@ void App::update(float deltaTime)
         {
             openMedicalWheel();
             gameplayInput.healJustPressed = false;
+            gameplayInput.weaponSlotJustPressed.reset();
         }
         if (medicalWheelOpen_)
         {
@@ -3474,26 +3584,30 @@ void App::renderDebugText()
     if (gameSession_.world().isAlphaRaidWorld())
     {
         std::string ammunitionText{"Weapon: NONE"};
-        if (const auto weapon = equippedAsset(
-                gameSession_.profile(),
-                EquipmentSlotKind::PrimaryWeapon))
+        if (const auto weapon = gameSession_.activeAlphaWeapon())
         {
             const AssetRecord *record =
                 gameSession_.profile().assets.find(*weapon);
-            const auto magazine = installedMagazine(
-                gameSession_.profile(),
-                *weapon);
-            ammunitionText = fmt::format(
-                "Chamber {} | Magazine {} | Condition {:.2f}/{:.2f}{}",
-                record->chamberedRound.has_value() ? 1 : 0,
-                magazine.has_value()
-                    ? magazineRoundCount(gameSession_.profile(), *magazine)
-                    : 0U,
-                static_cast<float>(record->currentDurability) / 100.0F,
-                static_cast<float>(record->currentMaximumDurability) / 100.0F,
-                record->weaponMalfunction != WeaponMalfunctionType::None
-                    ? " | MALFUNCTION - SWEEP MOUSE"
-                    : "");
+            if (record != nullptr)
+            {
+                const auto magazine = installedMagazine(
+                    gameSession_.profile(),
+                    *weapon);
+                const ItemDefinition &definition =
+                    publishedContentRegistry().item(record->definitionId);
+                ammunitionText = fmt::format(
+                    "{} | Chamber {} | Magazine {} | Condition {:.2f}/{:.2f}{}",
+                    definition.displayName,
+                    record->chamberedRound.has_value() ? 1 : 0,
+                    magazine.has_value()
+                        ? magazineRoundCount(gameSession_.profile(), *magazine)
+                        : 0U,
+                    static_cast<float>(record->currentDurability) / 100.0F,
+                    static_cast<float>(record->currentMaximumDurability) / 100.0F,
+                    record->weaponMalfunction != WeaponMalfunctionType::None
+                        ? " | MALFUNCTION - SWEEP MOUSE"
+                        : "");
+            }
         }
         SDL_RenderDebugText(
             renderer_, 980.0F, 100.0F, ammunitionText.c_str());
@@ -3531,6 +3645,9 @@ void App::renderDebugText()
                     if constexpr (
                         std::is_same_v<Action, WeaponMaintenanceRaidAction>)
                         return "MAINTAINING WEAPON";
+                    if constexpr (
+                        std::is_same_v<Action, WeaponSwitchRaidAction>)
+                        return "SWITCHING WEAPON";
                     return "EXTRACTING";
                 },
                 *gameSession_.raidActionState().active());
@@ -3565,6 +3682,42 @@ void App::renderDebugText()
                 : "");
         SDL_RenderDebugText(
             renderer_, 980.0F, 132.0F, medicalStatus.c_str());
+
+        for (std::size_t index = 0; index < kWeaponEquipmentSlots.size(); ++index)
+        {
+            const EquipmentSlotKind slot = kWeaponEquipmentSlots[index];
+            const bool active = gameSession_.activeAlphaWeaponSlot() == slot;
+            const SDL_FRect selector{
+                20.0F + static_cast<float>(index) * 142.0F,
+                674.0F,
+                134.0F,
+                30.0F};
+            SDL_SetRenderDrawColor(
+                renderer_, active ? 42 : 22, active ? 88 : 40,
+                active ? 70 : 46, 220);
+            SDL_RenderFillRect(renderer_, &selector);
+            SDL_SetRenderDrawColor(
+                renderer_, active ? 104 : 78, active ? 220 : 108,
+                active ? 166 : 116, 255);
+            SDL_RenderRect(renderer_, &selector);
+            std::string name{"EMPTY"};
+            if (const auto id = equippedAsset(profile, slot))
+            {
+                if (const AssetRecord *asset = profile.assets.find(*id))
+                {
+                    name = publishedContentRegistry()
+                        .item(asset->definitionId).displayName;
+                }
+            }
+            const std::string slotText = fmt::format(
+                "{} {}{}",
+                index + 1U,
+                active ? ">" : " ",
+                name.substr(0, 12));
+            SDL_RenderDebugText(
+                renderer_, selector.x + 6.0F, selector.y + 10.0F,
+                slotText.c_str());
+        }
         if (!uiMessage_.empty())
         {
             SDL_RenderDebugText(
@@ -6474,7 +6627,14 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
         const SDL_FRect bounds = equipmentSlotRect(slot);
         SDL_SetRenderDrawColor(renderer_, 28, 42, 46, 255);
         SDL_RenderFillRect(renderer_, &bounds);
-        SDL_SetRenderDrawColor(renderer_, 96, 126, 132, 255);
+        const bool activeWeapon = inRaid && isWeaponEquipmentSlot(slot) &&
+            gameSession_.activeAlphaWeaponSlot() == slot;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            activeWeapon ? 92 : 96,
+            activeWeapon ? 198 : 126,
+            activeWeapon ? 158 : 132,
+            255);
         SDL_RenderRect(renderer_, &bounds);
         SDL_RenderDebugText(
             renderer_,
@@ -6517,30 +6677,34 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                         bounds.y + bounds.h - 13.0F,
                         durability.c_str());
                 }
+                if (isWeaponEquipmentSlot(slot))
+                {
+                    const auto magazine = installedMagazine(profile, *id);
+                    const std::string ammo = fmt::format(
+                        "C{} M{}",
+                        asset->chamberedRound.has_value() ? 1 : 0,
+                        magazine.has_value()
+                            ? magazineRoundCount(profile, *magazine)
+                            : 0U);
+                    SDL_RenderDebugText(
+                        renderer_,
+                        bounds.x + bounds.w - 108.0F,
+                        bounds.y + 7.0F,
+                        ammo.c_str());
+                    if (magazine.has_value())
+                    {
+                        if (const AssetRecord *magazineAsset =
+                                profile.assets.find(*magazine))
+                        {
+                            renderProfileAsset(
+                                *magazineAsset,
+                                installedMagazineRect(slot),
+                                kBasePocketCellSize);
+                        }
+                    }
+                }
             }
         }
-    }
-
-    if (const auto weapon = equippedAsset(profile, EquipmentSlotKind::PrimaryWeapon))
-    {
-        if (const auto magazine = installedMagazine(profile, *weapon))
-        {
-            if (const AssetRecord *asset = profile.assets.find(*magazine))
-            {
-                renderProfileAsset(
-                    *asset, installedMagazineRect(), kBasePocketCellSize);
-            }
-        }
-        const AssetRecord *weaponAsset = profile.assets.find(*weapon);
-        const std::string state = fmt::format(
-            "CHAMBER {} | MAG {}",
-            weaponAsset != nullptr && weaponAsset->chamberedRound.has_value()
-                ? "READY" : "EMPTY",
-            installedMagazine(profile, *weapon).has_value()
-                ? std::to_string(magazineRoundCount(
-                      profile, *installedMagazine(profile, *weapon)))
-                : "NONE");
-        SDL_RenderDebugText(renderer_, 222.0F, 182.0F, state.c_str());
     }
 
     for (const ProfileGridView &view : profileGridViews(profile, includeStash))
@@ -6733,7 +6897,7 @@ void App::renderBaseDeployment()
     SDL_RenderDebugText(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
 
     const ProfileState &profile = gameSession_.profile();
-    float y = 244.0F;
+    float y = 224.0F;
     for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         const auto id = equippedAsset(profile, slot);
@@ -6746,45 +6910,33 @@ void App::renderBaseDeployment()
             equipmentSlotLabel(slot),
             name);
         SDL_RenderDebugText(renderer_, 480.0F, y, row.c_str());
-        y += 34.0F;
+        y += 28.0F;
     }
 
-    const auto weapon = equippedAsset(
-        profile,
-        EquipmentSlotKind::PrimaryWeapon);
-    std::size_t loadedRounds{};
-    bool chambered{};
-    if (weapon.has_value())
-    {
-        const AssetRecord *record = profile.assets.find(*weapon);
-        chambered = record != nullptr && record->chamberedRound.has_value();
-        for (const auto &[id, asset] : profile.assets.records())
-        {
-            if (assetIsCarried(profile, id) &&
-                publishedContentRegistry().item(asset.definitionId).category ==
-                    ItemCategory::Magazine)
-            {
-                loadedRounds += asset.magazineRounds.size();
-            }
-        }
-    }
-    const bool capable = weapon.has_value() && (chambered || loadedRounds > 0);
-    const std::string fireStatus = !weapon.has_value()
-        ? "NO PRIMARY WEAPON"
-        : chambered
-            ? fmt::format("CAN FIRE NOW | {} MAGAZINE ROUNDS", loadedRounds)
-            : loadedRounds > 0
-                ? fmt::format("NEEDS CHAMBER/RELOAD | {} ROUNDS", loadedRounds)
+    const WeaponReadiness readiness = weaponReadiness(profile);
+    const bool capable = readiness.hasWeapon &&
+        (readiness.hasChamberedRound ||
+         readiness.compatibleMagazineRounds > 0);
+    const std::string fireStatus = !readiness.hasWeapon
+        ? "NO WEAPON EQUIPPED"
+        : readiness.hasChamberedRound
+            ? fmt::format(
+                  "CAN FIRE NOW | {} COMPATIBLE MAGAZINE ROUNDS",
+                  readiness.compatibleMagazineRounds)
+            : readiness.compatibleMagazineRounds > 0
+                ? fmt::format(
+                      "NEEDS CHAMBER/RELOAD | {} COMPATIBLE ROUNDS",
+                      readiness.compatibleMagazineRounds)
                 : "NO USABLE AMMUNITION";
     SDL_RenderDebugText(
         renderer_,
         458.0F,
-        422.0F,
+        442.0F,
         fireStatus.c_str());
     SDL_RenderDebugText(
         renderer_,
         442.0F,
-        454.0F,
+        474.0F,
         capable
             ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
             : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");

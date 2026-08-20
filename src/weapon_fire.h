@@ -24,8 +24,9 @@ struct ShotSpec
     float spreadOffsetDegrees{};
 };
 
-// SDL-independent state for one automatic weapon. It owns cadence, bloom and
-// cosmetic recoil, and emits at most one value-only shot command per update.
+// SDL-independent presentation state for the currently selected weapon. The
+// caller decides whether held input is automatic; this owns cadence, bloom and
+// cosmetic recoil and emits at most one value-only shot command per update.
 class WeaponFireState
 {
 public:

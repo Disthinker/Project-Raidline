@@ -35,6 +35,9 @@ namespace
             GameAction::Fire,
             GameAction::Reload,
             GameAction::Heal,
+            GameAction::SelectWeapon1,
+            GameAction::SelectWeapon2,
+            GameAction::SelectWeapon3,
             GameAction::Sprint,
             GameAction::Interact,
             GameAction::ToggleInventory,
@@ -231,6 +234,18 @@ TEST(InputSystemTest, RaidResourceKeysMapToReloadAndHeal)
 
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Reload));
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Heal));
+}
+
+TEST(InputSystemTest, NumberKeysSelectThreeWeaponSlots)
+{
+    InputSystem input;
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_1));
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_2));
+    input.handleEvent(makeKeyEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_3));
+
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::SelectWeapon1));
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::SelectWeapon2));
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::SelectWeapon3));
 }
 
 TEST(InputSystemTest, HealReleaseIsReportedForOneFrame)

@@ -958,6 +958,20 @@ bool GameplayWorld::shotFiredLastUpdate() const noexcept
     return shotFiredLastUpdate_;
 }
 
+void GameplayWorld::configureWeaponFire(
+    const WeaponUseDefinition &definition)
+{
+    weaponFire_ = WeaponFireState{WeaponFireConfig{
+        definition.shotIntervalSeconds,
+        definition.spreadPerShotDegrees,
+        definition.maximumSpreadDegrees,
+        definition.recoveryDelaySeconds,
+        definition.spreadRecoveryDegreesPerSecond,
+        definition.visualRecoilPerShot,
+        definition.maximumVisualRecoil,
+        definition.visualRecoilRecoveryPerSecond}};
+}
+
 bool GameplayWorld::isAlphaRaidWorld() const noexcept
 {
     return alphaRaidWorld_;

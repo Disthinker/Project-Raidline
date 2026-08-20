@@ -103,11 +103,15 @@ public:
     [[nodiscard]] bool startAlphaWeaponMaintenance(
         AssetInstanceId kitAssetId,
         AssetInstanceId weaponAssetId);
+    [[nodiscard]] bool startAlphaWeaponSwitch(EquipmentSlotKind targetSlot);
     [[nodiscard]] bool observeAlphaWeaponClearMotion(Vec2 delta);
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
     [[nodiscard]] const ProfileState &profile() const noexcept;
+    [[nodiscard]] EquipmentSlotKind activeAlphaWeaponSlot() const noexcept;
+    [[nodiscard]] std::optional<AssetInstanceId>
+    activeAlphaWeapon() const noexcept;
 
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
@@ -164,6 +168,8 @@ private:
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};
+    EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};
+    std::optional<AssetInstanceId> configuredWeaponAssetId_;
 
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
@@ -172,6 +178,7 @@ private:
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
     void applyAlphaIncomingDamage();
     void advanceAlphaMedicalStatus(float deltaTime);
+    void synchronizeActiveAlphaWeapon();
     [[nodiscard]] bool advanceContinuousHealing(
         MedicalRaidAction &action,
         float deltaTime);

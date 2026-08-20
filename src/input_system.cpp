@@ -190,6 +190,18 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_KP_5:
         return GameAction::Heal;
 
+    case SDL_SCANCODE_1:
+    case SDL_SCANCODE_KP_1:
+        return GameAction::SelectWeapon1;
+
+    case SDL_SCANCODE_2:
+    case SDL_SCANCODE_KP_2:
+        return GameAction::SelectWeapon2;
+
+    case SDL_SCANCODE_3:
+    case SDL_SCANCODE_KP_3:
+        return GameAction::SelectWeapon3;
+
     case SDL_SCANCODE_LSHIFT:
     case SDL_SCANCODE_RSHIFT:
         return GameAction::Sprint;
