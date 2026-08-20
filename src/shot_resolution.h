@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "combat_damage_domain.h"
 #include "vec2.h"
 
 using ShotId = std::uint64_t;
@@ -63,6 +64,8 @@ struct HitResult
     Vec2 position{};
     int damageApplied{};
     bool targetKilled{false};
+    HitRegion region{HitRegion::Torso};
+    HitSemantic semantic{HitSemantic::Normal};
 };
 
 // Read-only App projection for the temporary V0 shot presentation. It is not

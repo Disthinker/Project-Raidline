@@ -2163,6 +2163,32 @@ TEST(GameplayWorldRaidTest, PlayerDamageConnectsHealthToStickyRaidDeath)
     EXPECT_EQ(world.player().health(), 0);
 }
 
+TEST(GameplayWorldRaidTest, AlphaWorldPublishesDamageInsteadOfGuessingArmor)
+{
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {EnemySpawn{Vec2{630.0F, 330.0F}, Vec2{50.0F, 50.0F}, 3}},
+        100,
+        100,
+        true}};
+
+    std::vector<PlayerDamageObservation> observations;
+    for (int frame = 0; frame < 600 && observations.empty(); ++frame)
+    {
+        world.update(GameplayInput{}, 1.0F / 60.0F);
+        observations = world.takePlayerDamageObservations();
+    }
+
+    ASSERT_FALSE(observations.empty());
+    EXPECT_EQ(world.player().health(), 100);
+    EXPECT_EQ(observations.front().baseDamage, 12);
+    EXPECT_EQ(observations.front().region, HitRegion::Torso);
+    EXPECT_EQ(observations.front().penetration, 1);
+    EXPECT_EQ(observations.front().armorDamage, 2);
+}
+
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
     GameplayWorld world;

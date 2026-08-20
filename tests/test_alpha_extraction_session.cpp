@@ -315,6 +315,56 @@ TEST(AlphaExtractionSessionTest, RaidMagazinePackingIsInterruptibleAndAtomic)
               sourceBefore - 10U);
 }
 
+TEST(AlphaExtractionSessionTest, EnemyHitAtomicallyUpdatesProfileArmorAndWorldHealth)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-armor-hit"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId helmet = assets(
+        session.profile(),
+        alpha_content::helmet).front();
+    const AssetInstanceId bodyArmor = assets(
+        session.profile(),
+        alpha_content::bodyArmor).front();
+    equip(session, helmet, EquipmentSlotKind::Helmet, "alpha-equip-helmet");
+    equip(
+        session,
+        bodyArmor,
+        EquipmentSlotKind::BodyArmor,
+        "alpha-equip-body-armor");
+    const std::uint32_t helmetBefore = session.profile().assets.find(helmet)
+        ->currentDurability;
+    const std::uint32_t bodyBefore = session.profile().assets.find(bodyArmor)
+        ->currentDurability;
+    ASSERT_TRUE(session.deployAlpha(73219));
+
+    for (int frame = 0;
+         frame < 2400 && session.profile().currentHealth == 100;
+         ++frame)
+    {
+        ASSERT_FALSE(session.world().enemies().empty());
+        const Vec2 player = session.world().player().position();
+        const Vec2 enemy = session.world().enemies().front().position();
+        GameplayInput approach{};
+        approach.sprint = true;
+        approach.moveLeft = player.x > enemy.x + 8.0F;
+        approach.moveRight = player.x + 8.0F < enemy.x;
+        approach.moveUp = player.y > enemy.y + 8.0F;
+        approach.moveDown = player.y + 8.0F < enemy.y;
+        session.update(approach, 1.0F / 60.0F);
+    }
+
+    ASSERT_LT(session.profile().currentHealth, 100);
+    EXPECT_EQ(
+        session.profile().currentHealth,
+        session.world().player().health());
+    const std::uint32_t helmetAfter = session.profile().assets.find(helmet)
+        ->currentDurability;
+    const std::uint32_t bodyAfter = session.profile().assets.find(bodyArmor)
+        ->currentDurability;
+    EXPECT_TRUE(helmetAfter < helmetBefore || bodyAfter < bodyBefore);
+}
+
 TEST(AlphaExtractionSessionTest, DeathSettlesFullLossAndIsIdempotent)
 {
     GameSession session;

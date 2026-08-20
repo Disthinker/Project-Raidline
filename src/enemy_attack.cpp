@@ -105,6 +105,31 @@ EnemyAttackConfigSet defaultEnemyAttackConfigs()
             0.75F}};
 }
 
+EnemyAttackCombatDamage enemyAttackCombatDamage(
+    EnemyAttackType type) noexcept
+{
+    switch (type)
+    {
+    case EnemyAttackType::Grab:
+        return EnemyAttackCombatDamage{};
+    case EnemyAttackType::Scratch:
+        return EnemyAttackCombatDamage{
+            12,
+            HitRegion::Torso,
+            1,
+            2,
+            false};
+    case EnemyAttackType::Bite:
+        return EnemyAttackCombatDamage{
+            18,
+            HitRegion::Head,
+            1,
+            3,
+            false};
+    }
+    return EnemyAttackCombatDamage{};
+}
+
 const char *enemyAttackTypeName(
     EnemyAttackType type) noexcept
 {

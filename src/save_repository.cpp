@@ -70,6 +70,10 @@ std::string slotName(EquipmentSlotKind slot)
         return "chest_rig";
     case EquipmentSlotKind::Backpack:
         return "backpack";
+    case EquipmentSlotKind::Helmet:
+        return "helmet";
+    case EquipmentSlotKind::BodyArmor:
+        return "body_armor";
     }
     return "invalid";
 }
@@ -79,6 +83,8 @@ std::optional<EquipmentSlotKind> parseSlot(std::string_view value)
     if (value == "primary_weapon") return EquipmentSlotKind::PrimaryWeapon;
     if (value == "chest_rig") return EquipmentSlotKind::ChestRig;
     if (value == "backpack") return EquipmentSlotKind::Backpack;
+    if (value == "helmet") return EquipmentSlotKind::Helmet;
+    if (value == "body_armor") return EquipmentSlotKind::BodyArmor;
     return std::nullopt;
 }
 
@@ -249,6 +255,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 ? roundValue(*asset.chamberedRound)
                 : Json(nullptr);
         }
+        if (schemaVersion >= 3)
+        {
+            value["current_maximum_durability"] =
+                asset.currentMaximumDurability;
+            value["current_durability"] = asset.currentDurability;
+        }
         assets.push_back(std::move(value));
     }
 
@@ -399,7 +411,7 @@ std::string serializeProfileEnvelope(
     std::string_view contentVersion,
     std::uint32_t schemaVersion)
 {
-    if (schemaVersion != 1 && schemaVersion != 2)
+    if (schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -431,10 +443,13 @@ SaveLoadResult deserializeProfileEnvelope(
             envelope.at("schema_version").get<std::uint32_t>();
         const std::string contentVersion =
             envelope.at("content_version").get<std::string>();
-        const bool legacyV1Content = schemaVersion == 1 &&
-            contentVersion == "core-alpha-content-1";
-        if ((schemaVersion != 1 && schemaVersion != 2) ||
-            (contentVersion != content.contentVersion() && !legacyV1Content))
+        const bool legacyContent =
+            (schemaVersion == 1 &&
+             contentVersion == "core-alpha-content-1") ||
+            (schemaVersion <= 2 &&
+             contentVersion == "core-alpha-content-2");
+        if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3) ||
+            (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
         }
@@ -503,6 +518,24 @@ SaveLoadResult deserializeProfileEnvelope(
             asset.orientation = *orientation;
             asset.remainingCharges =
                 value.at("remaining_charges").get<std::uint32_t>();
+            if (schemaVersion >= 3)
+            {
+                asset.currentMaximumDurability = value.at(
+                    "current_maximum_durability").get<std::uint32_t>();
+                asset.currentDurability = value.at(
+                    "current_durability").get<std::uint32_t>();
+            }
+            else
+            {
+                const ItemDefinition &definition =
+                    content.item(asset.definitionId);
+                if (definition.armorProtection.has_value())
+                {
+                    asset.currentMaximumDurability =
+                        definition.armorProtection->maximumDurability;
+                    asset.currentDurability = asset.currentMaximumDurability;
+                }
+            }
             if (value.contains("relief_batch_id"))
             {
                 asset.reliefBatchId =

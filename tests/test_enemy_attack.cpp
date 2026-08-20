@@ -37,6 +37,27 @@ TEST(EnemyAttackStateTest, DefaultConfigsMatchWeek27Contract)
     EXPECT_FLOAT_EQ(bite.controlDuration, 0.75F);
 }
 
+TEST(EnemyAttackStateTest, ProductionDamageCarriesExplicitArmorSemantics)
+{
+    const EnemyAttackCombatDamage scratch = enemyAttackCombatDamage(
+        EnemyAttackType::Scratch);
+    EXPECT_EQ(scratch.baseDamage, 12);
+    EXPECT_EQ(scratch.region, HitRegion::Torso);
+    EXPECT_EQ(scratch.penetration, 1);
+    EXPECT_EQ(scratch.armorDamage, 2);
+
+    const EnemyAttackCombatDamage bite = enemyAttackCombatDamage(
+        EnemyAttackType::Bite);
+    EXPECT_EQ(bite.baseDamage, 18);
+    EXPECT_EQ(bite.region, HitRegion::Head);
+    EXPECT_EQ(bite.penetration, 1);
+    EXPECT_EQ(bite.armorDamage, 3);
+
+    EXPECT_EQ(
+        enemyAttackCombatDamage(EnemyAttackType::Grab).baseDamage,
+        0);
+}
+
 TEST(EnemyAttackStateTest, StartLocksNormalizedDirectionAndWindup)
 {
     EnemyAttackState attacks;

@@ -1,6 +1,6 @@
 # Core Extraction Alpha 总 ExecPlan
 
-状态：Persistent Base 与 Extraction Loop 已进入 main；Alpha Hardening 含退出回滚、Raid 压卸弹、奔跑和空栏位快速装备修订，本地实现与自动化完成，等待新 head CI 及最终集中人工验收
+状态：已完成；Alpha Hardening 由 PR #60 以 merge commit `50849d5` 进入 main，精确 head CI 与用户最终正常游玩验收通过
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
@@ -205,7 +205,7 @@ Project_Raidline.exe
 - [x] Hardening 修复装入弹匣/枪膛弹药未计入最低出击能力的问题，并最终按用户修订将关闭程序处理改为精确出击前存档回滚。
 - [x] Hardening 全量 CTest 645/645 通过；10 局混合结果、3 次以上重载、三配置/三路线、双损坏存档、Deploy 保存失败、统一库存交互、Raid 压卸弹、奔跑及空栏位快速装备均有自动化证据。
 - [x] Hardening 返工提交 `daceec6` 的 Windows/Ubuntu CI（run `31861016485`）通过。
-- [ ] 用户按正常游玩流程完成最终验收与 Alpha 完成报告。
+- [x] 用户按正常游玩流程完成最终验收；PR #60 进入 main，Core Extraction Alpha 成为后续完整版切片基线。
 
 最后更新：2026-08-16。
 

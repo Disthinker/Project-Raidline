@@ -202,7 +202,9 @@ DeployReceipt executeDeploy(
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::PrimaryWeapon,
              EquipmentSlotKind::ChestRig,
-             EquipmentSlotKind::Backpack})
+             EquipmentSlotKind::Backpack,
+             EquipmentSlotKind::Helmet,
+             EquipmentSlotKind::BodyArmor})
     {
         if (const auto root = equippedAsset(candidate, slot))
         {

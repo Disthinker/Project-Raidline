@@ -222,6 +222,12 @@ AssetInstanceId AssetRegistry::create(
         quantity,
         ItemOrientation::Degrees0,
         definition.maximumCharges,
+        definition.armorProtection.has_value()
+            ? definition.armorProtection->maximumDurability
+            : 0U,
+        definition.armorProtection.has_value()
+            ? definition.armorProtection->maximumDurability
+            : 0U,
         std::move(reliefBatchId),
         {},
         std::nullopt,
@@ -291,6 +297,8 @@ ProfileState makeNewAlphaProfile(
     {
         placeNewAsset(profile, content, alpha_content::medkit);
     }
+    placeNewAsset(profile, content, alpha_content::helmet);
+    placeNewAsset(profile, content, alpha_content::bodyArmor);
 
     const ProfileValidationResult validation =
         validateProfileState(profile, content);
@@ -497,7 +505,8 @@ ProfileValidationResult validateProfileState(
 {
     if (profile.profileId.empty() || profile.revision == 0 ||
         profile.assets.nextAssetId() == 0 ||
-        profile.currentHealth <= 0 || profile.currentHealth > 100)
+        profile.currentHealth < 0 || profile.currentHealth > 100 ||
+        (profile.currentHealth == 0 && !profile.pendingRaid.has_value()))
     {
         return {false, "profile header is invalid"};
     }
@@ -529,6 +538,21 @@ ProfileValidationResult validateProfileState(
             (definition->maximumCharges == 0 && asset.remainingCharges != 0))
         {
             return {false, "asset value is outside definition limits"};
+        }
+        if (definition->armorProtection.has_value())
+        {
+            if (asset.currentMaximumDurability == 0 ||
+                asset.currentMaximumDurability >
+                    definition->armorProtection->maximumDurability ||
+                asset.currentDurability > asset.currentMaximumDurability)
+            {
+                return {false, "armor durability is outside definition limits"};
+            }
+        }
+        else if (asset.currentMaximumDurability != 0 ||
+                 asset.currentDurability != 0)
+        {
+            return {false, "non-armor asset contains durability"};
         }
 
         if (definition->category == ItemCategory::Magazine)
@@ -760,6 +784,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, asset.quantity);
         hashInteger(hash, static_cast<std::uint32_t>(asset.orientation));
         hashInteger(hash, asset.remainingCharges);
+        hashInteger(hash, asset.currentMaximumDurability);
+        hashInteger(hash, asset.currentDurability);
         hashBytes(hash, asset.reliefBatchId.value_or(""));
         for (const MagazineRoundRecord &round : asset.magazineRounds)
         {

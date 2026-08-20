@@ -99,6 +99,10 @@ private:
     bool deploymentWarningArmed_{};
     bool raidQuitArmed_{};
     std::string uiMessage_;
+    float specialHitFeedbackRemaining_{};
+    HitSemantic specialHitSemantic_{HitSemantic::Normal};
+    float playerDamageFeedbackRemaining_{};
+    bool lastIncomingDamageReducedByArmor_{};
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -233,6 +237,7 @@ private:
     void renderPlayer();
     void renderShotPresentations();
     void renderAimCrosshair();
+    void renderCombatFeedback();
     void renderParticles();
     void renderInventoryPlacementPreview(
         const GridInventory &inventory,

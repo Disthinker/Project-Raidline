@@ -98,6 +98,8 @@ struct AssetRecord
     std::uint32_t quantity{1};
     ItemOrientation orientation{ItemOrientation::Degrees0};
     std::uint32_t remainingCharges{};
+    std::uint32_t currentMaximumDurability{};
+    std::uint32_t currentDurability{};
     std::optional<std::string> reliefBatchId;
     std::vector<MagazineRoundRecord> magazineRounds;
     std::optional<MagazineRoundRecord> chamberedRound;

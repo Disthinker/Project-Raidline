@@ -218,6 +218,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     }
     worldSize_ = config.worldSize;
     alphaRaidWorld_ = true;
+    deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     player_ = Player{
         config.playerSpawn.x,
         config.playerSpawn.y,
@@ -493,6 +494,7 @@ void GameplayWorld::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
     if (!raidSession_.isActive())
     {
@@ -619,7 +621,9 @@ void GameplayWorld::update(
                     std::terminate();
                 }
 
-                if (damagePlayer(biteConfig->damage))
+                if (resolveEnemyAttackDamage(
+                        EnemyAttackType::Bite,
+                        biteConfig->damage))
                 {
                     return;
                 }
@@ -659,7 +663,9 @@ void GameplayWorld::update(
                 std::terminate();
             }
 
-            if (damagePlayer(attackConfig->damage))
+            if (resolveEnemyAttackDamage(
+                    *enemy.attackType(),
+                    attackConfig->damage))
             {
                 return;
             }
@@ -813,6 +819,7 @@ void GameplayWorld::update(
         particleSystem_.emitImpact(
             hit.position);
     }
+    hitResultsLastUpdate_ = hitResult.hits;
 
     // enemiesKilled 是 std::size_t。
     // Score 使用 int，因此在职责边界上显式转换。
@@ -940,6 +947,12 @@ float GameplayWorld::weaponVisualRecoilPixels() const noexcept
     return weaponFire_.visualRecoilPixels();
 }
 
+const std::vector<HitResult> &
+GameplayWorld::hitResultsLastUpdate() const noexcept
+{
+    return hitResultsLastUpdate_;
+}
+
 bool GameplayWorld::shotFiredLastUpdate() const noexcept
 {
     return shotFiredLastUpdate_;
@@ -999,6 +1012,38 @@ bool GameplayWorld::damagePlayer(int damage)
     }
 
     return true;
+}
+
+std::vector<PlayerDamageObservation>
+GameplayWorld::takePlayerDamageObservations()
+{
+    std::vector<PlayerDamageObservation> observations;
+    observations.swap(pendingPlayerDamageObservations_);
+    return observations;
+}
+
+bool GameplayWorld::resolveEnemyAttackDamage(
+    EnemyAttackType type,
+    int legacyDamage)
+{
+    if (!deferPlayerDamageResolution_)
+    {
+        return damagePlayer(legacyDamage);
+    }
+
+    const EnemyAttackCombatDamage damage = enemyAttackCombatDamage(type);
+    if (damage.baseDamage <= 0)
+    {
+        return false;
+    }
+    pendingPlayerDamageObservations_.push_back(
+        PlayerDamageObservation{
+            damage.baseDamage,
+            damage.region,
+            damage.penetration,
+            damage.armorDamage,
+            damage.weakPoint});
+    return false;
 }
 
 bool GameplayWorld::canInteractWithContainer() const noexcept

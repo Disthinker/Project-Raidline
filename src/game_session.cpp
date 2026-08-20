@@ -301,7 +301,8 @@ bool GameSession::deployAlpha(std::uint64_t seed)
             snapshot.extractionPoint,
             std::move(enemies),
             100,
-            candidate.currentHealth});
+            candidate.currentHealth,
+            true});
     }
     catch (const std::exception &error)
     {
@@ -617,6 +618,12 @@ const RaidActionState &GameSession::raidActionState() const noexcept
     return raidActionState_;
 }
 
+const std::optional<CombatDamageResolution> &
+GameSession::lastIncomingDamage() const noexcept
+{
+    return lastIncomingDamage_;
+}
+
 SaveLoadStatus GameSession::lastSaveLoadStatus() const noexcept
 {
     return lastSaveLoadStatus_;
@@ -631,6 +638,7 @@ void GameSession::updateAlphaRaid(
     const GameplayInput &input,
     float deltaTime)
 {
+    lastIncomingDamage_.reset();
     if (!profile_.pendingRaid.has_value())
     {
         alphaRaidActive_ = false;
@@ -740,6 +748,8 @@ void GameSession::updateAlphaRaid(
             std::move(*firedCandidate),
             false));
     }
+
+    applyAlphaIncomingDamage();
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
@@ -927,6 +937,46 @@ void GameSession::updateAlphaRaid(
                 persistenceMessage_ = receipt.message;
             }
         }
+    }
+}
+
+void GameSession::applyAlphaIncomingDamage()
+{
+    for (const PlayerDamageObservation &observation :
+         world_->takePlayerDamageObservations())
+    {
+        if (!world_->raidSession().isActive())
+        {
+            break;
+        }
+
+        ProfileState candidate = profile_;
+        const IncomingDamageReceipt receipt = executeIncomingDamage(
+            candidate,
+            publishedContentRegistry(),
+            IncomingDamageCommand{
+                observation.baseDamage,
+                observation.region,
+                observation.penetration,
+                observation.armorDamage,
+                observation.weakPoint},
+            CommandContext{
+                profile_.revision,
+                nextRaidTransaction("incoming-damage")});
+        if (!receipt.succeeded ||
+            !commitProfileCandidate(std::move(candidate), false))
+        {
+            persistenceMessage_ = receipt.message.empty()
+                ? "incoming damage could not be committed"
+                : receipt.message;
+            state_ = GameSessionState::SettlementBlocked;
+            break;
+        }
+
+        lastIncomingDamage_ = receipt.resolution;
+
+        static_cast<void>(world_->damagePlayer(
+            receipt.resolution.damageApplied));
     }
 }
 

@@ -1,21 +1,22 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-16。
+最后核对：2026-08-20。
 
 ## Git 与交付基线
 
-- `origin/main@ed45baa` 已包含 Core Extraction Alpha Slice 0、RL-INV-003、Build Module Foundation、Content Registry v1、Persistent Base 和 Extraction Loop；各已接受 feature head 的 Windows/Ubuntu CI 与对应人工门槛均已通过。
-- 当前开发分支：`codex/core-alpha-hardening`，从干净的 `origin/main@ed45baa` 创建。
-- 当前活动计划：`doc/exec-plans/active/core-alpha-hardening.md`。
+- `origin/main@50849d5` 已包含完整 Core Extraction Alpha；PR #60 的精确 head CI 与用户最终正常游玩验收均已通过。
+- 当前开发分支：`codex/survival-loadout-armor-hit-regions`，从干净的 `origin/main@50849d5` 创建。
+- 当前活动计划：`doc/exec-plans/active/survival-loadout-armor-hit-regions.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
 
 ## 当前产品里程碑
 
-当前唯一里程碑是 **Core Extraction Alpha**，唯一范围合同是外部 GDD 的 `05_Core_Extraction_Alpha_首阶段功能规格.md`。
+Core Extraction Alpha 已接受。当前里程碑进入 **Survival Loadout：基础防具与命中部位**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
-3. **Alpha Hardening**：恢复/救济缺陷、内容合同、自动化长序列及玩家反馈触发的库存/角色显示返工已在当前分支完成；Raid 退出回滚、局内压弹/卸弹和奔跑修订已通过本地门槛与既有功能 head CI；快捷转移修订与空栏位快速装备已通过本地门槛，等待新 head CI 与最终正常游玩验收。
+3. **Alpha Hardening**：PR #60 已以 merge commit `50849d5` 进入 main；本地 645/645、精确 head CI 与用户最终正常游玩验收通过。
+4. **基础防具与命中部位**：领域、内容、schema v3、五槽配装、Raid 结算与代码反馈已形成完整候选；本地 663/663 通过，等待 exact-head CI 与用户正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -43,10 +44,18 @@
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- EconomyDomain、ContentRegistry、SaveRepository、AlphaExtractionSession 与 AlphaHardening focused 37/37 通过。
-- 全量 CTest 645/645 通过，0 失败；新增空兼容栏位快速装备回归覆盖。
+- ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
+- 全量 CTest 663/663 通过，0 失败；覆盖三部位倍率、护甲减伤/磨损、v1/v2→v3 迁移、两新槽、死亡全损和 Profile/World HP 同步。
 - 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- Draft PR #60 的功能 head `db0935d` 已通过 GitHub Actions run `31919983014` 的范围检测、Windows C++ 和 Ubuntu C++。最终人工验收尚无证据，开发代理未启动游戏。
+- PR #60 已由用户正常游玩验收并合入；当前 Survival Loadout 候选尚待新 PR 的精确 head CI。开发代理未启动游戏。
+
+## Survival Loadout 当前实现
+
+- ContentRegistry 新增 ProtectiveGear、Helmet、BodyArmor 及基础头盔/基础护甲定义；两项均使用代码占位表现，没有生成或发布资源，也未修改美术 manifest。
+- AssetRegistry 防具实例保存出厂最大、当前最大与当前耐久；schema v3 往返保存，并能从 v1/v2 为防具补全合法满耐久默认值。
+- Base/Raid 个人页启用主武器、头盔、护甲、胸挂、背包五槽；拖拽与快速装备继续走统一 InventoryDomain。固定供应提供基础防具，部署快照、成功保留和死亡全损均包含两新装备根。
+- 敌方 Scratch 产生躯干命中，Bite 产生头部命中；GameSession 消费模拟事实并在同一 Profile 事务内提交 HP 与护甲磨损，再同步 Raid World。渲染层不推断命中部位或减伤。
+- 玩家射击按碰撞落点稳定解析 Head/Torso/Legs 并写入 HitResult；普通命中不显示 X，爆头/弱点才显示短促专用标记。受击边缘反馈区分普通伤害与护甲实际减伤。
 
 ## Alpha Hardening 当前实现
 
@@ -62,8 +71,7 @@
 
 ## 尚未完成
 
-- Alpha Hardening：用户按正常游玩流程完成一次最终验收；通过前 PR #60 保持 Draft。
-- Alpha 完成报告与后续阶段入口决策只在上述门槛全部通过后形成。
+- 基础防具与命中部位：exact-head Windows/Ubuntu CI、用户正常游玩验收与 PR 接受。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 代码反馈独立整理。
 - 正式攻击动画及所有新正式美术/音频生产。

@@ -259,6 +259,10 @@ namespace
         {
             return ItemCategory::Container;
         }
+        if (value == "protective_gear")
+        {
+            return ItemCategory::ProtectiveGear;
+        }
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -289,7 +293,48 @@ namespace
         {
             return EquipmentSlotKind::Backpack;
         }
+        if (*value == "helmet")
+        {
+            return EquipmentSlotKind::Helmet;
+        }
+        if (*value == "body_armor")
+        {
+            return EquipmentSlotKind::BodyArmor;
+        }
         fail("equipment_slot is not supported: " + *value);
+    }
+
+    std::optional<ArmorProtectionDefinition> parseArmorProtection(
+        const Json &item)
+    {
+        const auto found = item.find("armor");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("armor must be an object");
+        }
+        const std::string coverage = requiredString(*found, "coverage");
+        HitRegion region{};
+        if (coverage == "head")
+        {
+            region = HitRegion::Head;
+        }
+        else if (coverage == "torso")
+        {
+            region = HitRegion::Torso;
+        }
+        else
+        {
+            fail("armor coverage is not supported: " + coverage);
+        }
+        return ArmorProtectionDefinition{
+            region,
+            requiredPositiveInt(*found, "protection_requirement"),
+            requiredPositiveUint(*found, "maximum_durability"),
+            requiredPositiveUint(*found, "durability_loss_basis_points")};
     }
 
     std::vector<ContainerCompartmentDefinition>
@@ -501,6 +546,8 @@ ContentRegistry ContentRegistry::fromJson(
                 optionalUint(itemValue, "maximum_charges");
             definition.magazineCapacity =
                 optionalUint(itemValue, "magazine_capacity");
+            definition.armorProtection =
+                parseArmorProtection(itemValue);
 
             if (const auto ammunition =
                     optionalString(itemValue, "compatible_ammunition"))
@@ -532,6 +579,22 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.pickupSize.y <= 0.0F)
             {
                 fail("item world sizes must be positive");
+            }
+            if (definition.armorProtection.has_value())
+            {
+                const EquipmentSlotKind expectedSlot =
+                    definition.armorProtection->coverage == HitRegion::Head
+                        ? EquipmentSlotKind::Helmet
+                        : EquipmentSlotKind::BodyArmor;
+                if (definition.category != ItemCategory::ProtectiveGear ||
+                    definition.equipmentSlot != expectedSlot)
+                {
+                    fail("armor capability and equipment slot disagree");
+                }
+            }
+            else if (definition.category == ItemCategory::ProtectiveGear)
+            {
+                fail("protective gear requires armor capability");
             }
 
             const std::size_t index = registry.items_.size();
