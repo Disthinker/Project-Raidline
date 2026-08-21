@@ -161,6 +161,7 @@ struct WeaponUseDefinition
     int baseDamage{};
     float effectiveRange{};
     float maximumRange{};
+    float logicalBallisticSpeed{};
 
     friend bool operator==(
         const WeaponUseDefinition &,
@@ -190,8 +191,11 @@ struct WeaponHandlingParameters
     float aimDownSightsAccuracyMultiplier{};
     float aimDownSightsStabilityMultiplier{};
     float movingSpreadFraction{};
+    float reticleMotionSpreadDegreesPerSecond{};
+    float nearDistanceSpreadScale{};
     float weakTracerLength{};
     float weakTracerOpacity{};
+    float weakTracerLifetimeSeconds{};
 };
 
 [[nodiscard]] WeaponHandlingParameters deriveWeaponHandling(

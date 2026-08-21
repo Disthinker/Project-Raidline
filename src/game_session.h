@@ -41,16 +41,20 @@ enum class DeveloperWeaponParameter
     BaseDamage,
     EffectiveRange,
     MaximumRange,
+    LogicalBallisticSpeed,
     MaximumReticleSpeed,
     ReticleControlAcceleration,
     SpreadPerShot,
     RecoilLateralRatio,
     RecoilBendDuration,
     MovingSpreadFraction,
+    ReticleMotionSpreadRate,
+    NearDistanceSpreadScale,
     AdsAccuracyMultiplier,
     AdsStabilityMultiplier,
     WeakTracerLength,
     WeakTracerOpacity,
+    WeakTracerLifetime,
     Count,
 };
 
@@ -252,10 +256,13 @@ private:
         std::optional<float> recoilLateralRatio;
         std::optional<float> recoilBendDurationSeconds;
         std::optional<float> movingSpreadFraction;
+        std::optional<float> reticleMotionSpreadDegreesPerSecond;
+        std::optional<float> nearDistanceSpreadScale;
         std::optional<float> adsAccuracyMultiplier;
         std::optional<float> adsStabilityMultiplier;
         std::optional<float> weakTracerLength;
         std::optional<float> weakTracerOpacity;
+        std::optional<float> weakTracerLifetimeSeconds;
 
         friend bool operator==(
             const DeveloperWeaponHiddenOverrides &,

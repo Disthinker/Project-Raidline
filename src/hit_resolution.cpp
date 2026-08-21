@@ -60,22 +60,33 @@ namespace
         return std::clamp(enter, 0.0F, 1.0F);
     }
 
-    HitRegion hitRegionAt(
-        const Rect &target,
-        Vec2 hitPosition) noexcept
+}
+
+std::optional<HitRegion> hitRegionAtPoint(
+    const Rect &target,
+    Vec2 point) noexcept
+{
+    if (!finite(target.position) || !finite(target.size) ||
+        !finite(point) || target.size.x <= 0.0F || target.size.y <= 0.0F ||
+        point.x < target.position.x ||
+        point.x > target.position.x + target.size.x ||
+        point.y < target.position.y ||
+        point.y > target.position.y + target.size.y)
     {
-        const float relativeY =
-            (hitPosition.y - target.position.y) / target.size.y;
-        if (relativeY < 0.25F)
-        {
-            return HitRegion::Head;
-        }
-        if (relativeY < 0.75F)
-        {
-            return HitRegion::Torso;
-        }
-        return HitRegion::Legs;
+        return std::nullopt;
     }
+
+    const float relativeY =
+        (point.y - target.position.y) / target.size.y;
+    if (relativeY < 0.25F)
+    {
+        return HitRegion::Head;
+    }
+    if (relativeY < 0.75F)
+    {
+        return HitRegion::Torso;
+    }
+    return HitRegion::Legs;
 }
 
 HitResolutionResult resolveShotEnemyHits(
@@ -190,14 +201,33 @@ HitResolutionResult resolveShotHits(
                 enemyBounds.position.y,
                 enemyBounds.position.y + enemyBounds.size.y)};
 
-        const HitRegion region = hitRegionAt(enemyBounds, hitPosition);
+        const HitRegion physicalRegion =
+            hitRegionAtPoint(enemyBounds, hitPosition)
+                .value_or(HitRegion::Torso);
+        const bool aimMatchesPhysicalRegion =
+            shot.aimIntent.has_value() &&
+            shot.aimIntent->targetId == enemy.combatTargetId() &&
+            shot.aimIntent->region == physicalRegion;
+
+        // Headshots and weak points are precision semantics, not a side
+        // effect of an infinite ray crossing the right Y coordinate. They
+        // require both a matching fire-time reticle intent and a physical
+        // ballistic impact on the same target/region. A geometrical head
+        // contact without that intent remains an ordinary torso-equivalent
+        // hit; torso/leg impacts retain their actual region.
+        const HitRegion region =
+            physicalRegion == HitRegion::Head && !aimMatchesPhysicalRegion
+                ? HitRegion::Torso
+                : physicalRegion;
+        const bool weakPoint =
+            aimMatchesPhysicalRegion && shot.aimIntent->weakPoint;
         const CombatDamageResolution damage = resolveCombatDamage(
             CombatDamageCommand{
                 shot.damage,
                 region,
                 0,
                 0,
-                false,
+                weakPoint,
                 std::nullopt});
         if (!damage.resolved())
         {

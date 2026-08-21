@@ -1,6 +1,6 @@
 # Combat：输入捕获、后坐力曲线与 P0 音频 v1 ExecPlan
 
-状态：Draft PR #68；Base 环境声/低延迟修订提交 `8efcd8d` 本地 756/756 通过，待新 exact-head CI 与用户正常游玩验收
+状态：已完成；PR #68 通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `ba3375e` 进入 main
 
 基线：`origin/main@881c034`（PR #67 已通过用户验收并合入）
 
@@ -49,3 +49,4 @@
 - 2026-08-21：Windows Debug 全目标构建与 755/755 CTest 通过，0 失败；专项覆盖 bank 完整性、WAV 格式、路径安全、敌人警觉、换弹与医疗事件。提交 `f779d31` 已推送，exact-head Windows/Ubuntu CI 全部成功；待用户正常游玩验收。
 - 2026-08-21：用户报告 Base 出现强烈电流/滋滋声。确认不是循环叠加或格式错误，而是灯泡/线圈拾音素材本身具有高频噪声；替换为经过频段收束与低响度处理的 InMotionAudio 室内烟囱风声，Base 事件增益由 0.42 降至 0.28，过零率由约 0.344 降至 0.007。
 - 2026-08-21：针对远程桌面听感延迟，在 SDL 设备打开前请求 512 帧缓冲；游戏侧目标约 10.7 ms，不能消除远程重定向的附加延迟。修订提交 `8efcd8d` 已完成 Windows Debug 全目标、GameAudio 6/6 与全量 CTest 756/756；开发代理未启动游戏，待新 exact-head CI 与用户正常游玩验收。
+- 2026-08-21：修订 head 通过 exact-head Windows/Ubuntu CI；用户确认 P0 音效整体方向无误，小瑕疵和远程桌面附加延迟延期处理。PR #68 以 merge commit `ba3375e` 进入 main。

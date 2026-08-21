@@ -815,8 +815,11 @@ ProfileValidationResult validateProfileState(
         for (AssetInstanceId root : raid.carriedRootAssetIds)
         {
             const AssetRecord *asset = profile.assets.find(root);
-            if (asset == nullptr ||
-                !std::holds_alternative<EquippedAssetLocation>(asset->location))
+            // The deployment snapshot records the roots that entered the
+            // Raid, not permanent equipment-slot assignments. During a Raid
+            // those roots may be moved between equipment and another carried
+            // container, but must never leave the carried ownership tree.
+            if (asset == nullptr || !assetIsCarried(profile, root))
             {
                 return {false, "pending Raid carried root is invalid"};
             }

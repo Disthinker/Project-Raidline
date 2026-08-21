@@ -62,7 +62,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "combat-input-content-7");
+    EXPECT_EQ(registry.contentVersion(), "combat-ballistics-content-8");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
@@ -89,8 +89,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(rifle.weaponUse->ergonomics, 100U);
     EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
     EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
-    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
-    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 750.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 700.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 950.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->logicalBallisticSpeed, 7200.0F);
     EXPECT_TRUE(itemCanEquipInSlot(
         rifle, EquipmentSlotKind::PrimaryWeapon));
     EXPECT_TRUE(itemCanEquipInSlot(
@@ -105,6 +106,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(pistol.weaponUse->recoilControl, 55U);
     EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
     EXPECT_EQ(pistol.weaponUse->ergonomics, 100U);
+    EXPECT_FLOAT_EQ(pistol.weaponUse->effectiveRange, 400.0F);
+    EXPECT_FLOAT_EQ(pistol.weaponUse->maximumRange, 620.0F);
+    EXPECT_FLOAT_EQ(pistol.weaponUse->logicalBallisticSpeed, 4200.0F);
     EXPECT_LT(
         deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,
         deriveWeaponHandling(*rifle.weaponUse).switchDurationSeconds);
@@ -322,6 +326,17 @@ TEST(ContentRegistryTest, RejectsWeaponUseOutsideConfiguredBounds)
         publishedJsonCopy(),
         "\"accuracy\": 58",
         "\"accuracy\": 101");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsNonPositiveLogicalBallisticSpeed)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"logical_ballistic_speed\": 4200.0",
+        "\"logical_ballistic_speed\": 0.0");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

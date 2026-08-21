@@ -55,8 +55,10 @@ Enemy::Enemy(
     Vec2 position,
     Vec2 size,
     Vec2 velocity,
-    int maxHealth)
-    : position_(position),
+    int maxHealth,
+    CombatTargetId combatTargetId)
+    : combatTargetId_{combatTargetId},
+      position_(position),
       size_(size),
       velocity_(velocity),
       facingDirection_{
@@ -70,6 +72,11 @@ Enemy::Enemy(
               ? EnemyMovementState::Normal
               : EnemyMovementState::Stationary}
 {
+}
+
+CombatTargetId Enemy::combatTargetId() const noexcept
+{
+  return combatTargetId_;
 }
 
 Vec2 Enemy::position() const

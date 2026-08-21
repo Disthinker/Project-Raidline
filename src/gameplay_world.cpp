@@ -14,8 +14,8 @@
 
 namespace
 {
-    constexpr float kLegacyShotSpeed{1200.0f};
     constexpr float kLegacyShotExtent{8.0f};
+    constexpr float kPi{3.14159265358979323846F};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
@@ -168,6 +168,51 @@ namespace
 
         return deltaX * deltaX +
                deltaY * deltaY;
+    }
+
+    std::optional<ShotAimIntent> aimIntentAt(
+        Vec2 aimPoint,
+        Vec2 shotOrigin,
+        const std::vector<Enemy> &enemies) noexcept
+    {
+        const Enemy *selected{};
+        std::optional<HitRegion> selectedRegion;
+        float selectedDistanceSquared =
+            std::numeric_limits<float>::infinity();
+
+        for (const Enemy &enemy : enemies)
+        {
+            if (enemy.isDead() ||
+                enemy.combatTargetId() == kInvalidCombatTargetId)
+            {
+                continue;
+            }
+            const std::optional<HitRegion> region =
+                hitRegionAtPoint(enemy.bounds(), aimPoint);
+            if (!region.has_value())
+            {
+                continue;
+            }
+            const float candidateDistance = distanceSquared(
+                shotOrigin,
+                enemyCenter(enemy));
+            if (candidateDistance >= selectedDistanceSquared)
+            {
+                continue;
+            }
+            selected = &enemy;
+            selectedRegion = region;
+            selectedDistanceSquared = candidateDistance;
+        }
+
+        if (selected == nullptr || !selectedRegion.has_value())
+        {
+            return std::nullopt;
+        }
+        return ShotAimIntent{
+            selected->combatTargetId(),
+            *selectedRegion,
+            false};
     }
 }
 
@@ -364,6 +409,14 @@ GameplayWorld::GameplayWorld(
             "GameplayWorld does not have enough ItemInstanceId values"};
     }
 
+    if (initialEnemies.size() >
+        static_cast<std::size_t>(
+            std::numeric_limits<CombatTargetId>::max() -
+            nextCombatTargetId_))
+    {
+        throw std::overflow_error{
+            "GameplayWorld does not have enough CombatTargetId values"};
+    }
     enemies_.reserve(initialEnemies.size());
     for (const EnemySpawn &spawn : initialEnemies)
     {
@@ -383,7 +436,8 @@ GameplayWorld::GameplayWorld(
             spawn.position,
             spawn.size,
             Vec2{},
-            spawn.maxHealth);
+            spawn.maxHealth,
+            nextCombatTargetId_++);
     }
 
     groundItems_.reserve(
@@ -542,6 +596,22 @@ void GameplayWorld::update(
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
     enemiesAlertedLastUpdate_ = 0U;
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        for (TracerPresentationSegment &tracer : tracerPresentations_)
+        {
+            tracer.ageSeconds += deltaTime;
+            tracer.remainingSeconds = std::max(
+                0.0F,
+                tracer.remainingSeconds - deltaTime);
+        }
+        std::erase_if(
+            tracerPresentations_,
+            [](const TracerPresentationSegment &tracer)
+            {
+                return tracer.remainingSeconds <= 0.0F;
+            });
+    }
     if (!raidSession_.isActive())
     {
         return;
@@ -584,7 +654,8 @@ void GameplayWorld::update(
         worldSize_,
         input.aimDownSights,
         deltaTime,
-        input.aimMotionDelta);
+        input.aimMotionDelta,
+        AimControlMode::Direct);
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
@@ -767,10 +838,17 @@ void GameplayWorld::update(
             weaponAim_.actualDirection(),
             deltaTime,
             WeaponFireContext{
-                player_.isMoving(),
-                weaponAim_.aimDownSightsProgress(),
-                weaponAim_.rangeSpreadFactor(),
-                input.forceMaximumWeaponSpread});
+                .moving = player_.isMoving(),
+                .aimDownSightsProgress =
+                    weaponAim_.aimDownSightsProgress(),
+                .distanceSpreadFactor =
+                    weaponAim_.distanceSpreadFactor(),
+                .overEffectiveRangeFactor =
+                    weaponAim_.overEffectiveRangeFactor(),
+                .reticleControlSpeed =
+                    weaponAim_.reticleControlSpeed(),
+                .forceMaximumSpread =
+                    input.forceMaximumWeaponSpread});
 
     if (shot.has_value())
     {
@@ -797,14 +875,18 @@ void GameplayWorld::update(
                 nextShotId_,
                 shotOrigin,
                 shot->direction,
-                kLegacyShotSpeed,
+                weaponLogicalBallisticSpeed_,
                 kLegacyShotExtent,
                 std::max(
                     1,
                     static_cast<int>(std::lround(
                         static_cast<float>(weaponBaseDamage_) *
                         weaponAim_.damageMultiplier()))),
-                maximumDistance});
+                maximumDistance,
+                aimIntentAt(
+                    weaponAim_.actualWorldPosition(),
+                    shotOrigin,
+                    enemies_)});
 
         if (!resolution.accepted())
         {
@@ -815,7 +897,8 @@ void GameplayWorld::update(
             resolution,
             weaponTracerStyle_,
             weaponTracerLength_,
-            weaponTracerOpacity_);
+            weaponTracerOpacity_,
+            weaponTracerLifetimeSeconds_);
         weaponAim_.applyShotRecoil(shotOrigin);
         ++nextShotId_;
     }
@@ -825,19 +908,98 @@ void GameplayWorld::update(
     for (LogicalBallisticFlight &flight : logicalBallistics_)
     {
         const LogicalBallisticAdvance advance = flight.advance(deltaTime);
+        const float travelled = std::hypot(
+            advance.end.x - advance.start.x,
+            advance.end.y - advance.start.y);
+        if (flight.tracerStyle() != TracerStyle::None &&
+            travelled > 0.0001F)
+        {
+            // A tracer may span several completed simulation steps, but it
+            // never extends ahead of the distance already travelled.
+            const float visibleLength = std::min(
+                flight.tracerLength(),
+                flight.distanceTravelled());
+            const Vec2 visibleStart{
+                advance.end.x - flight.direction().x * visibleLength,
+                advance.end.y - flight.direction().y * visibleLength};
+            TracerPresentationSegment segment{
+                flight.shotId(),
+                visibleStart,
+                advance.end,
+                flight.direction(),
+                flight.tracerStyle(),
+                flight.tracerOpacity(),
+                flight.tracerLifetimeSeconds(),
+                flight.tracerLifetimeSeconds(),
+                0.0F};
+            const auto existing = std::find_if(
+                tracerPresentations_.begin(),
+                tracerPresentations_.end(),
+                [&](const TracerPresentationSegment &candidate)
+                {
+                    return candidate.shotId == flight.shotId();
+                });
+            if (existing == tracerPresentations_.end())
+            {
+                tracerPresentations_.push_back(segment);
+            }
+            else
+            {
+                segment.ageSeconds = existing->ageSeconds;
+                *existing = segment;
+            }
+        }
         collisionCandidates.push_back(
             ShotCollisionCandidate{
                 flight.shotId(),
                 advance.start,
                 advance.end,
                 flight.collisionExtent(),
-                flight.damage()});
+                flight.damage(),
+                flight.aimIntent()});
     }
 
     HitResolutionResult hitResult = resolveShotHits(
         collisionCandidates,
         enemies_,
         ballisticBlockers_);
+
+    // A large simulation step can resolve a collision before the requested
+    // advance endpoint. Clamp presentation to that authoritative hit so the
+    // longer streak never appears past an obstacle or enemy.
+    for (const HitResult &hit : hitResult.hits)
+    {
+        const auto flight = std::find_if(
+            logicalBallistics_.begin(),
+            logicalBallistics_.end(),
+            [&](const LogicalBallisticFlight &candidate)
+            {
+                return candidate.shotId() == hit.shotId;
+            });
+        const auto tracer = std::find_if(
+            tracerPresentations_.begin(),
+            tracerPresentations_.end(),
+            [&](const TracerPresentationSegment &candidate)
+            {
+                return candidate.shotId == hit.shotId;
+            });
+        if (flight == logicalBallistics_.end() ||
+            tracer == tracerPresentations_.end())
+        {
+            continue;
+        }
+
+        const float hitDistance = std::hypot(
+            hit.position.x - flight->origin().x,
+            hit.position.y - flight->origin().y);
+        const float visibleLength = std::min(
+            flight->tracerLength(),
+            hitDistance);
+        tracer->end = hit.position;
+        tracer->start = Vec2{
+            hit.position.x - flight->direction().x * visibleLength,
+            hit.position.y - flight->direction().y * visibleLength};
+    }
 
     std::erase_if(
         logicalBallistics_,
@@ -913,21 +1075,30 @@ std::vector<ShotPresentationSnapshot>
 GameplayWorld::shotPresentationSnapshots() const
 {
     std::vector<ShotPresentationSnapshot> snapshots;
-    snapshots.reserve(logicalBallistics_.size());
+    snapshots.reserve(tracerPresentations_.size());
 
-    for (const LogicalBallisticFlight &flight : logicalBallistics_)
+    for (const TracerPresentationSegment &tracer : tracerPresentations_)
     {
+        const float lifetimeRatio = tracer.lifetimeSeconds > 0.0F
+            ? std::clamp(
+                  tracer.remainingSeconds / tracer.lifetimeSeconds,
+                  0.0F,
+                  1.0F)
+            : 0.0F;
+        constexpr float kTau{6.28318530718F};
+        constexpr float kFlickerFrequencyHz{24.0F};
+        const float flicker = 0.55F + 0.45F *
+            (0.5F + 0.5F * std::sin(
+                tracer.ageSeconds * kTau * kFlickerFrequencyHz +
+                static_cast<float>(tracer.shotId % 17U) * 1.618F));
         snapshots.push_back(
             ShotPresentationSnapshot{
-                flight.shotId(),
-                flight.origin(),
-                flight.currentPosition(),
-                flight.direction(),
-                flight.impactPosition(),
-                flight.distanceTravelled(),
-                flight.tracerStyle(),
-                flight.tracerLength(),
-                flight.tracerOpacity()});
+                tracer.shotId,
+                tracer.start,
+                tracer.end,
+                tracer.direction,
+                tracer.style,
+                tracer.opacity * std::sqrt(lifetimeRatio) * flicker});
     }
 
     return snapshots;
@@ -1014,6 +1185,35 @@ float GameplayWorld::weaponVisualRecoilPixels() const noexcept
             0.02F);
 }
 
+WeaponAccuracyProjection
+GameplayWorld::weaponAccuracyProjection() const noexcept
+{
+    const float distance = weaponAim_.aimDistance();
+    const float spread = weaponFire_.spreadDegrees();
+    const float radians = spread * kPi / 180.0F;
+    const float radius = std::isfinite(radians)
+        ? std::tan(radians) * distance
+        : 0.0F;
+    // worldRadius is the authoritative geometric shot cone. reticleRadius is
+    // a monotonic, readable projection of the same spread state, so close-
+    // range movement/flick/fire bloom remains visible without making bullets
+    // artificially inaccurate. The SDL client consumes this projection and
+    // never invents spread from presentation-only state.
+    const float presentationFraction =
+        weaponFire_.spreadPresentationFraction();
+    const float readableRadius = 10.0F +
+        70.0F * std::sqrt(presentationFraction);
+    return WeaponAccuracyProjection{
+        weaponAim_.actualWorldPosition(),
+        distance,
+        spread,
+        weaponFire_.contextualMinimumSpreadDegrees(),
+        weaponFire_.contextualMaximumSpreadDegrees(),
+        std::max(0.0F, radius),
+        std::max(std::max(0.0F, radius), readableRadius),
+        weaponAim_.beyondEffectiveRange()};
+}
+
 Vec2 GameplayWorld::weaponAimWorldPosition() const noexcept
 {
     return weaponAim_.actualWorldPosition();
@@ -1027,6 +1227,11 @@ Vec2 GameplayWorld::weaponAimDirection() const noexcept
 float GameplayWorld::weaponAimDownSightsProgress() const noexcept
 {
     return weaponAim_.aimDownSightsProgress();
+}
+
+bool GameplayWorld::weaponAimBeyondEffectiveRange() const noexcept
+{
+    return weaponAim_.beyondEffectiveRange();
 }
 
 bool GameplayWorld::weaponAimBeyondMaximumRange() const noexcept
@@ -1072,7 +1277,12 @@ void GameplayWorld::configureWeaponFire(
         handling.spreadRecoveryDegreesPerSecond,
         handling.aimDownSightsAccuracyMultiplier,
         handling.aimDownSightsStabilityMultiplier,
-        handling.movingSpreadFraction};
+        handling.movingSpreadFraction,
+        handling.reticleMotionSpreadDegreesPerSecond,
+        120.0F,
+        1800.0F,
+        handling.nearDistanceSpreadScale,
+        1.50F};
     const WeaponAimConfig aimConfig{
         handling.maximumReticleSpeed,
         handling.reticleControlAcceleration,
@@ -1095,9 +1305,11 @@ void GameplayWorld::configureWeaponFire(
     }
     weaponBaseDamage_ = definition.baseDamage;
     weaponMaximumRange_ = definition.maximumRange;
+    weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;
     weaponTracerStyle_ = TracerStyle::Weak;
     weaponTracerLength_ = handling.weakTracerLength;
     weaponTracerOpacity_ = handling.weakTracerOpacity;
+    weaponTracerLifetimeSeconds_ = handling.weakTracerLifetimeSeconds;
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept

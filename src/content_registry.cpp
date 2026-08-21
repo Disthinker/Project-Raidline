@@ -389,7 +389,8 @@ namespace
             requiredWeaponAttribute(*found, "accuracy"),
             requiredPositiveInt(*found, "base_damage"),
             requiredFiniteFloat(*found, "effective_range", true),
-            requiredFiniteFloat(*found, "maximum_range", true)};
+            requiredFiniteFloat(*found, "maximum_range", true),
+            requiredFiniteFloat(*found, "logical_ballistic_speed", true)};
     }
 
     std::optional<ArmorProtectionDefinition> parseArmorProtection(
@@ -906,6 +907,8 @@ ContentRegistry ContentRegistry::fromJson(
                     use.recoilControl > 100U || use.stability > 100U ||
                     use.handlingSpeed > 100U || use.ergonomics > 100U ||
                     use.accuracy > 100U ||
+                    !std::isfinite(use.logicalBallisticSpeed) ||
+                    use.logicalBallisticSpeed <= 0.0F ||
                     use.effectiveRange > use.maximumRange)
                 {
                     fail("weapon use capability is invalid");

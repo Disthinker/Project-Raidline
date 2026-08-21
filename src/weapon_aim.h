@@ -6,6 +6,12 @@
 #include "stable_random.h"
 #include "vec2.h"
 
+enum class AimControlMode
+{
+    Direct,
+    HighMagnificationInertial,
+};
+
 struct WeaponAimConfig
 {
     float maximumReticleSpeed{5000.0F};
@@ -20,11 +26,11 @@ struct WeaponAimConfig
     std::uint64_t recoilSeed{0x7265636f696cULL};
 };
 
-// SDL-independent transient reticle kinematics. Pointer input supplies a target
-// world position; shots and App projections consume the independently moving
-// actual position. Control and recoil velocities remain separate so firing can
+// SDL-independent transient reticle state. Hip/low-power aim consumes pointer
+// motion directly; a future high-magnification consumer can select the bounded
+// inertial mode. Control and recoil velocities remain separate so firing can
 // refresh a bounded outward-then-bending recoil stroke without stacking an
-// unbounded impulse.
+// unbounded impulse or automatically returning to an old pointer position.
 class WeaponAimState
 {
 public:
@@ -37,7 +43,8 @@ public:
         Vec2 worldSize,
         bool aimDownSights,
         float deltaTime,
-        std::optional<Vec2> inputMotionDelta = std::nullopt) noexcept;
+        std::optional<Vec2> inputMotionDelta = std::nullopt,
+        AimControlMode controlMode = AimControlMode::Direct) noexcept;
 
     void applyShotRecoil(Vec2 shootingOrigin) noexcept;
     void reconfigure(WeaponAimConfig config);
@@ -49,9 +56,12 @@ public:
     [[nodiscard]] Vec2 recoilVelocity() const noexcept;
     [[nodiscard]] Vec2 recoilPresentationVelocity() const noexcept;
     [[nodiscard]] float aimDistance() const noexcept;
+    [[nodiscard]] float reticleControlSpeed() const noexcept;
     [[nodiscard]] float aimDownSightsProgress() const noexcept;
+    [[nodiscard]] bool beyondEffectiveRange() const noexcept;
     [[nodiscard]] bool beyondMaximumRange() const noexcept;
-    [[nodiscard]] float rangeSpreadFactor() const noexcept;
+    [[nodiscard]] float distanceSpreadFactor() const noexcept;
+    [[nodiscard]] float overEffectiveRangeFactor() const noexcept;
     [[nodiscard]] float damageMultiplier() const noexcept;
     [[nodiscard]] bool recoilActive() const noexcept;
 
@@ -68,6 +78,7 @@ private:
     Vec2 lastDirection_{1.0F, 0.0F};
     float aimDownSightsProgress_{};
     float recoilBendRemainingSeconds_{};
+    AimControlMode controlMode_{AimControlMode::Direct};
     bool initialized_{};
     Pcg32 recoilRandom_;
 

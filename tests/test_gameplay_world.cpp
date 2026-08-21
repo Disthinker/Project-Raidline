@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -394,33 +395,160 @@ TEST(GameplayWorldTest, FireCreatesLogicalBallistic)
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const LogicalBallisticFlight &flight = world.logicalBallistics()[0];
 
-    EXPECT_FLOAT_EQ(flight.currentPosition().x, 656.0f);
-    EXPECT_FLOAT_EQ(flight.currentPosition().y, 356.0f);
+    const float directionLength = std::hypot(
+        flight.direction().x,
+        flight.direction().y);
+    EXPECT_NEAR(directionLength, 1.0F, 0.000001F);
+    EXPECT_LT(flight.direction().y, -0.99F);
+    EXPECT_NEAR(
+        flight.currentPosition().x,
+        656.0F + flight.direction().x * 20.0F,
+        0.0001F);
+    EXPECT_NEAR(
+        flight.currentPosition().y,
+        376.0F + flight.direction().y * 20.0F,
+        0.0001F);
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0f);
-    EXPECT_NEAR(flight.direction().x, 0.0F, 0.000001F);
-    EXPECT_FLOAT_EQ(flight.direction().y, -1.0F);
-    EXPECT_FLOAT_EQ(flight.speed(), 1200.0F);
+    EXPECT_FLOAT_EQ(flight.speed(), 6000.0F);
     EXPECT_EQ(flight.damage(), 1);
+}
+
+TEST(GameplayWorldTest,
+     FireFreezesReticleTargetAndRegionInsteadOfInfiniteRayIntent)
+{
+    const EnemySpawn target{
+        Vec2{800.0F, 300.0F},
+        Vec2{50.0F, 100.0F},
+        20};
+    GameplayWorld aimedWorld{{target}, 3};
+    GameplayInput aimed = makeFireInput();
+    aimed.aimWorldPosition = Vec2{825.0F, 310.0F};
+    aimedWorld.update(aimed, 0.0F);
+
+    ASSERT_EQ(aimedWorld.logicalBallistics().size(), 1U);
+    ASSERT_TRUE(aimedWorld.logicalBallistics().front().aimIntent());
+    EXPECT_EQ(
+        aimedWorld.logicalBallistics().front().aimIntent()->targetId,
+        aimedWorld.enemies().front().combatTargetId());
+    EXPECT_EQ(
+        aimedWorld.logicalBallistics().front().aimIntent()->region,
+        HitRegion::Head);
+
+    GameplayWorld beforeWorld{{target}, 3};
+    GameplayInput before = makeFireInput();
+    before.aimWorldPosition = Vec2{760.0F, 310.0F};
+    beforeWorld.update(before, 0.0F);
+    ASSERT_EQ(beforeWorld.logicalBallistics().size(), 1U);
+    EXPECT_FALSE(beforeWorld.logicalBallistics().front().aimIntent());
+
+    GameplayWorld behindWorld{{target}, 3};
+    GameplayInput behind = makeFireInput();
+    behind.aimWorldPosition = Vec2{880.0F, 310.0F};
+    behindWorld.update(behind, 0.0F);
+    ASSERT_EQ(behindWorld.logicalBallistics().size(), 1U);
+    EXPECT_FALSE(behindWorld.logicalBallistics().front().aimIntent());
+}
+
+TEST(GameplayWorldTest, RaidEnemiesReceiveUniqueStableCombatTargetIds)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{700.0F, 300.0F}, Vec2{40.0F, 80.0F}, 3},
+            EnemySpawn{Vec2{800.0F, 300.0F}, Vec2{40.0F, 80.0F}, 3}},
+        3};
+
+    ASSERT_EQ(world.enemies().size(), 2U);
+    EXPECT_NE(
+        world.enemies()[0].combatTargetId(),
+        kInvalidCombatTargetId);
+    EXPECT_NE(
+        world.enemies()[1].combatTargetId(),
+        kInvalidCombatTargetId);
+    EXPECT_NE(
+        world.enemies()[0].combatTargetId(),
+        world.enemies()[1].combatTargetId());
 }
 
 TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
 {
     GameplayWorld world;
     world.update(makeFireInput(), 0.0F);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    const Vec2 frozenOrigin = world.logicalBallistics().front().origin();
+    const Vec2 frozenDirection = world.logicalBallistics().front().direction();
+    world.update(GameplayInput{}, 0.005F);
 
     const std::vector<ShotPresentationSnapshot> snapshots =
         world.shotPresentationSnapshots();
 
     ASSERT_EQ(snapshots.size(), 1U);
     EXPECT_NE(snapshots[0].shotId, kInvalidShotId);
-    EXPECT_FLOAT_EQ(snapshots[0].center.x, 656.0F);
-    EXPECT_FLOAT_EQ(snapshots[0].center.y, 356.0F);
-    EXPECT_NEAR(snapshots[0].direction.x, 0.0F, 0.000001F);
-    EXPECT_FLOAT_EQ(snapshots[0].direction.y, -1.0F);
-    EXPECT_FLOAT_EQ(snapshots[0].origin.x, snapshots[0].center.x);
-    EXPECT_FLOAT_EQ(snapshots[0].origin.y, snapshots[0].center.y);
-    EXPECT_FLOAT_EQ(snapshots[0].impactPosition.y, 0.0F);
-    EXPECT_FLOAT_EQ(snapshots[0].distanceTravelled, 0.0F);
+    EXPECT_NEAR(snapshots[0].start.x, frozenOrigin.x, 0.0001F);
+    EXPECT_NEAR(snapshots[0].start.y, frozenOrigin.y, 0.0001F);
+    EXPECT_FLOAT_EQ(snapshots[0].direction.x, frozenDirection.x);
+    EXPECT_FLOAT_EQ(snapshots[0].direction.y, frozenDirection.y);
+    const Vec2 travelled{
+        snapshots[0].end.x - snapshots[0].start.x,
+        snapshots[0].end.y - snapshots[0].start.y};
+    EXPECT_GT(
+        travelled.x * frozenDirection.x +
+            travelled.y * frozenDirection.y,
+        0.0F);
+    EXPECT_LE(
+        std::hypot(
+            snapshots[0].end.x - snapshots[0].start.x,
+            snapshots[0].end.y - snapshots[0].start.y),
+        48.0F);
+}
+
+TEST(GameplayWorldTest, SameFrameImpactKeepsShortLivedTracerProjection)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    world.update(makeFireInput(), 0.0F);
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+
+    world.update(GameplayInput{}, 1.0F);
+
+    EXPECT_TRUE(world.logicalBallistics().empty());
+    ASSERT_EQ(world.hitResultsLastUpdate().size(), 1U);
+    EXPECT_EQ(
+        world.hitResultsLastUpdate().front().targetKind,
+        HitTargetKind::Ground);
+    ASSERT_EQ(world.shotPresentationSnapshots().size(), 1U);
+
+    world.update(GameplayInput{}, 0.060F);
+    EXPECT_TRUE(world.shotPresentationSnapshots().empty());
+}
+
+TEST(GameplayWorldTest, ConfiguredTracerSpansTravelledStepsAndFlickers)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{1200.0F, 376.0F};
+    world.update(fire, 0.0F);
+    world.update(GameplayInput{}, 0.030F);
+
+    const std::vector<ShotPresentationSnapshot> first =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(first.size(), 1U);
+    EXPECT_NEAR(
+        std::hypot(
+            first.front().end.x - first.front().start.x,
+            first.front().end.y - first.front().start.y),
+        30.0F,
+        0.001F);
+
+    world.update(GameplayInput{}, 0.010F);
+    const std::vector<ShotPresentationSnapshot> second =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(second.size(), 1U);
+    EXPECT_NE(first.front().tracerOpacity, second.front().tracerOpacity);
+    EXPECT_GT(second.front().tracerOpacity, 0.0F);
+    EXPECT_LE(second.front().tracerOpacity, 1.0F);
 }
 
 TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
@@ -438,7 +566,14 @@ TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
 
 TEST(GameplayWorldTest, ConfiguredMaximumRangeReducesFrozenShotDamage)
 {
-    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{2400.0F, 1400.0F},
+        Vec2{1200.0F, 700.0F},
+        ContentRect{Vec2{2200.0F, 1200.0F}, Vec2{100.0F, 100.0F}},
+        {},
+        100,
+        100,
+        false}};
     const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
     ASSERT_TRUE(rifle.weaponUse.has_value());
     world.configureWeaponFire(*rifle.weaponUse);
@@ -450,6 +585,9 @@ TEST(GameplayWorldTest, ConfiguredMaximumRangeReducesFrozenShotDamage)
     ASSERT_EQ(world.logicalBallistics().size(), 1U);
     EXPECT_TRUE(world.weaponAimBeyondMaximumRange());
     EXPECT_EQ(world.logicalBallistics().front().damage(), 1);
+    EXPECT_FLOAT_EQ(
+        world.logicalBallistics().front().speed(),
+        rifle.weaponUse->logicalBallisticSpeed);
 }
 
 TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
@@ -463,7 +601,7 @@ TEST(GameplayWorldTest, ShotFreezesAimAndPublishesWorldImpactOnArrival)
     const Vec2 frozenImpact =
         world.logicalBallistics()[0].impactPosition();
     EXPECT_FLOAT_EQ(frozenImpact.x, 1280.0F);
-    EXPECT_FLOAT_EQ(frozenImpact.y, 376.0F);
+    EXPECT_TRUE(std::isfinite(frozenImpact.y));
 
     GameplayInput retarget{};
     retarget.aimWorldPosition = Vec2{200.0F, 100.0F};
@@ -514,7 +652,7 @@ TEST(GameplayWorldTest, LogicalBallisticMovesAfterSpawn)
         world.logicalBallistics()[0].currentPosition().y;
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     EXPECT_LT(
@@ -642,7 +780,7 @@ TEST(GameplayWorldTest, FireAfterFacingRightMovesBallisticRight)
         world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const Vec2 finalPosition =
@@ -666,7 +804,7 @@ TEST(GameplayWorldTest, FireAfterFacingLeftMovesBallisticLeft)
         world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const Vec2 finalPosition =
@@ -690,7 +828,7 @@ TEST(GameplayWorldTest, FireAfterFacingDownMovesBallisticDown)
         world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const Vec2 finalPosition =
@@ -717,7 +855,7 @@ TEST(GameplayWorldTest, FireWithoutMovementUsesPreviousFacingDirection)
         world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const Vec2 finalPosition =
@@ -743,13 +881,14 @@ TEST(GameplayWorldTest, PointerAimControlsFacingAndShotWithoutMovement)
 
     const Vec2 initialPosition =
         world.logicalBallistics()[0].currentPosition();
+    const Vec2 direction = world.logicalBallistics()[0].direction();
     world.update(GameplayInput{}, 0.01F);
+    const Vec2 travelled{
+        world.logicalBallistics()[0].currentPosition().x - initialPosition.x,
+        world.logicalBallistics()[0].currentPosition().y - initialPosition.y};
     EXPECT_GT(
-        world.logicalBallistics()[0].currentPosition().x,
-        initialPosition.x);
-    EXPECT_FLOAT_EQ(
-        world.logicalBallistics()[0].currentPosition().y,
-        initialPosition.y);
+        travelled.x * direction.x + travelled.y * direction.y,
+        0.0F);
 }
 
 TEST(GameplayWorldTest, PointerAimDoesNotChangeMovementDirection)
@@ -790,16 +929,47 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
     world.update(makeFireInput(), 0.0F);
 
     const float recoil = world.weaponVisualRecoilPixels();
+    const float firedSpread = world.weaponSpreadDegrees();
     EXPECT_GT(world.weaponSpreadDegrees(), 0.0F);
     EXPECT_GT(recoil, 0.0F);
 
     world.update(GameplayInput{}, 1.0F);
-    EXPECT_NEAR(
+    EXPECT_LE(world.weaponSpreadDegrees(), firedSpread);
+    EXPECT_GE(
         world.weaponSpreadDegrees(),
-        deriveWeaponHandling(*rifle.weaponUse).minimumSpreadDegrees,
-        0.0001F);
+        world.weaponAccuracyProjection().minimumSpreadDegrees);
+    EXPECT_LE(
+        world.weaponSpreadDegrees(),
+        world.weaponAccuracyProjection().maximumSpreadDegrees);
     EXPECT_LT(world.weaponVisualRecoilPixels(), recoil);
     EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
+}
+
+TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput rest{};
+    rest.aimWorldPosition = Vec2{720.0F, 376.0F};
+    world.update(rest, 0.0F);
+    const WeaponAccuracyProjection resting =
+        world.weaponAccuracyProjection();
+    EXPECT_GE(resting.reticleRadius, resting.worldRadius);
+    EXPECT_GE(resting.reticleRadius, 10.0F);
+    const WeaponHandlingParameters handling = deriveWeaponHandling(
+        *rifle.weaponUse);
+    const float expectedReadableRadius = 10.0F + 70.0F * std::sqrt(
+        std::clamp(
+            resting.currentSpreadDegrees / handling.maximumSpreadDegrees,
+            0.0F,
+            1.0F));
+    EXPECT_NEAR(
+        resting.reticleRadius,
+        std::max(resting.worldRadius, expectedReadableRadius),
+        0.001F);
 }
 
 TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)
@@ -845,7 +1015,7 @@ TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesBallisticDiagonally)
         world.logicalBallistics()[0].currentPosition();
 
     GameplayInput noInput{};
-    world.update(noInput, 0.1f);
+    world.update(noInput, 0.02f);
 
     ASSERT_EQ(world.logicalBallistics().size(), 1u);
     const Vec2 finalPosition =
@@ -891,7 +1061,7 @@ TEST(GameplayWorldTest, HoldingFireDoesNotCreateBallisticBeforeCooldownEnds)
     input.firePressed = true;
     world.update(input, 0.1f);
 
-    EXPECT_EQ(world.logicalBallistics().size(), 1u);
+    EXPECT_FALSE(world.shotFiredLastUpdate());
 }
 
 // 按住 Fire 且冷却结束后，可以再次生成逻辑弹道。
@@ -907,7 +1077,7 @@ TEST(GameplayWorldTest, HoldingFireCreatesAnotherBallisticAfterCooldownEnds)
     input.firePressed = true;
     world.update(input, 0.12f);
 
-    EXPECT_EQ(world.logicalBallistics().size(), 2u);
+    EXPECT_TRUE(world.shotFiredLastUpdate());
 }
 
 // 冷却结束后，如果没有按 Fire，不会自动生成逻辑弹道。
@@ -922,7 +1092,7 @@ TEST(GameplayWorldTest, NoFireDoesNotCreateBallisticAfterCooldownEnds)
     GameplayInput noInput{};
     world.update(noInput, 0.12f);
 
-    EXPECT_EQ(world.logicalBallistics().size(), 1u);
+    EXPECT_FALSE(world.shotFiredLastUpdate());
 }
 
 namespace
@@ -2349,6 +2519,15 @@ TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
         world.hitResultsLastUpdate().front().targetKind,
         HitTargetKind::Obstacle);
     EXPECT_EQ(world.hitResultsLastUpdate().front().damageApplied, 0);
+    const std::vector<ShotPresentationSnapshot> tracer =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(tracer.size(), 1U);
+    EXPECT_FLOAT_EQ(
+        tracer.front().end.x,
+        world.hitResultsLastUpdate().front().position.x);
+    EXPECT_FLOAT_EQ(
+        tracer.front().end.y,
+        world.hitResultsLastUpdate().front().position.y);
 }
 
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)

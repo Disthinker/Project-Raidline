@@ -336,7 +336,8 @@ TEST(ItemDefinitionTest, ClockwiseOrientationCyclesBackToZero)
 TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
 {
     WeaponUseDefinition baseline{
-        false, 0.20F, 50U, 50U, 50U, 50U, 50U, 4, 400.0F, 700.0F};
+        false, 0.20F, 50U, 50U, 50U, 50U, 50U, 4,
+        400.0F, 700.0F, 6000.0F};
 
     WeaponUseDefinition improved = baseline;
     improved.recoilControl = 90U;
@@ -365,7 +366,15 @@ TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
     EXPECT_LT(better.minimumSpreadDegrees, base.minimumSpreadDegrees);
     EXPECT_FLOAT_EQ(base.maximumReticleSpeed, 5000.0F);
     EXPECT_FLOAT_EQ(better.maximumReticleSpeed, 5000.0F);
-    EXPECT_FLOAT_EQ(
-        better.spreadPerShotDegrees,
-        base.spreadPerShotDegrees);
+    EXPECT_LT(better.spreadPerShotDegrees, base.spreadPerShotDegrees);
+    EXPECT_LT(
+        better.reticleMotionSpreadDegreesPerSecond,
+        base.reticleMotionSpreadDegreesPerSecond);
+    EXPECT_GE(better.reticleMotionSpreadDegreesPerSecond, 18.0F);
+    EXPECT_FLOAT_EQ(base.movingSpreadFraction, 0.75F);
+    EXPECT_FLOAT_EQ(better.movingSpreadFraction, 0.75F);
+    EXPECT_FLOAT_EQ(better.nearDistanceSpreadScale, base.nearDistanceSpreadScale);
+    EXPECT_FLOAT_EQ(base.weakTracerLength, 30.0F);
+    EXPECT_FLOAT_EQ(base.weakTracerOpacity, 0.85F);
+    EXPECT_FLOAT_EQ(base.weakTracerLifetimeSeconds, 0.095F);
 }

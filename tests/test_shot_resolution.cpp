@@ -13,7 +13,9 @@ TEST(ShotResolutionTest, ValidCommandProducesNormalizedAcceptedResult)
             Vec2{3.0F, 4.0F},
             1200.0F,
             8.0F,
-            30});
+            30,
+            2048.0F,
+            ShotAimIntent{91, HitRegion::Head, false}});
 
     ASSERT_TRUE(result.accepted());
     EXPECT_EQ(result.status, ShotResolutionStatus::Accepted);
@@ -29,6 +31,9 @@ TEST(ShotResolutionTest, ValidCommandProducesNormalizedAcceptedResult)
     EXPECT_FLOAT_EQ(result.maximumDistance, 2048.0F);
     EXPECT_FLOAT_EQ(result.impactPosition.x, 1238.8F);
     EXPECT_FLOAT_EQ(result.impactPosition.y, 1658.4F);
+    ASSERT_TRUE(result.aimIntent.has_value());
+    EXPECT_EQ(result.aimIntent->targetId, 91U);
+    EXPECT_EQ(result.aimIntent->region, HitRegion::Head);
 }
 
 TEST(ShotResolutionTest, InvalidIdIsRejectedWithoutAcceptedPayload)
@@ -115,6 +120,20 @@ TEST(ShotResolutionTest, InvalidPhysicalInputsAreRejectedIndependently)
     EXPECT_EQ(
         resolveShotCommand(invalidDistance).status,
         ShotResolutionStatus::RejectedInvalidMaximumDistance);
+
+    ShotCommand invalidAimIntent = valid;
+    invalidAimIntent.aimIntent = ShotAimIntent{};
+    EXPECT_EQ(
+        resolveShotCommand(invalidAimIntent).status,
+        ShotResolutionStatus::RejectedInvalidAimIntent);
+
+    invalidAimIntent.aimIntent = ShotAimIntent{
+        7,
+        static_cast<HitRegion>(255),
+        false};
+    EXPECT_EQ(
+        resolveShotCommand(invalidAimIntent).status,
+        ShotResolutionStatus::RejectedInvalidAimIntent);
 }
 
 TEST(ShotResolutionTest, StatusNamesCoverPublishedStates)
@@ -131,6 +150,10 @@ TEST(ShotResolutionTest, StatusNamesCoverPublishedStates)
         shotResolutionStatusName(
             ShotResolutionStatus::RejectedInvalidMaximumDistance),
         "RejectedInvalidMaximumDistance");
+    EXPECT_STREQ(
+        shotResolutionStatusName(
+            ShotResolutionStatus::RejectedInvalidAimIntent),
+        "RejectedInvalidAimIntent");
     EXPECT_STREQ(
         shotResolutionStatusName(
             static_cast<ShotResolutionStatus>(255)),

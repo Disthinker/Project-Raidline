@@ -55,6 +55,12 @@ namespace
             current.y + difference.y / distance * maximumDelta};
     }
 
+    float smoothstep(float value) noexcept
+    {
+        const float clamped = std::clamp(value, 0.0F, 1.0F);
+        return clamped * clamped * (3.0F - 2.0F * clamped);
+    }
+
     void validateConfig(const WeaponAimConfig &config)
     {
         if (!finitePositive(config.maximumReticleSpeed) ||
@@ -95,7 +101,8 @@ void WeaponAimState::update(
     Vec2 worldSize,
     bool aimDownSights,
     float deltaTime,
-    std::optional<Vec2> inputMotionDelta) noexcept
+    std::optional<Vec2> inputMotionDelta,
+    AimControlMode controlMode) noexcept
 {
     if (!finite(targetWorldPosition) ||
         !finite(shootingOrigin) ||
@@ -122,40 +129,66 @@ void WeaponAimState::update(
                 currentWorldPosition_.x - shootingOrigin_.x,
                 currentWorldPosition_.y - shootingOrigin_.y},
             lastDirection_);
+        controlMode_ = controlMode;
         initialized_ = true;
     }
-    else if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
+    else
     {
+        if (controlMode != controlMode_ &&
+            controlMode == AimControlMode::Direct)
+        {
+            targetWorldPosition_ = currentWorldPosition_;
+            controlVelocity_ = Vec2{};
+        }
+        controlMode_ = controlMode;
+
+        Vec2 motion{};
+        if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
+        {
+            motion = *inputMotionDelta;
+            inputWorldPosition_ = clampedInputPosition;
+        }
+        else
+        {
+            motion = Vec2{
+                clampedInputPosition.x - inputWorldPosition_.x,
+                clampedInputPosition.y - inputWorldPosition_.y};
+            inputWorldPosition_ = clampedInputPosition;
+        }
+
         // Relative mouse input is consumed as motion, not as a bounded OS
         // cursor position. This keeps aiming continuous while the pointer is
         // captured at a window edge and avoids a dead zone when reversing.
         targetWorldPosition_.x = std::clamp(
-            targetWorldPosition_.x + inputMotionDelta->x,
+            targetWorldPosition_.x + motion.x,
             0.0F,
             worldSize_.x);
         targetWorldPosition_.y = std::clamp(
-            targetWorldPosition_.y + inputMotionDelta->y,
+            targetWorldPosition_.y + motion.y,
             0.0F,
             worldSize_.y);
-        inputWorldPosition_ = clampedInputPosition;
-    }
-    else
-    {
-        // Mouse motion moves the reticle destination by the same delta. It is
-        // deliberately not treated as a permanent absolute return point:
-        // recoil may displace the reticle, and recovering that displacement
-        // requires an opposing mouse movement from the player.
-        targetWorldPosition_.x = std::clamp(
-            targetWorldPosition_.x +
-                clampedInputPosition.x - inputWorldPosition_.x,
-            0.0F,
-            worldSize_.x);
-        targetWorldPosition_.y = std::clamp(
-            targetWorldPosition_.y +
-                clampedInputPosition.y - inputWorldPosition_.y,
-            0.0F,
-            worldSize_.y);
-        inputWorldPosition_ = clampedInputPosition;
+
+        if (controlMode_ == AimControlMode::Direct)
+        {
+            currentWorldPosition_.x = std::clamp(
+                currentWorldPosition_.x + motion.x,
+                0.0F,
+                worldSize_.x);
+            currentWorldPosition_.y = std::clamp(
+                currentWorldPosition_.y + motion.y,
+                0.0F,
+                worldSize_.y);
+            if (deltaTime > 0.0F)
+            {
+                controlVelocity_ = Vec2{
+                    motion.x / deltaTime,
+                    motion.y / deltaTime};
+            }
+            else
+            {
+                controlVelocity_ = Vec2{};
+            }
+        }
     }
 
     float remaining = deltaTime;
@@ -180,27 +213,30 @@ void WeaponAimState::update(
 
 void WeaponAimState::advanceStep(float deltaTime) noexcept
 {
-    const Vec2 toTarget{
-        targetWorldPosition_.x - currentWorldPosition_.x,
-        targetWorldPosition_.y - currentWorldPosition_.y};
-    const float distanceToTarget = length(toTarget);
-    Vec2 desiredControlVelocity{};
-    if (std::isfinite(distanceToTarget) && distanceToTarget > 0.0001F)
+    if (controlMode_ == AimControlMode::HighMagnificationInertial)
     {
-        const float arrivalSpeed = std::sqrt(
-            2.0F * config_.controlAcceleration * distanceToTarget);
-        const float desiredSpeed = std::min(
-            config_.maximumReticleSpeed,
-            arrivalSpeed);
-        desiredControlVelocity = Vec2{
-            toTarget.x / distanceToTarget * desiredSpeed,
-            toTarget.y / distanceToTarget * desiredSpeed};
-    }
+        const Vec2 toTarget{
+            targetWorldPosition_.x - currentWorldPosition_.x,
+            targetWorldPosition_.y - currentWorldPosition_.y};
+        const float distanceToTarget = length(toTarget);
+        Vec2 desiredControlVelocity{};
+        if (std::isfinite(distanceToTarget) && distanceToTarget > 0.0001F)
+        {
+            const float arrivalSpeed = std::sqrt(
+                2.0F * config_.controlAcceleration * distanceToTarget);
+            const float desiredSpeed = std::min(
+                config_.maximumReticleSpeed,
+                arrivalSpeed);
+            desiredControlVelocity = Vec2{
+                toTarget.x / distanceToTarget * desiredSpeed,
+                toTarget.y / distanceToTarget * desiredSpeed};
+        }
 
-    controlVelocity_ = moveTowards(
-        controlVelocity_,
-        desiredControlVelocity,
-        config_.controlAcceleration * deltaTime);
+        controlVelocity_ = moveTowards(
+            controlVelocity_,
+            desiredControlVelocity,
+            config_.controlAcceleration * deltaTime);
+    }
     const float recoilSpeed = length(recoilVelocity_);
     if (recoilSpeed > kVelocityEpsilon)
     {
@@ -258,10 +294,16 @@ void WeaponAimState::advanceStep(float deltaTime) noexcept
         0.0F,
         worldSize_.y);
 
+    const Vec2 controlDisplacement =
+        controlMode_ == AimControlMode::HighMagnificationInertial
+            ? Vec2{
+                  controlVelocity_.x * deltaTime,
+                  controlVelocity_.y * deltaTime}
+            : Vec2{};
     currentWorldPosition_.x +=
-        controlVelocity_.x * deltaTime + recoilDisplacement.x;
+        controlDisplacement.x + recoilDisplacement.x;
     currentWorldPosition_.y +=
-        controlVelocity_.y * deltaTime + recoilDisplacement.y;
+        controlDisplacement.y + recoilDisplacement.y;
     currentWorldPosition_.x = std::clamp(
         currentWorldPosition_.x, 0.0F, worldSize_.x);
     currentWorldPosition_.y = std::clamp(
@@ -362,6 +404,11 @@ float WeaponAimState::aimDistance() const noexcept
         currentWorldPosition_.y - shootingOrigin_.y});
 }
 
+float WeaponAimState::reticleControlSpeed() const noexcept
+{
+    return length(controlVelocity_);
+}
+
 float WeaponAimState::aimDownSightsProgress() const noexcept
 {
     return aimDownSightsProgress_;
@@ -372,7 +419,21 @@ bool WeaponAimState::beyondMaximumRange() const noexcept
     return aimDistance() > config_.maximumRange;
 }
 
-float WeaponAimState::rangeSpreadFactor() const noexcept
+bool WeaponAimState::beyondEffectiveRange() const noexcept
+{
+    return aimDistance() > config_.effectiveRange;
+}
+
+float WeaponAimState::distanceSpreadFactor() const noexcept
+{
+    if (config_.effectiveRange <= 0.0F)
+    {
+        return 1.0F;
+    }
+    return smoothstep(aimDistance() / config_.effectiveRange);
+}
+
+float WeaponAimState::overEffectiveRangeFactor() const noexcept
 {
     const float distance = aimDistance();
     if (distance <= config_.effectiveRange)
@@ -384,15 +445,13 @@ float WeaponAimState::rangeSpreadFactor() const noexcept
     {
         return 1.0F;
     }
-    return std::clamp(
-        (distance - config_.effectiveRange) / span,
-        0.0F,
-        1.0F);
+    return smoothstep(
+        (distance - config_.effectiveRange) / span);
 }
 
 float WeaponAimState::damageMultiplier() const noexcept
 {
-    return beyondMaximumRange() ? 0.25F : 1.0F;
+    return std::lerp(1.0F, 0.25F, overEffectiveRangeFactor());
 }
 
 bool WeaponAimState::recoilActive() const noexcept

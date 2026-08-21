@@ -56,6 +56,9 @@ public:
     bool returnToBase() noexcept;
 
     [[nodiscard]]
+    bool returnToMainMenu() noexcept;
+
+    [[nodiscard]]
     GameFlowState state() const noexcept;
 
     [[nodiscard]]

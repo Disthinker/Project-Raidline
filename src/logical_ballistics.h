@@ -18,8 +18,9 @@ public:
     explicit LogicalBallisticFlight(
         const ShotResolution &resolution,
         TracerStyle tracerStyle = TracerStyle::Weak,
-        float tracerLength = 34.0F,
-        float tracerOpacity = 0.42F);
+        float tracerLength = 30.0F,
+        float tracerOpacity = 0.42F,
+        float tracerLifetimeSeconds = 0.055F);
 
     [[nodiscard]] LogicalBallisticAdvance advance(float deltaTime) noexcept;
 
@@ -33,10 +34,12 @@ public:
     [[nodiscard]] float distanceTravelled() const noexcept;
     [[nodiscard]] float maximumDistance() const noexcept;
     [[nodiscard]] int damage() const noexcept;
+    [[nodiscard]] std::optional<ShotAimIntent> aimIntent() const noexcept;
     [[nodiscard]] bool reachedImpact() const noexcept;
     [[nodiscard]] TracerStyle tracerStyle() const noexcept;
     [[nodiscard]] float tracerLength() const noexcept;
     [[nodiscard]] float tracerOpacity() const noexcept;
+    [[nodiscard]] float tracerLifetimeSeconds() const noexcept;
 
 private:
     ShotId shotId_{kInvalidShotId};
@@ -49,7 +52,9 @@ private:
     float distanceTravelled_{};
     float maximumDistance_{};
     int damage_{};
+    std::optional<ShotAimIntent> aimIntent_;
     TracerStyle tracerStyle_{TracerStyle::Weak};
-    float tracerLength_{34.0F};
+    float tracerLength_{30.0F};
     float tracerOpacity_{0.42F};
+    float tracerLifetimeSeconds_{0.055F};
 };

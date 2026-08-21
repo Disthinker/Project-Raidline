@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 
 #include "animation.h"
+#include "combat_target.h"
 #include "enemy_ai.h"
 #include "enemy_attack.h"
 #include "rect.h"
@@ -34,8 +36,10 @@ public:
         Vec2 position,
         Vec2 size,
         Vec2 velocity = Vec2{},
-        int maxHealth = 1);
+        int maxHealth = 1,
+        CombatTargetId combatTargetId = kInvalidCombatTargetId);
 
+    [[nodiscard]] CombatTargetId combatTargetId() const noexcept;
     Vec2 position() const;
     Vec2 size() const;
     Vec2 velocity() const;
@@ -116,6 +120,7 @@ public:
     bool isDead() const noexcept;
 
 private:
+    CombatTargetId combatTargetId_{kInvalidCombatTargetId};
     Vec2 position_;
     Vec2 size_;
     Vec2 velocity_;

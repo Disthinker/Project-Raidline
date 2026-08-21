@@ -9,6 +9,18 @@ namespace
         return std::isfinite(value.x) &&
                std::isfinite(value.y);
     }
+
+    bool validHitRegion(HitRegion region) noexcept
+    {
+        switch (region)
+        {
+        case HitRegion::Head:
+        case HitRegion::Torso:
+        case HitRegion::Legs:
+            return true;
+        }
+        return false;
+    }
 }
 
 bool ShotResolution::accepted() const noexcept
@@ -77,6 +89,15 @@ ShotResolution resolveShotCommand(
         return result;
     }
 
+    if (command.aimIntent.has_value() &&
+        (command.aimIntent->targetId == kInvalidCombatTargetId ||
+         !validHitRegion(command.aimIntent->region)))
+    {
+        result.status =
+            ShotResolutionStatus::RejectedInvalidAimIntent;
+        return result;
+    }
+
     if (!std::isfinite(command.maximumDistance) ||
         command.maximumDistance <= 0.0F)
     {
@@ -98,6 +119,7 @@ ShotResolution resolveShotCommand(
     result.collisionExtent = command.collisionExtent;
     result.damage = command.damage;
     result.maximumDistance = command.maximumDistance;
+    result.aimIntent = command.aimIntent;
     result.impactPosition = Vec2{
         result.origin.x +
             result.direction.x * result.maximumDistance,
@@ -133,6 +155,8 @@ const char *shotResolutionStatusName(
         return "RejectedInvalidDamage";
     case ShotResolutionStatus::RejectedInvalidMaximumDistance:
         return "RejectedInvalidMaximumDistance";
+    case ShotResolutionStatus::RejectedInvalidAimIntent:
+        return "RejectedInvalidAimIntent";
     }
 
     return "Unknown";

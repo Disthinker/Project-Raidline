@@ -10,7 +10,8 @@ namespace
         ShotId shotId,
         Vec2 position,
         Vec2 size = Vec2{10.0F, 10.0F},
-        int damage = 1)
+        int damage = 1,
+        std::optional<ShotAimIntent> aimIntent = std::nullopt)
     {
         const Vec2 center{
             position.x + size.x / 2.0F,
@@ -20,7 +21,8 @@ namespace
             center,
             center,
             std::max(size.x, size.y),
-            damage};
+            damage,
+            aimIntent};
     }
 }
 
@@ -94,9 +96,19 @@ TEST(HitResolutionTest, NonLethalHitProducesDomainResult)
 TEST(HitResolutionTest, HeadAndLegHitsAreResolvedByDomainGeometry)
 {
     std::vector<Enemy> headEnemies{
-        Enemy{Vec2{100.0F, 100.0F}, Vec2{40.0F, 80.0F}, Vec2{}, 10}};
+        Enemy{
+            Vec2{100.0F, 100.0F},
+            Vec2{40.0F, 80.0F},
+            Vec2{},
+            10,
+            71}};
     const HitResolutionResult head = resolveShotEnemyHits(
-        {makeShot(7, Vec2{110.0F, 102.0F}, Vec2{8.0F, 8.0F}, 3)},
+        {makeShot(
+            7,
+            Vec2{110.0F, 102.0F},
+            Vec2{8.0F, 8.0F},
+            3,
+            ShotAimIntent{71, HitRegion::Head, false})},
         headEnemies);
     ASSERT_EQ(head.hits.size(), 1U);
     EXPECT_EQ(head.hits[0].region, HitRegion::Head);
@@ -112,6 +124,121 @@ TEST(HitResolutionTest, HeadAndLegHitsAreResolvedByDomainGeometry)
     EXPECT_EQ(legs.hits[0].region, HitRegion::Legs);
     EXPECT_EQ(legs.hits[0].semantic, HitSemantic::Normal);
     EXPECT_EQ(legs.hits[0].damageApplied, 3);
+}
+
+TEST(HitResolutionTest,
+     HeadshotRequiresMatchingFireTimeAimAndPhysicalImpact)
+{
+    const auto makeEnemy = []
+    {
+        return Enemy{
+            Vec2{100.0F, 100.0F},
+            Vec2{40.0F, 80.0F},
+            Vec2{},
+            20,
+            81};
+    };
+
+    std::vector<Enemy> noAimEnemies{makeEnemy()};
+    const HitResolutionResult noAim = resolveShotEnemyHits(
+        {ShotCollisionCandidate{
+            20,
+            Vec2{0.0F, 110.0F},
+            Vec2{300.0F, 110.0F},
+            2.0F,
+            3,
+            std::nullopt}},
+        noAimEnemies);
+    ASSERT_EQ(noAim.hits.size(), 1U);
+    EXPECT_EQ(noAim.hits[0].region, HitRegion::Torso);
+    EXPECT_EQ(noAim.hits[0].semantic, HitSemantic::Normal);
+    EXPECT_EQ(noAim.hits[0].damageApplied, 3);
+
+    std::vector<Enemy> wrongTargetEnemies{makeEnemy()};
+    const HitResolutionResult wrongTarget = resolveShotEnemyHits(
+        {ShotCollisionCandidate{
+            21,
+            Vec2{0.0F, 110.0F},
+            Vec2{300.0F, 110.0F},
+            2.0F,
+            3,
+            ShotAimIntent{82, HitRegion::Head, false}}},
+        wrongTargetEnemies);
+    ASSERT_EQ(wrongTarget.hits.size(), 1U);
+    EXPECT_EQ(wrongTarget.hits[0].semantic, HitSemantic::Normal);
+
+    std::vector<Enemy> matchedEnemies{makeEnemy()};
+    const HitResolutionResult matched = resolveShotEnemyHits(
+        {ShotCollisionCandidate{
+            22,
+            Vec2{0.0F, 110.0F},
+            Vec2{300.0F, 110.0F},
+            2.0F,
+            3,
+            ShotAimIntent{81, HitRegion::Head, false}}},
+        matchedEnemies);
+    ASSERT_EQ(matched.hits.size(), 1U);
+    EXPECT_EQ(matched.hits[0].region, HitRegion::Head);
+    EXPECT_EQ(matched.hits[0].semantic, HitSemantic::Headshot);
+    EXPECT_EQ(matched.hits[0].damageApplied, 6);
+}
+
+TEST(HitResolutionTest,
+     WeakPointRequiresMatchingTargetRegionAndPhysicalImpact)
+{
+    std::vector<Enemy> enemies{
+        Enemy{
+            Vec2{100.0F, 100.0F},
+            Vec2{40.0F, 80.0F},
+            Vec2{},
+            20,
+            91}};
+    const HitResolutionResult matched = resolveShotEnemyHits(
+        {ShotCollisionCandidate{
+            23,
+            Vec2{0.0F, 140.0F},
+            Vec2{300.0F, 140.0F},
+            2.0F,
+            4,
+            ShotAimIntent{91, HitRegion::Torso, true}}},
+        enemies);
+
+    ASSERT_EQ(matched.hits.size(), 1U);
+    EXPECT_EQ(matched.hits[0].semantic, HitSemantic::WeakPoint);
+    EXPECT_EQ(matched.hits[0].damageApplied, 6);
+
+    std::vector<Enemy> mismatchEnemies{
+        Enemy{
+            Vec2{100.0F, 100.0F},
+            Vec2{40.0F, 80.0F},
+            Vec2{},
+            20,
+            91}};
+    const HitResolutionResult mismatch = resolveShotEnemyHits(
+        {ShotCollisionCandidate{
+            24,
+            Vec2{0.0F, 140.0F},
+            Vec2{300.0F, 140.0F},
+            2.0F,
+            4,
+            ShotAimIntent{91, HitRegion::Head, true}}},
+        mismatchEnemies);
+    ASSERT_EQ(mismatch.hits.size(), 1U);
+    EXPECT_EQ(mismatch.hits[0].semantic, HitSemantic::Normal);
+    EXPECT_EQ(mismatch.hits[0].damageApplied, 4);
+}
+
+TEST(HitResolutionTest, AimRegionQueryRejectsPointsBeforeOrBehindTarget)
+{
+    const Rect enemyBounds{
+        Vec2{100.0F, 100.0F},
+        Vec2{40.0F, 80.0F}};
+
+    EXPECT_FALSE(hitRegionAtPoint(enemyBounds, Vec2{90.0F, 110.0F}));
+    EXPECT_FALSE(hitRegionAtPoint(enemyBounds, Vec2{150.0F, 110.0F}));
+    EXPECT_EQ(
+        hitRegionAtPoint(enemyBounds, Vec2{120.0F, 110.0F}),
+        std::optional<HitRegion>{HitRegion::Head});
 }
 
 TEST(HitResolutionTest, OneShotHitsAtMostOneEnemy)

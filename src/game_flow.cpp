@@ -184,6 +184,20 @@ bool GameFlow::returnToBase() noexcept
     return true;
 }
 
+bool GameFlow::returnToMainMenu() noexcept
+{
+    if (state_ != GameFlowState::Base && state_ != GameFlowState::Raid)
+    {
+        return false;
+    }
+    // An active persistent Raid deliberately remains uncommitted in memory.
+    // Continue reloads the pre-Raid save and follows the existing idempotent
+    // rollback path; no implicit success/failure settlement occurs here.
+    activeBaseFacility_.reset();
+    state_ = GameFlowState::MainMenu;
+    return true;
+}
+
 GameFlowState GameFlow::state() const noexcept
 {
     return state_;

@@ -62,6 +62,18 @@ struct PlayerDamageObservation
     WoundSource woundSource{WoundSource::None};
 };
 
+struct WeaponAccuracyProjection
+{
+    Vec2 center{};
+    float aimDistance{};
+    float currentSpreadDegrees{};
+    float minimumSpreadDegrees{};
+    float maximumSpreadDegrees{};
+    float worldRadius{};
+    float reticleRadius{};
+    bool beyondEffectiveRange{};
+};
+
 class GameplayWorld
 {
 public:
@@ -172,10 +184,13 @@ public:
     const RaidSession &raidSession() const noexcept;
 
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
+    [[nodiscard]] WeaponAccuracyProjection
+    weaponAccuracyProjection() const noexcept;
     [[nodiscard]] float weaponVisualRecoilPixels() const noexcept;
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
     [[nodiscard]] float weaponAimDownSightsProgress() const noexcept;
+    [[nodiscard]] bool weaponAimBeyondEffectiveRange() const noexcept;
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     [[nodiscard]] std::size_t enemiesAlertedLastUpdate() const noexcept;
@@ -252,6 +267,19 @@ public:
     ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
+    struct TracerPresentationSegment
+    {
+        ShotId shotId{kInvalidShotId};
+        Vec2 start{};
+        Vec2 end{};
+        Vec2 direction{};
+        TracerStyle style{TracerStyle::Weak};
+        float opacity{};
+        float lifetimeSeconds{};
+        float remainingSeconds{};
+        float ageSeconds{};
+    };
+
     struct PlayerHealthOverrideTag
     {
     };
@@ -267,7 +295,9 @@ private:
     Player player_;
 
     std::vector<LogicalBallisticFlight> logicalBallistics_;
+    std::vector<TracerPresentationSegment> tracerPresentations_;
     ShotId nextShotId_{1};
+    CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     EnemySquadCoordinator enemySquadCoordinator_;
@@ -287,9 +317,11 @@ private:
     WeaponAimState weaponAim_;
     int weaponBaseDamage_{kDefaultWeaponDamage};
     float weaponMaximumRange_{2048.0F};
+    float weaponLogicalBallisticSpeed_{6000.0F};
     TracerStyle weaponTracerStyle_{TracerStyle::Weak};
-    float weaponTracerLength_{34.0F};
+    float weaponTracerLength_{30.0F};
     float weaponTracerOpacity_{0.42F};
+    float weaponTracerLifetimeSeconds_{0.055F};
 
     ParticleSystem particleSystem_;
     std::vector<HitResult> hitResultsLastUpdate_;

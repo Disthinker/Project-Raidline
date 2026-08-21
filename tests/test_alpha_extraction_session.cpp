@@ -283,6 +283,10 @@ TEST(AlphaExtractionSessionTest, AdsSlowsMovementAndKeepsLowPowerWeakTracer)
     adsFire.firePressed = true;
     adsSession.update(adsFire, 0.0F);
     ASSERT_TRUE(adsSession.world().shotFiredLastUpdate());
+    GameplayInput holdAds{};
+    holdAds.aimDownSights = true;
+    holdAds.aimWorldPosition = Vec2{1100.0F, 360.0F};
+    adsSession.update(holdAds, 0.005F);
     const auto shots = adsSession.world().shotPresentationSnapshots();
     ASSERT_FALSE(shots.empty());
     EXPECT_EQ(shots.back().tracerStyle, TracerStyle::Weak);
@@ -307,18 +311,10 @@ TEST(AlphaExtractionSessionTest, ReloadRetainsAdsAndLocksMaximumSpread)
     keepAiming.aimWorldPosition = Vec2{1000.0F, 360.0F};
     session.update(keepAiming, 0.20F);
 
-    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
-    ASSERT_TRUE(rifle.weaponUse.has_value());
     EXPECT_GT(session.world().weaponAimDownSightsProgress(), 0.0F);
-    const WeaponHandlingParameters handling =
-        deriveWeaponHandling(*rifle.weaponUse);
-    const float expectedMaximum = handling.maximumSpreadDegrees * std::lerp(
-        1.0F,
-        handling.aimDownSightsStabilityMultiplier,
-        session.world().weaponAimDownSightsProgress());
     EXPECT_FLOAT_EQ(
         session.world().weaponSpreadDegrees(),
-        expectedMaximum);
+        session.world().weaponAccuracyProjection().maximumSpreadDegrees);
     EXPECT_TRUE(session.raidActionState().active().has_value());
 }
 
@@ -462,6 +458,56 @@ TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSecon
     ASSERT_TRUE(installed.has_value());
     EXPECT_NE(*installed, original);
     EXPECT_EQ(magazineRoundCount(session.profile(), *installed), 20U);
+}
+
+TEST(AlphaExtractionSessionTest, RaidInventoryMovesUnequipsAndReequipsWeapon)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-raid-inventory"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId backpack = assets(
+        session.profile(), alpha_content::backpack).front();
+    ASSERT_TRUE(session.deployAlpha(77127));
+
+    const ProfileContainerId backpackGrid =
+        ProfileContainerId::compartment(backpack, 0);
+    const auto fit = findFirstProfileFit(
+        session.profile(),
+        publishedContentRegistry(),
+        backpackGrid,
+        publishedContentRegistry().item(alpha_content::rifle),
+        ItemOrientation::Degrees0,
+        rifle);
+    ASSERT_TRUE(fit.has_value());
+
+    const InventoryReceipt stored = session.executeProfileInventory(
+        InventoryMoveCommand{
+            rifle,
+            0,
+            StoredAssetLocation{backpackGrid, *fit},
+            ItemOrientation::Degrees0},
+        "raid-ui-unequip-rifle");
+    ASSERT_TRUE(stored.succeeded) << stored.message;
+    EXPECT_FALSE(equippedAsset(
+        session.profile(), EquipmentSlotKind::PrimaryWeapon).has_value());
+    EXPECT_TRUE(assetIsCarried(session.profile(), rifle));
+
+    const InventoryReceipt equipped = session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::SecondaryWeapon},
+        "raid-ui-reequip-rifle");
+    ASSERT_TRUE(equipped.succeeded) << equipped.message;
+    session.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(
+        equippedAsset(
+            session.profile(), EquipmentSlotKind::SecondaryWeapon),
+        rifle);
+    EXPECT_EQ(session.activeAlphaWeapon(), rifle);
+    EXPECT_EQ(
+        session.activeAlphaWeaponSlot(),
+        EquipmentSlotKind::SecondaryWeapon);
 }
 
 TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMode)
