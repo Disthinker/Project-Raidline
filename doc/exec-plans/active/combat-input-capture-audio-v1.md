@@ -1,6 +1,6 @@
 # Combat：输入捕获、后坐力曲线与 P0 音频 v1 ExecPlan
 
-状态：Draft PR #68；P0 音频代码 head `f779d31` 的 Windows/Ubuntu CI 已通过，待用户正常游玩验收
+状态：Draft PR #68；Base 环境声/低延迟修订提交 `8efcd8d` 本地 756/756 通过，待新 exact-head CI 与用户正常游玩验收
 
 基线：`origin/main@881c034`（PR #67 已通过用户验收并合入）
 
@@ -19,6 +19,7 @@
 - `maximumReticleSpeed`、`reticleControlAcceleration` 和 `recoilBendDurationSeconds` 都是可测试运行参数；人机工效仍派生控制加速度和后坐力减速度。
 - 相对鼠标启停与焦点/UI 仲裁只属于 `raidline_sdl_client`。App 把 `xrel/yrel` 翻译成 `GameplayInput::aimMotionDelta`，simulation 不依赖 SDL 或 OS 光标位置。
 - `GameAudioOutput` 与 `SoundEventId` 属于 SDL client；48 kHz mono WAV 在启动时由 SDL3 原生加载/转换，回调混音按事件限制并发和冷却。`GameSessionPresentationEvent` 只表达动作事实，不引用文件名。
+- 播放设备打开前请求 512 sample-frame 缓冲，在 48 kHz 下对应约 10.7 ms 的游戏侧目标。SDL/平台可以调整该值，远程桌面音频重定向仍属于游戏之外的附加延迟。
 - `assets/audio/v1/sound_events.json` 是音频表现 bank，不进入 Profile 内容版本或存档。`SOURCES.md` 和 `tools/audio_pipeline/build_p0_audio.ps1` 保存精确来源与离线处理配方；源 ZIP 不进入仓库。
 - 本次是用户于 2026-08-21 对这一命名 P0 包的明确授权；PNG、美术 manifest、Grab/Scratch/Bite、P1 音频及整包导入仍在范围外。
 
@@ -33,7 +34,8 @@
 ## 4. 自动化、风险与回滚
 
 - 自动化覆盖相对位移、速度/加速度上限、后坐力径向初速与连续弯曲、随机角度总速度、刷新不叠加、鼠标捕获决策、稳定事件完整性、路径安全、WAV 格式/时长及关键会话事件。
-- 风险：过高默认响应削弱武器重量感；通过独立加速度参数调节。后坐力过于平滑会缺少冲击；径向初速即时生效，弯曲时间只控制横向轨迹。相对模式与 UI 冲突通过单一纯决策函数收束。P0 音色与响度仍需用户正常游玩验收；事件并发、冷却和 master gain 可集中调整，不修改玩法领域。
+- 音频自动化额外限制 Base 环境循环的过零率与事件增益，防止尖锐电流噪声重新成为安全区底噪；资源脚本重复运行必须得到相同 SHA-256。
+- 风险：过高默认响应削弱武器重量感；通过独立加速度参数调节。后坐力过于平滑会缺少冲击；径向初速即时生效，弯曲时间只控制横向轨迹。相对模式与 UI 冲突通过单一纯决策函数收束。P0 音色与响度仍需用户正常游玩验收；事件并发、冷却和 master gain 可集中调整，不修改玩法领域。远程桌面可能忽略或掩盖较小的游戏侧缓冲收益，应分别比较本机与远程体验。
 - 整个 PR 可回滚到 `origin/main@881c034`，不改变 schema、Profile、内容 ID 或 manifest。
 
 ## 5. 进度
@@ -45,3 +47,5 @@
 - 2026-08-20：提交 `f32653d` 推送至 Draft PR #68，exact-head Windows/Ubuntu CI 成功；等待用户正常游玩验收。
 - 2026-08-21：用户授权从 ArtWorkbench 精选并接入 P0 音效。已生成统一 runtime WAV、稳定事件 bank、来源记录和可复现脚本；程序化音频实现退场。开发代理未启动游戏。
 - 2026-08-21：Windows Debug 全目标构建与 755/755 CTest 通过，0 失败；专项覆盖 bank 完整性、WAV 格式、路径安全、敌人警觉、换弹与医疗事件。提交 `f779d31` 已推送，exact-head Windows/Ubuntu CI 全部成功；待用户正常游玩验收。
+- 2026-08-21：用户报告 Base 出现强烈电流/滋滋声。确认不是循环叠加或格式错误，而是灯泡/线圈拾音素材本身具有高频噪声；替换为经过频段收束与低响度处理的 InMotionAudio 室内烟囱风声，Base 事件增益由 0.42 降至 0.28，过零率由约 0.344 降至 0.007。
+- 2026-08-21：针对远程桌面听感延迟，在 SDL 设备打开前请求 512 帧缓冲；游戏侧目标约 10.7 ms，不能消除远程重定向的附加延迟。修订提交 `8efcd8d` 已完成 Windows Debug 全目标、GameAudio 6/6 与全量 CTest 756/756；开发代理未启动游戏，待新 exact-head CI 与用户正常游玩验收。
