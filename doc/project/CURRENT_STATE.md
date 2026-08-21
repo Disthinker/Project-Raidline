@@ -25,7 +25,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
 11. **输入捕获、后坐力曲线与 P0 音频 v1**：PR #68 已通过 exact-head CI 与用户验收，以 merge commit `ba3375e` 进入 main。
 12. **直接瞄准、距离散布与高速曳光 v2**：PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；验收加固进一步修复 Raid 装备拖放，分离真实随机散布半径与玩家可读准星半径，加粗准星/曳光，加入 Base/Raid 统一 Esc 暂停菜单，并把默认曳光长度收敛为 30px。精确 head CI 与用户正常游玩验收通过，以 merge commit `f593719` 进入 main。
-13. **动态散布模型与准星稳定性 v3**：PR #71 第一轮将距离改为主要定义包络，并拆分移动、甩枪和击发 Bloom；连续投影与像素对齐解决距离遮蔽和组合输入闪动，head `5381a87` 已通过 exact-head CI。用户验收确认原问题基本解决后，第二轮移除轻微移准的 35% 硬台阶，放慢展开/恢复，增强连续横向后坐力，并加入默认 8% 有效射程 Distance Bloom 与 F10 调参项；Windows Debug 全目标、147 项定向回归和 778/778 全量 CTest 通过。
+13. **动态散布模型与准星稳定性 v3**：PR #71 第一轮将距离改为主要定义包络，并拆分移动、甩枪和击发 Bloom；连续投影与像素对齐解决距离遮蔽和组合输入闪动。第二轮移除轻微移准的硬台阶、放慢时序、增强连续横向后坐力并加入小权重距离 Bloom，head `13176d9` 已通过 exact-head CI。第三轮按正常游玩反馈让走路/奔跑首帧分别进入较大/更大扩散，提高持续甩枪展开并适度加快恢复；Windows Debug 全目标、149 项定向回归和 780/780 全量 CTest 通过。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -61,7 +61,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。PR #69 经多轮正常游玩验收、776/776 CTest 与最终 exact-head Windows/Ubuntu CI 后以 `f593719` 合入 main。当前 v3 第二轮分支已完成 Windows Debug 全目标、147 项定向回归和 778/778 全量 CTest；开发代理未启动游戏。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。PR #69 经多轮正常游玩验收、776/776 CTest 与最终 exact-head Windows/Ubuntu CI 后以 `f593719` 合入 main。当前 v3 第二轮 head `13176d9` 已通过 exact-head CI；第三轮分支已完成 Windows Debug 全目标、149 项定向回归和 780/780 全量 CTest。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -88,9 +88,10 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 ## Combat 动态散布模型与准星稳定性 v3 当前实现
 
 - `WeaponFireState` 分别保存移动、移准、击发和距离 Bloom。四种贡献通过 `1 - Π(1-bloom)` 饱和合成，既能同时生效，也不会无界相加；距离在有效射程默认只贡献 0.08，仍主要通过包络表达射程关系。
-- 移动和快速甩枪不再使用非零激活下限；单帧相对鼠标速度先经过 120～1800 px/s 连续软阈值，再以降低后的 attack 追向目标。移动 attack 固定为 1.5 fraction/s，移准速率约为旧值一半；操控速度派生恢复由 `3+0.24×handling` 放慢为 `2+0.10×handling`。击发 Bloom 按 `spreadPerShot / baseEnvelope` 增长并保留既有恢复延迟。
+- 移准 Bloom 不使用非零激活下限；单帧相对鼠标速度经过 120～1800 px/s 连续软阈值，持续快速甩枪按 `22-0.08×stability` 派生速率展开。离散移动状态另行保证即时可读：走路目标为 0.75 且首帧至少进入其 80%，奔跑目标为 0.95 且首帧至少进入其 95%，随后以 4.0 fraction/s 补齐。操控速度派生恢复调整为 `3+0.15×handling`，比第二轮过慢版本更快但仍保留恢复过程。击发 Bloom 按 `spreadPerShot / baseEnvelope` 增长并保留既有恢复延迟。
 - 默认横向后坐力比例由 0.30 提升到 0.55，最大目标偏角由 60° 提升到 70°，弯曲时间由 80ms 调整为 60ms；它仍从径向初速连续弯曲，不发生单帧横向跳点，也不自动回正。
 - `WeaponAccuracyProjection` 继续同时输出权威几何圆锥半径和可读半径；可读 Bloom 从平方根响应收敛为 `fraction^0.8`，降低小输入的视觉放大，同时保留持续移动/甩枪的清晰增量。SDL 只对中心和半径做像素对齐，不能反向影响命中。
+- F10 新增 `Sprinting spread fraction`，与 `Moving spread fraction` 分开调整；两者只覆盖当前武器实例的会话瞬态，不修改内容定义或存档。
 - 该切片不修改武器内容版本、Profile schema、弹药、逻辑弹道、命中语义、音频或资源 manifest。
 
 ## PR #69 第二轮验收加固
@@ -170,7 +171,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 
 ## 尚未完成
 
-- 动态散布模型与准星稳定性 v3：PR #71 第二轮代码、147 项 Gameplay/会话定向回归和 778/778 全量 CTest 已完成；最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收尚待完成。
+- 动态散布模型与准星稳定性 v3：PR #71 第三轮走路/奔跑扩散、甩枪展开和恢复修订已完成，149 项 Gameplay/会话定向回归和 780/780 全量 CTest 通过；最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收尚待完成。
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。

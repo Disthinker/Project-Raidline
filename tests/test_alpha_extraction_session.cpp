@@ -352,6 +352,10 @@ TEST(AlphaExtractionSessionTest,
         DeveloperWeaponParameter::DistanceBloomAtEffectiveRange,
         1,
         false));
+    ASSERT_TRUE(session.adjustDeveloperWeaponTuning(
+        DeveloperWeaponParameter::SprintingSpreadFraction,
+        -1,
+        false));
 
     const auto tuned = session.developerWeaponTuning();
     ASSERT_TRUE(tuned.has_value());
@@ -373,6 +377,9 @@ TEST(AlphaExtractionSessionTest,
     EXPECT_FLOAT_EQ(
         tuned->handling.distanceBloomAtEffectiveRange,
         defaults->handling.distanceBloomAtEffectiveRange + 0.01F);
+    EXPECT_FLOAT_EQ(
+        tuned->handling.sprintingSpreadFraction,
+        defaults->handling.sprintingSpreadFraction - 0.01F);
     EXPECT_EQ(session.profile().revision, revision);
     EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
 

@@ -17,6 +17,7 @@ struct WeaponFireConfig
     float aimDownSightsAccuracyMultiplier{0.55F};
     float aimDownSightsStabilityMultiplier{0.70F};
     float movingSpreadFraction{0.35F};
+    float sprintingSpreadFraction{0.55F};
     float reticleMotionSpreadDegreesPerSecond{5.0F};
     float reticleMotionSoftThreshold{120.0F};
     float reticleMotionFullSpeed{1800.0F};
@@ -29,6 +30,7 @@ struct WeaponFireConfig
 struct WeaponFireContext
 {
     bool moving{};
+    bool sprinting{};
     float aimDownSightsProgress{};
     float distanceSpreadFactor{1.0F};
     float overEffectiveRangeFactor{};

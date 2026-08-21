@@ -74,7 +74,7 @@ TEST(WeaponFireStateTest, ReleasedTriggerRecoversOnlyToContextualFloor)
     moving.moving = true;
     moving.distanceSpreadFactor = 0.0F;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 2.1F);
 }
 
 TEST(WeaponFireStateTest, AdsImprovesAccuracyAndStability)
@@ -211,8 +211,33 @@ TEST(WeaponFireStateTest, MovingPlayerUsesReadablePortionOfSpreadEnvelope)
     moving.distanceSpreadFactor = 0.0F;
 
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
-    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.15F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 3.6F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.60F);
+}
+
+TEST(WeaponFireStateTest, SprintingImmediatelyOpensFartherThanWalking)
+{
+    WeaponFireConfig config;
+    config.nearDistanceSpreadScale = 1.0F;
+    config.movingSpreadFraction = 0.75F;
+    config.sprintingSpreadFraction = 0.95F;
+
+    WeaponFireContext walking;
+    walking.moving = true;
+    walking.distanceSpreadFactor = 0.0F;
+    WeaponFireState walk{config};
+    EXPECT_FALSE(walk.update(
+        false, Vec2{1.0F, 0.0F}, 0.0F, walking));
+
+    WeaponFireContext sprinting = walking;
+    sprinting.sprinting = true;
+    WeaponFireState sprint{config};
+    EXPECT_FALSE(sprint.update(
+        false, Vec2{1.0F, 0.0F}, 0.0F, sprinting));
+
+    EXPECT_NEAR(walk.spreadPresentationFraction(), 0.60F, 0.001F);
+    EXPECT_NEAR(sprint.spreadPresentationFraction(), 0.9025F, 0.001F);
+    EXPECT_GT(sprint.spreadDegrees(), walk.spreadDegrees());
 }
 
 TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
@@ -226,8 +251,8 @@ TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
     moving.distanceSpreadFactor = 0.0F;
 
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
-    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.15F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 4.5F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.75F);
 
     WeaponFireState restingAtEffectiveRange{config};
     WeaponFireContext effective;

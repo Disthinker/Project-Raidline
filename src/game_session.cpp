@@ -948,6 +948,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.01F,
             0.05F,
             0.0F,
+            previousHandling.sprintingSpreadFraction,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::SprintingSpreadFraction:
+        entry.hidden.sprintingSpreadFraction = adjustFloat(
+            previousHandling.sprintingSpreadFraction,
+            0.01F,
+            0.05F,
+            previousHandling.movingSpreadFraction,
             1.0F,
             coarseStep);
         break;
@@ -2421,6 +2430,10 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.movingSpreadFraction.has_value())
     {
         handling.movingSpreadFraction = *hidden.movingSpreadFraction;
+    }
+    if (hidden.sprintingSpreadFraction.has_value())
+    {
+        handling.sprintingSpreadFraction = *hidden.sprintingSpreadFraction;
     }
     if (hidden.reticleMotionSpreadDegreesPerSecond.has_value())
     {

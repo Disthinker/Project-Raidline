@@ -370,9 +370,13 @@ TEST(ItemDefinitionTest, FiveWeaponAttributesHaveDistinctHandlingEffects)
     EXPECT_LT(
         better.reticleMotionSpreadDegreesPerSecond,
         base.reticleMotionSpreadDegreesPerSecond);
-    EXPECT_GE(better.reticleMotionSpreadDegreesPerSecond, 8.0F);
+    EXPECT_GE(better.reticleMotionSpreadDegreesPerSecond, 14.0F);
+    EXPECT_FLOAT_EQ(base.spreadRecoveryDegreesPerSecond, 10.5F);
+    EXPECT_FLOAT_EQ(base.reticleMotionSpreadDegreesPerSecond, 18.0F);
     EXPECT_FLOAT_EQ(base.movingSpreadFraction, 0.75F);
     EXPECT_FLOAT_EQ(better.movingSpreadFraction, 0.75F);
+    EXPECT_FLOAT_EQ(base.sprintingSpreadFraction, 0.95F);
+    EXPECT_FLOAT_EQ(better.sprintingSpreadFraction, 0.95F);
     EXPECT_FLOAT_EQ(better.nearDistanceSpreadScale, base.nearDistanceSpreadScale);
     EXPECT_FLOAT_EQ(base.distanceBloomAtEffectiveRange, 0.08F);
     EXPECT_FLOAT_EQ(base.recoilLateralRatio, 0.55F);

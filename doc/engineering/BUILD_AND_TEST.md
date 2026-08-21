@@ -42,7 +42,7 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/core-alpha-hardening` 从已包含 PR #59 的 `origin/main@ed45baa` 创建。Windows Debug 全目标重建成功；库存/角色返工、Raid 压卸弹、进程退出回滚、奔跑和空栏位快速装备的全量 CTest 645/645 通过，0 失败；最新快捷转移/快速装备 head 等待精确 CI。自动化覆盖 10 局混合结果、至少 3 次重载、三配置/三路线、出击前精确回滚、旧 pending 迁移、双损坏存档、Deploy 保存失败、Raid 动作中断、弹药守恒及快速装备的查询不变性；既有功能 head `db0935d` 的范围检测、Windows 和 Ubuntu CI 全部成功（run `31919983014`）。`Project_Raidline.exe` 已生成但开发代理未启动游戏；最终人工验收由用户执行。
 
-`codex/combat-spread-model-v3` 从已包含 PR #69 的 `origin/main@f593719` 创建。PR #71 第一轮公共 `WeaponFireState` 头变更后重建全部消费者成功；130/130 定向回归、全量 CTest 778/778 和 head `5381a87` exact-head Windows/Ubuntu CI 通过。第二轮按用户反馈再次重建全部头文件消费者成功，WeaponAim/WeaponFire/GameplayWorld/GameplayWorldRaid/ItemDefinition/AlphaExtractionSession 定向 147/147、全量 CTest 778/778 通过；自动化覆盖轻微移准不满扩散、持续移准逐步展开、慢恢复、小权重距离 Bloom、F10 会话覆盖、连续横向后坐力和组合输入投影稳定性。新 exact-head CI 待完成；`Project_Raidline.exe` 已生成但开发代理未启动游戏。
+`codex/combat-spread-model-v3` 从已包含 PR #69 的 `origin/main@f593719` 创建。PR #71 第一轮公共 `WeaponFireState` 头变更后重建全部消费者成功；130/130 定向回归、全量 CTest 778/778 和 head `5381a87` exact-head Windows/Ubuntu CI 通过。第二轮按用户反馈再次重建全部头文件消费者成功，147/147 定向回归、778/778 CTest 与 head `13176d9` exact-head Windows/Ubuntu CI 通过（run `32469515548`）。第三轮新增奔跑散布配置和会话调参后再次完成 116 步全目标重建，WeaponAim/WeaponFire/GameplayWorld/GameplayWorldRaid/ItemDefinition/AlphaExtractionSession 定向 149/149、全量 CTest 780/780 通过；自动化覆盖轻微移准不满扩散、持续快速甩枪展开、适度恢复、走路首帧大扩散、奔跑首帧更大扩散、F10 会话覆盖和既有逻辑弹道回归。第三轮 exact-head CI 待完成；`Project_Raidline.exe` 已生成但开发代理未启动游戏。
 
 ## 按风险选择证据
 

@@ -839,6 +839,7 @@ void GameplayWorld::update(
             deltaTime,
             WeaponFireContext{
                 .moving = player_.isMoving(),
+                .sprinting = input.sprint && player_.isMoving(),
                 .aimDownSightsProgress =
                     weaponAim_.aimDownSightsProgress(),
                 .distanceSpreadFactor =
@@ -1278,6 +1279,7 @@ void GameplayWorld::configureWeaponFire(
         handling.aimDownSightsAccuracyMultiplier,
         handling.aimDownSightsStabilityMultiplier,
         handling.movingSpreadFraction,
+        handling.sprintingSpreadFraction,
         handling.reticleMotionSpreadDegreesPerSecond,
         120.0F,
         1800.0F,

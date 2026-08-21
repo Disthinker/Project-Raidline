@@ -968,8 +968,8 @@ TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
     world.update(movingAndFlicking, 1.0F / 60.0F);
     const WeaponAccuracyProjection expanded =
         world.weaponAccuracyProjection();
-    EXPECT_GT(expanded.reticleRadius, resting.reticleRadius + 2.0F);
-    EXPECT_LT(expanded.reticleRadius, resting.reticleRadius + 15.0F);
+    EXPECT_GT(expanded.reticleRadius, resting.reticleRadius + 35.0F);
+    EXPECT_LT(expanded.reticleRadius, resting.reticleRadius + 70.0F);
 
     GameplayInput movingWithoutMouse{};
     movingWithoutMouse.moveRight = true;
@@ -978,7 +978,7 @@ TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
     world.update(movingWithoutMouse, 1.0F / 60.0F);
     const WeaponAccuracyProjection nextFrame =
         world.weaponAccuracyProjection();
-    EXPECT_GT(nextFrame.reticleRadius, resting.reticleRadius + 2.0F);
+    EXPECT_GT(nextFrame.reticleRadius, resting.reticleRadius + 35.0F);
     EXPECT_LT(
         std::abs(nextFrame.reticleRadius - expanded.reticleRadius),
         10.0F);
@@ -990,6 +990,37 @@ TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
     const WeaponAccuracyProjection sustained =
         world.weaponAccuracyProjection();
     EXPECT_GT(sustained.reticleRadius, resting.reticleRadius + 18.0F);
+}
+
+TEST(GameplayWorldTest, SprintingImmediatelyOpensFartherThanWalking)
+{
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    GameplayWorld walking{std::vector<EnemySpawn>{}, 3};
+    GameplayWorld sprinting{std::vector<EnemySpawn>{}, 3};
+    walking.configureWeaponFire(*rifle.weaponUse);
+    sprinting.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput walk;
+    walk.moveRight = true;
+    walk.aimWorldPosition = Vec2{900.0F, 376.0F};
+    walking.update(walk, 0.0F);
+
+    GameplayInput sprint = walk;
+    sprint.sprint = true;
+    sprinting.update(sprint, 0.0F);
+
+    const WeaponAccuracyProjection walkProjection =
+        walking.weaponAccuracyProjection();
+    const WeaponAccuracyProjection sprintProjection =
+        sprinting.weaponAccuracyProjection();
+    EXPECT_GT(
+        walkProjection.currentSpreadDegrees,
+        walkProjection.minimumSpreadDegrees);
+    EXPECT_GT(
+        sprintProjection.currentSpreadDegrees,
+        walkProjection.currentSpreadDegrees);
+    EXPECT_GT(sprintProjection.reticleRadius, walkProjection.reticleRadius);
 }
 
 TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)

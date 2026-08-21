@@ -32,6 +32,9 @@ namespace
             !std::isfinite(config.movingSpreadFraction) ||
             config.movingSpreadFraction < 0.0F ||
             config.movingSpreadFraction > 1.0F ||
+            !std::isfinite(config.sprintingSpreadFraction) ||
+            config.sprintingSpreadFraction < 0.0F ||
+            config.sprintingSpreadFraction > 1.0F ||
             !finiteNonNegative(config.reticleMotionSpreadDegreesPerSecond) ||
             !finiteNonNegative(config.reticleMotionSoftThreshold) ||
             !std::isfinite(config.reticleMotionFullSpeed) ||
@@ -255,11 +258,26 @@ void WeaponFireState::updateMovementAndMotionBloom(
     float deltaTime,
     WeaponFireContext context) noexcept
 {
-    constexpr float kMovementAttackFractionPerSecond{1.50F};
+    constexpr float kWalkActivationFraction{0.80F};
+    constexpr float kSprintActivationFraction{0.95F};
+    constexpr float kMovementAttackFractionPerSecond{4.0F};
     const float recoveryRate = bloomRecoveryFractionPerSecond();
     const float movementTarget = context.moving
-        ? config_.movingSpreadFraction
+        ? (context.sprinting
+               ? std::max(
+                     config_.movingSpreadFraction,
+                     config_.sprintingSpreadFraction)
+               : config_.movingSpreadFraction)
         : 0.0F;
+    if (movementTarget > movementBloomFraction_)
+    {
+        const float activationFraction = context.sprinting
+            ? kSprintActivationFraction
+            : kWalkActivationFraction;
+        movementBloomFraction_ = std::max(
+            movementBloomFraction_,
+            movementTarget * activationFraction);
+    }
     const float movementRate = movementTarget > movementBloomFraction_
         ? kMovementAttackFractionPerSecond
         : recoveryRate;

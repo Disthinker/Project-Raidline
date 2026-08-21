@@ -7263,7 +7263,8 @@ void App::renderDeveloperWeaponPanel()
         "Maximum range", "Logical ballistic speed",
         "High-scope maximum speed", "High-scope control accel",
         "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
-        "Moving spread fraction", "Reticle motion spread rate",
+        "Moving spread fraction", "Sprinting spread fraction",
+        "Reticle motion spread rate",
         "Near-distance spread scale", "Effective-range distance bloom",
         "Right-click aim accuracy", "Right-click aim stability",
         "Weak tracer length", "Weak tracer opacity",
@@ -7344,6 +7345,9 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MovingSpreadFraction:
             value = fmt::format("{:.2f}", handling.movingSpreadFraction);
             break;
+        case DeveloperWeaponParameter::SprintingSpreadFraction:
+            value = fmt::format("{:.2f}", handling.sprintingSpreadFraction);
+            break;
         case DeveloperWeaponParameter::ReticleMotionSpreadRate:
             value = fmt::format(
                 "{:.2f} deg/s",
@@ -7380,7 +7384,7 @@ void App::renderDeveloperWeaponPanel()
         }
 
         const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 22.0F;
+            static_cast<float>(index) * 21.0F;
         if (index == developerWeaponParameterIndex_)
         {
             const SDL_FRect selected{
