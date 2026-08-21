@@ -158,7 +158,7 @@ Project_Raidline.exe
 
 ## 8. Alpha Hardening 宏切片
 
-依赖：Extraction Loop 已由 PR #59 合入 `origin/main@ed45baa`。活动计划：`doc/exec-plans/active/core-alpha-hardening.md`。
+依赖：Extraction Loop 已由 PR #59 合入 `origin/main@ed45baa`。交付计划：`doc/exec-plans/completed/core-alpha-hardening.md`。
 
 禁止范围：不通过增加敌人刷新、倒计时、高危、任务或复杂伤势掩盖节奏问题。
 

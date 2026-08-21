@@ -11,11 +11,13 @@ Enter the configured Visual Studio Developer Shell with x64 host/x64 target, res
 
 ## Match evidence to risk
 
-- Run focused tests while implementing and full CTest before push.
+- Use CTest labels instead of guessing target lists: `sentinel`, `area-*`, `layer-integration` and `long-sequence`.
+- Run focused area tests while implementing, Sentinel before and after authoritative edits, and full CTest before pushing tracked C++/CMake changes.
 - Reconfigure when CMake inputs change.
 - Rebuild every affected target when headers or class layout change.
 - Run Python asset tests only for an explicitly authorized asset-pipeline task.
 - Require exact-head Windows and Ubuntu CI for C++ PRs.
+- Run `python tools/raidline_governance.py postflight --envelope <task.toml> --run-tests` for the final local evidence gate.
 
 ## Diagnose stale builds
 
@@ -23,4 +25,4 @@ If behavior disagrees with source or MSVC/GTest reports `gtest_ar_` stack corrup
 
 ## Report concisely
 
-Record commit, preset, targets, registered test count, passed/failed count, duration, CI URLs/status, and any untested risk.
+Record commit, preset, targets, label counts, registered/full passed/failed count, duration, architecture/postflight result, CI URLs/status and any untested risk. Do not copy transient CI state into stable project documents.

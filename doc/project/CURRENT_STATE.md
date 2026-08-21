@@ -1,170 +1,51 @@
-# Project Raidline 当前状态
+# Project Raidline 已接受状态
 
-最后核对：2026-08-21。
+本文只记录已经进入 `main` 并完成所需验收的稳定能力。当前分支、Draft PR、临时 CI、测试数量和待验收修订由 GitHub、自动快照与活动 ExecPlan 负责。
 
-## Git 与交付基线
+## 产品流程
 
-- `origin/main@881c034` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道与准星/散布/基础 ADS v1；PR #67 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/combat-input-capture-audio-v1`，从干净的 `origin/main@881c034` 创建。
-- 当前活动计划：`doc/exec-plans/active/combat-input-capture-audio-v1.md`。
-- Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
+- `MainMenu -> Base -> Raid -> RaidResult -> Base` 可跨进程反复游玩。
+- Base 可行走且安全，提供仓储/配装、供应/回收和 Raid 出击入口；首次环境目标链不阻塞游玩。
+- 一张固定 Alpha 地图在出击时冻结出生/撤离、有限敌人和一次性 Loot 快照；Raid 无硬时限。
+- 成功撤离保留合法随身资产和状态；死亡/主动放弃全损；程序关闭或异常退出恢复精确出击前档案。
+- Settlement 使用唯一幂等键；RaidResult 显示成功带回物与货币变化，失败不生成丢失物清单。
 
-## 当前产品里程碑
+## 资产、库存与经济
 
-Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 已接受。当前里程碑进入 **Combat：输入捕获、后坐力曲线与 P0 音频 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+- `ProfileState::AssetRegistry` 唯一拥有长期物品；Stash、装备、容器、武器安装点和 Raid 地面使用稳定实例 ID 与显式位置。
+- Base 与 Raid 共用领域驱动拖放：移动、旋转、交换、堆叠、配装、卸装、压卸弹和指定弹匣换弹均由查询/命令原子提交。
+- 非空容器禁止嵌套；内容跟随容器；失败操作保持 Profile、revision、高水位、货币和弹药不变。
+- 当前装备包含两把长枪、手枪、头盔、护甲、胸挂和背包；武器定义声明兼容槽。
+- 固定供应、低价回收、普通货币和条件式单份救济已持久化，连续失败不会形成不可恢复死档。
 
-1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
-2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
-3. **Alpha Hardening**：PR #60 已以 merge commit `50849d5` 进入 main；本地 645/645、精确 head CI 与用户最终正常游玩验收通过。
-4. **基础防具与命中部位**：PR #61 已由用户正常游玩验收，并以 merge commit `733b597` 进入 main。
-5. **流血、疼痛与战地医疗**：PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main。
-6. **武器耐久、故障与维护**：PR #63 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `b8ddbe3` 进入 main。
-7. **多武器配装与切换**：PR #64 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `4c16596` 进入 main。
-8. **防具维护**：PR #65 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `755fa00` 进入 main。
-9. **逻辑弹道与落点反馈 v1**：PR #66 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `7877d71` 进入 main。
-10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
-11. **输入捕获、后坐力曲线与 P0 音频 v1**：高响应默认值、有界随机角度后坐力、Raid 相对鼠标输入已在 Draft PR #68；原程序化 cue 正替换为精选枪械、库存、医疗、感染者和 Base/Raid 环境音。
+## 武器、战斗与生存
 
-每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
+- 真实散装弹药、弹匣有序内容、枪膛、换弹和击发消耗闭环已接入；只有合法兼容弹匣可安装。
+- 玩家 100 HP。基础防具、头/躯干/腿命中、流血、疼痛、Medkit/绷带/止血带/止痛药与 Raid 限时动作已接入。
+- 武器与防具有耐久、资源化维护；武器支持 Stovepipe 故障与清障。Raid 治疗和维修可按合同缓慢移动并接受中断风险。
+- `1/2/3` 在三把武器间限时切换；每把武器保留自己的弹药、耐久与故障状态。
+- `ShotCommand -> ShotResolution -> LogicalBallisticFlight -> HitResult` 是生产射击权威；没有可渲染/可碰撞的 Projectile 场景实体。
+- 准星中心、后坐力、随机散布和右键瞄准由 simulation 计算；玩家必须手动压枪。逻辑弹道连续扫掠最近目标/障碍，并在最大距离形成 Ground 结果。
+- 普通命中不显示准星 X；命中部位、防具、伤害和反馈由领域结果驱动，App 不猜测。
 
-## 已接受能力
+## 输入、表现与音频
 
-- `MainMenu → Base → Raid → RaidResult → Base` V0 流程和进程内多局会话。
-- RL-INV-001/002/003：原子交换、Ctrl/Shift 锁定数量拖拽、同定义堆叠合并与 60 发上限。
-- `ShotCommand → ShotResolution → HitResult` 窄边界；生产路径已使用非场景实体的 `LogicalBallisticFlight`，冻结本发并连续扫掠目标。
-- 四个生产库、唯一业务源码编译所有权、强类型 DefinitionId、版本化 JSON ContentRegistry 和仓库本地 nlohmann-json overlay。
-- Persistent Base 的长期 Profile、唯一 AssetRegistry、Stash/三槽配装、固定经济/救济、可行走三设施 Base、首次环境目标链和原子存档。
+- Active Raid 使用 SDL 相对鼠标位移，模态 UI、失焦和终局会释放捕获，避免 OS 光标离窗阻断连续压枪。
+- Base/Raid 显示现有批准主角资源；左右移动复用现有六帧，其他方向仍使用静态 fallback。
+- `assets/audio/v1` P0 Sound Event 库提供枪械、库存、医疗、感染者和 Base/Raid 环境的最小闭环；音频失败静默降级且不反向驱动领域状态。
+- 正式 Grab/Scratch/Bite 动画和未另行授权的美术/音频生产仍暂停。
 
-## 已接受的 Extraction Loop
+## 架构、内容与存档
 
-- `ProfileState::AssetRegistry` 在 Base、Deploy、Raid Loot 与 Settlement 全程唯一拥有资产；装备根、容器子资产、已安装弹匣和 Raid 地面位置均使用稳定实例 ID。
-- content v2 提供一张固定 Alpha 地图的 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽；每局冻结 6～9 个有效 Loot，PCG32 命名随机流结果写入 pending Raid 快照。
-- schema v2 保存当前 HP、弹匣有序弹药、枪膛、Settlement 幂等记录和最近 RaidResult，并能读取旧 pending Raid；新生产 Deploy 不再把运行中 pending Raid 覆盖到磁盘。schema v1 可显式迁移。
-- Base 与 Raid 共用按住拖拽库存交互；格子移动/交换/堆叠/配装均由领域预览和命令提交。Base 可将弹药拖到弹匣即时压弹、将弹匣拖到武器安装并按条件自动上膛；Raid 可拖动弹药到弹匣执行 0.2 秒/发的可中断压弹，也可拖动指定弹匣到武器并执行 2 秒换弹。
-- 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 保留为 Base 快速转移捷径；可穿戴物在对应栏位为空且领域查询合法时优先快速装备，否则沿用容器转移。
-- 玩家为 100 HP；Medkit 每件 3 次、每次恢复最多 30 HP，Raid 内治疗 5 秒且中断不消耗。
-- Alpha Raid 无硬时限；E 拾取真实 Loot，随身库存可移动和整理，打开时禁止射击/换弹/开始治疗但允许普通移动。
-- 3 秒撤离成功保留合法随身资产与 HP；死亡和主动放弃全损并恢复 100 HP。关闭程序或异常退出不会结算，重开后加载出击前的完整 Profile；正式成功/失败结果仍使用唯一 Settlement ID 幂等提交。
-- Raid 世界支持 Shift 奔跑，速度为普通移动的 1.5 倍；当前不引入耐力条、负重或复杂移动消耗。
-- RaidResult 显示结果、成功带回物和货币变化；失败不生成丢失物清单。生产 Alpha 路径不再使用 V0 柜体、无限弹或 Timeout 结算。
+- 四个生产库为 `raidline_domain`、`raidline_simulation`、`raidline_services`、`raidline_sdl_client`；每个 production cpp 只有一个编译所有者，domain/simulation 禁止 SDL。
+- ContentRegistry 从版本化 JSON 加载稳定命名 DefinitionId，并验证重复 ID、非法引用、数值、地图、价格与发布资源。
+- Save schema 已逐步迁移到 v6，保存稳定 ID、关系、版本、高水位、医疗/装备/武器状态和结算凭证；主档使用校验、备份和原子替换。
+- 旧 V0 ItemId、3 HP、180 秒 Timeout、无限弹和旧 RaidSettlement 只服务历史回归，不得增加新消费者。
 
-## 当前自动化证据
+## 已接受交付序列
 
-- Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
-- PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
-- PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
-- 新长序列自动化覆盖 10 次混合成功/失败 Raid、至少 3 次跨进程重载、三组出生/撤离、三组敌人部署、三路线 Loot、重复 Settlement 和保存失败阻断。
-- PR #63 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并合入 main。
-- PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
-- PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
-- PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。当前输入/P0 音频修订树已完成 Windows Debug 全目标构建与 756/756 CTest，0 失败；原 P0 代码 head `f779d31` 的 exact-head Windows/Ubuntu CI 全部成功，Base 环境声/低延迟修订提交 `8efcd8d` 等待新 exact-head CI。开发代理未启动游戏，用户正常游玩验收仍待完成。
+- Core Extraction Alpha：PR #55～#60。
+- Survival Loadout：PR #61～#65。
+- Combat 逻辑弹道、准星/调参与输入捕获/P0 音频：PR #66～#68。
 
-## Combat 逻辑弹道与落点反馈 v1 当前实现
-
-- `ShotCommand` 新增最大飞行距离；`ShotResolution` 在成功击发时冻结规范化方向、速度、最大距离和最终落点，后续鼠标或角色移动不能修改本发。
-- `GameplayWorld` 不再创建可渲染/可碰撞的 Projectile 场景对象；`LogicalBallisticFlight` 只保存本发冻结值和已飞距离，不具有资产、场景或存档身份。
-- 弹道以现有 1200 世界单位/秒直线推进并返回本帧实际飞过的线段；命中解析连续扫掠、选择最近活目标，高速大帧不会因离散采样穿过薄目标。
-- PR #67 将冻结终点修订为武器最大射程或世界边界，而不是准星落点；弹道选择已飞区段内最近敌人或数据化 BallisticBlocker，未接触时到达最大距离形成一个 `Ground HitResult`。App 的弱曳光钳制在已经飞过的区段，不能提前显示未来路径。
-- 普通命中、Obstacle 与 Ground 命中不显示准星 X；爆头/弱点继续只由领域 `HitSemantic` 触发专用标记。没有生成、发布或接入新美术/音频，也未修改 manifest。
-
-## Combat 准星运动、逻辑弹道与开发调参 v1 当前实现
-
-- `WeaponAimState` 保存实际准星世界位置、上次鼠标输入位置、可推移控制目标、玩家控制速度和后坐力速度；鼠标突然从 A 转向 B 时，准星从当前 P 按最大速度与人机工效派生加速度向 B 运动。玩家朝向、准星表现和成功击发都消费同一个实际准星，而不是原始鼠标点。
-- 击发按“枪口到实际准星”方向刷新一份有界后坐力初速度并加入少量 PCG32 横向偏转；再次击发替换旧后坐力速度而非叠加，随后按人机工效派生反向加速度让速度减到零。后坐力同步推移准星和控制目标，鼠标静止时不会自动回正，必须反向移动鼠标压枪。
-- PR #67 接受基线中的 Pistol/Rifle 后坐力控制为 55/42。当前切片按用户调参反馈将两者人机工效提高到 100、隐藏最大准星速度提高到面板上限 5000 像素/秒，并显著提高控制加速度映射；运行时仍可通过 F10 面板按武器实例调整。
-- 实际准星只确定总体射击方向；每发在当前散布圆锥内使用确定性 PCG32 偏移冻结最终方向。精准度控制最小散布，稳定性控制最大散布，操控速度控制停火收缩；普通移动与距离提高当前散布下限，连续击发逐发扩散。
-- 按住鼠标右键基础开镜；开镜降低移动速度并改善最小/最大散布。当前基础 ADS 代表机械/低倍瞄准，因此仍显示短、快、弱且只覆盖已飞区段的曳光；高倍 `None` 策略已建立，但等待合法瞄具消费者。换弹保持开镜输入，并把散布锁定到当前 ADS 最大值。
-- 奔跑不能直接击发；奔跑中按射击会先结束奔跑，经过由操控速度决定的短促举枪准备后只提交一次原射击意图，准备完成前不消耗弹药。
-- 超过有效射程后散布逐渐恶化；超过最大射程时准星变红，命中只保留 25% 基础伤害。五项属性、基础伤害和射程来自版本化 WeaponUse 内容定义，App 不按名称猜测。
-- Alpha 首图从 JSON 读取三个代码表现障碍；玩家和逻辑弹道不能穿过，内容加载拒绝越界、重复 ID 或与任一合法敌人部署重叠的障碍。敌人移动阻挡和正式墙/车辆视觉仍不是通用物理系统。
-- Raid 中按 `F10` 打开开发者武器面板，使用上下选择、左右微调、Shift 大步长、R 重置。面板覆盖按当前武器实例隔离，立即重配置射击瞬态，但不修改 ContentRegistry、Profile、revision、存档、结算或 manifest；关闭进程即清除。
-
-## Combat 输入捕获、后坐力曲线与 P0 音频 v1 当前实现
-
-- Active Raid 使用 SDL 相对鼠标模式，将每帧 `xrel/yrel` 作为明确 `aimMotionDelta` 交给 simulation；准星不再依赖可移出窗口的 OS 光标坐标。库存、医疗轮盘、F10 面板、终局或失焦都会释放捕获并恢复系统光标。
-- 后坐力横向随机从“径向速度加侧向速度”改为即时径向初速后在短弯曲时间内转向有界随机角度；横向比例只改变目标偏角，不再造成单帧斜向跳点。连续开火刷新一段运动，不叠加无界冲量，也不自动回正。
-- F10 新增准星控制加速度和后坐力弯曲时间；最大准星速度默认值与上限均提高到 5000 像素/秒，便于把剩余延迟集中由加速度控制。
-- SDL client 使用 `GameAudioOutput` 加载 `assets/audio/v1/sound_events.json`，将成功击发、Enemy/Obstacle/Ground `HitResult`、感染者警觉、玩家受伤和 GameSession 换弹/医疗/清障/拾取语义事实映射为稳定 Sound Event。运行时 WAV 统一为 48 kHz、16-bit、mono；事件定义集中控制变体、增益、并发、冷却与循环，总音量由 bank master gain 控制。
-- 当前精选包来自 ArtWorkbench 的 `freeweaponsounds.zip` 与 Sonniss GDC 2026 五卷中的少量素材；只提交 43 个处理后的 WAV（合计约 7 MB）、来源清单和可复现脚本，不提交源 ZIP。Base 已将不合适的灯泡/线圈电流拾音替换为经过 90～3200 Hz 收束、低响度处理的室内烟囱风声，事件增益为 0.28；自动化对 Base 循环的过零率设置上限，防止尖锐电流噪声回归。
-- SDL client 在打开设备前请求 512 sample-frame 缓冲；48 kHz 下游戏侧目标约为 10.7 ms，但 SDL/平台可以调整或忽略该请求，远程桌面音频重定向仍会叠加编码、网络和客户端缓冲。音频设备或 bank 加载失败时游戏静默降级。
-- 本授权和实现都不包含 PNG、美术 manifest、正式攻击动画、霰弹枪、消音枪、广播、车辆或 P1 环境细分。
-
-## Survival Loadout 防具维护切片当前实现
-
-- content v5 新增基础甲修包与类型化 ArmorMaintenance；容量 50.00 点，占 `1x2`。基础头盔为复合材料、基础护甲为软质材料，每恢复 1 点分别消耗 1.50/1.00 维修点；金属材料合同预留 2.00 点且已有领域覆盖。
-- `queryArmorMaintenance` 同时计划实际恢复、点数消耗、当前最大耐久变化和动作时长；`executeArmorMaintenance` 在候选 Profile 中原子提交，失败不改变 revision、指纹或稳定 ID 高水位。
-- Base 可将甲修包拖到任意合法自有防具即时维修；Raid 可维修装备槽或随身容器中的防具，关闭库存后执行六秒动作。期间可按基础速度的 45% 缓慢移动；战斗/冲刺/受伤/库存/控制中断且零修复零消耗。该移动规则是用户对外部只读 GDD 原地维修描述的最新修订。
-- 固定供应新增甲修包，并收束 PR #64 已声明但客户端列表漏列的 Pistol/15 发弹匣；供应按钮改为三列五行，避免与右侧 Stash 回收区重叠。
-- Base/Raid 每恢复 1 点分别按 10%/20% 降低当前最大耐久，最低保留出厂最大耐久的 20%；点数不足时自动选择能够完整支付的最大整数修复量，零耐久防具可恢复。
-- schema 继续为 v6：既有字段已保存防具当前/最大耐久与甲修包剩余点数；加载显式接受 PR #64 的 `survival-loadout-content-4` 档案，不为空结构变化增加版本。
-- 甲修包使用代码 fallback；未生成、发布或接入正式资源，未修改美术 manifest。
-
-## Survival Loadout 多武器切片当前实现
-
-- Equipment 扩展为第一长枪、第二长枪、手枪、头盔、护甲、胸挂和背包七槽。武器定义声明兼容槽集合；快速装备按稳定顺序选择第一个空兼容槽，显式拖放继续使用 InventoryDomain 原子查询与提交。
-- 新 Profile 提供基础 Pistol 与两只 15 发手枪弹匣。Pistol 与 Rifle 共用当前 9mm 普通弹，但两类弹匣不能互换；Pistol 使用已批准既有资源，未发布手枪弹匣继续使用代码 fallback，未修改美术 manifest。
-- Raid 以第一长枪→第二长枪→手枪的顺序选择首把可用武器。`1/2/3` 触发 0.65 秒长枪或 0.35 秒手枪切换；切换期间可普通移动，冲刺、射击、换弹、治疗或受控会中断且不会改变当前槽。
-- Rifle 保持按住自动射击，Pistol 只消费新的射击边沿。射击配置、切换耗时、磨损、弹匣、枪膛、故障和维护均按当前武器实例/内容定义解析，不再由 App 假设主武器槽。
-- Base/Raid 共用七槽页面，三个武器槽分别显示自己的枪膛、弹匣和耐久；Raid HUD 提供 `1/2/3` 当前高亮。拖匣、卸匣、换弹、清障和状态显示均指向正确武器实例。
-- content v4 增加类型化 WeaponUse；schema v6 保存新装备槽并继续读取 v1～v5。旧 v5 中尚无耐久的 Pistol 会迁移到合法出厂状态，已保存的 Rifle 耐久/故障不被覆盖。
-
-## Survival Loadout 武器状态切片当前实现
-
-- 基础步枪以 0.01 精度保存 100.00 耐久；只有成功击发磨损 0.10。61～100 无随机故障，31～60、11～30、1～10 分别使用 0.5%、3%、12% 基础故障率；型号可靠性乘数和故障权重来自版本化内容定义。
-- 本切片只启用 Stovepipe：故障发生在成功击发后，子弹与耐久已经消耗，但不会自动送入下一发；故障时射击被领域拒绝且不改变 Profile。0 耐久武器不能消耗枪膛弹药。
-- 故障类型不直接显示；HUD 只报告通用 `MALFUNCTION`。玩家保持瞄准并在一秒内完成四次、每段至少 36 逻辑像素且夹角至少 120° 的鼠标反向扫动即可清障。射击、换弹、冲刺、库存和受控状态会重置手势，普通受伤不会。
-- 新增 25.00 容量的基础武器维护包。将维护包拖到武器：Base 即时恢复当前耐久且不损失最大耐久；Raid 启动 8 秒可中断维护，完成时按实际修复量损失 10% 当前最大耐久，最低不低于出厂上限的 20%。维护期间可以基础速度的 45% 缓慢移动；受伤、战斗、冲刺、库存或受控仍会中断，零进度、零消耗。
-- 武器未装备时由物品卡片显示耐久；装备到主武器栏位后，禁止内层物品卡片重复绘制，只保留栏位的单行精确耐久。
-- Medkit、Bandage、Tourniquet 和 Painkiller 在 Raid 内使用时均允许以基础速度的 45% 缓慢移动；预览与会话仍消费同一版本化医疗定义。
-- schema v5 保存武器当前/最大耐久与故障；schema v1～v4 为旧武器补全满耐久、无故障默认值。拒绝命令继续保证指纹、revision、货币和稳定 ID 高水位不变。
-- 维护包使用代码 fallback 表现；未生成、发布或接入正式资源，未修改美术 manifest。
-
-## Survival Loadout 医疗切片当前实现
-
-- Scratch 有 35% 概率造成轻度流血，Bite 有 75% 概率造成重度流血；判定在护甲与最终伤害之后执行一次，使用独立 PCG32 命名随机序列。
-- 轻度流血 1 HP/秒、40 秒自然结束；重度流血 2 HP/秒且不会自然停止。流血不能把玩家降到 1 HP 以下。
-- 疼痛由流血派生；未被止痛药压制时移动和当前武器操作速度降低 10%。首次疼痛及后续 15～25 秒叫声会显式刺激附近敌人，不生成或播放正式音频。
-- 新增 Bandage、Tourniquet、Painkiller 与类型化医疗能力；Medkit 仍为 3 次、5 秒连续恢复最多 30 HP，首个实际恢复点消耗一次，中断保留已恢复生命。
-- Raid 按住 `5` 打开胸挂医疗轮盘，释放执行；随身医疗可右键使用。Base 个人页右键即时治疗，且 Base 不推进流血与止痛药计时。
-- schema v4 保存医疗状态与入场快照；成功撤离保留状态，死亡/主动放弃清除状态并恢复 100 HP，关闭程序继续恢复出击前档案。
-- 新增医疗定义复用已批准 Medkit 占位图；未生成、发布或接入正式美术/音频，未修改美术 manifest。
-
-## Survival Loadout 当前实现
-
-- ContentRegistry 新增 ProtectiveGear、Helmet、BodyArmor 及基础头盔/基础护甲定义；两项均使用代码占位表现，没有生成或发布资源，也未修改美术 manifest。
-- AssetRegistry 防具实例保存出厂最大、当前最大与当前耐久；schema v3 往返保存，并能从 v1/v2 为防具补全合法满耐久默认值。
-- Base/Raid 个人页启用主武器、头盔、护甲、胸挂、背包五槽；拖拽与快速装备继续走统一 InventoryDomain。固定供应提供基础防具，部署快照、成功保留和死亡全损均包含两新装备根。
-- 敌方 Scratch 产生躯干命中，Bite 产生头部命中；GameSession 消费模拟事实并在同一 Profile 事务内提交 HP 与护甲磨损，再同步 Raid World。渲染层不推断命中部位或减伤。
-- 玩家射击按碰撞落点稳定解析 Head/Torso/Legs 并写入 HitResult；普通命中不显示 X，爆头/弱点才显示短促专用标记。受击边缘反馈区分普通伤害与护甲实际减伤。
-
-## Alpha Hardening 当前实现
-
-- 最低出击能力与救济资格统一统计散装弹药、弹匣有序弹药和枪膛弹药，避免已有 30 发可用弹药时误发救济。
-- Deploy 在交换 Raid 运行时前再次原子保存出击前 Profile；Raid 内整理、弹药动作、治疗、战斗和 Loot 只修改内存。关闭程序后主档与安全备份均恢复出击前状态；旧版本留下的 pending Raid 存档会清理该局生成 Loot 并无损返回 Base。
-- 固定供应内容加载校验 Alpha 25% 向下取整、最低 1 的回收价基线。
-- 双份损坏存档明确失败；Deploy 保存失败不交换 Profile、不进入 Raid。
-- Base `Tab` 与仓储 `E` 打开同一个“左侧角色/配装/随身容器，右侧 Stash”界面；Raid `Tab` 使用同一拖拽内核，不暴露 Stash，但允许随身弹药拖到弹匣执行限时压弹。
-- Base 与 Raid 的弹匣右键菜单都保持卸弹入口可发现。Base 即时卸入 Stash；Raid 关闭库存并启动 3 秒动作，优先卸入背包、再尝试胸挂通用格。空弹匣、随身空间不足或中断均不改变 Profile。
-- 拖动需超过 4 像素；原物留在原位，虚像跟随鼠标，绿色/蓝色/红色与 `MOVE/SWAP/MERGE/LOAD/INSTALL/BLOCKED` 同时表达真实领域预览。Ctrl=1、Shift=向上取半在按下时锁定，Ctrl+Shift 无操作。
-- Base 与 Raid 世界复用已批准主角资源；个人页显示同一资源的静态预览。左右移动复用六帧资源，上下移动与静止暂用静态图，RL-ANIM-001 的正式补全仍延期。
-- 用户已明确修订外部 Alpha 规格中的三项旧限制：Raid 允许拖匣换弹、允许局内压卸弹，关闭程序后回滚到出击前存档而非异常全损；同时要求 Raid 支持奔跑。GDD 资料库保持只读，本仓库仅记录冲突与实现结果。
-
-## 尚未完成
-
-- 准星运动、逻辑弹道与开发调参 v1：PR #67 的自动回正验收缺陷已修正，本地构建、163 项 focused tests 和全量 CTest 745/745 通过；新 exact-head Windows/Ubuntu CI 与用户复验尚待完成。
-- 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
-- Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
-- NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
-- 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
-- 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- Week29 枪口与受伤代码反馈仍待按新投影边界独立整理；本切片不整体合并 Week29。
-- 正式攻击动画及所有新正式美术/音频生产。
-
-## 明确停止扩展的 V0 合同
-
-- 3 HP、180 秒直接失败、V0 只读 Stash、无限弹和旧 RaidSettlement 不是产品终态，不得增加新消费者。
-- 生产 Alpha 只通过 Profile Deploy/Settlement 事务进入 Raid；不得重新引入 Profile 与 V0 库存的资产复制桥。
-- 生产射击不得重新引入可渲染/可碰撞 Projectile 场景实体；武器、伤害、存档和 App 只能消费射击领域值、逻辑飞行投影与 HitResult。
-- 普通命中最终不显示准星 X；爆头/弱点反馈等待命中部位领域合同，App 不得猜测。
+精确提交、构建数量、CI 与人工证据保存在对应 completed ExecPlan 和 PR，不在本文重复维护。

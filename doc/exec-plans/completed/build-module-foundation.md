@@ -4,7 +4,7 @@
 
 产品范围来源：`E:\WorkPlace\Projects\C\Project RaidLine GDD\05_Core_Extraction_Alpha_首阶段功能规格.md`
 
-上位计划：`doc/exec-plans/active/core-extraction-alpha.md`
+上位计划：`doc/exec-plans/completed/core-extraction-alpha.md`
 
 代码基线：`origin/main@5bbddc3`
 

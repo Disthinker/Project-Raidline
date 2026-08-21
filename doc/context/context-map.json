@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "global_context": [
+    "AGENTS.md",
+    "doc/context/INDEX.md"
+  ],
+  "domains": {
+    "asset-inventory": {
+      "context": "doc/context/domains/asset-inventory.md",
+      "keywords": ["asset", "inventory", "stash", "equipment", "container", "magazine", "ammo", "backpack", "chest rig", "装备", "库存", "背包", "弹匣", "弹药"],
+      "paths": ["src/profile_state.*", "src/inventory_*", "src/grid_inventory.*", "src/weapon_ammo_domain.*", "tests/test_profile_state.cpp", "tests/test_inventory_*", "tests/test_grid_inventory.cpp", "tests/test_weapon_ammo_domain.cpp"],
+      "test_labels": ["area-assets", "area-inventory"],
+      "adjacent": ["session-persistence", "content", "combat"]
+    },
+    "combat": {
+      "context": "doc/context/domains/combat.md",
+      "keywords": ["combat", "shot", "aim", "reticle", "recoil", "ballistic", "hit", "enemy", "damage", "medical", "armor", "射击", "准星", "后坐力", "弹道", "命中", "敌人", "伤害", "医疗", "防具"],
+      "paths": ["src/gameplay_world.*", "src/weapon_aim.*", "src/weapon_fire.*", "src/shot_resolution.*", "src/logical_ballistics.*", "src/hit_resolution.*", "src/enemy*", "src/combat_damage_domain.*", "src/profile_combat_domain.*", "src/medical_*", "src/maintenance_domain.*", "tests/test_gameplay_world.cpp", "tests/test_weapon_*", "tests/test_shot_resolution.cpp", "tests/test_logical_ballistics.cpp", "tests/test_hit_resolution.cpp", "tests/test_enemy*", "tests/test_medical_domain.cpp", "tests/test_maintenance_domain.cpp"],
+      "test_labels": ["area-combat"],
+      "adjacent": ["asset-inventory", "client-presentation", "session-persistence"]
+    },
+    "session-persistence": {
+      "context": "doc/context/domains/session-persistence.md",
+      "keywords": ["session", "profile", "save", "schema", "migration", "deploy", "settlement", "raid lifecycle", "recovery", "存档", "迁移", "部署", "结算", "恢复", "异常退出"],
+      "paths": ["src/game_session.*", "src/game_flow.*", "src/save_repository.*", "src/raid_lifecycle.*", "src/raid_settlement.*", "src/raid_session.*", "tests/test_game_session.cpp", "tests/test_game_flow.cpp", "tests/test_save_repository.cpp", "tests/test_raid_lifecycle.cpp", "tests/test_raid_settlement.cpp", "tests/test_alpha_extraction_session.cpp", "tests/test_alpha_hardening.cpp", "tests/test_persistent_session.cpp"],
+      "test_labels": ["area-lifecycle", "area-persistence"],
+      "adjacent": ["asset-inventory", "content"]
+    },
+    "content": {
+      "context": "doc/context/domains/content.md",
+      "keywords": ["content", "definition", "json", "item definition", "map definition", "loot table", "内容", "定义", "物品表", "地图配置", "战利品"],
+      "paths": ["assets/content/**", "src/content_registry.*", "src/definition_id.h", "src/item_definition.*", "src/alpha_content_ids.h", "src/loot_table.*", "tests/test_content_registry.cpp", "tests/test_item_definition.cpp", "tests/test_loot_table.cpp"],
+      "test_labels": ["area-content"],
+      "adjacent": ["asset-inventory", "session-persistence", "combat"]
+    },
+    "client-presentation": {
+      "context": "doc/context/domains/client-presentation.md",
+      "keywords": ["app", "sdl", "input", "ui", "render", "audio", "menu", "inventory interaction", "输入", "界面", "渲染", "音频", "菜单", "拖拽"],
+      "paths": ["src/app.*", "src/input_system.*", "src/inventory_interaction.*", "src/profile_inventory_interaction.*", "src/game_audio.*", "src/sound_event.*", "src/texture.*", "tests/test_input_system.cpp", "tests/test_inventory_interaction.cpp", "tests/test_mouse_inventory_interaction.cpp", "tests/test_profile_inventory_interaction.cpp", "tests/test_game_audio.cpp", "tests/test_texture.cpp"],
+      "test_labels": ["area-client", "area-inventory-ui", "area-audio"],
+      "adjacent": ["combat", "asset-inventory", "session-persistence"]
+    },
+    "build-delivery": {
+      "context": "doc/context/domains/build-delivery.md",
+      "keywords": ["cmake", "build", "test", "ctest", "ci", "workflow", "agent", "skill", "governance", "context", "pr", "构建", "测试", "治理", "上下文", "交付"],
+      "paths": ["CMakeLists.txt", "CMakePresets.json", "cmake/**", ".github/workflows/**", "tools/raidline_governance.py", "tests/test_raidline_governance.py", "AGENTS.md", ".agents/**", ".codex/**", "doc/context/**", "doc/engineering/**", "doc/exec-plans/**"],
+      "test_labels": ["governance"],
+      "adjacent": []
+    }
+  },
+  "authority_paths": [
+    "src/profile_state.*",
+    "src/save_repository.*",
+    "src/raid_lifecycle.*",
+    "src/raid_settlement.*",
+    "src/inventory_domain.*",
+    "src/weapon_ammo_domain.*",
+    "assets/content/**"
+  ],
+  "stable_contracts": [
+    "single AssetRegistry ownership",
+    "stable monotonic IDs",
+    "atomic inventory and equipment commands",
+    "ammunition conservation",
+    "idempotent deploy and settlement",
+    "versioned save migration",
+    "ShotCommand to HitResult authority",
+    "domain and simulation remain SDL-free"
+  ]
+}

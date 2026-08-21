@@ -1,0 +1,19 @@
+schema_version = 1
+task = "One concise player or engineering outcome"
+risk = "local" # local | domain | cross-domain | authority
+primary_domain = "combat"
+secondary_domains = []
+allowed_paths = ["src/example.*", "tests/test_example.cpp"]
+read_only_context = ["doc/context/domains/combat.md"]
+protected_domains = ["session-persistence"]
+relevant_invariants = ["ShotCommand -> HitResult remains authoritative"]
+persistence_impact = "none"
+content_impact = "none"
+ownership_impact = "none"
+player_visible_behavior = "Describe visible result or write none"
+required_focused_labels = ["area-combat"]
+required_integration_labels = []
+manual_acceptance = "Describe one normal-play flow or write not applicable"
+explicit_exclusions = ["No save schema change"]
+exec_plan = "" # required for cross-domain/authority or multi-step player slices
+
