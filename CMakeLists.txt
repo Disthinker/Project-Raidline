@@ -341,6 +341,7 @@ add_library(raidline_sdl_client STATIC
     src/input_system.h
     src/inventory_interaction.cpp
     src/inventory_interaction.h
+    src/pause_menu.h
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
     src/raid_pointer_capture.h

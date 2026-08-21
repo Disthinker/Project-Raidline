@@ -7,6 +7,7 @@ struct RaidPointerCaptureContext
     bool inventoryOpen{};
     bool medicalWheelOpen{};
     bool developerPanelOpen{};
+    bool pauseMenuOpen{};
     bool windowHasInputFocus{};
 };
 
@@ -15,5 +16,6 @@ struct RaidPointerCaptureContext
 {
     return context.raidScreen && context.raidActive &&
            !context.inventoryOpen && !context.medicalWheelOpen &&
-           !context.developerPanelOpen && context.windowHasInputFocus;
+           !context.developerPanelOpen && !context.pauseMenuOpen &&
+           context.windowHasInputFocus;
 }

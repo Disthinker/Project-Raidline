@@ -129,6 +129,57 @@ TEST(RaidLifecycleTest, DeploySnapshotTracksAllThreeWeaponRoots)
     EXPECT_EQ(equippedAsset(profile, EquipmentSlotKind::Sidearm), sidearm);
 }
 
+TEST(RaidLifecycleTest, DeployedRootMayMoveWithinCarriedOwnershipTree)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-carried-move",
+        publishedContentRegistry());
+    equipAlphaLoadout(profile);
+    const AssetInstanceId rifle = *equippedAsset(
+        profile, EquipmentSlotKind::PrimaryWeapon);
+    const AssetInstanceId backpack = *equippedAsset(
+        profile, EquipmentSlotKind::Backpack);
+    ASSERT_TRUE(deploy(profile, 77126).succeeded);
+
+    const ItemDefinition &rifleDefinition =
+        publishedContentRegistry().item(alpha_content::rifle);
+    const ProfileContainerId backpackGrid =
+        ProfileContainerId::compartment(backpack, 0);
+    const auto fit = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        backpackGrid,
+        rifleDefinition,
+        ItemOrientation::Degrees0,
+        rifle);
+    ASSERT_TRUE(fit.has_value());
+
+    const InventoryReceipt moved = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            rifle,
+            0,
+            StoredAssetLocation{backpackGrid, *fit},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "raid-store-equipped-rifle"});
+    ASSERT_TRUE(moved.succeeded) << moved.message;
+    EXPECT_TRUE(assetIsCarried(profile, rifle));
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+
+    const InventoryReceipt reequipped = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::SecondaryWeapon},
+        CommandContext{profile.revision, "raid-reequip-rifle"});
+    ASSERT_TRUE(reequipped.succeeded) << reequipped.message;
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::SecondaryWeapon),
+        rifle);
+}
+
 TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
 {
     ProfileState profile = makeNewAlphaProfile(

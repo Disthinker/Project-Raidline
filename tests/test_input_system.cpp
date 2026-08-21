@@ -3,6 +3,7 @@
 #include <array>
 
 #include "input_system.h"
+#include "pause_menu.h"
 #include "raid_pointer_capture.h"
 
 namespace
@@ -757,7 +758,7 @@ TEST(InputSystemTest, PointerSuppressionDoesNotClearSpaceFire)
 TEST(InputSystemTest, RaidPointerCaptureRequiresUnobstructedFocusedGameplay)
 {
     RaidPointerCaptureContext context{
-        true, true, false, false, false, true};
+        true, true, false, false, false, false, true};
     EXPECT_TRUE(shouldCaptureRaidPointer(context));
 
     context.inventoryOpen = true;
@@ -769,6 +770,26 @@ TEST(InputSystemTest, RaidPointerCaptureRequiresUnobstructedFocusedGameplay)
     context.developerPanelOpen = true;
     EXPECT_FALSE(shouldCaptureRaidPointer(context));
     context.developerPanelOpen = false;
+    context.pauseMenuOpen = true;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
+    context.pauseMenuOpen = false;
     context.windowHasInputFocus = false;
     EXPECT_FALSE(shouldCaptureRaidPointer(context));
+}
+
+TEST(InputSystemTest, PauseMenuEscapeReturnsFromSettingsThenCloses)
+{
+    PauseMenuState menu;
+    EXPECT_FALSE(menu.isOpen());
+    EXPECT_FALSE(menu.handleEscape());
+
+    menu.open();
+    menu.showSettings();
+    ASSERT_TRUE(menu.isOpen());
+    ASSERT_TRUE(menu.settingsOpen());
+    EXPECT_TRUE(menu.handleEscape());
+    EXPECT_TRUE(menu.isOpen());
+    EXPECT_FALSE(menu.settingsOpen());
+    EXPECT_TRUE(menu.handleEscape());
+    EXPECT_FALSE(menu.isOpen());
 }

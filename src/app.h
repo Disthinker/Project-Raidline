@@ -14,6 +14,7 @@
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
+#include "pause_menu.h"
 #include "profile_inventory_interaction.h"
 #include "raid_pointer_capture.h"
 #include "texture.h"
@@ -75,6 +76,7 @@ private:
 
     bool pendingScreenConfirm_{false};
     std::optional<MainMenuCommand> pendingMainMenuCommand_;
+    std::optional<PauseMenuCommand> pendingPauseMenuCommand_;
     std::vector<BasePointerClick> pendingBaseClicks_;
     bool pendingBaseRotate_{};
     std::optional<Vec2> pointerWorldPosition_;
@@ -102,8 +104,8 @@ private:
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
+    PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
-    bool raidQuitArmed_{};
     std::string uiMessage_;
     float specialHitFeedbackRemaining_{};
     HitSemantic specialHitSemantic_{HitSemantic::Normal};
@@ -161,6 +163,11 @@ private:
 
     [[nodiscard]] SDL_FRect mainMenuButton(std::size_t index) const noexcept;
 
+    [[nodiscard]] SDL_FRect pauseMenuButton(std::size_t index) const noexcept;
+    [[nodiscard]] std::optional<PauseMenuCommand>
+    pauseMenuCommandAt(float x, float y) const noexcept;
+    void handlePauseMenuCommand(PauseMenuCommand command);
+
     [[nodiscard]]
     SDL_FRect screenPrimaryButton() const noexcept;
 
@@ -215,6 +222,7 @@ private:
     void render();
     void syncRaidPointerCapture() noexcept;
     void renderMainMenu();
+    void renderPauseMenu();
     void renderBase();
     void renderBaseWorld();
     void renderBaseStorage();

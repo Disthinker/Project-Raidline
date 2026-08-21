@@ -199,7 +199,7 @@ std::optional<ShotSpec> WeaponFireState::update(
         const float readableMotionFloor = std::lerp(
             targetSpread,
             motionTarget,
-            0.35F);
+            0.70F);
         spreadDegrees_ = std::max(
             spreadDegrees_,
             readableMotionFloor);
@@ -210,7 +210,7 @@ std::optional<ShotSpec> WeaponFireState::update(
                     reticleMotionFactor * deltaTime);
         recoveryDelayRemaining_ = std::max(
             recoveryDelayRemaining_,
-            std::min(config_.recoveryDelay, 0.04F));
+            config_.recoveryDelay);
     }
 
     if (context.forceMaximumSpread)
@@ -262,6 +262,18 @@ float WeaponFireState::contextualMinimumSpreadDegrees() const noexcept
 float WeaponFireState::contextualMaximumSpreadDegrees() const noexcept
 {
     return contextualMaximumSpreadDegrees_;
+}
+
+float WeaponFireState::spreadPresentationFraction() const noexcept
+{
+    if (config_.maximumSpreadDegrees <= 0.0001F)
+    {
+        return 0.0F;
+    }
+    return std::clamp(
+        spreadDegrees_ / config_.maximumSpreadDegrees,
+        0.0F,
+        1.0F);
 }
 
 float WeaponFireState::cooldownRemaining() const noexcept

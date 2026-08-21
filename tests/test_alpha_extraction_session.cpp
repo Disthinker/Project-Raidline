@@ -460,6 +460,56 @@ TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSecon
     EXPECT_EQ(magazineRoundCount(session.profile(), *installed), 20U);
 }
 
+TEST(AlphaExtractionSessionTest, RaidInventoryMovesUnequipsAndReequipsWeapon)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-raid-inventory"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId backpack = assets(
+        session.profile(), alpha_content::backpack).front();
+    ASSERT_TRUE(session.deployAlpha(77127));
+
+    const ProfileContainerId backpackGrid =
+        ProfileContainerId::compartment(backpack, 0);
+    const auto fit = findFirstProfileFit(
+        session.profile(),
+        publishedContentRegistry(),
+        backpackGrid,
+        publishedContentRegistry().item(alpha_content::rifle),
+        ItemOrientation::Degrees0,
+        rifle);
+    ASSERT_TRUE(fit.has_value());
+
+    const InventoryReceipt stored = session.executeProfileInventory(
+        InventoryMoveCommand{
+            rifle,
+            0,
+            StoredAssetLocation{backpackGrid, *fit},
+            ItemOrientation::Degrees0},
+        "raid-ui-unequip-rifle");
+    ASSERT_TRUE(stored.succeeded) << stored.message;
+    EXPECT_FALSE(equippedAsset(
+        session.profile(), EquipmentSlotKind::PrimaryWeapon).has_value());
+    EXPECT_TRUE(assetIsCarried(session.profile(), rifle));
+
+    const InventoryReceipt equipped = session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::SecondaryWeapon},
+        "raid-ui-reequip-rifle");
+    ASSERT_TRUE(equipped.succeeded) << equipped.message;
+    session.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(
+        equippedAsset(
+            session.profile(), EquipmentSlotKind::SecondaryWeapon),
+        rifle);
+    EXPECT_EQ(session.activeAlphaWeapon(), rifle);
+    EXPECT_EQ(
+        session.activeAlphaWeaponSlot(),
+        EquipmentSlotKind::SecondaryWeapon);
+}
+
 TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMode)
 {
     GameSession session;

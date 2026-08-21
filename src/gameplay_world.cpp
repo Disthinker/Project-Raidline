@@ -1146,6 +1146,15 @@ GameplayWorld::weaponAccuracyProjection() const noexcept
     const float radius = std::isfinite(radians)
         ? std::tan(radians) * distance
         : 0.0F;
+    // worldRadius is the authoritative geometric shot cone. reticleRadius is
+    // a monotonic, readable projection of the same spread state, so close-
+    // range movement/flick/fire bloom remains visible without making bullets
+    // artificially inaccurate. The SDL client consumes this projection and
+    // never invents spread from presentation-only state.
+    const float presentationFraction =
+        weaponFire_.spreadPresentationFraction();
+    const float readableRadius = 10.0F +
+        70.0F * std::sqrt(presentationFraction);
     return WeaponAccuracyProjection{
         weaponAim_.actualWorldPosition(),
         distance,
@@ -1153,6 +1162,7 @@ GameplayWorld::weaponAccuracyProjection() const noexcept
         weaponFire_.contextualMinimumSpreadDegrees(),
         weaponFire_.contextualMaximumSpreadDegrees(),
         std::max(0.0F, radius),
+        std::max(std::max(0.0F, radius), readableRadius),
         weaponAim_.beyondEffectiveRange()};
 }
 

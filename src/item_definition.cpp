@@ -77,12 +77,12 @@ WeaponHandlingParameters deriveWeaponHandling(
         0.65F,
         0.55F,
         0.70F,
-        0.60F,
+        0.75F,
         reticleMotionSpread,
         0.04F,
-        72.0F,
-        0.72F,
-        0.075F};
+        120.0F,
+        0.85F,
+        0.095F};
 }
 
 bool isWeaponEquipmentSlot(EquipmentSlotKind slot) noexcept

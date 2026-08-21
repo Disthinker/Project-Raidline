@@ -993,7 +993,7 @@ bool GameSession::adjustDeveloperWeaponTuning(
             1.0F,
             5.0F,
             0.0F,
-            200.0F,
+            360.0F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::WeakTracerOpacity:

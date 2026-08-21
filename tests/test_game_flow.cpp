@@ -300,3 +300,21 @@ TEST(GameFlowTest, StateNamesAreStableForDebugOutput)
         gameFlowStateName(GameFlowState::RaidResult),
         "RaidResult");
 }
+
+TEST(GameFlowTest, BaseAndRaidCanReturnToMainMenuWithoutSettlement)
+{
+    GameFlow base;
+    ASSERT_TRUE(base.startGame());
+    EXPECT_TRUE(base.returnToMainMenu());
+    EXPECT_EQ(base.state(), GameFlowState::MainMenu);
+    EXPECT_FALSE(base.returnToMainMenu());
+
+    GameFlow raid;
+    enterRaid(raid);
+    const RaidSettlementState settlementBefore =
+        raid.gameSession().settlement().state();
+    EXPECT_TRUE(raid.returnToMainMenu());
+    EXPECT_EQ(raid.state(), GameFlowState::MainMenu);
+    EXPECT_EQ(raid.gameSession().settlement().state(), settlementBefore);
+    EXPECT_EQ(raid.gameSession().state(), GameSessionState::InRaid);
+}

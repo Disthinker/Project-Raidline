@@ -1141,9 +1141,6 @@ GameplayInput App::makeGameplayInput() const
     {
         input.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
     }
-    input.quitRaidJustPressed =
-        input_.wasActionJustPressed(GameAction::InventoryCancel);
-
     return input;
 }
 
@@ -1202,7 +1199,6 @@ bool App::tryDeployFromBase()
         return false;
     }
     deploymentWarningArmed_ = false;
-    raidQuitArmed_ = false;
     uiMessage_.clear();
     return true;
 }
@@ -1225,6 +1221,80 @@ std::optional<MainMenuCommand> App::mainMenuCommandAt(
         }
     }
     return std::nullopt;
+}
+
+SDL_FRect App::pauseMenuButton(std::size_t index) const noexcept
+{
+    return SDL_FRect{
+        500.0F,
+        280.0F + static_cast<float>(index) * 58.0F,
+        280.0F,
+        46.0F};
+}
+
+std::optional<PauseMenuCommand> App::pauseMenuCommandAt(
+    float x,
+    float y) const noexcept
+{
+    const MousePosition point{x, y};
+    if (pauseMenu_.settingsOpen())
+    {
+        return contains(pauseMenuButton(1), point)
+            ? std::optional<PauseMenuCommand>{PauseMenuCommand::Settings}
+            : std::nullopt;
+    }
+    for (std::size_t index = 0; index < 4; ++index)
+    {
+        if (contains(pauseMenuButton(index), point))
+        {
+            return static_cast<PauseMenuCommand>(index);
+        }
+    }
+    return std::nullopt;
+}
+
+void App::handlePauseMenuCommand(PauseMenuCommand command)
+{
+    if (!pauseMenu_.isOpen())
+    {
+        return;
+    }
+    if (pauseMenu_.settingsOpen())
+    {
+        if (command == PauseMenuCommand::Settings)
+        {
+            static_cast<void>(pauseMenu_.handleEscape());
+        }
+        return;
+    }
+
+    switch (command)
+    {
+    case PauseMenuCommand::Continue:
+        pauseMenu_.close();
+        uiMessage_.clear();
+        break;
+    case PauseMenuCommand::Settings:
+        pauseMenu_.showSettings();
+        break;
+    case PauseMenuCommand::MainMenu:
+        closeInventory();
+        medicalWheelOpen_ = false;
+        medicalWheelOptions_.clear();
+        developerWeaponPanelOpen_ = false;
+        profileContextMenu_.reset();
+        if (gameFlow_.returnToMainMenu())
+        {
+            pauseMenu_.close();
+            uiMessage_ = gameSession_.hasSavedProfile()
+                ? "RETURNED TO MAIN MENU"
+                : "RETURNED TO MAIN MENU - NO PERSISTENT PROFILE";
+        }
+        break;
+    case PauseMenuCommand::ExitDesktop:
+        running_ = false;
+        break;
+    }
 }
 
 void App::handleMainMenuCommand(MainMenuCommand command)
@@ -2916,6 +2986,7 @@ void App::processEvents()
     pendingBaseClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
+    pendingPauseMenuCommand_.reset();
     pendingScreenConfirm_ = false;
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
@@ -2949,6 +3020,12 @@ void App::processEvents()
             medicalWheelOptions_.clear();
             developerWeaponPanelOpen_ = false;
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
+            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
+                (gameFlow_.state() == GameFlowState::Base ||
+                 gameFlow_.state() == GameFlowState::Raid))
+            {
+                pauseMenu_.open();
+            }
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
@@ -2975,6 +3052,7 @@ void App::processEvents()
             }
             if (gameFlow_.state() == GameFlowState::Raid &&
                 !inventoryOverlayState_.isOpen() &&
+                !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
                 gameSession_.observeAlphaWeaponClearMotion(motion))
             {
@@ -2998,7 +3076,7 @@ void App::processEvents()
         }
 
         if (gameFlow_.state() == GameFlowState::Raid &&
-            gameSession_.alphaRaidActive())
+            gameSession_.alphaRaidActive() && !pauseMenu_.isOpen())
         {
             if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
                 event.key.scancode == SDL_SCANCODE_F10)
@@ -3012,7 +3090,6 @@ void App::processEvents()
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
                     profileContextMenu_.reset();
-                    raidQuitArmed_ = false;
                     uiMessage_ = "DEVELOPER WEAPON TUNING OPEN";
                 }
                 else
@@ -3073,6 +3150,20 @@ void App::processEvents()
                 developerWeaponPanelBlocksGameplayThisFrame_ = true;
                 continue;
             }
+        }
+
+        if ((gameFlow_.state() == GameFlowState::Base ||
+             gameFlow_.state() == GameFlowState::Raid) &&
+            pauseMenu_.isOpen())
+        {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event.button.button == SDL_BUTTON_LEFT)
+            {
+                input_.suppressPrimaryPointerUntilRelease();
+                pendingPauseMenuCommand_ = pauseMenuCommandAt(
+                    event.button.x, event.button.y);
+            }
+            continue;
         }
 
         if (gameFlow_.state() == GameFlowState::MainMenu)
@@ -3207,6 +3298,37 @@ void App::update(float deltaTime)
     {
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
+    }
+    const bool escapePressed = input_.wasActionJustPressed(
+        GameAction::InventoryCancel);
+    const bool pauseEligible =
+        gameFlow_.state() == GameFlowState::Base ||
+        gameFlow_.state() == GameFlowState::Raid;
+    if (pauseMenu_.isOpen())
+    {
+        if (escapePressed)
+        {
+            static_cast<void>(pauseMenu_.handleEscape());
+        }
+        else if (pendingPauseMenuCommand_.has_value())
+        {
+            handlePauseMenuCommand(*pendingPauseMenuCommand_);
+        }
+        pendingPauseMenuCommand_.reset();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
+    const bool existingModalHandlesEscape =
+        inventoryOverlayState_.isOpen() ||
+        medicalWheelOpen_ ||
+        developerWeaponPanelBlocksGameplayThisFrame_ ||
+        (gameFlow_.state() == GameFlowState::Base &&
+         gameFlow_.activeBaseFacility().has_value());
+    if (pauseEligible && escapePressed && !existingModalHandlesEscape)
+    {
+        pauseMenu_.open();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
     }
     const bool screenConfirm =
         pendingScreenConfirm_ ||
@@ -3409,22 +3531,6 @@ void App::update(float deltaTime)
     {
         gameplayInput.quitRaidJustPressed = false;
     }
-    if (gameSession_.world().isAlphaRaidWorld() &&
-        gameplayInput.quitRaidJustPressed)
-    {
-        if (!raidQuitArmed_)
-        {
-            raidQuitArmed_ = true;
-            gameplayInput.quitRaidJustPressed = false;
-            uiMessage_ =
-                "PRESS ESC AGAIN TO ABANDON RAID AND LOSE ALL CARRIED ASSETS";
-        }
-        else
-        {
-            raidQuitArmed_ = false;
-        }
-    }
-
     const InventoryContainerInteractionDecision
         containerDecision =
             decideInventoryContainerInteraction(
@@ -3514,11 +3620,6 @@ void App::update(float deltaTime)
             gameSession_.lastIncomingDamage()->damageApplied >= 25
                 ? SoundEventId::PlayerHurtHeavy
                 : SoundEventId::PlayerHurtLight);
-    }
-
-    if (!gameFlow_.isRaidScreen())
-    {
-        raidQuitArmed_ = false;
     }
 
     if ((!gameFlow_.isRaidScreen() ||
@@ -5532,10 +5633,9 @@ void App::renderShotPresentations()
         {
             const Vec2 start = pointAt(from);
             const Vec2 end = pointAt(to);
-            // A warm three-pixel body plus a white-hot center remains a line
-            // streak, not a moving projectile core, while staying readable on
-            // both dark streets and pale inventory-adjacent scenery.
-            for (const float offset : {-1.5F, 1.5F})
+            // A five-pixel layered streak remains a non-colliding line
+            // presentation, but reads clearly at gameplay scale.
+            for (const float offset : {-2.0F, -1.0F, 1.0F, 2.0F})
             {
                 const Vec2 shiftedStart{
                     start.x + normal.x * offset,
@@ -5549,7 +5649,7 @@ void App::renderShotPresentations()
                     red,
                     green,
                     blue,
-                    alphaScale * 0.62F);
+                    alphaScale * (std::abs(offset) < 1.5F ? 0.78F : 0.46F));
             }
             drawLine(
                 start,
@@ -5607,6 +5707,7 @@ void App::syncRaidPointerCapture() noexcept
             inventoryOverlayState_.isOpen(),
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
+            pauseMenu_.isOpen(),
             windowHasInputFocus_});
 
     if (shouldCapture != relativeMouseModeActive_)
@@ -5638,6 +5739,7 @@ void App::renderAimCrosshair()
     if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
         developerWeaponPanelOpen_ ||
+        pauseMenu_.isOpen() ||
         !gameSession_.world().raidSession().isActive())
     {
         return;
@@ -5646,10 +5748,10 @@ void App::renderAimCrosshair()
     const WeaponAccuracyProjection accuracy =
         gameSession_.world().weaponAccuracyProjection();
     const float feedbackRadius = std::clamp(
-        std::max(4.0F, accuracy.worldRadius),
-        4.0F,
-        96.0F);
-    constexpr float kArmLength{7.0F};
+        accuracy.reticleRadius,
+        10.0F,
+        160.0F);
+    constexpr float kArmLength{15.0F};
     const Vec2 center = accuracy.center;
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -5661,29 +5763,35 @@ void App::renderAimCrosshair()
     {
         SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
     }
-    SDL_RenderLine(
-        renderer_,
+    const auto drawHorizontalArm = [&](float startX, float endX)
+    {
+        for (const float offset : {-1.0F, 0.0F, 1.0F})
+        {
+            SDL_RenderLine(
+                renderer_, startX, center.y + offset,
+                endX, center.y + offset);
+        }
+    };
+    const auto drawVerticalArm = [&](float startY, float endY)
+    {
+        for (const float offset : {-1.0F, 0.0F, 1.0F})
+        {
+            SDL_RenderLine(
+                renderer_, center.x + offset, startY,
+                center.x + offset, endY);
+        }
+    };
+    drawHorizontalArm(
         center.x - feedbackRadius - kArmLength,
-        center.y,
-        center.x - feedbackRadius,
-        center.y);
-    SDL_RenderLine(
-        renderer_,
+        center.x - feedbackRadius);
+    drawHorizontalArm(
         center.x + feedbackRadius,
-        center.y,
-        center.x + feedbackRadius + kArmLength,
-        center.y);
-    SDL_RenderLine(
-        renderer_,
-        center.x,
+        center.x + feedbackRadius + kArmLength);
+    drawVerticalArm(
         center.y - feedbackRadius - kArmLength,
-        center.x,
         center.y - feedbackRadius);
-    SDL_RenderLine(
-        renderer_,
-        center.x,
+    drawVerticalArm(
         center.y + feedbackRadius,
-        center.x,
         center.y + feedbackRadius + kArmLength);
     if (specialHitFeedbackRemaining_ > 0.0F)
     {
@@ -6416,7 +6524,7 @@ void App::renderMainMenu()
         SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
         SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
         SDL_RenderDebugText(renderer_, 466.0F, 400.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        SDL_RenderDebugText(renderer_, 458.0F, 424.0F, "SHIFT SPRINT  TAB INVENTORY  ESC ABANDON/CLOSE");
+        SDL_RenderDebugText(renderer_, 458.0F, 424.0F, "SHIFT SPRINT  TAB INVENTORY  ESC PAUSE/CLOSE");
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
@@ -6461,6 +6569,70 @@ void App::renderMainMenu()
     {
         SDL_RenderDebugText(renderer_, 484.0F, 596.0F, uiMessage_.c_str());
     }
+}
+
+void App::renderPauseMenu()
+{
+    if (!pauseMenu_.isOpen())
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
+    SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 185);
+    SDL_RenderFillRect(renderer_, &shade);
+
+    const SDL_FRect panel{kFlowPanelX, 112.0F, kFlowPanelWidth, 496.0F};
+    SDL_SetRenderDrawColor(renderer_, 14, 24, 29, 250);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 92, 154, 132, 255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 230, 236, 232, 255);
+    SDL_RenderDebugText(renderer_, 600.0F, 160.0F, "PAUSED");
+
+    if (pauseMenu_.settingsOpen())
+    {
+        SDL_RenderDebugText(renderer_, 568.0F, 208.0F, "SETTINGS");
+        SDL_RenderDebugText(
+            renderer_, 452.0F, 238.0F,
+            "WASD MOVE  SHIFT SPRINT  E INTERACT");
+        SDL_RenderDebugText(
+            renderer_, 438.0F, 262.0F,
+            "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
+        SDL_RenderDebugText(
+            renderer_, 448.0F, 286.0F,
+            "TAB INVENTORY  F10 WEAPON TUNING");
+        const SDL_FRect back = pauseMenuButton(1);
+        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
+        SDL_RenderFillRect(renderer_, &back);
+        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
+        SDL_RenderRect(renderer_, &back);
+        SDL_RenderDebugText(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
+    }
+    else
+    {
+        const std::array<const char *, 4> labels{
+            "CONTINUE GAME",
+            "SETTINGS",
+            "EXIT TO MAIN MENU",
+            "EXIT TO DESKTOP"};
+        for (std::size_t index{}; index < labels.size(); ++index)
+        {
+            const SDL_FRect button = pauseMenuButton(index);
+            SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
+            SDL_RenderFillRect(renderer_, &button);
+            SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
+            SDL_RenderRect(renderer_, &button);
+            SDL_RenderDebugText(
+                renderer_, button.x + 16.0F, button.y + 17.0F,
+                labels[index]);
+        }
+        SDL_RenderDebugText(
+            renderer_, 476.0F, 542.0F,
+            "ESC CONTINUES | RAID EXIT RESTORES PRE-RAID SAVE");
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderBaseWorld()
@@ -7736,6 +7908,8 @@ void App::render()
             "RETURN TO BASE");
         break;
     }
+
+    renderPauseMenu();
 
     SDL_RenderPresent(
         renderer_);

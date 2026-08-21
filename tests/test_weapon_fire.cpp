@@ -145,6 +145,10 @@ TEST(WeaponFireStateTest, FastReticleMotionExpandsAndThenRecoversSpread)
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, flick));
     EXPECT_GT(fire.spreadDegrees(), 4.0F);
 
+    // A one-frame flick remains visible for the configured recovery delay.
+    const float expanded = fire.spreadDegrees();
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, slow));
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), expanded);
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 1.0F, slow));
     EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.0F);
 }
@@ -189,6 +193,27 @@ TEST(WeaponFireStateTest, MovingPlayerUsesReadablePortionOfSpreadEnvelope)
 
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, moving));
     EXPECT_FLOAT_EQ(fire.spreadDegrees(), 3.6F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.6F);
+}
+
+TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
+{
+    WeaponFireConfig config;
+    config.nearDistanceSpreadScale = 1.0F;
+    config.movingSpreadFraction = 0.75F;
+    WeaponFireState fire{config};
+    WeaponFireContext moving;
+    moving.moving = true;
+    moving.distanceSpreadFactor = 0.0F;
+
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, moving));
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 4.5F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.75F);
+
+    WeaponFireContext effective;
+    effective.distanceSpreadFactor = 1.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, effective));
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 1.0F);
 }
 
 TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)

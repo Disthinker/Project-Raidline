@@ -70,6 +70,7 @@ struct WeaponAccuracyProjection
     float minimumSpreadDegrees{};
     float maximumSpreadDegrees{};
     float worldRadius{};
+    float reticleRadius{};
     bool beyondEffectiveRange{};
 };
 

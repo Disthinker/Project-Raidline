@@ -60,6 +60,7 @@ public:
     [[nodiscard]] float spreadDegrees() const noexcept;
     [[nodiscard]] float contextualMinimumSpreadDegrees() const noexcept;
     [[nodiscard]] float contextualMaximumSpreadDegrees() const noexcept;
+    [[nodiscard]] float spreadPresentationFraction() const noexcept;
     [[nodiscard]] float cooldownRemaining() const noexcept;
 
 private:

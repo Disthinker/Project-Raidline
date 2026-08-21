@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -904,6 +905,33 @@ TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
         world.weaponAccuracyProjection().maximumSpreadDegrees);
     EXPECT_LT(world.weaponVisualRecoilPixels(), recoil);
     EXPECT_FLOAT_EQ(world.weaponVisualRecoilPixels(), 0.0F);
+}
+
+TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput rest{};
+    rest.aimWorldPosition = Vec2{720.0F, 376.0F};
+    world.update(rest, 0.0F);
+    const WeaponAccuracyProjection resting =
+        world.weaponAccuracyProjection();
+    EXPECT_GE(resting.reticleRadius, resting.worldRadius);
+    EXPECT_GE(resting.reticleRadius, 10.0F);
+    const WeaponHandlingParameters handling = deriveWeaponHandling(
+        *rifle.weaponUse);
+    const float expectedReadableRadius = 10.0F + 70.0F * std::sqrt(
+        std::clamp(
+            resting.currentSpreadDegrees / handling.maximumSpreadDegrees,
+            0.0F,
+            1.0F));
+    EXPECT_NEAR(
+        resting.reticleRadius,
+        std::max(resting.worldRadius, expectedReadableRadius),
+        0.001F);
 }
 
 TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)
