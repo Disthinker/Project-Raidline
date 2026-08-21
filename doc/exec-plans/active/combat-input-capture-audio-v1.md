@@ -1,6 +1,6 @@
 # Combat：输入捕获、后坐力曲线与 P0 音频 v1 ExecPlan
 
-状态：Draft PR #68；输入/后坐力原 head 已通过 CI，用户授权的 ArtWorkbench P0 音频接入正在本地复验
+状态：Draft PR #68；P0 音频代码 head `f779d31` 的 Windows/Ubuntu CI 已通过，待用户正常游玩验收
 
 基线：`origin/main@881c034`（PR #67 已通过用户验收并合入）
 
@@ -44,4 +44,4 @@
 - 2026-08-20：Windows Debug 全目标构建和 751/751 CTest 通过；`Project_Raidline.exe` 已生成但开发代理未启动。提交、Draft PR 与 exact-head CI 待完成。
 - 2026-08-20：提交 `f32653d` 推送至 Draft PR #68，exact-head Windows/Ubuntu CI 成功；等待用户正常游玩验收。
 - 2026-08-21：用户授权从 ArtWorkbench 精选并接入 P0 音效。已生成统一 runtime WAV、稳定事件 bank、来源记录和可复现脚本；程序化音频实现退场。开发代理未启动游戏。
-- 2026-08-21：Windows Debug 全目标构建与 755/755 CTest 通过，0 失败；专项覆盖 bank 完整性、WAV 格式、路径安全、敌人警觉、换弹与医疗事件。待提交、推送、exact-head CI 和用户正常游玩验收。
+- 2026-08-21：Windows Debug 全目标构建与 755/755 CTest 通过，0 失败；专项覆盖 bank 完整性、WAV 格式、路径安全、敌人警觉、换弹与医疗事件。提交 `f779d31` 已推送，exact-head Windows/Ubuntu CI 全部成功；待用户正常游玩验收。

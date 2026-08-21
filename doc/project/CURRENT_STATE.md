@@ -59,7 +59,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。当前输入/P0 音频树已重新完成 Windows Debug 全目标构建与 755/755 CTest，0 失败；开发代理未启动游戏。新提交、exact-head CI 和用户正常游玩验收仍待完成。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。当前输入/P0 音频树已重新完成 Windows Debug 全目标构建与 755/755 CTest，0 失败；代码 head `f779d31` 的 exact-head Windows/Ubuntu CI 全部成功。开发代理未启动游戏，用户正常游玩验收仍待完成。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
