@@ -539,7 +539,7 @@ TEST(GameplayWorldTest, ConfiguredTracerSpansTravelledStepsAndFlickers)
         std::hypot(
             first.front().end.x - first.front().start.x,
             first.front().end.y - first.front().start.y),
-        180.0F,
+        30.0F,
         0.001F);
 
     world.update(GameplayInput{}, 0.010F);

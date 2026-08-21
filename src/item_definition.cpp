@@ -80,7 +80,7 @@ WeaponHandlingParameters deriveWeaponHandling(
         0.75F,
         reticleMotionSpread,
         0.04F,
-        180.0F,
+        30.0F,
         0.85F,
         0.095F};
 }

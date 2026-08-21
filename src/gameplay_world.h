@@ -319,7 +319,7 @@ private:
     float weaponMaximumRange_{2048.0F};
     float weaponLogicalBallisticSpeed_{6000.0F};
     TracerStyle weaponTracerStyle_{TracerStyle::Weak};
-    float weaponTracerLength_{34.0F};
+    float weaponTracerLength_{30.0F};
     float weaponTracerOpacity_{0.42F};
     float weaponTracerLifetimeSeconds_{0.055F};
 
