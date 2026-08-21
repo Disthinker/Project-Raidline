@@ -265,6 +265,8 @@ private:
     void renderEnemies();
     void renderPlayer();
     void renderShotPresentations();
+    void renderShotFeedbackPresentations();
+    [[nodiscard]] Vec2 raidWorldScreenShakePixels() const noexcept;
     void renderAimCrosshair();
     void renderCombatFeedback();
     void renderParticles();

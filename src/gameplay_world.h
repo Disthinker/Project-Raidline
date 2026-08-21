@@ -17,6 +17,7 @@
 #include "logical_ballistics.h"
 #include "raid_session.h"
 #include "shot_resolution.h"
+#include "shot_feedback_presentation.h"
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
 #include "weapon_aim.h"
@@ -136,6 +137,13 @@ public:
     [[nodiscard]]
     std::vector<ShotPresentationSnapshot>
     shotPresentationSnapshots() const;
+
+    // Accepted-shot-only presentation. These snapshots and the normalized
+    // camera offset have no collision, damage, aiming, or persistence role.
+    [[nodiscard]] std::vector<ShotFeedbackPresentationSnapshot>
+    shotFeedbackPresentationSnapshots() const;
+
+    [[nodiscard]] Vec2 normalizedShotScreenShakeOffset() const noexcept;
 
     [[nodiscard]]
     const std::vector<Enemy> &
@@ -296,6 +304,7 @@ private:
 
     std::vector<LogicalBallisticFlight> logicalBallistics_;
     std::vector<TracerPresentationSegment> tracerPresentations_;
+    ShotFeedbackPresentationState shotFeedbackPresentation_;
     ShotId nextShotId_{1};
     CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;

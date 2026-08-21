@@ -301,6 +301,8 @@ add_library(raidline_simulation STATIC
     src/particle_system.h
     src/player.cpp
     src/player.h
+    src/shot_feedback_presentation.cpp
+    src/shot_feedback_presentation.h
     src/storage_cabinet.cpp
     src/storage_cabinet.h
     src/weapon_fire.cpp
@@ -442,6 +444,10 @@ raidline_add_test(
     ShotResolutionTest
     tests/test_shot_resolution.cpp
     raidline::domain)
+raidline_add_test(
+    ShotFeedbackPresentationTest
+    tests/test_shot_feedback_presentation.cpp
+    raidline::simulation)
 raidline_add_test(
     LogicalBallisticsTest
     tests/test_logical_ballistics.cpp
