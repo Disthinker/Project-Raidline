@@ -1,6 +1,6 @@
 # Combat：直接瞄准、距离散布与高速曳光 v2 ExecPlan
 
-状态：实施中
+状态：Draft PR #69；实现、本地自动化与首个 exact-head Windows/Ubuntu CI 已通过，等待最终文档 head CI 与用户正常游玩验收
 
 基线：`origin/main@ba3375e`（PR #68 已通过 exact-head CI 与用户正常游玩验收并合入）
 
@@ -46,3 +46,4 @@
 - 2026-08-21：从干净主线创建本分支并冻结新版准星、散布、弹速和曳光合同。
 - 2026-08-21：完成 Direct/HighMagnificationInertial 模式、移准与距离散布包络、超有效射程领域投影、Pistol/Rifle 内容弹速、三段式短线曳光和 F10 运行时参数；没有创建 Projectile、修改 Profile schema、资源 manifest 或正式美术。
 - 2026-08-21：Windows Debug 全目标构建成功；171 项 Combat focused tests 与全量 CTest 761/761 通过，0 失败。`Project_Raidline.exe` 已生成但开发代理未启动；等待 exact-head CI 后由用户执行正常游玩验收。
+- 2026-08-21：实现提交 `f668215` 已推送至 Draft PR #69，首个 exact-head 分支识别、Windows 与 Ubuntu CI 全部成功；追加本状态记录后等待最终纯文档 head CI。
