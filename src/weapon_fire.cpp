@@ -39,6 +39,9 @@ namespace
             !std::isfinite(config.nearDistanceSpreadScale) ||
             config.nearDistanceSpreadScale < 0.0F ||
             config.nearDistanceSpreadScale > 1.0F ||
+            !std::isfinite(config.distanceBloomAtEffectiveRange) ||
+            config.distanceBloomAtEffectiveRange < 0.0F ||
+            config.distanceBloomAtEffectiveRange > 1.0F ||
             !std::isfinite(config.overEffectiveRangeSpreadMultiplier) ||
             config.overEffectiveRangeSpreadMultiplier < 1.0F)
         {
@@ -219,6 +222,8 @@ void WeaponFireState::updateContextualEnvelope(
         context.aimDownSightsProgress, 0.0F, 1.0F);
     lastDistanceSpreadFactor_ = std::clamp(
         context.distanceSpreadFactor, 0.0F, 1.0F);
+    distanceBloomFraction_ =
+        lastDistanceSpreadFactor_ * config_.distanceBloomAtEffectiveRange;
     lastOverEffectiveRangeFactor_ = std::clamp(
         context.overEffectiveRangeFactor, 0.0F, 1.0F);
     const float adsAccuracy = std::lerp(
@@ -250,18 +255,11 @@ void WeaponFireState::updateMovementAndMotionBloom(
     float deltaTime,
     WeaponFireContext context) noexcept
 {
-    constexpr float kActivationFloorFraction{0.35F};
-    constexpr float kMovementAttackFractionPerSecond{8.0F};
+    constexpr float kMovementAttackFractionPerSecond{1.50F};
     const float recoveryRate = bloomRecoveryFractionPerSecond();
     const float movementTarget = context.moving
         ? config_.movingSpreadFraction
         : 0.0F;
-    if (movementTarget > movementBloomFraction_)
-    {
-        movementBloomFraction_ = std::max(
-            movementBloomFraction_,
-            movementTarget * kActivationFloorFraction);
-    }
     const float movementRate = movementTarget > movementBloomFraction_
         ? kMovementAttackFractionPerSecond
         : recoveryRate;
@@ -278,12 +276,6 @@ void WeaponFireState::updateMovementAndMotionBloom(
              config_.reticleMotionSoftThreshold) /
             (config_.reticleMotionFullSpeed -
              config_.reticleMotionSoftThreshold));
-    }
-    if (motionTarget > reticleMotionBloomFraction_)
-    {
-        reticleMotionBloomFraction_ = std::max(
-            reticleMotionBloomFraction_,
-            motionTarget * kActivationFloorFraction);
     }
     const float baseEnvelope = baseSpreadEnvelopeDegrees();
     const float motionAttackRate = baseEnvelope > 0.0001F
@@ -335,7 +327,8 @@ void WeaponFireState::refreshSpread() noexcept
     const float remainingPrecision =
         (1.0F - std::clamp(movementBloomFraction_, 0.0F, 1.0F)) *
         (1.0F - std::clamp(reticleMotionBloomFraction_, 0.0F, 1.0F)) *
-        (1.0F - std::clamp(shotBloomFraction_, 0.0F, 1.0F));
+        (1.0F - std::clamp(shotBloomFraction_, 0.0F, 1.0F)) *
+        (1.0F - std::clamp(distanceBloomFraction_, 0.0F, 1.0F));
     combinedBloomFraction_ = std::clamp(
         1.0F - remainingPrecision, 0.0F, 1.0F);
     spreadDegrees_ = std::lerp(

@@ -21,6 +21,7 @@ struct WeaponFireConfig
     float reticleMotionSoftThreshold{120.0F};
     float reticleMotionFullSpeed{1800.0F};
     float nearDistanceSpreadScale{0.04F};
+    float distanceBloomAtEffectiveRange{0.08F};
     float overEffectiveRangeSpreadMultiplier{1.50F};
     std::uint64_t spreadSeed{0x737072656164ULL};
 };
@@ -73,6 +74,7 @@ private:
     float movementBloomFraction_{};
     float reticleMotionBloomFraction_{};
     float shotBloomFraction_{};
+    float distanceBloomFraction_{};
     float combinedBloomFraction_{};
     float lastAimDownSightsProgress_{};
     float lastDistanceSpreadFactor_{1.0F};

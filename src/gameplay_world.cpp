@@ -1202,7 +1202,7 @@ GameplayWorld::weaponAccuracyProjection() const noexcept
         weaponFire_.spreadPresentationFraction();
     const float worldRadius = std::max(0.0F, radius);
     const float readableBloomRadius =
-        70.0F * std::sqrt(presentationFraction);
+        70.0F * std::pow(presentationFraction, 0.80F);
     return WeaponAccuracyProjection{
         weaponAim_.actualWorldPosition(),
         distance,
@@ -1282,6 +1282,7 @@ void GameplayWorld::configureWeaponFire(
         120.0F,
         1800.0F,
         handling.nearDistanceSpreadScale,
+        handling.distanceBloomAtEffectiveRange,
         1.50F};
     const WeaponAimConfig aimConfig{
         handling.maximumReticleSpeed,

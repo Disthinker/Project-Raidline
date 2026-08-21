@@ -7264,7 +7264,7 @@ void App::renderDeveloperWeaponPanel()
         "High-scope maximum speed", "High-scope control accel",
         "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
         "Moving spread fraction", "Reticle motion spread rate",
-        "Near-distance spread scale",
+        "Near-distance spread scale", "Effective-range distance bloom",
         "Right-click aim accuracy", "Right-click aim stability",
         "Weak tracer length", "Weak tracer opacity",
         "Weak tracer lifetime"};
@@ -7353,6 +7353,10 @@ void App::renderDeveloperWeaponPanel()
             value = fmt::format(
                 "{:.2f}", handling.nearDistanceSpreadScale);
             break;
+        case DeveloperWeaponParameter::DistanceBloomAtEffectiveRange:
+            value = fmt::format(
+                "{:.2f}", handling.distanceBloomAtEffectiveRange);
+            break;
         case DeveloperWeaponParameter::AdsAccuracyMultiplier:
             value = fmt::format(
                 "{:.2f}", handling.aimDownSightsAccuracyMultiplier);
@@ -7376,14 +7380,14 @@ void App::renderDeveloperWeaponPanel()
         }
 
         const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 24.0F;
+            static_cast<float>(index) * 22.0F;
         if (index == developerWeaponParameterIndex_)
         {
             const SDL_FRect selected{
                 panel.x + 14.0F,
                 rowY - 6.0F,
                 panel.w - 28.0F,
-                22.0F};
+                20.0F};
             SDL_SetRenderDrawColor(renderer_, 42, 94, 91, 235);
             SDL_RenderFillRect(renderer_, &selected);
             SDL_SetRenderDrawColor(renderer_, 136, 226, 207, 255);

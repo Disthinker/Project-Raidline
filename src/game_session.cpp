@@ -969,6 +969,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.50F,
             coarseStep);
         break;
+    case DeveloperWeaponParameter::DistanceBloomAtEffectiveRange:
+        entry.hidden.distanceBloomAtEffectiveRange = adjustFloat(
+            previousHandling.distanceBloomAtEffectiveRange,
+            0.01F,
+            0.05F,
+            0.0F,
+            0.50F,
+            coarseStep);
+        break;
     case DeveloperWeaponParameter::AdsAccuracyMultiplier:
         entry.hidden.adsAccuracyMultiplier = adjustFloat(
             previousHandling.aimDownSightsAccuracyMultiplier,
@@ -2421,6 +2430,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.nearDistanceSpreadScale.has_value())
     {
         handling.nearDistanceSpreadScale = *hidden.nearDistanceSpreadScale;
+    }
+    if (hidden.distanceBloomAtEffectiveRange.has_value())
+    {
+        handling.distanceBloomAtEffectiveRange =
+            *hidden.distanceBloomAtEffectiveRange;
     }
     if (hidden.adsAccuracyMultiplier.has_value())
     {

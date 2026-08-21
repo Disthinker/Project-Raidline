@@ -52,7 +52,7 @@ Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#69 已接受。当
 | 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | PR #67 已通过用户验收，以 `881c034` 合入 main |
 | 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 合入 main |
 | 直接瞄准、距离散布与高速曳光 v2 | 常规瞄准同帧直跟、移动/快速移准可读扩散、近距高可信度、粗长准星/高速曳光、特殊命中双重验证、Raid 拖放修复和 Base/Raid 暂停菜单 | AimControlMode、WeaponAccuracyProjection 双半径、ShotAimIntent、CombatTargetId、随身所有权校验、PauseMenuState、只读 TracerPresentationSegment | PR #69 已通过 CI 和用户验收，以 `f593719` 合入 main |
-| 动态散布模型与准星稳定性 v3 | 距离不再遮蔽动态扩散；移动、甩枪和击发变化清晰且有界；组合输入不闪动 | 距离包络、三源 Bloom、饱和合成、连续 WeaponAccuracyProjection、SDL 像素对齐 | Windows Debug、130 项定向回归和 778/778 CTest 通过；PR/CI 与人工验收待完成 |
+| 动态散布模型与准星稳定性 v3 | 距离不再遮蔽动态扩散；轻微甩动不满扩散；展开/恢复可读；横向后坐力明显且连续 | 距离包络、四源 Bloom、无硬台阶 attack/release、连续 WeaponAccuracyProjection、SDL 像素对齐、F10 Distance Bloom | PR #71 第一轮 CI 已通过；第二轮 Windows Debug 全目标、147 项定向回归与 778/778 CTest 通过，最终 CI 与人工验收待完成 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

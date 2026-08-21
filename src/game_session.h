@@ -50,6 +50,7 @@ enum class DeveloperWeaponParameter
     MovingSpreadFraction,
     ReticleMotionSpreadRate,
     NearDistanceSpreadScale,
+    DistanceBloomAtEffectiveRange,
     AdsAccuracyMultiplier,
     AdsStabilityMultiplier,
     WeakTracerLength,
@@ -258,6 +259,7 @@ private:
         std::optional<float> movingSpreadFraction;
         std::optional<float> reticleMotionSpreadDegreesPerSecond;
         std::optional<float> nearDistanceSpreadScale;
+        std::optional<float> distanceBloomAtEffectiveRange;
         std::optional<float> adsAccuracyMultiplier;
         std::optional<float> adsStabilityMultiplier;
         std::optional<float> weakTracerLength;

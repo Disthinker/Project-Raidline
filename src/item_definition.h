@@ -193,6 +193,7 @@ struct WeaponHandlingParameters
     float movingSpreadFraction{};
     float reticleMotionSpreadDegreesPerSecond{};
     float nearDistanceSpreadScale{};
+    float distanceBloomAtEffectiveRange{};
     float weakTracerLength{};
     float weakTracerOpacity{};
     float weakTracerLifetimeSeconds{};

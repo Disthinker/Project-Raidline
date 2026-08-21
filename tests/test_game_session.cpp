@@ -319,6 +319,9 @@ TEST(GameSessionTest, RestartIsAcceptedOnlyOncePerCompletedRaid)
 
 TEST(GameSessionTest, NextRaidStartsWithFreshWeaponFireState)
 {
+    GameSession freshSession;
+    const float freshSpread =
+        freshSession.world().weaponSpreadDegrees();
     GameSession session;
     GameplayInput fire{};
     fire.fireJustPressed = true;
@@ -330,7 +333,7 @@ TEST(GameSessionTest, NextRaidStartsWithFreshWeaponFireState)
     session.update(GameplayInput{}, 0.0F);
     ASSERT_TRUE(session.startNextRaid());
 
-    EXPECT_FLOAT_EQ(session.world().weaponSpreadDegrees(), 0.0F);
+    EXPECT_FLOAT_EQ(session.world().weaponSpreadDegrees(), freshSpread);
     EXPECT_FLOAT_EQ(session.world().weaponVisualRecoilPixels(), 0.0F);
 }
 

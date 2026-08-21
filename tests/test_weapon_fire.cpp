@@ -74,7 +74,7 @@ TEST(WeaponFireStateTest, ReleasedTriggerRecoversOnlyToContextualFloor)
     moving.moving = true;
     moving.distanceSpreadFactor = 0.0F;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 2.1F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
 }
 
 TEST(WeaponFireStateTest, AdsImprovesAccuracyAndStability)
@@ -119,7 +119,7 @@ TEST(WeaponFireStateTest, DistanceEnvelopeAndReloadUseContextualMaximum)
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, beyond));
     EXPECT_FLOAT_EQ(fire.contextualMinimumSpreadDegrees(), 1.5F);
     EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 9.0F);
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 1.5F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 2.1F);
 
     WeaponFireContext reload;
     reload.forceMaximumSpread = true;
@@ -131,32 +131,49 @@ TEST(WeaponFireStateTest, FastReticleMotionExpandsAndThenRecoversSpread)
 {
     WeaponFireConfig config;
     config.nearDistanceSpreadScale = 1.0F;
-    config.reticleMotionSpreadDegreesPerSecond = 20.0F;
+    config.reticleMotionSpreadDegreesPerSecond = 10.0F;
     WeaponFireState fire{config};
-    WeaponFireContext slow;
-    slow.reticleControlSpeed = 100.0F;
-    slow.distanceSpreadFactor = 0.0F;
-    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, slow));
+    WeaponFireContext still;
+    still.reticleControlSpeed = 100.0F;
+    still.distanceSpreadFactor = 0.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, still));
     EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.0F);
+
+    WeaponFireContext slight;
+    slight.reticleControlSpeed = 180.0F;
+    slight.distanceSpreadFactor = 0.0F;
+    EXPECT_FALSE(fire.update(
+        false, Vec2{1.0F, 0.0F}, 1.0F / 60.0F, slight));
+    EXPECT_GT(fire.spreadDegrees(), 0.0F);
+    EXPECT_LT(fire.spreadDegrees(), 0.10F);
 
     WeaponFireContext flick;
     flick.reticleControlSpeed = 1800.0F;
     flick.distanceSpreadFactor = 0.0F;
-    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, flick));
-    EXPECT_GT(fire.spreadDegrees(), 4.0F);
+    EXPECT_FALSE(fire.update(
+        false, Vec2{1.0F, 0.0F}, 1.0F / 60.0F, flick));
+    EXPECT_GT(fire.spreadDegrees(), 0.10F);
+    EXPECT_LT(fire.spreadDegrees(), 1.0F);
 
-    // A one-frame input spike decays continuously instead of toggling the
-    // final spread directly back to its resting value.
+    for (int frame = 0; frame < 20; ++frame)
+    {
+        EXPECT_FALSE(fire.update(
+            false, Vec2{1.0F, 0.0F}, 1.0F / 60.0F, flick));
+    }
+    EXPECT_GT(fire.spreadDegrees(), 3.0F);
+    EXPECT_LT(fire.spreadDegrees(), 6.0F);
+
+    // Recovery is continuous and deliberately slower than the old snap-back.
     const float expanded = fire.spreadDegrees();
-    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, slow));
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, still));
     EXPECT_LT(fire.spreadDegrees(), expanded);
-    EXPECT_GT(fire.spreadDegrees(), 0.0F);
-    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 1.0F, slow));
+    EXPECT_GT(fire.spreadDegrees(), expanded * 0.50F);
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 2.0F, still));
     EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.0F);
 }
 
 TEST(WeaponFireStateTest,
-     DistanceDefinesEnvelopeWithoutConsumingDynamicBloom)
+     DistanceDefinesEnvelopeAndAddsModestRestingBloom)
 {
     WeaponFireConfig config;
     config.minimumSpreadDegrees = 1.0F;
@@ -171,19 +188,15 @@ TEST(WeaponFireStateTest,
     WeaponFireContext middle;
     middle.distanceSpreadFactor = 0.5F;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, middle));
-    EXPECT_FLOAT_EQ(
-        fire.spreadDegrees(),
-        fire.contextualMinimumSpreadDegrees());
+    EXPECT_GT(fire.spreadDegrees(), fire.contextualMinimumSpreadDegrees());
     EXPECT_GT(fire.contextualMaximumSpreadDegrees(), 0.28F);
     EXPECT_LT(fire.contextualMaximumSpreadDegrees(), 7.0F);
 
     WeaponFireContext effective;
     effective.distanceSpreadFactor = 1.0F;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, effective));
-    EXPECT_FLOAT_EQ(
-        fire.spreadDegrees(),
-        fire.contextualMinimumSpreadDegrees());
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 1.0F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.08F);
+    EXPECT_NEAR(fire.spreadDegrees(), 1.48F, 0.001F);
     EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 7.0F);
 }
 
@@ -198,8 +211,8 @@ TEST(WeaponFireStateTest, MovingPlayerUsesReadablePortionOfSpreadEnvelope)
     moving.distanceSpreadFactor = 0.0F;
 
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 3.6F);
-    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.6F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.15F);
 }
 
 TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
@@ -213,8 +226,8 @@ TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
     moving.distanceSpreadFactor = 0.0F;
 
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, moving));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 4.5F);
-    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.75F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.9F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.15F);
 
     WeaponFireState restingAtEffectiveRange{config};
     WeaponFireContext effective;
@@ -222,8 +235,8 @@ TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
     EXPECT_FALSE(restingAtEffectiveRange.update(
         false, Vec2{1.0F, 0.0F}, 0.0F, effective));
     EXPECT_FLOAT_EQ(
-        restingAtEffectiveRange.spreadPresentationFraction(), 0.0F);
-    EXPECT_FLOAT_EQ(
+        restingAtEffectiveRange.spreadPresentationFraction(), 0.08F);
+    EXPECT_GT(
         restingAtEffectiveRange.spreadDegrees(),
         restingAtEffectiveRange.contextualMinimumSpreadDegrees());
 }
