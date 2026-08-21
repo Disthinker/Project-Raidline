@@ -1194,14 +1194,14 @@ GameplayWorld::weaponAccuracyProjection() const noexcept
     const float radius = std::isfinite(radians)
         ? std::tan(radians) * distance
         : 0.0F;
-    // worldRadius is the authoritative geometric shot cone. reticleRadius is
-    // a monotonic, readable projection of the same spread state, so close-
-    // range movement/flick/fire bloom remains visible without making bullets
-    // artificially inaccurate. The SDL client consumes this projection and
-    // never invents spread from presentation-only state.
+    // worldRadius is the authoritative geometric shot cone. Dynamic bloom is
+    // added as one continuous readability term instead of switching between
+    // two competing radii; distance, movement and pointer input therefore
+    // cannot make the displayed radius oscillate across a max() boundary.
     const float presentationFraction =
         weaponFire_.spreadPresentationFraction();
-    const float readableRadius = 10.0F +
+    const float worldRadius = std::max(0.0F, radius);
+    const float readableBloomRadius =
         70.0F * std::sqrt(presentationFraction);
     return WeaponAccuracyProjection{
         weaponAim_.actualWorldPosition(),
@@ -1209,8 +1209,8 @@ GameplayWorld::weaponAccuracyProjection() const noexcept
         spread,
         weaponFire_.contextualMinimumSpreadDegrees(),
         weaponFire_.contextualMaximumSpreadDegrees(),
-        std::max(0.0F, radius),
-        std::max(std::max(0.0F, radius), readableRadius),
+        worldRadius,
+        10.0F + worldRadius + readableBloomRadius,
         weaponAim_.beyondEffectiveRange()};
 }
 

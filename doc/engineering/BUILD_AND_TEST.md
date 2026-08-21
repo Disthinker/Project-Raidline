@@ -42,6 +42,8 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/core-alpha-hardening` 从已包含 PR #59 的 `origin/main@ed45baa` 创建。Windows Debug 全目标重建成功；库存/角色返工、Raid 压卸弹、进程退出回滚、奔跑和空栏位快速装备的全量 CTest 645/645 通过，0 失败；最新快捷转移/快速装备 head 等待精确 CI。自动化覆盖 10 局混合结果、至少 3 次重载、三配置/三路线、出击前精确回滚、旧 pending 迁移、双损坏存档、Deploy 保存失败、Raid 动作中断、弹药守恒及快速装备的查询不变性；既有功能 head `db0935d` 的范围检测、Windows 和 Ubuntu CI 全部成功（run `31919983014`）。`Project_Raidline.exe` 已生成但开发代理未启动游戏；最终人工验收由用户执行。
 
+`codex/combat-spread-model-v3` 从已包含 PR #69 的 `origin/main@f593719` 创建。公共 `WeaponFireState` 头变更后重建全部消费者成功；WeaponAim/WeaponFire/GameplayWorld/AlphaExtractionSession 定向 130/130、全量 CTest 778/778 通过，0 失败。自动化覆盖距离只定义包络、移动/甩枪独立贡献、饱和组合、帧分割稳定与移动叠加鼠标输入后的准星半径连续性；`Project_Raidline.exe` 已生成但开发代理未启动游戏，exact-head CI 与用户人工验收待完成。
+
 ## 按风险选择证据
 
 - 修改纯领域类：构建对应测试目标，跑 focused tests，再跑全量 CTest。

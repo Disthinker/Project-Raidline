@@ -70,9 +70,23 @@ private:
     float contextualMinimumSpreadDegrees_{};
     float contextualMaximumSpreadDegrees_{};
     float recoveryDelayRemaining_{};
+    float movementBloomFraction_{};
+    float reticleMotionBloomFraction_{};
+    float shotBloomFraction_{};
+    float combinedBloomFraction_{};
+    float lastAimDownSightsProgress_{};
+    float lastDistanceSpreadFactor_{1.0F};
+    float lastOverEffectiveRangeFactor_{};
     Pcg32 random_;
     std::uint32_t burstShotCount_{};
 
-    void recover(float deltaTime, float targetSpread) noexcept;
+    void updateContextualEnvelope(WeaponFireContext context) noexcept;
+    void updateMovementAndMotionBloom(
+        float deltaTime,
+        WeaponFireContext context) noexcept;
+    void recoverShotBloom(bool triggerPressed, float deltaTime) noexcept;
+    void refreshSpread() noexcept;
+    [[nodiscard]] float baseSpreadEnvelopeDegrees() const noexcept;
+    [[nodiscard]] float bloomRecoveryFractionPerSecond() const noexcept;
     [[nodiscard]] float nextSignedUnit() noexcept;
 };

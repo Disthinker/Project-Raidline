@@ -5732,12 +5732,14 @@ void App::renderAimCrosshair()
 
     const WeaponAccuracyProjection accuracy =
         gameSession_.world().weaponAccuracyProjection();
-    const float feedbackRadius = std::clamp(
+    const float feedbackRadius = std::round(std::clamp(
         accuracy.reticleRadius,
         10.0F,
-        160.0F);
+        160.0F));
     constexpr float kArmLength{15.0F};
-    const Vec2 center = accuracy.center;
+    const Vec2 center{
+        std::round(accuracy.center.x),
+        std::round(accuracy.center.y)};
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (accuracy.beyondEffectiveRange)
