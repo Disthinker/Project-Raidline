@@ -4,7 +4,7 @@
 
 ## Git 与交付基线
 
-- `origin/main@ba3375e` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道、准星/散布/基础 ADS、相对输入和 P0 音频；PR #68 已通过精确 head CI 和用户正常游玩验收后合入。
+- `origin/main@ba3375e` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道、准星/散布、右键瞄准、相对输入和 P0 音频；PR #68 已通过精确 head CI 和用户正常游玩验收后合入。
 - 当前开发分支：`codex/combat-direct-aim-spread-tracer-v2`，从干净的 `origin/main@ba3375e` 创建。
 - 当前活动计划：`doc/exec-plans/active/combat-direct-aim-spread-tracer-v2.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
@@ -24,7 +24,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 9. **逻辑弹道与落点反馈 v1**：PR #66 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `7877d71` 进入 main。
 10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
 11. **输入捕获、后坐力曲线与 P0 音频 v1**：PR #68 已通过 exact-head CI 与用户验收，以 merge commit `ba3375e` 进入 main。
-12. **直接瞄准、距离散布与高速曳光 v2**：Draft PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；本地全量和首个 exact-head CI 已通过，等待最终文档 head CI 和用户验收。
+12. **直接瞄准、距离散布与高速曳光 v2**：Draft PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；首个实现 head 的本地全量和 exact-head CI 已通过。根据正常游玩反馈完成曳光/动态扩散加强与击发准星意图、物理落点双重验证；本轮 Windows Debug、175 项聚焦和 769/769 全量 CTest 已通过，等待推送与 exact-head CI。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -60,7 +60,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。当前 Draft PR #69 已完成 Windows Debug 全目标构建、171 项 Combat focused tests 和全量 CTest 761/761，均为 0 失败；实现提交 `f668215` 的 exact-head Windows/Ubuntu CI 全部成功，最终纯文档 head 等待重跑。开发代理未启动游戏。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。当前 Draft PR #69 的首个实现提交 `f668215` 已通过 exact-head Windows/Ubuntu CI；本轮验收修订已完成 Windows Debug 全目标构建、175 项 Combat focused tests 和全量 CTest 769/769，均为 0 失败，等待推送及新 head CI。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -72,17 +72,17 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 
 ## Combat 准星运动、逻辑弹道与开发调参 v1 当前实现
 
-- `WeaponAimState` 保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度和后坐力速度。当前腰射和基础 ADS 都以 `Direct` 模式同帧消费相对鼠标位移；未来合法高倍镜才切换为 `HighMagnificationInertial` 速度/加速度追赶。玩家朝向、准星表现和成功击发都消费同一个实际准星，而不是原始鼠标点。
+- `WeaponAimState` 保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度和后坐力速度。当前腰射和按住鼠标右键的瞄准状态都以 `Direct` 模式同帧消费相对鼠标位移；未来合法高倍镜才切换为 `HighMagnificationInertial` 速度/加速度追赶。玩家朝向、准星表现和成功击发都消费同一个实际准星，而不是原始鼠标点。
 - 击发按“枪口到实际准星”方向刷新一份有界后坐力初速度并加入少量 PCG32 横向偏转；再次击发替换旧后坐力速度而非叠加，随后按人机工效派生反向加速度让速度减到零。后坐力同步推移准星和控制目标，鼠标静止时不会自动回正，必须反向移动鼠标压枪。
 - PR #67 接受基线中的 Pistol/Rifle 后坐力控制为 55/42。当前切片按用户调参反馈将两者人机工效提高到 100、隐藏最大准星速度提高到面板上限 5000 像素/秒，并显著提高控制加速度映射；运行时仍可通过 F10 面板按武器实例调整。
-- 实际准星只确定总体射击方向；每发在当前散布圆锥内使用确定性 PCG32 偏移冻结最终方向。精准度控制有效射程处的最小散布，稳定性控制最大散布及射击/快速移准增长，操控速度控制停火收缩；最小/最大包络随准星距离平滑增长，贴脸接近零，有效射程达到正常值，快速甩动有界扩大散布而慢速微调影响很小。
-- 按住鼠标右键基础开镜；开镜降低移动速度并改善最小/最大散布。当前基础 ADS 代表机械/低倍瞄准，因此仍显示短、快、弱且只覆盖已飞区段的曳光；高倍 `None` 策略已建立，但等待合法瞄具消费者。换弹保持开镜输入，并把散布锁定到当前 ADS 最大值。
+- 实际准星只确定总体射击方向；每发在当前散布圆锥内使用确定性 PCG32 偏移冻结最终方向。精准度控制最小散布，稳定性控制最大散布及射击/快速移准增长，操控速度控制停火收缩；最小/最大包络随准星距离平滑增长，贴脸接近零。当前静止散布目标在最大有效射程达到该上下文的最大包络，玩家移动和快速甩动还会立即抬升一段可读的散布下限。
+- 按住鼠标右键进入当前瞄准状态；它降低移动速度并改善最小/最大散布。当前尚无瞄具倍率内容，因此不把这个输入另行解释为“基础 ADS”；它仍显示短、快、弱且只覆盖已飞区段的曳光。高倍 `None` 策略已建立，但等待合法瞄具消费者。换弹保持右键瞄准输入，并把散布锁定到当前瞄准状态的最大值。
 - 奔跑不能直接击发；奔跑中按射击会先结束奔跑，经过由操控速度决定的短促举枪准备后只提交一次原射击意图，准备完成前不消耗弹药。
 - 超过有效射程后准星立即以领域投影标红，散布和伤害质量继续平滑恶化，到最大射程只保留 25% 基础伤害。五项属性、基础伤害、射程和逻辑弹速来自版本化 WeaponUse 内容定义，App 不按名称猜测。
 - Alpha 首图从 JSON 读取三个代码表现障碍；玩家和逻辑弹道不能穿过，内容加载拒绝越界、重复 ID 或与任一合法敌人部署重叠的障碍。敌人移动阻挡和正式墙/车辆视觉仍不是通用物理系统。
 - Raid 中按 `F10` 打开开发者武器面板，使用上下选择、左右微调、Shift 大步长、R 重置。面板覆盖按当前武器实例隔离，立即重配置射击瞬态，但不修改 ContentRegistry、Profile、revision、存档、结算或 manifest；关闭进程即清除。
 - F10 在原有参数外新增逻辑弹速、移准扩散率、近距散布比例与弱曳光寿命；准星 UI 直接消费 simulation 的当前/最小/最大角散布和世界半径投影。
-- App 不再绘制移动弹头矩形、发光核心或余烬；每个 Weak 曳光只由三段短、亮、有间隔的线组成，并且只覆盖逻辑弹道本帧已经推进过的区段。同帧命中与逻辑记录销毁不会提前删除这份短时表现。
+- App 不再绘制移动弹头矩形、光球或余烬；每个 Weak 曳光只由三段短、有间隔、带暖色边缘和白亮中心的多像素线体组成，并且只覆盖逻辑弹道本帧已经推进过的区段。同帧命中与逻辑记录销毁不会提前删除这份短时表现。
 
 ## Combat 输入捕获、后坐力曲线与 P0 音频 v1 当前实现
 
@@ -140,7 +140,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 - AssetRegistry 防具实例保存出厂最大、当前最大与当前耐久；schema v3 往返保存，并能从 v1/v2 为防具补全合法满耐久默认值。
 - Base/Raid 个人页启用主武器、头盔、护甲、胸挂、背包五槽；拖拽与快速装备继续走统一 InventoryDomain。固定供应提供基础防具，部署快照、成功保留和死亡全损均包含两新装备根。
 - 敌方 Scratch 产生躯干命中，Bite 产生头部命中；GameSession 消费模拟事实并在同一 Profile 事务内提交 HP 与护甲磨损，再同步 Raid World。渲染层不推断命中部位或减伤。
-- 玩家射击按碰撞落点稳定解析 Head/Torso/Legs 并写入 HitResult；普通命中不显示 X，爆头/弱点才显示短促专用标记。受击边缘反馈区分普通伤害与护甲实际减伤。
+- 玩家射击在击发时冻结实际准星覆盖的 Raid 局部目标 ID 与部位意图，再按碰撞落点稳定解析 Head/Torso/Legs；只有同一目标、同一部位双重匹配才写入 Headshot/WeakPoint。准星在目标前后而射线穿过头部时只形成普通命中。普通命中不显示 X，爆头/弱点才显示短促专用标记。受击边缘反馈区分普通伤害与护甲实际减伤。
 
 ## Alpha Hardening 当前实现
 
@@ -170,4 +170,4 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 - 3 HP、180 秒直接失败、V0 只读 Stash、无限弹和旧 RaidSettlement 不是产品终态，不得增加新消费者。
 - 生产 Alpha 只通过 Profile Deploy/Settlement 事务进入 Raid；不得重新引入 Profile 与 V0 库存的资产复制桥。
 - 生产射击不得重新引入可渲染/可碰撞 Projectile 场景实体；武器、伤害、存档和 App 只能消费射击领域值、逻辑飞行投影与 HitResult。
-- 普通命中最终不显示准星 X；爆头/弱点反馈等待命中部位领域合同，App 不得猜测。
+- 普通命中最终不显示准星 X；爆头/弱点必须由击发准星意图与真实命中部位双重验证的领域结果驱动，App 不得猜测。当前敌人尚无数据化弱点区域，因此只有领域接口预留，不伪造弱点内容。

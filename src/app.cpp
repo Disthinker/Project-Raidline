@@ -5507,12 +5507,13 @@ void App::renderShotPresentations()
                 shot.start.x + travelled.x * fraction,
                 shot.start.y + travelled.y * fraction};
         };
-        const auto drawDash = [&](float from, float to,
+        const Vec2 normal{
+            -travelled.y / trailLength,
+            travelled.x / trailLength};
+        const auto drawLine = [&](Vec2 start, Vec2 end,
                                   Uint8 red, Uint8 green, Uint8 blue,
                                   float alphaScale)
         {
-            const Vec2 start = pointAt(from);
-            const Vec2 end = pointAt(to);
             SDL_SetRenderDrawColor(
                 renderer_,
                 red,
@@ -5524,6 +5525,39 @@ void App::renderShotPresentations()
                     0L,
                     255L)));
             SDL_RenderLine(renderer_, start.x, start.y, end.x, end.y);
+        };
+        const auto drawDash = [&](float from, float to,
+                                  Uint8 red, Uint8 green, Uint8 blue,
+                                  float alphaScale)
+        {
+            const Vec2 start = pointAt(from);
+            const Vec2 end = pointAt(to);
+            // A warm three-pixel body plus a white-hot center remains a line
+            // streak, not a moving projectile core, while staying readable on
+            // both dark streets and pale inventory-adjacent scenery.
+            for (const float offset : {-1.5F, 1.5F})
+            {
+                const Vec2 shiftedStart{
+                    start.x + normal.x * offset,
+                    start.y + normal.y * offset};
+                const Vec2 shiftedEnd{
+                    end.x + normal.x * offset,
+                    end.y + normal.y * offset};
+                drawLine(
+                    shiftedStart,
+                    shiftedEnd,
+                    red,
+                    green,
+                    blue,
+                    alphaScale * 0.62F);
+            }
+            drawLine(
+                start,
+                end,
+                255,
+                250,
+                214,
+                std::min(1.0F, alphaScale * 1.18F));
         };
 
         // Three separated streaks describe an already-travelled ballistic
@@ -7072,7 +7106,7 @@ void App::renderDeveloperWeaponPanel()
         "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
         "Moving spread fraction", "Reticle motion spread rate",
         "Near-distance spread scale",
-        "ADS accuracy multiplier", "ADS stability multiplier",
+        "Right-click aim accuracy", "Right-click aim stability",
         "Weak tracer length", "Weak tracer opacity",
         "Weak tracer lifetime"};
 
@@ -7207,7 +7241,7 @@ void App::renderDeveloperWeaponPanel()
     }
 
     const std::string derived = fmt::format(
-        "RECOIL DECEL {:.0f} | ADS {:.2f}s | MOVE {:.2f}x",
+        "RECOIL DECEL {:.0f} | RMB AIM {:.2f}s | MOVE {:.2f}x",
         handling.recoilDeceleration,
         handling.aimDownSightsDurationSeconds,
         handling.aimDownSightsMovementMultiplier);

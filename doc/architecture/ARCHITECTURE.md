@@ -113,9 +113,9 @@ SessionProjection snapshot() const;
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离，大帧时间受限并限制追帧次数。该迁移在有测试消费者的独立切片中完成。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
-- `WeaponAimState` 独立保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度、后坐力当前速度/目标方向、短弯曲阶段、ADS 进度与命名 PCG32 随机状态。绝对输入用于测试/初始化，Active Raid 的 SDL client 提交每帧相对鼠标位移。腰射、机械瞄具和当前基础 ADS 使用 `Direct` 模式同帧响应；未来合法高倍率瞄具才使用 `HighMagnificationInertial` 模式按速度/加速度追赶。击发立即刷新一份径向初速，再连续弯向有界随机角度并减速到零；不累加无界冲量，也不把准星位置自动拉回旧点。
-- 实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发。精准度控制有效射程处的最小散布，稳定性控制最大散布及射击/快速移准带来的增长，操控速度控制停火收缩；两端包络随距离平滑增长，近距离接近零。App 不得把鼠标点或准星图形当成命中权威。
-- WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数。基础 ADS、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。F10 开发面板的按武器实例覆盖仅存在于当前 GameSession 进程，不修改 ContentRegistry、ProfileRevision、存档或结算。
+- `WeaponAimState` 独立保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度、后坐力当前速度/目标方向、短弯曲阶段、右键瞄准进度与命名 PCG32 随机状态。绝对输入用于测试/初始化，Active Raid 的 SDL client 提交每帧相对鼠标位移。腰射与当前按住右键的瞄准状态使用 `Direct` 模式同帧响应；未来合法高倍率瞄具才使用 `HighMagnificationInertial` 模式按速度/加速度追赶。击发立即刷新一份径向初速，再连续弯向有界随机角度并减速到零；不累加无界冲量，也不把准星位置自动拉回旧点。
+- 实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发。精准度控制最小散布，稳定性控制最大散布及射击/快速移准带来的增长，操控速度控制停火收缩；两端包络随距离平滑增长，近距离接近零，静止散布目标在最大有效射程处达到当前上下文最大包络。玩家移动和快速移准会立即抬升一段可读的散布下限，再连续增长，避免只有内部数值变化而 UI 不可见。App 不得把鼠标点或准星图形当成命中权威。
+- WeaponUse 的后坐力控制、稳定性、操控速度、人机工效和精准度是不可变内容属性；simulation 的确定性映射生成运行参数。右键瞄准、移动、距离和换弹上下文由 GameSession 编排，不能在渲染层另算命中方向或伤害。F10 开发面板的按武器实例覆盖仅存在于当前 GameSession 进程，不修改 ContentRegistry、ProfileRevision、存档或结算。
 - Alpha 当前合同保持：
 
 ```text
@@ -127,7 +127,7 @@ WeaponAim/WeaponFire/Ammo
   -> damage / feedback / App projection
 ```
 
-生产射击使用非场景实体的 `LogicalBallisticFlight` 从枪口按武器内容定义的高速逻辑弹速推进到最大射程或世界边界，每帧只连续扫掠已经飞过的线段。最近敌人形成 `Enemy`，最近数据化障碍形成 `Obstacle`，无接触到达最大距离形成一次 `Ground`；准星位置不再充当地面终点。Weak/None 曳光只复制已飞区段为短时表现缓存，Weak 绘制数条短而分离的亮线，不存在弹头实体。WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型；命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
+生产射击使用非场景实体的 `LogicalBallisticFlight` 从枪口按武器内容定义的高速逻辑弹速推进到最大射程或世界边界，每帧只连续扫掠已经飞过的线段。最近敌人形成 `Enemy`，最近数据化障碍形成 `Obstacle`，无接触到达最大距离形成一次 `Ground`；准星位置不再充当地面终点。击发时由实际准星覆盖位置形成可选 `ShotAimIntent`，冻结 Raid 局部 `CombatTargetId` 与部位；扫掠碰撞仍独立解析真实落点，只有目标与部位均匹配才提升为 Headshot/WeakPoint。Weak/None 曳光只复制已飞区段为短时表现缓存，Weak 绘制数条短而分离、带暖色边缘和白亮中心的多像素线体，不存在弹头实体。WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型；命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
 
 SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗口相对鼠标模式，并将 `xrel/yrel` 翻译为 `GameplayInput::aimMotionDelta`；simulation 不读取 SDL 光标状态。
 

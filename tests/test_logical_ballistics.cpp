@@ -17,7 +17,8 @@ namespace
                 100.0F,
                 8.0F,
                 2,
-                250.0F});
+                250.0F,
+                ShotAimIntent{44, HitRegion::Head, false}});
     }
 }
 
@@ -37,6 +38,9 @@ TEST(LogicalBallisticsTest, StoresFrozenAcceptedShot)
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0F);
     EXPECT_FLOAT_EQ(flight.maximumDistance(), 250.0F);
     EXPECT_EQ(flight.damage(), 2);
+    ASSERT_TRUE(flight.aimIntent().has_value());
+    EXPECT_EQ(flight.aimIntent()->targetId, 44U);
+    EXPECT_EQ(flight.aimIntent()->region, HitRegion::Head);
     EXPECT_EQ(flight.tracerStyle(), TracerStyle::Weak);
     EXPECT_FLOAT_EQ(flight.tracerLength(), 24.0F);
     EXPECT_FLOAT_EQ(flight.tracerOpacity(), 0.30F);

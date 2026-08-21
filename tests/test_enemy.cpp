@@ -14,6 +14,18 @@ TEST(EnemyTest, savePosition)
     EXPECT_FLOAT_EQ(actual.x, pos.x);
     EXPECT_FLOAT_EQ(actual.y, pos.y);
 }
+
+TEST(EnemyTest, StoresRaidLocalCombatTargetId)
+{
+    Enemy enemy(
+        Vec2{10.0F, 20.0F},
+        Vec2{50.0F, 60.0F},
+        Vec2{},
+        3,
+        77);
+
+    EXPECT_EQ(enemy.combatTargetId(), 77U);
+}
 // 2. 构造后能保存 size
 TEST(EnemyTest, saveSize)
 {

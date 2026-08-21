@@ -21,6 +21,7 @@ LogicalBallisticFlight::LogicalBallisticFlight(
       collisionExtent_{resolution.collisionExtent},
       maximumDistance_{resolution.maximumDistance},
       damage_{resolution.damage},
+      aimIntent_{resolution.aimIntent},
       tracerStyle_{tracerStyle},
       tracerLength_{tracerLength},
       tracerOpacity_{tracerOpacity},
@@ -125,6 +126,11 @@ float LogicalBallisticFlight::maximumDistance() const noexcept
 int LogicalBallisticFlight::damage() const noexcept
 {
     return damage_;
+}
+
+std::optional<ShotAimIntent> LogicalBallisticFlight::aimIntent() const noexcept
+{
+    return aimIntent_;
 }
 
 bool LogicalBallisticFlight::reachedImpact() const noexcept

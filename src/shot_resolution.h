@@ -1,13 +1,25 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "combat_damage_domain.h"
+#include "combat_target.h"
 #include "vec2.h"
 
 using ShotId = std::uint64_t;
 
 inline constexpr ShotId kInvalidShotId{0};
+
+// Frozen at successful fire time from the actual reticle point. A later
+// collision can claim a special region only when it hits this same target and
+// the physical impact remains in the aimed region.
+struct ShotAimIntent
+{
+    CombatTargetId targetId{kInvalidCombatTargetId};
+    HitRegion region{HitRegion::Torso};
+    bool weakPoint{};
+};
 
 struct ShotCommand
 {
@@ -18,6 +30,7 @@ struct ShotCommand
     float collisionExtent{};
     int damage{};
     float maximumDistance{2048.0F};
+    std::optional<ShotAimIntent> aimIntent;
 };
 
 enum class ShotResolutionStatus
@@ -30,6 +43,7 @@ enum class ShotResolutionStatus
     RejectedInvalidCollisionExtent,
     RejectedInvalidDamage,
     RejectedInvalidMaximumDistance,
+    RejectedInvalidAimIntent,
 };
 
 // A domain result produced at successful fire time. It freezes all values
@@ -46,6 +60,7 @@ struct ShotResolution
     int damage{};
     float maximumDistance{};
     Vec2 impactPosition{};
+    std::optional<ShotAimIntent> aimIntent;
 
     [[nodiscard]]
     bool accepted() const noexcept;

@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#67 已接受。当前产品目标进入 **Combat：输入捕获、后坐力曲线与 P0 音频 v1**；范围合同见 `doc/exec-plans/active/combat-input-capture-audio-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#68 已接受。当前产品目标进入 **Combat：直接瞄准、距离散布与高速曳光 v2**；范围合同见 `doc/exec-plans/active/combat-direct-aim-spread-tracer-v2.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -48,7 +48,7 @@ Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#67 已接受。当
 | 逻辑弹道与落点反馈 v1 | 本发落点冻结、短促飞行延迟、连续扫掠、敌人/地面到达反馈 | ShotResolution、LogicalBallisticFlight、HitResult、只读轨迹投影 | PR #66 已通过 CI 和用户验收，以 `7877d71` 进入 main |
 | 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | PR #67 已通过用户验收，以 `881c034` 合入 main |
 | 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 合入 main |
-| 直接瞄准、距离散布与高速曳光 v2 | 常规瞄准同帧直跟、快速移准扩散、近距高可信度、超有效射程反馈和不似实体弹的高速短线曳光 | AimControlMode、WeaponAccuracyProjection、内容弹速、移动/距离散布包络、只读 TracerPresentationSegment | Draft PR #69；Windows Debug、761/761 CTest 与实现 head CI 通过，等待最终文档 head CI 与用户正常游玩验收 |
+| 直接瞄准、距离散布与高速曳光 v2 | 常规瞄准同帧直跟、移动/快速移准可读扩散、近距高可信度、超有效射程反馈、多像素高速短线曳光和特殊命中双重验证 | AimControlMode、WeaponAccuracyProjection、ShotAimIntent、CombatTargetId、内容弹速、移动/距离散布包络、只读 TracerPresentationSegment | Draft PR #69 验收修订中；本轮 Windows Debug、175 项聚焦与 769/769 CTest 已通过，等待推送和 exact-head CI |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

@@ -295,6 +295,7 @@ private:
     std::vector<LogicalBallisticFlight> logicalBallistics_;
     std::vector<TracerPresentationSegment> tracerPresentations_;
     ShotId nextShotId_{1};
+    CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     EnemySquadCoordinator enemySquadCoordinator_;

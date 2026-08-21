@@ -53,7 +53,11 @@ WeaponHandlingParameters deriveWeaponHandling(
     const float maximumSpread = 12.0F - 0.09F * stability;
     const float switchDuration = 0.95F - 0.007F * handling;
     const float spreadPerShot = 1.80F - 0.012F * stability;
-    const float reticleMotionSpread = 8.0F - 0.05F * stability;
+    // Direct mouse aiming must remain responsive, so weapon weight is
+    // communicated through a readable spread response instead of cursor lag.
+    // Stability still reduces the response, but even a stable weapon opens
+    // visibly during a fast flick.
+    const float reticleMotionSpread = 30.0F - 0.12F * stability;
 
     return WeaponHandlingParameters{
         switchDuration,
@@ -73,12 +77,12 @@ WeaponHandlingParameters deriveWeaponHandling(
         0.65F,
         0.55F,
         0.70F,
-        0.35F,
+        0.60F,
         reticleMotionSpread,
         0.04F,
-        48.0F,
-        0.56F,
-        0.055F};
+        72.0F,
+        0.72F,
+        0.075F};
 }
 
 bool isWeaponEquipmentSlot(EquipmentSlotKind slot) noexcept

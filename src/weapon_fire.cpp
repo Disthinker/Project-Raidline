@@ -157,7 +157,13 @@ std::optional<ShotSpec> WeaponFireState::update(
             config_.aimDownSightsStabilityMultiplier,
             adsProgress) *
             distanceScale * overEffectiveScale);
-    float targetSpread = contextualMinimumSpreadDegrees_;
+    // Distance is itself an accuracy pressure. At the effective-range edge
+    // the resting reticle reaches the normal in-range maximum; beyond it the
+    // separate over-effective multiplier continues the degradation.
+    float targetSpread = std::lerp(
+        contextualMinimumSpreadDegrees_,
+        contextualMaximumSpreadDegrees_,
+        distanceFactor);
     if (context.moving)
     {
         targetSpread +=
@@ -173,6 +179,7 @@ std::optional<ShotSpec> WeaponFireState::update(
         spreadDegrees_,
         contextualMinimumSpreadDegrees_,
         contextualMaximumSpreadDegrees_);
+    spreadDegrees_ = std::max(spreadDegrees_, targetSpread);
 
     const float reticleMotionFactor = smoothstep(
         (context.reticleControlSpeed - config_.reticleMotionSoftThreshold) /
@@ -182,8 +189,22 @@ std::optional<ShotSpec> WeaponFireState::update(
         deltaTime > 0.0F && reticleMotionFactor > 0.0F;
     if (motionExpandedSpread)
     {
-        spreadDegrees_ = std::min(
+        const float motionTarget = std::lerp(
+            targetSpread,
             contextualMaximumSpreadDegrees_,
+            reticleMotionFactor);
+        // A short flick can occupy only one rendered frame. Give it an
+        // immediate, bounded portion of the envelope, then let the configured
+        // rate carry sustained motion toward the full maximum.
+        const float readableMotionFloor = std::lerp(
+            targetSpread,
+            motionTarget,
+            0.35F);
+        spreadDegrees_ = std::max(
+            spreadDegrees_,
+            readableMotionFloor);
+        spreadDegrees_ = std::min(
+            motionTarget,
             spreadDegrees_ +
                 config_.reticleMotionSpreadDegreesPerSecond *
                     reticleMotionFactor * deltaTime);
@@ -196,10 +217,6 @@ std::optional<ShotSpec> WeaponFireState::update(
     {
         spreadDegrees_ = contextualMaximumSpreadDegrees_;
         recoveryDelayRemaining_ = config_.recoveryDelay;
-    }
-    else
-    {
-        spreadDegrees_ = std::max(spreadDegrees_, targetSpread);
     }
 
     if (deltaTime > 0.0F)

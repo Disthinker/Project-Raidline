@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "enemy.h"
@@ -16,6 +17,7 @@ struct ShotCollisionCandidate
     Vec2 end{};
     float collisionExtent{};
     int damage{};
+    std::optional<ShotAimIntent> aimIntent;
 };
 
 using BallisticBlockerId = std::uint64_t;
@@ -32,6 +34,10 @@ struct HitResolutionResult
     std::vector<ShotId> consumedShotIds;
     std::size_t enemiesKilled{0};
 };
+
+[[nodiscard]] std::optional<HitRegion> hitRegionAtPoint(
+    const Rect &target,
+    Vec2 point) noexcept;
 
 [[nodiscard]]
 HitResolutionResult resolveShotEnemyHits(

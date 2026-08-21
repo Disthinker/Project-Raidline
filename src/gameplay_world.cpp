@@ -169,6 +169,51 @@ namespace
         return deltaX * deltaX +
                deltaY * deltaY;
     }
+
+    std::optional<ShotAimIntent> aimIntentAt(
+        Vec2 aimPoint,
+        Vec2 shotOrigin,
+        const std::vector<Enemy> &enemies) noexcept
+    {
+        const Enemy *selected{};
+        std::optional<HitRegion> selectedRegion;
+        float selectedDistanceSquared =
+            std::numeric_limits<float>::infinity();
+
+        for (const Enemy &enemy : enemies)
+        {
+            if (enemy.isDead() ||
+                enemy.combatTargetId() == kInvalidCombatTargetId)
+            {
+                continue;
+            }
+            const std::optional<HitRegion> region =
+                hitRegionAtPoint(enemy.bounds(), aimPoint);
+            if (!region.has_value())
+            {
+                continue;
+            }
+            const float candidateDistance = distanceSquared(
+                shotOrigin,
+                enemyCenter(enemy));
+            if (candidateDistance >= selectedDistanceSquared)
+            {
+                continue;
+            }
+            selected = &enemy;
+            selectedRegion = region;
+            selectedDistanceSquared = candidateDistance;
+        }
+
+        if (selected == nullptr || !selectedRegion.has_value())
+        {
+            return std::nullopt;
+        }
+        return ShotAimIntent{
+            selected->combatTargetId(),
+            *selectedRegion,
+            false};
+    }
 }
 
 GameplayWorld::GameplayWorld()
@@ -364,6 +409,14 @@ GameplayWorld::GameplayWorld(
             "GameplayWorld does not have enough ItemInstanceId values"};
     }
 
+    if (initialEnemies.size() >
+        static_cast<std::size_t>(
+            std::numeric_limits<CombatTargetId>::max() -
+            nextCombatTargetId_))
+    {
+        throw std::overflow_error{
+            "GameplayWorld does not have enough CombatTargetId values"};
+    }
     enemies_.reserve(initialEnemies.size());
     for (const EnemySpawn &spawn : initialEnemies)
     {
@@ -383,7 +436,8 @@ GameplayWorld::GameplayWorld(
             spawn.position,
             spawn.size,
             Vec2{},
-            spawn.maxHealth);
+            spawn.maxHealth,
+            nextCombatTargetId_++);
     }
 
     groundItems_.reserve(
@@ -827,7 +881,11 @@ void GameplayWorld::update(
                     static_cast<int>(std::lround(
                         static_cast<float>(weaponBaseDamage_) *
                         weaponAim_.damageMultiplier()))),
-                maximumDistance});
+                maximumDistance,
+                aimIntentAt(
+                    weaponAim_.actualWorldPosition(),
+                    shotOrigin,
+                    enemies_)});
 
         if (!resolution.accepted())
         {
@@ -892,7 +950,8 @@ void GameplayWorld::update(
                 advance.start,
                 advance.end,
                 flight.collisionExtent(),
-                flight.damage()});
+                flight.damage(),
+                flight.aimIntent()});
     }
 
     HitResolutionResult hitResult = resolveShotHits(
@@ -979,10 +1038,10 @@ GameplayWorld::shotPresentationSnapshots() const
     for (const TracerPresentationSegment &tracer : tracerPresentations_)
     {
         const float lifetimeRatio = tracer.lifetimeSeconds > 0.0F
-            ? std::clamp(
+            ? std::sqrt(std::clamp(
                   tracer.remainingSeconds / tracer.lifetimeSeconds,
                   0.0F,
-                  1.0F)
+                  1.0F))
             : 0.0F;
         snapshots.push_back(
             ShotPresentationSnapshot{
