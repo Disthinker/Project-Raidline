@@ -24,7 +24,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 9. **逻辑弹道与落点反馈 v1**：PR #66 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `7877d71` 进入 main。
 10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
 11. **输入捕获、后坐力曲线与 P0 音频 v1**：PR #68 已通过 exact-head CI 与用户验收，以 merge commit `ba3375e` 进入 main。
-12. **直接瞄准、距离散布与高速曳光 v2**：Draft PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；首个实现 head 的本地全量和 exact-head CI 已通过。根据正常游玩反馈完成曳光/动态扩散加强与击发准星意图、物理落点双重验证；本轮 Windows Debug、175 项聚焦和 769/769 全量 CTest 已通过，等待推送与 exact-head CI。
+12. **直接瞄准、距离散布与高速曳光 v2**：Draft PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；根据正常游玩反馈完成曳光/动态扩散加强与击发准星意图、物理落点双重验证。验收修订提交 `d8312a0` 已通过 Windows Debug、175 项聚焦、769/769 全量 CTest 及 exact-head Windows/Ubuntu CI，等待用户正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -60,7 +60,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#68 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。当前 Draft PR #69 的首个实现提交 `f668215` 已通过 exact-head Windows/Ubuntu CI；本轮验收修订已完成 Windows Debug 全目标构建、175 项 Combat focused tests 和全量 CTest 769/769，均为 0 失败，等待推送及新 head CI。开发代理未启动游戏。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。当前 Draft PR #69 的验收修订提交 `d8312a0` 已完成 Windows Debug 全目标构建、175 项 Combat focused tests 和全量 CTest 769/769，均为 0 失败，且 exact-head Windows/Ubuntu CI 全部成功。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 

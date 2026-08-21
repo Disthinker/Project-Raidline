@@ -1,6 +1,6 @@
 # Combat：直接瞄准、距离散布与高速曳光 v2 ExecPlan
 
-状态：Draft PR #69 验收修订中；首个实现 head 的 Windows/Ubuntu CI 已通过，本轮修订已完成 Windows Debug、175 项聚焦回归与 769/769 全量 CTest，等待推送与 exact-head CI
+状态：Draft PR #69 等待用户正常游玩验收；验收修订已完成 Windows Debug、175 项聚焦回归、769/769 全量 CTest，并在提交 `d8312a0` 通过 exact-head Windows/Ubuntu CI
 
 基线：`origin/main@ba3375e`（PR #68 已通过 exact-head CI 与用户正常游玩验收并合入）
 
@@ -50,3 +50,4 @@
 - 2026-08-21：Windows Debug 全目标构建成功；171 项 Combat focused tests 与全量 CTest 761/761 通过，0 失败。`Project_Raidline.exe` 已生成但开发代理未启动；等待 exact-head CI 后由用户执行正常游玩验收。
 - 2026-08-21：实现提交 `f668215` 已推送至 Draft PR #69，首个 exact-head 分支识别、Windows 与 Ubuntu CI 全部成功；追加本状态记录后等待最终纯文档 head CI。
 - 2026-08-21：根据首轮正常游玩反馈完成验收修订：默认 Weak 曳光加强为多像素暖色边缘与白亮中心；移动/甩枪扩散增加可读下限；距离静止目标在最大有效射程达到最大包络；新增 `CombatTargetId` 与 `ShotAimIntent`，要求击发准星意图和真实碰撞同目标同部位后才生成爆头/弱点。Windows Debug 全目标、175 项聚焦回归和全量 CTest 769/769 通过，0 失败；开发代理未启动游戏。
+- 2026-08-21：验收修订提交 `d8312a0` 已推送，PR #69 的分支识别、Windows 与 Ubuntu exact-head CI 全部成功；进入用户正常游玩验收，未合并。

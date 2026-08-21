@@ -20,7 +20,7 @@
 | RL-COMBAT-004 | 击发时未冻结逻辑飞行且缺地面命中粒子 | PR #66 已以 `7877d71` 合入非实体逻辑飞行；PR #67 按新版合同把终点从准星点修订为武器最大距离/世界边界，并加入最近障碍与 Ground 结果 |
 | RL-COMBAT-005 | 位置式实际准星、手动压枪、随机散布与基础开镜未形成统一手感合同 | PR #67 已通过用户验收并以 `881c034` 合入 main |
 | RL-COMBAT-006 | 准星响应、极端横向后坐力、OS 光标离窗与基础听觉反馈 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 进入 main；远程桌面音频映射的附加延迟按用户要求延期到本机复验后再判断 |
-| RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | Draft PR #69 已完成 Direct/高倍模式分离、移准与距离散布、4200/7200 逻辑弹速和三段式短线曳光；当前验收修订加强多像素曳光和动态散布，并要求击发准星意图与真实部位双重验证特殊命中。Windows Debug、175 项聚焦和 769/769 全量 CTest 已通过，等待推送与 exact-head CI |
+| RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | Draft PR #69 已完成 Direct/高倍模式分离、移准与距离散布、4200/7200 逻辑弹速和三段式短线曳光；验收修订加强多像素曳光和动态散布，并要求击发准星意图与真实部位双重验证特殊命中。提交 `d8312a0` 已通过 Windows Debug、175 项聚焦、769/769 全量 CTest 和 exact-head Windows/Ubuntu CI，等待用户正常游玩验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -58,6 +58,6 @@
 | Combat：逻辑弹道与落点反馈 v1 | PR #66 已通过 CI 和用户验收，以 merge commit `7877d71` 进入 main |
 | Combat：准星运动、逻辑弹道与开发调参 v1 | PR #67 已通过用户验收，以 merge commit `881c034` 进入 main |
 | Combat：输入捕获、后坐力曲线与 P0 音频 v1 | PR #68 已通过 CI 和用户验收，以 merge commit `ba3375e` 进入 main |
-| Combat：直接瞄准、距离散布与高速曳光 v2 | Draft PR #69 验收修订中；本轮已完成 Windows Debug、175 项聚焦与 769/769 CTest，等待推送和 exact-head CI |
+| Combat：直接瞄准、距离散布与高速曳光 v2 | Draft PR #69 等待用户正常游玩验收；验收修订 `d8312a0` 已通过 Windows Debug、175 项聚焦、769/769 CTest 与 exact-head Windows/Ubuntu CI |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-direct-aim-spread-tracer-v2.md`。
