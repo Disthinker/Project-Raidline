@@ -16,4 +16,3 @@ required_integration_labels = []
 manual_acceptance = "Describe one normal-play flow or write not applicable"
 explicit_exclusions = ["No save schema change"]
 exec_plan = "" # required for cross-domain/authority or multi-step player slices
-

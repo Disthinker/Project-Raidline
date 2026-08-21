@@ -19,6 +19,7 @@ endif()
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Python3 3.11 COMPONENTS Interpreter REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 
@@ -384,6 +385,7 @@ add_custom_command(
 
 enable_testing()
 include(GoogleTest)
+include(cmake/RaidlineTestCatalog.cmake)
 
 function(raidline_add_test target source module)
     if(NOT ARGC EQUAL 3 OR NOT source MATCHES "^tests/.+\\.cpp$")
@@ -400,8 +402,48 @@ function(raidline_add_test target source module)
         PRIVATE
         GTest::gtest_main
         ${module})
-    gtest_discover_tests(${target})
+    set(label_variable "RAIDLINE_TEST_LABELS_${target}")
+    if(NOT DEFINED ${label_variable})
+        message(FATAL_ERROR "Missing CTest labels for ${target}.")
+    endif()
+    string(REPLACE ";" "\\;" escaped_test_labels "${${label_variable}}")
+    gtest_discover_tests(
+        ${target}
+        PROPERTIES LABELS "${escaped_test_labels}")
 endfunction()
+
+function(raidline_add_sentinel_test name target filter area_label)
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "Sentinel ${name} references missing target ${target}.")
+    endif()
+
+    add_test(
+        NAME "sentinel.${name}"
+        COMMAND
+            $<TARGET_FILE:${target}>
+            "--gtest_filter=${filter}"
+            --gtest_fail_if_no_test_selected)
+    set_tests_properties(
+        "sentinel.${name}"
+        PROPERTIES LABELS "sentinel;${area_label}")
+endfunction()
+
+add_test(
+    NAME GovernanceToolTest
+    COMMAND
+        ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_raidline_governance.py)
+set_tests_properties(GovernanceToolTest PROPERTIES LABELS "governance")
+
+add_test(
+    NAME GovernanceArchitectureGuard
+    COMMAND
+        ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/raidline_governance.py
+        architecture)
+set_tests_properties(
+    GovernanceArchitectureGuard
+    PROPERTIES LABELS "governance;sentinel")
 
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
 raidline_add_test(
@@ -606,3 +648,196 @@ raidline_add_test(
     ProfileInventoryInteractionTest
     tests/test_profile_inventory_interaction.cpp
     raidline::sdl_client)
+
+# Fast, duplicated registrations of existing high-value tests. These filters
+# deliberately protect contracts rather than implementation details.
+raidline_add_sentinel_test(
+    stable_high_water
+    ProfileStateTest
+    ProfileStateTest.BackwardHighWaterMarkIsRejected
+    area-assets)
+raidline_add_sentinel_test(
+    stale_revision
+    InventoryDomainTest
+    InventoryDomainTest.StaleRevisionRejectsWithoutMutation
+    area-inventory)
+raidline_add_sentinel_test(
+    atomic_swap
+    InventoryDomainTest
+    InventoryDomainTest.EqualFootprintAssetsSwapAtomically
+    area-inventory)
+raidline_add_sentinel_test(
+    stable_split
+    InventoryDomainTest
+    InventoryDomainTest.LockedPartialQuantityCreatesOneStableSplit
+    area-inventory)
+raidline_add_sentinel_test(
+    stable_merge
+    InventoryDomainTest
+    InventoryDomainTest.WholeStackMergePreservesDestinationStableId
+    area-inventory)
+raidline_add_sentinel_test(
+    no_container_cycle
+    InventoryDomainTest
+    InventoryDomainTest.NonEmptyContainerCannotBeNested
+    area-inventory)
+raidline_add_sentinel_test(
+    inventory_idempotency
+    InventoryDomainTest
+    InventoryDomainTest.RepeatedTransactionIsIdempotent
+    area-inventory)
+raidline_add_sentinel_test(
+    inventory_query_command_equivalence
+    InventoryDomainTest
+    InventoryDomainTest.QueryAndCommandRemainEquivalentAcrossCommandSequence
+    area-inventory)
+raidline_add_sentinel_test(
+    ammunition_conservation
+    WeaponAmmoDomainTest
+    WeaponAmmoDomainTest.LoadInstallChamberAndFirePreserveRealAmmunition
+    area-inventory)
+raidline_add_sentinel_test(
+    ammunition_rejection_atomicity
+    WeaponAmmoDomainTest
+    WeaponAmmoDomainTest.RejectedCommandDoesNotMutateProfile
+    area-inventory)
+raidline_add_sentinel_test(
+    magazine_install_atomicity
+    WeaponAmmoDomainTest
+    WeaponAmmoDomainTest.InstallAndChamberIsOneAtomicCommand
+    area-inventory)
+raidline_add_sentinel_test(
+    chamber_never_fires
+    WeaponAmmoDomainTest
+    WeaponAmmoDomainTest.ChamberCommandNeverFiresAnExistingRound
+    area-combat)
+raidline_add_sentinel_test(
+    broken_weapon_preserves_round
+    WeaponAmmoDomainTest
+    WeaponAmmoDomainTest.BrokenWeaponCannotConsumeChamberedRound
+    area-combat)
+raidline_add_sentinel_test(
+    deterministic_deploy
+    RaidLifecycleTest
+    RaidLifecycleTest.DeployCreatesDeterministicFiniteSnapshot
+    area-lifecycle)
+raidline_add_sentinel_test(
+    deploy_tracks_weapon_roots
+    RaidLifecycleTest
+    RaidLifecycleTest.DeploySnapshotTracksAllThreeWeaponRoots
+    area-lifecycle)
+raidline_add_sentinel_test(
+    extraction_assets_once
+    RaidLifecycleTest
+    RaidLifecycleTest.ExtractionRetainsCarriedAndPickedAssetsExactlyOnce
+    area-lifecycle)
+raidline_add_sentinel_test(
+    snapshot_asset_may_merge
+    RaidLifecycleTest
+    RaidLifecycleTest.PickupMayMergeAwayHistoricalSnapshotAsset
+    area-lifecycle)
+raidline_add_sentinel_test(
+    death_full_loss
+    RaidLifecycleTest
+    RaidLifecycleTest.DeathRemovesAllRaidAssetsAndResetsHealth
+    area-lifecycle)
+raidline_add_sentinel_test(
+    legacy_pending_rollback
+    RaidLifecycleTest
+    RaidLifecycleTest.LegacyPendingRaidRollbackKeepsEntryLoadout
+    area-persistence)
+raidline_add_sentinel_test(
+    deploy_real_shot_consumption
+    AlphaExtractionSessionTest
+    AlphaExtractionSessionTest.DeployUsesSnapshotAndRealShotConsumption
+    area-lifecycle)
+raidline_add_sentinel_test(
+    settlement_idempotency
+    AlphaExtractionSessionTest
+    AlphaExtractionSessionTest.DeathSettlesFullLossAndIsIdempotent
+    area-lifecycle)
+raidline_add_sentinel_test(
+    abnormal_exit_restore
+    AlphaExtractionSessionTest
+    AlphaExtractionSessionTest.ClosingDuringRaidRestoresExactPreRaidProfile
+    area-persistence)
+raidline_add_sentinel_test(
+    pre_raid_backup_restore
+    AlphaExtractionSessionTest
+    AlphaExtractionSessionTest.CorruptPrimaryRecoversPreRaidBackup
+    area-persistence)
+raidline_add_sentinel_test(
+    save_round_trip
+    SaveRepositoryTest
+    SaveRepositoryTest.SchemaV6RoundTripPreservesAuthoritativeState
+    area-persistence)
+raidline_add_sentinel_test(
+    save_v1_migration
+    SaveRepositoryTest
+    SaveRepositoryTest.SchemaV1MigratesToCurrentProfileDefaults
+    area-persistence)
+raidline_add_sentinel_test(
+    first_save_backup
+    SaveRepositoryTest
+    SaveRepositoryTest.FirstSuccessfulSaveAlsoCreatesRecoveryBackup
+    area-persistence)
+raidline_add_sentinel_test(
+    corrupt_primary_restore
+    SaveRepositoryTest
+    SaveRepositoryTest.CorruptPrimaryRecoversMostRecentValidBackup
+    area-persistence)
+raidline_add_sentinel_test(
+    checksum_rejection
+    SaveRepositoryTest
+    SaveRepositoryTest.ChecksumMismatchIsRejected
+    area-persistence)
+raidline_add_sentinel_test(
+    unsupported_content_rejection
+    SaveRepositoryTest
+    SaveRepositoryTest.UnsupportedContentVersionIsRejected
+    area-persistence)
+raidline_add_sentinel_test(
+    dual_corruption_failure
+    SaveRepositoryTest
+    SaveRepositoryTest.CorruptPrimaryAndBackupFailExplicitly
+    area-persistence)
+raidline_add_sentinel_test(
+    shot_contract
+    ShotResolutionTest
+    ShotResolutionTest.ValidCommandProducesNormalizedAcceptedResult
+    area-combat)
+raidline_add_sentinel_test(
+    ballistic_frame_partition
+    LogicalBallisticsTest
+    LogicalBallisticsTest.FramePartitionsProduceSamePosition
+    area-combat)
+raidline_add_sentinel_test(
+    continuous_sweep
+    HitResolutionTest
+    HitResolutionTest.ContinuousSweepHitsThinTargetWithoutTunnelling
+    area-combat)
+raidline_add_sentinel_test(
+    nearest_obstacle
+    HitResolutionTest
+    HitResolutionTest.NearestObstacleConsumesShotBeforeEnemy
+    area-combat)
+raidline_add_sentinel_test(
+    published_content_contract
+    ContentRegistryTest
+    ContentRegistryTest.PublishedRegistryPreservesCurrentContentContract
+    area-content)
+raidline_add_sentinel_test(
+    duplicate_definition_rejection
+    ContentRegistryTest
+    ContentRegistryTest.RejectsDuplicateOrMismatchedItemIdentity
+    area-content)
+raidline_add_sentinel_test(
+    invalid_spawn_rejection
+    ContentRegistryTest
+    ContentRegistryTest.RejectsEnemySpawnInsideBallisticBlocker
+    area-content)
+raidline_add_sentinel_test(
+    missing_resource_rejection
+    ContentRegistryTest
+    ContentRegistryTest.RejectsMissingPublishedResourceReference
+    area-content)
