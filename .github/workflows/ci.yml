@@ -72,6 +72,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
       - name: Validate governance tooling
         shell: bash
         run: python3 tests/test_raidline_governance.py
@@ -98,6 +103,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
       - name: Prepare vcpkg baseline
         shell: pwsh
@@ -166,6 +176,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
       - name: Install SDL3 system dependencies
         shell: bash
