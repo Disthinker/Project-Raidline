@@ -5732,10 +5732,9 @@ void App::renderAimCrosshair()
 
     const WeaponAccuracyProjection accuracy =
         gameSession_.world().weaponAccuracyProjection();
-    const float feedbackRadius = std::round(std::clamp(
-        accuracy.reticleRadius,
+    const float feedbackRadius = std::round(std::max(
         10.0F,
-        160.0F));
+        accuracy.reticleRadius));
     constexpr float kArmLength{15.0F};
     const Vec2 center{
         std::round(accuracy.center.x),

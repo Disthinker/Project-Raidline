@@ -22,7 +22,7 @@ struct WeaponFireConfig
     float reticleMotionSoftThreshold{120.0F};
     float reticleMotionFullSpeed{1800.0F};
     float nearDistanceSpreadScale{0.04F};
-    float distanceBloomAtEffectiveRange{0.08F};
+    float distanceBloomAtEffectiveRange{0.10F};
     float overEffectiveRangeSpreadMultiplier{1.50F};
     std::uint64_t spreadSeed{0x737072656164ULL};
 };
@@ -32,6 +32,7 @@ struct WeaponFireContext
     bool moving{};
     bool sprinting{};
     float aimDownSightsProgress{};
+    float aimDistance{};
     float distanceSpreadFactor{1.0F};
     float overEffectiveRangeFactor{};
     float reticleControlSpeed{};
@@ -64,6 +65,8 @@ public:
     [[nodiscard]] float contextualMinimumSpreadDegrees() const noexcept;
     [[nodiscard]] float contextualMaximumSpreadDegrees() const noexcept;
     [[nodiscard]] float spreadPresentationFraction() const noexcept;
+    [[nodiscard]] float spreadRadiusAtDistance(float distance) const noexcept;
+    [[nodiscard]] float spreadDegreesAtDistance(float distance) const noexcept;
     [[nodiscard]] float cooldownRemaining() const noexcept;
 
 private:

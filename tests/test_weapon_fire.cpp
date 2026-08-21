@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 
@@ -119,7 +121,7 @@ TEST(WeaponFireStateTest, DistanceEnvelopeAndReloadUseContextualMaximum)
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, beyond));
     EXPECT_FLOAT_EQ(fire.contextualMinimumSpreadDegrees(), 1.5F);
     EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 9.0F);
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 2.1F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 2.25F);
 
     WeaponFireContext reload;
     reload.forceMaximumSpread = true;
@@ -195,8 +197,8 @@ TEST(WeaponFireStateTest,
     WeaponFireContext effective;
     effective.distanceSpreadFactor = 1.0F;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, effective));
-    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.08F);
-    EXPECT_NEAR(fire.spreadDegrees(), 1.48F, 0.001F);
+    EXPECT_FLOAT_EQ(fire.spreadPresentationFraction(), 0.10F);
+    EXPECT_NEAR(fire.spreadDegrees(), 1.60F, 0.001F);
     EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 7.0F);
 }
 
@@ -260,7 +262,7 @@ TEST(WeaponFireStateTest, PresentationFractionTracksAuthoritativeSpread)
     EXPECT_FALSE(restingAtEffectiveRange.update(
         false, Vec2{1.0F, 0.0F}, 0.0F, effective));
     EXPECT_FLOAT_EQ(
-        restingAtEffectiveRange.spreadPresentationFraction(), 0.08F);
+        restingAtEffectiveRange.spreadPresentationFraction(), 0.10F);
     EXPECT_GT(
         restingAtEffectiveRange.spreadDegrees(),
         restingAtEffectiveRange.contextualMinimumSpreadDegrees());
@@ -329,6 +331,49 @@ TEST(WeaponFireStateTest, MotionBloomIsStableAcrossFramePartition)
         0.001F);
 }
 
+TEST(WeaponFireStateTest,
+     ShotSamplingUsesTheSameRadiusAsTheReticleProjection)
+{
+    constexpr float kAimDistance{500.0F};
+    WeaponFireConfig config;
+    config.minimumSpreadDegrees = 1.0F;
+    config.maximumSpreadDegrees = 7.0F;
+    config.nearDistanceSpreadScale = 1.0F;
+
+    float farthestSampleRadius{};
+    float expectedRadius{};
+    for (std::uint64_t seed = 1U; seed <= 512U; ++seed)
+    {
+        config.spreadSeed = seed;
+        WeaponFireState fire{config};
+        WeaponFireContext maximum;
+        maximum.aimDistance = kAimDistance;
+        maximum.distanceSpreadFactor = 1.0F;
+        maximum.forceMaximumSpread = true;
+
+        const auto shot = fire.update(
+            true, Vec2{1.0F, 0.0F}, 0.0F, maximum);
+        ASSERT_TRUE(shot.has_value());
+        const float directionOffset = std::atan2(
+            shot->direction.y,
+            shot->direction.x) * 180.0F / 3.14159265358979323846F;
+        EXPECT_NEAR(
+            directionOffset,
+            shot->spreadOffsetDegrees,
+            0.001F);
+        expectedRadius = fire.spreadRadiusAtDistance(kAimDistance);
+        const float sampledRadius = std::tan(
+            std::abs(shot->spreadOffsetDegrees) *
+            3.14159265358979323846F / 180.0F) * kAimDistance;
+        EXPECT_LE(sampledRadius, expectedRadius + 0.001F);
+        farthestSampleRadius = std::max(
+            farthestSampleRadius, sampledRadius);
+    }
+
+    EXPECT_GT(expectedRadius, 120.0F);
+    EXPECT_GT(farthestSampleRadius, expectedRadius * 0.90F);
+}
+
 TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)
 {
     WeaponFireState fire;
@@ -337,6 +382,11 @@ TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)
         true,
         Vec2{1.0F, 0.0F},
         std::numeric_limits<float>::quiet_NaN()));
+    WeaponFireContext invalidDistance;
+    invalidDistance.aimDistance =
+        std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(fire.update(
+        true, Vec2{1.0F, 0.0F}, 0.0F, invalidDistance));
     EXPECT_TRUE(std::isfinite(fire.spreadDegrees()));
     EXPECT_TRUE(fire.update(true, Vec2{1.0F, 0.0F}, 0.0F));
 }

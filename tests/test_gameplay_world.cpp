@@ -958,6 +958,7 @@ TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
     const WeaponAccuracyProjection resting =
         world.weaponAccuracyProjection();
     EXPECT_GT(resting.reticleRadius, resting.worldRadius);
+    EXPECT_NEAR(resting.reticleRadius - resting.worldRadius, 10.0F, 0.001F);
     EXPECT_GE(resting.reticleRadius, 10.0F);
     EXPECT_LT(resting.reticleRadius, 12.0F + resting.worldRadius);
 

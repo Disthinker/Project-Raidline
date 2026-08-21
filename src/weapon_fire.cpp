@@ -7,6 +7,8 @@
 namespace
 {
     constexpr float kPi{3.14159265358979323846F};
+    constexpr float kDynamicSpreadRadiusAtFullBloom{70.0F};
+    constexpr float kDynamicSpreadPresentationExponent{0.80F};
 
     bool finiteNonNegative(float value)
     {
@@ -142,6 +144,7 @@ std::optional<ShotSpec> WeaponFireState::update(
 {
     if (!std::isfinite(deltaTime) || deltaTime < 0.0F ||
         !std::isfinite(context.aimDownSightsProgress) ||
+        !finiteNonNegative(context.aimDistance) ||
         !std::isfinite(context.distanceSpreadFactor) ||
         !std::isfinite(context.overEffectiveRangeFactor) ||
         !finiteNonNegative(context.reticleControlSpeed))
@@ -171,7 +174,8 @@ std::optional<ShotSpec> WeaponFireState::update(
         return std::nullopt;
     }
 
-    const float offset = nextSignedUnit() * spreadDegrees_;
+    const float offset =
+        nextSignedUnit() * spreadDegreesAtDistance(context.aimDistance);
     cooldownRemaining_ = config_.shotInterval;
     recoveryDelayRemaining_ = config_.recoveryDelay;
     const float baseEnvelope = baseSpreadEnvelopeDegrees();
@@ -211,6 +215,34 @@ float WeaponFireState::spreadPresentationFraction() const noexcept
         return 0.0F;
     }
     return combinedBloomFraction_;
+}
+
+float WeaponFireState::spreadRadiusAtDistance(float distance) const noexcept
+{
+    if (!finiteNonNegative(distance) || distance <= 0.0001F)
+    {
+        return 0.0F;
+    }
+
+    const float radians = spreadDegrees_ * kPi / 180.0F;
+    const float angularRadius = std::isfinite(radians)
+        ? std::tan(radians) * distance
+        : 0.0F;
+    const float dynamicRadius = kDynamicSpreadRadiusAtFullBloom * std::pow(
+        std::clamp(combinedBloomFraction_, 0.0F, 1.0F),
+        kDynamicSpreadPresentationExponent);
+    return std::max(0.0F, angularRadius + dynamicRadius);
+}
+
+float WeaponFireState::spreadDegreesAtDistance(float distance) const noexcept
+{
+    if (!finiteNonNegative(distance) || distance <= 0.0001F)
+    {
+        return spreadDegrees_;
+    }
+
+    return std::atan2(spreadRadiusAtDistance(distance), distance) *
+        180.0F / kPi;
 }
 
 float WeaponFireState::cooldownRemaining() const noexcept
