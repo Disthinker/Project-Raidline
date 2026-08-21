@@ -600,6 +600,7 @@ void GameplayWorld::update(
     {
         for (TracerPresentationSegment &tracer : tracerPresentations_)
         {
+            tracer.ageSeconds += deltaTime;
             tracer.remainingSeconds = std::max(
                 0.0F,
                 tracer.remainingSeconds - deltaTime);
@@ -913,13 +914,15 @@ void GameplayWorld::update(
         if (flight.tracerStyle() != TracerStyle::None &&
             travelled > 0.0001F)
         {
+            // A tracer may span several completed simulation steps, but it
+            // never extends ahead of the distance already travelled.
             const float visibleLength = std::min(
                 flight.tracerLength(),
-                travelled);
+                flight.distanceTravelled());
             const Vec2 visibleStart{
                 advance.end.x - flight.direction().x * visibleLength,
                 advance.end.y - flight.direction().y * visibleLength};
-            const TracerPresentationSegment segment{
+            TracerPresentationSegment segment{
                 flight.shotId(),
                 visibleStart,
                 advance.end,
@@ -927,7 +930,8 @@ void GameplayWorld::update(
                 flight.tracerStyle(),
                 flight.tracerOpacity(),
                 flight.tracerLifetimeSeconds(),
-                flight.tracerLifetimeSeconds()};
+                flight.tracerLifetimeSeconds(),
+                0.0F};
             const auto existing = std::find_if(
                 tracerPresentations_.begin(),
                 tracerPresentations_.end(),
@@ -941,6 +945,7 @@ void GameplayWorld::update(
             }
             else
             {
+                segment.ageSeconds = existing->ageSeconds;
                 *existing = segment;
             }
         }
@@ -958,6 +963,43 @@ void GameplayWorld::update(
         collisionCandidates,
         enemies_,
         ballisticBlockers_);
+
+    // A large simulation step can resolve a collision before the requested
+    // advance endpoint. Clamp presentation to that authoritative hit so the
+    // longer streak never appears past an obstacle or enemy.
+    for (const HitResult &hit : hitResult.hits)
+    {
+        const auto flight = std::find_if(
+            logicalBallistics_.begin(),
+            logicalBallistics_.end(),
+            [&](const LogicalBallisticFlight &candidate)
+            {
+                return candidate.shotId() == hit.shotId;
+            });
+        const auto tracer = std::find_if(
+            tracerPresentations_.begin(),
+            tracerPresentations_.end(),
+            [&](const TracerPresentationSegment &candidate)
+            {
+                return candidate.shotId == hit.shotId;
+            });
+        if (flight == logicalBallistics_.end() ||
+            tracer == tracerPresentations_.end())
+        {
+            continue;
+        }
+
+        const float hitDistance = std::hypot(
+            hit.position.x - flight->origin().x,
+            hit.position.y - flight->origin().y);
+        const float visibleLength = std::min(
+            flight->tracerLength(),
+            hitDistance);
+        tracer->end = hit.position;
+        tracer->start = Vec2{
+            hit.position.x - flight->direction().x * visibleLength,
+            hit.position.y - flight->direction().y * visibleLength};
+    }
 
     std::erase_if(
         logicalBallistics_,
@@ -1038,11 +1080,17 @@ GameplayWorld::shotPresentationSnapshots() const
     for (const TracerPresentationSegment &tracer : tracerPresentations_)
     {
         const float lifetimeRatio = tracer.lifetimeSeconds > 0.0F
-            ? std::sqrt(std::clamp(
+            ? std::clamp(
                   tracer.remainingSeconds / tracer.lifetimeSeconds,
                   0.0F,
-                  1.0F))
+                  1.0F)
             : 0.0F;
+        constexpr float kTau{6.28318530718F};
+        constexpr float kFlickerFrequencyHz{24.0F};
+        const float flicker = 0.55F + 0.45F *
+            (0.5F + 0.5F * std::sin(
+                tracer.ageSeconds * kTau * kFlickerFrequencyHz +
+                static_cast<float>(tracer.shotId % 17U) * 1.618F));
         snapshots.push_back(
             ShotPresentationSnapshot{
                 tracer.shotId,
@@ -1050,7 +1098,7 @@ GameplayWorld::shotPresentationSnapshots() const
                 tracer.end,
                 tracer.direction,
                 tracer.style,
-                tracer.opacity * lifetimeRatio});
+                tracer.opacity * std::sqrt(lifetimeRatio) * flicker});
     }
 
     return snapshots;

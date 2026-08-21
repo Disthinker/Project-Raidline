@@ -89,8 +89,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(rifle.weaponUse->ergonomics, 100U);
     EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
     EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
-    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
-    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 750.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 700.0F);
+    EXPECT_FLOAT_EQ(rifle.weaponUse->maximumRange, 950.0F);
     EXPECT_FLOAT_EQ(rifle.weaponUse->logicalBallisticSpeed, 7200.0F);
     EXPECT_TRUE(itemCanEquipInSlot(
         rifle, EquipmentSlotKind::PrimaryWeapon));
@@ -106,6 +106,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(pistol.weaponUse->recoilControl, 55U);
     EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
     EXPECT_EQ(pistol.weaponUse->ergonomics, 100U);
+    EXPECT_FLOAT_EQ(pistol.weaponUse->effectiveRange, 400.0F);
+    EXPECT_FLOAT_EQ(pistol.weaponUse->maximumRange, 620.0F);
     EXPECT_FLOAT_EQ(pistol.weaponUse->logicalBallisticSpeed, 4200.0F);
     EXPECT_LT(
         deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,

@@ -82,8 +82,8 @@
         "ergonomics": 100,
         "accuracy": 58,
         "base_damage": 4,
-        "effective_range": 280.0,
-        "maximum_range": 450.0,
+        "effective_range": 400.0,
+        "maximum_range": 620.0,
         "logical_ballistic_speed": 4200.0
       }
     },
@@ -123,8 +123,8 @@
         "ergonomics": 100,
         "accuracy": 72,
         "base_damage": 4,
-        "effective_range": 500.0,
-        "maximum_range": 750.0,
+        "effective_range": 700.0,
+        "maximum_range": 950.0,
         "logical_ballistic_speed": 7200.0
       }
     },

@@ -520,6 +520,37 @@ TEST(GameplayWorldTest, SameFrameImpactKeepsShortLivedTracerProjection)
     EXPECT_TRUE(world.shotPresentationSnapshots().empty());
 }
 
+TEST(GameplayWorldTest, ConfiguredTracerSpansTravelledStepsAndFlickers)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{1200.0F, 376.0F};
+    world.update(fire, 0.0F);
+    world.update(GameplayInput{}, 0.030F);
+
+    const std::vector<ShotPresentationSnapshot> first =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(first.size(), 1U);
+    EXPECT_NEAR(
+        std::hypot(
+            first.front().end.x - first.front().start.x,
+            first.front().end.y - first.front().start.y),
+        180.0F,
+        0.001F);
+
+    world.update(GameplayInput{}, 0.010F);
+    const std::vector<ShotPresentationSnapshot> second =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(second.size(), 1U);
+    EXPECT_NE(first.front().tracerOpacity, second.front().tracerOpacity);
+    EXPECT_GT(second.front().tracerOpacity, 0.0F);
+    EXPECT_LE(second.front().tracerOpacity, 1.0F);
+}
+
 TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
 {
     GameplayWorld world;
@@ -535,7 +566,14 @@ TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
 
 TEST(GameplayWorldTest, ConfiguredMaximumRangeReducesFrozenShotDamage)
 {
-    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{2400.0F, 1400.0F},
+        Vec2{1200.0F, 700.0F},
+        ContentRect{Vec2{2200.0F, 1200.0F}, Vec2{100.0F, 100.0F}},
+        {},
+        100,
+        100,
+        false}};
     const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
     ASSERT_TRUE(rifle.weaponUse.has_value());
     world.configureWeaponFire(*rifle.weaponUse);
@@ -2481,6 +2519,15 @@ TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
         world.hitResultsLastUpdate().front().targetKind,
         HitTargetKind::Obstacle);
     EXPECT_EQ(world.hitResultsLastUpdate().front().damageApplied, 0);
+    const std::vector<ShotPresentationSnapshot> tracer =
+        world.shotPresentationSnapshots();
+    ASSERT_EQ(tracer.size(), 1U);
+    EXPECT_FLOAT_EQ(
+        tracer.front().end.x,
+        world.hitResultsLastUpdate().front().position.x);
+    EXPECT_FLOAT_EQ(
+        tracer.front().end.y,
+        world.hitResultsLastUpdate().front().position.y);
 }
 
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)

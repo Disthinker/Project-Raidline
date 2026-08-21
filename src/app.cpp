@@ -5602,12 +5602,6 @@ void App::renderShotPresentations()
             std::lround(shot.tracerOpacity * 255.0F),
             0L,
             255L));
-        const auto pointAt = [&](float fraction)
-        {
-            return Vec2{
-                shot.start.x + travelled.x * fraction,
-                shot.start.y + travelled.y * fraction};
-        };
         const Vec2 normal{
             -travelled.y / trailLength,
             travelled.x / trailLength};
@@ -5627,45 +5621,36 @@ void App::renderShotPresentations()
                     255L)));
             SDL_RenderLine(renderer_, start.x, start.y, end.x, end.y);
         };
-        const auto drawDash = [&](float from, float to,
-                                  Uint8 red, Uint8 green, Uint8 blue,
-                                  float alphaScale)
+        const auto drawOffsetLine = [&drawLine, &normal, &shot](
+            float offset,
+            Uint8 red,
+            Uint8 green,
+            Uint8 blue,
+            float alphaScale)
         {
-            const Vec2 start = pointAt(from);
-            const Vec2 end = pointAt(to);
-            // A five-pixel layered streak remains a non-colliding line
-            // presentation, but reads clearly at gameplay scale.
-            for (const float offset : {-2.0F, -1.0F, 1.0F, 2.0F})
-            {
-                const Vec2 shiftedStart{
-                    start.x + normal.x * offset,
-                    start.y + normal.y * offset};
-                const Vec2 shiftedEnd{
-                    end.x + normal.x * offset,
-                    end.y + normal.y * offset};
-                drawLine(
-                    shiftedStart,
-                    shiftedEnd,
-                    red,
-                    green,
-                    blue,
-                    alphaScale * (std::abs(offset) < 1.5F ? 0.78F : 0.46F));
-            }
+            const Vec2 shiftedStart{
+                shot.start.x + normal.x * offset,
+                shot.start.y + normal.y * offset};
+            const Vec2 shiftedEnd{
+                shot.end.x + normal.x * offset,
+                shot.end.y + normal.y * offset};
             drawLine(
-                start,
-                end,
-                255,
-                250,
-                214,
-                std::min(1.0F, alphaScale * 1.18F));
+                shiftedStart,
+                shiftedEnd,
+                red,
+                green,
+                blue,
+                alphaScale);
         };
 
-        // Three separated streaks describe an already-travelled ballistic
-        // slice. There is deliberately no moving core, glow rectangle or
-        // collision-bearing projectile presentation.
-        drawDash(0.00F, 0.18F, 255, 116, 32, 0.48F);
-        drawDash(0.32F, 0.60F, 255, 190, 74, 0.76F);
-        drawDash(0.73F, 1.00F, 255, 244, 184, 1.00F);
+        // One continuous, uniformly thick five-pixel streak: bright yellow
+        // edges around a white-hot center. Flicker is already encoded in the
+        // read-only opacity projection; this remains collision-free rendering.
+        drawOffsetLine(-2.0F, 255, 205, 48, 0.68F);
+        drawOffsetLine(2.0F, 255, 205, 48, 0.68F);
+        drawOffsetLine(-1.0F, 255, 238, 150, 0.88F);
+        drawOffsetLine(1.0F, 255, 238, 150, 0.88F);
+        drawOffsetLine(0.0F, 255, 255, 244, 1.00F);
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);

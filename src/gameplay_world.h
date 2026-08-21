@@ -277,6 +277,7 @@ private:
         float opacity{};
         float lifetimeSeconds{};
         float remainingSeconds{};
+        float ageSeconds{};
     };
 
     struct PlayerHealthOverrideTag
