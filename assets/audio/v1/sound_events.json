@@ -245,7 +245,7 @@
     {
       "id": "ambience.base.safe_low",
       "variants": ["ambience/base_safe_low.wav"],
-      "gain": 0.42,
+      "gain": 0.28,
       "max_instances": 1,
       "cooldown_seconds": 0.0,
       "loop": true

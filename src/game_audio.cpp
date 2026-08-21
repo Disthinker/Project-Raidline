@@ -9,6 +9,7 @@
 namespace
 {
     constexpr int kSampleRate{48000};
+    constexpr char kRequestedDeviceSampleFrames[]{"512"};
     constexpr std::size_t kMaximumTotalVoices{32U};
 }
 GameAudioOutput::~GameAudioOutput()
@@ -31,6 +32,11 @@ bool GameAudioOutput::initialize(
         return false;
     }
 
+    // Keep the game-owned portion of sound latency small. Audio redirection
+    // layers such as Remote Desktop can still add their own network buffer.
+    static_cast<void>(SDL_SetHint(
+        SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES,
+        kRequestedDeviceSampleFrames));
     const SDL_AudioSpec specification{SDL_AUDIO_F32, 1, kSampleRate};
     stream_ = SDL_OpenAudioDeviceStream(
         SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,

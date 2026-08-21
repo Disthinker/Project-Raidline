@@ -35,7 +35,6 @@ $sources = @(
     @('freeweaponsounds.zip', 'FreeWeaponSounds/Handgun/Foley/03_insert_the_mag_handgun_reload_1.wav', 'pistol_mag_in.wav'),
     @('freeweaponsounds.zip', 'FreeWeaponSounds/Handgun/Foley/04_slide_release_handgun_reload_1.wav', 'pistol_chamber.wav'),
     @('freeweaponsounds.zip', 'FreeWeaponSounds/Handgun/Foley/handgun_weapon_equip.wav', 'pistol_equip.wav'),
-    @('Sonniss.com-GDC2026-GameAudioBundle1of5.zip', '344 Audio - East Coast America Vol. 1/AMBSubn_Electricity Hum, Lightbulb,  Coil Pickup 01_344 Audio_East Coast America.wav', 'base_hum.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle1of5.zip', '344 Audio - Cinematic Fight Vol. 1/FGHTImpt_4 x Punch, Body 02_344 Audio_Cinematic Fight Vol 1.wav', 'body_impacts.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle2of5.zip', 'Epic Stock Media - HD Lock And Mechanism Sound Design Kit/MACHMech_Mechanism Counting Machine Interact Loose Container Short 01_ESM_HDLM.wav', 'mechanism_count.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle2of5.zip', 'Epic Stock Media - HD Lock And Mechanism Sound Design Kit/MECHLtch_Click Deep Mechanism Latch Button Nearfield Thunk 02_ESM_HDLM.wav', 'mechanism_latch.wav'),
@@ -49,6 +48,7 @@ $sources = @(
     @('Sonniss.com-GDC2026-GameAudioBundle3of5.zip', 'InMotionAudio - Instrument Case/OBJLug_CaseDown_Concrete12_InMotionAudio_InstrumentCase.wav', 'case_down.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle3of5.zip', 'InMotionAudio - Medical Thermometer/BEEPMed_Thermometer_Beep11_InMotionAudio_MedicalThermometer.wav', 'medical_beep.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle3of5.zip', 'InMotionAudio - Medical Thermometer/MACHMed_Thermometer_ButtonPress_Beep03_InMotionAudio_MedicalThermometer.wav', 'medical_press.wav'),
+    @('Sonniss.com-GDC2026-GameAudioBundle3of5.zip', 'InMotionAudio - Chimney Wind/WINDInt_ChimneyWind05_InMotionAudio_ChimneyWind.wav', 'base_chimney_wind.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle5of5.zip', 'SoundBits - Vox Bestiae - Source Elements/CREAHmn_Violent Humanoid Creature Exhale Short 4_SNDBTS_VB-SE.wav', 'infected_hit.wav'),
     @('Sonniss.com-GDC2026-GameAudioBundle5of5.zip', 'The Noisery - City Rain/WINDInt_Wind Strong Metal Rattle_The Noisery_City Rain.wav', 'raid_wind_metal.wav')
 )
@@ -94,11 +94,17 @@ function Convert-Loop(
     [string]$Source,
     [string]$Destination,
     [double]$Start,
-    [double]$Loudness) {
+    [double]$Loudness,
+    [string]$ExtraFilter = '') {
     $directory = Split-Path -Parent $Destination
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $end = $Start + 22.0
-    $filter = "[0:a]atrim=start=$Start`:end=$end,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,loudnorm=I=$Loudness`:TP=-3:LRA=4,asplit=3[whole][headsrc][tailsrc];[whole]atrim=start=2:end=20,asetpts=PTS-STARTPTS[body];[headsrc]atrim=start=0:end=2,asetpts=PTS-STARTPTS[head];[tailsrc]atrim=start=20:end=22,asetpts=PTS-STARTPTS[tail];[tail][head]acrossfade=d=2:c1=tri:c2=tri[cross];[body][cross]concat=n=2:v=0:a=1[out]"
+    $preparation = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono'
+    if (-not [string]::IsNullOrWhiteSpace($ExtraFilter)) {
+        $preparation += ",$ExtraFilter"
+    }
+    $preparation += ",loudnorm=I=$Loudness`:TP=-3:LRA=4"
+    $filter = "[0:a]atrim=start=$Start`:end=$end,asetpts=PTS-STARTPTS,$preparation,asplit=3[whole][headsrc][tailsrc];[whole]atrim=start=2:end=20,asetpts=PTS-STARTPTS[body];[headsrc]atrim=start=0:end=2,asetpts=PTS-STARTPTS[head];[tailsrc]atrim=start=20:end=22,asetpts=PTS-STARTPTS[tail];[tail][head]acrossfade=d=2:c1=tri:c2=tri[cross];[body][cross]concat=n=2:v=0:a=1[out]"
     Invoke-CheckedFfmpeg @(
         '-y', '-hide_banner', '-loglevel', 'error', '-i', $Source,
         '-filter_complex', $filter, '-map', '[out]',
@@ -177,7 +183,7 @@ try {
     Convert-Clip (Join-Path $t 'mechanism_spring.wav') (Join-Path $o 'impact\obstacle_01.wav') 0.26 0.70 -22
     Convert-Clip (Join-Path $t 'case_down.wav') (Join-Path $o 'impact\ground_01.wav') 0 0.65 -24
 
-    Convert-Loop (Join-Path $t 'base_hum.wav') (Join-Path $o 'ambience\base_safe_low.wav') 8 -32
+    Convert-Loop (Join-Path $t 'base_chimney_wind.wav') (Join-Path $o 'ambience\base_safe_low.wav') 30 -38 'highpass=f=90,lowpass=f=3200'
     Convert-Loop (Join-Path $t 'raid_wind_metal.wav') (Join-Path $o 'ambience\raid_urban_low.wav') 10 -30
 }
 finally {

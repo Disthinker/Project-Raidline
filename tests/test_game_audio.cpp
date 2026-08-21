@@ -107,6 +107,61 @@ TEST(GameAudioTest, PublishedBankDefinesLoadableRuntimeWaves)
     }
 }
 
+TEST(GameAudioTest, BaseAmbienceAvoidsHarshElectricalNoise)
+{
+    const SoundBankParseResult parsed = loadSoundBankDefinition(
+        audioRoot() / "sound_events.json");
+    ASSERT_TRUE(parsed.succeeded()) << parsed.message;
+    const auto event = std::find_if(
+        parsed.bank->events.begin(),
+        parsed.bank->events.end(),
+        [](const SoundEventDefinition &candidate)
+        {
+            return candidate.id == SoundEventId::AmbienceBaseSafeLow;
+        });
+    ASSERT_NE(event, parsed.bank->events.end());
+    ASSERT_EQ(event->variants.size(), 1U);
+    EXPECT_LE(event->gain, 0.30F);
+
+    const std::filesystem::path path = audioRoot() / event->variants.front();
+    SDL_AudioSpec specification{};
+    Uint8 *data{};
+    Uint32 length{};
+    const std::string nativePath = path.string();
+    ASSERT_TRUE(SDL_LoadWAV(
+        nativePath.c_str(), &specification, &data, &length))
+        << path << ": " << SDL_GetError();
+    ASSERT_NE(data, nullptr);
+    ASSERT_EQ(specification.format, SDL_AUDIO_S16LE);
+    ASSERT_EQ(specification.channels, 1);
+    ASSERT_EQ(length % sizeof(std::int16_t), 0U);
+
+    std::size_t zeroCrossings{};
+    int previousSign{};
+    const std::size_t sampleCount = length / sizeof(std::int16_t);
+    for (std::size_t index{}; index < sampleCount; ++index)
+    {
+        const std::size_t offset = index * sizeof(std::int16_t);
+        const std::uint16_t encoded =
+            static_cast<std::uint16_t>(data[offset]) |
+            (static_cast<std::uint16_t>(data[offset + 1U]) << 8U);
+        const auto sample = static_cast<std::int16_t>(encoded);
+        const int sign = sample < 0 ? -1 : (sample > 0 ? 1 : 0);
+        if (sign != 0)
+        {
+            zeroCrossings +=
+                previousSign != 0 && sign != previousSign ? 1U : 0U;
+            previousSign = sign;
+        }
+    }
+    SDL_free(data);
+
+    ASSERT_GT(sampleCount, 1U);
+    const double zeroCrossingRate = static_cast<double>(zeroCrossings) /
+        static_cast<double>(sampleCount - 1U);
+    EXPECT_LT(zeroCrossingRate, 0.08);
+}
+
 TEST(GameAudioTest, BankRejectsDuplicateIdsAndMissingStableEvent)
 {
     std::string invalid = manifestText();

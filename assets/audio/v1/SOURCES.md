@@ -16,7 +16,6 @@ the game repository.
   - Handgun/rifle magazine-out, magazine-in, chamber/bolt and equip Foley.
   - One handgun and one assault-rifle outdoor tail.
 - `Sonniss.com-GDC2026-GameAudioBundle1of5.zip`
-  - 344 Audio East Coast America electricity hum.
   - 344 Audio Cinematic Fight four body impacts.
 - `Sonniss.com-GDC2026-GameAudioBundle2of5.zip`
   - Epic Stock Media HD Lock and Mechanism small mechanism/latch/spring Foley.
@@ -25,6 +24,7 @@ the game repository.
 - `Sonniss.com-GDC2026-GameAudioBundle3of5.zip`
   - InMotionAudio T-Shirt cloth Foley, instrument-case Foley and medical
     thermometer button/beep.
+  - InMotionAudio Chimney Wind interior wind source for the safe Base bed.
 - `Sonniss.com-GDC2026-GameAudioBundle5of5.zip`
   - SoundBits short violent-humanoid exhale.
   - The Noisery wind-through-metal source from City Rain.
@@ -43,6 +43,10 @@ the runtime package.
   fantasy, alien and exaggerated monster sources.
 - Build 18-second Base and Raid loops from 20-second bodies with a two-second
   head/tail crossfade.
+- High-pass and low-pass the Base interior-wind loop, normalize it more quietly
+  than the Raid bed, and keep its event gain low. Electrical hum and coil-pickup
+  material are deliberately excluded because their stationary buzz reads as a
+  foreground fault rather than safe-area ambience.
 - Keep shotgun, suppressor, grenade, radio, voiced crowd, storm/rain, vehicle,
   door and other environment families deferred.
 
