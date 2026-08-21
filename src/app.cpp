@@ -5656,6 +5656,146 @@ void App::renderShotPresentations()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+Vec2 App::raidWorldScreenShakePixels() const noexcept
+{
+    const Vec2 normalized =
+        gameSession_.world().normalizedShotScreenShakeOffset();
+    // Deliberately below the threshold that would displace the crosshair or
+    // interfere with ordinary visual reading. Only the world viewport moves.
+    return Vec2{normalized.x * 1.8F, normalized.y * 1.3F};
+}
+
+void App::renderShotFeedbackPresentations()
+{
+    constexpr int kLightSegments{20};
+    constexpr float kTau{6.28318530718F};
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    for (const ShotFeedbackPresentationSnapshot &shot :
+         gameSession_.world().shotFeedbackPresentationSnapshots())
+    {
+        const Vec2 normal{-shot.direction.y, shot.direction.x};
+
+        if (shot.muzzleFlashIntensity > 0.0F)
+        {
+            // A low-alpha radial gradient briefly warms the area around the
+            // player. Transparent outer vertices keep its boundary soft and
+            // avoid a harsh full-screen flash.
+            std::array<SDL_Vertex, kLightSegments + 1> vertices{};
+            std::array<int, kLightSegments * 3> indices{};
+            const Vec2 lightCenter{
+                shot.origin.x - shot.direction.x * 12.0F,
+                shot.origin.y - shot.direction.y * 12.0F};
+            vertices[0] = SDL_Vertex{
+                SDL_FPoint{lightCenter.x, lightCenter.y},
+                SDL_FColor{
+                    1.0F,
+                    0.76F,
+                    0.32F,
+                    0.10F * shot.muzzleFlashIntensity},
+                SDL_FPoint{}};
+            constexpr float kSoftLightRadius{92.0F};
+            for (int index{}; index < kLightSegments; ++index)
+            {
+                const float angle = kTau * static_cast<float>(index) /
+                    static_cast<float>(kLightSegments);
+                vertices[static_cast<std::size_t>(index) + 1U] = SDL_Vertex{
+                    SDL_FPoint{
+                        lightCenter.x + std::cos(angle) * kSoftLightRadius,
+                        lightCenter.y + std::sin(angle) * kSoftLightRadius},
+                    SDL_FColor{1.0F, 0.72F, 0.24F, 0.0F},
+                    SDL_FPoint{}};
+                indices[static_cast<std::size_t>(index) * 3U] = 0;
+                indices[static_cast<std::size_t>(index) * 3U + 1U] =
+                    index + 1;
+                indices[static_cast<std::size_t>(index) * 3U + 2U] =
+                    (index + 1) % kLightSegments + 1;
+            }
+            static_cast<void>(SDL_RenderGeometry(
+                renderer_,
+                nullptr,
+                vertices.data(),
+                static_cast<int>(vertices.size()),
+                indices.data(),
+                static_cast<int>(indices.size())));
+
+            const float length =
+                10.0F + 10.0F * shot.muzzleFlashIntensity;
+            const Vec2 tip{
+                shot.origin.x + shot.direction.x * length,
+                shot.origin.y + shot.direction.y * length};
+            const Uint8 flashAlpha = static_cast<Uint8>(std::clamp(
+                std::lround(255.0F * shot.muzzleFlashIntensity),
+                0L,
+                255L));
+            const auto drawFlashLine = [&](float offset, float lengthScale,
+                                           Uint8 red, Uint8 green, Uint8 blue,
+                                           float alphaScale)
+            {
+                SDL_SetRenderDrawColor(
+                    renderer_,
+                    red,
+                    green,
+                    blue,
+                    static_cast<Uint8>(std::clamp(
+                        std::lround(
+                            static_cast<float>(flashAlpha) * alphaScale),
+                        0L,
+                        255L)));
+                SDL_RenderLine(
+                    renderer_,
+                    shot.origin.x + normal.x * offset,
+                    shot.origin.y + normal.y * offset,
+                    shot.origin.x +
+                        (tip.x - shot.origin.x) * lengthScale -
+                        normal.x * offset * 0.35F,
+                    shot.origin.y +
+                        (tip.y - shot.origin.y) * lengthScale -
+                        normal.y * offset * 0.35F);
+            };
+            drawFlashLine(-2.0F, 0.72F, 255, 177, 42, 0.72F);
+            drawFlashLine(2.0F, 0.72F, 255, 177, 42, 0.72F);
+            drawFlashLine(-1.0F, 0.90F, 255, 230, 126, 0.90F);
+            drawFlashLine(1.0F, 0.90F, 255, 230, 126, 0.90F);
+            drawFlashLine(0.0F, 1.0F, 255, 255, 238, 1.0F);
+        }
+
+        if (shot.smokeOpacity > 0.0F)
+        {
+            const float lateralSign =
+                (shot.shotId % 2U == 0U) ? 1.0F : -1.0F;
+            for (int puff{}; puff < 3; ++puff)
+            {
+                const float puffOffset = static_cast<float>(puff);
+                const float forward =
+                    5.0F + shot.smokeProgress * 20.0F + puffOffset * 3.5F;
+                const float lateral = lateralSign *
+                    (2.0F + shot.smokeProgress * 5.0F + puffOffset * 1.5F);
+                const float size =
+                    3.0F + shot.smokeProgress * 8.0F + puffOffset * 1.2F;
+                const SDL_FRect cloud{
+                    shot.origin.x + shot.direction.x * forward +
+                        normal.x * lateral - size * 0.5F,
+                    shot.origin.y + shot.direction.y * forward +
+                        normal.y * lateral - size * 0.5F,
+                    size,
+                    size};
+                const float opacityScale = 0.74F - puffOffset * 0.16F;
+                const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                    std::lround(
+                        shot.smokeOpacity * opacityScale * 255.0F),
+                    0L,
+                    255L));
+                SDL_SetRenderDrawColor(
+                    renderer_, 174, 178, 170, alpha);
+                SDL_RenderFillRect(renderer_, &cloud);
+            }
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderBallisticBlockers()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -7830,7 +7970,23 @@ void App::renderBase()
 
 void App::renderRaidScreen()
 {
+    // Keep an unshifted background underneath so the sub-two-pixel viewport
+    // displacement never exposes black edge strips.
     renderBackground();
+    const Vec2 shakePixels = raidWorldScreenShakePixels();
+    const SDL_Rect shakenViewport{
+        static_cast<int>(std::lround(shakePixels.x)),
+        static_cast<int>(std::lround(shakePixels.y)),
+        kWindowWidth,
+        kWindowHeight};
+    const bool worldIsShaken =
+        shakenViewport.x != 0 || shakenViewport.y != 0;
+    if (worldIsShaken)
+    {
+        static_cast<void>(
+            SDL_SetRenderViewport(renderer_, &shakenViewport));
+        renderBackground();
+    }
     renderExtractionPoint();
     renderBallisticBlockers();
     if (!gameSession_.world().isAlphaRaidWorld())
@@ -7852,7 +8008,15 @@ void App::renderRaidScreen()
     renderEnemies();
     renderPlayer();
     renderShotPresentations();
+    renderShotFeedbackPresentations();
     renderParticles();
+
+    // Crosshair and every UI/modal layer stay in stable screen coordinates;
+    // screen shake therefore cannot alter aiming or inventory interaction.
+    if (worldIsShaken)
+    {
+        static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
+    }
     renderAimCrosshair();
     renderCombatFeedback();
 

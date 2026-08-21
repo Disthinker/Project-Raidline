@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@f593719` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道、直接瞄准、距离散布、高速曳光、相对输入和 P0 音频；PR #69 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/combat-spread-model-v3`，从干净的 `origin/main@f593719` 创建。
-- 当前活动计划：`doc/exec-plans/active/combat-spread-model-v3.md`。
+- `origin/main@33da892` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道、直接瞄准、动态散布、高速曳光、相对输入和 P0 音频；PR #71 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/combat-feedback-finish`，从干净的 `origin/main@33da892` 创建。
+- 当前活动计划：`doc/exec-plans/active/combat-shooting-feedback-finish.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 已接受。当前里程碑进入 **Combat：动态散布模型与准星稳定性 v3**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#71 已接受。当前里程碑进入 **Combat：射击表现收尾**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -25,7 +25,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
 11. **输入捕获、后坐力曲线与 P0 音频 v1**：PR #68 已通过 exact-head CI 与用户验收，以 merge commit `ba3375e` 进入 main。
 12. **直接瞄准、距离散布与高速曳光 v2**：PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；验收加固进一步修复 Raid 装备拖放，分离真实随机散布半径与玩家可读准星半径，加粗准星/曳光，加入 Base/Raid 统一 Esc 暂停菜单，并把默认曳光长度收敛为 30px。精确 head CI 与用户正常游玩验收通过，以 merge commit `f593719` 进入 main。
-13. **动态散布模型与准星稳定性 v3**：PR #71 第一轮将距离改为主要定义包络，并拆分移动、甩枪和击发 Bloom；连续投影与像素对齐解决距离遮蔽和组合输入闪动。第二轮移除轻微移准硬台阶、增强连续横向后坐力并加入小权重距离 Bloom。第三轮让走路/奔跑首帧分别进入较大/更大扩散，提高持续甩枪展开并适度加快恢复，head `067e024` 已通过 exact-head CI。第四轮把原 App 可读半径纳入 simulation 的真实随机弹道范围，并小幅提高甩枪/距离影响；Windows Debug 全目标、150 项定向回归和 781/781 全量 CTest 通过。
+13. **动态散布模型与准星稳定性 v3**：PR #71 完成距离包络、四源 Bloom、走跑即时扩散、连续横向后坐力与准星—真实随机弹道权威半径统一；精确 head CI 和用户正常游玩验收通过，以 merge commit `33da892` 进入 main。
+14. **射击表现收尾**：当前分支为成功击发加入短促枪口焰、快速消散烟雾、柔边局部闪光和不影响瞄准/UI 的轻微世界画面抖动；明确不制作角色或枪械射击动画。Windows Debug 全目标、79 项定向回归和 788/788 全量 CTest 通过。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -61,7 +62,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。PR #69 经多轮正常游玩验收、776/776 CTest 与最终 exact-head Windows/Ubuntu CI 后以 `f593719` 合入 main。当前 v3 第三轮 head `067e024` 已通过 exact-head CI；第四轮分支已完成 Windows Debug 全目标、150 项定向回归和 781/781 全量 CTest。开发代理未启动游戏。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。PR #69 经多轮正常游玩验收、776/776 CTest 与最终 exact-head Windows/Ubuntu CI 后以 `f593719` 合入 main。PR #71 经 781/781 CTest、exact-head CI 与用户正常游玩验收后以 `33da892` 合入 main。当前射击表现收尾分支已完成 Windows Debug 全目标、79 项定向回归和 788/788 全量 CTest。开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -93,6 +94,13 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 - 原先 `WeaponAccuracyProjection` 把最多约 70px 动态增量只用于可读显示，导致大准星下随机弹道仍贴近中心。现在该增量由 `WeaponFireState::spreadRadiusAtDistance` 纳入 simulation 权威半径；随机射线和 `worldRadius` 共用该值，准星四臂只额外保留固定 10px 中心留白。App 不再把半径截断到 160px。
 - F10 新增 `Sprinting spread fraction`，与 `Moving spread fraction` 分开调整；两者只覆盖当前武器实例的会话瞬态，不修改内容定义或存档。
 - 该切片不修改武器内容版本、Profile schema、弹药、逻辑弹道、命中语义、音频或资源 manifest。
+
+## Combat 射击表现收尾当前实现
+
+- `ShotFeedbackPresentationState` 只接受已经解析成功的 ShotResolution，并以稳定 ShotId 保存最多八个短寿命表现记录；无弹、故障拒绝和冲刺阻断均不创建反馈。
+- 每发提供约 0.05 秒代码绘制枪口焰、0.22 秒且最大 18% 不透明度的三个小烟团，以及中心 10% alpha、92px 半径、外缘透明的柔边暖色局部闪光。它们不进入正式照明、敌人感知或美术资源系统。
+- 归一化抖动由 simulation 有界输出，SDL client 只把它映射为最大约 2px 的世界 viewport 偏移；准星、库存、HUD、暂停菜单与开发面板在恢复 viewport 后绘制，实际瞄准和命中不变。
+- 本切片不制作角色或枪械射击动画，不生成/发布正式资源，不修改内容版本、Profile schema、音频或 manifest。
 
 ## PR #69 第二轮验收加固
 
@@ -171,7 +179,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#69 �
 
 ## 尚未完成
 
-- 动态散布模型与准星稳定性 v3：PR #71 第四轮准星—真实随机弹道一致性、甩枪和距离修订已完成，150 项 Gameplay/会话定向回归和 781/781 全量 CTest 通过；最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收尚待完成。
+- 射击表现收尾：代码与本地自动化已完成；exact-head Windows/Ubuntu CI 与用户对火光、短烟、柔边局部闪光和轻微抖动的正常游玩验收尚待完成。
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。

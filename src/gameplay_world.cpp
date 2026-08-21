@@ -597,6 +597,7 @@ void GameplayWorld::update(
     enemiesAlertedLastUpdate_ = 0U;
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
+        shotFeedbackPresentation_.update(deltaTime);
         for (TracerPresentationSegment &tracer : tracerPresentations_)
         {
             tracer.ageSeconds += deltaTime;
@@ -900,6 +901,13 @@ void GameplayWorld::update(
             weaponTracerLength_,
             weaponTracerOpacity_,
             weaponTracerLifetimeSeconds_);
+        if (!shotFeedbackPresentation_.recordAcceptedShot(
+                resolution.shotId,
+                resolution.origin,
+                resolution.direction))
+        {
+            std::terminate();
+        }
         weaponAim_.applyShotRecoil(shotOrigin);
         ++nextShotId_;
     }
@@ -1103,6 +1111,17 @@ GameplayWorld::shotPresentationSnapshots() const
     }
 
     return snapshots;
+}
+
+std::vector<ShotFeedbackPresentationSnapshot>
+GameplayWorld::shotFeedbackPresentationSnapshots() const
+{
+    return shotFeedbackPresentation_.snapshots();
+}
+
+Vec2 GameplayWorld::normalizedShotScreenShakeOffset() const noexcept
+{
+    return shotFeedbackPresentation_.normalizedScreenShakeOffset();
 }
 
 const std::vector<Enemy> &

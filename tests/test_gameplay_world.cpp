@@ -501,6 +501,55 @@ TEST(GameplayWorldTest, FirePublishesShotPresentationWithoutDamageAuthority)
         48.0F);
 }
 
+TEST(GameplayWorldTest, AcceptedShotPublishesMuzzleSmokeAndShakeProjection)
+{
+    GameplayWorld world;
+    world.update(makeFireInput(), 0.0F);
+
+    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    const auto feedback = world.shotFeedbackPresentationSnapshots();
+    ASSERT_EQ(feedback.size(), 1U);
+    EXPECT_EQ(
+        feedback.front().shotId,
+        world.logicalBallistics().front().shotId());
+    EXPECT_FLOAT_EQ(
+        feedback.front().origin.x,
+        world.logicalBallistics().front().origin().x);
+    EXPECT_FLOAT_EQ(
+        feedback.front().origin.y,
+        world.logicalBallistics().front().origin().y);
+    EXPECT_FLOAT_EQ(
+        feedback.front().direction.x,
+        world.logicalBallistics().front().direction().x);
+    EXPECT_FLOAT_EQ(
+        feedback.front().direction.y,
+        world.logicalBallistics().front().direction().y);
+    EXPECT_FLOAT_EQ(feedback.front().muzzleFlashIntensity, 1.0F);
+    EXPECT_GT(feedback.front().smokeOpacity, 0.0F);
+    const Vec2 shake = world.normalizedShotScreenShakeOffset();
+    EXPECT_LE(std::hypot(shake.x, shake.y), 1.0F);
+
+    world.update(GameplayInput{}, 0.230F);
+    EXPECT_TRUE(world.shotFeedbackPresentationSnapshots().empty());
+    EXPECT_FLOAT_EQ(world.normalizedShotScreenShakeOffset().x, 0.0F);
+    EXPECT_FLOAT_EQ(world.normalizedShotScreenShakeOffset().y, 0.0F);
+}
+
+TEST(GameplayWorldTest, BlockedShotDoesNotPublishShotFeedback)
+{
+    GameplayWorld world;
+    GameplayInput input = makeFireInput();
+    input.sprint = true;
+    input.moveRight = true;
+
+    world.update(input, 0.0F);
+
+    EXPECT_FALSE(world.shotFiredLastUpdate());
+    EXPECT_TRUE(world.shotFeedbackPresentationSnapshots().empty());
+    EXPECT_FLOAT_EQ(world.normalizedShotScreenShakeOffset().x, 0.0F);
+    EXPECT_FLOAT_EQ(world.normalizedShotScreenShakeOffset().y, 0.0F);
+}
+
 TEST(GameplayWorldTest, SameFrameImpactKeepsShortLivedTracerProjection)
 {
     GameplayWorld world{std::vector<EnemySpawn>{}, 3};
