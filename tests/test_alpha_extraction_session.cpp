@@ -592,6 +592,7 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
         });
     ASSERT_NE(target, magazines.end());
     ASSERT_TRUE(session.deployAlpha(3320));
+    static_cast<void>(session.takePresentationEvents());
 
     for (int shot = 0; shot < 10; ++shot)
     {
@@ -604,6 +605,10 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
         profileStateFingerprint(session.profile());
 
     ASSERT_TRUE(session.startAlphaReload(rifle, *target));
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::ReloadStarted});
     GameplayInput inventoryOpened{};
     inventoryOpened.inventoryOpen = true;
     session.update(inventoryOpened, 0.5F);
@@ -612,10 +617,18 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(installedMagazine(session.profile(), rifle), original);
 
     ASSERT_TRUE(session.startAlphaReload(rifle, *target));
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::ReloadStarted});
     session.update(GameplayInput{}, 2.0F);
     EXPECT_EQ(installedMagazine(session.profile(), rifle), *target);
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::ReloadCompleted});
 }
 
 TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
@@ -917,7 +930,12 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
     const std::uint32_t chargesBefore =
         session.profile().assets.find(medkit)->remainingCharges;
     ASSERT_TRUE(session.deployAlpha(93431));
+    static_cast<void>(session.takePresentationEvents());
     ASSERT_TRUE(session.startAlphaMedical(medkit));
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::MedicalStarted});
 
     const float positionBefore = session.world().player().position().x;
     GameplayInput slowMovement{};
@@ -940,6 +958,10 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
     session.update(heldFire, 0.0F);
     EXPECT_FALSE(session.raidActionState().active().has_value());
     EXPECT_FALSE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::MedicalInterrupted});
 
     heldFire.fireJustPressed = false;
     session.update(heldFire, 0.0F);

@@ -9,7 +9,7 @@
 #include <SDL3/SDL.h>
 
 #include "game_flow.h"
-#include "combat_audio.h"
+#include "game_audio.h"
 #include "gameplay_input.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
@@ -82,7 +82,7 @@ private:
     bool relativeMouseModeActive_{false};
     bool windowHasInputFocus_{true};
     Vec2 pendingRelativeAimMotion_{};
-    CombatAudioOutput combatAudio_;
+    GameAudioOutput gameAudio_;
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -130,6 +130,8 @@ private:
 
     bool loadTextures();
     bool initialize();
+    void syncAmbience();
+    void consumePresentationAudioEvents();
 
     GameplayInput makeGameplayInput() const;
 

@@ -178,6 +178,7 @@ public:
     [[nodiscard]] float weaponAimDownSightsProgress() const noexcept;
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] std::size_t enemiesAlertedLastUpdate() const noexcept;
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(
         const WeaponUseDefinition &definition,
@@ -295,6 +296,7 @@ private:
     int score_{0};
     Vec2 worldSize_{1280.0F, 720.0F};
     bool shotFiredLastUpdate_{};
+    std::size_t enemiesAlertedLastUpdate_{};
     bool alphaRaidWorld_{};
     bool deferPlayerDamageResolution_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;

@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "bank_id": "raidline.audio.p0.v1",
+  "master_gain": 0.72,
+  "events": [
+    {
+      "id": "weapon.pistol.fire",
+      "variants": [
+        "weapon/pistol_fire_01.wav",
+        "weapon/pistol_fire_02.wav",
+        "weapon/pistol_fire_03.wav"
+      ],
+      "gain": 0.90,
+      "max_instances": 8,
+      "cooldown_seconds": 0.0,
+      "loop": false
+    },
+    {
+      "id": "weapon.rifle.fire",
+      "variants": [
+        "weapon/rifle_fire_01.wav",
+        "weapon/rifle_fire_02.wav",
+        "weapon/rifle_fire_03.wav"
+      ],
+      "gain": 0.90,
+      "max_instances": 8,
+      "cooldown_seconds": 0.0,
+      "loop": false
+    },
+    {
+      "id": "weapon.fire.tail.outdoor",
+      "variants": [
+        "weapon/outdoor_tail_01.wav",
+        "weapon/outdoor_tail_02.wav"
+      ],
+      "gain": 0.35,
+      "max_instances": 4,
+      "cooldown_seconds": 0.04,
+      "loop": false
+    },
+    {
+      "id": "weapon.mag.out",
+      "variants": [
+        "weapon/mag_out_01.wav",
+        "weapon/mag_out_02.wav"
+      ],
+      "gain": 0.80,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "weapon.mag.in",
+      "variants": [
+        "weapon/mag_in_01.wav",
+        "weapon/mag_in_02.wav"
+      ],
+      "gain": 0.80,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "weapon.chamber",
+      "variants": [
+        "weapon/chamber_01.wav",
+        "weapon/chamber_02.wav"
+      ],
+      "gain": 0.85,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "weapon.dry_fire",
+      "variants": ["weapon/dry_fire_01.wav"],
+      "gain": 0.80,
+      "max_instances": 1,
+      "cooldown_seconds": 0.08,
+      "loop": false
+    },
+    {
+      "id": "weapon.malfunction.clear",
+      "variants": [
+        "weapon/malfunction_clear_01.wav",
+        "weapon/malfunction_clear_02.wav"
+      ],
+      "gain": 0.82,
+      "max_instances": 2,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "ui.confirm",
+      "variants": ["ui/confirm_01.wav"],
+      "gain": 0.50,
+      "max_instances": 1,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "ui.deny",
+      "variants": ["ui/deny_01.wav"],
+      "gain": 0.55,
+      "max_instances": 1,
+      "cooldown_seconds": 0.08,
+      "loop": false
+    },
+    {
+      "id": "inventory.pickup",
+      "variants": [
+        "inventory/pickup_01.wav",
+        "inventory/pickup_02.wav"
+      ],
+      "gain": 0.58,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "inventory.equip",
+      "variants": [
+        "inventory/equip_01.wav",
+        "inventory/equip_02.wav"
+      ],
+      "gain": 0.62,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "inventory.move_or_place",
+      "variants": [
+        "inventory/place_01.wav",
+        "inventory/place_02.wav"
+      ],
+      "gain": 0.55,
+      "max_instances": 2,
+      "cooldown_seconds": 0.03,
+      "loop": false
+    },
+    {
+      "id": "medical.start",
+      "variants": ["medical/start_01.wav"],
+      "gain": 0.65,
+      "max_instances": 1,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "medical.complete",
+      "variants": ["medical/complete_01.wav"],
+      "gain": 0.60,
+      "max_instances": 1,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "medical.interrupt",
+      "variants": ["medical/interrupt_01.wav"],
+      "gain": 0.55,
+      "max_instances": 1,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "player.hurt.light",
+      "variants": [
+        "character/hurt_01.wav",
+        "character/hurt_02.wav"
+      ],
+      "gain": 0.70,
+      "max_instances": 2,
+      "cooldown_seconds": 0.08,
+      "loop": false
+    },
+    {
+      "id": "player.hurt.heavy",
+      "variants": [
+        "character/hurt_03.wav",
+        "character/hurt_04.wav"
+      ],
+      "gain": 0.78,
+      "max_instances": 2,
+      "cooldown_seconds": 0.08,
+      "loop": false
+    },
+    {
+      "id": "infected.alert",
+      "variants": [
+        "infected/alert_01.wav",
+        "infected/alert_02.wav"
+      ],
+      "gain": 0.52,
+      "max_instances": 2,
+      "cooldown_seconds": 0.15,
+      "loop": false
+    },
+    {
+      "id": "infected.hit",
+      "variants": [
+        "infected/hit_01.wav",
+        "infected/hit_02.wav"
+      ],
+      "gain": 0.50,
+      "max_instances": 3,
+      "cooldown_seconds": 0.05,
+      "loop": false
+    },
+    {
+      "id": "infected.death",
+      "variants": [
+        "infected/death_01.wav",
+        "infected/death_02.wav"
+      ],
+      "gain": 0.52,
+      "max_instances": 2,
+      "cooldown_seconds": 0.12,
+      "loop": false
+    },
+    {
+      "id": "impact.enemy",
+      "variants": ["impact/enemy_01.wav"],
+      "gain": 0.42,
+      "max_instances": 4,
+      "cooldown_seconds": 0.02,
+      "loop": false
+    },
+    {
+      "id": "impact.obstacle",
+      "variants": ["impact/obstacle_01.wav"],
+      "gain": 0.52,
+      "max_instances": 4,
+      "cooldown_seconds": 0.02,
+      "loop": false
+    },
+    {
+      "id": "impact.ground",
+      "variants": ["impact/ground_01.wav"],
+      "gain": 0.40,
+      "max_instances": 4,
+      "cooldown_seconds": 0.02,
+      "loop": false
+    },
+    {
+      "id": "ambience.base.safe_low",
+      "variants": ["ambience/base_safe_low.wav"],
+      "gain": 0.42,
+      "max_instances": 1,
+      "cooldown_seconds": 0.0,
+      "loop": true
+    },
+    {
+      "id": "ambience.raid.urban_low",
+      "variants": ["ambience/raid_urban_low.wav"],
+      "gain": 0.46,
+      "max_instances": 1,
+      "cooldown_seconds": 0.0,
+      "loop": true
+    }
+  ]
+}

@@ -19,7 +19,7 @@
 | RL-WEAPON-002 | Misfire/Double Feed 需要可保存的动态 Raid 地面弹药所有权 | 当前只启用不需要创建/抛出弹药资产的 Stovepipe；待 Raid 地面任意资产合同建立后独立扩展，禁止吞弹或凭空造弹 |
 | RL-COMBAT-004 | 击发时未冻结逻辑飞行且缺地面命中粒子 | PR #66 已以 `7877d71` 合入非实体逻辑飞行；PR #67 按新版合同把终点从准星点修订为武器最大距离/世界边界，并加入最近障碍与 Ground 结果 |
 | RL-COMBAT-005 | 位置式实际准星、手动压枪、随机散布与基础开镜未形成统一手感合同 | PR #67 已通过用户验收并以 `881c034` 合入 main |
-| RL-COMBAT-006 | 准星响应仍偏慢、横向后坐力极端值会跳点、OS 光标可离窗且射击缺少听觉反馈 | 当前分支迁移到高响应默认值、径向初速后连续弯曲的后坐力、Raid 相对鼠标捕获和程序化临时 cue；Windows Debug 与 751/751 已通过，待 CI 与用户验收 |
+| RL-COMBAT-006 | 准星响应、极端横向后坐力、OS 光标离窗与基础听觉反馈 | 输入/后坐力已迁移为高响应默认值、连续弯曲和 Raid 相对鼠标捕获；临时程序化 cue 正被 ArtWorkbench P0 Sound Event 音频库取代，待新 exact-head CI 与用户正常游玩验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -37,7 +37,7 @@
 - V0 `ItemId`/`ItemInstance`、3 HP、180 秒 Timeout、无限弹和旧 RaidSettlement 只服务历史测试路径；生产 Alpha 已绕过，但删除前仍需完整回归证明。
 - 生产路径已移除 Projectile；历史 V0 测试适配器继续按消费者安全退场，不得重新建立 WeaponAmmo、伤害、存档或 UI 依赖。
 - 当前没有合法瞄具定义、附件安装点或高倍率内容；圆形光学视野与镜片模糊不得在无消费者时做成通用相机框架。
-- Extraction Loop 使用代码 fallback 表现；正式美术、音频、manifest 与 runtime 资源发布仍在用户重新授权前暂停。
+- Extraction Loop 的正式美术仍使用代码 fallback；美术与 manifest 继续暂停。用户仅授权当前 P0 音效包，P1 音频和其他 runtime 资源仍需另行授权。
 - RL-COMBAT-002 肢体破坏/血液/击退/碎块和 RL-COMBAT-003 尸体残留均不在 Alpha。
 - Week29 分支无 PR、未进 main；代码可独立整理，正式攻击动画继续暂停。
 
@@ -55,6 +55,6 @@
 | Survival Loadout：防具维护 | PR #65 已通过 CI 与用户验收，以 merge commit `755fa00` 进入 main |
 | Combat：逻辑弹道与落点反馈 v1 | PR #66 已通过 CI 和用户验收，以 merge commit `7877d71` 进入 main |
 | Combat：准星运动、逻辑弹道与开发调参 v1 | PR #67 已通过用户验收，以 merge commit `881c034` 进入 main |
-| Combat：输入捕获、后坐力曲线与临时音频 v1 | 当前分支实现中；程序化 cue 只是代码 fallback，不代表正式音频完成 |
+| Combat：输入捕获、后坐力曲线与 P0 音频 v1 | Draft PR #68；程序化 cue 正替换为用户授权的精选 ArtWorkbench 音频，完成后仍不代表 P1 或全量正式音频完成 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-input-capture-audio-v1.md`。

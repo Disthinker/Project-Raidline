@@ -335,8 +335,8 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
-    src/combat_audio.cpp
-    src/combat_audio.h
+    src/game_audio.cpp
+    src/game_audio.h
     src/input_system.cpp
     src/input_system.h
     src/inventory_interaction.cpp
@@ -344,6 +344,8 @@ add_library(raidline_sdl_client STATIC
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
     src/raid_pointer_capture.h
+    src/sound_event.cpp
+    src/sound_event.h
     src/texture.cpp
     src/texture.h
 )
@@ -355,6 +357,7 @@ target_link_libraries(
     SDL3::SDL3
     PRIVATE
     fmt::fmt
+    nlohmann_json::nlohmann_json
     SDL3_image::SDL3_image)
 add_library(raidline::sdl_client ALIAS raidline_sdl_client)
 
@@ -418,9 +421,13 @@ raidline_add_test(
     tests/test_input_system.cpp
     raidline::sdl_client)
 raidline_add_test(
-    CombatAudioTest
-    tests/test_combat_audio.cpp
+    GameAudioTest
+    tests/test_game_audio.cpp
     raidline::sdl_client)
+target_compile_definitions(
+    GameAudioTest
+    PRIVATE
+    RAIDLINE_SOURCE_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
 raidline_add_test(
     WeaponFireTest

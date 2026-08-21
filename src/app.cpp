@@ -1017,9 +1017,16 @@ bool App::initialize()
     {
         fmt::print("SDL audio unavailable: {}\n", SDL_GetError());
     }
-    else if (!combatAudio_.initialize())
+    else
     {
-        fmt::print("Combat audio output unavailable: {}\n", SDL_GetError());
+        const char *basePath = SDL_GetBasePath();
+        if (basePath == nullptr ||
+            !gameAudio_.initialize(std::filesystem::path{basePath} / "assets"))
+        {
+            fmt::print(
+                "Game audio output unavailable: {}\n",
+                gameAudio_.lastError());
+        }
     }
 
     char *preferencePath = SDL_GetPrefPath(
@@ -1482,6 +1489,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? fmt::format("PURCHASED | CURRENCY {}", gameSession_.profile().currency)
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
             return;
         }
 
@@ -1521,6 +1532,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? fmt::format("RECYCLED | CURRENCY {}", gameSession_.profile().currency)
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
             if (receipt.succeeded)
             {
                 profileAssetSelection_.reset();
@@ -1538,6 +1553,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? "RELIEF BATCH ADDED TO STASH"
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
         }
         return;
     }
@@ -1566,6 +1585,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     slot},
                 nextProfileTransactionId("equip"));
         uiMessage_ = receipt.succeeded ? "EQUIPMENT UPDATED" : receipt.message;
+        gameAudio_.play(
+            receipt.succeeded
+                ? SoundEventId::InventoryEquip
+                : SoundEventId::UiDeny);
         if (receipt.succeeded)
         {
             profileAssetSelection_.reset();
@@ -2001,6 +2024,7 @@ void App::handleProfileInventoryUiEvent(
             }
         }
         uiMessage_ = "NO QUICK-TRANSFER SPACE";
+        gameAudio_.play(SoundEventId::UiDeny);
         return;
     }
 
@@ -2150,6 +2174,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
     if (!profileDragSourceMatches(profile, request.source))
     {
         uiMessage_ = "INVENTORY CHANGED - TRY AGAIN";
+        gameAudio_.play(SoundEventId::UiDeny);
         return;
     }
 
@@ -2163,6 +2188,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     target.location.container.kind == ProfileContainerKind::Stash)
                 {
                     uiMessage_ = "BLOCKED";
+                    gameAudio_.play(SoundEventId::UiDeny);
                     return;
                 }
                 if (std::holds_alternative<InstalledMagazineLocation>(
@@ -2194,6 +2220,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 uiMessage_ = receipt.succeeded
                     ? "INVENTORY UPDATED"
                     : receipt.message;
+                gameAudio_.play(
+                    receipt.succeeded
+                        ? SoundEventId::InventoryMoveOrPlace
+                        : SoundEventId::UiDeny);
             }
             else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
             {
@@ -2206,6 +2236,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 uiMessage_ = receipt.succeeded
                     ? "EQUIPMENT UPDATED"
                     : receipt.message;
+                gameAudio_.play(
+                    receipt.succeeded
+                        ? SoundEventId::InventoryEquip
+                        : SoundEventId::UiDeny);
             }
             else if constexpr (std::is_same_v<Target, MagazineLoadTarget>)
             {
@@ -2222,6 +2256,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     else
                     {
                         uiMessage_ = "AMMUNITION CANNOT BE LOADED";
+                        gameAudio_.play(SoundEventId::UiDeny);
                     }
                     return;
                 }
@@ -2250,6 +2285,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     else
                     {
                         uiMessage_ = "MAGAZINE CANNOT BE INSTALLED";
+                        gameAudio_.play(SoundEventId::UiDeny);
                     }
                     return;
                 }
@@ -3165,6 +3201,8 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
+    syncAmbience();
+    consumePresentationAudioEvents();
     if (gameFlow_.state() != GameFlowState::Raid)
     {
         developerWeaponPanelOpen_ = false;
@@ -3415,29 +3453,41 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    consumePresentationAudioEvents();
 
     if (gameSession_.world().shotFiredLastUpdate())
     {
         const auto tuning = gameSession_.developerWeaponTuning();
-        combatAudio_.play(
+        gameAudio_.play(
             tuning.has_value() && tuning->weaponUse.automaticFire
-                ? CombatAudioCue::RifleShot
-                : CombatAudioCue::PistolShot);
+                ? SoundEventId::WeaponRifleFire
+                : SoundEventId::WeaponPistolFire);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
     }
     for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
     {
         switch (hit.targetKind)
         {
         case HitTargetKind::Enemy:
-            combatAudio_.play(CombatAudioCue::EnemyImpact);
+            gameAudio_.play(SoundEventId::ImpactEnemy);
+            gameAudio_.play(
+                hit.targetKilled
+                    ? SoundEventId::InfectedDeath
+                    : SoundEventId::InfectedHit);
             break;
         case HitTargetKind::Obstacle:
-            combatAudio_.play(CombatAudioCue::ObstacleImpact);
+            gameAudio_.play(SoundEventId::ImpactObstacle);
             break;
         case HitTargetKind::Ground:
-            combatAudio_.play(CombatAudioCue::GroundImpact);
+            gameAudio_.play(SoundEventId::ImpactGround);
             break;
         }
+    }
+    for (std::size_t index{};
+         index < gameSession_.world().enemiesAlertedLastUpdate();
+         ++index)
+    {
+        gameAudio_.play(SoundEventId::InfectedAlert);
     }
 
     specialHitFeedbackRemaining_ = std::max(
@@ -3460,6 +3510,10 @@ void App::update(float deltaTime)
         lastIncomingDamageReducedByArmor_ =
             gameSession_.lastIncomingDamage()->armorReducedDamage;
         playerDamageFeedbackRemaining_ = 0.28F;
+        gameAudio_.play(
+            gameSession_.lastIncomingDamage()->damageApplied >= 25
+                ? SoundEventId::PlayerHurtHeavy
+                : SoundEventId::PlayerHurtLight);
     }
 
     if (!gameFlow_.isRaidScreen())
@@ -3477,6 +3531,71 @@ void App::update(float deltaTime)
         gameSession_.world().raidSession().isTerminal())
     {
         developerWeaponPanelOpen_ = false;
+    }
+}
+
+void App::syncAmbience()
+{
+    switch (gameFlow_.state())
+    {
+    case GameFlowState::Base:
+        gameAudio_.setAmbience(SoundEventId::AmbienceBaseSafeLow);
+        break;
+    case GameFlowState::Raid:
+        gameAudio_.setAmbience(SoundEventId::AmbienceRaidUrbanLow);
+        break;
+    case GameFlowState::MainMenu:
+    case GameFlowState::RaidResult:
+        gameAudio_.setAmbience(std::nullopt);
+        break;
+    }
+}
+
+void App::consumePresentationAudioEvents()
+{
+    for (const GameSessionPresentationEvent event :
+         gameSession_.takePresentationEvents())
+    {
+        switch (event)
+        {
+        case GameSessionPresentationEvent::WeaponDryFire:
+            gameAudio_.play(SoundEventId::WeaponDryFire);
+            break;
+        case GameSessionPresentationEvent::WeaponChambered:
+            gameAudio_.play(SoundEventId::WeaponChamber);
+            break;
+        case GameSessionPresentationEvent::ReloadStarted:
+            gameAudio_.play(SoundEventId::WeaponMagazineOut);
+            break;
+        case GameSessionPresentationEvent::ReloadCompleted:
+            gameAudio_.play(SoundEventId::WeaponMagazineIn);
+            gameAudio_.play(SoundEventId::WeaponChamber);
+            break;
+        case GameSessionPresentationEvent::MagazineLoaded:
+            gameAudio_.play(SoundEventId::InventoryMoveOrPlace);
+            break;
+        case GameSessionPresentationEvent::MagazineUnloaded:
+            gameAudio_.play(SoundEventId::WeaponMagazineOut);
+            break;
+        case GameSessionPresentationEvent::MedicalStarted:
+            gameAudio_.play(SoundEventId::MedicalStart);
+            break;
+        case GameSessionPresentationEvent::MedicalCompleted:
+            gameAudio_.play(SoundEventId::MedicalComplete);
+            break;
+        case GameSessionPresentationEvent::MedicalInterrupted:
+            gameAudio_.play(SoundEventId::MedicalInterrupt);
+            break;
+        case GameSessionPresentationEvent::WeaponEquipped:
+            gameAudio_.play(SoundEventId::InventoryEquip);
+            break;
+        case GameSessionPresentationEvent::MalfunctionCleared:
+            gameAudio_.play(SoundEventId::WeaponMalfunctionClear);
+            break;
+        case GameSessionPresentationEvent::LootPickedUp:
+            gameAudio_.play(SoundEventId::InventoryPickup);
+            break;
+        }
     }
 }
 
@@ -7601,7 +7720,7 @@ void App::shutdown()
     }
     relativeMouseModeActive_ = false;
     static_cast<void>(SDL_ShowCursor());
-    combatAudio_.shutdown();
+    gameAudio_.shutdown();
     systemCursorHidden_ = false;
 
     // 所有 SDL_Texture 必须在 Renderer 之前释放。

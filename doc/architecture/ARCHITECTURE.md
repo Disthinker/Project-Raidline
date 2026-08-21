@@ -129,7 +129,9 @@ WeaponAim/WeaponFire/Ammo
 
 生产射击使用非场景实体的 `LogicalBallisticFlight` 从枪口推进到武器最大射程或世界边界，每帧只连续扫掠已经飞过的线段。最近敌人形成 `Enemy`，最近数据化障碍形成 `Obstacle`，无接触到达最大距离形成一次 `Ground`；准星位置不再充当地面终点。Weak/None 曳光只投影已飞区段。WeaponAmmo、伤害、持久化和 App 不得要求 Projectile 类型；命中部位、弱点、防护和未来穿透只能由 HitResult 表达。
 
-SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗口相对鼠标模式，并将 `xrel/yrel` 翻译为 `GameplayInput::aimMotionDelta`；simulation 不读取 SDL 光标状态。临时 `CombatAudioOutput` 根据成功击发和 `HitResult` 生成/混合短 cue，音频不可反向驱动命中、伤害或弹药消费。
+SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗口相对鼠标模式，并将 `xrel/yrel` 翻译为 `GameplayInput::aimMotionDelta`；simulation 不读取 SDL 光标状态。
+
+`GameAudioOutput` 是 SDL client 的可选表现适配器。`GameSession` 只发布换弹、医疗、清障、拾取等瞬态语义事实，`GameplayWorld` 只发布击发、命中和敌人警觉结果；客户端再把事实映射为稳定 `SoundEventId`。`assets/audio/v1/sound_events.json` 定义变体、增益、并发、冷却和循环，启动时严格验证并将统一 WAV 转换为 48 kHz mono float 混音数据。音频库缺失或设备失败时静默降级，不能反向驱动命中、伤害、弹药、库存、存档或结算。Base/Raid 环境声是各自单实例循环；UI 和玩法短音效受事件级并发与冷却限制。
 
 ## 内容定义
 
@@ -174,6 +176,7 @@ Content Registry 的当前落地边界：
 9. `codex/survival-loadout-multi-weapon-switching`：PR #64 / merge commit `4c16596`，交付两长枪槽、手枪槽、WeaponUse、限时切换和 schema v6。
 10. `codex/survival-loadout-armor-maintenance`：PR #65 / merge commit `755fa00`，交付防具材质、甲修点数、Base/Raid 原子维修与六秒缓慢移动动作；复用 schema v6 已有耐久/charge 字段。
 11. `codex/combat-logical-ballistics-feedback-v1`：PR #66 / merge commit `7877d71`，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
-12. `codex/combat-aim-handling-ads-v1`：当前分支，交付位置/速度/加速度准星、刷新式后坐力、五项武器属性、随机散布、最大距离逻辑弹道、基础障碍/弱曳光、基础 ADS、奔跑举枪、射程反馈与 F10 运行时调参。
+12. `codex/combat-aim-handling-ads-v1`：PR #67 已进入 main，交付位置/速度/加速度准星、刷新式后坐力、五项武器属性、随机散布、最大距离逻辑弹道、基础障碍/弱曳光、基础 ADS、奔跑举枪、射程反馈与 F10 运行时调参。
+13. `codex/combat-input-capture-audio-v1`：Draft PR #68，交付相对鼠标捕获、连续后坐力弯曲与用户授权的 ArtWorkbench P0 Sound Event 音频库。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

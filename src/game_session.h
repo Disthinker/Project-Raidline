@@ -54,6 +54,24 @@ enum class DeveloperWeaponParameter
     Count,
 };
 
+// Client-facing semantic facts. These do not name audio files and are not
+// persisted; the SDL client decides how to present them.
+enum class GameSessionPresentationEvent
+{
+    WeaponDryFire,
+    WeaponChambered,
+    ReloadStarted,
+    ReloadCompleted,
+    MagazineLoaded,
+    MagazineUnloaded,
+    MedicalStarted,
+    MedicalCompleted,
+    MedicalInterrupted,
+    WeaponEquipped,
+    MalfunctionCleared,
+    LootPickedUp,
+};
+
 struct DeveloperWeaponTuningSnapshot
 {
     AssetInstanceId weaponAssetId{};
@@ -189,6 +207,9 @@ public:
     [[nodiscard]] const std::optional<CombatDamageResolution> &
     lastIncomingDamage() const noexcept;
 
+    [[nodiscard]] std::vector<GameSessionPresentationEvent>
+    takePresentationEvents();
+
     [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
 
@@ -208,6 +229,7 @@ private:
     bool recoveredAbandonedRaid_{};
     RaidActionState raidActionState_;
     std::optional<CombatDamageResolution> lastIncomingDamage_;
+    std::vector<GameSessionPresentationEvent> presentationEvents_;
     std::uint64_t raidCommandSequence_{};
     std::uint64_t medicalRandomSequence_{};
     std::uint64_t woundRandomSequence_{};

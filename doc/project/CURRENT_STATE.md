@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-20。
+最后核对：2026-08-21。
 
 ## Git 与交付基线
 
 - `origin/main@881c034` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道与准星/散布/基础 ADS v1；PR #67 已通过精确 head CI 和用户正常游玩验收后合入。
 - 当前开发分支：`codex/combat-input-capture-audio-v1`，从干净的 `origin/main@881c034` 创建。
 - 当前活动计划：`doc/exec-plans/active/combat-input-capture-audio-v1.md`。
-- Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术/音频生产继续暂停。
+- Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 已接受。当前里程碑进入 **Combat：输入捕获、后坐力曲线与临时音频 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 已接受。当前里程碑进入 **Combat：输入捕获、后坐力曲线与 P0 音频 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -23,7 +23,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 �
 8. **防具维护**：PR #65 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `755fa00` 进入 main。
 9. **逻辑弹道与落点反馈 v1**：PR #66 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `7877d71` 进入 main。
 10. **准星运动、逻辑弹道与开发调参 v1**：PR #67 已通过用户验收并以 merge commit `881c034` 进入 main。
-11. **输入捕获、后坐力曲线与临时音频 v1**：高响应默认值、有界随机角度后坐力、Raid 相对鼠标输入和程序化枪声/命中声正在当前分支形成完整玩家闭环。
+11. **输入捕获、后坐力曲线与 P0 音频 v1**：高响应默认值、有界随机角度后坐力、Raid 相对鼠标输入已在 Draft PR #68；原程序化 cue 正替换为精选枪械、库存、医疗、感染者和 Base/Raid 环境音。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -59,7 +59,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。当前输入/音频切片 Windows Debug 全目标与 751/751 CTest 已通过，开发代理未启动游戏。
+- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。当前输入/P0 音频树已重新完成 Windows Debug 全目标构建与 755/755 CTest，0 失败；开发代理未启动游戏。新提交、exact-head CI 和用户正常游玩验收仍待完成。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
@@ -81,12 +81,14 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#67 �
 - Alpha 首图从 JSON 读取三个代码表现障碍；玩家和逻辑弹道不能穿过，内容加载拒绝越界、重复 ID 或与任一合法敌人部署重叠的障碍。敌人移动阻挡和正式墙/车辆视觉仍不是通用物理系统。
 - Raid 中按 `F10` 打开开发者武器面板，使用上下选择、左右微调、Shift 大步长、R 重置。面板覆盖按当前武器实例隔离，立即重配置射击瞬态，但不修改 ContentRegistry、Profile、revision、存档、结算或 manifest；关闭进程即清除。
 
-## Combat 输入捕获、后坐力曲线与临时音频 v1 当前实现
+## Combat 输入捕获、后坐力曲线与 P0 音频 v1 当前实现
 
 - Active Raid 使用 SDL 相对鼠标模式，将每帧 `xrel/yrel` 作为明确 `aimMotionDelta` 交给 simulation；准星不再依赖可移出窗口的 OS 光标坐标。库存、医疗轮盘、F10 面板、终局或失焦都会释放捕获并恢复系统光标。
 - 后坐力横向随机从“径向速度加侧向速度”改为即时径向初速后在短弯曲时间内转向有界随机角度；横向比例只改变目标偏角，不再造成单帧斜向跳点。连续开火刷新一段运动，不叠加无界冲量，也不自动回正。
 - F10 新增准星控制加速度和后坐力弯曲时间；最大准星速度默认值与上限均提高到 5000 像素/秒，便于把剩余延迟集中由加速度控制。
-- SDL client 根据成功击发及 Enemy/Obstacle/Ground `HitResult` 播放短促程序化 cue。音频无设备时静默降级，只是表现消费者；没有生成、发布或接入正式音频文件，也未修改 manifest。
+- SDL client 使用 `GameAudioOutput` 加载 `assets/audio/v1/sound_events.json`，将成功击发、Enemy/Obstacle/Ground `HitResult`、感染者警觉、玩家受伤和 GameSession 换弹/医疗/清障/拾取语义事实映射为稳定 Sound Event。运行时 WAV 统一为 48 kHz、16-bit、mono；事件定义集中控制变体、增益、并发、冷却与循环，总音量由 bank master gain 控制。
+- 当前精选包来自 ArtWorkbench 的 `freeweaponsounds.zip` 与 Sonniss GDC 2026 五卷中的少量素材；只提交 43 个处理后的 WAV（合计约 7 MB）、来源清单和可复现脚本，不提交源 ZIP。Base 与 Raid 各使用一个低密度环境循环。音频设备或 bank 加载失败时游戏静默降级。
+- 本授权和实现都不包含 PNG、美术 manifest、正式攻击动画、霰弹枪、消音枪、广播、车辆或 P1 环境细分。
 
 ## Survival Loadout 防具维护切片当前实现
 

@@ -541,6 +541,7 @@ void GameplayWorld::update(
 {
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
+    enemiesAlertedLastUpdate_ = 0U;
     if (!raidSession_.isActive())
     {
         return;
@@ -645,6 +646,8 @@ void GameplayWorld::update(
              ++enemyIndex)
         {
             Enemy &enemy = enemies_[enemyIndex];
+            const EnemyAwarenessState awarenessBefore =
+                enemy.awarenessState();
 
             static_cast<void>(
                 enemy.updateTowardsTarget(
@@ -653,6 +656,11 @@ void GameplayWorld::update(
                     enemyStepTime,
                     worldWidth(),
                     worldHeight()));
+            if (awarenessBefore != EnemyAwarenessState::Alerted &&
+                enemy.awarenessState() == EnemyAwarenessState::Alerted)
+            {
+                ++enemiesAlertedLastUpdate_;
+            }
 
             if (enemy.hasGrabContactOpportunity())
             {
@@ -1035,6 +1043,11 @@ GameplayWorld::hitResultsLastUpdate() const noexcept
 bool GameplayWorld::shotFiredLastUpdate() const noexcept
 {
     return shotFiredLastUpdate_;
+}
+
+std::size_t GameplayWorld::enemiesAlertedLastUpdate() const noexcept
+{
+    return enemiesAlertedLastUpdate_;
 }
 
 void GameplayWorld::configureWeaponFire(
