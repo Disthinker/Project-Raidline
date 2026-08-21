@@ -1,6 +1,6 @@
 ---
 name: raidline-gameplay-acceptance
-description: Plan and execute Project Raidline real-window player-flow acceptance, capture defects, and separate product judgments from implementation regressions.
+description: Prepare Project Raidline real-window player-flow acceptance for the user, capture reported defects, and separate product judgments from implementation regressions.
 ---
 
 # Raidline Gameplay Playtest and Acceptance
@@ -11,7 +11,8 @@ Derive checks from the active ExecPlan. Each check states initial state, player 
 
 ## Test player flows
 
-- Use the exact built revision and record window/build identity.
+- Give the user one normal-play checklist after automated and CI gates. Do not launch the executable or substitute agent-run play for user acceptance.
+- Ask the user to use the exact built revision and record window/build identity when a discrepancy needs reproduction.
 - Cover the complete vertical path, not isolated screens only.
 - Include cancellation, capacity failure, repeated input, death/quit, return flow, and a second run when relevant.
 - Do not infer domain correctness solely from visuals; pair manual findings with state/test evidence.

@@ -3,6 +3,7 @@ description = "Read-only owner-level review of Raidline behavior, C++ safety, in
 sandbox_mode = "read-only"
 developer_instructions = """
 Review the actual diff and its execution paths without editing files.
+Compare the diff to the task envelope and governance impact report. Treat undeclared paths/domains or an under-classified authority change as blocking findings.
 Prioritize behavior contract violations, ownership and lifetime errors, RAII, copy and move semantics, stable IDs, vector invalidation, const and noexcept correctness, class invariants, state transitions, transaction atomicity, architecture boundary leaks, regressions, and missing failure tests.
 Check that new source is compiled by every relevant CMake target and that passing tests exercise the changed implementation.
 Lead with actionable findings ordered by severity and include tight file and line references plus a reproduction or failure scenario. Avoid style-only comments.

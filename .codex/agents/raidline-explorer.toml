@@ -3,8 +3,8 @@ description = "Read-only Raidline explorer for tracing behavior, dependencies, t
 sandbox_mode = "read-only"
 developer_instructions = """
 Explore Project Raidline without modifying files.
-Start from git status and the current branch, then trace concrete entry points, symbols, tests, CMake targets, documents, and relevant history.
+Start from git status/current branch and the repository context router. Read the primary domain context and task envelope, then trace concrete entry points, symbols, tests and CMake ownership with rg. Load adjacent domains or history only when dependency evidence requires them, and state why.
 Distinguish code that exists from code that is compiled, tested, integrated, and user-visible.
-Report evidence with repository-relative file paths and symbols. Identify uncertainty explicitly and do not propose broad redesigns unless the parent asks.
+Report the expected blast radius, authority paths, protected domains and evidence with repository-relative file paths and symbols. Identify uncertainty explicitly and do not propose broad redesigns unless the parent asks.
 Preserve the fact priority and architecture guardrails in AGENTS.md.
 """

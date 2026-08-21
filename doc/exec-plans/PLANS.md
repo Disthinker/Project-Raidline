@@ -1,20 +1,29 @@
-# Project Raidline ExecPlan 规范
+# Project Raidline 任务合同与 ExecPlan
 
-ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划以玩家结果或领域迁移命名，不再以 Week 编号命名；旧 Week 计划保留为历史证据。
+## 两种文件各自负责什么
 
-每份活动计划必须包含：
+- `*.task.toml` 是短 Task Envelope：允许改哪里、保护什么、风险、影响和证据门。每个 tracked change 都需要；模板见 `TASK_ENVELOPE_TEMPLATE.toml`。
+- ExecPlan 是多步骤执行与接管合同。`cross-domain`、`authority`、迁移和玩家可见垂直切片必须有；简单 local/domain 修复不为形式重复写长计划。
 
-1. 产品结果、唯一范围来源和明确排除。
-2. 当前 Git/PR/构建基线与依赖关系。
-3. V0 差距及可复用、需重构、需新建、停止扩展项。
-4. 状态所有权、领域命令/结果、稳定 ID 和持久化影响。
-5. 实施步骤与每步退出条件。
-6. 自动化门槛、真实窗口验收和证据格式。
-7. 提交/PR 边界、风险、回滚和未解决问题。
-8. 进度记录；只有证据完成后才能勾选。
+Task Envelope 不是第二份 ExecPlan。若实施必须离开 allowed paths、进入 protected domain 或触碰 authority path，先显式扩大 envelope 和证据门，再继续编辑。
 
-活动计划应能让接管者不依赖聊天历史继续工作。普通实现细节由开发主控决定；只有产品支柱、失败损失、商业模式、叙事主方向或显著范围扩张才升级给用户。
+## ExecPlan 最小内容
 
-当前总计划：`active/core-extraction-alpha.md`。
+1. 工程/玩家结果、范围来源和排除。
+2. 接受基线、依赖与真实差距。
+3. 所有权、命令/结果、稳定 ID、持久化/Content 影响。
+4. 实施步骤及可观察退出条件。
+5. 风险决定的 area/Sentinel/Integration/migration/long-sequence/full/CI/人工门。
+6. 提交与回滚、未解决风险、证据进度。
 
-当前实现计划：`active/combat-input-capture-audio-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout 与 Combat PR #66～#67 已接受；旧活动文档保留交付证据。
+活动计划只放 `active/`；接受或取消后移到 `completed/`。暂停中的命名工作可以保留 active，但必须在文档首部明确暂停原因。临时分支、CI 和 PR 状态只写活动计划/PR，不复制到稳定项目文档。
+
+## 新任务入口
+
+```powershell
+python tools/raidline_governance.py preflight --task "<request>"
+# 建立 task envelope / 必要时 ExecPlan 后：
+python tools/raidline_governance.py preflight --task "<request>" --envelope doc/exec-plans/active/<task>.task.toml --run-sentinel
+```
+
+普通实现细节由开发主控决定。只有产品支柱、失败损失、商业模式、叙事方向或显著范围扩张才升级给用户。

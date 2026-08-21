@@ -40,6 +40,13 @@ Project_Raidline.exe
 
 测试链接生产库，不再为每个测试目标重复编译业务源码。`App` 和 `GameplayWorld` 按消费者逐步迁移，禁止一次性无行为重写。
 
+### 机器化边界
+
+- CMake 配置检查每个非 main `src/*.cpp` 恰有一个生产库所有者，并阻止 domain/simulation 直接包含 SDL。
+- `python tools/raidline_governance.py architecture` 进一步检查模块向上 include/target 依赖、遗漏或重复 cpp 所有权，以及生产 Projectile 权威回归；GitHub 每个 PR 都运行该门。
+- CTest 通过 `layer-*`、`area-*`、`sentinel` 与 `long-sequence` 标签提供按风险选择的保护网；标签目录位于 `cmake/RaidlineTestCatalog.cmake`。
+- 上述工具只执行架构和证据保护，不成为运行时框架，也不进入游戏业务依赖。
+
 ## GameRuntime、GameSession 与活动运行时
 
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
