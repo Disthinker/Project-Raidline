@@ -120,6 +120,24 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousArmorMaintenanceContentVersion)
         *loaded.profile, publishedContentRegistry()).valid);
 }
 
+TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatAimContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-combat-input-content-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "combat-aim-content-6",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+}
+
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
 {
     ProfileState profile = makeNewAlphaProfile(

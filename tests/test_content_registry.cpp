@@ -62,7 +62,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "combat-aim-content-6");
+    EXPECT_EQ(registry.contentVersion(), "combat-input-content-7");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 4U);
@@ -86,7 +86,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(rifle.weaponUse->recoilControl, 42U);
     EXPECT_EQ(rifle.weaponUse->stability, 66U);
     EXPECT_EQ(rifle.weaponUse->handlingSpeed, 46U);
-    EXPECT_EQ(rifle.weaponUse->ergonomics, 75U);
+    EXPECT_EQ(rifle.weaponUse->ergonomics, 100U);
     EXPECT_EQ(rifle.weaponUse->accuracy, 72U);
     EXPECT_EQ(rifle.weaponUse->baseDamage, 4);
     EXPECT_FLOAT_EQ(rifle.weaponUse->effectiveRange, 500.0F);
@@ -104,7 +104,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FALSE(pistol.weaponUse->automaticFire);
     EXPECT_EQ(pistol.weaponUse->recoilControl, 55U);
     EXPECT_EQ(pistol.weaponUse->handlingSpeed, 82U);
-    EXPECT_EQ(pistol.weaponUse->ergonomics, 85U);
+    EXPECT_EQ(pistol.weaponUse->ergonomics, 100U);
     EXPECT_LT(
         deriveWeaponHandling(*pistol.weaponUse).switchDurationSeconds,
         deriveWeaponHandling(*rifle.weaponUse).switchDurationSeconds);

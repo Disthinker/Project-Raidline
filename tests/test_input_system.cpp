@@ -3,6 +3,7 @@
 #include <array>
 
 #include "input_system.h"
+#include "raid_pointer_capture.h"
 
 namespace
 {
@@ -751,4 +752,23 @@ TEST(InputSystemTest, PointerSuppressionDoesNotClearSpaceFire)
     EXPECT_TRUE(input.isActionPressed(GameAction::Fire));
     EXPECT_TRUE(input.wasActionJustPressed(GameAction::Fire));
     EXPECT_FALSE(input.isPrimaryPointerPressed());
+}
+
+TEST(InputSystemTest, RaidPointerCaptureRequiresUnobstructedFocusedGameplay)
+{
+    RaidPointerCaptureContext context{
+        true, true, false, false, false, true};
+    EXPECT_TRUE(shouldCaptureRaidPointer(context));
+
+    context.inventoryOpen = true;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
+    context.inventoryOpen = false;
+    context.medicalWheelOpen = true;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
+    context.medicalWheelOpen = false;
+    context.developerPanelOpen = true;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
+    context.developerPanelOpen = false;
+    context.windowHasInputFocus = false;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
 }

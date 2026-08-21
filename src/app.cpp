@@ -1013,6 +1013,22 @@ bool App::initialize()
         return false;
     }
 
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+    {
+        fmt::print("SDL audio unavailable: {}\n", SDL_GetError());
+    }
+    else
+    {
+        const char *basePath = SDL_GetBasePath();
+        if (basePath == nullptr ||
+            !gameAudio_.initialize(std::filesystem::path{basePath} / "assets"))
+        {
+            fmt::print(
+                "Game audio output unavailable: {}\n",
+                gameAudio_.lastError());
+        }
+    }
+
     char *preferencePath = SDL_GetPrefPath(
         "Disthinker",
         "Project Raidline");
@@ -1090,6 +1106,20 @@ GameplayInput App::makeGameplayInput() const
 
     input.aimWorldPosition =
         pointerWorldPosition_;
+
+    if (relativeMouseModeActive_ &&
+        !inventoryOverlayState_.isOpen() &&
+        !medicalWheelOpen_ &&
+        !developerWeaponPanelOpen_)
+    {
+        input.aimMotionDelta = pendingRelativeAimMotion_;
+    }
+    else if (gameFlow_.isRaidScreen())
+    {
+        // Modal UI freezes aim. It must not feed restored absolute cursor
+        // coordinates back into the relative aiming simulation.
+        input.aimMotionDelta = Vec2{};
+    }
 
     input.interactJustPressed =
         input_.wasActionJustPressed(
@@ -1459,6 +1489,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? fmt::format("PURCHASED | CURRENCY {}", gameSession_.profile().currency)
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
             return;
         }
 
@@ -1498,6 +1532,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? fmt::format("RECYCLED | CURRENCY {}", gameSession_.profile().currency)
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
             if (receipt.succeeded)
             {
                 profileAssetSelection_.reset();
@@ -1515,6 +1553,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             uiMessage_ = receipt.succeeded
                 ? "RELIEF BATCH ADDED TO STASH"
                 : receipt.message;
+            gameAudio_.play(
+                receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
         }
         return;
     }
@@ -1543,6 +1585,10 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     slot},
                 nextProfileTransactionId("equip"));
         uiMessage_ = receipt.succeeded ? "EQUIPMENT UPDATED" : receipt.message;
+        gameAudio_.play(
+            receipt.succeeded
+                ? SoundEventId::InventoryEquip
+                : SoundEventId::UiDeny);
         if (receipt.succeeded)
         {
             profileAssetSelection_.reset();
@@ -1978,6 +2024,7 @@ void App::handleProfileInventoryUiEvent(
             }
         }
         uiMessage_ = "NO QUICK-TRANSFER SPACE";
+        gameAudio_.play(SoundEventId::UiDeny);
         return;
     }
 
@@ -2127,6 +2174,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
     if (!profileDragSourceMatches(profile, request.source))
     {
         uiMessage_ = "INVENTORY CHANGED - TRY AGAIN";
+        gameAudio_.play(SoundEventId::UiDeny);
         return;
     }
 
@@ -2140,6 +2188,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     target.location.container.kind == ProfileContainerKind::Stash)
                 {
                     uiMessage_ = "BLOCKED";
+                    gameAudio_.play(SoundEventId::UiDeny);
                     return;
                 }
                 if (std::holds_alternative<InstalledMagazineLocation>(
@@ -2171,6 +2220,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 uiMessage_ = receipt.succeeded
                     ? "INVENTORY UPDATED"
                     : receipt.message;
+                gameAudio_.play(
+                    receipt.succeeded
+                        ? SoundEventId::InventoryMoveOrPlace
+                        : SoundEventId::UiDeny);
             }
             else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
             {
@@ -2183,6 +2236,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 uiMessage_ = receipt.succeeded
                     ? "EQUIPMENT UPDATED"
                     : receipt.message;
+                gameAudio_.play(
+                    receipt.succeeded
+                        ? SoundEventId::InventoryEquip
+                        : SoundEventId::UiDeny);
             }
             else if constexpr (std::is_same_v<Target, MagazineLoadTarget>)
             {
@@ -2199,6 +2256,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     else
                     {
                         uiMessage_ = "AMMUNITION CANNOT BE LOADED";
+                        gameAudio_.play(SoundEventId::UiDeny);
                     }
                     return;
                 }
@@ -2227,6 +2285,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     else
                     {
                         uiMessage_ = "MAGAZINE CANNOT BE INSTALLED";
+                        gameAudio_.play(SoundEventId::UiDeny);
                     }
                     return;
                 }
@@ -2866,9 +2925,23 @@ void App::processEvents()
     {
         input_.handleEvent(event);
 
+        if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED)
+        {
+            windowHasInputFocus_ = true;
+        }
         if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE ||
             event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
         {
+            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+            {
+                windowHasInputFocus_ = false;
+                static_cast<void>(
+                    SDL_SetWindowRelativeMouseMode(window_, false));
+                relativeMouseModeActive_ = false;
+                pendingRelativeAimMotion_ = Vec2{};
+                static_cast<void>(SDL_ShowCursor());
+                systemCursorHidden_ = false;
+            }
             inventoryInteraction_.cancelPointerGesture();
             profileInventoryInteraction_.cancelPointerGesture();
             profileContextMenu_.reset();
@@ -2880,18 +2953,30 @@ void App::processEvents()
 
         if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
-            const std::optional<Vec2> previousPointer =
-                pointerWorldPosition_;
-            pointerWorldPosition_ = Vec2{
-                event.motion.x,
-                event.motion.y};
+            Vec2 motion{event.motion.xrel, event.motion.yrel};
+            if (relativeMouseModeActive_)
+            {
+                pendingRelativeAimMotion_.x += motion.x;
+                pendingRelativeAimMotion_.y += motion.y;
+            }
+            else
+            {
+                const std::optional<Vec2> previousPointer =
+                    pointerWorldPosition_;
+                pointerWorldPosition_ = Vec2{
+                    event.motion.x,
+                    event.motion.y};
+                if (previousPointer.has_value())
+                {
+                    motion = Vec2{
+                        pointerWorldPosition_->x - previousPointer->x,
+                        pointerWorldPosition_->y - previousPointer->y};
+                }
+            }
             if (gameFlow_.state() == GameFlowState::Raid &&
                 !inventoryOverlayState_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
-                previousPointer.has_value() &&
-                gameSession_.observeAlphaWeaponClearMotion(Vec2{
-                    pointerWorldPosition_->x - previousPointer->x,
-                    pointerWorldPosition_->y - previousPointer->y}))
+                gameSession_.observeAlphaWeaponClearMotion(motion))
             {
                 uiMessage_ = "WEAPON MALFUNCTION CLEARED";
             }
@@ -2899,9 +2984,12 @@ void App::processEvents()
         else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                  event.type == SDL_EVENT_MOUSE_BUTTON_UP)
         {
-            pointerWorldPosition_ = Vec2{
-                event.button.x,
-                event.button.y};
+            if (!relativeMouseModeActive_)
+            {
+                pointerWorldPosition_ = Vec2{
+                    event.button.x,
+                    event.button.y};
+            }
         }
 
         if (event.type == SDL_EVENT_QUIT)
@@ -3113,6 +3201,8 @@ void App::processEvents()
 
 void App::update(float deltaTime)
 {
+    syncAmbience();
+    consumePresentationAudioEvents();
     if (gameFlow_.state() != GameFlowState::Raid)
     {
         developerWeaponPanelOpen_ = false;
@@ -3263,6 +3353,9 @@ void App::update(float deltaTime)
     if (developerWeaponPanelBlocksGameplayThisFrame_)
     {
         gameplayInput = GameplayInput{};
+        gameplayInput.aimWorldPosition =
+            gameSession_.world().weaponAimWorldPosition();
+        gameplayInput.aimMotionDelta = Vec2{};
     }
     if (inventoryOverlayState_.isOpen())
     {
@@ -3360,6 +3453,42 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    consumePresentationAudioEvents();
+
+    if (gameSession_.world().shotFiredLastUpdate())
+    {
+        const auto tuning = gameSession_.developerWeaponTuning();
+        gameAudio_.play(
+            tuning.has_value() && tuning->weaponUse.automaticFire
+                ? SoundEventId::WeaponRifleFire
+                : SoundEventId::WeaponPistolFire);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
+    }
+    for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
+    {
+        switch (hit.targetKind)
+        {
+        case HitTargetKind::Enemy:
+            gameAudio_.play(SoundEventId::ImpactEnemy);
+            gameAudio_.play(
+                hit.targetKilled
+                    ? SoundEventId::InfectedDeath
+                    : SoundEventId::InfectedHit);
+            break;
+        case HitTargetKind::Obstacle:
+            gameAudio_.play(SoundEventId::ImpactObstacle);
+            break;
+        case HitTargetKind::Ground:
+            gameAudio_.play(SoundEventId::ImpactGround);
+            break;
+        }
+    }
+    for (std::size_t index{};
+         index < gameSession_.world().enemiesAlertedLastUpdate();
+         ++index)
+    {
+        gameAudio_.play(SoundEventId::InfectedAlert);
+    }
 
     specialHitFeedbackRemaining_ = std::max(
         0.0F,
@@ -3381,6 +3510,10 @@ void App::update(float deltaTime)
         lastIncomingDamageReducedByArmor_ =
             gameSession_.lastIncomingDamage()->armorReducedDamage;
         playerDamageFeedbackRemaining_ = 0.28F;
+        gameAudio_.play(
+            gameSession_.lastIncomingDamage()->damageApplied >= 25
+                ? SoundEventId::PlayerHurtHeavy
+                : SoundEventId::PlayerHurtLight);
     }
 
     if (!gameFlow_.isRaidScreen())
@@ -3398,6 +3531,71 @@ void App::update(float deltaTime)
         gameSession_.world().raidSession().isTerminal())
     {
         developerWeaponPanelOpen_ = false;
+    }
+}
+
+void App::syncAmbience()
+{
+    switch (gameFlow_.state())
+    {
+    case GameFlowState::Base:
+        gameAudio_.setAmbience(SoundEventId::AmbienceBaseSafeLow);
+        break;
+    case GameFlowState::Raid:
+        gameAudio_.setAmbience(SoundEventId::AmbienceRaidUrbanLow);
+        break;
+    case GameFlowState::MainMenu:
+    case GameFlowState::RaidResult:
+        gameAudio_.setAmbience(std::nullopt);
+        break;
+    }
+}
+
+void App::consumePresentationAudioEvents()
+{
+    for (const GameSessionPresentationEvent event :
+         gameSession_.takePresentationEvents())
+    {
+        switch (event)
+        {
+        case GameSessionPresentationEvent::WeaponDryFire:
+            gameAudio_.play(SoundEventId::WeaponDryFire);
+            break;
+        case GameSessionPresentationEvent::WeaponChambered:
+            gameAudio_.play(SoundEventId::WeaponChamber);
+            break;
+        case GameSessionPresentationEvent::ReloadStarted:
+            gameAudio_.play(SoundEventId::WeaponMagazineOut);
+            break;
+        case GameSessionPresentationEvent::ReloadCompleted:
+            gameAudio_.play(SoundEventId::WeaponMagazineIn);
+            gameAudio_.play(SoundEventId::WeaponChamber);
+            break;
+        case GameSessionPresentationEvent::MagazineLoaded:
+            gameAudio_.play(SoundEventId::InventoryMoveOrPlace);
+            break;
+        case GameSessionPresentationEvent::MagazineUnloaded:
+            gameAudio_.play(SoundEventId::WeaponMagazineOut);
+            break;
+        case GameSessionPresentationEvent::MedicalStarted:
+            gameAudio_.play(SoundEventId::MedicalStart);
+            break;
+        case GameSessionPresentationEvent::MedicalCompleted:
+            gameAudio_.play(SoundEventId::MedicalComplete);
+            break;
+        case GameSessionPresentationEvent::MedicalInterrupted:
+            gameAudio_.play(SoundEventId::MedicalInterrupt);
+            break;
+        case GameSessionPresentationEvent::WeaponEquipped:
+            gameAudio_.play(SoundEventId::InventoryEquip);
+            break;
+        case GameSessionPresentationEvent::MalfunctionCleared:
+            gameAudio_.play(SoundEventId::WeaponMalfunctionClear);
+            break;
+        case GameSessionPresentationEvent::LootPickedUp:
+            gameAudio_.play(SoundEventId::InventoryPickup);
+            break;
+        }
     }
 }
 
@@ -5394,22 +5592,27 @@ void App::renderBallisticBlockers()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::syncSystemCursorVisibility() noexcept
+void App::syncRaidPointerCapture() noexcept
 {
-    const bool shouldHide =
-        gameFlow_.isRaidScreen() &&
-        gameSession_.world().raidSession().isActive() &&
-        !inventoryOverlayState_.isOpen() &&
-        !medicalWheelOpen_ &&
-        !developerWeaponPanelOpen_ &&
-        pointerWorldPosition_.has_value();
+    const bool shouldCapture = shouldCaptureRaidPointer(
+        RaidPointerCaptureContext{
+            gameFlow_.isRaidScreen(),
+            gameSession_.world().raidSession().isActive(),
+            inventoryOverlayState_.isOpen(),
+            medicalWheelOpen_,
+            developerWeaponPanelOpen_,
+            windowHasInputFocus_});
 
-    if (shouldHide == systemCursorHidden_)
+    if (shouldCapture != relativeMouseModeActive_)
     {
-        return;
+        if (SDL_SetWindowRelativeMouseMode(window_, shouldCapture))
+        {
+            relativeMouseModeActive_ = shouldCapture;
+            pendingRelativeAimMotion_ = Vec2{};
+        }
     }
 
-    if (shouldHide)
+    if (relativeMouseModeActive_ && !systemCursorHidden_)
     {
         if (SDL_HideCursor())
         {
@@ -5418,7 +5621,7 @@ void App::syncSystemCursorVisibility() noexcept
         return;
     }
 
-    if (SDL_ShowCursor())
+    if (!relativeMouseModeActive_ && systemCursorHidden_ && SDL_ShowCursor())
     {
         systemCursorHidden_ = false;
     }
@@ -5426,8 +5629,7 @@ void App::syncSystemCursorVisibility() noexcept
 
 void App::renderAimCrosshair()
 {
-    if (!pointerWorldPosition_.has_value() ||
-        inventoryOverlayState_.isOpen() ||
+    if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
         developerWeaponPanelOpen_ ||
         !gameSession_.world().raidSession().isActive())
@@ -6851,7 +7053,7 @@ void App::renderDeveloperWeaponPanel()
     const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
     SDL_SetRenderDrawColor(renderer_, 4, 7, 8, 175);
     SDL_RenderFillRect(renderer_, &shade);
-    const SDL_FRect panel{250.0F, 72.0F, 780.0F, 576.0F};
+    const SDL_FRect panel{230.0F, 35.0F, 820.0F, 650.0F};
     SDL_SetRenderDrawColor(renderer_, 14, 24, 27, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 92, 178, 173, 255);
@@ -6889,8 +7091,9 @@ void App::renderDeveloperWeaponPanel()
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
         "Recoil control", "Stability", "Handling speed", "Ergonomics",
         "Accuracy", "Shot interval", "Base damage", "Effective range",
-        "Maximum range", "Maximum reticle speed", "Spread per shot",
-        "Recoil lateral ratio", "Moving spread fraction",
+        "Maximum range", "Maximum reticle speed", "Reticle control accel",
+        "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
+        "Moving spread fraction",
         "ADS accuracy multiplier", "ADS stability multiplier",
         "Weak tracer length", "Weak tracer opacity"};
 
@@ -6948,11 +7151,19 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MaximumReticleSpeed:
             value = fmt::format("{:.0f} px/s", handling.maximumReticleSpeed);
             break;
+        case DeveloperWeaponParameter::ReticleControlAcceleration:
+            value = fmt::format(
+                "{:.0f} px/s2", handling.reticleControlAcceleration);
+            break;
         case DeveloperWeaponParameter::SpreadPerShot:
             value = fmt::format("{:.2f} deg", handling.spreadPerShotDegrees);
             break;
         case DeveloperWeaponParameter::RecoilLateralRatio:
             value = fmt::format("{:.2f}", handling.recoilLateralRatio);
+            break;
+        case DeveloperWeaponParameter::RecoilBendDuration:
+            value = fmt::format(
+                "{:.3f} s", handling.recoilBendDurationSeconds);
             break;
         case DeveloperWeaponParameter::MovingSpreadFraction:
             value = fmt::format("{:.2f}", handling.movingSpreadFraction);
@@ -6976,7 +7187,7 @@ void App::renderDeveloperWeaponPanel()
         }
 
         const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 25.0F;
+            static_cast<float>(index) * 24.0F;
         if (index == developerWeaponParameterIndex_)
         {
             const SDL_FRect selected{
@@ -7466,7 +7677,7 @@ void App::renderRaidScreen()
 
 void App::render()
 {
-    syncSystemCursorVisibility();
+    syncRaidPointerCapture();
 
     SDL_SetRenderDrawColor(
         renderer_,
@@ -7502,7 +7713,14 @@ void App::render()
 
 void App::shutdown()
 {
+    if (window_ != nullptr)
+    {
+        static_cast<void>(
+            SDL_SetWindowRelativeMouseMode(window_, false));
+    }
+    relativeMouseModeActive_ = false;
     static_cast<void>(SDL_ShowCursor());
+    gameAudio_.shutdown();
     systemCursorHidden_ = false;
 
     // 所有 SDL_Texture 必须在 Renderer 之前释放。
@@ -7561,6 +7779,7 @@ int App::run()
         processEvents();
         update(deltaTime);
         render();
+        pendingRelativeAimMotion_ = Vec2{};
         input_.endFrame();
     }
     shutdown();

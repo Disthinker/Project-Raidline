@@ -42,14 +42,34 @@ enum class DeveloperWeaponParameter
     EffectiveRange,
     MaximumRange,
     MaximumReticleSpeed,
+    ReticleControlAcceleration,
     SpreadPerShot,
     RecoilLateralRatio,
+    RecoilBendDuration,
     MovingSpreadFraction,
     AdsAccuracyMultiplier,
     AdsStabilityMultiplier,
     WeakTracerLength,
     WeakTracerOpacity,
     Count,
+};
+
+// Client-facing semantic facts. These do not name audio files and are not
+// persisted; the SDL client decides how to present them.
+enum class GameSessionPresentationEvent
+{
+    WeaponDryFire,
+    WeaponChambered,
+    ReloadStarted,
+    ReloadCompleted,
+    MagazineLoaded,
+    MagazineUnloaded,
+    MedicalStarted,
+    MedicalCompleted,
+    MedicalInterrupted,
+    WeaponEquipped,
+    MalfunctionCleared,
+    LootPickedUp,
 };
 
 struct DeveloperWeaponTuningSnapshot
@@ -187,6 +207,9 @@ public:
     [[nodiscard]] const std::optional<CombatDamageResolution> &
     lastIncomingDamage() const noexcept;
 
+    [[nodiscard]] std::vector<GameSessionPresentationEvent>
+    takePresentationEvents();
+
     [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
 
@@ -206,6 +229,7 @@ private:
     bool recoveredAbandonedRaid_{};
     RaidActionState raidActionState_;
     std::optional<CombatDamageResolution> lastIncomingDamage_;
+    std::vector<GameSessionPresentationEvent> presentationEvents_;
     std::uint64_t raidCommandSequence_{};
     std::uint64_t medicalRandomSequence_{};
     std::uint64_t woundRandomSequence_{};
@@ -223,8 +247,10 @@ private:
     struct DeveloperWeaponHiddenOverrides
     {
         std::optional<float> maximumReticleSpeed;
+        std::optional<float> reticleControlAcceleration;
         std::optional<float> spreadPerShotDegrees;
         std::optional<float> recoilLateralRatio;
+        std::optional<float> recoilBendDurationSeconds;
         std::optional<float> movingSpreadFraction;
         std::optional<float> adsAccuracyMultiplier;
         std::optional<float> adsStabilityMultiplier;

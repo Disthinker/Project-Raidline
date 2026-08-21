@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-20。
+最后核对：2026-08-21。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout 已交付切片与 Combat 逻辑弹道 v1 已由 PR #60～#66 接受。当前产品目标进入 **Combat：准星操控与基础开镜 v1**；范围合同见 `doc/exec-plans/active/combat-aim-handling-ads-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#67 已接受。当前产品目标进入 **Combat：输入捕获、后坐力曲线与 P0 音频 v1**；范围合同见 `doc/exec-plans/active/combat-input-capture-audio-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -46,7 +46,8 @@ Core Extraction Alpha、Survival Loadout 已交付切片与 Combat 逻辑弹道 
 | 多武器配装与切换 | 两把长枪与手枪独立配装；Raid 中限时切换并保持各自弹药、耐久和故障 | 兼容槽集合、WeaponUse、当前武器运行时、schema v6 | PR #64 已通过 CI 和用户验收，以 `4c16596` 进入 main |
 | 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修允许 45% 缓慢移动并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | PR #65 已通过 CI 和用户验收，以 `755fa00` 进入 main |
 | 逻辑弹道与落点反馈 v1 | 本发落点冻结、短促飞行延迟、连续扫掠、敌人/地面到达反馈 | ShotResolution、LogicalBallisticFlight、HitResult、只读轨迹投影 | PR #66 已通过 CI 和用户验收，以 `7877d71` 进入 main |
-| 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | Draft PR #67 已修正自动回正与默认操控参数；Windows Debug、163 项 focused tests 与全量 CTest 745/745 通过，待新 exact-head CI 和用户复验 |
+| 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | PR #67 已通过用户验收，以 `881c034` 合入 main |
+| 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | Draft PR #68；Base 电流音修订提交 `8efcd8d` 本地 756/756 通过，待新 exact-head CI 与用户正常游玩验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
@@ -66,5 +67,5 @@ Core Extraction Alpha、Survival Loadout 已交付切片与 Combat 逻辑弹道 
 - 当前准星切片只实现基础开镜和现有武器内容的五项属性消费；高倍圆形光学视野等待合法瞄具/附件消费者。当前三个数据化障碍只服务玩家/弹道验证，不扩张为正式墙门或通用物理。贯穿、特殊弹、击退、断肢、血液、压制与新正式美术继续延期。
 
 - `codex/core-alpha-hardening` 只收束 Alpha 稳定性、恢复、内容合同和验收证据；不提前实现特殊弹、部位、复杂伤势、耐久、多地图、高危或长期系统。
-- Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术/音频继续暂停。
+- Week29 代码反馈以后按新投影边界独立整理；正式攻击美术及所有新正式美术继续暂停。音频仅开放本次 `assets/audio/v1` P0 包，P1 和更广内容继续延期。
 - Alpha 内普通架构、数值、交互和验收由开发主控收口；只有改变产品支柱、失败损失、商业模式、叙事方向或显著扩大范围才请求用户决策。

@@ -8,6 +8,8 @@ namespace
 {
     constexpr float kMaximumAimStep{1.0F / 120.0F};
     constexpr float kVelocityEpsilon{0.01F};
+    constexpr float kMaximumRecoilDeflectionRadians{
+        1.0471975512F}; // 60 degrees at a lateral ratio of 1.0.
 
     bool finite(Vec2 value) noexcept
     {
@@ -63,6 +65,7 @@ namespace
             !std::isfinite(config.recoilLateralRatio) ||
             config.recoilLateralRatio < 0.0F ||
             config.recoilLateralRatio > 1.0F ||
+            !finitePositive(config.recoilBendDurationSeconds) ||
             !finitePositive(config.aimDownSightsDurationSeconds) ||
             !finitePositive(config.effectiveRange) ||
             !finitePositive(config.maximumRange) ||
@@ -91,7 +94,8 @@ void WeaponAimState::update(
     Vec2 shootingOrigin,
     Vec2 worldSize,
     bool aimDownSights,
-    float deltaTime) noexcept
+    float deltaTime,
+    std::optional<Vec2> inputMotionDelta) noexcept
 {
     if (!finite(targetWorldPosition) ||
         !finite(shootingOrigin) ||
@@ -119,6 +123,21 @@ void WeaponAimState::update(
                 currentWorldPosition_.y - shootingOrigin_.y},
             lastDirection_);
         initialized_ = true;
+    }
+    else if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
+    {
+        // Relative mouse input is consumed as motion, not as a bounded OS
+        // cursor position. This keeps aiming continuous while the pointer is
+        // captured at a window edge and avoids a dead zone when reversing.
+        targetWorldPosition_.x = std::clamp(
+            targetWorldPosition_.x + inputMotionDelta->x,
+            0.0F,
+            worldSize_.x);
+        targetWorldPosition_.y = std::clamp(
+            targetWorldPosition_.y + inputMotionDelta->y,
+            0.0F,
+            worldSize_.y);
+        inputWorldPosition_ = clampedInputPosition;
     }
     else
     {
@@ -182,10 +201,46 @@ void WeaponAimState::advanceStep(float deltaTime) noexcept
         controlVelocity_,
         desiredControlVelocity,
         config_.controlAcceleration * deltaTime);
-    recoilVelocity_ = moveTowards(
-        recoilVelocity_,
-        Vec2{},
-        config_.recoilDeceleration * deltaTime);
+    const float recoilSpeed = length(recoilVelocity_);
+    if (recoilSpeed > kVelocityEpsilon)
+    {
+        Vec2 recoilDirection = normalizedOr(
+            recoilVelocity_,
+            recoilTargetDirection_);
+        if (recoilBendRemainingSeconds_ > 0.0F)
+        {
+            // The shot starts with an immediate outward impulse, then bends
+            // continuously toward its sampled lateral direction. Blending by
+            // the remaining duration reaches the exact target direction
+            // without turning a large lateral value into a one-frame jump.
+            const float blend = std::clamp(
+                deltaTime / recoilBendRemainingSeconds_,
+                0.0F,
+                1.0F);
+            recoilDirection = normalizedOr(
+                Vec2{
+                    recoilDirection.x +
+                        (recoilTargetDirection_.x - recoilDirection.x) * blend,
+                    recoilDirection.y +
+                        (recoilTargetDirection_.y - recoilDirection.y) * blend},
+                recoilTargetDirection_);
+            recoilBendRemainingSeconds_ = std::max(
+                0.0F,
+                recoilBendRemainingSeconds_ - deltaTime);
+        }
+
+        const float nextRecoilSpeed = std::max(
+            0.0F,
+            recoilSpeed - config_.recoilDeceleration * deltaTime);
+        recoilVelocity_ = Vec2{
+            recoilDirection.x * nextRecoilSpeed,
+            recoilDirection.y * nextRecoilSpeed};
+    }
+    else
+    {
+        recoilVelocity_ = Vec2{};
+        recoilBendRemainingSeconds_ = 0.0F;
+    }
 
     const Vec2 recoilDisplacement{
         recoilVelocity_.x * deltaTime,
@@ -231,24 +286,35 @@ void WeaponAimState::applyShotRecoil(Vec2 shootingOrigin) noexcept
             currentWorldPosition_.y - shootingOrigin.y},
         lastDirection_);
     const Vec2 lateral{-radial.y, radial.x};
-    const float lateralSpeed =
-        config_.recoilInitialSpeed *
-        config_.recoilLateralRatio *
-        nextSignedUnit();
+    const float randomLateral = nextSignedUnit();
+    const float lateralStrength = std::copysign(
+        0.35F + 0.65F * std::abs(randomLateral),
+        randomLateral);
+    const float deflection =
+        lateralStrength * config_.recoilLateralRatio *
+        kMaximumRecoilDeflectionRadians;
+    const Vec2 recoilDirection{
+        radial.x * std::cos(deflection) + lateral.x * std::sin(deflection),
+        radial.y * std::cos(deflection) + lateral.y * std::sin(deflection)};
 
-    // Assignment is intentional: a new shot refreshes the recoil motion
-    // instead of stacking an unbounded impulse.
+    // A new shot refreshes one bounded motion instead of stacking impulses.
+    // Its initial velocity is always radial and therefore immediately
+    // readable; the sampled lateral component appears as a continuous curve.
     recoilVelocity_ = Vec2{
-        radial.x * config_.recoilInitialSpeed +
-            lateral.x * lateralSpeed,
-        radial.y * config_.recoilInitialSpeed +
-            lateral.y * lateralSpeed};
+        radial.x * config_.recoilInitialSpeed,
+        radial.y * config_.recoilInitialSpeed};
+    recoilTargetDirection_ = recoilDirection;
+    recoilBendRemainingSeconds_ = config_.recoilBendDurationSeconds;
 }
 
 void WeaponAimState::reconfigure(WeaponAimConfig config)
 {
     validateConfig(config);
     config_ = config;
+    if (recoilBendRemainingSeconds_ > config_.recoilBendDurationSeconds)
+    {
+        recoilBendRemainingSeconds_ = config_.recoilBendDurationSeconds;
+    }
     const float controlSpeed = length(controlVelocity_);
     if (controlSpeed > config_.maximumReticleSpeed)
     {
@@ -280,6 +346,11 @@ Vec2 WeaponAimState::controlVelocity() const noexcept
 }
 
 Vec2 WeaponAimState::recoilVelocity() const noexcept
+{
+    return recoilVelocity_;
+}
+
+Vec2 WeaponAimState::recoilPresentationVelocity() const noexcept
 {
     return recoilVelocity_;
 }

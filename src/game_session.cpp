@@ -395,12 +395,18 @@ bool GameSession::startAlphaReload(
                 !painIsSuppressed(profile_.medicalStatus)
             ? 0.9F
             : 1.0F;
-    return plan.canCommit && raidActionState_.start(
+    const bool started = plan.canCommit && raidActionState_.start(
         ReloadRaidAction{
             weaponAssetId,
             magazineAssetId,
             0.0F,
             2.0F / handlingMultiplier});
+    if (started)
+    {
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::ReloadStarted);
+    }
+    return started;
 }
 
 bool GameSession::startAlphaLoadMagazine(
@@ -500,7 +506,7 @@ bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
     }
     const ItemDefinition &definition = publishedContentRegistry().item(
         asset->definitionId);
-    return plan.canCommit && raidActionState_.start(MedicalRaidAction{
+    const bool started = plan.canCommit && raidActionState_.start(MedicalRaidAction{
         medicalAssetId,
         plan.effect,
         plan.slowMovement,
@@ -511,6 +517,12 @@ bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
             : 0,
         0.0F,
         static_cast<float>(plan.durationMs) / 1000.0F});
+    if (started)
+    {
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::MedicalStarted);
+    }
+    return started;
 }
 
 bool GameSession::startAlphaWeaponMaintenance(
@@ -634,8 +646,14 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
             profile_.revision,
             nextRaidTransaction("clear-malfunction")});
     weaponClearGesture_.reset();
-    return receipt.succeeded &&
-           commitProfileCandidate(std::move(candidate), false);
+    const bool cleared = receipt.succeeded &&
+        commitProfileCandidate(std::move(candidate), false);
+    if (cleared)
+    {
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::MalfunctionCleared);
+    }
+    return cleared;
 }
 
 bool GameSession::startAlphaUnloadMagazine(
@@ -873,10 +891,19 @@ bool GameSession::adjustDeveloperWeaponTuning(
     case DeveloperWeaponParameter::MaximumReticleSpeed:
         entry.hidden.maximumReticleSpeed = adjustFloat(
             previousHandling.maximumReticleSpeed,
-            10.0F,
+            25.0F,
+            100.0F,
             50.0F,
-            50.0F,
-            3000.0F,
+            5000.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::ReticleControlAcceleration:
+        entry.hidden.reticleControlAcceleration = adjustFloat(
+            previousHandling.reticleControlAcceleration,
+            100.0F,
+            500.0F,
+            100.0F,
+            20000.0F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::SpreadPerShot:
@@ -895,6 +922,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.05F,
             0.0F,
             1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::RecoilBendDuration:
+        entry.hidden.recoilBendDurationSeconds = adjustFloat(
+            previousHandling.recoilBendDurationSeconds,
+            0.005F,
+            0.025F,
+            0.005F,
+            0.25F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::MovingSpreadFraction:
@@ -1113,6 +1149,40 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
             WeaponAmmoResult::Dry,
             std::nullopt};
     }
+    switch (receipt.result)
+    {
+    case WeaponAmmoResult::Loaded:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::MagazineLoaded);
+        break;
+    case WeaponAmmoResult::Unloaded:
+    case WeaponAmmoResult::Uninstalled:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::MagazineUnloaded);
+        break;
+    case WeaponAmmoResult::Installed:
+    case WeaponAmmoResult::InstalledAndChambered:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::ReloadCompleted);
+        break;
+    case WeaponAmmoResult::Chambered:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::WeaponChambered);
+        break;
+    case WeaponAmmoResult::MalfunctionCleared:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::MalfunctionCleared);
+        break;
+    case WeaponAmmoResult::Dry:
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::WeaponDryFire);
+        break;
+    case WeaponAmmoResult::Fired:
+    case WeaponAmmoResult::FiredAndMalfunctioned:
+    case WeaponAmmoResult::BlockedByMalfunction:
+    case WeaponAmmoResult::Broken:
+        break;
+    }
     return receipt;
 }
 
@@ -1141,6 +1211,8 @@ HealReceipt GameSession::executeBaseHeal(
             profile_.revision,
             0};
     }
+    presentationEvents_.push_back(
+        GameSessionPresentationEvent::MedicalCompleted);
     return receipt;
 }
 
@@ -1168,6 +1240,8 @@ MedicalUseReceipt GameSession::executeBaseMedical(
             persistenceMessage_,
             profile_.revision};
     }
+    presentationEvents_.push_back(
+        GameSessionPresentationEvent::MedicalCompleted);
     return receipt;
 }
 
@@ -1241,6 +1315,14 @@ const std::optional<CombatDamageResolution> &
 GameSession::lastIncomingDamage() const noexcept
 {
     return lastIncomingDamage_;
+}
+
+std::vector<GameSessionPresentationEvent>
+GameSession::takePresentationEvents()
+{
+    std::vector<GameSessionPresentationEvent> events;
+    events.swap(presentationEvents_);
+    return events;
 }
 
 SaveLoadStatus GameSession::lastSaveLoadStatus() const noexcept
@@ -1535,6 +1617,8 @@ void GameSession::updateAlphaRaid(
                 false));
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
+            presentationEvents_.push_back(
+                GameSessionPresentationEvent::WeaponChambered);
         }
         else if (fire.succeeded &&
                  (fire.result == WeaponAmmoResult::Fired ||
@@ -1546,6 +1630,11 @@ void GameSession::updateAlphaRaid(
         {
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
+            if (fire.result == WeaponAmmoResult::Dry)
+            {
+                presentationEvents_.push_back(
+                    GameSessionPresentationEvent::WeaponDryFire);
+            }
         }
     }
     else if (!weapon.has_value())
@@ -1693,9 +1782,19 @@ void GameSession::updateAlphaRaid(
                 }
             }
         }
+        const bool medicalAction =
+            std::holds_alternative<HealRaidAction>(
+                *raidActionState_.active()) ||
+            std::holds_alternative<MedicalRaidAction>(
+                *raidActionState_.active());
         const RaidActionAdvance advance = raidActionState_.update(
             deltaTime,
             interrupted);
+        if (advance == RaidActionAdvance::Interrupted && medicalAction)
+        {
+            presentationEvents_.push_back(
+                GameSessionPresentationEvent::MedicalInterrupted);
+        }
         if (advance == RaidActionAdvance::Completed)
         {
             const std::optional<RaidAction> completed =
@@ -1720,6 +1819,8 @@ void GameSession::updateAlphaRaid(
                         static_cast<void>(commitProfileCandidate(
                             std::move(candidate),
                             false));
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::ReloadCompleted);
                     }
                     else
                     {
@@ -1745,6 +1846,8 @@ void GameSession::updateAlphaRaid(
                         static_cast<void>(commitProfileCandidate(
                             std::move(candidate),
                             false));
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::MagazineLoaded);
                     }
                     else
                     {
@@ -1770,6 +1873,8 @@ void GameSession::updateAlphaRaid(
                     {
                         static_cast<void>(
                             world_->restorePlayerHealth(receipt.healedAmount));
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::MedicalCompleted);
                     }
                     else if (!receipt.succeeded)
                     {
@@ -1781,6 +1886,8 @@ void GameSession::updateAlphaRaid(
                 {
                     if (medical->effect == MedicalUseEffect::RestoreHealth)
                     {
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::MedicalCompleted);
                         return;
                     }
                     ProfileState candidate = profile_;
@@ -1801,6 +1908,8 @@ void GameSession::updateAlphaRaid(
                             static_cast<void>(world_->restorePlayerHealth(
                                 receipt.healedAmount));
                         }
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::MedicalCompleted);
                     }
                     else if (!receipt.succeeded)
                     {
@@ -1825,6 +1934,8 @@ void GameSession::updateAlphaRaid(
                         static_cast<void>(commitProfileCandidate(
                             std::move(candidate),
                             false));
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::MagazineUnloaded);
                     }
                     else
                     {
@@ -1895,6 +2006,8 @@ void GameSession::updateAlphaRaid(
                         activeWeaponSlot_ = weaponSwitch->targetSlot;
                         configuredWeaponAssetId_.reset();
                         synchronizeActiveAlphaWeapon();
+                        presentationEvents_.push_back(
+                            GameSessionPresentationEvent::WeaponEquipped);
                     }
                 }
             }
@@ -1919,6 +2032,8 @@ void GameSession::updateAlphaRaid(
                 static_cast<void>(commitProfileCandidate(
                     std::move(candidate),
                     false));
+                presentationEvents_.push_back(
+                    GameSessionPresentationEvent::LootPickedUp);
             }
             else
             {
@@ -2240,6 +2355,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     {
         handling.maximumReticleSpeed = *hidden.maximumReticleSpeed;
     }
+    if (hidden.reticleControlAcceleration.has_value())
+    {
+        handling.reticleControlAcceleration =
+            *hidden.reticleControlAcceleration;
+    }
     if (hidden.spreadPerShotDegrees.has_value())
     {
         handling.spreadPerShotDegrees = *hidden.spreadPerShotDegrees;
@@ -2247,6 +2367,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.recoilLateralRatio.has_value())
     {
         handling.recoilLateralRatio = *hidden.recoilLateralRatio;
+    }
+    if (hidden.recoilBendDurationSeconds.has_value())
+    {
+        handling.recoilBendDurationSeconds =
+            *hidden.recoilBendDurationSeconds;
     }
     if (hidden.movingSpreadFraction.has_value())
     {

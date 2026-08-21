@@ -541,6 +541,7 @@ void GameplayWorld::update(
 {
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
+    enemiesAlertedLastUpdate_ = 0U;
     if (!raidSession_.isActive())
     {
         return;
@@ -582,7 +583,8 @@ void GameplayWorld::update(
         centerAfterMovement,
         worldSize_,
         input.aimDownSights,
-        deltaTime);
+        deltaTime,
+        input.aimMotionDelta);
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
@@ -644,6 +646,8 @@ void GameplayWorld::update(
              ++enemyIndex)
         {
             Enemy &enemy = enemies_[enemyIndex];
+            const EnemyAwarenessState awarenessBefore =
+                enemy.awarenessState();
 
             static_cast<void>(
                 enemy.updateTowardsTarget(
@@ -652,6 +656,11 @@ void GameplayWorld::update(
                     enemyStepTime,
                     worldWidth(),
                     worldHeight()));
+            if (awarenessBefore != EnemyAwarenessState::Alerted &&
+                enemy.awarenessState() == EnemyAwarenessState::Alerted)
+            {
+                ++enemiesAlertedLastUpdate_;
+            }
 
             if (enemy.hasGrabContactOpportunity())
             {
@@ -997,7 +1006,7 @@ float GameplayWorld::weaponSpreadDegrees() const noexcept
 
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
-    const Vec2 velocity = weaponAim_.recoilVelocity();
+    const Vec2 velocity = weaponAim_.recoilPresentationVelocity();
     return std::min(
         18.0F,
         std::sqrt(
@@ -1036,6 +1045,11 @@ bool GameplayWorld::shotFiredLastUpdate() const noexcept
     return shotFiredLastUpdate_;
 }
 
+std::size_t GameplayWorld::enemiesAlertedLastUpdate() const noexcept
+{
+    return enemiesAlertedLastUpdate_;
+}
+
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition)
 {
@@ -1065,6 +1079,7 @@ void GameplayWorld::configureWeaponFire(
         handling.recoilInitialSpeed,
         handling.recoilDeceleration,
         handling.recoilLateralRatio,
+        handling.recoilBendDurationSeconds,
         handling.aimDownSightsDurationSeconds,
         definition.effectiveRange,
         definition.maximumRange};

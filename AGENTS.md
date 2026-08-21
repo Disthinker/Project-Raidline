@@ -52,7 +52,7 @@ The active scope includes only the features enumerated in the Alpha scope contra
 - Player health migrates from the V0 value to 100 HP only in the planned health/medical slice.
 - One fixed map is represented by data definitions and a frozen per-Raid snapshot.
 - Failure means full loss for death or explicit active quit; closing the program during a Raid restores the exact pre-Raid persisted Profile on the next launch. Legacy pending-Raid saves migrate back to Base without full loss.
-- Formal attack animations, new art/audio production, multi-map work, high-risk phase, armor, hit regions, penetration, durability, faults, complex injuries, quests, crafting, base building, population, and story content are excluded.
+- Formal attack animations, new art production, broad audio production, multi-map work, high-risk phase, armor, hit regions, penetration, durability, faults, complex injuries, quests, crafting, base building, population, and story content are excluded. The user-authorized `assets/audio/v1` P0 sound bank is the only current audio-production exception.
 
 ## Build, test, and evidence
 
@@ -65,8 +65,8 @@ The active scope includes only the features enumerated in the Alpha scope contra
 
 ## Art boundary
 
-- Official Grab/Scratch/Bite art and all other new formal art/audio production are paused.
-- Without renewed user authorization, do not generate candidates, write `art/work/`, publish runtime assets, or modify the art manifest.
+- Official Grab/Scratch/Bite art and all new formal art production remain paused. Broader audio production outside the user-authorized `assets/audio/v1` P0 package also remains paused.
+- Without renewed user authorization, do not generate art candidates, write `art/work/`, publish additional runtime art/audio assets, or modify the art manifest.
 - Runtime code may use already approved assets and code-rendered fallback presentation. Only an explicitly reopened art package may use `$raidline-art-pipeline`.
 
 ## On-demand project skills

@@ -179,6 +179,7 @@ struct WeaponHandlingParameters
     float recoilInitialSpeed{};
     float recoilDeceleration{};
     float recoilLateralRatio{};
+    float recoilBendDurationSeconds{};
     float minimumSpreadDegrees{};
     float maximumSpreadDegrees{};
     float spreadPerShotDegrees{};

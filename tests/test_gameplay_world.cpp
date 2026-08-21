@@ -2418,6 +2418,20 @@ TEST(GameplayWorldTest, PlayerNoiseAlertsOnlyEnemiesInsideRadius)
     EXPECT_EQ(world.enemies()[1].awarenessState(), EnemyAwarenessState::Unaware);
 }
 
+TEST(GameplayWorldTest, ReportsAnAlertTransitionOnlyOnTheTransitionFrame)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{650.0F, 370.0F}, Vec2{50.0F, 50.0F}, 3}},
+        100};
+
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.enemiesAlertedLastUpdate(), 1U);
+
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.enemiesAlertedLastUpdate(), 0U);
+}
+
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)
 {
     GameplayWorld world;

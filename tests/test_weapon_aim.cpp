@@ -18,7 +18,7 @@ namespace
 TEST(WeaponAimStateTest, NewTargetMovesFromCurrentReticlePosition)
 {
     WeaponAimState aim{WeaponAimConfig{
-        100.0F, 200.0F, 0.0F, 500.0F, 0.0F,
+        100.0F, 200.0F, 0.0F, 500.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     aim.update(Vec2{500.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
     const Vec2 pointP = aim.actualWorldPosition();
@@ -36,7 +36,7 @@ TEST(WeaponAimStateTest, NewTargetMovesFromCurrentReticlePosition)
 TEST(WeaponAimStateTest, ControlAccelerationAndMaximumSpeedAreBounded)
 {
     WeaponAimState aim{WeaponAimConfig{
-        120.0F, 240.0F, 0.0F, 500.0F, 0.0F,
+        120.0F, 240.0F, 0.0F, 500.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     aim.update(Vec2{200.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
     aim.update(Vec2{900.0F, 100.0F}, kOrigin, kWorld, false, 0.25F);
@@ -49,13 +49,15 @@ TEST(WeaponAimStateTest, ControlAccelerationAndMaximumSpeedAreBounded)
 TEST(WeaponAimStateTest, RecoilMovesOutwardAndDecelerates)
 {
     WeaponAimState aim{WeaponAimConfig{
-        400.0F, 800.0F, 300.0F, 600.0F, 0.0F,
+        400.0F, 800.0F, 300.0F, 600.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
     aim.applyShotRecoil(kOrigin);
 
     EXPECT_NEAR(aim.recoilVelocity().x, 300.0F, 0.001F);
     EXPECT_NEAR(aim.recoilVelocity().y, 0.0F, 0.001F);
+    aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.05F);
+    EXPECT_GT(aim.recoilVelocity().x, 250.0F);
     aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.25F);
     EXPECT_LT(magnitude(aim.recoilVelocity()), 300.0F);
     aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 1.0F);
@@ -65,7 +67,7 @@ TEST(WeaponAimStateTest, RecoilMovesOutwardAndDecelerates)
 TEST(WeaponAimStateTest, StationaryMouseDoesNotAutomaticallyRecoverRecoil)
 {
     WeaponAimState aim{WeaponAimConfig{
-        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F,
+        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     constexpr Vec2 originalAim{400.0F, 100.0F};
     aim.update(originalAim, kOrigin, kWorld, false, 0.0F);
@@ -85,7 +87,7 @@ TEST(WeaponAimStateTest, StationaryMouseDoesNotAutomaticallyRecoverRecoil)
 TEST(WeaponAimStateTest, OpposingMouseMotionRecoversDisplacedReticle)
 {
     WeaponAimState aim{WeaponAimConfig{
-        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F,
+        800.0F, 1600.0F, 300.0F, 600.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     constexpr Vec2 originalAim{400.0F, 100.0F};
     aim.update(originalAim, kOrigin, kWorld, false, 0.0F);
@@ -97,15 +99,58 @@ TEST(WeaponAimStateTest, OpposingMouseMotionRecoversDisplacedReticle)
     EXPECT_LT(aim.actualWorldPosition().x, displacedX);
 }
 
+TEST(WeaponAimStateTest, RelativeMotionMovesAimWithoutAbsoluteCursorTravel)
+{
+    WeaponAimState aim{WeaponAimConfig{
+        3000.0F, 9000.0F, 0.0F, 600.0F, 0.0F, 0.05F,
+        0.25F, 100.0F, 500.0F}};
+    constexpr Vec2 fixedOsCursor{999.0F, 400.0F};
+    aim.update(fixedOsCursor, kOrigin, kWorld, false, 0.0F);
+
+    aim.update(
+        fixedOsCursor, kOrigin, kWorld, false, 0.1F,
+        Vec2{-120.0F, 0.0F});
+
+    EXPECT_LT(aim.actualWorldPosition().x, fixedOsCursor.x);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, 879.0F);
+}
+
+TEST(WeaponAimStateTest, HighLateralRecoilStartsOutwardThenBendsSmoothly)
+{
+    WeaponAimState aim{WeaponAimConfig{
+        3000.0F, 9000.0F, 600.0F, 1200.0F, 1.0F, 0.05F,
+        0.25F, 100.0F, 500.0F, 42U}};
+    aim.update(Vec2{500.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
+    aim.applyShotRecoil(kOrigin);
+
+    EXPECT_NEAR(magnitude(aim.recoilVelocity()), 600.0F, 0.01F);
+    EXPECT_NEAR(aim.recoilVelocity().y, 0.0F, 0.01F);
+    const Vec2 before = aim.actualWorldPosition();
+    aim.update(Vec2{500.0F, 100.0F}, kOrigin, kWorld, false, 0.01F);
+    const Vec2 earlyVelocity = aim.recoilVelocity();
+    EXPECT_GT(std::abs(earlyVelocity.y), 0.0F);
+    EXPECT_LT(magnitude(aim.recoilVelocity()), 600.0F);
+    EXPECT_LT(
+        magnitude(Vec2{
+            aim.actualWorldPosition().x - before.x,
+            aim.actualWorldPosition().y - before.y}),
+        7.0F);
+    aim.update(Vec2{500.0F, 100.0F}, kOrigin, kWorld, false, 0.07F);
+    EXPECT_GT(std::abs(aim.recoilVelocity().y), std::abs(earlyVelocity.y));
+    EXPECT_NEAR(magnitude(aim.recoilVelocity()), 504.0F, 2.0F);
+}
+
 TEST(WeaponAimStateTest, NewShotRefreshesInsteadOfStackingRecoil)
 {
     WeaponAimState aim{WeaponAimConfig{
-        400.0F, 800.0F, 300.0F, 600.0F, 0.2F,
+        400.0F, 800.0F, 300.0F, 600.0F, 0.2F, 0.05F,
         0.25F, 100.0F, 500.0F, 42U}};
     aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
     aim.applyShotRecoil(kOrigin);
+    aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.05F);
     const float first = magnitude(aim.recoilVelocity());
     aim.applyShotRecoil(kOrigin);
+    aim.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.05F);
     const float second = magnitude(aim.recoilVelocity());
 
     EXPECT_LE(first, 306.0F);
@@ -115,7 +160,7 @@ TEST(WeaponAimStateTest, NewShotRefreshesInsteadOfStackingRecoil)
 TEST(WeaponAimStateTest, FramePartitionsRemainClose)
 {
     const WeaponAimConfig config{
-        500.0F, 1400.0F, 250.0F, 1600.0F, 0.1F,
+        500.0F, 1400.0F, 250.0F, 1600.0F, 0.1F, 0.05F,
         0.25F, 100.0F, 500.0F, 9U};
     WeaponAimState whole{config};
     WeaponAimState split{config};
@@ -144,7 +189,7 @@ TEST(WeaponAimStateTest, FramePartitionsRemainClose)
 TEST(WeaponAimStateTest, AdsAndActualRangeProjectionAreDeterministic)
 {
     WeaponAimState aim{WeaponAimConfig{
-        500.0F, 1000.0F, 0.0F, 1000.0F, 0.0F,
+        500.0F, 1000.0F, 0.0F, 1000.0F, 0.0F, 0.05F,
         0.5F, 100.0F, 200.0F}};
     aim.update(Vec2{250.0F, 100.0F}, kOrigin, kWorld, true, 0.25F);
 
