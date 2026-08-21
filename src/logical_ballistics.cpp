@@ -8,7 +8,8 @@ LogicalBallisticFlight::LogicalBallisticFlight(
     const ShotResolution &resolution,
     TracerStyle tracerStyle,
     float tracerLength,
-    float tracerOpacity)
+    float tracerOpacity,
+    float tracerLifetimeSeconds)
     : shotId_{resolution.shotId},
       origin_{resolution.origin},
       currentPosition_{resolution.origin},
@@ -22,14 +23,17 @@ LogicalBallisticFlight::LogicalBallisticFlight(
       damage_{resolution.damage},
       tracerStyle_{tracerStyle},
       tracerLength_{tracerLength},
-      tracerOpacity_{tracerOpacity}
+      tracerOpacity_{tracerOpacity},
+      tracerLifetimeSeconds_{tracerLifetimeSeconds}
 {
     if (!resolution.accepted() ||
         !std::isfinite(speed_) || speed_ <= 0.0F ||
         !std::isfinite(maximumDistance_) || maximumDistance_ <= 0.0F ||
         !std::isfinite(tracerLength_) || tracerLength_ < 0.0F ||
         !std::isfinite(tracerOpacity_) ||
-        tracerOpacity_ < 0.0F || tracerOpacity_ > 1.0F)
+        tracerOpacity_ < 0.0F || tracerOpacity_ > 1.0F ||
+        !std::isfinite(tracerLifetimeSeconds_) ||
+        tracerLifetimeSeconds_ <= 0.0F)
     {
         throw std::invalid_argument{
             "LogicalBallisticFlight requires an accepted shot"};
@@ -141,4 +145,9 @@ float LogicalBallisticFlight::tracerLength() const noexcept
 float LogicalBallisticFlight::tracerOpacity() const noexcept
 {
     return tracerOpacity_;
+}
+
+float LogicalBallisticFlight::tracerLifetimeSeconds() const noexcept
+{
+    return tracerLifetimeSeconds_;
 }

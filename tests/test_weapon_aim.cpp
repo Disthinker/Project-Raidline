@@ -15,7 +15,7 @@ namespace
     }
 }
 
-TEST(WeaponAimStateTest, NewTargetMovesFromCurrentReticlePosition)
+TEST(WeaponAimStateTest, HighMagnificationMovesFromCurrentReticlePosition)
 {
     WeaponAimState aim{WeaponAimConfig{
         100.0F, 200.0F, 0.0F, 500.0F, 0.0F, 0.05F,
@@ -23,7 +23,9 @@ TEST(WeaponAimStateTest, NewTargetMovesFromCurrentReticlePosition)
     aim.update(Vec2{500.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
     const Vec2 pointP = aim.actualWorldPosition();
 
-    aim.update(Vec2{100.0F, 500.0F}, kOrigin, kWorld, false, 0.1F);
+    aim.update(
+        Vec2{100.0F, 500.0F}, kOrigin, kWorld, false, 0.1F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
     const Vec2 moved = aim.actualWorldPosition();
 
     EXPECT_FLOAT_EQ(pointP.x, 500.0F);
@@ -33,16 +35,20 @@ TEST(WeaponAimStateTest, NewTargetMovesFromCurrentReticlePosition)
     EXPECT_LT(magnitude(Vec2{moved.x - pointP.x, moved.y - pointP.y}), 11.0F);
 }
 
-TEST(WeaponAimStateTest, ControlAccelerationAndMaximumSpeedAreBounded)
+TEST(WeaponAimStateTest, HighMagnificationSpeedAndAccelerationAreBounded)
 {
     WeaponAimState aim{WeaponAimConfig{
         120.0F, 240.0F, 0.0F, 500.0F, 0.0F, 0.05F,
         0.25F, 100.0F, 500.0F}};
     aim.update(Vec2{200.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
-    aim.update(Vec2{900.0F, 100.0F}, kOrigin, kWorld, false, 0.25F);
+    aim.update(
+        Vec2{900.0F, 100.0F}, kOrigin, kWorld, false, 0.25F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
 
     EXPECT_LE(magnitude(aim.controlVelocity()), 60.01F);
-    aim.update(Vec2{900.0F, 100.0F}, kOrigin, kWorld, false, 1.0F);
+    aim.update(
+        Vec2{900.0F, 100.0F}, kOrigin, kWorld, false, 1.0F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
     EXPECT_LE(magnitude(aim.controlVelocity()), 120.01F);
 }
 
@@ -111,8 +117,28 @@ TEST(WeaponAimStateTest, RelativeMotionMovesAimWithoutAbsoluteCursorTravel)
         fixedOsCursor, kOrigin, kWorld, false, 0.1F,
         Vec2{-120.0F, 0.0F});
 
-    EXPECT_LT(aim.actualWorldPosition().x, fixedOsCursor.x);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, 879.0F);
     EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, 879.0F);
+}
+
+TEST(WeaponAimStateTest, HipAndLowPowerAdsRespondDirectlyToPointerMotion)
+{
+    WeaponAimState hip;
+    WeaponAimState ads;
+    hip.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.0F);
+    ads.update(Vec2{400.0F, 100.0F}, kOrigin, kWorld, true, 0.0F);
+
+    constexpr Vec2 motion{-75.0F, 45.0F};
+    hip.update(
+        Vec2{400.0F, 100.0F}, kOrigin, kWorld, false, 0.05F, motion);
+    ads.update(
+        Vec2{400.0F, 100.0F}, kOrigin, kWorld, true, 0.05F, motion);
+
+    EXPECT_FLOAT_EQ(hip.actualWorldPosition().x, 325.0F);
+    EXPECT_FLOAT_EQ(hip.actualWorldPosition().y, 145.0F);
+    EXPECT_FLOAT_EQ(ads.actualWorldPosition().x, 325.0F);
+    EXPECT_FLOAT_EQ(ads.actualWorldPosition().y, 145.0F);
+    EXPECT_NEAR(hip.reticleControlSpeed(), magnitude(motion) / 0.05F, 0.01F);
 }
 
 TEST(WeaponAimStateTest, HighLateralRecoilStartsOutwardThenBendsSmoothly)
@@ -169,11 +195,14 @@ TEST(WeaponAimStateTest, FramePartitionsRemainClose)
     whole.applyShotRecoil(kOrigin);
     split.applyShotRecoil(kOrigin);
 
-    whole.update(Vec2{700.0F, 500.0F}, kOrigin, kWorld, false, 0.5F);
+    whole.update(
+        Vec2{700.0F, 500.0F}, kOrigin, kWorld, false, 0.5F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
     for (int step = 0; step < 5; ++step)
     {
         split.update(
-            Vec2{700.0F, 500.0F}, kOrigin, kWorld, false, 0.1F);
+            Vec2{700.0F, 500.0F}, kOrigin, kWorld, false, 0.1F,
+            std::nullopt, AimControlMode::HighMagnificationInertial);
     }
 
     EXPECT_NEAR(
@@ -194,8 +223,10 @@ TEST(WeaponAimStateTest, AdsAndActualRangeProjectionAreDeterministic)
     aim.update(Vec2{250.0F, 100.0F}, kOrigin, kWorld, true, 0.25F);
 
     EXPECT_FLOAT_EQ(aim.aimDownSightsProgress(), 0.5F);
-    EXPECT_FLOAT_EQ(aim.rangeSpreadFactor(), 0.5F);
-    EXPECT_FLOAT_EQ(aim.damageMultiplier(), 1.0F);
+    EXPECT_FLOAT_EQ(aim.distanceSpreadFactor(), 1.0F);
+    EXPECT_FLOAT_EQ(aim.overEffectiveRangeFactor(), 0.5F);
+    EXPECT_FLOAT_EQ(aim.damageMultiplier(), 0.625F);
+    EXPECT_TRUE(aim.beyondEffectiveRange());
 
     aim.update(Vec2{301.0F, 100.0F}, kOrigin, kWorld, true, 1.0F);
     EXPECT_TRUE(aim.beyondMaximumRange());

@@ -888,6 +888,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             5000.0F,
             coarseStep);
         break;
+    case DeveloperWeaponParameter::LogicalBallisticSpeed:
+        entry.weaponUse.logicalBallisticSpeed = adjustFloat(
+            entry.weaponUse.logicalBallisticSpeed,
+            100.0F,
+            500.0F,
+            500.0F,
+            20000.0F,
+            coarseStep);
+        break;
     case DeveloperWeaponParameter::MaximumReticleSpeed:
         entry.hidden.maximumReticleSpeed = adjustFloat(
             previousHandling.maximumReticleSpeed,
@@ -942,6 +951,24 @@ bool GameSession::adjustDeveloperWeaponTuning(
             1.0F,
             coarseStep);
         break;
+    case DeveloperWeaponParameter::ReticleMotionSpreadRate:
+        entry.hidden.reticleMotionSpreadDegreesPerSecond = adjustFloat(
+            previousHandling.reticleMotionSpreadDegreesPerSecond,
+            0.10F,
+            0.50F,
+            0.0F,
+            30.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::NearDistanceSpreadScale:
+        entry.hidden.nearDistanceSpreadScale = adjustFloat(
+            previousHandling.nearDistanceSpreadScale,
+            0.01F,
+            0.05F,
+            0.0F,
+            0.50F,
+            coarseStep);
+        break;
     case DeveloperWeaponParameter::AdsAccuracyMultiplier:
         entry.hidden.adsAccuracyMultiplier = adjustFloat(
             previousHandling.aimDownSightsAccuracyMultiplier,
@@ -976,6 +1003,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.05F,
             0.0F,
             1.0F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::WeakTracerLifetime:
+        entry.hidden.weakTracerLifetimeSeconds = adjustFloat(
+            previousHandling.weakTracerLifetimeSeconds,
+            0.005F,
+            0.025F,
+            0.010F,
+            0.250F,
             coarseStep);
         break;
     case DeveloperWeaponParameter::Count:
@@ -2377,6 +2413,15 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     {
         handling.movingSpreadFraction = *hidden.movingSpreadFraction;
     }
+    if (hidden.reticleMotionSpreadDegreesPerSecond.has_value())
+    {
+        handling.reticleMotionSpreadDegreesPerSecond =
+            *hidden.reticleMotionSpreadDegreesPerSecond;
+    }
+    if (hidden.nearDistanceSpreadScale.has_value())
+    {
+        handling.nearDistanceSpreadScale = *hidden.nearDistanceSpreadScale;
+    }
     if (hidden.adsAccuracyMultiplier.has_value())
     {
         handling.aimDownSightsAccuracyMultiplier =
@@ -2394,6 +2439,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.weakTracerOpacity.has_value())
     {
         handling.weakTracerOpacity = *hidden.weakTracerOpacity;
+    }
+    if (hidden.weakTracerLifetimeSeconds.has_value())
+    {
+        handling.weakTracerLifetimeSeconds =
+            *hidden.weakTracerLifetimeSeconds;
     }
     return handling;
 }

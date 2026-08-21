@@ -5488,12 +5488,11 @@ void App::renderShotPresentations()
         {
             continue;
         }
-        const Vec2 center = shot.center;
-        const Vec2 direction = shot.direction;
-        const float trailLength = std::min(
-            shot.tracerLength,
-            std::max(0.0F, shot.distanceTravelled));
-        if (trailLength <= 0.0F)
+        const Vec2 travelled{
+            shot.end.x - shot.start.x,
+            shot.end.y - shot.start.y};
+        const float trailLength = std::hypot(travelled.x, travelled.y);
+        if (trailLength <= 0.0001F)
         {
             continue;
         }
@@ -5502,64 +5501,37 @@ void App::renderShotPresentations()
             std::lround(shot.tracerOpacity * 255.0F),
             0L,
             255L));
-        SDL_SetRenderDrawColor(
-            renderer_, 255, 94, 24, opacity / 2U);
-        SDL_RenderLine(
-            renderer_,
-            center.x - direction.x * trailLength,
-            center.y - direction.y * trailLength,
-            center.x - direction.x * trailLength * 0.45F,
-            center.y - direction.y * trailLength * 0.45F);
+        const auto pointAt = [&](float fraction)
+        {
+            return Vec2{
+                shot.start.x + travelled.x * fraction,
+                shot.start.y + travelled.y * fraction};
+        };
+        const auto drawDash = [&](float from, float to,
+                                  Uint8 red, Uint8 green, Uint8 blue,
+                                  float alphaScale)
+        {
+            const Vec2 start = pointAt(from);
+            const Vec2 end = pointAt(to);
+            SDL_SetRenderDrawColor(
+                renderer_,
+                red,
+                green,
+                blue,
+                static_cast<Uint8>(std::clamp(
+                    std::lround(
+                        static_cast<float>(opacity) * alphaScale),
+                    0L,
+                    255L)));
+            SDL_RenderLine(renderer_, start.x, start.y, end.x, end.y);
+        };
 
-        SDL_SetRenderDrawColor(renderer_, 255, 176, 48, opacity);
-        SDL_RenderLine(
-            renderer_,
-            center.x - direction.x * trailLength * 0.55F,
-            center.y - direction.y * trailLength * 0.55F,
-            center.x,
-            center.y);
-
-        const SDL_FRect farEmber{
-            center.x - direction.x * trailLength * 0.75F - 0.75F,
-            center.y - direction.y * trailLength * 0.75F - 0.75F,
-            1.5F,
-            1.5F};
-        SDL_SetRenderDrawColor(
-            renderer_, 255, 116, 24, opacity / 2U);
-        SDL_RenderFillRect(renderer_, &farEmber);
-
-        const SDL_FRect nearEmber{
-            center.x - direction.x * trailLength * 0.3F - 1.0F,
-            center.y - direction.y * trailLength * 0.3F - 1.0F,
-            2.0F,
-            2.0F};
-        SDL_SetRenderDrawColor(renderer_, 255, 202, 72, opacity);
-        SDL_RenderFillRect(renderer_, &nearEmber);
-
-        const SDL_FRect glow{
-            center.x - 2.5F,
-            center.y - 2.5F,
-            5.0F,
-            5.0F};
-        SDL_SetRenderDrawColor(
-            renderer_, 255, 176, 48, opacity / 2U);
-        SDL_RenderFillRect(renderer_, &glow);
-
-        SDL_SetRenderDrawColor(renderer_, 255, 236, 136, opacity);
-        SDL_RenderLine(
-            renderer_,
-            center.x - direction.x * std::min(2.0F, trailLength),
-            center.y - direction.y * std::min(2.0F, trailLength),
-            center.x,
-            center.y);
-
-        const SDL_FRect core{
-            center.x - 1.5F,
-            center.y - 1.5F,
-            3.0F,
-            3.0F};
-        SDL_SetRenderDrawColor(renderer_, 255, 252, 212, 255);
-        SDL_RenderFillRect(renderer_, &core);
+        // Three separated streaks describe an already-travelled ballistic
+        // slice. There is deliberately no moving core, glow rectangle or
+        // collision-bearing projectile presentation.
+        drawDash(0.00F, 0.18F, 255, 116, 32, 0.48F);
+        drawDash(0.32F, 0.60F, 255, 190, 74, 0.76F);
+        drawDash(0.73F, 1.00F, 255, 244, 184, 1.00F);
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -5637,13 +5609,17 @@ void App::renderAimCrosshair()
         return;
     }
 
-    const float feedbackRadius =
-        6.0F + gameSession_.world().weaponSpreadDegrees() * 1.5F;
+    const WeaponAccuracyProjection accuracy =
+        gameSession_.world().weaponAccuracyProjection();
+    const float feedbackRadius = std::clamp(
+        std::max(4.0F, accuracy.worldRadius),
+        4.0F,
+        96.0F);
     constexpr float kArmLength{7.0F};
-    const Vec2 center = gameSession_.world().weaponAimWorldPosition();
+    const Vec2 center = accuracy.center;
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    if (gameSession_.world().weaponAimBeyondMaximumRange())
+    if (accuracy.beyondEffectiveRange)
     {
         SDL_SetRenderDrawColor(renderer_, 232, 62, 52, 235);
     }
@@ -7091,11 +7067,14 @@ void App::renderDeveloperWeaponPanel()
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
         "Recoil control", "Stability", "Handling speed", "Ergonomics",
         "Accuracy", "Shot interval", "Base damage", "Effective range",
-        "Maximum range", "Maximum reticle speed", "Reticle control accel",
+        "Maximum range", "Logical ballistic speed",
+        "High-scope maximum speed", "High-scope control accel",
         "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
-        "Moving spread fraction",
+        "Moving spread fraction", "Reticle motion spread rate",
+        "Near-distance spread scale",
         "ADS accuracy multiplier", "ADS stability multiplier",
-        "Weak tracer length", "Weak tracer opacity"};
+        "Weak tracer length", "Weak tracer opacity",
+        "Weak tracer lifetime"};
 
     const WeaponUseDefinition &weapon = tuning->weaponUse;
     const WeaponHandlingParameters &handling = tuning->handling;
@@ -7148,6 +7127,10 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MaximumRange:
             value = fmt::format("{:.0f} px", weapon.maximumRange);
             break;
+        case DeveloperWeaponParameter::LogicalBallisticSpeed:
+            value = fmt::format(
+                "{:.0f} px/s", weapon.logicalBallisticSpeed);
+            break;
         case DeveloperWeaponParameter::MaximumReticleSpeed:
             value = fmt::format("{:.0f} px/s", handling.maximumReticleSpeed);
             break;
@@ -7168,6 +7151,15 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MovingSpreadFraction:
             value = fmt::format("{:.2f}", handling.movingSpreadFraction);
             break;
+        case DeveloperWeaponParameter::ReticleMotionSpreadRate:
+            value = fmt::format(
+                "{:.2f} deg/s",
+                handling.reticleMotionSpreadDegreesPerSecond);
+            break;
+        case DeveloperWeaponParameter::NearDistanceSpreadScale:
+            value = fmt::format(
+                "{:.2f}", handling.nearDistanceSpreadScale);
+            break;
         case DeveloperWeaponParameter::AdsAccuracyMultiplier:
             value = fmt::format(
                 "{:.2f}", handling.aimDownSightsAccuracyMultiplier);
@@ -7181,6 +7173,10 @@ void App::renderDeveloperWeaponPanel()
             break;
         case DeveloperWeaponParameter::WeakTracerOpacity:
             value = fmt::format("{:.2f}", handling.weakTracerOpacity);
+            break;
+        case DeveloperWeaponParameter::WeakTracerLifetime:
+            value = fmt::format(
+                "{:.3f} s", handling.weakTracerLifetimeSeconds);
             break;
         case DeveloperWeaponParameter::Count:
             break;

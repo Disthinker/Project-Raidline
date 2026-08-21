@@ -40,6 +40,7 @@ TEST(LogicalBallisticsTest, StoresFrozenAcceptedShot)
     EXPECT_EQ(flight.tracerStyle(), TracerStyle::Weak);
     EXPECT_FLOAT_EQ(flight.tracerLength(), 24.0F);
     EXPECT_FLOAT_EQ(flight.tracerOpacity(), 0.30F);
+    EXPECT_FLOAT_EQ(flight.tracerLifetimeSeconds(), 0.055F);
     EXPECT_FALSE(flight.reachedImpact());
 }
 

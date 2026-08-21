@@ -47,7 +47,8 @@ Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#67 已接受。当
 | 防具维护 | 受损头盔/护甲可在 Base 或 Raid 消耗甲修点维修；Raid 维修允许 45% 缓慢移动并承担中断风险 | ArmorMaterial、ArmorMaintenance、原子维修计划、类型安全 Raid 动作 | PR #65 已通过 CI 和用户验收，以 `755fa00` 进入 main |
 | 逻辑弹道与落点反馈 v1 | 本发落点冻结、短促飞行延迟、连续扫掠、敌人/地面到达反馈 | ShotResolution、LogicalBallisticFlight、HitResult、只读轨迹投影 | PR #66 已通过 CI 和用户验收，以 `7877d71` 进入 main |
 | 准星运动、逻辑弹道与开发调参 v1 | 位置/速度/加速度准星、手动压枪、随机散布、最大距离射击、基础障碍/弱曳光、基础开镜与 F10 即时调参 | WeaponAimState、五项 WeaponUse 属性、PCG32 散布/后坐力、BallisticBlocker、Enemy/Obstacle/Ground 结果、运行时实例覆盖 | PR #67 已通过用户验收，以 `881c034` 合入 main |
-| 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | Draft PR #68；Base 电流音修订提交 `8efcd8d` 本地 756/756 通过，待新 exact-head CI 与用户正常游玩验收 |
+| 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 合入 main |
+| 直接瞄准、距离散布与高速曳光 v2 | 常规瞄准同帧直跟、快速移准扩散、近距高可信度、超有效射程反馈和不似实体弹的高速短线曳光 | AimControlMode、WeaponAccuracyProjection、内容弹速、移动/距离散布包络、只读 TracerPresentationSegment | 当前分支 Windows Debug 与 761/761 CTest 通过；等待 exact-head CI 与用户正常游玩验收 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

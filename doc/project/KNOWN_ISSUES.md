@@ -19,7 +19,8 @@
 | RL-WEAPON-002 | Misfire/Double Feed 需要可保存的动态 Raid 地面弹药所有权 | 当前只启用不需要创建/抛出弹药资产的 Stovepipe；待 Raid 地面任意资产合同建立后独立扩展，禁止吞弹或凭空造弹 |
 | RL-COMBAT-004 | 击发时未冻结逻辑飞行且缺地面命中粒子 | PR #66 已以 `7877d71` 合入非实体逻辑飞行；PR #67 按新版合同把终点从准星点修订为武器最大距离/世界边界，并加入最近障碍与 Ground 结果 |
 | RL-COMBAT-005 | 位置式实际准星、手动压枪、随机散布与基础开镜未形成统一手感合同 | PR #67 已通过用户验收并以 `881c034` 合入 main |
-| RL-COMBAT-006 | 准星响应、极端横向后坐力、OS 光标离窗与基础听觉反馈 | 输入/后坐力已迁移为高响应默认值、连续弯曲和 Raid 相对鼠标捕获；P0 Sound Event 已接入。Base 电流素材在 `8efcd8d` 替换为低响度室内风声并请求 512 帧设备缓冲，本地 756/756 通过，待新 exact-head CI 与用户正常游玩验收 |
+| RL-COMBAT-006 | 准星响应、极端横向后坐力、OS 光标离窗与基础听觉反馈 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 进入 main；远程桌面音频映射的附加延迟按用户要求延期到本机复验后再判断 |
+| RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | 当前 `combat-direct-aim-spread-tracer-v2` 分支实施 Direct/高倍模式分离、移准与距离散布、4200/7200 逻辑弹速和三段式短线曳光；本地 761/761 通过，等待 exact-head CI 与用户正常游玩验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -56,6 +57,7 @@
 | Survival Loadout：防具维护 | PR #65 已通过 CI 与用户验收，以 merge commit `755fa00` 进入 main |
 | Combat：逻辑弹道与落点反馈 v1 | PR #66 已通过 CI 和用户验收，以 merge commit `7877d71` 进入 main |
 | Combat：准星运动、逻辑弹道与开发调参 v1 | PR #67 已通过用户验收，以 merge commit `881c034` 进入 main |
-| Combat：输入捕获、后坐力曲线与 P0 音频 v1 | Draft PR #68；P0 音频及 Base 音色修订已完成本地自动化，待精确 head CI 与用户正常游玩验收；不代表 P1 或全量正式音频完成 |
+| Combat：输入捕获、后坐力曲线与 P0 音频 v1 | PR #68 已通过 CI 和用户验收，以 merge commit `ba3375e` 进入 main |
+| Combat：直接瞄准、距离散布与高速曳光 v2 | 当前分支已完成实现、Windows Debug 构建和 761/761 CTest；等待 exact-head CI 与用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-input-capture-audio-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-direct-aim-spread-tracer-v2.md`。

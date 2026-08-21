@@ -17,6 +17,11 @@ struct WeaponFireConfig
     float aimDownSightsAccuracyMultiplier{0.55F};
     float aimDownSightsStabilityMultiplier{0.70F};
     float movingSpreadFraction{0.35F};
+    float reticleMotionSpreadDegreesPerSecond{5.0F};
+    float reticleMotionSoftThreshold{120.0F};
+    float reticleMotionFullSpeed{1800.0F};
+    float nearDistanceSpreadScale{0.04F};
+    float overEffectiveRangeSpreadMultiplier{1.50F};
     std::uint64_t spreadSeed{0x737072656164ULL};
 };
 
@@ -24,7 +29,9 @@ struct WeaponFireContext
 {
     bool moving{};
     float aimDownSightsProgress{};
-    float rangeSpreadFactor{};
+    float distanceSpreadFactor{1.0F};
+    float overEffectiveRangeFactor{};
+    float reticleControlSpeed{};
     bool forceMaximumSpread{};
 };
 
@@ -51,12 +58,16 @@ public:
         WeaponFireContext context = {});
 
     [[nodiscard]] float spreadDegrees() const noexcept;
+    [[nodiscard]] float contextualMinimumSpreadDegrees() const noexcept;
+    [[nodiscard]] float contextualMaximumSpreadDegrees() const noexcept;
     [[nodiscard]] float cooldownRemaining() const noexcept;
 
 private:
     WeaponFireConfig config_;
     float cooldownRemaining_{};
     float spreadDegrees_{};
+    float contextualMinimumSpreadDegrees_{};
+    float contextualMaximumSpreadDegrees_{};
     float recoveryDelayRemaining_{};
     Pcg32 random_;
     std::uint32_t burstShotCount_{};

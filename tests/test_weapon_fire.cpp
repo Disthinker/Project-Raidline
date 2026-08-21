@@ -89,18 +89,47 @@ TEST(WeaponFireStateTest, AdsImprovesAccuracyAndStability)
     EXPECT_LT(aimed.spreadDegrees(), hip.spreadDegrees());
 }
 
-TEST(WeaponFireStateTest, RangeAndReloadCanForceMaximumSpread)
+TEST(WeaponFireStateTest, DistanceEnvelopeAndReloadUseContextualMaximum)
 {
-    WeaponFireState fire;
-    WeaponFireContext ranged;
-    ranged.rangeSpreadFactor = 1.0F;
-    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, ranged));
-    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 6.0F);
+    WeaponFireConfig config;
+    config.minimumSpreadDegrees = 1.0F;
+    WeaponFireState fire{config};
+    WeaponFireContext close;
+    close.distanceSpreadFactor = 0.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, close));
+    EXPECT_FLOAT_EQ(fire.contextualMinimumSpreadDegrees(), 0.04F);
+    EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 0.24F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.24F);
+
+    WeaponFireContext beyond;
+    beyond.distanceSpreadFactor = 1.0F;
+    beyond.overEffectiveRangeFactor = 1.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.0F, beyond));
+    EXPECT_FLOAT_EQ(fire.contextualMinimumSpreadDegrees(), 1.5F);
+    EXPECT_FLOAT_EQ(fire.contextualMaximumSpreadDegrees(), 9.0F);
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 1.5F);
 
     WeaponFireContext reload;
     reload.forceMaximumSpread = true;
     EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 5.0F, reload));
     EXPECT_FLOAT_EQ(fire.spreadDegrees(), 6.0F);
+}
+
+TEST(WeaponFireStateTest, FastReticleMotionExpandsAndThenRecoversSpread)
+{
+    WeaponFireState fire;
+    WeaponFireContext slow;
+    slow.reticleControlSpeed = 100.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, slow));
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.0F);
+
+    WeaponFireContext flick;
+    flick.reticleControlSpeed = 1800.0F;
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 0.10F, flick));
+    EXPECT_NEAR(fire.spreadDegrees(), 0.5F, 0.001F);
+
+    EXPECT_FALSE(fire.update(false, Vec2{1.0F, 0.0F}, 1.0F));
+    EXPECT_FLOAT_EQ(fire.spreadDegrees(), 0.0F);
 }
 
 TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)

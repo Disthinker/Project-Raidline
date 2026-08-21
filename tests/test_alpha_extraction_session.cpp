@@ -283,6 +283,10 @@ TEST(AlphaExtractionSessionTest, AdsSlowsMovementAndKeepsLowPowerWeakTracer)
     adsFire.firePressed = true;
     adsSession.update(adsFire, 0.0F);
     ASSERT_TRUE(adsSession.world().shotFiredLastUpdate());
+    GameplayInput holdAds{};
+    holdAds.aimDownSights = true;
+    holdAds.aimWorldPosition = Vec2{1100.0F, 360.0F};
+    adsSession.update(holdAds, 0.005F);
     const auto shots = adsSession.world().shotPresentationSnapshots();
     ASSERT_FALSE(shots.empty());
     EXPECT_EQ(shots.back().tracerStyle, TracerStyle::Weak);
@@ -307,18 +311,10 @@ TEST(AlphaExtractionSessionTest, ReloadRetainsAdsAndLocksMaximumSpread)
     keepAiming.aimWorldPosition = Vec2{1000.0F, 360.0F};
     session.update(keepAiming, 0.20F);
 
-    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
-    ASSERT_TRUE(rifle.weaponUse.has_value());
     EXPECT_GT(session.world().weaponAimDownSightsProgress(), 0.0F);
-    const WeaponHandlingParameters handling =
-        deriveWeaponHandling(*rifle.weaponUse);
-    const float expectedMaximum = handling.maximumSpreadDegrees * std::lerp(
-        1.0F,
-        handling.aimDownSightsStabilityMultiplier,
-        session.world().weaponAimDownSightsProgress());
     EXPECT_FLOAT_EQ(
         session.world().weaponSpreadDegrees(),
-        expectedMaximum);
+        session.world().weaponAccuracyProjection().maximumSpreadDegrees);
     EXPECT_TRUE(session.raidActionState().active().has_value());
 }
 

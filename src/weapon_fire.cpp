@@ -31,7 +31,16 @@ namespace
             config.aimDownSightsStabilityMultiplier > 1.0F ||
             !std::isfinite(config.movingSpreadFraction) ||
             config.movingSpreadFraction < 0.0F ||
-            config.movingSpreadFraction > 1.0F)
+            config.movingSpreadFraction > 1.0F ||
+            !finiteNonNegative(config.reticleMotionSpreadDegreesPerSecond) ||
+            !finiteNonNegative(config.reticleMotionSoftThreshold) ||
+            !std::isfinite(config.reticleMotionFullSpeed) ||
+            config.reticleMotionFullSpeed <= config.reticleMotionSoftThreshold ||
+            !std::isfinite(config.nearDistanceSpreadScale) ||
+            config.nearDistanceSpreadScale < 0.0F ||
+            config.nearDistanceSpreadScale > 1.0F ||
+            !std::isfinite(config.overEffectiveRangeSpreadMultiplier) ||
+            config.overEffectiveRangeSpreadMultiplier < 1.0F)
         {
             throw std::invalid_argument{
                 "WeaponFireConfig values are inconsistent"};
@@ -61,6 +70,12 @@ namespace
             direction.x * cosine - direction.y * sine,
             direction.x * sine + direction.y * cosine});
     }
+
+    float smoothstep(float value) noexcept
+    {
+        const float clamped = std::clamp(value, 0.0F, 1.0F);
+        return clamped * clamped * (3.0F - 2.0F * clamped);
+    }
 }
 
 WeaponFireState::WeaponFireState()
@@ -71,6 +86,8 @@ WeaponFireState::WeaponFireState()
 WeaponFireState::WeaponFireState(WeaponFireConfig config)
     : config_{config},
       spreadDegrees_{config.minimumSpreadDegrees},
+      contextualMinimumSpreadDegrees_{config.minimumSpreadDegrees},
+      contextualMaximumSpreadDegrees_{config.maximumSpreadDegrees},
       random_{
           config.spreadSeed == 0U ? 0x737072656164ULL : config.spreadSeed,
           0x776561706f6e2d73ULL}
@@ -84,8 +101,19 @@ void WeaponFireState::reconfigure(WeaponFireConfig config)
     config_ = config;
     spreadDegrees_ = std::clamp(
         spreadDegrees_,
-        config_.minimumSpreadDegrees,
-        config_.maximumSpreadDegrees);
+        0.0F,
+        config_.maximumSpreadDegrees *
+            config_.overEffectiveRangeSpreadMultiplier);
+    contextualMinimumSpreadDegrees_ = std::clamp(
+        contextualMinimumSpreadDegrees_,
+        0.0F,
+        spreadDegrees_);
+    contextualMaximumSpreadDegrees_ = std::max(
+        contextualMinimumSpreadDegrees_,
+        std::min(
+            contextualMaximumSpreadDegrees_,
+            config_.maximumSpreadDegrees *
+                config_.overEffectiveRangeSpreadMultiplier));
 }
 
 std::optional<ShotSpec> WeaponFireState::update(
@@ -96,38 +124,77 @@ std::optional<ShotSpec> WeaponFireState::update(
 {
     if (!std::isfinite(deltaTime) || deltaTime < 0.0F ||
         !std::isfinite(context.aimDownSightsProgress) ||
-        !std::isfinite(context.rangeSpreadFactor))
+        !std::isfinite(context.distanceSpreadFactor) ||
+        !std::isfinite(context.overEffectiveRangeFactor) ||
+        !finiteNonNegative(context.reticleControlSpeed))
     {
         return std::nullopt;
     }
 
     const float adsProgress = std::clamp(
         context.aimDownSightsProgress, 0.0F, 1.0F);
-    const float rangeFactor = std::clamp(
-        context.rangeSpreadFactor, 0.0F, 1.0F);
+    const float distanceFactor = std::clamp(
+        context.distanceSpreadFactor, 0.0F, 1.0F);
+    const float overEffectiveFactor = std::clamp(
+        context.overEffectiveRangeFactor, 0.0F, 1.0F);
     const float adsAccuracy = std::lerp(
         1.0F, config_.aimDownSightsAccuracyMultiplier, adsProgress);
-    const float effectiveMaximumSpread = std::max(
-        config_.minimumSpreadDegrees * adsAccuracy,
+    const float distanceScale = std::lerp(
+        config_.nearDistanceSpreadScale,
+        1.0F,
+        distanceFactor);
+    const float overEffectiveScale = std::lerp(
+        1.0F,
+        config_.overEffectiveRangeSpreadMultiplier,
+        overEffectiveFactor);
+    contextualMinimumSpreadDegrees_ =
+        config_.minimumSpreadDegrees * adsAccuracy *
+        distanceScale * overEffectiveScale;
+    contextualMaximumSpreadDegrees_ = std::max(
+        contextualMinimumSpreadDegrees_,
         config_.maximumSpreadDegrees * std::lerp(
             1.0F,
             config_.aimDownSightsStabilityMultiplier,
-            adsProgress));
-    float targetSpread = config_.minimumSpreadDegrees * adsAccuracy;
+            adsProgress) *
+            distanceScale * overEffectiveScale);
+    float targetSpread = contextualMinimumSpreadDegrees_;
     if (context.moving)
     {
         targetSpread +=
-            (effectiveMaximumSpread - targetSpread) *
+            (contextualMaximumSpreadDegrees_ - targetSpread) *
             config_.movingSpreadFraction;
     }
-    targetSpread +=
-        (effectiveMaximumSpread - targetSpread) * rangeFactor;
     targetSpread = std::clamp(
-        targetSpread, 0.0F, effectiveMaximumSpread);
+        targetSpread,
+        contextualMinimumSpreadDegrees_,
+        contextualMaximumSpreadDegrees_);
+
+    spreadDegrees_ = std::clamp(
+        spreadDegrees_,
+        contextualMinimumSpreadDegrees_,
+        contextualMaximumSpreadDegrees_);
+
+    const float reticleMotionFactor = smoothstep(
+        (context.reticleControlSpeed - config_.reticleMotionSoftThreshold) /
+        (config_.reticleMotionFullSpeed -
+         config_.reticleMotionSoftThreshold));
+    const bool motionExpandedSpread =
+        deltaTime > 0.0F && reticleMotionFactor > 0.0F;
+    if (motionExpandedSpread)
+    {
+        spreadDegrees_ = std::min(
+            contextualMaximumSpreadDegrees_,
+            spreadDegrees_ +
+                config_.reticleMotionSpreadDegreesPerSecond *
+                    reticleMotionFactor * deltaTime);
+        recoveryDelayRemaining_ = std::max(
+            recoveryDelayRemaining_,
+            std::min(config_.recoveryDelay, 0.04F));
+    }
 
     if (context.forceMaximumSpread)
     {
-        spreadDegrees_ = effectiveMaximumSpread;
+        spreadDegrees_ = contextualMaximumSpreadDegrees_;
         recoveryDelayRemaining_ = config_.recoveryDelay;
     }
     else
@@ -142,7 +209,7 @@ std::optional<ShotSpec> WeaponFireState::update(
         {
             recoveryDelayRemaining_ = config_.recoveryDelay;
         }
-        else if (!context.forceMaximumSpread)
+        else if (!context.forceMaximumSpread && !motionExpandedSpread)
         {
             recover(deltaTime, targetSpread);
         }
@@ -158,7 +225,7 @@ std::optional<ShotSpec> WeaponFireState::update(
     cooldownRemaining_ = config_.shotInterval;
     recoveryDelayRemaining_ = config_.recoveryDelay;
     spreadDegrees_ = std::min(
-        effectiveMaximumSpread,
+        contextualMaximumSpreadDegrees_,
         spreadDegrees_ + config_.spreadPerShotDegrees);
     ++burstShotCount_;
 
@@ -168,6 +235,16 @@ std::optional<ShotSpec> WeaponFireState::update(
 float WeaponFireState::spreadDegrees() const noexcept
 {
     return spreadDegrees_;
+}
+
+float WeaponFireState::contextualMinimumSpreadDegrees() const noexcept
+{
+    return contextualMinimumSpreadDegrees_;
+}
+
+float WeaponFireState::contextualMaximumSpreadDegrees() const noexcept
+{
+    return contextualMaximumSpreadDegrees_;
 }
 
 float WeaponFireState::cooldownRemaining() const noexcept

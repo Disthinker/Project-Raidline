@@ -52,6 +52,8 @@ WeaponHandlingParameters deriveWeaponHandling(
     const float minimumSpread = 1.60F - 0.014F * accuracy;
     const float maximumSpread = 12.0F - 0.09F * stability;
     const float switchDuration = 0.95F - 0.007F * handling;
+    const float spreadPerShot = 1.80F - 0.012F * stability;
+    const float reticleMotionSpread = 8.0F - 0.05F * stability;
 
     return WeaponHandlingParameters{
         switchDuration,
@@ -64,7 +66,7 @@ WeaponHandlingParameters deriveWeaponHandling(
         0.080F,
         minimumSpread,
         std::max(minimumSpread, maximumSpread),
-        1.15F,
+        spreadPerShot,
         0.16F,
         3.0F + 0.24F * handling,
         0.50F - 0.0035F * ergonomics,
@@ -72,8 +74,11 @@ WeaponHandlingParameters deriveWeaponHandling(
         0.55F,
         0.70F,
         0.35F,
-        34.0F,
-        0.42F};
+        reticleMotionSpread,
+        0.04F,
+        48.0F,
+        0.56F,
+        0.055F};
 }
 
 bool isWeaponEquipmentSlot(EquipmentSlotKind slot) noexcept

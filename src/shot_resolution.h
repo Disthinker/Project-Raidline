@@ -77,18 +77,15 @@ struct HitResult
     HitSemantic semantic{HitSemantic::Normal};
 };
 
-// Read-only App projection for the temporary V0 shot presentation. It is not
-// a persistent asset and carries no collision or damage authority.
+// Read-only App projection for one short, already-travelled tracer segment.
+// It is not a persistent asset and carries no collision or damage authority.
 struct ShotPresentationSnapshot
 {
     ShotId shotId{kInvalidShotId};
-    Vec2 origin{};
-    Vec2 center{};
+    Vec2 start{};
+    Vec2 end{};
     Vec2 direction{};
-    Vec2 impactPosition{};
-    float distanceTravelled{};
     TracerStyle tracerStyle{TracerStyle::Weak};
-    float tracerLength{34.0F};
     float tracerOpacity{0.42F};
 };
 

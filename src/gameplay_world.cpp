@@ -14,8 +14,8 @@
 
 namespace
 {
-    constexpr float kLegacyShotSpeed{1200.0f};
     constexpr float kLegacyShotExtent{8.0f};
+    constexpr float kPi{3.14159265358979323846F};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
@@ -542,6 +542,21 @@ void GameplayWorld::update(
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
     enemiesAlertedLastUpdate_ = 0U;
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        for (TracerPresentationSegment &tracer : tracerPresentations_)
+        {
+            tracer.remainingSeconds = std::max(
+                0.0F,
+                tracer.remainingSeconds - deltaTime);
+        }
+        std::erase_if(
+            tracerPresentations_,
+            [](const TracerPresentationSegment &tracer)
+            {
+                return tracer.remainingSeconds <= 0.0F;
+            });
+    }
     if (!raidSession_.isActive())
     {
         return;
@@ -584,7 +599,8 @@ void GameplayWorld::update(
         worldSize_,
         input.aimDownSights,
         deltaTime,
-        input.aimMotionDelta);
+        input.aimMotionDelta,
+        AimControlMode::Direct);
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
@@ -767,10 +783,17 @@ void GameplayWorld::update(
             weaponAim_.actualDirection(),
             deltaTime,
             WeaponFireContext{
-                player_.isMoving(),
-                weaponAim_.aimDownSightsProgress(),
-                weaponAim_.rangeSpreadFactor(),
-                input.forceMaximumWeaponSpread});
+                .moving = player_.isMoving(),
+                .aimDownSightsProgress =
+                    weaponAim_.aimDownSightsProgress(),
+                .distanceSpreadFactor =
+                    weaponAim_.distanceSpreadFactor(),
+                .overEffectiveRangeFactor =
+                    weaponAim_.overEffectiveRangeFactor(),
+                .reticleControlSpeed =
+                    weaponAim_.reticleControlSpeed(),
+                .forceMaximumSpread =
+                    input.forceMaximumWeaponSpread});
 
     if (shot.has_value())
     {
@@ -797,7 +820,7 @@ void GameplayWorld::update(
                 nextShotId_,
                 shotOrigin,
                 shot->direction,
-                kLegacyShotSpeed,
+                weaponLogicalBallisticSpeed_,
                 kLegacyShotExtent,
                 std::max(
                     1,
@@ -815,7 +838,8 @@ void GameplayWorld::update(
             resolution,
             weaponTracerStyle_,
             weaponTracerLength_,
-            weaponTracerOpacity_);
+            weaponTracerOpacity_,
+            weaponTracerLifetimeSeconds_);
         weaponAim_.applyShotRecoil(shotOrigin);
         ++nextShotId_;
     }
@@ -825,6 +849,43 @@ void GameplayWorld::update(
     for (LogicalBallisticFlight &flight : logicalBallistics_)
     {
         const LogicalBallisticAdvance advance = flight.advance(deltaTime);
+        const float travelled = std::hypot(
+            advance.end.x - advance.start.x,
+            advance.end.y - advance.start.y);
+        if (flight.tracerStyle() != TracerStyle::None &&
+            travelled > 0.0001F)
+        {
+            const float visibleLength = std::min(
+                flight.tracerLength(),
+                travelled);
+            const Vec2 visibleStart{
+                advance.end.x - flight.direction().x * visibleLength,
+                advance.end.y - flight.direction().y * visibleLength};
+            const TracerPresentationSegment segment{
+                flight.shotId(),
+                visibleStart,
+                advance.end,
+                flight.direction(),
+                flight.tracerStyle(),
+                flight.tracerOpacity(),
+                flight.tracerLifetimeSeconds(),
+                flight.tracerLifetimeSeconds()};
+            const auto existing = std::find_if(
+                tracerPresentations_.begin(),
+                tracerPresentations_.end(),
+                [&](const TracerPresentationSegment &candidate)
+                {
+                    return candidate.shotId == flight.shotId();
+                });
+            if (existing == tracerPresentations_.end())
+            {
+                tracerPresentations_.push_back(segment);
+            }
+            else
+            {
+                *existing = segment;
+            }
+        }
         collisionCandidates.push_back(
             ShotCollisionCandidate{
                 flight.shotId(),
@@ -913,21 +974,24 @@ std::vector<ShotPresentationSnapshot>
 GameplayWorld::shotPresentationSnapshots() const
 {
     std::vector<ShotPresentationSnapshot> snapshots;
-    snapshots.reserve(logicalBallistics_.size());
+    snapshots.reserve(tracerPresentations_.size());
 
-    for (const LogicalBallisticFlight &flight : logicalBallistics_)
+    for (const TracerPresentationSegment &tracer : tracerPresentations_)
     {
+        const float lifetimeRatio = tracer.lifetimeSeconds > 0.0F
+            ? std::clamp(
+                  tracer.remainingSeconds / tracer.lifetimeSeconds,
+                  0.0F,
+                  1.0F)
+            : 0.0F;
         snapshots.push_back(
             ShotPresentationSnapshot{
-                flight.shotId(),
-                flight.origin(),
-                flight.currentPosition(),
-                flight.direction(),
-                flight.impactPosition(),
-                flight.distanceTravelled(),
-                flight.tracerStyle(),
-                flight.tracerLength(),
-                flight.tracerOpacity()});
+                tracer.shotId,
+                tracer.start,
+                tracer.end,
+                tracer.direction,
+                tracer.style,
+                tracer.opacity * lifetimeRatio});
     }
 
     return snapshots;
@@ -1014,6 +1078,25 @@ float GameplayWorld::weaponVisualRecoilPixels() const noexcept
             0.02F);
 }
 
+WeaponAccuracyProjection
+GameplayWorld::weaponAccuracyProjection() const noexcept
+{
+    const float distance = weaponAim_.aimDistance();
+    const float spread = weaponFire_.spreadDegrees();
+    const float radians = spread * kPi / 180.0F;
+    const float radius = std::isfinite(radians)
+        ? std::tan(radians) * distance
+        : 0.0F;
+    return WeaponAccuracyProjection{
+        weaponAim_.actualWorldPosition(),
+        distance,
+        spread,
+        weaponFire_.contextualMinimumSpreadDegrees(),
+        weaponFire_.contextualMaximumSpreadDegrees(),
+        std::max(0.0F, radius),
+        weaponAim_.beyondEffectiveRange()};
+}
+
 Vec2 GameplayWorld::weaponAimWorldPosition() const noexcept
 {
     return weaponAim_.actualWorldPosition();
@@ -1027,6 +1110,11 @@ Vec2 GameplayWorld::weaponAimDirection() const noexcept
 float GameplayWorld::weaponAimDownSightsProgress() const noexcept
 {
     return weaponAim_.aimDownSightsProgress();
+}
+
+bool GameplayWorld::weaponAimBeyondEffectiveRange() const noexcept
+{
+    return weaponAim_.beyondEffectiveRange();
 }
 
 bool GameplayWorld::weaponAimBeyondMaximumRange() const noexcept
@@ -1072,7 +1160,12 @@ void GameplayWorld::configureWeaponFire(
         handling.spreadRecoveryDegreesPerSecond,
         handling.aimDownSightsAccuracyMultiplier,
         handling.aimDownSightsStabilityMultiplier,
-        handling.movingSpreadFraction};
+        handling.movingSpreadFraction,
+        handling.reticleMotionSpreadDegreesPerSecond,
+        120.0F,
+        1800.0F,
+        handling.nearDistanceSpreadScale,
+        1.50F};
     const WeaponAimConfig aimConfig{
         handling.maximumReticleSpeed,
         handling.reticleControlAcceleration,
@@ -1095,9 +1188,11 @@ void GameplayWorld::configureWeaponFire(
     }
     weaponBaseDamage_ = definition.baseDamage;
     weaponMaximumRange_ = definition.maximumRange;
+    weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;
     weaponTracerStyle_ = TracerStyle::Weak;
     weaponTracerLength_ = handling.weakTracerLength;
     weaponTracerOpacity_ = handling.weakTracerOpacity;
+    weaponTracerLifetimeSeconds_ = handling.weakTracerLifetimeSeconds;
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept
