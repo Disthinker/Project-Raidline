@@ -948,6 +948,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
             0.01F,
             0.05F,
             0.0F,
+            previousHandling.sprintingSpreadFraction,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::SprintingSpreadFraction:
+        entry.hidden.sprintingSpreadFraction = adjustFloat(
+            previousHandling.sprintingSpreadFraction,
+            0.01F,
+            0.05F,
+            previousHandling.movingSpreadFraction,
             1.0F,
             coarseStep);
         break;
@@ -963,6 +972,15 @@ bool GameSession::adjustDeveloperWeaponTuning(
     case DeveloperWeaponParameter::NearDistanceSpreadScale:
         entry.hidden.nearDistanceSpreadScale = adjustFloat(
             previousHandling.nearDistanceSpreadScale,
+            0.01F,
+            0.05F,
+            0.0F,
+            0.50F,
+            coarseStep);
+        break;
+    case DeveloperWeaponParameter::DistanceBloomAtEffectiveRange:
+        entry.hidden.distanceBloomAtEffectiveRange = adjustFloat(
+            previousHandling.distanceBloomAtEffectiveRange,
             0.01F,
             0.05F,
             0.0F,
@@ -2413,6 +2431,10 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     {
         handling.movingSpreadFraction = *hidden.movingSpreadFraction;
     }
+    if (hidden.sprintingSpreadFraction.has_value())
+    {
+        handling.sprintingSpreadFraction = *hidden.sprintingSpreadFraction;
+    }
     if (hidden.reticleMotionSpreadDegreesPerSecond.has_value())
     {
         handling.reticleMotionSpreadDegreesPerSecond =
@@ -2421,6 +2443,11 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
     if (hidden.nearDistanceSpreadScale.has_value())
     {
         handling.nearDistanceSpreadScale = *hidden.nearDistanceSpreadScale;
+    }
+    if (hidden.distanceBloomAtEffectiveRange.has_value())
+    {
+        handling.distanceBloomAtEffectiveRange =
+            *hidden.distanceBloomAtEffectiveRange;
     }
     if (hidden.adsAccuracyMultiplier.has_value())
     {

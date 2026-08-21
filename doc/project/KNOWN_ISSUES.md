@@ -10,8 +10,8 @@
 | RL-INV-002 | Ctrl/Shift 数量选择后的拖拽锁定不完整 | PR #60 已完成返工并通过 exact-head CI 与用户正常游玩验收 |
 | RL-INV-003 | 同定义弹药堆叠与 60 发上限 | PR #54 已合入并完成人工验收 |
 | RL-UI-001 | Alpha Profile 库存回归为点击来源/目标和验收按钮，Base 缺角色图；Raid 缺压卸弹和奔跑，弹匣右键入口会被执行预查询错误隐藏 | PR #60 已进入 main，精确 head CI 与用户正常游玩验收通过 |
-| RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | Draft PR #69 第二轮加固已改为验证根资产仍属于随身所有权树，并覆盖局内卸装、格位移动和重新装备；本地 775/775 通过，等待 exact-head CI 与用户验收 |
-| RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | Draft PR #69 第二轮加固已加入继续、设置、回主菜单和退桌面菜单；移除 App 的双按 Esc 放弃入口，等待 exact-head CI 与用户验收 |
+| RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | PR #69 已改为验证根资产仍属于随身所有权树，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
+| RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | PR #69 已加入继续、设置、回主菜单和退桌面菜单，并移除双按 Esc 放弃入口；已通过用户验收并合入 main |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | PR #61 已完成 Head/Torso/Legs、Normal/Headshot/WeakPoint、防具接线与代码反馈，并通过 CI 和用户验收后合入 main |
 | RL-MED-001 | Raid 缺少流血、疼痛与对应战地医疗闭环 | PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main |
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |
@@ -22,7 +22,8 @@
 | RL-COMBAT-004 | 击发时未冻结逻辑飞行且缺地面命中粒子 | PR #66 已以 `7877d71` 合入非实体逻辑飞行；PR #67 按新版合同把终点从准星点修订为武器最大距离/世界边界，并加入最近障碍与 Ground 结果 |
 | RL-COMBAT-005 | 位置式实际准星、手动压枪、随机散布与基础开镜未形成统一手感合同 | PR #67 已通过用户验收并以 `881c034` 合入 main |
 | RL-COMBAT-006 | 准星响应、极端横向后坐力、OS 光标离窗与基础听觉反馈 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 进入 main；远程桌面音频映射的附加延迟按用户要求延期到本机复验后再判断 |
-| RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | Draft PR #69 已完成 Direct/高倍模式分离、移准与距离散布、4200/7200 逻辑弹速和三段式短线曳光；第二轮加固将真实散布半径与可读准星半径分离，并加粗加长准星/曳光。本地 172 项受影响回归和 775/775 CTest 通过，等待 exact-head CI 与用户正常游玩验收 |
+| RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | PR #69 已完成 Direct/高倍模式分离、移准与距离包络、4200/7200 逻辑弹速和纯短线曳光，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
+| RL-COMBAT-008 | 距离遮蔽动态扩散、组合输入闪动，以及 App 可读准星大于真实随机弹道范围 | PR #71 已拆分独立 Bloom、连续投影与像素对齐；第三轮 head `067e024` exact-head CI 通过。第四轮把动态可读半径提升为 simulation 权威弹道半径，小幅提高甩枪/距离影响，150 项定向回归与 781/781 CTest 通过，等待最终 CI 与人工验收 |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
@@ -60,6 +61,7 @@
 | Combat：逻辑弹道与落点反馈 v1 | PR #66 已通过 CI 和用户验收，以 merge commit `7877d71` 进入 main |
 | Combat：准星运动、逻辑弹道与开发调参 v1 | PR #67 已通过用户验收，以 merge commit `881c034` 进入 main |
 | Combat：输入捕获、后坐力曲线与 P0 音频 v1 | PR #68 已通过 CI 和用户验收，以 merge commit `ba3375e` 进入 main |
-| Combat：直接瞄准、距离散布与高速曳光 v2 | Draft PR #69 第二轮加固已通过 Windows Debug、172 项受影响回归和 775/775 CTest；等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收 |
+| Combat：直接瞄准、距离散布与高速曳光 v2 | PR #69 已通过 exact-head Windows/Ubuntu CI 和用户验收，以 merge commit `f593719` 进入 main |
+| Combat：动态散布模型与准星稳定性 v3 | PR #71 第三轮 head `067e024` CI 已通过；第四轮完成准星—弹道权威半径统一及甩枪/距离小幅增强，150 项定向回归与 781/781 CTest 通过；最终 CI 与人工验收待完成 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-direct-aim-spread-tracer-v2.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-spread-model-v3.md`。

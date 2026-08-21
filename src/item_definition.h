@@ -191,8 +191,10 @@ struct WeaponHandlingParameters
     float aimDownSightsAccuracyMultiplier{};
     float aimDownSightsStabilityMultiplier{};
     float movingSpreadFraction{};
+    float sprintingSpreadFraction{};
     float reticleMotionSpreadDegreesPerSecond{};
     float nearDistanceSpreadScale{};
+    float distanceBloomAtEffectiveRange{};
     float weakTracerLength{};
     float weakTracerOpacity{};
     float weakTracerLifetimeSeconds{};

@@ -48,8 +48,10 @@ enum class DeveloperWeaponParameter
     RecoilLateralRatio,
     RecoilBendDuration,
     MovingSpreadFraction,
+    SprintingSpreadFraction,
     ReticleMotionSpreadRate,
     NearDistanceSpreadScale,
+    DistanceBloomAtEffectiveRange,
     AdsAccuracyMultiplier,
     AdsStabilityMultiplier,
     WeakTracerLength,
@@ -256,8 +258,10 @@ private:
         std::optional<float> recoilLateralRatio;
         std::optional<float> recoilBendDurationSeconds;
         std::optional<float> movingSpreadFraction;
+        std::optional<float> sprintingSpreadFraction;
         std::optional<float> reticleMotionSpreadDegreesPerSecond;
         std::optional<float> nearDistanceSpreadScale;
+        std::optional<float> distanceBloomAtEffectiveRange;
         std::optional<float> adsAccuracyMultiplier;
         std::optional<float> adsStabilityMultiplier;
         std::optional<float> weakTracerLength;

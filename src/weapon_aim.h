@@ -18,8 +18,8 @@ struct WeaponAimConfig
     float controlAcceleration{9000.0F};
     float recoilInitialSpeed{420.0F};
     float recoilDeceleration{2200.0F};
-    float recoilLateralRatio{0.30F};
-    float recoilBendDurationSeconds{0.080F};
+    float recoilLateralRatio{0.55F};
+    float recoilBendDurationSeconds{0.060F};
     float aimDownSightsDurationSeconds{0.25F};
     float effectiveRange{500.0F};
     float maximumRange{750.0F};

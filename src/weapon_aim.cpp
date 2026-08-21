@@ -9,7 +9,7 @@ namespace
     constexpr float kMaximumAimStep{1.0F / 120.0F};
     constexpr float kVelocityEpsilon{0.01F};
     constexpr float kMaximumRecoilDeflectionRadians{
-        1.0471975512F}; // 60 degrees at a lateral ratio of 1.0.
+        1.2217304764F}; // 70 degrees at a lateral ratio of 1.0.
 
     bool finite(Vec2 value) noexcept
     {

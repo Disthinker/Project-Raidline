@@ -957,19 +957,71 @@ TEST(GameplayWorldTest, ReticleProjectionMakesAuthoritativeBloomReadable)
     world.update(rest, 0.0F);
     const WeaponAccuracyProjection resting =
         world.weaponAccuracyProjection();
-    EXPECT_GE(resting.reticleRadius, resting.worldRadius);
+    EXPECT_GT(resting.reticleRadius, resting.worldRadius);
+    EXPECT_NEAR(resting.reticleRadius - resting.worldRadius, 10.0F, 0.001F);
     EXPECT_GE(resting.reticleRadius, 10.0F);
-    const WeaponHandlingParameters handling = deriveWeaponHandling(
-        *rifle.weaponUse);
-    const float expectedReadableRadius = 10.0F + 70.0F * std::sqrt(
-        std::clamp(
-            resting.currentSpreadDegrees / handling.maximumSpreadDegrees,
-            0.0F,
-            1.0F));
-    EXPECT_NEAR(
-        resting.reticleRadius,
-        std::max(resting.worldRadius, expectedReadableRadius),
-        0.001F);
+    EXPECT_LT(resting.reticleRadius, 12.0F + resting.worldRadius);
+
+    GameplayInput movingAndFlicking{};
+    movingAndFlicking.moveRight = true;
+    movingAndFlicking.aimWorldPosition = Vec2{720.0F, 376.0F};
+    movingAndFlicking.aimMotionDelta = Vec2{30.0F, 0.0F};
+    world.update(movingAndFlicking, 1.0F / 60.0F);
+    const WeaponAccuracyProjection expanded =
+        world.weaponAccuracyProjection();
+    EXPECT_GT(expanded.reticleRadius, resting.reticleRadius + 35.0F);
+    EXPECT_LT(expanded.reticleRadius, resting.reticleRadius + 70.0F);
+
+    GameplayInput movingWithoutMouse{};
+    movingWithoutMouse.moveRight = true;
+    movingWithoutMouse.aimWorldPosition = Vec2{750.0F, 376.0F};
+    movingWithoutMouse.aimMotionDelta = Vec2{};
+    world.update(movingWithoutMouse, 1.0F / 60.0F);
+    const WeaponAccuracyProjection nextFrame =
+        world.weaponAccuracyProjection();
+    EXPECT_GT(nextFrame.reticleRadius, resting.reticleRadius + 35.0F);
+    EXPECT_LT(
+        std::abs(nextFrame.reticleRadius - expanded.reticleRadius),
+        10.0F);
+
+    for (int frame = 0; frame < 18; ++frame)
+    {
+        world.update(movingAndFlicking, 1.0F / 60.0F);
+    }
+    const WeaponAccuracyProjection sustained =
+        world.weaponAccuracyProjection();
+    EXPECT_GT(sustained.reticleRadius, resting.reticleRadius + 18.0F);
+}
+
+TEST(GameplayWorldTest, SprintingImmediatelyOpensFartherThanWalking)
+{
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    GameplayWorld walking{std::vector<EnemySpawn>{}, 3};
+    GameplayWorld sprinting{std::vector<EnemySpawn>{}, 3};
+    walking.configureWeaponFire(*rifle.weaponUse);
+    sprinting.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput walk;
+    walk.moveRight = true;
+    walk.aimWorldPosition = Vec2{900.0F, 376.0F};
+    walking.update(walk, 0.0F);
+
+    GameplayInput sprint = walk;
+    sprint.sprint = true;
+    sprinting.update(sprint, 0.0F);
+
+    const WeaponAccuracyProjection walkProjection =
+        walking.weaponAccuracyProjection();
+    const WeaponAccuracyProjection sprintProjection =
+        sprinting.weaponAccuracyProjection();
+    EXPECT_GT(
+        walkProjection.currentSpreadDegrees,
+        walkProjection.minimumSpreadDegrees);
+    EXPECT_GT(
+        sprintProjection.currentSpreadDegrees,
+        walkProjection.currentSpreadDegrees);
+    EXPECT_GT(sprintProjection.reticleRadius, walkProjection.reticleRadius);
 }
 
 TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)

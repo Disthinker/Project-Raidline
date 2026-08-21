@@ -42,6 +42,8 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 
 `codex/core-alpha-hardening` 从已包含 PR #59 的 `origin/main@ed45baa` 创建。Windows Debug 全目标重建成功；库存/角色返工、Raid 压卸弹、进程退出回滚、奔跑和空栏位快速装备的全量 CTest 645/645 通过，0 失败；最新快捷转移/快速装备 head 等待精确 CI。自动化覆盖 10 局混合结果、至少 3 次重载、三配置/三路线、出击前精确回滚、旧 pending 迁移、双损坏存档、Deploy 保存失败、Raid 动作中断、弹药守恒及快速装备的查询不变性；既有功能 head `db0935d` 的范围检测、Windows 和 Ubuntu CI 全部成功（run `31919983014`）。`Project_Raidline.exe` 已生成但开发代理未启动游戏；最终人工验收由用户执行。
 
+`codex/combat-spread-model-v3` 从已包含 PR #69 的 `origin/main@f593719` 创建。PR #71 第一轮公共 `WeaponFireState` 头变更后重建全部消费者成功；130/130 定向回归、全量 CTest 778/778 和 head `5381a87` exact-head Windows/Ubuntu CI 通过。第二轮 147/147 定向回归、778/778 CTest 与 head `13176d9` exact-head CI 通过（run `32469515548`）。第三轮新增奔跑散布配置后完成 116 步全目标重建、149/149 定向回归、780/780 CTest 与 head `067e024` exact-head CI（run `32471351205`）。第四轮将动态可读半径迁入 simulation 权威弹道抽样并移除 App 160px 截断，再次重建全部头文件消费者；WeaponAim/WeaponFire/GameplayWorld/GameplayWorldRaid/ItemDefinition/AlphaExtractionSession 定向 150/150、全量 CTest 781/781 通过。512-seed 测试证明随机射线不越过准星权威半径且最远样本覆盖 90% 以上。第四轮 exact-head CI 待完成；`Project_Raidline.exe` 已生成但开发代理未启动游戏。
+
 ## 按风险选择证据
 
 - 修改纯领域类：构建对应测试目标，跑 focused tests，再跑全量 CTest。

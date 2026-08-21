@@ -5732,12 +5732,13 @@ void App::renderAimCrosshair()
 
     const WeaponAccuracyProjection accuracy =
         gameSession_.world().weaponAccuracyProjection();
-    const float feedbackRadius = std::clamp(
-        accuracy.reticleRadius,
+    const float feedbackRadius = std::round(std::max(
         10.0F,
-        160.0F);
+        accuracy.reticleRadius));
     constexpr float kArmLength{15.0F};
-    const Vec2 center = accuracy.center;
+    const Vec2 center{
+        std::round(accuracy.center.x),
+        std::round(accuracy.center.y)};
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (accuracy.beyondEffectiveRange)
@@ -7261,8 +7262,9 @@ void App::renderDeveloperWeaponPanel()
         "Maximum range", "Logical ballistic speed",
         "High-scope maximum speed", "High-scope control accel",
         "Spread per shot", "Recoil lateral ratio", "Recoil bend duration",
-        "Moving spread fraction", "Reticle motion spread rate",
-        "Near-distance spread scale",
+        "Moving spread fraction", "Sprinting spread fraction",
+        "Reticle motion spread rate",
+        "Near-distance spread scale", "Effective-range distance bloom",
         "Right-click aim accuracy", "Right-click aim stability",
         "Weak tracer length", "Weak tracer opacity",
         "Weak tracer lifetime"};
@@ -7342,6 +7344,9 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::MovingSpreadFraction:
             value = fmt::format("{:.2f}", handling.movingSpreadFraction);
             break;
+        case DeveloperWeaponParameter::SprintingSpreadFraction:
+            value = fmt::format("{:.2f}", handling.sprintingSpreadFraction);
+            break;
         case DeveloperWeaponParameter::ReticleMotionSpreadRate:
             value = fmt::format(
                 "{:.2f} deg/s",
@@ -7350,6 +7355,10 @@ void App::renderDeveloperWeaponPanel()
         case DeveloperWeaponParameter::NearDistanceSpreadScale:
             value = fmt::format(
                 "{:.2f}", handling.nearDistanceSpreadScale);
+            break;
+        case DeveloperWeaponParameter::DistanceBloomAtEffectiveRange:
+            value = fmt::format(
+                "{:.2f}", handling.distanceBloomAtEffectiveRange);
             break;
         case DeveloperWeaponParameter::AdsAccuracyMultiplier:
             value = fmt::format(
@@ -7374,14 +7383,14 @@ void App::renderDeveloperWeaponPanel()
         }
 
         const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 24.0F;
+            static_cast<float>(index) * 21.0F;
         if (index == developerWeaponParameterIndex_)
         {
             const SDL_FRect selected{
                 panel.x + 14.0F,
                 rowY - 6.0F,
                 panel.w - 28.0F,
-                22.0F};
+                20.0F};
             SDL_SetRenderDrawColor(renderer_, 42, 94, 91, 235);
             SDL_RenderFillRect(renderer_, &selected);
             SDL_SetRenderDrawColor(renderer_, 136, 226, 207, 255);

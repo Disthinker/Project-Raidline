@@ -15,7 +15,6 @@
 namespace
 {
     constexpr float kLegacyShotExtent{8.0f};
-    constexpr float kPi{3.14159265358979323846F};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
 
@@ -839,8 +838,10 @@ void GameplayWorld::update(
             deltaTime,
             WeaponFireContext{
                 .moving = player_.isMoving(),
+                .sprinting = input.sprint && player_.isMoving(),
                 .aimDownSightsProgress =
                     weaponAim_.aimDownSightsProgress(),
+                .aimDistance = weaponAim_.aimDistance(),
                 .distanceSpreadFactor =
                     weaponAim_.distanceSpreadFactor(),
                 .overEffectiveRangeFactor =
@@ -1189,28 +1190,19 @@ WeaponAccuracyProjection
 GameplayWorld::weaponAccuracyProjection() const noexcept
 {
     const float distance = weaponAim_.aimDistance();
-    const float spread = weaponFire_.spreadDegrees();
-    const float radians = spread * kPi / 180.0F;
-    const float radius = std::isfinite(radians)
-        ? std::tan(radians) * distance
-        : 0.0F;
-    // worldRadius is the authoritative geometric shot cone. reticleRadius is
-    // a monotonic, readable projection of the same spread state, so close-
-    // range movement/flick/fire bloom remains visible without making bullets
-    // artificially inaccurate. The SDL client consumes this projection and
-    // never invents spread from presentation-only state.
-    const float presentationFraction =
-        weaponFire_.spreadPresentationFraction();
-    const float readableRadius = 10.0F +
-        70.0F * std::sqrt(presentationFraction);
+    const float spread = weaponFire_.spreadDegreesAtDistance(distance);
+    // worldRadius is the authoritative maximum lateral displacement where
+    // the shot ray crosses the current aim distance. The reticle reads this
+    // same radius; the fixed ten-pixel difference is only center clearance.
+    const float worldRadius = weaponFire_.spreadRadiusAtDistance(distance);
     return WeaponAccuracyProjection{
         weaponAim_.actualWorldPosition(),
         distance,
         spread,
         weaponFire_.contextualMinimumSpreadDegrees(),
         weaponFire_.contextualMaximumSpreadDegrees(),
-        std::max(0.0F, radius),
-        std::max(std::max(0.0F, radius), readableRadius),
+        worldRadius,
+        10.0F + worldRadius,
         weaponAim_.beyondEffectiveRange()};
 }
 
@@ -1278,10 +1270,12 @@ void GameplayWorld::configureWeaponFire(
         handling.aimDownSightsAccuracyMultiplier,
         handling.aimDownSightsStabilityMultiplier,
         handling.movingSpreadFraction,
+        handling.sprintingSpreadFraction,
         handling.reticleMotionSpreadDegreesPerSecond,
         120.0F,
         1800.0F,
         handling.nearDistanceSpreadScale,
+        handling.distanceBloomAtEffectiveRange,
         1.50F};
     const WeaponAimConfig aimConfig{
         handling.maximumReticleSpeed,

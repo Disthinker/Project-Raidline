@@ -57,7 +57,7 @@ WeaponHandlingParameters deriveWeaponHandling(
     // communicated through a readable spread response instead of cursor lag.
     // Stability still reduces the response, but even a stable weapon opens
     // visibly during a fast flick.
-    const float reticleMotionSpread = 30.0F - 0.12F * stability;
+    const float reticleMotionSpread = 24.0F - 0.08F * stability;
 
     return WeaponHandlingParameters{
         switchDuration,
@@ -66,20 +66,22 @@ WeaponHandlingParameters deriveWeaponHandling(
         3000.0F + 60.0F * ergonomics,
         720.0F - 5.8F * recoilControl,
         1000.0F + 24.0F * ergonomics,
-        0.30F,
-        0.080F,
+        0.55F,
+        0.060F,
         minimumSpread,
         std::max(minimumSpread, maximumSpread),
         spreadPerShot,
         0.16F,
-        3.0F + 0.24F * handling,
+        3.0F + 0.15F * handling,
         0.50F - 0.0035F * ergonomics,
         0.65F,
         0.55F,
         0.70F,
         0.75F,
+        0.95F,
         reticleMotionSpread,
         0.04F,
+        0.10F,
         30.0F,
         0.85F,
         0.095F};
