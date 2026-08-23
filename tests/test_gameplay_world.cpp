@@ -600,6 +600,47 @@ TEST(GameplayWorldTest, ConfiguredTracerSpansTravelledStepsAndFlickers)
     EXPECT_LE(second.front().tracerOpacity, 1.0F);
 }
 
+TEST(GameplayWorldTest, WeaponReconfigurationPreservesReticlePosition)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    const ItemDefinition &pistol = itemDefinition(ItemId::Pistol);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    ASSERT_TRUE(pistol.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    GameplayInput initialize{};
+    initialize.aimWorldPosition = Vec2{900.0F, 376.0F};
+    world.update(initialize, 0.0F);
+
+    GameplayInput relativeMotion = initialize;
+    relativeMotion.aimMotionDelta = Vec2{145.0F, -55.0F};
+    world.update(relativeMotion, 1.0F / 60.0F);
+    const Vec2 beforeSwitch = world.weaponAimWorldPosition();
+    ASSERT_NE(beforeSwitch.x, initialize.aimWorldPosition->x);
+
+    world.configureWeaponFire(*pistol.weaponUse);
+
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, beforeSwitch.x);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, beforeSwitch.y);
+
+    GameplayInput stationaryPointer = initialize;
+    stationaryPointer.aimMotionDelta = Vec2{};
+    world.update(stationaryPointer, 1.0F / 60.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, beforeSwitch.x);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, beforeSwitch.y);
+
+    GameplayInput fire = stationaryPointer;
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    world.update(fire, 0.0F);
+    ASSERT_TRUE(world.shotFiredLastUpdate());
+
+    world.configureWeaponFire(*rifle.weaponUse);
+    world.update(fire, 0.0F);
+    EXPECT_TRUE(world.shotFiredLastUpdate());
+}
+
 TEST(GameplayWorldTest, SprintBlocksImmediateShotCreation)
 {
     GameplayWorld world;

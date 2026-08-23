@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@795b644` 已包含完整 Core Extraction Alpha、Survival Loadout 与 Combat 射击手感/表现收尾；PR #72 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/raid-fixed-map-variety-v1`，从干净的 `origin/main@795b644` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-fixed-map-variety-v1.md`。
+- `origin/main@a32c476` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾与固定地图差异化 v1；PR #73 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/fix-weapon-switch-reticle-continuity`，从干净的 `origin/main@a32c476` 创建。
+- 当前活动计划：`doc/exec-plans/active/combat-weapon-switch-reticle-continuity.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#72 已接受。当前里程碑进入 **Raid Pressure & Variety：固定地图差异化 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#72 与固定地图 PR #73 已接受。当前先处理 **Combat Reliability：武器切换准星连续性**；外部 GDD 继续只读，本仓库 ExecPlan 是该聚焦缺陷的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -27,7 +27,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#72 �
 12. **直接瞄准、距离散布与高速曳光 v2**：PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；验收加固进一步修复 Raid 装备拖放，分离真实随机散布半径与玩家可读准星半径，加粗准星/曳光，加入 Base/Raid 统一 Esc 暂停菜单，并把默认曳光长度收敛为 30px。精确 head CI 与用户正常游玩验收通过，以 merge commit `f593719` 进入 main。
 13. **动态散布模型与准星稳定性 v3**：PR #71 完成距离包络、四源 Bloom、走跑即时扩散、连续横向后坐力与准星—真实随机弹道权威半径统一；精确 head CI 和用户正常游玩验收通过，以 merge commit `33da892` 进入 main。
 14. **射击表现收尾**：PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main。
-15. **固定地图差异化 v1**：当前分支把单图 Deploy 扩展为 Base 可选择的三张固定地图；每图独立冻结出生/撤离、敌人、Loot 与障碍配置，不引入随机地图、情报、高危或新美术。
+15. **固定地图差异化 v1**：PR #73 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `a32c476` 进入 main。
+16. **武器切换准星连续性**：当前分支修复切换完成时重建 `WeaponAimState` 导致实际准星跳回输入锚点的问题；不改变武器参数、散布模型或存档。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -64,6 +65,13 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#72 �
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
 - PR #67～#71 的射击手感切片均已通过对应 CI 与用户正常游玩验收。PR #72 的 Windows Debug 全目标、79 项定向回归、788/788 CTest、exact-head CI 与用户验收均已完成，并以 `795b644` 进入 main。当前固定地图分支已完成 Windows Debug 全目标编译和 793/793 全量 CTest；开发代理未启动游戏。
+- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。当前准星连续性缺陷完成 Windows Debug 全目标重建，GameplayWorld/AlphaExtractionSession 99/99 与完整 CTest 795/795 通过；开发代理未启动游戏。
+
+## Combat 武器切换准星连续性当前实现
+
+- 武器切换仍重建新武器的 `WeaponFireState`，因此射击冷却和动态散布瞬态不会跨武器泄漏。
+- `WeaponAimState` 改为原位重配置武器参数，保留实际准星世界位置、相对输入锚点、控制速度与有界后坐力运动。
+- 该修复不改变 Profile、存档 schema、内容版本、输入键位、射击参数、命中解析、音频或资源 manifest。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 
