@@ -631,6 +631,43 @@ TEST(AlphaExtractionSessionTest, TimedSwitchUsesIndependentWeaponStateAndFireMod
         rifleDurabilityBefore);
 }
 
+TEST(AlphaExtractionSessionTest, TimedWeaponSwitchKeepsRelativeReticlePosition)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-switch-reticle"));
+    MultiWeaponLoadout loadout;
+    prepareMultiWeaponLoadout(session, loadout);
+    ASSERT_TRUE(session.deployAlpha(77126));
+
+    GameplayInput initializeAim{};
+    initializeAim.aimWorldPosition = Vec2{900.0F, 376.0F};
+    session.update(initializeAim, 0.0F);
+
+    GameplayInput moveReticle = initializeAim;
+    moveReticle.aimMotionDelta = Vec2{135.0F, -48.0F};
+    session.update(moveReticle, 1.0F / 60.0F);
+    const Vec2 beforeSwitch = session.world().weaponAimWorldPosition();
+    ASSERT_NE(beforeSwitch.x, initializeAim.aimWorldPosition->x);
+
+    GameplayInput selectPistol = initializeAim;
+    selectPistol.aimMotionDelta = Vec2{};
+    selectPistol.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    session.update(selectPistol, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+
+    GameplayInput holdAim = initializeAim;
+    holdAim.aimMotionDelta = Vec2{};
+    session.update(holdAim, 1.0F);
+
+    ASSERT_EQ(session.activeAlphaWeapon(), loadout.pistol);
+    EXPECT_FLOAT_EQ(
+        session.world().weaponAimWorldPosition().x,
+        beforeSwitch.x);
+    EXPECT_FLOAT_EQ(
+        session.world().weaponAimWorldPosition().y,
+        beforeSwitch.y);
+}
+
 TEST(AlphaExtractionSessionTest, SprintInterruptsWeaponSwitchWithoutChangingSlot)
 {
     GameSession session;

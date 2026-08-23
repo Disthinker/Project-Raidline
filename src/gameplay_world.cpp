@@ -1277,7 +1277,7 @@ void GameplayWorld::configureWeaponFire(
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition,
     const WeaponHandlingParameters &handling,
-    bool preserveTransientState)
+    bool preserveWeaponFireTransientState)
 {
     const WeaponFireConfig fireConfig{
         definition.shotIntervalSeconds,
@@ -1306,16 +1306,19 @@ void GameplayWorld::configureWeaponFire(
         handling.aimDownSightsDurationSeconds,
         definition.effectiveRange,
         definition.maximumRange};
-    if (preserveTransientState)
+    if (preserveWeaponFireTransientState)
     {
         weaponFire_.reconfigure(fireConfig);
-        weaponAim_.reconfigure(aimConfig);
     }
     else
     {
         weaponFire_ = WeaponFireState{fireConfig};
-        weaponAim_ = WeaponAimState{aimConfig};
     }
+    // A weapon change owns fire cadence and spread state, but it does not own
+    // the player's world-space aiming point. Reconfiguring the existing aim
+    // state keeps the relative-input anchor, displaced reticle position and
+    // any bounded recoil motion continuous across a completed switch.
+    weaponAim_.reconfigure(aimConfig);
     weaponBaseDamage_ = definition.baseDamage;
     weaponMaximumRange_ = definition.maximumRange;
     weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;

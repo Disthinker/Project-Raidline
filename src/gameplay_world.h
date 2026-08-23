@@ -206,7 +206,7 @@ public:
     void configureWeaponFire(
         const WeaponUseDefinition &definition,
         const WeaponHandlingParameters &handling,
-        bool preserveTransientState);
+        bool preserveWeaponFireTransientState);
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 
