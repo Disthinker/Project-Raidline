@@ -34,7 +34,8 @@ public:
     [[nodiscard]] bool continueGame();
 
     [[nodiscard]]
-    bool deploy() noexcept;
+    bool deploy(
+        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"}) noexcept;
 
     void updateBase(
         const BaseInput &input,

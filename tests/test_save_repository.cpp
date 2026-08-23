@@ -156,6 +156,24 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatInputContentVersion)
         *loaded.profile, publishedContentRegistry()).valid);
 }
 
+TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatBallisticsContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-raid-fixed-maps-content-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "combat-ballistics-content-8",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+}
+
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
 {
     ProfileState profile = makeNewAlphaProfile(

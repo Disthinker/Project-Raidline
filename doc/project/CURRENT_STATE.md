@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-21。
+最后核对：2026-08-23。
 
 ## Git 与交付基线
 
-- `origin/main@33da892` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 逻辑弹道、直接瞄准、动态散布、高速曳光、相对输入和 P0 音频；PR #71 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/combat-feedback-finish`，从干净的 `origin/main@33da892` 创建。
-- 当前活动计划：`doc/exec-plans/active/combat-shooting-feedback-finish.md`。
+- `origin/main@795b644` 已包含完整 Core Extraction Alpha、Survival Loadout 与 Combat 射击手感/表现收尾；PR #72 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/raid-fixed-map-variety-v1`，从干净的 `origin/main@795b644` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-fixed-map-variety-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#71 已接受。当前里程碑进入 **Combat：射击表现收尾**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#72 已接受。当前里程碑进入 **Raid Pressure & Variety：固定地图差异化 v1**；外部 GDD 继续只读，本仓库 ExecPlan 是该垂直切片的实施范围合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -26,7 +26,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#71 �
 11. **输入捕获、后坐力曲线与 P0 音频 v1**：PR #68 已通过 exact-head CI 与用户验收，以 merge commit `ba3375e` 进入 main。
 12. **直接瞄准、距离散布与高速曳光 v2**：PR #69 实现常规瞄准同帧直跟、准星移动/距离散布、内容弹速、超有效射程投影与纯短线曳光；验收加固进一步修复 Raid 装备拖放，分离真实随机散布半径与玩家可读准星半径，加粗准星/曳光，加入 Base/Raid 统一 Esc 暂停菜单，并把默认曳光长度收敛为 30px。精确 head CI 与用户正常游玩验收通过，以 merge commit `f593719` 进入 main。
 13. **动态散布模型与准星稳定性 v3**：PR #71 完成距离包络、四源 Bloom、走跑即时扩散、连续横向后坐力与准星—真实随机弹道权威半径统一；精确 head CI 和用户正常游玩验收通过，以 merge commit `33da892` 进入 main。
-14. **射击表现收尾**：当前分支为成功击发加入短促枪口焰、快速消散烟雾、柔边局部闪光和不影响瞄准/UI 的轻微世界画面抖动；明确不制作角色或枪械射击动画。Windows Debug 全目标、79 项定向回归和 788/788 全量 CTest 通过。
+14. **射击表现收尾**：PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main。
+15. **固定地图差异化 v1**：当前分支把单图 Deploy 扩展为 Base 可选择的三张固定地图；每图独立冻结出生/撤离、敌人、Loot 与障碍配置，不引入随机地图、情报、高危或新美术。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -41,7 +42,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#71 �
 ## 已接受的 Extraction Loop
 
 - `ProfileState::AssetRegistry` 在 Base、Deploy、Raid Loot 与 Settlement 全程唯一拥有资产；装备根、容器子资产、已安装弹匣和 Raid 地面位置均使用稳定实例 ID。
-- content v2 提供一张固定 Alpha 地图的 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽；每局冻结 6～9 个有效 Loot，PCG32 命名随机流结果写入 pending Raid 快照。
+- content v9 提供三张可选择的固定 Raid 地图；每图各有 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽与独立障碍。每局冻结 6～9 个有效 Loot，PCG32 命名随机流和所选 MapDefinitionId 写入 pending Raid 快照。
 - schema v2 保存当前 HP、弹匣有序弹药、枪膛、Settlement 幂等记录和最近 RaidResult，并能读取旧 pending Raid；新生产 Deploy 不再把运行中 pending Raid 覆盖到磁盘。schema v1 可显式迁移。
 - Base 与 Raid 共用按住拖拽库存交互；格子移动/交换/堆叠/配装均由领域预览和命令提交。Base 可将弹药拖到弹匣即时压弹、将弹匣拖到武器安装并按条件自动上膛；Raid 可拖动弹药到弹匣执行 0.2 秒/发的可中断压弹，也可拖动指定弹匣到武器并执行 2 秒换弹。
 - 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 保留为 Base 快速转移捷径；可穿戴物在对应栏位为空且领域查询合法时优先快速装备，否则沿用容器转移。
@@ -62,7 +63,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片与 Combat PR #66～#71 �
 - PR #64 的最终 exact-head Windows/Ubuntu CI 与用户正常游玩验收已通过并以 `4c16596` 合入 main。
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
-- PR #67 修订后通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `881c034` 合入 main。PR #68 完成相对输入、后坐力曲线与 P0 音频，经 exact-head CI 和用户验收后以 `ba3375e` 合入 main。PR #69 经多轮正常游玩验收、776/776 CTest 与最终 exact-head Windows/Ubuntu CI 后以 `f593719` 合入 main。PR #71 经 781/781 CTest、exact-head CI 与用户正常游玩验收后以 `33da892` 合入 main。当前射击表现收尾分支已完成 Windows Debug 全目标、79 项定向回归和 788/788 全量 CTest。开发代理未启动游戏。
+- PR #67～#71 的射击手感切片均已通过对应 CI 与用户正常游玩验收。PR #72 的 Windows Debug 全目标、79 项定向回归、788/788 CTest、exact-head CI 与用户验收均已完成，并以 `795b644` 进入 main。当前固定地图分支已完成 Windows Debug 全目标编译和 793/793 全量 CTest；开发代理未启动游戏。
 
 ## Combat 逻辑弹道与落点反馈 v1 当前实现
 

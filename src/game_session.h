@@ -145,7 +145,9 @@ public:
     [[nodiscard]] bool startNewProfile(std::string profileId);
     [[nodiscard]] bool continueProfile();
 
-    [[nodiscard]] bool deployAlpha(std::uint64_t seed);
+    [[nodiscard]] bool deployAlpha(
+        std::uint64_t seed,
+        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"});
     [[nodiscard]] bool activeQuitAlphaRaid();
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,

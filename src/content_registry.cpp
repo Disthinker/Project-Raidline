@@ -1126,8 +1126,37 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map definition ID must use the map namespace");
             }
 
+            definition.displayName =
+                requiredString(mapValue, "display_name");
+            definition.routeProfile =
+                requiredString(mapValue, "route_profile");
+            if (definition.displayName.empty() ||
+                definition.routeProfile.empty())
+            {
+                fail("map display metadata must not be empty");
+            }
+
             definition.backgroundTexturePath =
                 requiredString(mapValue, "background_texture");
+            const Json &backgroundTint =
+                requiredObject(mapValue, "background_tint");
+            if (!backgroundTint.contains("red") ||
+                !backgroundTint.contains("green") ||
+                !backgroundTint.contains("blue"))
+            {
+                fail("map background tint requires red, green, and blue");
+            }
+            const std::uint32_t red = optionalUint(backgroundTint, "red");
+            const std::uint32_t green = optionalUint(backgroundTint, "green");
+            const std::uint32_t blue = optionalUint(backgroundTint, "blue");
+            if (red > 255U || green > 255U || blue > 255U)
+            {
+                fail("map background tint channel exceeds 255");
+            }
+            definition.backgroundTint = ContentColor{
+                static_cast<std::uint8_t>(red),
+                static_cast<std::uint8_t>(green),
+                static_cast<std::uint8_t>(blue)};
             requirePublishedResource(
                 resources,
                 definition.backgroundTexturePath,
@@ -1313,10 +1342,10 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 if (definition.spawnExtractionPairs.size() != 3 ||
                     definition.raidEnemyDeploymentIds.size() != 3 ||
-                    definition.raidLootSlots.size() < 8 ||
+                    definition.raidLootSlots.size() < 9 ||
                     definition.raidLootSlots.size() > 12)
                 {
-                    fail("Alpha map configuration counts are invalid");
+                    fail("Raid map configuration counts are invalid");
                 }
                 std::set<std::string> pairIds;
                 for (const SpawnExtractionPairDefinition &pair :
@@ -1326,7 +1355,7 @@ ContentRegistry ContentRegistry::fromJson(
                         !pointInside(pair.playerSpawn, definition.walkableBounds) ||
                         !rectInside(pair.extractionPoint, definition.walkableBounds))
                     {
-                        fail("Alpha spawn/extraction pair is invalid");
+                        fail("Raid spawn/extraction pair is invalid");
                     }
                 }
                 std::set<std::string> routes;
@@ -1338,14 +1367,14 @@ ContentRegistry ContentRegistry::fromJson(
                     if (slot.id.empty() || !slotIds.insert(slot.id).second ||
                         !pointInside(slot.position, definition.walkableBounds))
                     {
-                        fail("Alpha Raid Loot slot is invalid");
+                        fail("Raid Loot slot is invalid");
                     }
                 }
                 if (!routes.contains("central") ||
                     !routes.contains("perimeter") ||
                     !routes.contains("resource"))
                 {
-                    fail("Alpha Raid Loot slots do not cover every route");
+                    fail("Raid Loot slots do not cover every route");
                 }
                 for (const EnemyDeploymentDefinitionId &id :
                      definition.raidEnemyDeploymentIds)
@@ -1355,7 +1384,7 @@ ContentRegistry ContentRegistry::fromJson(
                     if (alphaDeployment.enemies.size() < 4 ||
                         alphaDeployment.enemies.size() > 6)
                     {
-                        fail("Alpha enemy deployment must contain 4 to 6 enemies");
+                        fail("Raid enemy deployment must contain 4 to 6 enemies");
                     }
                     for (const EnemySpawnDefinition &enemy :
                          alphaDeployment.enemies)
@@ -1367,14 +1396,14 @@ ContentRegistry ContentRegistry::fromJson(
                                 enemyBounds,
                                 definition.walkableBounds))
                         {
-                            fail("Alpha enemy deployment is outside map bounds");
+                            fail("Raid enemy deployment is outside map bounds");
                         }
                         for (const BallisticBlockerDefinition &blocker :
                              definition.ballisticBlockers)
                         {
                             if (rectsOverlap(enemyBounds, blocker.bounds))
                             {
-                                fail("Alpha enemy deployment overlaps a ballistic blocker");
+                                fail("Raid enemy deployment overlaps a ballistic blocker");
                             }
                         }
                     }

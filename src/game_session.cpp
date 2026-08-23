@@ -256,9 +256,12 @@ bool GameSession::continueProfile()
     return true;
 }
 
-bool GameSession::deployAlpha(std::uint64_t seed)
+bool GameSession::deployAlpha(
+    std::uint64_t seed,
+    MapDefinitionId mapDefinitionId)
 {
-    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0)
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
+        mapDefinitionId.value().empty())
     {
         return false;
     }
@@ -275,7 +278,7 @@ bool GameSession::deployAlpha(std::uint64_t seed)
             raidId,
             settlementId,
             seed,
-            MapDefinitionId{"map.v0.test"}},
+            std::move(mapDefinitionId)},
         CommandContext{
             profile_.revision,
             "deploy:" + raidId});

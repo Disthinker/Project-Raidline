@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -62,11 +63,35 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "combat-ballistics-content-8");
+    EXPECT_EQ(registry.contentVersion(), "raid-fixed-maps-content-9");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
-    ASSERT_EQ(registry.enemyDeployments().size(), 4U);
-    ASSERT_EQ(registry.maps().size(), 1U);
+    ASSERT_EQ(registry.enemyDeployments().size(), 10U);
+    ASSERT_EQ(registry.maps().size(), 3U);
+
+    std::set<MapDefinitionId> mapIds;
+    std::set<EnemyDeploymentDefinitionId> raidDeploymentIds;
+    for (const MapDefinition &publishedMap : registry.maps())
+    {
+        EXPECT_FALSE(publishedMap.displayName.empty());
+        EXPECT_FALSE(publishedMap.routeProfile.empty());
+        EXPECT_GT(publishedMap.backgroundTint.red, 0U);
+        EXPECT_GT(publishedMap.backgroundTint.green, 0U);
+        EXPECT_GT(publishedMap.backgroundTint.blue, 0U);
+        EXPECT_EQ(publishedMap.spawnExtractionPairs.size(), 3U);
+        EXPECT_EQ(publishedMap.raidEnemyDeploymentIds.size(), 3U);
+        EXPECT_EQ(publishedMap.raidLootSlots.size(), 10U);
+        EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
+        for (const EnemyDeploymentDefinitionId &deploymentId :
+             publishedMap.raidEnemyDeploymentIds)
+        {
+            EXPECT_TRUE(raidDeploymentIds.insert(deploymentId).second);
+        }
+    }
+    EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.v0.test"}));
+    EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.riverside"}));
+    EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.industrial"}));
+    EXPECT_EQ(raidDeploymentIds.size(), 9U);
 
     const ItemDefinition &ammunition = registry.item(
         ItemDefinitionId{"item.ammunition.9mm_basic"});
@@ -182,6 +207,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     const MapDefinition &map = defaultV0MapDefinition();
     EXPECT_EQ(map.id.value(), "map.v0.test");
+    EXPECT_EQ(map.displayName, "Greyline Depot");
     EXPECT_FLOAT_EQ(map.worldSize.x, 1280.0F);
     EXPECT_FLOAT_EQ(map.worldSize.y, 720.0F);
     EXPECT_FLOAT_EQ(map.playerSpawn.x, 640.0F);
@@ -403,6 +429,17 @@ TEST(ContentRegistryTest, RejectsUnknownMapDefinitionReference)
         publishedJsonCopy(),
         "\"enemy_deployment\": \"enemy_deployment.v0.default\"",
         "\"enemy_deployment\": \"enemy_deployment.v0.missing\"");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsOutOfRangeMapBackgroundTint)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"background_tint\": {\"red\": 255",
+        "\"background_tint\": {\"red\": 256");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

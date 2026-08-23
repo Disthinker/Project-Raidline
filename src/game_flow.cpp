@@ -55,7 +55,7 @@ bool GameFlow::continueGame()
     return true;
 }
 
-bool GameFlow::deploy() noexcept
+bool GameFlow::deploy(MapDefinitionId mapDefinitionId) noexcept
 {
     if (state_ != GameFlowState::Base)
     {
@@ -70,7 +70,7 @@ bool GameFlow::deploy() noexcept
         {
             seed = 1;
         }
-        if (!gameSession_.deployAlpha(seed))
+        if (!gameSession_.deployAlpha(seed, std::move(mapDefinitionId)))
         {
             return false;
         }

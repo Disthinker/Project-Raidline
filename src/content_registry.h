@@ -51,6 +51,13 @@ struct ContentGridSize
     int height{};
 };
 
+struct ContentColor
+{
+    std::uint8_t red{255};
+    std::uint8_t green{255};
+    std::uint8_t blue{255};
+};
+
 struct ContentRect
 {
     Vec2 position{};
@@ -100,7 +107,10 @@ struct BallisticBlockerDefinition
 struct MapDefinition
 {
     MapDefinitionId id;
+    std::string displayName;
+    std::string routeProfile;
     std::string backgroundTexturePath;
+    ContentColor backgroundTint;
     Vec2 worldSize{};
     ContentRect walkableBounds;
     Vec2 playerSpawn{};
