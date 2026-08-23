@@ -67,6 +67,28 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_FLOAT_EQ(
         session.world().player().position().y,
         session.profile().pendingRaid->playerSpawn.y);
+    EXPECT_TRUE(session.world().emergencyExtractionPoint().has_value());
+    EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
+    EXPECT_EQ(
+        session.profile().pendingRaid->rulesVersion,
+        "raid-pressure-1");
+}
+
+TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-high-risk"));
+    ASSERT_TRUE(session.deployAlpha(
+        77234, MapDefinitionId{"map.v0.test"}));
+
+    session.world().update(GameplayInput{}, 180.5F);
+
+    EXPECT_EQ(session.state(), GameSessionState::InRaid);
+    EXPECT_TRUE(session.profile().pendingRaid.has_value());
+    EXPECT_TRUE(session.world().raidSession().isActive());
+    EXPECT_EQ(session.world().raidSession().phase(), RaidPhase::HighRisk);
+    EXPECT_FALSE(session.world().raidSession().normalExtractionOpen());
+    EXPECT_TRUE(session.world().raidSession().emergencyExtractionOpen());
 }
 
 void equip(GameSession &session, AssetInstanceId id, EquipmentSlotKind slot,
@@ -218,7 +240,8 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
     EXPECT_EQ(session.world().player().maxHealth(), 100);
     EXPECT_EQ(session.world().player().health(), 100);
-    EXPECT_FLOAT_EQ(session.world().raidSession().raidTimeRemaining(), 0.0F);
+    EXPECT_FLOAT_EQ(session.world().raidSession().raidTimeRemaining(), 180.0F);
+    EXPECT_EQ(session.world().raidSession().phase(), RaidPhase::Regular);
     EXPECT_GE(session.profile().pendingRaid->loot.size(), 6U);
     EXPECT_LE(session.profile().pendingRaid->loot.size(), 9U);
 

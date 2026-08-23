@@ -315,15 +315,41 @@ bool GameSession::deployAlpha(
                 static_cast<BallisticBlockerId>(index + 1U),
                 Rect{definition.bounds.position, definition.bounds.size}});
         }
-        candidateWorld = std::make_unique<GameplayWorld>(RaidWorldConfig{
-            map.worldSize,
-            snapshot.playerSpawn,
-            snapshot.extractionPoint,
-            std::move(enemies),
-            100,
-            candidate.currentHealth,
-            true,
-            std::move(blockers)});
+        std::vector<EnemySpawn> pressureSpawns;
+        pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
+        for (const EnemySpawnDefinition &spawn :
+             map.highRisk.pressureSpawns)
+        {
+            pressureSpawns.push_back(EnemySpawn{
+                spawn.position,
+                spawn.size,
+                spawn.maximumHealth});
+        }
+
+        RaidWorldConfig worldConfig;
+        worldConfig.worldSize = map.worldSize;
+        worldConfig.playerSpawn = snapshot.playerSpawn;
+        worldConfig.extractionPoint = snapshot.extractionPoint;
+        worldConfig.initialEnemies = std::move(enemies);
+        worldConfig.playerMaximumHealth = 100;
+        worldConfig.playerCurrentHealth = candidate.currentHealth;
+        worldConfig.deferPlayerDamageResolution = true;
+        worldConfig.ballisticBlockers = std::move(blockers);
+        worldConfig.normalExtractionDurationSeconds =
+            map.raidRules.extractionDurationSeconds;
+        worldConfig.highRisk = HighRiskWorldConfig{
+            map.highRisk.enabled,
+            map.highRisk.regularPhaseDurationSeconds,
+            map.highRisk.emergencyExtractionPoint,
+            map.highRisk.emergencyExtractionDurationSeconds,
+            map.highRisk.initialWaveDelaySeconds,
+            map.highRisk.waveIntervalSeconds,
+            map.highRisk.waveSize,
+            map.highRisk.activeEnemyCap,
+            std::move(pressureSpawns),
+            snapshot.seed};
+        candidateWorld =
+            std::make_unique<GameplayWorld>(std::move(worldConfig));
     }
     catch (const std::exception &error)
     {

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-fixed-maps-content-9",
+  "content_version": "raid-pressure-content-10",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -608,6 +608,21 @@
         "duration_seconds": 180,
         "extraction_duration_seconds": 3
       },
+      "high_risk": {
+        "regular_phase_duration_seconds": 180,
+        "emergency_extraction_point": {"position": {"x": 960, "y": 520}, "size": {"x": 170, "y": 130}},
+        "emergency_extraction_duration_seconds": 12,
+        "initial_wave_delay_seconds": 3,
+        "wave_interval_seconds": 15,
+        "wave_size": 2,
+        "active_enemy_cap": 8,
+        "pressure_spawns": [
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        ]
+      },
       "storage_loot_table": "loot.storage_cabinet.default",
       "enemy_deployment": "enemy_deployment.v0.default",
       "spawn_extraction_pairs": [
@@ -653,6 +668,21 @@
       "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
       "extraction_point": {"position": {"x": 1080, "y": 520}, "size": {"x": 150, "y": 140}},
       "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "high_risk": {
+        "regular_phase_duration_seconds": 180,
+        "emergency_extraction_point": {"position": {"x": 540, "y": 300}, "size": {"x": 170, "y": 130}},
+        "emergency_extraction_duration_seconds": 12,
+        "initial_wave_delay_seconds": 3,
+        "wave_interval_seconds": 15,
+        "wave_size": 2,
+        "active_enemy_cap": 8,
+        "pressure_spawns": [
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        ]
+      },
       "storage_loot_table": "loot.storage_cabinet.default",
       "enemy_deployment": "enemy_deployment.riverside.crossroads",
       "spawn_extraction_pairs": [
@@ -698,6 +728,21 @@
       "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
       "extraction_point": {"position": {"x": 1090, "y": 40}, "size": {"x": 140, "y": 130}},
       "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "high_risk": {
+        "regular_phase_duration_seconds": 180,
+        "emergency_extraction_point": {"position": {"x": 760, "y": 500}, "size": {"x": 170, "y": 130}},
+        "emergency_extraction_duration_seconds": 12,
+        "initial_wave_delay_seconds": 3,
+        "wave_interval_seconds": 15,
+        "wave_size": 2,
+        "active_enemy_cap": 8,
+        "pressure_spawns": [
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        ]
+      },
       "storage_loot_table": "loot.storage_cabinet.default",
       "enemy_deployment": "enemy_deployment.industrial.center_hold",
       "spawn_extraction_pairs": [

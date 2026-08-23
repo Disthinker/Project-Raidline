@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@a32c476` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾与固定地图差异化 v1；PR #73 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/fix-weapon-switch-reticle-continuity`，从干净的 `origin/main@a32c476` 创建。
-- 当前活动计划：`doc/exec-plans/active/combat-weapon-switch-reticle-continuity.md`。
+- `origin/main@6138da8` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾、固定地图差异化 v1 与武器切换准星连续性修复；PR #74 已通过精确 head CI 和用户正常游玩验收后合入。
+- 当前开发分支：`codex/raid-continuous-high-risk-v1`，从干净的 `origin/main@6138da8` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-continuous-high-risk-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#72 与固定地图 PR #73 已接受。当前先处理 **Combat Reliability：武器切换准星连续性**；外部 GDD 继续只读，本仓库 ExecPlan 是该聚焦缺陷的实施范围合同。
+Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与固定地图 PR #73 已接受。当前进入 **Raid Pressure & Variety：持续高危阶段 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个有界压力与紧急撤离范围。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -28,7 +28,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#72 与
 13. **动态散布模型与准星稳定性 v3**：PR #71 完成距离包络、四源 Bloom、走跑即时扩散、连续横向后坐力与准星—真实随机弹道权威半径统一；精确 head CI 和用户正常游玩验收通过，以 merge commit `33da892` 进入 main。
 14. **射击表现收尾**：PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main。
 15. **固定地图差异化 v1**：PR #73 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `a32c476` 进入 main。
-16. **武器切换准星连续性**：当前分支修复切换完成时重建 `WeaponAimState` 导致实际准星跳回输入锚点的问题；不改变武器参数、散布模型或存档。
+16. **武器切换准星连续性**：PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main。
+17. **持续高危阶段 v1**：当前分支建立 `Regular → HighRisk` 生命周期、普通撤离一次宽限、地图定义的信号紧急撤离和有上限的感染者压力补入；不扩张到随机危机、情报、停电/火灾或新资源。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -48,7 +49,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#72 与
 - Base 与 Raid 共用按住拖拽库存交互；格子移动/交换/堆叠/配装均由领域预览和命令提交。Base 可将弹药拖到弹匣即时压弹、将弹匣拖到武器安装并按条件自动上膛；Raid 可拖动弹药到弹匣执行 0.2 秒/发的可中断压弹，也可拖动指定弹匣到武器并执行 2 秒换弹。
 - 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 保留为 Base 快速转移捷径；可穿戴物在对应栏位为空且领域查询合法时优先快速装备，否则沿用容器转移。
 - 玩家为 100 HP；Medkit 每件 3 次、每次恢复最多 30 HP，Raid 内治疗 5 秒且中断不消耗。
-- Alpha Raid 无硬时限；E 拾取真实 Loot，随身库存可移动和整理，打开时禁止射击/换弹/开始治疗但允许普通移动。
+- 生产 Raid 的常规阶段为 180 秒；归零只进入无终局倒计时的持续高危，不产生时间失败。E 拾取真实 Loot，随身库存可移动和整理，打开时禁止射击/换弹/开始治疗但允许普通移动。
 - 3 秒撤离成功保留合法随身资产与 HP；死亡和主动放弃全损并恢复 100 HP。关闭程序或异常退出不会结算，重开后加载出击前的完整 Profile；正式成功/失败结果仍使用唯一 Settlement ID 幂等提交。
 - Raid 世界支持 Shift 奔跑，速度为普通移动的 1.5 倍；当前不引入耐力条、负重或复杂移动消耗。
 - RaidResult 显示结果、成功带回物和货币变化；失败不生成丢失物清单。生产 Alpha 路径不再使用 V0 柜体、无限弹或 Timeout 结算。
@@ -65,7 +66,14 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#72 与
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
 - PR #67～#71 的射击手感切片均已通过对应 CI 与用户正常游玩验收。PR #72 的 Windows Debug 全目标、79 项定向回归、788/788 CTest、exact-head CI 与用户验收均已完成，并以 `795b644` 进入 main。当前固定地图分支已完成 Windows Debug 全目标编译和 793/793 全量 CTest；开发代理未启动游戏。
-- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。当前准星连续性缺陷完成 Windows Debug 全目标重建，GameplayWorld/AlphaExtractionSession 99/99 与完整 CTest 795/795 通过；开发代理未启动游戏。
+- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。PR #74 通过 795/795、exact-head CI 与用户验收后以 `6138da8` 进入 main。当前高危切片已完成 Windows Debug 全目标与 807/807 CTest；exact-head CI 和用户正常游玩验收尚待提交后执行，开发代理不会启动游戏。
+
+## Raid 持续高危阶段 v1 当前实现
+
+- `RaidSession` 唯一拥有常规/高危阶段、普通/信号撤离路线、一次普通撤离宽限和无终局倒计时状态；时间归零不能产生 Settlement 失败。
+- content v10 为三张固定图定义 180 秒常规阶段、12 秒信号撤离、压力出生点、首波/间隔、单波数量与活动敌人上限；schema v6 显式兼容读取 v9 存档。
+- `GameplayWorld` 按冻结 map ID 与 seed 稳定轮转出生点，跳过玩家附近、活敌占用或障碍位置；新敌人使用单调非零 `CombatTargetId`，同时存活上限为 8。
+- App 只读显示 30 秒预警、普通撤离关闭、持续高危、信号撤离进度和当前压力；所有区域当前仍为代码 fallback，不修改资源 manifest。
 
 ## Combat 武器切换准星连续性当前实现
 

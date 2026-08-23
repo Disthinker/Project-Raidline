@@ -520,7 +520,8 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "survival-loadout-content-5" ||
                contentVersion == "combat-aim-content-6" ||
                contentVersion == "combat-input-content-7" ||
-               contentVersion == "combat-ballistics-content-8"));
+               contentVersion == "combat-ballistics-content-8" ||
+               contentVersion == "raid-fixed-maps-content-9"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6) ||

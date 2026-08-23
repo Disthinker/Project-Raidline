@@ -5,6 +5,24 @@
 
 #include "raid_session.h"
 
+namespace
+{
+RaidSessionConfig highRiskConfig(
+    float regularDuration = 5.0F,
+    float normalExtractionDuration = 3.0F,
+    float emergencyExtractionDuration = 4.0F)
+{
+    return RaidSessionConfig{
+        0.0F,
+        normalExtractionDuration,
+        false,
+        HighRiskRaidSessionConfig{
+            true,
+            regularDuration,
+            emergencyExtractionDuration}};
+}
+}
+
 TEST(RaidSessionTest, RejectsInvalidDurations)
 {
     EXPECT_THROW(
@@ -22,6 +40,19 @@ TEST(RaidSessionTest, RejectsInvalidDurations)
         (void)RaidSession(RaidSessionConfig{
             180.0F,
             std::numeric_limits<float>::quiet_NaN()}),
+        std::invalid_argument);
+    EXPECT_THROW(
+        (void)RaidSession(RaidSessionConfig{
+            180.0F,
+            3.0F,
+            true,
+            HighRiskRaidSessionConfig{true, 5.0F, 4.0F}}),
+        std::invalid_argument);
+    EXPECT_THROW(
+        (void)RaidSession(highRiskConfig(0.0F)),
+        std::invalid_argument);
+    EXPECT_THROW(
+        (void)RaidSession(highRiskConfig(5.0F, 3.0F, 0.0F)),
         std::invalid_argument);
 }
 
@@ -86,6 +117,79 @@ TEST(RaidSessionTest, NoHardTimeLimitNeverTimesOutAndStillExtracts)
     session.update(3.0F, true);
     EXPECT_EQ(session.state(), RaidSessionState::Extracted);
     EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
+TEST(RaidSessionTest, RegularTimeTransitionsToContinuousHighRiskWithoutFailure)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+
+    session.update(5.0F, false, false);
+
+    EXPECT_EQ(session.phase(), RaidPhase::HighRisk);
+    EXPECT_TRUE(session.enteredHighRiskLastUpdate());
+    EXPECT_TRUE(session.isActive());
+    EXPECT_FALSE(session.isTerminal());
+    EXPECT_FLOAT_EQ(session.raidTimeRemaining(), 0.0F);
+    EXPECT_FALSE(session.normalExtractionOpen());
+    EXPECT_TRUE(session.emergencyExtractionOpen());
+
+    session.update(10000.0F, false, false);
+    EXPECT_EQ(session.phase(), RaidPhase::HighRisk);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(session.highRiskTimeElapsed(), 10000.0F);
+}
+
+TEST(RaidSessionTest, HighRiskClosesNormalExtractionAndOpensEmergencySignal)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+    session.update(5.0F, false, false);
+
+    session.update(1.0F, true, false);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::None);
+
+    session.update(4.0F, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+    EXPECT_EQ(
+        session.extractionRoute(),
+        RaidExtractionRoute::EmergencySignal);
+    EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
+TEST(RaidSessionTest, NormalExtractionStartedBeforeHighRiskGetsOneCompletionGrace)
+{
+    RaidSession session{highRiskConfig(5.0F, 6.0F, 4.0F)};
+    ASSERT_TRUE(session.start());
+
+    session.update(4.0F, true, false);
+    ASSERT_EQ(session.state(), RaidSessionState::Extracting);
+    session.update(2.0F, true, false);
+
+    EXPECT_EQ(session.phase(), RaidPhase::HighRisk);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::Normal);
+    EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
+TEST(RaidSessionTest, InterruptedNormalGraceCannotRestartDuringHighRisk)
+{
+    RaidSession session{highRiskConfig(5.0F, 6.0F, 4.0F)};
+    ASSERT_TRUE(session.start());
+
+    session.update(4.0F, true, false);
+    session.update(1.0F, true, false);
+    ASSERT_EQ(session.phase(), RaidPhase::HighRisk);
+    ASSERT_TRUE(session.normalExtractionGraceActive());
+
+    session.update(0.0F, false, false);
+    EXPECT_FALSE(session.normalExtractionGraceActive());
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+
+    session.update(10.0F, true, false);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::None);
 }
 
 TEST(RaidSessionTest, EnteringStartsContinuousExtraction)

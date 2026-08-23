@@ -25,12 +25,12 @@
 | RL-COMBAT-007 | 常规瞄准仍有惯性、散布缺少移准/近距曲线、旧曳光像慢速实体弹 | PR #69 已完成 Direct/高倍模式分离、移准与距离包络、4200/7200 逻辑弹速和纯短线曳光，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
 | RL-COMBAT-008 | 距离遮蔽动态扩散、组合输入闪动，以及 App 可读准星大于真实随机弹道范围 | PR #71 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `33da892` 进入 main |
 | RL-COMBAT-009 | 成功击发缺少短烟、柔边局部闪光和不影响瞄准的轻微屏幕抖动 | PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main |
-| RL-COMBAT-010 | 完成武器切换时重建 WeaponAimState，导致实际准星跳回相对输入锚点 | `codex/fix-weapon-switch-reticle-continuity` 已改为只重置新武器射击瞬态、原位重配置准星状态；本地 795/795 通过，等待 CI 与用户验收 |
+| RL-COMBAT-010 | 完成武器切换时重建 WeaponAimState，导致实际准星跳回相对输入锚点 | PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | Base/Raid 已正确显示角色且左右移动复用六帧资源；上下移动和静止仍用静态图，正式补全延期 |
 
 ## 需要未来产品决策
 
-- 无终局倒计时下的长期持续高危压力。
+- 持续高危 v1 已冻结为有上限感染者补入与信号撤离；随机危机池、停电/火灾、路线封锁和高危高级资源仍需后续独立范围合同。
 - 高倍率光学视野的正式镜片表现和具体倍镜内容；基础准星与开镜合同已由当前切片冻结。
 - 完整产品早/中/后期目标、结束条件和长期基地路线。
 - 灾难成因、主叙事责任链和正式世界观包装。
@@ -67,6 +67,7 @@
 | Combat：动态散布模型与准星稳定性 v3 | PR #71 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `33da892` 进入 main |
 | Combat：射击表现收尾 | PR #72 已通过 CI 与用户验收，以 merge commit `795b644` 进入 main |
 | Raid Pressure & Variety：固定地图差异化 v1 | PR #73 已通过 exact-head CI 与用户验收，以 merge commit `a32c476` 进入 main；随机地图、情报、高危和正式地图美术仍延期 |
-| Combat Reliability：武器切换准星连续性 | 当前分支已完成 simulation/session 双层修复和本地 795/795 CTest；等待 CI 与用户正常游玩验收 |
+| Combat Reliability：武器切换准星连续性 | PR #74 已通过 exact-head CI 与用户验收，以 merge commit `6138da8` 进入 main |
+| Raid Pressure & Variety：持续高危阶段 v1 | 当前分支实现 180 秒常规阶段、普通撤离宽限、12 秒信号撤离与活动敌人上限 8；Windows Debug 全目标与 807/807 CTest 已通过，等待 CI 与用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/combat-weapon-switch-reticle-continuity.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-continuous-high-risk-v1.md`。

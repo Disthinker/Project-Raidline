@@ -131,6 +131,36 @@ namespace
         }
         return false;
     }
+
+    RaidWorldConfig makeHighRiskWorldConfig(
+        std::uint64_t seed = 7U)
+    {
+        RaidWorldConfig config;
+        config.worldSize = Vec2{1280.0F, 720.0F};
+        config.playerSpawn = Vec2{600.0F, 320.0F};
+        config.extractionPoint =
+            ContentRect{Vec2{1000.0F, 560.0F}, Vec2{120.0F, 100.0F}};
+        config.initialEnemies.clear();
+        config.playerMaximumHealth = 100;
+        config.playerCurrentHealth = 100;
+        config.deferPlayerDamageResolution = true;
+        config.highRisk = HighRiskWorldConfig{
+            true,
+            0.10F,
+            ContentRect{Vec2{560.0F, 280.0F}, Vec2{180.0F, 160.0F}},
+            0.50F,
+            0.05F,
+            0.10F,
+            2U,
+            3U,
+            {
+                EnemySpawn{Vec2{20.0F, 20.0F}, Vec2{50.0F, 50.0F}, 12},
+                EnemySpawn{Vec2{1210.0F, 20.0F}, Vec2{50.0F, 50.0F}, 12},
+                EnemySpawn{Vec2{20.0F, 650.0F}, Vec2{50.0F, 50.0F}, 12},
+                EnemySpawn{Vec2{1210.0F, 650.0F}, Vec2{50.0F, 50.0F}, 12}},
+            seed};
+        return config;
+    }
 } // namespace
 
 // 初始 Player 位置是 (640, 360)
@@ -2778,4 +2808,95 @@ TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)
     EXPECT_FLOAT_EQ(
         world.player().position().y,
         activePosition.y);
+}
+
+TEST(GameplayWorldRaidTest, HighRiskPressureIsDeterministicAndCapped)
+{
+    GameplayWorld first{makeHighRiskWorldConfig(11U)};
+    GameplayWorld second{makeHighRiskWorldConfig(11U)};
+
+    first.update(GameplayInput{}, 0.16F);
+    second.update(GameplayInput{}, 0.16F);
+
+    ASSERT_EQ(first.raidSession().phase(), RaidPhase::HighRisk);
+    ASSERT_EQ(first.highRiskPressureWaveCount(), 1U);
+    ASSERT_EQ(first.aliveEnemyCount(), 2U);
+    ASSERT_EQ(first.enemies().size(), second.enemies().size());
+    for (std::size_t index = 0U; index < first.enemies().size(); ++index)
+    {
+        EXPECT_EQ(
+            first.enemies()[index].combatTargetId(),
+            second.enemies()[index].combatTargetId());
+        EXPECT_FLOAT_EQ(
+            first.enemies()[index].position().x,
+            second.enemies()[index].position().x);
+        EXPECT_FLOAT_EQ(
+            first.enemies()[index].position().y,
+            second.enemies()[index].position().y);
+    }
+
+    first.update(GameplayInput{}, 0.20F);
+    EXPECT_EQ(first.aliveEnemyCount(), 3U);
+    EXPECT_EQ(first.highRiskPressureWaveCount(), 2U);
+    EXPECT_EQ(first.highRiskActiveEnemyCap(), 3U);
+}
+
+TEST(GameplayWorldRaidTest, HighRiskPressureSkipsNearAndOccupiedSpawns)
+{
+    RaidWorldConfig config = makeHighRiskWorldConfig(0U);
+    config.highRisk.pressureSpawns[0].position = Vec2{610.0F, 330.0F};
+    config.initialEnemies = {config.highRisk.pressureSpawns[1]};
+    GameplayWorld world{std::move(config)};
+
+    world.update(GameplayInput{}, 0.16F);
+
+    ASSERT_EQ(world.aliveEnemyCount(), 3U);
+    ASSERT_EQ(world.highRiskPressureWaveCount(), 1U);
+    const Vec2 playerCenter{
+        world.player().position().x + world.player().size() * 0.5F,
+        world.player().position().y + world.player().size() * 0.5F};
+    std::vector<CombatTargetId> ids;
+    for (const Enemy &enemy : world.enemies())
+    {
+        EXPECT_NE(enemy.combatTargetId(), kInvalidCombatTargetId);
+        if (enemy.combatTargetId() > 1U)
+        {
+            const Vec2 center{
+                enemy.position().x + enemy.size().x * 0.5F,
+                enemy.position().y + enemy.size().y * 0.5F};
+            EXPECT_GT(
+                std::hypot(
+                    center.x - playerCenter.x,
+                    center.y - playerCenter.y),
+                200.0F);
+        }
+        ids.push_back(enemy.combatTargetId());
+    }
+    std::sort(ids.begin(), ids.end());
+    EXPECT_EQ(std::adjacent_find(ids.begin(), ids.end()), ids.end());
+}
+
+TEST(GameplayWorldRaidTest, HighRiskEmergencySignalExtractionCompletes)
+{
+    RaidWorldConfig config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    GameplayWorld world{std::move(config)};
+
+    world.update(GameplayInput{}, 0.11F);
+    ASSERT_EQ(world.raidSession().phase(), RaidPhase::HighRisk);
+    ASSERT_TRUE(world.raidSession().emergencyExtractionOpen());
+    ASSERT_FALSE(world.raidSession().normalExtractionOpen());
+
+    world.update(GameplayInput{}, 0.0F);
+    ASSERT_EQ(
+        world.raidSession().extractionRoute(),
+        RaidExtractionRoute::EmergencySignal);
+    ASSERT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::Extracting);
+
+    world.update(GameplayInput{}, 0.50F);
+    EXPECT_EQ(
+        world.raidSession().state(),
+        RaidSessionState::Extracted);
 }

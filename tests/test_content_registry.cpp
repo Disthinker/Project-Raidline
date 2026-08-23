@@ -63,7 +63,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "raid-fixed-maps-content-9");
+    EXPECT_EQ(registry.contentVersion(), "raid-pressure-content-10");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 2U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -81,6 +81,16 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.spawnExtractionPairs.size(), 3U);
         EXPECT_EQ(publishedMap.raidEnemyDeploymentIds.size(), 3U);
         EXPECT_EQ(publishedMap.raidLootSlots.size(), 10U);
+        EXPECT_TRUE(publishedMap.highRisk.enabled);
+        EXPECT_FLOAT_EQ(
+            publishedMap.highRisk.regularPhaseDurationSeconds,
+            180.0F);
+        EXPECT_FLOAT_EQ(
+            publishedMap.highRisk.emergencyExtractionDurationSeconds,
+            12.0F);
+        EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
+        EXPECT_EQ(publishedMap.highRisk.activeEnemyCap, 8U);
+        EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
              publishedMap.raidEnemyDeploymentIds)
@@ -475,6 +485,42 @@ TEST(ContentRegistryTest, RejectsEnemySpawnInsideBallisticBlocker)
         "{\"id\": \"central_barrier\", \"bounds\": {\"position\": {\"x\": 650, \"y\": 330}, \"size\": {\"x\": 50, \"y\": 50}}}");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsHighRiskWaveLargerThanActiveCap)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"active_enemy_cap\": 8",
+        "\"active_enemy_cap\": 1");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsHighRiskCapBelowInitialDeployment)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"active_enemy_cap\": 8",
+        "\"active_enemy_cap\": 3");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsHighRiskEmergencyExtractionOutsideMap)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"emergency_extraction_point\": {\"position\": {\"x\": 960, \"y\": 520}",
+        "\"emergency_extraction_point\": {\"position\": {\"x\": 1260, \"y\": 700}");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
 }
 

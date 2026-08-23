@@ -1242,6 +1242,55 @@ ContentRegistry ContentRegistry::fromJson(
                     "extraction_duration_seconds",
                     true)};
 
+            if (mapValue.contains("high_risk"))
+            {
+                const Json &highRisk =
+                    requiredObject(mapValue, "high_risk");
+                definition.highRisk.enabled = true;
+                definition.highRisk.regularPhaseDurationSeconds =
+                    requiredFiniteFloat(
+                        highRisk,
+                        "regular_phase_duration_seconds",
+                        true);
+                definition.highRisk.emergencyExtractionPoint =
+                    parseRect(highRisk, "emergency_extraction_point");
+                definition.highRisk.emergencyExtractionDurationSeconds =
+                    requiredFiniteFloat(
+                        highRisk,
+                        "emergency_extraction_duration_seconds",
+                        true);
+                definition.highRisk.initialWaveDelaySeconds =
+                    requiredFiniteFloat(
+                        highRisk,
+                        "initial_wave_delay_seconds",
+                        true);
+                definition.highRisk.waveIntervalSeconds =
+                    requiredFiniteFloat(
+                        highRisk,
+                        "wave_interval_seconds",
+                        true);
+                definition.highRisk.waveSize =
+                    requiredPositiveUint(highRisk, "wave_size");
+                definition.highRisk.activeEnemyCap =
+                    requiredPositiveUint(highRisk, "active_enemy_cap");
+                for (const Json &spawnValue :
+                     requiredArray(highRisk, "pressure_spawns"))
+                {
+                    const Vec2 size = parseVec2(spawnValue, "size");
+                    if (size.x <= 0.0F || size.y <= 0.0F)
+                    {
+                        fail("high-risk pressure spawn size must be positive");
+                    }
+                    definition.highRisk.pressureSpawns.push_back(
+                        EnemySpawnDefinition{
+                            parseVec2(spawnValue, "position"),
+                            size,
+                            requiredPositiveInt(
+                                spawnValue,
+                                "maximum_health")});
+                }
+            }
+
             definition.storageLootTableId = LootTableDefinitionId{
                 requiredString(mapValue, "storage_loot_table")};
             definition.enemyDeploymentId =
@@ -1343,9 +1392,47 @@ ContentRegistry ContentRegistry::fromJson(
                 if (definition.spawnExtractionPairs.size() != 3 ||
                     definition.raidEnemyDeploymentIds.size() != 3 ||
                     definition.raidLootSlots.size() < 9 ||
-                    definition.raidLootSlots.size() > 12)
+                    definition.raidLootSlots.size() > 12 ||
+                    !definition.highRisk.enabled)
                 {
                     fail("Raid map configuration counts are invalid");
+                }
+                if (!rectInside(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.walkableBounds) ||
+                    definition.highRisk.waveSize >
+                        definition.highRisk.activeEnemyCap ||
+                    definition.highRisk.pressureSpawns.size() < 3U ||
+                    definition.highRisk.pressureSpawns.size() > 8U)
+                {
+                    fail("Raid high-risk configuration is invalid");
+                }
+                for (const BallisticBlockerDefinition &blocker :
+                     definition.ballisticBlockers)
+                {
+                    if (rectsOverlap(
+                            definition.highRisk.emergencyExtractionPoint,
+                            blocker.bounds))
+                    {
+                        fail("high-risk extraction overlaps a ballistic blocker");
+                    }
+                }
+                for (const EnemySpawnDefinition &spawn :
+                     definition.highRisk.pressureSpawns)
+                {
+                    const ContentRect spawnBounds{spawn.position, spawn.size};
+                    if (!rectInside(spawnBounds, definition.walkableBounds))
+                    {
+                        fail("high-risk pressure spawn is outside map bounds");
+                    }
+                    for (const BallisticBlockerDefinition &blocker :
+                         definition.ballisticBlockers)
+                    {
+                        if (rectsOverlap(spawnBounds, blocker.bounds))
+                        {
+                            fail("high-risk pressure spawn overlaps a ballistic blocker");
+                        }
+                    }
                 }
                 std::set<std::string> pairIds;
                 for (const SpawnExtractionPairDefinition &pair :
@@ -1382,9 +1469,11 @@ ContentRegistry ContentRegistry::fromJson(
                     const auto &alphaDeployment =
                         registry.enemyDeployment(id);
                     if (alphaDeployment.enemies.size() < 4 ||
-                        alphaDeployment.enemies.size() > 6)
+                        alphaDeployment.enemies.size() > 6 ||
+                        alphaDeployment.enemies.size() >
+                            definition.highRisk.activeEnemyCap)
                     {
-                        fail("Raid enemy deployment must contain 4 to 6 enemies");
+                        fail("Raid enemy deployment count is invalid");
                     }
                     for (const EnemySpawnDefinition &enemy :
                          alphaDeployment.enemies)
