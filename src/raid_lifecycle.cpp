@@ -167,7 +167,7 @@ DeployReceipt executeDeploy(
     }
     if (map->spawnExtractionPairs.size() != 3 ||
         map->raidEnemyDeploymentIds.size() != 3 ||
-        map->raidLootSlots.size() < 8)
+        map->raidLootSlots.size() < 9)
     {
         return deployFailure(
             RaidLifecycleError::InvalidCommand,

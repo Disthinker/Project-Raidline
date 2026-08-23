@@ -144,7 +144,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、默认柜体 Loot、敌人部署、首图常量与基础弹道障碍的单一内容输入；当前内容版本为 `combat-ballistics-content-8`，武器定义包含独立逻辑弹速。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、三张固定 Raid 地图与基础弹道障碍的单一内容输入；当前内容版本为 `raid-fixed-maps-content-9`，地图定义包含展示元数据及独立出生/撤离、敌人、Loot 和障碍配置。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -153,7 +153,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`combat-ballistics-content-8` 只扩展内容参数并继续显式读取 schema v6 的 `combat-input-content-7` 及更早兼容内容版本存档。当前 V0 没有需兼容的更早正式玩家存档。
+- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`raid-fixed-maps-content-9` 不改变 Profile schema，并继续显式读取 schema v6 的 `combat-ballistics-content-8` 及更早兼容内容版本存档。当前 V0 没有需兼容的更早正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -178,6 +178,9 @@ Content Registry 的当前落地边界：
 11. `codex/combat-logical-ballistics-feedback-v1`：PR #66 / merge commit `7877d71`，移除生产 Projectile 场景实体，交付冻结落点、非实体延迟飞行、连续扫掠与 World 命中反馈。
 12. `codex/combat-aim-handling-ads-v1`：PR #67 已进入 main，交付位置/速度/加速度准星、刷新式后坐力、五项武器属性、随机散布、最大距离逻辑弹道、基础障碍/弱曳光、基础 ADS、奔跑举枪、射程反馈与 F10 运行时调参。
 13. `codex/combat-input-capture-audio-v1`：PR #68 / merge commit `ba3375e`，交付相对鼠标捕获、连续后坐力弯曲与用户授权的 ArtWorkbench P0 Sound Event 音频库。
-14. `codex/combat-direct-aim-spread-tracer-v2`：当前切片，交付常规直跟瞄准、准星移动/距离散布、高速内容弹道与纯短线曳光。
+14. `codex/combat-direct-aim-spread-tracer-v2`：PR #69 / merge commit `f593719`，交付常规直跟瞄准、准星移动/距离散布、高速内容弹道与纯短线曳光。
+15. `codex/combat-spread-model-v3`：PR #71 / merge commit `33da892`，交付四源 Bloom、走跑即时扩散和可见/真实散布统一。
+16. `codex/combat-feedback-finish`：PR #72 / merge commit `795b644`，交付枪口焰、短烟、柔边局部闪光和轻微世界画面抖动。
+17. `codex/raid-fixed-map-variety-v1`：当前切片，交付三张固定地图选择、独立配置与冻结快照；随机地图、情报和高危阶段不在本切片。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

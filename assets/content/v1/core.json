@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "combat-ballistics-content-8",
+  "content_version": "raid-fixed-maps-content-9",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -505,12 +505,73 @@
         {"position": {"x": 900, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
         {"position": {"x": 1030, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
       ]
+    },
+    {
+      "id": "enemy_deployment.riverside.crossroads",
+      "enemies": [
+        {"position": {"x": 430, "y": 310}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 620, "y": 210}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 700, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1030, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
+    },
+    {
+      "id": "enemy_deployment.riverside.warehouse_patrol",
+      "enemies": [
+        {"position": {"x": 250, "y": 420}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 590, "y": 390}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 740, "y": 180}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1050, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 860, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
+    },
+    {
+      "id": "enemy_deployment.riverside.outer_sweep",
+      "enemies": [
+        {"position": {"x": 170, "y": 150}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 650, "y": 110}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1120, "y": 170}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1090, "y": 590}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 320, "y": 580}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
+    },
+    {
+      "id": "enemy_deployment.industrial.center_hold",
+      "enemies": [
+        {"position": {"x": 450, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 600, "y": 230}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 820, "y": 410}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 910, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
+    },
+    {
+      "id": "enemy_deployment.industrial.tank_patrol",
+      "enemies": [
+        {"position": {"x": 430, "y": 480}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 850, "y": 210}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 850, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1100, "y": 390}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1120, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
+    },
+    {
+      "id": "enemy_deployment.industrial.western_push",
+      "enemies": [
+        {"position": {"x": 110, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 430, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 430, "y": 590}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 730, "y": 520}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
+        {"position": {"x": 1100, "y": 60}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+      ]
     }
   ],
   "maps": [
     {
       "id": "map.v0.test",
+      "display_name": "Greyline Depot",
+      "route_profile": "BALANCED | OPEN CENTER | LONG FLANKS",
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
+      "background_tint": {"red": 255, "green": 255, "blue": 255},
       "world_size": {"x": 1280, "y": 720},
       "walkable_bounds": {
         "position": {"x": 0, "y": 0},
@@ -571,6 +632,96 @@
         {"id": "resource_2", "route": "resource", "position": {"x": 520, "y": 610}},
         {"id": "resource_3", "route": "resource", "position": {"x": 760, "y": 560}},
         {"id": "resource_4", "route": "resource", "position": {"x": 940, "y": 520}}
+      ]
+    },
+    {
+      "id": "map.raid.riverside",
+      "display_name": "Riverside Checkpoint",
+      "route_profile": "MID-RANGE | CHOKEPOINTS | SAFE OUTER LOOP",
+      "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
+      "background_tint": {"red": 190, "green": 220, "blue": 210},
+      "world_size": {"x": 1280, "y": 720},
+      "walkable_bounds": {"position": {"x": 0, "y": 0}, "size": {"x": 1280, "y": 720}},
+      "player_spawn": {"x": 80, "y": 100},
+      "default_inventory": {"width": 10, "height": 6},
+      "ballistic_blockers": [
+        {"id": "north_barricade", "bounds": {"position": {"x": 300, "y": 190}, "size": {"x": 260, "y": 40}}},
+        {"id": "east_warehouse", "bounds": {"position": {"x": 800, "y": 300}, "size": {"x": 180, "y": 150}}},
+        {"id": "south_bus", "bounds": {"position": {"x": 480, "y": 530}, "size": {"x": 220, "y": 55}}}
+      ],
+      "ground_items": [],
+      "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
+      "extraction_point": {"position": {"x": 1080, "y": 520}, "size": {"x": 150, "y": 140}},
+      "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "storage_loot_table": "loot.storage_cabinet.default",
+      "enemy_deployment": "enemy_deployment.riverside.crossroads",
+      "spawn_extraction_pairs": [
+        {"id": "northwest_to_southeast", "player_spawn": {"x": 70, "y": 80}, "extraction_point": {"position": {"x": 1090, "y": 520}, "size": {"x": 140, "y": 140}}},
+        {"id": "southwest_to_north", "player_spawn": {"x": 80, "y": 570}, "extraction_point": {"position": {"x": 590, "y": 40}, "size": {"x": 160, "y": 120}}},
+        {"id": "east_to_west", "player_spawn": {"x": 1130, "y": 100}, "extraction_point": {"position": {"x": 40, "y": 310}, "size": {"x": 150, "y": 150}}}
+      ],
+      "raid_enemy_deployments": [
+        "enemy_deployment.riverside.crossroads",
+        "enemy_deployment.riverside.warehouse_patrol",
+        "enemy_deployment.riverside.outer_sweep"
+      ],
+      "raid_loot_table": "loot.raid.alpha",
+      "raid_loot_slots": [
+        {"id": "central_1", "route": "central", "position": {"x": 430, "y": 330}},
+        {"id": "central_2", "route": "central", "position": {"x": 650, "y": 350}},
+        {"id": "central_3", "route": "central", "position": {"x": 760, "y": 490}},
+        {"id": "perimeter_1", "route": "perimeter", "position": {"x": 180, "y": 120}},
+        {"id": "perimeter_2", "route": "perimeter", "position": {"x": 1080, "y": 120}},
+        {"id": "perimeter_3", "route": "perimeter", "position": {"x": 1090, "y": 590}},
+        {"id": "resource_1", "route": "resource", "position": {"x": 260, "y": 500}},
+        {"id": "resource_2", "route": "resource", "position": {"x": 400, "y": 610}},
+        {"id": "resource_3", "route": "resource", "position": {"x": 740, "y": 610}},
+        {"id": "resource_4", "route": "resource", "position": {"x": 1030, "y": 500}}
+      ]
+    },
+    {
+      "id": "map.raid.industrial",
+      "display_name": "Ashworks Yard",
+      "route_profile": "CLOSE COVER | SPLIT LANES | RISKY CENTER",
+      "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
+      "background_tint": {"red": 220, "green": 190, "blue": 170},
+      "world_size": {"x": 1280, "y": 720},
+      "walkable_bounds": {"position": {"x": 0, "y": 0}, "size": {"x": 1280, "y": 720}},
+      "player_spawn": {"x": 80, "y": 620},
+      "default_inventory": {"width": 10, "height": 6},
+      "ballistic_blockers": [
+        {"id": "west_workshop", "bounds": {"position": {"x": 200, "y": 250}, "size": {"x": 180, "y": 180}}},
+        {"id": "central_fence", "bounds": {"position": {"x": 550, "y": 320}, "size": {"x": 250, "y": 35}}},
+        {"id": "east_tanks", "bounds": {"position": {"x": 950, "y": 120}, "size": {"x": 120, "y": 210}}}
+      ],
+      "ground_items": [],
+      "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
+      "extraction_point": {"position": {"x": 1090, "y": 40}, "size": {"x": 140, "y": 130}},
+      "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "storage_loot_table": "loot.storage_cabinet.default",
+      "enemy_deployment": "enemy_deployment.industrial.center_hold",
+      "spawn_extraction_pairs": [
+        {"id": "southwest_to_northeast", "player_spawn": {"x": 70, "y": 600}, "extraction_point": {"position": {"x": 1090, "y": 40}, "size": {"x": 140, "y": 130}}},
+        {"id": "northwest_to_south", "player_spawn": {"x": 70, "y": 70}, "extraction_point": {"position": {"x": 570, "y": 560}, "size": {"x": 160, "y": 120}}},
+        {"id": "southeast_to_west", "player_spawn": {"x": 1130, "y": 580}, "extraction_point": {"position": {"x": 40, "y": 280}, "size": {"x": 140, "y": 150}}}
+      ],
+      "raid_enemy_deployments": [
+        "enemy_deployment.industrial.center_hold",
+        "enemy_deployment.industrial.tank_patrol",
+        "enemy_deployment.industrial.western_push"
+      ],
+      "raid_loot_table": "loot.raid.alpha",
+      "raid_loot_slots": [
+        {"id": "central_1", "route": "central", "position": {"x": 450, "y": 360}},
+        {"id": "central_2", "route": "central", "position": {"x": 660, "y": 270}},
+        {"id": "central_3", "route": "central", "position": {"x": 830, "y": 400}},
+        {"id": "perimeter_1", "route": "perimeter", "position": {"x": 100, "y": 100}},
+        {"id": "perimeter_2", "route": "perimeter", "position": {"x": 1160, "y": 100}},
+        {"id": "perimeter_3", "route": "perimeter", "position": {"x": 1120, "y": 610}},
+        {"id": "resource_1", "route": "resource", "position": {"x": 130, "y": 560}},
+        {"id": "resource_2", "route": "resource", "position": {"x": 440, "y": 520}},
+        {"id": "resource_3", "route": "resource", "position": {"x": 790, "y": 570}},
+        {"id": "resource_4", "route": "resource", "position": {"x": 1110, "y": 420}}
       ]
     }
   ]

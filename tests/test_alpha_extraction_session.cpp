@@ -48,6 +48,27 @@ std::vector<AssetInstanceId> assets(
     return result;
 }
 
+TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-selected-map"));
+
+    ASSERT_TRUE(session.deployAlpha(
+        77233, MapDefinitionId{"map.raid.industrial"}));
+
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    EXPECT_EQ(
+        session.profile().pendingRaid->mapDefinitionId,
+        MapDefinitionId{"map.raid.industrial"});
+    EXPECT_EQ(session.world().ballisticBlockers().size(), 3U);
+    EXPECT_FLOAT_EQ(
+        session.world().player().position().x,
+        session.profile().pendingRaid->playerSpawn.x);
+    EXPECT_FLOAT_EQ(
+        session.world().player().position().y,
+        session.profile().pendingRaid->playerSpawn.y);
+}
+
 void equip(GameSession &session, AssetInstanceId id, EquipmentSlotKind slot,
            std::string transaction)
 {

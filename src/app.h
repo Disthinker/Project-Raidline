@@ -106,6 +106,7 @@ private:
     bool settingsOpen_{};
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
+    std::size_t selectedRaidMapIndex_{};
     std::string uiMessage_;
     float specialHitFeedbackRemaining_{};
     HitSemantic specialHitSemantic_{HitSemantic::Normal};
@@ -154,6 +155,8 @@ private:
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
     [[nodiscard]] bool tryDeployFromBase();
+    [[nodiscard]] const MapDefinition &selectedRaidMap() const;
+    void cycleSelectedRaidMap(int direction) noexcept;
 
     [[nodiscard]] std::string nextProfileTransactionId(
         const char *prefix);
@@ -175,6 +178,9 @@ private:
     bool screenPrimaryButtonContains(
         float x,
         float y) const noexcept;
+
+    [[nodiscard]] SDL_FRect raidMapPreviousButton() const noexcept;
+    [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
 
     void processEvents();
     void update(float deltaTime);

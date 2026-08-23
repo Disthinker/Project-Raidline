@@ -42,7 +42,10 @@ void equipAlphaLoadout(ProfileState &profile)
     }
 }
 
-DeployReceipt deploy(ProfileState &profile, std::uint64_t seed = 9917)
+DeployReceipt deploy(
+    ProfileState &profile,
+    std::uint64_t seed = 9917,
+    MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"})
 {
     return executeDeploy(
         profile,
@@ -51,8 +54,55 @@ DeployReceipt deploy(ProfileState &profile, std::uint64_t seed = 9917)
             "raid-alpha-test",
             "settlement-alpha-test",
             seed,
-            MapDefinitionId{"map.v0.test"}},
+            std::move(mapDefinitionId)},
         CommandContext{profile.revision, "deploy-alpha-test"});
+}
+
+TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)
+{
+    for (const MapDefinition &map : publishedContentRegistry().maps())
+    {
+        ProfileState first = makeNewAlphaProfile(
+            "multi-map-first", publishedContentRegistry());
+        ProfileState second = first;
+        second.profileId = "multi-map-second";
+
+        ASSERT_TRUE(deploy(first, 77231, map.id).succeeded) << map.id.value();
+        ASSERT_TRUE(deploy(second, 77231, map.id).succeeded) << map.id.value();
+        ASSERT_TRUE(first.pendingRaid.has_value());
+        ASSERT_TRUE(second.pendingRaid.has_value());
+        EXPECT_EQ(first.pendingRaid->mapDefinitionId, map.id);
+        EXPECT_EQ(first.pendingRaid->spawnExtractionPairId,
+                  second.pendingRaid->spawnExtractionPairId);
+        EXPECT_EQ(first.pendingRaid->enemyDeploymentId,
+                  second.pendingRaid->enemyDeploymentId);
+        ASSERT_EQ(first.pendingRaid->loot.size(), second.pendingRaid->loot.size());
+        for (std::size_t index{}; index < first.pendingRaid->loot.size(); ++index)
+        {
+            EXPECT_EQ(first.pendingRaid->loot[index].assetId,
+                      second.pendingRaid->loot[index].assetId);
+            EXPECT_EQ(first.pendingRaid->loot[index].slotIndex,
+                      second.pendingRaid->loot[index].slotIndex);
+            EXPECT_FLOAT_EQ(first.pendingRaid->loot[index].position.x,
+                            second.pendingRaid->loot[index].position.x);
+            EXPECT_FLOAT_EQ(first.pendingRaid->loot[index].position.y,
+                            second.pendingRaid->loot[index].position.y);
+        }
+    }
+}
+
+TEST(RaidLifecycleTest, UnknownRaidMapRejectsWithoutChangingProfile)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "unknown-map", publishedContentRegistry());
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const DeployReceipt receipt = deploy(
+        profile, 77232, MapDefinitionId{"map.raid.unknown"});
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, RaidLifecycleError::InvalidCommand);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 }
 

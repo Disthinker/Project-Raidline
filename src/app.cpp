@@ -1191,7 +1191,7 @@ bool App::tryDeployFromBase()
         uiMessage_ = "UNSAFE LOADOUT - CONFIRM DEPLOY AGAIN";
         return false;
     }
-    if (!gameFlow_.deploy())
+    if (!gameFlow_.deploy(selectedRaidMap().id))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1201,6 +1201,30 @@ bool App::tryDeployFromBase()
     deploymentWarningArmed_ = false;
     uiMessage_.clear();
     return true;
+}
+
+const MapDefinition &App::selectedRaidMap() const
+{
+    const auto &maps = publishedContentRegistry().maps();
+    if (maps.empty())
+    {
+        throw std::logic_error("published content has no Raid maps");
+    }
+    return maps[selectedRaidMapIndex_ % maps.size()];
+}
+
+void App::cycleSelectedRaidMap(int direction) noexcept
+{
+    const std::size_t count = publishedContentRegistry().maps().size();
+    if (count < 2U || direction == 0)
+    {
+        return;
+    }
+    selectedRaidMapIndex_ = direction < 0
+        ? (selectedRaidMapIndex_ + count - 1U) % count
+        : (selectedRaidMapIndex_ + 1U) % count;
+    deploymentWarningArmed_ = false;
+    uiMessage_.clear();
 }
 
 SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
@@ -1391,6 +1415,16 @@ bool App::screenPrimaryButtonContains(
            y < button.y + button.h;
 }
 
+SDL_FRect App::raidMapPreviousButton() const noexcept
+{
+    return SDL_FRect{422.0F, 226.0F, 54.0F, 42.0F};
+}
+
+SDL_FRect App::raidMapNextButton() const noexcept
+{
+    return SDL_FRect{804.0F, 226.0F, 54.0F, 42.0F};
+}
+
 void App::closeInventory() noexcept
 {
     // Tab / browsing Esc closes the inventory and clears all pointer state,
@@ -1519,6 +1553,16 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::RaidGate)
     {
+        if (contains(raidMapPreviousButton(), click.position))
+        {
+            cycleSelectedRaidMap(-1);
+            return;
+        }
+        if (contains(raidMapNextButton(), click.position))
+        {
+            cycleSelectedRaidMap(1);
+            return;
+        }
         if (screenPrimaryButtonContains(click.position.x, click.position.y))
         {
             if (!tryDeployFromBase())
@@ -5383,6 +5427,17 @@ void App::renderStashOverlay()
 
 void App::renderBackground()
 {
+    const MapDefinition *map = &defaultV0MapDefinition();
+    if (gameSession_.profile().pendingRaid.has_value())
+    {
+        map = &publishedContentRegistry().map(
+            gameSession_.profile().pendingRaid->mapDefinitionId);
+    }
+    SDL_SetTextureColorMod(
+        backgroundTexture_.get(),
+        map->backgroundTint.red,
+        map->backgroundTint.green,
+        map->backgroundTint.blue);
     SDL_RenderTexture(renderer_, backgroundTexture_.get(), nullptr, nullptr);
 }
 
@@ -7859,8 +7914,27 @@ void App::renderBaseDeployment()
     SDL_RenderRect(renderer_, &panel);
     SDL_RenderDebugText(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
 
+    const MapDefinition &map = selectedRaidMap();
+    const SDL_FRect previous = raidMapPreviousButton();
+    const SDL_FRect next = raidMapNextButton();
+    SDL_SetRenderDrawColor(renderer_, 68, 54, 52, 255);
+    SDL_RenderFillRect(renderer_, &previous);
+    SDL_RenderFillRect(renderer_, &next);
+    SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
+    SDL_RenderRect(renderer_, &previous);
+    SDL_RenderRect(renderer_, &next);
+    SDL_RenderDebugText(renderer_, previous.x + 22.0F, previous.y + 16.0F, "<");
+    SDL_RenderDebugText(renderer_, next.x + 22.0F, next.y + 16.0F, ">");
+    const std::string mapLabel = fmt::format(
+        "MAP {}/{} | {}",
+        selectedRaidMapIndex_ % publishedContentRegistry().maps().size() + 1U,
+        publishedContentRegistry().maps().size(),
+        map.displayName);
+    SDL_RenderDebugText(renderer_, 492.0F, 232.0F, mapLabel.c_str());
+    SDL_RenderDebugText(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
+
     const ProfileState &profile = gameSession_.profile();
-    float y = 224.0F;
+    float y = 282.0F;
     for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         const auto id = equippedAsset(profile, slot);
@@ -7873,7 +7947,7 @@ void App::renderBaseDeployment()
             equipmentSlotLabel(slot),
             name);
         SDL_RenderDebugText(renderer_, 480.0F, y, row.c_str());
-        y += 28.0F;
+        y += 23.0F;
     }
 
     const WeaponReadiness readiness = weaponReadiness(profile);
@@ -7894,18 +7968,18 @@ void App::renderBaseDeployment()
     SDL_RenderDebugText(
         renderer_,
         458.0F,
-        442.0F,
+        454.0F,
         fireStatus.c_str());
     SDL_RenderDebugText(
         renderer_,
         442.0F,
-        474.0F,
+        480.0F,
         capable
             ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
             : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
-    SDL_RenderDebugText(renderer_, 482.0F, 590.0F, "ENTER/CLICK DEPLOY | ESC CLOSE");
+    SDL_RenderDebugText(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");
 }
 
 void App::renderBase()

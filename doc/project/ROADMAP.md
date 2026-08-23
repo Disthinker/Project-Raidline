@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-21。
+最后核对：2026-08-23。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#71 已接受。当前产品目标进入 **Combat：射击表现收尾**；范围合同见 `doc/exec-plans/active/combat-shooting-feedback-finish.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#72 已接受。当前产品目标进入 **Raid Pressure & Variety：固定地图差异化 v1**；范围合同见 `doc/exec-plans/active/raid-fixed-map-variety-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -31,6 +31,7 @@ Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#71 已接受。当
 | 输入捕获、后坐力曲线与 P0 音频 v1 | PR #68 / merge commit `ba3375e` |
 | 直接瞄准、距离散布与高速曳光 v2 | PR #69 / merge commit `f593719` |
 | 动态散布模型与准星稳定性 v3 | PR #71 / merge commit `33da892` |
+| 射击表现收尾 | PR #72 / merge commit `795b644` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -54,7 +55,13 @@ Core Extraction Alpha、Survival Loadout 与 Combat PR #66～#71 已接受。当
 | 输入捕获、后坐力曲线与 P0 音频 v1 | 连续压枪、高响应默认操控，以及枪械、库存、医疗、感染者和环境的最小听觉闭环 | 相对鼠标位移、焦点/UI 捕获仲裁、连续后坐力弯曲、稳定 Sound Event、SDL 原生混音、低延迟设备缓冲请求与语义事实投影 | PR #68 已通过 CI 和用户验收，以 `ba3375e` 合入 main |
 | 直接瞄准、距离散布与高速曳光 v2 | 常规瞄准同帧直跟、移动/快速移准可读扩散、近距高可信度、粗长准星/高速曳光、特殊命中双重验证、Raid 拖放修复和 Base/Raid 暂停菜单 | AimControlMode、WeaponAccuracyProjection 双半径、ShotAimIntent、CombatTargetId、随身所有权校验、PauseMenuState、只读 TracerPresentationSegment | PR #69 已通过 CI 和用户验收，以 `f593719` 合入 main |
 | 动态散布模型与准星稳定性 v3 | 距离不再遮蔽动态扩散；轻微甩动不满扩散；快速甩动快展缓收；走路立即大扩散、奔跑更大；可见准星准确预告真实随机弹道范围 | 距离包络、四源 Bloom、连续鼠标 attack/release、走跑独立目标、权威 spreadRadiusAtDistance、PCG32 同半径抽样、F10 Distance/Movement/Sprinting Bloom | PR #71 已通过 exact-head CI 与用户正常游玩验收，以 `33da892` 进入 main |
-| 射击表现收尾 | 成功击发出现短促枪口焰、快速消散烟雾、柔边局部闪光和不影响瞄准的轻微画面抖动 | accepted-shot-only 表现状态、短寿命只读投影、柔边代码渐变、稳定 UI/准星 viewport 边界 | Windows Debug 全目标、79 项定向回归和 788/788 CTest 通过；等待 exact-head CI 与用户正常游玩验收 |
+| 射击表现收尾 | 成功击发出现短促枪口焰、快速消散烟雾、柔边局部闪光和不影响瞄准的轻微画面抖动 | accepted-shot-only 表现状态、短寿命只读投影、柔边代码渐变、稳定 UI/准星 viewport 边界 | PR #72 已通过 CI 与用户验收，以 `795b644` 进入 main |
+
+## 当前 Raid Pressure & Variety 切片
+
+| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| 固定地图差异化 v1 | Base 出击口可在三张固定地图间选择；每张图具有不同路线、障碍、出生/撤离、敌人和 Loot 分布 | 显式 MapDefinitionId Deploy、地图展示元数据、独立 PCG32 快照、旧存档版本兼容 | 实现与自动化进行中；不包含随机地图、情报、高危或新美术 |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 
