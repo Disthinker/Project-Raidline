@@ -132,3 +132,71 @@ TEST(ProfileStateTest, InvalidMedicalTimerCombinationIsRejected)
     EXPECT_FALSE(result.valid);
     EXPECT_NE(result.message.find("medical"), std::string::npos);
 }
+
+TEST(ProfileStateTest, CarriedWeightCountsNestedAssetsAndLoadedRoundsOnce)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-weight",
+        publishedContentRegistry());
+    AssetRecord *rifle{};
+    AssetRecord *chestRig{};
+    AssetRecord *backpack{};
+    AssetRecord *magazine{};
+    AssetRecord *ammunition{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        AssetRecord *mutableAsset = profile.assets.findMutable(id);
+        if (asset.definitionId == alpha_content::rifle && rifle == nullptr)
+        {
+            rifle = mutableAsset;
+        }
+        else if (asset.definitionId == alpha_content::chestRig)
+        {
+            chestRig = mutableAsset;
+        }
+        else if (asset.definitionId == alpha_content::backpack)
+        {
+            backpack = mutableAsset;
+        }
+        else if (asset.definitionId == alpha_content::magazine &&
+                 magazine == nullptr)
+        {
+            magazine = mutableAsset;
+        }
+        else if (asset.definitionId == alpha_content::ammunition &&
+                 ammunition == nullptr)
+        {
+            ammunition = mutableAsset;
+        }
+    }
+    ASSERT_NE(rifle, nullptr);
+    ASSERT_NE(chestRig, nullptr);
+    ASSERT_NE(backpack, nullptr);
+    ASSERT_NE(magazine, nullptr);
+    ASSERT_NE(ammunition, nullptr);
+
+    rifle->location = EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon};
+    chestRig->location = EquippedAssetLocation{EquipmentSlotKind::ChestRig};
+    backpack->location = EquippedAssetLocation{EquipmentSlotKind::Backpack};
+    magazine->location = InstalledMagazineLocation{rifle->instanceId};
+    ammunition->quantity = 10U;
+    ammunition->location = StoredAssetLocation{
+        ProfileContainerId::compartment(backpack->instanceId, 0U),
+        GridPosition{0, 0}};
+    magazine->magazineRounds = {
+        MagazineRoundRecord{alpha_content::ammunition, std::nullopt},
+        MagazineRoundRecord{alpha_content::ammunition, std::nullopt}};
+    rifle->chamberedRound =
+        MagazineRoundRecord{alpha_content::ammunition, std::nullopt};
+
+    EXPECT_EQ(
+        carriedWeightGrams(profile, publishedContentRegistry()),
+        6606U);
+
+    ammunition->location = StoredAssetLocation{
+        ProfileContainerId::stash(),
+        GridPosition{0, 0}};
+    EXPECT_EQ(
+        carriedWeightGrams(profile, publishedContentRegistry()),
+        6486U);
+}

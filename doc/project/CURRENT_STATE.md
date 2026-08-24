@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@773443b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾、固定地图差异化、武器切换准星修复与持续高危阶段 v1；PR #75 已通过 CI 和用户正常游玩验收后普通合入。
-- 当前开发分支：`codex/raid-high-risk-control-resource-v1`，从干净的 `origin/main@773443b` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-high-risk-control-resource-v1.md`。
+- `origin/main@bc26337` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾，以及 Raid 固定地图、持续高危、主动高危与高级资源区 v1；PR #76 已通过 CI 和用户正常游玩验收后普通合入。
+- 当前开发分支：`codex/raid-conditional-extraction-v1`，从干净的 `origin/main@bc26337` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-conditional-extraction-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74、固定地图 PR #73 与持续高危 PR #75 已接受。当前进入 **Raid Pressure & Variety：主动高危与高级资源区 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个主动风险—收益闭环。
+Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，以及 Raid Pressure PR #73/#75/#76 已接受。当前进入 **Raid Pressure & Variety：高危条件撤离 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个由真实随身重量驱动的撤离取舍。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -30,7 +30,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74、�
 15. **固定地图差异化 v1**：PR #73 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `a32c476` 进入 main。
 16. **武器切换准星连续性**：PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main。
 17. **持续高危阶段 v1**：PR #75 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main。
-18. **主动高危与高级资源区 v1**：当前分支为每图建立可中断控制地标和开局冻结、仅在高危开放的高级 Loot；不扩张到随机危机、情报、停电/火灾、随机地图或新资源。
+18. **主动高危与高级资源区 v1**：PR #76 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `bc26337` 进入 main。
+19. **高危条件撤离 v1**：当前分支为每图增加与信号路线并存的轻装撤离，使用版本化物品克重和权威随身总重量决定资格；不扩张到移动负重、体力、燃油、凭证、情报或随机危机。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -58,6 +59,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74、�
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
+- 高危条件撤离 v1 已通过单位克重/嵌套资产/弹匣与枪膛计重、路线资格取消、三图几何互斥、旧 content v11 加载和 GameSession 投影定向回归；当前完整 CTest 为 825/825。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

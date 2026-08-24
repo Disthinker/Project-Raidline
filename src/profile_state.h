@@ -264,6 +264,12 @@ struct ProfileValidationResult
 [[nodiscard]] std::vector<AssetInstanceId> carriedAssetIds(
     const ProfileState &profile);
 
+// Gross carried mass includes equipped roots, nested carried contents,
+// installed magazines, magazine rounds, and chambered rounds exactly once.
+[[nodiscard]] std::uint64_t carriedWeightGrams(
+    const ProfileState &profile,
+    const ContentRegistry &content) noexcept;
+
 [[nodiscard]] std::optional<AssetInstanceId> profileAssetAtCell(
     const ProfileState &profile,
     const ContentRegistry &content,

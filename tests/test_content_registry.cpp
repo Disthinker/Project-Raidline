@@ -63,7 +63,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "raid-control-resource-content-11");
+    EXPECT_EQ(
+        registry.contentVersion(),
+        "raid-conditional-extraction-content-12");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -88,6 +90,12 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_FLOAT_EQ(
             publishedMap.highRisk.emergencyExtractionDurationSeconds,
             12.0F);
+        EXPECT_FLOAT_EQ(
+            publishedMap.highRisk.conditionalExtractionDurationSeconds,
+            6.0F);
+        EXPECT_EQ(
+            publishedMap.highRisk.conditionalExtractionMaximumWeightGrams,
+            22000U);
         EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
         EXPECT_EQ(publishedMap.highRisk.activeEnemyCap, 8U);
         EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
@@ -111,6 +119,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.ammunition.9mm_basic"});
     EXPECT_EQ(ammunition.id, ItemId::Ammo9mm);
     EXPECT_EQ(ammunition.maxStackSize, 60U);
+    EXPECT_EQ(ammunition.unitWeightGrams, 12U);
     EXPECT_EQ(ammunition.marketBuyPrice, 1U);
 
     const ItemDefinition &rifle = registry.item(alpha_content::rifle);
@@ -253,6 +262,18 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FLOAT_EQ(deployment.enemies[0].position.x, 600.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[1].position.y, 500.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[2].position.x, 930.0F);
+}
+
+TEST(ContentRegistryTest, RejectsNonPositiveItemWeight)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"unit_weight_grams\": 400",
+        "\"unit_weight_grams\": 0");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, LegacyAdapterCoversEveryCurrentItemExactly)
@@ -522,6 +543,28 @@ TEST(ContentRegistryTest, RejectsHighRiskEmergencyExtractionOutsideMap)
         publishedJsonCopy(),
         "\"emergency_extraction_point\": {\"position\": {\"x\": 300, \"y\": 300}",
         "\"emergency_extraction_point\": {\"position\": {\"x\": 1260, \"y\": 700}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsConditionalExtractionOutsideMap)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"conditional_extraction_point\": {\"position\": {\"x\": 380, \"y\": 60}",
+        "\"conditional_extraction_point\": {\"position\": {\"x\": 1260, \"y\": 700}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsConditionalExtractionOverlappingSignal)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"conditional_extraction_point\": {\"position\": {\"x\": 380, \"y\": 60}",
+        "\"conditional_extraction_point\": {\"position\": {\"x\": 300, \"y\": 300}");
 
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
                  ContentRegistryError);

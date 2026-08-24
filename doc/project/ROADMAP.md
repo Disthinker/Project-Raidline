@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat PR #66～#74、固定地图 PR #73 与持续高危 PR #75 已接受。当前优先交付 **Raid Pressure & Variety：主动高危与高级资源区 v1**；范围合同见 `doc/exec-plans/active/raid-high-risk-control-resource-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat PR #66～#74 与 Raid Pressure PR #73/#75/#76 已接受。当前优先交付 **Raid Pressure & Variety：高危条件撤离 v1**；范围合同见 `doc/exec-plans/active/raid-conditional-extraction-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -35,6 +35,7 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#74、固定地图 PR
 | 固定地图差异化 v1 | PR #73 / merge commit `a32c476` |
 | 武器切换准星连续性 | PR #74 / merge commit `6138da8` |
 | 持续高危阶段 v1 | PR #75 / merge commit `773443b` |
+| 主动高危与高级资源区 v1 | PR #76 / merge commit `bc26337` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -66,7 +67,8 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#74、固定地图 PR
 | --- | --- | --- | --- |
 | 固定地图差异化 v1 | Base 出击口可在三张固定地图间选择；每张图具有不同路线、障碍、出生/撤离、敌人和 Loot 分布 | 显式 MapDefinitionId Deploy、地图展示元数据、独立 PCG32 快照、旧存档版本兼容 | PR #73 已通过 CI 和用户验收，以 `a32c476` 进入 main；不包含随机地图、情报、高危或新美术 |
 | 持续高危阶段 v1 | 常规时间归零后进入持续高危；普通撤离关闭，地图信号区开放并承受有上限的持续感染者压力 | RaidPhase/RaidExtractionRoute、地图化高危规则、稳定出生轮转、单调目标 ID、无时间失败 | PR #75 已通过 CI 与用户正常游玩验收，以 `773443b` 进入 main；不包含随机危机、情报、高级资源、停电/火灾、条件撤离或新资源 |
-| 主动高危与高级资源区 v1 | 玩家可在每图控制点主动提前进入高危，并在承担持续压力后取得开局已冻结的高级 Loot | triggerHighRisk、可中断按住交互、独立 PCG32 流、requiresHighRisk 快照访问资格、content v11 | 当前分支实现与自动化中；不包含危机池、情报、随机地图、新物品或正式资源 |
+| 主动高危与高级资源区 v1 | 玩家可在每图控制点主动提前进入高危，并在承担持续压力后取得开局已冻结的高级 Loot | triggerHighRisk、可中断按住交互、独立 PCG32 流、requiresHighRisk 快照访问资格、content v11 | PR #76 已通过 CI 与用户正常游玩验收，以 `bc26337` 进入 main；不包含危机池、情报、随机地图、新物品或正式资源 |
+| 高危条件撤离 v1 | 高危同时开放长等待信号路线与更短轻装路线；携带高级 Loot 可能使玩家失去轻装资格 | 版本化单位克重、权威随身总重量、EmergencyConditional 路线、content v12 | 当前分支实现与自动化中；不包含移动负重、体力、燃油、凭证、随机危机、情报或新正式资源 |
 
 ## 当前 Combat Reliability 缺陷
 

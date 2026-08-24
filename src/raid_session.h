@@ -21,6 +21,7 @@ enum class RaidExtractionRoute
     None,
     Normal,
     EmergencySignal,
+    EmergencyConditional,
 };
 
 struct HighRiskRaidSessionConfig
@@ -28,6 +29,7 @@ struct HighRiskRaidSessionConfig
     bool enabled{};
     float regularPhaseDurationSeconds{};
     float emergencyExtractionDurationSeconds{};
+    float conditionalExtractionDurationSeconds{};
 };
 
 struct RaidSessionConfig
@@ -58,6 +60,12 @@ public:
         float deltaTime,
         bool playerInNormalExtractionPoint,
         bool playerInEmergencyExtractionPoint) noexcept;
+
+    void update(
+        float deltaTime,
+        bool playerInNormalExtractionPoint,
+        bool playerInEmergencyExtractionPoint,
+        bool playerInConditionalExtractionPoint) noexcept;
 
     [[nodiscard]]
     bool markPlayerDead() noexcept;
@@ -96,6 +104,8 @@ public:
     [[nodiscard]] bool normalExtractionGraceActive() const noexcept;
 
     [[nodiscard]] bool emergencyExtractionOpen() const noexcept;
+
+    [[nodiscard]] bool conditionalExtractionOpen() const noexcept;
 
     [[nodiscard]] bool enteredHighRiskLastUpdate() const noexcept;
 

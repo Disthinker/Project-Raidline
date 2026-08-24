@@ -523,7 +523,8 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "combat-input-content-7" ||
                contentVersion == "combat-ballistics-content-8" ||
                contentVersion == "raid-fixed-maps-content-9" ||
-               contentVersion == "raid-pressure-content-10"));
+               contentVersion == "raid-pressure-content-10" ||
+               contentVersion == "raid-control-resource-content-11"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6) ||

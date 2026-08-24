@@ -332,10 +332,23 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     if (config.highRisk.enabled)
     {
         const HighRiskWorldConfig &highRisk = config.highRisk;
+        const bool conditionalExtractionEnabled =
+            std::isfinite(highRisk.conditionalExtractionDurationSeconds) &&
+            highRisk.conditionalExtractionDurationSeconds > 0.0F;
         if (!std::isfinite(highRisk.regularPhaseDurationSeconds) ||
             highRisk.regularPhaseDurationSeconds <= 0.0F ||
             !std::isfinite(highRisk.emergencyExtractionDurationSeconds) ||
             highRisk.emergencyExtractionDurationSeconds <= 0.0F ||
+            !std::isfinite(highRisk.conditionalExtractionDurationSeconds) ||
+            highRisk.conditionalExtractionDurationSeconds < 0.0F ||
+            (conditionalExtractionEnabled &&
+             (highRisk.conditionalExtractionMaximumWeightGrams == 0U ||
+              !std::isfinite(highRisk.conditionalExtractionPoint.position.x) ||
+              !std::isfinite(highRisk.conditionalExtractionPoint.position.y) ||
+              !std::isfinite(highRisk.conditionalExtractionPoint.size.x) ||
+              !std::isfinite(highRisk.conditionalExtractionPoint.size.y) ||
+              highRisk.conditionalExtractionPoint.size.x <= 0.0F ||
+              highRisk.conditionalExtractionPoint.size.y <= 0.0F)) ||
             !std::isfinite(highRisk.initialWaveDelaySeconds) ||
             highRisk.initialWaveDelaySeconds <= 0.0F ||
             !std::isfinite(highRisk.waveIntervalSeconds) ||
@@ -381,6 +394,14 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         emergencyExtractionPoint_.emplace(
             highRisk.emergencyExtractionPoint.position,
             highRisk.emergencyExtractionPoint.size);
+        if (conditionalExtractionEnabled)
+        {
+            conditionalExtractionPoint_.emplace(
+                highRisk.conditionalExtractionPoint.position,
+                highRisk.conditionalExtractionPoint.size);
+            conditionalExtractionMaximumWeightGrams_ =
+                highRisk.conditionalExtractionMaximumWeightGrams;
+        }
         highRiskPressureSpawns_ = highRisk.pressureSpawns;
         highRiskWaveIntervalSeconds_ = highRisk.waveIntervalSeconds;
         highRiskNextWaveSeconds_ = highRisk.initialWaveDelaySeconds;
@@ -401,7 +422,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         HighRiskRaidSessionConfig{
             config.highRisk.enabled,
             config.highRisk.regularPhaseDurationSeconds,
-            config.highRisk.emergencyExtractionDurationSeconds}}};
+            config.highRisk.emergencyExtractionDurationSeconds,
+            config.highRisk.conditionalExtractionDurationSeconds}}};
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -778,11 +800,16 @@ void GameplayWorld::update(
     const bool playerInEmergencyExtraction =
         emergencyExtractionPoint_.has_value() &&
         emergencyExtractionPoint_->contains(playerCenter(player_));
+    const bool playerInConditionalExtraction =
+        conditionalExtractionPoint_.has_value() &&
+        input.conditionalExtractionEligible &&
+        conditionalExtractionPoint_->contains(playerCenter(player_));
     raidSession_.update(
         deltaTime,
         !player_.isControlled() && extractionPoint_.contains(
             playerCenter(player_)),
-        !player_.isControlled() && playerInEmergencyExtraction);
+        !player_.isControlled() && playerInEmergencyExtraction,
+        !player_.isControlled() && playerInConditionalExtraction);
     updateHighRiskActivation(input, deltaTime, centerAfterMovement);
     if (raidSession_.phase() == RaidPhase::HighRisk)
     {
@@ -1319,6 +1346,18 @@ const std::optional<ExtractionPoint> &
 GameplayWorld::emergencyExtractionPoint() const noexcept
 {
     return emergencyExtractionPoint_;
+}
+
+const std::optional<ExtractionPoint> &
+GameplayWorld::conditionalExtractionPoint() const noexcept
+{
+    return conditionalExtractionPoint_;
+}
+
+std::uint64_t
+GameplayWorld::conditionalExtractionMaximumWeightGrams() const noexcept
+{
+    return conditionalExtractionMaximumWeightGrams_;
 }
 
 const RaidSession &

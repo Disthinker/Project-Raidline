@@ -785,6 +785,8 @@ ContentRegistry ContentRegistry::fromJson(
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
+            definition.unitWeightGrams =
+                requiredPositiveUint(itemValue, "unit_weight_grams");
 
             if (definition.equipmentSlot.has_value() &&
                 !definition.compatibleEquipmentSlots.empty())
@@ -1259,6 +1261,18 @@ ContentRegistry ContentRegistry::fromJson(
                         highRisk,
                         "emergency_extraction_duration_seconds",
                         true);
+                definition.highRisk.conditionalExtractionPoint =
+                    parseRect(highRisk, "conditional_extraction_point");
+                definition.highRisk.conditionalExtractionDurationSeconds =
+                    requiredFiniteFloat(
+                        highRisk,
+                        "conditional_extraction_duration_seconds",
+                        true);
+                definition.highRisk
+                    .conditionalExtractionMaximumWeightGrams =
+                    requiredPositiveUint(
+                        highRisk,
+                        "conditional_extraction_maximum_weight_grams");
                 definition.highRisk.initialWaveDelaySeconds =
                     requiredFiniteFloat(
                         highRisk,
@@ -1424,6 +1438,9 @@ ContentRegistry ContentRegistry::fromJson(
                 if (!rectInside(
                         definition.highRisk.emergencyExtractionPoint,
                         definition.walkableBounds) ||
+                    !rectInside(
+                        definition.highRisk.conditionalExtractionPoint,
+                        definition.walkableBounds) ||
                     !rectInside(definition.highRisk.activationControlPoint,
                                 definition.walkableBounds) ||
                     !rectInside(definition.highRisk.advancedResourceArea,
@@ -1433,7 +1450,10 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.highRisk.pressureSpawns.size() < 3U ||
                     definition.highRisk.pressureSpawns.size() > 8U ||
                     definition.highRisk.advancedLootSlots.empty() ||
-                    definition.highRisk.advancedLootSlots.size() > 4U)
+                    definition.highRisk.advancedLootSlots.size() > 4U ||
+                    definition.highRisk
+                            .conditionalExtractionMaximumWeightGrams >
+                        250000U)
                 {
                     fail("Raid high-risk configuration is invalid");
                 }
@@ -1447,6 +1467,13 @@ ContentRegistry ContentRegistry::fromJson(
                         fail("high-risk extraction overlaps a ballistic "
                              "blocker");
                     }
+                    if (rectsOverlap(
+                            definition.highRisk.conditionalExtractionPoint,
+                            blocker.bounds))
+                    {
+                        fail("conditional extraction overlaps a ballistic "
+                             "blocker");
+                    }
                     if (rectsOverlap(definition.highRisk.activationControlPoint,
                                      blocker.bounds))
                     {
@@ -1455,6 +1482,15 @@ ContentRegistry ContentRegistry::fromJson(
                     }
                 }
                 if (rectsOverlap(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.highRisk.conditionalExtractionPoint) ||
+                    rectsOverlap(
+                        definition.highRisk.conditionalExtractionPoint,
+                        definition.highRisk.activationControlPoint) ||
+                    rectsOverlap(
+                        definition.highRisk.conditionalExtractionPoint,
+                        definition.highRisk.advancedResourceArea) ||
+                    rectsOverlap(
                         definition.highRisk.emergencyExtractionPoint,
                         definition.highRisk.activationControlPoint) ||
                     rectsOverlap(
@@ -1509,6 +1545,9 @@ ContentRegistry ContentRegistry::fromJson(
                     if (rectsOverlap(
                             pair.extractionPoint,
                             definition.highRisk.emergencyExtractionPoint) ||
+                        rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.conditionalExtractionPoint) ||
                         rectsOverlap(
                             pair.extractionPoint,
                             definition.highRisk.activationControlPoint) ||

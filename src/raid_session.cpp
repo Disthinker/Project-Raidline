@@ -24,7 +24,10 @@ RaidSession::RaidSession(
           config_.highRisk.regularPhaseDurationSeconds <= 0.0F ||
           !std::isfinite(
               config_.highRisk.emergencyExtractionDurationSeconds) ||
-          config_.highRisk.emergencyExtractionDurationSeconds <= 0.0F)))
+          config_.highRisk.emergencyExtractionDurationSeconds <= 0.0F ||
+          !std::isfinite(
+              config_.highRisk.conditionalExtractionDurationSeconds) ||
+          config_.highRisk.conditionalExtractionDurationSeconds < 0.0F)))
     {
         throw std::invalid_argument{
             "Raid session durations must be finite and positive"};
@@ -54,6 +57,19 @@ void RaidSession::update(
     bool playerInNormalExtractionPoint,
     bool playerInEmergencyExtractionPoint) noexcept
 {
+    update(
+        deltaTime,
+        playerInNormalExtractionPoint,
+        playerInEmergencyExtractionPoint,
+        false);
+}
+
+void RaidSession::update(
+    float deltaTime,
+    bool playerInNormalExtractionPoint,
+    bool playerInEmergencyExtractionPoint,
+    bool playerInConditionalExtractionPoint) noexcept
+{
     enteredHighRiskLastUpdate_ = false;
     if (!isActive())
     {
@@ -62,10 +78,21 @@ void RaidSession::update(
 
     if (state_ == RaidSessionState::Extracting)
     {
-        const bool remainsInRoute =
-            extractionRoute_ == RaidExtractionRoute::Normal
-                ? playerInNormalExtractionPoint
-                : playerInEmergencyExtractionPoint;
+        bool remainsInRoute{};
+        switch (extractionRoute_)
+        {
+        case RaidExtractionRoute::Normal:
+            remainsInRoute = playerInNormalExtractionPoint;
+            break;
+        case RaidExtractionRoute::EmergencySignal:
+            remainsInRoute = playerInEmergencyExtractionPoint;
+            break;
+        case RaidExtractionRoute::EmergencyConditional:
+            remainsInRoute = playerInConditionalExtractionPoint;
+            break;
+        case RaidExtractionRoute::None:
+            break;
+        }
         if (!remainsInRoute)
         {
             cancelExtraction();
@@ -78,6 +105,12 @@ void RaidSession::update(
         {
             state_ = RaidSessionState::Extracting;
             extractionRoute_ = RaidExtractionRoute::Normal;
+        }
+        else if (conditionalExtractionOpen() &&
+                 playerInConditionalExtractionPoint)
+        {
+            state_ = RaidSessionState::Extracting;
+            extractionRoute_ = RaidExtractionRoute::EmergencyConditional;
         }
         else if (emergencyExtractionOpen() &&
                  playerInEmergencyExtractionPoint)
@@ -258,6 +291,12 @@ bool RaidSession::emergencyExtractionOpen() const noexcept
     return config_.highRisk.enabled && phase_ == RaidPhase::HighRisk;
 }
 
+bool RaidSession::conditionalExtractionOpen() const noexcept
+{
+    return config_.highRisk.enabled && phase_ == RaidPhase::HighRisk &&
+           config_.highRisk.conditionalExtractionDurationSeconds > 0.0F;
+}
+
 bool RaidSession::enteredHighRiskLastUpdate() const noexcept
 {
     return enteredHighRiskLastUpdate_;
@@ -270,9 +309,17 @@ float RaidSession::highRiskTimeElapsed() const noexcept
 
 float RaidSession::activeExtractionDuration() const noexcept
 {
-    return extractionRoute_ == RaidExtractionRoute::EmergencySignal
-        ? config_.highRisk.emergencyExtractionDurationSeconds
-        : config_.extractionDurationSeconds;
+    switch (extractionRoute_)
+    {
+    case RaidExtractionRoute::EmergencySignal:
+        return config_.highRisk.emergencyExtractionDurationSeconds;
+    case RaidExtractionRoute::EmergencyConditional:
+        return config_.highRisk.conditionalExtractionDurationSeconds;
+    case RaidExtractionRoute::None:
+    case RaidExtractionRoute::Normal:
+        return config_.extractionDurationSeconds;
+    }
+    return config_.extractionDurationSeconds;
 }
 
 void RaidSession::cancelExtraction() noexcept

@@ -5507,7 +5507,8 @@ void App::renderExtractionPoint()
             RaidExtractionRoute route,
             bool open,
             const char *label,
-            bool signal)
+            bool signal,
+            const char *closedLabel)
     {
         const Rect &bounds = point.bounds();
         const SDL_FRect zone{
@@ -5529,7 +5530,7 @@ void App::renderExtractionPoint()
                 renderer_,
                 zone.x + 18.0F,
                 zone.y + 16.0F,
-                signal ? "SIGNAL LOCKED" : "EXTRACTION CLOSED");
+                closedLabel);
             return;
         }
 
@@ -5616,7 +5617,8 @@ void App::renderExtractionPoint()
         raidSession.normalExtractionGraceActive()
             ? "NORMAL - GRACE"
             : "NORMAL EXTRACTION",
-        false);
+        false,
+        "EXTRACTION CLOSED");
 
     if (const std::optional<ExtractionPoint> &emergency =
             gameSession_.world().emergencyExtractionPoint();
@@ -5627,7 +5629,37 @@ void App::renderExtractionPoint()
             RaidExtractionRoute::EmergencySignal,
             raidSession.emergencyExtractionOpen(),
             "SIGNAL EXTRACTION",
-            true);
+            true,
+            "SIGNAL LOCKED");
+    }
+
+    if (const std::optional<ExtractionPoint> &conditional =
+            gameSession_.world().conditionalExtractionPoint();
+        conditional.has_value())
+    {
+        const std::uint64_t weight =
+            gameSession_.currentRaidCarriedWeightGrams();
+        const std::uint64_t limit =
+            gameSession_.conditionalExtractionWeightLimitGrams();
+        const bool phaseOpen = raidSession.conditionalExtractionOpen();
+        const bool eligible = gameSession_.conditionalExtractionEligible();
+        const std::string label = fmt::format(
+            "LIGHT EXIT {:.1f}/{:.1f} KG",
+            static_cast<double>(weight) / 1000.0,
+            static_cast<double>(limit) / 1000.0);
+        const std::string closedLabel = phaseOpen
+            ? fmt::format(
+                  "TOO HEAVY {:.1f}/{:.1f} KG",
+                  static_cast<double>(weight) / 1000.0,
+                  static_cast<double>(limit) / 1000.0)
+            : "LIGHT EXTRACTION LOCKED";
+        renderZone(
+            *conditional,
+            RaidExtractionRoute::EmergencyConditional,
+            phaseOpen && eligible,
+            label.c_str(),
+            false,
+            closedLabel.c_str());
     }
 
     const bool highRisk = raidSession.phase() == RaidPhase::HighRisk;

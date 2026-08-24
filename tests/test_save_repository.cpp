@@ -210,6 +210,25 @@ TEST(SaveRepositoryTest,
             .valid);
 }
 
+TEST(SaveRepositoryTest,
+    SchemaV6AcceptsPreviousControlResourceContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-conditional-extraction-content-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-control-resource-content-11",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+}
+
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
 {
     ProfileState profile = makeNewAlphaProfile(
