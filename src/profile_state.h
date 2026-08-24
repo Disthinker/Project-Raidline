@@ -210,6 +210,18 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+struct BasePriorityState
+{
+    BasePriorityDefinitionId definitionId;
+    std::uint64_t cycleIndex{};
+    bool fulfilled{};
+    std::uint64_t missedCycleCount{};
+
+    friend bool operator==(
+        const BasePriorityState &,
+        const BasePriorityState &) = default;
+};
+
 struct GunsmithMaintenanceJob
 {
     BaseServiceJobId jobId{};
@@ -232,6 +244,7 @@ struct RaidTravelSnapshot
     std::uint32_t failureRegroupMinutes{};
     WorldClockState startingWorldClock;
     BaseResourceState startingBaseResources;
+    BasePriorityState startingBasePriority;
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -276,6 +289,7 @@ struct ProfileState
     MedicalStatusState medicalStatus;
     WorldClockState worldClock;
     BaseResourceState baseResources;
+    BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;

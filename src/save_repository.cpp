@@ -7,6 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "base_resource_domain.h"
+
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -379,6 +381,15 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"elapsed_world_minutes",
              profile.worldClock.elapsedWorldMinutes}};
     }
+    if (schemaVersion >= 11)
+    {
+        payload["base_priority"] = {
+            {"definition_id", profile.basePriority.definitionId.value()},
+            {"cycle_index", profile.basePriority.cycleIndex},
+            {"fulfilled", profile.basePriority.fulfilled},
+            {"missed_cycle_count",
+             profile.basePriority.missedCycleCount}};
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -496,6 +507,21 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     {"resolved_demand_cycle_count",
                      raid.travel.startingBaseResources
                          .resolvedDemandCycleCount}}}};
+            if (schemaVersion >= 11)
+            {
+                payload["pending_raid"]["travel"]
+                    ["starting_base_priority"] = {
+                        {"definition_id",
+                         raid.travel.startingBasePriority
+                             .definitionId.value()},
+                        {"cycle_index",
+                         raid.travel.startingBasePriority.cycleIndex},
+                        {"fulfilled",
+                         raid.travel.startingBasePriority.fulfilled},
+                        {"missed_cycle_count",
+                         raid.travel.startingBasePriority
+                             .missedCycleCount}};
+            }
         }
     }
     else
@@ -591,7 +617,8 @@ std::string serializeProfileEnvelope(
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
-        schemaVersion != 9 && schemaVersion != 10)
+        schemaVersion != 9 && schemaVersion != 10 &&
+        schemaVersion != 11)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -647,12 +674,15 @@ SaveLoadResult deserializeProfileEnvelope(
             ((schemaVersion == 7 || schemaVersion == 8) &&
              contentVersion == "base-resource-pressure-content-13") ||
             (schemaVersion == 9 &&
-             contentVersion == "raid-travel-time-content-14");
+             contentVersion == "raid-travel-time-content-14") ||
+            (schemaVersion == 10 &&
+             contentVersion == "base-gunsmith-service-content-15");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
-             schemaVersion != 9 && schemaVersion != 10) ||
+             schemaVersion != 9 && schemaVersion != 10 &&
+             schemaVersion != 11) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -733,6 +763,22 @@ SaveLoadResult deserializeProfileEnvelope(
                     ? resources.at("resolved_demand_cycle_count")
                           .get<std::uint64_t>()
                     : 0U};
+        }
+        if (schemaVersion >= 11)
+        {
+            const Json &priority = payload.at("base_priority");
+            profile.basePriority = BasePriorityState{
+                BasePriorityDefinitionId{
+                    priority.at("definition_id").get<std::string>()},
+                priority.at("cycle_index").get<std::uint64_t>(),
+                priority.at("fulfilled").get<bool>(),
+                priority.at("missed_cycle_count").get<std::uint64_t>()};
+        }
+        else
+        {
+            static_cast<void>(synchronizeBasePriorityThrough(
+                profile,
+                content));
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -1050,12 +1096,41 @@ SaveLoadResult deserializeProfileEnvelope(
                                 .get<std::uint32_t>()},
                         startingResources.at(
                             "resolved_demand_cycle_count")
-                            .get<std::uint64_t>()}};
+                            .get<std::uint64_t>()},
+                    schemaVersion >= 11
+                        ? BasePriorityState{
+                              BasePriorityDefinitionId{
+                                  travel.at("starting_base_priority")
+                                      .at("definition_id")
+                                      .get<std::string>()},
+                              travel.at("starting_base_priority")
+                                  .at("cycle_index")
+                                  .get<std::uint64_t>(),
+                              travel.at("starting_base_priority")
+                                  .at("fulfilled")
+                                  .get<bool>(),
+                              travel.at("starting_base_priority")
+                                  .at("missed_cycle_count")
+                                  .get<std::uint64_t>()}
+                        : BasePriorityState{}};
+                if (schemaVersion < 11)
+                {
+                    ProfileState startingState = profile;
+                    startingState.worldClock =
+                        raid.travel.startingWorldClock;
+                    startingState.basePriority = BasePriorityState{};
+                    static_cast<void>(synchronizeBasePriorityThrough(
+                        startingState,
+                        content));
+                    raid.travel.startingBasePriority =
+                        startingState.basePriority;
+                }
             }
             else
             {
                 raid.travel.startingWorldClock = profile.worldClock;
                 raid.travel.startingBaseResources = profile.baseResources;
+                raid.travel.startingBasePriority = profile.basePriority;
             }
             profile.pendingRaid = std::move(raid);
         }

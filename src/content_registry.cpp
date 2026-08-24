@@ -1046,6 +1046,71 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.compatibleMagazineDefinitionId);
         }
 
+        const Json &basePriorities = requiredObject(
+            root,
+            "base_priorities");
+        registry.basePriorityCycleMinutes_ = requiredPositiveUint(
+            basePriorities,
+            "cycle_minutes");
+        constexpr std::uint32_t maximumPriorityCycleMinutes =
+            30U * 24U * 60U;
+        if (registry.basePriorityCycleMinutes_ >
+            maximumPriorityCycleMinutes)
+        {
+            fail("Base priority cycle is outside its valid range");
+        }
+        for (const Json &priorityValue :
+             requiredArray(basePriorities, "requests"))
+        {
+            if (!priorityValue.is_object())
+            {
+                fail("Base priority definition must be an object");
+            }
+            BasePriorityDefinition definition{
+                BasePriorityDefinitionId{
+                    requiredString(priorityValue, "id")},
+                requiredString(priorityValue, "display_name"),
+                ItemDefinitionId{
+                    requiredString(priorityValue, "required_item")},
+                requiredPositiveUint(priorityValue, "required_quantity"),
+                {}};
+            if (!hasPrefix(definition.id.value(), "base_priority."))
+            {
+                fail("Base priority definition ID must use its namespace");
+            }
+            const Json &reward = requiredObject(
+                priorityValue,
+                "resource_reward");
+            definition.resourceReward = BaseResourceBundle{
+                optionalUint(reward, "food"),
+                optionalUint(reward, "hygiene"),
+                optionalUint(reward, "morale"),
+                optionalUint(reward, "security")};
+            const ItemDefinition &requiredItem = registry.item(
+                definition.requiredItemDefinitionId);
+            if (definition.requiredQuantity > requiredItem.maxStackSize ||
+                definition.resourceReward.empty() ||
+                definition.resourceReward.food > 100U ||
+                definition.resourceReward.hygiene > 100U ||
+                definition.resourceReward.morale > 100U ||
+                definition.resourceReward.security > 100U)
+            {
+                fail("Base priority requirement or reward is invalid");
+            }
+            const std::size_t index = registry.basePriorities_.size();
+            if (!registry.basePriorityIndex_
+                     .emplace(definition.id, index)
+                     .second)
+            {
+                fail("duplicate Base priority definition ID");
+            }
+            registry.basePriorities_.push_back(std::move(definition));
+        }
+        if (registry.basePriorities_.empty())
+        {
+            fail("at least one Base priority definition is required");
+        }
+
         for (const Json &lootValue :
              requiredArray(root, "loot_tables"))
         {
@@ -1778,6 +1843,27 @@ const GunsmithFullMaintenanceDefinition &
 ContentRegistry::gunsmithFullMaintenance() const noexcept
 {
     return gunsmithFullMaintenance_;
+}
+
+std::uint32_t ContentRegistry::basePriorityCycleMinutes() const noexcept
+{
+    return basePriorityCycleMinutes_;
+}
+
+const std::vector<BasePriorityDefinition> &
+ContentRegistry::basePriorities() const noexcept
+{
+    return basePriorities_;
+}
+
+const BasePriorityDefinition &ContentRegistry::basePriority(
+    const BasePriorityDefinitionId &id) const
+{
+    return lookup(
+        basePriorityIndex_,
+        basePriorities_,
+        id,
+        "Base priority");
 }
 
 const ItemDefinition &

@@ -36,6 +36,115 @@ TEST(BaseResourceDomainTest, NewProfileStartsWithSafeButFiniteResources)
     EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{40, 40, 40, 40}));
     EXPECT_TRUE(profile.baseResources.lastShortfall.empty());
     EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 0U);
+    EXPECT_EQ(
+        profile.basePriority.definitionId,
+        BasePriorityDefinitionId{"base_priority.comfort_cola"});
+    EXPECT_FALSE(profile.basePriority.fulfilled);
+    EXPECT_EQ(profile.basePriority.cycleIndex, 0U);
+}
+
+TEST(BaseResourceDomainTest, MatchingPendingItemFulfillsPriorityAtomically)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-priority-submit",
+        publishedContentRegistry());
+    const AssetInstanceId cola = createIntakeAsset(
+        profile, alpha_content::lootCola);
+
+    const BasePriorityReceipt receipt = executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{cola},
+        CommandContext{profile.revision, "fulfill-comfort"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.reward, (BaseResourceBundle{0, 0, 12, 0}));
+    EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{40, 40, 52, 40}));
+    EXPECT_TRUE(profile.basePriority.fulfilled);
+    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const BasePriorityReceipt repeated = executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{cola},
+        CommandContext{profile.revision, "fulfill-comfort"});
+    EXPECT_TRUE(repeated.succeeded);
+    EXPECT_TRUE(repeated.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseResourceDomainTest, PriorityRejectsWrongOrStashItemWithoutMutation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-priority-reject",
+        publishedContentRegistry());
+    const AssetInstanceId scrap = createIntakeAsset(
+        profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const ItemDefinition &colaDefinition =
+        publishedContentRegistry().item(alpha_content::lootCola);
+    const auto stashOrigin = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::stash(),
+        colaDefinition,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(stashOrigin.has_value());
+    const AssetInstanceId stashCola = profile.assets.create(
+        colaDefinition,
+        StoredAssetLocation{ProfileContainerId::stash(), *stashOrigin},
+        1);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    EXPECT_FALSE(executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{scrap},
+        CommandContext{profile.revision, "reject-wrong-priority"}).succeeded);
+    EXPECT_FALSE(executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{stashCola},
+        CommandContext{profile.revision, "reject-stash-priority"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-priority-catch-up",
+        publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes =
+        kInitialWorldMinute + 7200U;
+    const BasePrioritySyncResult first = synchronizeBasePriorityThrough(
+        profile, publishedContentRegistry());
+    EXPECT_TRUE(first.changed);
+    EXPECT_EQ(first.cyclesAdvanced, 1U);
+    EXPECT_EQ(first.newlyMissedCycles, 1U);
+    EXPECT_EQ(profile.basePriority.missedCycleCount, 1U);
+    EXPECT_EQ(
+        profile.basePriority.definitionId,
+        BasePriorityDefinitionId{"base_priority.reinforce_perimeter"});
+
+    const AssetInstanceId scrap = createIntakeAsset(
+        profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    ASSERT_TRUE(executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{scrap},
+        CommandContext{profile.revision, "fulfill-perimeter"}).succeeded);
+    profile.worldClock.elapsedWorldMinutes =
+        kInitialWorldMinute + 21600U;
+    const BasePrioritySyncResult later = synchronizeBasePriorityThrough(
+        profile, publishedContentRegistry());
+    EXPECT_EQ(later.cyclesAdvanced, 2U);
+    EXPECT_EQ(later.newlyMissedCycles, 1U);
+    EXPECT_EQ(profile.basePriority.missedCycleCount, 2U);
+    EXPECT_EQ(
+        profile.basePriority.definitionId,
+        BasePriorityDefinitionId{"base_priority.comfort_cola"});
+    EXPECT_FALSE(profile.basePriority.fulfilled);
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
 }
 
 TEST(BaseResourceDomainTest, IntakeContributionIsAtomicAndIdempotent)

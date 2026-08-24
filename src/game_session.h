@@ -214,6 +214,10 @@ public:
         AssetInstanceId assetId,
         std::string transactionId);
 
+    [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(
+        AssetInstanceId assetId,
+        std::string transactionId);
+
     [[nodiscard]] WeaponAmmoReceipt executeProfileWeaponAmmo(
         const WeaponAmmoCommand &command,
         std::string transactionId);

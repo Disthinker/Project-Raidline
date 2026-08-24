@@ -9,12 +9,12 @@
 #include <type_traits>
 
 #include "alpha_content_ids.h"
+#include "base_resource_domain.h"
 
 namespace
 {
 constexpr InventoryGridSize kStashSize{20, 12};
 constexpr InventoryGridSize kBaseIntakeSize{20, 12};
-constexpr std::uint32_t kMaximumBaseResource{100};
 
 bool validMedicalStatus(const MedicalStatusState &status) noexcept
 {
@@ -43,6 +43,38 @@ bool validMedicalStatus(const MedicalStatusState &status) noexcept
                status.painScreamRemainingMs <= 25000;
     }
     return false;
+}
+
+bool validBasePriorityState(
+    const BasePriorityState &state,
+    std::uint64_t elapsedWorldMinutes,
+    const ContentRegistry &content) noexcept
+{
+    try
+    {
+        const auto &definitions = content.basePriorities();
+        const std::uint64_t cycleMinutes =
+            content.basePriorityCycleMinutes();
+        if (!state.definitionId.valid() || definitions.empty() ||
+            cycleMinutes == 0U)
+        {
+            return false;
+        }
+        const std::uint64_t expectedCycle =
+            elapsedWorldMinutes <= kInitialWorldMinute
+                ? 0U
+                : (elapsedWorldMinutes - kInitialWorldMinute) /
+                      cycleMinutes;
+        return state.cycleIndex == expectedCycle &&
+               state.definitionId == definitions[
+                   expectedCycle % definitions.size()].id &&
+               content.basePriority(state.definitionId).id ==
+                   state.definitionId;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 bool overlaps(
@@ -350,6 +382,8 @@ ProfileState makeNewAlphaProfile(
     placeNewAsset(profile, content, alpha_content::bodyArmor);
     placeNewAsset(profile, content, alpha_content::weaponMaintenanceKit);
     placeNewAsset(profile, content, alpha_content::armorMaintenanceKit);
+
+    static_cast<void>(synchronizeBasePriorityThrough(profile, content));
 
     const ProfileValidationResult validation =
         validateProfileState(profile, content);
@@ -666,6 +700,13 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base demand cycle is ahead of the world clock"};
     }
+    if (!validBasePriorityState(
+            profile.basePriority,
+            profile.worldClock.elapsedWorldMinutes,
+            content))
+    {
+        return {false, "Base priority state is invalid"};
+    }
 
     AssetInstanceId maximumId{};
     std::set<EquipmentSlotKind> occupiedSlots;
@@ -934,9 +975,11 @@ ProfileValidationResult validateProfileState(
         const bool advancedLootRules =
             raid.rulesVersion == "raid-control-resource-2" ||
             raid.rulesVersion == "raid-conditional-extraction-3" ||
-            raid.rulesVersion == "raid-travel-time-4";
+            raid.rulesVersion == "raid-travel-time-4" ||
+            raid.rulesVersion == "base-periodic-priority-5";
         const bool travelRules =
-            raid.rulesVersion == "raid-travel-time-4";
+            raid.rulesVersion == "raid-travel-time-4" ||
+            raid.rulesVersion == "base-periodic-priority-5";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -988,7 +1031,11 @@ ProfileValidationResult validateProfileState(
                 startingShortfall.morale > kMaximumBaseResource ||
                 startingShortfall.security > kMaximumBaseResource ||
                 raid.travel.startingBaseResources
-                        .resolvedDemandCycleCount > startingCompletedDays)
+                        .resolvedDemandCycleCount > startingCompletedDays ||
+                !validBasePriorityState(
+                    raid.travel.startingBasePriority,
+                    raid.travel.startingWorldClock.elapsedWorldMinutes,
+                    content))
             {
                 return {false, "pending Raid travel snapshot is invalid"};
             }
@@ -1105,6 +1152,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
+    hashBytes(hash, profile.basePriority.definitionId.value());
+    hashInteger(hash, profile.basePriority.cycleIndex);
+    hashInteger(hash, profile.basePriority.fulfilled ? 1U : 0U);
+    hashInteger(hash, profile.basePriority.missedCycleCount);
     hashInteger(hash, profile.nextBaseServiceJobId);
     if (profile.gunsmithMaintenanceJob.has_value())
     {
@@ -1253,6 +1304,13 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash,
                     raid.travel.startingBaseResources
                         .resolvedDemandCycleCount);
+        hashBytes(hash,
+                  raid.travel.startingBasePriority.definitionId.value());
+        hashInteger(hash, raid.travel.startingBasePriority.cycleIndex);
+        hashInteger(hash,
+                    raid.travel.startingBasePriority.fulfilled ? 1U : 0U);
+        hashInteger(hash,
+                    raid.travel.startingBasePriority.missedCycleCount);
     }
     if (profile.lastRaidResult.has_value())
     {
