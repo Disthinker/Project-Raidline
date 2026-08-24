@@ -34,7 +34,7 @@
 ### 用户验收加固修订
 
 - Base 停止移动时保留最后一次水平朝向；只进行上下移动不会把已确认的左右朝向重置为默认左向。静止右向复用已批准水平移动图集的首帧，不新增角色资源。
-- `collision` 提供 Base/Raid 共用的连续轴向首次接触解算。Storage、Supply、Allocation、Raid Gate 与 Raid `BallisticBlocker` 均阻挡四向和斜向穿越，同时允许未被阻挡轴继续贴墙滑动。
+- `collision` 提供 Base/Raid 共用的连续轴向首次接触解算。Storage、Supply、Allocation、Raid Gate 与 Raid `BallisticBlocker` 均阻挡玩家和敌人的四向、斜向及攻击前冲穿越，同时允许未被阻挡轴继续贴墙滑动。
 - 玩家可见文本统一经过 SDL client 地化边界；首次运行默认简体中文，设置页可切换 English/简体中文。语言选择保存在独立 `settings.json`，不进入 Profile schema、revision、领域指纹或 Raid 结算。
 - Windows 首发客户端使用系统自带微软雅黑生成缓存 SDL 文字纹理，不提交字体或新美术资产；Linux 继续只承担编译和领域测试兼容性，不增加同步发行承诺。
 
@@ -53,5 +53,5 @@
 - [x] 2026-08-24：完成 BaseIntake、四资源状态、冻结 Loot 来源、Settlement 需求消耗、schema v7、贡献命令与服务保存边界。
 - [x] 2026-08-24：完成第四 Base 设施、待分配选择、保留/捐献、资源色条与常驻紧凑投影；只使用文字和代码图形。
 - [x] 2026-08-24：Windows Debug 全目标构建成功，完整 CTest 834/834 通过；开发代理未启动游戏。
-- [x] 2026-08-24：修复静止朝向，并将 Base/Raid 障碍物碰撞从终点重叠检测统一为连续轴向首次接触解算，避免正常帧、长帧和纯纵向穿透；接入独立中英文设置与统一玩家文本渲染。Windows Debug 全目标构建成功，碰撞 focused 14/14、完整 CTest 847/847 通过，开发代理未启动游戏。
+- [x] 2026-08-24：修复静止朝向，并将 Base/Raid 玩家与敌人障碍物碰撞从终点重叠检测统一为连续轴向首次接触解算，避免正常帧、长帧、纯纵向和敌人攻击前冲穿透；接入独立中英文设置与统一玩家文本渲染。Windows Debug 全目标构建成功，敌人碰撞 focused 29/29、完整 CTest 849/849 通过，开发代理未启动游戏。
 - [ ] 完成 PR、exact-head CI 与用户正常游玩验收。

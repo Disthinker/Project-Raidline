@@ -2848,6 +2848,135 @@ TEST(GameplayWorldRaidTest, EveryPublishedBlockerStopsMovementOnAllFourSides)
     }
 }
 
+TEST(GameplayWorldRaidTest, EnemyPursuitCannotTunnelThroughVerticalCover)
+{
+    GameplayWorld fromAbove{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {EnemySpawn{Vec2{591.0F, 120.0F}, Vec2{50.0F, 50.0F}, 12}},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{570.0F, 220.0F}, Vec2{140.0F, 40.0F}}}}}};
+    fromAbove.emitPlayerNoise(1000.0F);
+    fromAbove.update(GameplayInput{}, 2.0F);
+    ASSERT_EQ(fromAbove.enemies().size(), 1U);
+    EXPECT_FLOAT_EQ(fromAbove.enemies().front().position().y, 170.0F);
+
+    GameplayWorld fromBelow{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {EnemySpawn{Vec2{591.0F, 520.0F}, Vec2{50.0F, 50.0F}, 12}},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{570.0F, 420.0F}, Vec2{140.0F, 40.0F}}}}}};
+    fromBelow.emitPlayerNoise(1000.0F);
+    fromBelow.update(GameplayInput{}, 2.0F);
+    ASSERT_EQ(fromBelow.enemies().size(), 1U);
+    EXPECT_FLOAT_EQ(fromBelow.enemies().front().position().y, 460.0F);
+}
+
+TEST(GameplayWorldRaidTest, EveryPublishedBlockerStopsEnemyOnAllFourSides)
+{
+    constexpr float enemySize{50.0F};
+    constexpr float playerSize{32.0F};
+    constexpr float enemyMargin{24.0F};
+    constexpr float playerMargin{80.0F};
+    const auto advanceEnemy = [](GameplayWorld &world)
+    {
+        world.emitPlayerNoise(2000.0F);
+        for (int frame{}; frame < 240; ++frame)
+        {
+            world.update(GameplayInput{}, 1.0F / 60.0F);
+        }
+    };
+
+    for (const MapDefinition &map : publishedContentRegistry().maps())
+    {
+        for (const BallisticBlockerDefinition &definition :
+             map.ballisticBlockers)
+        {
+            SCOPED_TRACE(
+                std::string{map.id.value()} + "/" + definition.id);
+            const Rect obstacle{
+                definition.bounds.position,
+                definition.bounds.size};
+            const auto makeWorld = [&](Vec2 playerSpawn, Vec2 enemySpawn)
+            {
+                return GameplayWorld{RaidWorldConfig{
+                    map.worldSize,
+                    playerSpawn,
+                    map.extractionPoint,
+                    {EnemySpawn{enemySpawn, Vec2{enemySize, enemySize}, 12}},
+                    100,
+                    100,
+                    false,
+                    {BallisticBlocker{1, obstacle}}}};
+            };
+
+            const float obstacleCenterX =
+                obstacle.position.x + obstacle.size.x * 0.5F;
+            const float obstacleCenterY =
+                obstacle.position.y + obstacle.size.y * 0.5F;
+
+            GameplayWorld fromAbove = makeWorld(
+                Vec2{
+                    obstacleCenterX - playerSize * 0.5F,
+                    obstacle.position.y + obstacle.size.y + playerMargin},
+                Vec2{
+                    obstacleCenterX - enemySize * 0.5F,
+                    obstacle.position.y - enemySize - enemyMargin});
+            advanceEnemy(fromAbove);
+            EXPECT_FLOAT_EQ(
+                fromAbove.enemies().front().position().y,
+                obstacle.position.y - enemySize);
+
+            GameplayWorld fromBelow = makeWorld(
+                Vec2{
+                    obstacleCenterX - playerSize * 0.5F,
+                    obstacle.position.y - playerSize - playerMargin},
+                Vec2{
+                    obstacleCenterX - enemySize * 0.5F,
+                    obstacle.position.y + obstacle.size.y + enemyMargin});
+            advanceEnemy(fromBelow);
+            EXPECT_FLOAT_EQ(
+                fromBelow.enemies().front().position().y,
+                obstacle.position.y + obstacle.size.y);
+
+            GameplayWorld fromLeft = makeWorld(
+                Vec2{
+                    obstacle.position.x + obstacle.size.x + playerMargin,
+                    obstacleCenterY - playerSize * 0.5F},
+                Vec2{
+                    obstacle.position.x - enemySize - enemyMargin,
+                    obstacleCenterY - enemySize * 0.5F});
+            advanceEnemy(fromLeft);
+            EXPECT_FLOAT_EQ(
+                fromLeft.enemies().front().position().x,
+                obstacle.position.x - enemySize);
+
+            GameplayWorld fromRight = makeWorld(
+                Vec2{
+                    obstacle.position.x - playerSize - playerMargin,
+                    obstacleCenterY - playerSize * 0.5F},
+                Vec2{
+                    obstacle.position.x + obstacle.size.x + enemyMargin,
+                    obstacleCenterY - enemySize * 0.5F});
+            advanceEnemy(fromRight);
+            EXPECT_FLOAT_EQ(
+                fromRight.enemies().front().position().x,
+                obstacle.position.x + obstacle.size.x);
+        }
+    }
+}
+
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
     GameplayWorld world;

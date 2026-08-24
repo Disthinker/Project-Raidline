@@ -140,6 +140,34 @@ namespace
             Vec2{size, size}};
     }
 
+    Vec2 resolveMovementAgainstBlockers(
+        Vec2 currentPosition,
+        Vec2 actorSize,
+        Vec2 requestedPosition,
+        const std::vector<BallisticBlocker> &blockers) noexcept
+    {
+        Rect resolvedBounds{currentPosition, actorSize};
+        float resolvedX = requestedPosition.x;
+        for (const BallisticBlocker &blocker : blockers)
+        {
+            resolvedX = resolveHorizontalCollision(
+                resolvedBounds,
+                resolvedX,
+                blocker.bounds);
+        }
+        resolvedBounds.position.x = resolvedX;
+
+        float resolvedY = requestedPosition.y;
+        for (const BallisticBlocker &blocker : blockers)
+        {
+            resolvedY = resolveVerticalCollision(
+                resolvedBounds,
+                resolvedY,
+                blocker.bounds);
+        }
+        return Vec2{resolvedX, resolvedY};
+    }
+
     Vec2 playerCenter(
         const Player &player)
     {
@@ -739,28 +767,12 @@ void GameplayWorld::update(
         worldHeight());
     const Vec2 requestedPlayerPosition = player_.position();
 
-    Rect resolvedPlayerBounds{
+    const Vec2 resolvedPlayerPosition = resolveMovementAgainstBlockers(
         playerPositionBeforeMovement,
-        Vec2{player_.size(), player_.size()}};
-    float resolvedX = requestedPlayerPosition.x;
-    for (const BallisticBlocker &blocker : ballisticBlockers_)
-    {
-        resolvedX = resolveHorizontalCollision(
-            resolvedPlayerBounds,
-            resolvedX,
-            blocker.bounds);
-    }
-    resolvedPlayerBounds.position.x = resolvedX;
-
-    float resolvedY = requestedPlayerPosition.y;
-    for (const BallisticBlocker &blocker : ballisticBlockers_)
-    {
-        resolvedY = resolveVerticalCollision(
-            resolvedPlayerBounds,
-            resolvedY,
-            blocker.bounds);
-    }
-    static_cast<void>(player_.setPosition(Vec2{resolvedX, resolvedY}));
+        Vec2{player_.size(), player_.size()},
+        requestedPlayerPosition,
+        ballisticBlockers_);
+    static_cast<void>(player_.setPosition(resolvedPlayerPosition));
 
     const Vec2 centerAfterMovement = playerCenter(player_);
     Vec2 desiredAimPosition{
@@ -863,6 +875,7 @@ void GameplayWorld::update(
             Enemy &enemy = enemies_[enemyIndex];
             const EnemyAwarenessState awarenessBefore =
                 enemy.awarenessState();
+            const Vec2 enemyPositionBeforeMovement = enemy.position();
 
             static_cast<void>(
                 enemy.updateTowardsTarget(
@@ -871,6 +884,12 @@ void GameplayWorld::update(
                     enemyStepTime,
                     worldWidth(),
                     worldHeight()));
+            const Vec2 resolvedEnemyPosition = resolveMovementAgainstBlockers(
+                enemyPositionBeforeMovement,
+                enemy.size(),
+                enemy.position(),
+                ballisticBlockers_);
+            static_cast<void>(enemy.setPosition(resolvedEnemyPosition));
             if (awarenessBefore != EnemyAwarenessState::Alerted &&
                 enemy.awarenessState() == EnemyAwarenessState::Alerted)
             {
