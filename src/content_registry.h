@@ -136,6 +136,18 @@ struct RaidTravelDefinition
         const RaidTravelDefinition &) = default;
 };
 
+struct GunsmithFullMaintenanceDefinition
+{
+    std::uint32_t baseCost{};
+    std::uint32_t currentDurabilityCostPerPoint{};
+    std::uint32_t maximumDurabilityCostPerPoint{};
+    std::uint32_t durationMinutes{};
+
+    friend bool operator==(
+        const GunsmithFullMaintenanceDefinition &,
+        const GunsmithFullMaintenanceDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -191,6 +203,10 @@ public:
     const std::vector<MapDefinition> &maps() const noexcept;
 
     [[nodiscard]]
+    const GunsmithFullMaintenanceDefinition &
+    gunsmithFullMaintenance() const noexcept;
+
+    [[nodiscard]]
     const ItemDefinition &item(
         const ItemDefinitionId &id) const;
 
@@ -213,6 +229,7 @@ private:
     std::vector<LootTableDefinition> lootTables_;
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;
+    GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
 
     std::map<ItemDefinitionId, std::size_t> itemIndex_;
     std::map<LootTableDefinitionId, std::size_t> lootTableIndex_;

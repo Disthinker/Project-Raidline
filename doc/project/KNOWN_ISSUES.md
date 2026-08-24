@@ -74,6 +74,7 @@
 | Raid Pressure & Variety：高危条件撤离 v1 | PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main |
 | Base Growth：资源分配与基础需求 v1 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `ba8283f` 进入 main |
 | Base Growth：世界时钟与每日需求 v1 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `5d2a11a` 进入 main |
-| Raid 往返行动耗时 v1 | 当前分支实现三图出发/返程/失败归队耗时、抵达昼夜预览、schema v9 和整笔活动回滚；Windows Debug 全目标与 875/875 CTest 通过，分钟值仍是开发期平衡值，等待 exact-head CI 与用户正常游玩验收 |
+| Raid 往返行动耗时 v1 | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `defaac0` 进入 main；三图分钟值仍是开发期平衡值 |
+| Base 枪匠全面维护服务 v1 | PR #81 已实现单项付费送修、世界时间推进、同实例领取、content v15、schema v10、双语供应页和保存失败原子阻断；Windows Debug 全目标、889/889 CTest 与 exact-head Windows/Ubuntu CI 通过，等待用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-travel-time-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-gunsmith-full-maintenance-v1.md`。

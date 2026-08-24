@@ -191,6 +191,117 @@ TEST(PersistentSessionTest, SaveFailureDoesNotSwapCandidateIntoMemory)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest, GunsmithJobPersistsAndCompletesThroughRaidTravel)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-gunsmith",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = findDefinition(
+        initial, alpha_content::rifle);
+    ASSERT_NE(rifle, 0U);
+    AssetRecord *damaged = initial.assets.findMutable(rifle);
+    ASSERT_NE(damaged, nullptr);
+    initial.currency = 1000U;
+    damaged->currentDurability = 3000U;
+    damaged->currentMaximumDurability = 4500U;
+    damaged->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession started;
+    started.configurePersistence(temporary.path());
+    ASSERT_TRUE(started.continueProfile()) << started.persistenceMessage();
+    const GunsmithMaintenanceReceipt startReceipt =
+        started.executeBaseGunsmithMaintenance(
+            rifle,
+            "persistent-start-gunsmith");
+    ASSERT_TRUE(startReceipt.succeeded) << startReceipt.message;
+    ASSERT_TRUE(started.profile().gunsmithMaintenanceJob.has_value());
+    EXPECT_EQ(started.profile().gunsmithMaintenanceJob->weaponAssetId, rifle);
+
+    GameSession travelling;
+    travelling.configurePersistence(temporary.path());
+    ASSERT_TRUE(travelling.continueProfile()) << travelling.persistenceMessage();
+    ASSERT_TRUE(travelling.profile().gunsmithMaintenanceJob.has_value());
+    ASSERT_TRUE(travelling.deployAlpha(
+        99103,
+        MapDefinitionId{"map.raid.industrial"}));
+    ASSERT_TRUE(travelling.activeQuitAlphaRaid());
+    EXPECT_GE(
+        travelling.profile().worldClock.elapsedWorldMinutes,
+        travelling.profile().gunsmithMaintenanceJob->completionWorldMinute);
+
+    const GunsmithCollectionReceipt collectReceipt =
+        travelling.collectBaseGunsmithMaintenance(
+            "persistent-collect-gunsmith");
+    ASSERT_TRUE(collectReceipt.succeeded) << collectReceipt.message;
+    EXPECT_EQ(collectReceipt.weaponAssetId, rifle);
+    EXPECT_FALSE(travelling.profile().gunsmithMaintenanceJob.has_value());
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    const AssetRecord *restored = reopened.profile().assets.find(rifle);
+    ASSERT_NE(restored, nullptr);
+    const std::uint32_t factoryDurability = publishedContentRegistry()
+        .item(alpha_content::rifle)
+        .weaponCondition->maximumDurabilityCenti;
+    EXPECT_EQ(restored->currentDurability, factoryDurability);
+    EXPECT_EQ(restored->currentMaximumDurability, factoryDurability);
+    EXPECT_EQ(restored->weaponMalfunction, WeaponMalfunctionType::None);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(
+        restored->location));
+}
+
+TEST(PersistentSessionTest, GunsmithSaveFailurePreservesInMemoryProfile)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-gunsmith-save",
+        publishedContentRegistry());
+    const AssetInstanceId rifle = findDefinition(
+        initial, alpha_content::rifle);
+    ASSERT_NE(rifle, 0U);
+    AssetRecord *damaged = initial.assets.findMutable(rifle);
+    ASSERT_NE(damaged, nullptr);
+    initial.currency = 1000U;
+    damaged->currentDurability = 3000U;
+    damaged->currentMaximumDurability = 4500U;
+
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+    const GunsmithMaintenanceReceipt receipt =
+        session.executeBaseGunsmithMaintenance(
+            rifle,
+            "gunsmith-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().gunsmithMaintenanceJob.has_value());
+    const AssetRecord *unchanged = session.profile().assets.find(rifle);
+    ASSERT_NE(unchanged, nullptr);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(
+        unchanged->location));
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;

@@ -605,11 +605,38 @@ std::optional<GridPosition> findFirstProfileFit(
     return std::nullopt;
 }
 
+bool profilePlacementFits(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    ProfileContainerId container,
+    GridPosition origin,
+    const ItemDefinition &definition,
+    ItemOrientation orientation,
+    std::optional<AssetInstanceId> ignoredAsset) noexcept
+{
+    try
+    {
+        return placementFits(
+            profile,
+            content,
+            container,
+            origin,
+            definition,
+            orientation,
+            ignoredAsset);
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content)
 {
     if (profile.profileId.empty() || profile.revision == 0 ||
+        profile.nextBaseServiceJobId == 0 ||
         profile.assets.nextAssetId() == 0 ||
         profile.currentHealth < 0 || profile.currentHealth > 100 ||
         (profile.currentHealth == 0 && !profile.pendingRaid.has_value()))
@@ -644,6 +671,7 @@ ProfileValidationResult validateProfileState(
     std::set<EquipmentSlotKind> occupiedSlots;
     std::set<AssetInstanceId> installedWeaponIds;
     std::set<AssetInstanceId> groundAssetIds;
+    std::set<AssetInstanceId> serviceAssetIds;
     for (const auto &[id, asset] : profile.assets.records())
     {
         if (id == 0 || id != asset.instanceId)
@@ -792,6 +820,19 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (const auto *service =
+                std::get_if<BaseServiceAssetLocation>(&asset.location))
+        {
+            if (service->jobId == 0 ||
+                definition->category != ItemCategory::Weapon ||
+                !definition->weaponCondition.has_value())
+            {
+                return {false, "Base service ownership is invalid"};
+            }
+            serviceAssetIds.insert(id);
+            continue;
+        }
+
         const auto &stored = std::get<StoredAssetLocation>(asset.location);
         if (!placementFits(
                 profile,
@@ -833,6 +874,48 @@ ProfileValidationResult validateProfileState(
     if (profile.assets.nextAssetId() <= maximumId)
     {
         return {false, "asset high-water mark moved backward"};
+    }
+
+    if (profile.gunsmithMaintenanceJob.has_value())
+    {
+        const GunsmithMaintenanceJob &job =
+            *profile.gunsmithMaintenanceJob;
+        const AssetRecord *weapon = profile.assets.find(job.weaponAssetId);
+        const auto *service = weapon != nullptr
+            ? std::get_if<BaseServiceAssetLocation>(&weapon->location)
+            : nullptr;
+        const ItemDefinition *definition{};
+        try
+        {
+            if (weapon != nullptr)
+            {
+                definition = &content.item(weapon->definitionId);
+            }
+        }
+        catch (...)
+        {
+        }
+        if (job.jobId == 0 || job.weaponAssetId == 0 ||
+            job.jobId >= profile.nextBaseServiceJobId ||
+            job.completionWorldMinute <= job.startedWorldMinute ||
+            job.startedWorldMinute > profile.worldClock.elapsedWorldMinutes ||
+            job.paidCurrency == 0 ||
+            job.targetFactoryDurabilityCenti == 0 ||
+            weapon == nullptr || service == nullptr ||
+            service->jobId != job.jobId || definition == nullptr ||
+            !definition->weaponCondition.has_value() ||
+            job.targetFactoryDurabilityCenti !=
+                definition->weaponCondition->maximumDurabilityCenti ||
+            job.returnOrigin.x < 0 || job.returnOrigin.y < 0 ||
+            serviceAssetIds.size() != 1U ||
+            !serviceAssetIds.contains(job.weaponAssetId))
+        {
+            return {false, "gunsmith maintenance job is invalid"};
+        }
+    }
+    else if (!serviceAssetIds.empty())
+    {
+        return {false, "Base service asset exists without a job"};
     }
 
 
@@ -1022,6 +1105,20 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
+    hashInteger(hash, profile.nextBaseServiceJobId);
+    if (profile.gunsmithMaintenanceJob.has_value())
+    {
+        const GunsmithMaintenanceJob &job =
+            *profile.gunsmithMaintenanceJob;
+        hashInteger(hash, job.jobId);
+        hashInteger(hash, job.weaponAssetId);
+        hashInteger(hash, job.returnOrigin.x);
+        hashInteger(hash, job.returnOrigin.y);
+        hashInteger(hash, job.startedWorldMinute);
+        hashInteger(hash, job.completionWorldMinute);
+        hashInteger(hash, job.paidCurrency);
+        hashInteger(hash, job.targetFactoryDurabilityCenti);
+    }
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -1067,12 +1164,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, 2U);
             hashInteger(hash, installed->weaponAssetId);
         }
+        else if (const auto *ground =
+                     std::get_if<RaidGroundAssetLocation>(&asset.location))
+        {
+            hashInteger(hash, 3U);
+            hashBytes(hash, ground->raidId);
+            hashInteger(hash, ground->lootSlotIndex);
+        }
         else
         {
-            const auto &ground = std::get<RaidGroundAssetLocation>(asset.location);
-            hashInteger(hash, 3U);
-            hashBytes(hash, ground.raidId);
-            hashInteger(hash, ground.lootSlotIndex);
+            const auto &service =
+                std::get<BaseServiceAssetLocation>(asset.location);
+            hashInteger(hash, 4U);
+            hashInteger(hash, service.jobId);
         }
     }
     for (const std::string &transaction : profile.committedTransactions)

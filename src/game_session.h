@@ -11,6 +11,7 @@
 
 #include "economy_domain.h"
 #include "base_resource_domain.h"
+#include "base_service_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
 #include "profile_combat_domain.h"
@@ -230,6 +231,11 @@ public:
     [[nodiscard]] ArmorMaintenanceReceipt executeBaseArmorMaintenance(
         AssetInstanceId kitAssetId,
         AssetInstanceId armorAssetId,
+        std::string transactionId);
+    [[nodiscard]] GunsmithMaintenanceReceipt executeBaseGunsmithMaintenance(
+        AssetInstanceId weaponAssetId,
+        std::string transactionId);
+    [[nodiscard]] GunsmithCollectionReceipt collectBaseGunsmithMaintenance(
         std::string transactionId);
 
     [[nodiscard]] const RaidActionState &raidActionState() const noexcept;

@@ -68,6 +68,24 @@ TEST(UiLocalizationTest, ChineseTranslatesRaidTravelPreviewAndResult) {
   EXPECT_NE(result.find("失败归队 180 分钟"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
+  const std::string quote = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "GUNSMITH QUOTE 130 | 240 MIN | FULL FACTORY CONDITION");
+  EXPECT_NE(quote.find("枪匠报价 130"), std::string::npos);
+  EXPECT_NE(quote.find("240 分钟"), std::string::npos);
+  EXPECT_NE(quote.find("恢复出厂状态"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "gunsmith service is still in progress"),
+            "枪匠维护仍在进行");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Stash has no legal space for serviced weapon"),
+            "仓库没有可放置维护武器的合法空间");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);
