@@ -6,7 +6,7 @@
 
 - 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
 - Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
-- 当前唯一产品范围仍是 Core Extraction Alpha。长期系统只保留被当前消费者需要的稳定边界，不创建空转的世界时间、人口、任务、建设或联机状态。
+- 当前交付已进入 Alpha 后的 Base Growth。长期系统只保留被当前消费者需要的稳定边界；世界时钟已有每日需求消费者，人口、任务、建设或联机状态仍不得空转创建。
 - 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
 - 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
 
@@ -45,7 +45,7 @@ Project_Raidline.exe
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
 - `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和当前活动运行时。Persistent Base 已把 Profile 与 BaseRuntime 接入；Extraction Loop 已让 Alpha `GameplayWorld` 从 pending Raid 快照构造，并只通过 GameSession 命令读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
-- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。长期 BaseState、设施、人口和日程在真正有消费者时进入 ProfileState 的独立子领域。
+- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock 已因每日需求进入 ProfileState；设施、人口和其他日程仍须等待真正消费者。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
 - Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
 
@@ -56,7 +56,7 @@ Project_Raidline.exe
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
 - 七槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 当前 HP、MedicalStatus、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
+- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
 
 Persistent Base 已实例化资产、基础装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算；Survival Loadout 已扩展为两长枪、手枪、防具、胸挂与背包七槽。未启用的长期系统只通过后续显式迁移加入。
 
@@ -153,7 +153,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`raid-control-resource-content-11` 不改变 Profile schema；pending Raid Loot 新增的高危访问标记在 schema v6 中使用可缺省字段，并继续显式读取 `raid-pressure-content-10`、`raid-fixed-maps-content-9` 及更早兼容内容版本存档。当前 V0 没有需兼容的更早正式玩家存档。
+- Persistent Base 落地 schema v1，Extraction Loop 与 Survival Loadout 依次升级到 v2～v6，Base 资源分配使用 v7，世界时钟与每日需求使用 v8。v8 保存整数世界分钟和已结算日界线；v1～v7 迁移到第 1 日 08:00 且不重放旧 Raid 次数。内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -184,6 +184,8 @@ Content Registry 的当前落地边界：
 17. `codex/raid-fixed-map-variety-v1`：PR #73 / merge commit `a32c476`，交付三张固定地图选择、独立配置与冻结快照。
 18. `codex/fix-weapon-switch-reticle-continuity`：PR #74 / merge commit `6138da8`，修复限时切换完成时的实际准星跳点。
 19. `codex/raid-continuous-high-risk-v1`：PR #75 / merge commit `773443b`，交付无时间失败的常规→高危生命周期、普通撤离宽限、地图信号撤离和有界感染者压力。
-20. `codex/raid-high-risk-control-resource-v1`：当前切片，交付每图主动高危控制地标、可中断按住交互、开局冻结的高级 Loot 与阶段访问门控；随机危机、情报、随机地图和新资源不在本切片。
+20. `codex/raid-high-risk-control-resource-v1`：PR #76 / merge commit `bc26337`，交付每图主动高危控制地标、可中断按住交互、开局冻结的高级 Loot 与阶段访问门控。
+21. `codex/base-resource-pressure-v1`：PR #78 / merge commit `ba8283f`，交付待分配区、个人保留/基地捐献、四项资源、共享连续碰撞与中英文设置。
+22. `codex/base-world-clock-daily-needs-v1`：当前切片，交付唯一世界分钟时钟、每日需求、schema v8、Base 检查点与 Raid 时间提交/回滚。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

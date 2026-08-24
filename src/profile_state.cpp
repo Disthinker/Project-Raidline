@@ -634,6 +634,11 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base resource state is invalid"};
     }
+    const WorldClockProjection clock = projectWorldClock(profile.worldClock);
+    if (profile.baseResources.resolvedDemandCycleCount > clock.completedDays)
+    {
+        return {false, "Base demand cycle is ahead of the world clock"};
+    }
 
     AssetInstanceId maximumId{};
     std::set<EquipmentSlotKind> occupiedSlots;
@@ -969,6 +974,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.medicalStatus.bleedingDamageRemainingMs);
     hashInteger(hash, profile.medicalStatus.painkillerRemainingMs);
     hashInteger(hash, profile.medicalStatus.painScreamRemainingMs);
+    hashInteger(hash, profile.worldClock.elapsedWorldMinutes);
     hashInteger(hash, profile.baseResources.pool.food);
     hashInteger(hash, profile.baseResources.pool.hygiene);
     hashInteger(hash, profile.baseResources.pool.morale);
@@ -977,7 +983,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.hygiene);
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
-    hashInteger(hash, profile.baseResources.resolvedRaidCount);
+    hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {

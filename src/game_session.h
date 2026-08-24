@@ -153,6 +153,10 @@ public:
     [[nodiscard]] bool startNewProfile(std::string profileId);
     [[nodiscard]] bool continueProfile();
 
+    void advanceBaseWorldClock(float deltaTime);
+    [[nodiscard]] bool checkpointWorldClock();
+    [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
+
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,
         MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"});
@@ -258,6 +262,9 @@ private:
     std::uint64_t woundRandomSequence_{};
     std::uint64_t weaponFaultSequence_{};
     float raidElapsedSeconds_{};
+    double pendingWorldSeconds_{};
+    float worldClockCheckpointElapsedSeconds_{};
+    bool worldClockDirty_{};
     WeaponClearGesture weaponClearGesture_;
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
@@ -307,6 +314,10 @@ private:
         ProfileState candidate,
         bool persist = true);
     void refreshLoadoutTutorial();
+    void advanceWorldClockFromSimulation(
+        float deltaTime,
+        bool allowPeriodicCheckpoint);
+    void resetWorldClockRuntime() noexcept;
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
     void applyAlphaIncomingDamage();
     void advanceAlphaMedicalStatus(float deltaTime);

@@ -3,7 +3,7 @@
 #include "inventory_domain.h"
 
 inline constexpr std::uint32_t kMaximumBaseResource = 100;
-inline constexpr BaseResourceBundle kBaseActivityDemand{8, 6, 5, 4};
+inline constexpr BaseResourceBundle kBaseDailyDemand{8, 6, 5, 4};
 
 struct ContributeBaseAssetCommand
 {
@@ -40,7 +40,16 @@ struct BaseResourceReceipt
     const ContributeBaseAssetCommand &command,
     const CommandContext &context);
 
-// Settlement-only operation: every resolved Raid consumes the same small
-// Alpha activity demand. Shortages are recorded for presentation but do not
-// block play or mutate assets.
-void applyBaseActivityDemand(ProfileState &profile) noexcept;
+struct BaseDailyDemandResult
+{
+    std::uint64_t cyclesResolved{};
+    BaseResourceBundle latestShortfall;
+};
+
+// Resolves every unprocessed daily boundary through completedWorldDays.
+// The implementation is constant-time even when future sleep/travel commands
+// advance across many days. Shortages remain non-blocking and never mutate
+// assets.
+[[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandThrough(
+    BaseResourceState &state,
+    std::uint64_t completedWorldDays) noexcept;

@@ -120,6 +120,34 @@ TEST(GameSessionTest, DefaultSessionStartsRaidOneWithEmptyStash)
     EXPECT_FALSE(session.canStartNextRaid());
 }
 
+TEST(GameSessionTest, BaseClockUsesScaledSimulationTimeAndDailyDemand)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("base-clock-daily-demand"));
+    const ProfileRevision revision = session.profile().revision;
+
+    session.advanceBaseWorldClock(0.5F);
+    EXPECT_EQ(
+        session.profile().worldClock.elapsedWorldMinutes,
+        kInitialWorldMinute);
+    session.advanceBaseWorldClock(0.5F);
+    EXPECT_EQ(
+        session.profile().worldClock.elapsedWorldMinutes,
+        kInitialWorldMinute + 1U);
+
+    session.advanceBaseWorldClock(959.0F);
+    const WorldClockProjection clock = session.worldClockProjection();
+    EXPECT_EQ(clock.day, 2U);
+    EXPECT_EQ(clock.hour, 0U);
+    EXPECT_EQ(session.profile().revision, revision);
+    EXPECT_EQ(
+        session.profile().baseResources.pool,
+        (BaseResourceBundle{32, 34, 35, 36}));
+    EXPECT_EQ(
+        session.profile().baseResources.resolvedDemandCycleCount,
+        1U);
+}
+
 TEST(GameSessionTest, ActiveRaidRejectsRestartWithoutMutation)
 {
     GameSession session;

@@ -222,6 +222,7 @@ bool GameSession::startNewProfile(std::string profileId)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
     recoveredAbandonedRaid_ = false;
@@ -269,6 +270,7 @@ bool GameSession::continueProfile()
         recoveredAbandonedRaid_ = true;
     }
     profile_ = std::move(candidate);
+    resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
@@ -395,6 +397,8 @@ bool GameSession::deployAlpha(
         }
         saveMessage = saved.message;
     }
+    worldClockDirty_ = false;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
     if (!commitProfileCandidate(std::move(candidate), false))
     {
         return false;
@@ -1471,6 +1475,118 @@ const std::string &GameSession::persistenceMessage() const noexcept
     return persistenceMessage_;
 }
 
+void GameSession::advanceBaseWorldClock(float deltaTime)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
+        state_ != GameSessionState::BetweenRaids)
+    {
+        return;
+    }
+    advanceWorldClockFromSimulation(deltaTime, true);
+}
+
+bool GameSession::checkpointWorldClock()
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value())
+    {
+        persistenceMessage_ =
+            "active Raid time can only be saved by Settlement";
+        return false;
+    }
+    if (!worldClockDirty_)
+    {
+        return true;
+    }
+    const ProfileValidationResult validation =
+        validateProfileState(profile_, publishedContentRegistry());
+    if (!validation.valid)
+    {
+        persistenceMessage_ = validation.message;
+        return false;
+    }
+    if (saveRepository_.has_value())
+    {
+        const SaveWriteResult saved = saveRepository_->save(
+            profile_,
+            publishedContentRegistry().contentVersion());
+        if (!saved.succeeded)
+        {
+            persistenceMessage_ = saved.message;
+            return false;
+        }
+        persistenceMessage_ = saved.message;
+    }
+    worldClockDirty_ = false;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
+    return true;
+}
+
+WorldClockProjection GameSession::worldClockProjection() const noexcept
+{
+    return projectWorldClock(profile_.worldClock);
+}
+
+void GameSession::advanceWorldClockFromSimulation(
+    float deltaTime,
+    bool allowPeriodicCheckpoint)
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    {
+        return;
+    }
+    const double scaledSeconds =
+        pendingWorldSeconds_ +
+        static_cast<double>(deltaTime) *
+            static_cast<double>(kWorldSecondsPerSimulationSecond);
+    const double wholeMinutes = std::floor(
+        scaledSeconds / static_cast<double>(kWorldMinutesPerHour));
+    const double maximumMinutes = static_cast<double>(
+        std::numeric_limits<std::uint64_t>::max());
+    const std::uint64_t minutes = wholeMinutes >= maximumMinutes
+        ? std::numeric_limits<std::uint64_t>::max()
+        : static_cast<std::uint64_t>(wholeMinutes);
+    pendingWorldSeconds_ = minutes ==
+            std::numeric_limits<std::uint64_t>::max()
+        ? 0.0
+        : scaledSeconds -
+              static_cast<double>(minutes) *
+                  static_cast<double>(kWorldMinutesPerHour);
+
+    if (minutes > 0U)
+    {
+        const WorldClockAdvanceResult advanced =
+            advanceWorldClock(profile_.worldClock, minutes);
+        if (advanced.minutesApplied > 0U)
+        {
+            static_cast<void>(applyBaseDailyDemandThrough(
+                profile_.baseResources,
+                advanced.completedDaysAfter));
+            worldClockDirty_ = true;
+        }
+    }
+
+    if (!allowPeriodicCheckpoint)
+    {
+        return;
+    }
+    worldClockCheckpointElapsedSeconds_ = std::min(
+        kBaseClockCheckpointIntervalSeconds,
+        worldClockCheckpointElapsedSeconds_ + deltaTime);
+    if (worldClockDirty_ &&
+        worldClockCheckpointElapsedSeconds_ >=
+            kBaseClockCheckpointIntervalSeconds)
+    {
+        static_cast<void>(checkpointWorldClock());
+    }
+}
+
+void GameSession::resetWorldClockRuntime() noexcept
+{
+    pendingWorldSeconds_ = 0.0;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
+    worldClockDirty_ = false;
+}
+
 void GameSession::updateAlphaRaid(
     const GameplayInput &input,
     float deltaTime)
@@ -1485,6 +1601,10 @@ void GameSession::updateAlphaRaid(
         alphaRaidActive_ = false;
         state_ = GameSessionState::BetweenRaids;
         return;
+    }
+    if (alphaRaidActive_ && world_->raidSession().isActive())
+    {
+        advanceWorldClockFromSimulation(deltaTime, false);
     }
     synchronizeActiveAlphaWeapon();
     if (input.quitRaidJustPressed && alphaRaidActive_)
@@ -2621,6 +2741,11 @@ bool GameSession::commitProfileCandidate(
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    if (persist)
+    {
+        worldClockDirty_ = false;
+        worldClockCheckpointElapsedSeconds_ = 0.0F;
+    }
     persistenceMessage_ = std::move(saveMessage);
     return true;
 }

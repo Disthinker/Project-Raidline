@@ -39,7 +39,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV7RoundTripPreservesResourcesAndIntake)
+TEST(SaveRepositoryTest, SchemaV8RoundTripPreservesClockResourcesAndIntake)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -63,6 +63,8 @@ TEST(SaveRepositoryTest, SchemaV7RoundTripPreservesResourcesAndIntake)
         BaseResourceBundle{23, 45, 67, 89},
         BaseResourceBundle{1, 2, 3, 4},
         7};
+    profile.worldClock.elapsedWorldMinutes =
+        7U * kWorldMinutesPerDay + kInitialWorldMinute;
     const ItemDefinition &cola = publishedContentRegistry().item(
         alpha_content::lootCola);
     static_cast<void>(profile.assets.create(
@@ -80,6 +82,56 @@ TEST(SaveRepositoryTest, SchemaV7RoundTripPreservesResourcesAndIntake)
     ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
     ASSERT_TRUE(loaded.profile.has_value());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV7MigratesToInitialClockWithoutReplayingRaids)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v7-world-clock-migration",
+        publishedContentRegistry());
+    profile.baseResources.pool = BaseResourceBundle{17, 19, 23, 29};
+    profile.baseResources.lastShortfall = BaseResourceBundle{1, 2, 3, 4};
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion(),
+            7),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->worldClock, WorldClockState{});
+    EXPECT_EQ(
+        migrated.profile->baseResources.pool,
+        (BaseResourceBundle{17, 19, 23, 29}));
+    EXPECT_EQ(
+        migrated.profile->baseResources.lastShortfall,
+        (BaseResourceBundle{1, 2, 3, 4}));
+    EXPECT_EQ(
+        migrated.profile->baseResources.resolvedDemandCycleCount,
+        0U);
+    EXPECT_TRUE(validateProfileState(
+        *migrated.profile, publishedContentRegistry()).valid);
+}
+
+TEST(SaveRepositoryTest, SchemaV8RejectsDemandCycleAheadOfWorldClock)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-invalid-demand-cycle",
+        publishedContentRegistry());
+    profile.baseResources.resolvedDemandCycleCount = 1U;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
+    EXPECT_FALSE(loaded.profile.has_value());
+    EXPECT_NE(
+        loaded.message.find("Base demand cycle is ahead"),
+        std::string::npos);
 }
 
 TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousMultiWeaponContentVersion)

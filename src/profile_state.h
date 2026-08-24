@@ -12,6 +12,7 @@
 #include "content_registry.h"
 #include "grid_inventory.h"
 #include "medical_types.h"
+#include "world_clock.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -191,7 +192,7 @@ struct BaseResourceState
 {
     BaseResourceBundle pool{40, 40, 40, 40};
     BaseResourceBundle lastShortfall;
-    std::uint64_t resolvedRaidCount{};
+    std::uint64_t resolvedDemandCycleCount{};
 
     friend bool operator==(
         const BaseResourceState &,
@@ -232,6 +233,7 @@ struct ProfileState
     TutorialProgress tutorial{TutorialProgress::FindStorage};
     int currentHealth{100};
     MedicalStatusState medicalStatus;
+    WorldClockState worldClock;
     BaseResourceState baseResources;
     AssetRegistry assets;
     std::set<std::string> committedTransactions;

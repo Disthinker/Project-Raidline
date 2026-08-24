@@ -970,14 +970,20 @@ TEST(AlphaExtractionSessionTest, RaidMagazineUnloadIsInterruptibleAndAtomic)
     ASSERT_TRUE(session.deployAlpha(3321));
     ASSERT_EQ(carriedLooseAmmunition(session.profile()), 0U);
 
-    const std::uint64_t beforeInterrupted =
-        profileStateFingerprint(session.profile());
+    const ProfileState beforeInterrupted = session.profile();
     ASSERT_TRUE(session.startAlphaUnloadMagazine(*target));
     GameplayInput inventoryOpened{};
     inventoryOpened.inventoryOpen = true;
     session.update(inventoryOpened, 1.0F);
     EXPECT_FALSE(session.raidActionState().active().has_value());
-    EXPECT_EQ(profileStateFingerprint(session.profile()), beforeInterrupted);
+    ProfileState afterInterrupted = session.profile();
+    afterInterrupted.worldClock = beforeInterrupted.worldClock;
+    EXPECT_EQ(
+        profileStateFingerprint(afterInterrupted),
+        profileStateFingerprint(beforeInterrupted));
+    EXPECT_EQ(
+        session.profile().worldClock.elapsedWorldMinutes,
+        beforeInterrupted.worldClock.elapsedWorldMinutes + 1U);
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 20U);
 
     ASSERT_TRUE(session.startAlphaUnloadMagazine(*target));

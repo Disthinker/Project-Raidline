@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@d106193` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾，以及 Raid 固定地图、持续高危、主动高危、高级资源区和轻装条件撤离 v1；PR #77 已通过 CI 和用户正常游玩验收后普通合入。
-- 当前开发分支：`codex/base-resource-pressure-v1`，从干净的 `origin/main@d106193` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-resource-pressure-v1.md`。
+- `origin/main@ba8283f` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 与 Raid Pressure 接受切片，以及 PR #78 的 Base 资源分配、共享连续碰撞和中英文设置；PR #78 已通过 exact-head CI 和用户正常游玩验收后普通合入。
+- 当前开发分支：`codex/base-world-clock-daily-needs-v1`，从干净的 `origin/main@ba8283f` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-world-clock-daily-needs-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，以及 Raid Pressure PR #73/#75/#76/#77 已接受。当前进入 **Base Growth：资源分配与基础需求 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个“带回物在个人保留与基地需求之间取舍”的长期循环。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78 已接受。当前进入 **Base Growth：世界时钟与每日需求 v1**；外部 GDD 继续只读，本仓库 ExecPlan 将临时的“每局扣需求”迁移到唯一世界时间轴上的每日 00:00 节点。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -32,7 +32,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，�
 17. **持续高危阶段 v1**：PR #75 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main。
 18. **主动高危与高级资源区 v1**：PR #76 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `bc26337` 进入 main。
 19. **高危条件撤离 v1**：PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main。
-20. **Base 资源分配与基础需求 v1**：当前分支把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；每次正式 Raid 结算消耗小额需求，短缺不造成死档。当前表现只使用文字、色条和几何图形，不接入新美术资源。
+20. **Base 资源分配与基础需求 v1**：PR #78 把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；同时修复共享障碍碰撞、停止朝向并加入中英文设置，已以 merge commit `ba8283f` 进入 main。
+21. **Base 世界时钟与每日需求 v1**：当前分支建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -60,7 +61,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，�
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #77 的单位克重/嵌套资产/弹匣与枪膛计重、路线资格取消、三图几何互斥、旧 content v11 加载和 GameSession 投影均已完成并接受；当前 Base 资源切片及其验收加固 Windows Debug 全目标构建成功，完整 CTest 849/849 通过，开发代理未启动游戏。
+- PR #78 的资源分配、共享碰撞和语言设置已完成 CI、用户验收并进入 main。当前世界时钟切片 Windows Debug 全目标构建成功，完整 CTest 862/862 通过；开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -212,15 +213,22 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，�
 - 首次运行默认简体中文；主菜单与 Base/Raid 暂停菜单的设置页可点击语言项切换，`L` 是同一设置页快捷键。选择写入独立 `settings.json`，损坏或未知设置安全回退到简体中文，不改变游戏存档。
 - Windows 客户端使用系统微软雅黑生成并缓存 Unicode SDL 纹理，不提交字体文件、不生成美术资源、不修改 manifest；纯数字物品数量继续使用 SDL 内建数字字形。
 
+## Base 世界时钟与每日需求 v1 当前实现
+
+- `ProfileState::WorldClockState` 以第 1 日 08:00 起算的整数世界分钟作为唯一权威时间；Base 与 Active Raid 使用相同的暂定 60 倍时间缩放，日、时分与昼夜只由领域投影生成。
+- 未暂停 Base 世界和 Active Raid 才推进。Base 库存/设施模态页、Esc 暂停、MainMenu、RaidResult 与离线时间冻结；Base 每 30 秒有效模拟时间检查点保存，离开 Base 前显式保存。
+- 四项需求改为每日 00:00 结算。多日跨度以常数时间补算，`resolvedDemandCycleCount` 保证同一日界线只结算一次；短缺仍不阻止游玩或损坏资产。
+- schema v8 保存时钟与已结算日数；v1～v7 迁移到初始时刻且不重放旧 Raid 次数。Raid 内时间只随成功、死亡或主动退出 Settlement 提交，关闭程序或异常退出恢复出击前时间。
+- Base、资源分配页与 Raid HUD 只读显示双语时间；未增加调试按钮、新资源、音频或 manifest 修改。
+
 ## 尚未完成
 
-- 射击表现收尾：代码与本地自动化已完成；exact-head Windows/Ubuntu CI 与用户对火光、短烟、柔边局部闪光和轻微抖动的正常游玩验收尚待完成。
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
 - NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- Week29 枪口与受伤代码反馈仍待按新投影边界独立整理；本切片不整体合并 Week29。
+- Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。
 - 正式攻击动画及所有新正式美术/音频生产。
 
 ## 明确停止扩展的 V0 合同
