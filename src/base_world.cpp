@@ -4,6 +4,8 @@
 #include <cmath>
 #include <vector>
 
+#include "collision.h"
+
 namespace
 {
 float distanceSquaredToRect(Vec2 point, const Rect &rect) noexcept
@@ -27,15 +29,6 @@ AnimationClip makeBasePlayerMoveClip()
         std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
 }
 
-bool rangesOverlap(
-    float firstMinimum,
-    float firstMaximum,
-    float secondMinimum,
-    float secondMaximum) noexcept
-{
-    return firstMinimum < secondMaximum && firstMaximum > secondMinimum;
-}
-
 float resolveHorizontalMovement(
     Vec2 position,
     Vec2 size,
@@ -45,29 +38,10 @@ float resolveHorizontalMovement(
     float resolvedX = desiredX;
     for (const BaseFacility &facility : facilities)
     {
-        if (!rangesOverlap(
-                position.y,
-                position.y + size.y,
-                facility.bounds.position.y,
-                facility.bounds.position.y + facility.bounds.size.y))
-        {
-            continue;
-        }
-
-        const float facilityLeft = facility.bounds.position.x;
-        const float facilityRight = facilityLeft + facility.bounds.size.x;
-        if (desiredX > position.x &&
-            position.x + size.x <= facilityLeft &&
-            desiredX + size.x > facilityLeft)
-        {
-            resolvedX = std::min(resolvedX, facilityLeft - size.x);
-        }
-        else if (desiredX < position.x &&
-                 position.x >= facilityRight &&
-                 desiredX < facilityRight)
-        {
-            resolvedX = std::max(resolvedX, facilityRight);
-        }
+        resolvedX = resolveHorizontalCollision(
+            Rect{position, size},
+            resolvedX,
+            facility.bounds);
     }
     return resolvedX;
 }
@@ -81,29 +55,10 @@ float resolveVerticalMovement(
     float resolvedY = desiredY;
     for (const BaseFacility &facility : facilities)
     {
-        if (!rangesOverlap(
-                position.x,
-                position.x + size.x,
-                facility.bounds.position.x,
-                facility.bounds.position.x + facility.bounds.size.x))
-        {
-            continue;
-        }
-
-        const float facilityTop = facility.bounds.position.y;
-        const float facilityBottom = facilityTop + facility.bounds.size.y;
-        if (desiredY > position.y &&
-            position.y + size.y <= facilityTop &&
-            desiredY + size.y > facilityTop)
-        {
-            resolvedY = std::min(resolvedY, facilityTop - size.y);
-        }
-        else if (desiredY < position.y &&
-                 position.y >= facilityBottom &&
-                 desiredY < facilityBottom)
-        {
-            resolvedY = std::max(resolvedY, facilityBottom);
-        }
+        resolvedY = resolveVerticalCollision(
+            Rect{position, size},
+            resolvedY,
+            facility.bounds);
     }
     return resolvedY;
 }

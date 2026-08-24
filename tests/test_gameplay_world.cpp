@@ -8,6 +8,7 @@
 #include <vector>
 #include <utility>
 
+#include "content_registry.h"
 #include "gameplay_input.h"
 #include "gameplay_world.h"
 
@@ -2664,7 +2665,7 @@ TEST(GameplayWorldRaidTest, AlphaWorldPublishesDamageInsteadOfGuessingArmor)
 
 TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
 {
-    GameplayWorld world{RaidWorldConfig{
+    const RaidWorldConfig config{
         Vec2{1280.0F, 720.0F},
         Vec2{600.0F, 320.0F},
         ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
@@ -2674,38 +2675,41 @@ TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
         false,
         {BallisticBlocker{
             1,
-            Rect{Vec2{660.0F, 300.0F}, Vec2{60.0F, 80.0F}}}}}};
+            Rect{Vec2{660.0F, 300.0F}, Vec2{60.0F, 80.0F}}}}};
+    GameplayWorld world{config};
 
     const Vec2 start = world.player().position();
     GameplayInput move{};
     move.moveRight = true;
     world.update(move, 0.20F);
-    EXPECT_FLOAT_EQ(world.player().position().x, start.x);
+    EXPECT_FLOAT_EQ(world.player().position().x, 628.0F);
     EXPECT_FLOAT_EQ(world.player().position().y, start.y);
+
+    GameplayWorld shotWorld{config};
 
     GameplayInput fire{};
     fire.fireJustPressed = true;
     fire.firePressed = true;
     fire.aimWorldPosition = Vec2{900.0F, 336.0F};
-    world.update(fire, 0.0F);
-    ASSERT_EQ(world.logicalBallistics().size(), 1U);
+    shotWorld.update(fire, 0.0F);
+    ASSERT_EQ(shotWorld.logicalBallistics().size(), 1U);
 
-    world.update(GameplayInput{}, 0.10F);
-    EXPECT_TRUE(world.logicalBallistics().empty());
-    ASSERT_EQ(world.hitResultsLastUpdate().size(), 1U);
+    shotWorld.update(GameplayInput{}, 0.10F);
+    EXPECT_TRUE(shotWorld.logicalBallistics().empty());
+    ASSERT_EQ(shotWorld.hitResultsLastUpdate().size(), 1U);
     EXPECT_EQ(
-        world.hitResultsLastUpdate().front().targetKind,
+        shotWorld.hitResultsLastUpdate().front().targetKind,
         HitTargetKind::Obstacle);
-    EXPECT_EQ(world.hitResultsLastUpdate().front().damageApplied, 0);
+    EXPECT_EQ(shotWorld.hitResultsLastUpdate().front().damageApplied, 0);
     const std::vector<ShotPresentationSnapshot> tracer =
-        world.shotPresentationSnapshots();
+        shotWorld.shotPresentationSnapshots();
     ASSERT_EQ(tracer.size(), 1U);
     EXPECT_FLOAT_EQ(
         tracer.front().end.x,
-        world.hitResultsLastUpdate().front().position.x);
+        shotWorld.hitResultsLastUpdate().front().position.x);
     EXPECT_FLOAT_EQ(
         tracer.front().end.y,
-        world.hitResultsLastUpdate().front().position.y);
+        shotWorld.hitResultsLastUpdate().front().position.y);
 }
 
 TEST(GameplayWorldRaidTest, BlockedAxisStillAllowsSlidingAlongCover)
@@ -2730,6 +2734,118 @@ TEST(GameplayWorldRaidTest, BlockedAxisStillAllowsSlidingAlongCover)
 
     EXPECT_FLOAT_EQ(world.player().position().x, start.x);
     EXPECT_LT(world.player().position().y, start.y);
+}
+
+TEST(GameplayWorldRaidTest, VerticalCoverBlocksBothDirectionsAndLongFrames)
+{
+    GameplayWorld worldMovingUp{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{590.0F, 220.0F}, Vec2{80.0F, 40.0F}}}}}};
+
+    GameplayInput moveUp{};
+    moveUp.moveUp = true;
+    worldMovingUp.update(moveUp, 1.0F);
+    EXPECT_FLOAT_EQ(worldMovingUp.player().position().y, 260.0F);
+
+    GameplayWorld worldMovingDown{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{590.0F, 420.0F}, Vec2{80.0F, 40.0F}}}}}};
+
+    GameplayInput moveDown{};
+    moveDown.moveDown = true;
+    worldMovingDown.update(moveDown, 1.0F);
+    EXPECT_FLOAT_EQ(worldMovingDown.player().position().y, 388.0F);
+}
+
+TEST(GameplayWorldRaidTest, EveryPublishedBlockerStopsMovementOnAllFourSides)
+{
+    constexpr float playerSize{32.0F};
+    constexpr float approachMargin{24.0F};
+    for (const MapDefinition &map : publishedContentRegistry().maps())
+    {
+        for (const BallisticBlockerDefinition &definition :
+             map.ballisticBlockers)
+        {
+            SCOPED_TRACE(
+                std::string{map.id.value()} + "/" + definition.id);
+            const Rect obstacle{
+                definition.bounds.position,
+                definition.bounds.size};
+            const auto makeWorld = [&](Vec2 spawn)
+            {
+                return GameplayWorld{RaidWorldConfig{
+                    map.worldSize,
+                    spawn,
+                    map.extractionPoint,
+                    {},
+                    100,
+                    100,
+                    false,
+                    {BallisticBlocker{1, obstacle}}}};
+            };
+
+            const float centeredX = obstacle.position.x +
+                (obstacle.size.x - playerSize) * 0.5F;
+            const float centeredY = obstacle.position.y +
+                (obstacle.size.y - playerSize) * 0.5F;
+
+            GameplayWorld fromAbove = makeWorld(Vec2{
+                centeredX,
+                obstacle.position.y - playerSize - approachMargin});
+            GameplayInput moveDown{};
+            moveDown.moveDown = true;
+            fromAbove.update(moveDown, 2.0F);
+            EXPECT_FLOAT_EQ(
+                fromAbove.player().position().y,
+                obstacle.position.y - playerSize);
+
+            GameplayWorld fromBelow = makeWorld(Vec2{
+                centeredX,
+                obstacle.position.y + obstacle.size.y + approachMargin});
+            GameplayInput moveUp{};
+            moveUp.moveUp = true;
+            fromBelow.update(moveUp, 2.0F);
+            EXPECT_FLOAT_EQ(
+                fromBelow.player().position().y,
+                obstacle.position.y + obstacle.size.y);
+
+            GameplayWorld fromLeft = makeWorld(Vec2{
+                obstacle.position.x - playerSize - approachMargin,
+                centeredY});
+            GameplayInput moveRight{};
+            moveRight.moveRight = true;
+            fromLeft.update(moveRight, 2.0F);
+            EXPECT_FLOAT_EQ(
+                fromLeft.player().position().x,
+                obstacle.position.x - playerSize);
+
+            GameplayWorld fromRight = makeWorld(Vec2{
+                obstacle.position.x + obstacle.size.x + approachMargin,
+                centeredY});
+            GameplayInput moveLeft{};
+            moveLeft.moveLeft = true;
+            fromRight.update(moveLeft, 2.0F);
+            EXPECT_FLOAT_EQ(
+                fromRight.player().position().x,
+                obstacle.position.x + obstacle.size.x);
+        }
+    }
 }
 
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)

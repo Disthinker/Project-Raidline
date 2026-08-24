@@ -738,43 +738,29 @@ void GameplayWorld::update(
         worldWidth(),
         worldHeight());
     const Vec2 requestedPlayerPosition = player_.position();
-    const auto playerOverlapsBlocker = [&]() noexcept
-    {
-        return std::any_of(
-            ballisticBlockers_.begin(),
-            ballisticBlockers_.end(),
-            [&](const BallisticBlocker &blocker)
-            {
-                return isCollision(playerBounds(player_), blocker.bounds);
-            });
-    };
 
-    // Resolve each movement axis independently. Reverting the complete
-    // diagonal displacement when only one axis hit cover made a held key
-    // block the otherwise free perpendicular direction.
-    if (requestedPlayerPosition.x != playerPositionBeforeMovement.x)
+    Rect resolvedPlayerBounds{
+        playerPositionBeforeMovement,
+        Vec2{player_.size(), player_.size()}};
+    float resolvedX = requestedPlayerPosition.x;
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
     {
-        static_cast<void>(player_.setPosition(Vec2{
-            requestedPlayerPosition.x,
-            playerPositionBeforeMovement.y}));
-        if (playerOverlapsBlocker())
-        {
-            static_cast<void>(
-                player_.setPosition(playerPositionBeforeMovement));
-        }
+        resolvedX = resolveHorizontalCollision(
+            resolvedPlayerBounds,
+            resolvedX,
+            blocker.bounds);
     }
-    const Vec2 positionAfterHorizontalResolution = player_.position();
-    if (requestedPlayerPosition.y != playerPositionBeforeMovement.y)
+    resolvedPlayerBounds.position.x = resolvedX;
+
+    float resolvedY = requestedPlayerPosition.y;
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
     {
-        static_cast<void>(player_.setPosition(Vec2{
-            positionAfterHorizontalResolution.x,
-            requestedPlayerPosition.y}));
-        if (playerOverlapsBlocker())
-        {
-            static_cast<void>(
-                player_.setPosition(positionAfterHorizontalResolution));
-        }
+        resolvedY = resolveVerticalCollision(
+            resolvedPlayerBounds,
+            resolvedY,
+            blocker.bounds);
     }
+    static_cast<void>(player_.setPosition(Vec2{resolvedX, resolvedY}));
 
     const Vec2 centerAfterMovement = playerCenter(player_);
     Vec2 desiredAimPosition{
