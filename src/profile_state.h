@@ -179,6 +179,7 @@ struct RaidLootSnapshot
     AssetInstanceId assetId{};
     std::uint32_t slotIndex{};
     Vec2 position{};
+    bool requiresHighRisk{};
 };
 
 struct PendingRaidSnapshot

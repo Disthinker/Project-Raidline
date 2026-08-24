@@ -21,6 +21,15 @@ namespace
 
     constexpr int kScorePerEnemy{100};
 
+    bool pointInside(
+        ContentRect rect,
+        Vec2 point) noexcept
+    {
+        return point.x >= rect.position.x && point.y >= rect.position.y &&
+               point.x <= rect.position.x + rect.size.x &&
+               point.y <= rect.position.y + rect.size.y;
+    }
+
     float distanceToWorldBoundary(
         Vec2 origin,
         Vec2 direction,
@@ -335,7 +344,21 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             highRisk.activeEnemyCap == 0U ||
             highRisk.waveSize > highRisk.activeEnemyCap ||
             aliveEnemyCount() > highRisk.activeEnemyCap ||
-            highRisk.pressureSpawns.empty())
+            highRisk.pressureSpawns.empty() ||
+            !std::isfinite(highRisk.activationDurationSeconds) ||
+            highRisk.activationDurationSeconds <= 0.0F ||
+            !std::isfinite(highRisk.activationControlPoint.position.x) ||
+            !std::isfinite(highRisk.activationControlPoint.position.y) ||
+            !std::isfinite(highRisk.activationControlPoint.size.x) ||
+            !std::isfinite(highRisk.activationControlPoint.size.y) ||
+            highRisk.activationControlPoint.size.x <= 0.0F ||
+            highRisk.activationControlPoint.size.y <= 0.0F ||
+            !std::isfinite(highRisk.advancedResourceArea.position.x) ||
+            !std::isfinite(highRisk.advancedResourceArea.position.y) ||
+            !std::isfinite(highRisk.advancedResourceArea.size.x) ||
+            !std::isfinite(highRisk.advancedResourceArea.size.y) ||
+            highRisk.advancedResourceArea.size.x <= 0.0F ||
+            highRisk.advancedResourceArea.size.y <= 0.0F)
         {
             throw std::invalid_argument{
                 "RaidWorldConfig high-risk settings are invalid"};
@@ -363,6 +386,9 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         highRiskNextWaveSeconds_ = highRisk.initialWaveDelaySeconds;
         highRiskWaveSize_ = highRisk.waveSize;
         highRiskActiveEnemyCap_ = highRisk.activeEnemyCap;
+        highRiskControlPoint_ = highRisk.activationControlPoint;
+        highRiskAdvancedResourceArea_ = highRisk.advancedResourceArea;
+        highRiskActivationDurationSeconds_ = highRisk.activationDurationSeconds;
         nextHighRiskPressureSpawnIndex_ =
             static_cast<std::size_t>(
                 highRisk.seed % highRiskPressureSpawns_.size());
@@ -728,6 +754,11 @@ void GameplayWorld::update(
         !player_.isControlled() && extractionPoint_.contains(
             playerCenter(player_)),
         !player_.isControlled() && playerInEmergencyExtraction);
+    updateHighRiskActivation(input, deltaTime, centerAfterMovement);
+    if (raidSession_.phase() == RaidPhase::HighRisk)
+    {
+        highRiskActivationElapsedSeconds_ = highRiskActivationDurationSeconds_;
+    }
 
     // 终局形成后，本帧不再产生拾取、射击、敌人或命中结果。
     if (!raidSession_.isActive())
@@ -1289,6 +1320,47 @@ std::uint32_t GameplayWorld::highRiskActiveEnemyCap() const noexcept
     return highRiskActiveEnemyCap_;
 }
 
+const std::optional<ContentRect> &
+GameplayWorld::highRiskControlPoint() const noexcept
+{
+    return highRiskControlPoint_;
+}
+
+const std::optional<ContentRect> &
+GameplayWorld::highRiskAdvancedResourceArea() const noexcept
+{
+    return highRiskAdvancedResourceArea_;
+}
+
+float GameplayWorld::highRiskControlProgress() const noexcept
+{
+    if (highRiskActivationDurationSeconds_ <= 0.0F)
+    {
+        return 0.0F;
+    }
+    return std::clamp(highRiskActivationElapsedSeconds_ /
+                          highRiskActivationDurationSeconds_,
+                      0.0F,
+                      1.0F);
+}
+
+float GameplayWorld::highRiskControlTimeRemaining() const noexcept
+{
+    return std::max(0.0F,
+                    highRiskActivationDurationSeconds_ -
+                        highRiskActivationElapsedSeconds_);
+}
+
+bool GameplayWorld::highRiskControlInteractionInRange() const noexcept
+{
+    if (!highRiskControlPoint_.has_value() ||
+        raidSession_.phase() != RaidPhase::Regular || !raidSession_.isActive())
+    {
+        return false;
+    }
+    return pointInside(*highRiskControlPoint_, playerCenter(player_));
+}
+
 float GameplayWorld::weaponSpreadDegrees() const noexcept
 {
     return weaponFire_.spreadDegrees();
@@ -1464,6 +1536,11 @@ bool GameplayWorld::damagePlayer(int damage)
 
     const bool killed =
         player_.takeDamage(damage);
+
+    if (damage > 0 && raidSession_.phase() == RaidPhase::Regular)
+    {
+        highRiskActivationElapsedSeconds_ = 0.0F;
+    }
 
     if (!killed)
     {
@@ -1975,6 +2052,40 @@ void GameplayWorld::updateHighRiskPressure(float highRiskDeltaTime)
         }
         ++highRiskPressureWaveCount_;
         highRiskNextWaveSeconds_ += highRiskWaveIntervalSeconds_;
+    }
+}
+
+void GameplayWorld::updateHighRiskActivation(
+    const GameplayInput &input,
+    float deltaTime,
+    Vec2 playerPosition)
+{
+    if (!highRiskControlPoint_.has_value() ||
+        raidSession_.phase() != RaidPhase::Regular || !raidSession_.isActive())
+    {
+        return;
+    }
+
+    const bool canContinue =
+        !player_.isControlled() && !input.inventoryOpen &&
+        input.interactPressed &&
+        pointInside(*highRiskControlPoint_, playerPosition);
+    if (!canContinue)
+    {
+        highRiskActivationElapsedSeconds_ = 0.0F;
+        return;
+    }
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    {
+        return;
+    }
+
+    highRiskActivationElapsedSeconds_ =
+        std::min(highRiskActivationDurationSeconds_,
+                 highRiskActivationElapsedSeconds_ + deltaTime);
+    if (highRiskActivationElapsedSeconds_ >= highRiskActivationDurationSeconds_)
+    {
+        static_cast<void>(raidSession_.triggerHighRisk());
     }
 }
 

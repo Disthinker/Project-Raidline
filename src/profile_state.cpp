@@ -758,6 +758,24 @@ ProfileValidationResult validateProfileState(
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        const MapDefinition *raidMap{};
+        try
+        {
+            raidMap = &content.map(raid.mapDefinitionId);
+        }
+        catch (...)
+        {
+            return {false, "pending Raid map is invalid"};
+        }
+        const bool controlResourceRules =
+            raid.rulesVersion == "raid-control-resource-2";
+        const std::size_t advancedLootCount = static_cast<std::size_t>(
+            std::count_if(raid.loot.begin(),
+                          raid.loot.end(),
+                          [](const RaidLootSnapshot &loot)
+                          { return loot.requiresHighRisk; }));
+        const std::size_t regularLootCount =
+            raid.loot.size() - advancedLootCount;
         if (raid.raidId.empty() || raid.settlementId.empty() ||
             raid.rulesVersion.empty() || raid.mapDefinitionId.value().empty() ||
             raid.spawnExtractionPairId.empty() ||
@@ -765,16 +783,31 @@ ProfileValidationResult validateProfileState(
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
             !validMedicalStatus(raid.startingMedicalStatus) ||
             raid.enemies.size() < 4 || raid.enemies.size() > 6 ||
-            raid.loot.size() < 6 || raid.loot.size() > 9)
+            regularLootCount < 6 || regularLootCount > 9 ||
+            (controlResourceRules &&
+             advancedLootCount != raidMap->highRisk.advancedLootSlots.size()) ||
+            (!controlResourceRules && advancedLootCount != 0U))
         {
             return {false, "pending Raid header is invalid"};
         }
         std::set<AssetInstanceId> snapshotLoot;
+        std::set<std::uint32_t> snapshotSlots;
         for (const RaidLootSnapshot &loot : raid.loot)
         {
             const AssetRecord *asset = profile.assets.find(loot.assetId);
+            const std::size_t regularSlotCount = raidMap->raidLootSlots.size();
+            const bool validSlot =
+                loot.requiresHighRisk
+                    ? loot.slotIndex >= regularSlotCount &&
+                          loot.slotIndex <
+                              regularSlotCount +
+                                  raidMap->highRisk.advancedLootSlots.size()
+                    : loot.slotIndex < regularSlotCount;
             if (loot.assetId == 0 ||
                 !snapshotLoot.insert(loot.assetId).second ||
+                !snapshotSlots.insert(loot.slotIndex).second || !validSlot ||
+                !std::isfinite(loot.position.x) ||
+                !std::isfinite(loot.position.y) ||
                 (asset != nullptr &&
                  !groundAssetIds.contains(loot.assetId) &&
                  !assetIsCarried(profile, loot.assetId)))
@@ -943,6 +976,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, loot.slotIndex);
             hashFloat(hash, loot.position.x);
             hashFloat(hash, loot.position.y);
+            hashInteger(hash, loot.requiresHighRisk ? 1U : 0U);
         }
         for (AssetInstanceId root : raid.carriedRootAssetIds)
         {

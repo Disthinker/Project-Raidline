@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -192,6 +193,23 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousFixedMapsContentVersion)
         *loaded.profile, publishedContentRegistry()).valid);
 }
 
+TEST(SaveRepositoryTest,
+    SchemaV6AcceptsPreviousRaidPressureContentVersion)
+{
+    ProfileState profile =
+        makeNewAlphaProfile("save-v6-control-resource-content-migration",
+                            publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, "raid-pressure-content-10", 6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(
+        validateProfileState(*loaded.profile, publishedContentRegistry())
+            .valid);
+}
+
 TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -353,6 +371,11 @@ TEST(SaveRepositoryTest, SchemaV4PreservesPendingRaidWeaponAndMedicalState)
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
     ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(std::count_if(loaded.profile->pendingRaid->loot.begin(),
+                            loaded.profile->pendingRaid->loot.end(),
+                            [](const RaidLootSnapshot &loot)
+                            { return loot.requiresHighRisk; }),
+              2);
     EXPECT_EQ(installedMagazine(*loaded.profile, rifle), magazine);
     EXPECT_EQ(magazineRoundCount(*loaded.profile, magazine), 29U);
     EXPECT_TRUE(loaded.profile->assets.find(rifle)->chamberedRound.has_value());

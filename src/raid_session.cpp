@@ -170,6 +170,17 @@ bool RaidSession::markPlayerDead() noexcept
     return true;
 }
 
+bool RaidSession::triggerHighRisk() noexcept
+{
+    if (!isActive() || !config_.highRisk.enabled ||
+        phase_ != RaidPhase::Regular)
+    {
+        return false;
+    }
+    enterHighRisk();
+    return true;
+}
+
 RaidSessionState RaidSession::state() const noexcept
 {
     return state_;
@@ -276,6 +287,18 @@ void RaidSession::cancelExtraction() noexcept
     extractionTimeElapsed_ = 0.0F;
 }
 
+void RaidSession::enterHighRisk() noexcept
+{
+    raidTimeRemaining_ = 0.0F;
+    phase_ = RaidPhase::HighRisk;
+    enteredHighRiskLastUpdate_ = true;
+    if (state_ == RaidSessionState::Extracting &&
+        extractionRoute_ == RaidExtractionRoute::Normal)
+    {
+        normalExtractionGraceActive_ = true;
+    }
+}
+
 void RaidSession::updateContinuousHighRisk(float deltaTime) noexcept
 {
     float remaining = deltaTime;
@@ -318,13 +341,7 @@ void RaidSession::updateContinuousHighRisk(float deltaTime) noexcept
                 return;
             }
 
-            phase_ = RaidPhase::HighRisk;
-            enteredHighRiskLastUpdate_ = true;
-            if (state_ == RaidSessionState::Extracting &&
-                extractionRoute_ == RaidExtractionRoute::Normal)
-            {
-                normalExtractionGraceActive_ = true;
-            }
+            enterHighRisk();
             continue;
         }
 

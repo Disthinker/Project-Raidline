@@ -71,7 +71,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-pressure-1");
+        "raid-control-resource-2");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
@@ -89,6 +89,39 @@ TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
     EXPECT_EQ(session.world().raidSession().phase(), RaidPhase::HighRisk);
     EXPECT_FALSE(session.world().raidSession().normalExtractionOpen());
     EXPECT_TRUE(session.world().raidSession().emergencyExtractionOpen());
+}
+
+TEST(
+    AlphaExtractionSessionTest,
+    AdvancedLootIsFrozenButLockedUntilHighRisk)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-advanced-loot"));
+    ASSERT_TRUE(session.deployAlpha(77235, MapDefinitionId{"map.v0.test"}));
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+
+    std::vector<RaidLootSnapshot> advanced;
+    for (const RaidLootSnapshot &loot : session.profile().pendingRaid->loot)
+    {
+        if (loot.requiresHighRisk)
+        {
+            advanced.push_back(loot);
+            EXPECT_FALSE(session.raidLootAccessible(loot));
+            EXPECT_NE(session.profile().assets.find(loot.assetId), nullptr);
+        }
+    }
+    ASSERT_EQ(advanced.size(), 2U);
+    const std::uint64_t fingerprintBefore =
+        profileStateFingerprint(session.profile());
+
+    session.world().update(GameplayInput{}, 180.5F);
+
+    EXPECT_EQ(session.world().raidSession().phase(), RaidPhase::HighRisk);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprintBefore);
+    for (const RaidLootSnapshot &loot : advanced)
+    {
+        EXPECT_TRUE(session.raidLootAccessible(loot));
+    }
 }
 
 void equip(GameSession &session, AssetInstanceId id, EquipmentSlotKind slot,
@@ -242,8 +275,14 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     EXPECT_EQ(session.world().player().health(), 100);
     EXPECT_FLOAT_EQ(session.world().raidSession().raidTimeRemaining(), 180.0F);
     EXPECT_EQ(session.world().raidSession().phase(), RaidPhase::Regular);
-    EXPECT_GE(session.profile().pendingRaid->loot.size(), 6U);
-    EXPECT_LE(session.profile().pendingRaid->loot.size(), 9U);
+    const auto &raidLoot = session.profile().pendingRaid->loot;
+    EXPECT_GE(raidLoot.size(), 8U);
+    EXPECT_LE(raidLoot.size(), 11U);
+    EXPECT_EQ(std::count_if(raidLoot.begin(),
+                            raidLoot.end(),
+                            [](const RaidLootSnapshot &loot)
+                            { return loot.requiresHighRisk; }),
+              2);
 
     GameplayInput fire{};
     fire.fireJustPressed = true;

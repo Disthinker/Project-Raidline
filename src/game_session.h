@@ -171,6 +171,9 @@ public:
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
+    [[nodiscard]] bool
+    raidLootAccessible(const RaidLootSnapshot &loot) const noexcept;
+
     [[nodiscard]] const ProfileState &profile() const noexcept;
     [[nodiscard]] EquipmentSlotKind activeAlphaWeaponSlot() const noexcept;
     [[nodiscard]] std::optional<AssetInstanceId>

@@ -52,6 +52,9 @@ struct HighRiskWorldConfig
     std::uint32_t waveSize{};
     std::uint32_t activeEnemyCap{};
     std::vector<EnemySpawn> pressureSpawns;
+    ContentRect activationControlPoint;
+    float activationDurationSeconds{};
+    ContentRect advancedResourceArea;
     std::uint64_t seed{};
 };
 
@@ -214,6 +217,14 @@ public:
     [[nodiscard]] std::uint32_t highRiskPressureWaveCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskActiveEnemyCap() const noexcept;
 
+    [[nodiscard]] const std::optional<ContentRect> &
+    highRiskControlPoint() const noexcept;
+    [[nodiscard]] const std::optional<ContentRect> &
+    highRiskAdvancedResourceArea() const noexcept;
+    [[nodiscard]] float highRiskControlProgress() const noexcept;
+    [[nodiscard]] float highRiskControlTimeRemaining() const noexcept;
+    [[nodiscard]] bool highRiskControlInteractionInRange() const noexcept;
+
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
     weaponAccuracyProjection() const noexcept;
@@ -348,6 +359,10 @@ private:
     std::uint32_t highRiskActiveEnemyCap_{};
     std::uint32_t highRiskPressureWaveCount_{};
     std::size_t nextHighRiskPressureSpawnIndex_{};
+    std::optional<ContentRect> highRiskControlPoint_;
+    std::optional<ContentRect> highRiskAdvancedResourceArea_;
+    float highRiskActivationDurationSeconds_{};
+    float highRiskActivationElapsedSeconds_{};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
@@ -397,6 +412,9 @@ private:
     [[nodiscard]] float worldHeight() const noexcept;
 
     void updateHighRiskPressure(float highRiskDeltaTime);
+    void updateHighRiskActivation(const GameplayInput &input,
+                                  float deltaTime,
+                                  Vec2 playerCenter);
     [[nodiscard]] std::size_t spawnHighRiskPressureWave();
     [[nodiscard]] bool canSpawnHighRiskEnemy(
         const EnemySpawn &spawn) const noexcept;

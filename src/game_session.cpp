@@ -347,6 +347,9 @@ bool GameSession::deployAlpha(
             map.highRisk.waveSize,
             map.highRisk.activeEnemyCap,
             std::move(pressureSpawns),
+            map.highRisk.activationControlPoint,
+            map.highRisk.activationDurationSeconds,
+            map.highRisk.advancedResourceArea,
             snapshot.seed};
         candidateWorld =
             std::make_unique<GameplayWorld>(std::move(worldConfig));
@@ -2098,7 +2101,8 @@ void GameSession::updateAlphaRaid(
     }
 
     if (input.interactJustPressed &&
-        !raidActionState_.active().has_value())
+        !raidActionState_.active().has_value() &&
+        !world_->highRiskControlInteractionInRange())
     {
         if (const auto loot = nearbyRaidLoot())
         {
@@ -2517,6 +2521,10 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
     float bestDistance = 72.0F * 72.0F;
     for (const RaidLootSnapshot &loot : profile_.pendingRaid->loot)
     {
+        if (!raidLootAccessible(loot))
+        {
+            continue;
+        }
         const AssetRecord *asset = profile_.assets.find(loot.assetId);
         if (asset == nullptr ||
             !std::holds_alternative<RaidGroundAssetLocation>(asset->location))
@@ -2533,6 +2541,14 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
         }
     }
     return result;
+}
+
+bool GameSession::raidLootAccessible(
+    const RaidLootSnapshot &loot) const noexcept
+{
+    return !loot.requiresHighRisk ||
+           (world_ != nullptr &&
+            world_->raidSession().phase() == RaidPhase::HighRisk);
 }
 
 bool GameSession::commitProfileCandidate(
