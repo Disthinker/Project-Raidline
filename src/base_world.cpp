@@ -26,6 +26,29 @@ AnimationClip makeBasePlayerMoveClip()
     return AnimationClip{
         std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
 }
+
+bool overlaps(const Rect &first, const Rect &second) noexcept
+{
+    return first.position.x < second.position.x + second.size.x &&
+        first.position.x + first.size.x > second.position.x &&
+        first.position.y < second.position.y + second.size.y &&
+        first.position.y + first.size.y > second.position.y;
+}
+
+bool collidesWithFacility(
+    Vec2 position,
+    Vec2 size,
+    const std::array<BaseFacility, 4> &facilities) noexcept
+{
+    const Rect playerBounds{position, size};
+    return std::any_of(
+        facilities.begin(),
+        facilities.end(),
+        [&playerBounds](const BaseFacility &facility)
+        {
+            return overlaps(playerBounds, facility.bounds);
+        });
+}
 }
 
 BaseWorld::BaseWorld()
@@ -71,7 +94,15 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             const float inverseLength = 1.0F / std::sqrt(lengthSquared);
             direction.x *= inverseLength;
             direction.y *= inverseLength;
+            if (direction.x != 0.0F)
+            {
+                playerHorizontalFacing_ = direction.x;
+            }
             playerFacingDirection_ = direction;
+            if (playerFacingDirection_.x == 0.0F)
+            {
+                playerFacingDirection_.x = playerHorizontalFacing_;
+            }
             playerIsMoving_ = true;
             if (!wasMoving)
             {
@@ -79,19 +110,30 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             }
             playerMovementAnimator_.update(deltaTime);
             const float speed = input.sprint ? 280.0F : 180.0F;
-            playerPosition_.x += direction.x * speed * deltaTime;
-            playerPosition_.y += direction.y * speed * deltaTime;
+            const float maximumY = walkableBounds_.position.y +
+                walkableBounds_.size.y - playerSize_.y;
+            const float maximumPlayerX = walkableBounds_.position.x +
+                walkableBounds_.size.x - playerSize_.x;
 
-            playerPosition_.x = std::clamp(
-                playerPosition_.x,
+            Vec2 candidate = playerPosition_;
+            candidate.x = std::clamp(
+                candidate.x + direction.x * speed * deltaTime,
                 walkableBounds_.position.x,
-                walkableBounds_.position.x +
-                    walkableBounds_.size.x - playerSize_.x);
-            playerPosition_.y = std::clamp(
-                playerPosition_.y,
+                maximumPlayerX);
+            if (!collidesWithFacility(candidate, playerSize_, facilities_))
+            {
+                playerPosition_.x = candidate.x;
+            }
+
+            candidate = playerPosition_;
+            candidate.y = std::clamp(
+                candidate.y + direction.y * speed * deltaTime,
                 walkableBounds_.position.y,
-                walkableBounds_.position.y +
-                    walkableBounds_.size.y - playerSize_.y);
+                maximumY);
+            if (!collidesWithFacility(candidate, playerSize_, facilities_))
+            {
+                playerPosition_.y = candidate.y;
+            }
         }
         else
         {

@@ -1,0 +1,64 @@
+#include <gtest/gtest.h>
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+
+#include "ui_localization.h"
+
+namespace {
+std::filesystem::path uniqueSettingsPath() {
+  const auto suffix =
+      std::chrono::steady_clock::now().time_since_epoch().count();
+  return std::filesystem::temp_directory_path() /
+         ("raidline-ui-language-" + std::to_string(suffix)) / "settings.json";
+}
+} // namespace
+
+TEST(UiLocalizationTest, EnglishIsUnchangedAndChineseTranslatesStaticText) {
+  EXPECT_EQ(localizeUiText(UiLanguage::English, "CONTINUE GAME"),
+            "CONTINUE GAME");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "CONTINUE GAME"),
+            "继续游戏");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesFormattedCountersAndContentNames) {
+  const std::string translated = localizeUiText(
+      UiLanguage::SimplifiedChinese, "Rifle | AMMO 18/30 | DURABILITY 76%");
+  EXPECT_NE(translated.find("步枪"), std::string::npos);
+  EXPECT_NE(translated.find("弹药 18/30"), std::string::npos);
+  EXPECT_NE(translated.find("耐久 76%"), std::string::npos);
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesControlsAndDomainReceipts) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "Action: MoveLeft"),
+            "操作：向左移动");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "asset does not fit inside the destination"),
+            "物品无法放入目标位置");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "LANGUAGE: 简体中文"),
+            "语言: 简体中文");
+}
+
+TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
+  const std::filesystem::path settingsPath = uniqueSettingsPath();
+  EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);
+
+  ASSERT_TRUE(saveUiLanguage(settingsPath, UiLanguage::English));
+  EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::English);
+
+  ASSERT_TRUE(saveUiLanguage(settingsPath, UiLanguage::SimplifiedChinese));
+  EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);
+  std::filesystem::remove_all(settingsPath.parent_path());
+}
+
+TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
+  const std::filesystem::path settingsPath = uniqueSettingsPath();
+  std::filesystem::create_directories(settingsPath.parent_path());
+  {
+    std::ofstream stream{settingsPath};
+    stream << "not-json";
+  }
+  EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);
+  std::filesystem::remove_all(settingsPath.parent_path());
+}

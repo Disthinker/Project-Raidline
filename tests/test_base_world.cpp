@@ -41,6 +41,59 @@ TEST(BaseWorldTest, MovementAnimationResetsWhenPlayerStops)
     static_cast<void>(world.update(BaseInput{}, 0.01F));
     EXPECT_FALSE(world.playerIsMoving());
     EXPECT_EQ(world.playerAnimationFrame(), 0U);
+    EXPECT_LT(world.playerFacingDirection().x, 0.0F);
+}
+
+TEST(BaseWorldTest, StoppingPreservesLastHorizontalFacing)
+{
+    BaseWorld world;
+    BaseInput input;
+    input.moveRight = true;
+    static_cast<void>(world.update(input, 0.1F));
+    ASSERT_GT(world.playerFacingDirection().x, 0.0F);
+
+    input = BaseInput{};
+    input.moveUp = true;
+    static_cast<void>(world.update(input, 0.1F));
+    ASSERT_GT(world.playerFacingDirection().x, 0.0F);
+
+    static_cast<void>(world.update(BaseInput{}, 0.1F));
+
+    EXPECT_FALSE(world.playerIsMoving());
+    EXPECT_GT(world.playerFacingDirection().x, 0.0F);
+}
+
+TEST(BaseWorldTest, FacilityCollisionBlocksBothAxesAndAllowsSliding)
+{
+    BaseWorld horizontal;
+    BaseInput moveLeft;
+    moveLeft.moveLeft = true;
+    for (int index{}; index < 30; ++index)
+    {
+        static_cast<void>(horizontal.update(moveLeft, 0.05F));
+    }
+    const Vec2 horizontalPosition = horizontal.playerPosition();
+    EXPECT_GE(horizontalPosition.x, 304.0F);
+
+    BaseInput diagonal;
+    diagonal.moveLeft = true;
+    diagonal.moveUp = true;
+    const float beforeY = horizontal.playerPosition().y;
+    for (int index{}; index < 10; ++index)
+    {
+        static_cast<void>(horizontal.update(diagonal, 0.05F));
+    }
+    EXPECT_GE(horizontal.playerPosition().x, 304.0F);
+    EXPECT_LT(horizontal.playerPosition().y, beforeY);
+
+    BaseWorld vertical;
+    BaseInput moveUp;
+    moveUp.moveUp = true;
+    for (int index{}; index < 50; ++index)
+    {
+        static_cast<void>(vertical.update(moveUp, 0.05F));
+    }
+    EXPECT_GE(vertical.playerPosition().y, 132.0F);
 }
 
 TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)

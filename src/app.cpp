@@ -1040,6 +1040,8 @@ bool App::initialize()
     }
     gameFlow_.configurePersistence(
         std::filesystem::path{preferencePath});
+    settingsPath_ = std::filesystem::path{preferencePath} / "settings.json";
+    uiTextRenderer_.setLanguage(loadUiLanguage(settingsPath_));
     SDL_free(preferencePath);
 
     window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
@@ -1056,6 +1058,13 @@ bool App::initialize()
         fmt::print("SDL_CreateRenderer failed: {}\n", SDL_GetError());
         SDL_DestroyWindow(window_);
         SDL_Quit();
+        return false;
+    }
+
+    if (!uiTextRenderer_.initialize(renderer_))
+    {
+        fmt::print("UI font initialization failed: {}\n", SDL_GetError());
+        shutdown();
         return false;
     }
 
@@ -1247,6 +1256,16 @@ std::optional<MainMenuCommand> App::mainMenuCommandAt(
     float y) const noexcept
 {
     const MousePosition point{x, y};
+    if (settingsOpen_)
+    {
+        if (contains(mainMenuButton(0), point))
+        {
+            return MainMenuCommand::ToggleLanguage;
+        }
+        return contains(mainMenuButton(2), point)
+            ? std::optional<MainMenuCommand>{MainMenuCommand::Settings}
+            : std::nullopt;
+    }
     for (std::size_t index = 0; index < 4; ++index)
     {
         if (contains(mainMenuButton(index), point))
@@ -1273,6 +1292,10 @@ std::optional<PauseMenuCommand> App::pauseMenuCommandAt(
     const MousePosition point{x, y};
     if (pauseMenu_.settingsOpen())
     {
+        if (contains(pauseMenuButton(0), point))
+        {
+            return PauseMenuCommand::ToggleLanguage;
+        }
         return contains(pauseMenuButton(1), point)
             ? std::optional<PauseMenuCommand>{PauseMenuCommand::Settings}
             : std::nullopt;
@@ -1295,7 +1318,11 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
     }
     if (pauseMenu_.settingsOpen())
     {
-        if (command == PauseMenuCommand::Settings)
+        if (command == PauseMenuCommand::ToggleLanguage)
+        {
+            toggleLanguage();
+        }
+        else if (command == PauseMenuCommand::Settings)
         {
             static_cast<void>(pauseMenu_.handleEscape());
         }
@@ -1328,6 +1355,8 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
     case PauseMenuCommand::ExitDesktop:
         running_ = false;
         break;
+    case PauseMenuCommand::ToggleLanguage:
+        break;
     }
 }
 
@@ -1335,7 +1364,11 @@ void App::handleMainMenuCommand(MainMenuCommand command)
 {
     if (settingsOpen_)
     {
-        if (command == MainMenuCommand::Settings)
+        if (command == MainMenuCommand::ToggleLanguage)
+        {
+            toggleLanguage();
+        }
+        else if (command == MainMenuCommand::Settings)
         {
             settingsOpen_ = false;
         }
@@ -1391,6 +1424,18 @@ void App::handleMainMenuCommand(MainMenuCommand command)
         return;
     }
     running_ = false;
+}
+
+void App::toggleLanguage()
+{
+    const UiLanguage language = toggledUiLanguage(uiTextRenderer_.language());
+    uiTextRenderer_.setLanguage(language);
+    if (!saveUiLanguage(settingsPath_, language))
+    {
+        uiMessage_ = "LANGUAGE CHANGED - SETTINGS SAVE FAILED";
+        return;
+    }
+    uiMessage_ = "LANGUAGE UPDATED";
 }
 
 std::string App::nextProfileTransactionId(const char *prefix)
@@ -3340,6 +3385,13 @@ void App::processEvents()
              gameFlow_.state() == GameFlowState::Raid) &&
             pauseMenu_.isOpen())
         {
+            if (pauseMenu_.settingsOpen() &&
+                event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                event.key.scancode == SDL_SCANCODE_L)
+            {
+                pendingPauseMenuCommand_ = PauseMenuCommand::ToggleLanguage;
+                continue;
+            }
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
             {
@@ -3362,6 +3414,11 @@ void App::processEvents()
             }
             else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
             {
+                if (settingsOpen_ && event.key.scancode == SDL_SCANCODE_L)
+                {
+                    pendingMainMenuCommand_ = MainMenuCommand::ToggleLanguage;
+                    continue;
+                }
                 switch (event.key.scancode)
                 {
                 case SDL_SCANCODE_C:
@@ -3523,6 +3580,11 @@ void App::update(float deltaTime)
     if (gameFlow_.state() == GameFlowState::MainMenu)
     {
         pendingInventoryUiEvents_.clear();
+        if (settingsOpen_ && escapePressed)
+        {
+            settingsOpen_ = false;
+            return;
+        }
         if (pendingMainMenuCommand_.has_value())
         {
             handleMainMenuCommand(*pendingMainMenuCommand_);
@@ -3955,7 +4017,7 @@ void App::renderDebugText()
             "Action: Sprint";
     }
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         20.0f,
@@ -3966,7 +4028,7 @@ void App::renderDebugText()
             "Score: {}",
             gameSession_.world().score());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         36.0f,
@@ -3981,7 +4043,7 @@ void App::renderDebugText()
             player.health(),
             player.maxHealth());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         52.0f,
@@ -4014,7 +4076,7 @@ void App::renderDebugText()
             alertedEnemyCount,
             searchingEnemyCount);
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         68.0f,
@@ -4046,7 +4108,7 @@ void App::renderDebugText()
     const std::string groundItemText =
         fmt::format("Ground Items: {}", groundCount);
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         84.0f,
@@ -4058,13 +4120,13 @@ void App::renderDebugText()
     const std::string inventoryItemText =
         fmt::format("Inventory Items: {}", carriedCount);
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         100.0f,
         inventoryItemText.c_str());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         116.0f,
@@ -4076,7 +4138,7 @@ void App::renderDebugText()
                   ? "Inventory: Player [Open]"
                   : "Inventory: Tab [Closed]";
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         132.0f,
@@ -4091,7 +4153,7 @@ void App::renderDebugText()
             raidSessionStateName(
                 raidSession.state()));
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0F,
         148.0F,
@@ -4124,7 +4186,7 @@ void App::renderDebugText()
                   raidSession.raidTimeRemaining());
     }
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0F,
         164.0F,
@@ -4138,7 +4200,7 @@ void App::renderDebugText()
             gameSession_.world().highRiskPressureWaveCount(),
             gameSession_.world().aliveEnemyCount(),
             gameSession_.world().highRiskActiveEnemyCap());
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             20.0F,
             180.0F,
@@ -4155,7 +4217,7 @@ void App::renderDebugText()
               gameSession_.stash().stackCount(),
               gameSession_.stash().unitCount());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         980.0F,
         20.0F,
@@ -4167,7 +4229,7 @@ void App::renderDebugText()
             raidSettlementStateName(
                 gameSession_.settlement().state()));
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         980.0F,
         36.0F,
@@ -4182,7 +4244,7 @@ void App::renderDebugText()
                 gameSession_.state()),
             gameSession_.raidNumber());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         980.0F,
         52.0F,
@@ -4233,7 +4295,7 @@ void App::renderDebugText()
         }
     }
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         980.0F,
         68.0F,
@@ -4251,7 +4313,7 @@ void App::renderDebugText()
             " | stagger {:.2f}s",
             player.impactSlowRemaining());
     }
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         980.0F,
         84.0F,
@@ -4285,7 +4347,7 @@ void App::renderDebugText()
                         : "");
             }
         }
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 980.0F, 100.0F, ammunitionText.c_str());
 
         if (gameSession_.raidActionState().active().has_value())
@@ -4334,12 +4396,12 @@ void App::renderDebugText()
                 "{} {:.0f}%",
                 name,
                 gameSession_.raidActionState().progress() * 100.0F);
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, 980.0F, 116.0F, action.c_str());
         }
         else
         {
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, 980.0F, 116.0F,
                 "LMB FIRE | RMB AIM | SHIFT SPRINT | R RELOAD");
         }
@@ -4359,9 +4421,9 @@ void App::renderDebugText()
                     ? " | PAIN SUPPRESSED"
                     : " | PAIN -10%"
                 : "");
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 980.0F, 132.0F, medicalStatus.c_str());
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 980.0F, 148.0F,
             "F10 RUNTIME WEAPON TUNING");
 
@@ -4396,13 +4458,13 @@ void App::renderDebugText()
                 index + 1U,
                 active ? ">" : " ",
                 name.substr(0, 12));
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, selector.x + 6.0F, selector.y + 10.0F,
                 slotText.c_str());
         }
         if (!uiMessage_.empty())
         {
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, 760.0F, 684.0F, uiMessage_.c_str());
         }
     }
@@ -4418,7 +4480,7 @@ void App::renderDebugText()
                 raidSession.extractionProgress() *
                     100.0F);
 
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             20.0F,
             180.0F,
@@ -4463,12 +4525,12 @@ void App::renderDebugText()
             break;
         }
 
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             kStashPanelX + 130.0F,
             kStashPanelY + 42.0F,
             outcomeText.c_str());
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             kStashPanelX + 76.0F,
             kStashPanelY + 62.0F,
@@ -4480,7 +4542,7 @@ void App::renderDebugText()
                 ? "ENTER / CLICK: RETURN TO BASE"
                 : "Resolve Stash capacity before returning";
 
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             kStashPanelX + 92.0F,
             kStashPanelY + 82.0F,
@@ -4508,7 +4570,7 @@ void App::renderDebugText()
     const std::string interactionText =
         fmt::format("Pointer: {}", phaseText);
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         20.0f,
         180.0f,
@@ -4516,7 +4578,7 @@ void App::renderDebugText()
 
     if (inventoryOverlayState_.showsExternalContainer())
     {
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             20.0f,
             212.0f,
@@ -4536,7 +4598,7 @@ void App::renderDebugText()
                     : "Container",
                 selected->instanceId);
 
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             20.0f,
             196.0f,
@@ -5073,7 +5135,7 @@ void App::renderInventoryOverlay()
         230,
         255);
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         panelX +
             kInventoryPanelPadding,
@@ -5086,7 +5148,7 @@ void App::renderInventoryOverlay()
             "{} item(s)",
             inventory.placedItems().size());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         panelX +
             panelWidth -
@@ -5098,7 +5160,7 @@ void App::renderInventoryOverlay()
     const char *controlText =
         "Drag | Ctrl+LMB: 1 | Shift+LMB: half | R: rotate";
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         panelX +
             kInventoryPanelPadding,
@@ -5271,7 +5333,7 @@ void App::renderInventoryOverlay()
         225,
         230,
         255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         externalPanelX + kInventoryPanelPadding,
         externalPanelY + kInventoryPanelPadding,
@@ -5281,7 +5343,7 @@ void App::renderInventoryOverlay()
         fmt::format(
             "{} item(s)",
             externalInventory.placedItems().size());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         externalPanelX + externalPanelWidth - 100.0F,
         externalPanelY + kInventoryPanelPadding,
@@ -5329,17 +5391,17 @@ void App::renderInventoryOverlay()
     SDL_RenderRect(renderer_, &dropZone);
 
     SDL_SetRenderDrawColor(renderer_, 230, 230, 230, 255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         dropZone.x + 28.0F,
         dropZone.y + 326.0F,
         "DROP");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         dropZone.x + 20.0F,
         dropZone.y + 344.0F,
         "PLAYER");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         dropZone.x + 32.0F,
         dropZone.y + 362.0F,
@@ -5399,7 +5461,7 @@ void App::renderStashOverlay()
         SDL_RenderFillRect(renderer_, &panel);
         SDL_SetRenderDrawColor(renderer_, 122, 184, 166, 255);
         SDL_RenderRect(renderer_, &panel);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, panel.x + 154.0F, panel.y + 24.0F,
             "RAID RESULT");
         const auto &result = gameSession_.profile().lastRaidResult;
@@ -5412,12 +5474,12 @@ void App::renderStashOverlay()
                     : result->outcome == RaidResultOutcome::ActiveQuit
                         ? "RAID ABANDONED"
                         : "ABNORMAL EXIT - FAILED";
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, panel.x + 24.0F, panel.y + 64.0F, outcome);
             const std::string currency = fmt::format(
                 "CURRENCY CHANGE: {:+}",
                 result->currencyDelta);
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, panel.x + 24.0F, panel.y + 90.0F,
                 currency.c_str());
             if (result->outcome == RaidResultOutcome::Extracted)
@@ -5425,7 +5487,7 @@ void App::renderStashOverlay()
                 const std::string count = fmt::format(
                     "RETURNED ASSETS: {}",
                     result->returnedItemDefinitionIds.size());
-                SDL_RenderDebugText(
+                uiTextRenderer_.render(
                     renderer_, panel.x + 24.0F, panel.y + 122.0F,
                     count.c_str());
                 float y = panel.y + 148.0F;
@@ -5436,17 +5498,17 @@ void App::renderStashOverlay()
                 {
                     const std::string &name = publishedContentRegistry().item(
                         result->returnedItemDefinitionIds[index]).displayName;
-                    SDL_RenderDebugText(
+                    uiTextRenderer_.render(
                         renderer_, panel.x + 42.0F, y, name.c_str());
                     y += 20.0F;
                 }
             }
             else
             {
-                SDL_RenderDebugText(
+                uiTextRenderer_.render(
                     renderer_, panel.x + 24.0F, panel.y + 130.0F,
                     "ALL CARRIED ASSETS WERE LOST");
-                SDL_RenderDebugText(
+                uiTextRenderer_.render(
                     renderer_, panel.x + 24.0F, panel.y + 154.0F,
                     "NO LOST-ITEM LIST IS GENERATED");
             }
@@ -5588,7 +5650,7 @@ void App::renderStashOverlay()
     SDL_RenderRect(renderer_, &grid);
 
     SDL_SetRenderDrawColor(renderer_, 225, 230, 232, 255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         kStashPanelX + 18.0F,
         kStashPanelY + 16.0F,
@@ -5601,7 +5663,7 @@ void App::renderStashOverlay()
             "{} STACKS / {} UNITS",
             gameSession_.stash().stackCount(),
             gameSession_.stash().unitCount());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         kStashPanelX + 282.0F,
         kStashPanelY + 16.0F,
@@ -5664,7 +5726,7 @@ void App::renderExtractionPoint()
             SDL_RenderFillRect(renderer_, &zone);
             SDL_SetRenderDrawColor(renderer_, 138, 68, 68, 180);
             SDL_RenderRect(renderer_, &zone);
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_,
                 zone.x + 18.0F,
                 zone.y + 16.0F,
@@ -5686,7 +5748,7 @@ void App::renderExtractionPoint()
             signal ? 88 : (active ? 158 : 112),
             255);
         SDL_RenderRect(renderer_, &zone);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             zone.x + 18.0F,
             zone.y + 16.0F,
@@ -5740,7 +5802,7 @@ void App::renderExtractionPoint()
                       "HOLD POSITION {:.1f}s",
                       timeRemaining);
 
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             zone.x + 22.0F,
             zone.y + 48.0F,
@@ -5821,7 +5883,7 @@ void App::renderExtractionPoint()
                                highRisk ? 68 : 72,
                                220);
         SDL_RenderRect(renderer_, &zone);
-        SDL_RenderDebugText(renderer_,
+        uiTextRenderer_.render(renderer_,
                             zone.x + 12.0F,
                             zone.y + 12.0F,
                             highRisk ? "ADVANCED RESOURCE OPEN"
@@ -5849,7 +5911,7 @@ void App::renderExtractionPoint()
                                highRisk ? 80 : 68,
                                255);
         SDL_RenderRect(renderer_, &control);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             control.x + 6.0F,
             control.y + 8.0F,
@@ -5870,7 +5932,7 @@ void App::renderExtractionPoint()
             SDL_RenderFillRect(renderer_, &fill);
             const std::string remaining = fmt::format(
                 "{:.1f}s", gameSession_.world().highRiskControlTimeRemaining());
-            SDL_RenderDebugText(renderer_,
+            uiTextRenderer_.render(renderer_,
                                 control.x + 8.0F,
                                 control.y + 30.0F,
                                 remaining.c_str());
@@ -5947,7 +6009,7 @@ void App::renderStorageCabinet()
     if (gameSession_.world().canInteractWithContainer() &&
         !inventoryOverlayState_.isOpen())
     {
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             body.x - 12.0F,
             body.y - 20.0F,
@@ -6480,7 +6542,7 @@ void App::renderCombatFeedback()
 
     if (lastIncomingDamageReducedByArmor_)
     {
-        SDL_RenderDebugText(renderer_, 594.0F, 42.0F, "ARMOR HIT");
+        uiTextRenderer_.render(renderer_, 594.0F, 42.0F, "ARMOR HIT");
     }
 }
 
@@ -6562,7 +6624,7 @@ void App::renderPlayerAvatar(
         spriteY,
         spriteW,
         spriteH};
-    if (!moving || facingDirection.x == 0.0F)
+    if (!moving && facingDirection.x <= 0.0F)
     {
         SDL_RenderTexture(
             renderer_,
@@ -6572,7 +6634,7 @@ void App::renderPlayerAvatar(
     }
     else
     {
-        std::size_t frameIndex = animationFrame;
+        std::size_t frameIndex = moving ? animationFrame : 0U;
         if (frameIndex >= kPlayerMoveFrameCount)
         {
             frameIndex = 0;
@@ -6748,7 +6810,7 @@ void App::renderEnemies()
                     enemy.awarenessState()),
                 enemyTacticalRoleName(
                     enemy.tacticalRole()));
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_,
                 enemyRect.x,
                 enemyRect.y - 10.0F,
@@ -6868,7 +6930,7 @@ void App::renderEnemyAttackTelegraphs()
             "{} {}",
             enemyAttackTypeName(*attackType),
             enemyAttackPhaseName(phase));
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             enemyBounds.position.x,
             enemyBounds.position.y - 14.0F,
@@ -6978,7 +7040,7 @@ void App::renderScreenPrimaryButton(
         static_cast<float>(
             std::char_traits<char>::length(label)) *
         8.0F;
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         button.x + (button.w - textWidth) / 2.0F,
         button.y + 26.0F,
@@ -7020,25 +7082,36 @@ void App::renderMainMenu()
         236,
         232,
         255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         564.0F,
         244.0F,
         "PROJECT RAIDLINE");
-    SDL_RenderDebugText(renderer_, 548.0F, 278.0F, "CORE EXTRACTION ALPHA");
+    uiTextRenderer_.render(renderer_, 548.0F, 278.0F, "CORE EXTRACTION ALPHA");
 
     if (settingsOpen_)
     {
-        SDL_RenderDebugText(renderer_, 520.0F, 340.0F, "KEYBOARD & MOUSE");
-        SDL_RenderDebugText(renderer_, 490.0F, 372.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(renderer_, 466.0F, 400.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        SDL_RenderDebugText(renderer_, 458.0F, 424.0F, "SHIFT SPRINT  TAB INVENTORY  ESC PAUSE/CLOSE");
+        uiTextRenderer_.render(renderer_, 520.0F, 314.0F, "KEYBOARD & MOUSE");
+        uiTextRenderer_.render(renderer_, 490.0F, 340.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
+        uiTextRenderer_.render(renderer_, 466.0F, 364.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
+        uiTextRenderer_.render(renderer_, 458.0F, 388.0F, "SHIFT SPRINT  TAB INVENTORY  ESC PAUSE/CLOSE");
+        const SDL_FRect language = mainMenuButton(0);
+        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
+        SDL_RenderFillRect(renderer_, &language);
+        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
+        SDL_RenderRect(renderer_, &language);
+        const std::string languageLabel = fmt::format(
+            "LANGUAGE: {}",
+            uiLanguageDisplayName(uiTextRenderer_.language()));
+        uiTextRenderer_.render(
+            renderer_, language.x + 32.0F, language.y + 15.0F,
+            languageLabel.c_str());
         const SDL_FRect back = mainMenuButton(2);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
         SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
         SDL_RenderRect(renderer_, &back);
-        SDL_RenderDebugText(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
+        uiTextRenderer_.render(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
     }
     else
     {
@@ -7065,7 +7138,7 @@ void App::renderMainMenu()
                 disabled ? 94 : 176,
                 255);
             SDL_RenderRect(renderer_, &button);
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_,
                 button.x + 16.0F,
                 button.y + 17.0F,
@@ -7075,7 +7148,7 @@ void App::renderMainMenu()
 
     if (!uiMessage_.empty())
     {
-        SDL_RenderDebugText(renderer_, 484.0F, 596.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 484.0F, 596.0F, uiMessage_.c_str());
     }
 }
 
@@ -7097,26 +7170,37 @@ void App::renderPauseMenu()
     SDL_SetRenderDrawColor(renderer_, 92, 154, 132, 255);
     SDL_RenderRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 230, 236, 232, 255);
-    SDL_RenderDebugText(renderer_, 600.0F, 160.0F, "PAUSED");
+    uiTextRenderer_.render(renderer_, 600.0F, 160.0F, "PAUSED");
 
     if (pauseMenu_.settingsOpen())
     {
-        SDL_RenderDebugText(renderer_, 568.0F, 208.0F, "SETTINGS");
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(renderer_, 568.0F, 208.0F, "SETTINGS");
+        uiTextRenderer_.render(
             renderer_, 452.0F, 238.0F,
             "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 438.0F, 262.0F,
             "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 448.0F, 286.0F,
             "TAB INVENTORY  F10 WEAPON TUNING");
+        const SDL_FRect language = pauseMenuButton(0);
+        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
+        SDL_RenderFillRect(renderer_, &language);
+        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
+        SDL_RenderRect(renderer_, &language);
+        const std::string languageLabel = fmt::format(
+            "LANGUAGE: {}",
+            uiLanguageDisplayName(uiTextRenderer_.language()));
+        uiTextRenderer_.render(
+            renderer_, language.x + 32.0F, language.y + 15.0F,
+            languageLabel.c_str());
         const SDL_FRect back = pauseMenuButton(1);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &back);
         SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
         SDL_RenderRect(renderer_, &back);
-        SDL_RenderDebugText(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
+        uiTextRenderer_.render(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
     }
     else
     {
@@ -7132,11 +7216,11 @@ void App::renderPauseMenu()
             SDL_RenderFillRect(renderer_, &button);
             SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
             SDL_RenderRect(renderer_, &button);
-            SDL_RenderDebugText(
+            uiTextRenderer_.render(
                 renderer_, button.x + 16.0F, button.y + 17.0F,
                 labels[index]);
         }
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 476.0F, 542.0F,
             "ESC CONTINUES | RAID EXIT RESTORES PRE-RAID SAVE");
     }
@@ -7176,7 +7260,7 @@ void App::renderBaseWorld()
         SDL_RenderFillRect(renderer_, &bounds);
         SDL_SetRenderDrawColor(renderer_, 174, 188, 180, 255);
         SDL_RenderRect(renderer_, &bounds);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             bounds.x + 18.0F,
             bounds.y + bounds.h / 2.0F,
@@ -7197,7 +7281,7 @@ void App::renderBaseWorld()
         const std::string prompt = fmt::format(
             "E - {}",
             baseFacilityName(*facility));
-        SDL_RenderDebugText(renderer_, 520.0F, 650.0F, prompt.c_str());
+        uiTextRenderer_.render(renderer_, 520.0F, 650.0F, prompt.c_str());
     }
 }
 
@@ -7269,7 +7353,7 @@ void App::renderProfileAsset(
             0,
             std::min<std::size_t>(definition.displayName.size(), 12));
         SDL_SetRenderDrawColor(renderer_, 232, 236, 232, 255);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             bounds.x + 3.0F,
             bounds.y + 4.0F,
@@ -7285,7 +7369,7 @@ void App::renderProfileAsset(
             "D {:.2f}/{:.2f}",
             static_cast<float>(asset.currentDurability) / 100.0F,
             static_cast<float>(asset.currentMaximumDurability) / 100.0F);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
             condition.c_str());
     }
@@ -7295,7 +7379,7 @@ void App::renderProfileAsset(
             "D {}/{}",
             asset.currentDurability,
             asset.currentMaximumDurability);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
             condition.c_str());
     }
@@ -7305,7 +7389,7 @@ void App::renderProfileAsset(
         const std::string capacity = fmt::format(
             "KIT {:.2f}",
             static_cast<float>(asset.remainingCharges) / 100.0F);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
             capacity.c_str());
     }
@@ -7357,7 +7441,7 @@ void App::renderProfileGrid(
             x + grid.w,
             y + static_cast<float>(row) * cellSize);
     }
-    SDL_RenderDebugText(renderer_, x, y - 20.0F, label);
+    uiTextRenderer_.render(renderer_, x, y - 20.0F, label);
 
     for (const AssetRecord *asset : assetsInContainer(profile, container))
     {
@@ -7631,7 +7715,7 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
     renderProfileAsset(ghost, ghostBounds, kBasePocketCellSize, 150);
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, 255);
     SDL_RenderRect(renderer_, &ghostBounds);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         visual->pointerPosition.x + 16.0F,
         visual->pointerPosition.y + 16.0F,
@@ -7661,7 +7745,7 @@ void App::renderProfileContextMenu(bool inRaid)
     SDL_RenderFillRect(renderer_, &menu);
     SDL_SetRenderDrawColor(renderer_, 118, 188, 190, 255);
     SDL_RenderRect(renderer_, &menu);
-    SDL_RenderDebugText(renderer_, menu.x + 12.0F, menu.y + 18.0F, *label);
+    uiTextRenderer_.render(renderer_, menu.x + 12.0F, menu.y + 18.0F, *label);
 }
 
 void App::renderMedicalWheel()
@@ -7677,7 +7761,7 @@ void App::renderMedicalWheel()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 4, 8, 10, 150);
     SDL_RenderFillRect(renderer_, &shade);
-    SDL_RenderDebugText(renderer_, 560.0F, 246.0F,
+    uiTextRenderer_.render(renderer_, 560.0F, 246.0F,
                         "HOLD 5 / POINT / RELEASE");
 
     const ProfileState &profile = gameSession_.profile();
@@ -7719,14 +7803,14 @@ void App::renderMedicalWheel()
             plan.canCommit ? selected ? 225 : 180 : 82,
             255);
         SDL_RenderRect(renderer_, &option);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, option.x + 8.0F, option.y + 11.0F,
             definition.displayName.c_str());
         const std::string charges = fmt::format(
             "{} | {} charge(s)",
             plan.canCommit ? "READY" : "NOT NEEDED",
             asset->remainingCharges);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, option.x + 8.0F, option.y + 31.0F,
             charges.c_str());
     }
@@ -7753,15 +7837,15 @@ void App::renderDeveloperWeaponPanel()
     SDL_RenderRect(renderer_, &panel);
 
     SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 18.0F,
         "DEVELOPER WEAPON TUNING - RUNTIME ONLY");
     if (!tuning.has_value())
     {
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + 52.0F,
             "NO ACTIVE WEAPON");
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
             "F10 / ESC CLOSE");
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -7773,10 +7857,10 @@ void App::renderDeveloperWeaponPanel()
         tuning->weaponDefinitionId.value(),
         tuning->weaponAssetId,
         tuning->overridden ? "OVERRIDDEN" : "CONTENT DEFAULT");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 38.0F,
         weaponLine.c_str());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 54.0F,
         "CHANGES ARE NOT SAVED");
 
@@ -7927,7 +8011,7 @@ void App::renderDeveloperWeaponPanel()
             index == developerWeaponParameterIndex_ ? ">" : " ",
             labels[index],
             value);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, panel.x + 24.0F, rowY, row.c_str());
     }
 
@@ -7936,10 +8020,10 @@ void App::renderDeveloperWeaponPanel()
         handling.recoilDeceleration,
         handling.aimDownSightsDurationSeconds,
         handling.aimDownSightsMovementMultiplier);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + panel.h - 58.0F,
         derived.c_str());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + panel.h - 34.0F,
         "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET | F10/ESC CLOSE");
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -7955,10 +8039,10 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 102, 156, 168, 255);
     SDL_RenderRect(renderer_, &panel);
-    SDL_RenderDebugText(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
+    uiTextRenderer_.render(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
     if (includeStash)
     {
-        SDL_RenderDebugText(renderer_, 668.0F, 70.0F, "STASH");
+        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "STASH");
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
     }
 
@@ -7984,7 +8068,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
             activeWeapon ? 158 : 132,
             255);
         SDL_RenderRect(renderer_, &bounds);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_,
             bounds.x + 7.0F,
             bounds.y + 7.0F,
@@ -8019,7 +8103,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                                   "DUR {}/{}",
                                   asset->currentDurability,
                                   asset->currentMaximumDurability);
-                    SDL_RenderDebugText(
+                    uiTextRenderer_.render(
                         renderer_,
                         bounds.x + 7.0F,
                         bounds.y + bounds.h - 13.0F,
@@ -8034,7 +8118,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                         magazine.has_value()
                             ? magazineRoundCount(profile, *magazine)
                             : 0U);
-                    SDL_RenderDebugText(
+                    uiTextRenderer_.render(
                         renderer_,
                         bounds.x + bounds.w - 108.0F,
                         bounds.y + 7.0F,
@@ -8062,7 +8146,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     }
 
     const std::string health = fmt::format("HP {}/100", profile.currentHealth);
-    SDL_RenderDebugText(renderer_, 42.0F, 366.0F, health.c_str());
+    uiTextRenderer_.render(renderer_, 42.0F, 366.0F, health.c_str());
     const char *bleeding = profile.medicalStatus.bleeding == BleedingSeverity::Heavy
         ? "HEAVY BLEEDING"
         : profile.medicalStatus.bleeding == BleedingSeverity::Light
@@ -8075,17 +8159,17 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
             ? " | PAIN SUPPRESSED"
             : " | PAIN";
     }
-    SDL_RenderDebugText(renderer_, 42.0F, 382.0F, medical.c_str());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(renderer_, 42.0F, 382.0F, medical.c_str());
+    uiTextRenderer_.render(
         renderer_, 42.0F, 642.0F,
         "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, 42.0F, 664.0F,
         inRaid ? "RMB MEDICAL ITEM | TAB/ESC CLOSE"
                : "RMB: ITEM ACTION | TAB/ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        SDL_RenderDebugText(renderer_, includeStash ? 668.0F : 350.0F, 664.0F,
+        uiTextRenderer_.render(renderer_, includeStash ? 668.0F : 350.0F, 664.0F,
                             uiMessage_.c_str());
     }
     renderProfileDragFeedback(includeStash, inRaid);
@@ -8158,7 +8242,7 @@ void App::renderBaseSupply()
     const std::string currency = fmt::format(
         "SUPPLY & RECOVERY | CURRENCY {}",
         gameSession_.profile().currency);
-    SDL_RenderDebugText(renderer_, 96.0F, 100.0F, currency.c_str());
+    uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
 
     const auto &supply = fixedSupplyIds();
     for (std::size_t index = 0; index < supply.size(); ++index)
@@ -8183,10 +8267,10 @@ void App::renderBaseSupply()
             supplyName,
             quantity,
             definition.marketBuyPrice * quantity);
-        SDL_RenderDebugText(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
+        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
     }
 
-    SDL_RenderDebugText(renderer_, 650.0F, 138.0F, "STASH - SELECT TO RECYCLE");
+    uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT TO RECYCLE");
     std::size_t rowIndex{};
     for (const AssetRecord *asset : assetsInContainer(
              gameSession_.profile(),
@@ -8214,7 +8298,7 @@ void App::renderBaseSupply()
             asset->quantity,
             definition.marketRecyclePrice * asset->quantity,
             asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
-        SDL_RenderDebugText(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
+        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
         ++rowIndex;
     }
 
@@ -8224,18 +8308,18 @@ void App::renderBaseSupply()
         publishedContentRegistry());
     SDL_SetRenderDrawColor(renderer_, eligible ? 68 : 42, eligible ? 104 : 48, 60, 255);
     SDL_RenderFillRect(renderer_, &reliefButton);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
         eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
 
     const SDL_FRect recycleButton{820.0F, 554.0F, 280.0F, 48.0F};
     SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
     SDL_RenderFillRect(renderer_, &recycleButton);
-    SDL_RenderDebugText(renderer_, recycleButton.x + 40.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
-    SDL_RenderDebugText(renderer_, 96.0F, 630.0F, "ESC CLOSE");
+    uiTextRenderer_.render(renderer_, recycleButton.x + 40.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
+    uiTextRenderer_.render(renderer_, 96.0F, 630.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        SDL_RenderDebugText(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
     }
 }
 
@@ -8246,10 +8330,10 @@ void App::renderBaseAllocation()
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 92, 176, 142, 255);
     SDL_RenderRect(renderer_, &panel);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, 80.0F, 100.0F,
         "ALLOCATION & NEEDS | TEXT/GEOMETRY PLACEHOLDER");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, 80.0F, 124.0F,
         "EACH RESOLVED RAID CONSUMES 8 FOOD / 6 HYGIENE / 5 MORALE / 4 SECURITY");
 
@@ -8298,14 +8382,14 @@ void App::renderBaseAllocation()
             shortages[index] > 0U
                 ? fmt::format(" | LAST SHORTFALL {}", shortages[index])
                 : "");
-        SDL_RenderDebugText(renderer_, 80.0F, y, label.c_str());
+        uiTextRenderer_.render(renderer_, 80.0F, y, label.c_str());
     }
     const std::string cycles = fmt::format(
         "RESOLVED RAID ACTIVITIES {} | SHORTAGE NEVER BLOCKS PLAY",
         state.resolvedRaidCount);
-    SDL_RenderDebugText(renderer_, 80.0F, 500.0F, cycles.c_str());
+    uiTextRenderer_.render(renderer_, 80.0F, 500.0F, cycles.c_str());
 
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, 650.0F, 126.0F,
         "PENDING RAID RETURNS - CHOOSE KEEP OR CONTRIBUTE");
     const auto intake = assetsInContainer(
@@ -8313,7 +8397,7 @@ void App::renderBaseAllocation()
         ProfileContainerId::baseIntake());
     if (intake.empty())
     {
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, 650.0F, 174.0F,
             "NO PENDING ITEMS | BASE IS READY FOR DEPLOY");
     }
@@ -8356,7 +8440,7 @@ void App::renderBaseAllocation()
             definition.displayName,
             asset.quantity,
             contribution);
-        SDL_RenderDebugText(
+        uiTextRenderer_.render(
             renderer_, row.x + 8.0F, row.y + 14.0F, label.c_str());
     }
 
@@ -8385,17 +8469,17 @@ void App::renderBaseAllocation()
     SDL_SetRenderDrawColor(renderer_, 154, 202, 184, 255);
     SDL_RenderRect(renderer_, &keepButton);
     SDL_RenderRect(renderer_, &contributeButton);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, keepButton.x + 42.0F, keepButton.y + 18.0F,
         "KEEP IN STASH");
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_, contributeButton.x + 28.0F,
         contributeButton.y + 18.0F,
         contributeLabel);
-    SDL_RenderDebugText(renderer_, 80.0F, 632.0F, "ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 80.0F, 632.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        SDL_RenderDebugText(renderer_, 470.0F, 632.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 470.0F, 632.0F, uiMessage_.c_str());
     }
 }
 
@@ -8406,7 +8490,7 @@ void App::renderBaseDeployment()
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
     SDL_RenderRect(renderer_, &panel);
-    SDL_RenderDebugText(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
+    uiTextRenderer_.render(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
 
     const MapDefinition &map = selectedRaidMap();
     const SDL_FRect previous = raidMapPreviousButton();
@@ -8417,15 +8501,15 @@ void App::renderBaseDeployment()
     SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
     SDL_RenderRect(renderer_, &previous);
     SDL_RenderRect(renderer_, &next);
-    SDL_RenderDebugText(renderer_, previous.x + 22.0F, previous.y + 16.0F, "<");
-    SDL_RenderDebugText(renderer_, next.x + 22.0F, next.y + 16.0F, ">");
+    uiTextRenderer_.render(renderer_, previous.x + 22.0F, previous.y + 16.0F, "<");
+    uiTextRenderer_.render(renderer_, next.x + 22.0F, next.y + 16.0F, ">");
     const std::string mapLabel = fmt::format(
         "MAP {}/{} | {}",
         selectedRaidMapIndex_ % publishedContentRegistry().maps().size() + 1U,
         publishedContentRegistry().maps().size(),
         map.displayName);
-    SDL_RenderDebugText(renderer_, 492.0F, 232.0F, mapLabel.c_str());
-    SDL_RenderDebugText(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
+    uiTextRenderer_.render(renderer_, 492.0F, 232.0F, mapLabel.c_str());
+    uiTextRenderer_.render(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
 
     const ProfileState &profile = gameSession_.profile();
     float y = 282.0F;
@@ -8440,7 +8524,7 @@ void App::renderBaseDeployment()
             "{}: {}",
             equipmentSlotLabel(slot),
             name);
-        SDL_RenderDebugText(renderer_, 480.0F, y, row.c_str());
+        uiTextRenderer_.render(renderer_, 480.0F, y, row.c_str());
         y += 23.0F;
     }
 
@@ -8459,12 +8543,12 @@ void App::renderBaseDeployment()
                       "NEEDS CHAMBER/RELOAD | {} COMPATIBLE ROUNDS",
                       readiness.compatibleMagazineRounds)
                 : "NO USABLE AMMUNITION";
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         458.0F,
         454.0F,
         fireStatus.c_str());
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         442.0F,
         480.0F,
@@ -8479,11 +8563,11 @@ void App::renderBaseDeployment()
         const std::string blocked = fmt::format(
             "DEPLOY BLOCKED | RESOLVE {} PENDING ITEM(S) AT ALLOCATION & NEEDS",
             pendingAllocation);
-        SDL_RenderDebugText(renderer_, 404.0F, 508.0F, blocked.c_str());
+        uiTextRenderer_.render(renderer_, 404.0F, 508.0F, blocked.c_str());
     }
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
-    SDL_RenderDebugText(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");
 }
 
 void App::renderBase()
@@ -8496,7 +8580,7 @@ void App::renderBase()
         232,
         228,
         255);
-    SDL_RenderDebugText(
+    uiTextRenderer_.render(
         renderer_,
         574.0F,
         54.0F,
@@ -8506,7 +8590,7 @@ void App::renderBase()
         "CURRENCY {} | REV {}",
         gameSession_.profile().currency,
         gameSession_.profile().revision);
-    SDL_RenderDebugText(renderer_, 1010.0F, 54.0F, currency.c_str());
+    uiTextRenderer_.render(renderer_, 1010.0F, 54.0F, currency.c_str());
     const BaseResourceBundle &base =
         gameSession_.profile().baseResources.pool;
     const std::string resources = fmt::format(
@@ -8515,7 +8599,7 @@ void App::renderBase()
         base.hygiene,
         base.morale,
         base.security);
-    SDL_RenderDebugText(renderer_, 1010.0F, 72.0F, resources.c_str());
+    uiTextRenderer_.render(renderer_, 1010.0F, 72.0F, resources.c_str());
 
     const char *goal = "OBJECTIVE COMPLETE";
     switch (gameSession_.profile().tutorial)
@@ -8532,7 +8616,7 @@ void App::renderBase()
     case TutorialProgress::Complete:
         break;
     }
-    SDL_RenderDebugText(renderer_, 48.0F, 54.0F, goal);
+    uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal);
 
     if (const auto facility = gameFlow_.activeBaseFacility())
     {
@@ -8694,6 +8778,7 @@ void App::shutdown()
     playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
     backgroundTexture_.reset();
+    uiTextRenderer_.shutdown();
 
     SDL_DestroyRenderer(
         renderer_);

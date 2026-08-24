@@ -353,6 +353,10 @@ add_library(raidline_sdl_client STATIC
     src/sound_event.h
     src/texture.cpp
     src/texture.h
+    src/ui_localization.cpp
+    src/ui_localization.h
+    src/ui_text_renderer.cpp
+    src/ui_text_renderer.h
 )
 raidline_configure_library(raidline_sdl_client)
 target_link_libraries(
@@ -364,6 +368,9 @@ target_link_libraries(
     fmt::fmt
     nlohmann_json::nlohmann_json
     SDL3_image::SDL3_image)
+if(WIN32)
+    target_link_libraries(raidline_sdl_client PRIVATE gdi32)
+endif()
 add_library(raidline::sdl_client ALIAS raidline_sdl_client)
 
 set(RAIDLINE_PRODUCTION_TARGETS
@@ -428,6 +435,10 @@ raidline_add_test(
 raidline_add_test(
     GameAudioTest
     tests/test_game_audio.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    UiLocalizationTest
+    tests/test_ui_localization.cpp
     raidline::sdl_client)
 target_compile_definitions(
     GameAudioTest

@@ -60,7 +60,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，�
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #77 的单位克重/嵌套资产/弹匣与枪膛计重、路线资格取消、三图几何互斥、旧 content v11 加载和 GameSession 投影均已完成并接受；当前 Base 资源切片 Windows Debug 全目标构建成功，完整 CTest 834/834 通过，开发代理未启动游戏。
+- PR #77 的单位克重/嵌套资产/弹匣与枪膛计重、路线资格取消、三图几何互斥、旧 content v11 加载和 GameSession 投影均已完成并接受；当前 Base 资源切片及其验收加固 Windows Debug 全目标构建成功，完整 CTest 841/841 通过，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -204,6 +204,13 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74，�
 - 拖动需超过 4 像素；原物留在原位，虚像跟随鼠标，绿色/蓝色/红色与 `MOVE/SWAP/MERGE/LOAD/INSTALL/BLOCKED` 同时表达真实领域预览。Ctrl=1、Shift=向上取半在按下时锁定，Ctrl+Shift 无操作。
 - Base 与 Raid 世界复用已批准主角资源；个人页显示同一资源的静态预览。左右移动复用六帧资源，上下移动与静止暂用静态图，RL-ANIM-001 的正式补全仍延期。
 - 用户已明确修订外部 Alpha 规格中的三项旧限制：Raid 允许拖匣换弹、允许局内压卸弹，关闭程序后回滚到出击前存档而非异常全损；同时要求 Raid 支持奔跑。GDD 资料库保持只读，本仓库仅记录冲突与实现结果。
+
+## Base 客户端验收加固当前实现
+
+- BaseWorld 保存最后一次水平朝向；静止状态不再由渲染器强制回到左向。Storage、Supply、Allocation 与 Raid Gate 统一参与 X/Y 两轴独立碰撞，按住被阻挡方向并增加垂直输入时仍可贴墙移动，但不能斜向穿透。
+- SDL client 的全部玩家可见文本绘制统一经过 `UiTextRenderer` 和 `localizeUiText`；内容名称、动态计数、领域拒绝原因、菜单、HUD、库存、Base、RaidResult 与 F10 面板均支持 English/简体中文。
+- 首次运行默认简体中文；主菜单与 Base/Raid 暂停菜单的设置页可点击语言项切换，`L` 是同一设置页快捷键。选择写入独立 `settings.json`，损坏或未知设置安全回退到简体中文，不改变游戏存档。
+- Windows 客户端使用系统微软雅黑生成并缓存 Unicode SDL 纹理，不提交字体文件、不生成美术资源、不修改 manifest；纯数字物品数量继续使用 SDL 内建数字字形。
 
 ## 尚未完成
 

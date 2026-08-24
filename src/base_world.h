@@ -57,6 +57,7 @@ private:
     Vec2 playerPosition_{620.0F, 600.0F};
     Vec2 playerSize_{40.0F, 52.0F};
     Vec2 playerFacingDirection_{-1.0F, 0.0F};
+    float playerHorizontalFacing_{-1.0F};
     bool playerIsMoving_{};
     Animator playerMovementAnimator_;
     Rect walkableBounds_{{32.0F, 24.0F}, {1216.0F, 664.0F}};
