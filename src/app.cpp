@@ -1183,6 +1183,14 @@ bool App::handleScreenConfirm()
 bool App::tryDeployFromBase()
 {
     const ProfileState &profile = gameSession_.profile();
+    if (!assetsInContainer(
+             profile,
+             ProfileContainerId::baseIntake()).empty())
+    {
+        deploymentWarningArmed_ = false;
+        uiMessage_ = "RESOLVE ALLOCATION & NEEDS BEFORE DEPLOY";
+        return false;
+    }
     const WeaponReadiness readiness = weaponReadiness(profile);
     const std::size_t usableRounds = readiness.compatibleMagazineRounds +
         (readiness.hasChamberedRound ? 1U : 0U);
@@ -1578,6 +1586,136 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             {
                 profileAssetSelection_.reset();
             }
+        }
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::Allocation)
+    {
+        const auto intake = assetsInContainer(
+            gameSession_.profile(),
+            ProfileContainerId::baseIntake());
+        for (std::size_t index{}; index < intake.size() && index < 9U; ++index)
+        {
+            const SDL_FRect row{
+                650.0F,
+                158.0F + static_cast<float>(index) * 42.0F,
+                500.0F,
+                36.0F};
+            if (contains(row, click.position))
+            {
+                profileAssetSelection_ = ProfileAssetSelection{
+                    intake[index]->instanceId,
+                    0,
+                    intake[index]->orientation};
+                uiMessage_ = "PENDING ITEM SELECTED";
+                return;
+            }
+        }
+
+        if (!profileAssetSelection_.has_value())
+        {
+            return;
+        }
+        const AssetInstanceId selectedId =
+            profileAssetSelection_->instanceId;
+        const AssetRecord *selected =
+            gameSession_.profile().assets.find(selectedId);
+        const auto *stored = selected != nullptr
+            ? std::get_if<StoredAssetLocation>(&selected->location)
+            : nullptr;
+        if (stored == nullptr ||
+            stored->container != ProfileContainerId::baseIntake())
+        {
+            profileAssetSelection_.reset();
+            uiMessage_ = "SELECT A PENDING ITEM";
+            return;
+        }
+
+        const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 48.0F};
+        const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 48.0F};
+        if (contains(keepButton, click.position))
+        {
+            const ItemDefinition &definition =
+                publishedContentRegistry().item(selected->definitionId);
+            std::optional<StoredAssetLocation> destination;
+            if (definition.maxStackSize > 1)
+            {
+                for (const AssetRecord *target : assetsInContainer(
+                         gameSession_.profile(),
+                         ProfileContainerId::stash()))
+                {
+                    const auto *targetStored =
+                        std::get_if<StoredAssetLocation>(&target->location);
+                    if (targetStored != nullptr &&
+                        target->definitionId == selected->definitionId &&
+                        target->reliefBatchId == selected->reliefBatchId &&
+                        target->quantity <=
+                            definition.maxStackSize - selected->quantity)
+                    {
+                        destination = *targetStored;
+                        break;
+                    }
+                }
+            }
+            if (!destination.has_value())
+            {
+                const auto origin = findFirstProfileFit(
+                    gameSession_.profile(),
+                    publishedContentRegistry(),
+                    ProfileContainerId::stash(),
+                    definition,
+                    selected->orientation,
+                    selectedId);
+                if (origin.has_value())
+                {
+                    destination = StoredAssetLocation{
+                        ProfileContainerId::stash(), *origin};
+                }
+            }
+            if (!destination.has_value())
+            {
+                uiMessage_ = "STASH HAS NO LEGAL SPACE";
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
+            const InventoryReceipt receipt =
+                gameSession_.executeProfileInventory(
+                    InventoryMoveCommand{
+                        selectedId,
+                        0,
+                        *destination,
+                        selected->orientation},
+                    nextProfileTransactionId("keep-allocation"));
+            uiMessage_ = receipt.succeeded
+                ? "ITEM MOVED TO PERSONAL STASH"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
+        if (contains(contributeButton, click.position))
+        {
+            const BaseResourceReceipt receipt =
+                gameSession_.executeBaseResourceContribution(
+                    selectedId,
+                    nextProfileTransactionId("contribute-allocation"));
+            uiMessage_ = receipt.succeeded
+                ? "ITEM CONTRIBUTED TO BASE"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
         }
         return;
     }
@@ -7028,6 +7166,9 @@ void App::renderBaseWorld()
         case BaseFacilityKind::Supply:
             SDL_SetRenderDrawColor(renderer_, 78, 76, 48, 255);
             break;
+        case BaseFacilityKind::Allocation:
+            SDL_SetRenderDrawColor(renderer_, 42, 82, 68, 255);
+            break;
         case BaseFacilityKind::RaidGate:
             SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
             break;
@@ -8098,6 +8239,166 @@ void App::renderBaseSupply()
     }
 }
 
+void App::renderBaseAllocation()
+{
+    const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
+    SDL_SetRenderDrawColor(renderer_, 18, 30, 27, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 92, 176, 142, 255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_RenderDebugText(
+        renderer_, 80.0F, 100.0F,
+        "ALLOCATION & NEEDS | TEXT/GEOMETRY PLACEHOLDER");
+    SDL_RenderDebugText(
+        renderer_, 80.0F, 124.0F,
+        "EACH RESOLVED RAID CONSUMES 8 FOOD / 6 HYGIENE / 5 MORALE / 4 SECURITY");
+
+    const BaseResourceState &state =
+        gameSession_.profile().baseResources;
+    const std::array<std::pair<const char *, std::uint32_t>, 4> values{{
+        {"FOOD", state.pool.food},
+        {"HYGIENE", state.pool.hygiene},
+        {"MORALE", state.pool.morale},
+        {"SECURITY", state.pool.security}}};
+    const std::array<std::uint32_t, 4> shortages{
+        state.lastShortfall.food,
+        state.lastShortfall.hygiene,
+        state.lastShortfall.morale,
+        state.lastShortfall.security};
+    for (std::size_t index{}; index < values.size(); ++index)
+    {
+        const float y = 174.0F + static_cast<float>(index) * 76.0F;
+        const SDL_FRect track{80.0F, y + 23.0F, 450.0F, 24.0F};
+        const SDL_FRect fill{
+            track.x,
+            track.y,
+            track.w * static_cast<float>(values[index].second) / 100.0F,
+            track.h};
+        SDL_SetRenderDrawColor(renderer_, 38, 48, 44, 255);
+        SDL_RenderFillRect(renderer_, &track);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            values[index].second >= 25U ? 68 : 148,
+            values[index].second >= 25U ? 152 : 72,
+            values[index].second >= 25U ? 116 : 62,
+            255);
+        SDL_RenderFillRect(renderer_, &fill);
+        SDL_SetRenderDrawColor(renderer_, 128, 190, 164, 255);
+        SDL_RenderRect(renderer_, &track);
+        const char *tier = values[index].second >= 60U
+            ? "STABLE"
+            : values[index].second >= 25U
+                ? "STRAINED"
+                : "CRITICAL";
+        const std::string label = fmt::format(
+            "{} {}/100 | {}{}",
+            values[index].first,
+            values[index].second,
+            tier,
+            shortages[index] > 0U
+                ? fmt::format(" | LAST SHORTFALL {}", shortages[index])
+                : "");
+        SDL_RenderDebugText(renderer_, 80.0F, y, label.c_str());
+    }
+    const std::string cycles = fmt::format(
+        "RESOLVED RAID ACTIVITIES {} | SHORTAGE NEVER BLOCKS PLAY",
+        state.resolvedRaidCount);
+    SDL_RenderDebugText(renderer_, 80.0F, 500.0F, cycles.c_str());
+
+    SDL_RenderDebugText(
+        renderer_, 650.0F, 126.0F,
+        "PENDING RAID RETURNS - CHOOSE KEEP OR CONTRIBUTE");
+    const auto intake = assetsInContainer(
+        gameSession_.profile(),
+        ProfileContainerId::baseIntake());
+    if (intake.empty())
+    {
+        SDL_RenderDebugText(
+            renderer_, 650.0F, 174.0F,
+            "NO PENDING ITEMS | BASE IS READY FOR DEPLOY");
+    }
+    for (std::size_t index{}; index < intake.size() && index < 9U; ++index)
+    {
+        const AssetRecord &asset = *intake[index];
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset.definitionId);
+        const SDL_FRect row{
+            650.0F,
+            158.0F + static_cast<float>(index) * 42.0F,
+            500.0F,
+            36.0F};
+        SDL_SetRenderDrawColor(renderer_, 34, 62, 54, 255);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            profileAssetSelection_.has_value() &&
+                    profileAssetSelection_->instanceId == asset.instanceId
+                ? 236 : 98,
+            profileAssetSelection_.has_value() &&
+                    profileAssetSelection_->instanceId == asset.instanceId
+                ? 212 : 168,
+            120,
+            255);
+        SDL_RenderRect(renderer_, &row);
+        std::string contribution = "KEEP ONLY";
+        if (definition.baseContribution.has_value())
+        {
+            const BaseResourceBundle &value = *definition.baseContribution;
+            contribution = fmt::format(
+                "+F{} H{} M{} S{}",
+                value.food * asset.quantity,
+                value.hygiene * asset.quantity,
+                value.morale * asset.quantity,
+                value.security * asset.quantity);
+        }
+        const std::string label = fmt::format(
+            "{} x{} | {}",
+            definition.displayName,
+            asset.quantity,
+            contribution);
+        SDL_RenderDebugText(
+            renderer_, row.x + 8.0F, row.y + 14.0F, label.c_str());
+    }
+
+    const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 48.0F};
+    const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 48.0F};
+    bool canContribute{};
+    const char *contributeLabel = "SELECT ITEM FIRST";
+    if (profileAssetSelection_.has_value())
+    {
+        const BaseResourcePlan plan = queryBaseResourceContribution(
+            gameSession_.profile(),
+            publishedContentRegistry(),
+            ContributeBaseAssetCommand{
+                profileAssetSelection_->instanceId});
+        canContribute = plan.canCommit;
+        contributeLabel = plan.canCommit
+            ? "CONTRIBUTE TO BASE"
+            : "CONTRIBUTION BLOCKED";
+    }
+    SDL_SetRenderDrawColor(renderer_, 58, 92, 118, 255);
+    SDL_RenderFillRect(renderer_, &keepButton);
+    SDL_SetRenderDrawColor(
+        renderer_, canContribute ? 66 : 62, canContribute ? 118 : 68,
+        canContribute ? 84 : 66, 255);
+    SDL_RenderFillRect(renderer_, &contributeButton);
+    SDL_SetRenderDrawColor(renderer_, 154, 202, 184, 255);
+    SDL_RenderRect(renderer_, &keepButton);
+    SDL_RenderRect(renderer_, &contributeButton);
+    SDL_RenderDebugText(
+        renderer_, keepButton.x + 42.0F, keepButton.y + 18.0F,
+        "KEEP IN STASH");
+    SDL_RenderDebugText(
+        renderer_, contributeButton.x + 28.0F,
+        contributeButton.y + 18.0F,
+        contributeLabel);
+    SDL_RenderDebugText(renderer_, 80.0F, 632.0F, "ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_RenderDebugText(renderer_, 470.0F, 632.0F, uiMessage_.c_str());
+    }
+}
+
 void App::renderBaseDeployment()
 {
     const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
@@ -8170,6 +8471,16 @@ void App::renderBaseDeployment()
         capable
             ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
             : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
+    const std::size_t pendingAllocation = assetsInContainer(
+        profile,
+        ProfileContainerId::baseIntake()).size();
+    if (pendingAllocation > 0U)
+    {
+        const std::string blocked = fmt::format(
+            "DEPLOY BLOCKED | RESOLVE {} PENDING ITEM(S) AT ALLOCATION & NEEDS",
+            pendingAllocation);
+        SDL_RenderDebugText(renderer_, 404.0F, 508.0F, blocked.c_str());
+    }
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     SDL_RenderDebugText(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");
@@ -8196,6 +8507,15 @@ void App::renderBase()
         gameSession_.profile().currency,
         gameSession_.profile().revision);
     SDL_RenderDebugText(renderer_, 1010.0F, 54.0F, currency.c_str());
+    const BaseResourceBundle &base =
+        gameSession_.profile().baseResources.pool;
+    const std::string resources = fmt::format(
+        "BASE F{} H{} M{} S{}",
+        base.food,
+        base.hygiene,
+        base.morale,
+        base.security);
+    SDL_RenderDebugText(renderer_, 1010.0F, 72.0F, resources.c_str());
 
     const char *goal = "OBJECTIVE COMPLETE";
     switch (gameSession_.profile().tutorial)
@@ -8223,6 +8543,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Supply:
             renderBaseSupply();
+            break;
+        case BaseFacilityKind::Allocation:
+            renderBaseAllocation();
             break;
         case BaseFacilityKind::RaidGate:
             renderBaseDeployment();

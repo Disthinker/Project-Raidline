@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "economy_domain.h"
+#include "base_resource_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
 #include "profile_combat_domain.h"
@@ -200,6 +201,10 @@ public:
 
     [[nodiscard]] EconomyReceipt executeProfileEconomy(
         const EconomyCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] BaseResourceReceipt executeBaseResourceContribution(
+        AssetInstanceId assetId,
         std::string transactionId);
 
     [[nodiscard]] WeaponAmmoReceipt executeProfileWeaponAmmo(

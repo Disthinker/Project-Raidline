@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-conditional-extraction-content-12",
+  "content_version": "base-resource-pressure-content-13",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -30,6 +30,7 @@
       },
       "inventory_texture": "items/inventory/item_cola_basic_v1_64x64.png",
       "world_texture": "items/world/item_cola_basic_v1_32x32.png",
+      "base_contribution": {"food": 12, "morale": 4},
       "market_recycle_price": 15
     },
     {
@@ -249,6 +250,7 @@
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
       "market_buy_price": 60,
       "market_recycle_price": 15,
+      "base_contribution": {"hygiene": 14},
       "maximum_charges": 3,
       "medical_use": {
         "effect": "restore_health",
@@ -273,6 +275,7 @@
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
       "market_buy_price": 20,
       "market_recycle_price": 5,
+      "base_contribution": {"hygiene": 5},
       "maximum_charges": 1,
       "medical_use": {
         "effect": "stop_light_bleeding",
@@ -297,6 +300,7 @@
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
       "market_buy_price": 40,
       "market_recycle_price": 10,
+      "base_contribution": {"hygiene": 7},
       "maximum_charges": 1,
       "medical_use": {
         "effect": "stop_any_bleeding",
@@ -321,6 +325,7 @@
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
       "market_buy_price": 40,
       "market_recycle_price": 10,
+      "base_contribution": {"morale": 8},
       "maximum_charges": 3,
       "medical_use": {
         "effect": "suppress_pain",
@@ -443,6 +448,7 @@
       },
       "inventory_texture": "items/inventory/unpublished_scrap.png",
       "world_texture": "items/world/unpublished_scrap.png",
+      "base_contribution": {"security": 12},
       "market_recycle_price": 20
     },
     {
@@ -459,6 +465,7 @@
       },
       "inventory_texture": "items/inventory/unpublished_electronics.png",
       "world_texture": "items/world/unpublished_electronics.png",
+      "base_contribution": {"hygiene": 4, "security": 8},
       "market_recycle_price": 45
     }
   ],

@@ -233,6 +233,7 @@ private:
     void renderBaseWorld();
     void renderBaseStorage();
     void renderBaseSupply();
+    void renderBaseAllocation();
     void renderBaseDeployment();
     void renderProfileGrid(
         ProfileContainerId container,

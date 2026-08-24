@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "base_world.h"
 
 TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
@@ -55,4 +57,20 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
     EXPECT_EQ(
         world.update(interact, 0.0F),
         BaseFacilityKind::RaidGate);
+}
+
+TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
+{
+    const BaseWorld world;
+    ASSERT_EQ(world.facilities().size(), 4U);
+    EXPECT_NE(
+        std::find_if(
+            world.facilities().begin(),
+            world.facilities().end(),
+            [](const BaseFacility &facility)
+            { return facility.kind == BaseFacilityKind::Allocation; }),
+        world.facilities().end());
+    EXPECT_STREQ(
+        baseFacilityName(BaseFacilityKind::Allocation),
+        "ALLOCATION & NEEDS");
 }

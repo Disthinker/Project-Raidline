@@ -70,6 +70,7 @@
 | Combat Reliability：武器切换准星连续性 | PR #74 已通过 exact-head CI 与用户验收，以 merge commit `6138da8` 进入 main |
 | Raid Pressure & Variety：持续高危阶段 v1 | PR #75 已通过 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main |
 | Raid Pressure & Variety：主动高危与高级资源区 v1 | PR #76 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `bc26337` 进入 main |
-| Raid Pressure & Variety：高危条件撤离 v1 | 当前分支已完成单位克重、权威随身重量和轻装撤离，Windows Debug 全目标与 CTest 825/825 通过；等待 exact-head CI 与用户正常游玩验收 |
+| Raid Pressure & Variety：高危条件撤离 v1 | PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main |
+| Base Growth：资源分配与基础需求 v1 | 当前分支实现成功撤离待分配、个人保留/基地捐献、四资源与每局需求；仅使用文字和几何图形 fallback，等待完整自动化、CI 和用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-conditional-extraction-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-resource-pressure-v1.md`。

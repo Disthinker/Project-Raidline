@@ -13,6 +13,8 @@
 namespace
 {
 constexpr InventoryGridSize kStashSize{20, 12};
+constexpr InventoryGridSize kBaseIntakeSize{20, 12};
+constexpr std::uint32_t kMaximumBaseResource{100};
 
 bool validMedicalStatus(const MedicalStatusState &status) noexcept
 {
@@ -98,7 +100,7 @@ bool containerAccepts(
     ProfileContainerId container,
     const ItemDefinition &item)
 {
-    if (container.kind == ProfileContainerKind::Stash)
+    if (container.kind != ProfileContainerKind::AssetCompartment)
     {
         return true;
     }
@@ -205,6 +207,11 @@ void placeNewAsset(
 ProfileContainerId ProfileContainerId::stash() noexcept
 {
     return ProfileContainerId{};
+}
+
+ProfileContainerId ProfileContainerId::baseIntake() noexcept
+{
+    return ProfileContainerId{ProfileContainerKind::BaseIntake, 0, 0};
 }
 
 ProfileContainerId ProfileContainerId::compartment(
@@ -362,6 +369,10 @@ InventoryGridSize profileContainerSize(
     {
         return kStashSize;
     }
+    if (container.kind == ProfileContainerKind::BaseIntake)
+    {
+        return kBaseIntakeSize;
+    }
     const AssetRecord *owner = profile.assets.find(container.ownerAssetId);
     if (owner == nullptr)
     {
@@ -446,7 +457,8 @@ bool assetIsCarried(
         if (const auto *stored =
                 std::get_if<StoredAssetLocation>(&asset->location))
         {
-            if (stored->container.kind == ProfileContainerKind::Stash)
+            if (stored->container.kind !=
+                ProfileContainerKind::AssetCompartment)
             {
                 return false;
             }
@@ -607,6 +619,20 @@ ProfileValidationResult validateProfileState(
     if (!validMedicalStatus(profile.medicalStatus))
     {
         return {false, "profile medical status is invalid"};
+    }
+    const BaseResourceBundle &resources = profile.baseResources.pool;
+    const BaseResourceBundle &shortfall =
+        profile.baseResources.lastShortfall;
+    if (resources.food > kMaximumBaseResource ||
+        resources.hygiene > kMaximumBaseResource ||
+        resources.morale > kMaximumBaseResource ||
+        resources.security > kMaximumBaseResource ||
+        shortfall.food > kMaximumBaseResource ||
+        shortfall.hygiene > kMaximumBaseResource ||
+        shortfall.morale > kMaximumBaseResource ||
+        shortfall.security > kMaximumBaseResource)
+    {
+        return {false, "Base resource state is invalid"};
     }
 
     AssetInstanceId maximumId{};
@@ -854,14 +880,21 @@ ProfileValidationResult validateProfileState(
                               regularSlotCount +
                                   raidMap->highRisk.advancedLootSlots.size()
                     : loot.slotIndex < regularSlotCount;
-            if (loot.assetId == 0 ||
+            if (loot.assetId == 0 || loot.definitionId.value().empty() ||
+                loot.quantity == 0 ||
                 !snapshotLoot.insert(loot.assetId).second ||
                 !snapshotSlots.insert(loot.slotIndex).second || !validSlot ||
                 !std::isfinite(loot.position.x) ||
                 !std::isfinite(loot.position.y) ||
+                (!loot.collected && asset == nullptr) ||
                 (asset != nullptr &&
                  !groundAssetIds.contains(loot.assetId) &&
-                 !assetIsCarried(profile, loot.assetId)))
+                 !assetIsCarried(profile, loot.assetId)) ||
+                (loot.collected && asset != nullptr &&
+                 !groundAssetIds.contains(loot.assetId) &&
+                 !assetIsCarried(profile, loot.assetId)) ||
+                (asset != nullptr &&
+                 asset->definitionId != loot.definitionId))
             {
                 return {false, "pending Raid Loot ownership is invalid"};
             }
@@ -936,6 +969,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.medicalStatus.bleedingDamageRemainingMs);
     hashInteger(hash, profile.medicalStatus.painkillerRemainingMs);
     hashInteger(hash, profile.medicalStatus.painScreamRemainingMs);
+    hashInteger(hash, profile.baseResources.pool.food);
+    hashInteger(hash, profile.baseResources.pool.hygiene);
+    hashInteger(hash, profile.baseResources.pool.morale);
+    hashInteger(hash, profile.baseResources.pool.security);
+    hashInteger(hash, profile.baseResources.lastShortfall.food);
+    hashInteger(hash, profile.baseResources.lastShortfall.hygiene);
+    hashInteger(hash, profile.baseResources.lastShortfall.morale);
+    hashInteger(hash, profile.baseResources.lastShortfall.security);
+    hashInteger(hash, profile.baseResources.resolvedRaidCount);
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -1024,10 +1066,13 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         for (const RaidLootSnapshot &loot : raid.loot)
         {
             hashInteger(hash, loot.assetId);
+            hashBytes(hash, loot.definitionId.value());
+            hashInteger(hash, loot.quantity);
             hashInteger(hash, loot.slotIndex);
             hashFloat(hash, loot.position.x);
             hashFloat(hash, loot.position.y);
             hashInteger(hash, loot.requiresHighRisk ? 1U : 0U);
+            hashInteger(hash, loot.collected ? 1U : 0U);
         }
         for (AssetInstanceId root : raid.carriedRootAssetIds)
         {

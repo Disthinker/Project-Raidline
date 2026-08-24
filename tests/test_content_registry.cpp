@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-conditional-extraction-content-12");
+        "base-resource-pressure-content-13");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -118,6 +118,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     const ItemDefinition &ammunition = registry.item(
         ItemDefinitionId{"item.ammunition.9mm_basic"});
     EXPECT_EQ(ammunition.id, ItemId::Ammo9mm);
+    const ItemDefinition &cola = registry.item(alpha_content::lootCola);
+    ASSERT_TRUE(cola.baseContribution.has_value());
+    EXPECT_EQ(
+        *cola.baseContribution,
+        (BaseResourceBundle{12, 0, 4, 0}));
     EXPECT_EQ(ammunition.maxStackSize, 60U);
     EXPECT_EQ(ammunition.unitWeightGrams, 12U);
     EXPECT_EQ(ammunition.marketBuyPrice, 1U);

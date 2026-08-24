@@ -211,6 +211,8 @@ endfunction()
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
     src/alpha_content_ids.h
+    src/base_resource_domain.cpp
+    src/base_resource_domain.h
     src/combat_damage_domain.cpp
     src/combat_damage_domain.h
     src/content_registry.cpp
@@ -545,6 +547,10 @@ raidline_add_test(
 raidline_add_test(
     EconomyDomainTest
     tests/test_economy_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseResourceDomainTest
+    tests/test_base_resource_domain.cpp
     raidline::domain)
 raidline_add_test(
     WeaponAmmoDomainTest

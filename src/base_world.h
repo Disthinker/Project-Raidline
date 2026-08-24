@@ -11,6 +11,7 @@ enum class BaseFacilityKind
 {
     Storage,
     Supply,
+    Allocation,
     RaidGate
 };
 
@@ -45,7 +46,7 @@ public:
     [[nodiscard]] Vec2 playerFacingDirection() const noexcept;
     [[nodiscard]] bool playerIsMoving() const noexcept;
     [[nodiscard]] std::size_t playerAnimationFrame() const noexcept;
-    [[nodiscard]] const std::array<BaseFacility, 3> &facilities() const noexcept;
+    [[nodiscard]] const std::array<BaseFacility, 4> &facilities() const noexcept;
     [[nodiscard]] std::optional<BaseFacilityKind>
     interactableFacility() const noexcept;
 
@@ -59,7 +60,7 @@ private:
     bool playerIsMoving_{};
     Animator playerMovementAnimator_;
     Rect walkableBounds_{{32.0F, 24.0F}, {1216.0F, 664.0F}};
-    std::array<BaseFacility, 3> facilities_;
+    std::array<BaseFacility, 4> facilities_;
 };
 
 [[nodiscard]] const char *baseFacilityName(BaseFacilityKind kind) noexcept;

@@ -267,6 +267,15 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
     ASSERT_TRUE(settled.succeeded) << settled.message;
     EXPECT_FALSE(profile.pendingRaid.has_value());
     EXPECT_NE(profile.assets.find(loot), nullptr);
+    const auto *returnedLocation = std::get_if<StoredAssetLocation>(
+        &profile.assets.find(loot)->location);
+    ASSERT_NE(returnedLocation, nullptr);
+    EXPECT_EQ(
+        returnedLocation->container,
+        ProfileContainerId::baseIntake());
+    EXPECT_EQ(
+        profile.baseResources.pool,
+        (BaseResourceBundle{32, 34, 35, 36}));
     EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::Heavy);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
@@ -311,6 +320,9 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
     lootAsset->definitionId = alpha_content::ammunition;
     lootAsset->quantity = 5;
     lootAsset->reliefBatchId.reset();
+    profile.pendingRaid->loot.front().definitionId =
+        alpha_content::ammunition;
+    profile.pendingRaid->loot.front().quantity = 5;
     ASSERT_TRUE(validateProfileState(
         profile,
         publishedContentRegistry()).valid);
@@ -327,6 +339,19 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
     EXPECT_TRUE(validateProfileState(
         profile,
         publishedContentRegistry()).valid);
+
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        "settlement-alpha-test",
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_EQ(profile.assets.find(ammunition)->quantity, 55U);
+    const auto intake = assetsInContainer(
+        profile, ProfileContainerId::baseIntake());
+    ASSERT_EQ(intake.size(), 1U);
+    EXPECT_EQ(intake.front()->definitionId, alpha_content::ammunition);
+    EXPECT_EQ(intake.front()->quantity, 5U);
 }
 
 TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
@@ -409,4 +434,24 @@ TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
     }
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
+}
+
+TEST(RaidLifecycleTest, PendingAllocationBlocksAnotherDeploy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-allocation-gate",
+        publishedContentRegistry());
+    const ItemDefinition &definition = publishedContentRegistry().item(
+        alpha_content::lootCola);
+    static_cast<void>(profile.assets.create(
+        definition,
+        StoredAssetLocation{
+            ProfileContainerId::baseIntake(), GridPosition{0, 0}},
+        1));
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const DeployReceipt receipt = deploy(profile, 9901);
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
