@@ -1165,6 +1165,23 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map display metadata must not be empty");
             }
 
+            const Json &travel = requiredObject(mapValue, "travel");
+            definition.travel = RaidTravelDefinition{
+                requiredPositiveUint(travel, "outbound_minutes"),
+                requiredPositiveUint(travel, "return_minutes"),
+                requiredPositiveUint(travel, "failure_regroup_minutes")};
+            constexpr std::uint32_t maximumTravelMinutes =
+                7U * 24U * 60U;
+            if (definition.travel.outboundMinutes > maximumTravelMinutes ||
+                definition.travel.returnMinutes > maximumTravelMinutes ||
+                definition.travel.failureRegroupMinutes >
+                    maximumTravelMinutes ||
+                definition.travel.failureRegroupMinutes <
+                    definition.travel.returnMinutes)
+            {
+                fail("map travel definition is invalid");
+            }
+
             definition.backgroundTexturePath =
                 requiredString(mapValue, "background_texture");
             const Json &backgroundTint =

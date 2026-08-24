@@ -51,6 +51,21 @@ struct RaidRollbackReceipt
     ProfileRevision revision{};
 };
 
+struct RaidTravelPreview
+{
+    std::uint32_t outboundMinutes{};
+    std::uint32_t returnMinutes{};
+    std::uint32_t failureRegroupMinutes{};
+    WorldClockProjection departure;
+    WorldClockProjection arrival;
+    WorldClockProjection extractedReturn;
+    WorldClockProjection failureReturn;
+};
+
+[[nodiscard]] RaidTravelPreview queryRaidTravel(
+    const ProfileState &profile,
+    const MapDefinition &map) noexcept;
+
 [[nodiscard]] DeployReceipt executeDeploy(
     ProfileState &profile,
     const ContentRegistry &content,

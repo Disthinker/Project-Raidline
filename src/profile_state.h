@@ -199,6 +199,19 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+struct RaidTravelSnapshot
+{
+    std::uint32_t outboundMinutes{};
+    std::uint32_t returnMinutes{};
+    std::uint32_t failureRegroupMinutes{};
+    WorldClockState startingWorldClock;
+    BaseResourceState startingBaseResources;
+
+    friend bool operator==(
+        const RaidTravelSnapshot &,
+        const RaidTravelSnapshot &) = default;
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -215,6 +228,7 @@ struct PendingRaidSnapshot
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
     MedicalStatusState startingMedicalStatus;
+    RaidTravelSnapshot travel;
 };
 
 struct LastRaidResult
@@ -223,6 +237,7 @@ struct LastRaidResult
     RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
     std::vector<ItemDefinitionId> returnedItemDefinitionIds;
     std::int64_t currencyDelta{};
+    std::uint32_t travelMinutesApplied{};
 };
 
 struct ProfileState

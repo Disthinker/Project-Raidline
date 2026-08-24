@@ -39,7 +39,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV8RoundTripPreservesClockResourcesAndIntake)
+TEST(SaveRepositoryTest, SchemaV9RoundTripPreservesClockResourcesAndIntake)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -84,6 +84,99 @@ TEST(SaveRepositoryTest, SchemaV8RoundTripPreservesClockResourcesAndIntake)
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
+TEST(SaveRepositoryTest, SchemaV8AcceptsPreviousContentAndClockState)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v8-content-migration",
+        publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes =
+        3U * kWorldMinutesPerDay + 17U * 60U + 25U;
+    profile.baseResources.resolvedDemandCycleCount = 3U;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-resource-pressure-content-13",
+            8),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->worldClock, profile.worldClock);
+    EXPECT_EQ(migrated.profile->baseResources, profile.baseResources);
+}
+
+TEST(SaveRepositoryTest, SchemaV8PendingRaidMigratesToZeroTravelRollback)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v8-pending-travel-migration",
+        publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "legacy-raid",
+            "legacy-settlement",
+            91231,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "legacy-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    profile.pendingRaid->rulesVersion = "raid-conditional-extraction-3";
+    profile.worldClock = profile.pendingRaid->travel.startingWorldClock;
+    profile.baseResources = profile.pendingRaid->travel.startingBaseResources;
+    const WorldClockState expectedClock = profile.worldClock;
+    const BaseResourceState expectedResources = profile.baseResources;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-resource-pressure-content-13",
+            8),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    ASSERT_TRUE(migrated.profile->pendingRaid.has_value());
+    EXPECT_EQ(migrated.profile->pendingRaid->travel.outboundMinutes, 0U);
+    EXPECT_EQ(migrated.profile->pendingRaid->travel.startingWorldClock,
+              expectedClock);
+    ProfileState rolledBack = *migrated.profile;
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        rolledBack, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(rolledBack.worldClock, expectedClock);
+    EXPECT_EQ(rolledBack.baseResources, expectedResources);
+}
+
+TEST(SaveRepositoryTest, SchemaV9RoundTripsSettlementTravelReceipt)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v9-settlement-travel",
+        publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-travel-raid",
+            "save-travel-settlement",
+            91232,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "save-travel-deploy"}).succeeded);
+    ASSERT_TRUE(settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        "save-travel-settlement",
+        RaidResultOutcome::ActiveQuit).succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->lastRaidResult.has_value());
+    EXPECT_EQ(loaded.profile->lastRaidResult->travelMinutesApplied, 45U);
+}
+
 TEST(SaveRepositoryTest, SchemaV7MigratesToInitialClockWithoutReplayingRaids)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -114,7 +207,7 @@ TEST(SaveRepositoryTest, SchemaV7MigratesToInitialClockWithoutReplayingRaids)
         *migrated.profile, publishedContentRegistry()).valid);
 }
 
-TEST(SaveRepositoryTest, SchemaV8RejectsDemandCycleAheadOfWorldClock)
+TEST(SaveRepositoryTest, SchemaV9RejectsDemandCycleAheadOfWorldClock)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-invalid-demand-cycle",

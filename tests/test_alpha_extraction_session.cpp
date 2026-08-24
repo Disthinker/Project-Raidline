@@ -71,7 +71,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-conditional-extraction-3");
+        "raid-travel-time-4");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

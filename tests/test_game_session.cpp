@@ -148,6 +148,25 @@ TEST(GameSessionTest, BaseClockUsesScaledSimulationTimeAndDailyDemand)
         1U);
 }
 
+TEST(GameSessionTest, RaidTravelPreviewProjectsSelectedMapWithoutMutation)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("session-travel-preview"));
+    const std::uint64_t fingerprint =
+        profileStateFingerprint(session.profile());
+
+    const auto preview = session.raidTravelPreview(
+        MapDefinitionId{"map.raid.riverside"});
+
+    ASSERT_TRUE(preview.has_value());
+    EXPECT_EQ(preview->outboundMinutes, 90U);
+    EXPECT_EQ(preview->arrival.hour, 9U);
+    EXPECT_EQ(preview->arrival.minute, 30U);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    EXPECT_FALSE(session.raidTravelPreview(
+        MapDefinitionId{"map.raid.missing"}).has_value());
+}
+
 TEST(GameSessionTest, ActiveRaidRejectsRestartWithoutMutation)
 {
     GameSession session;
