@@ -99,6 +99,8 @@ queryProfileContextAction(
     AssetInstanceId instanceId,
     bool inRaid);
 
+// A current location match permits the App to re-query the drop against the
+// latest Profile revision. A moved or removed source remains invalid.
 [[nodiscard]] bool profileDragSourceMatches(
     const ProfileState &profile,
     const ProfileDragSource &source) noexcept;

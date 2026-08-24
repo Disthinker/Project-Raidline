@@ -2705,6 +2705,30 @@ TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
         world.hitResultsLastUpdate().front().position.y);
 }
 
+TEST(GameplayWorldRaidTest, BlockedAxisStillAllowsSlidingAlongCover)
+{
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{540.0F, 260.0F}, Vec2{60.0F, 180.0F}}}}}};
+
+    const Vec2 start = world.player().position();
+    GameplayInput moveAlongLeftWall{};
+    moveAlongLeftWall.moveLeft = true;
+    moveAlongLeftWall.moveUp = true;
+    world.update(moveAlongLeftWall, 0.10F);
+
+    EXPECT_FLOAT_EQ(world.player().position().x, start.x);
+    EXPECT_LT(world.player().position().y, start.y);
+}
+
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
     GameplayWorld world;

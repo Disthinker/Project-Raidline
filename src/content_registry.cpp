@@ -1454,6 +1454,18 @@ ContentRegistry ContentRegistry::fromJson(
                              "blocker");
                     }
                 }
+                if (rectsOverlap(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.highRisk.activationControlPoint) ||
+                    rectsOverlap(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.highRisk.advancedResourceArea) ||
+                    rectsOverlap(
+                        definition.highRisk.activationControlPoint,
+                        definition.highRisk.advancedResourceArea))
+                {
+                    fail("high-risk interaction regions overlap");
+                }
                 for (const EnemySpawnDefinition &spawn :
                      definition.highRisk.pressureSpawns)
                 {
@@ -1493,6 +1505,19 @@ ContentRegistry ContentRegistry::fromJson(
                         !rectInside(pair.extractionPoint, definition.walkableBounds))
                     {
                         fail("Raid spawn/extraction pair is invalid");
+                    }
+                    if (rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.emergencyExtractionPoint) ||
+                        rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.activationControlPoint) ||
+                        rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.advancedResourceArea))
+                    {
+                        fail("Raid extraction overlaps another interaction "
+                             "region");
                     }
                 }
                 std::set<std::string> routes;

@@ -715,13 +715,42 @@ void GameplayWorld::update(
         deltaTime,
         worldWidth(),
         worldHeight());
-    for (const BallisticBlocker &blocker : ballisticBlockers_)
+    const Vec2 requestedPlayerPosition = player_.position();
+    const auto playerOverlapsBlocker = [&]() noexcept
     {
-        if (isCollision(playerBounds(player_), blocker.bounds))
+        return std::any_of(
+            ballisticBlockers_.begin(),
+            ballisticBlockers_.end(),
+            [&](const BallisticBlocker &blocker)
+            {
+                return isCollision(playerBounds(player_), blocker.bounds);
+            });
+    };
+
+    // Resolve each movement axis independently. Reverting the complete
+    // diagonal displacement when only one axis hit cover made a held key
+    // block the otherwise free perpendicular direction.
+    if (requestedPlayerPosition.x != playerPositionBeforeMovement.x)
+    {
+        static_cast<void>(player_.setPosition(Vec2{
+            requestedPlayerPosition.x,
+            playerPositionBeforeMovement.y}));
+        if (playerOverlapsBlocker())
         {
             static_cast<void>(
                 player_.setPosition(playerPositionBeforeMovement));
-            break;
+        }
+    }
+    const Vec2 positionAfterHorizontalResolution = player_.position();
+    if (requestedPlayerPosition.y != playerPositionBeforeMovement.y)
+    {
+        static_cast<void>(player_.setPosition(Vec2{
+            positionAfterHorizontalResolution.x,
+            requestedPlayerPosition.y}));
+        if (playerOverlapsBlocker())
+        {
+            static_cast<void>(
+                player_.setPosition(positionAfterHorizontalResolution));
         }
     }
 

@@ -622,13 +622,13 @@
       },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
-        "emergency_extraction_point": {"position": {"x": 960, "y": 520}, "size": {"x": 170, "y": 130}},
+        "emergency_extraction_point": {"position": {"x": 300, "y": 300}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
         "active_enemy_cap": 8,
-        "activation_control_point": {"position": {"x": 1040, "y": 100}, "size": {"x": 150, "y": 84}},
+        "activation_control_point": {"position": {"x": 760, "y": 90}, "size": {"x": 150, "y": 84}},
         "activation_duration_seconds": 4,
         "advanced_resource_area": {"position": {"x": 820, "y": 440}, "size": {"x": 360, "y": 200}},
         "advanced_loot_table": "loot.raid.high_risk_v1",
@@ -698,11 +698,11 @@
         "active_enemy_cap": 8,
         "activation_control_point": {"position": {"x": 1040, "y": 300}, "size": {"x": 150, "y": 84}},
         "activation_duration_seconds": 4,
-        "advanced_resource_area": {"position": {"x": 930, "y": 470}, "size": {"x": 280, "y": 180}},
+        "advanced_resource_area": {"position": {"x": 210, "y": 450}, "size": {"x": 220, "y": 190}},
         "advanced_loot_table": "loot.raid.high_risk_v1",
         "advanced_loot_slots": [
-          {"id": "riverside_cache_1", "position": {"x": 980, "y": 510}},
-          {"id": "riverside_cache_2", "position": {"x": 1160, "y": 610}}
+          {"id": "riverside_cache_1", "position": {"x": 250, "y": 490}},
+          {"id": "riverside_cache_2", "position": {"x": 390, "y": 600}}
         ],
         "pressure_spawns": [
           {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
@@ -731,7 +731,7 @@
         {"id": "perimeter_1", "route": "perimeter", "position": {"x": 180, "y": 120}},
         {"id": "perimeter_2", "route": "perimeter", "position": {"x": 1080, "y": 120}},
         {"id": "perimeter_3", "route": "perimeter", "position": {"x": 1090, "y": 590}},
-        {"id": "resource_1", "route": "resource", "position": {"x": 260, "y": 500}},
+        {"id": "resource_1", "route": "resource", "position": {"x": 260, "y": 400}},
         {"id": "resource_2", "route": "resource", "position": {"x": 400, "y": 610}},
         {"id": "resource_3", "route": "resource", "position": {"x": 740, "y": 610}},
         {"id": "resource_4", "route": "resource", "position": {"x": 1030, "y": 500}}
@@ -758,13 +758,13 @@
       "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
       "high_risk": {
         "regular_phase_duration_seconds": 180,
-        "emergency_extraction_point": {"position": {"x": 760, "y": 500}, "size": {"x": 170, "y": 130}},
+        "emergency_extraction_point": {"position": {"x": 680, "y": 420}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
         "active_enemy_cap": 8,
-        "activation_control_point": {"position": {"x": 1090, "y": 350}, "size": {"x": 150, "y": 84}},
+        "activation_control_point": {"position": {"x": 1090, "y": 330}, "size": {"x": 150, "y": 84}},
         "activation_duration_seconds": 4,
         "advanced_resource_area": {"position": {"x": 900, "y": 430}, "size": {"x": 300, "y": 210}},
         "advanced_loot_table": "loot.raid.high_risk_v1",
