@@ -73,6 +73,7 @@
 | Raid Pressure & Variety：主动高危与高级资源区 v1 | PR #76 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `bc26337` 进入 main |
 | Raid Pressure & Variety：高危条件撤离 v1 | PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main |
 | Base Growth：资源分配与基础需求 v1 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `ba8283f` 进入 main |
-| Base Growth：世界时钟与每日需求 v1 | 当前分支实现 Base/Raid 共享时钟、每日 00:00 需求、schema v8、Base 检查点与 Raid 异常回滚；Windows Debug 全目标和 862/862 CTest 通过，等待 exact-head CI 与用户正常游玩验收 |
+| Base Growth：世界时钟与每日需求 v1 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `5d2a11a` 进入 main |
+| Raid 往返行动耗时 v1 | 当前分支实现三图出发/返程/失败归队耗时、抵达昼夜预览、schema v9 和整笔活动回滚；Windows Debug 全目标与 875/875 CTest 通过，分钟值仍是开发期平衡值，等待 exact-head CI 与用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-world-clock-daily-needs-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-travel-time-v1.md`。

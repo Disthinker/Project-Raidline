@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-resource-pressure-content-13",
+  "content_version": "raid-travel-time-content-14",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -608,6 +608,7 @@
       "id": "map.v0.test",
       "display_name": "Greyline Depot",
       "route_profile": "BALANCED | OPEN CENTER | LONG FLANKS",
+      "travel": {"outbound_minutes": 45, "return_minutes": 45, "failure_regroup_minutes": 90},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 255, "green": 255, "blue": 255},
       "world_size": {"x": 1280, "y": 720},
@@ -702,6 +703,7 @@
       "id": "map.raid.riverside",
       "display_name": "Riverside Checkpoint",
       "route_profile": "MID-RANGE | CHOKEPOINTS | SAFE OUTER LOOP",
+      "travel": {"outbound_minutes": 90, "return_minutes": 90, "failure_regroup_minutes": 180},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 190, "green": 220, "blue": 210},
       "world_size": {"x": 1280, "y": 720},
@@ -773,6 +775,7 @@
       "id": "map.raid.industrial",
       "display_name": "Ashworks Yard",
       "route_profile": "CLOSE COVER | SPLIT LANES | RISKY CENTER",
+      "travel": {"outbound_minutes": 150, "return_minutes": 150, "failure_regroup_minutes": 300},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 220, "green": 190, "blue": 170},
       "world_size": {"x": 1280, "y": 720},

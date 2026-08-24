@@ -5519,15 +5519,21 @@ void App::renderStashOverlay()
             uiTextRenderer_.render(
                 renderer_, panel.x + 24.0F, panel.y + 90.0F,
                 currency.c_str());
+            const std::string travel = fmt::format(
+                "RETURN / REGROUP TRAVEL: {} MIN",
+                result->travelMinutesApplied);
+            uiTextRenderer_.render(
+                renderer_, panel.x + 24.0F, panel.y + 112.0F,
+                travel.c_str());
             if (result->outcome == RaidResultOutcome::Extracted)
             {
                 const std::string count = fmt::format(
                     "RETURNED ASSETS: {}",
                     result->returnedItemDefinitionIds.size());
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 122.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 138.0F,
                     count.c_str());
-                float y = panel.y + 148.0F;
+                float y = panel.y + 164.0F;
                 for (std::size_t index = 0;
                      index < result->returnedItemDefinitionIds.size() &&
                      index < 9U;
@@ -5543,10 +5549,10 @@ void App::renderStashOverlay()
             else
             {
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 130.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 142.0F,
                     "ALL CARRIED ASSETS WERE LOST");
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 154.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 166.0F,
                     "NO LOST-ITEM LIST IS GENERATED");
             }
         }
@@ -8560,7 +8566,28 @@ void App::renderBaseDeployment()
     uiTextRenderer_.render(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
 
     const ProfileState &profile = gameSession_.profile();
-    float y = 282.0F;
+    if (const auto travel = gameSession_.raidTravelPreview(map.id))
+    {
+        const std::string timing = fmt::format(
+            "DEPART DAY {} {:02}:{:02} -> ARRIVE DAY {} {:02}:{:02} {} | {} MIN",
+            travel->departure.day,
+            travel->departure.hour,
+            travel->departure.minute,
+            travel->arrival.day,
+            travel->arrival.hour,
+            travel->arrival.minute,
+            worldTimeOfDayName(travel->arrival.timeOfDay),
+            travel->outboundMinutes);
+        const std::string returnTiming = fmt::format(
+            "NORMAL TRAVEL {} MIN | FAILURE REGROUP {} MIN",
+            travel->returnMinutes,
+            travel->failureRegroupMinutes);
+        uiTextRenderer_.render(renderer_, 410.0F, 272.0F, timing.c_str());
+        uiTextRenderer_.render(
+            renderer_, 478.0F, 292.0F, returnTiming.c_str());
+    }
+
+    float y = 318.0F;
     for (EquipmentSlotKind slot : kProfileEquipmentSlots)
     {
         const auto id = equippedAsset(profile, slot);
@@ -8573,7 +8600,7 @@ void App::renderBaseDeployment()
             equipmentSlotLabel(slot),
             name);
         uiTextRenderer_.render(renderer_, 480.0F, y, row.c_str());
-        y += 23.0F;
+        y += 18.0F;
     }
 
     const WeaponReadiness readiness = weaponReadiness(profile);
@@ -8594,15 +8621,8 @@ void App::renderBaseDeployment()
     uiTextRenderer_.render(
         renderer_,
         458.0F,
-        454.0F,
+        448.0F,
         fireStatus.c_str());
-    uiTextRenderer_.render(
-        renderer_,
-        442.0F,
-        480.0F,
-        capable
-            ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
-            : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     const std::size_t pendingAllocation = assetsInContainer(
         profile,
         ProfileContainerId::baseIntake()).size();
@@ -8611,7 +8631,17 @@ void App::renderBaseDeployment()
         const std::string blocked = fmt::format(
             "DEPLOY BLOCKED | RESOLVE {} PENDING ITEM(S) AT ALLOCATION & NEEDS",
             pendingAllocation);
-        uiTextRenderer_.render(renderer_, 404.0F, 508.0F, blocked.c_str());
+        uiTextRenderer_.render(renderer_, 404.0F, 470.0F, blocked.c_str());
+    }
+    else
+    {
+        uiTextRenderer_.render(
+            renderer_,
+            442.0F,
+            470.0F,
+            capable
+                ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
+                : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     }
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");

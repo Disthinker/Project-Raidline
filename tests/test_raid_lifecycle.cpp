@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 #include <tuple>
 
 #include "alpha_content_ids.h"
@@ -58,6 +59,137 @@ DeployReceipt deploy(
         CommandContext{profile.revision, "deploy-alpha-test"});
 }
 
+TEST(RaidLifecycleTest, TravelPreviewUsesMapTimeWithoutMutatingProfile)
+{
+    const ProfileState profile = makeNewAlphaProfile(
+        "travel-preview", publishedContentRegistry());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.industrial"});
+
+    const RaidTravelPreview preview = queryRaidTravel(profile, map);
+
+    EXPECT_EQ(preview.outboundMinutes, 150U);
+    EXPECT_EQ(preview.returnMinutes, 150U);
+    EXPECT_EQ(preview.failureRegroupMinutes, 300U);
+    EXPECT_EQ(preview.departure.hour, 8U);
+    EXPECT_EQ(preview.arrival.hour, 10U);
+    EXPECT_EQ(preview.arrival.minute, 30U);
+    EXPECT_EQ(preview.extractedReturn.hour, 13U);
+    EXPECT_EQ(preview.failureReturn.hour, 15U);
+    EXPECT_EQ(preview.failureReturn.minute, 30U);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-deploy", publishedContentRegistry());
+    const WorldClockState startingClock = profile.worldClock;
+    const BaseResourceState startingResources = profile.baseResources;
+
+    ASSERT_TRUE(deploy(
+        profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-travel-time-4");
+    EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 90U);
+    EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 90U);
+    EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 180U);
+    EXPECT_EQ(profile.pendingRaid->travel.startingWorldClock, startingClock);
+    EXPECT_EQ(profile.pendingRaid->travel.startingBaseResources,
+              startingResources);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes,
+              startingClock.elapsedWorldMinutes + 90U);
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(profile.worldClock, startingClock);
+    EXPECT_EQ(profile.baseResources, startingResources);
+}
+
+TEST(RaidLifecycleTest, SettlementUsesNormalOrFailureTravelExactlyOnce)
+{
+    for (const auto [outcome, expectedTravel] :
+         {std::pair{RaidResultOutcome::Extracted, 45U},
+          std::pair{RaidResultOutcome::ActiveQuit, 45U},
+          std::pair{RaidResultOutcome::PlayerDead, 90U}})
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            "travel-settlement-" + std::to_string(expectedTravel) + "-" +
+                std::to_string(static_cast<int>(outcome)),
+            publishedContentRegistry());
+        const std::uint64_t startingMinute =
+            profile.worldClock.elapsedWorldMinutes;
+        ASSERT_TRUE(deploy(profile).succeeded);
+
+        const RaidSettlementReceipt settled = settlePendingRaid(
+            profile,
+            publishedContentRegistry(),
+            "settlement-alpha-test",
+            outcome);
+
+        ASSERT_TRUE(settled.succeeded) << settled.message;
+        ASSERT_TRUE(profile.lastRaidResult.has_value());
+        EXPECT_EQ(profile.lastRaidResult->travelMinutesApplied,
+                  expectedTravel);
+        EXPECT_EQ(profile.worldClock.elapsedWorldMinutes,
+                  startingMinute + 45U + expectedTravel);
+        const std::uint64_t fingerprint = profileStateFingerprint(profile);
+        const RaidSettlementReceipt repeated = settlePendingRaid(
+            profile,
+            publishedContentRegistry(),
+            "settlement-alpha-test",
+            outcome);
+        EXPECT_TRUE(repeated.succeeded);
+        EXPECT_TRUE(repeated.alreadyCommitted);
+        EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    }
+}
+
+TEST(RaidLifecycleTest, AbnormalExitMustRollbackWithoutMutation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-abnormal-rollback", publishedContentRegistry());
+    ASSERT_TRUE(deploy(profile).succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const RaidSettlementReceipt rejected = settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        "settlement-alpha-test",
+        RaidResultOutcome::AbnormalQuit);
+
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(rejected.error, RaidLifecycleError::InvalidCommand);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(profile.worldClock, WorldClockState{});
+}
+
+TEST(RaidLifecycleTest, TravelAcrossMidnightResolvesDailyNeedOnce)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-midnight", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 23U * 60U + 30U;
+
+    ASSERT_TRUE(deploy(profile).succeeded);
+
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes,
+              kWorldMinutesPerDay + 15U);
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
+    EXPECT_EQ(profile.baseResources.pool,
+              (BaseResourceBundle{32, 34, 35, 36}));
+    ASSERT_TRUE(settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        "settlement-alpha-test",
+        RaidResultOutcome::Extracted).succeeded);
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
+    EXPECT_EQ(profile.baseResources.pool,
+              (BaseResourceBundle{32, 34, 35, 36}));
+}
+
 TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)
 {
     for (const MapDefinition &map : publishedContentRegistry().maps())
@@ -103,6 +235,23 @@ TEST(RaidLifecycleTest, UnknownRaidMapRejectsWithoutChangingProfile)
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(receipt.error, RaidLifecycleError::InvalidCommand);
     EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(RaidLifecycleTest, OutboundClockOverflowRejectsWithoutChangingProfile)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-overflow", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes =
+        std::numeric_limits<std::uint64_t>::max() - 44U;
+    profile.baseResources.resolvedDemandCycleCount =
+        projectWorldClock(profile.worldClock).completedDays;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const DeployReceipt receipt = deploy(profile);
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, RaidLifecycleError::RevisionOverflow);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 }
 

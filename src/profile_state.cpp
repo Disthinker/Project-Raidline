@@ -850,7 +850,10 @@ ProfileValidationResult validateProfileState(
         }
         const bool advancedLootRules =
             raid.rulesVersion == "raid-control-resource-2" ||
-            raid.rulesVersion == "raid-conditional-extraction-3";
+            raid.rulesVersion == "raid-conditional-extraction-3" ||
+            raid.rulesVersion == "raid-travel-time-4";
+        const bool travelRules =
+            raid.rulesVersion == "raid-travel-time-4";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -871,6 +874,41 @@ ProfileValidationResult validateProfileState(
             (!advancedLootRules && advancedLootCount != 0U))
         {
             return {false, "pending Raid header is invalid"};
+        }
+        if (travelRules)
+        {
+            const BaseResourceBundle &startingPool =
+                raid.travel.startingBaseResources.pool;
+            const BaseResourceBundle &startingShortfall =
+                raid.travel.startingBaseResources.lastShortfall;
+            const std::uint64_t startingCompletedDays =
+                projectWorldClock(
+                    raid.travel.startingWorldClock).completedDays;
+            const bool outboundWouldOverflow =
+                raid.travel.startingWorldClock.elapsedWorldMinutes >
+                    std::numeric_limits<std::uint64_t>::max() -
+                        raid.travel.outboundMinutes;
+            if (raid.travel.outboundMinutes == 0U ||
+                raid.travel.returnMinutes == 0U ||
+                raid.travel.failureRegroupMinutes <
+                    raid.travel.returnMinutes ||
+                outboundWouldOverflow ||
+                profile.worldClock.elapsedWorldMinutes <
+                    raid.travel.startingWorldClock.elapsedWorldMinutes +
+                        raid.travel.outboundMinutes ||
+                startingPool.food > kMaximumBaseResource ||
+                startingPool.hygiene > kMaximumBaseResource ||
+                startingPool.morale > kMaximumBaseResource ||
+                startingPool.security > kMaximumBaseResource ||
+                startingShortfall.food > kMaximumBaseResource ||
+                startingShortfall.hygiene > kMaximumBaseResource ||
+                startingShortfall.morale > kMaximumBaseResource ||
+                startingShortfall.security > kMaximumBaseResource ||
+                raid.travel.startingBaseResources
+                        .resolvedDemandCycleCount > startingCompletedDays)
+            {
+                return {false, "pending Raid travel snapshot is invalid"};
+            }
         }
         std::set<AssetInstanceId> snapshotLoot;
         std::set<std::uint32_t> snapshotSlots;
@@ -1091,6 +1129,26 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, raid.startingMedicalStatus.bleedingDamageRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painkillerRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painScreamRemainingMs);
+        hashInteger(hash, raid.travel.outboundMinutes);
+        hashInteger(hash, raid.travel.returnMinutes);
+        hashInteger(hash, raid.travel.failureRegroupMinutes);
+        hashInteger(hash,
+                    raid.travel.startingWorldClock.elapsedWorldMinutes);
+        hashInteger(hash, raid.travel.startingBaseResources.pool.food);
+        hashInteger(hash, raid.travel.startingBaseResources.pool.hygiene);
+        hashInteger(hash, raid.travel.startingBaseResources.pool.morale);
+        hashInteger(hash, raid.travel.startingBaseResources.pool.security);
+        hashInteger(hash,
+                    raid.travel.startingBaseResources.lastShortfall.food);
+        hashInteger(hash,
+                    raid.travel.startingBaseResources.lastShortfall.hygiene);
+        hashInteger(hash,
+                    raid.travel.startingBaseResources.lastShortfall.morale);
+        hashInteger(hash,
+                    raid.travel.startingBaseResources.lastShortfall.security);
+        hashInteger(hash,
+                    raid.travel.startingBaseResources
+                        .resolvedDemandCycleCount);
     }
     if (profile.lastRaidResult.has_value())
     {
@@ -1103,6 +1161,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, id.value());
         }
         hashInteger(hash, profile.lastRaidResult->currencyDelta);
+        hashInteger(hash, profile.lastRaidResult->travelMinutesApplied);
     }
     return hash;
 }

@@ -430,6 +430,36 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"pain_scream_remaining_ms",
                     raid.startingMedicalStatus.painScreamRemainingMs}};
         }
+        if (schemaVersion >= 9)
+        {
+            payload["pending_raid"]["travel"] = {
+                {"outbound_minutes", raid.travel.outboundMinutes},
+                {"return_minutes", raid.travel.returnMinutes},
+                {"failure_regroup_minutes",
+                 raid.travel.failureRegroupMinutes},
+                {"starting_world_clock", {
+                    {"elapsed_world_minutes",
+                     raid.travel.startingWorldClock.elapsedWorldMinutes}}},
+                {"starting_base_resources", {
+                    {"food", raid.travel.startingBaseResources.pool.food},
+                    {"hygiene",
+                     raid.travel.startingBaseResources.pool.hygiene},
+                    {"morale",
+                     raid.travel.startingBaseResources.pool.morale},
+                    {"security",
+                     raid.travel.startingBaseResources.pool.security},
+                    {"shortfall_food",
+                     raid.travel.startingBaseResources.lastShortfall.food},
+                    {"shortfall_hygiene",
+                     raid.travel.startingBaseResources.lastShortfall.hygiene},
+                    {"shortfall_morale",
+                     raid.travel.startingBaseResources.lastShortfall.morale},
+                    {"shortfall_security",
+                     raid.travel.startingBaseResources.lastShortfall.security},
+                    {"resolved_demand_cycle_count",
+                     raid.travel.startingBaseResources
+                         .resolvedDemandCycleCount}}}};
+        }
     }
     else
     {
@@ -449,6 +479,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"outcome", raidOutcomeName(profile.lastRaidResult->outcome)},
             {"returned_item_definition_ids", std::move(returned)},
             {"currency_delta", profile.lastRaidResult->currencyDelta}};
+        if (schemaVersion >= 9)
+        {
+            payload["last_raid_result"]["travel_minutes_applied"] =
+                profile.lastRaidResult->travelMinutesApplied;
+        }
     }
     else
     {
@@ -518,7 +553,8 @@ std::string serializeProfileEnvelope(
 {
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
-        schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8)
+        schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
+        schemaVersion != 9)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -570,11 +606,14 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "raid-fixed-maps-content-9" ||
                contentVersion == "raid-pressure-content-10" ||
                contentVersion == "raid-control-resource-content-11" ||
-               contentVersion == "raid-conditional-extraction-content-12"));
+               contentVersion == "raid-conditional-extraction-content-12")) ||
+            ((schemaVersion == 7 || schemaVersion == 8) &&
+             contentVersion == "base-resource-pressure-content-13");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
-             schemaVersion != 7 && schemaVersion != 8) ||
+             schemaVersion != 7 && schemaVersion != 8 &&
+             schemaVersion != 9) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -909,6 +948,48 @@ SaveLoadResult deserializeProfileEnvelope(
                     medical.at("pain_scream_remaining_ms")
                         .get<std::uint32_t>()};
             }
+            if (schemaVersion >= 9)
+            {
+                const Json &travel = value.at("travel");
+                const Json &startingResources =
+                    travel.at("starting_base_resources");
+                raid.travel = RaidTravelSnapshot{
+                    travel.at("outbound_minutes").get<std::uint32_t>(),
+                    travel.at("return_minutes").get<std::uint32_t>(),
+                    travel.at("failure_regroup_minutes")
+                        .get<std::uint32_t>(),
+                    WorldClockState{
+                        travel.at("starting_world_clock")
+                            .at("elapsed_world_minutes")
+                            .get<std::uint64_t>()},
+                    BaseResourceState{
+                        BaseResourceBundle{
+                            startingResources.at("food")
+                                .get<std::uint32_t>(),
+                            startingResources.at("hygiene")
+                                .get<std::uint32_t>(),
+                            startingResources.at("morale")
+                                .get<std::uint32_t>(),
+                            startingResources.at("security")
+                                .get<std::uint32_t>()},
+                        BaseResourceBundle{
+                            startingResources.at("shortfall_food")
+                                .get<std::uint32_t>(),
+                            startingResources.at("shortfall_hygiene")
+                                .get<std::uint32_t>(),
+                            startingResources.at("shortfall_morale")
+                                .get<std::uint32_t>(),
+                            startingResources.at("shortfall_security")
+                                .get<std::uint32_t>()},
+                        startingResources.at(
+                            "resolved_demand_cycle_count")
+                            .get<std::uint64_t>()}};
+            }
+            else
+            {
+                raid.travel.startingWorldClock = profile.worldClock;
+                raid.travel.startingBaseResources = profile.baseResources;
+            }
             profile.pendingRaid = std::move(raid);
         }
 
@@ -933,6 +1014,9 @@ SaveLoadResult deserializeProfileEnvelope(
                     id.get<std::string>());
             }
             result.currencyDelta = value.at("currency_delta").get<std::int64_t>();
+            result.travelMinutesApplied = schemaVersion >= 9
+                ? value.at("travel_minutes_applied").get<std::uint32_t>()
+                : 0U;
             profile.lastRaidResult = std::move(result);
         }
 

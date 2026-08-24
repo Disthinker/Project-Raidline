@@ -221,6 +221,48 @@ bool moveCollectedLootToIntake(
         loot.quantity));
     return true;
 }
+
+bool advanceProfileWorldTime(
+    ProfileState &profile,
+    std::uint32_t minutes) noexcept
+{
+    const WorldClockAdvanceResult advanced =
+        advanceWorldClock(profile.worldClock, minutes);
+    if (advanced.minutesApplied != minutes)
+    {
+        return false;
+    }
+    static_cast<void>(applyBaseDailyDemandThrough(
+        profile.baseResources,
+        advanced.completedDaysAfter));
+    return true;
+}
+}
+
+RaidTravelPreview queryRaidTravel(
+    const ProfileState &profile,
+    const MapDefinition &map) noexcept
+{
+    WorldClockState arrivalClock = profile.worldClock;
+    static_cast<void>(advanceWorldClock(
+        arrivalClock,
+        map.travel.outboundMinutes));
+    WorldClockState extractedClock = arrivalClock;
+    static_cast<void>(advanceWorldClock(
+        extractedClock,
+        map.travel.returnMinutes));
+    WorldClockState failureClock = arrivalClock;
+    static_cast<void>(advanceWorldClock(
+        failureClock,
+        map.travel.failureRegroupMinutes));
+    return RaidTravelPreview{
+        map.travel.outboundMinutes,
+        map.travel.returnMinutes,
+        map.travel.failureRegroupMinutes,
+        projectWorldClock(profile.worldClock),
+        projectWorldClock(arrivalClock),
+        projectWorldClock(extractedClock),
+        projectWorldClock(failureClock)};
 }
 
 DeployReceipt executeDeploy(
@@ -308,7 +350,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-conditional-extraction-3";
+    snapshot.rulesVersion = "raid-travel-time-4";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -317,6 +359,12 @@ DeployReceipt executeDeploy(
     snapshot.extractionPoint = pair.extractionPoint;
     snapshot.startingHealth = candidate.currentHealth;
     snapshot.startingMedicalStatus = candidate.medicalStatus;
+    snapshot.travel = RaidTravelSnapshot{
+        map->travel.outboundMinutes,
+        map->travel.returnMinutes,
+        map->travel.failureRegroupMinutes,
+        candidate.worldClock,
+        candidate.baseResources};
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
     {
         snapshot.enemies.push_back(
@@ -391,6 +439,15 @@ DeployReceipt executeDeploy(
     }
 
     candidate.pendingRaid = std::move(snapshot);
+    if (!advanceProfileWorldTime(
+            candidate,
+            candidate.pendingRaid->travel.outboundMinutes))
+    {
+        return deployFailure(
+            RaidLifecycleError::RevisionOverflow,
+            "world clock cannot apply outbound travel",
+            profile.revision);
+    }
     candidate.lastRaidResult.reset();
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -419,6 +476,14 @@ RaidSettlementReceipt settlePendingRaid(
         return settlementFailure(
             RaidLifecycleError::InvalidCommand,
             "Settlement ID is empty",
+            profile.revision,
+            outcome);
+    }
+    if (outcome == RaidResultOutcome::AbnormalQuit)
+    {
+        return settlementFailure(
+            RaidLifecycleError::InvalidCommand,
+            "abnormal Raid exit must restore the pre-Raid profile",
             profile.revision,
             outcome);
     }
@@ -493,13 +558,26 @@ RaidSettlementReceipt settlePendingRaid(
         candidate.currentHealth = 100;
         candidate.medicalStatus = MedicalStatusState{};
     }
+    const std::uint32_t travelMinutes =
+        outcome == RaidResultOutcome::PlayerDead
+            ? raidSnapshot.travel.failureRegroupMinutes
+            : raidSnapshot.travel.returnMinutes;
+    if (!advanceProfileWorldTime(candidate, travelMinutes))
+    {
+        return settlementFailure(
+            RaidLifecycleError::RevisionOverflow,
+            "world clock cannot apply Raid return travel",
+            profile.revision,
+            outcome);
+    }
     candidate.pendingRaid.reset();
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{
         id,
         outcome,
         std::move(returned),
-        0};
+        0,
+        travelMinutes};
     ++candidate.revision;
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);
@@ -535,6 +613,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     const int startingHealth = candidate.pendingRaid->startingHealth;
     const MedicalStatusState startingMedicalStatus =
         candidate.pendingRaid->startingMedicalStatus;
+    const WorldClockState startingWorldClock =
+        candidate.pendingRaid->travel.startingWorldClock;
+    const BaseResourceState startingBaseResources =
+        candidate.pendingRaid->travel.startingBaseResources;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -558,6 +640,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     }
     candidate.currentHealth = startingHealth;
     candidate.medicalStatus = startingMedicalStatus;
+    candidate.worldClock = startingWorldClock;
+    candidate.baseResources = startingBaseResources;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

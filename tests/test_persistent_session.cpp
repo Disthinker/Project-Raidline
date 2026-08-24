@@ -107,9 +107,11 @@ TEST(PersistentSessionTest, UnsettledRaidClockRollsBackWithPreRaidSave)
     ASSERT_TRUE(active.deployAlpha(99101));
 
     active.update(GameplayInput{}, 1.0F);
+    const std::uint32_t outboundMinutes = publishedContentRegistry().map(
+        MapDefinitionId{"map.v0.test"}).travel.outboundMinutes;
     EXPECT_EQ(
         active.profile().worldClock.elapsedWorldMinutes,
-        kInitialWorldMinute + 1U);
+        kInitialWorldMinute + outboundMinutes + 1U);
 
     GameSession reopened;
     reopened.configurePersistence(temporary.path());
@@ -129,13 +131,16 @@ TEST(PersistentSessionTest, SettledRaidCommitsElapsedWorldTime)
     ASSERT_TRUE(active.deployAlpha(99102));
     active.update(GameplayInput{}, 1.0F);
     ASSERT_TRUE(active.activeQuitAlphaRaid());
+    const RaidTravelDefinition travel = publishedContentRegistry().map(
+        MapDefinitionId{"map.v0.test"}).travel;
 
     GameSession reopened;
     reopened.configurePersistence(temporary.path());
     ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
     EXPECT_EQ(
         reopened.profile().worldClock.elapsedWorldMinutes,
-        kInitialWorldMinute + 1U);
+        kInitialWorldMinute + travel.outboundMinutes + 1U +
+            travel.returnMinutes);
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
 }
 

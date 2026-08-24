@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@ba8283f` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 与 Raid Pressure 接受切片，以及 PR #78 的 Base 资源分配、共享连续碰撞和中英文设置；PR #78 已通过 exact-head CI 和用户正常游玩验收后普通合入。
-- 当前开发分支：`codex/base-world-clock-daily-needs-v1`，从干净的 `origin/main@ba8283f` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-world-clock-daily-needs-v1.md`。
+- `origin/main@5d2a11a` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 与 Raid Pressure 接受切片，以及 PR #78 的 Base 资源分配和 PR #79 的 Base/Raid 权威世界时钟；两项均在 exact-head CI 和用户正常游玩验收后普通合入。
+- 当前开发分支：`codex/raid-travel-time-v1`，从干净的 `origin/main@5d2a11a` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-travel-time-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78 已接受。当前进入 **Base Growth：世界时钟与每日需求 v1**；外部 GDD 继续只读，本仓库 ExecPlan 将临时的“每局扣需求”迁移到唯一世界时间轴上的每日 00:00 节点。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#79 已接受。当前进入 **Raid 往返行动耗时 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让三张固定地图的出发、返程和失败归队耗时消费同一权威世界时间轴。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -33,7 +33,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 18. **主动高危与高级资源区 v1**：PR #76 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `bc26337` 进入 main。
 19. **高危条件撤离 v1**：PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main。
 20. **Base 资源分配与基础需求 v1**：PR #78 把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；同时修复共享障碍碰撞、停止朝向并加入中英文设置，已以 merge commit `ba8283f` 进入 main。
-21. **Base 世界时钟与每日需求 v1**：当前分支建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。
+21. **Base 世界时钟与每日需求 v1**：PR #79 建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `5d2a11a` 进入 main。
+22. **Raid 往返行动耗时 v1**：当前分支为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -48,7 +49,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 已接受的 Extraction Loop
 
 - `ProfileState::AssetRegistry` 在 Base、Deploy、Raid Loot 与 Settlement 全程唯一拥有资产；装备根、容器子资产、已安装弹匣和 Raid 地面位置均使用稳定实例 ID。
-- content v9 提供三张可选择的固定 Raid 地图；每图各有 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽与独立障碍。每局冻结 6～9 个有效 Loot，PCG32 命名随机流和所选 MapDefinitionId 写入 pending Raid 快照。
+- content v14 提供三张可选择的固定 Raid 地图；每图各有 3 组出生/撤离配对、3 组 4～6 敌人部署、10 个三路线 Loot 插槽、独立障碍和冻结的往返行动耗时。每局冻结 6～9 个有效 Loot，PCG32 命名随机流和所选 MapDefinitionId 写入 pending Raid 快照。
 - schema v2 保存当前 HP、弹匣有序弹药、枪膛、Settlement 幂等记录和最近 RaidResult，并能读取旧 pending Raid；新生产 Deploy 不再把运行中 pending Raid 覆盖到磁盘。schema v1 可显式迁移。
 - Base 与 Raid 共用按住拖拽库存交互；格子移动/交换/堆叠/配装均由领域预览和命令提交。Base 可将弹药拖到弹匣即时压弹、将弹匣拖到武器安装并按条件自动上膛；Raid 可拖动弹药到弹匣执行 0.2 秒/发的可中断压弹，也可拖动指定弹匣到武器并执行 2 秒换弹。
 - 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 保留为 Base 快速转移捷径；可穿戴物在对应栏位为空且领域查询合法时优先快速装备，否则沿用容器转移。
@@ -61,7 +62,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78 的资源分配、共享碰撞和语言设置已完成 CI、用户验收并进入 main。当前世界时钟切片 Windows Debug 全目标构建成功，完整 CTest 862/862 通过；开发代理未启动游戏。
+- PR #78 的资源分配、共享碰撞和语言设置以及 PR #79 的世界时钟均已完成 CI、用户验收并进入 main。当前旅行时间切片 Windows Debug 全目标构建成功，完整 CTest 875/875 通过；开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -220,6 +221,14 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - 四项需求改为每日 00:00 结算。多日跨度以常数时间补算，`resolvedDemandCycleCount` 保证同一日界线只结算一次；短缺仍不阻止游玩或损坏资产。
 - schema v8 保存时钟与已结算日数；v1～v7 迁移到初始时刻且不重放旧 Raid 次数。Raid 内时间只随成功、死亡或主动退出 Settlement 提交，关闭程序或异常退出恢复出击前时间。
 - Base、资源分配页与 Raid HUD 只读显示双语时间；未增加调试按钮、新资源、音频或 manifest 修改。
+
+## Raid 往返行动耗时 v1 当前实现
+
+- `MapDefinition::travel` 为 Greyline Depot、Riverside Checkpoint、Ashworks Yard 分别配置 `45/45/90`、`90/90/180`、`150/150/300` 世界分钟的出发/正常返程/失败归队开发值；ContentRegistry 拒绝零值、过大值和失败归队短于返程。
+- `queryRaidTravel` 无副作用投影出发与抵达时间；Base 出击面板显示抵达昼夜和三项耗时，RaidResult 显示本局实际提交的返程或归队时间。
+- Deploy 快照冻结地图旅行值、出发前时钟和 Base 资源；成功撤离与主动退出使用正常返程，死亡使用失败归队。旅行跨越 00:00 时复用每日需求幂等结算。
+- schema v9 保存旅行快照与结算耗时；schema v8 旧存档和旧 pending Raid 显式迁移。异常退出不能走 Settlement，只能恢复出发前 Profile，保证时钟、需求周期、资源与资产一起回滚。
+- 当前不实现夜间视野、路线状态、旅行遭遇、哨所、情报、人口/床位/口粮、精力或睡眠；分钟值是集中内容调参，不声明为最终平衡。
 
 ## 尚未完成
 

@@ -49,4 +49,4 @@ Base 与生产 Raid 共享一个保存在 Profile 中的权威世界时钟。只
 - [x] 2026-08-24：核对外部 GDD；确认使用实际有效模拟时间缩放，不采用固定 Raid 时间块，并冻结本切片范围与排除项。
 - [x] 2026-08-24：实现 WorldClock、常数时间每日需求补算、Profile 验证/指纹、schema v8 往返与 v7 迁移。
 - [x] 2026-08-24：接入 Base/Raid 推进、Base 周期/离开检查点、Raid Settlement 提交/异常退出回滚、双语 HUD 与自动化；Windows Debug 全目标构建和 862/862 CTest 通过，开发代理未启动游戏。
-- [ ] 完成构建、全量回归、PR、exact-head CI 与用户正常游玩验收。
+- [x] 2026-08-24：PR #79 通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `5d2a11a` 进入 main。

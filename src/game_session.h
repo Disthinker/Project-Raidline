@@ -156,6 +156,8 @@ public:
     void advanceBaseWorldClock(float deltaTime);
     [[nodiscard]] bool checkpointWorldClock();
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
+    [[nodiscard]] std::optional<RaidTravelPreview> raidTravelPreview(
+        const MapDefinitionId &mapDefinitionId) const noexcept;
 
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,

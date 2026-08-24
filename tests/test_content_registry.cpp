@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-resource-pressure-content-13");
+        "raid-travel-time-content-14");
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -73,10 +73,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     std::set<MapDefinitionId> mapIds;
     std::set<EnemyDeploymentDefinitionId> raidDeploymentIds;
+    std::set<std::uint32_t> outboundTravelMinutes;
     for (const MapDefinition &publishedMap : registry.maps())
     {
         EXPECT_FALSE(publishedMap.displayName.empty());
         EXPECT_FALSE(publishedMap.routeProfile.empty());
+        EXPECT_GT(publishedMap.travel.outboundMinutes, 0U);
+        EXPECT_GT(publishedMap.travel.returnMinutes, 0U);
+        EXPECT_GE(publishedMap.travel.failureRegroupMinutes,
+                  publishedMap.travel.returnMinutes);
+        EXPECT_TRUE(outboundTravelMinutes.insert(
+            publishedMap.travel.outboundMinutes).second);
         EXPECT_GT(publishedMap.backgroundTint.red, 0U);
         EXPECT_GT(publishedMap.backgroundTint.green, 0U);
         EXPECT_GT(publishedMap.backgroundTint.blue, 0U);
@@ -114,6 +121,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.riverside"}));
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.industrial"}));
     EXPECT_EQ(raidDeploymentIds.size(), 9U);
+    EXPECT_EQ(outboundTravelMinutes,
+              (std::set<std::uint32_t>{45U, 90U, 150U}));
 
     const ItemDefinition &ammunition = registry.item(
         ItemDefinitionId{"item.ammunition.9mm_basic"});
@@ -469,6 +478,28 @@ TEST(ContentRegistryTest, RejectsUnknownMapDefinitionReference)
         publishedJsonCopy(),
         "\"enemy_deployment\": \"enemy_deployment.v0.default\"",
         "\"enemy_deployment\": \"enemy_deployment.v0.missing\"");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsZeroRaidTravelTime)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"outbound_minutes\": 45",
+        "\"outbound_minutes\": 0");
+    EXPECT_THROW(
+        ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsFailureRegroupShorterThanReturnTravel)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"failure_regroup_minutes\": 90",
+        "\"failure_regroup_minutes\": 30");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);

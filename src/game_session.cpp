@@ -1526,6 +1526,21 @@ WorldClockProjection GameSession::worldClockProjection() const noexcept
     return projectWorldClock(profile_.worldClock);
 }
 
+std::optional<RaidTravelPreview> GameSession::raidTravelPreview(
+    const MapDefinitionId &mapDefinitionId) const noexcept
+{
+    try
+    {
+        return queryRaidTravel(
+            profile_,
+            publishedContentRegistry().map(mapDefinitionId));
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+}
+
 void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)

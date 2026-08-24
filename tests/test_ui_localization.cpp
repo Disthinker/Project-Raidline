@@ -53,6 +53,21 @@ TEST(UiLocalizationTest, ChineseTranslatesWorldClockAndDailyDemand) {
   EXPECT_NE(demand.find("已结算每日周期 2"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesRaidTravelPreviewAndResult) {
+  const std::string preview = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "DEPART DAY 1 08:00 -> ARRIVE DAY 1 09:30 DAY | 90 MIN");
+  EXPECT_NE(preview.find("出发 第 1"), std::string::npos);
+  EXPECT_NE(preview.find("抵达 第 1"), std::string::npos);
+  EXPECT_NE(preview.find("90 分钟"), std::string::npos);
+
+  const std::string result = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "NORMAL TRAVEL 90 MIN | FAILURE REGROUP 180 MIN");
+  EXPECT_NE(result.find("正常返程 90 分钟"), std::string::npos);
+  EXPECT_NE(result.find("失败归队 180 分钟"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

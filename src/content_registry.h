@@ -125,11 +125,23 @@ struct BallisticBlockerDefinition
     ContentRect bounds;
 };
 
+struct RaidTravelDefinition
+{
+    std::uint32_t outboundMinutes{};
+    std::uint32_t returnMinutes{};
+    std::uint32_t failureRegroupMinutes{};
+
+    friend bool operator==(
+        const RaidTravelDefinition &,
+        const RaidTravelDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
     std::string displayName;
     std::string routeProfile;
+    RaidTravelDefinition travel;
     std::string backgroundTexturePath;
     ContentColor backgroundTint;
     Vec2 worldSize{};
