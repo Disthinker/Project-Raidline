@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@5d2a11a` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 与 Raid Pressure 接受切片，以及 PR #78 的 Base 资源分配和 PR #79 的 Base/Raid 权威世界时钟；两项均在 exact-head CI 和用户正常游玩验收后普通合入。
-- 当前开发分支：`codex/raid-travel-time-v1`，从干净的 `origin/main@5d2a11a` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-travel-time-v1.md`。
+- `origin/main@defaac0` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#80 接受的 Base 资源、世界时钟与 Raid 往返行动耗时；PR #80 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `defaac0` 合入。
+- 当前开发分支：`codex/base-gunsmith-maintenance-service-v1`，从干净的 `origin/main@defaac0` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-gunsmith-full-maintenance-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#79 已接受。当前进入 **Raid 往返行动耗时 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让三张固定地图的出发、返程和失败归队耗时消费同一权威世界时间轴。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#80 已接受。当前进入 **Base 枪匠全面维护服务 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让武器损耗、货币、稳定资产所有权、权威世界时间和跨进程存档形成首个长期服务闭环。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -34,7 +34,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 19. **高危条件撤离 v1**：PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main。
 20. **Base 资源分配与基础需求 v1**：PR #78 把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；同时修复共享障碍碰撞、停止朝向并加入中英文设置，已以 merge commit `ba8283f` 进入 main。
 21. **Base 世界时钟与每日需求 v1**：PR #79 建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `5d2a11a` 进入 main。
-22. **Raid 往返行动耗时 v1**：当前分支为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。
+22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
+23. **Base 枪匠全面维护服务 v1**：当前分支允许玩家从供应与回收页选择 Stash 根层受损武器，冻结报价并付费送修；维护随 Base/Raid 权威时间推进，完成后领取同一实例并恢复当前/最大耐久至出厂值、清除故障，同时保留已装弹匣、枪膛和弹药关系。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -62,7 +63,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78 的资源分配、共享碰撞和语言设置以及 PR #79 的世界时钟均已完成 CI、用户验收并进入 main。当前旅行时间切片 Windows Debug 全目标构建成功，完整 CTest 875/875 通过；开发代理未启动游戏。
+- PR #78 的资源分配、共享碰撞和语言设置、PR #79 的世界时钟以及 PR #80 的 Raid 往返行动耗时均已完成 CI、用户验收并进入 main。当前枪匠服务切片 Windows Debug 全目标构建成功，完整 CTest 889/889 通过；开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -222,7 +223,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - schema v8 保存时钟与已结算日数；v1～v7 迁移到初始时刻且不重放旧 Raid 次数。Raid 内时间只随成功、死亡或主动退出 Settlement 提交，关闭程序或异常退出恢复出击前时间。
 - Base、资源分配页与 Raid HUD 只读显示双语时间；未增加调试按钮、新资源、音频或 manifest 修改。
 
-## Raid 往返行动耗时 v1 当前实现
+## Raid 往返行动耗时 v1 已接受实现
 
 - `MapDefinition::travel` 为 Greyline Depot、Riverside Checkpoint、Ashworks Yard 分别配置 `45/45/90`、`90/90/180`、`150/150/300` 世界分钟的出发/正常返程/失败归队开发值；ContentRegistry 拒绝零值、过大值和失败归队短于返程。
 - `queryRaidTravel` 无副作用投影出发与抵达时间；Base 出击面板显示抵达昼夜和三项耗时，RaidResult 显示本局实际提交的返程或归队时间。
@@ -230,11 +231,19 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - schema v9 保存旅行快照与结算耗时；schema v8 旧存档和旧 pending Raid 显式迁移。异常退出不能走 Settlement，只能恢复出发前 Profile，保证时钟、需求周期、资源与资产一起回滚。
 - 当前不实现夜间视野、路线状态、旅行遭遇、哨所、情报、人口/床位/口粮、精力或睡眠；分钟值是集中内容调参，不声明为最终平衡。
 
+## Base 枪匠全面维护服务 v1 当前实现
+
+- content v15 数据化全面维护的基础费、当前耐久缺口单价、最大耐久缺口单价和 240 世界分钟时长；数值属于开发期平衡值。
+- `BaseServiceJobId`、`BaseServiceAssetLocation` 和单项 `GunsmithMaintenanceJob` 明确服务期间的唯一资产所有权。送修只接受 Stash 根层受损武器，原子扣款并保存；所有拒绝和保存失败保持 Profile 指纹、revision、货币与高水位不变。
+- 完成状态只由权威世界时间投影。领取优先返回原格位，必要时使用首个合法 Stash 格位；空间不足时武器继续留在服务中，不复制、不覆盖、不丢失。
+- schema v10 保存任务、高水位、冻结报价/完成点和服务资产位置，v1～v9 明确迁移为空任务。跨进程回归已证明 Raid 往返能推进维护且领取后仍是同一武器实例。
+- 供应与回收页使用双语文字/几何占位显示报价、进行中、可领取和空间阻塞；没有新增或修改美术、音频与资源 manifest。
+
 ## 尚未完成
 
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
-- NPC 全面维护、组件级耐久和改枪台后续独立切片，不与当前防具自助维护混写。
+- 防具全面维护、组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不提前建立设施、人口或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。

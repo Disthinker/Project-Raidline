@@ -696,6 +696,32 @@ ContentRegistry ContentRegistry::fromJson(
         registry.contentVersion_ =
             requiredString(root, "content_version");
 
+        const Json &baseServices = requiredObject(root, "base_services");
+        const Json &gunsmith = requiredObject(
+            baseServices,
+            "gunsmith_full_maintenance");
+        registry.gunsmithFullMaintenance_ =
+            GunsmithFullMaintenanceDefinition{
+                requiredPositiveUint(gunsmith, "base_cost"),
+                requiredPositiveUint(
+                    gunsmith,
+                    "current_durability_cost_per_point"),
+                requiredPositiveUint(
+                    gunsmith,
+                    "maximum_durability_cost_per_point"),
+                requiredPositiveUint(gunsmith, "duration_minutes")};
+        constexpr std::uint32_t maximumServiceMinutes = 7U * 24U * 60U;
+        constexpr std::uint32_t maximumServiceUnitCost = 1000U;
+        if (registry.gunsmithFullMaintenance_.durationMinutes >
+                maximumServiceMinutes ||
+            registry.gunsmithFullMaintenance_
+                    .currentDurabilityCostPerPoint > maximumServiceUnitCost ||
+            registry.gunsmithFullMaintenance_
+                    .maximumDurabilityCostPerPoint > maximumServiceUnitCost)
+        {
+            fail("gunsmith full-maintenance definition is invalid");
+        }
+
         std::set<std::string> resources;
         for (const Json &resourceValue :
              requiredArray(root, "published_resources"))
@@ -1746,6 +1772,12 @@ const std::vector<MapDefinition> &
 ContentRegistry::maps() const noexcept
 {
     return maps_;
+}
+
+const GunsmithFullMaintenanceDefinition &
+ContentRegistry::gunsmithFullMaintenance() const noexcept
+{
+    return gunsmithFullMaintenance_;
 }
 
 const ItemDefinition &

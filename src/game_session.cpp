@@ -1446,6 +1446,52 @@ ArmorMaintenanceReceipt GameSession::executeBaseArmorMaintenance(
     return receipt;
 }
 
+GunsmithMaintenanceReceipt GameSession::executeBaseGunsmithMaintenance(
+    AssetInstanceId weaponAssetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    GunsmithMaintenanceReceipt receipt = executeGunsmithMaintenance(
+        candidate,
+        publishedContentRegistry(),
+        StartGunsmithMaintenanceCommand{weaponAssetId},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+GunsmithCollectionReceipt GameSession::collectBaseGunsmithMaintenance(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    GunsmithCollectionReceipt receipt = executeGunsmithCollection(
+        candidate,
+        publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 const RaidActionState &GameSession::raidActionState() const noexcept
 {
     return raidActionState_;

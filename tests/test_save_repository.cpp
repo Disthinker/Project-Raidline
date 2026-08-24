@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
 #include "save_repository.h"
@@ -39,7 +40,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV9RoundTripPreservesClockResourcesAndIntake)
+TEST(SaveRepositoryTest, SchemaV10RoundTripPreservesClockResourcesAndIntake)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -82,6 +83,73 @@ TEST(SaveRepositoryTest, SchemaV9RoundTripPreservesClockResourcesAndIntake)
     ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
     ASSERT_TRUE(loaded.profile.has_value());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v10-gunsmith",
+        publishedContentRegistry());
+    profile.currency = 1000;
+    AssetInstanceId rifleId{};
+    AssetInstanceId magazineId{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == alpha_content::rifle)
+        {
+            rifleId = id;
+        }
+        else if (asset.definitionId == alpha_content::magazine &&
+                 magazineId == 0)
+        {
+            magazineId = id;
+        }
+    }
+    ASSERT_NE(rifleId, 0U);
+    ASSERT_NE(magazineId, 0U);
+    AssetRecord *rifle = profile.assets.findMutable(rifleId);
+    rifle->currentMaximumDurability = 7600;
+    rifle->currentDurability = 4300;
+    rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+    profile.assets.findMutable(magazineId)->location =
+        InstalledMagazineLocation{rifleId};
+    ASSERT_TRUE(executeGunsmithMaintenance(
+        profile,
+        publishedContentRegistry(),
+        StartGunsmithMaintenanceCommand{rifleId},
+        CommandContext{profile.revision, "save-v10-start-service"}).succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(loaded.profile->nextBaseServiceJobId,
+              profile.nextBaseServiceJobId);
+    EXPECT_EQ(loaded.profile->gunsmithMaintenanceJob,
+              profile.gunsmithMaintenanceJob);
+    EXPECT_EQ(installedMagazine(*loaded.profile, rifleId), magazineId);
+}
+
+TEST(SaveRepositoryTest, SchemaV9MigratesWithoutBaseServiceJob)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v9-service-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-travel-time-content-14",
+            9),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->nextBaseServiceJobId, 1U);
+    EXPECT_FALSE(migrated.profile->gunsmithMaintenanceJob.has_value());
 }
 
 TEST(SaveRepositoryTest, SchemaV8AcceptsPreviousContentAndClockState)

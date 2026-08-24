@@ -16,6 +16,7 @@
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
+using BaseServiceJobId = std::uint64_t;
 
 enum class ProfileContainerKind
 {
@@ -79,11 +80,21 @@ struct RaidGroundAssetLocation
         const RaidGroundAssetLocation &) = default;
 };
 
+struct BaseServiceAssetLocation
+{
+    BaseServiceJobId jobId{};
+
+    friend bool operator==(
+        const BaseServiceAssetLocation &,
+        const BaseServiceAssetLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
     InstalledMagazineLocation,
-    RaidGroundAssetLocation>;
+    RaidGroundAssetLocation,
+    BaseServiceAssetLocation>;
 
 struct MagazineRoundRecord
 {
@@ -199,6 +210,21 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+struct GunsmithMaintenanceJob
+{
+    BaseServiceJobId jobId{};
+    AssetInstanceId weaponAssetId{};
+    GridPosition returnOrigin;
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+    std::uint32_t paidCurrency{};
+    std::uint32_t targetFactoryDurabilityCenti{};
+
+    friend bool operator==(
+        const GunsmithMaintenanceJob &,
+        const GunsmithMaintenanceJob &) = default;
+};
+
 struct RaidTravelSnapshot
 {
     std::uint32_t outboundMinutes{};
@@ -250,6 +276,8 @@ struct ProfileState
     MedicalStatusState medicalStatus;
     WorldClockState worldClock;
     BaseResourceState baseResources;
+    BaseServiceJobId nextBaseServiceJobId{1};
+    std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
@@ -314,6 +342,15 @@ struct ProfileValidationResult
     const ProfileState &profile,
     const ContentRegistry &content,
     ProfileContainerId container,
+    const ItemDefinition &definition,
+    ItemOrientation orientation,
+    std::optional<AssetInstanceId> ignoredAsset = std::nullopt) noexcept;
+
+[[nodiscard]] bool profilePlacementFits(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    ProfileContainerId container,
+    GridPosition origin,
     const ItemDefinition &definition,
     ItemOrientation orientation,
     std::optional<AssetInstanceId> ignoredAsset = std::nullopt) noexcept;

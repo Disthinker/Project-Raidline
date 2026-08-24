@@ -254,19 +254,31 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"type", "installed_magazine"},
                 {"weapon_asset_id", installed->weaponAssetId}};
         }
-        else
+        else if (const auto *ground =
+                     std::get_if<RaidGroundAssetLocation>(&asset.location))
         {
             if (schemaVersion == 1)
             {
                 throw std::invalid_argument{
                     "schema v1 cannot represent Raid ground assets"};
             }
-            const auto &ground =
-                std::get<RaidGroundAssetLocation>(asset.location);
             location = {
                 {"type", "raid_ground"},
-                {"raid_id", ground.raidId},
-                {"loot_slot_index", ground.lootSlotIndex}};
+                {"raid_id", ground->raidId},
+                {"loot_slot_index", ground->lootSlotIndex}};
+        }
+        else
+        {
+            if (schemaVersion < 10)
+            {
+                throw std::invalid_argument{
+                    "legacy schema cannot represent Base service assets"};
+            }
+            const auto &service =
+                std::get<BaseServiceAssetLocation>(asset.location);
+            location = {
+                {"type", "base_service"},
+                {"job_id", service.jobId}};
         }
 
         Json value{
@@ -366,6 +378,31 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["world_clock"] = {
             {"elapsed_world_minutes",
              profile.worldClock.elapsedWorldMinutes}};
+    }
+    if (schemaVersion >= 10)
+    {
+        payload["next_base_service_job_id"] =
+            profile.nextBaseServiceJobId;
+        if (profile.gunsmithMaintenanceJob.has_value())
+        {
+            const GunsmithMaintenanceJob &job =
+                *profile.gunsmithMaintenanceJob;
+            payload["gunsmith_maintenance_job"] = {
+                {"job_id", job.jobId},
+                {"weapon_asset_id", job.weaponAssetId},
+                {"return_origin", {
+                    {"x", job.returnOrigin.x},
+                    {"y", job.returnOrigin.y}}},
+                {"started_world_minute", job.startedWorldMinute},
+                {"completion_world_minute", job.completionWorldMinute},
+                {"paid_currency", job.paidCurrency},
+                {"target_factory_durability_centi",
+                 job.targetFactoryDurabilityCenti}};
+        }
+        else
+        {
+            payload["gunsmith_maintenance_job"] = nullptr;
+        }
     }
     payload["committed_settlements"] = Json::array();
     for (const std::string &settlement : profile.committedSettlements)
@@ -554,7 +591,7 @@ std::string serializeProfileEnvelope(
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
-        schemaVersion != 9)
+        schemaVersion != 9 && schemaVersion != 10)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -608,12 +645,14 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "raid-control-resource-content-11" ||
                contentVersion == "raid-conditional-extraction-content-12")) ||
             ((schemaVersion == 7 || schemaVersion == 8) &&
-             contentVersion == "base-resource-pressure-content-13");
+             contentVersion == "base-resource-pressure-content-13") ||
+            (schemaVersion == 9 &&
+             contentVersion == "raid-travel-time-content-14");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
-             schemaVersion != 9) ||
+             schemaVersion != 9 && schemaVersion != 10) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -670,6 +709,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 payload.at("world_clock")
                     .at("elapsed_world_minutes")
                     .get<std::uint64_t>();
+        }
+        if (schemaVersion >= 10)
+        {
+            profile.nextBaseServiceJobId = payload.at(
+                "next_base_service_job_id").get<BaseServiceJobId>();
         }
         if (schemaVersion >= 7)
         {
@@ -862,6 +906,11 @@ SaveLoadResult deserializeProfileEnvelope(
                     location.at("raid_id").get<std::string>(),
                     location.at("loot_slot_index").get<std::uint32_t>()};
             }
+            else if (schemaVersion >= 10 && locationType == "base_service")
+            {
+                asset.location = BaseServiceAssetLocation{
+                    location.at("job_id").get<BaseServiceJobId>()};
+            }
             else
             {
                 return {SaveLoadStatus::Failed, std::nullopt, "asset location type is invalid"};
@@ -871,6 +920,24 @@ SaveLoadResult deserializeProfileEnvelope(
             {
                 return {SaveLoadStatus::Failed, std::nullopt, "asset ID is duplicated"};
             }
+        }
+
+        if (schemaVersion >= 10 &&
+            !payload.at("gunsmith_maintenance_job").is_null())
+        {
+            const Json &job = payload.at("gunsmith_maintenance_job");
+            const Json &origin = job.at("return_origin");
+            profile.gunsmithMaintenanceJob = GunsmithMaintenanceJob{
+                job.at("job_id").get<BaseServiceJobId>(),
+                job.at("weapon_asset_id").get<AssetInstanceId>(),
+                GridPosition{
+                    origin.at("x").get<int>(),
+                    origin.at("y").get<int>()},
+                job.at("started_world_minute").get<std::uint64_t>(),
+                job.at("completion_world_minute").get<std::uint64_t>(),
+                job.at("paid_currency").get<std::uint32_t>(),
+                job.at("target_factory_durability_centi")
+                    .get<std::uint32_t>()};
         }
 
         if (schemaVersion >= 2 && !payload.at("pending_raid").is_null())

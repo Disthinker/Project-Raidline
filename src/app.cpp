@@ -117,6 +117,21 @@ namespace
             42.0F};
     }
 
+    SDL_FRect baseReliefButton() noexcept
+    {
+        return SDL_FRect{100.0F, 554.0F, 250.0F, 48.0F};
+    }
+
+    SDL_FRect baseRecycleButton() noexcept
+    {
+        return SDL_FRect{650.0F, 554.0F, 220.0F, 48.0F};
+    }
+
+    SDL_FRect baseGunsmithButton() noexcept
+    {
+        return SDL_FRect{890.0F, 554.0F, 280.0F, 48.0F};
+    }
+
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
         switch (slot)
@@ -1830,13 +1845,60 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     asset->instanceId,
                     0,
                     asset->orientation};
-                uiMessage_ = "SELECTED FOR RECYCLE";
+                uiMessage_ = "STASH ITEM SELECTED";
                 return;
             }
             ++rowIndex;
         }
 
-        const SDL_FRect recycleButton{820.0F, 554.0F, 280.0F, 48.0F};
+        const SDL_FRect gunsmithButton = baseGunsmithButton();
+        if (contains(gunsmithButton, click.position))
+        {
+            if (gameSession_.profile().gunsmithMaintenanceJob.has_value())
+            {
+                const GunsmithCollectionReceipt receipt =
+                    gameSession_.collectBaseGunsmithMaintenance(
+                        nextProfileTransactionId("collect-gunsmith"));
+                uiMessage_ = receipt.succeeded
+                    ? "SERVICED WEAPON COLLECTED"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                if (receipt.succeeded)
+                {
+                    profileAssetSelection_.reset();
+                }
+                return;
+            }
+            if (!profileAssetSelection_.has_value())
+            {
+                uiMessage_ = "SELECT A STASH WEAPON";
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
+            const GunsmithMaintenanceReceipt receipt =
+                gameSession_.executeBaseGunsmithMaintenance(
+                    profileAssetSelection_->instanceId,
+                    nextProfileTransactionId("start-gunsmith"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format(
+                    "SERVICE STARTED | READY IN {} MIN | PAID {}",
+                    receipt.completionWorldMinute -
+                        gameSession_.profile().worldClock.elapsedWorldMinutes,
+                    receipt.currencyPaid)
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
+
+        const SDL_FRect recycleButton = baseRecycleButton();
         if (contains(recycleButton, click.position) &&
             profileAssetSelection_.has_value())
         {
@@ -1857,7 +1919,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             return;
         }
 
-        const SDL_FRect reliefButton{140.0F, 554.0F, 280.0F, 48.0F};
+        const SDL_FRect reliefButton = baseReliefButton();
         if (contains(reliefButton, click.position))
         {
             const std::string batchId = nextProfileTransactionId("relief-batch");
@@ -8313,7 +8375,7 @@ void App::renderBaseSupply()
         uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
     }
 
-    uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT TO RECYCLE");
+    uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT AN ITEM");
     std::size_t rowIndex{};
     for (const AssetRecord *asset : assetsInContainer(
              gameSession_.profile(),
@@ -8345,7 +8407,8 @@ void App::renderBaseSupply()
         ++rowIndex;
     }
 
-    const SDL_FRect reliefButton{140.0F, 554.0F, 280.0F, 48.0F};
+    const ProfileState &profile = gameSession_.profile();
+    const SDL_FRect reliefButton = baseReliefButton();
     const bool eligible = isReliefEligible(
         gameSession_.profile(),
         publishedContentRegistry());
@@ -8355,10 +8418,80 @@ void App::renderBaseSupply()
         renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
         eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
 
-    const SDL_FRect recycleButton{820.0F, 554.0F, 280.0F, 48.0F};
+    const SDL_FRect recycleButton = baseRecycleButton();
     SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
     SDL_RenderFillRect(renderer_, &recycleButton);
-    uiTextRenderer_.render(renderer_, recycleButton.x + 40.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
+    uiTextRenderer_.render(renderer_, recycleButton.x + 26.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
+
+    const SDL_FRect gunsmithButton = baseGunsmithButton();
+    std::string gunsmithStatus;
+    const char *gunsmithLabel = "START FULL MAINTENANCE";
+    bool gunsmithAvailable{};
+    if (profile.gunsmithMaintenanceJob.has_value())
+    {
+        const GunsmithMaintenanceJob &job =
+            *profile.gunsmithMaintenanceJob;
+        const AssetRecord *weapon = profile.assets.find(job.weaponAssetId);
+        const std::string weaponName = weapon == nullptr
+            ? "UNKNOWN WEAPON"
+            : publishedContentRegistry().item(
+                weapon->definitionId).displayName;
+        const GunsmithCollectionPlan plan = queryGunsmithCollection(
+            profile, publishedContentRegistry());
+        gunsmithAvailable = plan.canCommit;
+        if (plan.canCommit)
+        {
+            gunsmithStatus = fmt::format(
+                "GUNSMITH READY | {}", weaponName);
+            gunsmithLabel = "COLLECT SERVICED WEAPON";
+        }
+        else if (plan.minutesRemaining > 0)
+        {
+            gunsmithStatus = fmt::format(
+                "GUNSMITH IN PROGRESS | {} | {} MIN",
+                weaponName,
+                plan.minutesRemaining);
+            gunsmithLabel = "SERVICE IN PROGRESS";
+        }
+        else
+        {
+            gunsmithStatus = "GUNSMITH READY | STASH SPACE REQUIRED";
+            gunsmithLabel = "COLLECT - STASH BLOCKED";
+        }
+    }
+    else if (profileAssetSelection_.has_value())
+    {
+        const GunsmithMaintenancePlan plan = queryGunsmithMaintenance(
+            profile,
+            publishedContentRegistry(),
+            StartGunsmithMaintenanceCommand{
+                profileAssetSelection_->instanceId});
+        gunsmithAvailable = plan.canCommit;
+        gunsmithStatus = plan.canCommit
+            ? fmt::format(
+                "GUNSMITH QUOTE {} | {} MIN | FULL FACTORY CONDITION",
+                plan.quotedCurrency,
+                plan.durationMinutes)
+            : plan.message;
+    }
+    else
+    {
+        gunsmithStatus = "GUNSMITH | SELECT A DAMAGED STASH WEAPON";
+    }
+    SDL_SetRenderDrawColor(
+        renderer_,
+        gunsmithAvailable ? 58 : 42,
+        gunsmithAvailable ? 92 : 48,
+        gunsmithAvailable ? 112 : 52,
+        255);
+    SDL_RenderFillRect(renderer_, &gunsmithButton);
+    uiTextRenderer_.render(
+        renderer_,
+        gunsmithButton.x + 18.0F,
+        gunsmithButton.y + 18.0F,
+        gunsmithLabel);
+    uiTextRenderer_.render(
+        renderer_, 650.0F, 532.0F, gunsmithStatus.c_str());
     uiTextRenderer_.render(renderer_, 96.0F, 630.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {

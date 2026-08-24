@@ -65,7 +65,15 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-travel-time-content-14");
+        "base-gunsmith-service-content-15");
+    EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
+    EXPECT_EQ(
+        registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
+        1U);
+    EXPECT_EQ(
+        registry.gunsmithFullMaintenance().maximumDurabilityCostPerPoint,
+        2U);
+    EXPECT_EQ(registry.gunsmithFullMaintenance().durationMinutes, 240U);
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -284,6 +292,30 @@ TEST(ContentRegistryTest, RejectsNonPositiveItemWeight)
         publishedJsonCopy(),
         "\"unit_weight_grams\": 400",
         "\"unit_weight_grams\": 0");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidGunsmithServiceDuration)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"duration_minutes\": 240",
+        "\"duration_minutes\": 0");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsExcessiveGunsmithServiceUnitCost)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"maximum_durability_cost_per_point\": 2",
+        "\"maximum_durability_cost_per_point\": 1001");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
