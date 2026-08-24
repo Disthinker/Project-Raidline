@@ -1,6 +1,6 @@
 # Base Growth：枪匠全面维护服务 v1 ExecPlan
 
-状态：本地实现与自动化完成，等待 exact-head CI 与用户正常游玩验收
+状态：本地自动化与 exact-head CI 完成，等待用户正常游玩验收
 
 基线：`origin/main@defaac0`（PR #80 已由用户正常游玩验收并普通合入）
 
@@ -57,5 +57,5 @@
 - [x] schema v10 往返、schema v9 迁移、GameSession 原子保存和跨进程旅行推进完成。
 - [x] 供应与回收页正常交互及 English/简体中文投影完成。
 - [x] Windows Debug 全目标构建成功；完整 CTest 889/889 通过；未由开发代理启动游戏。
-- [ ] exact-head Windows/Ubuntu CI。
+- [x] PR #81 exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。

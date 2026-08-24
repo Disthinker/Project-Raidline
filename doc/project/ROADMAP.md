@@ -81,7 +81,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 资源分配与基础需求 v1 | 成功撤离的新 Loot 先进入待分配区；玩家逐件保留到个人 Stash 或捐献为食物、卫生、士气、安全 | BaseIntake、BaseResourceState、冻结 Loot 来源、schema v7、贡献命令 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 `ba8283f` 进入 main；表现仅用文字、色条和几何图形 |
 | 世界时钟与每日需求 v1 | Base/Raid 显示同一日夜时间；每日 00:00 结算四项需求；暂停、离线和未结算 Raid 不偷走时间 | WorldClockState、每日幂等补算、schema v8、Base 检查点、Raid Settlement 提交/异常回滚 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 `5d2a11a` 进入 main；倍率暂为集中开发参数 |
 | Raid 往返行动耗时 v1 | 三张图显示不同抵达时间；出发、正常返程和失败归队推进世界时钟，异常退出精确回滚 | MapDefinition travel、冻结活动快照、schema v9、幂等时间/需求 Settlement | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 `defaac0` 进入 main；不包含夜间视野、路线状态、旅行遭遇、哨所、精力或睡眠 |
-| 枪匠全面维护服务 v1 | 在供应与回收页付费送修受损武器，经过世界时间后领取同一实例并恢复出厂耐久 | BaseServiceJob、服务资产位置、冻结报价、schema v10、原子存档 | 当前分支实现完成，Windows Debug 全目标与 889/889 CTest 通过；等待 exact-head CI 与用户正常游玩验收，不包含设施、人口、并行队列或改枪台 |
+| 枪匠全面维护服务 v1 | 在供应与回收页付费送修受损武器，经过世界时间后领取同一实例并恢复出厂耐久 | BaseServiceJob、服务资产位置、冻结报价、schema v10、原子存档 | PR #81 的 Windows Debug 全目标、889/889 CTest 与 exact-head Windows/Ubuntu CI 通过；等待用户正常游玩验收，不包含设施、人口、并行队列或改枪台 |
 
 ## 当前 Combat Reliability 缺陷
 
