@@ -56,6 +56,9 @@ struct HighRiskWorldConfig
     float activationDurationSeconds{};
     ContentRect advancedResourceArea;
     std::uint64_t seed{};
+    ContentRect conditionalExtractionPoint;
+    float conditionalExtractionDurationSeconds{};
+    std::uint64_t conditionalExtractionMaximumWeightGrams{};
 };
 
 struct RaidWorldConfig
@@ -210,6 +213,12 @@ public:
     [[nodiscard]] const std::optional<ExtractionPoint> &
     emergencyExtractionPoint() const noexcept;
 
+    [[nodiscard]] const std::optional<ExtractionPoint> &
+    conditionalExtractionPoint() const noexcept;
+
+    [[nodiscard]] std::uint64_t
+    conditionalExtractionMaximumWeightGrams() const noexcept;
+
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
 
@@ -350,6 +359,8 @@ private:
     StorageCabinet storageCabinet_;
     ExtractionPoint extractionPoint_;
     std::optional<ExtractionPoint> emergencyExtractionPoint_;
+    std::optional<ExtractionPoint> conditionalExtractionPoint_;
+    std::uint64_t conditionalExtractionMaximumWeightGrams_{};
     RaidSession raidSession_;
 
     std::vector<EnemySpawn> highRiskPressureSpawns_;

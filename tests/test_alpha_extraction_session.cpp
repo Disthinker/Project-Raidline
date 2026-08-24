@@ -71,7 +71,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-control-resource-2");
+        "raid-conditional-extraction-3");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
@@ -292,6 +292,23 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
     EXPECT_TRUE(session.world().shotFiredLastUpdate());
     EXPECT_EQ(magazineRoundCount(session.profile(), magazine), roundsBefore - 1U);
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
+}
+
+TEST(AlphaExtractionSessionTest, DeployProjectsAuthoritativeLightExitWeight)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-light-exit"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(
+        90818,
+        MapDefinitionId{"map.raid.riverside"}));
+
+    EXPECT_TRUE(session.world().conditionalExtractionPoint().has_value());
+    EXPECT_EQ(session.conditionalExtractionWeightLimitGrams(), 22000U);
+    EXPECT_EQ(
+        session.currentRaidCarriedWeightGrams(),
+        carriedWeightGrams(session.profile(), publishedContentRegistry()));
+    EXPECT_TRUE(session.conditionalExtractionEligible());
 }
 
 TEST(AlphaExtractionSessionTest, SprintFireWaitsForReadyAndConsumesOneRound)

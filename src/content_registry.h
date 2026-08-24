@@ -97,6 +97,9 @@ struct HighRiskRaidDefinition
     float regularPhaseDurationSeconds{};
     ContentRect emergencyExtractionPoint;
     float emergencyExtractionDurationSeconds{};
+    ContentRect conditionalExtractionPoint;
+    float conditionalExtractionDurationSeconds{};
+    std::uint64_t conditionalExtractionMaximumWeightGrams{};
     float initialWaveDelaySeconds{};
     float waveIntervalSeconds{};
     std::uint32_t waveSize{};

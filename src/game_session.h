@@ -127,6 +127,13 @@ public:
     [[nodiscard]]
     const RaidSettlement &settlement() const noexcept;
 
+    [[nodiscard]] std::uint64_t currentRaidCarriedWeightGrams() const noexcept;
+
+    [[nodiscard]] std::uint64_t
+    conditionalExtractionWeightLimitGrams() const noexcept;
+
+    [[nodiscard]] bool conditionalExtractionEligible() const noexcept;
+
     [[nodiscard]]
     GameSessionState state() const noexcept;
 

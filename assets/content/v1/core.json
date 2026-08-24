@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-control-resource-content-11",
+  "content_version": "raid-conditional-extraction-content-12",
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",
     "items/inventory/item_cola_basic_v1_64x64.png",
@@ -22,6 +22,7 @@
       "category": "consumable",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 400,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 32, "y": 32},
@@ -38,6 +39,7 @@
       "category": "medical",
       "inventory": {"width": 2, "height": 2, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 2000,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -53,6 +55,7 @@
       "category": "weapon",
       "inventory": {"width": 2, "height": 1, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 1000,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 32},
@@ -94,6 +97,7 @@
       "category": "weapon",
       "inventory": {"width": 4, "height": 2, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 3500,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 128, "y": 64},
@@ -135,6 +139,7 @@
       "category": "ammunition",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 60,
+      "unit_weight_grams": 12,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 32, "y": 32},
@@ -151,6 +156,7 @@
       "category": "magazine",
       "inventory": {"width": 1, "height": 2, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 250,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 32, "y": 64},
@@ -169,6 +175,7 @@
       "category": "magazine",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 180,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 32, "y": 32},
@@ -187,6 +194,7 @@
       "category": "container",
       "inventory": {"width": 3, "height": 3, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 1500,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 96, "y": 96},
@@ -210,6 +218,7 @@
       "category": "container",
       "inventory": {"width": 4, "height": 4, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 1200,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 96, "y": 96},
@@ -230,6 +239,7 @@
       "category": "medical",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 600,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -253,6 +263,7 @@
       "category": "medical",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 150,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -276,6 +287,7 @@
       "category": "medical",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 120,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -299,6 +311,7 @@
       "category": "medical",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 100,
       "visual_assets_published": true,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -322,6 +335,7 @@
       "category": "maintenance",
       "inventory": {"width": 2, "height": 1, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 1800,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 64, "y": 32},
@@ -344,6 +358,7 @@
       "category": "maintenance",
       "inventory": {"width": 1, "height": 2, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 2500,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 32, "y": 64},
@@ -370,6 +385,7 @@
       "category": "protective_gear",
       "inventory": {"width": 2, "height": 2, "can_rotate": false},
       "max_stack_size": 1,
+      "unit_weight_grams": 1500,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -394,6 +410,7 @@
       "category": "protective_gear",
       "inventory": {"width": 2, "height": 3, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 7000,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 64, "y": 96},
@@ -418,6 +435,7 @@
       "category": "loot",
       "inventory": {"width": 2, "height": 1, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 800,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 64, "y": 32},
@@ -433,6 +451,7 @@
       "category": "loot",
       "inventory": {"width": 2, "height": 2, "can_rotate": true},
       "max_stack_size": 1,
+      "unit_weight_grams": 500,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 64, "y": 64},
@@ -624,6 +643,9 @@
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 300, "y": 300}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
+        "conditional_extraction_point": {"position": {"x": 380, "y": 60}, "size": {"x": 170, "y": 130}},
+        "conditional_extraction_duration_seconds": 6,
+        "conditional_extraction_maximum_weight_grams": 22000,
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
@@ -692,6 +714,9 @@
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 540, "y": 300}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
+        "conditional_extraction_point": {"position": {"x": 820, "y": 60}, "size": {"x": 170, "y": 130}},
+        "conditional_extraction_duration_seconds": 6,
+        "conditional_extraction_maximum_weight_grams": 22000,
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
@@ -760,6 +785,9 @@
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 680, "y": 420}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
+        "conditional_extraction_point": {"position": {"x": 400, "y": 60}, "size": {"x": 170, "y": 130}},
+        "conditional_extraction_duration_seconds": 6,
+        "conditional_extraction_maximum_weight_grams": 22000,
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,

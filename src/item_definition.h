@@ -287,6 +287,10 @@ struct ItemDefinition
     std::optional<WeaponMaintenanceDefinition> weaponMaintenance;
     std::optional<ArmorMaintenanceDefinition> armorMaintenance;
     std::optional<WeaponUseDefinition> weaponUse;
+
+    // Versioned content fact used by extraction and future encumbrance
+    // consumers. Quantities and loose/magazine rounds multiply this value.
+    std::uint32_t unitWeightGrams{1000};
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

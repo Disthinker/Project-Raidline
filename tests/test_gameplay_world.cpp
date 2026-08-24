@@ -161,7 +161,10 @@ namespace
             ContentRect{Vec2{590.0F, 310.0F}, Vec2{100.0F, 100.0F}},
             0.20F,
             ContentRect{Vec2{850.0F, 450.0F}, Vec2{250.0F, 180.0F}},
-            seed};
+            seed,
+            ContentRect{Vec2{800.0F, 40.0F}, Vec2{180.0F, 150.0F}},
+            0.25F,
+            20000U};
         return config;
     }
 } // namespace
@@ -2967,4 +2970,30 @@ TEST(GameplayWorldRaidTest, HighRiskEmergencySignalExtractionCompletes)
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::Extracted);
+}
+
+TEST(GameplayWorldRaidTest, ConditionalExtractionConsumesServiceEligibility)
+{
+    RaidWorldConfig config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    config.playerSpawn = Vec2{840.0F, 80.0F};
+    GameplayWorld world{std::move(config)};
+
+    GameplayInput eligible;
+    eligible.conditionalExtractionEligible = true;
+    world.update(eligible, 0.11F);
+    ASSERT_EQ(world.raidSession().phase(), RaidPhase::HighRisk);
+
+    world.update(eligible, 0.10F);
+    ASSERT_EQ(
+        world.raidSession().extractionRoute(),
+        RaidExtractionRoute::EmergencyConditional);
+    ASSERT_EQ(world.raidSession().state(), RaidSessionState::Extracting);
+
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(world.raidSession().extractionProgress(), 0.0F);
+
+    world.update(eligible, 0.25F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::Extracted);
 }

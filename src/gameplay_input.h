@@ -37,4 +37,8 @@ struct GameplayInput
     bool quitRaidJustPressed{};
     bool inventoryOpen{};
     float movementSpeedMultiplier{1.0F};
+
+    // Service-owned profile query; the world only consumes this eligibility
+    // bit and never inspects asset ownership.
+    bool conditionalExtractionEligible{};
 };

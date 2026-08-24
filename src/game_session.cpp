@@ -135,6 +135,26 @@ GameSession::settlement() const noexcept
     return settlement_;
 }
 
+std::uint64_t GameSession::currentRaidCarriedWeightGrams() const noexcept
+{
+    return carriedWeightGrams(profile_, publishedContentRegistry());
+}
+
+std::uint64_t
+GameSession::conditionalExtractionWeightLimitGrams() const noexcept
+{
+    return world_ == nullptr
+        ? 0U
+        : world_->conditionalExtractionMaximumWeightGrams();
+}
+
+bool GameSession::conditionalExtractionEligible() const noexcept
+{
+    const std::uint64_t limit = conditionalExtractionWeightLimitGrams();
+    return alphaRaidActive_ && limit > 0U &&
+           currentRaidCarriedWeightGrams() <= limit;
+}
+
 GameSessionState GameSession::state() const noexcept
 {
     return state_;
@@ -350,7 +370,10 @@ bool GameSession::deployAlpha(
             map.highRisk.activationControlPoint,
             map.highRisk.activationDurationSeconds,
             map.highRisk.advancedResourceArea,
-            snapshot.seed};
+            snapshot.seed,
+            map.highRisk.conditionalExtractionPoint,
+            map.highRisk.conditionalExtractionDurationSeconds,
+            map.highRisk.conditionalExtractionMaximumWeightGrams};
         candidateWorld =
             std::make_unique<GameplayWorld>(std::move(worldConfig));
     }
@@ -1527,6 +1550,8 @@ void GameSession::updateAlphaRaid(
     }
 
     GameplayInput simulationInput = input;
+    simulationInput.conditionalExtractionEligible =
+        conditionalExtractionEligible();
     simulationInput.reloadJustPressed = false;
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;

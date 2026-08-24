@@ -19,7 +19,8 @@ RaidSessionConfig highRiskConfig(
         HighRiskRaidSessionConfig{
             true,
             regularDuration,
-            emergencyExtractionDuration}};
+            emergencyExtractionDuration,
+            2.0F}};
 }
 }
 
@@ -191,6 +192,31 @@ TEST(RaidSessionTest, HighRiskClosesNormalExtractionAndOpensEmergencySignal)
         session.extractionRoute(),
         RaidExtractionRoute::EmergencySignal);
     EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
+TEST(RaidSessionTest, ConditionalExtractionRequiresContinuousEligibility)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+    session.update(5.0F, false, false, false);
+    ASSERT_TRUE(session.conditionalExtractionOpen());
+
+    session.update(1.0F, false, false, true);
+    ASSERT_EQ(session.state(), RaidSessionState::Extracting);
+    ASSERT_EQ(
+        session.extractionRoute(),
+        RaidExtractionRoute::EmergencyConditional);
+    EXPECT_FLOAT_EQ(session.extractionProgress(), 0.5F);
+
+    session.update(0.0F, false, false, false);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(session.extractionProgress(), 0.0F);
+
+    session.update(2.0F, false, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+    EXPECT_EQ(
+        session.extractionRoute(),
+        RaidExtractionRoute::EmergencyConditional);
 }
 
 TEST(RaidSessionTest, NormalExtractionStartedBeforeHighRiskGetsOneCompletionGrace)

@@ -478,6 +478,56 @@ std::vector<AssetInstanceId> carriedAssetIds(const ProfileState &profile)
     return result;
 }
 
+std::uint64_t carriedWeightGrams(
+    const ProfileState &profile,
+    const ContentRegistry &content) noexcept
+{
+    constexpr std::uint64_t maximum =
+        std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t total{};
+    const auto add = [&total](std::uint64_t value)
+    {
+        if (value > maximum - total)
+        {
+            total = maximum;
+            return;
+        }
+        total += value;
+    };
+
+    try
+    {
+        for (AssetInstanceId assetId : carriedAssetIds(profile))
+        {
+            const AssetRecord *asset = profile.assets.find(assetId);
+            if (asset == nullptr)
+            {
+                return maximum;
+            }
+            const ItemDefinition &definition =
+                content.item(asset->definitionId);
+            add(static_cast<std::uint64_t>(definition.unitWeightGrams) *
+                asset->quantity);
+
+            for (const MagazineRoundRecord &round : asset->magazineRounds)
+            {
+                add(content.item(round.definitionId).unitWeightGrams);
+            }
+            if (asset->chamberedRound.has_value())
+            {
+                add(content.item(
+                        asset->chamberedRound->definitionId)
+                        .unitWeightGrams);
+            }
+        }
+    }
+    catch (...)
+    {
+        return maximum;
+    }
+    return total;
+}
+
 std::optional<AssetInstanceId> profileAssetAtCell(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -767,8 +817,9 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
-        const bool controlResourceRules =
-            raid.rulesVersion == "raid-control-resource-2";
+        const bool advancedLootRules =
+            raid.rulesVersion == "raid-control-resource-2" ||
+            raid.rulesVersion == "raid-conditional-extraction-3";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -784,9 +835,9 @@ ProfileValidationResult validateProfileState(
             !validMedicalStatus(raid.startingMedicalStatus) ||
             raid.enemies.size() < 4 || raid.enemies.size() > 6 ||
             regularLootCount < 6 || regularLootCount > 9 ||
-            (controlResourceRules &&
+            (advancedLootRules &&
              advancedLootCount != raidMap->highRisk.advancedLootSlots.size()) ||
-            (!controlResourceRules && advancedLootCount != 0U))
+            (!advancedLootRules && advancedLootCount != 0U))
         {
             return {false, "pending Raid header is invalid"};
         }
