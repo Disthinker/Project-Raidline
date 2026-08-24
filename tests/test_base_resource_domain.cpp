@@ -35,7 +35,7 @@ TEST(BaseResourceDomainTest, NewProfileStartsWithSafeButFiniteResources)
 
     EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{40, 40, 40, 40}));
     EXPECT_TRUE(profile.baseResources.lastShortfall.empty());
-    EXPECT_EQ(profile.baseResources.resolvedRaidCount, 0U);
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 0U);
 }
 
 TEST(BaseResourceDomainTest, IntakeContributionIsAtomicAndIdempotent)
@@ -120,22 +120,55 @@ TEST(BaseResourceDomainTest, ContributionRejectsOverflowWithoutPartialWaste)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, ActivityDemandRecordsShortageWithoutDeadlock)
+TEST(BaseResourceDomainTest, DailyDemandRecordsShortageWithoutDeadlock)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-resource-demand",
         publishedContentRegistry());
     profile.baseResources.pool = BaseResourceBundle{3, 6, 1, 9};
 
-    applyBaseActivityDemand(profile);
+    static_cast<void>(advanceWorldClock(
+        profile.worldClock,
+        kWorldMinutesPerDay - kInitialWorldMinute));
+    const BaseDailyDemandResult result = applyBaseDailyDemandThrough(
+        profile.baseResources,
+        projectWorldClock(profile.worldClock).completedDays);
 
+    EXPECT_EQ(result.cyclesResolved, 1U);
     EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{0, 0, 0, 5}));
     EXPECT_EQ(
         profile.baseResources.lastShortfall,
         (BaseResourceBundle{5, 0, 4, 0}));
-    EXPECT_EQ(profile.baseResources.resolvedRaidCount, 1U);
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
+}
+
+TEST(BaseResourceDomainTest, MultiDayCatchUpIsConstantAndIdempotent)
+{
+    BaseResourceState state;
+    state.pool = BaseResourceBundle{100, 100, 100, 100};
+
+    const BaseDailyDemandResult first =
+        applyBaseDailyDemandThrough(state, 3U);
+    EXPECT_EQ(first.cyclesResolved, 3U);
+    EXPECT_EQ(state.pool, (BaseResourceBundle{76, 82, 85, 88}));
+    EXPECT_TRUE(state.lastShortfall.empty());
+
+    const BaseResourceState beforeRepeat = state;
+    const BaseDailyDemandResult repeated =
+        applyBaseDailyDemandThrough(state, 3U);
+    EXPECT_EQ(repeated.cyclesResolved, 0U);
+    EXPECT_EQ(state, beforeRepeat);
+
+    const BaseDailyDemandResult later =
+        applyBaseDailyDemandThrough(state, 20U);
+    EXPECT_EQ(later.cyclesResolved, 17U);
+    EXPECT_EQ(state.pool, (BaseResourceBundle{0, 0, 0, 20}));
+    EXPECT_EQ(
+        state.lastShortfall,
+        (BaseResourceBundle{8, 6, 0, 0}));
+    EXPECT_EQ(state.resolvedDemandCycleCount, 20U);
 }
 
 TEST(BaseResourceDomainTest, OrdinaryInventoryCannotPopulateIntake)

@@ -74,6 +74,71 @@ TEST(PersistentSessionTest, AutosavedInventoryCommandSurvivesNewProcessSession)
         rifle);
 }
 
+TEST(PersistentSessionTest, BaseWorldClockCheckpointsWithoutRevisionChurn)
+{
+    SessionSaveDirectory temporary;
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.startNewProfile("persistent-world-clock"));
+    const ProfileRevision revision = first.profile().revision;
+
+    first.advanceBaseWorldClock(60.0F);
+    EXPECT_EQ(
+        first.profile().worldClock.elapsedWorldMinutes,
+        kInitialWorldMinute + 60U);
+    EXPECT_EQ(first.profile().revision, revision);
+    ASSERT_TRUE(first.checkpointWorldClock()) << first.persistenceMessage();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(
+        reopened.profile().worldClock,
+        first.profile().worldClock);
+    EXPECT_EQ(reopened.profile().revision, revision);
+}
+
+TEST(PersistentSessionTest, UnsettledRaidClockRollsBackWithPreRaidSave)
+{
+    SessionSaveDirectory temporary;
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.startNewProfile("rollback-world-clock"));
+    ASSERT_TRUE(active.deployAlpha(99101));
+
+    active.update(GameplayInput{}, 1.0F);
+    EXPECT_EQ(
+        active.profile().worldClock.elapsedWorldMinutes,
+        kInitialWorldMinute + 1U);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(
+        reopened.profile().worldClock,
+        WorldClockState{});
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+}
+
+TEST(PersistentSessionTest, SettledRaidCommitsElapsedWorldTime)
+{
+    SessionSaveDirectory temporary;
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.startNewProfile("settled-world-clock"));
+    ASSERT_TRUE(active.deployAlpha(99102));
+    active.update(GameplayInput{}, 1.0F);
+    ASSERT_TRUE(active.activeQuitAlphaRaid());
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(
+        reopened.profile().worldClock.elapsedWorldMinutes,
+        kInitialWorldMinute + 1U);
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+}
+
 TEST(PersistentSessionTest, EnvironmentObjectiveAdvancesWithoutBlockingPlay)
 {
     SessionSaveDirectory temporary;

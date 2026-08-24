@@ -42,13 +42,37 @@ void add(BaseResourceBundle &target, const BaseResourceBundle &value) noexcept
     target.security += value.security;
 }
 
-std::uint32_t consume(
-    std::uint32_t &current,
-    std::uint32_t demand) noexcept
+std::uint64_t saturatedMultiply(
+    std::uint64_t left,
+    std::uint64_t right) noexcept
 {
-    const std::uint32_t shortfall = demand > current ? demand - current : 0U;
-    current = demand > current ? 0U : current - demand;
-    return shortfall;
+    if (left != 0U &&
+        right > std::numeric_limits<std::uint64_t>::max() / left)
+    {
+        return std::numeric_limits<std::uint64_t>::max();
+    }
+    return left * right;
+}
+
+std::uint32_t consumeCycles(
+    std::uint32_t &current,
+    std::uint32_t demand,
+    std::uint64_t cycles) noexcept
+{
+    const std::uint64_t priorDemand = saturatedMultiply(
+        demand,
+        cycles - 1U);
+    const std::uint64_t availableBeforeLatest =
+        priorDemand >= current ? 0U : current - priorDemand;
+    const std::uint32_t latestShortfall =
+        availableBeforeLatest >= demand
+            ? 0U
+            : demand - static_cast<std::uint32_t>(availableBeforeLatest);
+    const std::uint64_t totalDemand = saturatedMultiply(demand, cycles);
+    current = totalDemand >= current
+        ? 0U
+        : current - static_cast<std::uint32_t>(totalDemand);
+    return latestShortfall;
 }
 }
 
@@ -163,17 +187,26 @@ BaseResourceReceipt executeBaseResourceContribution(
             profile.revision, plan.contribution};
 }
 
-void applyBaseActivityDemand(ProfileState &profile) noexcept
+BaseDailyDemandResult applyBaseDailyDemandThrough(
+    BaseResourceState &state,
+    std::uint64_t completedWorldDays) noexcept
 {
-    BaseResourceBundle &pool = profile.baseResources.pool;
-    BaseResourceBundle &shortfall = profile.baseResources.lastShortfall;
-    shortfall.food = consume(pool.food, kBaseActivityDemand.food);
-    shortfall.hygiene = consume(pool.hygiene, kBaseActivityDemand.hygiene);
-    shortfall.morale = consume(pool.morale, kBaseActivityDemand.morale);
-    shortfall.security = consume(pool.security, kBaseActivityDemand.security);
-    if (profile.baseResources.resolvedRaidCount !=
-        std::numeric_limits<std::uint64_t>::max())
+    if (completedWorldDays <= state.resolvedDemandCycleCount)
     {
-        ++profile.baseResources.resolvedRaidCount;
+        return {};
     }
+    const std::uint64_t cycles =
+        completedWorldDays - state.resolvedDemandCycleCount;
+    BaseResourceBundle &pool = state.pool;
+    BaseResourceBundle &shortfall = state.lastShortfall;
+    shortfall.food = consumeCycles(
+        pool.food, kBaseDailyDemand.food, cycles);
+    shortfall.hygiene = consumeCycles(
+        pool.hygiene, kBaseDailyDemand.hygiene, cycles);
+    shortfall.morale = consumeCycles(
+        pool.morale, kBaseDailyDemand.morale, cycles);
+    shortfall.security = consumeCycles(
+        pool.security, kBaseDailyDemand.security, cycles);
+    state.resolvedDemandCycleCount = completedWorldDays;
+    return {cycles, shortfall};
 }

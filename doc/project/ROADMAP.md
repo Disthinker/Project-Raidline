@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat PR #66～#74 与 Raid Pressure PR #73/#75/#76 已接受。当前优先交付 **Raid Pressure & Variety：高危条件撤离 v1**；范围合同见 `doc/exec-plans/active/raid-conditional-extraction-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78 已接受。当前优先交付 **Base Growth：世界时钟与每日需求 v1**；范围合同见 `doc/exec-plans/active/base-world-clock-daily-needs-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -37,6 +37,7 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#74 与 Raid Pressure
 | 持续高危阶段 v1 | PR #75 / merge commit `773443b` |
 | 主动高危与高级资源区 v1 | PR #76 / merge commit `bc26337` |
 | 高危条件撤离 v1 | PR #77 / merge commit `d106193` |
+| Base 资源分配与基础需求 v1 | PR #78 / merge commit `ba8283f` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -75,7 +76,8 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#74 与 Raid Pressure
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 资源分配与基础需求 v1 | 成功撤离的新 Loot 先进入待分配区；玩家逐件保留到个人 Stash 或捐献为食物、卫生、士气、安全；每次正式结算消耗小额需求 | BaseIntake、BaseResourceState、冻结 Loot 来源、幂等 Settlement 需求、schema v7、贡献命令 | 当前分支实现与自动化中；表现仅用文字、色条和几何图形，不包含人口、WorldClock、五日周期、设施建设、愿望、任务或新正式资源 |
+| 资源分配与基础需求 v1 | 成功撤离的新 Loot 先进入待分配区；玩家逐件保留到个人 Stash 或捐献为食物、卫生、士气、安全 | BaseIntake、BaseResourceState、冻结 Loot 来源、schema v7、贡献命令 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 `ba8283f` 进入 main；表现仅用文字、色条和几何图形 |
+| 世界时钟与每日需求 v1 | Base/Raid 显示同一日夜时间；每日 00:00 结算四项需求；暂停、离线和未结算 Raid 不偷走时间 | WorldClockState、每日幂等补算、schema v8、Base 检查点、Raid Settlement 提交/异常回滚 | 当前分支实现与自动化中；倍率暂为集中开发参数，不包含睡眠、旅行、建设、商人、愿望或新正式资源 |
 
 ## 当前 Combat Reliability 缺陷
 

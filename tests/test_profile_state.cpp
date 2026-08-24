@@ -117,6 +117,24 @@ TEST(ProfileStateTest, FingerprintChangesWithAuthoritativeState)
     const std::uint64_t before = profileStateFingerprint(profile);
     ++profile.currency;
     EXPECT_NE(profileStateFingerprint(profile), before);
+
+    const std::uint64_t afterCurrency = profileStateFingerprint(profile);
+    ++profile.worldClock.elapsedWorldMinutes;
+    EXPECT_NE(profileStateFingerprint(profile), afterCurrency);
+}
+
+TEST(ProfileStateTest, DemandCycleCannotAdvanceAheadOfWorldClock)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-world-clock-invalid",
+        publishedContentRegistry());
+    profile.baseResources.resolvedDemandCycleCount = 1U;
+
+    const ProfileValidationResult result = validateProfileState(
+        profile,
+        publishedContentRegistry());
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("world clock"), std::string::npos);
 }
 
 TEST(ProfileStateTest, InvalidMedicalTimerCombinationIsRejected)

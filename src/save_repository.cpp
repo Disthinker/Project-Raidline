@@ -349,8 +349,23 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"shortfall_food", profile.baseResources.lastShortfall.food},
             {"shortfall_hygiene", profile.baseResources.lastShortfall.hygiene},
             {"shortfall_morale", profile.baseResources.lastShortfall.morale},
-            {"shortfall_security", profile.baseResources.lastShortfall.security},
-            {"resolved_raid_count", profile.baseResources.resolvedRaidCount}};
+            {"shortfall_security", profile.baseResources.lastShortfall.security}};
+        if (schemaVersion >= 8)
+        {
+            payload["base_resources"]["resolved_demand_cycle_count"] =
+                profile.baseResources.resolvedDemandCycleCount;
+        }
+        else
+        {
+            payload["base_resources"]["resolved_raid_count"] =
+                profile.baseResources.resolvedDemandCycleCount;
+        }
+    }
+    if (schemaVersion >= 8)
+    {
+        payload["world_clock"] = {
+            {"elapsed_world_minutes",
+             profile.worldClock.elapsedWorldMinutes}};
     }
     payload["committed_settlements"] = Json::array();
     for (const std::string &settlement : profile.committedSettlements)
@@ -503,7 +518,7 @@ std::string serializeProfileEnvelope(
 {
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
-        schemaVersion != 6 && schemaVersion != 7)
+        schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -559,7 +574,7 @@ SaveLoadResult deserializeProfileEnvelope(
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
-             schemaVersion != 7) ||
+             schemaVersion != 7 && schemaVersion != 8) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -610,6 +625,13 @@ SaveLoadResult deserializeProfileEnvelope(
                 medical.at("pain_scream_remaining_ms")
                     .get<std::uint32_t>()};
         }
+        if (schemaVersion >= 8)
+        {
+            profile.worldClock.elapsedWorldMinutes =
+                payload.at("world_clock")
+                    .at("elapsed_world_minutes")
+                    .get<std::uint64_t>();
+        }
         if (schemaVersion >= 7)
         {
             const Json &resources = payload.at("base_resources");
@@ -624,7 +646,10 @@ SaveLoadResult deserializeProfileEnvelope(
                     resources.at("shortfall_hygiene").get<std::uint32_t>(),
                     resources.at("shortfall_morale").get<std::uint32_t>(),
                     resources.at("shortfall_security").get<std::uint32_t>()},
-                resources.at("resolved_raid_count").get<std::uint64_t>()};
+                schemaVersion >= 8
+                    ? resources.at("resolved_demand_cycle_count")
+                          .get<std::uint64_t>()
+                    : 0U};
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());

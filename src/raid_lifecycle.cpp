@@ -493,7 +493,6 @@ RaidSettlementReceipt settlePendingRaid(
         candidate.currentHealth = 100;
         candidate.medicalStatus = MedicalStatusState{};
     }
-    applyBaseActivityDemand(candidate);
     candidate.pendingRaid.reset();
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{

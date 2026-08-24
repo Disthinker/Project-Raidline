@@ -40,6 +40,19 @@ TEST(UiLocalizationTest, ChineseTranslatesControlsAndDomainReceipts) {
             "语言: 简体中文");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesWorldClockAndDailyDemand) {
+  const std::string clock = localizeUiText(
+      UiLanguage::SimplifiedChinese, "DAY 2 01:05 NIGHT");
+  EXPECT_NE(clock.find("白天 2"), std::string::npos);
+  EXPECT_NE(clock.find("夜晚"), std::string::npos);
+
+  const std::string demand = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "NEXT DAILY NEED IN 3H 05M | RESOLVED DAILY CYCLES 2");
+  EXPECT_NE(demand.find("下次每日需求"), std::string::npos);
+  EXPECT_NE(demand.find("已结算每日周期 2"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

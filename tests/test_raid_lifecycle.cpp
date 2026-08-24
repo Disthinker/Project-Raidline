@@ -275,7 +275,8 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
         ProfileContainerId::baseIntake());
     EXPECT_EQ(
         profile.baseResources.pool,
-        (BaseResourceBundle{32, 34, 35, 36}));
+        (BaseResourceBundle{40, 40, 40, 40}));
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 0U);
     EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::Heavy);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 

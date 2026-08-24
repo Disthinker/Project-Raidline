@@ -37,6 +37,9 @@
 - `GameFlow` 只拥有屏幕级状态；`GameSession` 是长期组合根。
 - `BaseWorld` 与 `GameplayWorld` 互斥运行。Base 不推进敌人、Loot、战斗或 Raid 生命周期。
 - Base 场景、设施对象与 UI 不拥有 Stash、装备、货币或唯一资产。
+- `ProfileState::WorldClockState` 是 Base 与 Raid 共享的唯一权威时间；领域只保存整数世界分钟，日、时分和昼夜均为投影。现实时间戳、离线时长、SDL 帧或 UI 文本不得进入时间真值。
+- 只有未暂停的 Base 世界和 Active Raid 模拟可以推进时钟。主菜单、RaidResult、暂停菜单、Base 库存/设施模态页和离线时间必须冻结；Base 按检查点原子保存，Raid 只随 Settlement 提交，异常退出随出击前 Profile 一并回滚。
+- 每日需求只由已跨越的 00:00 日界线驱动。`resolvedDemandCycleCount` 不得领先 WorldClock，重复调用和重复 Settlement 不得重复扣除；多日补算必须有界且不逐日循环。连续时间不递增 ProfileRevision，但必须进入 Profile 指纹与 schema v8。
 - 时间不能产生 Raid 失败。生产 Raid 的常规阶段归零只能原子进入无终局倒计时的持续高危；只有撤离、死亡或玩家主动放弃能终结并结算 Raid。关闭程序或异常退出不结算，重新进入时必须恢复出击前持久化 Profile。
 - Loot 和初始敌人部署在 Raid 创建时一次生成并保存快照；搜索、重载、接近和击杀不得重抽 Loot 或初始部署。持续高危只能按冻结地图定义与 seed，从合法压力点追加无资产身份的现有敌人，并受明确活动上限约束；不得借此刷新 Loot、重抽初始部署或在玩家脚下强制生成。
 - 主动高危只能通过 `RaidSession` 的显式、幂等阶段命令进入与自然超时相同的 HighRisk 状态；App、控制点表现和 Loot 交互不得直接改写阶段。可中断交互的进度属于 `GameplayWorld` 单局瞬态，不进入 Profile 或存档。

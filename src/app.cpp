@@ -1339,6 +1339,13 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         pauseMenu_.showSettings();
         break;
     case PauseMenuCommand::MainMenu:
+        if (gameFlow_.state() == GameFlowState::Base &&
+            !gameSession_.checkpointWorldClock())
+        {
+            uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
+                gameSession_.persistenceMessage();
+            break;
+        }
         closeInventory();
         medicalWheelOpen_ = false;
         medicalWheelOptions_.clear();
@@ -1353,6 +1360,13 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         }
         break;
     case PauseMenuCommand::ExitDesktop:
+        if (gameFlow_.state() == GameFlowState::Base &&
+            !gameSession_.checkpointWorldClock())
+        {
+            uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
+                gameSession_.persistenceMessage();
+            break;
+        }
         running_ = false;
         break;
     case PauseMenuCommand::ToggleLanguage:
@@ -1590,6 +1604,7 @@ void App::updateBase(float deltaTime)
     input.interactJustPressed =
         input_.wasActionJustPressed(GameAction::Interact);
     gameFlow_.updateBase(input, deltaTime);
+    gameSession_.advanceBaseWorldClock(deltaTime);
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage)
     {
         gameFlow_.closeBaseFacility();
@@ -3301,7 +3316,16 @@ void App::processEvents()
 
         if (event.type == SDL_EVENT_QUIT)
         {
-            running_ = false;
+            if (gameFlow_.state() != GameFlowState::Base ||
+                gameSession_.checkpointWorldClock())
+            {
+                running_ = false;
+            }
+            else
+            {
+                uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
+                    gameSession_.persistenceMessage();
+            }
         }
 
         if (gameFlow_.state() == GameFlowState::Raid &&
@@ -4206,6 +4230,19 @@ void App::renderDebugText()
             180.0F,
             pressureText.c_str());
     }
+
+    const WorldClockProjection clock = gameSession_.worldClockProjection();
+    const std::string worldTimeText = fmt::format(
+        "DAY {} {:02}:{:02} {}",
+        clock.day,
+        clock.hour,
+        clock.minute,
+        worldTimeOfDayName(clock.timeOfDay));
+    uiTextRenderer_.render(
+        renderer_,
+        20.0F,
+        196.0F,
+        worldTimeText.c_str());
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()
         ? fmt::format(
@@ -8335,10 +8372,18 @@ void App::renderBaseAllocation()
         "ALLOCATION & NEEDS | TEXT/GEOMETRY PLACEHOLDER");
     uiTextRenderer_.render(
         renderer_, 80.0F, 124.0F,
-        "EACH RESOLVED RAID CONSUMES 8 FOOD / 6 HYGIENE / 5 MORALE / 4 SECURITY");
+        "DAILY 00:00 NEEDS: 8 FOOD / 6 HYGIENE / 5 MORALE / 4 SECURITY");
 
     const BaseResourceState &state =
         gameSession_.profile().baseResources;
+    const WorldClockProjection clock = gameSession_.worldClockProjection();
+    const std::string nextDemand = fmt::format(
+        "NEXT DAILY NEED IN {}H {:02}M | RESOLVED DAILY CYCLES {}",
+        clock.minutesUntilNextDay / kWorldMinutesPerHour,
+        clock.minutesUntilNextDay % kWorldMinutesPerHour,
+        state.resolvedDemandCycleCount);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 146.0F, nextDemand.c_str());
     const std::array<std::pair<const char *, std::uint32_t>, 4> values{{
         {"FOOD", state.pool.food},
         {"HYGIENE", state.pool.hygiene},
@@ -8385,8 +8430,11 @@ void App::renderBaseAllocation()
         uiTextRenderer_.render(renderer_, 80.0F, y, label.c_str());
     }
     const std::string cycles = fmt::format(
-        "RESOLVED RAID ACTIVITIES {} | SHORTAGE NEVER BLOCKS PLAY",
-        state.resolvedRaidCount);
+        "DAY {} {:02}:{:02} {} | SHORTAGE NEVER BLOCKS PLAY",
+        clock.day,
+        clock.hour,
+        clock.minute,
+        worldTimeOfDayName(clock.timeOfDay));
     uiTextRenderer_.render(renderer_, 80.0F, 500.0F, cycles.c_str());
 
     uiTextRenderer_.render(
@@ -8600,6 +8648,14 @@ void App::renderBase()
         base.morale,
         base.security);
     uiTextRenderer_.render(renderer_, 1010.0F, 72.0F, resources.c_str());
+    const WorldClockProjection clock = gameSession_.worldClockProjection();
+    const std::string clockText = fmt::format(
+        "DAY {} {:02}:{:02} {}",
+        clock.day,
+        clock.hour,
+        clock.minute,
+        worldTimeOfDayName(clock.timeOfDay));
+    uiTextRenderer_.render(renderer_, 1010.0F, 90.0F, clockText.c_str());
 
     const char *goal = "OBJECTIVE COMPLETE";
     switch (gameSession_.profile().tutorial)

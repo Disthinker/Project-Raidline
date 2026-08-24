@@ -257,6 +257,8 @@ add_library(raidline_domain STATIC
     src/stable_random.h
     src/weapon_ammo_domain.cpp
     src/weapon_ammo_domain.h
+    src/world_clock.cpp
+    src/world_clock.h
     src/rect.h
     src/vec2.h
 )
@@ -562,6 +564,10 @@ raidline_add_test(
 raidline_add_test(
     BaseResourceDomainTest
     tests/test_base_resource_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    WorldClockTest
+    tests/test_world_clock.cpp
     raidline::domain)
 raidline_add_test(
     WeaponAmmoDomainTest
