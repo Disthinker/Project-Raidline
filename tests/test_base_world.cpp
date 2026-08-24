@@ -96,6 +96,39 @@ TEST(BaseWorldTest, FacilityCollisionBlocksBothAxesAndAllowsSliding)
     EXPECT_GE(vertical.playerPosition().y, 132.0F);
 }
 
+TEST(BaseWorldTest, PureVerticalMovementCannotTunnelThroughFacilities)
+{
+    BaseWorld world;
+
+    BaseInput moveUp;
+    moveUp.moveUp = true;
+    for (int index{}; index < 23; ++index)
+    {
+        static_cast<void>(world.update(moveUp, 0.05F));
+    }
+
+    BaseInput moveLeft;
+    moveLeft.moveLeft = true;
+    for (int index{}; index < 60; ++index)
+    {
+        static_cast<void>(world.update(moveLeft, 0.05F));
+    }
+    ASSERT_LT(world.playerPosition().x, 304.0F);
+    ASSERT_LT(world.playerPosition().y + world.playerSize().y, 470.0F);
+
+    BaseInput moveDownFast;
+    moveDownFast.moveDown = true;
+    moveDownFast.sprint = true;
+    static_cast<void>(world.update(moveDownFast, 1.0F));
+    EXPECT_FLOAT_EQ(world.playerPosition().y, 470.0F - world.playerSize().y);
+
+    BaseInput moveUpFast;
+    moveUpFast.moveUp = true;
+    moveUpFast.sprint = true;
+    static_cast<void>(world.update(moveUpFast, 2.0F));
+    EXPECT_FLOAT_EQ(world.playerPosition().y, 364.0F);
+}
+
 TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 {
     BaseWorld world;

@@ -27,27 +27,85 @@ AnimationClip makeBasePlayerMoveClip()
         std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
 }
 
-bool overlaps(const Rect &first, const Rect &second) noexcept
+bool rangesOverlap(
+    float firstMinimum,
+    float firstMaximum,
+    float secondMinimum,
+    float secondMaximum) noexcept
 {
-    return first.position.x < second.position.x + second.size.x &&
-        first.position.x + first.size.x > second.position.x &&
-        first.position.y < second.position.y + second.size.y &&
-        first.position.y + first.size.y > second.position.y;
+    return firstMinimum < secondMaximum && firstMaximum > secondMinimum;
 }
 
-bool collidesWithFacility(
+float resolveHorizontalMovement(
     Vec2 position,
     Vec2 size,
+    float desiredX,
     const std::array<BaseFacility, 4> &facilities) noexcept
 {
-    const Rect playerBounds{position, size};
-    return std::any_of(
-        facilities.begin(),
-        facilities.end(),
-        [&playerBounds](const BaseFacility &facility)
+    float resolvedX = desiredX;
+    for (const BaseFacility &facility : facilities)
+    {
+        if (!rangesOverlap(
+                position.y,
+                position.y + size.y,
+                facility.bounds.position.y,
+                facility.bounds.position.y + facility.bounds.size.y))
         {
-            return overlaps(playerBounds, facility.bounds);
-        });
+            continue;
+        }
+
+        const float facilityLeft = facility.bounds.position.x;
+        const float facilityRight = facilityLeft + facility.bounds.size.x;
+        if (desiredX > position.x &&
+            position.x + size.x <= facilityLeft &&
+            desiredX + size.x > facilityLeft)
+        {
+            resolvedX = std::min(resolvedX, facilityLeft - size.x);
+        }
+        else if (desiredX < position.x &&
+                 position.x >= facilityRight &&
+                 desiredX < facilityRight)
+        {
+            resolvedX = std::max(resolvedX, facilityRight);
+        }
+    }
+    return resolvedX;
+}
+
+float resolveVerticalMovement(
+    Vec2 position,
+    Vec2 size,
+    float desiredY,
+    const std::array<BaseFacility, 4> &facilities) noexcept
+{
+    float resolvedY = desiredY;
+    for (const BaseFacility &facility : facilities)
+    {
+        if (!rangesOverlap(
+                position.x,
+                position.x + size.x,
+                facility.bounds.position.x,
+                facility.bounds.position.x + facility.bounds.size.x))
+        {
+            continue;
+        }
+
+        const float facilityTop = facility.bounds.position.y;
+        const float facilityBottom = facilityTop + facility.bounds.size.y;
+        if (desiredY > position.y &&
+            position.y + size.y <= facilityTop &&
+            desiredY + size.y > facilityTop)
+        {
+            resolvedY = std::min(resolvedY, facilityTop - size.y);
+        }
+        else if (desiredY < position.y &&
+                 position.y >= facilityBottom &&
+                 desiredY < facilityBottom)
+        {
+            resolvedY = std::max(resolvedY, facilityBottom);
+        }
+    }
+    return resolvedY;
 }
 }
 
@@ -115,25 +173,25 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             const float maximumPlayerX = walkableBounds_.position.x +
                 walkableBounds_.size.x - playerSize_.x;
 
-            Vec2 candidate = playerPosition_;
-            candidate.x = std::clamp(
-                candidate.x + direction.x * speed * deltaTime,
+            const float desiredX = std::clamp(
+                playerPosition_.x + direction.x * speed * deltaTime,
                 walkableBounds_.position.x,
                 maximumPlayerX);
-            if (!collidesWithFacility(candidate, playerSize_, facilities_))
-            {
-                playerPosition_.x = candidate.x;
-            }
+            playerPosition_.x = resolveHorizontalMovement(
+                playerPosition_,
+                playerSize_,
+                desiredX,
+                facilities_);
 
-            candidate = playerPosition_;
-            candidate.y = std::clamp(
-                candidate.y + direction.y * speed * deltaTime,
+            const float desiredY = std::clamp(
+                playerPosition_.y + direction.y * speed * deltaTime,
                 walkableBounds_.position.y,
                 maximumY);
-            if (!collidesWithFacility(candidate, playerSize_, facilities_))
-            {
-                playerPosition_.y = candidate.y;
-            }
+            playerPosition_.y = resolveVerticalMovement(
+                playerPosition_,
+                playerSize_,
+                desiredY,
+                facilities_);
         }
         else
         {

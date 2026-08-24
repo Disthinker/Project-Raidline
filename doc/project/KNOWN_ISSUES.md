@@ -12,7 +12,7 @@
 | RL-UI-001 | Alpha Profile 库存回归为点击来源/目标和验收按钮，Base 缺角色图；Raid 缺压卸弹和奔跑，弹匣右键入口会被执行预查询错误隐藏 | PR #60 已进入 main，精确 head CI 与用户正常游玩验收通过 |
 | RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | PR #69 已改为验证根资产仍属于随身所有权树，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
 | RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | PR #69 已加入继续、设置、回主菜单和退桌面菜单，并移除双按 Esc 放弃入口；已通过用户验收并合入 main |
-| RL-UI-003 | Base 静止朝向回左、设施只在部分移动方向阻挡，且玩家文本没有中文/语言设置 | PR #78 验收加固已修复朝向与 X/Y 两轴碰撞，并接入独立 English/简体中文设置；Windows Debug 全目标和 841/841 CTest 通过，等待 exact-head CI 与用户正常游玩验收 |
+| RL-UI-003 | Base 静止朝向回左、设施终点重叠检测会在长帧下被纯纵向移动穿过，且玩家文本没有中文/语言设置 | PR #78 验收加固已修复朝向，改用 X/Y 连续首次接触碰撞，并接入独立 English/简体中文设置；Windows Debug 全目标和 842/842 CTest 通过，等待 exact-head CI 与用户正常游玩验收 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | PR #61 已完成 Head/Torso/Legs、Normal/Headshot/WeakPoint、防具接线与代码反馈，并通过 CI 和用户验收后合入 main |
 | RL-MED-001 | Raid 缺少流血、疼痛与对应战地医疗闭环 | PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main |
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |
@@ -72,6 +72,6 @@
 | Raid Pressure & Variety：持续高危阶段 v1 | PR #75 已通过 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main |
 | Raid Pressure & Variety：主动高危与高级资源区 v1 | PR #76 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `bc26337` 进入 main |
 | Raid Pressure & Variety：高危条件撤离 v1 | PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main |
-| Base Growth：资源分配与基础需求 v1 | 当前分支实现成功撤离待分配、个人保留/基地捐献、四资源与每局需求，并完成朝向、Base 碰撞和中英文设置验收加固；Windows Debug 全目标与 841/841 CTest 通过，等待 exact-head CI 和用户正常游玩验收 |
+| Base Growth：资源分配与基础需求 v1 | 当前分支实现成功撤离待分配、个人保留/基地捐献、四资源与每局需求，并完成朝向、连续 Base 碰撞和中英文设置验收加固；Windows Debug 全目标与 842/842 CTest 通过，等待 exact-head CI 和用户正常游玩验收 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-resource-pressure-v1.md`。
