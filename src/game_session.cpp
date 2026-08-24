@@ -1262,6 +1262,33 @@ BaseResourceReceipt GameSession::executeBaseResourceContribution(
     return receipt;
 }
 
+BasePriorityReceipt GameSession::executeBasePrioritySubmission(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BasePriorityReceipt receipt = ::executeBasePrioritySubmission(
+        candidate,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{assetId},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return BasePriorityReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision,
+            {}};
+    }
+    return receipt;
+}
+
 WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     const WeaponAmmoCommand &command,
     std::string transactionId)
@@ -1622,6 +1649,9 @@ void GameSession::advanceWorldClockFromSimulation(
             static_cast<void>(applyBaseDailyDemandThrough(
                 profile_.baseResources,
                 advanced.completedDaysAfter));
+            static_cast<void>(synchronizeBasePriorityThrough(
+                profile_,
+                publishedContentRegistry()));
             worldClockDirty_ = true;
         }
     }

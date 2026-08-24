@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-gunsmith-service-content-15",
+  "content_version": "base-periodic-wishes-content-16",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -8,6 +8,32 @@
       "maximum_durability_cost_per_point": 2,
       "duration_minutes": 240
     }
+  },
+  "base_priorities": {
+    "cycle_minutes": 7200,
+    "requests": [
+      {
+        "id": "base_priority.comfort_cola",
+        "display_name": "A Small Comfort",
+        "required_item": "item.loot.cola_basic",
+        "required_quantity": 1,
+        "resource_reward": {"morale": 12}
+      },
+      {
+        "id": "base_priority.reinforce_perimeter",
+        "display_name": "Reinforce the Perimeter",
+        "required_item": "item.loot.scrap_parts",
+        "required_quantity": 1,
+        "resource_reward": {"security": 16}
+      },
+      {
+        "id": "base_priority.restore_utilities",
+        "display_name": "Restore Essential Utilities",
+        "required_item": "item.loot.electronics",
+        "required_quantity": 1,
+        "resource_reward": {"hygiene": 8, "security": 8}
+      }
+    ]
   },
   "published_resources": [
     "backgrounds/project_raidline_test_map_1280x720.png",

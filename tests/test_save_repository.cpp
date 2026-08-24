@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "base_resource_domain.h"
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
@@ -40,7 +41,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV10RoundTripPreservesClockResourcesAndIntake)
+TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndIntake)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -66,6 +67,9 @@ TEST(SaveRepositoryTest, SchemaV10RoundTripPreservesClockResourcesAndIntake)
         7};
     profile.worldClock.elapsedWorldMinutes =
         7U * kWorldMinutesPerDay + kInitialWorldMinute;
+    static_cast<void>(synchronizeBasePriorityThrough(
+        profile,
+        publishedContentRegistry()));
     const ItemDefinition &cola = publishedContentRegistry().item(
         alpha_content::lootCola);
     static_cast<void>(profile.assets.create(
@@ -83,6 +87,30 @@ TEST(SaveRepositoryTest, SchemaV10RoundTripPreservesClockResourcesAndIntake)
     ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
     ASSERT_TRUE(loaded.profile.has_value());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v10-priority-migration",
+        publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 8000U;
+    static_cast<void>(synchronizeBasePriorityThrough(
+        profile, publishedContentRegistry()));
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-gunsmith-service-content-15",
+            10),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(loaded.profile->basePriority.cycleIndex, 1U);
+    EXPECT_EQ(
+        loaded.profile->basePriority.definitionId,
+        BasePriorityDefinitionId{"base_priority.reinforce_perimeter"});
+    EXPECT_FALSE(loaded.profile->basePriority.fulfilled);
 }
 
 TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)

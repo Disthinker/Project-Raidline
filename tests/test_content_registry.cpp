@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-gunsmith-service-content-15");
+        "base-periodic-wishes-content-16");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -74,6 +74,13 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         registry.gunsmithFullMaintenance().maximumDurabilityCostPerPoint,
         2U);
     EXPECT_EQ(registry.gunsmithFullMaintenance().durationMinutes, 240U);
+    EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
+    ASSERT_EQ(registry.basePriorities().size(), 3U);
+    const BasePriorityDefinition &comfort = registry.basePriority(
+        BasePriorityDefinitionId{"base_priority.comfort_cola"});
+    EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
+    EXPECT_EQ(comfort.requiredQuantity, 1U);
+    EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
     ASSERT_EQ(registry.items().size(), 19U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
@@ -284,6 +291,28 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FLOAT_EQ(deployment.enemies[0].position.x, 600.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[1].position.y, 500.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[2].position.x, 930.0F);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidBasePriorityDefinitions)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"cycle_minutes\": 7200",
+            "\"cycle_minutes\": 0")),
+        ContentRegistryError);
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"required_item\": \"item.loot.cola_basic\"",
+            "\"required_item\": \"item.loot.unknown\"")),
+        ContentRegistryError);
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"resource_reward\": {\"morale\": 12}",
+            "\"resource_reward\": {}")),
+        ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, RejectsNonPositiveItemWeight)

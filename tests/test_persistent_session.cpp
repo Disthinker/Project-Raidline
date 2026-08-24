@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "alpha_content_ids.h"
+#include "base_resource_domain.h"
 #include "base_world.h"
 #include "game_session.h"
 
@@ -45,6 +46,26 @@ AssetInstanceId findDefinition(
         }
     }
     return 0;
+}
+
+AssetInstanceId addPendingItem(
+    ProfileState &profile,
+    const ItemDefinitionId &definitionId)
+{
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(definitionId);
+    const auto origin = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::baseIntake(),
+        definition,
+        ItemOrientation::Degrees0);
+    EXPECT_TRUE(origin.has_value());
+    return profile.assets.create(
+        definition,
+        StoredAssetLocation{
+            ProfileContainerId::baseIntake(), *origin},
+        1);
 }
 }
 
@@ -189,6 +210,76 @@ TEST(PersistentSessionTest, SaveFailureDoesNotSwapCandidateIntoMemory)
         "must-not-commit");
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
+TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-base-priority",
+        publishedContentRegistry());
+    const AssetInstanceId cola = addPendingItem(
+        initial,
+        alpha_content::lootCola);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    const BasePriorityReceipt receipt =
+        active.executeBasePrioritySubmission(
+            cola,
+            "persistent-fulfill-base-priority");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(active.profile().basePriority.fulfilled);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(reopened.profile().basePriority.fulfilled);
+    EXPECT_EQ(reopened.profile().assets.find(cola), nullptr);
+    EXPECT_EQ(
+        reopened.profile().baseResources.pool.morale,
+        52U);
+}
+
+TEST(PersistentSessionTest, BasePrioritySaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-base-priority-save",
+        publishedContentRegistry());
+    const AssetInstanceId cola = addPendingItem(
+        initial,
+        alpha_content::lootCola);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BasePriorityReceipt receipt =
+        session.executeBasePrioritySubmission(
+            cola,
+            "priority-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_NE(session.profile().assets.find(cola), nullptr);
+    EXPECT_FALSE(session.profile().basePriority.fulfilled);
 }
 
 TEST(PersistentSessionTest, GunsmithJobPersistsAndCompletesThroughRaidTravel)

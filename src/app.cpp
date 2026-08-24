@@ -1670,11 +1670,11 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         const auto intake = assetsInContainer(
             gameSession_.profile(),
             ProfileContainerId::baseIntake());
-        for (std::size_t index{}; index < intake.size() && index < 9U; ++index)
+        for (std::size_t index{}; index < intake.size() && index < 7U; ++index)
         {
             const SDL_FRect row{
                 650.0F,
-                158.0F + static_cast<float>(index) * 42.0F,
+                258.0F + static_cast<float>(index) * 42.0F,
                 500.0F,
                 36.0F};
             if (contains(row, click.position))
@@ -1707,8 +1707,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             return;
         }
 
-        const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 48.0F};
-        const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 48.0F};
+        const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
+        const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
+        const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
         if (contains(keepButton, click.position))
         {
             const ItemDefinition &definition =
@@ -1782,6 +1783,24 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     nextProfileTransactionId("contribute-allocation"));
             uiMessage_ = receipt.succeeded
                 ? "ITEM CONTRIBUTED TO BASE"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
+        if (contains(priorityButton, click.position))
+        {
+            const BasePriorityReceipt receipt =
+                gameSession_.executeBasePrioritySubmission(
+                    selectedId,
+                    nextProfileTransactionId("fulfill-base-priority"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE WISH FULFILLED"
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::UiConfirm
@@ -8576,26 +8595,71 @@ void App::renderBaseAllocation()
         worldTimeOfDayName(clock.timeOfDay));
     uiTextRenderer_.render(renderer_, 80.0F, 500.0F, cycles.c_str());
 
+    const BasePriorityState &priorityState =
+        gameSession_.profile().basePriority;
+    const BasePriorityDefinition &priority =
+        publishedContentRegistry().basePriority(
+            priorityState.definitionId);
+    const ItemDefinition &priorityItem =
+        publishedContentRegistry().item(
+            priority.requiredItemDefinitionId);
+    const std::uint64_t cycleMinutes =
+        publishedContentRegistry().basePriorityCycleMinutes();
+    const std::uint64_t elapsedSinceProfileStart =
+        gameSession_.profile().worldClock.elapsedWorldMinutes <=
+                kInitialWorldMinute
+            ? 0U
+            : gameSession_.profile().worldClock.elapsedWorldMinutes -
+                  kInitialWorldMinute;
+    const std::uint64_t remainingMinutes = cycleMinutes -
+        elapsedSinceProfileStart % cycleMinutes;
     uiTextRenderer_.render(
-        renderer_, 650.0F, 126.0F,
-        "PENDING RAID RETURNS - CHOOSE KEEP OR CONTRIBUTE");
+        renderer_, 650.0F, 116.0F,
+        "CURRENT BASE WISH - ONE LOW-PRESENCE PRIORITY");
+    const std::string priorityName = fmt::format(
+        "{} | {}",
+        priority.displayName,
+        priorityState.fulfilled ? "FULFILLED" : "ACTIVE");
+    uiTextRenderer_.render(
+        renderer_, 650.0F, 142.0F, priorityName.c_str());
+    const std::string priorityRequirement = fmt::format(
+        "NEEDS {} x{} FROM PENDING RETURNS",
+        priorityItem.displayName,
+        priority.requiredQuantity);
+    uiTextRenderer_.render(
+        renderer_, 650.0F, 166.0F, priorityRequirement.c_str());
+    const BaseResourceBundle &wishReward = priority.resourceReward;
+    const std::string priorityTiming = fmt::format(
+        "IMPROVES F{} H{} M{} S{} | {}H {:02}M LEFT | MISSED {}",
+        wishReward.food,
+        wishReward.hygiene,
+        wishReward.morale,
+        wishReward.security,
+        remainingMinutes / kWorldMinutesPerHour,
+        remainingMinutes % kWorldMinutesPerHour,
+        priorityState.missedCycleCount);
+    uiTextRenderer_.render(
+        renderer_, 650.0F, 190.0F, priorityTiming.c_str());
+    uiTextRenderer_.render(
+        renderer_, 650.0F, 226.0F,
+        "PENDING RAID RETURNS - CHOOSE KEEP, CONTRIBUTE, OR WISH");
     const auto intake = assetsInContainer(
         gameSession_.profile(),
         ProfileContainerId::baseIntake());
     if (intake.empty())
     {
         uiTextRenderer_.render(
-            renderer_, 650.0F, 174.0F,
+            renderer_, 650.0F, 266.0F,
             "NO PENDING ITEMS | BASE IS READY FOR DEPLOY");
     }
-    for (std::size_t index{}; index < intake.size() && index < 9U; ++index)
+    for (std::size_t index{}; index < intake.size() && index < 7U; ++index)
     {
         const AssetRecord &asset = *intake[index];
         const ItemDefinition &definition =
             publishedContentRegistry().item(asset.definitionId);
         const SDL_FRect row{
             650.0F,
-            158.0F + static_cast<float>(index) * 42.0F,
+            258.0F + static_cast<float>(index) * 42.0F,
             500.0F,
             36.0F};
         SDL_SetRenderDrawColor(renderer_, 34, 62, 54, 255);
@@ -8631,8 +8695,9 @@ void App::renderBaseAllocation()
             renderer_, row.x + 8.0F, row.y + 14.0F, label.c_str());
     }
 
-    const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 48.0F};
-    const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 48.0F};
+    const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
+    const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
+    const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
     bool canContribute{};
     const char *contributeLabel = "SELECT ITEM FIRST";
     if (profileAssetSelection_.has_value())
@@ -8653,9 +8718,31 @@ void App::renderBaseAllocation()
         renderer_, canContribute ? 66 : 62, canContribute ? 118 : 68,
         canContribute ? 84 : 66, 255);
     SDL_RenderFillRect(renderer_, &contributeButton);
+    bool canFulfillPriority{};
+    const char *priorityLabel = priorityState.fulfilled
+        ? "BASE WISH ALREADY FULFILLED"
+        : "SELECT MATCHING PENDING ITEM";
+    if (profileAssetSelection_.has_value() && !priorityState.fulfilled)
+    {
+        const BasePriorityPlan plan = queryBasePrioritySubmission(
+            gameSession_.profile(),
+            publishedContentRegistry(),
+            SubmitBasePriorityCommand{
+                profileAssetSelection_->instanceId});
+        canFulfillPriority = plan.canCommit;
+        priorityLabel = plan.canCommit
+            ? "FULFILL CURRENT BASE WISH"
+            : "SELECTED ITEM DOES NOT MATCH WISH";
+    }
+    SDL_SetRenderDrawColor(
+        renderer_, canFulfillPriority ? 82 : 62,
+        canFulfillPriority ? 126 : 68,
+        canFulfillPriority ? 112 : 66, 255);
+    SDL_RenderFillRect(renderer_, &priorityButton);
     SDL_SetRenderDrawColor(renderer_, 154, 202, 184, 255);
     SDL_RenderRect(renderer_, &keepButton);
     SDL_RenderRect(renderer_, &contributeButton);
+    SDL_RenderRect(renderer_, &priorityButton);
     uiTextRenderer_.render(
         renderer_, keepButton.x + 42.0F, keepButton.y + 18.0F,
         "KEEP IN STASH");
@@ -8663,10 +8750,14 @@ void App::renderBaseAllocation()
         renderer_, contributeButton.x + 28.0F,
         contributeButton.y + 18.0F,
         contributeLabel);
-    uiTextRenderer_.render(renderer_, 80.0F, 632.0F, "ESC CLOSE");
+    uiTextRenderer_.render(
+        renderer_, priorityButton.x + 96.0F,
+        priorityButton.y + 15.0F,
+        priorityLabel);
+    uiTextRenderer_.render(renderer_, 80.0F, 646.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        uiTextRenderer_.render(renderer_, 470.0F, 632.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 470.0F, 646.0F, uiMessage_.c_str());
     }
 }
 

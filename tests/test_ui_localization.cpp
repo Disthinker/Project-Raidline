@@ -86,6 +86,19 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
             "仓库没有可放置维护武器的合法空间");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {
+  const std::string wish = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "A Small Comfort | ACTIVE | NEEDS Cola x1 FROM PENDING RETURNS");
+  EXPECT_NE(wish.find("一点小小的慰藉"), std::string::npos);
+  EXPECT_NE(wish.find("进行中"), std::string::npos);
+  EXPECT_NE(wish.find("可乐"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "selected item does not match the current Base priority"),
+            "所选物品不符合基地当前愿望");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

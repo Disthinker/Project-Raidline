@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@defaac0` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#80 接受的 Base 资源、世界时钟与 Raid 往返行动耗时；PR #80 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `defaac0` 合入。
-- 当前开发分支：`codex/base-gunsmith-maintenance-service-v1`，从干净的 `origin/main@defaac0` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-gunsmith-full-maintenance-v1.md`。
+- `origin/main@ace7c69` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#81 接受的 Base 资源、世界时钟、Raid 往返耗时和枪匠服务；PR #81 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `ace7c69` 合入。
+- 当前开发分支：`codex/base-periodic-wishes-v1`，从干净的 `origin/main@ace7c69` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-periodic-wishes-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#80 已接受。当前进入 **Base 枪匠全面维护服务 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让武器损耗、货币、稳定资产所有权、权威世界时间和跨进程存档形成首个长期服务闭环。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#81 已接受。当前进入 **Base 周期愿望与物资提交 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让待分配物资、权威世界时间和既有基地资源形成第一个低存在感长期目标闭环。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -35,7 +35,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 20. **Base 资源分配与基础需求 v1**：PR #78 把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；同时修复共享障碍碰撞、停止朝向并加入中英文设置，已以 merge commit `ba8283f` 进入 main。
 21. **Base 世界时钟与每日需求 v1**：PR #79 建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `5d2a11a` 进入 main。
 22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
-23. **Base 枪匠全面维护服务 v1**：当前分支允许玩家从供应与回收页选择 Stash 根层受损武器，冻结报价并付费送修；维护随 Base/Raid 权威时间推进，完成后领取同一实例并恢复当前/最大耐久至出厂值、清除故障，同时保留已装弹匣、枪膛和弹药关系。
+23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
+24. **Base 周期愿望与物资提交 v1**：当前分支以每五个世界日轮换的单一愿望替代任务面板；玩家只能手动提交匹配的待分配物资，完成后改善既有四项基地资源。人口缩放、士气惩罚、兑换点、稀有度和自动捐献继续延期。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -63,7 +64,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78 的资源分配、共享碰撞和语言设置、PR #79 的世界时钟以及 PR #80 的 Raid 往返行动耗时均已完成 CI、用户验收并进入 main。当前枪匠服务切片 Windows Debug 全目标构建成功，完整 CTest 889/889 与 PR #81 exact-head Windows/Ubuntu CI 通过；开发代理未启动游戏，等待用户正常游玩验收。
+- PR #78 的资源分配、PR #79 的世界时钟、PR #80 的 Raid 往返耗时和 PR #81 的枪匠服务均已完成 CI、用户验收并进入 main。当前周期愿望切片 Windows Debug 全目标构建成功，完整 CTest 898/898 通过；开发代理未启动游戏，exact-head CI 与用户正常游玩验收尚未执行。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -238,6 +239,14 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - 完成状态只由权威世界时间投影。领取优先返回原格位，必要时使用首个合法 Stash 格位；空间不足时武器继续留在服务中，不复制、不覆盖、不丢失。
 - schema v10 保存任务、高水位、冻结报价/完成点和服务资产位置，v1～v9 明确迁移为空任务。跨进程回归已证明 Raid 往返能推进维护且领取后仍是同一武器实例。
 - 供应与回收页使用双语文字/几何占位显示报价、进行中、可领取和空间阻塞；没有新增或修改美术、音频与资源 manifest。
+
+## Base 周期愿望与物资提交 v1 当前实现
+
+- content v16 提供五日周期和三个稳定愿望定义，分别要求可乐、废旧零件或损坏电子元件，并只奖励既有基地资源；显示名和数值仍是开发期内容。
+- `BasePriorityState` 保存当前稳定定义 ID、周期索引、完成状态和累计错过周期。周期从新 Profile 的初始世界分钟起算，任意大跨度时间均常数时间轮换；错过暂只记录，不施加尚无领域支撑的士气惩罚。
+- 只有玩家明确选中的 BaseIntake 资产可以提交；Stash、装备和随身资产不会被扫描。query/execute 共用匹配、数量与容量规则，TransactionId、revision、候选 Profile 和存档后交换保证幂等与失败零修改。
+- schema v11 保存愿望状态；schema v10 及更早版本按当前世界时间确定性初始化。Pending Raid 同时冻结出发前愿望，异常退出跨周期也会精确回滚。
+- Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；不建立传统任务列表、奖励弹窗或自动捐献。
 
 ## 尚未完成
 

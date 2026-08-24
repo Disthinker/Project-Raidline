@@ -148,6 +148,19 @@ struct GunsmithFullMaintenanceDefinition
         const GunsmithFullMaintenanceDefinition &) = default;
 };
 
+struct BasePriorityDefinition
+{
+    BasePriorityDefinitionId id;
+    std::string displayName;
+    ItemDefinitionId requiredItemDefinitionId;
+    std::uint32_t requiredQuantity{1};
+    BaseResourceBundle resourceReward;
+
+    friend bool operator==(
+        const BasePriorityDefinition &,
+        const BasePriorityDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -206,6 +219,15 @@ public:
     const GunsmithFullMaintenanceDefinition &
     gunsmithFullMaintenance() const noexcept;
 
+    [[nodiscard]] std::uint32_t
+    basePriorityCycleMinutes() const noexcept;
+
+    [[nodiscard]] const std::vector<BasePriorityDefinition> &
+    basePriorities() const noexcept;
+
+    [[nodiscard]] const BasePriorityDefinition &basePriority(
+        const BasePriorityDefinitionId &id) const;
+
     [[nodiscard]]
     const ItemDefinition &item(
         const ItemDefinitionId &id) const;
@@ -230,12 +252,15 @@ private:
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
+    std::uint32_t basePriorityCycleMinutes_{};
+    std::vector<BasePriorityDefinition> basePriorities_;
 
     std::map<ItemDefinitionId, std::size_t> itemIndex_;
     std::map<LootTableDefinitionId, std::size_t> lootTableIndex_;
     std::map<EnemyDeploymentDefinitionId, std::size_t>
         enemyDeploymentIndex_;
     std::map<MapDefinitionId, std::size_t> mapIndex_;
+    std::map<BasePriorityDefinitionId, std::size_t> basePriorityIndex_;
 };
 
 [[nodiscard]]

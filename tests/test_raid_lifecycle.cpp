@@ -5,6 +5,7 @@
 #include <tuple>
 
 #include "alpha_content_ids.h"
+#include "base_resource_domain.h"
 #include "raid_lifecycle.h"
 
 namespace
@@ -87,17 +88,20 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
         "travel-deploy", publishedContentRegistry());
     const WorldClockState startingClock = profile.worldClock;
     const BaseResourceState startingResources = profile.baseResources;
+    const BasePriorityState startingPriority = profile.basePriority;
 
     ASSERT_TRUE(deploy(
         profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-travel-time-4");
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, "base-periodic-priority-5");
     EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 180U);
     EXPECT_EQ(profile.pendingRaid->travel.startingWorldClock, startingClock);
     EXPECT_EQ(profile.pendingRaid->travel.startingBaseResources,
               startingResources);
+    EXPECT_EQ(profile.pendingRaid->travel.startingBasePriority,
+              startingPriority);
     EXPECT_EQ(profile.worldClock.elapsedWorldMinutes,
               startingClock.elapsedWorldMinutes + 90U);
 
@@ -105,6 +109,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
         profile, publishedContentRegistry()).succeeded);
     EXPECT_EQ(profile.worldClock, startingClock);
     EXPECT_EQ(profile.baseResources, startingResources);
+    EXPECT_EQ(profile.basePriority, startingPriority);
 }
 
 TEST(RaidLifecycleTest, SettlementUsesNormalOrFailureTravelExactlyOnce)
@@ -165,6 +170,28 @@ TEST(RaidLifecycleTest, AbnormalExitMustRollbackWithoutMutation)
     ASSERT_TRUE(rollbackPendingRaidToBase(
         profile, publishedContentRegistry()).succeeded);
     EXPECT_EQ(profile.worldClock, WorldClockState{});
+}
+
+TEST(RaidLifecycleTest, RollbackRestoresPriorityAcrossCycleBoundary)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "priority-cycle-rollback", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 7630U;
+    static_cast<void>(synchronizeBasePriorityThrough(
+        profile, publishedContentRegistry()));
+    const BasePriorityState startingPriority = profile.basePriority;
+
+    ASSERT_TRUE(deploy(
+        profile,
+        77231,
+        MapDefinitionId{"map.raid.riverside"}).succeeded);
+    EXPECT_EQ(profile.basePriority.cycleIndex, 1U);
+    EXPECT_NE(profile.basePriority, startingPriority);
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, 7630U);
+    EXPECT_EQ(profile.basePriority, startingPriority);
 }
 
 TEST(RaidLifecycleTest, TravelAcrossMidnightResolvesDailyNeedOnce)

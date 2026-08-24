@@ -224,6 +224,7 @@ bool moveCollectedLootToIntake(
 
 bool advanceProfileWorldTime(
     ProfileState &profile,
+    const ContentRegistry &content,
     std::uint32_t minutes) noexcept
 {
     const WorldClockAdvanceResult advanced =
@@ -235,6 +236,7 @@ bool advanceProfileWorldTime(
     static_cast<void>(applyBaseDailyDemandThrough(
         profile.baseResources,
         advanced.completedDaysAfter));
+    static_cast<void>(synchronizeBasePriorityThrough(profile, content));
     return true;
 }
 }
@@ -350,7 +352,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-travel-time-4";
+    snapshot.rulesVersion = "base-periodic-priority-5";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -364,7 +366,8 @@ DeployReceipt executeDeploy(
         map->travel.returnMinutes,
         map->travel.failureRegroupMinutes,
         candidate.worldClock,
-        candidate.baseResources};
+        candidate.baseResources,
+        candidate.basePriority};
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
     {
         snapshot.enemies.push_back(
@@ -441,6 +444,7 @@ DeployReceipt executeDeploy(
     candidate.pendingRaid = std::move(snapshot);
     if (!advanceProfileWorldTime(
             candidate,
+            content,
             candidate.pendingRaid->travel.outboundMinutes))
     {
         return deployFailure(
@@ -562,7 +566,7 @@ RaidSettlementReceipt settlePendingRaid(
         outcome == RaidResultOutcome::PlayerDead
             ? raidSnapshot.travel.failureRegroupMinutes
             : raidSnapshot.travel.returnMinutes;
-    if (!advanceProfileWorldTime(candidate, travelMinutes))
+    if (!advanceProfileWorldTime(candidate, content, travelMinutes))
     {
         return settlementFailure(
             RaidLifecycleError::RevisionOverflow,
@@ -617,6 +621,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingWorldClock;
     const BaseResourceState startingBaseResources =
         candidate.pendingRaid->travel.startingBaseResources;
+    const BasePriorityState startingBasePriority =
+        candidate.pendingRaid->travel.startingBasePriority;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -642,6 +648,7 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.medicalStatus = startingMedicalStatus;
     candidate.worldClock = startingWorldClock;
     candidate.baseResources = startingBaseResources;
+    candidate.basePriority = startingBasePriority;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;
