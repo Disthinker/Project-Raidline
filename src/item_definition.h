@@ -238,6 +238,23 @@ struct InventoryFootprint
         const InventoryFootprint &) = default;
 };
 
+struct BaseResourceBundle
+{
+    std::uint32_t food{};
+    std::uint32_t hygiene{};
+    std::uint32_t morale{};
+    std::uint32_t security{};
+
+    [[nodiscard]] bool empty() const noexcept
+    {
+        return food == 0 && hygiene == 0 && morale == 0 && security == 0;
+    }
+
+    friend bool operator==(
+        const BaseResourceBundle &,
+        const BaseResourceBundle &) = default;
+};
+
 // 一种物品的共享静态数据。
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
 struct ItemDefinition
@@ -291,6 +308,10 @@ struct ItemDefinition
     // Versioned content fact used by extraction and future encumbrance
     // consumers. Quantities and loose/magazine rounds multiply this value.
     std::uint32_t unitWeightGrams{1000};
+
+    // Optional irreversible contribution gained when the player allocates a
+    // returned Raid item to the Base instead of keeping the item instance.
+    std::optional<BaseResourceBundle> baseContribution;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

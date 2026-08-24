@@ -84,6 +84,16 @@ Vec2 Enemy::position() const
   return position_;
 }
 
+bool Enemy::setPosition(Vec2 position) noexcept
+{
+  if (!std::isfinite(position.x) || !std::isfinite(position.y))
+  {
+    return false;
+  }
+  position_ = position;
+  return true;
+}
+
 Vec2 Enemy::size() const
 {
   return size_;

@@ -1231,6 +1231,33 @@ EconomyReceipt GameSession::executeProfileEconomy(
     return receipt;
 }
 
+BaseResourceReceipt GameSession::executeBaseResourceContribution(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseResourceReceipt receipt = ::executeBaseResourceContribution(
+        candidate,
+        publishedContentRegistry(),
+        ContributeBaseAssetCommand{assetId},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return BaseResourceReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision,
+            {}};
+    }
+    return receipt;
+}
+
 WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     const WeaponAmmoCommand &command,
     std::string transactionId)

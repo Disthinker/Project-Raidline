@@ -4,6 +4,7 @@
 #include <limits>
 #include <set>
 
+#include "base_resource_domain.h"
 #include "stable_random.h"
 
 namespace
@@ -109,6 +110,117 @@ std::vector<ProfileContainerId> carriedContainers(
     }
     return result;
 }
+
+bool hasStoredChildren(
+    const ProfileState &profile,
+    AssetInstanceId ownerId) noexcept
+{
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
+        if (stored != nullptr &&
+            stored->container.kind == ProfileContainerKind::AssetCompartment &&
+            stored->container.ownerAssetId == ownerId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool consumeCollectedLoot(
+    ProfileState &profile,
+    const RaidLootSnapshot &loot)
+{
+    std::vector<AssetInstanceId> sources;
+    if (const AssetRecord *original = profile.assets.find(loot.assetId);
+        original != nullptr && assetIsCarried(profile, loot.assetId) &&
+        original->definitionId == loot.definitionId &&
+        !original->reliefBatchId.has_value() &&
+        !hasStoredChildren(profile, loot.assetId))
+    {
+        sources.push_back(loot.assetId);
+    }
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (id == loot.assetId || !assetIsCarried(profile, id) ||
+            asset.definitionId != loot.definitionId ||
+            asset.reliefBatchId.has_value() || hasStoredChildren(profile, id))
+        {
+            continue;
+        }
+        sources.push_back(id);
+    }
+
+    std::uint64_t available{};
+    for (AssetInstanceId id : sources)
+    {
+        available += profile.assets.find(id)->quantity;
+    }
+    if (available < loot.quantity)
+    {
+        return false;
+    }
+
+    std::uint32_t remaining = loot.quantity;
+    for (AssetInstanceId id : sources)
+    {
+        if (remaining == 0)
+        {
+            break;
+        }
+        AssetRecord *asset = profile.assets.findMutable(id);
+        const std::uint32_t consumed = std::min(remaining, asset->quantity);
+        asset->quantity -= consumed;
+        remaining -= consumed;
+        if (asset->quantity == 0)
+        {
+            static_cast<void>(profile.assets.erase(id));
+        }
+    }
+    return true;
+}
+
+bool moveCollectedLootToIntake(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const RaidLootSnapshot &loot)
+{
+    const ItemDefinition &definition = content.item(loot.definitionId);
+    const auto origin = findFirstProfileFit(
+        profile,
+        content,
+        ProfileContainerId::baseIntake(),
+        definition,
+        ItemOrientation::Degrees0);
+    if (!origin.has_value())
+    {
+        return false;
+    }
+    // Preserve the stable ID and instance state when the generated asset was
+    // not merged into an existing carried stack. Merged stackable Loot must
+    // be split back out as a new allocation asset after provenance recovery.
+    if (AssetRecord *original = profile.assets.findMutable(loot.assetId);
+        original != nullptr && original->quantity == loot.quantity &&
+        original->definitionId == loot.definitionId &&
+        assetIsCarried(profile, loot.assetId))
+    {
+        original->location = StoredAssetLocation{
+            ProfileContainerId::baseIntake(), *origin};
+        original->orientation = ItemOrientation::Degrees0;
+        return true;
+    }
+    if (!consumeCollectedLoot(profile, loot))
+    {
+        return false;
+    }
+    static_cast<void>(profile.assets.create(
+        definition,
+        StoredAssetLocation{ProfileContainerId::baseIntake(), *origin},
+        loot.quantity));
+    return true;
+}
 }
 
 DeployReceipt executeDeploy(
@@ -142,6 +254,15 @@ DeployReceipt executeDeploy(
         return deployFailure(
             RaidLifecycleError::RaidAlreadyPending,
             "a Raid is already pending",
+            profile.revision);
+    }
+    if (!assetsInContainer(
+             profile,
+             ProfileContainerId::baseIntake()).empty())
+    {
+        return deployFailure(
+            RaidLifecycleError::InvalidCommand,
+            "pending allocation must be resolved before Deploy",
             profile.revision);
     }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
@@ -233,8 +354,11 @@ DeployReceipt executeDeploy(
             quantity);
         snapshot.loot.push_back(RaidLootSnapshot{
             assetId,
+            entry.itemDefinitionId,
+            quantity,
             static_cast<std::uint32_t>(slotIndex),
             map->raidLootSlots[slotIndex].position,
+            false,
             false});
     }
 
@@ -258,9 +382,12 @@ DeployReceipt executeDeploy(
             quantity);
         snapshot.loot.push_back(RaidLootSnapshot{
             assetId,
+            entry.itemDefinitionId,
+            quantity,
             static_cast<std::uint32_t>(slotIndex),
             map->highRisk.advancedLootSlots[advancedIndex].position,
-            true});
+            true,
+            false});
     }
 
     candidate.pendingRaid = std::move(snapshot);
@@ -319,6 +446,7 @@ RaidSettlementReceipt settlePendingRaid(
     }
 
     ProfileState candidate = profile;
+    const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
     {
@@ -328,6 +456,18 @@ RaidSettlementReceipt settlePendingRaid(
             if (assetIsCarried(candidate, asset.instanceId))
             {
                 returned.push_back(asset.definitionId);
+            }
+        }
+        for (const RaidLootSnapshot &loot : raidSnapshot.loot)
+        {
+            if (loot.collected &&
+                !moveCollectedLootToIntake(candidate, content, loot))
+            {
+                return settlementFailure(
+                    RaidLifecycleError::InvalidProfile,
+                    "returned Loot cannot enter pending allocation",
+                    profile.revision,
+                    outcome);
             }
         }
     }
@@ -353,6 +493,7 @@ RaidSettlementReceipt settlePendingRaid(
         candidate.currentHealth = 100;
         candidate.medicalStatus = MedicalStatusState{};
     }
+    applyBaseActivityDemand(candidate);
     candidate.pendingRaid.reset();
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{
@@ -398,7 +539,19 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
-        generatedLoot.insert(loot.assetId);
+        if (loot.collected)
+        {
+            if (!consumeCollectedLoot(candidate, loot))
+            {
+                return {false, RaidLifecycleError::InvalidProfile,
+                        "collected Loot cannot be rolled back",
+                        profile.revision};
+            }
+        }
+        else
+        {
+            generatedLoot.insert(loot.assetId);
+        }
     }
     for (AssetInstanceId assetId : generatedLoot)
     {
@@ -434,16 +587,53 @@ InventoryReceipt pickupRaidLoot(
         return {false, false, DomainErrorCode::MissingAsset,
                 "Raid Loot is not on the ground", profile.revision};
     }
+    if (!profile.pendingRaid.has_value())
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                "Raid Loot has no pending Raid", profile.revision};
+    }
+    const auto snapshot = std::find_if(
+        profile.pendingRaid->loot.begin(),
+        profile.pendingRaid->loot.end(),
+        [assetId](const RaidLootSnapshot &loot)
+        { return loot.assetId == assetId && !loot.collected; });
+    if (snapshot == profile.pendingRaid->loot.end())
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                "Raid Loot snapshot is unavailable", profile.revision};
+    }
+
     const ItemDefinition &definition = content.item(asset->definitionId);
+    ProfileState candidateProfile = profile;
+    auto candidateSnapshot = std::find_if(
+        candidateProfile.pendingRaid->loot.begin(),
+        candidateProfile.pendingRaid->loot.end(),
+        [assetId](const RaidLootSnapshot &loot)
+        { return loot.assetId == assetId; });
+    candidateSnapshot->collected = true;
+    const auto commitMove = [&](const InventoryMoveCommand &command)
+    {
+        InventoryReceipt receipt = executeInventory(
+            candidateProfile,
+            content,
+            command,
+            context);
+        if (receipt.succeeded)
+        {
+            profile = std::move(candidateProfile);
+            receipt.revision = profile.revision;
+        }
+        return receipt;
+    };
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::Backpack,
              EquipmentSlotKind::ChestRig})
     {
         for (ProfileContainerId container :
-             carriedContainers(profile, content, slot))
+             carriedContainers(candidateProfile, content, slot))
         {
             for (const auto &[candidateId, candidate] :
-                 profile.assets.records())
+                 candidateProfile.assets.records())
             {
                 static_cast<void>(candidateId);
                 const auto *stored =
@@ -456,18 +646,15 @@ InventoryReceipt pickupRaidLoot(
                 {
                     continue;
                 }
-                return executeInventory(
-                    profile,
-                    content,
+                return commitMove(
                     InventoryMoveCommand{
                         assetId,
                         0,
                         *stored,
-                        candidate.orientation},
-                    context);
+                        candidate.orientation});
             }
             const auto origin = findFirstProfileFit(
-                profile,
+                candidateProfile,
                 content,
                 container,
                 definition,
@@ -476,15 +663,12 @@ InventoryReceipt pickupRaidLoot(
             {
                 continue;
             }
-            return executeInventory(
-                profile,
-                content,
+            return commitMove(
                 InventoryMoveCommand{
                     assetId,
                     0,
                     StoredAssetLocation{container, *origin},
-                    asset->orientation},
-                context);
+                    asset->orientation});
         }
     }
     return {false, false, DomainErrorCode::Capacity,

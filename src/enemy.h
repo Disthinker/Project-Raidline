@@ -41,6 +41,7 @@ public:
 
     [[nodiscard]] CombatTargetId combatTargetId() const noexcept;
     Vec2 position() const;
+    [[nodiscard]] bool setPosition(Vec2 position) noexcept;
     Vec2 size() const;
     Vec2 velocity() const;
     Rect bounds() const;

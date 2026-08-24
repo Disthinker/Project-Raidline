@@ -217,6 +217,16 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {
                 location["container"] = {{"type", "stash"}};
             }
+            else if (stored->container.kind ==
+                     ProfileContainerKind::BaseIntake)
+            {
+                if (schemaVersion < 7)
+                {
+                    throw std::invalid_argument{
+                        "legacy schema cannot represent Base intake"};
+                }
+                location["container"] = {{"type", "base_intake"}};
+            }
             else
             {
                 location["container"] = {
@@ -329,6 +339,19 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"pain_scream_remaining_ms",
                 profile.medicalStatus.painScreamRemainingMs}};
     }
+    if (schemaVersion >= 7)
+    {
+        payload["base_resources"] = {
+            {"food", profile.baseResources.pool.food},
+            {"hygiene", profile.baseResources.pool.hygiene},
+            {"morale", profile.baseResources.pool.morale},
+            {"security", profile.baseResources.pool.security},
+            {"shortfall_food", profile.baseResources.lastShortfall.food},
+            {"shortfall_hygiene", profile.baseResources.lastShortfall.hygiene},
+            {"shortfall_morale", profile.baseResources.lastShortfall.morale},
+            {"shortfall_security", profile.baseResources.lastShortfall.security},
+            {"resolved_raid_count", profile.baseResources.resolvedRaidCount}};
+    }
     payload["committed_settlements"] = Json::array();
     for (const std::string &settlement : profile.committedSettlements)
     {
@@ -349,11 +372,18 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         Json loot = Json::array();
         for (const RaidLootSnapshot &entry : raid.loot)
         {
-            loot.push_back({
+            Json lootEntry{
                 {"asset_id", entry.assetId},
                 {"slot_index", entry.slotIndex},
                 {"position", vectorValue(entry.position)},
-                {"requires_high_risk", entry.requiresHighRisk}});
+                {"requires_high_risk", entry.requiresHighRisk}};
+            if (schemaVersion >= 7)
+            {
+                lootEntry["definition_id"] = entry.definitionId.value();
+                lootEntry["quantity"] = entry.quantity;
+                lootEntry["collected"] = entry.collected;
+            }
+            loot.push_back(std::move(lootEntry));
         }
         payload["pending_raid"] = {
             {"raid_id", raid.raidId},
@@ -473,7 +503,7 @@ std::string serializeProfileEnvelope(
 {
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
-        schemaVersion != 6)
+        schemaVersion != 6 && schemaVersion != 7)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -524,10 +554,12 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "combat-ballistics-content-8" ||
                contentVersion == "raid-fixed-maps-content-9" ||
                contentVersion == "raid-pressure-content-10" ||
-               contentVersion == "raid-control-resource-content-11"));
+               contentVersion == "raid-control-resource-content-11" ||
+               contentVersion == "raid-conditional-extraction-content-12"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
-             schemaVersion != 5 && schemaVersion != 6) ||
+             schemaVersion != 5 && schemaVersion != 6 &&
+             schemaVersion != 7) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -577,6 +609,22 @@ SaveLoadResult deserializeProfileEnvelope(
                     .get<std::uint32_t>(),
                 medical.at("pain_scream_remaining_ms")
                     .get<std::uint32_t>()};
+        }
+        if (schemaVersion >= 7)
+        {
+            const Json &resources = payload.at("base_resources");
+            profile.baseResources = BaseResourceState{
+                BaseResourceBundle{
+                    resources.at("food").get<std::uint32_t>(),
+                    resources.at("hygiene").get<std::uint32_t>(),
+                    resources.at("morale").get<std::uint32_t>(),
+                    resources.at("security").get<std::uint32_t>()},
+                BaseResourceBundle{
+                    resources.at("shortfall_food").get<std::uint32_t>(),
+                    resources.at("shortfall_hygiene").get<std::uint32_t>(),
+                    resources.at("shortfall_morale").get<std::uint32_t>(),
+                    resources.at("shortfall_security").get<std::uint32_t>()},
+                resources.at("resolved_raid_count").get<std::uint64_t>()};
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -716,6 +764,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 {
                     containerId = ProfileContainerId::stash();
                 }
+                else if (schemaVersion >= 7 &&
+                         containerType == "base_intake")
+                {
+                    containerId = ProfileContainerId::baseIntake();
+                }
                 else if (containerType == "asset_compartment")
                 {
                     containerId = ProfileContainerId::compartment(
@@ -783,11 +836,27 @@ SaveLoadResult deserializeProfileEnvelope(
             }
             for (const Json &entry : value.at("loot"))
             {
+                const AssetInstanceId assetId =
+                    entry.at("asset_id").get<AssetInstanceId>();
+                const AssetRecord *legacyAsset = profile.assets.find(assetId);
                 raid.loot.push_back(RaidLootSnapshot{
-                    entry.at("asset_id").get<AssetInstanceId>(),
+                    assetId,
+                    schemaVersion >= 7
+                        ? ItemDefinitionId{entry.at("definition_id")
+                              .get<std::string>()}
+                        : (legacyAsset != nullptr
+                              ? legacyAsset->definitionId
+                              : ItemDefinitionId{}),
+                    schemaVersion >= 7
+                        ? entry.at("quantity").get<std::uint32_t>()
+                        : (legacyAsset != nullptr ? legacyAsset->quantity : 0U),
                     entry.at("slot_index").get<std::uint32_t>(),
                     parseVector(entry.at("position")),
-                    entry.value("requires_high_risk", false)});
+                    entry.value("requires_high_risk", false),
+                    schemaVersion >= 7
+                        ? entry.at("collected").get<bool>()
+                        : (legacyAsset != nullptr &&
+                           assetIsCarried(profile, assetId))});
             }
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")

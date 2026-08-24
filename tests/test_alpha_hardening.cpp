@@ -232,6 +232,43 @@ void expectValid(const ProfileState &profile)
         publishedContentRegistry());
     ASSERT_TRUE(validation.valid) << validation.message;
 }
+
+void keepPendingAllocation(ProfileState &profile, int cycle)
+{
+    while (true)
+    {
+        const auto intake = assetsInContainer(
+            profile, ProfileContainerId::baseIntake());
+        if (intake.empty())
+        {
+            return;
+        }
+        const AssetRecord &asset = *intake.front();
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset.definitionId);
+        const auto origin = findFirstProfileFit(
+            profile,
+            publishedContentRegistry(),
+            ProfileContainerId::stash(),
+            definition,
+            asset.orientation,
+            asset.instanceId);
+        ASSERT_TRUE(origin.has_value());
+        const InventoryReceipt kept = executeInventory(
+            profile,
+            publishedContentRegistry(),
+            InventoryMoveCommand{
+                asset.instanceId,
+                0,
+                StoredAssetLocation{ProfileContainerId::stash(), *origin},
+                asset.orientation},
+            CommandContext{
+                profile.revision,
+                "hardening-keep-" + std::to_string(cycle) + "-" +
+                    std::to_string(asset.instanceId)});
+        ASSERT_TRUE(kept.succeeded) << kept.message;
+    }
+}
 }
 
 TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
@@ -331,6 +368,7 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
             settlementId,
             outcome);
         ASSERT_TRUE(settled.succeeded) << settled.message;
+        keepPendingAllocation(profile, cycle);
         const std::uint64_t settledFingerprint =
             profileStateFingerprint(profile);
         const RaidSettlementReceipt repeated = settlePendingRaid(

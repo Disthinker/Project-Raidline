@@ -99,6 +99,19 @@ InventoryReceipt applyMove(
             "requested orientation is not supported",
             candidate.revision);
     }
+    const auto *sourceStored =
+        std::get_if<StoredAssetLocation>(&source->location);
+    const bool sourceInIntake = sourceStored != nullptr &&
+        sourceStored->container == ProfileContainerId::baseIntake();
+    if (command.destination.container ==
+            ProfileContainerId::baseIntake() &&
+        !sourceInIntake)
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "only Settlement can place assets into pending allocation",
+            candidate.revision);
+    }
 
     InventoryGridSize destinationSize{};
     try
@@ -138,6 +151,23 @@ InventoryReceipt applyMove(
         definition,
         command.destinationOrientation,
         source->instanceId);
+    if (sourceInIntake && !overlaps.empty())
+    {
+        const AssetRecord *target = overlaps.size() == 1
+            ? candidate.assets.find(*overlaps.begin())
+            : nullptr;
+        if (target == nullptr ||
+            target->definitionId != source->definitionId ||
+            target->reliefBatchId != source->reliefBatchId ||
+            definition.maxStackSize <= 1 ||
+            target->quantity > definition.maxStackSize - requested)
+        {
+            return failure(
+                DomainErrorCode::IllegalDestination,
+                "pending allocation cannot swap an asset back into intake",
+                candidate.revision);
+        }
+    }
 
     if (requested < source->quantity)
     {
@@ -262,6 +292,16 @@ InventoryReceipt applyEquip(
             candidate.revision);
     }
     const ItemDefinition &definition = content.item(source->definitionId);
+    if (const auto *stored =
+            std::get_if<StoredAssetLocation>(&source->location);
+        stored != nullptr &&
+        stored->container == ProfileContainerId::baseIntake())
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "pending allocation must be kept before it can be equipped",
+            candidate.revision);
+    }
     if (!itemCanEquipInSlot(definition, command.slot))
     {
         return failure(

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <vector>
 
+#include "collision.h"
+
 namespace
 {
 float distanceSquaredToRect(Vec2 point, const Rect &rect) noexcept
@@ -26,6 +28,40 @@ AnimationClip makeBasePlayerMoveClip()
     return AnimationClip{
         std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
 }
+
+float resolveHorizontalMovement(
+    Vec2 position,
+    Vec2 size,
+    float desiredX,
+    const std::array<BaseFacility, 4> &facilities) noexcept
+{
+    float resolvedX = desiredX;
+    for (const BaseFacility &facility : facilities)
+    {
+        resolvedX = resolveHorizontalCollision(
+            Rect{position, size},
+            resolvedX,
+            facility.bounds);
+    }
+    return resolvedX;
+}
+
+float resolveVerticalMovement(
+    Vec2 position,
+    Vec2 size,
+    float desiredY,
+    const std::array<BaseFacility, 4> &facilities) noexcept
+{
+    float resolvedY = desiredY;
+    for (const BaseFacility &facility : facilities)
+    {
+        resolvedY = resolveVerticalCollision(
+            Rect{position, size},
+            resolvedY,
+            facility.bounds);
+    }
+    return resolvedY;
+}
 }
 
 BaseWorld::BaseWorld()
@@ -40,6 +76,10 @@ BaseWorld::BaseWorld()
           BaseFacility{
               BaseFacilityKind::Supply,
               Rect{{976.0F, 176.0F}, {228.0F, 188.0F}},
+              64.0F},
+          BaseFacility{
+              BaseFacilityKind::Allocation,
+              Rect{{76.0F, 470.0F}, {228.0F, 140.0F}},
               64.0F},
           BaseFacility{
               BaseFacilityKind::RaidGate,
@@ -67,7 +107,15 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             const float inverseLength = 1.0F / std::sqrt(lengthSquared);
             direction.x *= inverseLength;
             direction.y *= inverseLength;
+            if (direction.x != 0.0F)
+            {
+                playerHorizontalFacing_ = direction.x;
+            }
             playerFacingDirection_ = direction;
+            if (playerFacingDirection_.x == 0.0F)
+            {
+                playerFacingDirection_.x = playerHorizontalFacing_;
+            }
             playerIsMoving_ = true;
             if (!wasMoving)
             {
@@ -75,19 +123,30 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             }
             playerMovementAnimator_.update(deltaTime);
             const float speed = input.sprint ? 280.0F : 180.0F;
-            playerPosition_.x += direction.x * speed * deltaTime;
-            playerPosition_.y += direction.y * speed * deltaTime;
+            const float maximumY = walkableBounds_.position.y +
+                walkableBounds_.size.y - playerSize_.y;
+            const float maximumPlayerX = walkableBounds_.position.x +
+                walkableBounds_.size.x - playerSize_.x;
 
-            playerPosition_.x = std::clamp(
-                playerPosition_.x,
+            const float desiredX = std::clamp(
+                playerPosition_.x + direction.x * speed * deltaTime,
                 walkableBounds_.position.x,
-                walkableBounds_.position.x +
-                    walkableBounds_.size.x - playerSize_.x);
-            playerPosition_.y = std::clamp(
-                playerPosition_.y,
+                maximumPlayerX);
+            playerPosition_.x = resolveHorizontalMovement(
+                playerPosition_,
+                playerSize_,
+                desiredX,
+                facilities_);
+
+            const float desiredY = std::clamp(
+                playerPosition_.y + direction.y * speed * deltaTime,
                 walkableBounds_.position.y,
-                walkableBounds_.position.y +
-                    walkableBounds_.size.y - playerSize_.y);
+                maximumY);
+            playerPosition_.y = resolveVerticalMovement(
+                playerPosition_,
+                playerSize_,
+                desiredY,
+                facilities_);
         }
         else
         {
@@ -128,7 +187,7 @@ std::size_t BaseWorld::playerAnimationFrame() const noexcept
     return playerMovementAnimator_.currentFrameIndex();
 }
 
-const std::array<BaseFacility, 3> &BaseWorld::facilities() const noexcept
+const std::array<BaseFacility, 4> &BaseWorld::facilities() const noexcept
 {
     return facilities_;
 }
@@ -171,6 +230,8 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
         return "STORAGE & LOADOUT";
     case BaseFacilityKind::Supply:
         return "SUPPLY & RECOVERY";
+    case BaseFacilityKind::Allocation:
+        return "ALLOCATION & NEEDS";
     case BaseFacilityKind::RaidGate:
         return "RAID DEPLOYMENT";
     }

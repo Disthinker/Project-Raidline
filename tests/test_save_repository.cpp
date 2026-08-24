@@ -39,7 +39,7 @@ private:
 };
 }
 
-TEST(SaveRepositoryTest, SchemaV6RoundTripPreservesAuthoritativeState)
+TEST(SaveRepositoryTest, SchemaV7RoundTripPreservesResourcesAndIntake)
 {
     TemporarySaveDirectory temporary;
     SaveRepository repository{temporary.path()};
@@ -59,6 +59,17 @@ TEST(SaveRepositoryTest, SchemaV6RoundTripPreservesAuthoritativeState)
             armor->currentDurability = 72;
         }
     }
+    profile.baseResources = BaseResourceState{
+        BaseResourceBundle{23, 45, 67, 89},
+        BaseResourceBundle{1, 2, 3, 4},
+        7};
+    const ItemDefinition &cola = publishedContentRegistry().item(
+        alpha_content::lootCola);
+    static_cast<void>(profile.assets.create(
+        cola,
+        StoredAssetLocation{
+            ProfileContainerId::baseIntake(), GridPosition{0, 0}},
+        1));
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     ASSERT_TRUE(repository.save(
@@ -225,6 +236,28 @@ TEST(SaveRepositoryTest,
         publishedContentRegistry());
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(validateProfileState(
+        *loaded.profile, publishedContentRegistry()).valid);
+}
+
+TEST(SaveRepositoryTest,
+    SchemaV6AcceptsPreviousConditionalExtractionContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v6-allocation-content-migration",
+        publishedContentRegistry());
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-conditional-extraction-content-12",
+            6),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(
+        loaded.profile->baseResources,
+        BaseResourceState{});
     EXPECT_TRUE(validateProfileState(
         *loaded.profile, publishedContentRegistry()).valid);
 }

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,13 +19,15 @@
 #include "profile_inventory_interaction.h"
 #include "raid_pointer_capture.h"
 #include "texture.h"
+#include "ui_text_renderer.h"
 
 enum class MainMenuCommand
 {
     Continue,
     NewGame,
     Settings,
-    Exit
+    Exit,
+    ToggleLanguage
 };
 
 struct BasePointerClick
@@ -85,6 +88,8 @@ private:
     bool windowHasInputFocus_{true};
     Vec2 pendingRelativeAimMotion_{};
     GameAudioOutput gameAudio_;
+    UiTextRenderer uiTextRenderer_;
+    std::filesystem::path settingsPath_;
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState
@@ -142,6 +147,7 @@ private:
     bool handleScreenConfirm();
 
     void handleMainMenuCommand(MainMenuCommand command);
+    void toggleLanguage();
     void updateBase(float deltaTime);
     void handleBasePointerClick(const BasePointerClick &click);
     void handleRaidProfileClick(const BasePointerClick &click);
@@ -233,6 +239,7 @@ private:
     void renderBaseWorld();
     void renderBaseStorage();
     void renderBaseSupply();
+    void renderBaseAllocation();
     void renderBaseDeployment();
     void renderProfileGrid(
         ProfileContainerId container,

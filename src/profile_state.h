@@ -19,6 +19,7 @@ using ProfileRevision = std::uint64_t;
 enum class ProfileContainerKind
 {
     Stash,
+    BaseIntake,
     AssetCompartment
 };
 
@@ -29,6 +30,7 @@ struct ProfileContainerId
     std::uint32_t compartmentIndex{};
 
     [[nodiscard]] static ProfileContainerId stash() noexcept;
+    [[nodiscard]] static ProfileContainerId baseIntake() noexcept;
     [[nodiscard]] static ProfileContainerId compartment(
         AssetInstanceId ownerAssetId,
         std::uint32_t compartmentIndex) noexcept;
@@ -177,9 +179,23 @@ struct RaidEnemySnapshot
 struct RaidLootSnapshot
 {
     AssetInstanceId assetId{};
+    ItemDefinitionId definitionId;
+    std::uint32_t quantity{};
     std::uint32_t slotIndex{};
     Vec2 position{};
     bool requiresHighRisk{};
+    bool collected{};
+};
+
+struct BaseResourceState
+{
+    BaseResourceBundle pool{40, 40, 40, 40};
+    BaseResourceBundle lastShortfall;
+    std::uint64_t resolvedRaidCount{};
+
+    friend bool operator==(
+        const BaseResourceState &,
+        const BaseResourceState &) = default;
 };
 
 struct PendingRaidSnapshot
@@ -216,6 +232,7 @@ struct ProfileState
     TutorialProgress tutorial{TutorialProgress::FindStorage};
     int currentHealth{100};
     MedicalStatusState medicalStatus;
+    BaseResourceState baseResources;
     AssetRegistry assets;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;

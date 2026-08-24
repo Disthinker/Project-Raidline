@@ -469,6 +469,32 @@ namespace
             requiredBool(*found, "slow_movement")};
     }
 
+    std::optional<BaseResourceBundle> parseBaseContribution(
+        const Json &item)
+    {
+        const auto found = item.find("base_contribution");
+        if (found == item.end())
+        {
+            return std::nullopt;
+        }
+        if (!found->is_object())
+        {
+            fail("base_contribution must be an object");
+        }
+        const BaseResourceBundle contribution{
+            optionalUint(*found, "food"),
+            optionalUint(*found, "hygiene"),
+            optionalUint(*found, "morale"),
+            optionalUint(*found, "security")};
+        if (contribution.empty() || contribution.food > 100U ||
+            contribution.hygiene > 100U || contribution.morale > 100U ||
+            contribution.security > 100U)
+        {
+            fail("base contribution must contain values from 1 to 100");
+        }
+        return contribution;
+    }
+
     std::optional<WeaponConditionDefinition> parseWeaponCondition(
         const Json &item)
     {
@@ -785,6 +811,7 @@ ContentRegistry ContentRegistry::fromJson(
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
+            definition.baseContribution = parseBaseContribution(itemValue);
             definition.unitWeightGrams =
                 requiredPositiveUint(itemValue, "unit_weight_grams");
 

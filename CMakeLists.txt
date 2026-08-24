@@ -211,6 +211,8 @@ endfunction()
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
     src/alpha_content_ids.h
+    src/base_resource_domain.cpp
+    src/base_resource_domain.h
     src/combat_damage_domain.cpp
     src/combat_damage_domain.h
     src/content_registry.cpp
@@ -351,6 +353,10 @@ add_library(raidline_sdl_client STATIC
     src/sound_event.h
     src/texture.cpp
     src/texture.h
+    src/ui_localization.cpp
+    src/ui_localization.h
+    src/ui_text_renderer.cpp
+    src/ui_text_renderer.h
 )
 raidline_configure_library(raidline_sdl_client)
 target_link_libraries(
@@ -362,6 +368,9 @@ target_link_libraries(
     fmt::fmt
     nlohmann_json::nlohmann_json
     SDL3_image::SDL3_image)
+if(WIN32)
+    target_link_libraries(raidline_sdl_client PRIVATE gdi32)
+endif()
 add_library(raidline::sdl_client ALIAS raidline_sdl_client)
 
 set(RAIDLINE_PRODUCTION_TARGETS
@@ -426,6 +435,10 @@ raidline_add_test(
 raidline_add_test(
     GameAudioTest
     tests/test_game_audio.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    UiLocalizationTest
+    tests/test_ui_localization.cpp
     raidline::sdl_client)
 target_compile_definitions(
     GameAudioTest
@@ -545,6 +558,10 @@ raidline_add_test(
 raidline_add_test(
     EconomyDomainTest
     tests/test_economy_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseResourceDomainTest
+    tests/test_base_resource_domain.cpp
     raidline::domain)
 raidline_add_test(
     WeaponAmmoDomainTest
