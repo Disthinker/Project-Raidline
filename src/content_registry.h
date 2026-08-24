@@ -84,6 +84,13 @@ struct RaidRuleDefinition
     float extractionDurationSeconds{};
 };
 
+struct RaidLootSlotDefinition
+{
+    std::string id;
+    std::string route;
+    Vec2 position{};
+};
+
 struct HighRiskRaidDefinition
 {
     bool enabled{};
@@ -95,6 +102,11 @@ struct HighRiskRaidDefinition
     std::uint32_t waveSize{};
     std::uint32_t activeEnemyCap{};
     std::vector<EnemySpawnDefinition> pressureSpawns;
+    ContentRect activationControlPoint;
+    float activationDurationSeconds{};
+    ContentRect advancedResourceArea;
+    LootTableDefinitionId advancedLootTableId;
+    std::vector<RaidLootSlotDefinition> advancedLootSlots;
 };
 
 struct SpawnExtractionPairDefinition
@@ -102,13 +114,6 @@ struct SpawnExtractionPairDefinition
     std::string id;
     Vec2 playerSpawn{};
     ContentRect extractionPoint;
-};
-
-struct RaidLootSlotDefinition
-{
-    std::string id;
-    std::string route;
-    Vec2 position{};
 };
 
 struct BallisticBlockerDefinition

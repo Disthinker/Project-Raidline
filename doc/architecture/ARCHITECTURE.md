@@ -144,7 +144,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、三张固定 Raid 地图、基础弹道障碍与持续高危配置的单一内容输入；当前内容版本为 `raid-pressure-content-10`，地图定义包含展示元数据、独立出生/撤离、敌人、Loot、障碍、信号撤离和有界压力出生配置。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、三张固定 Raid 地图、基础弹道障碍与持续高危配置的单一内容输入；当前内容版本为 `raid-control-resource-content-11`，地图定义包含展示元数据、独立出生/撤离、敌人、普通/高级 Loot、障碍、信号撤离、有界压力出生、主动控制地标和高级资源区。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -153,7 +153,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`raid-pressure-content-10` 不改变 Profile schema，并继续显式读取 schema v6 的 `raid-fixed-maps-content-9`、`combat-ballistics-content-8` 及更早兼容内容版本存档。当前 V0 没有需兼容的更早正式玩家存档。
+- Persistent Base 落地 schema v1，Extraction Loop 升级到 v2，防具、医疗、武器状态和多武器切片依次升级到 v3～v6；加载时为旧版本逐步补全弹药/结算、防具/武器耐久、医疗状态和新槽默认值。`raid-control-resource-content-11` 不改变 Profile schema；pending Raid Loot 新增的高危访问标记在 schema v6 中使用可缺省字段，并继续显式读取 `raid-pressure-content-10`、`raid-fixed-maps-content-9` 及更早兼容内容版本存档。当前 V0 没有需兼容的更早正式玩家存档。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -183,6 +183,7 @@ Content Registry 的当前落地边界：
 16. `codex/combat-feedback-finish`：PR #72 / merge commit `795b644`，交付枪口焰、短烟、柔边局部闪光和轻微世界画面抖动。
 17. `codex/raid-fixed-map-variety-v1`：PR #73 / merge commit `a32c476`，交付三张固定地图选择、独立配置与冻结快照。
 18. `codex/fix-weapon-switch-reticle-continuity`：PR #74 / merge commit `6138da8`，修复限时切换完成时的实际准星跳点。
-19. `codex/raid-continuous-high-risk-v1`：当前切片，交付无时间失败的常规→高危生命周期、普通撤离宽限、地图信号撤离和有界感染者压力；随机危机、情报、高级资源与新资源不在本切片。
+19. `codex/raid-continuous-high-risk-v1`：PR #75 / merge commit `773443b`，交付无时间失败的常规→高危生命周期、普通撤离宽限、地图信号撤离和有界感染者压力。
+20. `codex/raid-high-risk-control-resource-v1`：当前切片，交付每图主动高危控制地标、可中断按住交互、开局冻结的高级 Loot 与阶段访问门控；随机危机、情报、随机地图和新资源不在本切片。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

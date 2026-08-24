@@ -158,6 +158,9 @@ namespace
                 EnemySpawn{Vec2{1210.0F, 20.0F}, Vec2{50.0F, 50.0F}, 12},
                 EnemySpawn{Vec2{20.0F, 650.0F}, Vec2{50.0F, 50.0F}, 12},
                 EnemySpawn{Vec2{1210.0F, 650.0F}, Vec2{50.0F, 50.0F}, 12}},
+            ContentRect{Vec2{590.0F, 310.0F}, Vec2{100.0F, 100.0F}},
+            0.20F,
+            ContentRect{Vec2{850.0F, 450.0F}, Vec2{250.0F, 180.0F}},
             seed};
         return config;
     }
@@ -2702,6 +2705,30 @@ TEST(GameplayWorldRaidTest, BallisticBlockerBlocksPlayerAndLogicalShot)
         world.hitResultsLastUpdate().front().position.y);
 }
 
+TEST(GameplayWorldRaidTest, BlockedAxisStillAllowsSlidingAlongCover)
+{
+    GameplayWorld world{RaidWorldConfig{
+        Vec2{1280.0F, 720.0F},
+        Vec2{600.0F, 320.0F},
+        ContentRect{Vec2{1100.0F, 600.0F}, Vec2{80.0F, 80.0F}},
+        {},
+        100,
+        100,
+        false,
+        {BallisticBlocker{
+            1,
+            Rect{Vec2{540.0F, 260.0F}, Vec2{60.0F, 180.0F}}}}}};
+
+    const Vec2 start = world.player().position();
+    GameplayInput moveAlongLeftWall{};
+    moveAlongLeftWall.moveLeft = true;
+    moveAlongLeftWall.moveUp = true;
+    world.update(moveAlongLeftWall, 0.10F);
+
+    EXPECT_FLOAT_EQ(world.player().position().x, start.x);
+    EXPECT_LT(world.player().position().y, start.y);
+}
+
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
     GameplayWorld world;
@@ -2841,7 +2868,48 @@ TEST(GameplayWorldRaidTest, HighRiskPressureIsDeterministicAndCapped)
     EXPECT_EQ(first.highRiskActiveEnemyCap(), 3U);
 }
 
-TEST(GameplayWorldRaidTest, HighRiskPressureSkipsNearAndOccupiedSpawns)
+TEST(GameplayWorldRaidTest,
+    HighRiskControlRequiresHeldInterruptibleInteraction)
+{
+    RaidWorldConfig config = makeHighRiskWorldConfig();
+    config.highRisk.regularPhaseDurationSeconds = 10.0F;
+    config.highRisk.activationDurationSeconds = 0.20F;
+    GameplayWorld world{std::move(config)};
+
+    GameplayInput hold{};
+    hold.interactPressed = true;
+    world.update(hold, 0.10F);
+    EXPECT_NEAR(world.highRiskControlProgress(), 0.5F, 0.001F);
+    EXPECT_EQ(world.raidSession().phase(), RaidPhase::Regular);
+
+    world.update(GameplayInput{}, 0.01F);
+    EXPECT_FLOAT_EQ(world.highRiskControlProgress(), 0.0F);
+
+    world.update(hold, 0.05F);
+    GameplayInput leave = hold;
+    leave.moveRight = true;
+    leave.sprint = true;
+    world.update(leave, 0.50F);
+    EXPECT_FALSE(world.highRiskControlInteractionInRange());
+    EXPECT_FLOAT_EQ(world.highRiskControlProgress(), 0.0F);
+
+    RaidWorldConfig damageConfig = makeHighRiskWorldConfig();
+    damageConfig.highRisk.regularPhaseDurationSeconds = 10.0F;
+    damageConfig.highRisk.activationDurationSeconds = 0.20F;
+    GameplayWorld damageWorld{std::move(damageConfig)};
+    damageWorld.update(hold, 0.08F);
+    EXPECT_GT(damageWorld.highRiskControlProgress(), 0.0F);
+    EXPECT_FALSE(damageWorld.damagePlayer(1));
+    EXPECT_FLOAT_EQ(damageWorld.highRiskControlProgress(), 0.0F);
+
+    damageWorld.update(hold, 0.21F);
+    EXPECT_EQ(damageWorld.raidSession().phase(), RaidPhase::HighRisk);
+    EXPECT_FLOAT_EQ(damageWorld.highRiskControlProgress(), 1.0F);
+    EXPECT_TRUE(damageWorld.raidSession().emergencyExtractionOpen());
+}
+
+TEST(
+    GameplayWorldRaidTest, HighRiskPressureSkipsNearAndOccupiedSpawns)
 {
     RaidWorldConfig config = makeHighRiskWorldConfig(0U);
     config.highRisk.pressureSpawns[0].position = Vec2{610.0F, 330.0F};

@@ -93,8 +93,12 @@ bool profileDragSourceMatches(
     const ProfileDragSource &source) noexcept
 {
     const AssetRecord *asset = profile.assets.find(source.instanceId);
-    return profile.revision == source.expectedRevision &&
-        asset != nullptr && asset->location == source.location;
+    // Raid combat and medical ticks may advance the Profile revision while a
+    // pointer gesture is in progress. The drop path always queries and
+    // executes against the current Profile, so an unrelated revision change
+    // must not make every carried item immovable. A moved/removed source is
+    // still stale and is rejected before any command is sent.
+    return asset != nullptr && asset->location == source.location;
 }
 
 InventoryPointerPhase ProfileInventoryInteractionState::pointerPhase() const noexcept

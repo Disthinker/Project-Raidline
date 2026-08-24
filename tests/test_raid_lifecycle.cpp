@@ -125,8 +125,19 @@ TEST(RaidLifecycleTest, DeployCreatesDeterministicFiniteSnapshot)
     EXPECT_EQ(first.pendingRaid->enemyDeploymentId,
               second.pendingRaid->enemyDeploymentId);
     EXPECT_EQ(first.pendingRaid->loot.size(), second.pendingRaid->loot.size());
-    EXPECT_GE(first.pendingRaid->loot.size(), 6U);
-    EXPECT_LE(first.pendingRaid->loot.size(), 9U);
+    const auto regularLootCount = [](const PendingRaidSnapshot &raid)
+    {
+        return static_cast<std::size_t>(
+            std::count_if(raid.loot.begin(),
+                          raid.loot.end(),
+                          [](const RaidLootSnapshot &loot)
+                          { return !loot.requiresHighRisk; }));
+    };
+    EXPECT_GE(regularLootCount(*first.pendingRaid), 6U);
+    EXPECT_LE(regularLootCount(*first.pendingRaid), 9U);
+    EXPECT_EQ(first.pendingRaid->loot.size() -
+                  regularLootCount(*first.pendingRaid),
+              2U);
     EXPECT_GE(first.pendingRaid->enemies.size(), 4U);
     EXPECT_LE(first.pendingRaid->enemies.size(), 6U);
     EXPECT_TRUE(validateProfileState(first, publishedContentRegistry()).valid);

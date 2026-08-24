@@ -397,11 +397,18 @@ TEST(AlphaHardeningTest, StableSeedsReachAllConfigurationsAndEveryRoute)
         deploymentIds.insert(profile.pendingRaid->enemyDeploymentId);
 
         std::set<std::string> routes;
+        std::size_t advancedLootCount{};
         for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
         {
+            if (loot.requiresHighRisk)
+            {
+                ++advancedLootCount;
+                continue;
+            }
             ASSERT_LT(loot.slotIndex, map.raidLootSlots.size());
             routes.insert(map.raidLootSlots[loot.slotIndex].route);
         }
+        EXPECT_EQ(advancedLootCount, map.highRisk.advancedLootSlots.size());
         EXPECT_TRUE(routes.contains("central"));
         EXPECT_TRUE(routes.contains("perimeter"));
         EXPECT_TRUE(routes.contains("resource"));

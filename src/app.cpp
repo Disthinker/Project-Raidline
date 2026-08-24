@@ -1125,6 +1125,8 @@ GameplayInput App::makeGameplayInput() const
         input_.wasActionJustPressed(
             GameAction::Interact);
 
+    input.interactPressed = input_.isActionPressed(GameAction::Interact);
+
     input.reloadJustPressed =
         input_.wasActionJustPressed(GameAction::Reload);
     input.healJustPressed =
@@ -3532,6 +3534,7 @@ void App::update(float deltaTime)
         gameplayInput.weaponSlotJustPressed.reset();
         gameplayInput.quitRaidJustPressed = false;
         gameplayInput.interactJustPressed = false;
+        gameplayInput.interactPressed = false;
     }
     if (gameSession_.world().isAlphaRaidWorld() &&
         gameSession_.world().raidSession().isActive() &&
@@ -3552,6 +3555,7 @@ void App::update(float deltaTime)
             gameplayInput.firePressed = false;
             gameplayInput.reloadJustPressed = false;
             gameplayInput.interactJustPressed = false;
+            gameplayInput.interactPressed = false;
             gameplayInput.healJustPressed = false;
             if (input_.wasActionJustPressed(GameAction::InventoryCancel))
             {
@@ -3887,7 +3891,17 @@ void App::renderDebugText()
             static_cast<void>(id);
             if (std::holds_alternative<RaidGroundAssetLocation>(asset.location))
             {
-                ++groundCount;
+                const auto &loot = gameSession_.profile().pendingRaid->loot;
+                const auto snapshot =
+                    std::find_if(loot.begin(),
+                                 loot.end(),
+                                 [&](const RaidLootSnapshot &entry)
+                                 { return entry.assetId == asset.instanceId; });
+                if (snapshot != loot.end() &&
+                    gameSession_.raidLootAccessible(*snapshot))
+                {
+                    ++groundCount;
+                }
             }
         }
     }
@@ -5614,6 +5628,83 @@ void App::renderExtractionPoint()
             raidSession.emergencyExtractionOpen(),
             "SIGNAL EXTRACTION",
             true);
+    }
+
+    const bool highRisk = raidSession.phase() == RaidPhase::HighRisk;
+    if (const auto &resourceArea =
+            gameSession_.world().highRiskAdvancedResourceArea();
+        resourceArea.has_value())
+    {
+        const SDL_FRect zone{resourceArea->position.x,
+                             resourceArea->position.y,
+                             resourceArea->size.x,
+                             resourceArea->size.y};
+        SDL_SetRenderDrawColor(renderer_,
+                               highRisk ? 132 : 48,
+                               highRisk ? 98 : 38,
+                               highRisk ? 24 : 34,
+                               highRisk ? 62 : 72);
+        SDL_RenderFillRect(renderer_, &zone);
+        SDL_SetRenderDrawColor(renderer_,
+                               highRisk ? 244 : 126,
+                               highRisk ? 190 : 72,
+                               highRisk ? 68 : 72,
+                               220);
+        SDL_RenderRect(renderer_, &zone);
+        SDL_RenderDebugText(renderer_,
+                            zone.x + 12.0F,
+                            zone.y + 12.0F,
+                            highRisk ? "ADVANCED RESOURCE OPEN"
+                                     : "ADVANCED RESOURCE LOCKED");
+    }
+
+    if (const auto &controlPoint = gameSession_.world().highRiskControlPoint();
+        controlPoint.has_value())
+    {
+        const SDL_FRect control{controlPoint->position.x,
+                                controlPoint->position.y,
+                                controlPoint->size.x,
+                                controlPoint->size.y};
+        const bool inRange =
+            gameSession_.world().highRiskControlInteractionInRange();
+        SDL_SetRenderDrawColor(renderer_,
+                               highRisk ? 80 : (inRange ? 168 : 106),
+                               highRisk ? 54 : (inRange ? 112 : 72),
+                               highRisk ? 42 : 28,
+                               150);
+        SDL_RenderFillRect(renderer_, &control);
+        SDL_SetRenderDrawColor(renderer_,
+                               highRisk ? 150 : 255,
+                               highRisk ? 104 : 176,
+                               highRisk ? 80 : 68,
+                               255);
+        SDL_RenderRect(renderer_, &control);
+        SDL_RenderDebugText(
+            renderer_,
+            control.x + 6.0F,
+            control.y + 8.0F,
+            highRisk ? "HIGH RISK ACTIVE"
+                     : (inRange ? "HOLD F: TRIGGER" : "HIGH RISK CONTROL"));
+
+        const float progress = gameSession_.world().highRiskControlProgress();
+        if (!highRisk && progress > 0.0F)
+        {
+            const SDL_FRect track{control.x + 6.0F,
+                                  control.y + control.h - 16.0F,
+                                  control.w - 12.0F,
+                                  8.0F};
+            SDL_SetRenderDrawColor(renderer_, 32, 20, 16, 220);
+            SDL_RenderFillRect(renderer_, &track);
+            const SDL_FRect fill{track.x, track.y, track.w * progress, track.h};
+            SDL_SetRenderDrawColor(renderer_, 255, 176, 68, 245);
+            SDL_RenderFillRect(renderer_, &fill);
+            const std::string remaining = fmt::format(
+                "{:.1f}s", gameSession_.world().highRiskControlTimeRemaining());
+            SDL_RenderDebugText(renderer_,
+                                control.x + 8.0F,
+                                control.y + 30.0F,
+                                remaining.c_str());
+        }
     }
 
     SDL_SetRenderDrawBlendMode(
@@ -7843,6 +7934,10 @@ void App::renderAlphaRaidLoot()
     }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
+        if (!gameSession_.raidLootAccessible(loot))
+        {
+            continue;
+        }
         const AssetRecord *asset = profile.assets.find(loot.assetId);
         if (asset == nullptr ||
             !std::holds_alternative<RaidGroundAssetLocation>(asset->location))

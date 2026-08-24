@@ -28,6 +28,8 @@ struct GameplayInput
 
     // 只在 F 从未按下变为按下的这一帧为 true。
     bool interactJustPressed{};
+    // 可中断的世界交互读取持续状态；单击拾取仍使用上面的边沿。
+    bool interactPressed{};
 
     bool reloadJustPressed{};
     bool healJustPressed{};

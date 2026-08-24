@@ -1289,6 +1289,30 @@ ContentRegistry ContentRegistry::fromJson(
                                 spawnValue,
                                 "maximum_health")});
                 }
+                definition.highRisk.activationControlPoint =
+                    parseRect(highRisk, "activation_control_point");
+                definition.highRisk.activationDurationSeconds =
+                    requiredFiniteFloat(
+                        highRisk, "activation_duration_seconds", true);
+                definition.highRisk.advancedResourceArea =
+                    parseRect(highRisk, "advanced_resource_area");
+                definition.highRisk.advancedLootTableId = LootTableDefinitionId{
+                    requiredString(highRisk, "advanced_loot_table")};
+                if (!registry.lootTableIndex_.contains(
+                        definition.highRisk.advancedLootTableId))
+                {
+                    fail("high-risk configuration references an unknown Loot "
+                         "table");
+                }
+                for (const Json &slotValue :
+                     requiredArray(highRisk, "advanced_loot_slots"))
+                {
+                    definition.highRisk.advancedLootSlots.push_back(
+                        RaidLootSlotDefinition{
+                            requiredString(slotValue, "id"),
+                            "high_risk",
+                            parseVec2(slotValue, "position")});
+                }
             }
 
             definition.storageLootTableId = LootTableDefinitionId{
@@ -1400,10 +1424,16 @@ ContentRegistry ContentRegistry::fromJson(
                 if (!rectInside(
                         definition.highRisk.emergencyExtractionPoint,
                         definition.walkableBounds) ||
+                    !rectInside(definition.highRisk.activationControlPoint,
+                                definition.walkableBounds) ||
+                    !rectInside(definition.highRisk.advancedResourceArea,
+                                definition.walkableBounds) ||
                     definition.highRisk.waveSize >
                         definition.highRisk.activeEnemyCap ||
                     definition.highRisk.pressureSpawns.size() < 3U ||
-                    definition.highRisk.pressureSpawns.size() > 8U)
+                    definition.highRisk.pressureSpawns.size() > 8U ||
+                    definition.highRisk.advancedLootSlots.empty() ||
+                    definition.highRisk.advancedLootSlots.size() > 4U)
                 {
                     fail("Raid high-risk configuration is invalid");
                 }
@@ -1414,8 +1444,27 @@ ContentRegistry ContentRegistry::fromJson(
                             definition.highRisk.emergencyExtractionPoint,
                             blocker.bounds))
                     {
-                        fail("high-risk extraction overlaps a ballistic blocker");
+                        fail("high-risk extraction overlaps a ballistic "
+                             "blocker");
                     }
+                    if (rectsOverlap(definition.highRisk.activationControlPoint,
+                                     blocker.bounds))
+                    {
+                        fail("high-risk control point overlaps a ballistic "
+                             "blocker");
+                    }
+                }
+                if (rectsOverlap(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.highRisk.activationControlPoint) ||
+                    rectsOverlap(
+                        definition.highRisk.emergencyExtractionPoint,
+                        definition.highRisk.advancedResourceArea) ||
+                    rectsOverlap(
+                        definition.highRisk.activationControlPoint,
+                        definition.highRisk.advancedResourceArea))
+                {
+                    fail("high-risk interaction regions overlap");
                 }
                 for (const EnemySpawnDefinition &spawn :
                      definition.highRisk.pressureSpawns)
@@ -1430,8 +1479,21 @@ ContentRegistry ContentRegistry::fromJson(
                     {
                         if (rectsOverlap(spawnBounds, blocker.bounds))
                         {
-                            fail("high-risk pressure spawn overlaps a ballistic blocker");
+                            fail("high-risk pressure spawn overlaps a "
+                                 "ballistic blocker");
                         }
+                    }
+                }
+                std::set<std::string> advancedSlotIds;
+                for (const RaidLootSlotDefinition &slot :
+                     definition.highRisk.advancedLootSlots)
+                {
+                    if (slot.id.empty() ||
+                        !advancedSlotIds.insert(slot.id).second ||
+                        !pointInside(slot.position,
+                                     definition.highRisk.advancedResourceArea))
+                    {
+                        fail("high-risk advanced Loot slot is invalid");
                     }
                 }
                 std::set<std::string> pairIds;
@@ -1443,6 +1505,19 @@ ContentRegistry ContentRegistry::fromJson(
                         !rectInside(pair.extractionPoint, definition.walkableBounds))
                     {
                         fail("Raid spawn/extraction pair is invalid");
+                    }
+                    if (rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.emergencyExtractionPoint) ||
+                        rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.activationControlPoint) ||
+                        rectsOverlap(
+                            pair.extractionPoint,
+                            definition.highRisk.advancedResourceArea))
+                    {
+                        fail("Raid extraction overlaps another interaction "
+                             "region");
                     }
                 }
                 std::set<std::string> routes;
@@ -1492,7 +1567,8 @@ ContentRegistry ContentRegistry::fromJson(
                         {
                             if (rectsOverlap(enemyBounds, blocker.bounds))
                             {
-                                fail("Raid enemy deployment overlaps a ballistic blocker");
+                                fail("Raid enemy deployment overlaps a "
+                                     "ballistic blocker");
                             }
                         }
                     }
@@ -1516,7 +1592,8 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     if (rectsOverlap(enemyBounds, blocker.bounds))
                     {
-                        fail("map enemy deployment overlaps a ballistic blocker");
+                        fail("map enemy deployment overlaps a ballistic "
+                             "blocker");
                     }
                 }
             }

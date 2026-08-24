@@ -177,6 +177,7 @@ DeployReceipt executeDeploy(
 
     Pcg32 configurationRandom{command.seed, 0x6d61702d636f6e66ULL};
     Pcg32 lootRandom{command.seed, 0x6c6f6f742d726169ULL};
+    Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
     const std::size_t deploymentIndex = configurationRandom.bounded(3U);
     const auto &pair = map->spawnExtractionPairs[pairIndex];
@@ -186,7 +187,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-pressure-1";
+    snapshot.rulesVersion = "raid-control-resource-2";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -233,7 +234,33 @@ DeployReceipt executeDeploy(
         snapshot.loot.push_back(RaidLootSnapshot{
             assetId,
             static_cast<std::uint32_t>(slotIndex),
-            map->raidLootSlots[slotIndex].position});
+            map->raidLootSlots[slotIndex].position,
+            false});
+    }
+
+    const LootTableDefinition &advancedLootTable =
+        content.lootTable(map->highRisk.advancedLootTableId);
+    for (std::size_t advancedIndex = 0U;
+         advancedIndex < map->highRisk.advancedLootSlots.size();
+         ++advancedIndex)
+    {
+        const LootContentEntry &entry =
+            rollLoot(advancedLootTable, advancedLootRandom);
+        const std::uint32_t range =
+            entry.maximumQuantity - entry.minimumQuantity + 1U;
+        const std::uint32_t quantity =
+            entry.minimumQuantity + advancedLootRandom.bounded(range);
+        const std::size_t slotIndex = map->raidLootSlots.size() + advancedIndex;
+        const AssetInstanceId assetId = candidate.assets.create(
+            content.item(entry.itemDefinitionId),
+            RaidGroundAssetLocation{command.raidId,
+                                    static_cast<std::uint32_t>(slotIndex)},
+            quantity);
+        snapshot.loot.push_back(RaidLootSnapshot{
+            assetId,
+            static_cast<std::uint32_t>(slotIndex),
+            map->highRisk.advancedLootSlots[advancedIndex].position,
+            true});
     }
 
     candidate.pendingRaid = std::move(snapshot);

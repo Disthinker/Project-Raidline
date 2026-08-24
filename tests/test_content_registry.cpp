@@ -63,9 +63,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 {
     const ContentRegistry &registry = publishedContentRegistry();
 
-    EXPECT_EQ(registry.contentVersion(), "raid-pressure-content-10");
+    EXPECT_EQ(registry.contentVersion(), "raid-control-resource-content-11");
     ASSERT_EQ(registry.items().size(), 19U);
-    ASSERT_EQ(registry.lootTables().size(), 2U);
+    ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 3U);
 
@@ -91,6 +91,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
         EXPECT_EQ(publishedMap.highRisk.activeEnemyCap, 8U);
         EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
+        EXPECT_FLOAT_EQ(publishedMap.highRisk.activationDurationSeconds, 4.0F);
+        EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
+        EXPECT_EQ(publishedMap.highRisk.advancedLootTableId,
+                  LootTableDefinitionId{"loot.raid.high_risk_v1"});
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
              publishedMap.raidEnemyDeploymentIds)
@@ -516,8 +520,58 @@ TEST(ContentRegistryTest, RejectsHighRiskEmergencyExtractionOutsideMap)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"emergency_extraction_point\": {\"position\": {\"x\": 960, \"y\": 520}",
+        "\"emergency_extraction_point\": {\"position\": {\"x\": 300, \"y\": 300}",
         "\"emergency_extraction_point\": {\"position\": {\"x\": 1260, \"y\": 700}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(
+    ContentRegistryTest,
+    RejectsHighRiskControlPointInsideBlocker)
+{
+    const std::string invalid =
+        replaceFirst(publishedJsonCopy(),
+                     "\"activation_control_point\": {\"position\": {\"x\": "
+                     "760, \"y\": 90}",
+                     "\"activation_control_point\": {\"position\": {\"x\": "
+                     "590, \"y\": 395}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsOverlappingHighRiskInteractionRegions)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"emergency_extraction_point\": {\"position\": {\"x\": 300, \"y\": 300}",
+        "\"emergency_extraction_point\": {\"position\": {\"x\": 820, \"y\": 440}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsNormalExtractionOverlappingHighRiskRegion)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"id\": \"west_to_east\", \"player_spawn\": {\"x\": 80, \"y\": 330}, \"extraction_point\": {\"position\": {\"x\": 1080, \"y\": 260}",
+        "{\"id\": \"west_to_east\", \"player_spawn\": {\"x\": 80, \"y\": 330}, \"extraction_point\": {\"position\": {\"x\": 820, \"y\": 440}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(
+    ContentRegistryTest,
+    RejectsHighRiskAdvancedLootOutsideResourceArea)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"id\": \"depot_cache_1\", \"position\": {\"x\": 860, \"y\": 480}}",
+        "{\"id\": \"depot_cache_1\", \"position\": {\"x\": 200, \"y\": 200}}");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

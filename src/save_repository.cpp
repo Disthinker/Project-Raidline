@@ -352,7 +352,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             loot.push_back({
                 {"asset_id", entry.assetId},
                 {"slot_index", entry.slotIndex},
-                {"position", vectorValue(entry.position)}});
+                {"position", vectorValue(entry.position)},
+                {"requires_high_risk", entry.requiresHighRisk}});
         }
         payload["pending_raid"] = {
             {"raid_id", raid.raidId},
@@ -521,7 +522,8 @@ SaveLoadResult deserializeProfileEnvelope(
                contentVersion == "combat-aim-content-6" ||
                contentVersion == "combat-input-content-7" ||
                contentVersion == "combat-ballistics-content-8" ||
-               contentVersion == "raid-fixed-maps-content-9"));
+               contentVersion == "raid-fixed-maps-content-9" ||
+               contentVersion == "raid-pressure-content-10"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6) ||
@@ -783,7 +785,8 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.loot.push_back(RaidLootSnapshot{
                     entry.at("asset_id").get<AssetInstanceId>(),
                     entry.at("slot_index").get<std::uint32_t>(),
-                    parseVector(entry.at("position"))});
+                    parseVector(entry.at("position")),
+                    entry.value("requires_high_risk", false)});
             }
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")

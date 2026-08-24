@@ -140,6 +140,41 @@ TEST(RaidSessionTest, RegularTimeTransitionsToContinuousHighRiskWithoutFailure)
     EXPECT_FLOAT_EQ(session.highRiskTimeElapsed(), 10000.0F);
 }
 
+TEST(RaidSessionTest,
+    ActiveTriggerEntersTheSameIrreversibleHighRiskPhase)
+{
+    RaidSession session{highRiskConfig(20.0F)};
+    ASSERT_TRUE(session.start());
+
+    EXPECT_TRUE(session.triggerHighRisk());
+    EXPECT_EQ(session.phase(), RaidPhase::HighRisk);
+    EXPECT_FLOAT_EQ(session.raidTimeRemaining(), 0.0F);
+    EXPECT_TRUE(session.emergencyExtractionOpen());
+    EXPECT_FALSE(session.normalExtractionOpen());
+    EXPECT_FALSE(session.triggerHighRisk());
+
+    session.update(1000.0F, false, false);
+    EXPECT_TRUE(session.isActive());
+    EXPECT_FLOAT_EQ(session.highRiskTimeElapsed(), 1000.0F);
+}
+
+TEST(
+    RaidSessionTest,
+    ActiveTriggerPreservesOneInProgressNormalExtractionGrace)
+{
+    RaidSession session{highRiskConfig(20.0F)};
+    ASSERT_TRUE(session.start());
+
+    session.update(1.0F, true, false);
+    ASSERT_EQ(session.state(), RaidSessionState::Extracting);
+    ASSERT_TRUE(session.triggerHighRisk());
+
+    EXPECT_TRUE(session.normalExtractionGraceActive());
+    EXPECT_FALSE(session.normalExtractionOpen());
+    session.update(2.0F, true, false);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+}
+
 TEST(RaidSessionTest, HighRiskClosesNormalExtractionAndOpensEmergencySignal)
 {
     RaidSession session{highRiskConfig()};

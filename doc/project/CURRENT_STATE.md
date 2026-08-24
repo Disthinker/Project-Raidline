@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-23。
+最后核对：2026-08-24。
 
 ## Git 与交付基线
 
-- `origin/main@6138da8` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾、固定地图差异化 v1 与武器切换准星连续性修复；PR #74 已通过精确 head CI 和用户正常游玩验收后合入。
-- 当前开发分支：`codex/raid-continuous-high-risk-v1`，从干净的 `origin/main@6138da8` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-continuous-high-risk-v1.md`。
+- `origin/main@773443b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat 射击手感/表现收尾、固定地图差异化、武器切换准星修复与持续高危阶段 v1；PR #75 已通过 CI 和用户正常游玩验收后普通合入。
+- 当前开发分支：`codex/raid-high-risk-control-resource-v1`，从干净的 `origin/main@773443b` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-high-risk-control-resource-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与固定地图 PR #73 已接受。当前进入 **Raid Pressure & Variety：持续高危阶段 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个有界压力与紧急撤离范围。
+Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74、固定地图 PR #73 与持续高危 PR #75 已接受。当前进入 **Raid Pressure & Variety：主动高危与高级资源区 v1**；外部 GDD 继续只读，本仓库 ExecPlan 冻结首个主动风险—收益闭环。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -29,7 +29,8 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与
 14. **射击表现收尾**：PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main。
 15. **固定地图差异化 v1**：PR #73 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `a32c476` 进入 main。
 16. **武器切换准星连续性**：PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main。
-17. **持续高危阶段 v1**：当前分支建立 `Regular → HighRisk` 生命周期、普通撤离一次宽限、地图定义的信号紧急撤离和有上限的感染者压力补入；不扩张到随机危机、情报、停电/火灾或新资源。
+17. **持续高危阶段 v1**：PR #75 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main。
+18. **主动高危与高级资源区 v1**：当前分支为每图建立可中断控制地标和开局冻结、仅在高危开放的高级 Loot；不扩张到随机危机、情报、停电/火灾、随机地图或新资源。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -66,7 +67,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
 - PR #67～#71 的射击手感切片均已通过对应 CI 与用户正常游玩验收。PR #72 的 Windows Debug 全目标、79 项定向回归、788/788 CTest、exact-head CI 与用户验收均已完成，并以 `795b644` 进入 main。当前固定地图分支已完成 Windows Debug 全目标编译和 793/793 全量 CTest；开发代理未启动游戏。
-- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。PR #74 通过 795/795、exact-head CI 与用户验收后以 `6138da8` 进入 main。当前高危切片已完成 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收；用户已授权合并，开发代理未启动游戏。
+- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。PR #74 通过 795/795、exact-head CI 与用户验收后以 `6138da8` 进入 main。PR #75 已完成 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `773443b` 进入 main。当前主动高危切片相关定向回归、Windows Debug 全目标和完整 CTest 814/814 通过；开发代理未启动游戏。
 
 ## Raid 持续高危阶段 v1 当前实现
 
@@ -74,6 +75,13 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与
 - content v10 为三张固定图定义 180 秒常规阶段、12 秒信号撤离、压力出生点、首波/间隔、单波数量与活动敌人上限；schema v6 显式兼容读取 v9 存档。
 - `GameplayWorld` 按冻结 map ID 与 seed 稳定轮转出生点，跳过玩家附近、活敌占用或障碍位置；新敌人使用单调非零 `CombatTargetId`，同时存活上限为 8。
 - App 只读显示 30 秒预警、普通撤离关闭、持续高危、信号撤离进度和当前压力；所有区域当前仍为代码 fallback，不修改资源 manifest。
+
+## Raid 主动高危与高级资源区 v1 当前实现
+
+- `RaidSession::triggerHighRisk()` 是主动切换的唯一权威入口；每图一个控制地标要求持续按住 F 4 秒，松开、离区、受伤、被控制或打开模态界面会清空进度。
+- content v11 为三图定义控制地标、一个高级资源区、两个冻结插槽和独立高级 Loot 表；普通 Loot 仍保持 6～9 个且不受新增随机流影响。
+- `RaidLootSnapshot::requiresHighRisk` 随 schema v6 往返并进入 Profile 指纹。高级资产在 Deploy 时已经获得稳定 ID，常规阶段不可见不可拾取，自然或主动进入高危后只解除访问限制。
+- SDL client 只读绘制控制点、读条和资源区锁定/开放 fallback；没有新增或修改正式美术、音频与资源 manifest。
 
 ## Combat 武器切换准星连续性当前实现
 

@@ -62,6 +62,10 @@ public:
     [[nodiscard]]
     bool markPlayerDead() noexcept;
 
+    // Active Regular Raid can enter the same irreversible HighRisk phase
+    // early. Repeated, disabled, or terminal calls are strict no-ops.
+    [[nodiscard]] bool triggerHighRisk() noexcept;
+
     [[nodiscard]]
     RaidSessionState state() const noexcept;
 
@@ -110,6 +114,7 @@ private:
 
     [[nodiscard]] float activeExtractionDuration() const noexcept;
     void cancelExtraction() noexcept;
+    void enterHighRisk() noexcept;
     void updateContinuousHighRisk(float deltaTime) noexcept;
 };
 

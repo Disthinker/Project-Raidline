@@ -115,7 +115,7 @@ TEST(ProfileInventoryInteractionTest, CancelAndInvalidReleaseAreZeroIntent)
     EXPECT_FALSE(state.source().has_value());
 }
 
-TEST(ProfileInventoryInteractionTest, RevisionOrLocationChangeInvalidatesSource)
+TEST(ProfileInventoryInteractionTest, UnrelatedRevisionCanRequeryButLocationChangeInvalidatesSource)
 {
     ProfileState profile;
     profile.revision = 12;
@@ -141,8 +141,7 @@ TEST(ProfileInventoryInteractionTest, RevisionOrLocationChangeInvalidatesSource)
     EXPECT_TRUE(profileDragSourceMatches(profile, source));
 
     ++profile.revision;
-    EXPECT_FALSE(profileDragSourceMatches(profile, source));
-    profile.revision = 12;
+    EXPECT_TRUE(profileDragSourceMatches(profile, source));
     profile.assets.findMutable(id)->location = StoredAssetLocation{
         ProfileContainerId::stash(), GridPosition{2, 1}};
     EXPECT_FALSE(profileDragSourceMatches(profile, source));

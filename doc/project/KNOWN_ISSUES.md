@@ -30,7 +30,7 @@
 
 ## 需要未来产品决策
 
-- 持续高危 v1 已冻结为有上限感染者补入与信号撤离；随机危机池、停电/火灾、路线封锁和高危高级资源仍需后续独立范围合同。
+- 持续高危 v1 已冻结为有上限感染者补入与信号撤离；当前切片只加入主动控制点和开局冻结的高级资源访问。随机危机池、停电/火灾、路线封锁、最终高级资源数量/品质和情报可见性仍需后续独立范围合同。
 - 高倍率光学视野的正式镜片表现和具体倍镜内容；基础准星与开镜合同已由当前切片冻结。
 - 完整产品早/中/后期目标、结束条件和长期基地路线。
 - 灾难成因、主叙事责任链和正式世界观包装。
@@ -68,6 +68,7 @@
 | Combat：射击表现收尾 | PR #72 已通过 CI 与用户验收，以 merge commit `795b644` 进入 main |
 | Raid Pressure & Variety：固定地图差异化 v1 | PR #73 已通过 exact-head CI 与用户验收，以 merge commit `a32c476` 进入 main；随机地图、情报、高危和正式地图美术仍延期 |
 | Combat Reliability：武器切换准星连续性 | PR #74 已通过 exact-head CI 与用户验收，以 merge commit `6138da8` 进入 main |
-| Raid Pressure & Variety：持续高危阶段 v1 | PR #75 已通过 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收；用户已授权合并 |
+| Raid Pressure & Variety：持续高危阶段 v1 | PR #75 已通过 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main |
+| Raid Pressure & Variety：主动高危与高级资源区 v1 | 当前分支已通过相关定向回归、Windows Debug 全目标和完整 CTest 814/814；等待 exact-head CI 与用户正常游玩验收 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-continuous-high-risk-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-high-risk-control-resource-v1.md`。
