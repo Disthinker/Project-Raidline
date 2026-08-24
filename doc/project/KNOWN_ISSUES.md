@@ -68,6 +68,6 @@
 | Combat：射击表现收尾 | PR #72 已通过 CI 与用户验收，以 merge commit `795b644` 进入 main |
 | Raid Pressure & Variety：固定地图差异化 v1 | PR #73 已通过 exact-head CI 与用户验收，以 merge commit `a32c476` 进入 main；随机地图、情报、高危和正式地图美术仍延期 |
 | Combat Reliability：武器切换准星连续性 | PR #74 已通过 exact-head CI 与用户验收，以 merge commit `6138da8` 进入 main |
-| Raid Pressure & Variety：持续高危阶段 v1 | 当前分支实现 180 秒常规阶段、普通撤离宽限、12 秒信号撤离与活动敌人上限 8；Windows Debug 全目标与 807/807 CTest 已通过，等待 CI 与用户正常游玩验收 |
+| Raid Pressure & Variety：持续高危阶段 v1 | PR #75 已通过 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收；用户已授权合并 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-continuous-high-risk-v1.md`。

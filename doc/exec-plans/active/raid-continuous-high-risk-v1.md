@@ -52,4 +52,4 @@
 - [x] 2026-08-23：核对 `origin/main@6138da8`、GDD、RaidSession、地图内容和现有 HUD，冻结 v1 范围。
 - [x] 2026-08-23：完成阶段/撤离领域合同及普通撤离一次宽限。
 - [x] 2026-08-23：完成 content v10、三图信号撤离、稳定有界压力和 HUD 代码 fallback。
-- [ ] 2026-08-23：Windows Debug 全目标与 807/807 CTest 已通过；等待 exact-head CI 与用户正常游玩验收。
+- [x] 2026-08-24：Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收全部通过；用户已授权合并。

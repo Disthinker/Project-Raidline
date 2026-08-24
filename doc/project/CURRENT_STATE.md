@@ -66,7 +66,7 @@ Core Extraction Alpha、五个 Survival Loadout 切片、Combat PR #66～#74 与
 - PR #65 的防具维护 Windows Debug 全目标、718/718 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均已通过并合入。
 - PR #66 的逻辑弹道切片已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，并以 `7877d71` 合入 main。
 - PR #67～#71 的射击手感切片均已通过对应 CI 与用户正常游玩验收。PR #72 的 Windows Debug 全目标、79 项定向回归、788/788 CTest、exact-head CI 与用户验收均已完成，并以 `795b644` 进入 main。当前固定地图分支已完成 Windows Debug 全目标编译和 793/793 全量 CTest；开发代理未启动游戏。
-- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。PR #74 通过 795/795、exact-head CI 与用户验收后以 `6138da8` 进入 main。当前高危切片已完成 Windows Debug 全目标与 807/807 CTest；exact-head CI 和用户正常游玩验收尚待提交后执行，开发代理不会启动游戏。
+- PR #73 的 Windows Debug 全目标、793/793 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已完成，并以 `a32c476` 进入 main。PR #74 通过 795/795、exact-head CI 与用户验收后以 `6138da8` 进入 main。当前高危切片已完成 Windows Debug 全目标、807/807 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收；用户已授权合并，开发代理未启动游戏。
 
 ## Raid 持续高危阶段 v1 当前实现
 
