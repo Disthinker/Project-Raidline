@@ -10,11 +10,32 @@ enum class RaidSessionState
     RaidEnded,
 };
 
+enum class RaidPhase
+{
+    Regular,
+    HighRisk,
+};
+
+enum class RaidExtractionRoute
+{
+    None,
+    Normal,
+    EmergencySignal,
+};
+
+struct HighRiskRaidSessionConfig
+{
+    bool enabled{};
+    float regularPhaseDurationSeconds{};
+    float emergencyExtractionDurationSeconds{};
+};
+
 struct RaidSessionConfig
 {
     float raidDurationSeconds{180.0F};
     float extractionDurationSeconds{3.0F};
     bool hardTimeLimit{true};
+    HighRiskRaidSessionConfig highRisk;
 };
 
 class RaidSession
@@ -32,6 +53,11 @@ public:
     void update(
         float deltaTime,
         bool playerInExtractionPoint) noexcept;
+
+    void update(
+        float deltaTime,
+        bool playerInNormalExtractionPoint,
+        bool playerInEmergencyExtractionPoint) noexcept;
 
     [[nodiscard]]
     bool markPlayerDead() noexcept;
@@ -57,13 +83,38 @@ public:
     [[nodiscard]]
     float extractionProgress() const noexcept;
 
+    [[nodiscard]] RaidPhase phase() const noexcept;
+
+    [[nodiscard]] RaidExtractionRoute extractionRoute() const noexcept;
+
+    [[nodiscard]] bool normalExtractionOpen() const noexcept;
+
+    [[nodiscard]] bool normalExtractionGraceActive() const noexcept;
+
+    [[nodiscard]] bool emergencyExtractionOpen() const noexcept;
+
+    [[nodiscard]] bool enteredHighRiskLastUpdate() const noexcept;
+
+    [[nodiscard]] float highRiskTimeElapsed() const noexcept;
+
 private:
     RaidSessionConfig config_;
     RaidSessionState state_{RaidSessionState::Preparing};
     float raidTimeRemaining_{};
     float extractionTimeElapsed_{};
+    float highRiskTimeElapsed_{};
+    RaidPhase phase_{RaidPhase::Regular};
+    RaidExtractionRoute extractionRoute_{RaidExtractionRoute::None};
+    bool normalExtractionGraceActive_{};
+    bool enteredHighRiskLastUpdate_{};
+
+    [[nodiscard]] float activeExtractionDuration() const noexcept;
+    void cancelExtraction() noexcept;
+    void updateContinuousHighRisk(float deltaTime) noexcept;
 };
 
 [[nodiscard]]
 const char *raidSessionStateName(
     RaidSessionState state) noexcept;
+
+[[nodiscard]] const char *raidPhaseName(RaidPhase phase) noexcept;

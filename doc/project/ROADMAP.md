@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat PR #66～#72 与固定地图 PR #73 已接受。当前优先处理 **Combat Reliability：武器切换准星连续性**；范围合同见 `doc/exec-plans/active/combat-weapon-switch-reticle-continuity.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat PR #66～#74 与固定地图 PR #73 已接受。当前优先交付 **Raid Pressure & Variety：持续高危阶段 v1**；范围合同见 `doc/exec-plans/active/raid-continuous-high-risk-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -33,6 +33,7 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#72 与固定地图 P
 | 动态散布模型与准星稳定性 v3 | PR #71 / merge commit `33da892` |
 | 射击表现收尾 | PR #72 / merge commit `795b644` |
 | 固定地图差异化 v1 | PR #73 / merge commit `a32c476` |
+| 武器切换准星连续性 | PR #74 / merge commit `6138da8` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -63,12 +64,13 @@ Core Extraction Alpha、Survival Loadout、Combat PR #66～#72 与固定地图 P
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
 | 固定地图差异化 v1 | Base 出击口可在三张固定地图间选择；每张图具有不同路线、障碍、出生/撤离、敌人和 Loot 分布 | 显式 MapDefinitionId Deploy、地图展示元数据、独立 PCG32 快照、旧存档版本兼容 | PR #73 已通过 CI 和用户验收，以 `a32c476` 进入 main；不包含随机地图、情报、高危或新美术 |
+| 持续高危阶段 v1 | 常规时间归零后进入持续高危；普通撤离关闭，地图信号区开放并承受有上限的持续感染者压力 | RaidPhase/RaidExtractionRoute、地图化高危规则、稳定出生轮转、单调目标 ID、无时间失败 | PR #75 已通过 CI 与用户正常游玩验收并获合并授权；不包含随机危机、情报、高级资源、停电/火灾、条件撤离或新资源 |
 
 ## 当前 Combat Reliability 缺陷
 
 | 缺陷 | 玩家可见结果 | 技术边界 | 当前状态 |
 | --- | --- | --- | --- |
-| 武器切换准星连续性 | Raid 限时切换完成前后，准星保持当前实际位置，不跳回系统指针锚点 | 只保留 WeaponAimState 空间/输入瞬态；新武器仍重置 WeaponFireState | Windows Debug 全目标与 795/795 CTest 通过，等待 CI 与用户验收 |
+| 武器切换准星连续性 | Raid 限时切换完成前后，准星保持当前实际位置，不跳回系统指针锚点 | 只保留 WeaponAimState 空间/输入瞬态；新武器仍重置 WeaponFireState | PR #74 已通过 CI 和用户验收，以 `6138da8` 进入 main |
 
 生产 Alpha 已以真实 Deploy、随身资产和幂等 Settlement 替换 V0 的 Profile 隔离桥，并移除 180 秒失败、3 HP 与无限弹在生产路径中的职责。旧路径只保留历史回归，不得扩展。
 

@@ -3945,18 +3945,53 @@ void App::renderDebugText()
         148.0F,
         raidStateText.c_str());
 
-    const std::string raidTimeText =
-        gameSession_.world().isAlphaRaidWorld()
+    std::string raidTimeText;
+    if (gameSession_.world().emergencyExtractionPoint().has_value())
+    {
+        if (raidSession.phase() == RaidPhase::Regular)
+        {
+            raidTimeText = fmt::format(
+                "REGULAR: {:.0f}s | NORMAL EXTRACTION OPEN{}",
+                raidSession.raidTimeRemaining(),
+                raidSession.raidTimeRemaining() <= 30.0F
+                    ? " | HIGH RISK SOON"
+                    : "");
+        }
+        else
+        {
+            raidTimeText =
+                "HIGH RISK: CONTINUOUS | SIGNAL EXTRACTION OPEN";
+        }
+    }
+    else
+    {
+        raidTimeText = gameSession_.world().isAlphaRaidWorld()
             ? "Raid Time: NO HARD LIMIT"
             : fmt::format(
                   "Raid Time: {:.1f}s",
                   raidSession.raidTimeRemaining());
+    }
 
     SDL_RenderDebugText(
         renderer_,
         20.0F,
         164.0F,
         raidTimeText.c_str());
+
+    if (raidSession.phase() == RaidPhase::HighRisk &&
+        gameSession_.world().highRiskActiveEnemyCap() > 0U)
+    {
+        const std::string pressureText = fmt::format(
+            "Pressure wave {} | Active {}/{}",
+            gameSession_.world().highRiskPressureWaveCount(),
+            gameSession_.world().aliveEnemyCount(),
+            gameSession_.world().highRiskActiveEnemyCap());
+        SDL_RenderDebugText(
+            renderer_,
+            20.0F,
+            180.0F,
+            pressureText.c_str());
+    }
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()
         ? fmt::format(
@@ -5443,67 +5478,78 @@ void App::renderBackground()
 
 void App::renderExtractionPoint()
 {
-    const ExtractionPoint &extractionPoint =
-        gameSession_.world().extractionPoint();
-    const Rect &bounds =
-        extractionPoint.bounds();
     const RaidSession &raidSession =
         gameSession_.world().raidSession();
-
-    const bool extracting =
-        raidSession.state() ==
-        RaidSessionState::Extracting;
     const bool extracted =
         raidSession.state() ==
         RaidSessionState::Extracted;
-
-    const SDL_FRect zone{
-        bounds.position.x,
-        bounds.position.y,
-        bounds.size.x,
-        bounds.size.y};
 
     SDL_SetRenderDrawBlendMode(
         renderer_,
         SDL_BLENDMODE_BLEND);
 
-    SDL_SetRenderDrawColor(
-        renderer_,
-        extracted ? 30 : 25,
-        extracting || extracted ? 155 : 92,
-        extracted ? 70 : 62,
-        extracting || extracted ? 118 : 76);
-    SDL_RenderFillRect(
-        renderer_,
-        &zone);
-
-    SDL_SetRenderDrawColor(
-        renderer_,
-        extracting || extracted ? 132 : 88,
-        extracting || extracted ? 245 : 188,
-        extracting || extracted ? 158 : 112,
-        255);
-    SDL_RenderRect(
-        renderer_,
-        &zone);
-
-    SDL_RenderDebugText(
-        renderer_,
-        zone.x + 44.0F,
-        zone.y + 16.0F,
-        "EXTRACTION");
-
-    if (extracting || extracted)
+    const auto renderZone =
+        [&](const ExtractionPoint &point,
+            RaidExtractionRoute route,
+            bool open,
+            const char *label,
+            bool signal)
     {
-        const float progress =
-            raidSession.extractionProgress();
+        const Rect &bounds = point.bounds();
+        const SDL_FRect zone{
+            bounds.position.x,
+            bounds.position.y,
+            bounds.size.x,
+            bounds.size.y};
+        const bool active =
+            raidSession.extractionRoute() == route &&
+            (raidSession.state() == RaidSessionState::Extracting || extracted);
 
+        if (!open && !active)
+        {
+            SDL_SetRenderDrawColor(renderer_, 72, 30, 30, 54);
+            SDL_RenderFillRect(renderer_, &zone);
+            SDL_SetRenderDrawColor(renderer_, 138, 68, 68, 180);
+            SDL_RenderRect(renderer_, &zone);
+            SDL_RenderDebugText(
+                renderer_,
+                zone.x + 18.0F,
+                zone.y + 16.0F,
+                signal ? "SIGNAL LOCKED" : "EXTRACTION CLOSED");
+            return;
+        }
+
+        SDL_SetRenderDrawColor(
+            renderer_,
+            signal ? 145 : 25,
+            signal ? 94 : (active ? 155 : 92),
+            signal ? 28 : 62,
+            active ? 128 : 82);
+        SDL_RenderFillRect(renderer_, &zone);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            signal ? 255 : (active ? 132 : 88),
+            signal ? 196 : (active ? 245 : 188),
+            signal ? 88 : (active ? 158 : 112),
+            255);
+        SDL_RenderRect(renderer_, &zone);
+        SDL_RenderDebugText(
+            renderer_,
+            zone.x + 18.0F,
+            zone.y + 16.0F,
+            label);
+
+        if (!active)
+        {
+            return;
+        }
+
+        const float progress = raidSession.extractionProgress();
         const SDL_FRect progressTrack{
             zone.x + 12.0F,
             zone.y + zone.h - 24.0F,
             zone.w - 24.0F,
             10.0F};
-
         SDL_SetRenderDrawColor(
             renderer_,
             10,
@@ -5522,13 +5568,11 @@ void App::renderExtractionPoint()
 
         SDL_SetRenderDrawColor(
             renderer_,
-            126,
-            235,
-            154,
+            signal ? 255 : 126,
+            signal ? 202 : 235,
+            signal ? 98 : 154,
             240);
-        SDL_RenderFillRect(
-            renderer_,
-            &progressFill);
+        SDL_RenderFillRect(renderer_, &progressFill);
 
         const float timeRemaining =
             std::max(
@@ -5548,6 +5592,28 @@ void App::renderExtractionPoint()
             zone.x + 22.0F,
             zone.y + 48.0F,
             extractionPrompt.c_str());
+    };
+
+    renderZone(
+        gameSession_.world().extractionPoint(),
+        RaidExtractionRoute::Normal,
+        raidSession.normalExtractionOpen() ||
+            raidSession.normalExtractionGraceActive(),
+        raidSession.normalExtractionGraceActive()
+            ? "NORMAL - GRACE"
+            : "NORMAL EXTRACTION",
+        false);
+
+    if (const std::optional<ExtractionPoint> &emergency =
+            gameSession_.world().emergencyExtractionPoint();
+        emergency.has_value())
+    {
+        renderZone(
+            *emergency,
+            RaidExtractionRoute::EmergencySignal,
+            raidSession.emergencyExtractionOpen(),
+            "SIGNAL EXTRACTION",
+            true);
     }
 
     SDL_SetRenderDrawBlendMode(

@@ -84,6 +84,19 @@ struct RaidRuleDefinition
     float extractionDurationSeconds{};
 };
 
+struct HighRiskRaidDefinition
+{
+    bool enabled{};
+    float regularPhaseDurationSeconds{};
+    ContentRect emergencyExtractionPoint;
+    float emergencyExtractionDurationSeconds{};
+    float initialWaveDelaySeconds{};
+    float waveIntervalSeconds{};
+    std::uint32_t waveSize{};
+    std::uint32_t activeEnemyCap{};
+    std::vector<EnemySpawnDefinition> pressureSpawns;
+};
+
 struct SpawnExtractionPairDefinition
 {
     std::string id;
@@ -120,6 +133,7 @@ struct MapDefinition
     StorageCabinetDefinition storageCabinet;
     ContentRect extractionPoint;
     RaidRuleDefinition raidRules;
+    HighRiskRaidDefinition highRisk;
     LootTableDefinitionId storageLootTableId;
     EnemyDeploymentDefinitionId enemyDeploymentId;
     std::vector<SpawnExtractionPairDefinition> spawnExtractionPairs;

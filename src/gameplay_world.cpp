@@ -17,6 +17,7 @@ namespace
     constexpr float kLegacyShotExtent{8.0f};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
+    constexpr float kMinimumHighRiskSpawnDistance{260.0F};
 
     constexpr int kScorePerEnemy{100};
 
@@ -286,7 +287,9 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         !std::isfinite(config.worldSize.y) ||
         config.worldSize.x <= 0.0F || config.worldSize.y <= 0.0F ||
         config.playerCurrentHealth <= 0 ||
-        config.playerCurrentHealth > config.playerMaximumHealth)
+        config.playerCurrentHealth > config.playerMaximumHealth ||
+        !std::isfinite(config.normalExtractionDurationSeconds) ||
+        config.normalExtractionDurationSeconds <= 0.0F)
     {
         throw std::invalid_argument{"RaidWorldConfig is invalid"};
     }
@@ -316,7 +319,63 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     extractionPoint_ = ExtractionPoint{
         config.extractionPoint.position,
         config.extractionPoint.size};
-    raidSession_ = RaidSession{RaidSessionConfig{0.0F, 3.0F, false}};
+
+    if (config.highRisk.enabled)
+    {
+        const HighRiskWorldConfig &highRisk = config.highRisk;
+        if (!std::isfinite(highRisk.regularPhaseDurationSeconds) ||
+            highRisk.regularPhaseDurationSeconds <= 0.0F ||
+            !std::isfinite(highRisk.emergencyExtractionDurationSeconds) ||
+            highRisk.emergencyExtractionDurationSeconds <= 0.0F ||
+            !std::isfinite(highRisk.initialWaveDelaySeconds) ||
+            highRisk.initialWaveDelaySeconds <= 0.0F ||
+            !std::isfinite(highRisk.waveIntervalSeconds) ||
+            highRisk.waveIntervalSeconds <= 0.0F ||
+            highRisk.waveSize == 0U ||
+            highRisk.activeEnemyCap == 0U ||
+            highRisk.waveSize > highRisk.activeEnemyCap ||
+            aliveEnemyCount() > highRisk.activeEnemyCap ||
+            highRisk.pressureSpawns.empty())
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig high-risk settings are invalid"};
+        }
+        for (const EnemySpawn &spawn : highRisk.pressureSpawns)
+        {
+            if (!std::isfinite(spawn.position.x) ||
+                !std::isfinite(spawn.position.y) ||
+                !std::isfinite(spawn.size.x) ||
+                !std::isfinite(spawn.size.y) ||
+                spawn.size.x <= 0.0F ||
+                spawn.size.y <= 0.0F ||
+                spawn.maxHealth <= 0)
+            {
+                throw std::invalid_argument{
+                    "RaidWorldConfig high-risk pressure spawn is invalid"};
+            }
+        }
+
+        emergencyExtractionPoint_.emplace(
+            highRisk.emergencyExtractionPoint.position,
+            highRisk.emergencyExtractionPoint.size);
+        highRiskPressureSpawns_ = highRisk.pressureSpawns;
+        highRiskWaveIntervalSeconds_ = highRisk.waveIntervalSeconds;
+        highRiskNextWaveSeconds_ = highRisk.initialWaveDelaySeconds;
+        highRiskWaveSize_ = highRisk.waveSize;
+        highRiskActiveEnemyCap_ = highRisk.activeEnemyCap;
+        nextHighRiskPressureSpawnIndex_ =
+            static_cast<std::size_t>(
+                highRisk.seed % highRiskPressureSpawns_.size());
+    }
+
+    raidSession_ = RaidSession{RaidSessionConfig{
+        0.0F,
+        config.normalExtractionDurationSeconds,
+        false,
+        HighRiskRaidSessionConfig{
+            config.highRisk.enabled,
+            config.highRisk.regularPhaseDurationSeconds,
+            config.highRisk.emergencyExtractionDurationSeconds}}};
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -659,16 +718,28 @@ void GameplayWorld::update(
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
+    const float highRiskTimeBeforeUpdate =
+        raidSession_.highRiskTimeElapsed();
+    const bool playerInEmergencyExtraction =
+        emergencyExtractionPoint_.has_value() &&
+        emergencyExtractionPoint_->contains(playerCenter(player_));
     raidSession_.update(
         deltaTime,
         !player_.isControlled() && extractionPoint_.contains(
-            playerCenter(player_)));
+            playerCenter(player_)),
+        !player_.isControlled() && playerInEmergencyExtraction);
 
     // 终局形成后，本帧不再产生拾取、射击、敌人或命中结果。
     if (!raidSession_.isActive())
     {
         return;
     }
+
+    updateHighRiskPressure(
+        std::max(
+            0.0F,
+            raidSession_.highRiskTimeElapsed() -
+                highRiskTimeBeforeUpdate));
 
     // Bounded substeps keep attack phase transitions and one-shot hit
     // opportunities observable even when a render frame is long.
@@ -1184,10 +1255,38 @@ GameplayWorld::extractionPoint() const noexcept
     return extractionPoint_;
 }
 
+const std::optional<ExtractionPoint> &
+GameplayWorld::emergencyExtractionPoint() const noexcept
+{
+    return emergencyExtractionPoint_;
+}
+
 const RaidSession &
 GameplayWorld::raidSession() const noexcept
 {
     return raidSession_;
+}
+
+std::size_t GameplayWorld::aliveEnemyCount() const noexcept
+{
+    return static_cast<std::size_t>(
+        std::count_if(
+            enemies_.begin(),
+            enemies_.end(),
+            [](const Enemy &enemy)
+            {
+                return !enemy.isDead();
+            }));
+}
+
+std::uint32_t GameplayWorld::highRiskPressureWaveCount() const noexcept
+{
+    return highRiskPressureWaveCount_;
+}
+
+std::uint32_t GameplayWorld::highRiskActiveEnemyCap() const noexcept
+{
+    return highRiskActiveEnemyCap_;
 }
 
 float GameplayWorld::weaponSpreadDegrees() const noexcept
@@ -1851,4 +1950,124 @@ float GameplayWorld::worldWidth() const noexcept
 float GameplayWorld::worldHeight() const noexcept
 {
     return worldSize_.y;
+}
+
+void GameplayWorld::updateHighRiskPressure(float highRiskDeltaTime)
+{
+    if (raidSession_.phase() != RaidPhase::HighRisk ||
+        !std::isfinite(highRiskDeltaTime) ||
+        highRiskDeltaTime <= 0.0F ||
+        highRiskPressureSpawns_.empty())
+    {
+        return;
+    }
+
+    highRiskNextWaveSeconds_ -= highRiskDeltaTime;
+    while (highRiskNextWaveSeconds_ <= 0.0F &&
+           aliveEnemyCount() < highRiskActiveEnemyCap_)
+    {
+        if (spawnHighRiskPressureWave() == 0U)
+        {
+            // Keep the pressure due. A later frame can retry after the player
+            // or living enemies have moved away from every legal spawn.
+            highRiskNextWaveSeconds_ = 0.0F;
+            return;
+        }
+        ++highRiskPressureWaveCount_;
+        highRiskNextWaveSeconds_ += highRiskWaveIntervalSeconds_;
+    }
+}
+
+std::size_t GameplayWorld::spawnHighRiskPressureWave()
+{
+    if (nextCombatTargetId_ ==
+        std::numeric_limits<CombatTargetId>::max())
+    {
+        return 0U;
+    }
+
+    const std::size_t available =
+        static_cast<std::size_t>(highRiskActiveEnemyCap_) -
+        aliveEnemyCount();
+    const std::size_t requested = std::min(
+        static_cast<std::size_t>(highRiskWaveSize_),
+        available);
+    std::size_t spawned{};
+
+    for (std::size_t member = 0U; member < requested; ++member)
+    {
+        bool found{};
+        for (std::size_t attempt = 0U;
+             attempt < highRiskPressureSpawns_.size();
+             ++attempt)
+        {
+            const EnemySpawn &candidate =
+                highRiskPressureSpawns_[nextHighRiskPressureSpawnIndex_];
+            nextHighRiskPressureSpawnIndex_ =
+                (nextHighRiskPressureSpawnIndex_ + 1U) %
+                highRiskPressureSpawns_.size();
+            if (!canSpawnHighRiskEnemy(candidate))
+            {
+                continue;
+            }
+            enemies_.emplace_back(
+                candidate.position,
+                candidate.size,
+                Vec2{},
+                candidate.maxHealth,
+                nextCombatTargetId_++);
+            ++spawned;
+            found = true;
+            break;
+        }
+        if (!found ||
+            nextCombatTargetId_ ==
+                std::numeric_limits<CombatTargetId>::max())
+        {
+            break;
+        }
+    }
+    return spawned;
+}
+
+bool GameplayWorld::canSpawnHighRiskEnemy(
+    const EnemySpawn &spawn) const noexcept
+{
+    const Rect candidate{spawn.position, spawn.size};
+    if (candidate.position.x < 0.0F ||
+        candidate.position.y < 0.0F ||
+        candidate.position.x + candidate.size.x > worldWidth() ||
+        candidate.position.y + candidate.size.y > worldHeight())
+    {
+        return false;
+    }
+
+    const Vec2 spawnCenter{
+        spawn.position.x + spawn.size.x * 0.5F,
+        spawn.position.y + spawn.size.y * 0.5F};
+    const Vec2 playerPosition = playerCenter(player_);
+    const float deltaX = spawnCenter.x - playerPosition.x;
+    const float deltaY = spawnCenter.y - playerPosition.y;
+    if (deltaX * deltaX + deltaY * deltaY <
+        kMinimumHighRiskSpawnDistance *
+            kMinimumHighRiskSpawnDistance)
+    {
+        return false;
+    }
+
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
+    {
+        if (isCollision(candidate, blocker.bounds))
+        {
+            return false;
+        }
+    }
+    return std::none_of(
+        enemies_.begin(),
+        enemies_.end(),
+        [&candidate](const Enemy &enemy)
+        {
+            return !enemy.isDead() &&
+                   isCollision(candidate, enemy.bounds());
+        });
 }

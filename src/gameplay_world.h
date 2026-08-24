@@ -41,6 +41,20 @@ struct EnemySpawn
     int maxHealth{3};
 };
 
+struct HighRiskWorldConfig
+{
+    bool enabled{};
+    float regularPhaseDurationSeconds{};
+    ContentRect emergencyExtractionPoint;
+    float emergencyExtractionDurationSeconds{};
+    float initialWaveDelaySeconds{};
+    float waveIntervalSeconds{};
+    std::uint32_t waveSize{};
+    std::uint32_t activeEnemyCap{};
+    std::vector<EnemySpawn> pressureSpawns;
+    std::uint64_t seed{};
+};
+
 struct RaidWorldConfig
 {
     Vec2 worldSize{1280.0F, 720.0F};
@@ -51,6 +65,8 @@ struct RaidWorldConfig
     int playerCurrentHealth{100};
     bool deferPlayerDamageResolution{};
     std::vector<BallisticBlocker> ballisticBlockers;
+    float normalExtractionDurationSeconds{3.0F};
+    HighRiskWorldConfig highRisk;
 };
 
 struct PlayerDamageObservation
@@ -188,8 +204,15 @@ public:
     [[nodiscard]]
     const ExtractionPoint &extractionPoint() const noexcept;
 
+    [[nodiscard]] const std::optional<ExtractionPoint> &
+    emergencyExtractionPoint() const noexcept;
+
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
+
+    [[nodiscard]] std::size_t aliveEnemyCount() const noexcept;
+    [[nodiscard]] std::uint32_t highRiskPressureWaveCount() const noexcept;
+    [[nodiscard]] std::uint32_t highRiskActiveEnemyCap() const noexcept;
 
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
@@ -315,7 +338,16 @@ private:
     GridInventory inventory_{{10, 6}};
     StorageCabinet storageCabinet_;
     ExtractionPoint extractionPoint_;
+    std::optional<ExtractionPoint> emergencyExtractionPoint_;
     RaidSession raidSession_;
+
+    std::vector<EnemySpawn> highRiskPressureSpawns_;
+    float highRiskWaveIntervalSeconds_{};
+    float highRiskNextWaveSeconds_{};
+    std::uint32_t highRiskWaveSize_{};
+    std::uint32_t highRiskActiveEnemyCap_{};
+    std::uint32_t highRiskPressureWaveCount_{};
+    std::size_t nextHighRiskPressureSpawnIndex_{};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
@@ -363,4 +395,9 @@ private:
 
     [[nodiscard]] float worldWidth() const noexcept;
     [[nodiscard]] float worldHeight() const noexcept;
+
+    void updateHighRiskPressure(float highRiskDeltaTime);
+    [[nodiscard]] std::size_t spawnHighRiskPressureWave();
+    [[nodiscard]] bool canSpawnHighRiskEnemy(
+        const EnemySpawn &spawn) const noexcept;
 };

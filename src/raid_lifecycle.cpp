@@ -186,7 +186,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "core-alpha-raid-1";
+    snapshot.rulesVersion = "raid-pressure-1";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
