@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "alpha_content_ids.h"
 #include "base_resource_domain.h"
+#include "inventory_domain.h"
 
 namespace
 {
@@ -23,6 +26,26 @@ AssetInstanceId createIntakeAsset(
         definition,
         StoredAssetLocation{
             ProfileContainerId::baseIntake(), *origin},
+        quantity);
+}
+
+AssetInstanceId createStashAsset(
+    ProfileState &profile,
+    const ItemDefinitionId &definitionId,
+    std::uint32_t quantity = 1)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ItemDefinition &definition = content.item(definitionId);
+    const auto origin = findFirstProfileFit(
+        profile,
+        content,
+        ProfileContainerId::stash(),
+        definition,
+        ItemOrientation::Degrees0);
+    EXPECT_TRUE(origin.has_value());
+    return profile.assets.create(
+        definition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin},
         quantity);
 }
 }
@@ -100,12 +123,12 @@ TEST(BaseResourceDomainTest, OperationalReadinessIsPureAndUsesExactThresholds)
     EXPECT_EQ(state, before);
 }
 
-TEST(BaseResourceDomainTest, MatchingPendingItemFulfillsPriorityAtomically)
+TEST(BaseResourceDomainTest, MatchingStashItemFulfillsPriorityAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-priority-submit",
         publishedContentRegistry());
-    const AssetInstanceId cola = createIntakeAsset(
+    const AssetInstanceId cola = createStashAsset(
         profile, alpha_content::lootCola);
 
     const BasePriorityReceipt receipt = executeBasePrioritySubmission(
@@ -130,26 +153,15 @@ TEST(BaseResourceDomainTest, MatchingPendingItemFulfillsPriorityAtomically)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, PriorityRejectsWrongOrStashItemWithoutMutation)
+TEST(BaseResourceDomainTest, PriorityRejectsWrongItemAndAcceptsExplicitStashItem)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-priority-reject",
         publishedContentRegistry());
     const AssetInstanceId scrap = createIntakeAsset(
         profile, ItemDefinitionId{"item.loot.scrap_parts"});
-    const ItemDefinition &colaDefinition =
-        publishedContentRegistry().item(alpha_content::lootCola);
-    const auto stashOrigin = findFirstProfileFit(
-        profile,
-        publishedContentRegistry(),
-        ProfileContainerId::stash(),
-        colaDefinition,
-        ItemOrientation::Degrees0);
-    ASSERT_TRUE(stashOrigin.has_value());
-    const AssetInstanceId stashCola = profile.assets.create(
-        colaDefinition,
-        StoredAssetLocation{ProfileContainerId::stash(), *stashOrigin},
-        1);
+    const AssetInstanceId stashCola = createStashAsset(
+        profile, alpha_content::lootCola);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     EXPECT_FALSE(executeBasePrioritySubmission(
@@ -157,12 +169,15 @@ TEST(BaseResourceDomainTest, PriorityRejectsWrongOrStashItemWithoutMutation)
         publishedContentRegistry(),
         SubmitBasePriorityCommand{scrap},
         CommandContext{profile.revision, "reject-wrong-priority"}).succeeded);
-    EXPECT_FALSE(executeBasePrioritySubmission(
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    const BasePriorityReceipt accepted = executeBasePrioritySubmission(
         profile,
         publishedContentRegistry(),
         SubmitBasePriorityCommand{stashCola},
-        CommandContext{profile.revision, "reject-stash-priority"}).succeeded);
-    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+        CommandContext{profile.revision, "accept-stash-priority"});
+    EXPECT_TRUE(accepted.succeeded) << accepted.message;
+    EXPECT_EQ(profile.assets.find(stashCola), nullptr);
 }
 
 TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
@@ -234,35 +249,83 @@ TEST(BaseResourceDomainTest, IntakeContributionIsAtomicAndIdempotent)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, StashAssetCannotBeSilentlyConsumed)
+TEST(BaseResourceDomainTest, ExplicitStashContributionConsumesOnlySelectedAsset)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-resource-location",
         publishedContentRegistry());
-    const ItemDefinition &definition = publishedContentRegistry().item(
-        alpha_content::lootCola);
-    const auto origin = findFirstProfileFit(
-        profile,
-        publishedContentRegistry(),
-        ProfileContainerId::stash(),
-        definition,
-        ItemOrientation::Degrees0);
-    ASSERT_TRUE(origin.has_value());
-    const AssetInstanceId cola = profile.assets.create(
-        definition,
-        StoredAssetLocation{ProfileContainerId::stash(), *origin},
-        1);
-    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const AssetInstanceId cola = createStashAsset(
+        profile, alpha_content::lootCola);
+    const AssetInstanceId unrelatedAsset =
+        profile.assets.records().begin()->first;
+    const AssetLocation unrelatedLocation =
+        profile.assets.find(unrelatedAsset)->location;
 
     const BaseResourceReceipt receipt = executeBaseResourceContribution(
         profile,
         publishedContentRegistry(),
         ContributeBaseAssetCommand{cola},
-        CommandContext{profile.revision, "reject-stash-cola"});
+        CommandContext{profile.revision, "contribute-stash-cola"});
 
-    EXPECT_FALSE(receipt.succeeded);
-    EXPECT_EQ(receipt.error, DomainErrorCode::IllegalDestination);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    ASSERT_NE(profile.assets.find(unrelatedAsset), nullptr);
+    EXPECT_EQ(
+        profile.assets.find(unrelatedAsset)->location,
+        unrelatedLocation);
+}
+
+TEST(BaseResourceDomainTest, ExplicitCarriedContributionUsesOriginalContainer)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-resource-carried-location",
+        publishedContentRegistry());
+    const auto backpackEntry = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        {
+            return entry.second.definitionId == alpha_content::backpack;
+        });
+    ASSERT_NE(backpackEntry, profile.assets.records().end());
+    const AssetInstanceId backpack = backpackEntry->first;
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        CommandContext{profile.revision, "equip-allocation-backpack"}).succeeded);
+    const ItemDefinition &colaDefinition = publishedContentRegistry().item(
+        alpha_content::lootCola);
+    const AssetInstanceId cola = profile.assets.create(
+        colaDefinition,
+        StoredAssetLocation{
+            ProfileContainerId::compartment(backpack, 0),
+            GridPosition{0, 0}});
+    ASSERT_TRUE(assetIsCarried(profile, cola));
+    ASSERT_TRUE(assetIsBaseAccessible(profile, cola));
+    const AssetLocation locationBefore = profile.assets.find(cola)->location;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const BaseResourcePlan plan = queryBaseResourceContribution(
+        profile,
+        publishedContentRegistry(),
+        ContributeBaseAssetCommand{cola});
+
+    ASSERT_TRUE(plan.canCommit) << plan.message;
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    EXPECT_EQ(profile.assets.find(cola)->location, locationBefore);
+
+    const BaseResourceReceipt receipt = executeBaseResourceContribution(
+        profile,
+        publishedContentRegistry(),
+        ContributeBaseAssetCommand{cola},
+        CommandContext{profile.revision, "contribute-carried-cola"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    EXPECT_EQ(
+        equippedAsset(profile, EquipmentSlotKind::Backpack),
+        backpack);
 }
 
 TEST(BaseResourceDomainTest, ContributionRejectsOverflowWithoutPartialWaste)
@@ -284,6 +347,126 @@ TEST(BaseResourceDomainTest, ContributionRejectsOverflowWithoutPartialWaste)
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(receipt.error, DomainErrorCode::Capacity);
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseResourceDomainTest, SupplyAssignmentIsPersistentIntentNotImmediateConsumption)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-supply-assignment",
+        publishedContentRegistry());
+    const AssetInstanceId cola = createStashAsset(
+        profile, alpha_content::lootCola);
+    const AssetLocation location = profile.assets.find(cola)->location;
+
+    const BaseSupplyAssignmentReceipt enabled = executeBaseSupplyAssignment(
+        profile,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{
+            alpha_content::lootCola, BaseSupplyCategory::Food},
+        CommandContext{profile.revision, "enable-cola-food"});
+
+    ASSERT_TRUE(enabled.succeeded) << enabled.message;
+    ASSERT_NE(profile.assets.find(cola), nullptr);
+    EXPECT_EQ(profile.assets.find(cola)->location, location);
+    EXPECT_EQ(
+        profile.baseSupplyPolicy.assignments.at(alpha_content::lootCola),
+        BaseSupplyCategory::Food);
+
+    const std::uint64_t beforeReject = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeBaseSupplyAssignment(
+        profile,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{
+            alpha_content::lootCola, BaseSupplyCategory::Medical},
+        CommandContext{profile.revision, "invalid-cola-medical"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeReject);
+
+    const BaseSupplyAssignmentReceipt disabled = executeBaseSupplyAssignment(
+        profile,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{alpha_content::lootCola, std::nullopt},
+        CommandContext{profile.revision, "disable-cola-food"});
+    EXPECT_TRUE(disabled.succeeded) << disabled.message;
+    EXPECT_FALSE(profile.baseSupplyPolicy.assignments.contains(
+        alpha_content::lootCola));
+    EXPECT_NE(profile.assets.find(cola), nullptr);
+}
+
+TEST(BaseResourceDomainTest, DailyNeedConsumesOnlyAssignedCategoryAndMinimumQuantity)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-supply-daily",
+        publishedContentRegistry());
+    profile.baseResources.pool = BaseResourceBundle{0, 100, 0, 100};
+    const AssetInstanceId cola = createStashAsset(
+        profile, alpha_content::lootCola);
+    ASSERT_TRUE(executeBaseSupplyAssignment(
+        profile,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{
+            alpha_content::lootCola, BaseSupplyCategory::Food},
+        CommandContext{profile.revision, "auto-cola-food"}).succeeded);
+
+    const BaseDailyDemandResult result =
+        applyBaseDailyDemandWithSupplyThrough(
+            profile,
+            publishedContentRegistry(),
+            1U);
+
+    EXPECT_EQ(result.cyclesResolved, 1U);
+    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    EXPECT_EQ(profile.baseResources.pool.food, 4U);
+    EXPECT_EQ(profile.baseResources.pool.morale, 0U);
+    EXPECT_EQ(profile.baseResources.lastShortfall.food, 0U);
+    EXPECT_EQ(profile.baseResources.lastShortfall.morale, 5U);
+    EXPECT_TRUE(profile.baseSupplyPolicy.assignments.contains(
+        alpha_content::lootCola));
+}
+
+TEST(BaseResourceDomainTest, BaseDoesNotConsumeAnySupplyDuringPendingRaid)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-supply-pending-raid",
+        publishedContentRegistry());
+    const auto backpackEntry = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        {
+            return entry.second.definitionId == alpha_content::backpack;
+        });
+    ASSERT_NE(backpackEntry, profile.assets.records().end());
+    const AssetInstanceId backpack = backpackEntry->first;
+    ASSERT_TRUE(executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        CommandContext{profile.revision, "equip-supply-backpack"}).succeeded);
+    const AssetInstanceId cola = profile.assets.create(
+        publishedContentRegistry().item(alpha_content::lootCola),
+        StoredAssetLocation{
+            ProfileContainerId::compartment(backpack, 0),
+            GridPosition{0, 0}});
+    ASSERT_TRUE(executeBaseSupplyAssignment(
+        profile,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{
+            alpha_content::lootCola, BaseSupplyCategory::Food},
+        CommandContext{profile.revision, "assign-carried-cola"}).succeeded);
+    const AssetInstanceId stashCola = createStashAsset(
+        profile, alpha_content::lootCola);
+    profile.baseResources.pool.food = 0U;
+    profile.pendingRaid = PendingRaidSnapshot{};
+
+    static_cast<void>(applyBaseDailyDemandWithSupplyThrough(
+        profile,
+        publishedContentRegistry(),
+        1U));
+
+    EXPECT_NE(profile.assets.find(cola), nullptr);
+    EXPECT_NE(profile.assets.find(stashCola), nullptr);
+    EXPECT_EQ(profile.baseResources.pool.food, 0U);
+    EXPECT_EQ(profile.baseResources.lastShortfall.food, 8U);
 }
 
 TEST(BaseResourceDomainTest, DailyDemandRecordsShortageWithoutDeadlock)

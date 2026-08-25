@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-ordinary-survivor-rescue-content-21");
+        "base-supply-policy-content-23");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -81,13 +81,25 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
+    EXPECT_EQ(registry.maximumBaseConstructionMaterials(), 100U);
+    ASSERT_EQ(registry.baseConstructionProjects().size(), 1U);
+    const BaseConstructionProjectDefinition &dormitory =
+        registry.baseConstructionProject(
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"});
+    EXPECT_EQ(dormitory.requiredDormitoryLevel, 1U);
+    EXPECT_EQ(dormitory.targetDormitoryLevel, 2U);
+    EXPECT_EQ(dormitory.materialCost, 4U);
+    EXPECT_EQ(dormitory.workerCount, 3U);
+    EXPECT_EQ(dormitory.durationMinutes, 360U);
+    EXPECT_EQ(dormitory.bedCapacityAfter, 14U);
     ASSERT_EQ(registry.basePriorities().size(), 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
         BasePriorityDefinitionId{"base_priority.comfort_cola"});
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 19U);
+    ASSERT_EQ(registry.items().size(), 21U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 3U);
@@ -161,6 +173,28 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         *cola.baseContribution,
         (BaseResourceBundle{12, 0, 4, 0}));
+    EXPECT_EQ(cola.baseConstructionMaterialValue, 0U);
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.book_basic"})
+             .baseContribution,
+        (BaseResourceBundle{0, 0, 10, 0}));
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.toilet_paper"})
+             .baseContribution,
+        (BaseResourceBundle{0, 3, 0, 0}));
+    EXPECT_LT(
+        registry.item(ItemDefinitionId{"item.loot.toilet_paper"})
+            .baseContribution->hygiene,
+        registry.item(alpha_content::medkit)
+            .baseContribution->hygiene);
+    EXPECT_EQ(
+        registry.item(ItemDefinitionId{"item.loot.scrap_parts"})
+            .baseConstructionMaterialValue,
+        4U);
+    EXPECT_EQ(
+        registry.item(ItemDefinitionId{"item.loot.electronics"})
+            .baseConstructionMaterialValue,
+        4U);
     EXPECT_EQ(ammunition.maxStackSize, 60U);
     EXPECT_EQ(ammunition.unitWeightGrams, 12U);
     EXPECT_EQ(ammunition.marketBuyPrice, 1U);
@@ -354,6 +388,28 @@ TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
             publishedJsonCopy(),
             "\"supported_at_reserve_days\": 7",
             "\"supported_at_reserve_days\": 2")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidBaseConstructionDefinition)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"material_cost\": 4",
+            "\"material_cost\": 101"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"target_dormitory_level\": 2",
+            "\"target_dormitory_level\": 3"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"base_construction_material\": 4",
+            "\"base_construction_material\": 101"))),
         ContentRegistryError);
 }
 

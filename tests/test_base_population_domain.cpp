@@ -49,6 +49,32 @@ TEST(BasePopulationDomainTest, RestCrossesMidnightAndResolvesPopulationDemand)
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
+TEST(BasePopulationDomainTest, RestCompletesDueDormitoryExpansion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "population-rest-construction",
+        publishedContentRegistry());
+    profile.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            profile.worldClock.elapsedWorldMinutes,
+            profile.worldClock.elapsedWorldMinutes + 360U};
+
+    const BaseRestReceipt receipt = executeBaseRest(
+        profile,
+        publishedContentRegistry(),
+        BaseRestCommand{6},
+        CommandContext{profile.revision, "rest-completes-construction"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 2U);
+    EXPECT_FALSE(profile.baseConstruction.activeProject.has_value());
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 14U);
+}
+
 TEST(BasePopulationDomainTest, RestIsIdempotentAndRejectsInvalidRequests)
 {
     const ContentRegistry &content = publishedContentRegistry();

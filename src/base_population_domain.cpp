@@ -1,5 +1,7 @@
 #include "base_population_domain.h"
 
+#include "base_construction_domain.h"
+
 #include <limits>
 #include <utility>
 
@@ -122,11 +124,13 @@ BaseRestReceipt executeBaseRest(
     ProfileState candidate = profile;
     const WorldClockAdvanceResult advanced = advanceWorldClock(
         candidate.worldClock, plan.worldMinutes);
-    const BaseDailyDemandResult demand = applyBaseDailyDemandThrough(
-        candidate.baseResources,
+    const BaseDailyDemandResult demand = applyBaseDailyDemandWithSupplyThrough(
+        candidate,
+        content,
         advanced.completedDaysAfter,
         plan.dailyDemand);
     static_cast<void>(synchronizeBasePriorityThrough(candidate, content));
+    static_cast<void>(applyBaseConstructionThrough(candidate, content));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(

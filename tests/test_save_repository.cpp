@@ -1140,3 +1140,84 @@ TEST(SaveRepositoryTest, CorruptPrimaryAndBackupFailExplicitly)
     EXPECT_EQ(result.status, SaveLoadStatus::Failed);
     EXPECT_FALSE(result.profile.has_value());
 }
+
+TEST(SaveRepositoryTest, SchemaV15RoundTripsConstructionAndSupplyPolicy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-supply-v15",
+        publishedContentRegistry());
+    profile.baseConstruction.materialUnits = 7U;
+    profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        4U,
+        3U,
+        profile.worldClock.elapsedWorldMinutes,
+        profile.worldClock.elapsedWorldMinutes + 360U};
+    profile.baseSupplyPolicy.assignments.emplace(
+        alpha_content::lootCola,
+        BaseSupplyCategory::Food);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(loaded.profile->baseConstruction.materialUnits, 7U);
+    ASSERT_TRUE(loaded.profile->baseConstruction.activeProject.has_value());
+    EXPECT_EQ(
+        loaded.profile->baseConstruction.activeProject->committedWorkers,
+        3U);
+    EXPECT_EQ(
+        loaded.profile->baseSupplyPolicy.assignments.at(
+            alpha_content::lootCola),
+        BaseSupplyCategory::Food);
+}
+
+TEST(SaveRepositoryTest, SchemaV14MigratesToEmptySupplyPolicy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-supply-v14",
+        publishedContentRegistry());
+    profile.baseConstruction.materialUnits = 7U;
+    profile.baseSupplyPolicy.assignments.emplace(
+        alpha_content::lootCola,
+        BaseSupplyCategory::Food);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-dormitory-expansion-content-22",
+            14),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->baseConstruction.materialUnits, 7U);
+    EXPECT_TRUE(migrated.profile->baseSupplyPolicy.assignments.empty());
+}
+
+TEST(SaveRepositoryTest, SchemaV13MigratesToDefaultBaseConstruction)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-construction-v13",
+        publishedContentRegistry());
+    profile.baseConstruction.materialUnits = 9U;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-ordinary-survivor-rescue-content-21",
+            13),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->baseConstruction.materialUnits, 0U);
+    EXPECT_EQ(migrated.profile->baseConstruction.dormitoryLevel, 1U);
+    EXPECT_FALSE(migrated.profile->baseConstruction.activeProject.has_value());
+    // Population was already part of schema v13 and remains authoritative.
+    EXPECT_EQ(migrated.profile->basePopulation.bedCapacity, 10U);
+}

@@ -196,6 +196,22 @@ struct BasePriorityDefinition
         const BasePriorityDefinition &) = default;
 };
 
+struct BaseConstructionProjectDefinition
+{
+    BaseConstructionProjectDefinitionId id;
+    std::string displayName;
+    std::uint32_t requiredDormitoryLevel{};
+    std::uint32_t targetDormitoryLevel{};
+    std::uint32_t materialCost{};
+    std::uint32_t workerCount{};
+    std::uint32_t durationMinutes{};
+    std::uint32_t bedCapacityAfter{};
+
+    friend bool operator==(
+        const BaseConstructionProjectDefinition &,
+        const BaseConstructionProjectDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -270,6 +286,16 @@ public:
     [[nodiscard]] const BasePriorityDefinition &basePriority(
         const BasePriorityDefinitionId &id) const;
 
+    [[nodiscard]] std::uint32_t
+    maximumBaseConstructionMaterials() const noexcept;
+
+    [[nodiscard]] const std::vector<BaseConstructionProjectDefinition> &
+    baseConstructionProjects() const noexcept;
+
+    [[nodiscard]] const BaseConstructionProjectDefinition &
+    baseConstructionProject(
+        const BaseConstructionProjectDefinitionId &id) const;
+
     [[nodiscard]]
     const ItemDefinition &item(
         const ItemDefinitionId &id) const;
@@ -298,6 +324,9 @@ private:
     BaseOperationsDefinition baseOperations_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
+    std::uint32_t maximumBaseConstructionMaterials_{};
+    std::vector<BaseConstructionProjectDefinition>
+        baseConstructionProjects_;
 
     std::map<ItemDefinitionId, std::size_t> itemIndex_;
     std::map<LootTableDefinitionId, std::size_t> lootTableIndex_;
@@ -305,6 +334,8 @@ private:
         enemyDeploymentIndex_;
     std::map<MapDefinitionId, std::size_t> mapIndex_;
     std::map<BasePriorityDefinitionId, std::size_t> basePriorityIndex_;
+    std::map<BaseConstructionProjectDefinitionId, std::size_t>
+        baseConstructionProjectIndex_;
 };
 
 [[nodiscard]]

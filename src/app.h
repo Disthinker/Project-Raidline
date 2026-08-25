@@ -112,6 +112,8 @@ private:
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
     std::size_t selectedRaidMapIndex_{};
+    BaseSupplyCategory selectedBaseSupplyCategory_{
+        BaseSupplyCategory::Food};
     std::string uiMessage_;
     float specialHitFeedbackRemaining_{};
     HitSemantic specialHitSemantic_{HitSemantic::Normal};

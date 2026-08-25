@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#85 已接受。当前优先交付 **Raid：普通幸存者安全转移与基地接纳 v1**；范围合同见 `doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受。当前优先交付 **Base：宿舍扩建 v1**；范围合同见 `doc/exec-plans/active/base-dormitory-expansion-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -45,6 +45,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 运营状态与即时枪械维护 v1 | PR #83 / merge commit `20d9f48` |
 | 付费医疗服务 v1 | PR #84 / merge commit `c01d431` |
 | 居民、床位与睡眠 v1 | PR #85 / merge commit `2377035` |
+| Raid 普通幸存者安全转移 v1 | PR #86 / merge commit `ee9ba48` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -83,15 +84,17 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 资源分配与基础需求 v1 | 成功撤离的新 Loot 先进入待分配区；玩家逐件保留到个人 Stash 或捐献为食物、卫生、士气、安全 | BaseIntake、BaseResourceState、冻结 Loot 来源、schema v7、贡献命令 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 `ba8283f` 进入 main；表现仅用文字、色条和几何图形 |
+| 资源分配与基础需求 v1（历史） | PR #78 曾把成功 Loot 放入待分配区；该返还规则已被 2026-08-25 用户决策取代 | BaseIntake、BaseResourceState、schema v7 历史兼容 | PR #78 仍是历史证据；PR #87 正在迁移为“成功撤离保持原位置、BaseIntake 仅恢复旧档” |
 | 世界时钟与每日需求 v1 | Base/Raid 显示同一日夜时间；每日 00:00 结算四项需求；暂停、离线和未结算 Raid 不偷走时间 | WorldClockState、每日幂等补算、schema v8、Base 检查点、Raid Settlement 提交/异常回滚 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 `5d2a11a` 进入 main；倍率暂为集中开发参数 |
 | Raid 往返行动耗时 v1 | 三张图显示不同抵达时间；出发、正常返程和失败归队推进世界时钟，异常退出精确回滚 | MapDefinition travel、冻结活动快照、schema v9、幂等时间/需求 Settlement | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 `defaac0` 进入 main；不包含夜间视野、路线状态、旅行遭遇、哨所、精力或睡眠 |
 | 枪匠全面维护服务 v1 | PR #81 原为付费计时送修；PR #83 按用户决策将新维护改为付费后立即恢复同一实例 | 即时候选 Profile 事务；BaseServiceJob 仅保留旧存档兼容；schema v10/v11 | PR #81 历史实现已进入 main；PR #83 以 `20d9f48` 进入 main，新操作不再消耗时间 |
-| 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的待分配物资，改善既有基地资源 | BasePriorityDefinition/State、手动原子提交、Raid 回滚快照、schema v11 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 `eca7d62` 进入 main；不包含任务板、人口、士气惩罚、兑换点或自动捐献 |
+| 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的基地可访问自有物资，改善既有基地资源 | BasePriorityDefinition/State、显式原子提交、Raid 回滚快照、schema v11 | PR #82 已进入 main；PR #87 移除对 BaseIntake 的正常流程依赖，愿望仍不自动提交 |
 | 运营状态与即时枪械维护 v1 | 四项资源按最短储备日数形成运营档位；枪械全面维护只扣货币并立即恢复出厂状态 | BaseOperationalProjection、content v18、content v16/v17 兼容、即时维护事务、旧任务立即领取 | PR #83 已通过 exact-head CI 与用户验收，以 `20d9f48` 进入 main |
 | 付费医疗服务 v1 | Base 独立医疗设施显示伤势和报价；支付货币后立即恢复生命并清除流血，个人医疗物保持不变 | PlayerBaseMedicalDefinition、query/execute 原子事务、content v19、schema v11 兼容 v18 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以 `c01d431` 进入 main；不包含 NPC 医疗、公共医疗库存、时间队列或新伤势 |
 | 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | PR #85 已通过 CI 和用户验收，以 `2377035` 进入 main；建设、岗位、精力、正式士气、具名 NPC 或居民医疗仍延期 |
-| Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | 当前分支进行中；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
+| Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | PR #86 已通过 CI 和用户验收，以 `ee9ba48` 进入 main；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
+| 宿舍扩建 v1 | 玩家从统一自有资产中显式加工回收物；宿舍项目占用劳动力并随世界时间完成，取消可返还建材 | BaseConstructionState、query/command/receipt、Raid 回滚快照、schema v14/content v22 | PR #87 原范围已完成自动化和 CI；返还位置修订正在同一 Draft PR 复验 |
+| 分类自动供给 v1 | 食物、医疗、娱乐、安全菜单显示玩家拥有的可用定义；勾选后仅在每日缺口出现时自动消耗，物品此前保持原位 | BaseSupplyPolicyState、定义→唯一分类授权、最低数量日结、schema v15/content v23 | PR #87 当前修订已完成 Windows Debug 与 966/966 CTest；等待 exact-head CI 和用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

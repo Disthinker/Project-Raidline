@@ -77,6 +77,56 @@ TEST(InventoryDomainTest, EquipmentCommandsUseStableLocations)
     EXPECT_TRUE(profile.committedTransactions.contains("equip-rifle"));
 }
 
+TEST(InventoryDomainTest, LegacyUnassignedReturnCanBeRecoveredToStash)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "inventory-keep-pending-return",
+        publishedContentRegistry());
+    const ItemDefinition &definition = publishedContentRegistry().item(
+        alpha_content::lootScrap);
+    const AssetInstanceId returnedAsset = profile.assets.create(
+        definition,
+        StoredAssetLocation{
+            ProfileContainerId::baseIntake(), GridPosition{0, 0}});
+    const auto destination = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::stash(),
+        definition,
+        ItemOrientation::Degrees0,
+        returnedAsset);
+    ASSERT_TRUE(destination.has_value());
+
+    const InventoryPlan plan = queryInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            returnedAsset,
+            0,
+            StoredAssetLocation{ProfileContainerId::stash(), *destination},
+            ItemOrientation::Degrees0});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+
+    const InventoryReceipt receipt = executeInventory(
+        profile,
+        publishedContentRegistry(),
+        InventoryMoveCommand{
+            returnedAsset,
+            0,
+            StoredAssetLocation{ProfileContainerId::stash(), *destination},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "keep-pending-return"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_NE(profile.assets.find(returnedAsset), nullptr);
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(
+            profile.assets.find(returnedAsset)->location).container,
+        ProfileContainerId::stash());
+    EXPECT_TRUE(assetsInContainer(
+        profile, ProfileContainerId::baseIntake()).empty());
+}
+
 TEST(InventoryDomainTest, LongGunAndSidearmUseDistinctCompatibleSlots)
 {
     ProfileState profile = makeNewAlphaProfile(

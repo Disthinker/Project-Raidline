@@ -13,6 +13,7 @@
 | RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | PR #69 已改为验证根资产仍属于随身所有权树，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
 | RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | PR #69 已加入继续、设置、回主菜单和退桌面菜单，并移除双按 Esc 放弃入口；已通过用户验收并合入 main |
 | RL-UI-003 | Base 静止朝向回左；Base/Raid 玩家及敌人未共享连续碰撞，纵向移动与敌人追击可穿过障碍；玩家文本没有中文/语言设置 | PR #78 已修复并通过 exact-head CI 与用户正常游玩验收，以 merge commit `ba8283f` 进入 main |
+| RL-UI-004 | 旧 Settlement 把成功带回物迁入 BaseIntake，破坏玩家撤离时选择的背包/装备位置并让物品只在分配页可见 | PR #87 当前修订已删除正常返还迁移：所有随身物保持精确原位置，未来载具沿用同一合同；BaseIntake 仅兼容旧档。分类供给菜单从统一自有资产配置定义级授权，Windows Debug 与 966/966 CTest 通过，等待新 exact-head CI 与用户正常游玩复验 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | PR #61 已完成 Head/Torso/Legs、Normal/Headshot/WeakPoint、防具接线与代码反馈，并通过 CI 和用户验收后合入 main |
 | RL-MED-001 | Raid 缺少流血、疼痛与对应战地医疗闭环 | PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main |
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |
@@ -28,7 +29,7 @@
 | RL-COMBAT-009 | 成功击发缺少短烟、柔边局部闪光和不影响瞄准的轻微屏幕抖动 | PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main |
 | RL-COMBAT-010 | 完成武器切换时重建 WeaponAimState，导致实际准星跳回相对输入锚点 | PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | PR #78 已修复 Base 停止时丢失最后水平朝向；Base/Raid 左右移动继续复用六帧资源，上下移动仍用静态图，正式补全延期 |
-| RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | 当前分支实现三图一次性安全转移、schema v13 幂等账本与干净恢复检查点；具名 NPC、护送 AI、伤病和职业仍延期 |
+| RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | PR #86 已以 `ee9ba48` 进入 main；三图一次性安全转移、schema v13 幂等账本与干净恢复检查点已完成，具名 NPC、护送 AI、伤病和职业仍延期 |
 
 ## 需要未来产品决策
 
@@ -82,8 +83,9 @@
 | Base 运营状态与即时枪械维护 v1 | PR #83 以四项最短储备日数投影运营状态，并把玩家枪械全面维护改为只扣货币、立即完成；已通过 exact-head CI 和用户验收，以 `20d9f48` 进入 main |
 | Base 付费医疗服务 v1 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main |
 | Base 居民、床位与睡眠 v1 | PR #85 已通过 CI 和用户验收，以普通 merge commit `2377035` 进入 main |
-| Raid 普通幸存者安全转移 v1 | 当前分支实现一次性安全转移、聚合人口接纳、床位/口粮预警、失败结局保留和异常退出干净检查点；schema v13/content v21 |
+| Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
+| Base 宿舍扩建与供给修订 | PR #87 原宿舍范围已通过 CI；当前追加撤离位置保持、分类自动供给、schema v15/content v23。本地 Windows Debug 与 966/966 CTest 已通过，等待新 exact-head CI 与用户验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；GDD 保持只读，待策划线程同步修订。玩家付费医疗与 NPC 设施治疗必须继续保持独立命令，后者未来才消耗世界时间和公共医疗库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-dormitory-expansion-v1.md`。

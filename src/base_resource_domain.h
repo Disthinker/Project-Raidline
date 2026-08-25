@@ -62,6 +62,46 @@ struct BaseResourceReceipt
     BaseResourceBundle contribution;
 };
 
+struct SetBaseSupplyAssignmentCommand
+{
+    ItemDefinitionId itemDefinitionId;
+    std::optional<BaseSupplyCategory> category;
+};
+
+struct BaseSupplyAssignmentPlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::optional<BaseSupplyCategory> category;
+};
+
+struct BaseSupplyAssignmentReceipt
+{
+    bool succeeded{};
+    bool alreadyCommitted{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::optional<BaseSupplyCategory> category;
+};
+
+[[nodiscard]] std::uint32_t baseSupplyContribution(
+    const ItemDefinition &definition,
+    BaseSupplyCategory category) noexcept;
+
+[[nodiscard]] BaseSupplyAssignmentPlan queryBaseSupplyAssignment(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const SetBaseSupplyAssignmentCommand &command);
+
+[[nodiscard]] BaseSupplyAssignmentReceipt executeBaseSupplyAssignment(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const SetBaseSupplyAssignmentCommand &command,
+    const CommandContext &context);
+
 [[nodiscard]] BaseResourcePlan queryBaseResourceContribution(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -85,6 +125,18 @@ struct BaseDailyDemandResult
 // assets.
 [[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandThrough(
     BaseResourceState &state,
+    std::uint64_t completedWorldDays,
+    BaseResourceBundle dailyDemand = kBaseDailyDemand) noexcept;
+
+// Resolves daily needs and, only when an assigned need would otherwise be
+// short, consumes the minimum whole quantity of explicitly authorized owned
+// item definitions. Assets remain in their real Stash/carried location until
+// this function commits their consumption. While a Raid is pending no owned
+// assets are auto-consumed, so abnormal rollback can restore the exact
+// pre-deployment Profile without reconstructing inventory instances.
+[[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
+    ProfileState &profile,
+    const ContentRegistry &content,
     std::uint64_t completedWorldDays,
     BaseResourceBundle dailyDemand = kBaseDailyDemand) noexcept;
 

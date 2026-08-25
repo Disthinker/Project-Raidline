@@ -341,6 +341,165 @@ TEST(PersistentSessionTest, GunsmithMaintenancePersistsImmediately)
     EXPECT_FALSE(reopened.profile().gunsmithMaintenanceJob.has_value());
 }
 
+TEST(PersistentSessionTest, ConstructionCommandsPersistAcrossProcessSessions)
+{
+    SessionSaveDirectory temporary;
+    ProfileState prepared = makeNewAlphaProfile(
+        "persistent-construction-commands",
+        publishedContentRegistry());
+    const AssetInstanceId scrap = addPendingItem(
+        prepared,
+        ItemDefinitionId{"item.loot.scrap_parts"});
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        prepared,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.continueProfile()) << first.persistenceMessage();
+    ASSERT_TRUE(first.executeConstructionMaterialContribution(
+        scrap,
+        "persistent-process-material").succeeded);
+    ASSERT_TRUE(first.executeStartBaseConstruction(
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        "persistent-start-construction").succeeded);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(reopened.profile().baseConstruction.materialUnits, 0U);
+
+    ASSERT_TRUE(reopened.executeCancelBaseConstruction(
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        "persistent-cancel-construction").succeeded);
+    GameSession cancelled;
+    cancelled.configurePersistence(temporary.path());
+    ASSERT_TRUE(cancelled.continueProfile()) << cancelled.persistenceMessage();
+    EXPECT_FALSE(cancelled.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(cancelled.profile().baseConstruction.materialUnits, 4U);
+}
+
+TEST(PersistentSessionTest, BaseClockCompletesAndPersistsDormitoryExpansion)
+{
+    SessionSaveDirectory temporary;
+    ProfileState prepared = makeNewAlphaProfile(
+        "persistent-construction-completion",
+        publishedContentRegistry());
+    prepared.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            prepared.worldClock.elapsedWorldMinutes,
+            prepared.worldClock.elapsedWorldMinutes + 360U};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        prepared,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const ProfileRevision startedRevision = session.profile().revision;
+    session.advanceBaseWorldClock(359.0F);
+    EXPECT_TRUE(session.profile().baseConstruction.activeProject.has_value());
+    session.advanceBaseWorldClock(1.0F);
+    EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(session.profile().baseConstruction.dormitoryLevel, 2U);
+    EXPECT_EQ(session.profile().basePopulation.bedCapacity, 14U);
+    EXPECT_EQ(session.profile().revision, startedRevision + 1U);
+    ASSERT_TRUE(session.checkpointWorldClock()) << session.persistenceMessage();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().baseConstruction.dormitoryLevel, 2U);
+    EXPECT_EQ(reopened.profile().basePopulation.bedCapacity, 14U);
+}
+
+TEST(PersistentSessionTest, ConstructionSaveFailurePreservesInMemoryProfile)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-construction-save",
+        publishedContentRegistry());
+    initial.baseConstruction.materialUnits = 4U;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "construction-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BaseConstructionReceipt receipt =
+        session.executeStartBaseConstruction(
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            "construction-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(session.profile().baseConstruction.materialUnits, 4U);
+}
+
+TEST(PersistentSessionTest,
+     ConstructionCompletionSaveFailurePreservesProjectClockAndBeds)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-construction-completion-save",
+        publishedContentRegistry());
+    initial.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            initial.worldClock.elapsedWorldMinutes,
+            initial.worldClock.elapsedWorldMinutes + 360U};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "completion-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    session.advanceBaseWorldClock(360.0F);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    ASSERT_TRUE(session.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(session.profile().baseConstruction.dormitoryLevel, 1U);
+    EXPECT_EQ(session.profile().basePopulation.bedCapacity, 10U);
+    EXPECT_EQ(
+        session.profile().worldClock.elapsedWorldMinutes,
+        initial.worldClock.elapsedWorldMinutes);
+    EXPECT_FALSE(session.persistenceMessage().empty());
+}
+
 TEST(PersistentSessionTest, GunsmithSaveFailurePreservesInMemoryProfile)
 {
     SessionSaveDirectory temporary;

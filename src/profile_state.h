@@ -210,6 +210,26 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+// A supply assignment authorizes the Base to consume a matching owned item
+// definition for one specific need. The item stays in its real inventory
+// location until a world-time demand boundary actually consumes it.
+enum class BaseSupplyCategory
+{
+    Food,
+    Medical,
+    Recreation,
+    Security
+};
+
+struct BaseSupplyPolicyState
+{
+    std::map<ItemDefinitionId, BaseSupplyCategory> assignments;
+
+    friend bool operator==(
+        const BaseSupplyPolicyState &,
+        const BaseSupplyPolicyState &) = default;
+};
+
 struct RaidRescueSnapshot
 {
     RescueDefinitionId definitionId;
@@ -234,6 +254,30 @@ struct BasePopulationState
     friend bool operator==(
         const BasePopulationState &,
         const BasePopulationState &) = default;
+};
+
+struct ActiveBaseConstructionProject
+{
+    BaseConstructionProjectDefinitionId definitionId;
+    std::uint32_t lockedMaterialUnits{};
+    std::uint32_t committedWorkers{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+
+    friend bool operator==(
+        const ActiveBaseConstructionProject &,
+        const ActiveBaseConstructionProject &) = default;
+};
+
+struct BaseConstructionState
+{
+    std::uint32_t materialUnits{};
+    std::uint32_t dormitoryLevel{1};
+    std::optional<ActiveBaseConstructionProject> activeProject;
+
+    friend bool operator==(
+        const BaseConstructionState &,
+        const BaseConstructionState &) = default;
 };
 
 struct BasePriorityState
@@ -271,6 +315,8 @@ struct RaidTravelSnapshot
     WorldClockState startingWorldClock;
     BaseResourceState startingBaseResources;
     BasePriorityState startingBasePriority;
+    BaseConstructionState startingBaseConstruction;
+    std::uint32_t startingBedCapacity{10};
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -317,7 +363,9 @@ struct ProfileState
     MedicalStatusState medicalStatus;
     WorldClockState worldClock;
     BaseResourceState baseResources;
+    BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
+    BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
@@ -364,6 +412,13 @@ struct ProfileValidationResult
     AssetInstanceId weaponAssetId) noexcept;
 
 [[nodiscard]] bool assetIsCarried(
+    const ProfileState &profile,
+    AssetInstanceId instanceId) noexcept;
+
+// Base allocation commands may explicitly consume an asset from the personal
+// Stash or the equipped ownership tree without moving it into a transit
+// container first. Service-held and Raid-ground assets are not accessible.
+[[nodiscard]] bool assetIsBaseAccessible(
     const ProfileState &profile,
     AssetInstanceId instanceId) noexcept;
 

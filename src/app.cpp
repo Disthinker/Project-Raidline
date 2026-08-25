@@ -70,6 +70,11 @@ namespace
     constexpr float kBaseStashX{668.0F};
     constexpr float kBaseStashY{132.0F};
     constexpr float kBaseStashCellSize{28.0F};
+    constexpr float kBaseStashWithRecoveryY{118.0F};
+    constexpr float kBaseStashWithRecoveryCellSize{20.0F};
+    constexpr float kBaseIntakeX{668.0F};
+    constexpr float kBaseIntakeY{398.0F};
+    constexpr float kBaseIntakeCellSize{20.0F};
     constexpr float kBasePocketCellSize{28.0F};
     constexpr std::array<EquipmentSlotKind, 3> kWeaponEquipmentSlots{
         EquipmentSlotKind::PrimaryWeapon,
@@ -172,10 +177,15 @@ namespace
     SDL_FRect baseRestButton(std::size_t index) noexcept
     {
         return SDL_FRect{
-            250.0F + static_cast<float>(index) * 280.0F,
-            492.0F,
+            170.0F + static_cast<float>(index) * 310.0F,
+            526.0F,
             220.0F,
-            56.0F};
+            50.0F};
+    }
+
+    SDL_FRect baseConstructionButton() noexcept
+    {
+        return SDL_FRect{710.0F, 384.0F, 340.0F, 58.0F};
     }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
@@ -307,12 +317,25 @@ namespace
         std::vector<ProfileGridView> result;
         if (includeStash)
         {
+            const bool hasLegacyReturns = !assetsInContainer(
+                profile, ProfileContainerId::baseIntake()).empty();
             result.push_back(ProfileGridView{
                 ProfileContainerId::stash(),
                 kBaseStashX,
-                kBaseStashY,
-                kBaseStashCellSize,
+                hasLegacyReturns ? kBaseStashWithRecoveryY : kBaseStashY,
+                hasLegacyReturns
+                    ? kBaseStashWithRecoveryCellSize
+                    : kBaseStashCellSize,
                 "STASH"});
+            if (hasLegacyReturns)
+            {
+                result.push_back(ProfileGridView{
+                    ProfileContainerId::baseIntake(),
+                    kBaseIntakeX,
+                    kBaseIntakeY,
+                    kBaseIntakeCellSize,
+                    "UNASSIGNED RETURNS (MOVE TO RECOVER)"});
+            }
         }
 
         if (const auto chest = equippedAsset(
@@ -339,6 +362,75 @@ namespace
             result.push_back({
                 ProfileContainerId::compartment(*backpack, 0),
                 214.0F, 520.0F, kBasePocketCellSize, "BACKPACK"});
+        }
+        return result;
+    }
+
+    const char *baseSupplyCategoryName(BaseSupplyCategory category) noexcept
+    {
+        switch (category)
+        {
+        case BaseSupplyCategory::Food:
+            return "FOOD";
+        case BaseSupplyCategory::Medical:
+            return "MEDICAL";
+        case BaseSupplyCategory::Recreation:
+            return "RECREATION";
+        case BaseSupplyCategory::Security:
+            return "SECURITY";
+        }
+        return "UNKNOWN";
+    }
+
+    struct BaseSupplyDefinitionProjection
+    {
+        const ItemDefinition *definition{};
+        std::uint32_t ownedQuantity{};
+        std::optional<AssetInstanceId> firstAssetId;
+        bool assignedToSelectedCategory{};
+        bool assignedElsewhere{};
+    };
+
+    std::vector<BaseSupplyDefinitionProjection> baseSupplyDefinitions(
+        const ProfileState &profile,
+        BaseSupplyCategory selectedCategory)
+    {
+        std::vector<BaseSupplyDefinitionProjection> result;
+        for (const ItemDefinition &definition :
+             publishedContentRegistry().items())
+        {
+            if (baseSupplyContribution(definition, selectedCategory) == 0U)
+            {
+                continue;
+            }
+            BaseSupplyDefinitionProjection projection;
+            projection.definition = &definition;
+            const auto assignment = profile.baseSupplyPolicy.assignments.find(
+                definition.definitionId);
+            projection.assignedToSelectedCategory =
+                assignment != profile.baseSupplyPolicy.assignments.end() &&
+                assignment->second == selectedCategory;
+            projection.assignedElsewhere =
+                assignment != profile.baseSupplyPolicy.assignments.end() &&
+                assignment->second != selectedCategory;
+            for (const auto &[id, asset] : profile.assets.records())
+            {
+                if (asset.definitionId != definition.definitionId ||
+                    !assetIsBaseAccessible(profile, id))
+                {
+                    continue;
+                }
+                projection.ownedQuantity += asset.quantity;
+                if (!projection.firstAssetId.has_value())
+                {
+                    projection.firstAssetId = id;
+                }
+            }
+            if (projection.ownedQuantity > 0U ||
+                projection.assignedToSelectedCategory)
+            {
+                result.push_back(std::move(projection));
+            }
         }
         return result;
     }
@@ -1253,14 +1345,6 @@ bool App::handleScreenConfirm()
 bool App::tryDeployFromBase()
 {
     const ProfileState &profile = gameSession_.profile();
-    if (!assetsInContainer(
-             profile,
-             ProfileContainerId::baseIntake()).empty())
-    {
-        deploymentWarningArmed_ = false;
-        uiMessage_ = "RESOLVE ALLOCATION & NEEDS BEFORE DEPLOY";
-        return false;
-    }
     const WeaponReadiness readiness = weaponReadiness(profile);
     const std::size_t usableRounds = readiness.compatibleMagazineRounds +
         (readiness.hasChamberedRound ? 1U : 0U);
@@ -1713,122 +1797,123 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Allocation)
     {
-        const auto intake = assetsInContainer(
-            gameSession_.profile(),
-            ProfileContainerId::baseIntake());
-        for (std::size_t index{}; index < intake.size() && index < 7U; ++index)
+        constexpr std::array<BaseSupplyCategory, 4> categories{
+            BaseSupplyCategory::Food,
+            BaseSupplyCategory::Medical,
+            BaseSupplyCategory::Recreation,
+            BaseSupplyCategory::Security};
+        for (std::size_t index{}; index < categories.size(); ++index)
         {
-            const SDL_FRect row{
-                650.0F,
-                258.0F + static_cast<float>(index) * 42.0F,
-                500.0F,
-                36.0F};
-            if (contains(row, click.position))
+            const SDL_FRect tab{
+                650.0F + static_cast<float>(index) * 126.0F,
+                218.0F,
+                120.0F,
+                34.0F};
+            if (contains(tab, click.position))
             {
-                profileAssetSelection_ = ProfileAssetSelection{
-                    intake[index]->instanceId,
-                    0,
-                    intake[index]->orientation};
-                uiMessage_ = "PENDING ITEM SELECTED";
+                selectedBaseSupplyCategory_ = categories[index];
+                profileAssetSelection_.reset();
+                uiMessage_.clear();
                 return;
             }
         }
 
+        const auto allocation = baseSupplyDefinitions(
+            gameSession_.profile(), selectedBaseSupplyCategory_);
+        for (std::size_t index{};
+             index < allocation.size() && index < 7U;
+             ++index)
+        {
+            const SDL_FRect row{
+                650.0F,
+                262.0F + static_cast<float>(index) * 40.0F,
+                500.0F,
+                34.0F};
+            if (contains(row, click.position))
+            {
+                const BaseSupplyDefinitionProjection &projection =
+                    allocation[index];
+                if (projection.firstAssetId.has_value())
+                {
+                    const AssetRecord *asset = gameSession_.profile().assets.find(
+                        *projection.firstAssetId);
+                    profileAssetSelection_ = asset == nullptr
+                        ? std::nullopt
+                        : std::optional<ProfileAssetSelection>{
+                              ProfileAssetSelection{
+                                  asset->instanceId, 0, asset->orientation}};
+                }
+                else
+                {
+                    profileAssetSelection_.reset();
+                }
+                const SDL_FRect check{
+                    row.x + 8.0F, row.y + 7.0F, 20.0F, 20.0F};
+                if (!contains(check, click.position))
+                {
+                    uiMessage_ = projection.firstAssetId.has_value()
+                        ? "OWNED SUPPLY ITEM SELECTED"
+                        : "SUPPLY RULE HAS NO CURRENT ITEM";
+                    return;
+                }
+                const std::optional<BaseSupplyCategory> next =
+                    projection.assignedToSelectedCategory
+                        ? std::nullopt
+                        : std::optional<BaseSupplyCategory>{
+                              selectedBaseSupplyCategory_};
+                const BaseSupplyAssignmentReceipt receipt =
+                    gameSession_.executeBaseSupplyAssignment(
+                        projection.definition->definitionId,
+                        next,
+                        nextProfileTransactionId("base-supply-policy"));
+                uiMessage_ = receipt.succeeded
+                    ? (next.has_value()
+                        ? "AUTOMATIC BASE SUPPLY ENABLED"
+                        : "AUTOMATIC BASE SUPPLY DISABLED")
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                return;
+            }
+        }
+
+        const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
+        const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
+        if (!contains(materialButton, click.position) &&
+            !contains(priorityButton, click.position))
+        {
+            return;
+        }
         if (!profileAssetSelection_.has_value())
         {
+            uiMessage_ = "SELECT AN OWNED SUPPLY ITEM FIRST";
+            gameAudio_.play(SoundEventId::UiDeny);
             return;
         }
         const AssetInstanceId selectedId =
             profileAssetSelection_->instanceId;
         const AssetRecord *selected =
             gameSession_.profile().assets.find(selectedId);
-        const auto *stored = selected != nullptr
-            ? std::get_if<StoredAssetLocation>(&selected->location)
-            : nullptr;
-        if (stored == nullptr ||
-            stored->container != ProfileContainerId::baseIntake())
+        if (selected == nullptr ||
+            !assetIsBaseAccessible(
+                gameSession_.profile(), selected->instanceId))
         {
             profileAssetSelection_.reset();
-            uiMessage_ = "SELECT A PENDING ITEM";
+            uiMessage_ = "SELECT AN OWNED SUPPLY ITEM FIRST";
             return;
         }
-
-        const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
-        const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
-        const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
-        if (contains(keepButton, click.position))
+        if (contains(materialButton, click.position))
         {
-            const ItemDefinition &definition =
-                publishedContentRegistry().item(selected->definitionId);
-            std::optional<StoredAssetLocation> destination;
-            if (definition.maxStackSize > 1)
-            {
-                for (const AssetRecord *target : assetsInContainer(
-                         gameSession_.profile(),
-                         ProfileContainerId::stash()))
-                {
-                    const auto *targetStored =
-                        std::get_if<StoredAssetLocation>(&target->location);
-                    if (targetStored != nullptr &&
-                        target->definitionId == selected->definitionId &&
-                        target->reliefBatchId == selected->reliefBatchId &&
-                        target->quantity <=
-                            definition.maxStackSize - selected->quantity)
-                    {
-                        destination = *targetStored;
-                        break;
-                    }
-                }
-            }
-            if (!destination.has_value())
-            {
-                const auto origin = findFirstProfileFit(
-                    gameSession_.profile(),
-                    publishedContentRegistry(),
-                    ProfileContainerId::stash(),
-                    definition,
-                    selected->orientation,
-                    selectedId);
-                if (origin.has_value())
-                {
-                    destination = StoredAssetLocation{
-                        ProfileContainerId::stash(), *origin};
-                }
-            }
-            if (!destination.has_value())
-            {
-                uiMessage_ = "STASH HAS NO LEGAL SPACE";
-                gameAudio_.play(SoundEventId::UiDeny);
-                return;
-            }
-            const InventoryReceipt receipt =
-                gameSession_.executeProfileInventory(
-                    InventoryMoveCommand{
-                        selectedId,
-                        0,
-                        *destination,
-                        selected->orientation},
-                    nextProfileTransactionId("keep-allocation"));
-            uiMessage_ = receipt.succeeded
-                ? "ITEM MOVED TO PERSONAL STASH"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
-            return;
-        }
-        if (contains(contributeButton, click.position))
-        {
-            const BaseResourceReceipt receipt =
-                gameSession_.executeBaseResourceContribution(
+            const ConstructionMaterialReceipt receipt =
+                gameSession_.executeConstructionMaterialContribution(
                     selectedId,
-                    nextProfileTransactionId("contribute-allocation"));
+                    nextProfileTransactionId(
+                        "process-construction-material"));
             uiMessage_ = receipt.succeeded
-                ? "ITEM CONTRIBUTED TO BASE"
+                ? fmt::format(
+                    "ITEM PROCESSED | CONSTRUCTION MATERIAL +{}",
+                    receipt.materialUnits)
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::UiConfirm
@@ -1883,6 +1968,42 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Dormitory)
     {
+        const BaseConstructionProjectDefinition &project =
+            publishedContentRegistry().baseConstructionProjects().front();
+        if (contains(baseConstructionButton(), click.position))
+        {
+            const bool active = gameSession_.profile()
+                .baseConstruction.activeProject.has_value();
+            if (!active)
+            {
+                const BaseConstructionPlan plan = queryStartBaseConstruction(
+                    gameSession_.profile(),
+                    publishedContentRegistry(),
+                    StartBaseConstructionCommand{project.id});
+                if (!plan.canCommit)
+                {
+                    uiMessage_ = plan.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                    return;
+                }
+            }
+            const BaseConstructionReceipt receipt = active
+                ? gameSession_.executeCancelBaseConstruction(
+                    project.id,
+                    nextProfileTransactionId("cancel-base-construction"))
+                : gameSession_.executeStartBaseConstruction(
+                    project.id,
+                    nextProfileTransactionId("start-base-construction"));
+            uiMessage_ = receipt.succeeded
+                ? active
+                    ? "CONSTRUCTION CANCELLED | MATERIAL REFUNDED"
+                    : "DORMITORY EXPANSION STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
         constexpr std::array<std::uint32_t, 3> restHours{1U, 6U, 12U};
         for (std::size_t index{}; index < restHours.size(); ++index)
         {
@@ -7738,9 +7859,21 @@ void App::renderProfileGrid(
         y,
         static_cast<float>(size.width) * cellSize,
         static_cast<float>(size.height) * cellSize};
-    SDL_SetRenderDrawColor(renderer_, 20, 27, 30, 255);
+    const bool pendingReturns =
+        container == ProfileContainerId::baseIntake();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        pendingReturns ? 34 : 20,
+        pendingReturns ? 31 : 27,
+        pendingReturns ? 20 : 30,
+        255);
     SDL_RenderFillRect(renderer_, &grid);
-    SDL_SetRenderDrawColor(renderer_, 86, 102, 108, 255);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        pendingReturns ? 156 : 86,
+        pendingReturns ? 132 : 102,
+        pendingReturns ? 62 : 108,
+        255);
     for (int column = 0; column <= size.width; ++column)
     {
         SDL_RenderLine(
@@ -8360,7 +8493,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     uiTextRenderer_.render(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
     if (includeStash)
     {
-        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "STASH");
+        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "WAREHOUSE");
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
     }
 
@@ -8871,7 +9004,7 @@ void App::renderBaseAllocation()
     uiTextRenderer_.render(
         renderer_, 650.0F, 142.0F, priorityName.c_str());
     const std::string priorityRequirement = fmt::format(
-        "NEEDS {} x{} FROM PENDING RETURNS",
+        "NEEDS {} x{} FROM BASE-ACCESSIBLE INVENTORY",
         priorityItem.displayName,
         priority.requiredQuantity);
     uiTextRenderer_.render(
@@ -8888,88 +9021,127 @@ void App::renderBaseAllocation()
         priorityState.missedCycleCount);
     uiTextRenderer_.render(
         renderer_, 650.0F, 190.0F, priorityTiming.c_str());
-    uiTextRenderer_.render(
-        renderer_, 650.0F, 226.0F,
-        "PENDING RAID RETURNS - CHOOSE KEEP, CONTRIBUTE, OR WISH");
-    const auto intake = assetsInContainer(
-        gameSession_.profile(),
-        ProfileContainerId::baseIntake());
-    if (intake.empty())
+    constexpr std::array<BaseSupplyCategory, 4> categories{
+        BaseSupplyCategory::Food,
+        BaseSupplyCategory::Medical,
+        BaseSupplyCategory::Recreation,
+        BaseSupplyCategory::Security};
+    for (std::size_t index{}; index < categories.size(); ++index)
+    {
+        const SDL_FRect tab{
+            650.0F + static_cast<float>(index) * 126.0F,
+            218.0F,
+            120.0F,
+            34.0F};
+        const bool selected = categories[index] ==
+            selectedBaseSupplyCategory_;
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 58 : 34, selected ? 104 : 54,
+            selected ? 88 : 50, 255);
+        SDL_RenderFillRect(renderer_, &tab);
+        SDL_SetRenderDrawColor(renderer_, 120, 190, 162, 255);
+        SDL_RenderRect(renderer_, &tab);
+        uiTextRenderer_.render(
+            renderer_, tab.x + 12.0F, tab.y + 13.0F,
+            baseSupplyCategoryName(categories[index]));
+    }
+    const auto allocation = baseSupplyDefinitions(
+        gameSession_.profile(), selectedBaseSupplyCategory_);
+    if (allocation.empty())
     {
         uiTextRenderer_.render(
-            renderer_, 650.0F, 266.0F,
-            "NO PENDING ITEMS | BASE IS READY FOR DEPLOY");
+            renderer_, 650.0F, 272.0F,
+            "NO OWNED ITEMS CAN SUPPLY THIS CATEGORY");
     }
-    for (std::size_t index{}; index < intake.size() && index < 7U; ++index)
+    for (std::size_t index{};
+         index < allocation.size() && index < 7U;
+         ++index)
     {
-        const AssetRecord &asset = *intake[index];
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset.definitionId);
+        const BaseSupplyDefinitionProjection &projection = allocation[index];
+        const ItemDefinition &definition = *projection.definition;
         const SDL_FRect row{
             650.0F,
-            258.0F + static_cast<float>(index) * 42.0F,
+            262.0F + static_cast<float>(index) * 40.0F,
             500.0F,
-            36.0F};
-        SDL_SetRenderDrawColor(renderer_, 34, 62, 54, 255);
-        SDL_RenderFillRect(renderer_, &row);
+            34.0F};
         SDL_SetRenderDrawColor(
             renderer_,
-            profileAssetSelection_.has_value() &&
-                    profileAssetSelection_->instanceId == asset.instanceId
-                ? 236 : 98,
-            profileAssetSelection_.has_value() &&
-                    profileAssetSelection_->instanceId == asset.instanceId
-                ? 212 : 168,
-            120,
+            projection.assignedToSelectedCategory ? 42 : 34,
+            projection.assignedToSelectedCategory ? 84 : 62,
+            projection.assignedToSelectedCategory ? 68 : 54,
             255);
+        SDL_RenderFillRect(renderer_, &row);
+        const bool selected = projection.firstAssetId.has_value() &&
+            profileAssetSelection_.has_value() &&
+            *projection.firstAssetId == profileAssetSelection_->instanceId;
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 232 : 98, selected ? 206 : 168,
+            selected ? 126 : 120, 255);
         SDL_RenderRect(renderer_, &row);
-        std::string contribution = "KEEP ONLY";
-        if (definition.baseContribution.has_value())
+        const SDL_FRect check{row.x + 8.0F, row.y + 7.0F, 20.0F, 20.0F};
+        SDL_SetRenderDrawColor(
+            renderer_,
+            projection.assignedToSelectedCategory ? 76 : 28,
+            projection.assignedToSelectedCategory ? 166 : 52,
+            projection.assignedToSelectedCategory ? 122 : 48,
+            255);
+        SDL_RenderFillRect(renderer_, &check);
+        SDL_SetRenderDrawColor(renderer_, 170, 216, 194, 255);
+        SDL_RenderRect(renderer_, &check);
+        if (projection.assignedToSelectedCategory)
         {
-            const BaseResourceBundle &value = *definition.baseContribution;
-            contribution = fmt::format(
-                "+F{} H{} M{} S{}",
-                value.food * asset.quantity,
-                value.hygiene * asset.quantity,
-                value.morale * asset.quantity,
-                value.security * asset.quantity);
+            uiTextRenderer_.render(
+                renderer_, check.x + 5.0F, check.y + 10.0F, "X");
+        }
+        std::string assignment;
+        const auto existing =
+            gameSession_.profile().baseSupplyPolicy.assignments.find(
+                definition.definitionId);
+        if (projection.assignedElsewhere &&
+            existing != gameSession_.profile()
+                            .baseSupplyPolicy.assignments.end())
+        {
+            assignment = fmt::format(
+                " | ASSIGNED {}",
+                baseSupplyCategoryName(existing->second));
         }
         const std::string label = fmt::format(
-            "{} x{} | {}",
+            "{} x{} | +{} PER ITEM{}",
             definition.displayName,
-            asset.quantity,
-            contribution);
+            projection.ownedQuantity,
+            baseSupplyContribution(
+                definition, selectedBaseSupplyCategory_),
+            assignment);
         uiTextRenderer_.render(
-            renderer_, row.x + 8.0F, row.y + 14.0F, label.c_str());
+            renderer_, row.x + 38.0F, row.y + 13.0F, label.c_str());
     }
 
-    const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
-    const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
-    const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
-    bool canContribute{};
-    const char *contributeLabel = "SELECT ITEM FIRST";
+    const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
+    const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
+    bool canProcessMaterial{};
+    const char *materialLabel = "SELECT SALVAGE";
     if (profileAssetSelection_.has_value())
     {
-        const BaseResourcePlan plan = queryBaseResourceContribution(
-            gameSession_.profile(),
-            publishedContentRegistry(),
-            ContributeBaseAssetCommand{
-                profileAssetSelection_->instanceId});
-        canContribute = plan.canCommit;
-        contributeLabel = plan.canCommit
-            ? "CONTRIBUTE TO BASE"
-            : "CONTRIBUTION BLOCKED";
+        const ConstructionMaterialPlan plan =
+            queryConstructionMaterialContribution(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                ContributeConstructionMaterialCommand{
+                    profileAssetSelection_->instanceId});
+        canProcessMaterial = plan.canCommit;
+        materialLabel = plan.canCommit
+            ? "PROCESS FOR BUILDING"
+            : "NOT BUILDING MATERIAL";
     }
-    SDL_SetRenderDrawColor(renderer_, 58, 92, 118, 255);
-    SDL_RenderFillRect(renderer_, &keepButton);
     SDL_SetRenderDrawColor(
-        renderer_, canContribute ? 66 : 62, canContribute ? 118 : 68,
-        canContribute ? 84 : 66, 255);
-    SDL_RenderFillRect(renderer_, &contributeButton);
+        renderer_, canProcessMaterial ? 92 : 62,
+        canProcessMaterial ? 108 : 68,
+        canProcessMaterial ? 132 : 66, 255);
+    SDL_RenderFillRect(renderer_, &materialButton);
     bool canFulfillPriority{};
     const char *priorityLabel = priorityState.fulfilled
         ? "BASE WISH ALREADY FULFILLED"
-        : "SELECT MATCHING PENDING ITEM";
+        : "SELECT MATCHING ACCESSIBLE ITEM";
     if (profileAssetSelection_.has_value() && !priorityState.fulfilled)
     {
         const BasePriorityPlan plan = queryBasePrioritySubmission(
@@ -8988,19 +9160,21 @@ void App::renderBaseAllocation()
         canFulfillPriority ? 112 : 66, 255);
     SDL_RenderFillRect(renderer_, &priorityButton);
     SDL_SetRenderDrawColor(renderer_, 154, 202, 184, 255);
-    SDL_RenderRect(renderer_, &keepButton);
-    SDL_RenderRect(renderer_, &contributeButton);
+    SDL_RenderRect(renderer_, &materialButton);
     SDL_RenderRect(renderer_, &priorityButton);
     uiTextRenderer_.render(
-        renderer_, keepButton.x + 42.0F, keepButton.y + 18.0F,
-        "KEEP IN STASH");
+        renderer_, 650.0F, 562.0F,
+        "CHECK A DEFINITION TO AUTHORIZE AUTOMATIC USE AT DAILY NEEDS");
     uiTextRenderer_.render(
-        renderer_, contributeButton.x + 28.0F,
-        contributeButton.y + 18.0F,
-        contributeLabel);
+        renderer_, 650.0F, 582.0F,
+        "ITEMS KEEP THEIR REAL LOCATION UNTIL THE BASE CONSUMES THEM");
     uiTextRenderer_.render(
-        renderer_, priorityButton.x + 96.0F,
-        priorityButton.y + 15.0F,
+        renderer_, materialButton.x + 24.0F,
+        materialButton.y + 18.0F,
+        materialLabel);
+    uiTextRenderer_.render(
+        renderer_, priorityButton.x + 24.0F,
+        priorityButton.y + 18.0F,
         priorityLabel);
     uiTextRenderer_.render(renderer_, 80.0F, 646.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
@@ -9152,17 +9326,80 @@ void App::renderBaseDormitory()
         population.bedShortfall > 0U ? 124 : 194,
         255);
     uiTextRenderer_.render(
-        renderer_, 170.0F, 338.0F,
+        renderer_, 170.0F, 316.0F,
         population.bedShortfall > 0U
             ? "OVERCROWDED | SHORTAGE IS NON-BLOCKING"
             : "BED CAPACITY AVAILABLE");
+    const BaseConstructionProjection construction = projectBaseConstruction(
+        profile,
+        publishedContentRegistry());
+    const BaseConstructionProjectDefinition &project =
+        publishedContentRegistry().baseConstructionProjects().front();
     SDL_SetRenderDrawColor(renderer_, 184, 194, 210, 255);
+    const std::string constructionSummary = fmt::format(
+        "DORMITORY LEVEL {} | BUILDING MATERIAL {}/{} | WORKERS {}/{} AVAILABLE",
+        construction.dormitoryLevel,
+        construction.materialUnits,
+        construction.maximumMaterialUnits,
+        construction.availableWorkers,
+        construction.totalWorkers);
     uiTextRenderer_.render(
-        renderer_, 170.0F, 382.0F,
+        renderer_, 170.0F, 350.0F, constructionSummary.c_str());
+
+    std::string projectStatus;
+    bool constructionAvailable{};
+    const char *constructionLabel{};
+    if (construction.activeProjectId.has_value())
+    {
+        projectStatus = fmt::format(
+            "EXPANSION IN PROGRESS | {}H {:02}M LEFT | {} WORKERS COMMITTED",
+            construction.remainingMinutes / kWorldMinutesPerHour,
+            construction.remainingMinutes % kWorldMinutesPerHour,
+            construction.committedWorkers);
+        constructionAvailable = true;
+        constructionLabel = "CANCEL & REFUND MATERIAL";
+    }
+    else if (construction.dormitoryLevel >= project.targetDormitoryLevel)
+    {
+        projectStatus = "DORMITORY EXPANSION COMPLETE";
+        constructionLabel = "NO FURTHER PROJECT";
+    }
+    else
+    {
+        const BaseConstructionPlan plan = queryStartBaseConstruction(
+            profile,
+            publishedContentRegistry(),
+            StartBaseConstructionCommand{project.id});
+        constructionAvailable = plan.canCommit;
+        projectStatus = fmt::format(
+            "NEXT: LEVEL {} / {} BEDS | COST {} MATERIAL / {} WORKERS / {}H",
+            project.targetDormitoryLevel,
+            project.bedCapacityAfter,
+            project.materialCost,
+            project.workerCount,
+            project.durationMinutes / kWorldMinutesPerHour);
+        constructionLabel = plan.canCommit
+            ? "START DORMITORY EXPANSION"
+            : "EXPANSION REQUIREMENTS NOT MET";
+    }
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 382.0F, projectStatus.c_str());
+    const SDL_FRect constructionButton = baseConstructionButton();
+    SDL_SetRenderDrawColor(
+        renderer_, constructionAvailable ? 66 : 52,
+        constructionAvailable ? 102 : 58,
+        constructionAvailable ? 124 : 64, 255);
+    SDL_RenderFillRect(renderer_, &constructionButton);
+    SDL_SetRenderDrawColor(renderer_, 170, 188, 216, 255);
+    SDL_RenderRect(renderer_, &constructionButton);
+    uiTextRenderer_.render(
+        renderer_, constructionButton.x + 28.0F,
+        constructionButton.y + 22.0F,
+        constructionLabel);
+
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 470.0F,
         "REST ADVANCES WORLD TIME AND DAILY NEEDS | MAXIMUM 12H");
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 412.0F,
-        "V1 DOES NOT HEAL THE PLAYER OR SIMULATE INDIVIDUAL RESIDENTS");
 
     constexpr std::array<const char *, 3> labels{
         "REST 1 HOUR", "REST 6 HOURS", "REST 12 HOURS"};
@@ -9177,12 +9414,12 @@ void App::renderBaseDormitory()
             renderer_, button.x + 44.0F, button.y + 20.0F, labels[index]);
     }
     SDL_SetRenderDrawColor(renderer_, 194, 204, 218, 255);
-    uiTextRenderer_.render(renderer_, 170.0F, 584.0F, "ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
         uiTextRenderer_.render(
-            renderer_, 420.0F, 584.0F, uiMessage_.c_str());
+            renderer_, 420.0F, 610.0F, uiMessage_.c_str());
     }
 }
 
@@ -9272,26 +9509,13 @@ void App::renderBaseDeployment()
         458.0F,
         448.0F,
         fireStatus.c_str());
-    const std::size_t pendingAllocation = assetsInContainer(
-        profile,
-        ProfileContainerId::baseIntake()).size();
-    if (pendingAllocation > 0U)
-    {
-        const std::string blocked = fmt::format(
-            "DEPLOY BLOCKED | RESOLVE {} PENDING ITEM(S) AT ALLOCATION & NEEDS",
-            pendingAllocation);
-        uiTextRenderer_.render(renderer_, 404.0F, 470.0F, blocked.c_str());
-    }
-    else
-    {
-        uiTextRenderer_.render(
-            renderer_,
-            442.0F,
-            470.0F,
-            capable
-                ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
-                : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
-    }
+    uiTextRenderer_.render(
+        renderer_,
+        442.0F,
+        470.0F,
+        capable
+            ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
+            : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     uiTextRenderer_.render(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <tuple>
 
 #include "alpha_content_ids.h"
@@ -116,6 +117,42 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.worldClock, startingClock);
     EXPECT_EQ(profile.baseResources, startingResources);
     EXPECT_EQ(profile.basePriority, startingPriority);
+}
+
+TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-construction-rollback",
+        publishedContentRegistry());
+    const WorldClockState startingClock = profile.worldClock;
+    profile.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            startingClock.elapsedWorldMinutes - 330U,
+            startingClock.elapsedWorldMinutes + 30U};
+
+    const DeployReceipt receipt = deploy(profile);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 2U);
+    EXPECT_FALSE(profile.baseConstruction.activeProject.has_value());
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 14U);
+    // Models a rescue fact that must survive a later Raid rollback.
+    ++profile.basePopulation.ordinaryResidents;
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile,
+        publishedContentRegistry()).succeeded);
+    EXPECT_EQ(profile.worldClock, startingClock);
+    EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 1U);
+    ASSERT_TRUE(profile.baseConstruction.activeProject.has_value());
+    EXPECT_EQ(
+        profile.baseConstruction.activeProject->completionWorldMinute,
+        startingClock.elapsedWorldMinutes + 30U);
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 10U);
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
 }
 
 TEST(RaidLifecycleTest, CommittedMapRescueIsNotOfferedAgain)
@@ -484,6 +521,16 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
         loot,
         CommandContext{profile.revision, "pickup-first-loot"}).succeeded);
     ASSERT_TRUE(assetIsCarried(profile, loot));
+    const AssetLocation locationBeforeSettlement =
+        profile.assets.find(loot)->location;
+    std::map<AssetInstanceId, AssetLocation> carriedLocations;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (assetIsCarried(profile, id))
+        {
+            carriedLocations.emplace(id, asset.location);
+        }
+    }
     profile.medicalStatus = MedicalStatusState{
         BleedingSeverity::Heavy, 0, 400, 0, 18000};
 
@@ -495,12 +542,17 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
     ASSERT_TRUE(settled.succeeded) << settled.message;
     EXPECT_FALSE(profile.pendingRaid.has_value());
     EXPECT_NE(profile.assets.find(loot), nullptr);
-    const auto *returnedLocation = std::get_if<StoredAssetLocation>(
-        &profile.assets.find(loot)->location);
-    ASSERT_NE(returnedLocation, nullptr);
     EXPECT_EQ(
-        returnedLocation->container,
-        ProfileContainerId::baseIntake());
+        profile.assets.find(loot)->location,
+        locationBeforeSettlement);
+    EXPECT_TRUE(assetIsCarried(profile, loot));
+    for (const auto &[id, expectedLocation] : carriedLocations)
+    {
+        ASSERT_NE(profile.assets.find(id), nullptr);
+        EXPECT_EQ(profile.assets.find(id)->location, expectedLocation);
+    }
+    EXPECT_TRUE(assetsInContainer(
+        profile, ProfileContainerId::baseIntake()).empty());
     EXPECT_EQ(
         profile.baseResources.pool,
         (BaseResourceBundle{40, 40, 40, 40}));
@@ -575,12 +627,13 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
         "settlement-alpha-test",
         RaidResultOutcome::Extracted);
     ASSERT_TRUE(settled.succeeded) << settled.message;
-    EXPECT_EQ(profile.assets.find(ammunition)->quantity, 55U);
-    const auto intake = assetsInContainer(
-        profile, ProfileContainerId::baseIntake());
-    ASSERT_EQ(intake.size(), 1U);
-    EXPECT_EQ(intake.front()->definitionId, alpha_content::ammunition);
-    EXPECT_EQ(intake.front()->quantity, 5U);
+    EXPECT_EQ(profile.assets.find(ammunition)->quantity, 60U);
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(
+            profile.assets.find(ammunition)->location).container,
+        ProfileContainerId::compartment(backpack, 0));
+    EXPECT_TRUE(assetsInContainer(
+        profile, ProfileContainerId::baseIntake()).empty());
 }
 
 TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
@@ -665,7 +718,7 @@ TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
         profile, publishedContentRegistry()).valid);
 }
 
-TEST(RaidLifecycleTest, PendingAllocationBlocksAnotherDeploy)
+TEST(RaidLifecycleTest, LegacyUnassignedReturnsDoNotBlockDeploy)
 {
     ProfileState profile = makeNewAlphaProfile(
         "raid-lifecycle-allocation-gate",
@@ -677,10 +730,12 @@ TEST(RaidLifecycleTest, PendingAllocationBlocksAnotherDeploy)
         StoredAssetLocation{
             ProfileContainerId::baseIntake(), GridPosition{0, 0}},
         1));
-    const std::uint64_t fingerprint = profileStateFingerprint(profile);
-
     const DeployReceipt receipt = deploy(profile, 9901);
 
-    EXPECT_FALSE(receipt.succeeded);
-    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_EQ(
+        assetsInContainer(
+            profile, ProfileContainerId::baseIntake()).size(),
+        1U);
 }
