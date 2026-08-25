@@ -96,7 +96,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | PR #86 已通过 CI 和用户验收，以 `ee9ba48` 进入 main；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
 | 宿舍扩建 v1 | 玩家从统一自有资产中显式加工回收物；宿舍项目占用劳动力并随世界时间完成，取消可返还建材 | BaseConstructionState、query/command/receipt、Raid 回滚快照、schema v14/content v22 | PR #87 已通过 exact-head CI 和用户验收，以 `1be94bf` 进入 main |
 | 分类自动供给 v1 | 食物、医疗、娱乐、安全菜单显示玩家拥有的可用定义；勾选后仅在每日缺口出现时自动消耗，物品此前保持原位 | BaseSupplyPolicyState、定义→唯一分类授权、最低数量日结、schema v15/content v23 | PR #87 已通过 exact-head CI 和用户验收，以 `1be94bf` 进入 main |
-| 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | 当前分支已通过 Windows Debug 全目标和 973/973 CTest；等待 Draft PR exact-head CI 与用户正常游玩验收 |
+| 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | Draft PR #88 已通过 Windows Debug、973/973 CTest 和 exact-head Windows/Ubuntu CI；等待用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

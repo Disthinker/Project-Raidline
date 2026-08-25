@@ -71,7 +71,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #87 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `1be94bf` 进入 main。
-- 当前居民医疗分支已通过 Windows Debug 全目标和完整 CTest 973/973；尚待 Draft PR exact-head Windows/Ubuntu CI 与用户正常游玩验收。开发代理未启动游戏。
+- 当前居民医疗分支已通过 Windows Debug 全目标、完整 CTest 973/973 和 Draft PR #88 exact-head Windows/Ubuntu CI；尚待用户正常游玩验收。开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

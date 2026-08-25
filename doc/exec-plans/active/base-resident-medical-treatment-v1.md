@@ -88,7 +88,7 @@ Codex does not launch the game for this acceptance.
 - [x] GameSession and Medical facility UI implemented.
 - [x] Automated verification complete: Windows Debug full build and 973/973
   CTest pass; Codex did not launch the game.
-- [ ] Draft PR open with exact-head CI green.
+- [x] Draft PR #88 open with exact-head Windows/Ubuntu CI green.
 - [ ] User normal-play acceptance complete.
 
 ## Rollback
