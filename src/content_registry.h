@@ -141,7 +141,6 @@ struct GunsmithFullMaintenanceDefinition
     std::uint32_t baseCost{};
     std::uint32_t currentDurabilityCostPerPoint{};
     std::uint32_t maximumDurabilityCostPerPoint{};
-    std::uint32_t durationMinutes{};
 
     friend bool operator==(
         const GunsmithFullMaintenanceDefinition &,
@@ -152,10 +151,6 @@ struct BaseOperationsDefinition
 {
     std::uint32_t strainedBelowReserveDays{};
     std::uint32_t supportedAtReserveDays{};
-    std::uint32_t criticalServiceDurationPercent{};
-    std::uint32_t strainedServiceDurationPercent{};
-    std::uint32_t stableServiceDurationPercent{};
-    std::uint32_t supportedServiceDurationPercent{};
 
     friend bool operator==(
         const BaseOperationsDefinition &,

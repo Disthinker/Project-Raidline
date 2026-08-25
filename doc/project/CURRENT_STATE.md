@@ -11,7 +11,7 @@
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#82 已接受。当前进入 **Base 运营状态与服务效率 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让四项运营储备首次产生温和、非死档的实际服务影响，同时不把当前数值池固化成完整版居民士气。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#82 已接受。当前进入 **Base 运营状态与即时枪械维护 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让四项运营储备形成非死档的可读投影，并按用户最新决策把玩家枪械全面维护改为只扣货币、立即完成。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -37,7 +37,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
 23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
 24. **Base 周期愿望与物资提交 v1**：PR #82 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `eca7d62` 进入 main。
-25. **Base 运营状态与服务效率 v1**：当前分支按四项资源的最短可支撑日数投影危急/紧张/稳定/充足；枪匠等待时间成为首个消费者并在开工时冻结。人口、床位、正式居民士气、生产和自动防守继续延期。
+25. **Base 运营状态与即时枪械维护 v1**：当前分支按四项资源的最短可支撑日数投影危急/紧张/稳定/充足；枪匠全面维护只扣除货币并在同一存档事务中立即恢复出厂耐久、清除故障，不再推进时间。人口、床位、正式居民士气、生产和自动防守继续延期。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -65,7 +65,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78～#82 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望均已完成 CI、用户验收并进入 main。当前运营状态切片 Content/Domain/Service/Save/UI 定向回归 104/104、Windows Debug 全目标和完整 CTest 903/903 通过；PR #83 首个 exact-head Windows/Ubuntu CI 已通过，人工验收发现供应页仓库未选中文本继承深色背景绘制颜色，当前修复已重新完成 Windows Debug 与完整 CTest 903/903，新 exact-head CI 和用户复验待执行。开发代理未启动游戏。
+- PR #78～#82 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望均已完成 CI、用户验收并进入 main。PR #83 已完成 Supply 未选中文本对比度修复；用户随后把玩家枪械全面维护修订为立即货币服务，当前修订已通过 Windows Debug 全目标、115 项聚焦回归与完整 CTest 903/903。exact-head CI 和用户复验待完成；开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -233,13 +233,12 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - schema v9 保存旅行快照与结算耗时；schema v8 旧存档和旧 pending Raid 显式迁移。异常退出不能走 Settlement，只能恢复出发前 Profile，保证时钟、需求周期、资源与资产一起回滚。
 - 当前不实现夜间视野、路线状态、旅行遭遇、哨所、情报、人口/床位/口粮、精力或睡眠；分钟值是集中内容调参，不声明为最终平衡。
 
-## Base 枪匠全面维护服务 v1 当前实现
+## Base 枪匠全面维护服务 v1 历史基线
 
-- content v15 数据化全面维护的基础费、当前耐久缺口单价、最大耐久缺口单价和 240 世界分钟时长；数值属于开发期平衡值。
+- PR #81 的 content v15 曾数据化全面维护价格和 240 世界分钟时长；这是已合入的历史存档合同，当前 PR #83 已按用户新决策替换新维护路径。
 - `BaseServiceJobId`、`BaseServiceAssetLocation` 和单项 `GunsmithMaintenanceJob` 明确服务期间的唯一资产所有权。送修只接受 Stash 根层受损武器，原子扣款并保存；所有拒绝和保存失败保持 Profile 指纹、revision、货币与高水位不变。
-- 完成状态只由权威世界时间投影。领取优先返回原格位，必要时使用首个合法 Stash 格位；空间不足时武器继续留在服务中，不复制、不覆盖、不丢失。
-- schema v10 保存任务、高水位、冻结报价/完成点和服务资产位置，v1～v9 明确迁移为空任务。跨进程回归已证明 Raid 往返能推进维护且领取后仍是同一武器实例。
-- 供应与回收页使用双语文字/几何占位显示报价、进行中、可领取和空间阻塞；没有新增或修改美术、音频与资源 manifest。
+- schema v10/v11 继续保存旧任务、高水位、冻结报价/完成点和服务资产位置；PR #83 不删除这些字段，以便旧存档中的武器仍由唯一位置持有并可安全领取。
+- 当前新维护不会再产生这种任务；旧任务在加载后立即可领取，Stash 空间不足时仍零修改保留服务所有权。
 
 ## Base 周期愿望与物资提交 v1 当前实现
 
@@ -249,12 +248,12 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - schema v11 保存愿望状态；schema v10 及更早版本按当前世界时间确定性初始化。Pending Raid 同时冻结出发前愿望，异常退出跨周期也会精确回滚。
 - Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；不建立传统任务列表、奖励弹窗或自动捐献。
 
-## Base 运营状态与服务效率 v1 当前实现
+## Base 运营状态与即时枪械维护 v1 当前实现
 
-- content v17 以四项资源各自每日需求为分母，配置紧张/充足储备日数和危急/紧张/稳定/充足四档服务耗时百分比；非法阈值或颠倒倍率会阻断内容加载。
-- `BaseOperationalProjection` 只读计算各项整日储备、精确最短板、运营档位和服务耗时，不进入 Profile、revision 或存档。默认新档仍为稳定档，枪匠保持原 240 分钟。
-- 枪匠全面维护按运营档位使用 300/276/240/216 分钟，费用与服务资格不变；开工后完成分钟冻结，后续资源变化不会追改活动任务。
-- schema 维持 v11，并显式接受 PR #82 的 content v16 存档。Allocation 与 Supply 以中英文显示运营状态、最短板和当前服务耗时。
+- content v18 以四项资源各自每日需求为分母，只配置紧张/充足储备日数；已无消费者的枪匠耗时和运营耗时倍率已删除。
+- `BaseOperationalProjection` 只读计算各项整日储备、精确最短板和运营档位，不进入 Profile、revision 或存档。首版状态仅作风险可读投影。
+- 玩家枪械全面维护只消费货币：候选 Profile 原子恢复当前/最大耐久到出厂值并清除故障；不推进世界时间、不创建任务、不移动武器，也不改变枪膛和已装弹匣。运营资源不影响报价或资格。
+- schema 维持 v11，并显式接受 content v16/v17 存档；旧计时任务立即可领取。Allocation 与 Supply 以中英文显示运营状态、最短板和即时维护反馈。
 - 当前四项池仅作为早期运营储备；完整版居民士气仍保留独立三档模型，人口、口粮/床位、生产、居民恢复和自动防守未在本切片提前实现。
 
 ## 尚未完成

@@ -1,7 +1,5 @@
 #include "base_service_domain.h"
 
-#include "base_resource_domain.h"
-
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -29,13 +27,10 @@ GunsmithMaintenanceReceipt maintenanceReceiptFailure(
 GunsmithCollectionPlan collectionFailure(
     DomainErrorCode error,
     std::string message,
-    ProfileRevision revision,
-    std::uint64_t minutesRemaining = 0)
+    ProfileRevision revision)
 {
-    GunsmithCollectionPlan result{
+    return GunsmithCollectionPlan{
         false, error, std::move(message), revision};
-    result.minutesRemaining = minutesRemaining;
-    return result;
 }
 
 GunsmithCollectionReceipt collectionReceiptFailure(
@@ -137,34 +132,6 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
             "currency is insufficient for gunsmith service",
             profile.revision);
     }
-    const BaseOperationalProjection operations = projectBaseOperations(
-        profile.baseResources,
-        content.baseOperations());
-    const std::uint64_t adjustedDuration =
-        (static_cast<std::uint64_t>(service.durationMinutes) *
-             operations.serviceDurationPercent +
-         99U) /
-        100U;
-    if (adjustedDuration == 0U ||
-        adjustedDuration > std::numeric_limits<std::uint32_t>::max())
-    {
-        return maintenanceFailure(
-            DomainErrorCode::InvalidQuantity,
-            "gunsmith service duration is invalid",
-            profile.revision);
-    }
-    if (profile.nextBaseServiceJobId ==
-            std::numeric_limits<BaseServiceJobId>::max() ||
-        profile.worldClock.elapsedWorldMinutes >
-            std::numeric_limits<std::uint64_t>::max() -
-                adjustedDuration)
-    {
-        return maintenanceFailure(
-            DomainErrorCode::RevisionOverflow,
-            "gunsmith service timeline cannot advance",
-            profile.revision);
-    }
-
     return GunsmithMaintenancePlan{
         true,
         DomainErrorCode::None,
@@ -172,11 +139,6 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
         profile.revision,
         command.weaponAssetId,
         static_cast<std::uint32_t>(quoted),
-        static_cast<std::uint32_t>(adjustedDuration),
-        operations.serviceDurationPercent,
-        operations.tier,
-        operations.limitingResource,
-        profile.worldClock.elapsedWorldMinutes + adjustedDuration,
         weapon->currentDurability,
         weapon->currentMaximumDurability,
         factoryMaximum};
@@ -224,20 +186,17 @@ GunsmithMaintenanceReceipt executeGunsmithMaintenance(
     }
 
     ProfileState candidate = profile;
-    const BaseServiceJobId jobId = candidate.nextBaseServiceJobId++;
     AssetRecord *weapon = candidate.assets.findMutable(command.weaponAssetId);
-    const StoredAssetLocation returnLocation =
-        std::get<StoredAssetLocation>(weapon->location);
-    weapon->location = BaseServiceAssetLocation{jobId};
+    const std::uint32_t restoredCurrent =
+        plan.targetFactoryDurabilityCenti - weapon->currentDurability;
+    const std::uint32_t restoredMaximum =
+        plan.targetFactoryDurabilityCenti - weapon->currentMaximumDurability;
+    const bool cleared =
+        weapon->weaponMalfunction != WeaponMalfunctionType::None;
+    weapon->currentMaximumDurability = plan.targetFactoryDurabilityCenti;
+    weapon->currentDurability = plan.targetFactoryDurabilityCenti;
+    weapon->weaponMalfunction = WeaponMalfunctionType::None;
     candidate.currency -= plan.quotedCurrency;
-    candidate.gunsmithMaintenanceJob = GunsmithMaintenanceJob{
-        jobId,
-        command.weaponAssetId,
-        returnLocation.origin,
-        candidate.worldClock.elapsedWorldMinutes,
-        plan.completionWorldMinute,
-        plan.quotedCurrency,
-        plan.targetFactoryDurabilityCenti};
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
 
@@ -257,10 +216,11 @@ GunsmithMaintenanceReceipt executeGunsmithMaintenance(
         DomainErrorCode::None,
         {},
         profile.revision,
-        jobId,
         command.weaponAssetId,
         plan.quotedCurrency,
-        plan.completionWorldMinute};
+        restoredCurrent,
+        restoredMaximum,
+        cleared};
 }
 
 GunsmithCollectionPlan queryGunsmithCollection(
@@ -284,16 +244,9 @@ GunsmithCollectionPlan queryGunsmithCollection(
             "gunsmith service asset ownership is invalid",
             profile.revision);
     }
-    if (profile.worldClock.elapsedWorldMinutes < job.completionWorldMinute)
-    {
-        return collectionFailure(
-            DomainErrorCode::InvalidQuantity,
-            "gunsmith service is still in progress",
-            profile.revision,
-            job.completionWorldMinute -
-                profile.worldClock.elapsedWorldMinutes);
-    }
-
+    // Jobs written by schema v10/v11 saves are legacy compatibility state.
+    // New maintenance is immediate, so an old held weapon is collectible as
+    // soon as the profile is loaded.
     const ItemDefinition &definition = content.item(weapon->definitionId);
     std::optional<GridPosition> destination;
     if (profilePlacementFits(
@@ -331,7 +284,6 @@ GunsmithCollectionPlan queryGunsmithCollection(
         profile.revision,
         job.jobId,
         job.weaponAssetId,
-        0,
         StoredAssetLocation{ProfileContainerId::stash(), *destination},
         job.targetFactoryDurabilityCenti};
 }

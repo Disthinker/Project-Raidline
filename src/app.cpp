@@ -1934,9 +1934,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     nextProfileTransactionId("start-gunsmith"));
             uiMessage_ = receipt.succeeded
                 ? fmt::format(
-                    "SERVICE STARTED | READY IN {} MIN | PAID {}",
-                    receipt.completionWorldMinute -
-                        gameSession_.profile().worldClock.elapsedWorldMinutes,
+                    "WEAPON FULLY SERVICED | PAID {}",
                     receipt.currencyPaid)
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
@@ -8404,10 +8402,9 @@ void App::renderBaseSupply()
         gameSession_.profile().baseResources,
         publishedContentRegistry().baseOperations());
     const std::string operationsStatus = fmt::format(
-        "BASE OPERATIONS {} | LIMITING {} | SERVICE TIME {}%",
+        "BASE OPERATIONS {} | LIMITING {}",
         baseOperationalTierName(operations.tier),
-        baseResourceKindName(operations.limitingResource),
-        operations.serviceDurationPercent);
+        baseResourceKindName(operations.limitingResource));
     SDL_SetRenderDrawColor(renderer_, 224, 214, 174, 255);
     uiTextRenderer_.render(
         renderer_, 96.0F, 122.0F, operationsStatus.c_str());
@@ -8519,14 +8516,6 @@ void App::renderBaseSupply()
                 "GUNSMITH READY | {}", weaponName);
             gunsmithLabel = "COLLECT SERVICED WEAPON";
         }
-        else if (plan.minutesRemaining > 0)
-        {
-            gunsmithStatus = fmt::format(
-                "GUNSMITH IN PROGRESS | {} | {} MIN",
-                weaponName,
-                plan.minutesRemaining);
-            gunsmithLabel = "SERVICE IN PROGRESS";
-        }
         else
         {
             gunsmithStatus = "GUNSMITH READY | STASH SPACE REQUIRED";
@@ -8543,11 +8532,8 @@ void App::renderBaseSupply()
         gunsmithAvailable = plan.canCommit;
         gunsmithStatus = plan.canCommit
             ? fmt::format(
-                "GUNSMITH QUOTE {} | {} MIN | OPERATIONS {}% TIME | "
-                "FULL FACTORY CONDITION",
-                plan.quotedCurrency,
-                plan.durationMinutes,
-                plan.durationPercent)
+                "GUNSMITH QUOTE {} | INSTANT | FULL FACTORY CONDITION",
+                plan.quotedCurrency)
             : plan.message;
     }
     else
@@ -8671,10 +8657,9 @@ void App::renderBaseAllocation()
         uiTextRenderer_.render(renderer_, 80.0F, y, label.c_str());
     }
     const std::string operationsStatus = fmt::format(
-        "BASE OPERATIONS {} | LIMITING {} | SERVICE TIME {}%",
+        "BASE OPERATIONS {} | LIMITING {}",
         baseOperationalTierName(operations.tier),
-        baseResourceKindName(operations.limitingResource),
-        operations.serviceDurationPercent);
+        baseResourceKindName(operations.limitingResource));
     uiTextRenderer_.render(
         renderer_, 80.0F, 474.0F, operationsStatus.c_str());
     const std::string cycles = fmt::format(

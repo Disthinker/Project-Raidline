@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <string>
 
-#include "base_resource_domain.h"
 #include "inventory_domain.h"
 #include "profile_state.h"
 
@@ -20,11 +19,6 @@ struct GunsmithMaintenancePlan
     ProfileRevision revision{};
     AssetInstanceId weaponAssetId{};
     std::uint32_t quotedCurrency{};
-    std::uint32_t durationMinutes{};
-    std::uint32_t durationPercent{100};
-    BaseOperationalTier operationalTier{BaseOperationalTier::Stable};
-    BaseResourceKind limitingResource{BaseResourceKind::Food};
-    std::uint64_t completionWorldMinute{};
     std::uint32_t currentDurabilityBeforeCenti{};
     std::uint32_t currentMaximumBeforeCenti{};
     std::uint32_t targetFactoryDurabilityCenti{};
@@ -37,10 +31,11 @@ struct GunsmithMaintenanceReceipt
     DomainErrorCode error{DomainErrorCode::None};
     std::string message;
     ProfileRevision revision{};
-    BaseServiceJobId jobId{};
     AssetInstanceId weaponAssetId{};
     std::uint32_t currencyPaid{};
-    std::uint64_t completionWorldMinute{};
+    std::uint32_t restoredCurrentDurabilityCenti{};
+    std::uint32_t restoredMaximumDurabilityCenti{};
+    bool clearedMalfunction{};
 };
 
 struct GunsmithCollectionPlan
@@ -51,7 +46,6 @@ struct GunsmithCollectionPlan
     ProfileRevision revision{};
     BaseServiceJobId jobId{};
     AssetInstanceId weaponAssetId{};
-    std::uint64_t minutesRemaining{};
     StoredAssetLocation destination;
     std::uint32_t targetFactoryDurabilityCenti{};
 };

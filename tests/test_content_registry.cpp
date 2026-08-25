@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-operational-readiness-content-17");
+        "base-instant-gunsmith-content-18");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -73,21 +73,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().maximumDurabilityCostPerPoint,
         2U);
-    EXPECT_EQ(registry.gunsmithFullMaintenance().durationMinutes, 240U);
     EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
-    EXPECT_EQ(
-        registry.baseOperations().criticalServiceDurationPercent,
-        125U);
-    EXPECT_EQ(
-        registry.baseOperations().strainedServiceDurationPercent,
-        115U);
-    EXPECT_EQ(
-        registry.baseOperations().stableServiceDurationPercent,
-        100U);
-    EXPECT_EQ(
-        registry.baseOperations().supportedServiceDurationPercent,
-        90U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     ASSERT_EQ(registry.basePriorities().size(), 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
@@ -341,18 +328,6 @@ TEST(ContentRegistryTest, RejectsNonPositiveItemWeight)
         ContentRegistryError);
 }
 
-TEST(ContentRegistryTest, RejectsInvalidGunsmithServiceDuration)
-{
-    const std::string invalid = replaceFirst(
-        publishedJsonCopy(),
-        "\"duration_minutes\": 240",
-        "\"duration_minutes\": 0");
-
-    EXPECT_THROW(
-        static_cast<void>(ContentRegistry::fromJson(invalid)),
-        ContentRegistryError);
-}
-
 TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
 {
     EXPECT_THROW(
@@ -367,18 +342,6 @@ TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
             "\"supported_at_reserve_days\": 7",
             "\"supported_at_reserve_days\": 2")),
         ContentRegistryError);
-    EXPECT_THROW(
-        ContentRegistry::fromJson(replaceFirst(
-            publishedJsonCopy(),
-            "\"stable\": 100",
-            "\"stable\": 99")),
-        ContentRegistryError);
-    EXPECT_THROW(
-        ContentRegistry::fromJson(replaceFirst(
-            publishedJsonCopy(),
-            "\"supported\": 90",
-            "\"supported\": 110")),
-        ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, RejectsExcessiveGunsmithServiceUnitCost)
@@ -387,6 +350,18 @@ TEST(ContentRegistryTest, RejectsExcessiveGunsmithServiceUnitCost)
         publishedJsonCopy(),
         "\"maximum_durability_cost_per_point\": 2",
         "\"maximum_durability_cost_per_point\": 1001");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsZeroGunsmithServiceBaseCost)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"base_cost\": 40",
+        "\"base_cost\": 0");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

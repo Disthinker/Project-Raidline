@@ -678,7 +678,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 10 &&
              contentVersion == "base-gunsmith-service-content-15") ||
             (schemaVersion == 11 &&
-             contentVersion == "base-periodic-wishes-content-16");
+             (contentVersion == "base-periodic-wishes-content-16" ||
+              contentVersion == "base-operational-readiness-content-17"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

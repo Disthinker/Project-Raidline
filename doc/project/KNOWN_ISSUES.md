@@ -78,6 +78,6 @@
 | Raid 往返行动耗时 v1 | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `defaac0` 进入 main；三图分钟值仍是开发期平衡值 |
 | Base 枪匠全面维护服务 v1 | PR #81 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `ace7c69` 进入 main |
 | Base 周期愿望与物资提交 v1 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `eca7d62` 进入 main |
-| Base 运营状态与服务效率 v1 | 当前分支以四项最短储备日数投影运营状态，并把枪匠等待时间作为首个温和消费者；content v17、旧 content v16 存档兼容和双语 UI 已完成，104 项定向回归、Windows Debug 全目标与完整 CTest 903/903 通过 |
+| Base 运营状态与即时枪械维护 v1 | 当前分支以四项最短储备日数投影运营状态；按用户最新决策，玩家枪械全面维护改为只扣货币并立即完成，content v18 继续兼容 v16/v17 和旧计时任务。Windows Debug、115 项聚焦回归与完整 CTest 903/903 已通过，exact-head CI 待完成 |
 
 具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-operational-readiness-v1.md`。

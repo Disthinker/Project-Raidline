@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <vector>
 
 #include "alpha_content_ids.h"
 #include "base_service_domain.h"
-#include "world_clock.h"
 
 namespace
 {
@@ -29,7 +29,8 @@ ProfileState damagedRifleProfile()
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile("gunsmith-domain", content);
     profile.currency = 1000;
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
     AssetRecord *rifle = profile.assets.findMutable(rifleId);
     rifle->currentMaximumDurability = 8000;
     rifle->currentDurability = 5000;
@@ -45,23 +46,47 @@ ProfileState damagedRifleProfile()
     EXPECT_TRUE(validateProfileState(profile, content).valid);
     return profile;
 }
+
+void moveWeaponIntoLegacyJob(
+    ProfileState &profile,
+    AssetInstanceId weaponAssetId)
+{
+    AssetRecord *weapon = profile.assets.findMutable(weaponAssetId);
+    ASSERT_NE(weapon, nullptr);
+    const StoredAssetLocation returnLocation =
+        std::get<StoredAssetLocation>(weapon->location);
+    const BaseServiceJobId jobId = profile.nextBaseServiceJobId++;
+    weapon->location = BaseServiceAssetLocation{jobId};
+    profile.gunsmithMaintenanceJob = GunsmithMaintenanceJob{
+        jobId,
+        weaponAssetId,
+        returnLocation.origin,
+        profile.worldClock.elapsedWorldMinutes,
+        profile.worldClock.elapsedWorldMinutes + 240U,
+        130U,
+        10000U};
+}
 }
 
-TEST(BaseServiceDomainTest, QuotesAndStartsOneAtomicGunsmithJob)
+TEST(BaseServiceDomainTest, QuoteAndMaintenanceCommitImmediately)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = damagedRifleProfile();
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
+    const AssetInstanceId magazineId = installedMagazine(
+        profile, rifleId).value();
+    const AssetLocation originalLocation =
+        profile.assets.find(rifleId)->location;
+    const BaseServiceJobId nextJobId = profile.nextBaseServiceJobId;
+    const std::uint64_t worldMinute =
+        profile.worldClock.elapsedWorldMinutes;
     const ProfileRevision revisionBefore = profile.revision;
 
     const GunsmithMaintenancePlan plan = queryGunsmithMaintenance(
         profile, content, StartGunsmithMaintenanceCommand{rifleId});
     ASSERT_TRUE(plan.canCommit) << plan.message;
     EXPECT_EQ(plan.quotedCurrency, 130U);
-    EXPECT_EQ(plan.durationMinutes, 240U);
-    EXPECT_EQ(plan.durationPercent, 100U);
-    EXPECT_EQ(plan.operationalTier, BaseOperationalTier::Stable);
-    EXPECT_EQ(plan.limitingResource, BaseResourceKind::Food);
     EXPECT_EQ(plan.currentDurabilityBeforeCenti, 5000U);
     EXPECT_EQ(plan.currentMaximumBeforeCenti, 8000U);
     EXPECT_EQ(plan.targetFactoryDurabilityCenti, 10000U);
@@ -70,87 +95,87 @@ TEST(BaseServiceDomainTest, QuotesAndStartsOneAtomicGunsmithJob)
         profile,
         content,
         StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{revisionBefore, "gunsmith-start-1"});
+        CommandContext{revisionBefore, "gunsmith-instant-1"});
     ASSERT_TRUE(receipt.succeeded) << receipt.message;
     EXPECT_FALSE(receipt.idempotent);
+    EXPECT_EQ(receipt.currencyPaid, 130U);
+    EXPECT_EQ(receipt.restoredCurrentDurabilityCenti, 5000U);
+    EXPECT_EQ(receipt.restoredMaximumDurabilityCenti, 2000U);
+    EXPECT_TRUE(receipt.clearedMalfunction);
     EXPECT_EQ(profile.currency, 870U);
     EXPECT_EQ(profile.revision, revisionBefore + 1U);
-    ASSERT_TRUE(profile.gunsmithMaintenanceJob.has_value());
-    EXPECT_EQ(receipt.jobId, profile.gunsmithMaintenanceJob->jobId);
-    EXPECT_EQ(profile.nextBaseServiceJobId, receipt.jobId + 1U);
-    EXPECT_EQ(
-        profile.assets.find(rifleId)->location,
-        AssetLocation{BaseServiceAssetLocation{receipt.jobId}});
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, worldMinute);
+    EXPECT_EQ(profile.nextBaseServiceJobId, nextJobId);
+    EXPECT_FALSE(profile.gunsmithMaintenanceJob.has_value());
+
+    const AssetRecord *rifle = profile.assets.find(rifleId);
+    ASSERT_NE(rifle, nullptr);
+    EXPECT_EQ(rifle->location, originalLocation);
+    EXPECT_EQ(rifle->currentDurability, 10000U);
+    EXPECT_EQ(rifle->currentMaximumDurability, 10000U);
+    EXPECT_EQ(rifle->weaponMalfunction, WeaponMalfunctionType::None);
+    EXPECT_TRUE(rifle->chamberedRound.has_value());
+    EXPECT_EQ(installedMagazine(profile, rifleId), magazineId);
+    EXPECT_EQ(profile.assets.find(magazineId)->magazineRounds.size(), 1U);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
-TEST(BaseServiceDomainTest, OperationalReadinessAdjustsAndFreezesDuration)
+TEST(BaseServiceDomainTest, OperationalReadinessDoesNotChangeQuoteOrTime)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState critical = damagedRifleProfile();
-    critical.baseResources.pool = BaseResourceBundle{7, 100, 100, 100};
+    critical.baseResources.pool = BaseResourceBundle{0, 100, 100, 100};
     const AssetInstanceId criticalRifle = firstStashAsset(
-        critical,
-        alpha_content::rifle);
+        critical, alpha_content::rifle);
     const GunsmithMaintenancePlan criticalPlan = queryGunsmithMaintenance(
         critical,
         content,
         StartGunsmithMaintenanceCommand{criticalRifle});
     ASSERT_TRUE(criticalPlan.canCommit) << criticalPlan.message;
-    EXPECT_EQ(criticalPlan.durationPercent, 125U);
-    EXPECT_EQ(criticalPlan.durationMinutes, 300U);
-    ASSERT_TRUE(executeGunsmithMaintenance(
-        critical,
-        content,
-        StartGunsmithMaintenanceCommand{criticalRifle},
-        CommandContext{critical.revision, "critical-service"}).succeeded);
-    ASSERT_TRUE(critical.gunsmithMaintenanceJob.has_value());
-    const std::uint64_t frozenCompletion =
-        critical.gunsmithMaintenanceJob->completionWorldMinute;
-    critical.baseResources.pool = BaseResourceBundle{100, 100, 100, 100};
-    EXPECT_EQ(
-        critical.gunsmithMaintenanceJob->completionWorldMinute,
-        frozenCompletion);
 
     ProfileState supported = damagedRifleProfile();
-    supported.baseResources.pool = BaseResourceBundle{56, 42, 35, 28};
+    supported.baseResources.pool = BaseResourceBundle{100, 100, 100, 100};
     const AssetInstanceId supportedRifle = firstStashAsset(
-        supported,
-        alpha_content::rifle);
+        supported, alpha_content::rifle);
     const GunsmithMaintenancePlan supportedPlan = queryGunsmithMaintenance(
         supported,
         content,
         StartGunsmithMaintenanceCommand{supportedRifle});
     ASSERT_TRUE(supportedPlan.canCommit) << supportedPlan.message;
-    EXPECT_EQ(supportedPlan.durationPercent, 90U);
-    EXPECT_EQ(supportedPlan.durationMinutes, 216U);
+    EXPECT_EQ(criticalPlan.quotedCurrency, supportedPlan.quotedCurrency);
+
+    const std::uint64_t beforeMinute =
+        critical.worldClock.elapsedWorldMinutes;
+    ASSERT_TRUE(executeGunsmithMaintenance(
+        critical,
+        content,
+        StartGunsmithMaintenanceCommand{criticalRifle},
+        CommandContext{critical.revision, "critical-instant-service"})
+                    .succeeded);
+    EXPECT_EQ(critical.worldClock.elapsedWorldMinutes, beforeMinute);
+    EXPECT_FALSE(critical.gunsmithMaintenanceJob.has_value());
 }
 
-TEST(BaseServiceDomainTest, RejectionsPreserveFingerprintAndHighWaterMarks)
+TEST(BaseServiceDomainTest, RejectionsPreserveEveryParticipant)
 {
     const ContentRegistry &content = publishedContentRegistry();
-    ProfileState profile = damagedRifleProfile();
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
-    profile.currency = 1;
-    const std::uint64_t fingerprint = profileStateFingerprint(profile);
-    const AssetInstanceId nextAssetId = profile.assets.nextAssetId();
-    const BaseServiceJobId nextJobId = profile.nextBaseServiceJobId;
-
-    const GunsmithMaintenanceReceipt receipt = executeGunsmithMaintenance(
-        profile,
+    ProfileState insufficient = damagedRifleProfile();
+    const AssetInstanceId rifleId = firstStashAsset(
+        insufficient, alpha_content::rifle);
+    insufficient.currency = 1;
+    const std::uint64_t fingerprint = profileStateFingerprint(insufficient);
+    const AssetInstanceId nextAssetId = insufficient.assets.nextAssetId();
+    const BaseServiceJobId nextJobId = insufficient.nextBaseServiceJobId;
+    EXPECT_FALSE(executeGunsmithMaintenance(
+        insufficient,
         content,
         StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{profile.revision, "gunsmith-insufficient"});
-    EXPECT_FALSE(receipt.succeeded);
-    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
-    EXPECT_EQ(profile.assets.nextAssetId(), nextAssetId);
-    EXPECT_EQ(profile.nextBaseServiceJobId, nextJobId);
-    EXPECT_FALSE(profile.gunsmithMaintenanceJob.has_value());
-}
+        CommandContext{insufficient.revision, "gunsmith-insufficient"})
+                     .succeeded);
+    EXPECT_EQ(profileStateFingerprint(insufficient), fingerprint);
+    EXPECT_EQ(insufficient.assets.nextAssetId(), nextAssetId);
+    EXPECT_EQ(insufficient.nextBaseServiceJobId, nextJobId);
 
-TEST(BaseServiceDomainTest, ServiceRequiresStashRootAndOneActiveJob)
-{
-    const ContentRegistry &content = publishedContentRegistry();
     ProfileState equipped = damagedRifleProfile();
     const AssetInstanceId equippedRifle = firstStashAsset(
         equipped, alpha_content::rifle);
@@ -159,63 +184,41 @@ TEST(BaseServiceDomainTest, ServiceRequiresStashRootAndOneActiveJob)
         content,
         InventoryEquipCommand{
             equippedRifle, EquipmentSlotKind::PrimaryWeapon},
-        CommandContext{equipped.revision, "equip-before-service"}).succeeded);
+        CommandContext{equipped.revision, "equip-before-service"})
+                    .succeeded);
     const std::uint64_t equippedFingerprint =
         profileStateFingerprint(equipped);
-    const GunsmithMaintenanceReceipt equippedReceipt =
-        executeGunsmithMaintenance(
-            equipped,
-            content,
-            StartGunsmithMaintenanceCommand{equippedRifle},
-            CommandContext{equipped.revision, "reject-equipped-service"});
-    EXPECT_FALSE(equippedReceipt.succeeded);
-    EXPECT_EQ(
-        profileStateFingerprint(equipped), equippedFingerprint);
-
-    ProfileState active = damagedRifleProfile();
-    const AssetInstanceId rifle = firstStashAsset(
-        active, alpha_content::rifle);
-    ASSERT_TRUE(executeGunsmithMaintenance(
-        active,
+    EXPECT_FALSE(executeGunsmithMaintenance(
+        equipped,
         content,
-        StartGunsmithMaintenanceCommand{rifle},
-        CommandContext{active.revision, "start-only-service-slot"}).succeeded);
-    const AssetInstanceId pistol = firstStashAsset(
-        active, alpha_content::pistol);
-    ASSERT_NE(pistol, 0U);
-    AssetRecord *damagedPistol = active.assets.findMutable(pistol);
-    damagedPistol->currentDurability -= 100U;
-    const std::uint64_t activeFingerprint = profileStateFingerprint(active);
-    const GunsmithMaintenanceReceipt secondReceipt =
-        executeGunsmithMaintenance(
-            active,
-            content,
-            StartGunsmithMaintenanceCommand{pistol},
-            CommandContext{active.revision, "reject-second-service-slot"});
-    EXPECT_FALSE(secondReceipt.succeeded);
-    EXPECT_EQ(profileStateFingerprint(active), activeFingerprint);
+        StartGunsmithMaintenanceCommand{equippedRifle},
+        CommandContext{equipped.revision, "reject-equipped-service"})
+                     .succeeded);
+    EXPECT_EQ(profileStateFingerprint(equipped), equippedFingerprint);
 }
 
-TEST(BaseServiceDomainTest, TimelineOverflowAndTransactionReplayAreSafe)
+TEST(BaseServiceDomainTest, RevisionOverflowAndTransactionReplayAreSafe)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState overflow = damagedRifleProfile();
     const AssetInstanceId overflowRifle = firstStashAsset(
         overflow, alpha_content::rifle);
-    overflow.worldClock.elapsedWorldMinutes =
-        std::numeric_limits<std::uint64_t>::max() - 100U;
-    const GunsmithMaintenancePlan overflowPlan = queryGunsmithMaintenance(
+    overflow.revision = std::numeric_limits<ProfileRevision>::max();
+    const std::uint64_t overflowFingerprint =
+        profileStateFingerprint(overflow);
+    EXPECT_FALSE(executeGunsmithMaintenance(
         overflow,
         content,
-        StartGunsmithMaintenanceCommand{overflowRifle});
-    EXPECT_FALSE(overflowPlan.canCommit);
-    EXPECT_EQ(overflowPlan.error, DomainErrorCode::RevisionOverflow);
+        StartGunsmithMaintenanceCommand{overflowRifle},
+        CommandContext{overflow.revision, "overflow-instant-service"})
+                     .succeeded);
+    EXPECT_EQ(profileStateFingerprint(overflow), overflowFingerprint);
 
     ProfileState profile = damagedRifleProfile();
     const AssetInstanceId rifle = firstStashAsset(
         profile, alpha_content::rifle);
     const CommandContext context{
-        profile.revision, "idempotent-gunsmith-start"};
+        profile.revision, "idempotent-gunsmith-service"};
     ASSERT_TRUE(executeGunsmithMaintenance(
         profile,
         content,
@@ -232,25 +235,18 @@ TEST(BaseServiceDomainTest, TimelineOverflowAndTransactionReplayAreSafe)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseServiceDomainTest, CollectionWaitsForWorldTimeAndRestoresSameWeapon)
+TEST(BaseServiceDomainTest, LegacyTimedJobIsCollectibleImmediately)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = damagedRifleProfile();
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
-    const AssetInstanceId magazineId = installedMagazine(profile, rifleId).value();
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
+    const AssetInstanceId magazineId = installedMagazine(
+        profile, rifleId).value();
     const GridPosition original = std::get<StoredAssetLocation>(
         profile.assets.find(rifleId)->location).origin;
-    ASSERT_TRUE(executeGunsmithMaintenance(
-        profile,
-        content,
-        StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{profile.revision, "gunsmith-start-collect"}).succeeded);
-
-    const GunsmithCollectionPlan waiting = queryGunsmithCollection(
-        profile, content);
-    EXPECT_FALSE(waiting.canCommit);
-    EXPECT_EQ(waiting.minutesRemaining, 240U);
-    static_cast<void>(advanceWorldClock(profile.worldClock, 240U));
+    moveWeaponIntoLegacyJob(profile, rifleId);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
 
     const GunsmithCollectionPlan ready = queryGunsmithCollection(
         profile, content);
@@ -260,21 +256,16 @@ TEST(BaseServiceDomainTest, CollectionWaitsForWorldTimeAndRestoresSameWeapon)
     const GunsmithCollectionReceipt receipt = executeGunsmithCollection(
         profile,
         content,
-        CommandContext{revisionBefore, "gunsmith-collect-1"});
+        CommandContext{revisionBefore, "collect-legacy-gunsmith"});
     ASSERT_TRUE(receipt.succeeded) << receipt.message;
     EXPECT_EQ(receipt.weaponAssetId, rifleId);
-    EXPECT_EQ(receipt.restoredCurrentDurabilityCenti, 5000U);
-    EXPECT_EQ(receipt.restoredMaximumDurabilityCenti, 2000U);
-    EXPECT_TRUE(receipt.clearedMalfunction);
     EXPECT_FALSE(profile.gunsmithMaintenanceJob.has_value());
     const AssetRecord *rifle = profile.assets.find(rifleId);
     ASSERT_NE(rifle, nullptr);
     EXPECT_EQ(rifle->currentDurability, 10000U);
     EXPECT_EQ(rifle->currentMaximumDurability, 10000U);
     EXPECT_EQ(rifle->weaponMalfunction, WeaponMalfunctionType::None);
-    EXPECT_TRUE(rifle->chamberedRound.has_value());
     EXPECT_EQ(installedMagazine(profile, rifleId), magazineId);
-    EXPECT_EQ(profile.assets.find(magazineId)->magazineRounds.size(), 1U);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 
     const std::uint64_t collectedFingerprint =
@@ -282,53 +273,79 @@ TEST(BaseServiceDomainTest, CollectionWaitsForWorldTimeAndRestoresSameWeapon)
     const GunsmithCollectionReceipt replay = executeGunsmithCollection(
         profile,
         content,
-        CommandContext{revisionBefore, "gunsmith-collect-1"});
+        CommandContext{revisionBefore, "collect-legacy-gunsmith"});
     EXPECT_TRUE(replay.succeeded);
     EXPECT_TRUE(replay.idempotent);
     EXPECT_EQ(profileStateFingerprint(profile), collectedFingerprint);
 }
 
-TEST(BaseServiceDomainTest, CollectionUsesAnotherLegalStashPosition)
+TEST(BaseServiceDomainTest, LegacyHeldJobBlocksAnotherMaintenance)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = damagedRifleProfile();
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
-    const GridPosition original = std::get<StoredAssetLocation>(
-        profile.assets.find(rifleId)->location).origin;
-    ASSERT_TRUE(executeGunsmithMaintenance(
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
+    moveWeaponIntoLegacyJob(profile, rifleId);
+
+    const AssetInstanceId pistolId = firstStashAsset(
+        profile, alpha_content::pistol);
+    ASSERT_NE(pistolId, 0U);
+    AssetRecord *pistol = profile.assets.findMutable(pistolId);
+    ASSERT_GT(pistol->currentDurability, 100U);
+    pistol->currentDurability -= 100U;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const GunsmithMaintenanceReceipt receipt = executeGunsmithMaintenance(
         profile,
         content,
-        StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{profile.revision, "gunsmith-start-fallback"}).succeeded);
-    static_cast<void>(advanceWorldClock(profile.worldClock, 240U));
+        StartGunsmithMaintenanceCommand{pistolId},
+        CommandContext{profile.revision, "reject-while-legacy-held"});
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseServiceDomainTest, LegacyCollectionUsesAnotherLegalStashPosition)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = damagedRifleProfile();
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
+    const GridPosition original = std::get<StoredAssetLocation>(
+        profile.assets.find(rifleId)->location).origin;
+    moveWeaponIntoLegacyJob(profile, rifleId);
 
     const ItemDefinition &ammo = content.item(alpha_content::ammunition);
     static_cast<void>(profile.assets.create(
         ammo,
         StoredAssetLocation{ProfileContainerId::stash(), original},
         1));
-    const GunsmithCollectionPlan ready = queryGunsmithCollection(
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    const GunsmithCollectionPlan plan = queryGunsmithCollection(
         profile, content);
-    ASSERT_TRUE(ready.canCommit) << ready.message;
-    EXPECT_NE(ready.destination.origin, original);
-    EXPECT_TRUE(executeGunsmithCollection(
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_NE(plan.destination.origin, original);
+    const GunsmithCollectionReceipt receipt = executeGunsmithCollection(
         profile,
         content,
-        CommandContext{profile.revision, "gunsmith-collect-fallback"}).succeeded);
+        CommandContext{profile.revision, "collect-legacy-fallback"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    const auto *stored = std::get_if<StoredAssetLocation>(
+        &profile.assets.find(rifleId)->location);
+    ASSERT_NE(stored, nullptr);
+    EXPECT_EQ(stored->origin, plan.destination.origin);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
-TEST(BaseServiceDomainTest, FullStashKeepsReadyWeaponInService)
+TEST(BaseServiceDomainTest, FullStashPreservesLegacyHeldWeapon)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = damagedRifleProfile();
-    const AssetInstanceId rifleId = firstStashAsset(profile, alpha_content::rifle);
-    ASSERT_TRUE(executeGunsmithMaintenance(
-        profile,
-        content,
-        StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{profile.revision, "gunsmith-start-blocked"}).succeeded);
-    static_cast<void>(advanceWorldClock(profile.worldClock, 240U));
+    const AssetInstanceId rifleId = firstStashAsset(
+        profile, alpha_content::rifle);
+    moveWeaponIntoLegacyJob(profile, rifleId);
 
     std::vector<AssetInstanceId> storedIds;
     for (const AssetRecord *asset : assetsInContainer(
@@ -357,7 +374,7 @@ TEST(BaseServiceDomainTest, FullStashKeepsReadyWeaponInService)
     const GunsmithCollectionReceipt receipt = executeGunsmithCollection(
         profile,
         content,
-        CommandContext{profile.revision, "gunsmith-collect-blocked"});
+        CommandContext{profile.revision, "collect-full-legacy"});
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(receipt.error, DomainErrorCode::Capacity);
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);

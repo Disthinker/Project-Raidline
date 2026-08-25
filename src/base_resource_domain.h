@@ -26,7 +26,6 @@ struct BaseOperationalProjection
     BaseOperationalTier tier{BaseOperationalTier::Stable};
     BaseResourceKind limitingResource{BaseResourceKind::Food};
     BaseResourceBundle reserveDays;
-    std::uint32_t serviceDurationPercent{100};
 };
 
 [[nodiscard]] BaseOperationalTier projectBaseResourceTier(

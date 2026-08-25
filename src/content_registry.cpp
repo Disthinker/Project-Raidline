@@ -708,13 +708,9 @@ ContentRegistry ContentRegistry::fromJson(
                     "current_durability_cost_per_point"),
                 requiredPositiveUint(
                     gunsmith,
-                    "maximum_durability_cost_per_point"),
-                requiredPositiveUint(gunsmith, "duration_minutes")};
-        constexpr std::uint32_t maximumServiceMinutes = 7U * 24U * 60U;
+                    "maximum_durability_cost_per_point")};
         constexpr std::uint32_t maximumServiceUnitCost = 1000U;
-        if (registry.gunsmithFullMaintenance_.durationMinutes >
-                maximumServiceMinutes ||
-            registry.gunsmithFullMaintenance_
+        if (registry.gunsmithFullMaintenance_
                     .currentDurabilityCostPerPoint > maximumServiceUnitCost ||
             registry.gunsmithFullMaintenance_
                     .maximumDurabilityCostPerPoint > maximumServiceUnitCost)
@@ -725,36 +721,19 @@ ContentRegistry ContentRegistry::fromJson(
         const Json &baseOperations = requiredObject(
             root,
             "base_operations");
-        const Json &serviceDuration = requiredObject(
-            baseOperations,
-            "service_duration_percent");
         registry.baseOperations_ = BaseOperationsDefinition{
             requiredPositiveUint(
                 baseOperations,
                 "strained_below_reserve_days"),
             requiredPositiveUint(
                 baseOperations,
-                "supported_at_reserve_days"),
-            requiredPositiveUint(serviceDuration, "critical"),
-            requiredPositiveUint(serviceDuration, "strained"),
-            requiredPositiveUint(serviceDuration, "stable"),
-            requiredPositiveUint(serviceDuration, "supported")};
+                "supported_at_reserve_days")};
         const BaseOperationsDefinition &operations = registry.baseOperations_;
         constexpr std::uint32_t maximumReserveDays = 30U;
-        constexpr std::uint32_t maximumDurationPercent = 200U;
         if (operations.strainedBelowReserveDays <= 1U ||
             operations.strainedBelowReserveDays >=
                 operations.supportedAtReserveDays ||
-            operations.supportedAtReserveDays > maximumReserveDays ||
-            operations.criticalServiceDurationPercent >
-                maximumDurationPercent ||
-            operations.criticalServiceDurationPercent <
-                operations.strainedServiceDurationPercent ||
-            operations.strainedServiceDurationPercent <
-                operations.stableServiceDurationPercent ||
-            operations.stableServiceDurationPercent != 100U ||
-            operations.stableServiceDurationPercent <
-                operations.supportedServiceDurationPercent)
+            operations.supportedAtReserveDays > maximumReserveDays)
         {
             fail("Base operations definition is invalid");
         }

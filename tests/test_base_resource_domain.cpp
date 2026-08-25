@@ -55,7 +55,6 @@ TEST(BaseResourceDomainTest, OperationalReadinessUsesTheShortestReserve)
     EXPECT_EQ(stable.tier, BaseOperationalTier::Stable);
     EXPECT_EQ(stable.limitingResource, BaseResourceKind::Food);
     EXPECT_EQ(stable.reserveDays, (BaseResourceBundle{5, 6, 8, 10}));
-    EXPECT_EQ(stable.serviceDurationPercent, 100U);
 
     state.pool = BaseResourceBundle{7, 100, 100, 100};
     const BaseOperationalProjection critical = projectBaseOperations(
@@ -63,21 +62,18 @@ TEST(BaseResourceDomainTest, OperationalReadinessUsesTheShortestReserve)
         definition);
     EXPECT_EQ(critical.tier, BaseOperationalTier::Critical);
     EXPECT_EQ(critical.limitingResource, BaseResourceKind::Food);
-    EXPECT_EQ(critical.serviceDurationPercent, 125U);
 
     state.pool = BaseResourceBundle{16, 18, 15, 12};
     const BaseOperationalProjection strained = projectBaseOperations(
         state,
         definition);
     EXPECT_EQ(strained.tier, BaseOperationalTier::Strained);
-    EXPECT_EQ(strained.serviceDurationPercent, 115U);
 
     state.pool = BaseResourceBundle{56, 42, 35, 28};
     const BaseOperationalProjection supported = projectBaseOperations(
         state,
         definition);
     EXPECT_EQ(supported.tier, BaseOperationalTier::Supported);
-    EXPECT_EQ(supported.serviceDurationPercent, 90U);
 }
 
 TEST(BaseResourceDomainTest, OperationalReadinessIsPureAndUsesExactThresholds)

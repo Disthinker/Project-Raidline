@@ -89,26 +89,28 @@ TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndInt
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
-TEST(SaveRepositoryTest, SchemaV11AcceptsPeriodicWishContentVersion)
+TEST(SaveRepositoryTest, SchemaV11AcceptsPreviousContentVersions)
 {
-    ProfileState profile = makeNewAlphaProfile(
-        "save-v11-operations-content-migration",
-        publishedContentRegistry());
-    profile.baseResources.pool = BaseResourceBundle{7, 18, 35, 28};
-    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    for (const std::string &contentVersion : {
+             std::string{"base-periodic-wishes-content-16"},
+             std::string{"base-operational-readiness-content-17"}})
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            "save-v11-operations-content-migration",
+            publishedContentRegistry());
+        profile.baseResources.pool = BaseResourceBundle{7, 18, 35, 28};
+        const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
-    const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
-            profile,
-            "base-periodic-wishes-content-16",
-            11),
-        publishedContentRegistry());
+        const SaveLoadResult loaded = deserializeProfileEnvelope(
+            serializeProfileEnvelope(profile, contentVersion, 11),
+            publishedContentRegistry());
 
-    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
-    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
-    EXPECT_EQ(
-        loaded.profile->baseResources.pool,
-        (BaseResourceBundle{7, 18, 35, 28}));
+        ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+        EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+        EXPECT_EQ(
+            loaded.profile->baseResources.pool,
+            (BaseResourceBundle{7, 18, 35, 28}));
+    }
 }
 
 TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
@@ -163,11 +165,20 @@ TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)
     rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
     profile.assets.findMutable(magazineId)->location =
         InstalledMagazineLocation{rifleId};
-    ASSERT_TRUE(executeGunsmithMaintenance(
-        profile,
-        publishedContentRegistry(),
-        StartGunsmithMaintenanceCommand{rifleId},
-        CommandContext{profile.revision, "save-v10-start-service"}).succeeded);
+    const StoredAssetLocation returnLocation =
+        std::get<StoredAssetLocation>(rifle->location);
+    const BaseServiceJobId jobId = profile.nextBaseServiceJobId++;
+    rifle->location = BaseServiceAssetLocation{jobId};
+    profile.gunsmithMaintenanceJob = GunsmithMaintenanceJob{
+        jobId,
+        rifleId,
+        returnLocation.origin,
+        profile.worldClock.elapsedWorldMinutes,
+        profile.worldClock.elapsedWorldMinutes + 240U,
+        130U,
+        10000U};
+    ASSERT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(

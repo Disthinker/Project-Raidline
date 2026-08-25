@@ -59,25 +59,6 @@ BaseOperationalProjection projectBaseOperationsImpl(
         limiting->current,
         limiting->dailyDemand,
         definition);
-    switch (projection.tier)
-    {
-    case BaseOperationalTier::Critical:
-        projection.serviceDurationPercent =
-            definition.criticalServiceDurationPercent;
-        break;
-    case BaseOperationalTier::Strained:
-        projection.serviceDurationPercent =
-            definition.strainedServiceDurationPercent;
-        break;
-    case BaseOperationalTier::Stable:
-        projection.serviceDurationPercent =
-            definition.stableServiceDurationPercent;
-        break;
-    case BaseOperationalTier::Supported:
-        projection.serviceDurationPercent =
-            definition.supportedServiceDurationPercent;
-        break;
-    }
     return projection;
 }
 
