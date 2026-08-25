@@ -422,6 +422,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"ordinary_residents",
              profile.basePopulation.ordinaryResidents},
             {"bed_capacity", profile.basePopulation.bedCapacity}};
+        if (schemaVersion >= 16)
+        {
+            payload["base_population"]["injured_residents"] =
+                profile.basePopulation.injuredResidents;
+        }
     }
     if (schemaVersion >= 14)
     {
@@ -456,6 +461,27 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         }
         payload["base_supply_policy"] = {
             {"assignments", std::move(assignments)}};
+    }
+    if (schemaVersion >= 16)
+    {
+        if (profile.residentMedical.activeTreatment.has_value())
+        {
+            const ActiveResidentTreatment &treatment =
+                *profile.residentMedical.activeTreatment;
+            payload["resident_medical"] = {
+                {"active_treatment", {
+                    {"job_id", treatment.jobId},
+                    {"started_world_minute", treatment.startedWorldMinute},
+                    {"completion_world_minute",
+                     treatment.completionWorldMinute},
+                    {"consumed_contribution",
+                     treatment.consumedContribution}}}};
+        }
+        else
+        {
+            payload["resident_medical"] = {
+                {"active_treatment", nullptr}};
+        }
     }
     if (schemaVersion >= 10)
     {
@@ -629,6 +655,33 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["travel"]
                     ["starting_bed_capacity"] =
                         raid.travel.startingBedCapacity;
+                if (schemaVersion >= 16)
+                {
+                    payload["pending_raid"]["travel"]
+                        ["starting_injured_residents"] =
+                            raid.travel.startingInjuredResidents;
+                    if (raid.travel.startingResidentMedical.activeTreatment
+                            .has_value())
+                    {
+                        const ActiveResidentTreatment &treatment =
+                            *raid.travel.startingResidentMedical
+                                 .activeTreatment;
+                        payload["pending_raid"]["travel"]
+                            ["starting_resident_treatment"] = {
+                                {"job_id", treatment.jobId},
+                                {"started_world_minute",
+                                 treatment.startedWorldMinute},
+                                {"completion_world_minute",
+                                 treatment.completionWorldMinute},
+                                {"consumed_contribution",
+                                 treatment.consumedContribution}};
+                    }
+                    else
+                    {
+                        payload["pending_raid"]["travel"]
+                            ["starting_resident_treatment"] = nullptr;
+                    }
+                }
             }
         }
         if (schemaVersion >= 13)
@@ -648,6 +701,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     {"ordinary_resident_count",
                      raid.rescue->ordinaryResidentCount},
                     {"secured", raid.rescue->secured}};
+                if (schemaVersion >= 16)
+                {
+                    payload["pending_raid"]["rescue"]
+                        ["injured_resident_count"] =
+                            raid.rescue->injuredResidentCount;
+                }
             }
             else
             {
@@ -682,6 +741,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             payload["last_raid_result"]["rescued_ordinary_residents"] =
                 profile.lastRaidResult->rescuedOrdinaryResidents;
+        }
+        if (schemaVersion >= 16)
+        {
+            payload["last_raid_result"]["rescued_injured_residents"] =
+                profile.lastRaidResult->rescuedInjuredResidents;
         }
     }
     else
@@ -755,7 +819,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
-        schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15)
+        schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
+        schemaVersion != 16)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -825,7 +890,9 @@ SaveLoadResult deserializeProfileEnvelope(
              contentVersion ==
                  "raid-ordinary-survivor-rescue-content-21") ||
             (schemaVersion == 14 &&
-             contentVersion == "base-dormitory-expansion-content-22");
+             contentVersion == "base-dormitory-expansion-content-22") ||
+            (schemaVersion == 15 &&
+             contentVersion == "base-supply-policy-content-23");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -833,7 +900,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 9 && schemaVersion != 10 &&
              schemaVersion != 11 && schemaVersion != 12 &&
              schemaVersion != 13 && schemaVersion != 14 &&
-             schemaVersion != 15) ||
+             schemaVersion != 15 && schemaVersion != 16) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -937,7 +1004,11 @@ SaveLoadResult deserializeProfileEnvelope(
             profile.basePopulation = BasePopulationState{
                 population.at("ordinary_residents")
                     .get<std::uint32_t>(),
-                population.at("bed_capacity").get<std::uint32_t>()};
+                population.at("bed_capacity").get<std::uint32_t>(),
+                schemaVersion >= 16
+                    ? population.at("injured_residents")
+                          .get<std::uint32_t>()
+                    : 0U};
         }
         if (schemaVersion >= 14)
         {
@@ -981,6 +1052,24 @@ SaveLoadResult deserializeProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "Base supply policy is invalid"};
                 }
+            }
+        }
+        if (schemaVersion >= 16)
+        {
+            const Json &residentMedical = payload.at("resident_medical");
+            if (!residentMedical.at("active_treatment").is_null())
+            {
+                const Json &treatment =
+                    residentMedical.at("active_treatment");
+                profile.residentMedical.activeTreatment =
+                    ActiveResidentTreatment{
+                        treatment.at("job_id").get<BaseServiceJobId>(),
+                        treatment.at("started_world_minute")
+                            .get<std::uint64_t>(),
+                        treatment.at("completion_world_minute")
+                            .get<std::uint64_t>(),
+                        treatment.at("consumed_contribution")
+                            .get<std::uint32_t>()};
             }
         }
         profile.assets.setNextAssetIdForLoad(
@@ -1370,6 +1459,27 @@ SaveLoadResult deserializeProfileEnvelope(
                     }
                     raid.travel.startingBedCapacity = travel.at(
                         "starting_bed_capacity").get<std::uint32_t>();
+                    if (schemaVersion >= 16)
+                    {
+                        raid.travel.startingInjuredResidents = travel.at(
+                            "starting_injured_residents")
+                                .get<std::uint32_t>();
+                        if (!travel.at("starting_resident_treatment").is_null())
+                        {
+                            const Json &treatment = travel.at(
+                                "starting_resident_treatment");
+                            raid.travel.startingResidentMedical
+                                .activeTreatment = ActiveResidentTreatment{
+                                    treatment.at("job_id")
+                                        .get<BaseServiceJobId>(),
+                                    treatment.at("started_world_minute")
+                                        .get<std::uint64_t>(),
+                                    treatment.at("completion_world_minute")
+                                        .get<std::uint64_t>(),
+                                    treatment.at("consumed_contribution")
+                                        .get<std::uint32_t>()};
+                        }
+                    }
                 }
                 else
                 {
@@ -1377,6 +1487,8 @@ SaveLoadResult deserializeProfileEnvelope(
                         profile.baseConstruction;
                     raid.travel.startingBedCapacity =
                         profile.basePopulation.bedCapacity;
+                    raid.travel.startingInjuredResidents = 0U;
+                    raid.travel.startingResidentMedical = {};
                 }
             }
             else
@@ -1388,6 +1500,8 @@ SaveLoadResult deserializeProfileEnvelope(
                     profile.baseConstruction;
                 raid.travel.startingBedCapacity =
                     profile.basePopulation.bedCapacity;
+                raid.travel.startingInjuredResidents = 0U;
+                raid.travel.startingResidentMedical = {};
             }
             if (schemaVersion >= 13 && !value.at("rescue").is_null())
             {
@@ -1407,6 +1521,10 @@ SaveLoadResult deserializeProfileEnvelope(
                         parseVector(rescue.at("transfer_point").at("size"))},
                     rescue.at("interaction_duration_seconds").get<float>(),
                     rescue.at("ordinary_resident_count").get<std::uint32_t>(),
+                    schemaVersion >= 16
+                        ? rescue.at("injured_resident_count")
+                              .get<std::uint32_t>()
+                        : 0U,
                     rescue.at("secured").get<bool>()};
             }
             profile.pendingRaid = std::move(raid);
@@ -1438,6 +1556,10 @@ SaveLoadResult deserializeProfileEnvelope(
                 : 0U;
             result.rescuedOrdinaryResidents = schemaVersion >= 13
                 ? value.at("rescued_ordinary_residents")
+                      .get<std::uint32_t>()
+                : 0U;
+            result.rescuedInjuredResidents = schemaVersion >= 16
+                ? value.at("rescued_injured_residents")
                       .get<std::uint32_t>()
                 : 0U;
             profile.lastRaidResult = std::move(result);

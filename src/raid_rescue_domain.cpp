@@ -35,6 +35,7 @@ OrdinarySurvivorAdmissionPlan failurePlan(
         profile.revision,
         profile.basePopulation.ordinaryResidents,
         profile.basePopulation.ordinaryResidents,
+        profile.basePopulation.injuredResidents,
         profile.basePopulation.bedCapacity,
         profile.basePopulation.ordinaryResidents >
                 profile.basePopulation.bedCapacity
@@ -50,7 +51,8 @@ OrdinarySurvivorAdmissionPlan queryOrdinarySurvivorAdmission(
     const OrdinarySurvivorAdmissionCommand &command)
 {
     if (!command.rescueDefinitionId.valid() ||
-        command.ordinaryResidentCount == 0U)
+        command.ordinaryResidentCount == 0U ||
+        command.injuredResidentCount > command.ordinaryResidentCount)
     {
         return failurePlan(
             profile,
@@ -78,6 +80,17 @@ OrdinarySurvivorAdmissionPlan queryOrdinarySurvivorAdmission(
             RaidRescueError::PopulationOverflow,
             "ordinary resident count cannot advance");
     }
+    if (profile.basePopulation.injuredResidents >
+            kMaximumOrdinaryResidents ||
+        command.injuredResidentCount >
+            kMaximumOrdinaryResidents -
+                profile.basePopulation.injuredResidents)
+    {
+        return failurePlan(
+            profile,
+            RaidRescueError::PopulationOverflow,
+            "injured resident count cannot advance");
+    }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
     {
         return failurePlan(
@@ -97,6 +110,8 @@ OrdinarySurvivorAdmissionPlan queryOrdinarySurvivorAdmission(
         profile.revision,
         profile.basePopulation.ordinaryResidents,
         after,
+        profile.basePopulation.injuredResidents +
+            command.injuredResidentCount,
         profile.basePopulation.bedCapacity,
         after > profile.basePopulation.bedCapacity
             ? after - profile.basePopulation.bedCapacity
@@ -119,7 +134,8 @@ OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(
         content, command.rescueDefinitionId);
     if (definition == nullptr ||
         definition->subjectKind != RaidRescueSubjectKind::OrdinaryResidents ||
-        definition->ordinaryResidentCount != command.ordinaryResidentCount)
+        definition->ordinaryResidentCount != command.ordinaryResidentCount ||
+        definition->injuredResidentCount != command.injuredResidentCount)
     {
         return {false, false, RaidRescueError::InvalidCommand,
                 "rescue definition does not match published content",
@@ -130,7 +146,9 @@ OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(
     {
         const auto plan = queryOrdinarySurvivorAdmission(profile, command);
         return {true, true, RaidRescueError::None, {}, profile.revision, 0U,
+                0U,
                 profile.basePopulation.ordinaryResidents,
+                profile.basePopulation.injuredResidents,
                 plan.bedShortfallAfter,
                 plan.dailyRationsAfter};
     }
@@ -149,6 +167,8 @@ OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(
 
     ProfileState candidate = profile;
     candidate.basePopulation.ordinaryResidents = plan.residentsAfter;
+    candidate.basePopulation.injuredResidents =
+        plan.injuredResidentsAfter;
     candidate.committedRescues.insert(command.rescueDefinitionId);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -161,6 +181,9 @@ OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(
     }
     profile = std::move(candidate);
     return {true, false, RaidRescueError::None, {}, profile.revision,
-            command.ordinaryResidentCount, plan.residentsAfter,
+            command.ordinaryResidentCount,
+            command.injuredResidentCount,
+            plan.residentsAfter,
+            plan.injuredResidentsAfter,
             plan.bedShortfallAfter, plan.dailyRationsAfter};
 }

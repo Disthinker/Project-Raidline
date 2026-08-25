@@ -13,6 +13,8 @@ struct BasePopulationProjection
     std::uint32_t bedCapacity{};
     std::uint32_t bedShortfall{};
     std::uint32_t dailyRationDemand{};
+    std::uint32_t injuredResidents{};
+    std::uint32_t healthyResidents{};
 };
 
 [[nodiscard]] BasePopulationProjection projectBasePopulation(

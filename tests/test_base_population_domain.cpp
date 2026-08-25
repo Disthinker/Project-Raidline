@@ -12,6 +12,13 @@ TEST(BasePopulationDomainTest, ProjectionAggregatesResidentsBedsAndRations)
     EXPECT_EQ(supported.bedCapacity, 10U);
     EXPECT_EQ(supported.bedShortfall, 0U);
     EXPECT_EQ(supported.dailyRationDemand, 8U);
+    EXPECT_EQ(supported.injuredResidents, 0U);
+    EXPECT_EQ(supported.healthyResidents, 8U);
+
+    const BasePopulationProjection injured = projectBasePopulation(
+        BasePopulationState{8, 10, 3});
+    EXPECT_EQ(injured.injuredResidents, 3U);
+    EXPECT_EQ(injured.healthyResidents, 5U);
 
     const BasePopulationProjection crowded = projectBasePopulation(
         BasePopulationState{13, 9});

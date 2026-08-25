@@ -1,6 +1,7 @@
 #include "profile_state.h"
 
 #include "base_population_domain.h"
+#include "base_resident_medical_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -778,7 +779,9 @@ ProfileValidationResult validateProfileState(
     }
     if (profile.basePopulation.ordinaryResidents >
             kMaximumOrdinaryResidents ||
-        profile.basePopulation.bedCapacity > kMaximumBedCapacity)
+        profile.basePopulation.bedCapacity > kMaximumBedCapacity ||
+        profile.basePopulation.injuredResidents >
+            profile.basePopulation.ordinaryResidents)
     {
         return {false, "Base population state is invalid"};
     }
@@ -821,7 +824,8 @@ ProfileValidationResult validateProfileState(
             active.lockedMaterialUnits != definition->materialCost ||
             active.committedWorkers != definition->workerCount ||
             active.committedWorkers >
-                profile.basePopulation.ordinaryResidents ||
+                profile.basePopulation.ordinaryResidents -
+                    profile.basePopulation.injuredResidents ||
             active.startedWorldMinute >= active.completionWorldMinute ||
             active.completionWorldMinute - active.startedWorldMinute !=
                 definition->durationMinutes ||
@@ -832,6 +836,27 @@ ProfileValidationResult validateProfileState(
                 maximum - active.lockedMaterialUnits)
         {
             return {false, "Base construction project state is invalid"};
+        }
+    }
+    if (profile.residentMedical.activeTreatment.has_value())
+    {
+        const ActiveResidentTreatment &treatment =
+            *profile.residentMedical.activeTreatment;
+        const ResidentMedicalDefinition &definition = content.residentMedical();
+        if (treatment.jobId == 0U ||
+            treatment.jobId >= profile.nextBaseServiceJobId ||
+            treatment.startedWorldMinute >= treatment.completionWorldMinute ||
+            treatment.startedWorldMinute >
+                profile.worldClock.elapsedWorldMinutes ||
+            treatment.completionWorldMinute <=
+                profile.worldClock.elapsedWorldMinutes ||
+            treatment.completionWorldMinute - treatment.startedWorldMinute !=
+                definition.durationMinutes ||
+            treatment.consumedContribution <
+                definition.requiredContribution ||
+            profile.basePopulation.injuredResidents == 0U)
+        {
+            return {false, "resident treatment state is invalid"};
         }
     }
     for (const RescueDefinitionId &rescue : profile.committedRescues)
@@ -1125,11 +1150,13 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-conditional-extraction-3" ||
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
-            raid.rulesVersion == "raid-ordinary-rescue-6";
+            raid.rulesVersion == "raid-ordinary-rescue-6" ||
+            raid.rulesVersion == "raid-resident-medical-7";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
-            raid.rulesVersion == "raid-ordinary-rescue-6";
+            raid.rulesVersion == "raid-ordinary-rescue-6" ||
+            raid.rulesVersion == "raid-resident-medical-7";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1167,7 +1194,9 @@ ProfileValidationResult validateProfileState(
             bool startingConstructionValid =
                 raid.travel.startingBaseConstruction.materialUnits <=
                     content.maximumBaseConstructionMaterials() &&
-                raid.travel.startingBedCapacity <= kMaximumBedCapacity;
+                raid.travel.startingBedCapacity <= kMaximumBedCapacity &&
+                raid.travel.startingInjuredResidents <=
+                    profile.basePopulation.ordinaryResidents;
             bool publishedStartingLevel =
                 raid.travel.startingBaseConstruction.dormitoryLevel == 1U;
             for (const BaseConstructionProjectDefinition &definition :
@@ -1196,7 +1225,8 @@ ProfileValidationResult validateProfileState(
                         active.lockedMaterialUnits == definition.materialCost &&
                         active.committedWorkers == definition.workerCount &&
                         active.committedWorkers <=
-                            profile.basePopulation.ordinaryResidents &&
+                            profile.basePopulation.ordinaryResidents -
+                                raid.travel.startingInjuredResidents &&
                         active.startedWorldMinute <
                             active.completionWorldMinute &&
                         active.completionWorldMinute -
@@ -1213,6 +1243,29 @@ ProfileValidationResult validateProfileState(
                 {
                     startingConstructionValid = false;
                 }
+            }
+            bool startingResidentMedicalValid = true;
+            if (raid.travel.startingResidentMedical.activeTreatment.has_value())
+            {
+                const ActiveResidentTreatment &treatment =
+                    *raid.travel.startingResidentMedical.activeTreatment;
+                const ResidentMedicalDefinition &definition =
+                    content.residentMedical();
+                startingResidentMedicalValid =
+                    treatment.jobId > 0U &&
+                    treatment.jobId < profile.nextBaseServiceJobId &&
+                    treatment.startedWorldMinute <
+                        treatment.completionWorldMinute &&
+                    treatment.startedWorldMinute <=
+                        raid.travel.startingWorldClock.elapsedWorldMinutes &&
+                    treatment.completionWorldMinute >
+                        raid.travel.startingWorldClock.elapsedWorldMinutes &&
+                    treatment.completionWorldMinute -
+                            treatment.startedWorldMinute ==
+                        definition.durationMinutes &&
+                    treatment.consumedContribution >=
+                        definition.requiredContribution &&
+                    raid.travel.startingInjuredResidents > 0U;
             }
             if (raid.travel.outboundMinutes == 0U ||
                 raid.travel.returnMinutes == 0U ||
@@ -1236,7 +1289,8 @@ ProfileValidationResult validateProfileState(
                     raid.travel.startingBasePriority,
                     raid.travel.startingWorldClock.elapsedWorldMinutes,
                     content) ||
-                !startingConstructionValid)
+                !startingConstructionValid ||
+                !startingResidentMedicalValid)
             {
                 return {false, "pending Raid travel snapshot is invalid"};
             }
@@ -1325,6 +1379,8 @@ ProfileValidationResult validateProfileState(
                 rescue.subjectKind != RaidRescueSubjectKind::OrdinaryResidents ||
                 rescue.ordinaryResidentCount == 0U ||
                 rescue.ordinaryResidentCount > 16U ||
+                rescue.injuredResidentCount >
+                    rescue.ordinaryResidentCount ||
                 !std::isfinite(rescue.interactionDurationSeconds) ||
                 rescue.interactionDurationSeconds <= 0.0F ||
                 rescue.interactionDurationSeconds > 30.0F ||
@@ -1347,7 +1403,9 @@ ProfileValidationResult validateProfileState(
 
     if (profile.lastRaidResult.has_value() &&
         (profile.lastRaidResult->settlementId.empty() ||
-         profile.lastRaidResult->rescuedOrdinaryResidents > 16U))
+         profile.lastRaidResult->rescuedOrdinaryResidents > 16U ||
+         profile.lastRaidResult->rescuedInjuredResidents >
+             profile.lastRaidResult->rescuedOrdinaryResidents))
     {
         return {false, "last Raid result is invalid"};
     }
@@ -1386,6 +1444,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     }
     hashInteger(hash, profile.basePopulation.ordinaryResidents);
     hashInteger(hash, profile.basePopulation.bedCapacity);
+    hashInteger(hash, profile.basePopulation.injuredResidents);
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
     if (profile.baseConstruction.activeProject.has_value())
@@ -1397,6 +1456,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, project.committedWorkers);
         hashInteger(hash, project.startedWorldMinute);
         hashInteger(hash, project.completionWorldMinute);
+    }
+    if (profile.residentMedical.activeTreatment.has_value())
+    {
+        const ActiveResidentTreatment &treatment =
+            *profile.residentMedical.activeTreatment;
+        hashInteger(hash, treatment.jobId);
+        hashInteger(hash, treatment.startedWorldMinute);
+        hashInteger(hash, treatment.completionWorldMinute);
+        hashInteger(hash, treatment.consumedContribution);
     }
     hashBytes(hash, profile.basePriority.definitionId.value());
     hashInteger(hash, profile.basePriority.cycleIndex);
@@ -1538,6 +1606,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, raid.rescue->transferPoint.size.y);
             hashFloat(hash, raid.rescue->interactionDurationSeconds);
             hashInteger(hash, raid.rescue->ordinaryResidentCount);
+            hashInteger(hash, raid.rescue->injuredResidentCount);
             hashInteger(hash, raid.rescue->secured ? 1U : 0U);
         }
         hashInteger(hash, raid.startingHealth);
@@ -1589,6 +1658,16 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, project.completionWorldMinute);
         }
         hashInteger(hash, raid.travel.startingBedCapacity);
+        hashInteger(hash, raid.travel.startingInjuredResidents);
+        if (raid.travel.startingResidentMedical.activeTreatment.has_value())
+        {
+            const ActiveResidentTreatment &treatment =
+                *raid.travel.startingResidentMedical.activeTreatment;
+            hashInteger(hash, treatment.jobId);
+            hashInteger(hash, treatment.startedWorldMinute);
+            hashInteger(hash, treatment.completionWorldMinute);
+            hashInteger(hash, treatment.consumedContribution);
+        }
     }
     if (profile.lastRaidResult.has_value())
     {
@@ -1603,6 +1682,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, profile.lastRaidResult->currencyDelta);
         hashInteger(hash, profile.lastRaidResult->travelMinutesApplied);
         hashInteger(hash, profile.lastRaidResult->rescuedOrdinaryResidents);
+        hashInteger(hash, profile.lastRaidResult->rescuedInjuredResidents);
     }
     return hash;
 }

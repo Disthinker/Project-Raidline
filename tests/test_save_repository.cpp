@@ -1141,7 +1141,7 @@ TEST(SaveRepositoryTest, CorruptPrimaryAndBackupFailExplicitly)
     EXPECT_FALSE(result.profile.has_value());
 }
 
-TEST(SaveRepositoryTest, SchemaV15RoundTripsConstructionAndSupplyPolicy)
+TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-base-supply-v15",
@@ -1155,8 +1155,15 @@ TEST(SaveRepositoryTest, SchemaV15RoundTripsConstructionAndSupplyPolicy)
         profile.worldClock.elapsedWorldMinutes,
         profile.worldClock.elapsedWorldMinutes + 360U};
     profile.baseSupplyPolicy.assignments.emplace(
-        alpha_content::lootCola,
-        BaseSupplyCategory::Food);
+        ItemDefinitionId{"item.medical.medkit_alpha"},
+        BaseSupplyCategory::Medical);
+    profile.basePopulation.injuredResidents = 1U;
+    profile.nextBaseServiceJobId = 2U;
+    profile.residentMedical.activeTreatment = ActiveResidentTreatment{
+        1U,
+        profile.worldClock.elapsedWorldMinutes,
+        profile.worldClock.elapsedWorldMinutes + 360U,
+        14U};
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1174,8 +1181,46 @@ TEST(SaveRepositoryTest, SchemaV15RoundTripsConstructionAndSupplyPolicy)
         3U);
     EXPECT_EQ(
         loaded.profile->baseSupplyPolicy.assignments.at(
-            alpha_content::lootCola),
-        BaseSupplyCategory::Food);
+            ItemDefinitionId{"item.medical.medkit_alpha"}),
+        BaseSupplyCategory::Medical);
+    EXPECT_EQ(loaded.profile->basePopulation.injuredResidents, 1U);
+    ASSERT_TRUE(loaded.profile->residentMedical.activeTreatment.has_value());
+    EXPECT_EQ(
+        loaded.profile->residentMedical.activeTreatment
+            ->completionWorldMinute,
+        profile.worldClock.elapsedWorldMinutes + 360U);
+}
+
+TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-resident-medical-v15",
+        publishedContentRegistry());
+    profile.baseSupplyPolicy.assignments.emplace(
+        ItemDefinitionId{"item.medical.medkit_alpha"},
+        BaseSupplyCategory::Medical);
+    profile.basePopulation.injuredResidents = 1U;
+    profile.nextBaseServiceJobId = 2U;
+    profile.residentMedical.activeTreatment = ActiveResidentTreatment{
+        1U,
+        profile.worldClock.elapsedWorldMinutes,
+        profile.worldClock.elapsedWorldMinutes + 360U,
+        14U};
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-supply-policy-content-23",
+            15),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->basePopulation.injuredResidents, 0U);
+    EXPECT_FALSE(migrated.profile->residentMedical.activeTreatment.has_value());
+    EXPECT_EQ(
+        migrated.profile->baseSupplyPolicy.assignments.at(
+            ItemDefinitionId{"item.medical.medkit_alpha"}),
+        BaseSupplyCategory::Medical);
 }
 
 TEST(SaveRepositoryTest, SchemaV14MigratesToEmptySupplyPolicy)

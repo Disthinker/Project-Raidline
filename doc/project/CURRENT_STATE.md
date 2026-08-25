@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@ee9ba48` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#86 接受的 Base Growth 基线；PR #86 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `ee9ba48` 合入。
-- 当前开发分支：`codex/base-dormitory-expansion-v1`，从干净的 `origin/main@ee9ba48` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-dormitory-expansion-v1.md`。
+- `origin/main@1be94bf` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#87 接受的 Base Growth 基线；PR #87 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `1be94bf` 合入。
+- 当前开发分支：`codex/base-resident-medical-treatment-v1`，从干净的 `origin/main@1be94bf` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-resident-medical-treatment-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受。当前 PR #87 同时收束 **Base 宿舍扩建 v1、撤离位置保持与分类自动供给 v1**；外部 GDD 继续只读，新增范围只建立已有物品、每日需求和统一资产所有权的实际消费者。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#87 已接受。当前分支交付 **Base 居民伤病与医疗所治疗 v1**；外部 GDD 继续只读，新增范围只建立聚合居民、统一自有资产、医疗分类授权和世界时间的实际消费者。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -32,7 +32,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 17. **持续高危阶段 v1**：PR #75 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main。
 18. **主动高危与高级资源区 v1**：PR #76 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `bc26337` 进入 main。
 19. **高危条件撤离 v1**：PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main。
-20. **Base 资源分配与基础需求 v1（历史）**：PR #78 把成功带回的新 Loot 放入独立待分配区并已以 `ba8283f` 进入 main；用户于 2026-08-25 明确废弃该返还行为，PR #87 正迁移为成功撤离保持原位置，BaseIntake 只兼容旧档。
+20. **Base 资源分配与基础需求 v1（历史）**：PR #78 把成功带回的新 Loot 放入独立待分配区并已以 `ba8283f` 进入 main；用户于 2026-08-25 明确废弃该返还行为，PR #87 已迁移为成功撤离保持原位置，BaseIntake 只兼容旧档。
 21. **Base 世界时钟与每日需求 v1**：PR #79 建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `5d2a11a` 进入 main。
 22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
 23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
@@ -41,7 +41,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 26. **Base 付费医疗服务 v1**：PR #84 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main。玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。
 27. **Base 居民、床位与睡眠 v1**：PR #85 新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；已通过 CI 和用户验收并以 `2377035` 合入 main。
 28. **Raid 普通幸存者安全转移 v1**：PR #86 为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。已通过 CI 与用户正常游玩验收并以 `ee9ba48` 合入 main。
-29. **Base 宿舍扩建与分类自动供给 v1**：当前分支允许从统一自有资产显式加工建材并完成宿舍 1→2 级项目；成功撤离保持全部随身物原位置，食物/医疗/娱乐/安全菜单则按物品定义保存自动供给授权，只有每日需求不足时才消费。
+29. **Base 宿舍扩建与分类自动供给 v1**：PR #87 允许从统一自有资产显式加工建材并完成宿舍 1→2 级项目；成功撤离保持全部随身物原位置，食物/医疗/娱乐/安全菜单按物品定义保存自动供给授权，只有每日需求不足时才消费。已通过 exact-head CI 和用户正常游玩验收，以 `1be94bf` 进入 main。
+30. **Base 居民伤病与医疗所治疗 v1**：当前分支让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -69,8 +70,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #86 已通过 exact-head CI 与用户正常游玩验收，并以 `ee9ba48` 进入 main。
-- PR #87 原宿舍范围已通过 exact-head CI；当前位置保持与自动供给修订已通过 Windows Debug 全目标和完整 CTest 966/966，尚待新 exact-head Windows/Ubuntu CI 与用户正常游玩验收。开发代理未启动游戏。
+- PR #87 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `1be94bf` 进入 main。
+- 当前居民医疗分支已通过 Windows Debug 全目标和完整 CTest 973/973；尚待 Draft PR exact-head Windows/Ubuntu CI 与用户正常游玩验收。开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -268,7 +269,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - Base 新增文字/几何占位宿舍。玩家可查看居民、床位/拥挤、口粮储备和下次日结，并正常选择休息 1、6 或 12 小时；休息不治疗玩家。
 - `queryBaseRest/executeBaseRest` 在候选 Profile 上推进唯一 WorldClock、按人口结算跨越的日界线、同步五日愿望并原子保存。非法时长、Raid pending、过期 revision、重复事务和保存失败均不产生部分提交。
 - schema v12/content v20 保存人口与床位；schema v11 及更早版本使用确定性默认值迁移。Base 实时流逝和 Raid 往返跨日也消费同一人口口粮需求。
-- PR #86 已把普通幸存者接纳接入聚合人口；当前宿舍扩建切片只增加一项真实建设项目，岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
+- PR #86 已把普通幸存者接纳接入聚合人口；PR #87 增加一项真实建设项目。当前居民医疗切片只区分健康/受伤聚合人数及可用劳动力，岗位/专业、精力、正式士气、具名 NPC 和疾病模拟继续延期。
 
 ## Raid 普通幸存者安全转移 v1 当前实现
 
@@ -293,7 +294,16 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - 菜单按分类聚合显示当前拥有且可提供对应贡献的物品定义、总数量和单件贡献。可乐可在食物与娱乐之间选择一种用途；基础药品提供较高医疗贡献，卫生纸提供较低医疗贡献；旧书提供娱乐贡献。新增内容仅使用文字/几何占位。
 - 每日需求仅在现有储备不足时，按稳定资产 ID 消耗能够补足缺口的最少完整数量。未勾选物品、不匹配分类及非空容器均不消费；规则在物品耗尽后继续保留，后续获得同定义物品仍适用。
 - Pending Raid 期间不自动消耗任何自有资产，使异常退出能恢复精确出击前资产状态；Raid 往返仍结算既有抽象储备消耗。成功返回 Base 后，物品继续保持玩家/容器原位置，下一次 Base 日结才可能按已授权策略使用。
-- schema v15/content v23 保存策略并把 v14 旧档迁移为空策略；未知定义、类别无对应贡献、重复条目或坏分类均拒绝加载。Windows Debug 全目标与完整 CTest 966/966 已通过，等待 exact-head CI 与用户正常游玩验收。
+- schema v15/content v23 保存策略并把 v14 旧档迁移为空策略；未知定义、类别无对应贡献、重复条目或坏分类均拒绝加载。该切片已由 PR #87 接受并进入 main。
+
+## Base 居民伤病与医疗所治疗 v1 当前实现
+
+- `BasePopulationState` 在普通居民聚合人数之外保存受伤人数；受伤居民继续占用床位并消耗口粮，但不计入宿舍建设的健康劳动力。当前没有逐人姓名、职业或病症模拟。
+- Ashworks 的一次性安全转移冻结并接纳 1 名受伤居民；其余两张固定图当前接纳健康居民。伤病事实与救援账本一起幂等落盘，即使同局随后失败也不会重复或回滚。
+- 医疗所同页保留两条独立路径：玩家付费医疗只扣货币并立即完成；居民治疗消耗 360 世界分钟，并从统一 `AssetRegistry` 的真实位置原子消费玩家已授权为医疗供给的物品。没有第二套公共医疗库存。
+- 居民治疗预览与提交使用同一确定性计划：贡献高的物品优先，同级按稳定资产 ID；非空容器不可被消费，拒绝、过期 revision 或保存失败均保持 Profile 和资产不变。
+- Base 实时、休息及 Raid 往返共同推进活动治疗；到期只结算一次。schema v16/content v24 保存受伤人数、活动治疗和出击前回滚状态；v15 迁移不会追溯制造伤病。
+- 客户端继续只使用双语文字和几何占位，没有新增或修改正式美术、音频与 manifest。
 
 ## 尚未完成
 

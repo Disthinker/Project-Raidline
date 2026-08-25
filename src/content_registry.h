@@ -160,6 +160,7 @@ struct RaidRescueDefinition
     ContentRect transferPoint;
     float interactionDurationSeconds{};
     std::uint32_t ordinaryResidentCount{};
+    std::uint32_t injuredResidentCount{};
 };
 
 struct PlayerBaseMedicalDefinition
@@ -171,6 +172,16 @@ struct PlayerBaseMedicalDefinition
     friend bool operator==(
         const PlayerBaseMedicalDefinition &,
         const PlayerBaseMedicalDefinition &) = default;
+};
+
+struct ResidentMedicalDefinition
+{
+    std::uint32_t requiredContribution{};
+    std::uint32_t durationMinutes{};
+
+    friend bool operator==(
+        const ResidentMedicalDefinition &,
+        const ResidentMedicalDefinition &) = default;
 };
 
 struct BaseOperationsDefinition
@@ -274,6 +285,9 @@ public:
     [[nodiscard]] const PlayerBaseMedicalDefinition &
     playerBaseMedical() const noexcept;
 
+    [[nodiscard]] const ResidentMedicalDefinition &
+    residentMedical() const noexcept;
+
     [[nodiscard]]
     const BaseOperationsDefinition &baseOperations() const noexcept;
 
@@ -321,6 +335,7 @@ private:
     std::vector<MapDefinition> maps_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
     PlayerBaseMedicalDefinition playerBaseMedical_;
+    ResidentMedicalDefinition residentMedical_;
     BaseOperationsDefinition baseOperations_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;

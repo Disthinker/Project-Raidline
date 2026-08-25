@@ -50,7 +50,11 @@ projectBaseConstruction(const ProfileState &profile,
       content.maximumBaseConstructionMaterials(),
       profile.baseConstruction.dormitoryLevel,
       profile.basePopulation.bedCapacity,
-      profile.basePopulation.ordinaryResidents};
+      profile.basePopulation.ordinaryResidents >
+              profile.basePopulation.injuredResidents
+          ? profile.basePopulation.ordinaryResidents -
+                profile.basePopulation.injuredResidents
+          : 0U};
   if (profile.baseConstruction.activeProject.has_value()) {
     const ActiveBaseConstructionProject &active =
         *profile.baseConstruction.activeProject;
@@ -199,7 +203,13 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "insufficient Base construction material",
                                profile.revision);
   }
-  if (profile.basePopulation.ordinaryResidents < definition->workerCount) {
+  const std::uint32_t healthyWorkers =
+      profile.basePopulation.ordinaryResidents >
+              profile.basePopulation.injuredResidents
+          ? profile.basePopulation.ordinaryResidents -
+                profile.basePopulation.injuredResidents
+          : 0U;
+  if (healthyWorkers < definition->workerCount) {
     return constructionFailure(DomainErrorCode::Capacity,
                                "insufficient available Base workers",
                                profile.revision);
