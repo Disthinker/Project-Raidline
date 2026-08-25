@@ -1,6 +1,6 @@
 # Base Growth：宿舍扩建 v1 ExecPlan
 
-状态：本地验证完成，等待 exact-head CI 与用户正常游玩验收
+状态：本地与 exact-head CI 已完成，等待用户正常游玩验收
 
 ## 产品结果与范围来源
 
@@ -53,7 +53,7 @@
 - [x] 建材分配、宿舍交互与双语投影。
 - [x] schema v14 迁移与自动化。
 - [x] Windows Debug 全目标构建、156 项聚焦回归与全量 CTest 957/957。
-- [ ] exact-head Windows/Ubuntu CI。
+- [x] exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。
 
-2026-08-25 本地证据：Windows Debug 全目标构建成功；相关领域、存档、Raid 回滚、跨进程和双语界面聚焦回归 156/156；完整 CTest 957/957。开发代理未启动游戏。
+2026-08-25 证据：Windows Debug 全目标构建成功；相关领域、存档、Raid 回滚、跨进程和双语界面聚焦回归 156/156；完整 CTest 957/957；PR #87 的范围、Ubuntu 与 Windows exact-code CI 全部通过。开发代理未启动游戏。

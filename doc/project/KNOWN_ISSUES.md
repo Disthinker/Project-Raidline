@@ -83,7 +83,7 @@
 | Base 付费医疗服务 v1 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main |
 | Base 居民、床位与睡眠 v1 | PR #85 已通过 CI 和用户验收，以普通 merge commit `2377035` 进入 main |
 | Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
-| Base 宿舍扩建 v1 | 当前分支实现独立建材、单一项目、劳动力锁定、时间完成/取消返还、Raid 回滚快照与 schema v14/content v22；本地 957/957 通过，等待 PR CI 和用户验收 |
+| Base 宿舍扩建 v1 | PR #87 实现独立建材、单一项目、劳动力锁定、时间完成/取消返还、Raid 回滚快照与 schema v14/content v22；本地 957/957 和 exact-head CI 已通过，等待用户验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；GDD 保持只读，待策划线程同步修订。玩家付费医疗与 NPC 设施治疗必须继续保持独立命令，后者未来才消耗世界时间和公共医疗库存。
 

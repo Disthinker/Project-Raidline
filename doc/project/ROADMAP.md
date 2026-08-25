@@ -93,7 +93,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 付费医疗服务 v1 | Base 独立医疗设施显示伤势和报价；支付货币后立即恢复生命并清除流血，个人医疗物保持不变 | PlayerBaseMedicalDefinition、query/execute 原子事务、content v19、schema v11 兼容 v18 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以 `c01d431` 进入 main；不包含 NPC 医疗、公共医疗库存、时间队列或新伤势 |
 | 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | PR #85 已通过 CI 和用户验收，以 `2377035` 进入 main；建设、岗位、精力、正式士气、具名 NPC 或居民医疗仍延期 |
 | Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | PR #86 已通过 CI 和用户验收，以 `ee9ba48` 进入 main；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
-| 宿舍扩建 v1 | 待分配回收物可加工为独立建材；宿舍项目占用劳动力并随世界时间完成，取消可返还建材 | BaseConstructionState、query/command/receipt、Raid 回滚快照、schema v14/content v22 | 当前分支已完成本地 Windows Debug 全目标与 957/957 CTest；等待 exact-head CI 和用户正常游玩验收 |
+| 宿舍扩建 v1 | 待分配回收物可加工为独立建材；宿舍项目占用劳动力并随世界时间完成，取消可返还建材 | BaseConstructionState、query/command/receipt、Raid 回滚快照、schema v14/content v22 | PR #87 已完成本地 Windows Debug、957/957 CTest 与 exact-head CI；等待用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 
