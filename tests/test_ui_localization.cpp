@@ -71,10 +71,16 @@ TEST(UiLocalizationTest, ChineseTranslatesRaidTravelPreviewAndResult) {
 TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
   const std::string quote = localizeUiText(
       UiLanguage::SimplifiedChinese,
-      "GUNSMITH QUOTE 130 | 240 MIN | FULL FACTORY CONDITION");
+      "GUNSMITH QUOTE 130 | INSTANT | FULL FACTORY CONDITION");
   EXPECT_NE(quote.find("枪匠报价 130"), std::string::npos);
-  EXPECT_NE(quote.find("240 分钟"), std::string::npos);
+  EXPECT_NE(quote.find("立即完成"), std::string::npos);
   EXPECT_NE(quote.find("恢复出厂状态"), std::string::npos);
+
+  const std::string complete = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "WEAPON FULLY SERVICED | PAID 130");
+  EXPECT_NE(complete.find("武器已完成全面维护"), std::string::npos);
+  EXPECT_NE(complete.find("已支付 130"), std::string::npos);
 
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
@@ -84,6 +90,12 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
                 UiLanguage::SimplifiedChinese,
                 "Stash has no legal space for serviced weapon"),
             "仓库没有可放置维护武器的合法空间");
+
+  const std::string operations = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "BASE OPERATIONS SUPPORTED | LIMITING FOOD");
+  EXPECT_NE(operations.find("基地运转 充足"), std::string::npos);
+  EXPECT_NE(operations.find("短板 食物"), std::string::npos);
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {

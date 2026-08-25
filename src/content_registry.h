@@ -141,11 +141,20 @@ struct GunsmithFullMaintenanceDefinition
     std::uint32_t baseCost{};
     std::uint32_t currentDurabilityCostPerPoint{};
     std::uint32_t maximumDurabilityCostPerPoint{};
-    std::uint32_t durationMinutes{};
 
     friend bool operator==(
         const GunsmithFullMaintenanceDefinition &,
         const GunsmithFullMaintenanceDefinition &) = default;
+};
+
+struct BaseOperationsDefinition
+{
+    std::uint32_t strainedBelowReserveDays{};
+    std::uint32_t supportedAtReserveDays{};
+
+    friend bool operator==(
+        const BaseOperationsDefinition &,
+        const BaseOperationsDefinition &) = default;
 };
 
 struct BasePriorityDefinition
@@ -219,6 +228,9 @@ public:
     const GunsmithFullMaintenanceDefinition &
     gunsmithFullMaintenance() const noexcept;
 
+    [[nodiscard]]
+    const BaseOperationsDefinition &baseOperations() const noexcept;
+
     [[nodiscard]] std::uint32_t
     basePriorityCycleMinutes() const noexcept;
 
@@ -252,6 +264,7 @@ private:
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
+    BaseOperationsDefinition baseOperations_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
 

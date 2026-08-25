@@ -43,6 +43,63 @@ TEST(BaseResourceDomainTest, NewProfileStartsWithSafeButFiniteResources)
     EXPECT_EQ(profile.basePriority.cycleIndex, 0U);
 }
 
+TEST(BaseResourceDomainTest, OperationalReadinessUsesTheShortestReserve)
+{
+    const BaseOperationsDefinition &definition =
+        publishedContentRegistry().baseOperations();
+    BaseResourceState state;
+
+    const BaseOperationalProjection stable = projectBaseOperations(
+        state,
+        definition);
+    EXPECT_EQ(stable.tier, BaseOperationalTier::Stable);
+    EXPECT_EQ(stable.limitingResource, BaseResourceKind::Food);
+    EXPECT_EQ(stable.reserveDays, (BaseResourceBundle{5, 6, 8, 10}));
+
+    state.pool = BaseResourceBundle{7, 100, 100, 100};
+    const BaseOperationalProjection critical = projectBaseOperations(
+        state,
+        definition);
+    EXPECT_EQ(critical.tier, BaseOperationalTier::Critical);
+    EXPECT_EQ(critical.limitingResource, BaseResourceKind::Food);
+
+    state.pool = BaseResourceBundle{16, 18, 15, 12};
+    const BaseOperationalProjection strained = projectBaseOperations(
+        state,
+        definition);
+    EXPECT_EQ(strained.tier, BaseOperationalTier::Strained);
+
+    state.pool = BaseResourceBundle{56, 42, 35, 28};
+    const BaseOperationalProjection supported = projectBaseOperations(
+        state,
+        definition);
+    EXPECT_EQ(supported.tier, BaseOperationalTier::Supported);
+}
+
+TEST(BaseResourceDomainTest, OperationalReadinessIsPureAndUsesExactThresholds)
+{
+    const BaseOperationsDefinition &definition =
+        publishedContentRegistry().baseOperations();
+    BaseResourceState state;
+    state.pool = BaseResourceBundle{24, 18, 15, 12};
+    const BaseResourceState before = state;
+
+    EXPECT_EQ(
+        projectBaseResourceTier(7, kBaseDailyDemand.food, definition),
+        BaseOperationalTier::Critical);
+    EXPECT_EQ(
+        projectBaseResourceTier(8, kBaseDailyDemand.food, definition),
+        BaseOperationalTier::Strained);
+    EXPECT_EQ(
+        projectBaseResourceTier(24, kBaseDailyDemand.food, definition),
+        BaseOperationalTier::Stable);
+    EXPECT_EQ(
+        projectBaseResourceTier(56, kBaseDailyDemand.food, definition),
+        BaseOperationalTier::Supported);
+    static_cast<void>(projectBaseOperations(state, definition));
+    EXPECT_EQ(state, before);
+}
+
 TEST(BaseResourceDomainTest, MatchingPendingItemFulfillsPriorityAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(

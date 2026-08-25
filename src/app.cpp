@@ -106,6 +106,38 @@ namespace
         return "UNKNOWN";
     }
 
+    const char *baseOperationalTierName(BaseOperationalTier tier) noexcept
+    {
+        switch (tier)
+        {
+        case BaseOperationalTier::Critical:
+            return "CRITICAL";
+        case BaseOperationalTier::Strained:
+            return "STRAINED";
+        case BaseOperationalTier::Stable:
+            return "STABLE";
+        case BaseOperationalTier::Supported:
+            return "SUPPORTED";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseResourceKindName(BaseResourceKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case BaseResourceKind::Food:
+            return "FOOD";
+        case BaseResourceKind::Hygiene:
+            return "HYGIENE";
+        case BaseResourceKind::Morale:
+            return "MORALE";
+        case BaseResourceKind::Security:
+            return "SECURITY";
+        }
+        return "UNKNOWN";
+    }
+
     // Legacy click-page geometry remains only for the supply/deployment
     // adapters while Profile inventory uses drag-and-drop.
     SDL_FRect baseActionButton(std::size_t index) noexcept
@@ -1902,9 +1934,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     nextProfileTransactionId("start-gunsmith"));
             uiMessage_ = receipt.succeeded
                 ? fmt::format(
-                    "SERVICE STARTED | READY IN {} MIN | PAID {}",
-                    receipt.completionWorldMinute -
-                        gameSession_.profile().worldClock.elapsedWorldMinutes,
+                    "WEAPON FULLY SERVICED | PAID {}",
                     receipt.currencyPaid)
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
@@ -8366,7 +8396,18 @@ void App::renderBaseSupply()
     const std::string currency = fmt::format(
         "SUPPLY & RECOVERY | CURRENCY {}",
         gameSession_.profile().currency);
+    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
     uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
+    const BaseOperationalProjection operations = projectBaseOperations(
+        gameSession_.profile().baseResources,
+        publishedContentRegistry().baseOperations());
+    const std::string operationsStatus = fmt::format(
+        "BASE OPERATIONS {} | LIMITING {}",
+        baseOperationalTierName(operations.tier),
+        baseResourceKindName(operations.limitingResource));
+    SDL_SetRenderDrawColor(renderer_, 224, 214, 174, 255);
+    uiTextRenderer_.render(
+        renderer_, 96.0F, 122.0F, operationsStatus.c_str());
 
     const auto &supply = fixedSupplyIds();
     for (std::size_t index = 0; index < supply.size(); ++index)
@@ -8391,9 +8432,11 @@ void App::renderBaseSupply()
             supplyName,
             quantity,
             definition.marketBuyPrice * quantity);
+        SDL_SetRenderDrawColor(renderer_, 232, 224, 178, 255);
         uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
     }
 
+    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
     uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT AN ITEM");
     std::size_t rowIndex{};
     for (const AssetRecord *asset : assetsInContainer(
@@ -8410,8 +8453,9 @@ void App::renderBaseSupply()
             26.0F};
         SDL_SetRenderDrawColor(renderer_, 42, 44, 34, 255);
         SDL_RenderFillRect(renderer_, &row);
-        if (profileAssetSelection_.has_value() &&
-            profileAssetSelection_->instanceId == asset->instanceId)
+        const bool selected = profileAssetSelection_.has_value() &&
+            profileAssetSelection_->instanceId == asset->instanceId;
+        if (selected)
         {
             SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
             SDL_RenderRect(renderer_, &row);
@@ -8422,6 +8466,12 @@ void App::renderBaseSupply()
             asset->quantity,
             definition.marketRecyclePrice * asset->quantity,
             asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
+        SDL_SetRenderDrawColor(
+            renderer_,
+            selected ? 255 : 218,
+            selected ? 231 : 214,
+            selected ? 116 : 190,
+            255);
         uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
         ++rowIndex;
     }
@@ -8433,6 +8483,7 @@ void App::renderBaseSupply()
         publishedContentRegistry());
     SDL_SetRenderDrawColor(renderer_, eligible ? 68 : 42, eligible ? 104 : 48, 60, 255);
     SDL_RenderFillRect(renderer_, &reliefButton);
+    SDL_SetRenderDrawColor(renderer_, 228, 232, 214, 255);
     uiTextRenderer_.render(
         renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
         eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
@@ -8440,6 +8491,7 @@ void App::renderBaseSupply()
     const SDL_FRect recycleButton = baseRecycleButton();
     SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
     SDL_RenderFillRect(renderer_, &recycleButton);
+    SDL_SetRenderDrawColor(renderer_, 238, 224, 202, 255);
     uiTextRenderer_.render(renderer_, recycleButton.x + 26.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
 
     const SDL_FRect gunsmithButton = baseGunsmithButton();
@@ -8464,14 +8516,6 @@ void App::renderBaseSupply()
                 "GUNSMITH READY | {}", weaponName);
             gunsmithLabel = "COLLECT SERVICED WEAPON";
         }
-        else if (plan.minutesRemaining > 0)
-        {
-            gunsmithStatus = fmt::format(
-                "GUNSMITH IN PROGRESS | {} | {} MIN",
-                weaponName,
-                plan.minutesRemaining);
-            gunsmithLabel = "SERVICE IN PROGRESS";
-        }
         else
         {
             gunsmithStatus = "GUNSMITH READY | STASH SPACE REQUIRED";
@@ -8488,9 +8532,8 @@ void App::renderBaseSupply()
         gunsmithAvailable = plan.canCommit;
         gunsmithStatus = plan.canCommit
             ? fmt::format(
-                "GUNSMITH QUOTE {} | {} MIN | FULL FACTORY CONDITION",
-                plan.quotedCurrency,
-                plan.durationMinutes)
+                "GUNSMITH QUOTE {} | INSTANT | FULL FACTORY CONDITION",
+                plan.quotedCurrency)
             : plan.message;
     }
     else
@@ -8504,16 +8547,25 @@ void App::renderBaseSupply()
         gunsmithAvailable ? 112 : 52,
         255);
     SDL_RenderFillRect(renderer_, &gunsmithButton);
+    SDL_SetRenderDrawColor(renderer_, 228, 232, 220, 255);
     uiTextRenderer_.render(
         renderer_,
         gunsmithButton.x + 18.0F,
         gunsmithButton.y + 18.0F,
         gunsmithLabel);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        gunsmithAvailable ? 184 : 214,
+        gunsmithAvailable ? 222 : 204,
+        gunsmithAvailable ? 236 : 174,
+        255);
     uiTextRenderer_.render(
         renderer_, 650.0F, 532.0F, gunsmithStatus.c_str());
+    SDL_SetRenderDrawColor(renderer_, 206, 202, 178, 255);
     uiTextRenderer_.render(renderer_, 96.0F, 630.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
+        SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
         uiTextRenderer_.render(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
     }
 }
@@ -8534,6 +8586,11 @@ void App::renderBaseAllocation()
 
     const BaseResourceState &state =
         gameSession_.profile().baseResources;
+    const BaseOperationsDefinition &operationsDefinition =
+        publishedContentRegistry().baseOperations();
+    const BaseOperationalProjection operations = projectBaseOperations(
+        state,
+        operationsDefinition);
     const WorldClockProjection clock = gameSession_.worldClockProjection();
     const std::string nextDemand = fmt::format(
         "NEXT DAILY NEED IN {}H {:02}M | RESOLVED DAILY CYCLES {}",
@@ -8552,8 +8609,17 @@ void App::renderBaseAllocation()
         state.lastShortfall.hygiene,
         state.lastShortfall.morale,
         state.lastShortfall.security};
+    const std::array<std::uint32_t, 4> dailyDemand{
+        kBaseDailyDemand.food,
+        kBaseDailyDemand.hygiene,
+        kBaseDailyDemand.morale,
+        kBaseDailyDemand.security};
     for (std::size_t index{}; index < values.size(); ++index)
     {
+        const BaseOperationalTier resourceTier = projectBaseResourceTier(
+            values[index].second,
+            dailyDemand[index],
+            operationsDefinition);
         const float y = 174.0F + static_cast<float>(index) * 76.0F;
         const SDL_FRect track{80.0F, y + 23.0F, 450.0F, 24.0F};
         const SDL_FRect fill{
@@ -8563,20 +8629,23 @@ void App::renderBaseAllocation()
             track.h};
         SDL_SetRenderDrawColor(renderer_, 38, 48, 44, 255);
         SDL_RenderFillRect(renderer_, &track);
+        const SDL_Color fillColor = resourceTier == BaseOperationalTier::Critical
+            ? SDL_Color{148, 72, 62, 255}
+            : resourceTier == BaseOperationalTier::Strained
+                ? SDL_Color{164, 132, 58, 255}
+                : resourceTier == BaseOperationalTier::Supported
+                    ? SDL_Color{74, 178, 138, 255}
+                    : SDL_Color{68, 152, 116, 255};
         SDL_SetRenderDrawColor(
             renderer_,
-            values[index].second >= 25U ? 68 : 148,
-            values[index].second >= 25U ? 152 : 72,
-            values[index].second >= 25U ? 116 : 62,
-            255);
+            fillColor.r,
+            fillColor.g,
+            fillColor.b,
+            fillColor.a);
         SDL_RenderFillRect(renderer_, &fill);
         SDL_SetRenderDrawColor(renderer_, 128, 190, 164, 255);
         SDL_RenderRect(renderer_, &track);
-        const char *tier = values[index].second >= 60U
-            ? "STABLE"
-            : values[index].second >= 25U
-                ? "STRAINED"
-                : "CRITICAL";
+        const char *tier = baseOperationalTierName(resourceTier);
         const std::string label = fmt::format(
             "{} {}/100 | {}{}",
             values[index].first,
@@ -8587,6 +8656,12 @@ void App::renderBaseAllocation()
                 : "");
         uiTextRenderer_.render(renderer_, 80.0F, y, label.c_str());
     }
+    const std::string operationsStatus = fmt::format(
+        "BASE OPERATIONS {} | LIMITING {}",
+        baseOperationalTierName(operations.tier),
+        baseResourceKindName(operations.limitingResource));
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 474.0F, operationsStatus.c_str());
     const std::string cycles = fmt::format(
         "DAY {} {:02}:{:02} {} | SHORTAGE NEVER BLOCKS PLAY",
         clock.day,

@@ -1,13 +1,16 @@
 {
   "schema_version": 1,
-  "content_version": "base-periodic-wishes-content-16",
+  "content_version": "base-instant-gunsmith-content-18",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
       "current_durability_cost_per_point": 1,
-      "maximum_durability_cost_per_point": 2,
-      "duration_minutes": 240
+      "maximum_durability_cost_per_point": 2
     }
+  },
+  "base_operations": {
+    "strained_below_reserve_days": 3,
+    "supported_at_reserve_days": 7
   },
   "base_priorities": {
     "cycle_minutes": 7200,

@@ -5,6 +5,38 @@
 inline constexpr std::uint32_t kMaximumBaseResource = 100;
 inline constexpr BaseResourceBundle kBaseDailyDemand{8, 6, 5, 4};
 
+enum class BaseResourceKind
+{
+    Food,
+    Hygiene,
+    Morale,
+    Security
+};
+
+enum class BaseOperationalTier
+{
+    Critical,
+    Strained,
+    Stable,
+    Supported
+};
+
+struct BaseOperationalProjection
+{
+    BaseOperationalTier tier{BaseOperationalTier::Stable};
+    BaseResourceKind limitingResource{BaseResourceKind::Food};
+    BaseResourceBundle reserveDays;
+};
+
+[[nodiscard]] BaseOperationalTier projectBaseResourceTier(
+    std::uint32_t current,
+    std::uint32_t dailyDemand,
+    const BaseOperationsDefinition &definition) noexcept;
+
+[[nodiscard]] BaseOperationalProjection projectBaseOperations(
+    const BaseResourceState &state,
+    const BaseOperationsDefinition &definition) noexcept;
+
 struct ContributeBaseAssetCommand
 {
     AssetInstanceId assetId{};

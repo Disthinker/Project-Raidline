@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-periodic-wishes-content-16");
+        "base-instant-gunsmith-content-18");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -73,7 +73,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().maximumDurabilityCostPerPoint,
         2U);
-    EXPECT_EQ(registry.gunsmithFullMaintenance().durationMinutes, 240U);
+    EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
+    EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     ASSERT_EQ(registry.basePriorities().size(), 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
@@ -327,15 +328,19 @@ TEST(ContentRegistryTest, RejectsNonPositiveItemWeight)
         ContentRegistryError);
 }
 
-TEST(ContentRegistryTest, RejectsInvalidGunsmithServiceDuration)
+TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
 {
-    const std::string invalid = replaceFirst(
-        publishedJsonCopy(),
-        "\"duration_minutes\": 240",
-        "\"duration_minutes\": 0");
-
     EXPECT_THROW(
-        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"strained_below_reserve_days\": 3",
+            "\"strained_below_reserve_days\": 1")),
+        ContentRegistryError);
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"supported_at_reserve_days\": 7",
+            "\"supported_at_reserve_days\": 2")),
         ContentRegistryError);
 }
 
@@ -345,6 +350,18 @@ TEST(ContentRegistryTest, RejectsExcessiveGunsmithServiceUnitCost)
         publishedJsonCopy(),
         "\"maximum_durability_cost_per_point\": 2",
         "\"maximum_durability_cost_per_point\": 1001");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsZeroGunsmithServiceBaseCost)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"base_cost\": 40",
+        "\"base_cost\": 0");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

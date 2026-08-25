@@ -282,7 +282,7 @@ TEST(PersistentSessionTest, BasePrioritySaveFailurePreservesMemory)
     EXPECT_FALSE(session.profile().basePriority.fulfilled);
 }
 
-TEST(PersistentSessionTest, GunsmithJobPersistsAndCompletesThroughRaidTravel)
+TEST(PersistentSessionTest, GunsmithMaintenancePersistsImmediately)
 {
     SessionSaveDirectory temporary;
     ProfileState initial = makeNewAlphaProfile(
@@ -297,41 +297,30 @@ TEST(PersistentSessionTest, GunsmithJobPersistsAndCompletesThroughRaidTravel)
     damaged->currentDurability = 3000U;
     damaged->currentMaximumDurability = 4500U;
     damaged->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
+    const AssetLocation originalLocation = damaged->location;
+    const std::uint64_t originalWorldMinute =
+        initial.worldClock.elapsedWorldMinutes;
 
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         initial,
         publishedContentRegistry().contentVersion()).succeeded);
 
-    GameSession started;
-    started.configurePersistence(temporary.path());
-    ASSERT_TRUE(started.continueProfile()) << started.persistenceMessage();
-    const GunsmithMaintenanceReceipt startReceipt =
-        started.executeBaseGunsmithMaintenance(
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    const GunsmithMaintenanceReceipt receipt =
+        active.executeBaseGunsmithMaintenance(
             rifle,
-            "persistent-start-gunsmith");
-    ASSERT_TRUE(startReceipt.succeeded) << startReceipt.message;
-    ASSERT_TRUE(started.profile().gunsmithMaintenanceJob.has_value());
-    EXPECT_EQ(started.profile().gunsmithMaintenanceJob->weaponAssetId, rifle);
-
-    GameSession travelling;
-    travelling.configurePersistence(temporary.path());
-    ASSERT_TRUE(travelling.continueProfile()) << travelling.persistenceMessage();
-    ASSERT_TRUE(travelling.profile().gunsmithMaintenanceJob.has_value());
-    ASSERT_TRUE(travelling.deployAlpha(
-        99103,
-        MapDefinitionId{"map.raid.industrial"}));
-    ASSERT_TRUE(travelling.activeQuitAlphaRaid());
-    EXPECT_GE(
-        travelling.profile().worldClock.elapsedWorldMinutes,
-        travelling.profile().gunsmithMaintenanceJob->completionWorldMinute);
-
-    const GunsmithCollectionReceipt collectReceipt =
-        travelling.collectBaseGunsmithMaintenance(
-            "persistent-collect-gunsmith");
-    ASSERT_TRUE(collectReceipt.succeeded) << collectReceipt.message;
-    EXPECT_EQ(collectReceipt.weaponAssetId, rifle);
-    EXPECT_FALSE(travelling.profile().gunsmithMaintenanceJob.has_value());
+            "persistent-instant-gunsmith");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.weaponAssetId, rifle);
+    EXPECT_EQ(receipt.currencyPaid, 220U);
+    EXPECT_FALSE(active.profile().gunsmithMaintenanceJob.has_value());
+    EXPECT_EQ(
+        active.profile().worldClock.elapsedWorldMinutes,
+        originalWorldMinute);
+    EXPECT_EQ(active.profile().assets.find(rifle)->location, originalLocation);
 
     GameSession reopened;
     reopened.configurePersistence(temporary.path());
@@ -344,8 +333,12 @@ TEST(PersistentSessionTest, GunsmithJobPersistsAndCompletesThroughRaidTravel)
     EXPECT_EQ(restored->currentDurability, factoryDurability);
     EXPECT_EQ(restored->currentMaximumDurability, factoryDurability);
     EXPECT_EQ(restored->weaponMalfunction, WeaponMalfunctionType::None);
-    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(
-        restored->location));
+    EXPECT_EQ(restored->location, originalLocation);
+    EXPECT_EQ(reopened.profile().currency, 780U);
+    EXPECT_EQ(
+        reopened.profile().worldClock.elapsedWorldMinutes,
+        originalWorldMinute);
+    EXPECT_FALSE(reopened.profile().gunsmithMaintenanceJob.has_value());
 }
 
 TEST(PersistentSessionTest, GunsmithSaveFailurePreservesInMemoryProfile)

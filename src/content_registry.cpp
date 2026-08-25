@@ -708,18 +708,34 @@ ContentRegistry ContentRegistry::fromJson(
                     "current_durability_cost_per_point"),
                 requiredPositiveUint(
                     gunsmith,
-                    "maximum_durability_cost_per_point"),
-                requiredPositiveUint(gunsmith, "duration_minutes")};
-        constexpr std::uint32_t maximumServiceMinutes = 7U * 24U * 60U;
+                    "maximum_durability_cost_per_point")};
         constexpr std::uint32_t maximumServiceUnitCost = 1000U;
-        if (registry.gunsmithFullMaintenance_.durationMinutes >
-                maximumServiceMinutes ||
-            registry.gunsmithFullMaintenance_
+        if (registry.gunsmithFullMaintenance_
                     .currentDurabilityCostPerPoint > maximumServiceUnitCost ||
             registry.gunsmithFullMaintenance_
                     .maximumDurabilityCostPerPoint > maximumServiceUnitCost)
         {
             fail("gunsmith full-maintenance definition is invalid");
+        }
+
+        const Json &baseOperations = requiredObject(
+            root,
+            "base_operations");
+        registry.baseOperations_ = BaseOperationsDefinition{
+            requiredPositiveUint(
+                baseOperations,
+                "strained_below_reserve_days"),
+            requiredPositiveUint(
+                baseOperations,
+                "supported_at_reserve_days")};
+        const BaseOperationsDefinition &operations = registry.baseOperations_;
+        constexpr std::uint32_t maximumReserveDays = 30U;
+        if (operations.strainedBelowReserveDays <= 1U ||
+            operations.strainedBelowReserveDays >=
+                operations.supportedAtReserveDays ||
+            operations.supportedAtReserveDays > maximumReserveDays)
+        {
+            fail("Base operations definition is invalid");
         }
 
         std::set<std::string> resources;
@@ -1843,6 +1859,11 @@ const GunsmithFullMaintenanceDefinition &
 ContentRegistry::gunsmithFullMaintenance() const noexcept
 {
     return gunsmithFullMaintenance_;
+}
+
+const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept
+{
+    return baseOperations_;
 }
 
 std::uint32_t ContentRegistry::basePriorityCycleMinutes() const noexcept
