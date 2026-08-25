@@ -20,6 +20,19 @@ AssetInstanceId addPendingSalvage(ProfileState &profile,
       StoredAssetLocation{ProfileContainerId::baseIntake(), origin});
 }
 
+AssetInstanceId addStashSalvage(ProfileState &profile,
+                                const ItemDefinitionId &definitionId) {
+  const ItemDefinition &definition =
+      publishedContentRegistry().item(definitionId);
+  const auto origin = findFirstProfileFit(
+      profile, publishedContentRegistry(), ProfileContainerId::stash(),
+      definition, ItemOrientation::Degrees0);
+  EXPECT_TRUE(origin.has_value());
+  return profile.assets.create(
+      definition,
+      StoredAssetLocation{ProfileContainerId::stash(), *origin});
+}
+
 void grantConstructionMaterial(ProfileState &profile) {
   const AssetInstanceId scrap =
       addPendingSalvage(profile, ItemDefinitionId{"item.loot.scrap_parts"});
@@ -36,7 +49,7 @@ TEST(BaseConstructionDomainTest,
   ProfileState profile =
       makeNewAlphaProfile("construction-material", publishedContentRegistry());
   const AssetInstanceId scrap =
-      addPendingSalvage(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+      addStashSalvage(profile, ItemDefinitionId{"item.loot.scrap_parts"});
   const ConstructionMaterialPlan plan = queryConstructionMaterialContribution(
       profile, publishedContentRegistry(),
       ContributeConstructionMaterialCommand{scrap});

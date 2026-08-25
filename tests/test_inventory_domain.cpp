@@ -77,7 +77,7 @@ TEST(InventoryDomainTest, EquipmentCommandsUseStableLocations)
     EXPECT_TRUE(profile.committedTransactions.contains("equip-rifle"));
 }
 
-TEST(InventoryDomainTest, PendingRaidReturnCanBeKeptInStash)
+TEST(InventoryDomainTest, LegacyUnassignedReturnCanBeRecoveredToStash)
 {
     ProfileState profile = makeNewAlphaProfile(
         "inventory-keep-pending-return",

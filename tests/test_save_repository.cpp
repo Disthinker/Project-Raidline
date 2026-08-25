@@ -1141,10 +1141,10 @@ TEST(SaveRepositoryTest, CorruptPrimaryAndBackupFailExplicitly)
     EXPECT_FALSE(result.profile.has_value());
 }
 
-TEST(SaveRepositoryTest, SchemaV14RoundTripsActiveBaseConstruction)
+TEST(SaveRepositoryTest, SchemaV15RoundTripsConstructionAndSupplyPolicy)
 {
     ProfileState profile = makeNewAlphaProfile(
-        "save-base-construction-v14",
+        "save-base-supply-v15",
         publishedContentRegistry());
     profile.baseConstruction.materialUnits = 7U;
     profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
@@ -1154,6 +1154,9 @@ TEST(SaveRepositoryTest, SchemaV14RoundTripsActiveBaseConstruction)
         3U,
         profile.worldClock.elapsedWorldMinutes,
         profile.worldClock.elapsedWorldMinutes + 360U};
+    profile.baseSupplyPolicy.assignments.emplace(
+        alpha_content::lootCola,
+        BaseSupplyCategory::Food);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1169,6 +1172,32 @@ TEST(SaveRepositoryTest, SchemaV14RoundTripsActiveBaseConstruction)
     EXPECT_EQ(
         loaded.profile->baseConstruction.activeProject->committedWorkers,
         3U);
+    EXPECT_EQ(
+        loaded.profile->baseSupplyPolicy.assignments.at(
+            alpha_content::lootCola),
+        BaseSupplyCategory::Food);
+}
+
+TEST(SaveRepositoryTest, SchemaV14MigratesToEmptySupplyPolicy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-supply-v14",
+        publishedContentRegistry());
+    profile.baseConstruction.materialUnits = 7U;
+    profile.baseSupplyPolicy.assignments.emplace(
+        alpha_content::lootCola,
+        BaseSupplyCategory::Food);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-dormitory-expansion-content-22",
+            14),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->baseConstruction.materialUnits, 7U);
+    EXPECT_TRUE(migrated.profile->baseSupplyPolicy.assignments.empty());
 }
 
 TEST(SaveRepositoryTest, SchemaV13MigratesToDefaultBaseConstruction)

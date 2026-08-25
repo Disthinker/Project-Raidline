@@ -13,7 +13,7 @@
 | RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | PR #69 已改为验证根资产仍属于随身所有权树，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
 | RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | PR #69 已加入继续、设置、回主菜单和退桌面菜单，并移除双按 Esc 放弃入口；已通过用户验收并合入 main |
 | RL-UI-003 | Base 静止朝向回左；Base/Raid 玩家及敌人未共享连续碰撞，纵向移动与敌人追击可穿过障碍；玩家文本没有中文/语言设置 | PR #78 已修复并通过 exact-head CI 与用户正常游玩验收，以 merge commit `ba8283f` 进入 main |
-| RL-UI-004 | 成功撤离物资已进入 BaseIntake，但仓库页只渲染 Stash，导致返还物只能在资源分配设施中看到 | PR #87 已在仓库页加入可拖拽、可 Ctrl+左键收纳的独立返还格区；Windows Debug 与 959/959 CTest 通过，等待用户正常游玩复验 |
+| RL-UI-004 | 旧 Settlement 把成功带回物迁入 BaseIntake，破坏玩家撤离时选择的背包/装备位置并让物品只在分配页可见 | PR #87 当前修订已删除正常返还迁移：所有随身物保持精确原位置，未来载具沿用同一合同；BaseIntake 仅兼容旧档。分类供给菜单从统一自有资产配置定义级授权，Windows Debug 与 966/966 CTest 通过，等待新 exact-head CI 与用户正常游玩复验 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | PR #61 已完成 Head/Torso/Legs、Normal/Headshot/WeakPoint、防具接线与代码反馈，并通过 CI 和用户验收后合入 main |
 | RL-MED-001 | Raid 缺少流血、疼痛与对应战地医疗闭环 | PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main |
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |
@@ -84,7 +84,7 @@
 | Base 付费医疗服务 v1 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main |
 | Base 居民、床位与睡眠 v1 | PR #85 已通过 CI 和用户验收，以普通 merge commit `2377035` 进入 main |
 | Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
-| Base 宿舍扩建 v1 | PR #87 实现独立建材、单一项目、劳动力锁定、时间完成/取消返还、Raid 回滚快照与 schema v14/content v22；本地 957/957 和 exact-head CI 已通过，等待用户验收 |
+| Base 宿舍扩建与供给修订 | PR #87 原宿舍范围已通过 CI；当前追加撤离位置保持、分类自动供给、schema v15/content v23。本地 Windows Debug 与 966/966 CTest 已通过，等待新 exact-head CI 与用户验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；GDD 保持只读，待策划线程同步修订。玩家付费医疗与 NPC 设施治疗必须继续保持独立命令，后者未来才消耗世界时间和公共医疗库存。
 

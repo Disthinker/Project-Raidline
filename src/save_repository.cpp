@@ -166,6 +166,32 @@ std::optional<RaidResultOutcome> parseRaidOutcome(std::string_view value)
     return std::nullopt;
 }
 
+std::string baseSupplyCategoryName(BaseSupplyCategory category)
+{
+    switch (category)
+    {
+    case BaseSupplyCategory::Food:
+        return "food";
+    case BaseSupplyCategory::Medical:
+        return "medical";
+    case BaseSupplyCategory::Recreation:
+        return "recreation";
+    case BaseSupplyCategory::Security:
+        return "security";
+    }
+    return "invalid";
+}
+
+std::optional<BaseSupplyCategory> parseBaseSupplyCategory(
+    std::string_view value)
+{
+    if (value == "food") return BaseSupplyCategory::Food;
+    if (value == "medical") return BaseSupplyCategory::Medical;
+    if (value == "recreation") return BaseSupplyCategory::Recreation;
+    if (value == "security") return BaseSupplyCategory::Security;
+    return std::nullopt;
+}
+
 Json vectorValue(Vec2 value)
 {
     return {{"x", value.x}, {"y", value.y}};
@@ -417,6 +443,19 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             payload["base_construction"]["active_project"] = nullptr;
         }
+    }
+    if (schemaVersion >= 15)
+    {
+        Json assignments = Json::array();
+        for (const auto &[definitionId, category] :
+             profile.baseSupplyPolicy.assignments)
+        {
+            assignments.push_back({
+                {"item_definition_id", definitionId.value()},
+                {"category", baseSupplyCategoryName(category)}});
+        }
+        payload["base_supply_policy"] = {
+            {"assignments", std::move(assignments)}};
     }
     if (schemaVersion >= 10)
     {
@@ -716,7 +755,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
-        schemaVersion != 13 && schemaVersion != 14)
+        schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -784,14 +823,17 @@ SaveLoadResult deserializeProfileEnvelope(
              contentVersion == "base-residents-beds-sleep-content-20") ||
             (schemaVersion == 13 &&
              contentVersion ==
-                 "raid-ordinary-survivor-rescue-content-21");
+                 "raid-ordinary-survivor-rescue-content-21") ||
+            (schemaVersion == 14 &&
+             contentVersion == "base-dormitory-expansion-content-22");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
              schemaVersion != 9 && schemaVersion != 10 &&
              schemaVersion != 11 && schemaVersion != 12 &&
-             schemaVersion != 13 && schemaVersion != 14) ||
+             schemaVersion != 13 && schemaVersion != 14 &&
+             schemaVersion != 15) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -920,6 +962,25 @@ SaveLoadResult deserializeProfileEnvelope(
                             .get<std::uint64_t>(),
                         project.at("completion_world_minute")
                             .get<std::uint64_t>()};
+            }
+        }
+        if (schemaVersion >= 15)
+        {
+            const Json &policy = payload.at("base_supply_policy");
+            for (const Json &assignment : policy.at("assignments"))
+            {
+                const ItemDefinitionId definitionId{
+                    assignment.at("item_definition_id")
+                        .get<std::string>()};
+                const auto category = parseBaseSupplyCategory(
+                    assignment.at("category").get<std::string>());
+                if (!category.has_value() ||
+                    !profile.baseSupplyPolicy.assignments.emplace(
+                        definitionId, *category).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Base supply policy is invalid"};
+                }
             }
         }
         profile.assets.setNextAssetIdForLoad(

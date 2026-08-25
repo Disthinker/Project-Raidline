@@ -11,7 +11,7 @@
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受。当前进入 **Base 宿舍扩建 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用独立建材池、单一宿舍 1→2 级项目、临时劳动力占用与世界时间完成合同。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受。当前 PR #87 同时收束 **Base 宿舍扩建 v1、撤离位置保持与分类自动供给 v1**；外部 GDD 继续只读，新增范围只建立已有物品、每日需求和统一资产所有权的实际消费者。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -32,7 +32,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 17. **持续高危阶段 v1**：PR #75 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `773443b` 进入 main。
 18. **主动高危与高级资源区 v1**：PR #76 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 merge commit `bc26337` 进入 main。
 19. **高危条件撤离 v1**：PR #77 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `d106193` 进入 main。
-20. **Base 资源分配与基础需求 v1**：PR #78 把成功带回的新 Loot 放入独立待分配区，允许保留到 Stash 或不可逆转化为食物、卫生、士气、安全；同时修复共享障碍碰撞、停止朝向并加入中英文设置，已以 merge commit `ba8283f` 进入 main。
+20. **Base 资源分配与基础需求 v1（历史）**：PR #78 把成功带回的新 Loot 放入独立待分配区并已以 `ba8283f` 进入 main；用户于 2026-08-25 明确废弃该返还行为，PR #87 正迁移为成功撤离保持原位置，BaseIntake 只兼容旧档。
 21. **Base 世界时钟与每日需求 v1**：PR #79 建立 Base/Raid 共享的权威分钟时钟，把四项需求迁移到每日 00:00 幂等结算；暂停、模态页、主菜单、结果页和离线时间不推进，未结算 Raid 的时间随出击前存档回滚。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `5d2a11a` 进入 main。
 22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
 23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
@@ -41,7 +41,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 26. **Base 付费医疗服务 v1**：PR #84 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main。玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。
 27. **Base 居民、床位与睡眠 v1**：PR #85 新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；已通过 CI 和用户验收并以 `2377035` 合入 main。
 28. **Raid 普通幸存者安全转移 v1**：PR #86 为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。已通过 CI 与用户正常游玩验收并以 `ee9ba48` 合入 main。
-29. **Base 宿舍扩建 v1**：当前分支允许把待分配的废旧零件/损坏电子元件主动加工为独立建材，并启动一次宿舍 1→2 级、4 建材、3 劳动力、6 小时的建设项目；完成后床位从 10 增至 14，取消返还建材但不回退世界时间。
+29. **Base 宿舍扩建与分类自动供给 v1**：当前分支允许从统一自有资产显式加工建材并完成宿舍 1→2 级项目；成功撤离保持全部随身物原位置，食物/医疗/娱乐/安全菜单则按物品定义保存自动供给授权，只有每日需求不足时才消费。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -62,7 +62,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - 卸弹、显式上膛和 Medkit 使用物品右键情境菜单，不再依赖 `FILL MAG / INSTALL / CHAMBER / USE MED` 等验收按钮。Base 卸弹即时回到 Stash；Raid 弹匣卸弹为 3 秒可中断动作，完成时原子写入背包或胸挂通用格。`F`/`Ctrl+右键` 保留为 Base 快速转移捷径；可穿戴物在对应栏位为空且领域查询合法时优先快速装备，否则沿用容器转移。
 - 玩家为 100 HP；Medkit 每件 3 次、每次恢复最多 30 HP，Raid 内治疗 5 秒且中断不消耗。
 - 生产 Raid 的常规阶段为 180 秒；归零只进入无终局倒计时的持续高危，不产生时间失败。E 拾取真实 Loot，随身库存可移动和整理，打开时禁止射击/换弹/开始治疗但允许普通移动。
-- 3 秒撤离成功保留合法随身资产与 HP；死亡和主动放弃全损并恢复 100 HP。关闭程序或异常退出不会结算，重开后加载出击前的完整 Profile；正式成功/失败结果仍使用唯一 Settlement ID 幂等提交。
+- 3 秒撤离成功保留合法随身资产、HP 以及每件资产的精确装备槽/容器格位；未来载具货物沿用同一位置保持合同。死亡和主动放弃全损并恢复 100 HP。关闭程序或异常退出不会结算，重开后加载出击前的完整 Profile；正式成功/失败结果仍使用唯一 Settlement ID 幂等提交。
 - Raid 世界支持 Shift 奔跑，速度为普通移动的 1.5 倍；当前不引入耐力条、负重或复杂移动消耗。
 - RaidResult 显示结果、成功带回物和货币变化；失败不生成丢失物清单。生产 Alpha 路径不再使用 V0 柜体、无限弹或 Timeout 结算。
 
@@ -70,7 +70,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #86 已通过 exact-head CI 与用户正常游玩验收，并以 `ee9ba48` 进入 main。
-- 当前宿舍扩建树已通过 Windows Debug 全目标构建、156 项聚焦回归、完整 CTest 957/957，以及 PR #87 的范围、Ubuntu 与 Windows exact-code CI；开发代理未启动游戏，当前只等待用户正常游玩验收。
+- PR #87 原宿舍范围已通过 exact-head CI；当前位置保持与自动供给修订已通过 Windows Debug 全目标和完整 CTest 966/966，尚待新 exact-head Windows/Ubuntu CI 与用户正常游玩验收。开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -249,9 +249,9 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 - content v16 提供五日周期和三个稳定愿望定义，分别要求可乐、废旧零件或损坏电子元件，并只奖励既有基地资源；显示名和数值仍是开发期内容。
 - `BasePriorityState` 保存当前稳定定义 ID、周期索引、完成状态和累计错过周期。周期从新 Profile 的初始世界分钟起算，任意大跨度时间均常数时间轮换；错过暂只记录，不施加尚无领域支撑的士气惩罚。
-- 只有玩家明确选中的 BaseIntake 资产可以提交；Stash、装备和随身资产不会被扫描。query/execute 共用匹配、数量与容量规则，TransactionId、revision、候选 Profile 和存档后交换保证幂等与失败零修改。
+- 愿望提交只消费玩家明确选中的基地可访问自有资产；正常流程不再要求物品先进入 BaseIntake。Stash、装备与随身容器不会被静默扫描或自动提交，query/execute 共用匹配、数量与容量规则。
 - schema v11 保存愿望状态；schema v10 及更早版本按当前世界时间确定性初始化。Pending Raid 同时冻结出发前愿望，异常退出跨周期也会精确回滚。
-- Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；不建立传统任务列表、奖励弹窗或自动捐献。
+- Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；愿望仍是显式提交，不会被日常自动供给策略代替。
 
 ## Base 运营状态与即时枪械维护 v1 当前实现
 
@@ -281,11 +281,19 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## Base 宿舍扩建 v1 当前实现
 
 - content v22 为废旧零件与损坏电子元件声明独立建材价值，并定义唯一宿舍 1→2 级项目：4 建材、3 名聚合劳动力、360 世界分钟、床位 10→14。四项运营资源不承担建筑材料语义。
-- 成功撤离后进入 `BaseIntake` 的返还物资现在与 Stash 同时显示在仓库页，并以独立金色格区标识。玩家可直接拖入仓库或随身容器，也可用 Ctrl+左键快速收纳；保留在返还区的实例仍可前往资源分配页捐献、加工建材或提交愿望。普通库存命令仍不能反向把资产放进该结算中转容器。
-- Allocation 页由玩家主动把待分配回收物加工为建材；原资产实例不可逆消失。宿舍页显示等级、建材、可用/占用劳动力、剩余时间，并提供正常的开始或取消入口。
+- 用户于 2026-08-25 明确修订返还合同：成功撤离后，装备、弹药、战利品及其容器关系全部保持撤离瞬间的精确 `AssetLocation`；未来载具货舱也必须遵守同一规则。Settlement 不再把物品迁入 `BaseIntake`，该容器只保留旧存档恢复用途。
+- Allocation 页从统一的基地可访问自有资产中显式选择回收物加工为建材；原资产实例不可逆消失。宿舍页显示等级、建材、可用/占用劳动力、剩余时间，并提供正常的开始或取消入口。
 - 启动、取消和完成均通过候选 Profile 原子提交；取消返还锁定建材且不回退已流逝时间。Base 实时、休息和 Raid 往返共同推进项目，完成只结算一次。
 - Deploy 快照冻结出击前建材、项目和床位；未结算 Raid 异常恢复时回滚建设进度和床位，但不会回滚已经安全转移并落盘的普通居民。
 - schema v14 保存当前项目及 Raid 回滚快照；schema v13 确定性迁移为宿舍 1 级、0 建材、无活动项目。客户端继续只使用双语文字与几何占位，没有修改正式美术、音频或 manifest。
+
+## Base 分类自动供给 v1 当前实现
+
+- `BaseSupplyPolicyState` 按物品定义保存唯一供给分类：食物、医疗、娱乐或安全。勾选/取消是候选 Profile 原子事务，只改变授权，不移动、不锁定也不立即消耗任何物品。
+- 菜单按分类聚合显示当前拥有且可提供对应贡献的物品定义、总数量和单件贡献。可乐可在食物与娱乐之间选择一种用途；基础药品提供较高医疗贡献，卫生纸提供较低医疗贡献；旧书提供娱乐贡献。新增内容仅使用文字/几何占位。
+- 每日需求仅在现有储备不足时，按稳定资产 ID 消耗能够补足缺口的最少完整数量。未勾选物品、不匹配分类及非空容器均不消费；规则在物品耗尽后继续保留，后续获得同定义物品仍适用。
+- Pending Raid 期间不自动消耗任何自有资产，使异常退出能恢复精确出击前资产状态；Raid 往返仍结算既有抽象储备消耗。成功返回 Base 后，物品继续保持玩家/容器原位置，下一次 Base 日结才可能按已授权策略使用。
+- schema v15/content v23 保存策略并把 v14 旧档迁移为空策略；未知定义、类别无对应贡献、重复条目或坏分类均拒绝加载。Windows Debug 全目标与完整 CTest 966/966 已通过，等待 exact-head CI 与用户正常游玩验收。
 
 ## 尚未完成
 

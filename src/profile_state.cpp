@@ -512,6 +512,50 @@ bool assetIsCarried(
     return false;
 }
 
+bool assetIsBaseAccessible(
+    const ProfileState &profile,
+    AssetInstanceId instanceId) noexcept
+{
+    std::set<AssetInstanceId> visited;
+    AssetInstanceId current = instanceId;
+    while (current != 0 && visited.insert(current).second)
+    {
+        const AssetRecord *asset = profile.assets.find(current);
+        if (asset == nullptr)
+        {
+            return false;
+        }
+        if (std::holds_alternative<EquippedAssetLocation>(asset->location))
+        {
+            return true;
+        }
+        if (const auto *stored =
+                std::get_if<StoredAssetLocation>(&asset->location))
+        {
+            if (stored->container.kind == ProfileContainerKind::Stash ||
+                stored->container.kind == ProfileContainerKind::BaseIntake)
+            {
+                return true;
+            }
+            if (stored->container.kind !=
+                ProfileContainerKind::AssetCompartment)
+            {
+                return false;
+            }
+            current = stored->container.ownerAssetId;
+            continue;
+        }
+        if (const auto *installed =
+                std::get_if<InstalledMagazineLocation>(&asset->location))
+        {
+            current = installed->weaponAssetId;
+            continue;
+        }
+        return false;
+    }
+    return false;
+}
+
 std::vector<AssetInstanceId> carriedAssetIds(const ProfileState &profile)
 {
     std::vector<AssetInstanceId> result;
@@ -696,6 +740,36 @@ ProfileValidationResult validateProfileState(
         shortfall.security > kMaximumBaseResource)
     {
         return {false, "Base resource state is invalid"};
+    }
+    for (const auto &[definitionId, category] :
+         profile.baseSupplyPolicy.assignments)
+    {
+        const ItemDefinition *definition{};
+        try
+        {
+            definition = &content.item(definitionId);
+        }
+        catch (...)
+        {
+            return {false, "Base supply policy item is unknown"};
+        }
+        if (!definition->baseContribution.has_value())
+        {
+            return {false, "Base supply policy item has no contribution"};
+        }
+        const BaseResourceBundle &value = *definition->baseContribution;
+        const bool valid =
+            (category == BaseSupplyCategory::Food && value.food > 0U) ||
+            (category == BaseSupplyCategory::Medical &&
+             value.hygiene > 0U) ||
+            (category == BaseSupplyCategory::Recreation &&
+             value.morale > 0U) ||
+            (category == BaseSupplyCategory::Security &&
+             value.security > 0U);
+        if (!valid)
+        {
+            return {false, "Base supply policy category is invalid"};
+        }
     }
     const WorldClockProjection clock = projectWorldClock(profile.worldClock);
     if (profile.baseResources.resolvedDemandCycleCount > clock.completedDays)
@@ -1304,6 +1378,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
+    for (const auto &[definitionId, category] :
+         profile.baseSupplyPolicy.assignments)
+    {
+        hashBytes(hash, definitionId.value());
+        hashInteger(hash, static_cast<std::uint32_t>(category));
+    }
     hashInteger(hash, profile.basePopulation.ordinaryResidents);
     hashInteger(hash, profile.basePopulation.bedCapacity);
     hashInteger(hash, profile.baseConstruction.materialUnits);

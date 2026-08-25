@@ -245,6 +245,27 @@ TEST(ProfileStateTest, InvalidBaseConstructionStateIsRejected)
         publishedContentRegistry()).valid);
 }
 
+TEST(ProfileStateTest, SupplyPolicyRequiresKnownCompatibleContribution)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-invalid-supply-policy",
+        publishedContentRegistry());
+    profile.baseSupplyPolicy.assignments.emplace(
+        alpha_content::lootCola,
+        BaseSupplyCategory::Medical);
+    EXPECT_FALSE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+
+    profile.baseSupplyPolicy.assignments.clear();
+    profile.baseSupplyPolicy.assignments.emplace(
+        ItemDefinitionId{"item.loot.unknown"},
+        BaseSupplyCategory::Food);
+    EXPECT_FALSE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+}
+
 TEST(ProfileStateTest, CarriedWeightCountsNestedAssetsAndLoadedRoundsOnce)
 {
     ProfileState profile = makeNewAlphaProfile(

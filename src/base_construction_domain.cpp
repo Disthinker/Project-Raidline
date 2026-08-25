@@ -71,17 +71,20 @@ projectBaseConstruction(const ProfileState &profile,
 ConstructionMaterialPlan queryConstructionMaterialContribution(
     const ProfileState &profile, const ContentRegistry &content,
     const ContributeConstructionMaterialCommand &command) {
+  if (profile.pendingRaid.has_value()) {
+    return materialFailure(DomainErrorCode::IllegalDestination,
+                           "Base allocation is unavailable during a Raid",
+                           profile.revision);
+  }
   const AssetRecord *asset = profile.assets.find(command.assetId);
   if (asset == nullptr) {
     return materialFailure(DomainErrorCode::MissingAsset,
                            "allocation item does not exist", profile.revision);
   }
-  const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
-  if (stored == nullptr ||
-      stored->container != ProfileContainerId::baseIntake()) {
+  if (!assetIsBaseAccessible(profile, asset->instanceId)) {
     return materialFailure(
         DomainErrorCode::IllegalDestination,
-        "only pending allocation items can become construction material",
+        "only Base-accessible personal assets can become construction material",
         profile.revision);
   }
   if (hasChildren(profile, asset->instanceId)) {

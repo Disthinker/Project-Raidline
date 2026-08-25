@@ -99,13 +99,17 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
   EXPECT_NE(operations.find("短板 食物"), std::string::npos);
 }
 
-TEST(UiLocalizationTest, ChineseTranslatesWarehouseRaidReturnTray) {
+TEST(UiLocalizationTest, ChineseTranslatesWarehouseRecoveryAndAllocationAccess) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WAREHOUSE"),
             "仓储");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
-                "RAID RETURNS (DRAG OR CTRL+CLICK TO KEEP)"),
-            "对局返还物资（拖拽或 Ctrl+左键收纳）");
+                "UNASSIGNED RETURNS (MOVE TO RECOVER)"),
+            "旧版未归位物资（移动后恢复）");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ITEM LEFT IN ORIGINAL LOCATION"),
+            "物品保持在原位置");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {
@@ -184,6 +188,23 @@ TEST(UiLocalizationTest, ChineseTranslatesDormitoryConstructionFlow) {
                 UiLanguage::SimplifiedChinese,
                 "insufficient Base construction material"),
             "基地建材不足");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesCategorizedAutomaticBaseSupply) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "AUTOMATIC BASE SUPPLY ENABLED"),
+            "已启用基地自动供给");
+  const std::string row = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "Toilet Paper x2 | +3 PER ITEM | ASSIGNED MEDICAL");
+  EXPECT_NE(row.find("卫生纸 x2"), std::string::npos);
+  EXPECT_NE(row.find("每件"), std::string::npos);
+  EXPECT_NE(row.find("已分配 医疗"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base supply policy is unavailable during a Raid"),
+            "对局期间不能修改基地自动供给规则");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesOrdinarySurvivorRescueFlow) {

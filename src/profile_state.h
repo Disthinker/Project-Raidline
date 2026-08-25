@@ -210,6 +210,26 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+// A supply assignment authorizes the Base to consume a matching owned item
+// definition for one specific need. The item stays in its real inventory
+// location until a world-time demand boundary actually consumes it.
+enum class BaseSupplyCategory
+{
+    Food,
+    Medical,
+    Recreation,
+    Security
+};
+
+struct BaseSupplyPolicyState
+{
+    std::map<ItemDefinitionId, BaseSupplyCategory> assignments;
+
+    friend bool operator==(
+        const BaseSupplyPolicyState &,
+        const BaseSupplyPolicyState &) = default;
+};
+
 struct RaidRescueSnapshot
 {
     RescueDefinitionId definitionId;
@@ -343,6 +363,7 @@ struct ProfileState
     MedicalStatusState medicalStatus;
     WorldClockState worldClock;
     BaseResourceState baseResources;
+    BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
     BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
@@ -391,6 +412,13 @@ struct ProfileValidationResult
     AssetInstanceId weaponAssetId) noexcept;
 
 [[nodiscard]] bool assetIsCarried(
+    const ProfileState &profile,
+    AssetInstanceId instanceId) noexcept;
+
+// Base allocation commands may explicitly consume an asset from the personal
+// Stash or the equipped ownership tree without moving it into a transit
+// container first. Service-held and Raid-ground assets are not accessible.
+[[nodiscard]] bool assetIsBaseAccessible(
     const ProfileState &profile,
     AssetInstanceId instanceId) noexcept;
 

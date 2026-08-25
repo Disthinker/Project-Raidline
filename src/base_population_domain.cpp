@@ -124,8 +124,9 @@ BaseRestReceipt executeBaseRest(
     ProfileState candidate = profile;
     const WorldClockAdvanceResult advanced = advanceWorldClock(
         candidate.worldClock, plan.worldMinutes);
-    const BaseDailyDemandResult demand = applyBaseDailyDemandThrough(
-        candidate.baseResources,
+    const BaseDailyDemandResult demand = applyBaseDailyDemandWithSupplyThrough(
+        candidate,
+        content,
         advanced.completedDaysAfter,
         plan.dailyDemand);
     static_cast<void>(synchronizeBasePriorityThrough(candidate, content));

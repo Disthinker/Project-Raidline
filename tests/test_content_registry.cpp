@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-dormitory-expansion-content-22");
+        "base-supply-policy-content-23");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -99,7 +99,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 19U);
+    ASSERT_EQ(registry.items().size(), 21U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 3U);
@@ -174,6 +174,19 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         *cola.baseContribution,
         (BaseResourceBundle{12, 0, 4, 0}));
     EXPECT_EQ(cola.baseConstructionMaterialValue, 0U);
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.book_basic"})
+             .baseContribution,
+        (BaseResourceBundle{0, 0, 10, 0}));
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.toilet_paper"})
+             .baseContribution,
+        (BaseResourceBundle{0, 3, 0, 0}));
+    EXPECT_LT(
+        registry.item(ItemDefinitionId{"item.loot.toilet_paper"})
+            .baseContribution->hygiene,
+        registry.item(alpha_content::medkit)
+            .baseContribution->hygiene);
     EXPECT_EQ(
         registry.item(ItemDefinitionId{"item.loot.scrap_parts"})
             .baseConstructionMaterialValue,

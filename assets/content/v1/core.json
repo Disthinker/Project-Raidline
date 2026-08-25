@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-dormitory-expansion-content-22",
+  "content_version": "base-supply-policy-content-23",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -105,6 +105,40 @@
       },
       "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
       "world_texture": "items/world/item_medkit_basic_v1_64x64.png"
+    },
+    {
+      "id": "item.loot.book_basic",
+      "display_name": "Used Book",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 450,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_book.png",
+      "world_texture": "items/world/unpublished_book.png",
+      "base_contribution": {"morale": 10},
+      "market_recycle_price": 12
+    },
+    {
+      "id": "item.loot.toilet_paper",
+      "display_name": "Toilet Paper",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 180,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_toilet_paper.png",
+      "world_texture": "items/world/unpublished_toilet_paper.png",
+      "base_contribution": {"hygiene": 3},
+      "market_recycle_price": 8
     },
     {
       "id": "item.weapon.pistol_basic",
@@ -544,7 +578,9 @@
       "id": "loot.raid.alpha",
       "roll_count": 1,
       "entries": [
-        {"item": "item.loot.cola_basic", "weight": 28, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.cola_basic", "weight": 24, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.book_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.toilet_paper", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 2},
         {"item": "item.loot.scrap_parts", "weight": 30, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.electronics", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.ammunition.9mm_basic", "weight": 18, "minimum_quantity": 8, "maximum_quantity": 24},

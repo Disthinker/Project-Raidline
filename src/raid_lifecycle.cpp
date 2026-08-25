@@ -132,6 +132,9 @@ bool hasStoredChildren(
     return false;
 }
 
+// Abnormal Raid rollback removes exactly the generated quantity even when a
+// picked stack was merged into a pre-Raid carried stack. Successful extraction
+// never calls this helper and preserves the merged stack in place.
 bool consumeCollectedLoot(
     ProfileState &profile,
     const RaidLootSnapshot &loot)
@@ -185,46 +188,6 @@ bool consumeCollectedLoot(
     return true;
 }
 
-bool moveCollectedLootToIntake(
-    ProfileState &profile,
-    const ContentRegistry &content,
-    const RaidLootSnapshot &loot)
-{
-    const ItemDefinition &definition = content.item(loot.definitionId);
-    const auto origin = findFirstProfileFit(
-        profile,
-        content,
-        ProfileContainerId::baseIntake(),
-        definition,
-        ItemOrientation::Degrees0);
-    if (!origin.has_value())
-    {
-        return false;
-    }
-    // Preserve the stable ID and instance state when the generated asset was
-    // not merged into an existing carried stack. Merged stackable Loot must
-    // be split back out as a new allocation asset after provenance recovery.
-    if (AssetRecord *original = profile.assets.findMutable(loot.assetId);
-        original != nullptr && original->quantity == loot.quantity &&
-        original->definitionId == loot.definitionId &&
-        assetIsCarried(profile, loot.assetId))
-    {
-        original->location = StoredAssetLocation{
-            ProfileContainerId::baseIntake(), *origin};
-        original->orientation = ItemOrientation::Degrees0;
-        return true;
-    }
-    if (!consumeCollectedLoot(profile, loot))
-    {
-        return false;
-    }
-    static_cast<void>(profile.assets.create(
-        definition,
-        StoredAssetLocation{ProfileContainerId::baseIntake(), *origin},
-        loot.quantity));
-    return true;
-}
-
 bool advanceProfileWorldTime(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -236,8 +199,9 @@ bool advanceProfileWorldTime(
     {
         return false;
     }
-    static_cast<void>(applyBaseDailyDemandThrough(
-        profile.baseResources,
+    static_cast<void>(applyBaseDailyDemandWithSupplyThrough(
+        profile,
+        content,
         advanced.completedDaysAfter,
         populationAdjustedDailyDemand(profile.basePopulation)));
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
@@ -303,15 +267,6 @@ DeployReceipt executeDeploy(
         return deployFailure(
             RaidLifecycleError::RaidAlreadyPending,
             "a Raid is already pending",
-            profile.revision);
-    }
-    if (!assetsInContainer(
-             profile,
-             ProfileContainerId::baseIntake()).empty())
-    {
-        return deployFailure(
-            RaidLifecycleError::InvalidCommand,
-            "pending allocation must be resolved before Deploy",
             profile.revision);
     }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
@@ -545,18 +500,11 @@ RaidSettlementReceipt settlePendingRaid(
                 returned.push_back(asset.definitionId);
             }
         }
-        for (const RaidLootSnapshot &loot : raidSnapshot.loot)
-        {
-            if (loot.collected &&
-                !moveCollectedLootToIntake(candidate, content, loot))
-            {
-                return settlementFailure(
-                    RaidLifecycleError::InvalidProfile,
-                    "returned Loot cannot enter pending allocation",
-                    profile.revision,
-                    outcome);
-            }
-        }
+        // Successful extraction confirms ownership but never rewrites the
+        // location of a carried asset. Loot therefore stays in the exact
+        // equipment slot or container cell chosen during the Raid. Future
+        // carried roots (for example a vehicle cargo hold) must follow the
+        // same location-preserving settlement rule.
     }
 
     std::vector<AssetInstanceId> eraseIds;

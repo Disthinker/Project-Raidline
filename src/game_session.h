@@ -219,6 +219,11 @@ public:
         AssetInstanceId assetId,
         std::string transactionId);
 
+    [[nodiscard]] BaseSupplyAssignmentReceipt executeBaseSupplyAssignment(
+        ItemDefinitionId definitionId,
+        std::optional<BaseSupplyCategory> category,
+        std::string transactionId);
+
     [[nodiscard]] ConstructionMaterialReceipt
     executeConstructionMaterialContribution(
         AssetInstanceId assetId,

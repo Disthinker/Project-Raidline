@@ -1274,6 +1274,30 @@ BaseResourceReceipt GameSession::executeBaseResourceContribution(
     return receipt;
 }
 
+BaseSupplyAssignmentReceipt GameSession::executeBaseSupplyAssignment(
+    ItemDefinitionId definitionId,
+    std::optional<BaseSupplyCategory> category,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseSupplyAssignmentReceipt receipt = ::executeBaseSupplyAssignment(
+        candidate,
+        publishedContentRegistry(),
+        SetBaseSupplyAssignmentCommand{
+            std::move(definitionId), category},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                persistenceMessage_, profile_.revision};
+    }
+    return receipt;
+}
+
 ConstructionMaterialReceipt
 GameSession::executeConstructionMaterialContribution(
     AssetInstanceId assetId,
@@ -1801,8 +1825,9 @@ void GameSession::advanceWorldClockFromSimulation(
             advanceWorldClock(candidate.worldClock, minutes);
         if (advanced.minutesApplied > 0U)
         {
-            static_cast<void>(applyBaseDailyDemandThrough(
-                candidate.baseResources,
+            static_cast<void>(applyBaseDailyDemandWithSupplyThrough(
+                candidate,
+                publishedContentRegistry(),
                 advanced.completedDaysAfter,
                 populationAdjustedDailyDemand(candidate.basePopulation)));
             static_cast<void>(synchronizeBasePriorityThrough(
