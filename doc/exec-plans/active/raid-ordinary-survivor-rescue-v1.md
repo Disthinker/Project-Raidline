@@ -81,5 +81,5 @@
 - [x] 完成内容、领域和存档合同。
 - [x] 完成 Raid 交互、持久检查点和玩家反馈。
 - [x] 完成 Windows Debug、全量 CTest 942/942 和文档同步。
-- [ ] 提交、推送、建立 Draft PR并通过精确 head CI。
+- [x] 提交、推送、建立 Draft PR #86，并通过功能提交 `52592c7` 的范围检查、Windows 与 Ubuntu CI。
 - [ ] 用户正常游玩验收。

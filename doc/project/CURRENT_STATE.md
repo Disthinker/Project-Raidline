@@ -68,6 +68,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
+- PR #86 功能提交 `52592c7` 已通过范围检查、Ubuntu 与 Windows exact-code CI；本地完整 CTest 942/942 通过，等待用户正常游玩验收。
 - PR #78～#85 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望、运营状态、付费医疗和居民/床位/睡眠均已完成 CI、用户验收并进入 main。当前普通幸存者救援树已通过 Windows Debug 全目标构建和完整 CTest 942/942，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
