@@ -19,6 +19,7 @@
 #include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
+#include "raid_rescue_domain.h"
 #include "raid_settlement.h"
 #include "save_repository.h"
 #include "stash.h"
@@ -80,6 +81,7 @@ enum class GameSessionPresentationEvent
     WeaponEquipped,
     MalfunctionCleared,
     LootPickedUp,
+    RescueSecured,
 };
 
 struct DeveloperWeaponTuningSnapshot
@@ -259,12 +261,15 @@ public:
 
     [[nodiscard]] SaveLoadStatus lastSaveLoadStatus() const noexcept;
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
+    [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
+    ordinarySurvivorRescuePlan() const;
 
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
     ProfileState profile_;
     std::optional<SaveRepository> saveRepository_;
+    std::optional<ProfileState> activeRaidRecoveryProfile_;
     SaveLoadStatus lastSaveLoadStatus_{SaveLoadStatus::NotFound};
     std::string persistenceMessage_;
     Stash stash_;
@@ -350,6 +355,7 @@ private:
         MedicalRaidAction &action,
         float deltaTime);
     [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
+    [[nodiscard]] bool secureOrdinarySurvivorRescue();
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
 };

@@ -708,6 +708,20 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base population state is invalid"};
     }
+    for (const RescueDefinitionId &rescue : profile.committedRescues)
+    {
+        const bool published = std::any_of(
+            content.maps().begin(),
+            content.maps().end(),
+            [&rescue](const MapDefinition &map)
+            {
+                return map.rescue.has_value() && map.rescue->id == rescue;
+            });
+        if (!rescue.valid() || !published)
+        {
+            return {false, "committed rescue ID is invalid or unknown"};
+        }
+    }
     if (!validBasePriorityState(
             profile.basePriority,
             profile.worldClock.elapsedWorldMinutes,
@@ -984,10 +998,12 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-control-resource-2" ||
             raid.rulesVersion == "raid-conditional-extraction-3" ||
             raid.rulesVersion == "raid-travel-time-4" ||
-            raid.rulesVersion == "base-periodic-priority-5";
+            raid.rulesVersion == "base-periodic-priority-5" ||
+            raid.rulesVersion == "raid-ordinary-rescue-6";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
-            raid.rulesVersion == "base-periodic-priority-5";
+            raid.rulesVersion == "base-periodic-priority-5" ||
+            raid.rulesVersion == "raid-ordinary-rescue-6";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1122,6 +1138,30 @@ ProfileValidationResult validateProfileState(
                 return {false, "pending Raid carried root is invalid"};
             }
         }
+        if (raid.rescue.has_value())
+        {
+            const RaidRescueSnapshot &rescue = *raid.rescue;
+            const bool committed =
+                profile.committedRescues.contains(rescue.definitionId);
+            if (!raidMap->rescue.has_value() ||
+                rescue.definitionId != raidMap->rescue->id ||
+                rescue.subjectKind != RaidRescueSubjectKind::OrdinaryResidents ||
+                rescue.ordinaryResidentCount == 0U ||
+                rescue.ordinaryResidentCount > 16U ||
+                !std::isfinite(rescue.interactionDurationSeconds) ||
+                rescue.interactionDurationSeconds <= 0.0F ||
+                rescue.interactionDurationSeconds > 30.0F ||
+                !std::isfinite(rescue.transferPoint.position.x) ||
+                !std::isfinite(rescue.transferPoint.position.y) ||
+                !std::isfinite(rescue.transferPoint.size.x) ||
+                !std::isfinite(rescue.transferPoint.size.y) ||
+                rescue.transferPoint.size.x <= 0.0F ||
+                rescue.transferPoint.size.y <= 0.0F ||
+                rescue.secured != committed)
+            {
+                return {false, "pending Raid rescue is invalid"};
+            }
+        }
     }
     else if (!groundAssetIds.empty())
     {
@@ -1129,7 +1169,8 @@ ProfileValidationResult validateProfileState(
     }
 
     if (profile.lastRaidResult.has_value() &&
-        profile.lastRaidResult->settlementId.empty())
+        (profile.lastRaidResult->settlementId.empty() ||
+         profile.lastRaidResult->rescuedOrdinaryResidents > 16U))
     {
         return {false, "last Raid result is invalid"};
     }
@@ -1248,6 +1289,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     {
         hashBytes(hash, settlement);
     }
+    for (const RescueDefinitionId &rescue : profile.committedRescues)
+    {
+        hashBytes(hash, rescue.value());
+    }
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
@@ -1286,6 +1331,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         for (AssetInstanceId root : raid.carriedRootAssetIds)
         {
             hashInteger(hash, root);
+        }
+        if (raid.rescue.has_value())
+        {
+            hashBytes(hash, raid.rescue->definitionId.value());
+            hashInteger(hash, static_cast<std::uint32_t>(
+                raid.rescue->subjectKind));
+            hashFloat(hash, raid.rescue->transferPoint.position.x);
+            hashFloat(hash, raid.rescue->transferPoint.position.y);
+            hashFloat(hash, raid.rescue->transferPoint.size.x);
+            hashFloat(hash, raid.rescue->transferPoint.size.y);
+            hashFloat(hash, raid.rescue->interactionDurationSeconds);
+            hashInteger(hash, raid.rescue->ordinaryResidentCount);
+            hashInteger(hash, raid.rescue->secured ? 1U : 0U);
         }
         hashInteger(hash, raid.startingHealth);
         hashInteger(hash, static_cast<std::uint32_t>(
@@ -1334,6 +1392,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         }
         hashInteger(hash, profile.lastRaidResult->currencyDelta);
         hashInteger(hash, profile.lastRaidResult->travelMinutesApplied);
+        hashInteger(hash, profile.lastRaidResult->rescuedOrdinaryResidents);
     }
     return hash;
 }

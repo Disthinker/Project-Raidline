@@ -427,6 +427,14 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     {
         payload["committed_settlements"].push_back(settlement);
     }
+    if (schemaVersion >= 13)
+    {
+        payload["committed_rescues"] = Json::array();
+        for (const RescueDefinitionId &rescue : profile.committedRescues)
+        {
+            payload["committed_rescues"].push_back(rescue.value());
+        }
+    }
 
     if (profile.pendingRaid.has_value())
     {
@@ -530,6 +538,29 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                              .missedCycleCount}};
             }
         }
+        if (schemaVersion >= 13)
+        {
+            if (raid.rescue.has_value())
+            {
+                payload["pending_raid"]["rescue"] = {
+                    {"definition_id", raid.rescue->definitionId.value()},
+                    {"subject_kind", "ordinary_residents"},
+                    {"transfer_point", {
+                        {"position", vectorValue(
+                            raid.rescue->transferPoint.position)},
+                        {"size", vectorValue(
+                            raid.rescue->transferPoint.size)}}},
+                    {"interaction_duration_seconds",
+                     raid.rescue->interactionDurationSeconds},
+                    {"ordinary_resident_count",
+                     raid.rescue->ordinaryResidentCount},
+                    {"secured", raid.rescue->secured}};
+            }
+            else
+            {
+                payload["pending_raid"]["rescue"] = nullptr;
+            }
+        }
     }
     else
     {
@@ -553,6 +584,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             payload["last_raid_result"]["travel_minutes_applied"] =
                 profile.lastRaidResult->travelMinutesApplied;
+        }
+        if (schemaVersion >= 13)
+        {
+            payload["last_raid_result"]["rescued_ordinary_residents"] =
+                profile.lastRaidResult->rescuedOrdinaryResidents;
         }
     }
     else
@@ -625,7 +661,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
         schemaVersion != 9 && schemaVersion != 10 &&
-        schemaVersion != 11 && schemaVersion != 12)
+        schemaVersion != 11 && schemaVersion != 12 &&
+        schemaVersion != 13)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -688,13 +725,16 @@ SaveLoadResult deserializeProfileEnvelope(
              (contentVersion == "base-periodic-wishes-content-16" ||
               contentVersion == "base-operational-readiness-content-17" ||
               contentVersion == "base-instant-gunsmith-content-18" ||
-              contentVersion == "base-paid-medical-content-19"));
+              contentVersion == "base-paid-medical-content-19")) ||
+            (schemaVersion == 12 &&
+             contentVersion == "base-residents-beds-sleep-content-20");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
              schemaVersion != 9 && schemaVersion != 10 &&
-             schemaVersion != 11 && schemaVersion != 12) ||
+             schemaVersion != 11 && schemaVersion != 12 &&
+             schemaVersion != 13) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -821,6 +861,18 @@ SaveLoadResult deserializeProfileEnvelope(
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "settlement history is invalid"};
+                }
+            }
+        }
+        if (schemaVersion >= 13)
+        {
+            for (const Json &rescue : payload.at("committed_rescues"))
+            {
+                RescueDefinitionId id{rescue.get<std::string>()};
+                if (!profile.committedRescues.insert(std::move(id)).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "rescue history is invalid"};
                 }
             }
         }
@@ -1152,6 +1204,26 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.travel.startingBaseResources = profile.baseResources;
                 raid.travel.startingBasePriority = profile.basePriority;
             }
+            if (schemaVersion >= 13 && !value.at("rescue").is_null())
+            {
+                const Json &rescue = value.at("rescue");
+                if (rescue.at("subject_kind").get<std::string>() !=
+                    "ordinary_residents")
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "pending rescue subject kind is invalid"};
+                }
+                raid.rescue = RaidRescueSnapshot{
+                    RescueDefinitionId{
+                        rescue.at("definition_id").get<std::string>()},
+                    RaidRescueSubjectKind::OrdinaryResidents,
+                    ContentRect{
+                        parseVector(rescue.at("transfer_point").at("position")),
+                        parseVector(rescue.at("transfer_point").at("size"))},
+                    rescue.at("interaction_duration_seconds").get<float>(),
+                    rescue.at("ordinary_resident_count").get<std::uint32_t>(),
+                    rescue.at("secured").get<bool>()};
+            }
             profile.pendingRaid = std::move(raid);
         }
 
@@ -1178,6 +1250,10 @@ SaveLoadResult deserializeProfileEnvelope(
             result.currencyDelta = value.at("currency_delta").get<std::int64_t>();
             result.travelMinutesApplied = schemaVersion >= 9
                 ? value.at("travel_minutes_applied").get<std::uint32_t>()
+                : 0U;
+            result.rescuedOrdinaryResidents = schemaVersion >= 13
+                ? value.at("rescued_ordinary_residents")
+                      .get<std::uint32_t>()
                 : 0U;
             profile.lastRaidResult = std::move(result);
         }

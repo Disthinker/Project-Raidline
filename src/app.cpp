@@ -4140,6 +4140,9 @@ void App::consumePresentationAudioEvents()
         case GameSessionPresentationEvent::LootPickedUp:
             gameAudio_.play(SoundEventId::InventoryPickup);
             break;
+        case GameSessionPresentationEvent::RescueSecured:
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
         }
     }
 }
@@ -5697,15 +5700,21 @@ void App::renderStashOverlay()
             uiTextRenderer_.render(
                 renderer_, panel.x + 24.0F, panel.y + 112.0F,
                 travel.c_str());
+            const std::string rescued = fmt::format(
+                "RESCUED RESIDENTS: +{} (SECURED)",
+                result->rescuedOrdinaryResidents);
+            uiTextRenderer_.render(
+                renderer_, panel.x + 24.0F, panel.y + 136.0F,
+                rescued.c_str());
             if (result->outcome == RaidResultOutcome::Extracted)
             {
                 const std::string count = fmt::format(
                     "RETURNED ASSETS: {}",
                     result->returnedItemDefinitionIds.size());
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 138.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 162.0F,
                     count.c_str());
-                float y = panel.y + 164.0F;
+                float y = panel.y + 188.0F;
                 for (std::size_t index = 0;
                      index < result->returnedItemDefinitionIds.size() &&
                      index < 9U;
@@ -5721,10 +5730,10 @@ void App::renderStashOverlay()
             else
             {
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 142.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 166.0F,
                     "ALL CARRIED ASSETS WERE LOST");
                 uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 166.0F,
+                    renderer_, panel.x + 24.0F, panel.y + 190.0F,
                     "NO LOST-ITEM LIST IS GENERATED");
             }
         }
@@ -6151,6 +6160,94 @@ void App::renderExtractionPoint()
                                 control.x + 8.0F,
                                 control.y + 30.0F,
                                 remaining.c_str());
+        }
+    }
+
+    if (const auto &rescuePoint =
+            gameSession_.world().ordinarySurvivorRescuePoint();
+        rescuePoint.has_value())
+    {
+        const SDL_FRect rescue{
+            rescuePoint->position.x,
+            rescuePoint->position.y,
+            rescuePoint->size.x,
+            rescuePoint->size.y};
+        const bool inRange =
+            gameSession_.world().ordinarySurvivorRescueInteractionInRange();
+        const auto plan = gameSession_.ordinarySurvivorRescuePlan();
+        const bool secured = plan.has_value() && plan->alreadyCommitted;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            secured ? 48 : (inRange ? 46 : 34),
+            secured ? 112 : (inRange ? 154 : 92),
+            secured ? 88 : (inRange ? 132 : 78),
+            150);
+        SDL_RenderFillRect(renderer_, &rescue);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            secured ? 116 : 116,
+            secured ? 224 : 246,
+            secured ? 174 : 206,
+            255);
+        SDL_RenderRect(renderer_, &rescue);
+        uiTextRenderer_.render(
+            renderer_,
+            rescue.x + 7.0F,
+            rescue.y + 7.0F,
+            secured
+                ? "SAFE TRANSFER COMPLETE"
+                : (inRange
+                       ? "HOLD F: SECURE TRANSFER"
+                       : "ORDINARY SURVIVOR"));
+
+        if (plan.has_value())
+        {
+            const std::string population = fmt::format(
+                "RESIDENTS {} -> {} | BEDS {}",
+                plan->residentsBefore,
+                plan->residentsAfter,
+                plan->bedCapacity);
+            uiTextRenderer_.render(
+                renderer_,
+                rescue.x + 7.0F,
+                rescue.y + 29.0F,
+                population.c_str());
+            const std::string rations = fmt::format(
+                "RATIONS {}/DAY",
+                plan->dailyRationsAfter);
+            uiTextRenderer_.render(
+                renderer_,
+                rescue.x + 7.0F,
+                rescue.y + 48.0F,
+                rations.c_str());
+            if (plan->bedShortfallAfter > 0U)
+            {
+                const std::string warning = fmt::format(
+                    "WARNING: BED SHORTFALL +{}",
+                    plan->bedShortfallAfter);
+                uiTextRenderer_.render(
+                    renderer_,
+                    rescue.x + 7.0F,
+                    rescue.y + 67.0F,
+                    warning.c_str());
+            }
+        }
+
+        const float progress =
+            gameSession_.world().ordinarySurvivorRescueProgress();
+        if (!secured && progress > 0.0F)
+        {
+            const SDL_FRect track{
+                rescue.x + 7.0F,
+                rescue.y + rescue.h - 15.0F,
+                rescue.w - 14.0F,
+                8.0F};
+            SDL_SetRenderDrawColor(renderer_, 14, 34, 28, 220);
+            SDL_RenderFillRect(renderer_, &track);
+            const SDL_FRect fill{
+                track.x, track.y, track.w * progress, track.h};
+            SDL_SetRenderDrawColor(renderer_, 116, 246, 206, 245);
+            SDL_RenderFillRect(renderer_, &fill);
         }
     }
 
@@ -7437,7 +7534,7 @@ void App::renderPauseMenu()
         }
         uiTextRenderer_.render(
             renderer_, 476.0F, 542.0F,
-            "ESC CONTINUES | RAID EXIT RESTORES PRE-RAID SAVE");
+            "ESC CONTINUES | RAID EXIT RESTORES GEAR; RESCUES PERSIST");
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }

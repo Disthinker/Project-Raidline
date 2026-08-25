@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#84 已接受。当前优先交付 **Base Growth：居民、床位与睡眠 v1**；范围合同见 `doc/exec-plans/active/base-residents-beds-sleep-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#85 已接受。当前优先交付 **Raid：普通幸存者安全转移与基地接纳 v1**；范围合同见 `doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -43,6 +43,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 枪匠全面维护服务 v1 | PR #81 / merge commit `ace7c69` |
 | 周期愿望与物资提交 v1 | PR #82 / merge commit `eca7d62` |
 | 运营状态与即时枪械维护 v1 | PR #83 / merge commit `20d9f48` |
+| 付费医疗服务 v1 | PR #84 / merge commit `c01d431` |
+| 居民、床位与睡眠 v1 | PR #85 / merge commit `2377035` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -88,7 +90,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的待分配物资，改善既有基地资源 | BasePriorityDefinition/State、手动原子提交、Raid 回滚快照、schema v11 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 `eca7d62` 进入 main；不包含任务板、人口、士气惩罚、兑换点或自动捐献 |
 | 运营状态与即时枪械维护 v1 | 四项资源按最短储备日数形成运营档位；枪械全面维护只扣货币并立即恢复出厂状态 | BaseOperationalProjection、content v18、content v16/v17 兼容、即时维护事务、旧任务立即领取 | PR #83 已通过 exact-head CI 与用户验收，以 `20d9f48` 进入 main |
 | 付费医疗服务 v1 | Base 独立医疗设施显示伤势和报价；支付货币后立即恢复生命并清除流血，个人医疗物保持不变 | PlayerBaseMedicalDefinition、query/execute 原子事务、content v19、schema v11 兼容 v18 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以 `c01d431` 进入 main；不包含 NPC 医疗、公共医疗库存、时间队列或新伤势 |
-| 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | 当前分支已通过 Windows Debug 全目标和完整 CTest 923/923；不包含接纳、建设、岗位、精力、正式士气、具名 NPC 或居民医疗 |
+| 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | PR #85 已通过 CI 和用户验收，以 `2377035` 进入 main；建设、岗位、精力、正式士气、具名 NPC 或居民医疗仍延期 |
+| Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | 当前分支进行中；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
 
 ## 当前 Combat Reliability 缺陷
 

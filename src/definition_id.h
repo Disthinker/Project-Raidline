@@ -89,6 +89,7 @@ struct LootTableDefinitionTag;
 struct EnemyDeploymentDefinitionTag;
 struct MapDefinitionTag;
 struct BasePriorityDefinitionTag;
+struct RescueDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
@@ -96,3 +97,4 @@ using EnemyDeploymentDefinitionId =
     DefinitionId<EnemyDeploymentDefinitionTag>;
 using MapDefinitionId = DefinitionId<MapDefinitionTag>;
 using BasePriorityDefinitionId = DefinitionId<BasePriorityDefinitionTag>;
+using RescueDefinitionId = DefinitionId<RescueDefinitionTag>;

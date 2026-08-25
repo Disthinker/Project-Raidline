@@ -354,7 +354,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "base-periodic-priority-5";
+    snapshot.rulesVersion = "raid-ordinary-rescue-6";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -370,6 +370,17 @@ DeployReceipt executeDeploy(
         candidate.worldClock,
         candidate.baseResources,
         candidate.basePriority};
+    if (map->rescue.has_value() &&
+        !candidate.committedRescues.contains(map->rescue->id))
+    {
+        snapshot.rescue = RaidRescueSnapshot{
+            map->rescue->id,
+            map->rescue->subjectKind,
+            map->rescue->transferPoint,
+            map->rescue->interactionDurationSeconds,
+            map->rescue->ordinaryResidentCount,
+            false};
+    }
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
     {
         snapshot.enemies.push_back(
@@ -583,7 +594,10 @@ RaidSettlementReceipt settlePendingRaid(
         outcome,
         std::move(returned),
         0,
-        travelMinutes};
+        travelMinutes,
+        raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
+            ? raidSnapshot.rescue->ordinaryResidentCount
+            : 0U};
     ++candidate.revision;
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);

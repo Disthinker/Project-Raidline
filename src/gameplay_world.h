@@ -73,6 +73,12 @@ struct RaidWorldConfig
     std::vector<BallisticBlocker> ballisticBlockers;
     float normalExtractionDurationSeconds{3.0F};
     HighRiskWorldConfig highRisk;
+    struct OrdinarySurvivorRescue
+    {
+        ContentRect transferPoint;
+        float interactionDurationSeconds{};
+    };
+    std::optional<OrdinarySurvivorRescue> rescue;
 };
 
 struct PlayerDamageObservation
@@ -234,6 +240,15 @@ public:
     [[nodiscard]] float highRiskControlTimeRemaining() const noexcept;
     [[nodiscard]] bool highRiskControlInteractionInRange() const noexcept;
 
+    [[nodiscard]] const std::optional<ContentRect> &
+    ordinarySurvivorRescuePoint() const noexcept;
+    [[nodiscard]] float ordinarySurvivorRescueProgress() const noexcept;
+    [[nodiscard]] float ordinarySurvivorRescueTimeRemaining() const noexcept;
+    [[nodiscard]] bool ordinarySurvivorRescueInteractionInRange() const noexcept;
+    [[nodiscard]] bool ordinarySurvivorRescueReady() const noexcept;
+    void confirmOrdinarySurvivorRescue() noexcept;
+    void cancelOrdinarySurvivorRescueInteraction() noexcept;
+
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
     weaponAccuracyProjection() const noexcept;
@@ -374,6 +389,10 @@ private:
     std::optional<ContentRect> highRiskAdvancedResourceArea_;
     float highRiskActivationDurationSeconds_{};
     float highRiskActivationElapsedSeconds_{};
+    std::optional<ContentRect> ordinarySurvivorRescuePoint_;
+    float ordinarySurvivorRescueDurationSeconds_{};
+    float ordinarySurvivorRescueElapsedSeconds_{};
+    bool ordinarySurvivorRescueSecured_{};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
@@ -426,6 +445,10 @@ private:
     void updateHighRiskActivation(const GameplayInput &input,
                                   float deltaTime,
                                   Vec2 playerCenter);
+    void updateOrdinarySurvivorRescue(
+        const GameplayInput &input,
+        float deltaTime,
+        Vec2 playerCenter);
     [[nodiscard]] std::size_t spawnHighRiskPressureWave();
     [[nodiscard]] bool canSpawnHighRiskEnemy(
         const EnemySpawn &spawn) const noexcept;

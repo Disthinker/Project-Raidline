@@ -12,6 +12,7 @@
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_rescue_domain.h"
 #include "save_repository.h"
 #include "weapon_ammo_domain.h"
 
@@ -138,6 +139,92 @@ TEST(SaveRepositoryTest, SchemaV12PersistsPopulationAndMigratesV11Defaults)
     EXPECT_EQ(
         migrated.profile->basePopulation,
         (BasePopulationState{8, 10}));
+}
+
+TEST(SaveRepositoryTest, SchemaV13PersistsRescueSnapshotAndCommittedLedger)
+{
+    ProfileState pending = makeNewAlphaProfile(
+        "save-v13-pending-rescue", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        pending,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-v13-raid",
+            "save-v13-settlement",
+            9917U,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{pending.revision, "save-v13-deploy"}).succeeded);
+    ASSERT_TRUE(pending.pendingRaid.has_value());
+    ASSERT_TRUE(pending.pendingRaid->rescue.has_value());
+
+    const SaveLoadResult pendingRoundTrip = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            pending, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+    ASSERT_TRUE(pendingRoundTrip.profile.has_value())
+        << pendingRoundTrip.message;
+    ASSERT_TRUE(pendingRoundTrip.profile->pendingRaid.has_value());
+    ASSERT_TRUE(pendingRoundTrip.profile->pendingRaid->rescue.has_value());
+    const RaidRescueSnapshot &loadedRescue =
+        *pendingRoundTrip.profile->pendingRaid->rescue;
+    const RaidRescueSnapshot &sourceRescue = *pending.pendingRaid->rescue;
+    EXPECT_EQ(loadedRescue.definitionId, sourceRescue.definitionId);
+    EXPECT_EQ(loadedRescue.subjectKind, sourceRescue.subjectKind);
+    EXPECT_EQ(loadedRescue.transferPoint.position.x,
+              sourceRescue.transferPoint.position.x);
+    EXPECT_EQ(loadedRescue.transferPoint.position.y,
+              sourceRescue.transferPoint.position.y);
+    EXPECT_EQ(loadedRescue.transferPoint.size.x,
+              sourceRescue.transferPoint.size.x);
+    EXPECT_EQ(loadedRescue.transferPoint.size.y,
+              sourceRescue.transferPoint.size.y);
+    EXPECT_EQ(loadedRescue.interactionDurationSeconds,
+              sourceRescue.interactionDurationSeconds);
+    EXPECT_EQ(loadedRescue.ordinaryResidentCount,
+              sourceRescue.ordinaryResidentCount);
+    EXPECT_EQ(loadedRescue.secured, sourceRescue.secured);
+
+    ProfileState committed = makeNewAlphaProfile(
+        "save-v13-committed-rescue", publishedContentRegistry());
+    const OrdinarySurvivorAdmissionReceipt admission =
+        executeOrdinarySurvivorAdmission(
+            committed,
+            publishedContentRegistry(),
+            OrdinarySurvivorAdmissionCommand{
+                RescueDefinitionId{"rescue.ordinary.greyline_depot"},
+                1U},
+            CommandContext{committed.revision, "save-v13-rescue"});
+    ASSERT_TRUE(admission.succeeded) << admission.message;
+
+    const SaveLoadResult committedRoundTrip = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            committed, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+    ASSERT_TRUE(committedRoundTrip.profile.has_value())
+        << committedRoundTrip.message;
+    EXPECT_EQ(
+        committedRoundTrip.profile->basePopulation,
+        (BasePopulationState{9U, 10U}));
+    EXPECT_TRUE(committedRoundTrip.profile->committedRescues.contains(
+        RescueDefinitionId{"rescue.ordinary.greyline_depot"}));
+}
+
+TEST(SaveRepositoryTest, SchemaV13MigratesSchemaV12WithEmptyRescueLedger)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v12-rescue-migration", publishedContentRegistry());
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-residents-beds-sleep-content-20",
+            12),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_TRUE(migrated.profile->committedRescues.empty());
+    EXPECT_EQ(
+        migrated.profile->basePopulation,
+        (BasePopulationState{8U, 10U}));
 }
 
 TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)

@@ -222,6 +222,7 @@ bool GameSession::startNewProfile(std::string profileId)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
@@ -270,6 +271,7 @@ bool GameSession::continueProfile()
         recoveredAbandonedRaid_ = true;
     }
     profile_ = std::move(candidate);
+    activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
@@ -288,6 +290,7 @@ bool GameSession::deployAlpha(
         return false;
     }
     const std::size_t number = profile_.committedSettlements.size() + 1U;
+    ProfileState recoveryProfile = profile_;
     ProfileState candidate = profile_;
     const std::string raidId = candidate.profileId + "-raid-" +
         std::to_string(number);
@@ -359,6 +362,12 @@ bool GameSession::deployAlpha(
         worldConfig.ballisticBlockers = std::move(blockers);
         worldConfig.normalExtractionDurationSeconds =
             map.raidRules.extractionDurationSeconds;
+        if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
+        {
+            worldConfig.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+                snapshot.rescue->transferPoint,
+                snapshot.rescue->interactionDurationSeconds};
+        }
         worldConfig.highRisk = HighRiskWorldConfig{
             map.highRisk.enabled,
             map.highRisk.regularPhaseDurationSeconds,
@@ -405,6 +414,7 @@ bool GameSession::deployAlpha(
     }
     persistenceMessage_ = std::move(saveMessage);
     world_.swap(candidateWorld);
+    activeRaidRecoveryProfile_ = std::move(recoveryProfile);
     settlement_ = RaidSettlement{};
     state_ = GameSessionState::InRaid;
     raidNumber_ = number;
@@ -1602,6 +1612,22 @@ const std::string &GameSession::persistenceMessage() const noexcept
     return persistenceMessage_;
 }
 
+std::optional<OrdinarySurvivorAdmissionPlan>
+GameSession::ordinarySurvivorRescuePlan() const
+{
+    if (!alphaRaidActive_ || !profile_.pendingRaid.has_value() ||
+        !profile_.pendingRaid->rescue.has_value())
+    {
+        return std::nullopt;
+    }
+    const RaidRescueSnapshot &rescue = *profile_.pendingRaid->rescue;
+    return queryOrdinarySurvivorAdmission(
+        profile_,
+        OrdinarySurvivorAdmissionCommand{
+            rescue.definitionId,
+            rescue.ordinaryResidentCount});
+}
+
 void GameSession::advanceBaseWorldClock(float deltaTime)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
@@ -2070,6 +2096,15 @@ void GameSession::updateAlphaRaid(
     }
 
     applyAlphaIncomingDamage();
+    if (lastIncomingDamage_.has_value() &&
+        lastIncomingDamage_->damageApplied > 0)
+    {
+        world_->cancelOrdinarySurvivorRescueInteraction();
+    }
+    else if (world_->ordinarySurvivorRescueReady())
+    {
+        static_cast<void>(secureOrdinarySurvivorRescue());
+    }
     advanceAlphaMedicalStatus(deltaTime);
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
@@ -2420,7 +2455,8 @@ void GameSession::updateAlphaRaid(
 
     if (input.interactJustPressed &&
         !raidActionState_.active().has_value() &&
-        !world_->highRiskControlInteractionInRange())
+        !world_->highRiskControlInteractionInRange() &&
+        !world_->ordinarySurvivorRescueInteractionInRange())
     {
         if (const auto loot = nearbyRaidLoot())
         {
@@ -2661,8 +2697,90 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
+    activeRaidRecoveryProfile_.reset();
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
+    return true;
+}
+
+bool GameSession::secureOrdinarySurvivorRescue()
+{
+    if (!alphaRaidActive_ || !activeRaidRecoveryProfile_.has_value() ||
+        !profile_.pendingRaid.has_value() ||
+        !profile_.pendingRaid->rescue.has_value() ||
+        profile_.pendingRaid->rescue->secured ||
+        !world_->ordinarySurvivorRescueReady())
+    {
+        return false;
+    }
+
+    const RaidRescueSnapshot rescue = *profile_.pendingRaid->rescue;
+    const OrdinarySurvivorAdmissionCommand command{
+        rescue.definitionId,
+        rescue.ordinaryResidentCount};
+    ProfileState raidCandidate = profile_;
+    ProfileState recoveryCandidate = *activeRaidRecoveryProfile_;
+    const OrdinarySurvivorAdmissionReceipt recoveryReceipt =
+        executeOrdinarySurvivorAdmission(
+            recoveryCandidate,
+            publishedContentRegistry(),
+            command,
+            CommandContext{
+                recoveryCandidate.revision,
+                "rescue-checkpoint:" +
+                    std::string{rescue.definitionId.value()}});
+    if (!recoveryReceipt.succeeded)
+    {
+        persistenceMessage_ = recoveryReceipt.message;
+        world_->cancelOrdinarySurvivorRescueInteraction();
+        return false;
+    }
+    raidCandidate.pendingRaid->rescue->secured = true;
+    const OrdinarySurvivorAdmissionReceipt raidReceipt =
+        executeOrdinarySurvivorAdmission(
+            raidCandidate,
+            publishedContentRegistry(),
+            command,
+            CommandContext{
+                raidCandidate.revision,
+                nextRaidTransaction("rescue")});
+    if (!raidReceipt.succeeded || !raidCandidate.pendingRaid.has_value() ||
+        !raidCandidate.pendingRaid->rescue.has_value())
+    {
+        persistenceMessage_ = raidReceipt.message;
+        world_->cancelOrdinarySurvivorRescueInteraction();
+        return false;
+    }
+    const ProfileValidationResult validation = validateProfileState(
+        raidCandidate,
+        publishedContentRegistry());
+    if (!validation.valid)
+    {
+        persistenceMessage_ = validation.message;
+        world_->cancelOrdinarySurvivorRescueInteraction();
+        return false;
+    }
+
+    std::string saveMessage;
+    if (saveRepository_.has_value())
+    {
+        const SaveWriteResult saved = saveRepository_->save(
+            recoveryCandidate,
+            publishedContentRegistry().contentVersion());
+        if (!saved.succeeded)
+        {
+            persistenceMessage_ = saved.message;
+            world_->cancelOrdinarySurvivorRescueInteraction();
+            return false;
+        }
+        saveMessage = saved.message;
+    }
+    activeRaidRecoveryProfile_ = std::move(recoveryCandidate);
+    profile_ = std::move(raidCandidate);
+    persistenceMessage_ = std::move(saveMessage);
+    world_->confirmOrdinarySurvivorRescue();
+    presentationEvents_.push_back(
+        GameSessionPresentationEvent::RescueSecured);
     return true;
 }
 

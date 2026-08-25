@@ -210,6 +210,20 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+struct RaidRescueSnapshot
+{
+    RescueDefinitionId definitionId;
+    RaidRescueSubjectKind subjectKind{RaidRescueSubjectKind::OrdinaryResidents};
+    ContentRect transferPoint;
+    float interactionDurationSeconds{};
+    std::uint32_t ordinaryResidentCount{};
+    bool secured{};
+
+    friend bool operator==(
+        const RaidRescueSnapshot &,
+        const RaidRescueSnapshot &) = default;
+};
+
 // Ordinary residents are deliberately aggregated. The player and future
 // named NPCs have separate ownership and are not counted here.
 struct BasePopulationState
@@ -276,6 +290,7 @@ struct PendingRaidSnapshot
     ContentRect extractionPoint;
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidLootSnapshot> loot;
+    std::optional<RaidRescueSnapshot> rescue;
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
     MedicalStatusState startingMedicalStatus;
@@ -289,6 +304,7 @@ struct LastRaidResult
     std::vector<ItemDefinitionId> returnedItemDefinitionIds;
     std::int64_t currencyDelta{};
     std::uint32_t travelMinutesApplied{};
+    std::uint32_t rescuedOrdinaryResidents{};
 };
 
 struct ProfileState
@@ -308,6 +324,7 @@ struct ProfileState
     AssetRegistry assets;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
+    std::set<RescueDefinitionId> committedRescues;
     std::optional<PendingRaidSnapshot> pendingRaid;
     std::optional<LastRaidResult> lastRaidResult;
 };

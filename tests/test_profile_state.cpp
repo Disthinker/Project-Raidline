@@ -3,6 +3,7 @@
 #include "alpha_content_ids.h"
 #include "base_population_domain.h"
 #include "profile_state.h"
+#include "raid_lifecycle.h"
 
 TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
 {
@@ -169,6 +170,51 @@ TEST(ProfileStateTest, PopulationStateHasBoundedAggregateCounts)
         publishedContentRegistry());
     EXPECT_FALSE(result.valid);
     EXPECT_NE(result.message.find("population"), std::string::npos);
+}
+
+TEST(ProfileStateTest, PendingRescueSecuredFlagMustMatchCommittedLedger)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-rescue-invalid", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "profile-rescue-raid",
+            "profile-rescue-settlement",
+            9917U,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "profile-rescue-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
+    const RescueDefinitionId rescueId =
+        profile.pendingRaid->rescue->definitionId;
+
+    profile.pendingRaid->rescue->secured = true;
+    EXPECT_FALSE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+
+    profile.committedRescues.insert(rescueId);
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+
+    profile.pendingRaid->rescue->secured = false;
+    EXPECT_FALSE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+}
+
+TEST(ProfileStateTest, UnknownCommittedRescueDefinitionIsRejected)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-unknown-rescue", publishedContentRegistry());
+    profile.committedRescues.insert(
+        RescueDefinitionId{"rescue.ordinary.unknown"});
+
+    const ProfileValidationResult validation = validateProfileState(
+        profile, publishedContentRegistry());
+
+    EXPECT_FALSE(validation.valid);
+    EXPECT_NE(validation.message.find("unknown"), std::string::npos);
 }
 
 TEST(ProfileStateTest, CarriedWeightCountsNestedAssetsAndLoadedRoundsOnce)

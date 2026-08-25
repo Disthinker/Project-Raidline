@@ -2500,6 +2500,62 @@ TEST(GameplayWorldRaidTest, StartsActiveRaidWithPublishedExtractionPoint)
     EXPECT_FLOAT_EQ(bounds.size.y, 136.0F);
 }
 
+TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = Vec2{80.0F, 320.0F};
+    config.extractionPoint = ContentRect{
+        Vec2{1080.0F, 260.0F}, Vec2{140.0F, 140.0F}};
+    config.initialEnemies.clear();
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        ContentRect{Vec2{40.0F, 290.0F}, Vec2{200.0F, 120.0F}},
+        2.0F};
+    GameplayWorld world{std::move(config)};
+
+    ASSERT_TRUE(world.ordinarySurvivorRescuePoint().has_value());
+    EXPECT_TRUE(world.ordinarySurvivorRescueInteractionInRange());
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+
+    GameplayInput hold;
+    hold.interactPressed = true;
+    world.update(hold, 1.0F);
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.5F);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+
+    world.update(GameplayInput{}, 0.1F);
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+
+    world.update(hold, 2.0F);
+    EXPECT_TRUE(world.ordinarySurvivorRescueReady());
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueTimeRemaining(), 0.0F);
+    world.confirmOrdinarySurvivorRescue();
+    EXPECT_FALSE(world.ordinarySurvivorRescueInteractionInRange());
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+}
+
+TEST(GameplayWorldRaidTest, InventoryOpenCancelsOrdinarySurvivorTransfer)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = Vec2{80.0F, 320.0F};
+    config.extractionPoint = ContentRect{
+        Vec2{1080.0F, 260.0F}, Vec2{140.0F, 140.0F}};
+    config.initialEnemies.clear();
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        ContentRect{Vec2{40.0F, 290.0F}, Vec2{200.0F, 120.0F}},
+        2.0F};
+    GameplayWorld world{std::move(config)};
+    GameplayInput input;
+    input.interactPressed = true;
+    world.update(input, 0.75F);
+    ASSERT_GT(world.ordinarySurvivorRescueProgress(), 0.0F);
+
+    input.inventoryOpen = true;
+    world.update(input, 0.1F);
+
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+}
+
 TEST(GameplayWorldRaidTest, ActiveWorldAdvancesRaidClock)
 {
     GameplayWorld world;

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-residents-beds-sleep-content-20",
+  "content_version": "raid-ordinary-survivor-rescue-content-21",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -689,6 +689,13 @@
         "duration_seconds": 180,
         "extraction_duration_seconds": 3
       },
+      "rescue": {
+        "id": "rescue.ordinary.greyline_depot",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 40, "y": 290}, "size": {"x": 200, "y": 120}},
+        "interaction_duration_seconds": 2,
+        "ordinary_resident_count": 1
+      },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 300, "y": 300}, "size": {"x": 170, "y": 130}},
@@ -761,6 +768,13 @@
       "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
       "extraction_point": {"position": {"x": 1080, "y": 520}, "size": {"x": 150, "y": 140}},
       "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "rescue": {
+        "id": "rescue.ordinary.riverside_checkpoint",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 1010, "y": 190}, "size": {"x": 170, "y": 90}},
+        "interaction_duration_seconds": 2,
+        "ordinary_resident_count": 1
+      },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 540, "y": 300}, "size": {"x": 170, "y": 130}},
@@ -833,6 +847,13 @@
       "storage_cabinet": {"bounds": {"position": {"x": 40, "y": 40}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
       "extraction_point": {"position": {"x": 1090, "y": 40}, "size": {"x": 140, "y": 130}},
       "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "rescue": {
+        "id": "rescue.ordinary.ashworks_yard",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 400, "y": 430}, "size": {"x": 170, "y": 90}},
+        "interaction_duration_seconds": 2,
+        "ordinary_resident_count": 1
+      },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
         "emergency_extraction_point": {"position": {"x": 680, "y": 420}, "size": {"x": 170, "y": 130}},
