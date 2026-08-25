@@ -718,6 +718,28 @@ ContentRegistry ContentRegistry::fromJson(
             fail("gunsmith full-maintenance definition is invalid");
         }
 
+        const Json &playerMedical = requiredObject(
+            baseServices,
+            "player_medical");
+        registry.playerBaseMedical_ = PlayerBaseMedicalDefinition{
+            requiredPositiveUint(
+                playerMedical,
+                "missing_health_cost_per_point"),
+            requiredPositiveUint(playerMedical, "light_bleeding_cost"),
+            requiredPositiveUint(playerMedical, "heavy_bleeding_cost")};
+        constexpr std::uint32_t maximumMedicalUnitCost = 10000U;
+        if (registry.playerBaseMedical_.missingHealthCostPerPoint >
+                maximumMedicalUnitCost ||
+            registry.playerBaseMedical_.lightBleedingCost >
+                maximumMedicalUnitCost ||
+            registry.playerBaseMedical_.heavyBleedingCost >
+                maximumMedicalUnitCost ||
+            registry.playerBaseMedical_.heavyBleedingCost <
+                registry.playerBaseMedical_.lightBleedingCost)
+        {
+            fail("player Base medical definition is invalid");
+        }
+
         const Json &baseOperations = requiredObject(
             root,
             "base_operations");
@@ -1859,6 +1881,12 @@ const GunsmithFullMaintenanceDefinition &
 ContentRegistry::gunsmithFullMaintenance() const noexcept
 {
     return gunsmithFullMaintenance_;
+}
+
+const PlayerBaseMedicalDefinition &
+ContentRegistry::playerBaseMedical() const noexcept
+{
+    return playerBaseMedical_;
 }
 
 const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept

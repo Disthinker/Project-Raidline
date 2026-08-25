@@ -164,6 +164,11 @@ namespace
         return SDL_FRect{890.0F, 554.0F, 280.0F, 48.0F};
     }
 
+    SDL_FRect baseMedicalServiceButton() noexcept
+    {
+        return SDL_FRect{460.0F, 500.0F, 360.0F, 54.0F};
+    }
+
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
         switch (slot)
@@ -1842,6 +1847,27 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 profileAssetSelection_.reset();
             }
             return;
+        }
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::Medical)
+    {
+        if (!contains(baseMedicalServiceButton(), click.position))
+        {
+            return;
+        }
+        const BaseMedicalServiceReceipt receipt =
+            gameSession_.executeBasePaidMedicalService(
+                nextProfileTransactionId("base-paid-medical"));
+        uiMessage_ = receipt.succeeded
+            ? fmt::format(
+                "PLAYER FULLY TREATED | PAID {}",
+                receipt.currencyPaid)
+            : receipt.message;
+        if (!receipt.succeeded)
+        {
+            gameAudio_.play(SoundEventId::UiDeny);
         }
         return;
     }
@@ -7407,6 +7433,9 @@ void App::renderBaseWorld()
         case BaseFacilityKind::Allocation:
             SDL_SetRenderDrawColor(renderer_, 42, 82, 68, 255);
             break;
+        case BaseFacilityKind::Medical:
+            SDL_SetRenderDrawColor(renderer_, 54, 72, 74, 255);
+            break;
         case BaseFacilityKind::RaidGate:
             SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
             break;
@@ -8836,6 +8865,102 @@ void App::renderBaseAllocation()
     }
 }
 
+void App::renderBaseMedicalService()
+{
+    const SDL_FRect panel{220.0F, 112.0F, 840.0F, 500.0F};
+    SDL_SetRenderDrawColor(renderer_, 20, 29, 30, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 118, 186, 178, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    const ProfileState &profile = gameSession_.profile();
+    const BaseMedicalServicePlan plan = queryBaseMedicalService(
+        profile,
+        publishedContentRegistry());
+    const char *bleeding =
+        profile.medicalStatus.bleeding == BleedingSeverity::Heavy
+        ? "HEAVY BLEEDING"
+        : profile.medicalStatus.bleeding == BleedingSeverity::Light
+            ? "LIGHT BLEEDING"
+            : "NO BLEEDING";
+    const char *pain = hasPain(profile.medicalStatus)
+        ? (painIsSuppressed(profile.medicalStatus)
+            ? "PAIN SUPPRESSED"
+            : "PAIN ACTIVE")
+        : "NO INJURY PAIN";
+
+    SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
+    uiTextRenderer_.render(
+        renderer_, 270.0F, 158.0F,
+        "MEDICAL SERVICE | TEXT/GEOMETRY PLACEHOLDER");
+    const std::string currency = fmt::format(
+        "CURRENCY {}",
+        profile.currency);
+    uiTextRenderer_.render(
+        renderer_, 830.0F, 158.0F, currency.c_str());
+
+    const std::string health = fmt::format(
+        "PLAYER HEALTH {}/100",
+        profile.currentHealth);
+    uiTextRenderer_.render(renderer_, 310.0F, 230.0F, health.c_str());
+    uiTextRenderer_.render(renderer_, 310.0F, 264.0F, bleeding);
+    uiTextRenderer_.render(renderer_, 310.0F, 298.0F, pain);
+    const std::string painkiller = fmt::format(
+        "PAINKILLER REMAINING {} SEC",
+        profile.medicalStatus.painkillerRemainingMs / 1000U);
+    uiTextRenderer_.render(
+        renderer_, 310.0F, 332.0F, painkiller.c_str());
+
+    std::string status;
+    if (plan.quotedCurrency > 0)
+    {
+        status = fmt::format(
+            "TREATMENT QUOTE {} | HP {} + INJURY {} | {}",
+            plan.quotedCurrency,
+            plan.healthCost,
+            plan.injuryCost,
+            plan.canCommit ? "READY" : "INSUFFICIENT CURRENCY");
+    }
+    else
+    {
+        status = plan.message;
+    }
+    SDL_SetRenderDrawColor(
+        renderer_,
+        plan.canCommit ? 176 : 218,
+        plan.canCommit ? 232 : 190,
+        plan.canCommit ? 216 : 150,
+        255);
+    uiTextRenderer_.render(renderer_, 310.0F, 405.0F, status.c_str());
+
+    const SDL_FRect button = baseMedicalServiceButton();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        plan.canCommit ? 48 : 42,
+        plan.canCommit ? 104 : 50,
+        plan.canCommit ? 94 : 52,
+        255);
+    SDL_RenderFillRect(renderer_, &button);
+    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
+    SDL_RenderRect(renderer_, &button);
+    uiTextRenderer_.render(
+        renderer_,
+        button.x + 82.0F,
+        button.y + 20.0F,
+        plan.canCommit ? "PAY & TREAT" : "TREATMENT UNAVAILABLE");
+
+    SDL_SetRenderDrawColor(renderer_, 190, 208, 202, 255);
+    uiTextRenderer_.render(
+        renderer_, 310.0F, 574.0F,
+        "CURRENCY ONLY | PERSONAL MEDICAL ITEMS ARE NOT CONSUMED | ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_SetRenderDrawColor(renderer_, 228, 220, 156, 255);
+        uiTextRenderer_.render(
+            renderer_, 310.0F, 600.0F, uiMessage_.c_str());
+    }
+}
+
 void App::renderBaseDeployment()
 {
     const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
@@ -9015,6 +9140,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Allocation:
             renderBaseAllocation();
+            break;
+        case BaseFacilityKind::Medical:
+            renderBaseMedicalService();
             break;
         case BaseFacilityKind::RaidGate:
             renderBaseDeployment();

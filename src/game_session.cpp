@@ -1412,6 +1412,32 @@ MedicalUseReceipt GameSession::executeBaseMedical(
     return receipt;
 }
 
+BaseMedicalServiceReceipt GameSession::executeBasePaidMedicalService(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseMedicalServiceReceipt receipt = executeBaseMedicalService(
+        candidate,
+        publishedContentRegistry(),
+        BaseMedicalServiceCommand{},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+        return receipt;
+    }
+    presentationEvents_.push_back(
+        GameSessionPresentationEvent::MedicalCompleted);
+    return receipt;
+}
+
 WeaponMaintenanceReceipt GameSession::executeBaseWeaponMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId weaponAssetId,

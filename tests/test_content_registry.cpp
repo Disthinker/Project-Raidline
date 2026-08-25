@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-instant-gunsmith-content-18");
+        "base-paid-medical-content-19");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -73,6 +73,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().maximumDurabilityCostPerPoint,
         2U);
+    EXPECT_EQ(
+        registry.playerBaseMedical().missingHealthCostPerPoint,
+        3U);
+    EXPECT_EQ(registry.playerBaseMedical().lightBleedingCost, 30U);
+    EXPECT_EQ(registry.playerBaseMedical().heavyBleedingCost, 60U);
     EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
@@ -393,6 +398,27 @@ TEST(ContentRegistryTest, RejectsUnsupportedSchema)
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidPlayerBaseMedicalPricing)
+{
+    for (const std::pair<std::string_view, std::string_view> replacement : {
+             std::pair{
+                 std::string_view{"\"missing_health_cost_per_point\": 3"},
+                 std::string_view{"\"missing_health_cost_per_point\": 0"}},
+             std::pair{
+                 std::string_view{"\"light_bleeding_cost\": 30"},
+                 std::string_view{"\"light_bleeding_cost\": 10001"}},
+             std::pair{
+                 std::string_view{"\"heavy_bleeding_cost\": 60"},
+                 std::string_view{"\"heavy_bleeding_cost\": 10"}}})
+    {
+        const std::string invalid = replaceFirst(
+            publishedJsonCopy(), replacement.first, replacement.second);
+        EXPECT_THROW(
+            ContentRegistry::fromJson(invalid),
+            ContentRegistryError);
+    }
 }
 
 TEST(ContentRegistryTest, RejectsDuplicatePublishedResource)

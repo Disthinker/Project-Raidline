@@ -147,6 +147,17 @@ struct GunsmithFullMaintenanceDefinition
         const GunsmithFullMaintenanceDefinition &) = default;
 };
 
+struct PlayerBaseMedicalDefinition
+{
+    std::uint32_t missingHealthCostPerPoint{};
+    std::uint32_t lightBleedingCost{};
+    std::uint32_t heavyBleedingCost{};
+
+    friend bool operator==(
+        const PlayerBaseMedicalDefinition &,
+        const PlayerBaseMedicalDefinition &) = default;
+};
+
 struct BaseOperationsDefinition
 {
     std::uint32_t strainedBelowReserveDays{};
@@ -228,6 +239,9 @@ public:
     const GunsmithFullMaintenanceDefinition &
     gunsmithFullMaintenance() const noexcept;
 
+    [[nodiscard]] const PlayerBaseMedicalDefinition &
+    playerBaseMedical() const noexcept;
+
     [[nodiscard]]
     const BaseOperationsDefinition &baseOperations() const noexcept;
 
@@ -264,6 +278,7 @@ private:
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
+    PlayerBaseMedicalDefinition playerBaseMedical_;
     BaseOperationsDefinition baseOperations_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;

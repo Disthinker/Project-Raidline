@@ -1,11 +1,16 @@
 {
   "schema_version": 1,
-  "content_version": "base-instant-gunsmith-content-18",
+  "content_version": "base-paid-medical-content-19",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
       "current_durability_cost_per_point": 1,
       "maximum_durability_cost_per_point": 2
+    },
+    "player_medical": {
+      "missing_health_cost_per_point": 3,
+      "light_bleeding_cost": 30,
+      "heavy_bleeding_cost": 60
     }
   },
   "base_operations": {

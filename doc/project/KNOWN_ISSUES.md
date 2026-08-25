@@ -78,6 +78,9 @@
 | Raid 往返行动耗时 v1 | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `defaac0` 进入 main；三图分钟值仍是开发期平衡值 |
 | Base 枪匠全面维护服务 v1 | PR #81 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `ace7c69` 进入 main |
 | Base 周期愿望与物资提交 v1 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `eca7d62` 进入 main |
-| Base 运营状态与即时枪械维护 v1 | 当前分支以四项最短储备日数投影运营状态；按用户最新决策，玩家枪械全面维护改为只扣货币并立即完成，content v18 继续兼容 v16/v17 和旧计时任务。Windows Debug、115 项聚焦回归与完整 CTest 903/903 已通过，exact-head CI 待完成 |
+| Base 运营状态与即时枪械维护 v1 | PR #83 以四项最短储备日数投影运营状态，并把玩家枪械全面维护改为只扣货币、立即完成；已通过 exact-head CI 和用户验收，以 `20d9f48` 进入 main |
+| Base 付费医疗服务 v1 | 当前分支加入只扣货币、立即完成的玩家治疗事务与独立医疗设施；不读取或消耗个人医疗物。Windows Debug、80 项聚焦回归和完整 CTest 913/913 已通过，exact-head CI 与用户验收待完成 |
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-operational-readiness-v1.md`。
+外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；GDD 保持只读，待策划线程同步修订。玩家付费医疗与 NPC 设施治疗必须继续保持独立命令，后者未来才消耗世界时间和公共医疗库存。
+
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-paid-medical-service-v1.md`。

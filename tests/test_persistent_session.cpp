@@ -386,6 +386,89 @@ TEST(PersistentSessionTest, GunsmithSaveFailurePreservesInMemoryProfile)
         unchanged->location));
 }
 
+TEST(PersistentSessionTest, PaidBaseMedicalServicePersistsAcrossProcess)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-paid-base-medical",
+        publishedContentRegistry());
+    initial.currency = 1000U;
+    initial.currentHealth = 55;
+    initial.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Heavy, 0U, 400U, 80000U, 12000U};
+    const AssetInstanceId medkit = findDefinition(
+        initial, alpha_content::medkit);
+    ASSERT_NE(medkit, 0U);
+    const std::uint32_t medkitCharges =
+        initial.assets.find(medkit)->remainingCharges;
+    const AssetInstanceId nextAssetId = initial.assets.nextAssetId();
+
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    const BaseMedicalServiceReceipt receipt =
+        active.executeBasePaidMedicalService(
+            "persistent-paid-base-medical-treatment");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.currencyPaid, 195U);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().currency, 805U);
+    EXPECT_EQ(reopened.profile().currentHealth, 100);
+    EXPECT_EQ(
+        reopened.profile().medicalStatus.bleeding,
+        BleedingSeverity::None);
+    EXPECT_EQ(
+        reopened.profile().medicalStatus.painkillerRemainingMs,
+        80000U);
+    EXPECT_EQ(reopened.profile().assets.nextAssetId(), nextAssetId);
+    ASSERT_NE(reopened.profile().assets.find(medkit), nullptr);
+    EXPECT_EQ(
+        reopened.profile().assets.find(medkit)->remainingCharges,
+        medkitCharges);
+}
+
+TEST(PersistentSessionTest, PaidBaseMedicalSaveFailurePreservesProfile)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-paid-base-medical-save",
+        publishedContentRegistry());
+    initial.currency = 1000U;
+    initial.currentHealth = 70;
+    initial.medicalStatus = MedicalStatusState{
+        BleedingSeverity::Light, 30000U, 800U, 0U, 12000U};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BaseMedicalServiceReceipt receipt =
+        session.executeBasePaidMedicalService(
+            "paid-base-medical-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;
