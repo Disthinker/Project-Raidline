@@ -38,7 +38,7 @@
 - `BaseWorld` 与 `GameplayWorld` 互斥运行。Base 不推进敌人、Loot、战斗或 Raid 生命周期。
 - Base 场景、设施对象与 UI 不拥有 Stash、装备、货币或唯一资产。
 - `ProfileState::WorldClockState` 是 Base 与 Raid 共享的唯一权威时间；领域只保存整数世界分钟，日、时分和昼夜均为投影。现实时间戳、离线时长、SDL 帧或 UI 文本不得进入时间真值。
-- 只有未暂停的 Base 世界和 Active Raid 模拟可以推进时钟。主菜单、RaidResult、暂停菜单、Base 库存/设施模态页和离线时间必须冻结；Base 按检查点原子保存，Raid 只随 Settlement 提交，异常退出随出击前 Profile 一并回滚。
+- 只有未暂停的 Base 世界和 Active Raid 模拟可以推进时钟。主菜单、RaidResult、暂停菜单、Base 库存/设施模态页和离线时间必须冻结；Base 按检查点原子保存，Raid 时间只随 Settlement 提交。普通幸存者安全转移是唯一已启用的局中持久事实：它只能写入不含当前 Raid 装备、Loot、HP 和时间的干净恢复候选；异常退出保留该救援事实，同时其余状态仍回滚到出击前。
 - 每日需求只由已跨越的 00:00 日界线驱动。`resolvedDemandCycleCount` 不得领先 WorldClock，重复调用和重复 Settlement 不得重复扣除；多日补算必须有界且不逐日循环。连续时间不递增 ProfileRevision，但必须进入 Profile 指纹与 schema v8。
 - 普通居民只以聚合人数进入 Profile；玩家和具名 NPC 不得重复计入。每日口粮需求必须从该聚合人数投影，床位不足只形成明确缺口，不能由 App 根据场景床铺图形猜测。原 `morale` 运营池不得冒充正式三档居民士气。
 - Base 主动休息只能接受 1～12 小时，并在单一候选 Profile 中推进 WorldClock、结算全部跨越的日界线、同步周期消费者和保存；保存失败、重复事务、Raid pending 或非法时长必须零修改。休息不隐式治疗玩家。
@@ -79,6 +79,7 @@
 - 滚动安全备份只用于主档损坏或迁移失败恢复，不作为玩家回档槽。
 - Deploy 在进入 Raid 前原子持久化完整出击前 Profile；当前产品不保存可续玩的运行中 Raid。关闭程序后必须恢复该出击前状态。
 - 同一结算 ID 最多改变长期档案一次；重放返回已提交结果。旧 schema 遗留的 pending Raid 加载时必须删除该局生成物并原子回滚到入场快照，不能产生重复结算或资产。
+- 普通幸存者只进入 `BasePopulationState` 聚合池，不创建逐人资产或 NPC。每个 `RescueDefinitionId` 最多增加人口一次；未知定义、篡改人数、重复 ID、人口/revision 溢出或保存失败必须零接纳。床位和口粮不足只形成明确预警，不得静默拒绝已完成的安全转移。
 
 ## 生命状态与医疗
 

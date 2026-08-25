@@ -45,7 +45,7 @@ Project_Raidline.exe
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
 - `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和当前活动运行时。Persistent Base 已把 Profile 与 BaseRuntime 接入；Extraction Loop 已让 Alpha `GameplayWorld` 从 pending Raid 快照构造，并只通过 GameSession 命令读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
-- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock、普通居民聚合人数和床位容量因每日口粮、宿舍投影和主动休息进入 ProfileState；建设、具名 NPC、岗位与其他日程仍须等待真正消费者。
+- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock、普通居民聚合人数和床位容量因每日口粮、宿舍投影、主动休息和普通幸存者接纳进入 ProfileState；建设、具名 NPC、岗位与其他日程仍须等待真正消费者。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
 - Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
 
@@ -56,7 +56,7 @@ Project_Raidline.exe
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
 - 七槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、BasePopulationState、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
+- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、BasePopulationState、pending Raid、已提交 Settlement/Rescue ID 与最近一次 RaidResult。
 
 Persistent Base 已实例化资产、基础装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算；Survival Loadout 已扩展为两长枪、手枪、防具、胸挂与背包七槽。未启用的长期系统只通过后续显式迁移加入。
 
@@ -103,7 +103,7 @@ SessionProjection snapshot() const;
 - 命令返回 receipt 与明确领域事实；UI 不读取或持有可变领域对象。
 - 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
 - Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
-- Raid 帧内模拟不每帧保存；Deploy 先原子保存精确的出击前 Profile，再仅在内存建立 pending Raid 和本局生成资产。正式终局以同一 SettlementId 原子提交；进程关闭或异常退出后重新加载磁盘上的出击前 Profile。
+- Raid 帧内模拟不每帧保存；Deploy 先原子保存精确的出击前 Profile，再仅在内存建立 pending Raid 和本局生成资产。普通幸存者安全转移完成时，GameSession 同时构造活动候选与不含当前 Raid 瞬态的干净恢复候选，只保存后者；保存成功后才交换内存并确认世界状态。正式终局仍以同一 SettlementId 原子提交；进程关闭或异常退出后加载最近干净恢复档，因此只保留已提交救援，装备、Loot、HP 和 Raid 时间仍回滚。
 - 当前 GridInventory 适配器的整堆拖拽预览与提交共用同一领域规则：空目标保持 transform/transfer，同定义未满堆按上限部分填满；拒绝时源、目标、高水位和 ID 序列不变。Ctrl/Shift 数量拖拽继续使用独立的精确数量原子合同。
 
 ## 动作、模拟、射击与随机
@@ -153,13 +153,13 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 与 Survival Loadout 依次升级到 v2～v6，Base 资源分配使用 v7，世界时钟与每日需求使用 v8。v8 保存整数世界分钟和已结算日界线；v1～v7 迁移到第 1 日 08:00 且不重放旧 Raid 次数。内容版本兼容仍独立于 Profile schema。
+- Persistent Base 落地 schema v1，Extraction Loop 与 Survival Loadout 依次升级到 v2～v6，Base 资源分配/时间/服务/人口依次演进到 v12；普通幸存者安全转移使用 schema v13 保存稳定救援账本、pending 救援快照和结果人数。v12 迁移为空救援账本；内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
 - 设置与档案分文件保存。Steam 云存档以后只同步本地档案文件，不进入领域模型。
 - 迁移只能逐版本执行；失败时保留原文件并尝试最近有效备份。未知定义、重复实例 ID、坏引用和高水位倒退均拒绝加载。
-- Alpha 不支持 Raid 中途续玩。新部署不会把 pending Raid 写入磁盘；加载旧版本遗留的 pending Raid 时清理本局生成 Loot、恢复入场状态并返回 Base，不生成失败结算。未来续玩通过新增活动快照版本实现。
+- Alpha 不支持 Raid 中途续玩。新部署不会把 pending Raid 写入磁盘；局中救援检查点也只保存干净恢复 Profile，不保存 pending Raid。加载旧版本遗留的 pending Raid 时清理本局生成 Loot、恢复入场状态并返回 Base，不生成失败结算。未来续玩通过新增活动快照版本实现。
 
 ## 迁移顺序
 

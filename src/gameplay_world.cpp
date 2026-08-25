@@ -357,6 +357,26 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         config.extractionPoint.position,
         config.extractionPoint.size};
 
+    if (config.rescue.has_value())
+    {
+        const auto &rescue = *config.rescue;
+        if (!std::isfinite(rescue.transferPoint.position.x) ||
+            !std::isfinite(rescue.transferPoint.position.y) ||
+            !std::isfinite(rescue.transferPoint.size.x) ||
+            !std::isfinite(rescue.transferPoint.size.y) ||
+            rescue.transferPoint.size.x <= 0.0F ||
+            rescue.transferPoint.size.y <= 0.0F ||
+            !std::isfinite(rescue.interactionDurationSeconds) ||
+            rescue.interactionDurationSeconds <= 0.0F)
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig rescue settings are invalid"};
+        }
+        ordinarySurvivorRescuePoint_ = rescue.transferPoint;
+        ordinarySurvivorRescueDurationSeconds_ =
+            rescue.interactionDurationSeconds;
+    }
+
     if (config.highRisk.enabled)
     {
         const HighRiskWorldConfig &highRisk = config.highRisk;
@@ -809,6 +829,7 @@ void GameplayWorld::update(
         !player_.isControlled() && playerInEmergencyExtraction,
         !player_.isControlled() && playerInConditionalExtraction);
     updateHighRiskActivation(input, deltaTime, centerAfterMovement);
+    updateOrdinarySurvivorRescue(input, deltaTime, centerAfterMovement);
     if (raidSession_.phase() == RaidPhase::HighRisk)
     {
         highRiskActivationElapsedSeconds_ = highRiskActivationDurationSeconds_;
@@ -1432,6 +1453,64 @@ bool GameplayWorld::highRiskControlInteractionInRange() const noexcept
         return false;
     }
     return pointInside(*highRiskControlPoint_, playerCenter(player_));
+}
+
+const std::optional<ContentRect> &
+GameplayWorld::ordinarySurvivorRescuePoint() const noexcept
+{
+    return ordinarySurvivorRescuePoint_;
+}
+
+float GameplayWorld::ordinarySurvivorRescueProgress() const noexcept
+{
+    if (ordinarySurvivorRescueDurationSeconds_ <= 0.0F)
+    {
+        return 0.0F;
+    }
+    return std::clamp(
+        ordinarySurvivorRescueElapsedSeconds_ /
+            ordinarySurvivorRescueDurationSeconds_,
+        0.0F,
+        1.0F);
+}
+
+float GameplayWorld::ordinarySurvivorRescueTimeRemaining() const noexcept
+{
+    return std::max(
+        0.0F,
+        ordinarySurvivorRescueDurationSeconds_ -
+            ordinarySurvivorRescueElapsedSeconds_);
+}
+
+bool GameplayWorld::ordinarySurvivorRescueInteractionInRange() const noexcept
+{
+    return ordinarySurvivorRescuePoint_.has_value() &&
+           !ordinarySurvivorRescueSecured_ && raidSession_.isActive() &&
+           pointInside(*ordinarySurvivorRescuePoint_, playerCenter(player_));
+}
+
+bool GameplayWorld::ordinarySurvivorRescueReady() const noexcept
+{
+    return ordinarySurvivorRescueInteractionInRange() &&
+           ordinarySurvivorRescueDurationSeconds_ > 0.0F &&
+           ordinarySurvivorRescueElapsedSeconds_ >=
+               ordinarySurvivorRescueDurationSeconds_;
+}
+
+void GameplayWorld::confirmOrdinarySurvivorRescue() noexcept
+{
+    if (ordinarySurvivorRescueReady())
+    {
+        ordinarySurvivorRescueSecured_ = true;
+    }
+}
+
+void GameplayWorld::cancelOrdinarySurvivorRescueInteraction() noexcept
+{
+    if (!ordinarySurvivorRescueSecured_)
+    {
+        ordinarySurvivorRescueElapsedSeconds_ = 0.0F;
+    }
 }
 
 float GameplayWorld::weaponSpreadDegrees() const noexcept
@@ -2160,6 +2239,35 @@ void GameplayWorld::updateHighRiskActivation(
     {
         static_cast<void>(raidSession_.triggerHighRisk());
     }
+}
+
+void GameplayWorld::updateOrdinarySurvivorRescue(
+    const GameplayInput &input,
+    float deltaTime,
+    Vec2 playerPosition)
+{
+    if (!ordinarySurvivorRescuePoint_.has_value() ||
+        ordinarySurvivorRescueSecured_ || !raidSession_.isActive())
+    {
+        return;
+    }
+
+    const bool canContinue =
+        !player_.isControlled() && !input.inventoryOpen &&
+        input.interactPressed &&
+        pointInside(*ordinarySurvivorRescuePoint_, playerPosition);
+    if (!canContinue)
+    {
+        ordinarySurvivorRescueElapsedSeconds_ = 0.0F;
+        return;
+    }
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    {
+        return;
+    }
+    ordinarySurvivorRescueElapsedSeconds_ = std::min(
+        ordinarySurvivorRescueDurationSeconds_,
+        ordinarySurvivorRescueElapsedSeconds_ + deltaTime);
 }
 
 std::size_t GameplayWorld::spawnHighRiskPressureWave()

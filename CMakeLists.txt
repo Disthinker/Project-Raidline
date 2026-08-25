@@ -250,6 +250,8 @@ add_library(raidline_domain STATIC
     src/profile_combat_domain.h
     src/raid_lifecycle.cpp
     src/raid_lifecycle.h
+    src/raid_rescue_domain.cpp
+    src/raid_rescue_domain.h
     src/raid_action.cpp
     src/raid_action.h
     src/raid_session.cpp
@@ -574,6 +576,10 @@ raidline_add_test(
 raidline_add_test(
     BasePopulationDomainTest
     tests/test_base_population_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    RaidRescueDomainTest
+    tests/test_raid_rescue_domain.cpp
     raidline::domain)
 raidline_add_test(
     BaseServiceDomainTest

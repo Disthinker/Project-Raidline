@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@c01d431` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#84 接受的 Base Growth 基线；PR #84 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `c01d431` 合入。
-- 当前开发分支：`codex/base-residents-beds-sleep-v1`，从干净的 `origin/main@c01d431` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-residents-beds-sleep-v1.md`。
+- `origin/main@2377035` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#85 接受的 Base Growth 基线；PR #85 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `2377035` 合入。
+- 当前开发分支：`codex/raid-ordinary-survivor-rescue-v1`，从干净的 `origin/main@2377035` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#84 已接受。当前进入 **Base 居民、床位与睡眠 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用普通居民聚合、人口口粮、床位投影和 Base 主动休息。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#85 已接受。当前进入 **Raid 普通幸存者安全转移与基地接纳 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用一次性普通幸存者、可中断安全转移、聚合人口接纳和干净恢复检查点。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -39,7 +39,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 24. **Base 周期愿望与物资提交 v1**：PR #82 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `eca7d62` 进入 main。
 25. **Base 运营状态与即时枪械维护 v1**：PR #83 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `20d9f48` 进入 main。
 26. **Base 付费医疗服务 v1**：PR #84 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main。玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。
-27. **Base 居民、床位与睡眠 v1**：当前分支新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；接纳、建设、岗位、正式士气和居民医疗继续延期。
+27. **Base 居民、床位与睡眠 v1**：PR #85 新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；已通过 CI 和用户验收并以 `2377035` 合入 main。
+28. **Raid 普通幸存者安全转移 v1**：当前分支为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。具名 NPC、护送 AI、职业、伤病和正式美术继续延期。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -67,7 +68,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78～#84 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望、运营状态和付费医疗均已完成 CI、用户验收并进入 main。当前居民/床位/睡眠切片已通过 Windows Debug 全目标构建和完整 CTest 923/923，开发代理未启动游戏。
+- PR #86 功能提交 `52592c7` 已通过范围检查、Ubuntu 与 Windows exact-code CI；本地完整 CTest 942/942 通过，等待用户正常游玩验收。
+- PR #78～#85 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望、运营状态、付费医疗和居民/床位/睡眠均已完成 CI、用户验收并进入 main。当前普通幸存者救援树已通过 Windows Debug 全目标构建和完整 CTest 942/942，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -265,7 +267,15 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - Base 新增文字/几何占位宿舍。玩家可查看居民、床位/拥挤、口粮储备和下次日结，并正常选择休息 1、6 或 12 小时；休息不治疗玩家。
 - `queryBaseRest/executeBaseRest` 在候选 Profile 上推进唯一 WorldClock、按人口结算跨越的日界线、同步五日愿望并原子保存。非法时长、Raid pending、过期 revision、重复事务和保存失败均不产生部分提交。
 - schema v12/content v20 保存人口与床位；schema v11 及更早版本使用确定性默认值迁移。Base 实时流逝和 Raid 往返跨日也消费同一人口口粮需求。
-- 幸存者接纳、床位建设、岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
+- 普通幸存者接纳进入当前 Raid 救援切片；床位建设、岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
+
+## Raid 普通幸存者安全转移 v1 当前实现
+
+- content v21 为三张固定图各声明一个稳定、一次性的普通幸存者救援点；内容加载拒绝重复 ID、未知类别、越界以及与障碍、高危区或撤离区重叠的定义。
+- 玩家在区域内持续按住 F 2 秒完成安全转移；松键、离区、受伤、受控制或打开背包都会取消进度。界面只使用双语文字和几何占位，显示接纳后的居民、床位缺口和日口粮预测。
+- `ProfileState::committedRescues` 与 schema v13 幂等保存已完成的稳定救援 ID。接纳立即增加聚合普通居民；床位或口粮不足只预警，不阻止接纳，同图不能重复增加人口。
+- `GameSession` 同时维护活动 Raid 候选和不含 pending Raid 的干净恢复候选。救援写盘只保存人口事实；后续死亡、主动退出或异常关闭仍保留居民，但装备、HP、战利品、资源和 Raid 时间继续恢复到出击前状态。写盘失败则人口、账本和世界确认均不提交。
+- 本切片没有新增或修改正式美术、音频与 manifest；具名 NPC、护送 AI、职业、伤病和逐人模拟继续延期。
 
 ## 尚未完成
 

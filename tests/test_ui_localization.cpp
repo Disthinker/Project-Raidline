@@ -154,6 +154,25 @@ TEST(UiLocalizationTest, ChineseTranslatesDormitoryPopulationAndRest) {
             "休息12小时");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesOrdinarySurvivorRescueFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "HOLD F: SECURE TRANSFER"),
+            "按住 F：执行安全转移");
+
+  const std::string pressure = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "RESIDENTS 8 -> 9 | BEDS 10 | RATIONS 9/DAY");
+  EXPECT_NE(pressure.find("居民 8 -> 9"), std::string::npos);
+  EXPECT_NE(pressure.find("床位 10"), std::string::npos);
+  EXPECT_NE(pressure.find("口粮 9/天"), std::string::npos);
+
+  const std::string pause = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "ESC CONTINUES | RAID EXIT RESTORES GEAR; RESCUES PERSIST");
+  EXPECT_NE(pause.find("已转移幸存者保留"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-residents-beds-sleep-content-20");
+        "raid-ordinary-survivor-rescue-content-21");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -131,6 +131,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
         EXPECT_EQ(publishedMap.highRisk.advancedLootTableId,
                   LootTableDefinitionId{"loot.raid.high_risk_v1"});
+        ASSERT_TRUE(publishedMap.rescue.has_value());
+        EXPECT_EQ(
+            publishedMap.rescue->subjectKind,
+            RaidRescueSubjectKind::OrdinaryResidents);
+        EXPECT_EQ(publishedMap.rescue->ordinaryResidentCount, 1U);
+        EXPECT_FLOAT_EQ(
+            publishedMap.rescue->interactionDurationSeconds,
+            2.0F);
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
              publishedMap.raidEnemyDeploymentIds)
@@ -742,6 +750,39 @@ TEST(ContentRegistryTest, RejectsNormalExtractionOverlappingHighRiskRegion)
         publishedJsonCopy(),
         "{\"id\": \"west_to_east\", \"player_spawn\": {\"x\": 80, \"y\": 330}, \"extraction_point\": {\"position\": {\"x\": 1080, \"y\": 260}",
         "{\"id\": \"west_to_east\", \"player_spawn\": {\"x\": 80, \"y\": 330}, \"extraction_point\": {\"position\": {\"x\": 820, \"y\": 440}");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnsupportedRescueSubjectKind)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"subject_kind\": \"ordinary_residents\"",
+        "\"subject_kind\": \"named_npc\"");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsDuplicateRescueDefinitionId)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "rescue.ordinary.riverside_checkpoint",
+        "rescue.ordinary.greyline_depot");
+
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
+                 ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsRescuePointOverlappingHighRiskRegion)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"transfer_point\": {\"position\": {\"x\": 40, \"y\": 290}, \"size\": {\"x\": 200, \"y\": 120}}",
+        "\"transfer_point\": {\"position\": {\"x\": 300, \"y\": 300}, \"size\": {\"x\": 170, \"y\": 130}}");
 
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid)),
                  ContentRegistryError);

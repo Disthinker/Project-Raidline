@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <tuple>
 
 #include "alpha_content_ids.h"
@@ -48,6 +49,31 @@ std::vector<AssetInstanceId> assets(
     return result;
 }
 
+std::uint64_t greylineWestSpawnSeed()
+{
+    for (std::uint64_t seed = 1U; seed <= 64U; ++seed)
+    {
+        ProfileState probe = makeNewAlphaProfile(
+            "rescue-seed-probe", publishedContentRegistry());
+        const DeployReceipt deployed = executeDeploy(
+            probe,
+            publishedContentRegistry(),
+            DeployCommand{
+                "rescue-seed-raid",
+                "rescue-seed-settlement",
+                seed,
+                MapDefinitionId{"map.v0.test"}},
+            CommandContext{probe.revision, "rescue-seed-deploy"});
+        if (!deployed.succeeded || !probe.pendingRaid.has_value() ||
+            probe.pendingRaid->spawnExtractionPairId != "west_to_east")
+        {
+            continue;
+        }
+        return seed;
+    }
+    throw std::logic_error{"no deterministic rescue test seed was found"};
+}
+
 TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
 {
     GameSession session;
@@ -71,7 +97,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "base-periodic-priority-5");
+        "raid-ordinary-rescue-6");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
@@ -1305,4 +1331,109 @@ TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPreRaidBackup)
     EXPECT_FALSE(reopened.recoveredAbandonedRaid());
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
     EXPECT_EQ(profileStateFingerprint(reopened.profile()), preRaidFingerprint);
+}
+
+TEST(AlphaExtractionSessionTest, SecuredRescuePersistsThroughActiveQuit)
+{
+    TemporarySaveDirectory temporary;
+    const std::uint64_t seed = greylineWestSpawnSeed();
+    {
+        GameSession session;
+        session.configurePersistence(temporary.path());
+        ASSERT_TRUE(session.startNewProfile("rescue-active-quit"));
+        ASSERT_TRUE(session.deployAlpha(
+            seed, MapDefinitionId{"map.v0.test"}));
+        ASSERT_TRUE(session.world().ordinarySurvivorRescueInteractionInRange());
+
+        GameplayInput transfer;
+        transfer.interactPressed = true;
+        session.update(transfer, 2.1F);
+
+        ASSERT_TRUE(session.profile().pendingRaid.has_value());
+        ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
+        EXPECT_TRUE(session.profile().pendingRaid->rescue->secured);
+        EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, 9U);
+        EXPECT_TRUE(session.activeQuitAlphaRaid());
+        ASSERT_TRUE(session.profile().lastRaidResult.has_value());
+        EXPECT_EQ(
+            session.profile().lastRaidResult->rescuedOrdinaryResidents,
+            1U);
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().basePopulation.ordinaryResidents, 9U);
+    EXPECT_TRUE(reopened.profile().committedRescues.contains(
+        RescueDefinitionId{"rescue.ordinary.greyline_depot"}));
+    ASSERT_TRUE(reopened.profile().lastRaidResult.has_value());
+    EXPECT_EQ(
+        reopened.profile().lastRaidResult->rescuedOrdinaryResidents,
+        1U);
+}
+
+TEST(AlphaExtractionSessionTest, SecuredRescueIsCleanAbnormalExitCheckpoint)
+{
+    TemporarySaveDirectory temporary;
+    const std::uint64_t seed = greylineWestSpawnSeed();
+    {
+        GameSession session;
+        session.configurePersistence(temporary.path());
+        ASSERT_TRUE(session.startNewProfile("rescue-abnormal-exit"));
+        ASSERT_TRUE(session.deployAlpha(
+            seed, MapDefinitionId{"map.v0.test"}));
+        GameplayInput transfer;
+        transfer.interactPressed = true;
+        session.update(transfer, 2.1F);
+        ASSERT_EQ(session.profile().basePopulation.ordinaryResidents, 9U);
+        ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+    EXPECT_FALSE(reopened.recoveredAbandonedRaid());
+    EXPECT_EQ(reopened.profile().basePopulation.ordinaryResidents, 9U);
+    EXPECT_TRUE(reopened.profile().committedRescues.contains(
+        RescueDefinitionId{"rescue.ordinary.greyline_depot"}));
+    EXPECT_FALSE(reopened.profile().lastRaidResult.has_value());
+}
+
+TEST(AlphaExtractionSessionTest, RescueCheckpointSaveFailureIsZeroCommit)
+{
+    TemporarySaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("rescue-save-failure"));
+    ASSERT_TRUE(session.deployAlpha(
+        greylineWestSpawnSeed(), MapDefinitionId{"map.v0.test"}));
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
+    const ProfileRevision revision = session.profile().revision;
+    const AssetInstanceId nextAssetId = session.profile().assets.nextAssetId();
+    const std::uint64_t currency = session.profile().currency;
+
+    std::error_code removeError;
+    std::filesystem::remove_all(temporary.path(), removeError);
+    ASSERT_FALSE(removeError);
+    std::ofstream blocker(temporary.path(), std::ios::trunc);
+    blocker << "not a directory";
+    blocker.close();
+
+    GameplayInput transfer;
+    transfer.interactPressed = true;
+    session.update(transfer, 2.1F);
+
+    EXPECT_EQ(session.profile().revision, revision);
+    EXPECT_EQ(session.profile().assets.nextAssetId(), nextAssetId);
+    EXPECT_EQ(session.profile().currency, currency);
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, 8U);
+    EXPECT_TRUE(session.profile().committedRescues.empty());
+    EXPECT_FALSE(session.profile().pendingRaid->rescue->secured);
+    EXPECT_FLOAT_EQ(
+        session.world().ordinarySurvivorRescueProgress(),
+        0.0F);
+    EXPECT_FALSE(session.persistenceMessage().empty());
 }

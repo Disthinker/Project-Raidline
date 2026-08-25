@@ -1268,6 +1268,7 @@ ContentRegistry ContentRegistry::fromJson(
                 std::move(definition));
         }
 
+        std::set<RescueDefinitionId> rescueDefinitionIds;
         for (const Json &mapValue :
              requiredArray(root, "maps"))
         {
@@ -1416,6 +1417,32 @@ ContentRegistry ContentRegistry::fromJson(
                     raidRules,
                     "extraction_duration_seconds",
                     true)};
+
+            if (mapValue.contains("rescue"))
+            {
+                const Json &rescue = requiredObject(mapValue, "rescue");
+                const std::string subjectKind =
+                    requiredString(rescue, "subject_kind");
+                if (subjectKind != "ordinary_residents")
+                {
+                    fail("map rescue subject kind is not supported");
+                }
+                RaidRescueDefinition rescueDefinition{
+                    RescueDefinitionId{requiredString(rescue, "id")},
+                    RaidRescueSubjectKind::OrdinaryResidents,
+                    parseRect(rescue, "transfer_point"),
+                    requiredFiniteFloat(
+                        rescue, "interaction_duration_seconds", true),
+                    requiredPositiveUint(rescue, "ordinary_resident_count")};
+                if (!hasPrefix(rescueDefinition.id.value(), "rescue.") ||
+                    !rescueDefinitionIds.insert(rescueDefinition.id).second ||
+                    rescueDefinition.interactionDurationSeconds > 30.0F ||
+                    rescueDefinition.ordinaryResidentCount > 16U)
+                {
+                    fail("map rescue definition is invalid or duplicated");
+                }
+                definition.rescue = std::move(rescueDefinition);
+            }
 
             if (mapValue.contains("high_risk"))
             {
@@ -1572,7 +1599,11 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.walkableBounds) ||
                 !rectInside(
                     definition.extractionPoint,
-                    definition.walkableBounds))
+                    definition.walkableBounds) ||
+                (definition.rescue.has_value() &&
+                 !rectInside(
+                     definition.rescue->transferPoint,
+                     definition.walkableBounds)))
             {
                 fail("map anchors are outside the connected walkable bounds");
             }
@@ -1594,6 +1625,13 @@ ContentRegistry ContentRegistry::fromJson(
                 if (!rectInside(blocker.bounds, definition.walkableBounds))
                 {
                     fail("map ballistic blocker is outside walkable bounds");
+                }
+                if (definition.rescue.has_value() &&
+                    rectsOverlap(
+                        definition.rescue->transferPoint,
+                        blocker.bounds))
+                {
+                    fail("map rescue overlaps a ballistic blocker");
                 }
             }
 
@@ -1675,6 +1713,22 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     fail("high-risk interaction regions overlap");
                 }
+                if (definition.rescue.has_value() &&
+                    (rectsOverlap(
+                         definition.rescue->transferPoint,
+                         definition.highRisk.emergencyExtractionPoint) ||
+                     rectsOverlap(
+                         definition.rescue->transferPoint,
+                         definition.highRisk.conditionalExtractionPoint) ||
+                     rectsOverlap(
+                         definition.rescue->transferPoint,
+                         definition.highRisk.activationControlPoint) ||
+                     rectsOverlap(
+                         definition.rescue->transferPoint,
+                         definition.highRisk.advancedResourceArea)))
+                {
+                    fail("map rescue overlaps another interaction region");
+                }
                 for (const EnemySpawnDefinition &spawn :
                      definition.highRisk.pressureSpawns)
                 {
@@ -1726,7 +1780,11 @@ ContentRegistry ContentRegistry::fromJson(
                             definition.highRisk.activationControlPoint) ||
                         rectsOverlap(
                             pair.extractionPoint,
-                            definition.highRisk.advancedResourceArea))
+                            definition.highRisk.advancedResourceArea) ||
+                        (definition.rescue.has_value() &&
+                         rectsOverlap(
+                             pair.extractionPoint,
+                             definition.rescue->transferPoint)))
                     {
                         fail("Raid extraction overlaps another interaction "
                              "region");

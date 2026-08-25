@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -147,6 +148,20 @@ struct GunsmithFullMaintenanceDefinition
         const GunsmithFullMaintenanceDefinition &) = default;
 };
 
+enum class RaidRescueSubjectKind
+{
+    OrdinaryResidents
+};
+
+struct RaidRescueDefinition
+{
+    RescueDefinitionId id;
+    RaidRescueSubjectKind subjectKind{RaidRescueSubjectKind::OrdinaryResidents};
+    ContentRect transferPoint;
+    float interactionDurationSeconds{};
+    std::uint32_t ordinaryResidentCount{};
+};
+
 struct PlayerBaseMedicalDefinition
 {
     std::uint32_t missingHealthCostPerPoint{};
@@ -198,6 +213,7 @@ struct MapDefinition
     StorageCabinetDefinition storageCabinet;
     ContentRect extractionPoint;
     RaidRuleDefinition raidRules;
+    std::optional<RaidRescueDefinition> rescue;
     HighRiskRaidDefinition highRisk;
     LootTableDefinitionId storageLootTableId;
     EnemyDeploymentDefinitionId enemyDeploymentId;

@@ -7,6 +7,7 @@
 #include "alpha_content_ids.h"
 #include "base_resource_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_rescue_domain.h"
 
 namespace
 {
@@ -93,7 +94,12 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(deploy(
         profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, "base-periodic-priority-5");
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-ordinary-rescue-6");
+    ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
+    EXPECT_EQ(
+        profile.pendingRaid->rescue->definitionId,
+        RescueDefinitionId{"rescue.ordinary.riverside_checkpoint"});
+    EXPECT_FALSE(profile.pendingRaid->rescue->secured);
     EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 180U);
@@ -110,6 +116,51 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.worldClock, startingClock);
     EXPECT_EQ(profile.baseResources, startingResources);
     EXPECT_EQ(profile.basePriority, startingPriority);
+}
+
+TEST(RaidLifecycleTest, CommittedMapRescueIsNotOfferedAgain)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "rescue-not-repeated", publishedContentRegistry());
+    profile.committedRescues.insert(
+        RescueDefinitionId{"rescue.ordinary.greyline_depot"});
+
+    ASSERT_TRUE(deploy(profile).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_FALSE(profile.pendingRaid->rescue.has_value());
+}
+
+TEST(RaidLifecycleTest, SecuredRescueSurvivesFailedRaidSettlementExactlyOnce)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "rescue-failed-raid", publishedContentRegistry());
+    ASSERT_TRUE(deploy(profile).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
+    const RaidRescueSnapshot rescue = *profile.pendingRaid->rescue;
+    profile.pendingRaid->rescue->secured = true;
+    const OrdinarySurvivorAdmissionReceipt admitted =
+        executeOrdinarySurvivorAdmission(
+            profile,
+            publishedContentRegistry(),
+            OrdinarySurvivorAdmissionCommand{
+                rescue.definitionId,
+                rescue.ordinaryResidentCount},
+            CommandContext{profile.revision, "rescue-before-death"});
+    ASSERT_TRUE(admitted.succeeded) << admitted.message;
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
+
+    const RaidSettlementReceipt settlement = settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        "settlement-alpha-test",
+        RaidResultOutcome::PlayerDead);
+
+    ASSERT_TRUE(settlement.succeeded) << settlement.message;
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    EXPECT_EQ(profile.lastRaidResult->rescuedOrdinaryResidents, 1U);
+    EXPECT_TRUE(profile.committedRescues.contains(rescue.definitionId));
 }
 
 TEST(RaidLifecycleTest, SettlementUsesNormalOrFailureTravelExactlyOnce)
