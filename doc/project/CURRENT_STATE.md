@@ -65,7 +65,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78～#82 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望均已完成 CI、用户验收并进入 main。当前运营状态切片 Content/Domain/Service/Save/UI 定向回归 104/104、Windows Debug 全目标和完整 CTest 903/903 通过；exact-head CI 与用户正常游玩验收尚未执行，开发代理未启动游戏。
+- PR #78～#82 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望均已完成 CI、用户验收并进入 main。当前运营状态切片 Content/Domain/Service/Save/UI 定向回归 104/104、Windows Debug 全目标和完整 CTest 903/903 通过；PR #83 首个 exact-head Windows/Ubuntu CI 已通过，人工验收发现供应页仓库未选中文本继承深色背景绘制颜色，当前修复已重新完成 Windows Debug 与完整 CTest 903/903，新 exact-head CI 和用户复验待执行。开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

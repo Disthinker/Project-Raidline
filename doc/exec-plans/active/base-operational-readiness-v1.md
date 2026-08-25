@@ -56,4 +56,6 @@
 - [x] 2026-08-25：实现内容驱动运营投影、枪匠冻结时长、旧 content v16 兼容和双语 UI。
 - [x] 2026-08-25：定向 Content/Domain/Service/Save/UI 回归 104/104 通过。
 - [x] 2026-08-25：Windows Debug 全目标与完整 CTest 903/903 通过；开发代理未启动游戏。
-- [ ] exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- [x] 2026-08-25：首个 exact-head Windows/Ubuntu CI 通过；人工验收定位供应页仓库未选中文本继承深色背景绘制颜色的可读性缺陷。
+- [x] 2026-08-25：为供应页标题、仓库行、按钮和状态文本设置显式高对比前景色；Windows Debug 与完整 CTest 903/903 重新通过。
+- [ ] 修复提交的 exact-head Windows/Ubuntu CI 与用户正常游玩复验。

@@ -8398,6 +8398,7 @@ void App::renderBaseSupply()
     const std::string currency = fmt::format(
         "SUPPLY & RECOVERY | CURRENCY {}",
         gameSession_.profile().currency);
+    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
     uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
     const BaseOperationalProjection operations = projectBaseOperations(
         gameSession_.profile().baseResources,
@@ -8407,6 +8408,7 @@ void App::renderBaseSupply()
         baseOperationalTierName(operations.tier),
         baseResourceKindName(operations.limitingResource),
         operations.serviceDurationPercent);
+    SDL_SetRenderDrawColor(renderer_, 224, 214, 174, 255);
     uiTextRenderer_.render(
         renderer_, 96.0F, 122.0F, operationsStatus.c_str());
 
@@ -8433,9 +8435,11 @@ void App::renderBaseSupply()
             supplyName,
             quantity,
             definition.marketBuyPrice * quantity);
+        SDL_SetRenderDrawColor(renderer_, 232, 224, 178, 255);
         uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
     }
 
+    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
     uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT AN ITEM");
     std::size_t rowIndex{};
     for (const AssetRecord *asset : assetsInContainer(
@@ -8452,8 +8456,9 @@ void App::renderBaseSupply()
             26.0F};
         SDL_SetRenderDrawColor(renderer_, 42, 44, 34, 255);
         SDL_RenderFillRect(renderer_, &row);
-        if (profileAssetSelection_.has_value() &&
-            profileAssetSelection_->instanceId == asset->instanceId)
+        const bool selected = profileAssetSelection_.has_value() &&
+            profileAssetSelection_->instanceId == asset->instanceId;
+        if (selected)
         {
             SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
             SDL_RenderRect(renderer_, &row);
@@ -8464,6 +8469,12 @@ void App::renderBaseSupply()
             asset->quantity,
             definition.marketRecyclePrice * asset->quantity,
             asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
+        SDL_SetRenderDrawColor(
+            renderer_,
+            selected ? 255 : 218,
+            selected ? 231 : 214,
+            selected ? 116 : 190,
+            255);
         uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
         ++rowIndex;
     }
@@ -8475,6 +8486,7 @@ void App::renderBaseSupply()
         publishedContentRegistry());
     SDL_SetRenderDrawColor(renderer_, eligible ? 68 : 42, eligible ? 104 : 48, 60, 255);
     SDL_RenderFillRect(renderer_, &reliefButton);
+    SDL_SetRenderDrawColor(renderer_, 228, 232, 214, 255);
     uiTextRenderer_.render(
         renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
         eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
@@ -8482,6 +8494,7 @@ void App::renderBaseSupply()
     const SDL_FRect recycleButton = baseRecycleButton();
     SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
     SDL_RenderFillRect(renderer_, &recycleButton);
+    SDL_SetRenderDrawColor(renderer_, 238, 224, 202, 255);
     uiTextRenderer_.render(renderer_, recycleButton.x + 26.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
 
     const SDL_FRect gunsmithButton = baseGunsmithButton();
@@ -8548,16 +8561,25 @@ void App::renderBaseSupply()
         gunsmithAvailable ? 112 : 52,
         255);
     SDL_RenderFillRect(renderer_, &gunsmithButton);
+    SDL_SetRenderDrawColor(renderer_, 228, 232, 220, 255);
     uiTextRenderer_.render(
         renderer_,
         gunsmithButton.x + 18.0F,
         gunsmithButton.y + 18.0F,
         gunsmithLabel);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        gunsmithAvailable ? 184 : 214,
+        gunsmithAvailable ? 222 : 204,
+        gunsmithAvailable ? 236 : 174,
+        255);
     uiTextRenderer_.render(
         renderer_, 650.0F, 532.0F, gunsmithStatus.c_str());
+    SDL_SetRenderDrawColor(renderer_, 206, 202, 178, 255);
     uiTextRenderer_.render(renderer_, 96.0F, 630.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
+        SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
         uiTextRenderer_.render(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
     }
 }
