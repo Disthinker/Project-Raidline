@@ -89,6 +89,28 @@ TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndInt
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
+TEST(SaveRepositoryTest, SchemaV11AcceptsPeriodicWishContentVersion)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v11-operations-content-migration",
+        publishedContentRegistry());
+    profile.baseResources.pool = BaseResourceBundle{7, 18, 35, 28};
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-periodic-wishes-content-16",
+            11),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(
+        loaded.profile->baseResources.pool,
+        (BaseResourceBundle{7, 18, 35, 28}));
+}
+
 TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
 {
     ProfileState profile = makeNewAlphaProfile(

@@ -1,12 +1,22 @@
 {
   "schema_version": 1,
-  "content_version": "base-periodic-wishes-content-16",
+  "content_version": "base-operational-readiness-content-17",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
       "current_durability_cost_per_point": 1,
       "maximum_durability_cost_per_point": 2,
       "duration_minutes": 240
+    }
+  },
+  "base_operations": {
+    "strained_below_reserve_days": 3,
+    "supported_at_reserve_days": 7,
+    "service_duration_percent": {
+      "critical": 125,
+      "strained": 115,
+      "stable": 100,
+      "supported": 90
     }
   },
   "base_priorities": {

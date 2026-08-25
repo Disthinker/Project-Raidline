@@ -1,5 +1,7 @@
 #include "base_service_domain.h"
 
+#include "base_resource_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -135,11 +137,27 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
             "currency is insufficient for gunsmith service",
             profile.revision);
     }
+    const BaseOperationalProjection operations = projectBaseOperations(
+        profile.baseResources,
+        content.baseOperations());
+    const std::uint64_t adjustedDuration =
+        (static_cast<std::uint64_t>(service.durationMinutes) *
+             operations.serviceDurationPercent +
+         99U) /
+        100U;
+    if (adjustedDuration == 0U ||
+        adjustedDuration > std::numeric_limits<std::uint32_t>::max())
+    {
+        return maintenanceFailure(
+            DomainErrorCode::InvalidQuantity,
+            "gunsmith service duration is invalid",
+            profile.revision);
+    }
     if (profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
         profile.worldClock.elapsedWorldMinutes >
             std::numeric_limits<std::uint64_t>::max() -
-                service.durationMinutes)
+                adjustedDuration)
     {
         return maintenanceFailure(
             DomainErrorCode::RevisionOverflow,
@@ -154,8 +172,11 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
         profile.revision,
         command.weaponAssetId,
         static_cast<std::uint32_t>(quoted),
-        service.durationMinutes,
-        profile.worldClock.elapsedWorldMinutes + service.durationMinutes,
+        static_cast<std::uint32_t>(adjustedDuration),
+        operations.serviceDurationPercent,
+        operations.tier,
+        operations.limitingResource,
+        profile.worldClock.elapsedWorldMinutes + adjustedDuration,
         weapon->currentDurability,
         weapon->currentMaximumDurability,
         factoryMaximum};

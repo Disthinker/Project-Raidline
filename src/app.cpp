@@ -106,6 +106,38 @@ namespace
         return "UNKNOWN";
     }
 
+    const char *baseOperationalTierName(BaseOperationalTier tier) noexcept
+    {
+        switch (tier)
+        {
+        case BaseOperationalTier::Critical:
+            return "CRITICAL";
+        case BaseOperationalTier::Strained:
+            return "STRAINED";
+        case BaseOperationalTier::Stable:
+            return "STABLE";
+        case BaseOperationalTier::Supported:
+            return "SUPPORTED";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseResourceKindName(BaseResourceKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case BaseResourceKind::Food:
+            return "FOOD";
+        case BaseResourceKind::Hygiene:
+            return "HYGIENE";
+        case BaseResourceKind::Morale:
+            return "MORALE";
+        case BaseResourceKind::Security:
+            return "SECURITY";
+        }
+        return "UNKNOWN";
+    }
+
     // Legacy click-page geometry remains only for the supply/deployment
     // adapters while Profile inventory uses drag-and-drop.
     SDL_FRect baseActionButton(std::size_t index) noexcept
@@ -8367,6 +8399,16 @@ void App::renderBaseSupply()
         "SUPPLY & RECOVERY | CURRENCY {}",
         gameSession_.profile().currency);
     uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
+    const BaseOperationalProjection operations = projectBaseOperations(
+        gameSession_.profile().baseResources,
+        publishedContentRegistry().baseOperations());
+    const std::string operationsStatus = fmt::format(
+        "BASE OPERATIONS {} | LIMITING {} | SERVICE TIME {}%",
+        baseOperationalTierName(operations.tier),
+        baseResourceKindName(operations.limitingResource),
+        operations.serviceDurationPercent);
+    uiTextRenderer_.render(
+        renderer_, 96.0F, 122.0F, operationsStatus.c_str());
 
     const auto &supply = fixedSupplyIds();
     for (std::size_t index = 0; index < supply.size(); ++index)
@@ -8488,9 +8530,11 @@ void App::renderBaseSupply()
         gunsmithAvailable = plan.canCommit;
         gunsmithStatus = plan.canCommit
             ? fmt::format(
-                "GUNSMITH QUOTE {} | {} MIN | FULL FACTORY CONDITION",
+                "GUNSMITH QUOTE {} | {} MIN | OPERATIONS {}% TIME | "
+                "FULL FACTORY CONDITION",
                 plan.quotedCurrency,
-                plan.durationMinutes)
+                plan.durationMinutes,
+                plan.durationPercent)
             : plan.message;
     }
     else
@@ -8534,6 +8578,11 @@ void App::renderBaseAllocation()
 
     const BaseResourceState &state =
         gameSession_.profile().baseResources;
+    const BaseOperationsDefinition &operationsDefinition =
+        publishedContentRegistry().baseOperations();
+    const BaseOperationalProjection operations = projectBaseOperations(
+        state,
+        operationsDefinition);
     const WorldClockProjection clock = gameSession_.worldClockProjection();
     const std::string nextDemand = fmt::format(
         "NEXT DAILY NEED IN {}H {:02}M | RESOLVED DAILY CYCLES {}",
@@ -8552,8 +8601,17 @@ void App::renderBaseAllocation()
         state.lastShortfall.hygiene,
         state.lastShortfall.morale,
         state.lastShortfall.security};
+    const std::array<std::uint32_t, 4> dailyDemand{
+        kBaseDailyDemand.food,
+        kBaseDailyDemand.hygiene,
+        kBaseDailyDemand.morale,
+        kBaseDailyDemand.security};
     for (std::size_t index{}; index < values.size(); ++index)
     {
+        const BaseOperationalTier resourceTier = projectBaseResourceTier(
+            values[index].second,
+            dailyDemand[index],
+            operationsDefinition);
         const float y = 174.0F + static_cast<float>(index) * 76.0F;
         const SDL_FRect track{80.0F, y + 23.0F, 450.0F, 24.0F};
         const SDL_FRect fill{
@@ -8563,20 +8621,23 @@ void App::renderBaseAllocation()
             track.h};
         SDL_SetRenderDrawColor(renderer_, 38, 48, 44, 255);
         SDL_RenderFillRect(renderer_, &track);
+        const SDL_Color fillColor = resourceTier == BaseOperationalTier::Critical
+            ? SDL_Color{148, 72, 62, 255}
+            : resourceTier == BaseOperationalTier::Strained
+                ? SDL_Color{164, 132, 58, 255}
+                : resourceTier == BaseOperationalTier::Supported
+                    ? SDL_Color{74, 178, 138, 255}
+                    : SDL_Color{68, 152, 116, 255};
         SDL_SetRenderDrawColor(
             renderer_,
-            values[index].second >= 25U ? 68 : 148,
-            values[index].second >= 25U ? 152 : 72,
-            values[index].second >= 25U ? 116 : 62,
-            255);
+            fillColor.r,
+            fillColor.g,
+            fillColor.b,
+            fillColor.a);
         SDL_RenderFillRect(renderer_, &fill);
         SDL_SetRenderDrawColor(renderer_, 128, 190, 164, 255);
         SDL_RenderRect(renderer_, &track);
-        const char *tier = values[index].second >= 60U
-            ? "STABLE"
-            : values[index].second >= 25U
-                ? "STRAINED"
-                : "CRITICAL";
+        const char *tier = baseOperationalTierName(resourceTier);
         const std::string label = fmt::format(
             "{} {}/100 | {}{}",
             values[index].first,
@@ -8587,6 +8648,13 @@ void App::renderBaseAllocation()
                 : "");
         uiTextRenderer_.render(renderer_, 80.0F, y, label.c_str());
     }
+    const std::string operationsStatus = fmt::format(
+        "BASE OPERATIONS {} | LIMITING {} | SERVICE TIME {}%",
+        baseOperationalTierName(operations.tier),
+        baseResourceKindName(operations.limitingResource),
+        operations.serviceDurationPercent);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 474.0F, operationsStatus.c_str());
     const std::string cycles = fmt::format(
         "DAY {} {:02}:{:02} {} | SHORTAGE NEVER BLOCKS PLAY",
         clock.day,

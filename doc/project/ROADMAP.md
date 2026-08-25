@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-24。
+最后核对：2026-08-25。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#81 已接受。当前优先交付 **Base Growth：周期愿望与物资提交 v1**；范围合同见 `doc/exec-plans/active/base-periodic-wishes-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#82 已接受。当前优先交付 **Base Growth：运营状态与服务效率 v1**；范围合同见 `doc/exec-plans/active/base-operational-readiness-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -41,6 +41,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | Base 世界时钟与每日需求 v1 | PR #79 / merge commit `5d2a11a` |
 | Raid 往返行动耗时 v1 | PR #80 / merge commit `defaac0` |
 | 枪匠全面维护服务 v1 | PR #81 / merge commit `ace7c69` |
+| 周期愿望与物资提交 v1 | PR #82 / merge commit `eca7d62` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -83,7 +84,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 世界时钟与每日需求 v1 | Base/Raid 显示同一日夜时间；每日 00:00 结算四项需求；暂停、离线和未结算 Raid 不偷走时间 | WorldClockState、每日幂等补算、schema v8、Base 检查点、Raid Settlement 提交/异常回滚 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 `5d2a11a` 进入 main；倍率暂为集中开发参数 |
 | Raid 往返行动耗时 v1 | 三张图显示不同抵达时间；出发、正常返程和失败归队推进世界时钟，异常退出精确回滚 | MapDefinition travel、冻结活动快照、schema v9、幂等时间/需求 Settlement | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 `defaac0` 进入 main；不包含夜间视野、路线状态、旅行遭遇、哨所、精力或睡眠 |
 | 枪匠全面维护服务 v1 | 在供应与回收页付费送修受损武器，经过世界时间后领取同一实例并恢复出厂耐久 | BaseServiceJob、服务资产位置、冻结报价、schema v10、原子存档 | PR #81 已通过 exact-head CI 与用户正常游玩验收，以 `ace7c69` 进入 main；不包含设施、人口、并行队列或改枪台 |
-| 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的待分配物资，改善既有基地资源 | BasePriorityDefinition/State、手动原子提交、Raid 回滚快照、schema v11 | 当前分支 Windows Debug 全目标与 898/898 CTest 通过；等待 exact-head CI 和用户正常游玩验收，不包含任务板、人口、士气惩罚、兑换点或自动捐献 |
+| 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的待分配物资，改善既有基地资源 | BasePriorityDefinition/State、手动原子提交、Raid 回滚快照、schema v11 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 `eca7d62` 进入 main；不包含任务板、人口、士气惩罚、兑换点或自动捐献 |
+| 运营状态与服务效率 v1 | 四项资源按最短储备日数形成运营档位；枪匠等待时间随状态温和变化且开工后冻结 | BaseOperationalProjection、content v17、旧 content v16 兼容、服务时间消费者 | 当前分支 104 项定向回归、Windows Debug 全目标和完整 CTest 903/903 通过；不把当前 M 池固化为完整版居民士气，不影响战斗、Loot、价格或核心服务资格 |
 
 ## 当前 Combat Reliability 缺陷
 

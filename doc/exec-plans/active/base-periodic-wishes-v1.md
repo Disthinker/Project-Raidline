@@ -48,4 +48,4 @@
 - [x] 2026-08-24：实现 content v16、愿望领域、五日周期、schema v11、旧档迁移与 Raid 跨周期回滚。
 - [x] 2026-08-24：接入 Allocation 页面手动提交和中英文文字/几何投影。
 - [x] 2026-08-24：Windows Debug 全目标构建与完整 CTest 898/898 通过，开发代理未启动游戏。
-- [ ] 完成 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- [x] 2026-08-24：exact-head Windows/Ubuntu CI 与用户正常游玩验收通过，PR #82 以 merge commit `eca7d62` 普通合入 main。

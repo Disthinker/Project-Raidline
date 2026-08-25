@@ -722,6 +722,43 @@ ContentRegistry ContentRegistry::fromJson(
             fail("gunsmith full-maintenance definition is invalid");
         }
 
+        const Json &baseOperations = requiredObject(
+            root,
+            "base_operations");
+        const Json &serviceDuration = requiredObject(
+            baseOperations,
+            "service_duration_percent");
+        registry.baseOperations_ = BaseOperationsDefinition{
+            requiredPositiveUint(
+                baseOperations,
+                "strained_below_reserve_days"),
+            requiredPositiveUint(
+                baseOperations,
+                "supported_at_reserve_days"),
+            requiredPositiveUint(serviceDuration, "critical"),
+            requiredPositiveUint(serviceDuration, "strained"),
+            requiredPositiveUint(serviceDuration, "stable"),
+            requiredPositiveUint(serviceDuration, "supported")};
+        const BaseOperationsDefinition &operations = registry.baseOperations_;
+        constexpr std::uint32_t maximumReserveDays = 30U;
+        constexpr std::uint32_t maximumDurationPercent = 200U;
+        if (operations.strainedBelowReserveDays <= 1U ||
+            operations.strainedBelowReserveDays >=
+                operations.supportedAtReserveDays ||
+            operations.supportedAtReserveDays > maximumReserveDays ||
+            operations.criticalServiceDurationPercent >
+                maximumDurationPercent ||
+            operations.criticalServiceDurationPercent <
+                operations.strainedServiceDurationPercent ||
+            operations.strainedServiceDurationPercent <
+                operations.stableServiceDurationPercent ||
+            operations.stableServiceDurationPercent != 100U ||
+            operations.stableServiceDurationPercent <
+                operations.supportedServiceDurationPercent)
+        {
+            fail("Base operations definition is invalid");
+        }
+
         std::set<std::string> resources;
         for (const Json &resourceValue :
              requiredArray(root, "published_resources"))
@@ -1843,6 +1880,11 @@ const GunsmithFullMaintenanceDefinition &
 ContentRegistry::gunsmithFullMaintenance() const noexcept
 {
     return gunsmithFullMaintenance_;
+}
+
+const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept
+{
+    return baseOperations_;
 }
 
 std::uint32_t ContentRegistry::basePriorityCycleMinutes() const noexcept

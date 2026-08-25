@@ -59,6 +59,9 @@ TEST(BaseServiceDomainTest, QuotesAndStartsOneAtomicGunsmithJob)
     ASSERT_TRUE(plan.canCommit) << plan.message;
     EXPECT_EQ(plan.quotedCurrency, 130U);
     EXPECT_EQ(plan.durationMinutes, 240U);
+    EXPECT_EQ(plan.durationPercent, 100U);
+    EXPECT_EQ(plan.operationalTier, BaseOperationalTier::Stable);
+    EXPECT_EQ(plan.limitingResource, BaseResourceKind::Food);
     EXPECT_EQ(plan.currentDurabilityBeforeCenti, 5000U);
     EXPECT_EQ(plan.currentMaximumBeforeCenti, 8000U);
     EXPECT_EQ(plan.targetFactoryDurabilityCenti, 10000U);
@@ -79,6 +82,48 @@ TEST(BaseServiceDomainTest, QuotesAndStartsOneAtomicGunsmithJob)
         profile.assets.find(rifleId)->location,
         AssetLocation{BaseServiceAssetLocation{receipt.jobId}});
     EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseServiceDomainTest, OperationalReadinessAdjustsAndFreezesDuration)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState critical = damagedRifleProfile();
+    critical.baseResources.pool = BaseResourceBundle{7, 100, 100, 100};
+    const AssetInstanceId criticalRifle = firstStashAsset(
+        critical,
+        alpha_content::rifle);
+    const GunsmithMaintenancePlan criticalPlan = queryGunsmithMaintenance(
+        critical,
+        content,
+        StartGunsmithMaintenanceCommand{criticalRifle});
+    ASSERT_TRUE(criticalPlan.canCommit) << criticalPlan.message;
+    EXPECT_EQ(criticalPlan.durationPercent, 125U);
+    EXPECT_EQ(criticalPlan.durationMinutes, 300U);
+    ASSERT_TRUE(executeGunsmithMaintenance(
+        critical,
+        content,
+        StartGunsmithMaintenanceCommand{criticalRifle},
+        CommandContext{critical.revision, "critical-service"}).succeeded);
+    ASSERT_TRUE(critical.gunsmithMaintenanceJob.has_value());
+    const std::uint64_t frozenCompletion =
+        critical.gunsmithMaintenanceJob->completionWorldMinute;
+    critical.baseResources.pool = BaseResourceBundle{100, 100, 100, 100};
+    EXPECT_EQ(
+        critical.gunsmithMaintenanceJob->completionWorldMinute,
+        frozenCompletion);
+
+    ProfileState supported = damagedRifleProfile();
+    supported.baseResources.pool = BaseResourceBundle{56, 42, 35, 28};
+    const AssetInstanceId supportedRifle = firstStashAsset(
+        supported,
+        alpha_content::rifle);
+    const GunsmithMaintenancePlan supportedPlan = queryGunsmithMaintenance(
+        supported,
+        content,
+        StartGunsmithMaintenanceCommand{supportedRifle});
+    ASSERT_TRUE(supportedPlan.canCommit) << supportedPlan.message;
+    EXPECT_EQ(supportedPlan.durationPercent, 90U);
+    EXPECT_EQ(supportedPlan.durationMinutes, 216U);
 }
 
 TEST(BaseServiceDomainTest, RejectionsPreserveFingerprintAndHighWaterMarks)

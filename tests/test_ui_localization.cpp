@@ -84,6 +84,13 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
                 UiLanguage::SimplifiedChinese,
                 "Stash has no legal space for serviced weapon"),
             "仓库没有可放置维护武器的合法空间");
+
+  const std::string operations = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "BASE OPERATIONS SUPPORTED | LIMITING FOOD | SERVICE TIME 90%");
+  EXPECT_NE(operations.find("基地运转 充足"), std::string::npos);
+  EXPECT_NE(operations.find("短板 食物"), std::string::npos);
+  EXPECT_NE(operations.find("服务耗时 90%"), std::string::npos);
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {

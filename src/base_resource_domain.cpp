@@ -1,16 +1,84 @@
 #include "base_resource_domain.h"
 
+#include <array>
 #include <limits>
 #include <stdexcept>
 
 namespace
 {
+struct ResourceReserve
+{
+    BaseResourceKind kind{};
+    std::uint32_t current{};
+    std::uint32_t dailyDemand{};
+};
+
 BaseResourcePlan planFailure(
     DomainErrorCode error,
     std::string message,
     ProfileRevision revision)
 {
     return {false, error, std::move(message), revision, {}};
+}
+
+BaseOperationalProjection projectBaseOperationsImpl(
+    const BaseResourceState &state,
+    const BaseOperationsDefinition &definition) noexcept
+{
+    const std::array<ResourceReserve, 4> resources{{
+        {BaseResourceKind::Food, state.pool.food, kBaseDailyDemand.food},
+        {BaseResourceKind::Hygiene, state.pool.hygiene,
+         kBaseDailyDemand.hygiene},
+        {BaseResourceKind::Morale, state.pool.morale,
+         kBaseDailyDemand.morale},
+        {BaseResourceKind::Security, state.pool.security,
+         kBaseDailyDemand.security}}};
+    const ResourceReserve *limiting = &resources.front();
+    for (const ResourceReserve &resource : resources)
+    {
+        const std::uint64_t candidate =
+            static_cast<std::uint64_t>(resource.current) *
+            limiting->dailyDemand;
+        const std::uint64_t currentMinimum =
+            static_cast<std::uint64_t>(limiting->current) *
+            resource.dailyDemand;
+        if (candidate < currentMinimum)
+        {
+            limiting = &resource;
+        }
+    }
+
+    BaseOperationalProjection projection;
+    projection.limitingResource = limiting->kind;
+    projection.reserveDays = BaseResourceBundle{
+        state.pool.food / kBaseDailyDemand.food,
+        state.pool.hygiene / kBaseDailyDemand.hygiene,
+        state.pool.morale / kBaseDailyDemand.morale,
+        state.pool.security / kBaseDailyDemand.security};
+    projection.tier = projectBaseResourceTier(
+        limiting->current,
+        limiting->dailyDemand,
+        definition);
+    switch (projection.tier)
+    {
+    case BaseOperationalTier::Critical:
+        projection.serviceDurationPercent =
+            definition.criticalServiceDurationPercent;
+        break;
+    case BaseOperationalTier::Strained:
+        projection.serviceDurationPercent =
+            definition.strainedServiceDurationPercent;
+        break;
+    case BaseOperationalTier::Stable:
+        projection.serviceDurationPercent =
+            definition.stableServiceDurationPercent;
+        break;
+    case BaseOperationalTier::Supported:
+        projection.serviceDurationPercent =
+            definition.supportedServiceDurationPercent;
+        break;
+    }
+    return projection;
 }
 
 bool hasChildren(const ProfileState &profile, AssetInstanceId ownerId) noexcept
@@ -75,6 +143,33 @@ std::uint32_t consumeCycles(
         : current - static_cast<std::uint32_t>(totalDemand);
     return latestShortfall;
 }
+}
+
+BaseOperationalTier projectBaseResourceTier(
+    std::uint32_t current,
+    std::uint32_t dailyDemand,
+    const BaseOperationsDefinition &definition) noexcept
+{
+    if (current < dailyDemand)
+    {
+        return BaseOperationalTier::Critical;
+    }
+    if (current < dailyDemand * definition.strainedBelowReserveDays)
+    {
+        return BaseOperationalTier::Strained;
+    }
+    if (current >= dailyDemand * definition.supportedAtReserveDays)
+    {
+        return BaseOperationalTier::Supported;
+    }
+    return BaseOperationalTier::Stable;
+}
+
+BaseOperationalProjection projectBaseOperations(
+    const BaseResourceState &state,
+    const BaseOperationsDefinition &definition) noexcept
+{
+    return projectBaseOperationsImpl(state, definition);
 }
 
 BaseResourcePlan queryBaseResourceContribution(
