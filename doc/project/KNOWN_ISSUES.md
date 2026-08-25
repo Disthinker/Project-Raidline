@@ -13,6 +13,7 @@
 | RL-INV-004 | pending Raid 根资产被校验为必须永久保持装备，导致局内拖放卸装/重装整笔失败 | PR #69 已改为验证根资产仍属于随身所有权树，通过 exact-head CI 与用户验收后以 `f593719` 合入 main |
 | RL-UI-002 | Base/Raid 缺少可冻结世界的 Esc 暂停菜单，旧 Raid Esc 会进入双按放弃流程 | PR #69 已加入继续、设置、回主菜单和退桌面菜单，并移除双按 Esc 放弃入口；已通过用户验收并合入 main |
 | RL-UI-003 | Base 静止朝向回左；Base/Raid 玩家及敌人未共享连续碰撞，纵向移动与敌人追击可穿过障碍；玩家文本没有中文/语言设置 | PR #78 已修复并通过 exact-head CI 与用户正常游玩验收，以 merge commit `ba8283f` 进入 main |
+| RL-UI-004 | 成功撤离物资已进入 BaseIntake，但仓库页只渲染 Stash，导致返还物只能在资源分配设施中看到 | PR #87 已在仓库页加入可拖拽、可 Ctrl+左键收纳的独立返还格区；Windows Debug 与 959/959 CTest 通过，等待用户正常游玩复验 |
 | RL-COMBAT-001 | 普通命中/爆头/弱点缺少领域命中部位合同 | PR #61 已完成 Head/Torso/Legs、Normal/Headshot/WeakPoint、防具接线与代码反馈，并通过 CI 和用户验收后合入 main |
 | RL-MED-001 | Raid 缺少流血、疼痛与对应战地医疗闭环 | PR #62 已通过 exact-head CI 和用户正常游玩验收，并以 merge commit `ea918ab` 进入 main |
 | RL-MED-002 | 疼痛叫声缺少墙/门声学遮挡 | 当前地图没有正式墙/门遮挡查询；本切片只使用 300 世界单位显式警觉刺激，完整遮挡需在空间领域出现实际消费者后实现 |

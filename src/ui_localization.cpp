@@ -13,7 +13,9 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"PENDING RAID RETURNS - KEEP, CONTRIBUTE, BUILD, OR WISH",
+    {{"RAID RETURNS (DRAG OR CTRL+CLICK TO KEEP)",
+      "对局返还物资（拖拽或 Ctrl+左键收纳）"},
+     {"PENDING RAID RETURNS - KEEP, CONTRIBUTE, BUILD, OR WISH",
       "对局待分配物资 - 保留、捐献、转为建材或满足愿望"},
      {"CONSTRUCTION CANCELLED | MATERIAL REFUNDED",
       "建设已取消 | 建材已返还"},
@@ -430,6 +432,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"OBJECTIVE", "目标"},
      {"SCORE", "得分"},
      {"RAID", "对局"},
+     {"WAREHOUSE", "仓储"},
      {"STASH", "仓库"},
      {"UNKNOWN", "未知"},
      {"medical asset does not exist", "医疗物品不存在"},

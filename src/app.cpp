@@ -68,8 +68,11 @@ namespace
     constexpr float kFlowButtonWidth{280.0F};
     constexpr float kFlowButtonHeight{60.0F};
     constexpr float kBaseStashX{668.0F};
-    constexpr float kBaseStashY{132.0F};
-    constexpr float kBaseStashCellSize{28.0F};
+    constexpr float kBaseStashY{118.0F};
+    constexpr float kBaseStashCellSize{20.0F};
+    constexpr float kBaseIntakeX{668.0F};
+    constexpr float kBaseIntakeY{398.0F};
+    constexpr float kBaseIntakeCellSize{20.0F};
     constexpr float kBasePocketCellSize{28.0F};
     constexpr std::array<EquipmentSlotKind, 3> kWeaponEquipmentSlots{
         EquipmentSlotKind::PrimaryWeapon,
@@ -318,6 +321,12 @@ namespace
                 kBaseStashY,
                 kBaseStashCellSize,
                 "STASH"});
+            result.push_back(ProfileGridView{
+                ProfileContainerId::baseIntake(),
+                kBaseIntakeX,
+                kBaseIntakeY,
+                kBaseIntakeCellSize,
+                "RAID RETURNS (DRAG OR CTRL+CLICK TO KEEP)"});
         }
 
         if (const auto chest = equippedAsset(
@@ -7801,9 +7810,21 @@ void App::renderProfileGrid(
         y,
         static_cast<float>(size.width) * cellSize,
         static_cast<float>(size.height) * cellSize};
-    SDL_SetRenderDrawColor(renderer_, 20, 27, 30, 255);
+    const bool pendingReturns =
+        container == ProfileContainerId::baseIntake();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        pendingReturns ? 34 : 20,
+        pendingReturns ? 31 : 27,
+        pendingReturns ? 20 : 30,
+        255);
     SDL_RenderFillRect(renderer_, &grid);
-    SDL_SetRenderDrawColor(renderer_, 86, 102, 108, 255);
+    SDL_SetRenderDrawColor(
+        renderer_,
+        pendingReturns ? 156 : 86,
+        pendingReturns ? 132 : 102,
+        pendingReturns ? 62 : 108,
+        255);
     for (int column = 0; column <= size.width; ++column)
     {
         SDL_RenderLine(
@@ -8423,7 +8444,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     uiTextRenderer_.render(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
     if (includeStash)
     {
-        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "STASH");
+        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "WAREHOUSE");
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
     }
 

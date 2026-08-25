@@ -99,6 +99,15 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
   EXPECT_NE(operations.find("短板 食物"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesWarehouseRaidReturnTray) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WAREHOUSE"),
+            "仓储");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RAID RETURNS (DRAG OR CTRL+CLICK TO KEEP)"),
+            "对局返还物资（拖拽或 Ctrl+左键收纳）");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {
   const std::string wish = localizeUiText(
       UiLanguage::SimplifiedChinese,
