@@ -148,7 +148,7 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
 {
     const BaseWorld world;
-    ASSERT_EQ(world.facilities().size(), 4U);
+    ASSERT_EQ(world.facilities().size(), 5U);
     EXPECT_NE(
         std::find_if(
             world.facilities().begin(),
@@ -159,4 +159,32 @@ TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
     EXPECT_STREQ(
         baseFacilityName(BaseFacilityKind::Allocation),
         "ALLOCATION & NEEDS");
+}
+
+TEST(BaseWorldTest, ExposesAndInteractsWithMedicalFacility)
+{
+    BaseWorld world;
+    EXPECT_NE(
+        std::find_if(
+            world.facilities().begin(),
+            world.facilities().end(),
+            [](const BaseFacility &facility)
+            { return facility.kind == BaseFacilityKind::Medical; }),
+        world.facilities().end());
+    EXPECT_STREQ(
+        baseFacilityName(BaseFacilityKind::Medical),
+        "MEDICAL SERVICE");
+
+    BaseInput moveRight;
+    moveRight.moveRight = true;
+    for (int index{}; index < 50; ++index)
+    {
+        static_cast<void>(world.update(moveRight, 0.05F));
+    }
+    EXPECT_EQ(world.interactableFacility(), BaseFacilityKind::Medical);
+    BaseInput interact;
+    interact.interactJustPressed = true;
+    EXPECT_EQ(
+        world.update(interact, 0.0F),
+        BaseFacilityKind::Medical);
 }

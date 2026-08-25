@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@eca7d62` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#82 接受的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望；PR #82 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `eca7d62` 合入。
-- 当前开发分支：`codex/base-operational-readiness-v1`，从干净的 `origin/main@eca7d62` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-operational-readiness-v1.md`。
+- `origin/main@20d9f48` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#83 接受的 Base Growth 基线；PR #83 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `20d9f48` 合入。
+- 当前开发分支：`codex/base-paid-medical-service-v1`，从干净的 `origin/main@20d9f48` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-paid-medical-service-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#82 已接受。当前进入 **Base 运营状态与即时枪械维护 v1**；外部 GDD 继续只读，本仓库 ExecPlan 让四项运营储备形成非死档的可读投影，并按用户最新决策把玩家枪械全面维护改为只扣货币、立即完成。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#83 已接受。当前进入 **Base 付费医疗服务 v1**；外部 GDD 继续只读，本仓库 ExecPlan 将玩家付费医疗与个人医疗物自疗拆成两个独立事务。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -37,7 +37,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 22. **Raid 往返行动耗时 v1**：PR #80 为三图增加版本化出发/正常返程/失败归队时间，出击前显示抵达昼夜预览；旅行、有效 Raid 时间与跨日需求作为同一活动事务提交，异常退出精确回到出发前时钟和资源。已通过 exact-head CI 和用户正常游玩验收，以 merge commit `defaac0` 进入 main。
 23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
 24. **Base 周期愿望与物资提交 v1**：PR #82 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `eca7d62` 进入 main。
-25. **Base 运营状态与即时枪械维护 v1**：当前分支按四项资源的最短可支撑日数投影危急/紧张/稳定/充足；枪匠全面维护只扣除货币并在同一存档事务中立即恢复出厂耐久、清除故障，不再推进时间。人口、床位、正式居民士气、生产和自动防守继续延期。
+25. **Base 运营状态与即时枪械维护 v1**：PR #83 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `20d9f48` 进入 main。
+26. **Base 付费医疗服务 v1**：当前分支加入独立医疗设施；玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。NPC 医疗、公共医疗库存、骨折与内伤继续延期。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -65,7 +66,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78～#82 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务和周期愿望均已完成 CI、用户验收并进入 main。PR #83 已完成 Supply 未选中文本对比度修复；用户随后把玩家枪械全面维护修订为立即货币服务，当前修订已通过 Windows Debug 全目标、115 项聚焦回归与完整 CTest 903/903。exact-head CI 和用户复验待完成；开发代理未启动游戏。
+- PR #78～#83 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望和运营状态均已完成 CI、用户验收并进入 main。当前付费医疗切片已通过 Windows Debug 全目标、80 项聚焦回归与完整 CTest 913/913；exact-head CI 和用户正常游玩验收待完成，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

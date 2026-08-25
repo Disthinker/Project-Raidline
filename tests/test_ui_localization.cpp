@@ -111,6 +111,30 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {
             "所选物品不符合基地当前愿望");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesPaidBaseMedicalService) {
+  const std::string quote = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "TREATMENT QUOTE 195 | HP 135 + INJURY 60 | READY");
+  EXPECT_NE(quote.find("治疗报价 195"), std::string::npos);
+  EXPECT_NE(quote.find("生命 135"), std::string::npos);
+  EXPECT_NE(quote.find("伤势 60"), std::string::npos);
+
+  const std::string completed = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "PLAYER FULLY TREATED | PAID 195");
+  EXPECT_NE(completed.find("玩家已完成全面治疗"), std::string::npos);
+  EXPECT_NE(completed.find("已支付 195"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "player does not need Base medical treatment"),
+            "玩家当前不需要基地医疗");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "currency is insufficient for player medical service"),
+            "货币不足，无法使用玩家医疗服务");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

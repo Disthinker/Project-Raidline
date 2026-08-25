@@ -33,7 +33,7 @@ float resolveHorizontalMovement(
     Vec2 position,
     Vec2 size,
     float desiredX,
-    const std::array<BaseFacility, 4> &facilities) noexcept
+    const std::array<BaseFacility, 5> &facilities) noexcept
 {
     float resolvedX = desiredX;
     for (const BaseFacility &facility : facilities)
@@ -50,7 +50,7 @@ float resolveVerticalMovement(
     Vec2 position,
     Vec2 size,
     float desiredY,
-    const std::array<BaseFacility, 4> &facilities) noexcept
+    const std::array<BaseFacility, 5> &facilities) noexcept
 {
     float resolvedY = desiredY;
     for (const BaseFacility &facility : facilities)
@@ -80,6 +80,10 @@ BaseWorld::BaseWorld()
           BaseFacility{
               BaseFacilityKind::Allocation,
               Rect{{76.0F, 470.0F}, {228.0F, 140.0F}},
+              64.0F},
+          BaseFacility{
+              BaseFacilityKind::Medical,
+              Rect{{976.0F, 470.0F}, {228.0F, 140.0F}},
               64.0F},
           BaseFacility{
               BaseFacilityKind::RaidGate,
@@ -187,7 +191,7 @@ std::size_t BaseWorld::playerAnimationFrame() const noexcept
     return playerMovementAnimator_.currentFrameIndex();
 }
 
-const std::array<BaseFacility, 4> &BaseWorld::facilities() const noexcept
+const std::array<BaseFacility, 5> &BaseWorld::facilities() const noexcept
 {
     return facilities_;
 }
@@ -232,6 +236,8 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
         return "SUPPLY & RECOVERY";
     case BaseFacilityKind::Allocation:
         return "ALLOCATION & NEEDS";
+    case BaseFacilityKind::Medical:
+        return "MEDICAL SERVICE";
     case BaseFacilityKind::RaidGate:
         return "RAID DEPLOYMENT";
     }

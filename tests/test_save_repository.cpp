@@ -93,7 +93,8 @@ TEST(SaveRepositoryTest, SchemaV11AcceptsPreviousContentVersions)
 {
     for (const std::string &contentVersion : {
              std::string{"base-periodic-wishes-content-16"},
-             std::string{"base-operational-readiness-content-17"}})
+             std::string{"base-operational-readiness-content-17"},
+             std::string{"base-instant-gunsmith-content-18"}})
     {
         ProfileState profile = makeNewAlphaProfile(
             "save-v11-operations-content-migration",

@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#82 已接受。当前优先交付 **Base Growth：运营状态与即时枪械维护 v1**；范围合同见 `doc/exec-plans/active/base-operational-readiness-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#83 已接受。当前优先交付 **Base Growth：付费医疗服务 v1**；范围合同见 `doc/exec-plans/active/base-paid-medical-service-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -42,6 +42,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | Raid 往返行动耗时 v1 | PR #80 / merge commit `defaac0` |
 | 枪匠全面维护服务 v1 | PR #81 / merge commit `ace7c69` |
 | 周期愿望与物资提交 v1 | PR #82 / merge commit `eca7d62` |
+| 运营状态与即时枪械维护 v1 | PR #83 / merge commit `20d9f48` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -83,9 +84,10 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 资源分配与基础需求 v1 | 成功撤离的新 Loot 先进入待分配区；玩家逐件保留到个人 Stash 或捐献为食物、卫生、士气、安全 | BaseIntake、BaseResourceState、冻结 Loot 来源、schema v7、贡献命令 | PR #78 已通过 exact-head CI 与用户正常游玩验收，以 `ba8283f` 进入 main；表现仅用文字、色条和几何图形 |
 | 世界时钟与每日需求 v1 | Base/Raid 显示同一日夜时间；每日 00:00 结算四项需求；暂停、离线和未结算 Raid 不偷走时间 | WorldClockState、每日幂等补算、schema v8、Base 检查点、Raid Settlement 提交/异常回滚 | PR #79 已通过 exact-head CI 与用户正常游玩验收，以 `5d2a11a` 进入 main；倍率暂为集中开发参数 |
 | Raid 往返行动耗时 v1 | 三张图显示不同抵达时间；出发、正常返程和失败归队推进世界时钟，异常退出精确回滚 | MapDefinition travel、冻结活动快照、schema v9、幂等时间/需求 Settlement | PR #80 已通过 exact-head CI 与用户正常游玩验收，以 `defaac0` 进入 main；不包含夜间视野、路线状态、旅行遭遇、哨所、精力或睡眠 |
-| 枪匠全面维护服务 v1 | PR #81 原为付费计时送修；当前 PR #83 按用户决策将新维护改为付费后立即恢复同一实例 | 即时候选 Profile 事务；BaseServiceJob 仅保留旧存档兼容；schema v10/v11 | PR #81 历史实现已进入 main；PR #83 不删除旧任务数据，但新操作不再消耗时间 |
+| 枪匠全面维护服务 v1 | PR #81 原为付费计时送修；PR #83 按用户决策将新维护改为付费后立即恢复同一实例 | 即时候选 Profile 事务；BaseServiceJob 仅保留旧存档兼容；schema v10/v11 | PR #81 历史实现已进入 main；PR #83 以 `20d9f48` 进入 main，新操作不再消耗时间 |
 | 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的待分配物资，改善既有基地资源 | BasePriorityDefinition/State、手动原子提交、Raid 回滚快照、schema v11 | PR #82 已通过 exact-head CI 和用户正常游玩验收，以 `eca7d62` 进入 main；不包含任务板、人口、士气惩罚、兑换点或自动捐献 |
-| 运营状态与即时枪械维护 v1 | 四项资源按最短储备日数形成运营档位；枪械全面维护只扣货币并立即恢复出厂状态 | BaseOperationalProjection、content v18、content v16/v17 兼容、即时维护事务、旧任务立即领取 | 当前修订已通过 Windows Debug、115 项聚焦回归与完整 CTest 903/903；exact-head CI 与用户正常游玩复验待完成；运营档位暂不改变维护价格或时间 |
+| 运营状态与即时枪械维护 v1 | 四项资源按最短储备日数形成运营档位；枪械全面维护只扣货币并立即恢复出厂状态 | BaseOperationalProjection、content v18、content v16/v17 兼容、即时维护事务、旧任务立即领取 | PR #83 已通过 exact-head CI 与用户验收，以 `20d9f48` 进入 main |
+| 付费医疗服务 v1 | Base 独立医疗设施显示伤势和报价；支付货币后立即恢复生命并清除流血，个人医疗物保持不变 | PlayerBaseMedicalDefinition、query/execute 原子事务、content v19、schema v11 兼容 v18 | 当前分支已通过 Windows Debug、80 项聚焦回归和完整 CTest 913/913；不包含 NPC 医疗、公共医疗库存、时间队列或新伤势 |
 
 ## 当前 Combat Reliability 缺陷
 

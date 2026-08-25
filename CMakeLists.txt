@@ -211,6 +211,8 @@ endfunction()
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
     src/alpha_content_ids.h
+    src/base_medical_service_domain.cpp
+    src/base_medical_service_domain.h
     src/base_resource_domain.cpp
     src/base_resource_domain.h
     src/base_service_domain.cpp
@@ -570,6 +572,10 @@ raidline_add_test(
 raidline_add_test(
     BaseServiceDomainTest
     tests/test_base_service_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseMedicalServiceDomainTest
+    tests/test_base_medical_service_domain.cpp
     raidline::domain)
 raidline_add_test(
     WorldClockTest
