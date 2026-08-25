@@ -23,19 +23,29 @@ BaseResourcePlan planFailure(
 
 BaseOperationalProjection projectBaseOperationsImpl(
     const BaseResourceState &state,
-    const BaseOperationsDefinition &definition) noexcept
+    const BaseOperationsDefinition &definition,
+    BaseResourceBundle dailyDemand) noexcept
 {
     const std::array<ResourceReserve, 4> resources{{
-        {BaseResourceKind::Food, state.pool.food, kBaseDailyDemand.food},
+        {BaseResourceKind::Food, state.pool.food, dailyDemand.food},
         {BaseResourceKind::Hygiene, state.pool.hygiene,
-         kBaseDailyDemand.hygiene},
+         dailyDemand.hygiene},
         {BaseResourceKind::Morale, state.pool.morale,
-         kBaseDailyDemand.morale},
+         dailyDemand.morale},
         {BaseResourceKind::Security, state.pool.security,
-         kBaseDailyDemand.security}}};
+         dailyDemand.security}}};
     const ResourceReserve *limiting = &resources.front();
     for (const ResourceReserve &resource : resources)
     {
+        if (resource.dailyDemand == 0U)
+        {
+            continue;
+        }
+        if (limiting->dailyDemand == 0U)
+        {
+            limiting = &resource;
+            continue;
+        }
         const std::uint64_t candidate =
             static_cast<std::uint64_t>(resource.current) *
             limiting->dailyDemand;
@@ -51,10 +61,18 @@ BaseOperationalProjection projectBaseOperationsImpl(
     BaseOperationalProjection projection;
     projection.limitingResource = limiting->kind;
     projection.reserveDays = BaseResourceBundle{
-        state.pool.food / kBaseDailyDemand.food,
-        state.pool.hygiene / kBaseDailyDemand.hygiene,
-        state.pool.morale / kBaseDailyDemand.morale,
-        state.pool.security / kBaseDailyDemand.security};
+        dailyDemand.food == 0U
+            ? kMaximumBaseResource
+            : state.pool.food / dailyDemand.food,
+        dailyDemand.hygiene == 0U
+            ? kMaximumBaseResource
+            : state.pool.hygiene / dailyDemand.hygiene,
+        dailyDemand.morale == 0U
+            ? kMaximumBaseResource
+            : state.pool.morale / dailyDemand.morale,
+        dailyDemand.security == 0U
+            ? kMaximumBaseResource
+            : state.pool.security / dailyDemand.security};
     projection.tier = projectBaseResourceTier(
         limiting->current,
         limiting->dailyDemand,
@@ -131,6 +149,10 @@ BaseOperationalTier projectBaseResourceTier(
     std::uint32_t dailyDemand,
     const BaseOperationsDefinition &definition) noexcept
 {
+    if (dailyDemand == 0U)
+    {
+        return BaseOperationalTier::Supported;
+    }
     if (current < dailyDemand)
     {
         return BaseOperationalTier::Critical;
@@ -148,9 +170,10 @@ BaseOperationalTier projectBaseResourceTier(
 
 BaseOperationalProjection projectBaseOperations(
     const BaseResourceState &state,
-    const BaseOperationsDefinition &definition) noexcept
+    const BaseOperationsDefinition &definition,
+    BaseResourceBundle dailyDemand) noexcept
 {
-    return projectBaseOperationsImpl(state, definition);
+    return projectBaseOperationsImpl(state, definition, dailyDemand);
 }
 
 BaseResourcePlan queryBaseResourceContribution(
@@ -266,7 +289,8 @@ BaseResourceReceipt executeBaseResourceContribution(
 
 BaseDailyDemandResult applyBaseDailyDemandThrough(
     BaseResourceState &state,
-    std::uint64_t completedWorldDays) noexcept
+    std::uint64_t completedWorldDays,
+    BaseResourceBundle dailyDemand) noexcept
 {
     if (completedWorldDays <= state.resolvedDemandCycleCount)
     {
@@ -277,13 +301,13 @@ BaseDailyDemandResult applyBaseDailyDemandThrough(
     BaseResourceBundle &pool = state.pool;
     BaseResourceBundle &shortfall = state.lastShortfall;
     shortfall.food = consumeCycles(
-        pool.food, kBaseDailyDemand.food, cycles);
+        pool.food, dailyDemand.food, cycles);
     shortfall.hygiene = consumeCycles(
-        pool.hygiene, kBaseDailyDemand.hygiene, cycles);
+        pool.hygiene, dailyDemand.hygiene, cycles);
     shortfall.morale = consumeCycles(
-        pool.morale, kBaseDailyDemand.morale, cycles);
+        pool.morale, dailyDemand.morale, cycles);
     shortfall.security = consumeCycles(
-        pool.security, kBaseDailyDemand.security, cycles);
+        pool.security, dailyDemand.security, cycles);
     state.resolvedDemandCycleCount = completedWorldDays;
     return {cycles, shortfall};
 }

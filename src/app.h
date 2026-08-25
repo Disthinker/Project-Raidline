@@ -241,6 +241,7 @@ private:
     void renderBaseSupply();
     void renderBaseAllocation();
     void renderBaseMedicalService();
+    void renderBaseDormitory();
     void renderBaseDeployment();
     void renderProfileGrid(
         ProfileContainerId container,

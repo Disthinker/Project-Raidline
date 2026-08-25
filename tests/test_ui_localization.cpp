@@ -94,7 +94,8 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
   const std::string operations = localizeUiText(
       UiLanguage::SimplifiedChinese,
       "BASE OPERATIONS SUPPORTED | LIMITING FOOD");
-  EXPECT_NE(operations.find("基地运转 充足"), std::string::npos);
+  EXPECT_NE(operations.find("基地运转 充足"), std::string::npos)
+      << operations;
   EXPECT_NE(operations.find("短板 食物"), std::string::npos);
 }
 
@@ -133,6 +134,24 @@ TEST(UiLocalizationTest, ChineseTranslatesPaidBaseMedicalService) {
                 UiLanguage::SimplifiedChinese,
                 "currency is insufficient for player medical service"),
             "货币不足，无法使用玩家医疗服务");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesDormitoryPopulationAndRest) {
+  const std::string population = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "ORDINARY RESIDENTS 8 | BEDS 10 | BED SHORTFALL 0");
+  EXPECT_NE(population.find("普通居民 8"), std::string::npos);
+  EXPECT_NE(population.find("床位 10"), std::string::npos);
+  EXPECT_NE(population.find("床位缺口 0"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DORMITORY & REST"),
+            "宿舍与休息");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "REST 12 HOURS"),
+            "休息12小时");
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

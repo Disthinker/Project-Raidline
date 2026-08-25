@@ -148,7 +148,7 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
 {
     const BaseWorld world;
-    ASSERT_EQ(world.facilities().size(), 5U);
+    ASSERT_EQ(world.facilities().size(), 6U);
     EXPECT_NE(
         std::find_if(
             world.facilities().begin(),
@@ -159,6 +159,43 @@ TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
     EXPECT_STREQ(
         baseFacilityName(BaseFacilityKind::Allocation),
         "ALLOCATION & NEEDS");
+}
+
+TEST(BaseWorldTest, ExposesDormitoryWithoutBlockingCentralRoute)
+{
+    BaseWorld world;
+    EXPECT_NE(
+        std::find_if(
+            world.facilities().begin(),
+            world.facilities().end(),
+            [](const BaseFacility &facility)
+            { return facility.kind == BaseFacilityKind::Dormitory; }),
+        world.facilities().end());
+    EXPECT_STREQ(
+        baseFacilityName(BaseFacilityKind::Dormitory),
+        "DORMITORY & REST");
+
+    BaseInput moveLeft;
+    moveLeft.moveLeft = true;
+    for (int index{}; index < 20; ++index)
+    {
+        static_cast<void>(world.update(moveLeft, 0.05F));
+    }
+    EXPECT_EQ(world.interactableFacility(), BaseFacilityKind::Dormitory);
+    BaseInput interact;
+    interact.interactJustPressed = true;
+    EXPECT_EQ(
+        world.update(interact, 0.0F),
+        BaseFacilityKind::Dormitory);
+
+    world = BaseWorld{};
+    BaseInput moveUp;
+    moveUp.moveUp = true;
+    for (int index{}; index < 50; ++index)
+    {
+        static_cast<void>(world.update(moveUp, 0.05F));
+    }
+    EXPECT_GE(world.playerPosition().y, 132.0F);
 }
 
 TEST(BaseWorldTest, ExposesAndInteractsWithMedicalFacility)

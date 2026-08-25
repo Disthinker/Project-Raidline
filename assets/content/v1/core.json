@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-paid-medical-content-19",
+  "content_version": "base-residents-beds-sleep-content-20",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,

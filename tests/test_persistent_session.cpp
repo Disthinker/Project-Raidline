@@ -469,6 +469,56 @@ TEST(PersistentSessionTest, PaidBaseMedicalSaveFailurePreservesProfile)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest, BaseRestPersistsClockPopulationAndDailyNeeds)
+{
+    SessionSaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("persistent-base-rest"));
+
+    ASSERT_TRUE(session.executeBaseRest(12, "rest-to-evening").succeeded);
+    const BaseRestReceipt crossed = session.executeBaseRest(
+        6, "rest-across-midnight");
+    ASSERT_TRUE(crossed.succeeded) << crossed.message;
+    EXPECT_EQ(crossed.dailyCyclesResolved, 1U);
+    EXPECT_EQ(
+        session.profile().baseResources.pool,
+        (BaseResourceBundle{32, 34, 35, 36}));
+    const std::uint64_t fingerprint = profileStateFingerprint(
+        session.profile());
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), fingerprint);
+    EXPECT_EQ(
+        reopened.profile().basePopulation,
+        (BasePopulationState{8, 10}));
+    EXPECT_EQ(reopened.worldClockProjection().day, 2U);
+    EXPECT_EQ(reopened.worldClockProjection().hour, 2U);
+}
+
+TEST(PersistentSessionTest, BaseRestSaveFailurePreservesProfile)
+{
+    SessionSaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("failed-base-rest-save"));
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BaseRestReceipt receipt = session.executeBaseRest(
+        12, "base-rest-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;

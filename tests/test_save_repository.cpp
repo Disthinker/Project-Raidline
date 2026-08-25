@@ -114,6 +114,32 @@ TEST(SaveRepositoryTest, SchemaV11AcceptsPreviousContentVersions)
     }
 }
 
+TEST(SaveRepositoryTest, SchemaV12PersistsPopulationAndMigratesV11Defaults)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-v12-population", publishedContentRegistry());
+    profile.basePopulation = BasePopulationState{17, 12};
+
+    const SaveLoadResult roundTrip = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+    ASSERT_TRUE(roundTrip.profile.has_value()) << roundTrip.message;
+    EXPECT_EQ(
+        roundTrip.profile->basePopulation,
+        (BasePopulationState{17, 12}));
+
+    profile.basePopulation = BasePopulationState{};
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, "base-paid-medical-content-19", 11),
+        publishedContentRegistry());
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(
+        migrated.profile->basePopulation,
+        (BasePopulationState{8, 10}));
+}
+
 TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
 {
     ProfileState profile = makeNewAlphaProfile(

@@ -1,5 +1,7 @@
 #include "profile_state.h"
 
+#include "base_population_domain.h"
+
 #include <algorithm>
 #include <cmath>
 #include <bit>
@@ -700,6 +702,12 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base demand cycle is ahead of the world clock"};
     }
+    if (profile.basePopulation.ordinaryResidents >
+            kMaximumOrdinaryResidents ||
+        profile.basePopulation.bedCapacity > kMaximumBedCapacity)
+    {
+        return {false, "Base population state is invalid"};
+    }
     if (!validBasePriorityState(
             profile.basePriority,
             profile.worldClock.elapsedWorldMinutes,
@@ -1152,6 +1160,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
+    hashInteger(hash, profile.basePopulation.ordinaryResidents);
+    hashInteger(hash, profile.basePopulation.bedCapacity);
     hashBytes(hash, profile.basePriority.definitionId.value());
     hashInteger(hash, profile.basePriority.cycleIndex);
     hashInteger(hash, profile.basePriority.fulfilled ? 1U : 0U);

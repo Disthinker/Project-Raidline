@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "economy_domain.h"
+#include "base_population_domain.h"
 #include "base_resource_domain.h"
 #include "base_medical_service_domain.h"
 #include "base_service_domain.h"
@@ -217,6 +218,10 @@ public:
 
     [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(
         AssetInstanceId assetId,
+        std::string transactionId);
+
+    [[nodiscard]] BaseRestReceipt executeBaseRest(
+        std::uint32_t hours,
         std::string transactionId);
 
     [[nodiscard]] WeaponAmmoReceipt executeProfileWeaponAmmo(
