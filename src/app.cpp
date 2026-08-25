@@ -131,7 +131,7 @@ namespace
         case BaseResourceKind::Hygiene:
             return "HYGIENE";
         case BaseResourceKind::Morale:
-            return "MORALE";
+            return "OPERATIONS SUPPORT";
         case BaseResourceKind::Security:
             return "SECURITY";
         }
@@ -167,6 +167,15 @@ namespace
     SDL_FRect baseMedicalServiceButton() noexcept
     {
         return SDL_FRect{460.0F, 500.0F, 360.0F, 54.0F};
+    }
+
+    SDL_FRect baseRestButton(std::size_t index) noexcept
+    {
+        return SDL_FRect{
+            250.0F + static_cast<float>(index) * 280.0F,
+            492.0F,
+            220.0F,
+            56.0F};
     }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
@@ -1868,6 +1877,32 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         if (!receipt.succeeded)
         {
             gameAudio_.play(SoundEventId::UiDeny);
+        }
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::Dormitory)
+    {
+        constexpr std::array<std::uint32_t, 3> restHours{1U, 6U, 12U};
+        for (std::size_t index{}; index < restHours.size(); ++index)
+        {
+            if (!contains(baseRestButton(index), click.position))
+            {
+                continue;
+            }
+            const BaseRestReceipt receipt = gameSession_.executeBaseRest(
+                restHours[index],
+                nextProfileTransactionId("base-rest"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format(
+                    "RESTED {}H | DAILY CYCLES {}",
+                    restHours[index],
+                    receipt.dailyCyclesResolved)
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
         }
         return;
     }
@@ -7436,6 +7471,9 @@ void App::renderBaseWorld()
         case BaseFacilityKind::Medical:
             SDL_SetRenderDrawColor(renderer_, 54, 72, 74, 255);
             break;
+        case BaseFacilityKind::Dormitory:
+            SDL_SetRenderDrawColor(renderer_, 66, 64, 78, 255);
+            break;
         case BaseFacilityKind::RaidGate:
             SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
             break;
@@ -8429,7 +8467,9 @@ void App::renderBaseSupply()
     uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
     const BaseOperationalProjection operations = projectBaseOperations(
         gameSession_.profile().baseResources,
-        publishedContentRegistry().baseOperations());
+        publishedContentRegistry().baseOperations(),
+        populationAdjustedDailyDemand(
+            gameSession_.profile().basePopulation));
     const std::string operationsStatus = fmt::format(
         "BASE OPERATIONS {} | LIMITING {}",
         baseOperationalTierName(operations.tier),
@@ -8609,17 +8649,24 @@ void App::renderBaseAllocation()
     uiTextRenderer_.render(
         renderer_, 80.0F, 100.0F,
         "ALLOCATION & NEEDS | TEXT/GEOMETRY PLACEHOLDER");
-    uiTextRenderer_.render(
-        renderer_, 80.0F, 124.0F,
-        "DAILY 00:00 NEEDS: 8 FOOD / 6 HYGIENE / 5 MORALE / 4 SECURITY");
-
     const BaseResourceState &state =
         gameSession_.profile().baseResources;
+    const BaseResourceBundle demand = populationAdjustedDailyDemand(
+        gameSession_.profile().basePopulation);
+    const std::string demandSummary = fmt::format(
+        "DAILY 00:00 NEEDS: {} RATIONS / {} HYGIENE / {} OPERATIONS SUPPORT / {} SECURITY",
+        demand.food,
+        demand.hygiene,
+        demand.morale,
+        demand.security);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 124.0F, demandSummary.c_str());
     const BaseOperationsDefinition &operationsDefinition =
         publishedContentRegistry().baseOperations();
     const BaseOperationalProjection operations = projectBaseOperations(
         state,
-        operationsDefinition);
+        operationsDefinition,
+        demand);
     const WorldClockProjection clock = gameSession_.worldClockProjection();
     const std::string nextDemand = fmt::format(
         "NEXT DAILY NEED IN {}H {:02}M | RESOLVED DAILY CYCLES {}",
@@ -8629,9 +8676,9 @@ void App::renderBaseAllocation()
     uiTextRenderer_.render(
         renderer_, 80.0F, 146.0F, nextDemand.c_str());
     const std::array<std::pair<const char *, std::uint32_t>, 4> values{{
-        {"FOOD", state.pool.food},
+        {"RATION STOCK", state.pool.food},
         {"HYGIENE", state.pool.hygiene},
-        {"MORALE", state.pool.morale},
+        {"OPERATIONS SUPPORT", state.pool.morale},
         {"SECURITY", state.pool.security}}};
     const std::array<std::uint32_t, 4> shortages{
         state.lastShortfall.food,
@@ -8639,10 +8686,10 @@ void App::renderBaseAllocation()
         state.lastShortfall.morale,
         state.lastShortfall.security};
     const std::array<std::uint32_t, 4> dailyDemand{
-        kBaseDailyDemand.food,
-        kBaseDailyDemand.hygiene,
-        kBaseDailyDemand.morale,
-        kBaseDailyDemand.security};
+        demand.food,
+        demand.hygiene,
+        demand.morale,
+        demand.security};
     for (std::size_t index{}; index < values.size(); ++index)
     {
         const BaseOperationalTier resourceTier = projectBaseResourceTier(
@@ -8961,6 +9008,87 @@ void App::renderBaseMedicalService()
     }
 }
 
+void App::renderBaseDormitory()
+{
+    const SDL_FRect panel{120.0F, 90.0F, 1040.0F, 560.0F};
+    SDL_SetRenderDrawColor(renderer_, 22, 28, 36, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 132, 144, 174, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    const ProfileState &profile = gameSession_.profile();
+    const BasePopulationProjection population = projectBasePopulation(
+        profile.basePopulation);
+    const BaseResourceBundle demand = populationAdjustedDailyDemand(
+        profile.basePopulation);
+    const WorldClockProjection clock = gameSession_.worldClockProjection();
+    SDL_SetRenderDrawColor(renderer_, 224, 232, 242, 255);
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 128.0F,
+        "DORMITORY & REST | AGGREGATED RESIDENTS");
+
+    const std::string residents = fmt::format(
+        "ORDINARY RESIDENTS {} | BEDS {} | BED SHORTFALL {}",
+        population.ordinaryResidents,
+        population.bedCapacity,
+        population.bedShortfall);
+    uiTextRenderer_.render(renderer_, 170.0F, 194.0F, residents.c_str());
+    const std::string rations = fmt::format(
+        "DAILY RATIONS {} | RESERVE {} | NEXT NEED IN {}H {:02}M",
+        demand.food,
+        profile.baseResources.pool.food,
+        clock.minutesUntilNextDay / kWorldMinutesPerHour,
+        clock.minutesUntilNextDay % kWorldMinutesPerHour);
+    uiTextRenderer_.render(renderer_, 170.0F, 236.0F, rations.c_str());
+    const std::string time = fmt::format(
+        "DAY {} {:02}:{:02} {}",
+        clock.day,
+        clock.hour,
+        clock.minute,
+        worldTimeOfDayName(clock.timeOfDay));
+    uiTextRenderer_.render(renderer_, 170.0F, 278.0F, time.c_str());
+
+    SDL_SetRenderDrawColor(
+        renderer_,
+        population.bedShortfall > 0U ? 224 : 166,
+        population.bedShortfall > 0U ? 164 : 214,
+        population.bedShortfall > 0U ? 124 : 194,
+        255);
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 338.0F,
+        population.bedShortfall > 0U
+            ? "OVERCROWDED | SHORTAGE IS NON-BLOCKING"
+            : "BED CAPACITY AVAILABLE");
+    SDL_SetRenderDrawColor(renderer_, 184, 194, 210, 255);
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 382.0F,
+        "REST ADVANCES WORLD TIME AND DAILY NEEDS | MAXIMUM 12H");
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 412.0F,
+        "V1 DOES NOT HEAL THE PLAYER OR SIMULATE INDIVIDUAL RESIDENTS");
+
+    constexpr std::array<const char *, 3> labels{
+        "REST 1 HOUR", "REST 6 HOURS", "REST 12 HOURS"};
+    for (std::size_t index{}; index < labels.size(); ++index)
+    {
+        const SDL_FRect button = baseRestButton(index);
+        SDL_SetRenderDrawColor(renderer_, 52, 66, 84, 255);
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(renderer_, 160, 178, 210, 255);
+        SDL_RenderRect(renderer_, &button);
+        uiTextRenderer_.render(
+            renderer_, button.x + 44.0F, button.y + 20.0F, labels[index]);
+    }
+    SDL_SetRenderDrawColor(renderer_, 194, 204, 218, 255);
+    uiTextRenderer_.render(renderer_, 170.0F, 584.0F, "ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
+        uiTextRenderer_.render(
+            renderer_, 420.0F, 584.0F, uiMessage_.c_str());
+    }
+}
+
 void App::renderBaseDeployment()
 {
     const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
@@ -9096,7 +9224,7 @@ void App::renderBase()
     const BaseResourceBundle &base =
         gameSession_.profile().baseResources.pool;
     const std::string resources = fmt::format(
-        "BASE F{} H{} M{} S{}",
+        "BASE R{} H{} O{} S{}",
         base.food,
         base.hygiene,
         base.morale,
@@ -9143,6 +9271,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Medical:
             renderBaseMedicalService();
+            break;
+        case BaseFacilityKind::Dormitory:
+            renderBaseDormitory();
             break;
         case BaseFacilityKind::RaidGate:
             renderBaseDeployment();

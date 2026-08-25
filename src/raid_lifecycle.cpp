@@ -5,6 +5,7 @@
 #include <set>
 
 #include "base_resource_domain.h"
+#include "base_population_domain.h"
 #include "stable_random.h"
 
 namespace
@@ -235,7 +236,8 @@ bool advanceProfileWorldTime(
     }
     static_cast<void>(applyBaseDailyDemandThrough(
         profile.baseResources,
-        advanced.completedDaysAfter));
+        advanced.completedDaysAfter,
+        populationAdjustedDailyDemand(profile.basePopulation)));
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
     return true;
 }

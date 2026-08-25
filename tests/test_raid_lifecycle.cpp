@@ -199,6 +199,7 @@ TEST(RaidLifecycleTest, TravelAcrossMidnightResolvesDailyNeedOnce)
     ProfileState profile = makeNewAlphaProfile(
         "travel-midnight", publishedContentRegistry());
     profile.worldClock.elapsedWorldMinutes = 23U * 60U + 30U;
+    profile.basePopulation = BasePopulationState{12, 10};
 
     ASSERT_TRUE(deploy(profile).succeeded);
 
@@ -206,7 +207,7 @@ TEST(RaidLifecycleTest, TravelAcrossMidnightResolvesDailyNeedOnce)
               kWorldMinutesPerDay + 15U);
     EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
     EXPECT_EQ(profile.baseResources.pool,
-              (BaseResourceBundle{32, 34, 35, 36}));
+              (BaseResourceBundle{28, 34, 35, 36}));
     ASSERT_TRUE(settlePendingRaid(
         profile,
         publishedContentRegistry(),
@@ -214,7 +215,7 @@ TEST(RaidLifecycleTest, TravelAcrossMidnightResolvesDailyNeedOnce)
         RaidResultOutcome::Extracted).succeeded);
     EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
     EXPECT_EQ(profile.baseResources.pool,
-              (BaseResourceBundle{32, 34, 35, 36}));
+              (BaseResourceBundle{28, 34, 35, 36}));
 }
 
 TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)

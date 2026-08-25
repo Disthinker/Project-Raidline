@@ -6,7 +6,7 @@
 
 - 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
 - Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
-- 当前交付已进入 Alpha 后的 Base Growth。长期系统只保留被当前消费者需要的稳定边界；世界时钟已有每日需求消费者，人口、任务、建设或联机状态仍不得空转创建。
+- 当前交付已进入 Alpha 后的 Base Growth。长期系统只保留被当前消费者需要的稳定边界；世界时钟已有每日需求与主动休息消费者，普通人口聚合已有口粮/床位消费者，任务、建设、具名 NPC 或联机状态仍不得空转创建。
 - 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
 - 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
 
@@ -45,7 +45,7 @@ Project_Raidline.exe
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
 - `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和当前活动运行时。Persistent Base 已把 Profile 与 BaseRuntime 接入；Extraction Loop 已让 Alpha `GameplayWorld` 从 pending Raid 快照构造，并只通过 GameSession 命令读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
-- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock 已因每日需求进入 ProfileState；设施、人口和其他日程仍须等待真正消费者。
+- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock、普通居民聚合人数和床位容量因每日口粮、宿舍投影和主动休息进入 ProfileState；建设、具名 NPC、岗位与其他日程仍须等待真正消费者。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
 - Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
 
@@ -56,7 +56,7 @@ Project_Raidline.exe
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
 - 七槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
+- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、BasePopulationState、pending Raid、已提交 Settlement ID 与最近一次 RaidResult。
 
 Persistent Base 已实例化资产、基础装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算；Survival Loadout 已扩展为两长枪、手枪、防具、胸挂与背包七槽。未启用的长期系统只通过后续显式迁移加入。
 

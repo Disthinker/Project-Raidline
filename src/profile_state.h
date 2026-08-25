@@ -210,6 +210,18 @@ struct BaseResourceState
         const BaseResourceState &) = default;
 };
 
+// Ordinary residents are deliberately aggregated. The player and future
+// named NPCs have separate ownership and are not counted here.
+struct BasePopulationState
+{
+    std::uint32_t ordinaryResidents{8};
+    std::uint32_t bedCapacity{10};
+
+    friend bool operator==(
+        const BasePopulationState &,
+        const BasePopulationState &) = default;
+};
+
 struct BasePriorityState
 {
     BasePriorityDefinitionId definitionId;
@@ -289,6 +301,7 @@ struct ProfileState
     MedicalStatusState medicalStatus;
     WorldClockState worldClock;
     BaseResourceState baseResources;
+    BasePopulationState basePopulation;
     BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;

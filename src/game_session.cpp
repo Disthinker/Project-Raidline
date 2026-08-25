@@ -1412,6 +1412,34 @@ MedicalUseReceipt GameSession::executeBaseMedical(
     return receipt;
 }
 
+BaseRestReceipt GameSession::executeBaseRest(
+    std::uint32_t hours,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseRestReceipt receipt = ::executeBaseRest(
+        candidate,
+        publishedContentRegistry(),
+        BaseRestCommand{hours},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return BaseRestReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision};
+    }
+    worldClockDirty_ = false;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
+    return receipt;
+}
+
 BaseMedicalServiceReceipt GameSession::executeBasePaidMedicalService(
     std::string transactionId)
 {
@@ -1674,7 +1702,8 @@ void GameSession::advanceWorldClockFromSimulation(
         {
             static_cast<void>(applyBaseDailyDemandThrough(
                 profile_.baseResources,
-                advanced.completedDaysAfter));
+                advanced.completedDaysAfter,
+                populationAdjustedDailyDemand(profile_.basePopulation)));
             static_cast<void>(synchronizeBasePriorityThrough(
                 profile_,
                 publishedContentRegistry()));

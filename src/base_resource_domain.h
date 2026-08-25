@@ -35,7 +35,8 @@ struct BaseOperationalProjection
 
 [[nodiscard]] BaseOperationalProjection projectBaseOperations(
     const BaseResourceState &state,
-    const BaseOperationsDefinition &definition) noexcept;
+    const BaseOperationsDefinition &definition,
+    BaseResourceBundle dailyDemand = kBaseDailyDemand) noexcept;
 
 struct ContributeBaseAssetCommand
 {
@@ -84,7 +85,8 @@ struct BaseDailyDemandResult
 // assets.
 [[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandThrough(
     BaseResourceState &state,
-    std::uint64_t completedWorldDays) noexcept;
+    std::uint64_t completedWorldDays,
+    BaseResourceBundle dailyDemand = kBaseDailyDemand) noexcept;
 
 struct BasePrioritySyncResult
 {

@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@20d9f48` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#83 接受的 Base Growth 基线；PR #83 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `20d9f48` 合入。
-- 当前开发分支：`codex/base-paid-medical-service-v1`，从干净的 `origin/main@20d9f48` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-paid-medical-service-v1.md`。
+- `origin/main@c01d431` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#84 接受的 Base Growth 基线；PR #84 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `c01d431` 合入。
+- 当前开发分支：`codex/base-residents-beds-sleep-v1`，从干净的 `origin/main@c01d431` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-residents-beds-sleep-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#83 已接受。当前进入 **Base 付费医疗服务 v1**；外部 GDD 继续只读，本仓库 ExecPlan 将玩家付费医疗与个人医疗物自疗拆成两个独立事务。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#84 已接受。当前进入 **Base 居民、床位与睡眠 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用普通居民聚合、人口口粮、床位投影和 Base 主动休息。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -38,7 +38,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 23. **Base 枪匠全面维护服务 v1**：PR #81 已通过 exact-head CI 与用户正常游玩验收，并以 merge commit `ace7c69` 进入 main。
 24. **Base 周期愿望与物资提交 v1**：PR #82 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `eca7d62` 进入 main。
 25. **Base 运营状态与即时枪械维护 v1**：PR #83 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `20d9f48` 进入 main。
-26. **Base 付费医疗服务 v1**：当前分支加入独立医疗设施；玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。NPC 医疗、公共医疗库存、骨折与内伤继续延期。
+26. **Base 付费医疗服务 v1**：PR #84 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main。玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。
+27. **Base 居民、床位与睡眠 v1**：当前分支新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；接纳、建设、岗位、正式士气和居民医疗继续延期。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -66,7 +67,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #78～#83 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望和运营状态均已完成 CI、用户验收并进入 main。当前付费医疗切片已通过 Windows Debug 全目标、80 项聚焦回归与完整 CTest 913/913；exact-head CI 和用户正常游玩验收待完成，开发代理未启动游戏。
+- PR #78～#84 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望、运营状态和付费医疗均已完成 CI、用户验收并进入 main。当前居民/床位/睡眠切片已通过 Windows Debug 全目标构建和完整 CTest 923/923，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -257,11 +258,20 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - schema 维持 v11，并显式接受 content v16/v17 存档；旧计时任务立即可领取。Allocation 与 Supply 以中英文显示运营状态、最短板和即时维护反馈。
 - 当前四项池仅作为早期运营储备；完整版居民士气仍保留独立三档模型，人口、口粮/床位、生产、居民恢复和自动防守未在本切片提前实现。
 
+## Base 居民、床位与睡眠 v1 当前实现
+
+- `ProfileState::BasePopulationState` 只保存普通居民聚合人数和床位容量；玩家与未来具名 NPC 不计入该池，也没有逐居民姓名、情绪、装备或日程模拟。
+- 旧档迁移为 8 名普通居民、10 个床位；每人每天消耗 1 单位口粮，因此旧固定食物需求仍为 8，升级不会改变既有每日消耗。原 `morale` 池在界面改称运营支持，仍不是完整版三档居民士气。
+- Base 新增文字/几何占位宿舍。玩家可查看居民、床位/拥挤、口粮储备和下次日结，并正常选择休息 1、6 或 12 小时；休息不治疗玩家。
+- `queryBaseRest/executeBaseRest` 在候选 Profile 上推进唯一 WorldClock、按人口结算跨越的日界线、同步五日愿望并原子保存。非法时长、Raid pending、过期 revision、重复事务和保存失败均不产生部分提交。
+- schema v12/content v20 保存人口与床位；schema v11 及更早版本使用确定性默认值迁移。Base 实时流逝和 Raid 往返跨日也消费同一人口口粮需求。
+- 幸存者接纳、床位建设、岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
+
 ## 尚未完成
 
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
-- 防具全面维护、组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不提前建立设施、人口或通用任务框架。
+- 防具全面维护、组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "alpha_content_ids.h"
+#include "base_population_domain.h"
 #include "profile_state.h"
 
 TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
@@ -121,6 +122,10 @@ TEST(ProfileStateTest, FingerprintChangesWithAuthoritativeState)
     const std::uint64_t afterCurrency = profileStateFingerprint(profile);
     ++profile.worldClock.elapsedWorldMinutes;
     EXPECT_NE(profileStateFingerprint(profile), afterCurrency);
+
+    const std::uint64_t afterClock = profileStateFingerprint(profile);
+    ++profile.basePopulation.ordinaryResidents;
+    EXPECT_NE(profileStateFingerprint(profile), afterClock);
 }
 
 TEST(ProfileStateTest, DemandCycleCannotAdvanceAheadOfWorldClock)
@@ -149,6 +154,21 @@ TEST(ProfileStateTest, InvalidMedicalTimerCombinationIsRejected)
         publishedContentRegistry());
     EXPECT_FALSE(result.valid);
     EXPECT_NE(result.message.find("medical"), std::string::npos);
+}
+
+TEST(ProfileStateTest, PopulationStateHasBoundedAggregateCounts)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-population-invalid",
+        publishedContentRegistry());
+    profile.basePopulation.ordinaryResidents =
+        kMaximumOrdinaryResidents + 1U;
+
+    const ProfileValidationResult result = validateProfileState(
+        profile,
+        publishedContentRegistry());
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("population"), std::string::npos);
 }
 
 TEST(ProfileStateTest, CarriedWeightCountsNestedAssetsAndLoadedRoundsOnce)

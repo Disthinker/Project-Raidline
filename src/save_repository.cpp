@@ -390,6 +390,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"missed_cycle_count",
              profile.basePriority.missedCycleCount}};
     }
+    if (schemaVersion >= 12)
+    {
+        payload["base_population"] = {
+            {"ordinary_residents",
+             profile.basePopulation.ordinaryResidents},
+            {"bed_capacity", profile.basePopulation.bedCapacity}};
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -618,7 +625,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
         schemaVersion != 9 && schemaVersion != 10 &&
-        schemaVersion != 11)
+        schemaVersion != 11 && schemaVersion != 12)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -680,13 +687,14 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 11 &&
              (contentVersion == "base-periodic-wishes-content-16" ||
               contentVersion == "base-operational-readiness-content-17" ||
-              contentVersion == "base-instant-gunsmith-content-18"));
+              contentVersion == "base-instant-gunsmith-content-18" ||
+              contentVersion == "base-paid-medical-content-19"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
              schemaVersion != 9 && schemaVersion != 10 &&
-             schemaVersion != 11) ||
+             schemaVersion != 11 && schemaVersion != 12) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -783,6 +791,14 @@ SaveLoadResult deserializeProfileEnvelope(
             static_cast<void>(synchronizeBasePriorityThrough(
                 profile,
                 content));
+        }
+        if (schemaVersion >= 12)
+        {
+            const Json &population = payload.at("base_population");
+            profile.basePopulation = BasePopulationState{
+                population.at("ordinary_residents")
+                    .get<std::uint32_t>(),
+                population.at("bed_capacity").get<std::uint32_t>()};
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
