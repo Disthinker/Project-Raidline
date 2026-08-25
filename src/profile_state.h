@@ -236,6 +236,30 @@ struct BasePopulationState
         const BasePopulationState &) = default;
 };
 
+struct ActiveBaseConstructionProject
+{
+    BaseConstructionProjectDefinitionId definitionId;
+    std::uint32_t lockedMaterialUnits{};
+    std::uint32_t committedWorkers{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+
+    friend bool operator==(
+        const ActiveBaseConstructionProject &,
+        const ActiveBaseConstructionProject &) = default;
+};
+
+struct BaseConstructionState
+{
+    std::uint32_t materialUnits{};
+    std::uint32_t dormitoryLevel{1};
+    std::optional<ActiveBaseConstructionProject> activeProject;
+
+    friend bool operator==(
+        const BaseConstructionState &,
+        const BaseConstructionState &) = default;
+};
+
 struct BasePriorityState
 {
     BasePriorityDefinitionId definitionId;
@@ -271,6 +295,8 @@ struct RaidTravelSnapshot
     WorldClockState startingWorldClock;
     BaseResourceState startingBaseResources;
     BasePriorityState startingBasePriority;
+    BaseConstructionState startingBaseConstruction;
+    std::uint32_t startingBedCapacity{10};
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -318,6 +344,7 @@ struct ProfileState
     WorldClockState worldClock;
     BaseResourceState baseResources;
     BasePopulationState basePopulation;
+    BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;

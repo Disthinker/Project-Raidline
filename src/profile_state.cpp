@@ -708,6 +708,58 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base population state is invalid"};
     }
+    if (profile.baseConstruction.materialUnits >
+        content.maximumBaseConstructionMaterials())
+    {
+        return {false, "Base construction material state is invalid"};
+    }
+    bool publishedDormitoryLevel =
+        profile.baseConstruction.dormitoryLevel == 1U;
+    for (const BaseConstructionProjectDefinition &definition :
+         content.baseConstructionProjects())
+    {
+        publishedDormitoryLevel = publishedDormitoryLevel ||
+            profile.baseConstruction.dormitoryLevel ==
+                definition.targetDormitoryLevel;
+    }
+    if (!publishedDormitoryLevel)
+    {
+        return {false, "Base dormitory level is invalid"};
+    }
+    if (profile.baseConstruction.activeProject.has_value())
+    {
+        const ActiveBaseConstructionProject &active =
+            *profile.baseConstruction.activeProject;
+        const BaseConstructionProjectDefinition *definition{};
+        try
+        {
+            definition = &content.baseConstructionProject(
+                active.definitionId);
+        }
+        catch (...)
+        {
+            return {false, "Base construction project is unknown"};
+        }
+        const std::uint32_t maximum =
+            content.maximumBaseConstructionMaterials();
+        if (profile.baseConstruction.dormitoryLevel !=
+                definition->requiredDormitoryLevel ||
+            active.lockedMaterialUnits != definition->materialCost ||
+            active.committedWorkers != definition->workerCount ||
+            active.committedWorkers >
+                profile.basePopulation.ordinaryResidents ||
+            active.startedWorldMinute >= active.completionWorldMinute ||
+            active.completionWorldMinute - active.startedWorldMinute !=
+                definition->durationMinutes ||
+            active.completionWorldMinute <=
+                profile.worldClock.elapsedWorldMinutes ||
+            active.lockedMaterialUnits > maximum ||
+            profile.baseConstruction.materialUnits >
+                maximum - active.lockedMaterialUnits)
+        {
+            return {false, "Base construction project state is invalid"};
+        }
+    }
     for (const RescueDefinitionId &rescue : profile.committedRescues)
     {
         const bool published = std::any_of(
@@ -1038,6 +1090,56 @@ ProfileValidationResult validateProfileState(
                 raid.travel.startingWorldClock.elapsedWorldMinutes >
                     std::numeric_limits<std::uint64_t>::max() -
                         raid.travel.outboundMinutes;
+            bool startingConstructionValid =
+                raid.travel.startingBaseConstruction.materialUnits <=
+                    content.maximumBaseConstructionMaterials() &&
+                raid.travel.startingBedCapacity <= kMaximumBedCapacity;
+            bool publishedStartingLevel =
+                raid.travel.startingBaseConstruction.dormitoryLevel == 1U;
+            for (const BaseConstructionProjectDefinition &definition :
+                 content.baseConstructionProjects())
+            {
+                publishedStartingLevel = publishedStartingLevel ||
+                    raid.travel.startingBaseConstruction.dormitoryLevel ==
+                        definition.targetDormitoryLevel;
+            }
+            startingConstructionValid = startingConstructionValid &&
+                publishedStartingLevel;
+            if (raid.travel.startingBaseConstruction.activeProject
+                    .has_value())
+            {
+                const ActiveBaseConstructionProject &active =
+                    *raid.travel.startingBaseConstruction.activeProject;
+                try
+                {
+                    const BaseConstructionProjectDefinition &definition =
+                        content.baseConstructionProject(active.definitionId);
+                    const std::uint32_t maximum =
+                        content.maximumBaseConstructionMaterials();
+                    startingConstructionValid = startingConstructionValid &&
+                        raid.travel.startingBaseConstruction.dormitoryLevel ==
+                            definition.requiredDormitoryLevel &&
+                        active.lockedMaterialUnits == definition.materialCost &&
+                        active.committedWorkers == definition.workerCount &&
+                        active.committedWorkers <=
+                            profile.basePopulation.ordinaryResidents &&
+                        active.startedWorldMinute <
+                            active.completionWorldMinute &&
+                        active.completionWorldMinute -
+                                active.startedWorldMinute ==
+                            definition.durationMinutes &&
+                        active.completionWorldMinute >
+                            raid.travel.startingWorldClock
+                                .elapsedWorldMinutes &&
+                        active.lockedMaterialUnits <= maximum &&
+                        raid.travel.startingBaseConstruction.materialUnits <=
+                            maximum - active.lockedMaterialUnits;
+                }
+                catch (...)
+                {
+                    startingConstructionValid = false;
+                }
+            }
             if (raid.travel.outboundMinutes == 0U ||
                 raid.travel.returnMinutes == 0U ||
                 raid.travel.failureRegroupMinutes <
@@ -1059,7 +1161,8 @@ ProfileValidationResult validateProfileState(
                 !validBasePriorityState(
                     raid.travel.startingBasePriority,
                     raid.travel.startingWorldClock.elapsedWorldMinutes,
-                    content))
+                    content) ||
+                !startingConstructionValid)
             {
                 return {false, "pending Raid travel snapshot is invalid"};
             }
@@ -1203,6 +1306,18 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
     hashInteger(hash, profile.basePopulation.ordinaryResidents);
     hashInteger(hash, profile.basePopulation.bedCapacity);
+    hashInteger(hash, profile.baseConstruction.materialUnits);
+    hashInteger(hash, profile.baseConstruction.dormitoryLevel);
+    if (profile.baseConstruction.activeProject.has_value())
+    {
+        const ActiveBaseConstructionProject &project =
+            *profile.baseConstruction.activeProject;
+        hashBytes(hash, project.definitionId.value());
+        hashInteger(hash, project.lockedMaterialUnits);
+        hashInteger(hash, project.committedWorkers);
+        hashInteger(hash, project.startedWorldMinute);
+        hashInteger(hash, project.completionWorldMinute);
+    }
     hashBytes(hash, profile.basePriority.definitionId.value());
     hashInteger(hash, profile.basePriority.cycleIndex);
     hashInteger(hash, profile.basePriority.fulfilled ? 1U : 0U);
@@ -1379,6 +1494,21 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                     raid.travel.startingBasePriority.fulfilled ? 1U : 0U);
         hashInteger(hash,
                     raid.travel.startingBasePriority.missedCycleCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseConstruction.materialUnits);
+        hashInteger(hash,
+                    raid.travel.startingBaseConstruction.dormitoryLevel);
+        if (raid.travel.startingBaseConstruction.activeProject.has_value())
+        {
+            const ActiveBaseConstructionProject &project =
+                *raid.travel.startingBaseConstruction.activeProject;
+            hashBytes(hash, project.definitionId.value());
+            hashInteger(hash, project.lockedMaterialUnits);
+            hashInteger(hash, project.committedWorkers);
+            hashInteger(hash, project.startedWorldMinute);
+            hashInteger(hash, project.completionWorldMinute);
+        }
+        hashInteger(hash, raid.travel.startingBedCapacity);
     }
     if (profile.lastRaidResult.has_value())
     {

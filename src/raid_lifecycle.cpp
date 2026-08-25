@@ -1,5 +1,7 @@
 #include "raid_lifecycle.h"
 
+#include "base_construction_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -239,6 +241,7 @@ bool advanceProfileWorldTime(
         advanced.completedDaysAfter,
         populationAdjustedDailyDemand(profile.basePopulation)));
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
+    static_cast<void>(applyBaseConstructionThrough(profile, content));
     return true;
 }
 }
@@ -369,7 +372,9 @@ DeployReceipt executeDeploy(
         map->travel.failureRegroupMinutes,
         candidate.worldClock,
         candidate.baseResources,
-        candidate.basePriority};
+        candidate.basePriority,
+        candidate.baseConstruction,
+        candidate.basePopulation.bedCapacity};
     if (map->rescue.has_value() &&
         !candidate.committedRescues.contains(map->rescue->id))
     {
@@ -639,6 +644,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingBaseResources;
     const BasePriorityState startingBasePriority =
         candidate.pendingRaid->travel.startingBasePriority;
+    const BaseConstructionState startingBaseConstruction =
+        candidate.pendingRaid->travel.startingBaseConstruction;
+    const std::uint32_t startingBedCapacity =
+        candidate.pendingRaid->travel.startingBedCapacity;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -665,6 +674,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.worldClock = startingWorldClock;
     candidate.baseResources = startingBaseResources;
     candidate.basePriority = startingBasePriority;
+    candidate.baseConstruction = startingBaseConstruction;
+    candidate.basePopulation.bedCapacity = startingBedCapacity;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

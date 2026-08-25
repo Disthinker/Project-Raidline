@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@2377035` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#85 接受的 Base Growth 基线；PR #85 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `2377035` 合入。
-- 当前开发分支：`codex/raid-ordinary-survivor-rescue-v1`，从干净的 `origin/main@2377035` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`。
+- `origin/main@ee9ba48` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#86 接受的 Base Growth 基线；PR #86 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `ee9ba48` 合入。
+- 当前开发分支：`codex/base-dormitory-expansion-v1`，从干净的 `origin/main@ee9ba48` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-dormitory-expansion-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#85 已接受。当前进入 **Raid 普通幸存者安全转移与基地接纳 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用一次性普通幸存者、可中断安全转移、聚合人口接纳和干净恢复检查点。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受。当前进入 **Base 宿舍扩建 v1**；外部 GDD 继续只读，本仓库 ExecPlan 只启用独立建材池、单一宿舍 1→2 级项目、临时劳动力占用与世界时间完成合同。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -40,7 +40,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 25. **Base 运营状态与即时枪械维护 v1**：PR #83 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `20d9f48` 进入 main。
 26. **Base 付费医疗服务 v1**：PR #84 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main。玩家只支付货币即可立即恢复生命并清除流血，不消耗个人医疗物、不推进世界时间。
 27. **Base 居民、床位与睡眠 v1**：PR #85 新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；已通过 CI 和用户验收并以 `2377035` 合入 main。
-28. **Raid 普通幸存者安全转移 v1**：当前分支为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。具名 NPC、护送 AI、职业、伤病和正式美术继续延期。
+28. **Raid 普通幸存者安全转移 v1**：PR #86 为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。已通过 CI 与用户正常游玩验收并以 `ee9ba48` 合入 main。
+29. **Base 宿舍扩建 v1**：当前分支允许把待分配的废旧零件/损坏电子元件主动加工为独立建材，并启动一次宿舍 1→2 级、4 建材、3 劳动力、6 小时的建设项目；完成后床位从 10 增至 14，取消返还建材但不回退世界时间。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -68,8 +69,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #86 功能提交 `52592c7` 已通过范围检查、Ubuntu 与 Windows exact-code CI；本地完整 CTest 942/942 通过，等待用户正常游玩验收。
-- PR #78～#85 的 Base 资源、世界时钟、Raid 往返耗时、枪匠服务、周期愿望、运营状态、付费医疗和居民/床位/睡眠均已完成 CI、用户验收并进入 main。当前普通幸存者救援树已通过 Windows Debug 全目标构建和完整 CTest 942/942，开发代理未启动游戏。
+- PR #86 已通过 exact-head CI 与用户正常游玩验收，并以 `ee9ba48` 进入 main。
+- 当前宿舍扩建树已通过 Windows Debug 全目标构建、156 项聚焦回归与完整 CTest 957/957；开发代理未启动游戏，exact-head CI 和用户正常游玩验收仍待 PR 阶段完成。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -267,7 +268,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - Base 新增文字/几何占位宿舍。玩家可查看居民、床位/拥挤、口粮储备和下次日结，并正常选择休息 1、6 或 12 小时；休息不治疗玩家。
 - `queryBaseRest/executeBaseRest` 在候选 Profile 上推进唯一 WorldClock、按人口结算跨越的日界线、同步五日愿望并原子保存。非法时长、Raid pending、过期 revision、重复事务和保存失败均不产生部分提交。
 - schema v12/content v20 保存人口与床位；schema v11 及更早版本使用确定性默认值迁移。Base 实时流逝和 Raid 往返跨日也消费同一人口口粮需求。
-- 普通幸存者接纳进入当前 Raid 救援切片；床位建设、岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
+- PR #86 已把普通幸存者接纳接入聚合人口；当前宿舍扩建切片只增加一项真实建设项目，岗位/专业、精力、正式士气、具名 NPC、居民医疗和公共医疗储备继续延期。
 
 ## Raid 普通幸存者安全转移 v1 当前实现
 
@@ -277,11 +278,19 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - `GameSession` 同时维护活动 Raid 候选和不含 pending Raid 的干净恢复候选。救援写盘只保存人口事实；后续死亡、主动退出或异常关闭仍保留居民，但装备、HP、战利品、资源和 Raid 时间继续恢复到出击前状态。写盘失败则人口、账本和世界确认均不提交。
 - 本切片没有新增或修改正式美术、音频与 manifest；具名 NPC、护送 AI、职业、伤病和逐人模拟继续延期。
 
+## Base 宿舍扩建 v1 当前实现
+
+- content v22 为废旧零件与损坏电子元件声明独立建材价值，并定义唯一宿舍 1→2 级项目：4 建材、3 名聚合劳动力、360 世界分钟、床位 10→14。四项运营资源不承担建筑材料语义。
+- Allocation 页由玩家主动把待分配回收物加工为建材；原资产实例不可逆消失。宿舍页显示等级、建材、可用/占用劳动力、剩余时间，并提供正常的开始或取消入口。
+- 启动、取消和完成均通过候选 Profile 原子提交；取消返还锁定建材且不回退已流逝时间。Base 实时、休息和 Raid 往返共同推进项目，完成只结算一次。
+- Deploy 快照冻结出击前建材、项目和床位；未结算 Raid 异常恢复时回滚建设进度和床位，但不会回滚已经安全转移并落盘的普通居民。
+- schema v14 保存当前项目及 Raid 回滚快照；schema v13 确定性迁移为宿舍 1 级、0 建材、无活动项目。客户端继续只使用双语文字与几何占位，没有修改正式美术、音频或 manifest。
+
 ## 尚未完成
 
 - 高倍率圆形光学视野等待首个合法高倍瞄具定义、附件安装点和实际内容消费者后独立交付；当前基础开镜不伪造高倍镜。
 - Rifle 当前只启用 Stovepipe；Misfire/Double Feed 需要通用的 Raid 动态地面弹药所有权，不能静默销毁或凭空生成退膛/抛出弹药。
-- 防具全面维护、组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
+- 组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。

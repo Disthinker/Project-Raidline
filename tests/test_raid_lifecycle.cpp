@@ -118,6 +118,42 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.basePriority, startingPriority);
 }
 
+TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-construction-rollback",
+        publishedContentRegistry());
+    const WorldClockState startingClock = profile.worldClock;
+    profile.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            startingClock.elapsedWorldMinutes - 330U,
+            startingClock.elapsedWorldMinutes + 30U};
+
+    const DeployReceipt receipt = deploy(profile);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 2U);
+    EXPECT_FALSE(profile.baseConstruction.activeProject.has_value());
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 14U);
+    // Models a rescue fact that must survive a later Raid rollback.
+    ++profile.basePopulation.ordinaryResidents;
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile,
+        publishedContentRegistry()).succeeded);
+    EXPECT_EQ(profile.worldClock, startingClock);
+    EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 1U);
+    ASSERT_TRUE(profile.baseConstruction.activeProject.has_value());
+    EXPECT_EQ(
+        profile.baseConstruction.activeProject->completionWorldMinute,
+        startingClock.elapsedWorldMinutes + 30U);
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 10U);
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
+}
+
 TEST(RaidLifecycleTest, CommittedMapRescueIsNotOfferedAgain)
 {
     ProfileState profile = makeNewAlphaProfile(

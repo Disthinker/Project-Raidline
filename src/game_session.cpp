@@ -1,5 +1,7 @@
 #include "game_session.h"
 
+#include "base_construction_domain.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1272,6 +1274,78 @@ BaseResourceReceipt GameSession::executeBaseResourceContribution(
     return receipt;
 }
 
+ConstructionMaterialReceipt
+GameSession::executeConstructionMaterialContribution(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    ConstructionMaterialReceipt receipt =
+        ::executeConstructionMaterialContribution(
+            candidate,
+            publishedContentRegistry(),
+            ContributeConstructionMaterialCommand{assetId},
+            CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                persistenceMessage_, profile_.revision};
+    }
+    return receipt;
+}
+
+BaseConstructionReceipt GameSession::executeStartBaseConstruction(
+    BaseConstructionProjectDefinitionId definitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseConstructionReceipt receipt = ::executeStartBaseConstruction(
+        candidate,
+        publishedContentRegistry(),
+        StartBaseConstructionCommand{std::move(definitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BaseConstructionReceipt GameSession::executeCancelBaseConstruction(
+    BaseConstructionProjectDefinitionId definitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseConstructionReceipt receipt = ::executeCancelBaseConstruction(
+        candidate,
+        publishedContentRegistry(),
+        CancelBaseConstructionCommand{std::move(definitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 BasePriorityReceipt GameSession::executeBasePrioritySubmission(
     AssetInstanceId assetId,
     std::string transactionId)
@@ -1713,7 +1787,7 @@ void GameSession::advanceWorldClockFromSimulation(
     const std::uint64_t minutes = wholeMinutes >= maximumMinutes
         ? std::numeric_limits<std::uint64_t>::max()
         : static_cast<std::uint64_t>(wholeMinutes);
-    pendingWorldSeconds_ = minutes ==
+    const double remainingWorldSeconds = minutes ==
             std::numeric_limits<std::uint64_t>::max()
         ? 0.0
         : scaledSeconds -
@@ -1722,20 +1796,59 @@ void GameSession::advanceWorldClockFromSimulation(
 
     if (minutes > 0U)
     {
+        ProfileState candidate = profile_;
         const WorldClockAdvanceResult advanced =
-            advanceWorldClock(profile_.worldClock, minutes);
+            advanceWorldClock(candidate.worldClock, minutes);
         if (advanced.minutesApplied > 0U)
         {
             static_cast<void>(applyBaseDailyDemandThrough(
-                profile_.baseResources,
+                candidate.baseResources,
                 advanced.completedDaysAfter,
-                populationAdjustedDailyDemand(profile_.basePopulation)));
+                populationAdjustedDailyDemand(candidate.basePopulation)));
             static_cast<void>(synchronizeBasePriorityThrough(
-                profile_,
+                candidate,
                 publishedContentRegistry()));
-            worldClockDirty_ = true;
+            const BaseConstructionAdvanceResult construction =
+                applyBaseConstructionThrough(
+                    candidate,
+                    publishedContentRegistry());
+            if (construction.completed)
+            {
+                if (candidate.revision ==
+                    std::numeric_limits<ProfileRevision>::max())
+                {
+                    persistenceMessage_ =
+                        "construction completion revision overflow";
+                    pendingWorldSeconds_ = scaledSeconds;
+                    return;
+                }
+                ++candidate.revision;
+            }
+            const ProfileValidationResult validation = validateProfileState(
+                candidate,
+                publishedContentRegistry());
+            if (!validation.valid)
+            {
+                persistenceMessage_ = validation.message;
+                pendingWorldSeconds_ = scaledSeconds;
+                return;
+            }
+            if (construction.completed)
+            {
+                if (!commitProfileCandidate(std::move(candidate)))
+                {
+                    pendingWorldSeconds_ = scaledSeconds;
+                    return;
+                }
+            }
+            else
+            {
+                profile_ = std::move(candidate);
+                worldClockDirty_ = true;
+            }
         }
     }
+    pendingWorldSeconds_ = remainingWorldSeconds;
 
     if (!allowPeriodicCheckpoint)
     {

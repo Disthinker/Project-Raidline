@@ -312,6 +312,11 @@ struct ItemDefinition
     // Optional irreversible contribution gained when the player allocates a
     // returned Raid item to the Base instead of keeping the item instance.
     std::optional<BaseResourceBundle> baseContribution;
+
+    // Independent construction-material value produced by deliberately
+    // processing a returned salvage item. It is not one of the four daily
+    // Base operating resources and never happens automatically.
+    std::uint32_t baseConstructionMaterialValue{};
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

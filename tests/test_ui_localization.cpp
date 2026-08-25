@@ -154,6 +154,29 @@ TEST(UiLocalizationTest, ChineseTranslatesDormitoryPopulationAndRest) {
             "休息12小时");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesDormitoryConstructionFlow) {
+  const std::string summary = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "DORMITORY LEVEL 1 | BUILDING MATERIAL 4/100 | WORKERS 8/8 AVAILABLE");
+  EXPECT_NE(summary.find("宿舍等级 1"), std::string::npos);
+  EXPECT_NE(summary.find("基地建材 4/100"), std::string::npos);
+  EXPECT_NE(summary.find("劳动力 8/8"), std::string::npos);
+  EXPECT_NE(summary.find("可用"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "START DORMITORY EXPANSION"),
+            "开始宿舍扩建");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CONSTRUCTION CANCELLED | MATERIAL REFUNDED"),
+            "建设已取消 | 建材已返还");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "insufficient Base construction material"),
+            "基地建材不足");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesOrdinarySurvivorRescueFlow) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

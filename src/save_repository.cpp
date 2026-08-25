@@ -397,6 +397,27 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
              profile.basePopulation.ordinaryResidents},
             {"bed_capacity", profile.basePopulation.bedCapacity}};
     }
+    if (schemaVersion >= 14)
+    {
+        payload["base_construction"] = {
+            {"material_units", profile.baseConstruction.materialUnits},
+            {"dormitory_level", profile.baseConstruction.dormitoryLevel}};
+        if (profile.baseConstruction.activeProject.has_value())
+        {
+            const ActiveBaseConstructionProject &project =
+                *profile.baseConstruction.activeProject;
+            payload["base_construction"]["active_project"] = {
+                {"definition_id", project.definitionId.value()},
+                {"locked_material_units", project.lockedMaterialUnits},
+                {"committed_workers", project.committedWorkers},
+                {"started_world_minute", project.startedWorldMinute},
+                {"completion_world_minute", project.completionWorldMinute}};
+        }
+        else
+        {
+            payload["base_construction"]["active_project"] = nullptr;
+        }
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -537,6 +558,39 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                          raid.travel.startingBasePriority
                              .missedCycleCount}};
             }
+            if (schemaVersion >= 14)
+            {
+                Json startingConstruction{
+                    {"material_units",
+                     raid.travel.startingBaseConstruction.materialUnits},
+                    {"dormitory_level",
+                     raid.travel.startingBaseConstruction.dormitoryLevel}};
+                if (raid.travel.startingBaseConstruction.activeProject
+                        .has_value())
+                {
+                    const ActiveBaseConstructionProject &project =
+                        *raid.travel.startingBaseConstruction.activeProject;
+                    startingConstruction["active_project"] = {
+                        {"definition_id", project.definitionId.value()},
+                        {"locked_material_units",
+                         project.lockedMaterialUnits},
+                        {"committed_workers", project.committedWorkers},
+                        {"started_world_minute",
+                         project.startedWorldMinute},
+                        {"completion_world_minute",
+                         project.completionWorldMinute}};
+                }
+                else
+                {
+                    startingConstruction["active_project"] = nullptr;
+                }
+                payload["pending_raid"]["travel"]
+                    ["starting_base_construction"] =
+                        std::move(startingConstruction);
+                payload["pending_raid"]["travel"]
+                    ["starting_bed_capacity"] =
+                        raid.travel.startingBedCapacity;
+            }
         }
         if (schemaVersion >= 13)
         {
@@ -662,7 +716,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
-        schemaVersion != 13)
+        schemaVersion != 13 && schemaVersion != 14)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -727,14 +781,17 @@ SaveLoadResult deserializeProfileEnvelope(
               contentVersion == "base-instant-gunsmith-content-18" ||
               contentVersion == "base-paid-medical-content-19")) ||
             (schemaVersion == 12 &&
-             contentVersion == "base-residents-beds-sleep-content-20");
+             contentVersion == "base-residents-beds-sleep-content-20") ||
+            (schemaVersion == 13 &&
+             contentVersion ==
+                 "raid-ordinary-survivor-rescue-content-21");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
              schemaVersion != 7 && schemaVersion != 8 &&
              schemaVersion != 9 && schemaVersion != 10 &&
              schemaVersion != 11 && schemaVersion != 12 &&
-             schemaVersion != 13) ||
+             schemaVersion != 13 && schemaVersion != 14) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -839,6 +896,31 @@ SaveLoadResult deserializeProfileEnvelope(
                 population.at("ordinary_residents")
                     .get<std::uint32_t>(),
                 population.at("bed_capacity").get<std::uint32_t>()};
+        }
+        if (schemaVersion >= 14)
+        {
+            const Json &construction = payload.at("base_construction");
+            profile.baseConstruction.materialUnits = construction.at(
+                "material_units").get<std::uint32_t>();
+            profile.baseConstruction.dormitoryLevel = construction.at(
+                "dormitory_level").get<std::uint32_t>();
+            if (!construction.at("active_project").is_null())
+            {
+                const Json &project = construction.at("active_project");
+                profile.baseConstruction.activeProject =
+                    ActiveBaseConstructionProject{
+                        BaseConstructionProjectDefinitionId{
+                            project.at("definition_id")
+                                .get<std::string>()},
+                        project.at("locked_material_units")
+                            .get<std::uint32_t>(),
+                        project.at("committed_workers")
+                            .get<std::uint32_t>(),
+                        project.at("started_world_minute")
+                            .get<std::uint64_t>(),
+                        project.at("completion_world_minute")
+                            .get<std::uint64_t>()};
+            }
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -1197,12 +1279,54 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingBasePriority =
                         startingState.basePriority;
                 }
+                if (schemaVersion >= 14)
+                {
+                    const Json &construction = travel.at(
+                        "starting_base_construction");
+                    raid.travel.startingBaseConstruction.materialUnits =
+                        construction.at("material_units")
+                            .get<std::uint32_t>();
+                    raid.travel.startingBaseConstruction.dormitoryLevel =
+                        construction.at("dormitory_level")
+                            .get<std::uint32_t>();
+                    if (!construction.at("active_project").is_null())
+                    {
+                        const Json &project = construction.at(
+                            "active_project");
+                        raid.travel.startingBaseConstruction.activeProject =
+                            ActiveBaseConstructionProject{
+                                BaseConstructionProjectDefinitionId{
+                                    project.at("definition_id")
+                                        .get<std::string>()},
+                                project.at("locked_material_units")
+                                    .get<std::uint32_t>(),
+                                project.at("committed_workers")
+                                    .get<std::uint32_t>(),
+                                project.at("started_world_minute")
+                                    .get<std::uint64_t>(),
+                                project.at("completion_world_minute")
+                                    .get<std::uint64_t>()};
+                    }
+                    raid.travel.startingBedCapacity = travel.at(
+                        "starting_bed_capacity").get<std::uint32_t>();
+                }
+                else
+                {
+                    raid.travel.startingBaseConstruction =
+                        profile.baseConstruction;
+                    raid.travel.startingBedCapacity =
+                        profile.basePopulation.bedCapacity;
+                }
             }
             else
             {
                 raid.travel.startingWorldClock = profile.worldClock;
                 raid.travel.startingBaseResources = profile.baseResources;
                 raid.travel.startingBasePriority = profile.basePriority;
+                raid.travel.startingBaseConstruction =
+                    profile.baseConstruction;
+                raid.travel.startingBedCapacity =
+                    profile.basePopulation.bedCapacity;
             }
             if (schemaVersion >= 13 && !value.at("rescue").is_null())
             {

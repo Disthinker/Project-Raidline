@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "economy_domain.h"
+#include "base_construction_domain.h"
 #include "base_population_domain.h"
 #include "base_resource_domain.h"
 #include "base_medical_service_domain.h"
@@ -216,6 +217,19 @@ public:
 
     [[nodiscard]] BaseResourceReceipt executeBaseResourceContribution(
         AssetInstanceId assetId,
+        std::string transactionId);
+
+    [[nodiscard]] ConstructionMaterialReceipt
+    executeConstructionMaterialContribution(
+        AssetInstanceId assetId,
+        std::string transactionId);
+
+    [[nodiscard]] BaseConstructionReceipt executeStartBaseConstruction(
+        BaseConstructionProjectDefinitionId definitionId,
+        std::string transactionId);
+
+    [[nodiscard]] BaseConstructionReceipt executeCancelBaseConstruction(
+        BaseConstructionProjectDefinitionId definitionId,
         std::string transactionId);
 
     [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(

@@ -760,6 +760,65 @@ ContentRegistry ContentRegistry::fromJson(
             fail("Base operations definition is invalid");
         }
 
+        const Json &baseConstruction = requiredObject(
+            root,
+            "base_construction");
+        registry.maximumBaseConstructionMaterials_ = requiredPositiveUint(
+            baseConstruction,
+            "maximum_material_units");
+        constexpr std::uint32_t maximumConstructionMaterials = 10000U;
+        if (registry.maximumBaseConstructionMaterials_ >
+            maximumConstructionMaterials)
+        {
+            fail("Base construction material capacity is invalid");
+        }
+        for (const Json &projectValue :
+             requiredArray(baseConstruction, "projects"))
+        {
+            if (!projectValue.is_object())
+            {
+                fail("Base construction project must be an object");
+            }
+            BaseConstructionProjectDefinition definition{
+                BaseConstructionProjectDefinitionId{
+                    requiredString(projectValue, "id")},
+                requiredString(projectValue, "display_name"),
+                requiredPositiveUint(
+                    projectValue, "required_dormitory_level"),
+                requiredPositiveUint(
+                    projectValue, "target_dormitory_level"),
+                requiredPositiveUint(projectValue, "material_cost"),
+                requiredPositiveUint(projectValue, "worker_count"),
+                requiredPositiveUint(projectValue, "duration_minutes"),
+                requiredPositiveUint(projectValue, "bed_capacity_after")};
+            if (!hasPrefix(definition.id.value(), "base_construction.") ||
+                definition.displayName.empty() ||
+                definition.targetDormitoryLevel !=
+                    definition.requiredDormitoryLevel + 1U ||
+                definition.materialCost >
+                    registry.maximumBaseConstructionMaterials_ ||
+                definition.workerCount > 1000U ||
+                definition.durationMinutes > 30U * 24U * 60U ||
+                definition.bedCapacityAfter > 1000U)
+            {
+                fail("Base construction project definition is invalid");
+            }
+            const std::size_t index =
+                registry.baseConstructionProjects_.size();
+            if (!registry.baseConstructionProjectIndex_
+                     .emplace(definition.id, index)
+                     .second)
+            {
+                fail("duplicate Base construction project definition ID");
+            }
+            registry.baseConstructionProjects_.push_back(
+                std::move(definition));
+        }
+        if (registry.baseConstructionProjects_.empty())
+        {
+            fail("at least one Base construction project is required");
+        }
+
         std::set<std::string> resources;
         for (const Json &resourceValue :
              requiredArray(root, "published_resources"))
@@ -876,8 +935,16 @@ ContentRegistry ContentRegistry::fromJson(
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
             definition.baseContribution = parseBaseContribution(itemValue);
+            definition.baseConstructionMaterialValue = optionalUint(
+                itemValue,
+                "base_construction_material");
             definition.unitWeightGrams =
                 requiredPositiveUint(itemValue, "unit_weight_grams");
+            if (definition.baseConstructionMaterialValue >
+                registry.maximumBaseConstructionMaterials_)
+            {
+                fail("item Base construction material value is invalid");
+            }
 
             if (definition.equipmentSlot.has_value() &&
                 !definition.compatibleEquipmentSlots.empty())
@@ -1443,7 +1510,6 @@ ContentRegistry ContentRegistry::fromJson(
                 }
                 definition.rescue = std::move(rescueDefinition);
             }
-
             if (mapValue.contains("high_risk"))
             {
                 const Json &highRisk =
@@ -1971,6 +2037,28 @@ const BasePriorityDefinition &ContentRegistry::basePriority(
         basePriorities_,
         id,
         "Base priority");
+}
+
+std::uint32_t ContentRegistry::maximumBaseConstructionMaterials() const noexcept
+{
+    return maximumBaseConstructionMaterials_;
+}
+
+const std::vector<BaseConstructionProjectDefinition> &
+ContentRegistry::baseConstructionProjects() const noexcept
+{
+    return baseConstructionProjects_;
+}
+
+const BaseConstructionProjectDefinition &
+ContentRegistry::baseConstructionProject(
+    const BaseConstructionProjectDefinitionId &id) const
+{
+    return lookup(
+        baseConstructionProjectIndex_,
+        baseConstructionProjects_,
+        id,
+        "Base construction project");
 }
 
 const ItemDefinition &

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-ordinary-survivor-rescue-content-21",
+  "content_version": "base-dormitory-expansion-content-22",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -16,6 +16,21 @@
   "base_operations": {
     "strained_below_reserve_days": 3,
     "supported_at_reserve_days": 7
+  },
+  "base_construction": {
+    "maximum_material_units": 100,
+    "projects": [
+      {
+        "id": "base_construction.dormitory.level_2",
+        "display_name": "Dormitory Expansion",
+        "required_dormitory_level": 1,
+        "target_dormitory_level": 2,
+        "material_cost": 4,
+        "worker_count": 3,
+        "duration_minutes": 360,
+        "bed_capacity_after": 14
+      }
+    ]
   },
   "base_priorities": {
     "cycle_minutes": 7200,
@@ -491,6 +506,7 @@
       "inventory_texture": "items/inventory/unpublished_scrap.png",
       "world_texture": "items/world/unpublished_scrap.png",
       "base_contribution": {"security": 12},
+      "base_construction_material": 4,
       "market_recycle_price": 20
     },
     {
@@ -508,6 +524,7 @@
       "inventory_texture": "items/inventory/unpublished_electronics.png",
       "world_texture": "items/world/unpublished_electronics.png",
       "base_contribution": {"hygiene": 4, "security": 8},
+      "base_construction_material": 4,
       "market_recycle_price": 45
     }
   ],

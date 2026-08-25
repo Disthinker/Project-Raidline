@@ -28,7 +28,7 @@
 | RL-COMBAT-009 | 成功击发缺少短烟、柔边局部闪光和不影响瞄准的轻微屏幕抖动 | PR #72 已通过 exact-head CI 与用户正常游玩验收，以 merge commit `795b644` 进入 main |
 | RL-COMBAT-010 | 完成武器切换时重建 WeaponAimState，导致实际准星跳回相对输入锚点 | PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | PR #78 已修复 Base 停止时丢失最后水平朝向；Base/Raid 左右移动继续复用六帧资源，上下移动仍用静态图，正式补全延期 |
-| RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | 当前分支实现三图一次性安全转移、schema v13 幂等账本与干净恢复检查点；具名 NPC、护送 AI、伤病和职业仍延期 |
+| RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | PR #86 已以 `ee9ba48` 进入 main；三图一次性安全转移、schema v13 幂等账本与干净恢复检查点已完成，具名 NPC、护送 AI、伤病和职业仍延期 |
 
 ## 需要未来产品决策
 
@@ -82,8 +82,9 @@
 | Base 运营状态与即时枪械维护 v1 | PR #83 以四项最短储备日数投影运营状态，并把玩家枪械全面维护改为只扣货币、立即完成；已通过 exact-head CI 和用户验收，以 `20d9f48` 进入 main |
 | Base 付费医疗服务 v1 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `c01d431` 进入 main |
 | Base 居民、床位与睡眠 v1 | PR #85 已通过 CI 和用户验收，以普通 merge commit `2377035` 进入 main |
-| Raid 普通幸存者安全转移 v1 | 当前分支实现一次性安全转移、聚合人口接纳、床位/口粮预警、失败结局保留和异常退出干净检查点；schema v13/content v21 |
+| Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
+| Base 宿舍扩建 v1 | 当前分支实现独立建材、单一项目、劳动力锁定、时间完成/取消返还、Raid 回滚快照与 schema v14/content v22；本地 957/957 通过，等待 PR CI 和用户验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；GDD 保持只读，待策划线程同步修订。玩家付费医疗与 NPC 设施治疗必须继续保持独立命令，后者未来才消耗世界时间和公共医疗库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-ordinary-survivor-rescue-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-dormitory-expansion-v1.md`。

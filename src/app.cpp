@@ -172,10 +172,15 @@ namespace
     SDL_FRect baseRestButton(std::size_t index) noexcept
     {
         return SDL_FRect{
-            250.0F + static_cast<float>(index) * 280.0F,
-            492.0F,
+            170.0F + static_cast<float>(index) * 310.0F,
+            526.0F,
             220.0F,
-            56.0F};
+            50.0F};
+    }
+
+    SDL_FRect baseConstructionButton() noexcept
+    {
+        return SDL_FRect{710.0F, 384.0F, 340.0F, 58.0F};
     }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
@@ -1755,7 +1760,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
         const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
         const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
-        const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
+        const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
+        const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
         if (contains(keepButton, click.position))
         {
             const ItemDefinition &definition =
@@ -1839,6 +1845,27 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             }
             return;
         }
+        if (contains(materialButton, click.position))
+        {
+            const ConstructionMaterialReceipt receipt =
+                gameSession_.executeConstructionMaterialContribution(
+                    selectedId,
+                    nextProfileTransactionId(
+                        "process-construction-material"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format(
+                    "ITEM PROCESSED | CONSTRUCTION MATERIAL +{}",
+                    receipt.materialUnits)
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+            }
+            return;
+        }
         if (contains(priorityButton, click.position))
         {
             const BasePriorityReceipt receipt =
@@ -1883,6 +1910,42 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Dormitory)
     {
+        const BaseConstructionProjectDefinition &project =
+            publishedContentRegistry().baseConstructionProjects().front();
+        if (contains(baseConstructionButton(), click.position))
+        {
+            const bool active = gameSession_.profile()
+                .baseConstruction.activeProject.has_value();
+            if (!active)
+            {
+                const BaseConstructionPlan plan = queryStartBaseConstruction(
+                    gameSession_.profile(),
+                    publishedContentRegistry(),
+                    StartBaseConstructionCommand{project.id});
+                if (!plan.canCommit)
+                {
+                    uiMessage_ = plan.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                    return;
+                }
+            }
+            const BaseConstructionReceipt receipt = active
+                ? gameSession_.executeCancelBaseConstruction(
+                    project.id,
+                    nextProfileTransactionId("cancel-base-construction"))
+                : gameSession_.executeStartBaseConstruction(
+                    project.id,
+                    nextProfileTransactionId("start-base-construction"));
+            uiMessage_ = receipt.succeeded
+                ? active
+                    ? "CONSTRUCTION CANCELLED | MATERIAL REFUNDED"
+                    : "DORMITORY EXPANSION STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
         constexpr std::array<std::uint32_t, 3> restHours{1U, 6U, 12U};
         for (std::size_t index{}; index < restHours.size(); ++index)
         {
@@ -8890,7 +8953,7 @@ void App::renderBaseAllocation()
         renderer_, 650.0F, 190.0F, priorityTiming.c_str());
     uiTextRenderer_.render(
         renderer_, 650.0F, 226.0F,
-        "PENDING RAID RETURNS - CHOOSE KEEP, CONTRIBUTE, OR WISH");
+        "PENDING RAID RETURNS - KEEP, CONTRIBUTE, BUILD, OR WISH");
     const auto intake = assetsInContainer(
         gameSession_.profile(),
         ProfileContainerId::baseIntake());
@@ -8934,6 +8997,12 @@ void App::renderBaseAllocation()
                 value.morale * asset.quantity,
                 value.security * asset.quantity);
         }
+        if (definition.baseConstructionMaterialValue > 0U)
+        {
+            contribution += fmt::format(
+                " | BUILD +{}",
+                definition.baseConstructionMaterialValue * asset.quantity);
+        }
         const std::string label = fmt::format(
             "{} x{} | {}",
             definition.displayName,
@@ -8945,7 +9014,8 @@ void App::renderBaseAllocation()
 
     const SDL_FRect keepButton{650.0F, 554.0F, 230.0F, 42.0F};
     const SDL_FRect contributeButton{920.0F, 554.0F, 230.0F, 42.0F};
-    const SDL_FRect priorityButton{650.0F, 604.0F, 500.0F, 42.0F};
+    const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
+    const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
     bool canContribute{};
     const char *contributeLabel = "SELECT ITEM FIRST";
     if (profileAssetSelection_.has_value())
@@ -8966,6 +9036,26 @@ void App::renderBaseAllocation()
         renderer_, canContribute ? 66 : 62, canContribute ? 118 : 68,
         canContribute ? 84 : 66, 255);
     SDL_RenderFillRect(renderer_, &contributeButton);
+    bool canProcessMaterial{};
+    const char *materialLabel = "SELECT SALVAGE";
+    if (profileAssetSelection_.has_value())
+    {
+        const ConstructionMaterialPlan plan =
+            queryConstructionMaterialContribution(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                ContributeConstructionMaterialCommand{
+                    profileAssetSelection_->instanceId});
+        canProcessMaterial = plan.canCommit;
+        materialLabel = plan.canCommit
+            ? "PROCESS FOR BUILDING"
+            : "NOT BUILDING MATERIAL";
+    }
+    SDL_SetRenderDrawColor(
+        renderer_, canProcessMaterial ? 92 : 62,
+        canProcessMaterial ? 108 : 68,
+        canProcessMaterial ? 132 : 66, 255);
+    SDL_RenderFillRect(renderer_, &materialButton);
     bool canFulfillPriority{};
     const char *priorityLabel = priorityState.fulfilled
         ? "BASE WISH ALREADY FULFILLED"
@@ -8990,6 +9080,7 @@ void App::renderBaseAllocation()
     SDL_SetRenderDrawColor(renderer_, 154, 202, 184, 255);
     SDL_RenderRect(renderer_, &keepButton);
     SDL_RenderRect(renderer_, &contributeButton);
+    SDL_RenderRect(renderer_, &materialButton);
     SDL_RenderRect(renderer_, &priorityButton);
     uiTextRenderer_.render(
         renderer_, keepButton.x + 42.0F, keepButton.y + 18.0F,
@@ -8999,8 +9090,12 @@ void App::renderBaseAllocation()
         contributeButton.y + 18.0F,
         contributeLabel);
     uiTextRenderer_.render(
-        renderer_, priorityButton.x + 96.0F,
-        priorityButton.y + 15.0F,
+        renderer_, materialButton.x + 24.0F,
+        materialButton.y + 18.0F,
+        materialLabel);
+    uiTextRenderer_.render(
+        renderer_, priorityButton.x + 24.0F,
+        priorityButton.y + 18.0F,
         priorityLabel);
     uiTextRenderer_.render(renderer_, 80.0F, 646.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
@@ -9152,17 +9247,80 @@ void App::renderBaseDormitory()
         population.bedShortfall > 0U ? 124 : 194,
         255);
     uiTextRenderer_.render(
-        renderer_, 170.0F, 338.0F,
+        renderer_, 170.0F, 316.0F,
         population.bedShortfall > 0U
             ? "OVERCROWDED | SHORTAGE IS NON-BLOCKING"
             : "BED CAPACITY AVAILABLE");
+    const BaseConstructionProjection construction = projectBaseConstruction(
+        profile,
+        publishedContentRegistry());
+    const BaseConstructionProjectDefinition &project =
+        publishedContentRegistry().baseConstructionProjects().front();
     SDL_SetRenderDrawColor(renderer_, 184, 194, 210, 255);
+    const std::string constructionSummary = fmt::format(
+        "DORMITORY LEVEL {} | BUILDING MATERIAL {}/{} | WORKERS {}/{} AVAILABLE",
+        construction.dormitoryLevel,
+        construction.materialUnits,
+        construction.maximumMaterialUnits,
+        construction.availableWorkers,
+        construction.totalWorkers);
     uiTextRenderer_.render(
-        renderer_, 170.0F, 382.0F,
+        renderer_, 170.0F, 350.0F, constructionSummary.c_str());
+
+    std::string projectStatus;
+    bool constructionAvailable{};
+    const char *constructionLabel{};
+    if (construction.activeProjectId.has_value())
+    {
+        projectStatus = fmt::format(
+            "EXPANSION IN PROGRESS | {}H {:02}M LEFT | {} WORKERS COMMITTED",
+            construction.remainingMinutes / kWorldMinutesPerHour,
+            construction.remainingMinutes % kWorldMinutesPerHour,
+            construction.committedWorkers);
+        constructionAvailable = true;
+        constructionLabel = "CANCEL & REFUND MATERIAL";
+    }
+    else if (construction.dormitoryLevel >= project.targetDormitoryLevel)
+    {
+        projectStatus = "DORMITORY EXPANSION COMPLETE";
+        constructionLabel = "NO FURTHER PROJECT";
+    }
+    else
+    {
+        const BaseConstructionPlan plan = queryStartBaseConstruction(
+            profile,
+            publishedContentRegistry(),
+            StartBaseConstructionCommand{project.id});
+        constructionAvailable = plan.canCommit;
+        projectStatus = fmt::format(
+            "NEXT: LEVEL {} / {} BEDS | COST {} MATERIAL / {} WORKERS / {}H",
+            project.targetDormitoryLevel,
+            project.bedCapacityAfter,
+            project.materialCost,
+            project.workerCount,
+            project.durationMinutes / kWorldMinutesPerHour);
+        constructionLabel = plan.canCommit
+            ? "START DORMITORY EXPANSION"
+            : "EXPANSION REQUIREMENTS NOT MET";
+    }
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 382.0F, projectStatus.c_str());
+    const SDL_FRect constructionButton = baseConstructionButton();
+    SDL_SetRenderDrawColor(
+        renderer_, constructionAvailable ? 66 : 52,
+        constructionAvailable ? 102 : 58,
+        constructionAvailable ? 124 : 64, 255);
+    SDL_RenderFillRect(renderer_, &constructionButton);
+    SDL_SetRenderDrawColor(renderer_, 170, 188, 216, 255);
+    SDL_RenderRect(renderer_, &constructionButton);
+    uiTextRenderer_.render(
+        renderer_, constructionButton.x + 28.0F,
+        constructionButton.y + 22.0F,
+        constructionLabel);
+
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 470.0F,
         "REST ADVANCES WORLD TIME AND DAILY NEEDS | MAXIMUM 12H");
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 412.0F,
-        "V1 DOES NOT HEAL THE PLAYER OR SIMULATE INDIVIDUAL RESIDENTS");
 
     constexpr std::array<const char *, 3> labels{
         "REST 1 HOUR", "REST 6 HOURS", "REST 12 HOURS"};
@@ -9177,12 +9335,12 @@ void App::renderBaseDormitory()
             renderer_, button.x + 44.0F, button.y + 20.0F, labels[index]);
     }
     SDL_SetRenderDrawColor(renderer_, 194, 204, 218, 255);
-    uiTextRenderer_.render(renderer_, 170.0F, 584.0F, "ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
         uiTextRenderer_.render(
-            renderer_, 420.0F, 584.0F, uiMessage_.c_str());
+            renderer_, 420.0F, 610.0F, uiMessage_.c_str());
     }
 }
 

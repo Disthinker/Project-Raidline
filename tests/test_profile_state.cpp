@@ -217,6 +217,34 @@ TEST(ProfileStateTest, UnknownCommittedRescueDefinitionIsRejected)
     EXPECT_NE(validation.message.find("unknown"), std::string::npos);
 }
 
+TEST(ProfileStateTest, InvalidBaseConstructionStateIsRejected)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-invalid-construction",
+        publishedContentRegistry());
+    profile.baseConstruction.dormitoryLevel = 3U;
+    EXPECT_FALSE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+
+    profile.baseConstruction.dormitoryLevel = 2U;
+    EXPECT_TRUE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+
+    profile.baseConstruction.activeProject =
+        ActiveBaseConstructionProject{
+            BaseConstructionProjectDefinitionId{
+                "base_construction.dormitory.level_2"},
+            4U,
+            3U,
+            profile.worldClock.elapsedWorldMinutes,
+            profile.worldClock.elapsedWorldMinutes + 360U};
+    EXPECT_FALSE(validateProfileState(
+        profile,
+        publishedContentRegistry()).valid);
+}
+
 TEST(ProfileStateTest, CarriedWeightCountsNestedAssetsAndLoadedRoundsOnce)
 {
     ProfileState profile = makeNewAlphaProfile(
