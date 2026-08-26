@@ -168,6 +168,28 @@ namespace
             20000U};
         return config;
     }
+
+    RaidWorldConfig makeInteriorDiscoveryWorldConfig()
+    {
+        RaidWorldConfig config;
+        config.worldSize = Vec2{800.0F, 600.0F};
+        config.playerSpawn = Vec2{500.0F, 100.0F};
+        config.extractionPoint =
+            ContentRect{Vec2{650.0F, 450.0F}, Vec2{100.0F, 100.0F}};
+        config.initialEnemies.clear();
+        RaidInteriorWorldConfig interior;
+        interior.id = RaidSpaceDefinitionId{"raid_space.test.office"};
+        interior.displayName = "Test Office";
+        interior.worldSize = Vec2{480.0F, 360.0F};
+        interior.exteriorEntrance =
+            ContentRect{Vec2{80.0F, 80.0F}, Vec2{100.0F, 100.0F}};
+        interior.exteriorReturn = Vec2{200.0F, 100.0F};
+        interior.interiorSpawn = Vec2{80.0F, 80.0F};
+        interior.interiorExit =
+            ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}};
+        config.interiors.push_back(std::move(interior));
+        return config;
+    }
 } // namespace
 
 // 初始 Player 位置是 (640, 360)
@@ -2565,6 +2587,42 @@ TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
                     outdoorEnemyPosition.x);
     EXPECT_FLOAT_EQ(world.enemies().front().position().y,
                     outdoorEnemyPosition.y);
+}
+
+TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
+{
+    GameplayWorld world{makeInteriorDiscoveryWorldConfig()};
+    const RaidSpaceDefinitionId officeId{"raid_space.test.office"};
+
+    EXPECT_FALSE(world.activeRaidSpacePortal().has_value());
+    EXPECT_FALSE(world.tacticalMap().specialLocationVisible(officeId));
+
+    GameplayInput approach;
+    approach.moveLeft = true;
+    world.update(approach, 1.5F);
+
+    EXPECT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_TRUE(world.activeRaidSpacePortal().has_value());
+    EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
+}
+
+TEST(GameplayWorldRaidTest, EnteringPortalDiscoversItBeforeSpaceTransition)
+{
+    GameplayWorld world{makeInteriorDiscoveryWorldConfig()};
+    const RaidSpaceDefinitionId officeId{"raid_space.test.office"};
+    GameplayInput approachAndEnter;
+    approachAndEnter.moveLeft = true;
+    approachAndEnter.interactJustPressed = true;
+
+    world.update(approachAndEnter, 1.5F);
+
+    EXPECT_FALSE(world.inOutdoorRaidSpace());
+    EXPECT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
+    ASSERT_TRUE(world.activeRaidSpacePortal().has_value());
+    EXPECT_EQ(
+        *world.activeRaidSpacePortal(),
+        (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
 }
 
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)

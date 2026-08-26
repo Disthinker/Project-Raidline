@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -28,12 +29,35 @@ void RaidTacticalMapState::configure(
     std::optional<ContentRect> emergencyExtraction,
     std::optional<ContentRect> conditionalExtraction,
     std::optional<ContentRect> advancedResourceArea,
-    std::vector<Vec2> initialEnemyCenters)
+    std::vector<Vec2> initialEnemyCenters,
+    std::vector<RaidSpecialLocationMapState> specialLocations)
 {
     if (!std::isfinite(worldSize.x) || !std::isfinite(worldSize.y) ||
         worldSize.x <= 0.0F || worldSize.y <= 0.0F)
     {
         throw std::invalid_argument{"tactical map world size is invalid"};
+    }
+    std::set<RaidSpaceDefinitionId> specialLocationIds;
+    for (RaidSpecialLocationMapState &location : specialLocations)
+    {
+        const ContentRect entrance = location.entrance;
+        if (location.id == outdoorRaidSpaceId() ||
+            location.displayName.empty() ||
+            !specialLocationIds.insert(location.id).second ||
+            !std::isfinite(entrance.position.x) ||
+            !std::isfinite(entrance.position.y) ||
+            !std::isfinite(entrance.size.x) ||
+            !std::isfinite(entrance.size.y) ||
+            entrance.position.x < 0.0F ||
+            entrance.position.y < 0.0F ||
+            entrance.size.x <= 0.0F || entrance.size.y <= 0.0F ||
+            entrance.position.x + entrance.size.x > worldSize.x ||
+            entrance.position.y + entrance.size.y > worldSize.y)
+        {
+            throw std::invalid_argument{
+                "tactical map special location is invalid"};
+        }
+        location.discovered = false;
     }
     worldSize_ = worldSize;
     intelligence_ = intelligence;
@@ -42,6 +66,7 @@ void RaidTacticalMapState::configure(
     conditionalExtraction_ = conditionalExtraction;
     advancedResourceArea_ = advancedResourceArea;
     initialEnemyCenters_ = std::move(initialEnemyCenters);
+    specialLocations_ = std::move(specialLocations);
     revealed_.assign(static_cast<std::size_t>(columns_ * rows_), false);
     normalExtractionDiscovered_ = false;
     emergencyExtractionDiscovered_ = false;
@@ -88,6 +113,12 @@ void RaidTacticalMapState::revealAround(Vec2 worldPosition) noexcept
         discovered(emergencyExtraction_);
     conditionalExtractionDiscovered_ = conditionalExtractionDiscovered_ ||
         discovered(conditionalExtraction_);
+    for (RaidSpecialLocationMapState &location : specialLocations_)
+    {
+        location.discovered = location.discovered ||
+            distanceSquared(centerOf(location.entrance), worldPosition) <=
+                discoveryRadius * discoveryRadius;
+    }
 }
 
 bool RaidTacticalMapState::configured() const noexcept
@@ -165,4 +196,20 @@ const std::vector<Vec2> &
 RaidTacticalMapState::initialEnemyCenters() const noexcept
 {
     return initialEnemyCenters_;
+}
+
+const std::vector<RaidSpecialLocationMapState> &
+RaidTacticalMapState::specialLocations() const noexcept
+{
+    return specialLocations_;
+}
+
+bool RaidTacticalMapState::specialLocationVisible(
+    const RaidSpaceDefinitionId &id) const noexcept
+{
+    const auto found = std::find_if(
+        specialLocations_.begin(), specialLocations_.end(),
+        [&](const RaidSpecialLocationMapState &location)
+        { return location.id == id; });
+    return found != specialLocations_.end() && found->discovered;
 }

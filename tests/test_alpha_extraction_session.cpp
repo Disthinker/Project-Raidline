@@ -100,6 +100,26 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
         "raid-special-location-placement-13");
 }
 
+TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-special-location"));
+    ASSERT_TRUE(session.deployAlpha(
+        88123U,
+        MapDefinitionId{"map.raid.frontier_exchange"}));
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    ASSERT_EQ(session.profile().pendingRaid->interiors.size(), 1U);
+    ASSERT_EQ(session.world().tacticalMap().specialLocations().size(), 1U);
+
+    const RaidInteriorSnapshot &snapshot =
+        session.profile().pendingRaid->interiors.front();
+    const RaidSpecialLocationMapState &projection =
+        session.world().tacticalMap().specialLocations().front();
+    EXPECT_EQ(projection.id, snapshot.id);
+    EXPECT_EQ(projection.displayName, snapshot.displayName);
+    EXPECT_EQ(projection.entrance, snapshot.exteriorEntrance);
+}
+
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
 {
     GameSession session;

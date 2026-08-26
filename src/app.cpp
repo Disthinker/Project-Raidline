@@ -10655,6 +10655,29 @@ void App::renderRaidTacticalMap()
         }
     }
 
+    for (const RaidSpecialLocationMapState &location :
+         map.specialLocations())
+    {
+        if (!location.discovered)
+        {
+            continue;
+        }
+        const SDL_FRect marker = screenRect(location.entrance);
+        SDL_SetRenderDrawColor(renderer_, 86, 194, 178, 104);
+        SDL_RenderFillRect(renderer_, &marker);
+        SDL_SetRenderDrawColor(renderer_, 126, 234, 210, 245);
+        SDL_RenderRect(renderer_, &marker);
+        const SDL_FRect inset{
+            marker.x + 3.0F,
+            marker.y + 3.0F,
+            std::max(0.0F, marker.w - 6.0F),
+            std::max(0.0F, marker.h - 6.0F)};
+        SDL_RenderRect(renderer_, &inset);
+        uiTextRenderer_.render(
+            renderer_, marker.x + 5.0F, marker.y + 4.0F,
+            "SPECIAL SITE");
+    }
+
     const Player &player = gameSession_.world().player();
     const Vec2 playerMarker = screenPoint(Vec2{
         player.position().x + player.size() * 0.5F,

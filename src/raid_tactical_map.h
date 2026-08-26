@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "content_registry.h"
@@ -11,6 +12,14 @@ enum class RaidMapExtractionKind
     Normal,
     EmergencySignal,
     EmergencyConditional
+};
+
+struct RaidSpecialLocationMapState
+{
+    RaidSpaceDefinitionId id;
+    std::string displayName;
+    ContentRect entrance;
+    bool discovered{};
 };
 
 class RaidTacticalMapState
@@ -25,7 +34,8 @@ public:
         std::optional<ContentRect> emergencyExtraction,
         std::optional<ContentRect> conditionalExtraction,
         std::optional<ContentRect> advancedResourceArea,
-        std::vector<Vec2> initialEnemyCenters);
+        std::vector<Vec2> initialEnemyCenters,
+        std::vector<RaidSpecialLocationMapState> specialLocations = {});
     void revealAround(Vec2 worldPosition) noexcept;
 
     [[nodiscard]] bool configured() const noexcept;
@@ -47,6 +57,10 @@ public:
     advancedResourceArea() const noexcept;
     [[nodiscard]] const std::vector<Vec2> &
     initialEnemyCenters() const noexcept;
+    [[nodiscard]] const std::vector<RaidSpecialLocationMapState> &
+    specialLocations() const noexcept;
+    [[nodiscard]] bool specialLocationVisible(
+        const RaidSpaceDefinitionId &id) const noexcept;
 
 private:
     Vec2 worldSize_{};
@@ -56,6 +70,7 @@ private:
     std::optional<ContentRect> conditionalExtraction_;
     std::optional<ContentRect> advancedResourceArea_;
     std::vector<Vec2> initialEnemyCenters_;
+    std::vector<RaidSpecialLocationMapState> specialLocations_;
     int columns_{32};
     int rows_{18};
     std::vector<bool> revealed_;

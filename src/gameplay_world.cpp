@@ -542,6 +542,16 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     {
         initialEnemyCenters.push_back(enemyCenter(enemy));
     }
+    std::vector<RaidSpecialLocationMapState> specialLocations;
+    specialLocations.reserve(interiors_.size());
+    for (const InteriorRuntime &interior : interiors_)
+    {
+        specialLocations.push_back(RaidSpecialLocationMapState{
+            interior.id,
+            interior.displayName,
+            interior.exteriorEntrance,
+            false});
+    }
     tacticalMap_.configure(
         config.worldSize,
         config.intelligence,
@@ -557,7 +567,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         config.highRisk.enabled
             ? std::optional<ContentRect>{config.highRisk.advancedResourceArea}
             : std::nullopt,
-        std::move(initialEnemyCenters));
+        std::move(initialEnemyCenters),
+        std::move(specialLocations));
     tacticalMap_.revealAround(playerCenter(player_));
     if (!raidSession_.start())
     {
@@ -882,13 +893,15 @@ void GameplayWorld::update(
         activeBallisticBlockers());
     static_cast<void>(player_.setPosition(resolvedPlayerPosition));
 
+    const bool exploredOutdoor = inOutdoorRaidSpace();
+    const Vec2 explorationCenter = playerCenter(player_);
+    if (exploredOutdoor)
+    {
+        tacticalMap_.revealAround(explorationCenter);
+    }
     spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input);
 
     const Vec2 centerAfterMovement = playerCenter(player_);
-    if (inOutdoorRaidSpace())
-    {
-        tacticalMap_.revealAround(centerAfterMovement);
-    }
     Vec2 desiredAimPosition{
         centerAfterMovement.x + player_.facingDirection().x * 400.0F,
         centerAfterMovement.y + player_.facingDirection().y * 400.0F};
@@ -1457,7 +1470,14 @@ GameplayWorld::activeRaidSpacePortal() const noexcept
     }
     if (!interiors_.empty())
     {
-        return interiors_.front().exteriorEntrance;
+        const auto visible = std::find_if(
+            interiors_.begin(), interiors_.end(),
+            [&](const InteriorRuntime &interior)
+            { return tacticalMap_.specialLocationVisible(interior.id); });
+        if (visible != interiors_.end())
+        {
+            return visible->exteriorEntrance;
+        }
     }
     return std::nullopt;
 }

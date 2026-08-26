@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、程序化室外空间基础与独立室内空间已进入主线。当前继续 **Raid World Vertical Slice**，优先建立特殊地点随机合法放置；范围合同见 `doc/exec-plans/active/raid-world-special-location-placement-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、程序化室外空间基础、独立室内空间与特殊地点随机合法放置已进入主线。当前继续 **Raid World Vertical Slice**，建立特殊地点探索发现和战术地图投影；范围合同见 `doc/exec-plans/active/raid-world-special-location-discovery-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -54,6 +54,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 区域地图与对局情报 v1 | PR #92 / merge commit `bf8baf3` |
 | 程序化室外空间基础 v1 | PR #93 / merge commit `1404b41` |
 | 独立室内空间 v1 | PR #94 / merge commit `62ebd8a` |
+| 特殊地点随机合法放置 v1 | PR #95 / merge commit `d2ceb59` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -120,7 +121,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | --- | --- | --- | --- |
 | 程序化室外空间基础 v1 | 第四张地图每次出击具有不同但可通行的代码几何掩体；战斗、Loot、救援、高危、撤离和战术地图继续正常工作 | ProceduralOutdoorDefinition、稳定 PCG32、锚点连通性、确定性回退、冻结 SpatialLayout、schema v21/content v29 | PR #93 已通过 CI 与用户验收，以普通 merge commit `1404b41` 进入 main |
 | 独立室内空间 v1 | `Frontier Exchange` 可通过 F 进入交换站办公室，室内有独立障碍、敌人、Loot 和返回出口；室内外非活动状态冻结 | RaidSpaceDefinitionId、稳定入口/返回 Socket、空间化 Actor/Loot、schema v22/content v30、当前空间模拟/投影 | PR #94 已通过 CI 与用户验收，以普通 merge commit `62ebd8a` 进入 main |
-| 特殊地点随机合法放置 v1 | 同一交换站办公室每局可出现在多个合法室外位置，入口仍使用现有双语文字和代码几何 | 命名候选、动态锚点过滤、独立 PCG32 流、rules v13/content v31、schema v22 最终坐标冻结 | 当前 `codex/raid-world-special-location-placement-v1` 实现中；程序化室内、永久内部图、门锁/钥匙与正式资源延期 |
+| 特殊地点随机合法放置 v1 | 同一交换站办公室每局可出现在多个合法室外位置，入口仍使用现有双语文字和代码几何 | 命名候选、动态锚点过滤、独立 PCG32 流、rules v13/content v31、schema v22 最终坐标冻结 | PR #95 已通过 CI 与用户验收，以普通 merge commit `d2ceb59` 进入 main |
+| 特殊地点发现与战术地图投影 v1 | 玩家探索靠近后才看到精确入口与 `M` 地图标记，本局发现后持续可见 | 稳定空间 ID 的瞬态发现投影、同帧交互仲裁、Simulation 权威可见性、双语 SDL 投影 | 当前 `codex/raid-world-special-location-discovery-v1` 实现中；永久情报、跨局地图记忆和正式资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 

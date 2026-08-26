@@ -14,6 +14,7 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {{"RETURN OUTSIDE TO USE TACTICAL MAP", "返回室外后可使用战术地图"},
+     {"SPECIAL SITE", "特殊地点"},
      {"INTERIOR MAP UNAVAILABLE", "室内地图尚不可用"},
      {"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",
       "M/ESC 关闭 | 世界继续运行 | 移动速度45%"},
