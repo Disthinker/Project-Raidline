@@ -336,16 +336,16 @@ bool GameSession::deployAlpha(
         const MapDefinition &map =
             publishedContentRegistry().map(snapshot.mapDefinitionId);
         std::vector<BallisticBlocker> blockers;
-        blockers.reserve(map.ballisticBlockers.size());
+        blockers.reserve(snapshot.spatialLayout.ballisticBlockers.size());
         for (std::size_t index = 0;
-             index < map.ballisticBlockers.size();
+             index < snapshot.spatialLayout.ballisticBlockers.size();
              ++index)
         {
-            const BallisticBlockerDefinition &definition =
-                map.ballisticBlockers[index];
+            const ContentRect &definition =
+                snapshot.spatialLayout.ballisticBlockers[index];
             blockers.push_back(BallisticBlocker{
                 static_cast<BallisticBlockerId>(index + 1U),
-                Rect{definition.bounds.position, definition.bounds.size}});
+                Rect{definition.position, definition.size}});
         }
         std::vector<EnemySpawn> pressureSpawns;
         pressureSpawns.reserve(map.highRisk.pressureSpawns.size());

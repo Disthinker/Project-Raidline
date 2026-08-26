@@ -34,7 +34,8 @@
 | RL-BASE-001 | Base 缺少以真实资产、劳动力和世界时间驱动的生产消费者 | PR #89 已完成单工坊槽和维护包配方，经 CI 与用户验收后以 `194f910` 进入 main |
 | RL-BASE-002 | 旧运营支持资源不能表达居民士气，也没有愿望、短缺、床位与生产之间的可解释反馈 | PR #90 已完成独立三档士气、每日原因账本、五日稳定事件和制造耗时消费者，经 CI 与用户验收后以 `1af0e56` 进入 main |
 | RL-POP-003 | 聚合居民缺少专业构成与互斥岗位，设施等级也没有成为现有服务的实际消费者 | PR #91 已完成四类聚合专业、工坊/医疗所互斥岗位、专业效率和两个线性设施升级，经双平台 CI 与用户正常游玩验收后以 `12a2fa6` 进入 main；具名 NPC、培训、战斗小组和复杂居民模拟继续延期 |
-| RL-MAP-001 | 三张固定图缺少出击风险判断、探索迷雾和可消费情报闭环 | 当前 `codex/regional-map-intelligence-v1` 实现地图专属情报归档、部署冻结权限、战术地图与三类粗粒度投影；等待完整自动化、CI 和用户正常游玩验收，不扩展随机地图或正式商人 |
+| RL-MAP-001 | 三张固定图缺少出击风险判断、探索迷雾和可消费情报闭环 | PR #92 已通过 Windows/Ubuntu exact-head CI，并按用户连续交付授权以普通 merge commit `bf8baf3` 进入 main；用户正常游玩验收后续集中进行 |
+| RL-MAP-002 | Raid 世界缺少程序化室外空间、冻结布局与坏种子回退合同 | 当前 `codex/raid-world-procedural-outdoor-v1` 新增第四图、稳定生成、锚点连通性、确定性回退及 schema v21 快照；独立室内和特殊地点换位延期 |
 
 ## 需要未来产品决策
 
@@ -94,8 +95,9 @@
 | Base 基础制造队列 v1 | PR #89 已通过 Windows Debug、CTest 988/988、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `194f910` 进入 main |
 | Base 正式士气与周期事件 v1 | PR #90 已通过 Windows Debug、CTest 1001/1001、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `1af0e56` 进入 main |
 | Base 聚合岗位、专业人口与设施升级 v1 | PR #91 已通过双平台 CI 和用户正常游玩验收，以普通 merge commit `12a2fa6` 进入 main |
-| 区域地图与对局情报 v1 | 当前 `codex/regional-map-intelligence-v1` 从 `origin/main@12a2fa6` 开始；范围见对应 ExecPlan |
+| 区域地图与对局情报 v1 | PR #92 已以普通 merge commit `bf8baf3` 进入 main；用户集中验收延期到后续批次 |
+| Raid World：程序化室外空间基础 v1 | 当前 `codex/raid-world-procedural-outdoor-v1` 从 `origin/main@bf8baf3` 开始；范围见对应 ExecPlan |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-map-intelligence-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-procedural-outdoor-v1.md`。

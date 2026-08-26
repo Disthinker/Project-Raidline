@@ -1407,6 +1407,44 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
         mapId, RaidIntelligenceCategory::Transport), 1U);
 }
 
+TEST(SaveRepositoryTest, SchemaV21FreezesAndValidatesProceduralSpatialLayout)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-procedural-layout-v21", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-procedural-raid",
+            "save-procedural-settle",
+            783311U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-procedural-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_FALSE(
+        profile.pendingRaid->spatialLayout.ballisticBlockers.empty());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(loaded.profile->pendingRaid->spatialLayout,
+              profile.pendingRaid->spatialLayout);
+
+    ++profile.pendingRaid->spatialLayout.layoutHash;
+    const SaveLoadResult corrupt = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+    EXPECT_FALSE(corrupt.profile.has_value());
+    EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
 TEST(SaveRepositoryTest, SchemaV19MigratesToEmptyRaidIntelligenceArchive)
 {
     ProfileState profile = makeNewAlphaProfile(

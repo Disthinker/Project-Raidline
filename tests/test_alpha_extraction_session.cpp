@@ -97,7 +97,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "regional-map-intelligence-10");
+        "procedural-outdoor-layout-11");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

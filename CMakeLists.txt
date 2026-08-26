@@ -259,6 +259,8 @@ add_library(raidline_domain STATIC
     src/profile_combat_domain.h
     src/raid_lifecycle.cpp
     src/raid_lifecycle.h
+    src/raid_map_generation.cpp
+    src/raid_map_generation.h
     src/raid_intelligence_domain.cpp
     src/raid_intelligence_domain.h
     src/raid_intelligence_types.h
@@ -525,6 +527,10 @@ raidline_add_test(
 raidline_add_test(
     RaidSessionTest
     tests/test_raid_session.cpp
+    raidline::domain)
+raidline_add_test(
+    RaidMapGenerationTest
+    tests/test_raid_map_generation.cpp
     raidline::domain)
 raidline_add_test(
     RaidSettlementTest

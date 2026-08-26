@@ -64,6 +64,14 @@ struct ContentRect
 {
     Vec2 position{};
     Vec2 size{};
+
+    friend bool operator==(ContentRect first, ContentRect second) noexcept
+    {
+        return first.position.x == second.position.x &&
+            first.position.y == second.position.y &&
+            first.size.x == second.size.x &&
+            first.size.y == second.size.y;
+    }
 };
 
 struct GroundItemDefinition
@@ -321,6 +329,24 @@ struct BaseManufacturingRecipeDefinition
         const BaseManufacturingRecipeDefinition &) = default;
 };
 
+// A deliberately narrow first consumer for the future procedural Raid world.
+// Content still owns every gameplay anchor; generation only varies outdoor
+// cover between those validated anchors and freezes the accepted result.
+struct ProceduralOutdoorDefinition
+{
+    bool enabled{};
+    std::uint32_t columns{16};
+    std::uint32_t rows{9};
+    std::uint32_t minimumBlockers{18};
+    std::uint32_t maximumBlockers{26};
+    std::uint32_t maximumAttempts{8};
+    std::uint32_t anchorClearanceCells{1};
+
+    friend bool operator==(
+        const ProceduralOutdoorDefinition &,
+        const ProceduralOutdoorDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -347,6 +373,7 @@ struct MapDefinition
     std::vector<EnemyDeploymentDefinitionId> raidEnemyDeploymentIds;
     std::vector<RaidLootSlotDefinition> raidLootSlots;
     LootTableDefinitionId raidLootTableId;
+    ProceduralOutdoorDefinition proceduralOutdoor;
 };
 
 class ContentRegistry

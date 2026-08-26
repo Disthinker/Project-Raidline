@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#91 已接受。当前优先交付 **区域地图与对局情报 v1**；范围合同见 `doc/exec-plans/active/regional-map-intelligence-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 与区域地图情报已进入主线。当前进入 **Raid World Vertical Slice**，优先交付程序化室外空间基础；范围合同见 `doc/exec-plans/active/raid-world-procedural-outdoor-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -109,7 +109,13 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 区域地图与对局情报 v1 | 三张固定图显示难度/风险；购买并选择交通、资源、敌情后出击；Raid 内用 `M` 查看不暂停的探索地图 | 地图专属情报归档、原子购买/消耗、冻结情报权限、探索/发现状态、schema v20/content v28 | 当前 `codex/regional-map-intelligence-v1` 实现中；随机地图、正式商人、情报 Loot、跨局地图记忆、哨所和迁徙延期 |
+| 区域地图与对局情报 v1 | 三张固定图显示难度/风险；购买并选择交通、资源、敌情后出击；Raid 内用 `M` 查看不暂停的探索地图 | 地图专属情报归档、原子购买/消耗、冻结情报权限、探索/发现状态、schema v20/content v28 | PR #92 已以普通 merge commit `bf8baf3` 进入 main；正式商人、情报 Loot 和跨局地图记忆延期 |
+
+## 当前 Raid World Vertical Slice
+
+| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| 程序化室外空间基础 v1 | 第四张地图每次出击具有不同但可通行的代码几何掩体；战斗、Loot、救援、高危、撤离和战术地图继续正常工作 | ProceduralOutdoorDefinition、稳定 PCG32、锚点连通性、确定性回退、冻结 SpatialLayout、schema v21/content v29 | 当前 `codex/raid-world-procedural-outdoor-v1` 实现中；独立室内、特殊地点换位、导航网格和正式地图资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 

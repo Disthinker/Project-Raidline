@@ -15,6 +15,7 @@
 #include "grid_inventory.h"
 #include "medical_types.h"
 #include "raid_intelligence_types.h"
+#include "raid_map_generation.h"
 #include "world_clock.h"
 
 using AssetInstanceId = std::uint64_t;
@@ -498,6 +499,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
+    RaidGeneratedMapLayout spatialLayout;
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
     MedicalStatusState startingMedicalStatus;

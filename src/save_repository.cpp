@@ -882,6 +882,23 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"enemy", raid.intelligence.has(
                     RaidIntelligenceCategory::Enemy)}};
         }
+        if (schemaVersion >= 21)
+        {
+            Json blockers = Json::array();
+            for (const ContentRect &blocker :
+                 raid.spatialLayout.ballisticBlockers)
+            {
+                blockers.push_back({
+                    {"position", vectorValue(blocker.position)},
+                    {"size", vectorValue(blocker.size)}});
+            }
+            payload["pending_raid"]["spatial_layout"] = {
+                {"ballistic_blockers", std::move(blockers)},
+                {"generation_attempt",
+                 raid.spatialLayout.generationAttempt},
+                {"layout_hash", raid.spatialLayout.layoutHash},
+                {"used_fallback", raid.spatialLayout.usedFallback}};
+        }
         if (schemaVersion >= 9)
         {
             payload["pending_raid"]["travel"] = {
@@ -1194,7 +1211,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
-        schemaVersion != 19 && schemaVersion != 20)
+        schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1275,7 +1292,9 @@ SaveLoadResult deserializeProfileEnvelope(
              (contentVersion == "base-morale-events-content-26" ||
               contentVersion == "base-workforce-facilities-content-27")) ||
             (schemaVersion == 19 &&
-             contentVersion == "base-workforce-facilities-content-27");
+             contentVersion == "base-workforce-facilities-content-27") ||
+            (schemaVersion == 20 &&
+             contentVersion == "regional-map-intelligence-content-28");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1285,7 +1304,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 13 && schemaVersion != 14 &&
              schemaVersion != 15 && schemaVersion != 16 &&
              schemaVersion != 17 && schemaVersion != 18 &&
-             schemaVersion != 19 && schemaVersion != 20) ||
+             schemaVersion != 19 && schemaVersion != 20 &&
+             schemaVersion != 21) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1968,6 +1988,37 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.intelligence.set(
                     RaidIntelligenceCategory::Enemy,
                     intelligence.at("enemy").get<bool>());
+            }
+            if (schemaVersion >= 21)
+            {
+                const Json &layout = value.at("spatial_layout");
+                for (const Json &blocker :
+                     layout.at("ballistic_blockers"))
+                {
+                    raid.spatialLayout.ballisticBlockers.push_back(
+                        ContentRect{
+                            parseVector(blocker.at("position")),
+                            parseVector(blocker.at("size"))});
+                }
+                raid.spatialLayout.generationAttempt =
+                    layout.at("generation_attempt").get<std::uint32_t>();
+                raid.spatialLayout.layoutHash =
+                    layout.at("layout_hash").get<std::uint64_t>();
+                raid.spatialLayout.usedFallback =
+                    layout.at("used_fallback").get<bool>();
+            }
+            else
+            {
+                const MapDefinition &legacyMap = content.map(
+                    raid.mapDefinitionId);
+                raid.spatialLayout = generateRaidMapLayout(
+                    legacyMap,
+                    raid.seed,
+                    RaidMapGenerationAnchors{
+                        raid.playerSpawn,
+                        raid.extractionPoint,
+                        {},
+                        {}});
             }
             if (schemaVersion >= 9)
             {
