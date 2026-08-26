@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <set>
 #include <tuple>
 
 #include "alpha_content_ids.h"
@@ -104,7 +105,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "raid-interior-spaces-12");
+        "raid-special-location-placement-13");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -148,6 +149,22 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
     const RaidSpaceDefinitionId interiorId{
         "raid_space.frontier_exchange.office"};
     EXPECT_EQ(raid.interiors.front().id, interiorId);
+    const RaidInteriorDefinition &definition =
+        publishedContentRegistry()
+            .map(MapDefinitionId{"map.raid.frontier_exchange"})
+            .interiors.front();
+    EXPECT_TRUE(std::any_of(
+        definition.exteriorPlacements.begin(),
+        definition.exteriorPlacements.end(),
+        [&](const RaidExteriorPlacementDefinition &placement)
+        {
+            return placement.entrance ==
+                    raid.interiors.front().exteriorEntrance &&
+                placement.returnPoint.x ==
+                    raid.interiors.front().exteriorReturn.x &&
+                placement.returnPoint.y ==
+                    raid.interiors.front().exteriorReturn.y;
+        }));
     EXPECT_EQ(
         std::count_if(
             raid.enemies.begin(), raid.enemies.end(),
@@ -172,6 +189,45 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
                 blocker.position.y < entrance.position.y + entrance.size.y &&
                 blocker.position.y + blocker.size.y > entrance.position.y;
         }));
+}
+
+TEST(RaidLifecycleTest, SpecialLocationPlacementIsStableAndVariesByRaidSeed)
+{
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    ProfileState first = makeNewAlphaProfile(
+        "special-location-repeat-a", publishedContentRegistry());
+    ProfileState repeated = makeNewAlphaProfile(
+        "special-location-repeat-b", publishedContentRegistry());
+    ASSERT_TRUE(deploy(first, 44119U, mapId).succeeded);
+    ASSERT_TRUE(deploy(repeated, 44119U, mapId).succeeded);
+    ASSERT_TRUE(first.pendingRaid.has_value());
+    ASSERT_TRUE(repeated.pendingRaid.has_value());
+    ASSERT_EQ(first.pendingRaid->interiors.size(), 1U);
+    ASSERT_EQ(repeated.pendingRaid->interiors.size(), 1U);
+    EXPECT_EQ(
+        first.pendingRaid->interiors.front().exteriorEntrance,
+        repeated.pendingRaid->interiors.front().exteriorEntrance);
+    EXPECT_FLOAT_EQ(
+        first.pendingRaid->interiors.front().exteriorReturn.x,
+        repeated.pendingRaid->interiors.front().exteriorReturn.x);
+    EXPECT_FLOAT_EQ(
+        first.pendingRaid->interiors.front().exteriorReturn.y,
+        repeated.pendingRaid->interiors.front().exteriorReturn.y);
+
+    std::set<std::pair<int, int>> selectedPositions;
+    for (std::uint64_t seed = 1U; seed <= 48U; ++seed)
+    {
+        ProfileState candidate = makeNewAlphaProfile(
+            "special-location-variety", publishedContentRegistry());
+        ASSERT_TRUE(deploy(candidate, seed, mapId).succeeded);
+        ASSERT_TRUE(candidate.pendingRaid.has_value());
+        const Vec2 position = candidate.pendingRaid->interiors.front()
+                                  .exteriorEntrance.position;
+        selectedPositions.emplace(
+            static_cast<int>(position.x),
+            static_cast<int>(position.y));
+    }
+    EXPECT_GT(selectedPositions.size(), 1U);
 }
 
 TEST(RaidLifecycleTest, DeployConsumesOnlySelectedMapIntelligence)

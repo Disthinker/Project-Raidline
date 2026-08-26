@@ -1951,10 +1951,32 @@ ContentRegistry ContentRegistry::fromJson(
                         requiredString(interiorValue, "display_name");
                     interior.worldSize =
                         parseVec2(interiorValue, "world_size");
+                    std::set<std::string> exteriorPlacementIds;
+                    for (const Json &placementValue :
+                         requiredArray(
+                             interiorValue, "exterior_placements"))
+                    {
+                        RaidExteriorPlacementDefinition placement{
+                            requiredString(placementValue, "id"),
+                            parseRect(placementValue, "entrance"),
+                            parseVec2(placementValue, "return_point")};
+                        if (placement.id.empty() ||
+                            !exteriorPlacementIds.insert(placement.id).second)
+                        {
+                            fail("Raid exterior placement IDs must be unique");
+                        }
+                        interior.exteriorPlacements.push_back(
+                            std::move(placement));
+                    }
+                    if (interior.exteriorPlacements.size() < 2U ||
+                        interior.exteriorPlacements.size() > 8U)
+                    {
+                        fail("Raid interior exterior placement count is invalid");
+                    }
                     interior.exteriorEntrance =
-                        parseRect(interiorValue, "exterior_entrance");
+                        interior.exteriorPlacements.front().entrance;
                     interior.exteriorReturn =
-                        parseVec2(interiorValue, "exterior_return");
+                        interior.exteriorPlacements.front().returnPoint;
                     interior.interiorSpawn =
                         parseVec2(interiorValue, "interior_spawn");
                     interior.interiorExit =
@@ -2076,40 +2098,69 @@ ContentRegistry ContentRegistry::fromJson(
                  definition.interiors)
             {
                 const ContentRect interiorBounds{Vec2{}, interior.worldSize};
-                if (!rectInside(interior.exteriorEntrance,
-                                definition.walkableBounds) ||
-                    !pointInside(interior.exteriorReturn,
-                                 definition.walkableBounds) ||
-                    !pointInside(interior.interiorSpawn, interiorBounds) ||
+                if (!pointInside(interior.interiorSpawn, interiorBounds) ||
                     !rectInside(interior.interiorExit, interiorBounds))
                 {
                     fail("Raid interior portal geometry is outside its space");
                 }
-                if (rectsOverlap(interior.exteriorEntrance,
-                                 definition.extractionPoint) ||
-                    (definition.rescue.has_value() &&
-                     rectsOverlap(interior.exteriorEntrance,
-                                  definition.rescue->transferPoint)) ||
-                    rectsOverlap(interior.exteriorEntrance,
-                                 definition.highRisk.emergencyExtractionPoint) ||
-                    rectsOverlap(interior.exteriorEntrance,
-                                 definition.highRisk.conditionalExtractionPoint) ||
-                    rectsOverlap(interior.exteriorEntrance,
-                                 definition.highRisk.activationControlPoint) ||
-                    rectsOverlap(interior.exteriorEntrance,
-                                 definition.highRisk.advancedResourceArea) ||
-                    std::any_of(
-                        definition.ballisticBlockers.begin(),
-                        definition.ballisticBlockers.end(),
-                        [&](const BallisticBlockerDefinition &blocker)
-                        {
-                            return rectsOverlap(
-                                interior.exteriorEntrance, blocker.bounds) ||
-                                pointInside(
-                                    interior.exteriorReturn, blocker.bounds);
-                        }))
+                for (const RaidExteriorPlacementDefinition &placement :
+                     interior.exteriorPlacements)
                 {
-                    fail("Raid interior exterior portal overlaps another anchor");
+                    if (!rectInside(
+                            placement.entrance,
+                            definition.walkableBounds) ||
+                        !pointInside(
+                            placement.returnPoint,
+                            definition.walkableBounds))
+                    {
+                        fail("Raid exterior placement is outside walkable bounds");
+                    }
+                    if (rectsOverlap(
+                            placement.entrance,
+                            definition.extractionPoint) ||
+                        (definition.rescue.has_value() &&
+                         rectsOverlap(
+                             placement.entrance,
+                             definition.rescue->transferPoint)) ||
+                        rectsOverlap(
+                            placement.entrance,
+                            definition.highRisk.emergencyExtractionPoint) ||
+                        rectsOverlap(
+                            placement.entrance,
+                            definition.highRisk.conditionalExtractionPoint) ||
+                        rectsOverlap(
+                            placement.entrance,
+                            definition.highRisk.activationControlPoint) ||
+                        rectsOverlap(
+                            placement.entrance,
+                            definition.highRisk.advancedResourceArea) ||
+                        std::any_of(
+                            definition.ballisticBlockers.begin(),
+                            definition.ballisticBlockers.end(),
+                            [&](const BallisticBlockerDefinition &blocker)
+                            {
+                                return rectsOverlap(
+                                    placement.entrance, blocker.bounds) ||
+                                    pointInside(
+                                        placement.returnPoint, blocker.bounds);
+                            }))
+                    {
+                        fail("Raid exterior placement overlaps a fixed anchor");
+                    }
+                }
+                for (std::size_t left{};
+                     left < interior.exteriorPlacements.size(); ++left)
+                {
+                    for (std::size_t right = left + 1U;
+                         right < interior.exteriorPlacements.size(); ++right)
+                    {
+                        if (rectsOverlap(
+                                interior.exteriorPlacements[left].entrance,
+                                interior.exteriorPlacements[right].entrance))
+                        {
+                            fail("Raid exterior placements overlap each other");
+                        }
+                    }
                 }
                 for (const BallisticBlockerDefinition &blocker :
                      interior.ballisticBlockers)
@@ -2153,9 +2204,25 @@ ContentRegistry ContentRegistry::fromJson(
                 for (std::size_t right = left + 1U;
                      right < definition.interiors.size(); ++right)
                 {
-                    if (rectsOverlap(
-                            definition.interiors[left].exteriorEntrance,
-                            definition.interiors[right].exteriorEntrance))
+                    const bool overlapsAnotherInterior = std::any_of(
+                        definition.interiors[left].exteriorPlacements.begin(),
+                        definition.interiors[left].exteriorPlacements.end(),
+                        [&](const RaidExteriorPlacementDefinition &leftPlacement)
+                        {
+                            return std::any_of(
+                                definition.interiors[right]
+                                    .exteriorPlacements.begin(),
+                                definition.interiors[right]
+                                    .exteriorPlacements.end(),
+                                [&](const RaidExteriorPlacementDefinition &
+                                        rightPlacement)
+                                {
+                                    return rectsOverlap(
+                                        leftPlacement.entrance,
+                                        rightPlacement.entrance);
+                                });
+                        });
+                    if (overlapsAnotherInterior)
                     {
                         fail("Raid interior exterior portals overlap");
                     }

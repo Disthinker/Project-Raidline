@@ -1489,7 +1489,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "base-workforce-facilities-9" ||
             raid.rulesVersion == "regional-map-intelligence-10" ||
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
-            raid.rulesVersion == "raid-interior-spaces-12";
+            raid.rulesVersion == "raid-interior-spaces-12" ||
+            raid.rulesVersion == "raid-special-location-placement-13";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1499,12 +1500,17 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "base-workforce-facilities-9" ||
             raid.rulesVersion == "regional-map-intelligence-10" ||
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
-            raid.rulesVersion == "raid-interior-spaces-12";
+            raid.rulesVersion == "raid-interior-spaces-12" ||
+            raid.rulesVersion == "raid-special-location-placement-13";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
-            raid.rulesVersion == "raid-interior-spaces-12";
+            raid.rulesVersion == "raid-interior-spaces-12" ||
+            raid.rulesVersion == "raid-special-location-placement-13";
         const bool interiorRules =
-            raid.rulesVersion == "raid-interior-spaces-12";
+            raid.rulesVersion == "raid-interior-spaces-12" ||
+            raid.rulesVersion == "raid-special-location-placement-13";
+        const bool specialLocationRules =
+            raid.rulesVersion == "raid-special-location-placement-13";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1628,6 +1634,12 @@ ProfileValidationResult validateProfileState(
                 }
                 anchors.reachablePoints.push_back(loot.position);
             }
+            for (const EnemySpawnDefinition &spawn :
+                 raidMap->highRisk.pressureSpawns)
+            {
+                anchors.occupiedRegions.push_back(
+                    ContentRect{spawn.position, spawn.size});
+            }
             const auto addRegion = [&anchors](ContentRect region)
             {
                 anchors.reachablePoints.push_back(
@@ -1644,8 +1656,34 @@ ProfileValidationResult validateProfileState(
                     raid.rescue->transferPoint);
                 addRegion(raid.rescue->transferPoint);
             }
-            for (const RaidInteriorSnapshot &interior : raid.interiors)
+            for (std::size_t interiorIndex{};
+                 interiorIndex < raid.interiors.size(); ++interiorIndex)
             {
+                const RaidInteriorSnapshot &interior =
+                    raid.interiors[interiorIndex];
+                if (specialLocationRules)
+                {
+                    const RaidInteriorDefinition &definition =
+                        raidMap->interiors[interiorIndex];
+                    const auto placement = std::find_if(
+                        definition.exteriorPlacements.begin(),
+                        definition.exteriorPlacements.end(),
+                        [&](const RaidExteriorPlacementDefinition &candidate)
+                        {
+                            return candidate.entrance ==
+                                    interior.exteriorEntrance &&
+                                candidate.returnPoint.x ==
+                                    interior.exteriorReturn.x &&
+                                candidate.returnPoint.y ==
+                                    interior.exteriorReturn.y;
+                        });
+                    if (placement == definition.exteriorPlacements.end() ||
+                        !raidExteriorPlacementIsLegal(*placement, anchors))
+                    {
+                        return {false,
+                                "pending Raid special location is invalid"};
+                    }
+                }
                 anchors.occupiedRegions.push_back(
                     interior.exteriorEntrance);
                 addRegion(interior.exteriorEntrance);
@@ -1702,13 +1740,30 @@ ProfileValidationResult validateProfileState(
                         [](ContentRect bounds,
                            const BallisticBlockerDefinition &blocker)
                         { return bounds == blocker.bounds; });
+                const bool portalMatches = specialLocationRules
+                    ? std::any_of(
+                          definition.exteriorPlacements.begin(),
+                          definition.exteriorPlacements.end(),
+                          [&](const RaidExteriorPlacementDefinition &placement)
+                          {
+                              return placement.entrance ==
+                                      snapshot.exteriorEntrance &&
+                                  placement.returnPoint.x ==
+                                      snapshot.exteriorReturn.x &&
+                                  placement.returnPoint.y ==
+                                      snapshot.exteriorReturn.y;
+                          })
+                    : snapshot.exteriorEntrance ==
+                              definition.exteriorEntrance &&
+                          snapshot.exteriorReturn.x ==
+                              definition.exteriorReturn.x &&
+                          snapshot.exteriorReturn.y ==
+                              definition.exteriorReturn.y;
                 if (snapshot.id != definition.id ||
                     snapshot.displayName != definition.displayName ||
                     snapshot.worldSize.x != definition.worldSize.x ||
                     snapshot.worldSize.y != definition.worldSize.y ||
-                    snapshot.exteriorEntrance != definition.exteriorEntrance ||
-                    snapshot.exteriorReturn.x != definition.exteriorReturn.x ||
-                    snapshot.exteriorReturn.y != definition.exteriorReturn.y ||
+                    !portalMatches ||
                     snapshot.interiorSpawn.x != definition.interiorSpawn.x ||
                     snapshot.interiorSpawn.y != definition.interiorSpawn.y ||
                     snapshot.interiorExit != definition.interiorExit ||

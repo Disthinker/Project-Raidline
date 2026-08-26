@@ -25,6 +25,17 @@ struct RaidGeneratedMapLayout
         const RaidGeneratedMapLayout &) = default;
 };
 
+[[nodiscard]] bool raidExteriorPlacementIsLegal(
+    const RaidExteriorPlacementDefinition &placement,
+    const RaidMapGenerationAnchors &anchors) noexcept;
+
+[[nodiscard]] const RaidExteriorPlacementDefinition *
+selectRaidExteriorPlacement(
+    const RaidInteriorDefinition &interior,
+    std::uint64_t raidSeed,
+    std::uint64_t interiorOrdinal,
+    const RaidMapGenerationAnchors &anchors) noexcept;
+
 [[nodiscard]] RaidGeneratedMapLayout generateRaidMapLayout(
     const MapDefinition &map,
     std::uint64_t raidSeed,

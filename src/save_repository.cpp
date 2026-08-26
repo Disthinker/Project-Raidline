@@ -1335,7 +1335,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 20 &&
              contentVersion == "regional-map-intelligence-content-28") ||
             (schemaVersion == 21 &&
-             contentVersion == "procedural-outdoor-layout-content-29");
+             contentVersion == "procedural-outdoor-layout-content-29") ||
+            (schemaVersion == 22 &&
+             contentVersion == "raid-interior-spaces-content-30");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

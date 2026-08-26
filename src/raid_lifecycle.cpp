@@ -334,7 +334,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-interior-spaces-12";
+    snapshot.rulesVersion = "raid-special-location-placement-13";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -395,8 +395,11 @@ DeployReceipt executeDeploy(
         snapshot.enemies.push_back(
             RaidEnemySnapshot{enemy.position, enemy.size, enemy.maximumHealth});
     }
-    for (const RaidInteriorDefinition &interior : map->interiors)
+    for (std::size_t interiorIndex{};
+         interiorIndex < map->interiors.size(); ++interiorIndex)
     {
+        const RaidInteriorDefinition &interior =
+            map->interiors[interiorIndex];
         RaidInteriorSnapshot frozen;
         frozen.id = interior.id;
         frozen.displayName = interior.displayName;
@@ -492,8 +495,11 @@ DeployReceipt executeDeploy(
 
     std::size_t interiorSlotIndex = map->raidLootSlots.size() +
         map->highRisk.advancedLootSlots.size();
-    for (const RaidInteriorDefinition &interior : map->interiors)
+    for (std::size_t interiorIndex{};
+         interiorIndex < map->interiors.size(); ++interiorIndex)
     {
+        const RaidInteriorDefinition &interior =
+            map->interiors[interiorIndex];
         const LootTableDefinition &interiorLootTable =
             content.lootTable(interior.lootTableId);
         for (const RaidLootSlotDefinition &slot : interior.lootSlots)
@@ -572,8 +578,25 @@ DeployReceipt executeDeploy(
             snapshot.rescue->transferPoint);
         addReachableRegion(snapshot.rescue->transferPoint);
     }
-    for (const RaidInteriorDefinition &interior : map->interiors)
+    for (std::size_t interiorIndex{};
+         interiorIndex < map->interiors.size(); ++interiorIndex)
     {
+        const RaidExteriorPlacementDefinition *placement =
+            selectRaidExteriorPlacement(
+                map->interiors[interiorIndex],
+                snapshot.seed,
+                interiorIndex,
+                generationAnchors);
+        if (placement == nullptr)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "Raid special location has no legal exterior placement",
+                profile.revision);
+        }
+        RaidInteriorSnapshot &interior = snapshot.interiors[interiorIndex];
+        interior.exteriorEntrance = placement->entrance;
+        interior.exteriorReturn = placement->returnPoint;
         generationAnchors.occupiedRegions.push_back(
             interior.exteriorEntrance);
         addReachableRegion(interior.exteriorEntrance);

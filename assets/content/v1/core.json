@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-interior-spaces-content-30",
+  "content_version": "raid-special-location-placement-content-31",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1056,8 +1056,14 @@
           "id": "raid_space.frontier_exchange.office",
           "display_name": "Exchange Office",
           "world_size": {"x": 960, "y": 640},
-          "exterior_entrance": {"position": {"x": 1100, "y": 190}, "size": {"x": 120, "y": 80}},
-          "exterior_return": {"x": 1125, "y": 285},
+          "exterior_placements": [
+            {"id": "east_gate", "entrance": {"position": {"x": 1100, "y": 190}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 1125, "y": 285}},
+            {"id": "north_exchange", "entrance": {"position": {"x": 710, "y": 200}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 770, "y": 295}},
+            {"id": "west_market", "entrance": {"position": {"x": 270, "y": 210}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 330, "y": 305}},
+            {"id": "southwest_lot", "entrance": {"position": {"x": 260, "y": 600}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 330, "y": 695}},
+            {"id": "southeast_lot", "entrance": {"position": {"x": 890, "y": 620}, "size": {"x": 120, "y": 70}}, "return_point": {"x": 950, "y": 705}},
+            {"id": "central_north", "entrance": {"position": {"x": 450, "y": 180}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 510, "y": 275}}
+          ],
           "interior_spawn": {"x": 110, "y": 510},
           "interior_exit": {"position": {"x": 40, "y": 480}, "size": {"x": 130, "y": 120}},
           "ballistic_blockers": [

@@ -36,7 +36,8 @@
 | RL-POP-003 | 聚合居民缺少专业构成与互斥岗位，设施等级也没有成为现有服务的实际消费者 | PR #91 已完成四类聚合专业、工坊/医疗所互斥岗位、专业效率和两个线性设施升级，经双平台 CI 与用户正常游玩验收后以 `12a2fa6` 进入 main；具名 NPC、培训、战斗小组和复杂居民模拟继续延期 |
 | RL-MAP-001 | 三张固定图缺少出击风险判断、探索迷雾和可消费情报闭环 | PR #92 已通过 Windows/Ubuntu exact-head CI，并按用户连续交付授权以普通 merge commit `bf8baf3` 进入 main；用户正常游玩验收后续集中进行 |
 | RL-MAP-002 | Raid 世界缺少程序化室外空间、冻结布局与坏种子回退合同 | PR #93 已通过本地 1033/1033、exact-head 双平台 CI 和用户集中验收，以普通 merge commit `1404b41` 进入 main |
-| RL-MAP-003 | 可进入建筑仍与室外共享单一坐标、敌人、Loot 和碰撞空间 | 当前 `codex/raid-world-interiors-v1` 建立独立空间 ID、入口/返回 Socket、schema v22/content v30 空间快照和当前空间运行时隔离；特殊地点随机换位、程序化室内与永久内部图延期 |
+| RL-MAP-003 | 可进入建筑仍与室外共享单一坐标、敌人、Loot 和碰撞空间 | PR #94 已通过 CI 和用户验收，以普通 merge commit `62ebd8a` 进入 main；独立空间 ID、入口/返回 Socket、schema v22/content v30 快照和当前空间运行时隔离已接受 |
+| RL-MAP-004 | 特殊地点入口固定在单一坐标，无法随本局路线变化且缺少动态冲突过滤 | 当前 `codex/raid-world-special-location-placement-v1` 建立 content v31 的 6 个命名候选、独立 PCG32 选择、动态锚点过滤与旧 v12 兼容；本地 Windows Debug 和 1043/1043 CTest 已通过，等待 Draft PR exact-head CI |
 
 ## 需要未来产品决策
 
@@ -98,8 +99,9 @@
 | Base 聚合岗位、专业人口与设施升级 v1 | PR #91 已通过双平台 CI 和用户正常游玩验收，以普通 merge commit `12a2fa6` 进入 main |
 | 区域地图与对局情报 v1 | PR #92 已以普通 merge commit `bf8baf3` 进入 main；用户集中验收延期到后续批次 |
 | Raid World：程序化室外空间基础 v1 | PR #93 已通过 CI 与用户验收，以普通 merge commit `1404b41` 进入 main |
-| Raid World：独立室内空间 v1 | 当前 `codex/raid-world-interiors-v1` 从 `origin/main@1404b41` 开始；范围见对应 ExecPlan |
+| Raid World：独立室内空间 v1 | PR #94 已通过 CI 与用户验收，以普通 merge commit `62ebd8a` 进入 main |
+| Raid World：特殊地点随机合法放置 v1 | 当前 `codex/raid-world-special-location-placement-v1` 从 `origin/main@62ebd8a` 开始；范围见对应 ExecPlan |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-interiors-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-special-location-placement-v1.md`。

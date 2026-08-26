@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-interior-spaces-content-30");
+        "raid-special-location-placement-content-31");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -136,6 +136,21 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"});
     EXPECT_EQ(frontierWithInterior.interiors.front().enemies.size(), 2U);
     EXPECT_EQ(frontierWithInterior.interiors.front().lootSlots.size(), 3U);
+    ASSERT_EQ(
+        frontierWithInterior.interiors.front().exteriorPlacements.size(),
+        6U);
+    EXPECT_EQ(
+        frontierWithInterior.interiors.front().exteriorPlacements.front()
+            .entrance,
+        frontierWithInterior.interiors.front().exteriorEntrance);
+    EXPECT_FLOAT_EQ(
+        frontierWithInterior.interiors.front().exteriorPlacements.front()
+            .returnPoint.x,
+        frontierWithInterior.interiors.front().exteriorReturn.x);
+    EXPECT_FLOAT_EQ(
+        frontierWithInterior.interiors.front().exteriorPlacements.front()
+            .returnPoint.y,
+        frontierWithInterior.interiors.front().exteriorReturn.y);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 4U);
@@ -1022,6 +1037,18 @@ TEST(ContentRegistryTest, RejectsMissingPublishedResourceReference)
         "backgrounds/missing.png");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsDuplicateRaidExteriorPlacementId)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"id\": \"north_exchange\"",
+        "\"id\": \"east_gate\"");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
 }
 
