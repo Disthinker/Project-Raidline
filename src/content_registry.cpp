@@ -740,6 +740,22 @@ ContentRegistry ContentRegistry::fromJson(
             fail("player Base medical definition is invalid");
         }
 
+        const Json &residentMedical = requiredObject(
+            baseServices,
+            "resident_medical");
+        registry.residentMedical_ = ResidentMedicalDefinition{
+            requiredPositiveUint(
+                residentMedical,
+                "required_contribution"),
+            requiredPositiveUint(
+                residentMedical,
+                "duration_minutes")};
+        if (registry.residentMedical_.requiredContribution > 1000U ||
+            registry.residentMedical_.durationMinutes > 30U * 24U * 60U)
+        {
+            fail("resident medical definition is invalid");
+        }
+
         const Json &baseOperations = requiredObject(
             root,
             "base_operations");
@@ -1500,11 +1516,14 @@ ContentRegistry ContentRegistry::fromJson(
                     parseRect(rescue, "transfer_point"),
                     requiredFiniteFloat(
                         rescue, "interaction_duration_seconds", true),
-                    requiredPositiveUint(rescue, "ordinary_resident_count")};
+                    requiredPositiveUint(rescue, "ordinary_resident_count"),
+                    optionalUint(rescue, "injured_resident_count")};
                 if (!hasPrefix(rescueDefinition.id.value(), "rescue.") ||
                     !rescueDefinitionIds.insert(rescueDefinition.id).second ||
                     rescueDefinition.interactionDurationSeconds > 30.0F ||
-                    rescueDefinition.ordinaryResidentCount > 16U)
+                    rescueDefinition.ordinaryResidentCount > 16U ||
+                    rescueDefinition.injuredResidentCount >
+                        rescueDefinition.ordinaryResidentCount)
                 {
                     fail("map rescue definition is invalid or duplicated");
                 }
@@ -2011,6 +2030,12 @@ const PlayerBaseMedicalDefinition &
 ContentRegistry::playerBaseMedical() const noexcept
 {
     return playerBaseMedical_;
+}
+
+const ResidentMedicalDefinition &
+ContentRegistry::residentMedical() const noexcept
+{
+    return residentMedical_;
 }
 
 const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept

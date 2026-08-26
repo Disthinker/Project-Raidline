@@ -678,6 +678,84 @@ TEST(PersistentSessionTest, BaseRestSaveFailurePreservesProfile)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest,
+     ResidentTreatmentPersistsAndRestCompletesRecovery)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-resident-treatment",
+        publishedContentRegistry());
+    initial.basePopulation.injuredResidents = 1U;
+    initial.baseSupplyPolicy.assignments.emplace(
+        ItemDefinitionId{"item.medical.medkit_alpha"},
+        BaseSupplyCategory::Medical);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const ResidentTreatmentReceipt started =
+        session.executeStartResidentTreatment(
+            "persistent-start-resident-treatment");
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(session.profile().residentMedical.activeTreatment.has_value());
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().residentMedical.activeTreatment.has_value());
+    ASSERT_TRUE(reopened.executeBaseRest(
+        6U, "rest-completes-resident-treatment").succeeded);
+    EXPECT_EQ(reopened.profile().basePopulation.injuredResidents, 0U);
+    EXPECT_FALSE(reopened.profile().residentMedical.activeTreatment.has_value());
+
+    GameSession completed;
+    completed.configurePersistence(temporary.path());
+    ASSERT_TRUE(completed.continueProfile()) << completed.persistenceMessage();
+    EXPECT_EQ(completed.profile().basePopulation.injuredResidents, 0U);
+    EXPECT_FALSE(completed.profile().residentMedical.activeTreatment.has_value());
+}
+
+TEST(PersistentSessionTest,
+     ResidentTreatmentSaveFailurePreservesAssetsAndPopulation)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-resident-treatment-save",
+        publishedContentRegistry());
+    initial.basePopulation.injuredResidents = 1U;
+    initial.baseSupplyPolicy.assignments.emplace(
+        ItemDefinitionId{"item.medical.medkit_alpha"},
+        BaseSupplyCategory::Medical);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "resident-treatment-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const ResidentTreatmentReceipt receipt =
+        session.executeStartResidentTreatment(
+            "resident-treatment-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().residentMedical.activeTreatment.has_value());
+    EXPECT_EQ(session.profile().basePopulation.injuredResidents, 1U);
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;

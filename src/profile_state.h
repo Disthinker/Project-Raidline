@@ -237,6 +237,7 @@ struct RaidRescueSnapshot
     ContentRect transferPoint;
     float interactionDurationSeconds{};
     std::uint32_t ordinaryResidentCount{};
+    std::uint32_t injuredResidentCount{};
     bool secured{};
 
     friend bool operator==(
@@ -250,10 +251,32 @@ struct BasePopulationState
 {
     std::uint32_t ordinaryResidents{8};
     std::uint32_t bedCapacity{10};
+    std::uint32_t injuredResidents{};
 
     friend bool operator==(
         const BasePopulationState &,
         const BasePopulationState &) = default;
+};
+
+struct ActiveResidentTreatment
+{
+    BaseServiceJobId jobId{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+    std::uint32_t consumedContribution{};
+
+    friend bool operator==(
+        const ActiveResidentTreatment &,
+        const ActiveResidentTreatment &) = default;
+};
+
+struct BaseResidentMedicalState
+{
+    std::optional<ActiveResidentTreatment> activeTreatment;
+
+    friend bool operator==(
+        const BaseResidentMedicalState &,
+        const BaseResidentMedicalState &) = default;
 };
 
 struct ActiveBaseConstructionProject
@@ -317,6 +340,8 @@ struct RaidTravelSnapshot
     BasePriorityState startingBasePriority;
     BaseConstructionState startingBaseConstruction;
     std::uint32_t startingBedCapacity{10};
+    std::uint32_t startingInjuredResidents{};
+    BaseResidentMedicalState startingResidentMedical;
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -351,6 +376,7 @@ struct LastRaidResult
     std::int64_t currencyDelta{};
     std::uint32_t travelMinutesApplied{};
     std::uint32_t rescuedOrdinaryResidents{};
+    std::uint32_t rescuedInjuredResidents{};
 };
 
 struct ProfileState
@@ -365,6 +391,7 @@ struct ProfileState
     BaseResourceState baseResources;
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
+    BaseResidentMedicalState residentMedical;
     BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};

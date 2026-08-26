@@ -1,6 +1,7 @@
 #include "base_population_domain.h"
 
 #include "base_construction_domain.h"
+#include "base_resident_medical_domain.h"
 
 #include <limits>
 #include <utility>
@@ -25,13 +26,19 @@ BasePopulationProjection projectBasePopulation(
     const std::uint64_t demand =
         static_cast<std::uint64_t>(state.ordinaryResidents) *
         kRationsPerResidentPerDay;
+    const std::uint32_t healthy =
+        state.ordinaryResidents > state.injuredResidents
+            ? state.ordinaryResidents - state.injuredResidents
+            : 0U;
     return {
         state.ordinaryResidents,
         state.bedCapacity,
         shortfall,
         demand > std::numeric_limits<std::uint32_t>::max()
             ? std::numeric_limits<std::uint32_t>::max()
-            : static_cast<std::uint32_t>(demand)};
+            : static_cast<std::uint32_t>(demand),
+        state.injuredResidents,
+        healthy};
 }
 
 BaseResourceBundle populationAdjustedDailyDemand(
@@ -131,6 +138,7 @@ BaseRestReceipt executeBaseRest(
         plan.dailyDemand);
     static_cast<void>(synchronizeBasePriorityThrough(candidate, content));
     static_cast<void>(applyBaseConstructionThrough(candidate, content));
+    static_cast<void>(applyResidentTreatmentThrough(candidate));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(

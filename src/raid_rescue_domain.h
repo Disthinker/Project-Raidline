@@ -19,6 +19,7 @@ struct OrdinarySurvivorAdmissionCommand
 {
     RescueDefinitionId rescueDefinitionId;
     std::uint32_t ordinaryResidentCount{};
+    std::uint32_t injuredResidentCount{};
 };
 
 struct OrdinarySurvivorAdmissionPlan
@@ -30,6 +31,7 @@ struct OrdinarySurvivorAdmissionPlan
     ProfileRevision revision{};
     std::uint32_t residentsBefore{};
     std::uint32_t residentsAfter{};
+    std::uint32_t injuredResidentsAfter{};
     std::uint32_t bedCapacity{};
     std::uint32_t bedShortfallAfter{};
     std::uint32_t dailyRationsAfter{};
@@ -43,7 +45,9 @@ struct OrdinarySurvivorAdmissionReceipt
     std::string message;
     ProfileRevision revision{};
     std::uint32_t admittedResidents{};
+    std::uint32_t admittedInjuredResidents{};
     std::uint32_t residentsAfter{};
+    std::uint32_t injuredResidentsAfter{};
     std::uint32_t bedShortfallAfter{};
     std::uint32_t dailyRationsAfter{};
 };

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-supply-policy-content-23",
+  "content_version": "base-resident-medical-content-24",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -11,6 +11,10 @@
       "missing_health_cost_per_point": 3,
       "light_bleeding_cost": 30,
       "heavy_bleeding_cost": 60
+    },
+    "resident_medical": {
+      "required_contribution": 10,
+      "duration_minutes": 360
     }
   },
   "base_operations": {
@@ -905,7 +909,8 @@
         "subject_kind": "ordinary_residents",
         "transfer_point": {"position": {"x": 400, "y": 430}, "size": {"x": 170, "y": 90}},
         "interaction_duration_seconds": 2,
-        "ordinary_resident_count": 1
+        "ordinary_resident_count": 1,
+        "injured_resident_count": 1
       },
       "high_risk": {
         "regular_phase_duration_seconds": 180,

@@ -136,6 +136,17 @@ TEST(UiLocalizationTest, ChineseTranslatesPaidBaseMedicalService) {
   const std::string completed = localizeUiText(
       UiLanguage::SimplifiedChinese,
       "PLAYER FULLY TREATED | PAID 195");
+  const auto expectTranslated = [](std::string_view text) {
+    EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, text), text);
+  };
+  expectTranslated(
+      "RESIDENT CARE | RESIDENTS 9 | INJURED 1 | HEALTHY 8");
+  expectTranslated(
+      "AUTHORIZED SUPPLIES Basic Medkit x1 | CONTRIBUTION 14/10 | 360 MIN");
+  expectTranslated(
+      "USES ONLY ITEMS ASSIGNED TO MEDICAL SUPPLY | CONSUMED ON START");
+  expectTranslated("resident treatment is already active");
+  expectTranslated("insufficient authorized medical supplies");
   EXPECT_NE(completed.find("玩家已完成全面治疗"), std::string::npos);
   EXPECT_NE(completed.find("已支付 195"), std::string::npos);
 

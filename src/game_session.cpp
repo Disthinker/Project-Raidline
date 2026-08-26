@@ -1,6 +1,7 @@
 #include "game_session.h"
 
 #include "base_construction_domain.h"
+#include "base_resident_medical_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1574,6 +1575,29 @@ BaseMedicalServiceReceipt GameSession::executeBasePaidMedicalService(
     return receipt;
 }
 
+ResidentTreatmentReceipt GameSession::executeStartResidentTreatment(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    ResidentTreatmentReceipt receipt = ::executeStartResidentTreatment(
+        candidate,
+        publishedContentRegistry(),
+        StartResidentTreatmentCommand{},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 WeaponMaintenanceReceipt GameSession::executeBaseWeaponMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId weaponAssetId,
@@ -1723,7 +1747,8 @@ GameSession::ordinarySurvivorRescuePlan() const
         profile_,
         OrdinarySurvivorAdmissionCommand{
             rescue.definitionId,
-            rescue.ordinaryResidentCount});
+            rescue.ordinaryResidentCount,
+            rescue.injuredResidentCount});
 }
 
 void GameSession::advanceBaseWorldClock(float deltaTime)
@@ -1837,7 +1862,9 @@ void GameSession::advanceWorldClockFromSimulation(
                 applyBaseConstructionThrough(
                     candidate,
                     publishedContentRegistry());
-            if (construction.completed)
+            const ResidentTreatmentAdvanceResult residentTreatment =
+                applyResidentTreatmentThrough(candidate);
+            if (construction.completed || residentTreatment.completed)
             {
                 if (candidate.revision ==
                     std::numeric_limits<ProfileRevision>::max())
@@ -1858,7 +1885,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 pendingWorldSeconds_ = scaledSeconds;
                 return;
             }
-            if (construction.completed)
+            if (construction.completed || residentTreatment.completed)
             {
                 if (!commitProfileCandidate(std::move(candidate)))
                 {
@@ -2855,7 +2882,8 @@ bool GameSession::secureOrdinarySurvivorRescue()
     const RaidRescueSnapshot rescue = *profile_.pendingRaid->rescue;
     const OrdinarySurvivorAdmissionCommand command{
         rescue.definitionId,
-        rescue.ordinaryResidentCount};
+        rescue.ordinaryResidentCount,
+        rescue.injuredResidentCount};
     ProfileState raidCandidate = profile_;
     ProfileState recoveryCandidate = *activeRaidRecoveryProfile_;
     const OrdinarySurvivorAdmissionReceipt recoveryReceipt =

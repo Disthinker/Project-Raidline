@@ -11,6 +11,7 @@
 
 #include "economy_domain.h"
 #include "base_construction_domain.h"
+#include "base_resident_medical_domain.h"
 #include "base_population_domain.h"
 #include "base_resource_domain.h"
 #include "base_medical_service_domain.h"
@@ -256,6 +257,8 @@ public:
         AssetInstanceId medicalAssetId,
         std::string transactionId);
     [[nodiscard]] BaseMedicalServiceReceipt executeBasePaidMedicalService(
+        std::string transactionId);
+    [[nodiscard]] ResidentTreatmentReceipt executeStartResidentTreatment(
         std::string transactionId);
     [[nodiscard]] WeaponMaintenanceReceipt executeBaseWeaponMaintenance(
         AssetInstanceId kitAssetId,

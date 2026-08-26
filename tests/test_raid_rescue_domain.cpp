@@ -10,6 +10,10 @@ namespace
 const OrdinarySurvivorAdmissionCommand kGreylineRescue{
     RescueDefinitionId{"rescue.ordinary.greyline_depot"},
     1U};
+const OrdinarySurvivorAdmissionCommand kAshworksRescue{
+    RescueDefinitionId{"rescue.ordinary.ashworks_yard"},
+    1U,
+    1U};
 }
 
 TEST(RaidRescueDomainTest, QueryProjectsResidentsBedsAndDailyRations)
@@ -66,6 +70,26 @@ TEST(RaidRescueDomainTest, ExecuteCommitsExactlyOnceWithStableRescueId)
     EXPECT_TRUE(repeated.alreadyCommitted);
     EXPECT_EQ(repeated.admittedResidents, 0U);
     EXPECT_EQ(profileStateFingerprint(profile), committedFingerprint);
+}
+
+TEST(RaidRescueDomainTest, AshworksAdmissionCarriesPublishedInjuryFact)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "rescue-injured-admission", publishedContentRegistry());
+
+    const OrdinarySurvivorAdmissionReceipt admitted =
+        executeOrdinarySurvivorAdmission(
+            profile,
+            publishedContentRegistry(),
+            kAshworksRescue,
+            CommandContext{profile.revision, "rescue-injured-admission"});
+
+    ASSERT_TRUE(admitted.succeeded) << admitted.message;
+    EXPECT_EQ(admitted.admittedResidents, 1U);
+    EXPECT_EQ(admitted.admittedInjuredResidents, 1U);
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
+    EXPECT_EQ(profile.basePopulation.injuredResidents, 1U);
+    EXPECT_TRUE(validateProfileState(profile, publishedContentRegistry()).valid);
 }
 
 TEST(RaidRescueDomainTest, RejectionsPreserveProfileFingerprint)

@@ -8,6 +8,7 @@
 
 #include "base_resource_domain.h"
 #include "base_population_domain.h"
+#include "base_resident_medical_domain.h"
 #include "stable_random.h"
 
 namespace
@@ -206,6 +207,7 @@ bool advanceProfileWorldTime(
         populationAdjustedDailyDemand(profile.basePopulation)));
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
     static_cast<void>(applyBaseConstructionThrough(profile, content));
+    static_cast<void>(applyResidentTreatmentThrough(profile));
     return true;
 }
 }
@@ -312,7 +314,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-ordinary-rescue-6";
+    snapshot.rulesVersion = "raid-resident-medical-7";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -329,7 +331,9 @@ DeployReceipt executeDeploy(
         candidate.baseResources,
         candidate.basePriority,
         candidate.baseConstruction,
-        candidate.basePopulation.bedCapacity};
+        candidate.basePopulation.bedCapacity,
+        candidate.basePopulation.injuredResidents,
+        candidate.residentMedical};
     if (map->rescue.has_value() &&
         !candidate.committedRescues.contains(map->rescue->id))
     {
@@ -339,6 +343,7 @@ DeployReceipt executeDeploy(
             map->rescue->transferPoint,
             map->rescue->interactionDurationSeconds,
             map->rescue->ordinaryResidentCount,
+            map->rescue->injuredResidentCount,
             false};
     }
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
@@ -550,6 +555,9 @@ RaidSettlementReceipt settlePendingRaid(
         travelMinutes,
         raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
             ? raidSnapshot.rescue->ordinaryResidentCount
+            : 0U,
+        raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
+            ? raidSnapshot.rescue->injuredResidentCount
             : 0U};
     ++candidate.revision;
     const ProfileValidationResult validation =
@@ -596,6 +604,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingBaseConstruction;
     const std::uint32_t startingBedCapacity =
         candidate.pendingRaid->travel.startingBedCapacity;
+    const std::uint32_t startingInjuredResidents =
+        candidate.pendingRaid->travel.startingInjuredResidents;
+    const BaseResidentMedicalState startingResidentMedical =
+        candidate.pendingRaid->travel.startingResidentMedical;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -624,6 +636,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.basePriority = startingBasePriority;
     candidate.baseConstruction = startingBaseConstruction;
     candidate.basePopulation.bedCapacity = startingBedCapacity;
+    candidate.basePopulation.injuredResidents = startingInjuredResidents;
+    candidate.residentMedical = startingResidentMedical;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

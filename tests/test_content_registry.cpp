@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-supply-policy-content-23");
+        "base-resident-medical-content-24");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -78,6 +78,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         3U);
     EXPECT_EQ(registry.playerBaseMedical().lightBleedingCost, 30U);
     EXPECT_EQ(registry.playerBaseMedical().heavyBleedingCost, 60U);
+    EXPECT_EQ(registry.residentMedical().requiredContribution, 10U);
+    EXPECT_EQ(registry.residentMedical().durationMinutes, 360U);
     EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
@@ -161,6 +163,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.v0.test"}));
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.riverside"}));
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.industrial"}));
+    EXPECT_EQ(
+        registry.map(MapDefinitionId{"map.raid.industrial"})
+            .rescue->injuredResidentCount,
+        1U);
+    EXPECT_EQ(
+        registry.map(MapDefinitionId{"map.v0.test"})
+            .rescue->injuredResidentCount,
+        0U);
     EXPECT_EQ(raidDeploymentIds.size(), 9U);
     EXPECT_EQ(outboundTravelMinutes,
               (std::set<std::uint32_t>{45U, 90U, 150U}));

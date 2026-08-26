@@ -171,7 +171,12 @@ namespace
 
     SDL_FRect baseMedicalServiceButton() noexcept
     {
-        return SDL_FRect{460.0F, 500.0F, 360.0F, 54.0F};
+        return SDL_FRect{700.0F, 250.0F, 300.0F, 48.0F};
+    }
+
+    SDL_FRect baseResidentTreatmentButton() noexcept
+    {
+        return SDL_FRect{700.0F, 474.0F, 300.0F, 48.0F};
     }
 
     SDL_FRect baseRestButton(std::size_t index) noexcept
@@ -1947,21 +1952,36 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Medical)
     {
-        if (!contains(baseMedicalServiceButton(), click.position))
+        if (contains(baseMedicalServiceButton(), click.position))
         {
+            const BaseMedicalServiceReceipt receipt =
+                gameSession_.executeBasePaidMedicalService(
+                    nextProfileTransactionId("base-paid-medical"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format(
+                    "PLAYER FULLY TREATED | PAID {}",
+                    receipt.currencyPaid)
+                : receipt.message;
+            if (!receipt.succeeded)
+            {
+                gameAudio_.play(SoundEventId::UiDeny);
+            }
             return;
         }
-        const BaseMedicalServiceReceipt receipt =
-            gameSession_.executeBasePaidMedicalService(
-                nextProfileTransactionId("base-paid-medical"));
-        uiMessage_ = receipt.succeeded
-            ? fmt::format(
-                "PLAYER FULLY TREATED | PAID {}",
-                receipt.currencyPaid)
-            : receipt.message;
-        if (!receipt.succeeded)
+        if (contains(baseResidentTreatmentButton(), click.position))
         {
-            gameAudio_.play(SoundEventId::UiDeny);
+            const ResidentTreatmentReceipt receipt =
+                gameSession_.executeStartResidentTreatment(
+                    nextProfileTransactionId("resident-treatment"));
+            uiMessage_ = receipt.succeeded
+                ? fmt::format(
+                    "RESIDENT TREATMENT STARTED | READY IN {} MIN",
+                    receipt.completionWorldMinute -
+                        gameSession_.profile().worldClock.elapsedWorldMinutes)
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
         }
         return;
     }
@@ -9185,16 +9205,21 @@ void App::renderBaseAllocation()
 
 void App::renderBaseMedicalService()
 {
-    const SDL_FRect panel{220.0F, 112.0F, 840.0F, 500.0F};
+    const SDL_FRect panel{180.0F, 76.0F, 920.0F, 570.0F};
     SDL_SetRenderDrawColor(renderer_, 20, 29, 30, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 118, 186, 178, 255);
     SDL_RenderRect(renderer_, &panel);
 
     const ProfileState &profile = gameSession_.profile();
-    const BaseMedicalServicePlan plan = queryBaseMedicalService(
+    const BaseMedicalServicePlan playerPlan = queryBaseMedicalService(
         profile,
         publishedContentRegistry());
+    const ResidentTreatmentPlan residentPlan = queryStartResidentTreatment(
+        profile,
+        publishedContentRegistry());
+    const BaseResidentMedicalProjection residents =
+        projectBaseResidentMedical(profile);
     const char *bleeding =
         profile.medicalStatus.bleeding == BleedingSeverity::Heavy
         ? "HEAVY BLEEDING"
@@ -9209,73 +9234,153 @@ void App::renderBaseMedicalService()
 
     SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
     uiTextRenderer_.render(
-        renderer_, 270.0F, 158.0F,
+        renderer_, 220.0F, 108.0F,
         "MEDICAL SERVICE | TEXT/GEOMETRY PLACEHOLDER");
     const std::string currency = fmt::format(
         "CURRENCY {}",
         profile.currency);
     uiTextRenderer_.render(
-        renderer_, 830.0F, 158.0F, currency.c_str());
+        renderer_, 900.0F, 108.0F, currency.c_str());
 
-    const std::string health = fmt::format(
-        "PLAYER HEALTH {}/100",
-        profile.currentHealth);
-    uiTextRenderer_.render(renderer_, 310.0F, 230.0F, health.c_str());
-    uiTextRenderer_.render(renderer_, 310.0F, 264.0F, bleeding);
-    uiTextRenderer_.render(renderer_, 310.0F, 298.0F, pain);
+    const std::string playerStatus = fmt::format(
+        "PLAYER SERVICE | HEALTH {}/100 | {} | {}",
+        profile.currentHealth,
+        bleeding,
+        pain);
+    uiTextRenderer_.render(renderer_, 230.0F, 164.0F, playerStatus.c_str());
     const std::string painkiller = fmt::format(
         "PAINKILLER REMAINING {} SEC",
         profile.medicalStatus.painkillerRemainingMs / 1000U);
     uiTextRenderer_.render(
-        renderer_, 310.0F, 332.0F, painkiller.c_str());
+        renderer_, 230.0F, 194.0F, painkiller.c_str());
 
     std::string status;
-    if (plan.quotedCurrency > 0)
+    if (playerPlan.quotedCurrency > 0)
     {
         status = fmt::format(
             "TREATMENT QUOTE {} | HP {} + INJURY {} | {}",
-            plan.quotedCurrency,
-            plan.healthCost,
-            plan.injuryCost,
-            plan.canCommit ? "READY" : "INSUFFICIENT CURRENCY");
+            playerPlan.quotedCurrency,
+            playerPlan.healthCost,
+            playerPlan.injuryCost,
+            playerPlan.canCommit ? "READY" : "INSUFFICIENT CURRENCY");
     }
     else
     {
-        status = plan.message;
+        status = playerPlan.message;
     }
     SDL_SetRenderDrawColor(
         renderer_,
-        plan.canCommit ? 176 : 218,
-        plan.canCommit ? 232 : 190,
-        plan.canCommit ? 216 : 150,
+        playerPlan.canCommit ? 176 : 218,
+        playerPlan.canCommit ? 232 : 190,
+        playerPlan.canCommit ? 216 : 150,
         255);
-    uiTextRenderer_.render(renderer_, 310.0F, 405.0F, status.c_str());
+    uiTextRenderer_.render(renderer_, 230.0F, 224.0F, status.c_str());
 
     const SDL_FRect button = baseMedicalServiceButton();
     SDL_SetRenderDrawColor(
         renderer_,
-        plan.canCommit ? 48 : 42,
-        plan.canCommit ? 104 : 50,
-        plan.canCommit ? 94 : 52,
+        playerPlan.canCommit ? 48 : 42,
+        playerPlan.canCommit ? 104 : 50,
+        playerPlan.canCommit ? 94 : 52,
         255);
     SDL_RenderFillRect(renderer_, &button);
     SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
     SDL_RenderRect(renderer_, &button);
     uiTextRenderer_.render(
         renderer_,
-        button.x + 82.0F,
-        button.y + 20.0F,
-        plan.canCommit ? "PAY & TREAT" : "TREATMENT UNAVAILABLE");
+        button.x + 54.0F,
+        button.y + 17.0F,
+        playerPlan.canCommit ? "PAY & TREAT" : "TREATMENT UNAVAILABLE");
+
+    SDL_SetRenderDrawColor(renderer_, 94, 130, 124, 255);
+    const SDL_FRect divider{220.0F, 326.0F, 840.0F, 1.0F};
+    SDL_RenderFillRect(renderer_, &divider);
+    const std::string residentStatus = fmt::format(
+        "RESIDENT CARE | RESIDENTS {} | INJURED {} | HEALTHY {}",
+        residents.ordinaryResidents,
+        residents.injuredResidents,
+        residents.healthyResidents);
+    SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
+    uiTextRenderer_.render(
+        renderer_, 230.0F, 354.0F, residentStatus.c_str());
+
+    std::string residentDetail;
+    if (residents.treatmentActive)
+    {
+        residentDetail = fmt::format(
+            "TREATMENT ACTIVE | READY IN {} H {} MIN",
+            residents.remainingMinutes / kWorldMinutesPerHour,
+            residents.remainingMinutes % kWorldMinutesPerHour);
+    }
+    else if (residentPlan.canCommit)
+    {
+        std::string supplies;
+        for (std::size_t index{}; index < residentPlan.supplies.size(); ++index)
+        {
+            const ResidentMedicalSupplySelection &selection =
+                residentPlan.supplies[index];
+            if (index != 0U)
+            {
+                supplies += " + ";
+            }
+            supplies += fmt::format(
+                "{} x{}",
+                publishedContentRegistry().item(selection.definitionId)
+                    .displayName,
+                selection.quantity);
+        }
+        residentDetail = fmt::format(
+            "AUTHORIZED SUPPLIES {} | CONTRIBUTION {}/{} | {} MIN",
+            supplies,
+            residentPlan.plannedContribution,
+            residentPlan.requiredContribution,
+            residentPlan.durationMinutes);
+    }
+    else
+    {
+        residentDetail = residentPlan.message;
+    }
+    SDL_SetRenderDrawColor(
+        renderer_,
+        residentPlan.canCommit ? 176 : 218,
+        residentPlan.canCommit ? 232 : 190,
+        residentPlan.canCommit ? 216 : 150,
+        255);
+    uiTextRenderer_.render(
+        renderer_, 230.0F, 402.0F, residentDetail.c_str());
+    uiTextRenderer_.render(
+        renderer_, 230.0F, 430.0F,
+        "USES ONLY ITEMS ASSIGNED TO MEDICAL SUPPLY | CONSUMED ON START");
+
+    const SDL_FRect residentButton = baseResidentTreatmentButton();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        residentPlan.canCommit ? 48 : 42,
+        residentPlan.canCommit ? 104 : 50,
+        residentPlan.canCommit ? 94 : 52,
+        255);
+    SDL_RenderFillRect(renderer_, &residentButton);
+    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
+    SDL_RenderRect(renderer_, &residentButton);
+    uiTextRenderer_.render(
+        renderer_,
+        residentButton.x + 42.0F,
+        residentButton.y + 17.0F,
+        residentPlan.canCommit
+            ? "START RESIDENT TREATMENT"
+            : residents.treatmentActive
+                ? "RESIDENT TREATMENT ACTIVE"
+                : "RESIDENT TREATMENT UNAVAILABLE");
 
     SDL_SetRenderDrawColor(renderer_, 190, 208, 202, 255);
     uiTextRenderer_.render(
-        renderer_, 310.0F, 574.0F,
+        renderer_, 230.0F, 570.0F,
         "CURRENCY ONLY | PERSONAL MEDICAL ITEMS ARE NOT CONSUMED | ESC CLOSE");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 228, 220, 156, 255);
         uiTextRenderer_.render(
-            renderer_, 310.0F, 600.0F, uiMessage_.c_str());
+            renderer_, 230.0F, 608.0F, uiMessage_.c_str());
     }
 }
 
@@ -9299,8 +9404,10 @@ void App::renderBaseDormitory()
         "DORMITORY & REST | AGGREGATED RESIDENTS");
 
     const std::string residents = fmt::format(
-        "ORDINARY RESIDENTS {} | BEDS {} | BED SHORTFALL {}",
+        "ORDINARY RESIDENTS {} | INJURED {} | HEALTHY {} | BEDS {} | BED SHORTFALL {}",
         population.ordinaryResidents,
+        population.injuredResidents,
+        population.healthyResidents,
         population.bedCapacity,
         population.bedShortfall);
     uiTextRenderer_.render(renderer_, 170.0F, 194.0F, residents.c_str());

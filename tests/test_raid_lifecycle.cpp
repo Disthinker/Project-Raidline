@@ -95,7 +95,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(deploy(
         profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-ordinary-rescue-6");
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-resident-medical-7");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -198,6 +198,42 @@ TEST(RaidLifecycleTest, SecuredRescueSurvivesFailedRaidSettlementExactlyOnce)
     ASSERT_TRUE(profile.lastRaidResult.has_value());
     EXPECT_EQ(profile.lastRaidResult->rescuedOrdinaryResidents, 1U);
     EXPECT_TRUE(profile.committedRescues.contains(rescue.definitionId));
+}
+
+TEST(RaidLifecycleTest, AshworksSettlementReportsAndKeepsInjuredResident)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "rescue-injured-settlement", publishedContentRegistry());
+    ASSERT_TRUE(deploy(
+        profile,
+        77231U,
+        MapDefinitionId{"map.raid.industrial"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
+    const RaidRescueSnapshot rescue = *profile.pendingRaid->rescue;
+    ASSERT_EQ(rescue.injuredResidentCount, 1U);
+    profile.pendingRaid->rescue->secured = true;
+    ASSERT_TRUE(executeOrdinarySurvivorAdmission(
+        profile,
+        publishedContentRegistry(),
+        OrdinarySurvivorAdmissionCommand{
+            rescue.definitionId,
+            rescue.ordinaryResidentCount,
+            rescue.injuredResidentCount},
+        CommandContext{profile.revision, "secure-injured-resident"})
+                    .succeeded);
+
+    const RaidSettlementReceipt settlement = settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        profile.pendingRaid->settlementId,
+        RaidResultOutcome::Extracted);
+
+    ASSERT_TRUE(settlement.succeeded) << settlement.message;
+    EXPECT_EQ(profile.basePopulation.injuredResidents, 1U);
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    EXPECT_EQ(profile.lastRaidResult->rescuedOrdinaryResidents, 1U);
+    EXPECT_EQ(profile.lastRaidResult->rescuedInjuredResidents, 1U);
 }
 
 TEST(RaidLifecycleTest, SettlementUsesNormalOrFailureTravelExactlyOnce)
