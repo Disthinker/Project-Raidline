@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#89 已接受。当前优先交付 **Base：正式士气与周期事件 v1**；范围合同见 `doc/exec-plans/active/base-morale-periodic-events-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#90 已接受。当前优先交付 **Base：聚合岗位、专业人口与设施升级 v1**；范围合同见 `doc/exec-plans/active/base-workforce-facility-upgrades-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -100,7 +100,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 分类自动供给 v1 | 食物、医疗、娱乐、安全菜单显示玩家拥有的可用定义；勾选后仅在每日缺口出现时自动消耗，物品此前保持原位 | BaseSupplyPolicyState、定义→唯一分类授权、最低数量日结、schema v15/content v23 | PR #87 已通过 exact-head CI 和用户验收，以 `1be94bf` 进入 main |
 | 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main |
 | 基础制造队列 v1 | 工坊用真实废旧零件、损坏电子元件、健康劳动力和世界时间制造真实武器维护包；可取消、可处理仓库满载 | 版本化 Recipe、稳定资产预留、单生产槽、工人预算、Raid 延迟物化、schema v17/content v25 | PR #89 已通过 CI 与用户正常游玩验收，以 `194f910` 进入 main；不扩展多队列、升级、职业、蓝图、品质、电力或自动化 |
-| 正式士气与周期事件 v1 | Allocation 显示居民士气、每日原因和五日事件；低/稳/高士气改变新制造订单耗时 | 独立 BaseMoraleState、每日账本、稳定事件快照、统一日结、Raid 回滚、schema v18/content v26 | 当前分支已完成领域、持久化、工坊消费者和双语占位 UI；Windows Debug、CTest 1001/1001 与 exact-head CI 通过，等待用户正常游玩验收，不实现离队、叛乱或战斗修正 |
+| 正式士气与周期事件 v1 | Allocation 显示居民士气、每日原因和五日事件；低/稳/高士气改变新制造订单耗时 | 独立 BaseMoraleState、每日账本、稳定事件快照、统一日结、Raid 回滚、schema v18/content v26 | PR #90 已通过 CI 与用户正常游玩验收，以 `1af0e56` 进入 main；不实现离队、叛乱或战斗修正 |
+| 聚合岗位、专业人口与设施升级 v1 | Raid 救援带来专业能力；玩家为工坊/医疗所安排人员并投资线性升级，任务时间按资格与等级冻结 | 四类聚合专业、互斥岗位、typed construction target、schema v19/content v27 | 实现与本地 1010/1010 回归已完成，等待 exact-head CI 和用户正常游玩验收；不包含具名 NPC、培训、战斗小组、第二服务队列或正式资源 |
 
 ## 当前 Combat Reliability 缺陷
 

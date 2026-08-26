@@ -148,6 +148,22 @@ namespace
         return value;
     }
 
+    BaseResidentProfession parseResidentProfession(
+        const Json &parent,
+        std::string_view field)
+    {
+        const std::string value = requiredString(parent, field);
+        if (value == "general")
+            return BaseResidentProfession::General;
+        if (value == "medical")
+            return BaseResidentProfession::Medical;
+        if (value == "engineering")
+            return BaseResidentProfession::Engineering;
+        if (value == "combat")
+            return BaseResidentProfession::Combat;
+        fail(std::string{field} + " is not a supported resident profession");
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -852,6 +868,25 @@ ContentRegistry ContentRegistry::fromJson(
             fail("at least two Base community events are required");
         }
 
+        const Json &baseWorkforce = requiredObject(root, "base_workforce");
+        registry.baseWorkforce_ = BaseWorkforceDefinition{
+            requiredPositiveUint(
+                baseWorkforce, "general_fallback_duration_percent"),
+            requiredPositiveUint(
+                baseWorkforce, "workshop_level_2_duration_percent"),
+            requiredPositiveUint(
+                baseWorkforce, "medical_level_2_duration_percent")};
+        const BaseWorkforceDefinition &workforce = registry.baseWorkforce_;
+        if (workforce.generalFallbackDurationPercent < 100U ||
+            workforce.generalFallbackDurationPercent > 300U ||
+            workforce.workshopLevel2DurationPercent < 50U ||
+            workforce.workshopLevel2DurationPercent > 100U ||
+            workforce.medicalLevel2DurationPercent < 50U ||
+            workforce.medicalLevel2DurationPercent > 100U)
+        {
+            fail("Base workforce definition is invalid");
+        }
+
         const Json &baseConstruction = requiredObject(
             root,
             "base_construction");
@@ -871,27 +906,48 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("Base construction project must be an object");
             }
+            const std::string targetFacility = requiredString(
+                projectValue, "target_facility");
+            BaseFacilityUpgradeTarget target{};
+            if (targetFacility == "dormitory")
+            {
+                target = BaseFacilityUpgradeTarget::Dormitory;
+            }
+            else if (targetFacility == "workshop")
+            {
+                target = BaseFacilityUpgradeTarget::Workshop;
+            }
+            else if (targetFacility == "medical")
+            {
+                target = BaseFacilityUpgradeTarget::Medical;
+            }
+            else
+            {
+                fail("Base construction target facility is invalid");
+            }
             BaseConstructionProjectDefinition definition{
                 BaseConstructionProjectDefinitionId{
                     requiredString(projectValue, "id")},
                 requiredString(projectValue, "display_name"),
-                requiredPositiveUint(
-                    projectValue, "required_dormitory_level"),
-                requiredPositiveUint(
-                    projectValue, "target_dormitory_level"),
+                target,
+                requiredPositiveUint(projectValue, "required_level"),
+                requiredPositiveUint(projectValue, "target_level"),
                 requiredPositiveUint(projectValue, "material_cost"),
                 requiredPositiveUint(projectValue, "worker_count"),
                 requiredPositiveUint(projectValue, "duration_minutes"),
-                requiredPositiveUint(projectValue, "bed_capacity_after")};
+                optionalUint(projectValue, "bed_capacity_after")};
             if (!hasPrefix(definition.id.value(), "base_construction.") ||
                 definition.displayName.empty() ||
-                definition.targetDormitoryLevel !=
-                    definition.requiredDormitoryLevel + 1U ||
+                definition.targetLevel != definition.requiredLevel + 1U ||
                 definition.materialCost >
                     registry.maximumBaseConstructionMaterials_ ||
                 definition.workerCount > 1000U ||
                 definition.durationMinutes > 30U * 24U * 60U ||
-                definition.bedCapacityAfter > 1000U)
+                definition.bedCapacityAfter > 1000U ||
+                (definition.target == BaseFacilityUpgradeTarget::Dormitory &&
+                 definition.bedCapacityAfter == 0U) ||
+                (definition.target != BaseFacilityUpgradeTarget::Dormitory &&
+                 definition.bedCapacityAfter != 0U))
             {
                 fail("Base construction project definition is invalid");
             }
@@ -1674,7 +1730,8 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredFiniteFloat(
                         rescue, "interaction_duration_seconds", true),
                     requiredPositiveUint(rescue, "ordinary_resident_count"),
-                    optionalUint(rescue, "injured_resident_count")};
+                    optionalUint(rescue, "injured_resident_count"),
+                    parseResidentProfession(rescue, "profession")};
                 if (!hasPrefix(rescueDefinition.id.value(), "rescue.") ||
                     !rescueDefinitionIds.insert(rescueDefinition.id).second ||
                     rescueDefinition.interactionDurationSeconds > 30.0F ||
@@ -2203,6 +2260,11 @@ const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept
 const BaseMoraleDefinition &ContentRegistry::baseMorale() const noexcept
 {
     return baseMorale_;
+}
+
+const BaseWorkforceDefinition &ContentRegistry::baseWorkforce() const noexcept
+{
+    return baseWorkforce_;
 }
 
 const std::vector<BaseCommunityEventDefinition> &

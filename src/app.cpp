@@ -184,19 +184,34 @@ namespace
     {
         return SDL_FRect{
             170.0F + static_cast<float>(index) * 310.0F,
-            526.0F,
+            550.0F,
             220.0F,
             50.0F};
     }
 
     SDL_FRect baseConstructionButton() noexcept
     {
-        return SDL_FRect{710.0F, 384.0F, 340.0F, 58.0F};
+        return SDL_FRect{710.0F, 400.0F, 340.0F, 48.0F};
     }
 
     SDL_FRect baseManufacturingButton() noexcept
     {
         return SDL_FRect{700.0F, 520.0F, 340.0F, 56.0F};
+    }
+
+    SDL_FRect baseFacilityStaffingButton() noexcept
+    {
+        return SDL_FRect{170.0F, 530.0F, 240.0F, 42.0F};
+    }
+
+    SDL_FRect baseFacilityUpgradeButton() noexcept
+    {
+        return SDL_FRect{430.0F, 530.0F, 240.0F, 42.0F};
+    }
+
+    SDL_FRect baseWorkforceAutoFillButton() noexcept
+    {
+        return SDL_FRect{170.0F, 400.0F, 300.0F, 48.0F};
     }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
@@ -1958,6 +1973,63 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Workshop)
     {
+        if (contains(baseFacilityStaffingButton(), click.position))
+        {
+            const bool assigned = gameSession_.profile().baseWorkforce
+                .workshopWorker.has_value();
+            const BaseWorkforceReceipt receipt = assigned
+                ? gameSession_.executeClearBaseWorker(
+                    BaseFacilityStaffingKind::Workshop,
+                    nextProfileTransactionId("clear-workshop-worker"))
+                : gameSession_.executeAssignBestBaseWorker(
+                    BaseFacilityStaffingKind::Workshop,
+                    nextProfileTransactionId("assign-workshop-worker"));
+            uiMessage_ = receipt.succeeded
+                ? assigned ? "WORKSHOP WORKER CLEARED"
+                           : "WORKSHOP WORKER ASSIGNED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
+        if (contains(baseFacilityUpgradeButton(), click.position))
+        {
+            const auto &projects =
+                publishedContentRegistry().baseConstructionProjects();
+            const auto found = std::find_if(
+                projects.begin(), projects.end(),
+                [](const BaseConstructionProjectDefinition &project)
+                {
+                    return project.target ==
+                        BaseFacilityUpgradeTarget::Workshop;
+                });
+            if (found == projects.end())
+            {
+                uiMessage_ = "NO WORKSHOP UPGRADE PUBLISHED";
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
+            const auto &active = gameSession_.profile()
+                .baseConstruction.activeProject;
+            const bool matchingActive = active.has_value() &&
+                active->definitionId == found->id;
+            const BaseConstructionReceipt receipt = matchingActive
+                ? gameSession_.executeCancelBaseConstruction(
+                    found->id,
+                    nextProfileTransactionId("cancel-workshop-upgrade"))
+                : gameSession_.executeStartBaseConstruction(
+                    found->id,
+                    nextProfileTransactionId("start-workshop-upgrade"));
+            uiMessage_ = receipt.succeeded
+                ? matchingActive ? "WORKSHOP UPGRADE CANCELLED"
+                                 : "WORKSHOP UPGRADE STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
         if (!contains(baseManufacturingButton(), click.position))
         {
             return;
@@ -2005,6 +2077,62 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Medical)
     {
+        if (contains(baseFacilityStaffingButton(), click.position))
+        {
+            const bool assigned = gameSession_.profile().baseWorkforce
+                .medicalWorker.has_value();
+            const BaseWorkforceReceipt receipt = assigned
+                ? gameSession_.executeClearBaseWorker(
+                    BaseFacilityStaffingKind::Medical,
+                    nextProfileTransactionId("clear-medical-worker"))
+                : gameSession_.executeAssignBestBaseWorker(
+                    BaseFacilityStaffingKind::Medical,
+                    nextProfileTransactionId("assign-medical-worker"));
+            uiMessage_ = receipt.succeeded
+                ? assigned ? "MEDICAL WORKER CLEARED"
+                           : "MEDICAL WORKER ASSIGNED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
+        if (contains(baseFacilityUpgradeButton(), click.position))
+        {
+            const auto &projects =
+                publishedContentRegistry().baseConstructionProjects();
+            const auto found = std::find_if(
+                projects.begin(), projects.end(),
+                [](const BaseConstructionProjectDefinition &project)
+                {
+                    return project.target == BaseFacilityUpgradeTarget::Medical;
+                });
+            if (found == projects.end())
+            {
+                uiMessage_ = "NO MEDICAL UPGRADE PUBLISHED";
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
+            const auto &active = gameSession_.profile()
+                .baseConstruction.activeProject;
+            const bool matchingActive = active.has_value() &&
+                active->definitionId == found->id;
+            const BaseConstructionReceipt receipt = matchingActive
+                ? gameSession_.executeCancelBaseConstruction(
+                    found->id,
+                    nextProfileTransactionId("cancel-medical-upgrade"))
+                : gameSession_.executeStartBaseConstruction(
+                    found->id,
+                    nextProfileTransactionId("start-medical-upgrade"));
+            uiMessage_ = receipt.succeeded
+                ? matchingActive ? "MEDICAL UPGRADE CANCELLED"
+                                 : "MEDICAL UPGRADE STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
         if (contains(baseMedicalServiceButton(), click.position))
         {
             const BaseMedicalServiceReceipt receipt =
@@ -2041,12 +2169,45 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Dormitory)
     {
-        const BaseConstructionProjectDefinition &project =
-            publishedContentRegistry().baseConstructionProjects().front();
+        if (contains(baseWorkforceAutoFillButton(), click.position))
+        {
+            const BaseWorkforceReceipt receipt =
+                gameSession_.executeAutoFillBaseWorkers(
+                    nextProfileTransactionId("autofill-base-workers"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE FACILITY WORKERS AUTO-FILLED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return;
+        }
+        const auto &projects =
+            publishedContentRegistry().baseConstructionProjects();
+        const auto found = std::find_if(
+            projects.begin(), projects.end(),
+            [](const BaseConstructionProjectDefinition &candidate)
+            {
+                return candidate.target ==
+                    BaseFacilityUpgradeTarget::Dormitory;
+            });
+        if (found == projects.end())
+        {
+            return;
+        }
+        const BaseConstructionProjectDefinition &project = *found;
         if (contains(baseConstructionButton(), click.position))
         {
-            const bool active = gameSession_.profile()
-                .baseConstruction.activeProject.has_value();
+            const auto &activeProject = gameSession_.profile()
+                .baseConstruction.activeProject;
+            const bool active = activeProject.has_value() &&
+                activeProject->definitionId == project.id;
+            if (activeProject.has_value() && !active)
+            {
+                uiMessage_ = "ANOTHER BASE CONSTRUCTION PROJECT IS ACTIVE";
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
             if (!active)
             {
                 const BaseConstructionPlan plan = queryStartBaseConstruction(
@@ -9399,6 +9560,14 @@ void App::renderBaseMedicalService()
     SDL_SetRenderDrawColor(renderer_, 94, 130, 124, 255);
     const SDL_FRect divider{220.0F, 326.0F, 840.0F, 1.0F};
     SDL_RenderFillRect(renderer_, &divider);
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    const std::string facility = fmt::format(
+        "MEDICAL LEVEL {} | ASSIGNED {} | GENERAL FALLBACK IS 50% SLOWER",
+        profile.baseConstruction.medicalLevel,
+        workforce.medicalWorker.has_value()
+            ? baseResidentProfessionName(*workforce.medicalWorker)
+            : "EMPTY");
+    uiTextRenderer_.render(renderer_, 230.0F, 334.0F, facility.c_str());
     const std::string residentStatus = fmt::format(
         "RESIDENT CARE | RESIDENTS {} | INJURED {} | HEALTHY {}",
         residents.ordinaryResidents,
@@ -9406,7 +9575,7 @@ void App::renderBaseMedicalService()
         residents.healthyResidents);
     SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
     uiTextRenderer_.render(
-        renderer_, 230.0F, 354.0F, residentStatus.c_str());
+        renderer_, 230.0F, 366.0F, residentStatus.c_str());
 
     std::string residentDetail;
     if (residents.treatmentActive)
@@ -9451,9 +9620,9 @@ void App::renderBaseMedicalService()
         residentPlan.canCommit ? 216 : 150,
         255);
     uiTextRenderer_.render(
-        renderer_, 230.0F, 402.0F, residentDetail.c_str());
+        renderer_, 230.0F, 408.0F, residentDetail.c_str());
     uiTextRenderer_.render(
-        renderer_, 230.0F, 430.0F,
+        renderer_, 230.0F, 436.0F,
         "USES ONLY ITEMS ASSIGNED TO MEDICAL SUPPLY | CONSUMED ON START");
 
     const SDL_FRect residentButton = baseResidentTreatmentButton();
@@ -9476,9 +9645,63 @@ void App::renderBaseMedicalService()
                 ? "RESIDENT TREATMENT ACTIVE"
                 : "RESIDENT TREATMENT UNAVAILABLE");
 
+    const SDL_FRect staffingButton = baseFacilityStaffingButton();
+    SDL_SetRenderDrawColor(renderer_, 42, 76, 70, 255);
+    SDL_RenderFillRect(renderer_, &staffingButton);
+    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
+    SDL_RenderRect(renderer_, &staffingButton);
+    uiTextRenderer_.render(
+        renderer_, staffingButton.x + 24.0F, staffingButton.y + 14.0F,
+        workforce.medicalWorker.has_value()
+            ? "CLEAR MEDICAL WORKER"
+            : "ASSIGN BEST WORKER");
+
+    const auto &projects =
+        publishedContentRegistry().baseConstructionProjects();
+    const auto upgrade = std::find_if(
+        projects.begin(), projects.end(),
+        [](const BaseConstructionProjectDefinition &candidate)
+        {
+            return candidate.target == BaseFacilityUpgradeTarget::Medical;
+        });
+    const SDL_FRect upgradeButton = baseFacilityUpgradeButton();
+    bool upgradeAvailable{};
+    std::string upgradeLabel = "NO MEDICAL UPGRADE";
+    if (upgrade != projects.end())
+    {
+        const auto &active = profile.baseConstruction.activeProject;
+        const bool matchingActive = active.has_value() &&
+            active->definitionId == upgrade->id;
+        const BaseConstructionPlan plan = matchingActive
+            ? queryCancelBaseConstruction(
+                profile,
+                publishedContentRegistry(),
+                CancelBaseConstructionCommand{upgrade->id})
+            : queryStartBaseConstruction(
+                profile,
+                publishedContentRegistry(),
+                StartBaseConstructionCommand{upgrade->id});
+        upgradeAvailable = plan.canCommit;
+        upgradeLabel = matchingActive
+            ? "CANCEL MEDICAL UPGRADE"
+            : profile.baseConstruction.medicalLevel >= upgrade->targetLevel
+                ? "MEDICAL LEVEL 2 COMPLETE"
+                : "UPGRADE MEDICAL TO LEVEL 2";
+    }
+    SDL_SetRenderDrawColor(
+        renderer_, upgradeAvailable ? 54 : 42,
+        upgradeAvailable ? 90 : 52,
+        upgradeAvailable ? 82 : 54, 255);
+    SDL_RenderFillRect(renderer_, &upgradeButton);
+    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
+    SDL_RenderRect(renderer_, &upgradeButton);
+    uiTextRenderer_.render(
+        renderer_, upgradeButton.x + 20.0F, upgradeButton.y + 14.0F,
+        upgradeLabel.c_str());
+
     SDL_SetRenderDrawColor(renderer_, 190, 208, 202, 255);
     uiTextRenderer_.render(
-        renderer_, 230.0F, 570.0F,
+        renderer_, 230.0F, 590.0F,
         "CURRENCY ONLY | PERSONAL MEDICAL ITEMS ARE NOT CONSUMED | ESC CLOSE");
     if (!uiMessage_.empty())
     {
@@ -9544,9 +9767,42 @@ void App::renderBaseDormitory()
     const BaseConstructionProjection construction = projectBaseConstruction(
         profile,
         publishedContentRegistry());
-    const BaseConstructionProjectDefinition &project =
-        publishedContentRegistry().baseConstructionProjects().front();
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    const auto &projects =
+        publishedContentRegistry().baseConstructionProjects();
+    const auto dormitoryProject = std::find_if(
+        projects.begin(), projects.end(),
+        [](const BaseConstructionProjectDefinition &candidate)
+        {
+            return candidate.target == BaseFacilityUpgradeTarget::Dormitory;
+        });
+    if (dormitoryProject == projects.end())
+    {
+        return;
+    }
+    const BaseConstructionProjectDefinition &project = *dormitoryProject;
     SDL_SetRenderDrawColor(renderer_, 184, 194, 210, 255);
+    const std::string professions = fmt::format(
+        "PROFESSIONS | GENERAL {} | MEDICAL {} | ENGINEERING {} | COMBAT {}",
+        workforce.residentsByProfession[baseProfessionIndex(
+            BaseResidentProfession::General)],
+        workforce.residentsByProfession[baseProfessionIndex(
+            BaseResidentProfession::Medical)],
+        workforce.residentsByProfession[baseProfessionIndex(
+            BaseResidentProfession::Engineering)],
+        workforce.residentsByProfession[baseProfessionIndex(
+            BaseResidentProfession::Combat)]);
+    uiTextRenderer_.render(renderer_, 170.0F, 346.0F, professions.c_str());
+    const std::string staffing = fmt::format(
+        "STAFFING | WORKSHOP {} | MEDICAL {} | UNASSIGNED {}",
+        workforce.workshopWorker.has_value()
+            ? baseResidentProfessionName(*workforce.workshopWorker)
+            : "EMPTY",
+        workforce.medicalWorker.has_value()
+            ? baseResidentProfessionName(*workforce.medicalWorker)
+            : "EMPTY",
+        workforce.availableResidents);
+    uiTextRenderer_.render(renderer_, 170.0F, 370.0F, staffing.c_str());
     const std::string constructionSummary = fmt::format(
         "DORMITORY LEVEL {} | BUILDING MATERIAL {}/{} | WORKERS {}/{} AVAILABLE",
         construction.dormitoryLevel,
@@ -9555,12 +9811,13 @@ void App::renderBaseDormitory()
         construction.availableWorkers,
         construction.totalWorkers);
     uiTextRenderer_.render(
-        renderer_, 170.0F, 350.0F, constructionSummary.c_str());
+        renderer_, 170.0F, 466.0F, constructionSummary.c_str());
 
     std::string projectStatus;
     bool constructionAvailable{};
     const char *constructionLabel{};
-    if (construction.activeProjectId.has_value())
+    if (construction.activeProjectId.has_value() &&
+        construction.activeProjectId == project.id)
     {
         projectStatus = fmt::format(
             "EXPANSION IN PROGRESS | {}H {:02}M LEFT | {} WORKERS COMMITTED",
@@ -9570,7 +9827,12 @@ void App::renderBaseDormitory()
         constructionAvailable = true;
         constructionLabel = "CANCEL & REFUND MATERIAL";
     }
-    else if (construction.dormitoryLevel >= project.targetDormitoryLevel)
+    else if (construction.activeProjectId.has_value())
+    {
+        projectStatus = "ANOTHER BASE CONSTRUCTION PROJECT IS ACTIVE";
+        constructionLabel = "DORMITORY EXPANSION BLOCKED";
+    }
+    else if (construction.dormitoryLevel >= project.targetLevel)
     {
         projectStatus = "DORMITORY EXPANSION COMPLETE";
         constructionLabel = "NO FURTHER PROJECT";
@@ -9584,7 +9846,7 @@ void App::renderBaseDormitory()
         constructionAvailable = plan.canCommit;
         projectStatus = fmt::format(
             "NEXT: LEVEL {} / {} BEDS | COST {} MATERIAL / {} WORKERS / {}H",
-            project.targetDormitoryLevel,
+            project.targetLevel,
             project.bedCapacityAfter,
             project.materialCost,
             project.workerCount,
@@ -9594,7 +9856,16 @@ void App::renderBaseDormitory()
             : "EXPANSION REQUIREMENTS NOT MET";
     }
     uiTextRenderer_.render(
-        renderer_, 170.0F, 382.0F, projectStatus.c_str());
+        renderer_, 170.0F, 490.0F, projectStatus.c_str());
+    const SDL_FRect autoFillButton = baseWorkforceAutoFillButton();
+    SDL_SetRenderDrawColor(renderer_, 58, 86, 106, 255);
+    SDL_RenderFillRect(renderer_, &autoFillButton);
+    SDL_SetRenderDrawColor(renderer_, 170, 188, 216, 255);
+    SDL_RenderRect(renderer_, &autoFillButton);
+    uiTextRenderer_.render(
+        renderer_, autoFillButton.x + 34.0F,
+        autoFillButton.y + 17.0F,
+        "AUTO-FILL EMPTY FACILITY JOBS");
     const SDL_FRect constructionButton = baseConstructionButton();
     SDL_SetRenderDrawColor(
         renderer_, constructionAvailable ? 66 : 52,
@@ -9609,7 +9880,7 @@ void App::renderBaseDormitory()
         constructionLabel);
 
     uiTextRenderer_.render(
-        renderer_, 170.0F, 470.0F,
+        renderer_, 170.0F, 518.0F,
         "REST ADVANCES WORLD TIME AND DAILY NEEDS | MAXIMUM 12H");
 
     constexpr std::array<const char *, 3> labels{
@@ -9654,7 +9925,16 @@ void App::renderBaseWorkshop()
     uiTextRenderer_.render(
         renderer_, 170.0F, 178.0F, recipe.displayName.c_str());
 
-    float y = 228.0F;
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    const std::string worker = fmt::format(
+        "WORKSHOP LEVEL {} | ASSIGNED {} | GENERAL FALLBACK IS 50% SLOWER",
+        profile.baseConstruction.workshopLevel,
+        workforce.workshopWorker.has_value()
+            ? baseResidentProfessionName(*workforce.workshopWorker)
+            : "EMPTY");
+    uiTextRenderer_.render(renderer_, 170.0F, 204.0F, worker.c_str());
+
+    float y = 234.0F;
     uiTextRenderer_.render(renderer_, 170.0F, y, "REQUIRED INPUTS");
     for (const BaseManufacturingInputDefinition &input : recipe.inputs)
     {
@@ -9667,10 +9947,18 @@ void App::renderBaseWorkshop()
     }
     const ItemDefinition &outputDefinition =
         publishedContentRegistry().item(recipe.outputItemDefinitionId);
-    const std::uint32_t adjustedDuration = applyBaseMoraleDurationPercent(
+    const std::uint32_t moraleDuration = applyBaseMoraleDurationPercent(
         recipe.durationMinutes,
         profile.baseMorale.tier,
         publishedContentRegistry().baseMorale());
+    const std::uint32_t adjustedDuration = workforce.workshopWorker.has_value()
+        ? applyBaseFacilityTaskDuration(
+            moraleDuration,
+            BaseFacilityStaffingKind::Workshop,
+            *workforce.workshopWorker,
+            profile.baseConstruction.workshopLevel,
+            publishedContentRegistry().baseWorkforce())
+        : 0U;
     const std::string output = fmt::format(
         "OUTPUT {} x{} | {} WORKER | BASE {}H | CURRENT {}H {:02}M",
         outputDefinition.displayName,
@@ -9737,6 +10025,59 @@ void App::renderBaseWorkshop()
     SDL_RenderRect(renderer_, &button);
     uiTextRenderer_.render(
         renderer_, button.x + 28.0F, button.y + 20.0F, buttonLabel);
+
+    const SDL_FRect staffingButton = baseFacilityStaffingButton();
+    SDL_SetRenderDrawColor(renderer_, 58, 76, 64, 255);
+    SDL_RenderFillRect(renderer_, &staffingButton);
+    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
+    SDL_RenderRect(renderer_, &staffingButton);
+    uiTextRenderer_.render(
+        renderer_, staffingButton.x + 24.0F, staffingButton.y + 14.0F,
+        workforce.workshopWorker.has_value()
+            ? "CLEAR WORKSHOP WORKER"
+            : "ASSIGN BEST WORKER");
+
+    const auto &projects =
+        publishedContentRegistry().baseConstructionProjects();
+    const auto upgrade = std::find_if(
+        projects.begin(), projects.end(),
+        [](const BaseConstructionProjectDefinition &candidate)
+        {
+            return candidate.target == BaseFacilityUpgradeTarget::Workshop;
+        });
+    const SDL_FRect upgradeButton = baseFacilityUpgradeButton();
+    bool upgradeAvailable{};
+    std::string upgradeLabel = "NO WORKSHOP UPGRADE";
+    if (upgrade != projects.end())
+    {
+        const auto &active = profile.baseConstruction.activeProject;
+        const bool matchingActive = active.has_value() &&
+            active->definitionId == upgrade->id;
+        const BaseConstructionPlan plan = matchingActive
+            ? queryCancelBaseConstruction(
+                profile,
+                publishedContentRegistry(),
+                CancelBaseConstructionCommand{upgrade->id})
+            : queryStartBaseConstruction(
+                profile,
+                publishedContentRegistry(),
+                StartBaseConstructionCommand{upgrade->id});
+        upgradeAvailable = plan.canCommit;
+        upgradeLabel = matchingActive
+            ? "CANCEL WORKSHOP UPGRADE"
+            : profile.baseConstruction.workshopLevel >= upgrade->targetLevel
+                ? "WORKSHOP LEVEL 2 COMPLETE"
+                : "UPGRADE WORKSHOP TO LEVEL 2";
+    }
+    SDL_SetRenderDrawColor(
+        renderer_, upgradeAvailable ? 72 : 48,
+        upgradeAvailable ? 86 : 52, 64, 255);
+    SDL_RenderFillRect(renderer_, &upgradeButton);
+    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
+    SDL_RenderRect(renderer_, &upgradeButton);
+    uiTextRenderer_.render(
+        renderer_, upgradeButton.x + 20.0F, upgradeButton.y + 14.0F,
+        upgradeLabel.c_str());
     uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {

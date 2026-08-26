@@ -265,6 +265,24 @@ TEST(UiLocalizationTest, ChineseTranslatesOrdinarySurvivorRescueFlow) {
   EXPECT_NE(pause.find("已转移幸存者保留"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesWorkforceAndFacilityUpgrades) {
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "PROFESSIONS | GENERAL 6 | MEDICAL 1 | ENGINEERING 1 | COMBAT 0"),
+      "职业 | 通用 6 | 医疗 1 | 工程 1 | 战斗 0");
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "WORKSHOP LEVEL 1 | ASSIGNED Engineering | GENERAL FALLBACK IS 50% SLOWER"),
+      "工坊等级 1 | 已分配 工程 | 通用人员替岗耗时增加50%");
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "UPGRADE MEDICAL TO LEVEL 2"),
+      "将医疗设施升级至2级");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

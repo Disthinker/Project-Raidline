@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <compare>
 #include <cstdint>
 #include <map>
@@ -230,6 +232,11 @@ struct BaseSupplyPolicyState
         const BaseSupplyPolicyState &) = default;
 };
 
+inline constexpr std::size_t kBaseResidentProfessionCount = 4U;
+
+using BaseProfessionCounts =
+    std::array<std::uint32_t, kBaseResidentProfessionCount>;
+
 struct RaidRescueSnapshot
 {
     RescueDefinitionId definitionId;
@@ -238,6 +245,7 @@ struct RaidRescueSnapshot
     float interactionDurationSeconds{};
     std::uint32_t ordinaryResidentCount{};
     std::uint32_t injuredResidentCount{};
+    BaseResidentProfession profession{BaseResidentProfession::General};
     bool secured{};
 
     friend bool operator==(
@@ -252,10 +260,44 @@ struct BasePopulationState
     std::uint32_t ordinaryResidents{8};
     std::uint32_t bedCapacity{10};
     std::uint32_t injuredResidents{};
+    BaseProfessionCounts professionResidents{6U, 1U, 1U, 0U};
+    BaseProfessionCounts injuredByProfession{};
+
+    BasePopulationState() = default;
+
+    BasePopulationState(
+        std::uint32_t ordinary,
+        std::uint32_t beds,
+        std::uint32_t injured = 0U) noexcept
+        : ordinaryResidents{ordinary},
+          bedCapacity{beds},
+          injuredResidents{injured}
+    {
+        const std::uint32_t specialists = std::min(ordinary, 2U);
+        professionResidents = {
+            ordinary - specialists,
+            specialists >= 1U ? 1U : 0U,
+            specialists >= 2U ? 1U : 0U,
+            0U};
+        injuredByProfession[static_cast<std::size_t>(
+            BaseResidentProfession::General)] = injured;
+    }
 
     friend bool operator==(
         const BasePopulationState &,
         const BasePopulationState &) = default;
+};
+
+struct BaseWorkforceState
+{
+    std::optional<BaseResidentProfession> workshopWorker{
+        BaseResidentProfession::Engineering};
+    std::optional<BaseResidentProfession> medicalWorker{
+        BaseResidentProfession::Medical};
+
+    friend bool operator==(
+        const BaseWorkforceState &,
+        const BaseWorkforceState &) = default;
 };
 
 enum class BaseMoraleTier
@@ -322,6 +364,8 @@ struct ActiveResidentTreatment
     std::uint64_t startedWorldMinute{};
     std::uint64_t completionWorldMinute{};
     std::uint32_t consumedContribution{};
+    BaseResidentProfession patientProfession{BaseResidentProfession::General};
+    BaseResidentProfession workerProfession{BaseResidentProfession::General};
 
     friend bool operator==(
         const ActiveResidentTreatment &,
@@ -342,6 +386,7 @@ struct BaseManufacturingOrder
     BaseServiceJobId jobId{};
     BaseManufacturingRecipeDefinitionId recipeDefinitionId;
     std::uint32_t committedWorkers{};
+    BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::uint64_t startedWorldMinute{};
     std::uint64_t completionWorldMinute{};
     std::vector<AssetInstanceId> inputAssetIds;
@@ -379,6 +424,8 @@ struct BaseConstructionState
 {
     std::uint32_t materialUnits{};
     std::uint32_t dormitoryLevel{1};
+    std::uint32_t workshopLevel{1};
+    std::uint32_t medicalLevel{1};
     std::optional<ActiveBaseConstructionProject> activeProject;
 
     friend bool operator==(
@@ -424,8 +471,10 @@ struct RaidTravelSnapshot
     BaseMoraleState startingBaseMorale;
     BaseCommunityEventState startingBaseCommunityEvent;
     BaseConstructionState startingBaseConstruction;
+    BaseWorkforceState startingBaseWorkforce;
     std::uint32_t startingBedCapacity{10};
     std::uint32_t startingInjuredResidents{};
+    BaseProfessionCounts startingInjuredByProfession{};
     BaseResidentMedicalState startingResidentMedical;
 
     friend bool operator==(
@@ -476,6 +525,7 @@ struct ProfileState
     BaseResourceState baseResources;
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
+    BaseWorkforceState baseWorkforce;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;

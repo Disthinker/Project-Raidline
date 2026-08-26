@@ -1373,6 +1373,76 @@ BaseConstructionReceipt GameSession::executeCancelBaseConstruction(
     return receipt;
 }
 
+BaseWorkforceReceipt GameSession::executeAssignBestBaseWorker(
+    BaseFacilityStaffingKind facility,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseWorkforceReceipt receipt = ::executeAssignBestBaseWorker(
+        candidate,
+        publishedContentRegistry(),
+        BaseFacilityStaffingCommand{facility},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BaseWorkforceReceipt GameSession::executeClearBaseWorker(
+    BaseFacilityStaffingKind facility,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseWorkforceReceipt receipt = ::executeClearBaseWorker(
+        candidate,
+        publishedContentRegistry(),
+        BaseFacilityStaffingCommand{facility},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BaseWorkforceReceipt GameSession::executeAutoFillBaseWorkers(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseWorkforceReceipt receipt = ::executeAutoFillBaseWorkers(
+        candidate,
+        publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 BasePriorityReceipt GameSession::executeBasePrioritySubmission(
     AssetInstanceId assetId,
     std::string transactionId)

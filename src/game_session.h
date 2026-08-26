@@ -11,6 +11,7 @@
 
 #include "economy_domain.h"
 #include "base_construction_domain.h"
+#include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
 #include "base_population_domain.h"
@@ -237,6 +238,15 @@ public:
 
     [[nodiscard]] BaseConstructionReceipt executeCancelBaseConstruction(
         BaseConstructionProjectDefinitionId definitionId,
+        std::string transactionId);
+
+    [[nodiscard]] BaseWorkforceReceipt executeAssignBestBaseWorker(
+        BaseFacilityStaffingKind facility,
+        std::string transactionId);
+    [[nodiscard]] BaseWorkforceReceipt executeClearBaseWorker(
+        BaseFacilityStaffingKind facility,
+        std::string transactionId);
+    [[nodiscard]] BaseWorkforceReceipt executeAutoFillBaseWorkers(
         std::string transactionId);
 
     [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(

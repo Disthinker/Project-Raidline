@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "base_workforce_domain.h"
+
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
 #include "base_population_domain.h"
@@ -127,6 +129,8 @@ TEST(ProfileStateTest, FingerprintChangesWithAuthoritativeState)
 
     const std::uint64_t afterClock = profileStateFingerprint(profile);
     ++profile.basePopulation.ordinaryResidents;
+    ++profile.basePopulation.professionResidents[baseProfessionIndex(
+        BaseResidentProfession::General)];
     EXPECT_NE(profileStateFingerprint(profile), afterClock);
 
     const std::uint64_t afterPopulation = profileStateFingerprint(profile);

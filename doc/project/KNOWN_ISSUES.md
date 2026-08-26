@@ -32,7 +32,8 @@
 | RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | PR #86 已以 `ee9ba48` 进入 main；三图一次性安全转移、schema v13 幂等账本与干净恢复检查点已完成，具名 NPC、护送 AI、伤病和职业仍延期 |
 | RL-POP-002 | 受伤居民缺少使用真实库存物资与世界时间的医疗所治疗闭环 | PR #88 已建立聚合伤病、医疗分类授权、确定性精确消耗、单治疗槽和 schema v16；经 exact-head CI 与用户正常游玩验收后以 `987dc6b` 进入 main |
 | RL-BASE-001 | Base 缺少以真实资产、劳动力和世界时间驱动的生产消费者 | PR #89 已完成单工坊槽和维护包配方，经 CI 与用户验收后以 `194f910` 进入 main |
-| RL-BASE-002 | 旧运营支持资源不能表达居民士气，也没有愿望、短缺、床位与生产之间的可解释反馈 | 当前 `codex/base-morale-periodic-events-v1` 已建立独立三档士气、每日原因账本、五日稳定事件和新制造订单耗时消费者；Windows Debug、CTest 1001/1001 与 exact-head CI 通过，等待正常游玩验收 |
+| RL-BASE-002 | 旧运营支持资源不能表达居民士气，也没有愿望、短缺、床位与生产之间的可解释反馈 | PR #90 已完成独立三档士气、每日原因账本、五日稳定事件和制造耗时消费者，经 CI 与用户验收后以 `1af0e56` 进入 main |
+| RL-POP-003 | 聚合居民缺少专业构成与互斥岗位，设施等级也没有成为现有服务的实际消费者 | 当前分支已实现四类聚合专业、工坊/医疗所互斥岗位、专业效率和两个线性设施升级，Windows Debug 与 CTest 1010/1010 通过；等待 exact-head CI 和用户正常游玩验收，具名 NPC、培训、战斗小组和复杂居民模拟继续延期 |
 
 ## 需要未来产品决策
 
@@ -90,8 +91,9 @@
 | Base 宿舍扩建与供给修订 | PR #87 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `1be94bf` 进入 main |
 | Base 居民伤病与医疗所治疗 v1 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `987dc6b` 进入 main |
 | Base 基础制造队列 v1 | PR #89 已通过 Windows Debug、CTest 988/988、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `194f910` 进入 main |
-| Base 正式士气与周期事件 v1 | 当前分支已实现 schema v18/content v26、统一每日账本、稳定五日事件、Raid 回滚和制造耗时消费者；Windows Debug、CTest 1001/1001 与 exact-head CI 通过，等待用户正常游玩验收 |
+| Base 正式士气与周期事件 v1 | PR #90 已通过 Windows Debug、CTest 1001/1001、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `1af0e56` 进入 main |
+| Base 聚合岗位、专业人口与设施升级 v1 | 当前 `codex/base-workforce-facility-upgrades-v1` 从 `origin/main@1af0e56` 开始；范围见对应 ExecPlan |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-morale-periodic-events-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-workforce-facility-upgrades-v1.md`。

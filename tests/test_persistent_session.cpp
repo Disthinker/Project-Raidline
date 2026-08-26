@@ -402,6 +402,35 @@ TEST(PersistentSessionTest, ConstructionCommandsPersistAcrossProcessSessions)
     EXPECT_EQ(cancelled.profile().baseConstruction.materialUnits, 4U);
 }
 
+TEST(PersistentSessionTest, WorkforceAssignmentsPersistAcrossProcessSessions)
+{
+    SessionSaveDirectory temporary;
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.startNewProfile("persistent-workforce"));
+
+    ASSERT_TRUE(first.executeClearBaseWorker(
+        BaseFacilityStaffingKind::Workshop,
+        "persistent-clear-workshop-worker").succeeded);
+
+    GameSession cleared;
+    cleared.configurePersistence(temporary.path());
+    ASSERT_TRUE(cleared.continueProfile()) << cleared.persistenceMessage();
+    EXPECT_FALSE(cleared.profile().baseWorkforce.workshopWorker.has_value());
+
+    ASSERT_TRUE(cleared.executeAssignBestBaseWorker(
+        BaseFacilityStaffingKind::Workshop,
+        "persistent-assign-workshop-worker").succeeded);
+
+    GameSession assigned;
+    assigned.configurePersistence(temporary.path());
+    ASSERT_TRUE(assigned.continueProfile()) << assigned.persistenceMessage();
+    ASSERT_TRUE(assigned.profile().baseWorkforce.workshopWorker.has_value());
+    EXPECT_EQ(
+        *assigned.profile().baseWorkforce.workshopWorker,
+        BaseResidentProfession::Engineering);
+}
+
 TEST(PersistentSessionTest, BaseClockCompletesAndPersistsDormitoryExpansion)
 {
     SessionSaveDirectory temporary;
@@ -439,6 +468,41 @@ TEST(PersistentSessionTest, BaseClockCompletesAndPersistsDormitoryExpansion)
     ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
     EXPECT_EQ(reopened.profile().baseConstruction.dormitoryLevel, 2U);
     EXPECT_EQ(reopened.profile().basePopulation.bedCapacity, 14U);
+}
+
+TEST(PersistentSessionTest, BaseClockCompletesAndPersistsWorkshopUpgrade)
+{
+    SessionSaveDirectory temporary;
+    ProfileState prepared = makeNewAlphaProfile(
+        "persistent-workshop-upgrade",
+        publishedContentRegistry());
+    prepared.baseConstruction.materialUnits = 6U;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        prepared,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    ASSERT_TRUE(session.executeStartBaseConstruction(
+        BaseConstructionProjectDefinitionId{
+            "base_construction.workshop.level_2"},
+        "persistent-start-workshop-upgrade").succeeded);
+
+    session.advanceBaseWorldClock(719.0F);
+    EXPECT_EQ(session.profile().baseConstruction.workshopLevel, 1U);
+    EXPECT_TRUE(session.profile().baseConstruction.activeProject.has_value());
+    session.advanceBaseWorldClock(1.0F);
+    EXPECT_EQ(session.profile().baseConstruction.workshopLevel, 2U);
+    EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
+    ASSERT_TRUE(session.checkpointWorldClock()) << session.persistenceMessage();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().baseConstruction.workshopLevel, 2U);
+    EXPECT_FALSE(reopened.profile().baseConstruction.activeProject.has_value());
 }
 
 TEST(PersistentSessionTest, ConstructionSaveFailurePreservesInMemoryProfile)
@@ -705,6 +769,8 @@ TEST(PersistentSessionTest,
         "persistent-resident-treatment",
         publishedContentRegistry());
     initial.basePopulation.injuredResidents = 1U;
+    initial.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     initial.baseSupplyPolicy.assignments.emplace(
         ItemDefinitionId{"item.medical.medkit_alpha"},
         BaseSupplyCategory::Medical);
@@ -746,6 +812,8 @@ TEST(PersistentSessionTest,
         "failed-resident-treatment-save",
         publishedContentRegistry());
     initial.basePopulation.injuredResidents = 1U;
+    initial.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     initial.baseSupplyPolicy.assignments.emplace(
         ItemDefinitionId{"item.medical.medkit_alpha"},
         BaseSupplyCategory::Medical);

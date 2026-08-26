@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "base_workforce_domain.h"
+
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -1166,12 +1168,16 @@ TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
         ItemDefinitionId{"item.medical.medkit_alpha"},
         BaseSupplyCategory::Medical);
     profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     profile.nextBaseServiceJobId = 2U;
     profile.residentMedical.activeTreatment = ActiveResidentTreatment{
         1U,
         profile.worldClock.elapsedWorldMinutes,
         profile.worldClock.elapsedWorldMinutes + 360U,
-        14U};
+        14U,
+        BaseResidentProfession::General,
+        BaseResidentProfession::Medical};
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1330,6 +1336,39 @@ TEST(SaveRepositoryTest, SchemaV18RejectsInvalidMoraleEventSnapshot)
     EXPECT_NE(loaded.message.find("morale"), std::string::npos);
 }
 
+TEST(SaveRepositoryTest, SchemaV19RoundTripsProfessionsStaffingAndFacilityLevels)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-workforce-facilities-v19",
+        publishedContentRegistry());
+    profile.basePopulation = BasePopulationState{10U, 14U, 2U};
+    profile.basePopulation.professionResidents = {6U, 2U, 1U, 1U};
+    profile.basePopulation.injuredByProfession = {1U, 0U, 1U, 0U};
+    profile.baseWorkforce.workshopWorker = BaseResidentProfession::General;
+    profile.baseWorkforce.medicalWorker = BaseResidentProfession::Medical;
+    profile.baseConstruction.dormitoryLevel = 2U;
+    profile.baseConstruction.workshopLevel = 2U;
+    profile.baseConstruction.medicalLevel = 2U;
+    ASSERT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(
+        loaded.profile->basePopulation.professionResidents,
+        profile.basePopulation.professionResidents);
+    EXPECT_EQ(loaded.profile->baseWorkforce, profile.baseWorkforce);
+    EXPECT_EQ(loaded.profile->baseConstruction.workshopLevel, 2U);
+    EXPECT_EQ(loaded.profile->baseConstruction.medicalLevel, 2U);
+}
+
 TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -1339,12 +1378,16 @@ TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)
         ItemDefinitionId{"item.medical.medkit_alpha"},
         BaseSupplyCategory::Medical);
     profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     profile.nextBaseServiceJobId = 2U;
     profile.residentMedical.activeTreatment = ActiveResidentTreatment{
         1U,
         profile.worldClock.elapsedWorldMinutes,
         profile.worldClock.elapsedWorldMinutes + 360U,
-        14U};
+        14U,
+        BaseResidentProfession::General,
+        BaseResidentProfession::Medical};
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
         serializeProfileEnvelope(

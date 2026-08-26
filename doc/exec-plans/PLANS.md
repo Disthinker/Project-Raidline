@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/base-dormitory-expansion-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#86 已接受；旧活动文档保留交付证据。
+当前实现计划：`active/base-workforce-facility-upgrades-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#90 已接受；旧活动文档保留交付证据。

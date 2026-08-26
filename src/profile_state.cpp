@@ -3,6 +3,7 @@
 #include "base_population_domain.h"
 #include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
+#include "base_workforce_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -515,6 +516,42 @@ bool assetIsCarried(
     return false;
 }
 
+std::uint32_t baseFacilityLevel(
+    const BaseConstructionState &state,
+    BaseFacilityUpgradeTarget target) noexcept
+{
+    switch (target)
+    {
+    case BaseFacilityUpgradeTarget::Dormitory:
+        return state.dormitoryLevel;
+    case BaseFacilityUpgradeTarget::Workshop:
+        return state.workshopLevel;
+    case BaseFacilityUpgradeTarget::Medical:
+        return state.medicalLevel;
+    }
+    return 0U;
+}
+
+bool publishedBaseFacilityLevel(
+    const BaseConstructionState &state,
+    BaseFacilityUpgradeTarget target,
+    const ContentRegistry &content) noexcept
+{
+    const std::uint32_t level = baseFacilityLevel(state, target);
+    if (level == 1U)
+    {
+        return true;
+    }
+    return std::any_of(
+        content.baseConstructionProjects().begin(),
+        content.baseConstructionProjects().end(),
+        [target, level](const BaseConstructionProjectDefinition &definition)
+        {
+            return definition.target == target &&
+                definition.targetLevel == level;
+        });
+}
+
 namespace
 {
 bool validBaseMoraleSnapshot(
@@ -840,31 +877,83 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base morale state is invalid"};
     }
+    std::uint64_t professionResidents{};
+    std::uint64_t injuredByProfession{};
+    for (std::size_t index = 0; index < kBaseResidentProfessionCount; ++index)
+    {
+        professionResidents +=
+            profile.basePopulation.professionResidents[index];
+        injuredByProfession +=
+            profile.basePopulation.injuredByProfession[index];
+        if (profile.basePopulation.injuredByProfession[index] >
+            profile.basePopulation.professionResidents[index])
+        {
+            return {false, "Base profession injury state is invalid"};
+        }
+    }
     if (profile.basePopulation.ordinaryResidents >
             kMaximumOrdinaryResidents ||
         profile.basePopulation.bedCapacity > kMaximumBedCapacity ||
         profile.basePopulation.injuredResidents >
-            profile.basePopulation.ordinaryResidents)
+            profile.basePopulation.ordinaryResidents ||
+        professionResidents != profile.basePopulation.ordinaryResidents ||
+        injuredByProfession != profile.basePopulation.injuredResidents)
     {
         return {false, "Base population state is invalid"};
+    }
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    BaseProfessionCounts assignedByProfession{};
+    for (const auto &worker : {
+             profile.baseWorkforce.workshopWorker,
+             profile.baseWorkforce.medicalWorker})
+    {
+        if (worker.has_value() &&
+            baseProfessionIndex(*worker) < assignedByProfession.size())
+        {
+            ++assignedByProfession[baseProfessionIndex(*worker)];
+        }
+    }
+    bool professionAssignmentsValid = true;
+    for (std::size_t index = 0; index < assignedByProfession.size(); ++index)
+    {
+        const std::uint32_t healthy =
+            profile.basePopulation.professionResidents[index] -
+            profile.basePopulation.injuredByProfession[index];
+        professionAssignmentsValid = professionAssignmentsValid &&
+            assignedByProfession[index] <= healthy;
+    }
+    if (workforce.assignedResidents > workforce.healthyResidents ||
+        !professionAssignmentsValid ||
+        (profile.baseWorkforce.workshopWorker.has_value() &&
+         !baseFacilityAcceptsProfession(
+             BaseFacilityStaffingKind::Workshop,
+             *profile.baseWorkforce.workshopWorker)) ||
+        (profile.baseWorkforce.medicalWorker.has_value() &&
+         !baseFacilityAcceptsProfession(
+             BaseFacilityStaffingKind::Medical,
+             *profile.baseWorkforce.medicalWorker)))
+    {
+        return {false, "Base workforce assignment state is invalid"};
     }
     if (profile.baseConstruction.materialUnits >
         content.maximumBaseConstructionMaterials())
     {
         return {false, "Base construction material state is invalid"};
     }
-    bool publishedDormitoryLevel =
-        profile.baseConstruction.dormitoryLevel == 1U;
-    for (const BaseConstructionProjectDefinition &definition :
-         content.baseConstructionProjects())
+    if (!publishedBaseFacilityLevel(
+            profile.baseConstruction,
+            BaseFacilityUpgradeTarget::Dormitory,
+            content) ||
+        !publishedBaseFacilityLevel(
+            profile.baseConstruction,
+            BaseFacilityUpgradeTarget::Workshop,
+            content) ||
+        !publishedBaseFacilityLevel(
+            profile.baseConstruction,
+            BaseFacilityUpgradeTarget::Medical,
+            content))
     {
-        publishedDormitoryLevel = publishedDormitoryLevel ||
-            profile.baseConstruction.dormitoryLevel ==
-                definition.targetDormitoryLevel;
-    }
-    if (!publishedDormitoryLevel)
-    {
-        return {false, "Base dormitory level is invalid"};
+        return {false, "Base facility level is invalid"};
     }
     if (profile.baseConstruction.activeProject.has_value())
     {
@@ -882,8 +971,8 @@ ProfileValidationResult validateProfileState(
         }
         const std::uint32_t maximum =
             content.maximumBaseConstructionMaterials();
-        if (profile.baseConstruction.dormitoryLevel !=
-                definition->requiredDormitoryLevel ||
+        if (baseFacilityLevel(profile.baseConstruction, definition->target) !=
+                definition->requiredLevel ||
             active.lockedMaterialUnits != definition->materialCost ||
             active.committedWorkers != definition->workerCount ||
             active.committedWorkers >
@@ -905,18 +994,18 @@ ProfileValidationResult validateProfileState(
         profile.baseConstruction.activeProject.has_value()
         ? profile.baseConstruction.activeProject->committedWorkers
         : 0U;
-    const std::uint32_t manufacturingWorkers =
-        profile.baseManufacturing.activeOrder.has_value() &&
-            !profile.baseManufacturing.activeOrder->outputReady
-        ? profile.baseManufacturing.activeOrder->committedWorkers
-        : 0U;
-    const std::uint32_t healthyWorkers =
-        profile.basePopulation.ordinaryResidents -
-        profile.basePopulation.injuredResidents;
-    if (constructionWorkers > healthyWorkers ||
-        manufacturingWorkers > healthyWorkers - constructionWorkers)
+    if (constructionWorkers >
+            workforce.healthyResidents - workforce.assignedResidents)
     {
         return {false, "Base worker commitments are invalid"};
+    }
+    if (profile.baseManufacturing.activeOrder.has_value() &&
+        !profile.baseManufacturing.activeOrder->outputReady &&
+        (!profile.baseWorkforce.workshopWorker.has_value() ||
+         profile.baseManufacturing.activeOrder->workerProfession !=
+             *profile.baseWorkforce.workshopWorker))
+    {
+        return {false, "Base manufacturing worker state is invalid"};
     }
     if (profile.residentMedical.activeTreatment.has_value())
     {
@@ -931,10 +1020,25 @@ ProfileValidationResult validateProfileState(
             treatment.completionWorldMinute <=
                 profile.worldClock.elapsedWorldMinutes ||
             treatment.completionWorldMinute - treatment.startedWorldMinute !=
-                definition.durationMinutes ||
+                applyBaseFacilityTaskDuration(
+                    definition.durationMinutes,
+                    BaseFacilityStaffingKind::Medical,
+                    treatment.workerProfession,
+                    profile.baseConstruction.medicalLevel,
+                    content.baseWorkforce()) ||
             treatment.consumedContribution <
                 definition.requiredContribution ||
-            profile.basePopulation.injuredResidents == 0U)
+            profile.basePopulation.injuredResidents == 0U ||
+            baseProfessionIndex(treatment.patientProfession) >=
+                kBaseResidentProfessionCount ||
+            profile.basePopulation.injuredByProfession[
+                baseProfessionIndex(treatment.patientProfession)] == 0U ||
+            !profile.baseWorkforce.medicalWorker.has_value() ||
+            treatment.workerProfession !=
+                *profile.baseWorkforce.medicalWorker ||
+            !baseFacilityAcceptsProfession(
+                BaseFacilityStaffingKind::Medical,
+                treatment.workerProfession))
         {
             return {false, "resident treatment state is invalid"};
         }
@@ -1245,19 +1349,28 @@ ProfileValidationResult validateProfileState(
             : nullptr;
         const std::uint64_t frozenDuration =
             order.completionWorldMinute - order.startedWorldMinute;
-        const bool publishedDuration =
-            frozenDuration == applyBaseMoraleDurationPercent(
-                recipe->durationMinutes,
-                BaseMoraleTier::Low,
-                content.baseMorale()) ||
-            frozenDuration == applyBaseMoraleDurationPercent(
-                recipe->durationMinutes,
-                BaseMoraleTier::Stable,
-                content.baseMorale()) ||
-            frozenDuration == applyBaseMoraleDurationPercent(
-                recipe->durationMinutes,
-                BaseMoraleTier::High,
-                content.baseMorale());
+        bool publishedDuration = false;
+        for (BaseMoraleTier tier : {
+                 BaseMoraleTier::Low,
+                 BaseMoraleTier::Stable,
+                 BaseMoraleTier::High})
+        {
+            const std::uint32_t moraleDuration =
+                applyBaseMoraleDurationPercent(
+                    recipe->durationMinutes,
+                    tier,
+                    content.baseMorale());
+            for (std::uint32_t facilityLevel : {1U, 2U})
+            {
+                publishedDuration = publishedDuration ||
+                    frozenDuration == applyBaseFacilityTaskDuration(
+                        moraleDuration,
+                        BaseFacilityStaffingKind::Workshop,
+                        order.workerProfession,
+                        facilityLevel,
+                        content.baseWorkforce());
+            }
+        }
         const bool timingValid =
             order.startedWorldMinute < order.completionWorldMinute &&
             order.startedWorldMinute <=
@@ -1275,6 +1388,9 @@ ProfileValidationResult validateProfileState(
                  profile.pendingRaid.has_value());
         if (order.jobId == 0U ||
             order.jobId >= profile.nextBaseServiceJobId ||
+            !baseFacilityAcceptsProfession(
+                BaseFacilityStaffingKind::Workshop,
+                order.workerProfession) ||
             !timingValid || !phaseValid || output == nullptr ||
             outputService == nullptr ||
             outputService->jobId != order.jobId ||
@@ -1335,13 +1451,15 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "base-periodic-priority-5" ||
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
             raid.rulesVersion == "raid-resident-medical-7" ||
-            raid.rulesVersion == "base-morale-events-8";
+            raid.rulesVersion == "base-morale-events-8" ||
+            raid.rulesVersion == "base-workforce-facilities-9";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
             raid.rulesVersion == "raid-resident-medical-7" ||
-            raid.rulesVersion == "base-morale-events-8";
+            raid.rulesVersion == "base-morale-events-8" ||
+            raid.rulesVersion == "base-workforce-facilities-9";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1382,17 +1500,19 @@ ProfileValidationResult validateProfileState(
                 raid.travel.startingBedCapacity <= kMaximumBedCapacity &&
                 raid.travel.startingInjuredResidents <=
                     profile.basePopulation.ordinaryResidents;
-            bool publishedStartingLevel =
-                raid.travel.startingBaseConstruction.dormitoryLevel == 1U;
-            for (const BaseConstructionProjectDefinition &definition :
-                 content.baseConstructionProjects())
-            {
-                publishedStartingLevel = publishedStartingLevel ||
-                    raid.travel.startingBaseConstruction.dormitoryLevel ==
-                        definition.targetDormitoryLevel;
-            }
             startingConstructionValid = startingConstructionValid &&
-                publishedStartingLevel;
+                publishedBaseFacilityLevel(
+                    raid.travel.startingBaseConstruction,
+                    BaseFacilityUpgradeTarget::Dormitory,
+                    content) &&
+                publishedBaseFacilityLevel(
+                    raid.travel.startingBaseConstruction,
+                    BaseFacilityUpgradeTarget::Workshop,
+                    content) &&
+                publishedBaseFacilityLevel(
+                    raid.travel.startingBaseConstruction,
+                    BaseFacilityUpgradeTarget::Medical,
+                    content);
             if (raid.travel.startingBaseConstruction.activeProject
                     .has_value())
             {
@@ -1405,8 +1525,9 @@ ProfileValidationResult validateProfileState(
                     const std::uint32_t maximum =
                         content.maximumBaseConstructionMaterials();
                     startingConstructionValid = startingConstructionValid &&
-                        raid.travel.startingBaseConstruction.dormitoryLevel ==
-                            definition.requiredDormitoryLevel &&
+                        baseFacilityLevel(
+                            raid.travel.startingBaseConstruction,
+                            definition.target) == definition.requiredLevel &&
                         active.lockedMaterialUnits == definition.materialCost &&
                         active.committedWorkers == definition.workerCount &&
                         active.committedWorkers <=
@@ -1429,6 +1550,44 @@ ProfileValidationResult validateProfileState(
                     startingConstructionValid = false;
                 }
             }
+            ProfileState startingWorkforceProfile = profile;
+            startingWorkforceProfile.baseConstruction =
+                raid.travel.startingBaseConstruction;
+            startingWorkforceProfile.baseWorkforce =
+                raid.travel.startingBaseWorkforce;
+            startingWorkforceProfile.basePopulation.injuredResidents =
+                raid.travel.startingInjuredResidents;
+            startingWorkforceProfile.basePopulation.injuredByProfession =
+                raid.travel.startingInjuredByProfession;
+            std::uint64_t startingInjuredProfessionTotal{};
+            bool startingInjuredProfessionsValid = true;
+            for (std::size_t index = 0;
+                 index < kBaseResidentProfessionCount;
+                 ++index)
+            {
+                startingInjuredProfessionTotal +=
+                    raid.travel.startingInjuredByProfession[index];
+                startingInjuredProfessionsValid =
+                    startingInjuredProfessionsValid &&
+                    raid.travel.startingInjuredByProfession[index] <=
+                        profile.basePopulation.professionResidents[index];
+            }
+            const BaseWorkforceProjection startingWorkforce =
+                projectBaseWorkforce(startingWorkforceProfile);
+            const bool startingWorkforceValid =
+                startingInjuredProfessionsValid &&
+                startingInjuredProfessionTotal ==
+                    raid.travel.startingInjuredResidents &&
+                startingWorkforce.assignedResidents <=
+                    startingWorkforce.healthyResidents &&
+                (!raid.travel.startingBaseWorkforce.workshopWorker.has_value() ||
+                 baseFacilityAcceptsProfession(
+                     BaseFacilityStaffingKind::Workshop,
+                     *raid.travel.startingBaseWorkforce.workshopWorker)) &&
+                (!raid.travel.startingBaseWorkforce.medicalWorker.has_value() ||
+                 baseFacilityAcceptsProfession(
+                     BaseFacilityStaffingKind::Medical,
+                     *raid.travel.startingBaseWorkforce.medicalWorker));
             bool startingResidentMedicalValid = true;
             if (raid.travel.startingResidentMedical.activeTreatment.has_value())
             {
@@ -1447,7 +1606,12 @@ ProfileValidationResult validateProfileState(
                         raid.travel.startingWorldClock.elapsedWorldMinutes &&
                     treatment.completionWorldMinute -
                             treatment.startedWorldMinute ==
-                        definition.durationMinutes &&
+                        applyBaseFacilityTaskDuration(
+                            definition.durationMinutes,
+                            BaseFacilityStaffingKind::Medical,
+                            treatment.workerProfession,
+                            raid.travel.startingBaseConstruction.medicalLevel,
+                            content.baseWorkforce()) &&
                     treatment.consumedContribution >=
                         definition.requiredContribution &&
                     raid.travel.startingInjuredResidents > 0U;
@@ -1480,7 +1644,7 @@ ProfileValidationResult validateProfileState(
                     profile.profileId,
                     raid.travel.startingWorldClock,
                     content) ||
-                !startingConstructionValid ||
+                 !startingConstructionValid || !startingWorkforceValid ||
                 !startingResidentMedicalValid)
             {
                 return {false, "pending Raid travel snapshot is invalid"};
@@ -1568,6 +1732,7 @@ ProfileValidationResult validateProfileState(
             if (!raidMap->rescue.has_value() ||
                 rescue.definitionId != raidMap->rescue->id ||
                 rescue.subjectKind != RaidRescueSubjectKind::OrdinaryResidents ||
+                rescue.profession != raidMap->rescue->profession ||
                 rescue.ordinaryResidentCount == 0U ||
                 rescue.ordinaryResidentCount > 16U ||
                 rescue.injuredResidentCount >
@@ -1658,8 +1823,27 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.basePopulation.ordinaryResidents);
     hashInteger(hash, profile.basePopulation.bedCapacity);
     hashInteger(hash, profile.basePopulation.injuredResidents);
+    for (std::size_t index = 0; index < kBaseResidentProfessionCount; ++index)
+    {
+        hashInteger(hash, profile.basePopulation.professionResidents[index]);
+        hashInteger(hash, profile.basePopulation.injuredByProfession[index]);
+    }
+    hashInteger(hash, profile.baseWorkforce.workshopWorker.has_value() ? 1U : 0U);
+    if (profile.baseWorkforce.workshopWorker.has_value())
+    {
+        hashInteger(hash, static_cast<std::uint32_t>(
+            *profile.baseWorkforce.workshopWorker));
+    }
+    hashInteger(hash, profile.baseWorkforce.medicalWorker.has_value() ? 1U : 0U);
+    if (profile.baseWorkforce.medicalWorker.has_value())
+    {
+        hashInteger(hash, static_cast<std::uint32_t>(
+            *profile.baseWorkforce.medicalWorker));
+    }
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
+    hashInteger(hash, profile.baseConstruction.workshopLevel);
+    hashInteger(hash, profile.baseConstruction.medicalLevel);
     if (profile.baseConstruction.activeProject.has_value())
     {
         const ActiveBaseConstructionProject &project =
@@ -1678,6 +1862,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, treatment.startedWorldMinute);
         hashInteger(hash, treatment.completionWorldMinute);
         hashInteger(hash, treatment.consumedContribution);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            treatment.patientProfession));
+        hashInteger(hash, static_cast<std::uint32_t>(
+            treatment.workerProfession));
     }
     if (profile.baseManufacturing.activeOrder.has_value())
     {
@@ -1686,6 +1874,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, order.jobId);
         hashBytes(hash, order.recipeDefinitionId.value());
         hashInteger(hash, order.committedWorkers);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            order.workerProfession));
         hashInteger(hash, order.startedWorldMinute);
         hashInteger(hash, order.completionWorldMinute);
         for (AssetInstanceId inputId : order.inputAssetIds)
@@ -1836,6 +2026,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, raid.rescue->interactionDurationSeconds);
             hashInteger(hash, raid.rescue->ordinaryResidentCount);
             hashInteger(hash, raid.rescue->injuredResidentCount);
+            hashInteger(hash, static_cast<std::uint32_t>(
+                raid.rescue->profession));
             hashInteger(hash, raid.rescue->secured ? 1U : 0U);
         }
         hashInteger(hash, raid.startingHealth);
@@ -1924,6 +2116,28 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                     raid.travel.startingBaseConstruction.materialUnits);
         hashInteger(hash,
                     raid.travel.startingBaseConstruction.dormitoryLevel);
+        hashInteger(hash,
+                    raid.travel.startingBaseConstruction.workshopLevel);
+        hashInteger(hash,
+                    raid.travel.startingBaseConstruction.medicalLevel);
+        hashInteger(hash,
+                    raid.travel.startingBaseWorkforce.workshopWorker.has_value()
+                        ? 1U
+                        : 0U);
+        if (raid.travel.startingBaseWorkforce.workshopWorker.has_value())
+        {
+            hashInteger(hash, static_cast<std::uint32_t>(
+                *raid.travel.startingBaseWorkforce.workshopWorker));
+        }
+        hashInteger(hash,
+                    raid.travel.startingBaseWorkforce.medicalWorker.has_value()
+                        ? 1U
+                        : 0U);
+        if (raid.travel.startingBaseWorkforce.medicalWorker.has_value())
+        {
+            hashInteger(hash, static_cast<std::uint32_t>(
+                *raid.travel.startingBaseWorkforce.medicalWorker));
+        }
         if (raid.travel.startingBaseConstruction.activeProject.has_value())
         {
             const ActiveBaseConstructionProject &project =
@@ -1936,6 +2150,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         }
         hashInteger(hash, raid.travel.startingBedCapacity);
         hashInteger(hash, raid.travel.startingInjuredResidents);
+        for (std::uint32_t count :
+             raid.travel.startingInjuredByProfession)
+        {
+            hashInteger(hash, count);
+        }
         if (raid.travel.startingResidentMedical.activeTreatment.has_value())
         {
             const ActiveResidentTreatment &treatment =
@@ -1944,6 +2163,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, treatment.startedWorldMinute);
             hashInteger(hash, treatment.completionWorldMinute);
             hashInteger(hash, treatment.consumedContribution);
+            hashInteger(hash, static_cast<std::uint32_t>(
+                treatment.patientProfession));
+            hashInteger(hash, static_cast<std::uint32_t>(
+                treatment.workerProfession));
         }
     }
     if (profile.lastRaidResult.has_value())

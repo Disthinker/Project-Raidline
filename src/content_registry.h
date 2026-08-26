@@ -153,6 +153,14 @@ enum class RaidRescueSubjectKind
     OrdinaryResidents
 };
 
+enum class BaseResidentProfession
+{
+    General,
+    Medical,
+    Engineering,
+    Combat
+};
+
 struct RaidRescueDefinition
 {
     RescueDefinitionId id;
@@ -161,6 +169,7 @@ struct RaidRescueDefinition
     float interactionDurationSeconds{};
     std::uint32_t ordinaryResidentCount{};
     std::uint32_t injuredResidentCount{};
+    BaseResidentProfession profession{BaseResidentProfession::General};
 };
 
 struct PlayerBaseMedicalDefinition
@@ -207,6 +216,17 @@ struct BaseMoraleDefinition
         const BaseMoraleDefinition &) = default;
 };
 
+struct BaseWorkforceDefinition
+{
+    std::uint32_t generalFallbackDurationPercent{};
+    std::uint32_t workshopLevel2DurationPercent{};
+    std::uint32_t medicalLevel2DurationPercent{};
+
+    friend bool operator==(
+        const BaseWorkforceDefinition &,
+        const BaseWorkforceDefinition &) = default;
+};
+
 struct BaseCommunityEventDefinition
 {
     BaseCommunityEventDefinitionId id;
@@ -232,12 +252,20 @@ struct BasePriorityDefinition
         const BasePriorityDefinition &) = default;
 };
 
+enum class BaseFacilityUpgradeTarget
+{
+    Dormitory,
+    Workshop,
+    Medical
+};
+
 struct BaseConstructionProjectDefinition
 {
     BaseConstructionProjectDefinitionId id;
     std::string displayName;
-    std::uint32_t requiredDormitoryLevel{};
-    std::uint32_t targetDormitoryLevel{};
+    BaseFacilityUpgradeTarget target{BaseFacilityUpgradeTarget::Dormitory};
+    std::uint32_t requiredLevel{};
+    std::uint32_t targetLevel{};
     std::uint32_t materialCost{};
     std::uint32_t workerCount{};
     std::uint32_t durationMinutes{};
@@ -343,6 +371,8 @@ public:
 
     [[nodiscard]] const BaseMoraleDefinition &baseMorale() const noexcept;
 
+    [[nodiscard]] const BaseWorkforceDefinition &baseWorkforce() const noexcept;
+
     [[nodiscard]] const std::vector<BaseCommunityEventDefinition> &
     baseCommunityEvents() const noexcept;
 
@@ -403,6 +433,7 @@ private:
     ResidentMedicalDefinition residentMedical_;
     BaseOperationsDefinition baseOperations_;
     BaseMoraleDefinition baseMorale_;
+    BaseWorkforceDefinition baseWorkforce_;
     std::vector<BaseCommunityEventDefinition> baseCommunityEvents_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;

@@ -127,6 +127,47 @@ TEST(BaseConstructionDomainTest, CancelRefundsMaterialWithoutRewindingTime) {
   EXPECT_EQ(profile.basePopulation.bedCapacity, 10U);
 }
 
+TEST(BaseConstructionDomainTest, WorkshopAndMedicalUseTypedLinearUpgrades) {
+  for (const auto &[definitionId, target] : std::array{
+           std::pair{BaseConstructionProjectDefinitionId{
+                         "base_construction.workshop.level_2"},
+                     BaseFacilityUpgradeTarget::Workshop},
+           std::pair{BaseConstructionProjectDefinitionId{
+                         "base_construction.medical.level_2"},
+                     BaseFacilityUpgradeTarget::Medical}}) {
+    ProfileState profile = makeNewAlphaProfile(
+        "typed-facility-upgrade", publishedContentRegistry());
+    profile.baseConstruction.materialUnits = 6U;
+    const BaseConstructionPlan plan = queryStartBaseConstruction(
+        profile, publishedContentRegistry(),
+        StartBaseConstructionCommand{definitionId});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.target, target);
+    EXPECT_EQ(plan.currentLevel, 1U);
+    EXPECT_EQ(plan.targetLevel, 2U);
+    ASSERT_TRUE(executeStartBaseConstruction(
+                    profile, publishedContentRegistry(),
+                    StartBaseConstructionCommand{definitionId},
+                    CommandContext{profile.revision, "start-typed-upgrade"})
+                    .succeeded);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 720U));
+    const BaseConstructionAdvanceResult completed =
+        applyBaseConstructionThrough(profile, publishedContentRegistry());
+    ASSERT_TRUE(completed.completed);
+    EXPECT_EQ(completed.target, target);
+    EXPECT_EQ(completed.levelBefore, 1U);
+    EXPECT_EQ(completed.levelAfter, 2U);
+    EXPECT_EQ(profile.basePopulation.bedCapacity, 10U);
+    if (target == BaseFacilityUpgradeTarget::Workshop) {
+      EXPECT_EQ(profile.baseConstruction.workshopLevel, 2U);
+      EXPECT_EQ(profile.baseConstruction.medicalLevel, 1U);
+    } else {
+      EXPECT_EQ(profile.baseConstruction.medicalLevel, 2U);
+      EXPECT_EQ(profile.baseConstruction.workshopLevel, 1U);
+    }
+  }
+}
+
 TEST(BaseConstructionDomainTest, RejectionsLeaveProfileUnchanged) {
   ProfileState profile =
       makeNewAlphaProfile("construction-rejected", publishedContentRegistry());

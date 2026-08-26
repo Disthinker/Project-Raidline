@@ -215,6 +215,8 @@ add_library(raidline_domain STATIC
     src/base_construction_domain.h
     src/base_population_domain.cpp
     src/base_population_domain.h
+    src/base_workforce_domain.cpp
+    src/base_workforce_domain.h
     src/base_resident_medical_domain.cpp
     src/base_manufacturing_domain.cpp
     src/base_morale_domain.cpp
@@ -591,6 +593,10 @@ raidline_add_test(
 raidline_add_test(
     BaseManufacturingDomainTest
     tests/test_base_manufacturing_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseWorkforceDomainTest
+    tests/test_base_workforce_domain.cpp
     raidline::domain)
 raidline_add_test(
     BaseMoraleDomainTest
