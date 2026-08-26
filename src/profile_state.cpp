@@ -838,6 +838,23 @@ ProfileValidationResult validateProfileState(
             return {false, "Base construction project state is invalid"};
         }
     }
+    const std::uint32_t constructionWorkers =
+        profile.baseConstruction.activeProject.has_value()
+        ? profile.baseConstruction.activeProject->committedWorkers
+        : 0U;
+    const std::uint32_t manufacturingWorkers =
+        profile.baseManufacturing.activeOrder.has_value() &&
+            !profile.baseManufacturing.activeOrder->outputReady
+        ? profile.baseManufacturing.activeOrder->committedWorkers
+        : 0U;
+    const std::uint32_t healthyWorkers =
+        profile.basePopulation.ordinaryResidents -
+        profile.basePopulation.injuredResidents;
+    if (constructionWorkers > healthyWorkers ||
+        manufacturingWorkers > healthyWorkers - constructionWorkers)
+    {
+        return {false, "Base worker commitments are invalid"};
+    }
     if (profile.residentMedical.activeTreatment.has_value())
     {
         const ActiveResidentTreatment &treatment =
@@ -858,6 +875,24 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "resident treatment state is invalid"};
         }
+    }
+    std::set<BaseServiceJobId> activeBaseServiceJobIds;
+    const auto claimBaseServiceJob = [&activeBaseServiceJobIds](
+        BaseServiceJobId jobId)
+    {
+        return jobId == 0U ||
+            !activeBaseServiceJobIds.insert(jobId).second;
+    };
+    if ((profile.residentMedical.activeTreatment.has_value() &&
+         claimBaseServiceJob(
+             profile.residentMedical.activeTreatment->jobId)) ||
+        (profile.gunsmithMaintenanceJob.has_value() &&
+         claimBaseServiceJob(profile.gunsmithMaintenanceJob->jobId)) ||
+        (profile.baseManufacturing.activeOrder.has_value() &&
+         claimBaseServiceJob(
+             profile.baseManufacturing.activeOrder->jobId)))
+    {
+        return {false, "Base service job identity is duplicated"};
     }
     for (const RescueDefinitionId &rescue : profile.committedRescues)
     {
@@ -1037,9 +1072,7 @@ ProfileValidationResult validateProfileState(
         if (const auto *service =
                 std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
-            if (service->jobId == 0 ||
-                definition->category != ItemCategory::Weapon ||
-                !definition->weaponCondition.has_value())
+            if (service->jobId == 0)
             {
                 return {false, "Base service ownership is invalid"};
             }
@@ -1090,6 +1123,7 @@ ProfileValidationResult validateProfileState(
         return {false, "asset high-water mark moved backward"};
     }
 
+    std::set<AssetInstanceId> claimedServiceAssetIds;
     if (profile.gunsmithMaintenanceJob.has_value())
     {
         const GunsmithMaintenanceJob &job =
@@ -1121,15 +1155,87 @@ ProfileValidationResult validateProfileState(
             job.targetFactoryDurabilityCenti !=
                 definition->weaponCondition->maximumDurabilityCenti ||
             job.returnOrigin.x < 0 || job.returnOrigin.y < 0 ||
-            serviceAssetIds.size() != 1U ||
             !serviceAssetIds.contains(job.weaponAssetId))
         {
             return {false, "gunsmith maintenance job is invalid"};
         }
+        claimedServiceAssetIds.insert(job.weaponAssetId);
     }
-    else if (!serviceAssetIds.empty())
+
+    if (profile.baseManufacturing.activeOrder.has_value())
     {
-        return {false, "Base service asset exists without a job"};
+        const BaseManufacturingOrder &order =
+            *profile.baseManufacturing.activeOrder;
+        const BaseManufacturingRecipeDefinition *recipe{};
+        try
+        {
+            recipe = &content.baseManufacturingRecipe(
+                order.recipeDefinitionId);
+        }
+        catch (...)
+        {
+            return {false, "Base manufacturing recipe is unknown"};
+        }
+        const AssetRecord *output = profile.assets.find(order.outputAssetId);
+        const auto *outputService = output != nullptr
+            ? std::get_if<BaseServiceAssetLocation>(&output->location)
+            : nullptr;
+        const bool timingValid =
+            order.startedWorldMinute < order.completionWorldMinute &&
+            order.startedWorldMinute <=
+                profile.worldClock.elapsedWorldMinutes &&
+            order.completionWorldMinute - order.startedWorldMinute ==
+                recipe->durationMinutes;
+        const bool phaseValid = order.outputReady
+            ? order.committedWorkers == 0U &&
+                order.inputAssetIds.empty() &&
+                order.completionWorldMinute <=
+                    profile.worldClock.elapsedWorldMinutes
+            : order.committedWorkers == recipe->workerCount &&
+                order.inputAssetIds.size() == recipe->inputs.size() &&
+                (order.completionWorldMinute >
+                     profile.worldClock.elapsedWorldMinutes ||
+                 profile.pendingRaid.has_value());
+        if (order.jobId == 0U ||
+            order.jobId >= profile.nextBaseServiceJobId ||
+            !timingValid || !phaseValid || output == nullptr ||
+            outputService == nullptr ||
+            outputService->jobId != order.jobId ||
+            output->definitionId != recipe->outputItemDefinitionId ||
+            output->quantity != recipe->outputQuantity ||
+            !claimedServiceAssetIds.insert(order.outputAssetId).second)
+        {
+            return {false, "Base manufacturing order is invalid"};
+        }
+        std::set<ItemDefinitionId> expectedInputDefinitions;
+        for (const BaseManufacturingInputDefinition &input : recipe->inputs)
+        {
+            expectedInputDefinitions.insert(input.itemDefinitionId);
+        }
+        for (AssetInstanceId inputId : order.inputAssetIds)
+        {
+            const AssetRecord *input = profile.assets.find(inputId);
+            const auto *inputService = input != nullptr
+                ? std::get_if<BaseServiceAssetLocation>(&input->location)
+                : nullptr;
+            if (input == nullptr || inputService == nullptr ||
+                inputService->jobId != order.jobId ||
+                input->quantity != 1U ||
+                !expectedInputDefinitions.erase(input->definitionId) ||
+                !claimedServiceAssetIds.insert(inputId).second)
+            {
+                return {false, "Base manufacturing input is invalid"};
+            }
+        }
+        if (!order.outputReady && !expectedInputDefinitions.empty())
+        {
+            return {false, "Base manufacturing inputs are incomplete"};
+        }
+    }
+
+    if (claimedServiceAssetIds != serviceAssetIds)
+    {
+        return {false, "Base service asset exists without its typed job"};
     }
 
 
@@ -1465,6 +1571,22 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, treatment.startedWorldMinute);
         hashInteger(hash, treatment.completionWorldMinute);
         hashInteger(hash, treatment.consumedContribution);
+    }
+    if (profile.baseManufacturing.activeOrder.has_value())
+    {
+        const BaseManufacturingOrder &order =
+            *profile.baseManufacturing.activeOrder;
+        hashInteger(hash, order.jobId);
+        hashBytes(hash, order.recipeDefinitionId.value());
+        hashInteger(hash, order.committedWorkers);
+        hashInteger(hash, order.startedWorldMinute);
+        hashInteger(hash, order.completionWorldMinute);
+        for (AssetInstanceId inputId : order.inputAssetIds)
+        {
+            hashInteger(hash, inputId);
+        }
+        hashInteger(hash, order.outputAssetId);
+        hashInteger(hash, order.outputReady ? 1U : 0U);
     }
     hashBytes(hash, profile.basePriority.definitionId.value());
     hashInteger(hash, profile.basePriority.cycleIndex);

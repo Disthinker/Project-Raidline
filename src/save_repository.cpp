@@ -483,6 +483,29 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"active_treatment", nullptr}};
         }
     }
+    if (schemaVersion >= 17)
+    {
+        if (profile.baseManufacturing.activeOrder.has_value())
+        {
+            const BaseManufacturingOrder &order =
+                *profile.baseManufacturing.activeOrder;
+            payload["base_manufacturing"] = {
+                {"active_order", {
+                    {"job_id", order.jobId},
+                    {"recipe_definition_id",
+                     order.recipeDefinitionId.value()},
+                    {"committed_workers", order.committedWorkers},
+                    {"started_world_minute", order.startedWorldMinute},
+                    {"completion_world_minute", order.completionWorldMinute},
+                    {"input_asset_ids", order.inputAssetIds},
+                    {"output_asset_id", order.outputAssetId},
+                    {"output_ready", order.outputReady}}}};
+        }
+        else
+        {
+            payload["base_manufacturing"] = {{"active_order", nullptr}};
+        }
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -820,7 +843,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
-        schemaVersion != 16)
+        schemaVersion != 16 && schemaVersion != 17)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -892,7 +915,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 14 &&
              contentVersion == "base-dormitory-expansion-content-22") ||
             (schemaVersion == 15 &&
-             contentVersion == "base-supply-policy-content-23");
+             contentVersion == "base-supply-policy-content-23") ||
+            (schemaVersion == 16 &&
+             contentVersion == "base-resident-medical-content-24");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -900,7 +925,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 9 && schemaVersion != 10 &&
              schemaVersion != 11 && schemaVersion != 12 &&
              schemaVersion != 13 && schemaVersion != 14 &&
-             schemaVersion != 15 && schemaVersion != 16) ||
+             schemaVersion != 15 && schemaVersion != 16 &&
+             schemaVersion != 17) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1070,6 +1096,31 @@ SaveLoadResult deserializeProfileEnvelope(
                             .get<std::uint64_t>(),
                         treatment.at("consumed_contribution")
                             .get<std::uint32_t>()};
+            }
+        }
+        if (schemaVersion >= 17)
+        {
+            const Json &manufacturing = payload.at("base_manufacturing");
+            if (!manufacturing.at("active_order").is_null())
+            {
+                const Json &order = manufacturing.at("active_order");
+                profile.baseManufacturing.activeOrder =
+                    BaseManufacturingOrder{
+                        order.at("job_id").get<BaseServiceJobId>(),
+                        BaseManufacturingRecipeDefinitionId{
+                            order.at("recipe_definition_id")
+                                .get<std::string>()},
+                        order.at("committed_workers")
+                            .get<std::uint32_t>(),
+                        order.at("started_world_minute")
+                            .get<std::uint64_t>(),
+                        order.at("completion_world_minute")
+                            .get<std::uint64_t>(),
+                        order.at("input_asset_ids")
+                            .get<std::vector<AssetInstanceId>>(),
+                        order.at("output_asset_id")
+                            .get<AssetInstanceId>(),
+                        order.at("output_ready").get<bool>()};
             }
         }
         profile.assets.setNextAssetIdForLoad(

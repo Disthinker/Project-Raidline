@@ -1,6 +1,7 @@
 #include "raid_lifecycle.h"
 
 #include "base_construction_domain.h"
+#include "base_manufacturing_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -207,6 +208,7 @@ bool advanceProfileWorldTime(
         populationAdjustedDailyDemand(profile.basePopulation)));
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
     static_cast<void>(applyBaseConstructionThrough(profile, content));
+    static_cast<void>(applyBaseManufacturingThrough(profile, content));
     static_cast<void>(applyResidentTreatmentThrough(profile));
     return true;
 }
@@ -546,6 +548,7 @@ RaidSettlementReceipt settlePendingRaid(
             outcome);
     }
     candidate.pendingRaid.reset();
+    static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{
         id,

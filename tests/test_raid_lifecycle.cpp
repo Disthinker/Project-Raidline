@@ -6,6 +6,7 @@
 #include <tuple>
 
 #include "alpha_content_ids.h"
+#include "base_manufacturing_domain.h"
 #include "base_resource_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_rescue_domain.h"
@@ -153,6 +154,63 @@ TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)
         startingClock.elapsedWorldMinutes + 30U);
     EXPECT_EQ(profile.basePopulation.bedCapacity, 10U);
     EXPECT_EQ(profile.basePopulation.ordinaryResidents, 9U);
+}
+
+TEST(RaidLifecycleTest, ManufacturingDefersAcrossRaidAndSettlesOrRollsBackSafely)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-manufacturing-boundary",
+        publishedContentRegistry());
+    for (const ItemDefinitionId &definitionId : {
+             ItemDefinitionId{"item.loot.scrap_parts"},
+             ItemDefinitionId{"item.loot.electronics"}})
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(definitionId);
+        const auto origin = findFirstProfileFit(
+            profile,
+            publishedContentRegistry(),
+            ProfileContainerId::stash(),
+            definition,
+            ItemOrientation::Degrees0);
+        ASSERT_TRUE(origin.has_value());
+        profile.assets.create(
+            definition,
+            StoredAssetLocation{ProfileContainerId::stash(), *origin});
+    }
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile,
+        publishedContentRegistry(),
+        StartBaseManufacturingCommand{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"}},
+        CommandContext{profile.revision, "raid-start-manufacturing"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 330U));
+    const WorldClockState preRaidClock = profile.worldClock;
+
+    ASSERT_TRUE(deploy(profile).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_TRUE(profile.baseManufacturing.activeOrder.has_value());
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder->outputReady);
+
+    ProfileState rollback = profile;
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        rollback, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(rollback.worldClock, preRaidClock);
+    ASSERT_TRUE(rollback.baseManufacturing.activeOrder.has_value());
+    EXPECT_FALSE(rollback.baseManufacturing.activeOrder->outputReady);
+
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        publishedContentRegistry(),
+        profile.pendingRaid->settlementId,
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder.has_value());
+    const AssetRecord *output = profile.assets.find(*started.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
 }
 
 TEST(RaidLifecycleTest, CommittedMapRescueIsNotOfferedAgain)

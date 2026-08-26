@@ -279,6 +279,31 @@ struct BaseResidentMedicalState
         const BaseResidentMedicalState &) = default;
 };
 
+struct BaseManufacturingOrder
+{
+    BaseServiceJobId jobId{};
+    BaseManufacturingRecipeDefinitionId recipeDefinitionId;
+    std::uint32_t committedWorkers{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+    std::vector<AssetInstanceId> inputAssetIds;
+    AssetInstanceId outputAssetId{};
+    bool outputReady{};
+
+    friend bool operator==(
+        const BaseManufacturingOrder &,
+        const BaseManufacturingOrder &) = default;
+};
+
+struct BaseManufacturingState
+{
+    std::optional<BaseManufacturingOrder> activeOrder;
+
+    friend bool operator==(
+        const BaseManufacturingState &,
+        const BaseManufacturingState &) = default;
+};
+
 struct ActiveBaseConstructionProject
 {
     BaseConstructionProjectDefinitionId definitionId;
@@ -392,6 +417,7 @@ struct ProfileState
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
     BaseResidentMedicalState residentMedical;
+    BaseManufacturingState baseManufacturing;
     BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
     BaseServiceJobId nextBaseServiceJobId{1};

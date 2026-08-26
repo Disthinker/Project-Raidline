@@ -223,6 +223,31 @@ struct BaseConstructionProjectDefinition
         const BaseConstructionProjectDefinition &) = default;
 };
 
+struct BaseManufacturingInputDefinition
+{
+    ItemDefinitionId itemDefinitionId;
+    std::uint32_t quantity{1};
+
+    friend bool operator==(
+        const BaseManufacturingInputDefinition &,
+        const BaseManufacturingInputDefinition &) = default;
+};
+
+struct BaseManufacturingRecipeDefinition
+{
+    BaseManufacturingRecipeDefinitionId id;
+    std::string displayName;
+    std::vector<BaseManufacturingInputDefinition> inputs;
+    ItemDefinitionId outputItemDefinitionId;
+    std::uint32_t outputQuantity{1};
+    std::uint32_t workerCount{1};
+    std::uint32_t durationMinutes{};
+
+    friend bool operator==(
+        const BaseManufacturingRecipeDefinition &,
+        const BaseManufacturingRecipeDefinition &) = default;
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -310,6 +335,13 @@ public:
     baseConstructionProject(
         const BaseConstructionProjectDefinitionId &id) const;
 
+    [[nodiscard]] const std::vector<BaseManufacturingRecipeDefinition> &
+    baseManufacturingRecipes() const noexcept;
+
+    [[nodiscard]] const BaseManufacturingRecipeDefinition &
+    baseManufacturingRecipe(
+        const BaseManufacturingRecipeDefinitionId &id) const;
+
     [[nodiscard]]
     const ItemDefinition &item(
         const ItemDefinitionId &id) const;
@@ -342,6 +374,8 @@ private:
     std::uint32_t maximumBaseConstructionMaterials_{};
     std::vector<BaseConstructionProjectDefinition>
         baseConstructionProjects_;
+    std::vector<BaseManufacturingRecipeDefinition>
+        baseManufacturingRecipes_;
 
     std::map<ItemDefinitionId, std::size_t> itemIndex_;
     std::map<LootTableDefinitionId, std::size_t> lootTableIndex_;
@@ -351,6 +385,8 @@ private:
     std::map<BasePriorityDefinitionId, std::size_t> basePriorityIndex_;
     std::map<BaseConstructionProjectDefinitionId, std::size_t>
         baseConstructionProjectIndex_;
+    std::map<BaseManufacturingRecipeDefinitionId, std::size_t>
+        baseManufacturingRecipeIndex_;
 };
 
 [[nodiscard]]

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "base_manufacturing_domain.h"
 #include "base_resource_domain.h"
 #include "base_service_domain.h"
 #include "economy_domain.h"
@@ -1169,7 +1170,8 @@ TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(
             profile,
-            publishedContentRegistry().contentVersion()),
+            "base-resident-medical-content-24",
+            16),
         publishedContentRegistry());
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
@@ -1189,6 +1191,53 @@ TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
         loaded.profile->residentMedical.activeTreatment
             ->completionWorldMinute,
         profile.worldClock.elapsedWorldMinutes + 360U);
+}
+
+TEST(SaveRepositoryTest, SchemaV17RoundTripsActiveManufacturingOwnership)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-manufacturing-v17",
+        publishedContentRegistry());
+    const auto addInput = [&](const ItemDefinitionId &definitionId)
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(definitionId);
+        const auto origin = findFirstProfileFit(
+            profile,
+            publishedContentRegistry(),
+            ProfileContainerId::stash(),
+            definition,
+            ItemOrientation::Degrees0);
+        ASSERT_TRUE(origin.has_value());
+        profile.assets.create(
+            definition,
+            StoredAssetLocation{ProfileContainerId::stash(), *origin});
+    };
+    addInput(ItemDefinitionId{"item.loot.scrap_parts"});
+    addInput(ItemDefinitionId{"item.loot.electronics"});
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile,
+        publishedContentRegistry(),
+        StartBaseManufacturingCommand{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"}},
+        CommandContext{profile.revision, "save-start-manufacturing"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion(),
+            17),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->baseManufacturing.activeOrder.has_value());
+    EXPECT_EQ(
+        loaded.profile->baseManufacturing.activeOrder->outputAssetId,
+        started.outputAssetId);
 }
 
 TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)

@@ -1232,6 +1232,87 @@ ContentRegistry ContentRegistry::fromJson(
             fail("at least one Base priority definition is required");
         }
 
+        const Json &baseManufacturing = requiredObject(
+            root,
+            "base_manufacturing");
+        for (const Json &recipeValue :
+             requiredArray(baseManufacturing, "recipes"))
+        {
+            if (!recipeValue.is_object())
+            {
+                fail("Base manufacturing recipe must be an object");
+            }
+            BaseManufacturingRecipeDefinition definition;
+            definition.id = BaseManufacturingRecipeDefinitionId{
+                requiredString(recipeValue, "id")};
+            definition.displayName = requiredString(
+                recipeValue, "display_name");
+            definition.workerCount = requiredPositiveUint(
+                recipeValue, "worker_count");
+            definition.durationMinutes = requiredPositiveUint(
+                recipeValue, "duration_minutes");
+            if (!hasPrefix(definition.id.value(), "base_manufacturing.") ||
+                definition.displayName.empty() ||
+                definition.workerCount > 1000U ||
+                definition.durationMinutes > 30U * 24U * 60U)
+            {
+                fail("Base manufacturing recipe definition is invalid");
+            }
+
+            std::set<ItemDefinitionId> inputIds;
+            for (const Json &inputValue :
+                 requiredArray(recipeValue, "inputs"))
+            {
+                if (!inputValue.is_object())
+                {
+                    fail("Base manufacturing input must be an object");
+                }
+                BaseManufacturingInputDefinition input{
+                    ItemDefinitionId{requiredString(inputValue, "item")},
+                    requiredPositiveUint(inputValue, "quantity")};
+                const ItemDefinition &item = registry.item(
+                    input.itemDefinitionId);
+                if (!inputIds.insert(input.itemDefinitionId).second ||
+                    input.quantity != 1U || item.maxStackSize != 1U ||
+                    !item.containerCompartments.empty())
+                {
+                    fail("Base manufacturing input contract is invalid");
+                }
+                definition.inputs.push_back(std::move(input));
+            }
+            if (definition.inputs.empty())
+            {
+                fail("Base manufacturing recipe requires an input");
+            }
+
+            const Json &output = requiredObject(recipeValue, "output");
+            definition.outputItemDefinitionId = ItemDefinitionId{
+                requiredString(output, "item")};
+            definition.outputQuantity = requiredPositiveUint(
+                output, "quantity");
+            const ItemDefinition &outputItem = registry.item(
+                definition.outputItemDefinitionId);
+            if (definition.outputQuantity > outputItem.maxStackSize)
+            {
+                fail("Base manufacturing output quantity is invalid");
+            }
+
+            const std::size_t index =
+                registry.baseManufacturingRecipes_.size();
+            if (!registry.baseManufacturingRecipeIndex_
+                     .emplace(definition.id, index)
+                     .second)
+            {
+                fail("duplicate Base manufacturing recipe ID");
+            }
+            registry.baseManufacturingRecipes_.push_back(
+                std::move(definition));
+        }
+        if (registry.baseManufacturingRecipes_.empty())
+        {
+            fail("at least one Base manufacturing recipe is required");
+        }
+
         for (const Json &lootValue :
              requiredArray(root, "loot_tables"))
         {
@@ -2084,6 +2165,23 @@ ContentRegistry::baseConstructionProject(
         baseConstructionProjects_,
         id,
         "Base construction project");
+}
+
+const std::vector<BaseManufacturingRecipeDefinition> &
+ContentRegistry::baseManufacturingRecipes() const noexcept
+{
+    return baseManufacturingRecipes_;
+}
+
+const BaseManufacturingRecipeDefinition &
+ContentRegistry::baseManufacturingRecipe(
+    const BaseManufacturingRecipeDefinitionId &id) const
+{
+    return lookup(
+        baseManufacturingRecipeIndex_,
+        baseManufacturingRecipes_,
+        id,
+        "Base manufacturing recipe");
 }
 
 const ItemDefinition &

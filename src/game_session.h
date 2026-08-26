@@ -11,6 +11,7 @@
 
 #include "economy_domain.h"
 #include "base_construction_domain.h"
+#include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
 #include "base_population_domain.h"
 #include "base_resource_domain.h"
@@ -244,6 +245,14 @@ public:
 
     [[nodiscard]] BaseRestReceipt executeBaseRest(
         std::uint32_t hours,
+        std::string transactionId);
+
+    [[nodiscard]] BaseManufacturingReceipt executeStartBaseManufacturing(
+        BaseManufacturingRecipeDefinitionId definitionId,
+        std::string transactionId);
+    [[nodiscard]] BaseManufacturingReceipt executeCancelBaseManufacturing(
+        std::string transactionId);
+    [[nodiscard]] BaseManufacturingReceipt executeCollectBaseManufacturing(
         std::string transactionId);
 
     [[nodiscard]] WeaponAmmoReceipt executeProfileWeaponAmmo(

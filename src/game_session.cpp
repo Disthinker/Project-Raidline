@@ -1,6 +1,7 @@
 #include "game_session.h"
 
 #include "base_construction_domain.h"
+#include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
 
 #include <algorithm>
@@ -1549,6 +1550,74 @@ BaseRestReceipt GameSession::executeBaseRest(
     return receipt;
 }
 
+BaseManufacturingReceipt GameSession::executeStartBaseManufacturing(
+    BaseManufacturingRecipeDefinitionId definitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseManufacturingReceipt receipt = ::executeStartBaseManufacturing(
+        candidate,
+        publishedContentRegistry(),
+        StartBaseManufacturingCommand{std::move(definitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BaseManufacturingReceipt GameSession::executeCancelBaseManufacturing(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseManufacturingReceipt receipt = ::executeCancelBaseManufacturing(
+        candidate,
+        publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BaseManufacturingReceipt GameSession::executeCollectBaseManufacturing(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseManufacturingReceipt receipt = ::executeCollectBaseManufacturing(
+        candidate,
+        publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 BaseMedicalServiceReceipt GameSession::executeBasePaidMedicalService(
     std::string transactionId)
 {
@@ -1862,9 +1931,14 @@ void GameSession::advanceWorldClockFromSimulation(
                 applyBaseConstructionThrough(
                     candidate,
                     publishedContentRegistry());
+            const BaseManufacturingAdvanceResult manufacturing =
+                applyBaseManufacturingThrough(
+                    candidate,
+                    publishedContentRegistry());
             const ResidentTreatmentAdvanceResult residentTreatment =
                 applyResidentTreatmentThrough(candidate);
-            if (construction.completed || residentTreatment.completed)
+            if (construction.completed || manufacturing.completed ||
+                residentTreatment.completed)
             {
                 if (candidate.revision ==
                     std::numeric_limits<ProfileRevision>::max())
@@ -1885,7 +1959,8 @@ void GameSession::advanceWorldClockFromSimulation(
                 pendingWorldSeconds_ = scaledSeconds;
                 return;
             }
-            if (construction.completed || residentTreatment.completed)
+            if (construction.completed || manufacturing.completed ||
+                residentTreatment.completed)
             {
                 if (!commitProfileCandidate(std::move(candidate)))
                 {

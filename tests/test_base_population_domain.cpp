@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "base_population_domain.h"
+#include "base_manufacturing_domain.h"
 
 TEST(BasePopulationDomainTest, ProjectionAggregatesResidentsBedsAndRations)
 {
@@ -80,6 +81,53 @@ TEST(BasePopulationDomainTest, RestCompletesDueDormitoryExpansion)
     EXPECT_EQ(profile.baseConstruction.dormitoryLevel, 2U);
     EXPECT_FALSE(profile.baseConstruction.activeProject.has_value());
     EXPECT_EQ(profile.basePopulation.bedCapacity, 14U);
+}
+
+TEST(BasePopulationDomainTest, RestCompletesManufacturingIntoRealStashAsset)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "population-rest-manufacturing",
+        publishedContentRegistry());
+    for (const ItemDefinitionId &definitionId : {
+             ItemDefinitionId{"item.loot.scrap_parts"},
+             ItemDefinitionId{"item.loot.electronics"}})
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(definitionId);
+        const auto origin = findFirstProfileFit(
+            profile,
+            publishedContentRegistry(),
+            ProfileContainerId::stash(),
+            definition,
+            ItemOrientation::Degrees0);
+        ASSERT_TRUE(origin.has_value());
+        profile.assets.create(
+            definition,
+            StoredAssetLocation{ProfileContainerId::stash(), *origin});
+    }
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile,
+        publishedContentRegistry(),
+        StartBaseManufacturingCommand{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"}},
+        CommandContext{profile.revision, "rest-start-manufacturing"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+
+    const BaseRestReceipt rested = executeBaseRest(
+        profile,
+        publishedContentRegistry(),
+        BaseRestCommand{6},
+        CommandContext{profile.revision, "rest-completes-manufacturing"});
+
+    ASSERT_TRUE(rested.succeeded) << rested.message;
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder.has_value());
+    const AssetRecord *output = profile.assets.find(*started.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(
+        output->definitionId,
+        ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
 }
 
 TEST(BasePopulationDomainTest, RestIsIdempotentAndRejectsInvalidRequests)
