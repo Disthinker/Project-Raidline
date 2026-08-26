@@ -98,7 +98,8 @@ management layer, not a resident life simulation.
 - [x] Bilingual fallback UI and automated verification complete. Windows Debug
   builds and CTest passes 1010/1010; persistence tests cover staffing and
   Workshop completion across process sessions.
-- [ ] Exact-head CI complete.
+- [x] Exact-head Windows and Ubuntu CI complete for implementation commit
+  `d59a113`.
 - [ ] User normal-play acceptance complete.
 
 ## Rollback

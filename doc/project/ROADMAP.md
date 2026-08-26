@@ -101,7 +101,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main |
 | 基础制造队列 v1 | 工坊用真实废旧零件、损坏电子元件、健康劳动力和世界时间制造真实武器维护包；可取消、可处理仓库满载 | 版本化 Recipe、稳定资产预留、单生产槽、工人预算、Raid 延迟物化、schema v17/content v25 | PR #89 已通过 CI 与用户正常游玩验收，以 `194f910` 进入 main；不扩展多队列、升级、职业、蓝图、品质、电力或自动化 |
 | 正式士气与周期事件 v1 | Allocation 显示居民士气、每日原因和五日事件；低/稳/高士气改变新制造订单耗时 | 独立 BaseMoraleState、每日账本、稳定事件快照、统一日结、Raid 回滚、schema v18/content v26 | PR #90 已通过 CI 与用户正常游玩验收，以 `1af0e56` 进入 main；不实现离队、叛乱或战斗修正 |
-| 聚合岗位、专业人口与设施升级 v1 | Raid 救援带来专业能力；玩家为工坊/医疗所安排人员并投资线性升级，任务时间按资格与等级冻结 | 四类聚合专业、互斥岗位、typed construction target、schema v19/content v27 | 实现与本地 1010/1010 回归已完成，等待 exact-head CI 和用户正常游玩验收；不包含具名 NPC、培训、战斗小组、第二服务队列或正式资源 |
+| 聚合岗位、专业人口与设施升级 v1 | Raid 救援带来专业能力；玩家为工坊/医疗所安排人员并投资线性升级，任务时间按资格与等级冻结 | 四类聚合专业、互斥岗位、typed construction target、schema v19/content v27 | 实现、本地 1010/1010 回归和双平台 CI 已完成，等待用户正常游玩验收；不包含具名 NPC、培训、战斗小组、第二服务队列或正式资源 |
 
 ## 当前 Combat Reliability 缺陷
 

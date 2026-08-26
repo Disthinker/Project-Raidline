@@ -45,7 +45,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 30. **Base 居民伤病与医疗所治疗 v1**：PR #88 让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main。
 31. **Base 基础制造队列 v1**：PR #89 为损坏工坊提供一个生产槽；以 1 个废旧零件、1 个损坏电子元件和 1 名健康劳动力经过 6 小时制造一件真实武器维护包。已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `194f910` 进入 main。
 32. **Base 正式士气与周期事件 v1**：PR #90 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `1af0e56` 进入 main。
-33. **Base 聚合岗位、专业人口与设施升级 v1**：当前分支从 `origin/main@1af0e56` 开始，已建立通用/医疗/工程/战斗聚合专业、工坊/医疗所显式岗位、专业效率与两个线性设施升级；自动化完成，等待 exact-head CI 与用户正常游玩验收。
+33. **Base 聚合岗位、专业人口与设施升级 v1**：当前分支从 `origin/main@1af0e56` 开始，已建立通用/医疗/工程/战斗聚合专业、工坊/医疗所显式岗位、专业效率与两个线性设施升级；本地自动化与实现提交 `d59a113` 的 Windows/Ubuntu CI 已通过，等待用户正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -74,7 +74,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90 的士气与周期事件已通过 Windows/Ubuntu CI 和用户正常游玩验收并进入 main。当前岗位与设施升级分支已完成 schema v19/content v27、专业救援、互斥岗位、冻结耗时、三类 typed construction target、双语文字/图形占位 UI 和跨进程持久化回归；Windows Debug 全目标构建成功，完整 CTest 1010/1010。开发代理未启动游戏，exact-head CI 与用户正常游玩验收待完成。
+- PR #90 的士气与周期事件已通过 Windows/Ubuntu CI 和用户正常游玩验收并进入 main。当前岗位与设施升级分支已完成 schema v19/content v27、专业救援、互斥岗位、冻结耗时、三类 typed construction target、双语文字/图形占位 UI 和跨进程持久化回归；Windows Debug 全目标、完整 CTest 1010/1010 及实现提交 `d59a113` 的 Windows/Ubuntu CI 均通过。开发代理未启动游戏，用户正常游玩验收待完成。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
