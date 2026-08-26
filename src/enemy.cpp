@@ -189,7 +189,9 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
     const EnemyTacticalDirective &tacticalDirective,
     float deltaTime,
     float worldWidth,
-    float worldHeight)
+    float worldHeight,
+    bool targetVisible,
+    std::optional<Vec2> navigationTarget)
 {
   if (isDead())
   {
@@ -224,7 +226,9 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
                 selfPosition,
                 targetPosition,
                 activeDirective,
-                deltaTime}));
+                deltaTime,
+                targetVisible,
+                navigationTarget}));
     return updateActiveAttack(
         targetOffset,
         effectiveDeltaTime,
@@ -238,7 +242,9 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
               selfPosition,
               targetPosition,
               tacticalDirective,
-              deltaTime});
+              deltaTime,
+              targetVisible,
+              navigationTarget});
 
   if (decision.attackRequest.has_value() &&
       tryStartAttack(

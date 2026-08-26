@@ -11,6 +11,7 @@
 #include "content_registry.h"
 #include "hit_resolution.h"
 #include "inventory_transfer.h"
+#include "raid_space_query.h"
 
 namespace
 {
@@ -1010,6 +1011,49 @@ void GameplayWorld::update(
             const EnemyAwarenessState awarenessBefore =
                 enemy.awarenessState();
             const Vec2 enemyPositionBeforeMovement = enemy.position();
+            const Vec2 enemyPosition = enemyCenter(enemy);
+            const bool targetVisible = raidSpaceHasLineOfSight(
+                enemyPosition,
+                playerPosition,
+                activeBlockerSet);
+            std::optional<Vec2> navigationGoal;
+            if (targetVisible)
+            {
+                navigationGoal = playerPosition;
+            }
+            else
+            {
+                navigationGoal = enemy.lastKnownTargetPosition();
+            }
+
+            std::optional<Vec2> navigationTarget;
+            if (navigationGoal.has_value())
+            {
+                const Vec2 worldSize = activeWorldSize();
+                const Vec2 halfEnemySize{
+                    enemy.size().x * 0.5F,
+                    enemy.size().y * 0.5F};
+                const Vec2 reachableNavigationGoal{
+                    std::clamp(
+                        navigationGoal->x,
+                        halfEnemySize.x,
+                        worldSize.x - halfEnemySize.x),
+                    std::clamp(
+                        navigationGoal->y,
+                        halfEnemySize.y,
+                        worldSize.y - halfEnemySize.y)};
+                navigationTarget = nextRaidSpaceWaypoint(
+                    RaidSpaceNavigationQuery{
+                        enemyPosition,
+                        reachableNavigationGoal,
+                        enemy.size(),
+                        worldSize,
+                        activeBlockerSet});
+                if (!navigationTarget.has_value())
+                {
+                    navigationTarget = enemyPosition;
+                }
+            }
 
             static_cast<void>(
                 enemy.updateTowardsTarget(
@@ -1017,7 +1061,9 @@ void GameplayWorld::update(
                     directives[enemyIndex],
                     enemyStepTime,
                     worldWidth(),
-                    worldHeight()));
+                    worldHeight(),
+                    targetVisible,
+                    navigationTarget));
             const Vec2 resolvedEnemyPosition = resolveMovementAgainstBlockers(
                 enemyPositionBeforeMovement,
                 enemy.size(),
@@ -1035,6 +1081,10 @@ void GameplayWorld::update(
                 const std::optional<Rect> grabHitbox =
                     enemy.attackHitbox();
                 if (!grabHitbox.has_value() ||
+                    !raidSpaceHasLineOfSight(
+                        enemyCenter(enemy),
+                        playerCenter(player_),
+                        activeBlockerSet) ||
                     !isCollision(
                         *grabHitbox,
                         playerBounds(player_)))
@@ -1087,6 +1137,10 @@ void GameplayWorld::update(
 
             if (!hitbox.has_value() ||
                 !attackConfig.has_value() ||
+                !raidSpaceHasLineOfSight(
+                    enemyCenter(enemy),
+                    playerCenter(player_),
+                    activeBlockerSet) ||
                 !isCollision(
                     *hitbox,
                     playerBounds(player_)))

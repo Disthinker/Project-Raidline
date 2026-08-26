@@ -60,7 +60,9 @@ public:
         const EnemyTacticalDirective &tacticalDirective,
         float deltaTime,
         float worldWidth,
-        float worldHeight);
+        float worldHeight,
+        bool targetVisible = true,
+        std::optional<Vec2> navigationTarget = std::nullopt);
 
     [[nodiscard]]
     bool tryStartAttack(
