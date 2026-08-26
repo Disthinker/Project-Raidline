@@ -245,6 +245,18 @@ const RaidExteriorPlacementDefinition *selectRaidExteriorPlacement(
     return legal[random.bounded(static_cast<std::uint32_t>(legal.size()))];
 }
 
+void appendRaidExteriorPlacementAnchors(
+    RaidMapGenerationAnchors &anchors,
+    const RaidExteriorPlacementDefinition &placement)
+{
+    anchors.occupiedRegions.push_back(placement.entrance);
+    anchors.occupiedRegions.push_back(pointRegion(placement.returnPoint, 20.0F));
+    anchors.reachablePoints.push_back(
+        Vec2{placement.entrance.position.x + placement.entrance.size.x * 0.5F,
+             placement.entrance.position.y + placement.entrance.size.y * 0.5F});
+    anchors.reachablePoints.push_back(placement.returnPoint);
+}
+
 RaidGeneratedMapLayout generateRaidMapLayout(
     const MapDefinition &map,
     std::uint64_t raidSeed,

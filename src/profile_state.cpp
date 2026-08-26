@@ -1503,7 +1503,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1515,21 +1516,28 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
         const bool buildingIntelligenceRules =
-            raid.rulesVersion == "raid-building-intelligence-14";
+            raid.rulesVersion == "raid-building-intelligence-14" ||
+            raid.rulesVersion == "raid-second-representative-location-15";
+        const bool multipleInteriorRules =
+            raid.rulesVersion == "raid-second-representative-location-15";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1557,8 +1565,12 @@ ProfileValidationResult validateProfileState(
                 { return loot.spaceId != outdoorRaidSpaceId(); }));
         std::size_t expectedInteriorEnemyCount{};
         std::size_t expectedInteriorLootCount{};
-        for (const RaidInteriorDefinition &interior : raidMap->interiors)
+        const std::size_t expectedInteriorCount = multipleInteriorRules
+            ? raidMap->interiors.size()
+            : std::min<std::size_t>(raidMap->interiors.size(), 1U);
+        for (std::size_t index{}; index < expectedInteriorCount; ++index)
         {
+            const RaidInteriorDefinition &interior = raidMap->interiors[index];
             expectedInteriorEnemyCount += interior.enemies.size();
             expectedInteriorLootCount += interior.lootSlots.size();
         }
@@ -1571,7 +1583,7 @@ ProfileValidationResult validateProfileState(
             outdoorEnemyCount < 4 || outdoorEnemyCount > 6 ||
             outdoorRegularLootCount < 6 || outdoorRegularLootCount > 9 ||
             (interiorRules &&
-             (raid.interiors.size() != raidMap->interiors.size() ||
+             (raid.interiors.size() != expectedInteriorCount ||
               interiorEnemyCount != expectedInteriorEnemyCount ||
               interiorLootCount != expectedInteriorLootCount)) ||
             (!interiorRules &&
@@ -1703,9 +1715,21 @@ ProfileValidationResult validateProfileState(
                                 "pending Raid special location is invalid"};
                     }
                 }
-                anchors.occupiedRegions.push_back(
-                    interior.exteriorEntrance);
-                addRegion(interior.exteriorEntrance);
+                if (multipleInteriorRules)
+                {
+                    appendRaidExteriorPlacementAnchors(
+                        anchors,
+                        RaidExteriorPlacementDefinition{
+                            {},
+                            interior.exteriorEntrance,
+                            interior.exteriorReturn});
+                }
+                else
+                {
+                    anchors.occupiedRegions.push_back(
+                        interior.exteriorEntrance);
+                    addRegion(interior.exteriorEntrance);
+                }
             }
             if (raid.spatialLayout.layoutHash == 0U ||
                 raid.spatialLayout.layoutHash != raidMapLayoutHash(
@@ -2120,8 +2144,9 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid outdoor enemies do not match deployment"};
         }
-        for (const RaidInteriorDefinition &interior : raidMap->interiors)
+        for (std::size_t index{}; index < expectedInteriorCount; ++index)
         {
+            const RaidInteriorDefinition &interior = raidMap->interiors[index];
             std::vector<RaidEnemySnapshot> interiorEnemies;
             std::copy_if(
                 raid.enemies.begin(), raid.enemies.end(),

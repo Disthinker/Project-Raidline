@@ -109,7 +109,7 @@ TEST(RaidMapGenerationTest, SelectsOnlyLegalSpecialLocationCandidate)
 {
     const MapDefinition &map = publishedContentRegistry().map(
         MapDefinitionId{"map.raid.frontier_exchange"});
-    ASSERT_EQ(map.interiors.size(), 1U);
+    ASSERT_EQ(map.interiors.size(), 2U);
     RaidMapGenerationAnchors anchors = publishedAnchors(map);
     anchors.occupiedRegions.push_back(
         map.interiors.front().exteriorPlacements.front().entrance);
@@ -127,4 +127,16 @@ TEST(RaidMapGenerationTest, SelectsOnlyLegalSpecialLocationCandidate)
         selectRaidExteriorPlacement(
             map.interiors.front(), 99117U, 0U, anchors),
         selected);
+
+    appendRaidExteriorPlacementAnchors(anchors, *selected);
+    const RaidExteriorPlacementDefinition *second =
+        selectRaidExteriorPlacement(
+            map.interiors[1], 99117U, 1U, anchors);
+    ASSERT_NE(second, nullptr);
+    EXPECT_TRUE(raidExteriorPlacementIsLegal(*second, anchors));
+    appendRaidExteriorPlacementAnchors(anchors, *second);
+
+    const RaidGeneratedMapLayout layout = generateRaidMapLayout(
+        map, 99117U, anchors);
+    EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, anchors));
 }

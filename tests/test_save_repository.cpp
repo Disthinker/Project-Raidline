@@ -1493,8 +1493,9 @@ TEST(SaveRepositoryTest,
             {}},
         {profile.revision, "save-known-interior-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    ASSERT_EQ(profile.pendingRaid->interiors.size(), 1U);
+    ASSERT_EQ(profile.pendingRaid->interiors.size(), 2U);
     ASSERT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
+    EXPECT_FALSE(profile.pendingRaid->interiors[1].layoutKnown);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1507,6 +1508,8 @@ TEST(SaveRepositoryTest,
     EXPECT_TRUE(loaded.profile->raidInteriorIntelligence.knows(interiorId));
     ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
     EXPECT_TRUE(loaded.profile->pendingRaid->interiors.front().layoutKnown);
+    ASSERT_EQ(loaded.profile->pendingRaid->interiors.size(), 2U);
+    EXPECT_FALSE(loaded.profile->pendingRaid->interiors[1].layoutKnown);
 }
 
 TEST(SaveRepositoryTest,
@@ -1613,6 +1616,28 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
                     .succeeded);
     ASSERT_TRUE(legacyProfile.pendingRaid.has_value());
     PendingRaidSnapshot &raid = *legacyProfile.pendingRaid;
+    const RaidSpaceDefinitionId secondInteriorId = map.interiors[1].id;
+    std::vector<AssetInstanceId> removedLootAssets;
+    for (const RaidLootSnapshot &loot : raid.loot)
+    {
+        if (loot.spaceId == secondInteriorId)
+        {
+            removedLootAssets.push_back(loot.assetId);
+        }
+    }
+    std::erase_if(
+        raid.enemies,
+        [&](const RaidEnemySnapshot &enemy)
+        { return enemy.spaceId == secondInteriorId; });
+    std::erase_if(
+        raid.loot,
+        [&](const RaidLootSnapshot &loot)
+        { return loot.spaceId == secondInteriorId; });
+    for (AssetInstanceId assetId : removedLootAssets)
+    {
+        ASSERT_TRUE(legacyProfile.assets.erase(assetId));
+    }
+    raid.interiors.resize(1U);
     raid.rulesVersion = "raid-interior-spaces-12";
     raid.interiors.front().exteriorEntrance = definition.exteriorEntrance;
     raid.interiors.front().exteriorReturn = definition.exteriorReturn;

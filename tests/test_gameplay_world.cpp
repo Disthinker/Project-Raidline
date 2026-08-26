@@ -2609,7 +2609,7 @@ TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
     GameplayWorld world{makeInteriorDiscoveryWorldConfig()};
     const RaidSpaceDefinitionId officeId{"raid_space.test.office"};
 
-    EXPECT_FALSE(world.activeRaidSpacePortal().has_value());
+    EXPECT_TRUE(world.visibleRaidSpacePortals().empty());
     EXPECT_FALSE(world.tacticalMap().specialLocationVisible(officeId));
 
     GameplayInput approach;
@@ -2617,7 +2617,8 @@ TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
     world.update(approach, 1.5F);
 
     EXPECT_TRUE(world.inOutdoorRaidSpace());
-    EXPECT_TRUE(world.activeRaidSpacePortal().has_value());
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
+    EXPECT_EQ(world.visibleRaidSpacePortals().front().id, officeId);
     EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
 }
 
@@ -2634,11 +2635,45 @@ TEST(GameplayWorldRaidTest, EnteringPortalDiscoversItBeforeSpaceTransition)
     EXPECT_FALSE(world.inOutdoorRaidSpace());
     EXPECT_TRUE(world.spaceTransitionedLastUpdate());
     EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
-    ASSERT_TRUE(world.activeRaidSpacePortal().has_value());
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
     EXPECT_EQ(
-        *world.activeRaidSpacePortal(),
+        world.visibleRaidSpacePortals().front().bounds,
         (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
+    EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
     EXPECT_FALSE(world.activeInteriorMapProjection().has_value());
+}
+
+TEST(GameplayWorldRaidTest,
+     MultipleDiscoveredInteriorPortalsRemainVisibleAndEnterByStableIdentity)
+{
+    RaidWorldConfig config = makeInteriorDiscoveryWorldConfig();
+    config.playerSpawn = Vec2{230.0F, 90.0F};
+    RaidInteriorWorldConfig freight = config.interiors.front();
+    freight.id = RaidSpaceDefinitionId{"raid_space.test.freight"};
+    freight.displayName = "Test Freight Bay";
+    freight.exteriorEntrance =
+        ContentRect{Vec2{220.0F, 80.0F}, Vec2{100.0F, 100.0F}};
+    freight.exteriorReturn = Vec2{330.0F, 100.0F};
+    config.interiors.push_back(std::move(freight));
+    GameplayWorld world{std::move(config)};
+
+    world.update(GameplayInput{}, 0.0F);
+    const std::vector<RaidSpacePortalProjection> portals =
+        world.visibleRaidSpacePortals();
+    ASSERT_EQ(portals.size(), 2U);
+    EXPECT_EQ(portals[0].id,
+              RaidSpaceDefinitionId{"raid_space.test.office"});
+    EXPECT_EQ(portals[1].id,
+              RaidSpaceDefinitionId{"raid_space.test.freight"});
+
+    GameplayInput enter;
+    enter.interactJustPressed = true;
+    world.update(enter, 0.0F);
+
+    EXPECT_EQ(world.activeRaidSpaceId(),
+              RaidSpaceDefinitionId{"raid_space.test.freight"});
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
+    EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
 }
 
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)

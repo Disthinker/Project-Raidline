@@ -88,6 +88,15 @@ struct RaidInteriorMapProjection
     std::span<const BallisticBlocker> blockers;
 };
 
+struct RaidSpacePortalProjection
+{
+    RaidSpaceDefinitionId id;
+    std::string_view displayName;
+    ContentRect bounds;
+    bool returnsOutside{};
+    bool interactionInRange{};
+};
+
 struct RaidWorldConfig
 {
     Vec2 worldSize{1280.0F, 720.0F};
@@ -216,8 +225,8 @@ public:
     [[nodiscard]] std::string_view
     activeRaidSpaceDisplayName() const noexcept;
     [[nodiscard]] Vec2 raidSpaceWorldSize() const noexcept;
-    [[nodiscard]] std::optional<ContentRect>
-    activeRaidSpacePortal() const noexcept;
+    [[nodiscard]] std::vector<RaidSpacePortalProjection>
+    visibleRaidSpacePortals() const;
     [[nodiscard]] bool raidSpacePortalInteractionInRange() const noexcept;
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>

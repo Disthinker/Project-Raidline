@@ -36,6 +36,10 @@ selectRaidExteriorPlacement(
     std::uint64_t interiorOrdinal,
     const RaidMapGenerationAnchors &anchors) noexcept;
 
+void appendRaidExteriorPlacementAnchors(
+    RaidMapGenerationAnchors &anchors,
+    const RaidExteriorPlacementDefinition &placement);
+
 [[nodiscard]] RaidGeneratedMapLayout generateRaidMapLayout(
     const MapDefinition &map,
     std::uint64_t raidSeed,

@@ -8,6 +8,8 @@ namespace
 const MapDefinitionId kTestMap{"map.v0.test"};
 const RaidSpaceDefinitionId kTestInterior{
     "raid_space.frontier_exchange.office"};
+const RaidSpaceDefinitionId kSecondTestInterior{
+    "raid_space.frontier_exchange.freight_service_bay"};
 }
 
 TEST(RaidIntelligenceDomainTest, PurchaseConsumesCurrencyAndAddsOneCharge)
@@ -127,6 +129,7 @@ TEST(RaidIntelligenceDomainTest,
 {
     ProfileState profile = makeNewAlphaProfile(
         "interior-intelligence-purchase", publishedContentRegistry());
+    profile.currency = 1000U;
     const std::uint32_t startingCurrency = profile.currency;
     const RaidInteriorIntelligencePurchasePlan plan =
         queryRaidInteriorIntelligencePurchase(
@@ -149,6 +152,18 @@ TEST(RaidIntelligenceDomainTest,
     EXPECT_EQ(purchased.currencyPaid, 180U);
     EXPECT_EQ(profile.currency, startingCurrency - 180U);
     EXPECT_TRUE(profile.raidInteriorIntelligence.knows(kTestInterior));
+
+    const RaidInteriorIntelligencePurchaseReceipt freightPurchased =
+        executeRaidInteriorIntelligencePurchase(
+            profile,
+            publishedContentRegistry(),
+            {kSecondTestInterior},
+            {profile.revision, "purchase-frontier-freight-plan"});
+    ASSERT_TRUE(freightPurchased.succeeded) << freightPurchased.message;
+    EXPECT_EQ(freightPurchased.currencyPaid, 220U);
+    EXPECT_EQ(profile.currency, startingCurrency - 400U);
+    EXPECT_TRUE(profile.raidInteriorIntelligence.knows(kTestInterior));
+    EXPECT_TRUE(profile.raidInteriorIntelligence.knows(kSecondTestInterior));
 
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
     const RaidInteriorIntelligencePurchaseReceipt repeated =

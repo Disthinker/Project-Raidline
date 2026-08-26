@@ -1518,25 +1518,36 @@ Vec2 GameplayWorld::raidSpaceWorldSize() const noexcept
     return activeWorldSize();
 }
 
-std::optional<ContentRect>
-GameplayWorld::activeRaidSpacePortal() const noexcept
+std::vector<RaidSpacePortalProjection>
+GameplayWorld::visibleRaidSpacePortals() const
 {
+    std::vector<RaidSpacePortalProjection> result;
+    const Vec2 center = playerCenter(player_);
     if (activeInteriorIndex_.has_value())
     {
-        return interiors_[*activeInteriorIndex_].interiorExit;
+        const InteriorRuntime &interior = interiors_[*activeInteriorIndex_];
+        result.push_back(RaidSpacePortalProjection{
+            interior.id,
+            "Outdoor",
+            interior.interiorExit,
+            true,
+            pointInside(interior.interiorExit, center)});
+        return result;
     }
-    if (!interiors_.empty())
+    result.reserve(interiors_.size());
+    for (const InteriorRuntime &interior : interiors_)
     {
-        const auto visible = std::find_if(
-            interiors_.begin(), interiors_.end(),
-            [&](const InteriorRuntime &interior)
-            { return tacticalMap_.specialLocationVisible(interior.id); });
-        if (visible != interiors_.end())
+        if (tacticalMap_.specialLocationVisible(interior.id))
         {
-            return visible->exteriorEntrance;
+            result.push_back(RaidSpacePortalProjection{
+                interior.id,
+                interior.displayName,
+                interior.exteriorEntrance,
+                false,
+                pointInside(interior.exteriorEntrance, center)});
         }
     }
-    return std::nullopt;
+    return result;
 }
 
 bool GameplayWorld::raidSpacePortalInteractionInRange() const noexcept

@@ -9263,37 +9263,34 @@ void App::renderBaseSupply()
 
 void App::renderRaidSpacePortal()
 {
-    const std::optional<ContentRect> portal =
-        gameSession_.world().activeRaidSpacePortal();
-    if (!portal.has_value())
+    for (const RaidSpacePortalProjection &portal :
+         gameSession_.world().visibleRaidSpacePortals())
     {
-        return;
+        const SDL_FRect bounds{
+            portal.bounds.position.x,
+            portal.bounds.position.y,
+            portal.bounds.size.x,
+            portal.bounds.size.y};
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(
+            renderer_, 50, portal.interactionInRange ? 116 : 82, 105,
+            portal.interactionInRange ? 118 : 70);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(
+            renderer_, 112, portal.interactionInRange ? 230 : 162, 192, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        const SDL_FRect inset{
+            bounds.x + 5.0F,
+            bounds.y + 5.0F,
+            std::max(0.0F, bounds.w - 10.0F),
+            std::max(0.0F, bounds.h - 10.0F)};
+        SDL_RenderRect(renderer_, &inset);
+        const std::string label = portal.returnsOutside
+            ? "OUTDOOR | F EXIT"
+            : fmt::format("{} | F ENTER", portal.displayName);
+        uiTextRenderer_.render(
+            renderer_, bounds.x + 8.0F, bounds.y + 8.0F, label.c_str());
     }
-    const SDL_FRect bounds{
-        portal->position.x,
-        portal->position.y,
-        portal->size.x,
-        portal->size.y};
-    const bool inRange =
-        gameSession_.world().raidSpacePortalInteractionInRange();
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(
-        renderer_, 50, inRange ? 116 : 82, 105, inRange ? 118 : 70);
-    SDL_RenderFillRect(renderer_, &bounds);
-    SDL_SetRenderDrawColor(
-        renderer_, 112, inRange ? 230 : 162, 192, 255);
-    SDL_RenderRect(renderer_, &bounds);
-    const SDL_FRect inset{
-        bounds.x + 5.0F,
-        bounds.y + 5.0F,
-        std::max(0.0F, bounds.w - 10.0F),
-        std::max(0.0F, bounds.h - 10.0F)};
-    SDL_RenderRect(renderer_, &inset);
-    const char *label = gameSession_.world().inOutdoorRaidSpace()
-        ? "EXCHANGE OFFICE | F ENTER"
-        : "OUTDOOR | F EXIT";
-    uiTextRenderer_.render(
-        renderer_, bounds.x + 8.0F, bounds.y + 8.0F, label);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
