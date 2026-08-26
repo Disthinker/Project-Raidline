@@ -45,7 +45,7 @@
 - [x] Pending Raid、GameplayWorld、战术地图和 schema v21 接线完成。
 - [x] 中英文文字与几何占位完成；未修改正式资源。
 - [x] Windows Debug 全目标完成，完整 CTest 1033/1033 通过；开发代理未启动游戏。
-- [ ] Draft PR exact-head Windows/Ubuntu CI。
+- [x] Draft PR #93 的实现提交 `9090d88` exact-head Windows/Ubuntu CI 通过（run `32933559429`）。
 - [ ] 用户后续集中正常游玩验收。
 
 ## 回滚
