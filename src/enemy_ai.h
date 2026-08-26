@@ -40,7 +40,7 @@ struct EnemyAiConfig
 
     float acquireTargetDistance{360.0F};
     float loseTargetDistance{460.0F};
-    float searchMemoryDuration{2.0F};
+    float searchMemoryDuration{8.0F};
     float searchArrivalDistance{20.0F};
     float maximumTurnRateRadians{9.42477796F};
     float supportMinDistance{105.0F};
@@ -61,6 +61,8 @@ struct EnemyAiInput
     Vec2 targetPosition{};
     EnemyTacticalDirective tactical{};
     float deltaTime{};
+    bool targetVisible{true};
+    std::optional<Vec2> navigationTarget;
 };
 
 struct EnemyAiDecision
@@ -124,6 +126,7 @@ private:
     void updatePerception(
         Vec2 selfPosition,
         Vec2 targetPosition,
+        bool targetVisible,
         float deltaTime) noexcept;
 
     [[nodiscard]]

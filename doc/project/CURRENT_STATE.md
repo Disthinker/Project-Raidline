@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@de3402c` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、程序化室外空间基础、独立室内空间，以及 PR #95/#96 接受的特殊地点随机合法放置与当局探索发现。
-- 当前开发分支：`codex/raid-world-building-intelligence-v1`，从干净的 `origin/main@de3402c` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-world-building-intelligence-v1.md`。
+- `origin/main@a7b3cc2` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 PR #93～#97 接受的 Raid World Vertical Slice 基线。
+- 当前开发分支：`codex/raid-world-spatial-tactical-reliability-v1`，从干净的 `origin/main@a7b3cc2` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-world-spatial-tactical-reliability-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、程序化室外空间基础、独立室内空间、特殊地点随机合法放置与当局探索发现已进入主线。当前分支继续 **Raid World Vertical Slice**：玩家可在 Base 为交换站办公室购买一次永久内部图；Deploy 只冻结内部布局资格，室外随机入口仍必须按 PR #96 在当局探索发现。内部图只显示固定墙体、出口和玩家，不泄露敌人或 Loot；程序化室内、哨所和迁徙继续延期。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及程序化室外、独立室内、随机特殊地点、探索发现和永久内部图均已进入主线。当前分支继续 **Raid World Vertical Slice** 的空间战术可靠性收束：视觉获取读取当前空间真实遮挡，成功实弹击发按半径发布独立 AI 听觉刺激，敌人使用合法接近点绕过当前 blocker 调查/追击，近战提交前重新验证无遮挡。视锥、光照潜行、墙体声学和跨空间追踪继续延期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -51,7 +51,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 36. **独立室内空间 v1**：PR #94 已通过本地 1039/1039、exact-head Windows/Ubuntu CI 和用户集中验收，以普通 merge commit `62ebd8a` 进入 main。`Frontier Exchange` 交换站办公室使用稳定空间 ID、独立尺寸/障碍/敌人/Loot 和 F 入口/返回 Socket；占位表现仅使用双语文字与代码几何。
 37. **特殊地点随机合法放置 v1**：PR #95 已通过本地 1043/1043、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `d2ceb59` 进入 main。content v31 为交换站办公室声明 6 个候选位置，Deploy 以独立 PCG32 流过滤本局动态冲突并确定性选择，最终坐标继续冻结在 schema v22。
 38. **特殊地点发现与战术地图投影 v1**：PR #96 已通过本地 1048/1048、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `de3402c` 进入 main。玩家接近入口约 145 世界单位后才在本局显示精确世界入口和 `M` 地图特殊地点标记；同帧进入会先记录发现。
-39. **建筑内部图永久情报 v1**：当前分支从 `origin/main@de3402c` 开始；content v32 为交换站办公室声明 180 货币的一次性内部图，schema v23 保存永久空间 ID 授权并冻结到 pending Raid。进入已知室内后 `M` 显示固定布局、出口和玩家；室外入口、敌人和 Loot 不被泄露。
+39. **建筑内部图永久情报 v1**：PR #97 已通过本地 1058/1058、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main。content v32 为交换站办公室声明 180 货币的一次性内部图，schema v23 保存永久空间 ID 授权并冻结到 pending Raid。
+40. **空间战术可靠性 v1**：当前分支从 `origin/main@a7b3cc2` 开始；新增 SDL-free 当前空间 LOS/确定性最小可见图，敌人不能隔墙视觉获取或提交近战命中，成功实弹击发会发布 900 世界单位的 Alpha 非消音枪声刺激，玩家贴墙时敌人会选择攻击/搜索允许距离内的合法接近点继续绕障。无 schema、content 或正式资源变化。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -80,7 +81,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#96 均已进入 main；PR #96 的特殊地点发现已通过本地 1048/1048、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `de3402c` 合入。当前建筑内部图分支已完成永久授权、schema v23、Deploy 冻结资格、室内地图投影和双语占位；Windows Debug 全目标、295 项定向回归及完整 CTest 1058/1058 通过，exact-head CI 待本分支最终提交后记录。开发代理不启动游戏，用户正常游玩验收放在自动化与 CI 之后。
+- PR #90～#97 均已进入 main；PR #97 的永久内部图已通过本地 1058/1058、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `a7b3cc2` 合入。当前空间战术可靠性分支已完成 LOS、最后已知位置、确定性绕障、贴墙合法接近点、成功击发枪声刺激与近战遮挡接线；Windows Debug 全目标和完整 CTest 1072/1072 通过，exact-head CI 待最终提交后记录。开发代理未启动游戏，用户正常游玩验收放在自动化与 CI 之后。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

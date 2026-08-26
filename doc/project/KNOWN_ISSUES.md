@@ -39,7 +39,8 @@
 | RL-MAP-003 | 可进入建筑仍与室外共享单一坐标、敌人、Loot 和碰撞空间 | PR #94 已通过 CI 和用户验收，以普通 merge commit `62ebd8a` 进入 main；独立空间 ID、入口/返回 Socket、schema v22/content v30 快照和当前空间运行时隔离已接受 |
 | RL-MAP-004 | 特殊地点入口固定在单一坐标，无法随本局路线变化且缺少动态冲突过滤 | PR #95 已通过本地 1043/1043、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `d2ceb59` 进入 main |
 | RL-MAP-005 | 特殊地点的精确入口和战术地图坐标从开局无条件泄露，探索没有发现价值 | PR #96 已通过本地 1048/1048、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `de3402c` 进入 main |
-| RL-MAP-006 | 固定建筑内部布局没有可永久获取的情报，进入室内后战术地图只能显示占位提示 | 当前 `codex/raid-world-building-intelligence-v1` 建立按稳定空间 ID 的一次性购买、schema v23 持久授权、Deploy 冻结资格和不泄露敌人/Loot 的室内地图；Windows Debug、295 项定向回归与完整 CTest 1058/1058 已通过 |
+| RL-MAP-006 | 固定建筑内部布局没有可永久获取的情报，进入室内后战术地图只能显示占位提示 | PR #97 已通过本地 1058/1058、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main |
+| RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 统一 LOS、最后已知位置、确定性绕障和命中前遮挡复验；验收加固补齐贴墙合法接近点、成功实弹击发的独立枪声刺激和失去视线后的单墙绕行调查；Windows Debug 全目标与完整 CTest 1072/1072 已通过 |
 
 ## 需要未来产品决策
 
@@ -104,8 +105,9 @@
 | Raid World：独立室内空间 v1 | PR #94 已通过 CI 与用户验收，以普通 merge commit `62ebd8a` 进入 main |
 | Raid World：特殊地点随机合法放置 v1 | PR #95 已通过 CI 与用户验收，以普通 merge commit `d2ceb59` 进入 main |
 | Raid World：特殊地点发现与战术地图投影 v1 | PR #96 已通过 CI 与用户验收，以普通 merge commit `de3402c` 进入 main |
-| Raid World：建筑内部图永久情报 v1 | 当前 `codex/raid-world-building-intelligence-v1` 从 `origin/main@de3402c` 开始；范围见对应 ExecPlan |
+| Raid World：建筑内部图永久情报 v1 | PR #97 已通过 CI 与用户验收，以普通 merge commit `a7b3cc2` 进入 main |
+| Raid World：空间战术可靠性 v1 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 从 `origin/main@a7b3cc2` 开始；范围见对应 ExecPlan |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-building-intelligence-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-spatial-tactical-reliability-v1.md`。

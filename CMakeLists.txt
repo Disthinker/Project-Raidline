@@ -327,6 +327,8 @@ add_library(raidline_simulation STATIC
     src/particle_system.h
     src/raid_tactical_map.cpp
     src/raid_tactical_map.h
+    src/raid_space_query.cpp
+    src/raid_space_query.h
     src/player.cpp
     src/player.h
     src/shot_feedback_presentation.cpp
@@ -515,6 +517,10 @@ raidline_add_test(
 raidline_add_test(
     GameplayWorldTest
     tests/test_gameplay_world.cpp
+    raidline::simulation)
+raidline_add_test(
+    RaidSpaceQueryTest
+    tests/test_raid_space_query.cpp
     raidline::simulation)
 raidline_add_test(
     StorageCabinetTest

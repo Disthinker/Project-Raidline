@@ -330,12 +330,28 @@ TEST(AlphaExtractionSessionTest, DeployUsesSnapshotAndRealShotConsumption)
                             { return loot.requiresHighRisk; }),
               2);
 
+    session.update(GameplayInput{}, 0.0F);
+    const auto alertedEnemyCount = [&session]()
+    {
+        return std::count_if(
+            session.world().enemies().begin(),
+            session.world().enemies().end(),
+            [](const Enemy &enemy)
+            {
+                return enemy.awarenessState() ==
+                    EnemyAwarenessState::Alerted;
+            });
+    };
+    const auto alertedBeforeShot = alertedEnemyCount();
+    ASSERT_LT(alertedBeforeShot, session.world().enemies().size());
+
     GameplayInput fire{};
     fire.fireJustPressed = true;
     fire.firePressed = true;
     session.update(fire, 0.0F);
 
     EXPECT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_GT(alertedEnemyCount(), alertedBeforeShot);
     EXPECT_EQ(magazineRoundCount(session.profile(), magazine), roundsBefore - 1U);
     EXPECT_TRUE(session.profile().assets.find(rifle)->chamberedRound.has_value());
 }

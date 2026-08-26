@@ -60,7 +60,9 @@ public:
         const EnemyTacticalDirective &tacticalDirective,
         float deltaTime,
         float worldWidth,
-        float worldHeight);
+        float worldHeight,
+        bool targetVisible = true,
+        std::optional<Vec2> navigationTarget = std::nullopt);
 
     [[nodiscard]]
     bool tryStartAttack(
@@ -108,6 +110,8 @@ public:
     [[nodiscard]] EnemyTacticalRole tacticalRole() const noexcept;
     [[nodiscard]] float searchTimeRemaining() const noexcept;
     [[nodiscard]] std::optional<Vec2> lastKnownTargetPosition() const noexcept;
+    [[nodiscard]] float navigationGoalTolerance(
+        bool targetVisible) const noexcept;
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);

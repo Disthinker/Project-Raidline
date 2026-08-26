@@ -158,7 +158,9 @@ EnemyAiDecision EnemyAiState::update(
     if (!isFinite(input.selfPosition) ||
         !isFinite(input.targetPosition) ||
         !isFinite(input.tactical.separationDirection) ||
-        !std::isfinite(input.tactical.supportSide))
+        !std::isfinite(input.tactical.supportSide) ||
+        (input.navigationTarget.has_value() &&
+         !isFinite(*input.navigationTarget)))
     {
         return EnemyAiDecision{};
     }
@@ -167,6 +169,7 @@ EnemyAiDecision EnemyAiState::update(
     updatePerception(
         input.selfPosition,
         input.targetPosition,
+        input.targetVisible,
         input.deltaTime);
 
     if (awarenessState_ == EnemyAwarenessState::Unaware ||
@@ -196,6 +199,12 @@ EnemyAiDecision EnemyAiState::update(
     const Vec2 direction{
         targetOffset.x / distance,
         targetOffset.y / distance};
+    const Vec2 movementTarget =
+        input.navigationTarget.value_or(selectedTarget);
+    const Vec2 movementDirection = normalizedOrZero(
+        Vec2{
+            movementTarget.x - input.selfPosition.x,
+            movementTarget.y - input.selfPosition.y});
 
     const bool canAttack =
         awarenessState_ == EnemyAwarenessState::Alerted &&
@@ -249,7 +258,7 @@ EnemyAiDecision EnemyAiState::update(
     Vec2 desiredDirection{};
     if (awarenessState_ == EnemyAwarenessState::Searching)
     {
-        desiredDirection = direction;
+        desiredDirection = movementDirection;
     }
     else if (input.tactical.role == EnemyTacticalRole::Support)
     {
@@ -280,7 +289,7 @@ EnemyAiDecision EnemyAiState::update(
     }
     else if (distance > config_.stopDistance)
     {
-        desiredDirection = direction;
+        desiredDirection = movementDirection;
     }
 
     desiredDirection.x +=
@@ -409,6 +418,7 @@ void EnemyAiState::advanceCooldowns(float deltaTime) noexcept
 void EnemyAiState::updatePerception(
     Vec2 selfPosition,
     Vec2 targetPosition,
+    bool targetVisible,
     float deltaTime) noexcept
 {
     const float targetDistance = distanceBetween(
@@ -417,7 +427,8 @@ void EnemyAiState::updatePerception(
 
     if (awarenessState_ == EnemyAwarenessState::Unaware)
     {
-        if (targetDistance <= config_.acquireTargetDistance)
+        if (targetVisible &&
+            targetDistance <= config_.acquireTargetDistance)
         {
             awarenessState_ = EnemyAwarenessState::Alerted;
             lastKnownTargetPosition_ = targetPosition;
@@ -427,7 +438,8 @@ void EnemyAiState::updatePerception(
 
     if (awarenessState_ == EnemyAwarenessState::Alerted)
     {
-        if (targetDistance <= config_.loseTargetDistance)
+        if (targetVisible &&
+            targetDistance <= config_.loseTargetDistance)
         {
             lastKnownTargetPosition_ = targetPosition;
             return;
@@ -436,7 +448,8 @@ void EnemyAiState::updatePerception(
         awarenessState_ = EnemyAwarenessState::Searching;
         searchTimeRemaining_ = config_.searchMemoryDuration;
     }
-    else if (targetDistance <= config_.acquireTargetDistance)
+    else if (targetVisible &&
+             targetDistance <= config_.acquireTargetDistance)
     {
         awarenessState_ = EnemyAwarenessState::Alerted;
         lastKnownTargetPosition_ = targetPosition;

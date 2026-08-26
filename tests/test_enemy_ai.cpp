@@ -55,6 +55,52 @@ TEST(EnemyAiStateTest, NearbyTargetIsAcquiredAndPursued)
     EXPECT_NEAR(decision.moveDirection.y, 0.8F, kTolerance);
 }
 
+TEST(EnemyAiStateTest, HiddenNearbyTargetIsNotAcquired)
+{
+    EnemyAiState ai;
+    EnemyAiInput input = makeInput(Vec2{120.0F, 0.0F});
+    input.targetVisible = false;
+
+    const EnemyAiDecision decision = ai.update(input);
+
+    EXPECT_EQ(ai.awarenessState(), EnemyAwarenessState::Unaware);
+    EXPECT_FALSE(ai.lastKnownTargetPosition().has_value());
+    EXPECT_FALSE(decision.attackRequest.has_value());
+    EXPECT_FLOAT_EQ(decision.moveDirection.x, 0.0F);
+}
+
+TEST(EnemyAiStateTest, LosingLineOfSightSearchesFrozenLastKnownPosition)
+{
+    EnemyAiState ai;
+    static_cast<void>(ai.update(makeInput(Vec2{200.0F, 0.0F})));
+
+    EnemyAiInput hidden = makeInput(Vec2{240.0F, 80.0F}, 0.1F);
+    hidden.targetVisible = false;
+    hidden.navigationTarget = Vec2{100.0F, -80.0F};
+    const EnemyAiDecision decision = ai.update(hidden);
+
+    ASSERT_EQ(ai.awarenessState(), EnemyAwarenessState::Searching);
+    ASSERT_TRUE(ai.lastKnownTargetPosition().has_value());
+    EXPECT_FLOAT_EQ(ai.lastKnownTargetPosition()->x, 200.0F);
+    EXPECT_FLOAT_EQ(ai.lastKnownTargetPosition()->y, 0.0F);
+    EXPECT_GT(decision.moveDirection.x, 0.0F);
+    EXPECT_LT(decision.moveDirection.y, 0.0F);
+}
+
+TEST(EnemyAiStateTest, AudibleHiddenTargetInvestigatesWithoutAttacking)
+{
+    EnemyAiState ai;
+    ai.hearTarget(Vec2{70.0F, 0.0F});
+    EnemyAiInput input = makeInput(Vec2{70.0F, 0.0F});
+    input.targetVisible = false;
+
+    const EnemyAiDecision decision = ai.update(input);
+
+    EXPECT_EQ(ai.awarenessState(), EnemyAwarenessState::Searching);
+    EXPECT_FALSE(decision.attackRequest.has_value());
+    EXPECT_GT(decision.moveDirection.x, 0.0F);
+}
+
 TEST(EnemyAiStateTest, AcquireAndLoseDistancesProvideHysteresis)
 {
     EnemyAiState ai;
@@ -91,7 +137,9 @@ TEST(EnemyAiStateTest, SearchStopsWhenMemoryExpires)
     static_cast<void>(ai.update(makeInput(Vec2{600.0F, 0.0F}, 0.5F)));
 
     const EnemyAiDecision decision =
-        ai.update(makeInput(Vec2{600.0F, 0.0F}, 1.5F));
+        ai.update(makeInput(
+            Vec2{600.0F, 0.0F},
+            ai.config().searchMemoryDuration - 0.5F));
 
     EXPECT_EQ(ai.awarenessState(), EnemyAwarenessState::Unaware);
     EXPECT_FALSE(ai.lastKnownTargetPosition().has_value());
