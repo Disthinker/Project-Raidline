@@ -189,6 +189,62 @@ bool layoutConnects(
 }
 }
 
+bool raidExteriorPlacementIsLegal(
+    const RaidExteriorPlacementDefinition &placement,
+    const RaidMapGenerationAnchors &anchors) noexcept
+{
+    const ContentRect returnRegion = pointRegion(placement.returnPoint, 20.0F);
+    const auto conflicts = [&](ContentRect reserved) noexcept
+    {
+        return overlaps(placement.entrance, reserved) ||
+            overlaps(returnRegion, reserved);
+    };
+    if (conflicts(anchors.extractionPoint) ||
+        conflicts(pointRegion(anchors.playerSpawn, 70.0F)) ||
+        std::any_of(
+            anchors.occupiedRegions.begin(),
+            anchors.occupiedRegions.end(),
+            conflicts))
+    {
+        return false;
+    }
+    return std::none_of(
+        anchors.reachablePoints.begin(),
+        anchors.reachablePoints.end(),
+        [&](Vec2 point)
+        { return conflicts(pointRegion(point, 35.0F)); });
+}
+
+const RaidExteriorPlacementDefinition *selectRaidExteriorPlacement(
+    const RaidInteriorDefinition &interior,
+    std::uint64_t raidSeed,
+    std::uint64_t interiorOrdinal,
+    const RaidMapGenerationAnchors &anchors) noexcept
+{
+    if (raidSeed == 0U || interior.exteriorPlacements.empty())
+    {
+        return nullptr;
+    }
+    std::vector<const RaidExteriorPlacementDefinition *> legal;
+    legal.reserve(interior.exteriorPlacements.size());
+    for (const RaidExteriorPlacementDefinition &placement :
+         interior.exteriorPlacements)
+    {
+        if (raidExteriorPlacementIsLegal(placement, anchors))
+        {
+            legal.push_back(&placement);
+        }
+    }
+    if (legal.empty())
+    {
+        return nullptr;
+    }
+    Pcg32 random{
+        raidSeed,
+        0x7370656369616c70ULL + interiorOrdinal};
+    return legal[random.bounded(static_cast<std::uint32_t>(legal.size()))];
+}
+
 RaidGeneratedMapLayout generateRaidMapLayout(
     const MapDefinition &map,
     std::uint64_t raidSeed,

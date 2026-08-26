@@ -104,3 +104,27 @@ TEST(RaidMapGenerationTest, InvalidSeedRejectsInsteadOfInventingLayout)
             map, 0U, publishedAnchors(map))),
         std::invalid_argument);
 }
+
+TEST(RaidMapGenerationTest, SelectsOnlyLegalSpecialLocationCandidate)
+{
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    ASSERT_EQ(map.interiors.size(), 1U);
+    RaidMapGenerationAnchors anchors = publishedAnchors(map);
+    anchors.occupiedRegions.push_back(
+        map.interiors.front().exteriorPlacements.front().entrance);
+
+    const RaidExteriorPlacementDefinition *selected =
+        selectRaidExteriorPlacement(
+            map.interiors.front(), 99117U, 0U, anchors);
+
+    ASSERT_NE(selected, nullptr);
+    EXPECT_TRUE(raidExteriorPlacementIsLegal(*selected, anchors));
+    EXPECT_NE(
+        selected->id,
+        map.interiors.front().exteriorPlacements.front().id);
+    EXPECT_EQ(
+        selectRaidExteriorPlacement(
+            map.interiors.front(), 99117U, 0U, anchors),
+        selected);
+}

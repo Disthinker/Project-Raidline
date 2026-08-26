@@ -97,7 +97,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-interior-spaces-12");
+        "raid-special-location-placement-13");
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

@@ -16,6 +16,7 @@
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
 #include "save_repository.h"
 #include "weapon_ammo_domain.h"
@@ -1480,6 +1481,98 @@ TEST(SaveRepositoryTest, SchemaV22RejectsUnknownInteriorActorSpace)
         publishedContentRegistry());
     EXPECT_FALSE(corrupt.profile.has_value());
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    const MapDefinition &map = content.map(mapId);
+    const RaidInteriorDefinition &definition = map.interiors.front();
+    ProfileState legacyProfile = makeNewAlphaProfile(
+        "save-legacy-interior-v22", content);
+    ASSERT_TRUE(executeDeploy(
+        legacyProfile,
+        content,
+        DeployCommand{
+            "save-legacy-interior-raid",
+            "save-legacy-interior-settle",
+            78123U,
+            mapId,
+            {}},
+        {legacyProfile.revision, "save-legacy-interior-deploy"})
+                    .succeeded);
+    ASSERT_TRUE(legacyProfile.pendingRaid.has_value());
+    PendingRaidSnapshot &raid = *legacyProfile.pendingRaid;
+    raid.rulesVersion = "raid-interior-spaces-12";
+    raid.interiors.front().exteriorEntrance = definition.exteriorEntrance;
+    raid.interiors.front().exteriorReturn = definition.exteriorReturn;
+
+    RaidMapGenerationAnchors anchors;
+    anchors.playerSpawn = raid.playerSpawn;
+    anchors.extractionPoint = raid.extractionPoint;
+    anchors.occupiedRegions = {
+        map.highRisk.emergencyExtractionPoint,
+        map.highRisk.conditionalExtractionPoint,
+        map.highRisk.activationControlPoint,
+        map.highRisk.advancedResourceArea};
+    const auto addRegion = [&anchors](ContentRect region)
+    {
+        anchors.reachablePoints.push_back(
+            {region.position.x + region.size.x * 0.5F,
+             region.position.y + region.size.y * 0.5F});
+    };
+    for (const RaidEnemySnapshot &enemy : raid.enemies)
+    {
+        if (enemy.spaceId == outdoorRaidSpaceId())
+        {
+            anchors.occupiedRegions.push_back(
+                {enemy.position, enemy.size});
+            addRegion({enemy.position, enemy.size});
+        }
+    }
+    for (const RaidLootSnapshot &loot : raid.loot)
+    {
+        if (loot.spaceId == outdoorRaidSpaceId())
+        {
+            anchors.reachablePoints.push_back(loot.position);
+        }
+    }
+    for (const EnemySpawnDefinition &spawn : map.highRisk.pressureSpawns)
+    {
+        anchors.occupiedRegions.push_back({spawn.position, spawn.size});
+    }
+    addRegion(map.highRisk.emergencyExtractionPoint);
+    addRegion(map.highRisk.conditionalExtractionPoint);
+    addRegion(map.highRisk.activationControlPoint);
+    addRegion(map.highRisk.advancedResourceArea);
+    if (raid.rescue.has_value())
+    {
+        anchors.occupiedRegions.push_back(raid.rescue->transferPoint);
+        addRegion(raid.rescue->transferPoint);
+    }
+    anchors.occupiedRegions.push_back(definition.exteriorEntrance);
+    addRegion(definition.exteriorEntrance);
+    raid.spatialLayout = generateRaidMapLayout(map, raid.seed, anchors);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            legacyProfile,
+            "raid-interior-spaces-content-30",
+            22),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->interiors.front().exteriorEntrance,
+        definition.exteriorEntrance);
+    EXPECT_FLOAT_EQ(
+        loaded.profile->pendingRaid->interiors.front().exteriorReturn.x,
+        definition.exteriorReturn.x);
+    EXPECT_FLOAT_EQ(
+        loaded.profile->pendingRaid->interiors.front().exteriorReturn.y,
+        definition.exteriorReturn.y);
 }
 
 TEST(SaveRepositoryTest, SchemaV21MigratesRootActorsWithoutInteriorState)

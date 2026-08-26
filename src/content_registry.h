@@ -159,13 +159,32 @@ struct GunsmithFullMaintenanceDefinition
 
 [[nodiscard]] const RaidSpaceDefinitionId &outdoorRaidSpaceId();
 
+struct RaidExteriorPlacementDefinition
+{
+    std::string id;
+    ContentRect entrance;
+    Vec2 returnPoint{};
+
+    friend bool operator==(
+        const RaidExteriorPlacementDefinition &left,
+        const RaidExteriorPlacementDefinition &right) noexcept
+    {
+        return left.id == right.id &&
+            left.entrance == right.entrance &&
+            left.returnPoint.x == right.returnPoint.x &&
+            left.returnPoint.y == right.returnPoint.y;
+    }
+};
+
 struct RaidInteriorDefinition
 {
     RaidSpaceDefinitionId id;
     std::string displayName;
     Vec2 worldSize{};
+    // The first candidate remains the legacy fixed portal for rules v12.
     ContentRect exteriorEntrance;
     Vec2 exteriorReturn{};
+    std::vector<RaidExteriorPlacementDefinition> exteriorPlacements;
     Vec2 interiorSpawn{};
     ContentRect interiorExit;
     std::vector<BallisticBlockerDefinition> ballisticBlockers;
