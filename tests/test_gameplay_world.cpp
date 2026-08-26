@@ -3276,6 +3276,101 @@ TEST(GameplayWorldRaidTest, AudibleEnemyRoutesAroundOutdoorCover)
         EnemyAwarenessState::Unaware);
 }
 
+TEST(GameplayWorldRaidTest, AudibleEnemyPursuesPlayerFlushAgainstCover)
+{
+    RaidWorldConfig config;
+    config.worldSize = Vec2{800.0F, 600.0F};
+    config.playerSpawn = Vec2{278.0F, 250.0F};
+    config.extractionPoint =
+        ContentRect{Vec2{650.0F, 450.0F}, Vec2{100.0F, 100.0F}};
+    config.initialEnemies = {
+        EnemySpawn{Vec2{360.0F, 241.0F}, Vec2{50.0F, 50.0F}, 12}};
+    config.playerMaximumHealth = 100;
+    config.playerCurrentHealth = 100;
+    config.deferPlayerDamageResolution = true;
+    const Rect cover{Vec2{310.0F, 150.0F}, Vec2{20.0F, 200.0F}};
+    config.ballisticBlockers = {BallisticBlocker{1, cover}};
+    GameplayWorld world{config};
+    const Vec2 initialEnemyPosition = world.enemies().front().position();
+    const float initialDistance = playerEnemyCenterDistance(world);
+    float minimumDistance = initialDistance;
+
+    world.emitPlayerNoise(1000.0F);
+    ASSERT_EQ(
+        world.enemies().front().awarenessState(),
+        EnemyAwarenessState::Alerted);
+    for (int frame{}; frame < 360; ++frame)
+    {
+        world.update(GameplayInput{}, 1.0F / 60.0F);
+        EXPECT_FALSE(isCollision(
+            enemyBounds(world.enemies().front()),
+            cover));
+        minimumDistance = std::min(
+            minimumDistance,
+            playerEnemyCenterDistance(world));
+    }
+
+    EXPECT_GT(
+        std::hypot(
+            world.enemies().front().position().x - initialEnemyPosition.x,
+            world.enemies().front().position().y - initialEnemyPosition.y),
+        30.0F);
+    EXPECT_LT(minimumDistance, initialDistance - 20.0F);
+}
+
+TEST(GameplayWorldRaidTest, AlertedEnemyContinuesInvestigationAfterPlayerBreaksSight)
+{
+    RaidWorldConfig config;
+    config.worldSize = Vec2{800.0F, 600.0F};
+    config.playerSpawn = Vec2{278.0F, 130.0F};
+    config.extractionPoint =
+        ContentRect{Vec2{650.0F, 450.0F}, Vec2{100.0F, 100.0F}};
+    config.initialEnemies = {
+        EnemySpawn{Vec2{360.0F, 130.0F}, Vec2{50.0F, 50.0F}, 12}};
+    config.playerMaximumHealth = 100;
+    config.playerCurrentHealth = 100;
+    config.deferPlayerDamageResolution = true;
+    const Rect cover{Vec2{310.0F, 200.0F}, Vec2{20.0F, 220.0F}};
+    config.ballisticBlockers = {BallisticBlocker{1, cover}};
+    GameplayWorld world{config};
+
+    world.update(GameplayInput{}, 0.0F);
+    ASSERT_EQ(
+        world.enemies().front().awarenessState(),
+        EnemyAwarenessState::Alerted);
+
+    const Vec2 enemyBeforeSightBreak = world.enemies().front().position();
+    GameplayInput hideBehindCover{};
+    hideBehindCover.moveDown = true;
+    world.update(hideBehindCover, 0.45F);
+    ASSERT_GT(world.player().position().y, cover.position.y);
+    ASSERT_NE(
+        world.enemies().front().awarenessState(),
+        EnemyAwarenessState::Unaware);
+    const float distanceAfterSightBreak = playerEnemyCenterDistance(world);
+    float minimumDistance = distanceAfterSightBreak;
+
+    for (int frame{}; frame < 300; ++frame)
+    {
+        world.update(GameplayInput{}, 1.0F / 60.0F);
+        EXPECT_FALSE(isCollision(
+            enemyBounds(world.enemies().front()),
+            cover));
+        minimumDistance = std::min(
+            minimumDistance,
+            playerEnemyCenterDistance(world));
+    }
+
+    EXPECT_GT(
+        std::hypot(
+            world.enemies().front().position().x -
+                enemyBeforeSightBreak.x,
+            world.enemies().front().position().y -
+                enemyBeforeSightBreak.y),
+        30.0F);
+    EXPECT_LT(minimumDistance, distanceAfterSightBreak - 20.0F);
+}
+
 TEST(GameplayWorldRaidTest, InteriorCoverBlocksVisualAcquisition)
 {
     RaidWorldConfig config;

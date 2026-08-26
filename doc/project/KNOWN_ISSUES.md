@@ -40,7 +40,7 @@
 | RL-MAP-004 | 特殊地点入口固定在单一坐标，无法随本局路线变化且缺少动态冲突过滤 | PR #95 已通过本地 1043/1043、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `d2ceb59` 进入 main |
 | RL-MAP-005 | 特殊地点的精确入口和战术地图坐标从开局无条件泄露，探索没有发现价值 | PR #96 已通过本地 1048/1048、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `de3402c` 进入 main |
 | RL-MAP-006 | 固定建筑内部布局没有可永久获取的情报，进入室内后战术地图只能显示占位提示 | PR #97 已通过本地 1058/1058、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main |
-| RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 统一 LOS、最后已知位置、确定性绕障和命中前遮挡复验；Windows Debug 全目标与完整 CTest 1069/1069 已通过 |
+| RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 统一 LOS、最后已知位置、确定性绕障和命中前遮挡复验；验收加固补齐贴墙合法接近点、成功实弹击发的独立枪声刺激和失去视线后的单墙绕行调查；Windows Debug 全目标与完整 CTest 1072/1072 已通过 |
 
 ## 需要未来产品决策
 

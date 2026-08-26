@@ -14,6 +14,14 @@
 #include "base_world.h"
 #include "stable_random.h"
 
+namespace
+{
+    // Current Alpha weapons have no suppressor consumer. Keep this gameplay
+    // stimulus separate from audio playback; a later weapon-content slice can
+    // data-drive per-shot acoustic profiles without changing AI ownership.
+    constexpr float kUnsuppressedGunshotNoiseRadius{900.0F};
+}
+
 GameSession::GameSession()
     : profile_{makeNewAlphaProfile(
           "in-memory-profile",
@@ -2432,6 +2440,7 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(commitProfileCandidate(
             std::move(*firedCandidate),
             false));
+        world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius);
         ++weaponFaultSequence_;
         const AssetRecord *currentWeapon = weapon.has_value()
             ? profile_.assets.find(*weapon)

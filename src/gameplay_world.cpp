@@ -1048,7 +1048,9 @@ void GameplayWorld::update(
                         reachableNavigationGoal,
                         enemy.size(),
                         worldSize,
-                        activeBlockerSet});
+                        activeBlockerSet,
+                        2.0F,
+                        enemy.navigationGoalTolerance(targetVisible)});
                 if (!navigationTarget.has_value())
                 {
                     navigationTarget = enemyPosition;

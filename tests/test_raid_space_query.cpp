@@ -125,3 +125,32 @@ TEST(RaidSpaceQueryTest, SealedGoalFailsClosed)
             Vec2{360.0F, 320.0F},
             blockers}).has_value());
 }
+
+TEST(RaidSpaceQueryTest, GoalToleranceRoutesToTargetFlushAgainstCover)
+{
+    const std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{
+            1U,
+            Rect{Vec2{310.0F, 150.0F}, Vec2{20.0F, 200.0F}}}};
+
+    const std::optional<Vec2> waypoint = nextRaidSpaceWaypoint(
+        RaidSpaceNavigationQuery{
+            Vec2{385.0F, 266.0F},
+            Vec2{294.0F, 266.0F},
+            Vec2{50.0F, 50.0F},
+            Vec2{800.0F, 600.0F},
+            blockers,
+            2.0F,
+            20.0F});
+
+    ASSERT_TRUE(waypoint.has_value());
+    EXPECT_TRUE(
+        waypoint->y <= 123.0F + kTolerance ||
+        waypoint->y >= 377.0F - kTolerance);
+    EXPECT_GT(
+        std::hypot(
+            waypoint->x - 385.0F,
+            waypoint->y - 266.0F),
+        kTolerance);
+    EXPECT_FALSE(pointInside(*waypoint, blockers.front().bounds));
+}

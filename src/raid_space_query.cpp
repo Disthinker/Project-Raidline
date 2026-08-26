@@ -163,6 +163,7 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
     if (!finite(query.start) || !finite(query.goal) ||
         !finitePositive(query.actorSize) || !finitePositive(query.worldSize) ||
         !std::isfinite(query.clearance) || query.clearance < 0.0F ||
+        !std::isfinite(query.goalTolerance) || query.goalTolerance < 0.0F ||
         !pointInsideWorldForActor(
             query.start,
             query.actorSize,
@@ -173,11 +174,6 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
             query.worldSize))
     {
         return std::nullopt;
-    }
-
-    if (distance(query.start, query.goal) <= kDistanceEpsilon)
-    {
-        return query.goal;
     }
 
     std::vector<Rect> expandedBlockers;
@@ -201,9 +197,72 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
             expandedBlockers.end(),
             [&](const Rect &blocker)
             {
-                return pointInsideOpenRect(query.start, blocker) ||
-                       pointInsideOpenRect(query.goal, blocker);
+                return pointInsideOpenRect(query.start, blocker);
             }))
+    {
+        return std::nullopt;
+    }
+
+    if (distance(query.start, query.goal) <=
+        query.goalTolerance + kDistanceEpsilon)
+    {
+        return query.start;
+    }
+
+    std::vector<Vec2> goalNodes;
+    const auto appendGoalNode = [&](Vec2 candidate)
+    {
+        if (!pointInsideWorldForActor(
+                candidate,
+                query.actorSize,
+                query.worldSize) ||
+            distance(candidate, query.goal) >
+                query.goalTolerance + kGeometryEpsilon ||
+            std::any_of(
+                expandedBlockers.begin(),
+                expandedBlockers.end(),
+                [&](const Rect &blocker)
+                {
+                    return pointInsideOpenRect(candidate, blocker);
+                }) ||
+            std::any_of(
+                goalNodes.begin(),
+                goalNodes.end(),
+                [&](Vec2 existing)
+                {
+                    return distance(existing, candidate) <=
+                        kDistanceEpsilon;
+                }))
+        {
+            return;
+        }
+        goalNodes.push_back(candidate);
+    };
+
+    appendGoalNode(query.goal);
+    if (query.goalTolerance > kDistanceEpsilon)
+    {
+        for (const Rect &blocker : expandedBlockers)
+        {
+            if (!pointInsideOpenRect(query.goal, blocker))
+            {
+                continue;
+            }
+
+            const float left = blocker.position.x;
+            const float right = blocker.position.x + blocker.size.x;
+            const float top = blocker.position.y;
+            const float bottom = blocker.position.y + blocker.size.y;
+            const float projectedX = std::clamp(query.goal.x, left, right);
+            const float projectedY = std::clamp(query.goal.y, top, bottom);
+            appendGoalNode(Vec2{left, projectedY});
+            appendGoalNode(Vec2{right, projectedY});
+            appendGoalNode(Vec2{projectedX, top});
+            appendGoalNode(Vec2{projectedX, bottom});
+        }
+    }
+
+    if (goalNodes.empty())
     {
         return std::nullopt;
     }
@@ -211,13 +270,18 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
     // Most pursuit frames have a direct route. Return before constructing the
     // visibility graph so ordinary visible movement remains proportional to
     // the number of blockers rather than the square of all blocker corners.
-    if (segmentClear(query.start, query.goal, expandedBlockers))
+    if (goalNodes.front().x == query.goal.x &&
+        goalNodes.front().y == query.goal.y &&
+        segmentClear(query.start, query.goal, expandedBlockers))
     {
         return query.goal;
     }
 
-    std::vector<Vec2> nodes{query.start, query.goal};
-    nodes.reserve(2U + expandedBlockers.size() * 4U);
+    std::vector<Vec2> nodes{query.start};
+    nodes.insert(nodes.end(), goalNodes.begin(), goalNodes.end());
+    const std::size_t firstCornerNode = nodes.size();
+    nodes.reserve(
+        firstCornerNode + expandedBlockers.size() * 4U);
     for (const Rect &blocker : expandedBlockers)
     {
         const float left = blocker.position.x;
@@ -308,10 +372,6 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
             break;
         }
         visited[current] = true;
-        if (current == 1U)
-        {
-            break;
-        }
 
         for (std::size_t neighbor{}; neighbor < nodeCount; ++neighbor)
         {
@@ -332,12 +392,34 @@ std::optional<Vec2> nextRaidSpaceWaypoint(
         }
     }
 
-    if (!std::isfinite(distances[1U]) || previous[1U] == kNoNode)
+    std::size_t selectedGoal = kNoNode;
+    for (std::size_t goalIndex = 1U;
+         goalIndex < firstCornerNode;
+         ++goalIndex)
+    {
+        if (!std::isfinite(distances[goalIndex]) ||
+            previous[goalIndex] == kNoNode)
+        {
+            continue;
+        }
+        if (selectedGoal == kNoNode ||
+            distances[goalIndex] <
+                distances[selectedGoal] - kDistanceEpsilon ||
+            (std::abs(
+                 distances[goalIndex] - distances[selectedGoal]) <=
+                 kDistanceEpsilon &&
+             goalIndex < selectedGoal))
+        {
+            selectedGoal = goalIndex;
+        }
+    }
+
+    if (selectedGoal == kNoNode)
     {
         return std::nullopt;
     }
 
-    std::size_t next = 1U;
+    std::size_t next = selectedGoal;
     std::size_t guard{};
     while (previous[next] != 0U)
     {

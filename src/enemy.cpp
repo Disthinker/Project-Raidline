@@ -511,6 +511,14 @@ Enemy::lastKnownTargetPosition() const noexcept
   return ai_.lastKnownTargetPosition();
 }
 
+float Enemy::navigationGoalTolerance(
+    bool targetVisible) const noexcept
+{
+  return targetVisible
+      ? ai_.config().stopDistance
+      : ai_.config().searchArrivalDistance;
+}
+
 std::size_t Enemy::currentAnimationFrameIndex() const
 {
   return movementAnimator_.currentFrameIndex();
