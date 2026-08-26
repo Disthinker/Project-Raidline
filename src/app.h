@@ -12,6 +12,7 @@
 #include "game_flow.h"
 #include "game_audio.h"
 #include "gameplay_input.h"
+#include "frame_performance.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
 #include "item_definition.h"
@@ -127,6 +128,10 @@ private:
     bool developerWeaponPanelOpen_{};
     bool developerWeaponPanelBlocksGameplayThisFrame_{};
     std::size_t developerWeaponParameterIndex_{};
+    bool developerPerformanceOverlayOpen_{};
+    FramePerformanceMonitor framePerformance_;
+    std::uint64_t framePerformanceSequence_{};
+    std::array<std::string, 7U> performanceOverlayLines_{};
 
     Texture backgroundTexture_;
     Texture playerTexture_;
@@ -270,6 +275,8 @@ private:
     void renderProfileContextMenu(bool inRaid);
     void renderMedicalWheel();
     void renderDeveloperWeaponPanel();
+    void renderDeveloperPerformanceOverlay();
+    void refreshDeveloperPerformanceOverlay();
     void renderPlayerAvatar(
         Vec2 position,
         Vec2 bodySize,

@@ -148,26 +148,46 @@ namespace
         Vec2 currentPosition,
         Vec2 actorSize,
         Vec2 requestedPosition,
-        const std::vector<BallisticBlocker> &blockers) noexcept
+        const RaidSpaceBlockerIndex &blockerIndex,
+        std::vector<std::size_t> &queryScratch,
+        std::size_t *blockersExamined) noexcept
     {
+        const float minimumX = std::min(currentPosition.x, requestedPosition.x);
+        const float minimumY = std::min(currentPosition.y, requestedPosition.y);
+        const float maximumX = std::max(
+            currentPosition.x + actorSize.x,
+            requestedPosition.x + actorSize.x);
+        const float maximumY = std::max(
+            currentPosition.y + actorSize.y,
+            requestedPosition.y + actorSize.y);
+        blockerIndex.queryCandidateIndices(
+            Rect{
+                Vec2{minimumX, minimumY},
+                Vec2{maximumX - minimumX, maximumY - minimumY}},
+            queryScratch);
+        if (blockersExamined != nullptr)
+        {
+            *blockersExamined += queryScratch.size();
+        }
+
         Rect resolvedBounds{currentPosition, actorSize};
         float resolvedX = requestedPosition.x;
-        for (const BallisticBlocker &blocker : blockers)
+        for (const std::size_t blocker : queryScratch)
         {
             resolvedX = resolveHorizontalCollision(
                 resolvedBounds,
                 resolvedX,
-                blocker.bounds);
+                blockerIndex.blockerBounds(blocker));
         }
         resolvedBounds.position.x = resolvedX;
 
         float resolvedY = requestedPosition.y;
-        for (const BallisticBlocker &blocker : blockers)
+        for (const std::size_t blocker : queryScratch)
         {
             resolvedY = resolveVerticalCollision(
                 resolvedBounds,
                 resolvedY,
-                blocker.bounds);
+                blockerIndex.blockerBounds(blocker));
         }
         return Vec2{resolvedX, resolvedY};
     }
@@ -416,6 +436,14 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 nextCombatTargetId_++);
         }
         interior.enemyNavigation.resize(interior.enemies.size());
+        interior.blockerIndex = RaidSpaceBlockerIndex::build(
+            interior.worldSize,
+            interior.ballisticBlockers);
+        if (!interior.blockerIndex.has_value())
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig interior blocker index is invalid"};
+        }
         interiors_.push_back(std::move(interior));
     }
     player_ = Player{
@@ -576,6 +604,14 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         std::move(initialEnemyCenters),
         std::move(specialLocations));
     tacticalMap_.revealAround(playerCenter(player_));
+    outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
+        worldSize_,
+        ballisticBlockers_);
+    if (!outdoorBlockerIndex_.has_value())
+    {
+        throw std::invalid_argument{
+            "RaidWorldConfig outdoor blocker index is invalid"};
+    }
     cacheNavigationFieldsForSpace(
         outdoorRaidSpaceId(),
         worldSize_,
@@ -711,6 +747,14 @@ GameplayWorld::GameplayWorld(
             nextCombatTargetId_++);
     }
     enemyNavigation_.resize(enemies_.size());
+    outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
+        worldSize_,
+        ballisticBlockers_);
+    if (!outdoorBlockerIndex_.has_value())
+    {
+        throw std::logic_error{
+            "GameplayWorld failed to build its blocker index"};
+    }
 
     groundItems_.reserve(
         initialGroundItems.size());
@@ -870,6 +914,7 @@ void GameplayWorld::update(
     shotFiredLastUpdate_ = false;
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
+    simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         shotFeedbackPresentation_.update(deltaTime);
@@ -911,7 +956,9 @@ void GameplayWorld::update(
         playerPositionBeforeMovement,
         Vec2{player_.size(), player_.size()},
         requestedPlayerPosition,
-        activeBallisticBlockers());
+        activeBlockerIndex(),
+        blockerQueryScratch_,
+        &simulationWorkloadLastUpdate_.movementBlockersExamined);
     static_cast<void>(player_.setPosition(resolvedPlayerPosition));
 
     const bool exploredOutdoor = inOutdoorRaidSpace();
@@ -1005,6 +1052,22 @@ void GameplayWorld::update(
     }
     const std::vector<BallisticBlocker> &activeBlockerSet =
         activeBallisticBlockers();
+    const RaidSpaceBlockerIndex &activeStaticBlockers =
+        activeBlockerIndex();
+    simulationWorkloadLastUpdate_.activeEnemies = activeEnemySet.size();
+    simulationWorkloadLastUpdate_.activeBlockers =
+        activeStaticBlockers.blockerCount();
+    simulationWorkloadLastUpdate_.enemySubsteps = enemySubsteps;
+
+    struct EnemyNavigationIntent
+    {
+        bool targetVisible{};
+        bool refreshRequired{};
+        bool selectedForRefresh{};
+        std::optional<Vec2> reachableGoal;
+    };
+    std::vector<EnemyNavigationIntent> navigationIntents(
+        activeEnemySet.size());
     for (std::size_t step{0U};
          step < enemySubsteps;
          ++step)
@@ -1023,12 +1086,113 @@ void GameplayWorld::update(
                     enemy.attackPhase()});
         }
 
+        EnemySquadDecisionMetrics squadMetrics;
         const std::vector<EnemyTacticalDirective> directives =
             enemySquadCoordinator_.decide(
                 enemySnapshots,
+                playerPosition,
+                &squadMetrics);
+        simulationWorkloadLastUpdate_.neighborCandidatesExamined +=
+            squadMetrics.neighborCandidatesExamined;
+
+        const auto hasLineOfSight = [&](Vec2 start, Vec2 end)
+        {
+            std::size_t blockerTests{};
+            const bool visible = activeStaticBlockers.hasLineOfSight(
+                start,
+                end,
+                &blockerTests);
+            simulationWorkloadLastUpdate_.lineOfSightBlockersExamined +=
+                blockerTests;
+            return visible;
+        };
+
+        std::size_t refreshRequiredCount{};
+        for (std::size_t enemyIndex{};
+             enemyIndex < activeEnemySet.size();
+             ++enemyIndex)
+        {
+            EnemyNavigationIntent &intent = navigationIntents[enemyIndex];
+            intent = EnemyNavigationIntent{};
+            Enemy &enemy = activeEnemySet[enemyIndex];
+            EnemyNavigationRuntime &navigation =
+                activeNavigationSet[enemyIndex];
+            if (enemy.isDead())
+            {
+                navigation = EnemyNavigationRuntime{};
+                continue;
+            }
+
+            const Vec2 enemyPosition = enemyCenter(enemy);
+            intent.targetVisible = hasLineOfSight(
+                enemyPosition,
                 playerPosition);
-        std::size_t navigationQueriesRemaining =
-            kMaximumNavigationQueriesPerEnemySubstep;
+            const std::optional<Vec2> navigationGoal = intent.targetVisible
+                ? std::optional<Vec2>{playerPosition}
+                : enemy.lastKnownTargetPosition();
+            if (!navigationGoal.has_value())
+            {
+                navigation = EnemyNavigationRuntime{};
+                continue;
+            }
+
+            const Vec2 worldSize = activeWorldSize();
+            const Vec2 halfEnemySize{
+                enemy.size().x * 0.5F,
+                enemy.size().y * 0.5F};
+            intent.reachableGoal = Vec2{
+                std::clamp(
+                    navigationGoal->x,
+                    halfEnemySize.x,
+                    worldSize.x - halfEnemySize.x),
+                std::clamp(
+                    navigationGoal->y,
+                    halfEnemySize.y,
+                    worldSize.y - halfEnemySize.y)};
+            navigation.refreshRemainingSeconds = std::max(
+                0.0F,
+                navigation.refreshRemainingSeconds - enemyStepTime);
+            const bool goalMoved = !navigation.goal.has_value() ||
+                distanceSquared(*navigation.goal, *intent.reachableGoal) >=
+                    kEnemyNavigationGoalRefreshDistance *
+                        kEnemyNavigationGoalRefreshDistance;
+            const bool perceptionChanged = navigation.initialized &&
+                navigation.targetVisible != intent.targetVisible;
+            intent.refreshRequired =
+                enemy.attackPhase() == EnemyAttackPhase::Idle &&
+                (!navigation.initialized || goalMoved || perceptionChanged ||
+                 navigation.refreshRemainingSeconds <= 0.0F);
+            refreshRequiredCount += intent.refreshRequired ? 1U : 0U;
+        }
+
+        std::size_t selectedRefreshCount{};
+        std::size_t &scheduleCursor = activeNavigationScheduleCursor();
+        if (!activeEnemySet.empty())
+        {
+            scheduleCursor %= activeEnemySet.size();
+            for (std::size_t scanned{};
+                 scanned < activeEnemySet.size() &&
+                 selectedRefreshCount <
+                     kMaximumNavigationQueriesPerEnemySubstep;
+                 ++scanned)
+            {
+                const std::size_t candidate =
+                    (scheduleCursor + scanned) % activeEnemySet.size();
+                if (!navigationIntents[candidate].refreshRequired)
+                {
+                    continue;
+                }
+                navigationIntents[candidate].selectedForRefresh = true;
+                ++selectedRefreshCount;
+                scheduleCursor = (candidate + 1U) % activeEnemySet.size();
+            }
+        }
+        else
+        {
+            scheduleCursor = 0U;
+        }
+        simulationWorkloadLastUpdate_.navigationRefreshesDeferred +=
+            refreshRequiredCount - selectedRefreshCount;
 
         for (std::size_t enemyIndex{0U};
              enemyIndex < activeEnemySet.size();
@@ -1039,9 +1203,10 @@ void GameplayWorld::update(
                 enemy.awarenessState();
             const Vec2 enemyPositionBeforeMovement = enemy.position();
             const Vec2 enemyPosition = enemyCenter(enemy);
+            const EnemyNavigationIntent &intent =
+                navigationIntents[enemyIndex];
             if (enemy.isDead())
             {
-                activeNavigationSet[enemyIndex] = EnemyNavigationRuntime{};
                 static_cast<void>(enemy.updateTowardsTarget(
                     playerPosition,
                     directives[enemyIndex],
@@ -1052,82 +1217,37 @@ void GameplayWorld::update(
                     std::nullopt));
                 continue;
             }
-            const bool targetVisible = raidSpaceHasLineOfSight(
-                enemyPosition,
-                playerPosition,
-                activeBlockerSet);
-            std::optional<Vec2> navigationGoal;
-            if (targetVisible)
-            {
-                navigationGoal = playerPosition;
-            }
-            else
-            {
-                navigationGoal = enemy.lastKnownTargetPosition();
-            }
 
             std::optional<Vec2> navigationTarget;
-            if (navigationGoal.has_value())
+            if (intent.reachableGoal.has_value())
             {
-                const Vec2 worldSize = activeWorldSize();
-                const Vec2 halfEnemySize{
-                    enemy.size().x * 0.5F,
-                    enemy.size().y * 0.5F};
-                const Vec2 reachableNavigationGoal{
-                    std::clamp(
-                        navigationGoal->x,
-                        halfEnemySize.x,
-                        worldSize.x - halfEnemySize.x),
-                    std::clamp(
-                        navigationGoal->y,
-                        halfEnemySize.y,
-                        worldSize.y - halfEnemySize.y)};
                 EnemyNavigationRuntime &navigation =
                     activeNavigationSet[enemyIndex];
-                navigation.refreshRemainingSeconds = std::max(
-                    0.0F,
-                    navigation.refreshRemainingSeconds - enemyStepTime);
-                const bool goalMoved = !navigation.goal.has_value() ||
-                    distanceSquared(
-                        *navigation.goal,
-                        reachableNavigationGoal) >=
-                        kEnemyNavigationGoalRefreshDistance *
-                            kEnemyNavigationGoalRefreshDistance;
-                const bool perceptionChanged =
-                    navigation.initialized &&
-                    navigation.targetVisible != targetVisible;
-                const bool refreshNavigation =
-                    enemy.attackPhase() == EnemyAttackPhase::Idle &&
-                    (!navigation.initialized || goalMoved ||
-                     perceptionChanged ||
-                     navigation.refreshRemainingSeconds <= 0.0F);
-                if (refreshNavigation && navigationQueriesRemaining > 0U)
+                if (intent.selectedForRefresh)
                 {
-                    --navigationQueriesRemaining;
                     ++navigationQueriesLastUpdate_;
+                    ++simulationWorkloadLastUpdate_.navigationQueries;
                     RaidSpaceNavigationField *navigationField =
                         activeNavigationField(enemy.size());
                     navigation.waypoint = navigationField == nullptr
                         ? std::nullopt
                         : navigationField->nextWaypoint(
                               enemyPosition,
-                              reachableNavigationGoal,
-                              enemy.navigationGoalTolerance(targetVisible));
+                              *intent.reachableGoal,
+                              enemy.navigationGoalTolerance(
+                                  intent.targetVisible));
                     if (!navigation.waypoint.has_value())
                     {
                         navigation.waypoint = enemyPosition;
                     }
-                    navigation.goal = reachableNavigationGoal;
-                    navigation.targetVisible = targetVisible;
+                    navigation.goal = *intent.reachableGoal;
+                    navigation.targetVisible = intent.targetVisible;
                     navigation.initialized = true;
+                    ++navigation.refreshCount;
                     navigation.refreshRemainingSeconds =
                         kEnemyNavigationRefreshSeconds;
                 }
                 navigationTarget = navigation.waypoint;
-            }
-            else
-            {
-                activeNavigationSet[enemyIndex] = EnemyNavigationRuntime{};
             }
 
             static_cast<void>(
@@ -1137,13 +1257,15 @@ void GameplayWorld::update(
                     enemyStepTime,
                     worldWidth(),
                     worldHeight(),
-                    targetVisible,
+                    intent.targetVisible,
                     navigationTarget));
             const Vec2 resolvedEnemyPosition = resolveMovementAgainstBlockers(
                 enemyPositionBeforeMovement,
                 enemy.size(),
                 enemy.position(),
-                activeBlockerSet);
+                activeStaticBlockers,
+                blockerQueryScratch_,
+                &simulationWorkloadLastUpdate_.movementBlockersExamined);
             static_cast<void>(enemy.setPosition(resolvedEnemyPosition));
             if (awarenessBefore != EnemyAwarenessState::Alerted &&
                 enemy.awarenessState() == EnemyAwarenessState::Alerted)
@@ -1156,10 +1278,9 @@ void GameplayWorld::update(
                 const std::optional<Rect> grabHitbox =
                     enemy.attackHitbox();
                 if (!grabHitbox.has_value() ||
-                    !raidSpaceHasLineOfSight(
+                    !hasLineOfSight(
                         enemyCenter(enemy),
-                        playerCenter(player_),
-                        activeBlockerSet) ||
+                        playerCenter(player_)) ||
                     !isCollision(
                         *grabHitbox,
                         playerBounds(player_)))
@@ -1212,10 +1333,9 @@ void GameplayWorld::update(
 
             if (!hitbox.has_value() ||
                 !attackConfig.has_value() ||
-                !raidSpaceHasLineOfSight(
+                !hasLineOfSight(
                     enemyCenter(enemy),
-                    playerCenter(player_),
-                    activeBlockerSet) ||
+                    playerCenter(player_)) ||
                 !isCollision(
                     *hitbox,
                     playerBounds(player_)))
@@ -1947,6 +2067,25 @@ std::size_t GameplayWorld::navigationQueriesLastUpdate() const noexcept
     return navigationQueriesLastUpdate_;
 }
 
+const RaidSimulationWorkload &
+GameplayWorld::simulationWorkloadLastUpdate() const noexcept
+{
+    return simulationWorkloadLastUpdate_;
+}
+
+std::vector<std::uint64_t> GameplayWorld::navigationRefreshCounts() const
+{
+    const std::vector<EnemyNavigationRuntime> &navigation =
+        activeEnemyNavigation();
+    std::vector<std::uint64_t> counts;
+    counts.reserve(navigation.size());
+    for (const EnemyNavigationRuntime &runtime : navigation)
+    {
+        counts.push_back(runtime.refreshCount);
+    }
+    return counts;
+}
+
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition)
 {
@@ -2568,12 +2707,41 @@ GameplayWorld::activeEnemyNavigation() noexcept
         : enemyNavigation_;
 }
 
+const std::vector<GameplayWorld::EnemyNavigationRuntime> &
+GameplayWorld::activeEnemyNavigation() const noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemyNavigation
+        : enemyNavigation_;
+}
+
 const std::vector<BallisticBlocker> &
 GameplayWorld::activeBallisticBlockers() const noexcept
 {
     return activeInteriorIndex_.has_value()
         ? interiors_[*activeInteriorIndex_].ballisticBlockers
         : ballisticBlockers_;
+}
+
+const RaidSpaceBlockerIndex &
+GameplayWorld::activeBlockerIndex() const noexcept
+{
+    const std::optional<RaidSpaceBlockerIndex> &index =
+        activeInteriorIndex_.has_value()
+            ? interiors_[*activeInteriorIndex_].blockerIndex
+            : outdoorBlockerIndex_;
+    if (!index.has_value())
+    {
+        std::terminate();
+    }
+    return *index;
+}
+
+std::size_t &GameplayWorld::activeNavigationScheduleCursor() noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].navigationScheduleCursor
+        : outdoorNavigationScheduleCursor_;
 }
 
 RaidSpaceNavigationField *

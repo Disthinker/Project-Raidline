@@ -198,6 +198,45 @@ namespace
         config.interiors.push_back(std::move(interior));
         return config;
     }
+
+    RaidWorldConfig makeScalabilityWorldConfig(
+        std::size_t enemyCount,
+        std::size_t blockerCount)
+    {
+        RaidWorldConfig config;
+        config.worldSize = Vec2{4000.0F, 2400.0F};
+        config.playerSpawn = Vec2{3700.0F, 1080.0F};
+        config.extractionPoint =
+            ContentRect{Vec2{3700.0F, 2200.0F}, Vec2{120.0F, 120.0F}};
+        config.playerMaximumHealth = 100;
+        config.playerCurrentHealth = 100;
+        config.deferPlayerDamageResolution = true;
+        config.initialEnemies.reserve(enemyCount);
+        for (std::size_t enemy{}; enemy < enemyCount; ++enemy)
+        {
+            config.initialEnemies.push_back(EnemySpawn{
+                Vec2{
+                    80.0F + static_cast<float>(enemy % 10U) * 65.0F,
+                    80.0F + static_cast<float>(enemy / 10U) * 120.0F},
+                Vec2{50.0F, 50.0F},
+                12});
+        }
+        config.ballisticBlockers.reserve(blockerCount);
+        for (std::size_t blocker{}; blocker < blockerCount; ++blocker)
+        {
+            const std::size_t column = blocker % 12U;
+            const std::size_t row = blocker / 12U;
+            config.ballisticBlockers.push_back(BallisticBlocker{
+                static_cast<std::uint32_t>(blocker + 1U),
+                Rect{
+                    Vec2{
+                        1250.0F + static_cast<float>(column) * 190.0F,
+                        60.0F + static_cast<float>(row) * 270.0F +
+                            (column % 2U == 0U ? 0.0F : 70.0F)},
+                    Vec2{48.0F, 90.0F}}});
+        }
+        return config;
+    }
 } // namespace
 
 // 初始 Player 位置是 (640, 360)
@@ -2724,6 +2763,107 @@ TEST(GameplayWorldPerformanceTest,
            "expensive navigation query.";
     EXPECT_LT(slowestFrame.count(), 100000)
         << "One dense navigation frame exceeded the coarse hitch guard.";
+}
+
+TEST(GameplayWorldPerformanceTest,
+     ThirtyTwoEnemiesStayInsideIntermediateDensityBudget)
+{
+    constexpr std::size_t kEnemyCount{32U};
+    constexpr std::size_t kFrames{120U};
+    GameplayWorld world{makeScalabilityWorldConfig(kEnemyCount, 64U)};
+    world.emitPlayerNoise(5000.0F);
+
+    std::chrono::microseconds slowestFrame{};
+    const auto started = std::chrono::steady_clock::now();
+    for (std::size_t frame{}; frame < kFrames; ++frame)
+    {
+        const auto frameStarted = std::chrono::steady_clock::now();
+        world.update(GameplayInput{}, 1.0F / 120.0F);
+        slowestFrame = std::max(
+            slowestFrame,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - frameStarted));
+        EXPECT_LE(
+            world.simulationWorkloadLastUpdate().navigationQueries,
+            1U);
+    }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started);
+    const std::vector<std::uint64_t> refreshCounts =
+        world.navigationRefreshCounts();
+    ASSERT_EQ(refreshCounts.size(), kEnemyCount);
+    EXPECT_TRUE(std::all_of(
+        refreshCounts.begin(), refreshCounts.end(),
+        [](std::uint64_t count) { return count >= 2U; }));
+    EXPECT_LT(elapsed.count(), 750);
+    EXPECT_LT(slowestFrame.count(), 25000);
+    std::cout << "32-enemy scalability simulation: "
+              << elapsed.count() << " ms, slowest frame: "
+              << slowestFrame.count() << " us\n";
+}
+
+TEST(GameplayWorldPerformanceTest,
+     HundredEnemiesReceiveFairNavigationUnderStaticSpatialLoad)
+{
+    constexpr std::size_t kEnemyCount{100U};
+    constexpr std::size_t kBlockerCount{96U};
+    constexpr std::size_t kFrames{120U};
+    GameplayWorld world{
+        makeScalabilityWorldConfig(kEnemyCount, kBlockerCount)};
+    world.emitPlayerNoise(5000.0F);
+
+    std::size_t neighborCandidates{};
+    std::size_t lineOfSightCandidates{};
+    std::size_t movementCandidates{};
+    std::size_t maximumNavigationQueries{};
+    std::chrono::microseconds slowestFrame{};
+    const auto started = std::chrono::steady_clock::now();
+    for (std::size_t frame{}; frame < kFrames; ++frame)
+    {
+        const auto frameStarted = std::chrono::steady_clock::now();
+        world.update(GameplayInput{}, 1.0F / 120.0F);
+        slowestFrame = std::max(
+            slowestFrame,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - frameStarted));
+        const RaidSimulationWorkload &workload =
+            world.simulationWorkloadLastUpdate();
+        neighborCandidates += workload.neighborCandidatesExamined;
+        lineOfSightCandidates += workload.lineOfSightBlockersExamined;
+        movementCandidates += workload.movementBlockersExamined;
+        maximumNavigationQueries = std::max(
+            maximumNavigationQueries,
+            workload.navigationQueries);
+    }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started);
+    const std::vector<std::uint64_t> refreshCounts =
+        world.navigationRefreshCounts();
+    ASSERT_EQ(refreshCounts.size(), kEnemyCount);
+    EXPECT_TRUE(std::all_of(
+        refreshCounts.begin(), refreshCounts.end(),
+        [](std::uint64_t count) { return count >= 1U; }))
+        << "Round-robin navigation must reach every active enemy before "
+           "revisiting the front of the collection.";
+    EXPECT_LE(maximumNavigationQueries, 1U);
+
+    const std::size_t allPairsNeighborChecks =
+        kEnemyCount * (kEnemyCount - 1U) * kFrames;
+    const std::size_t fullObstacleScans =
+        kEnemyCount * kBlockerCount * kFrames;
+    EXPECT_LT(neighborCandidates, allPairsNeighborChecks / 4U);
+    EXPECT_LT(lineOfSightCandidates, fullObstacleScans);
+    EXPECT_LT(movementCandidates, fullObstacleScans / 8U);
+    EXPECT_LT(elapsed.count(), 1000)
+        << "The 100-enemy Debug scalability guard exceeded one second.";
+    EXPECT_LT(slowestFrame.count(), 25000)
+        << "One 100-enemy simulation update exceeded the coarse hitch guard.";
+    std::cout << "100-enemy scalability simulation: "
+              << elapsed.count() << " ms, slowest frame: "
+              << slowestFrame.count() << " us, neighbor candidates: "
+              << neighborCandidates << ", LOS candidates: "
+              << lineOfSightCandidates << ", movement candidates: "
+              << movementCandidates << '\n';
 }
 
 TEST(GameplayWorldRaidTest,

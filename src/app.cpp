@@ -3943,6 +3943,20 @@ void App::processEvents()
             }
         }
 
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+            event.key.scancode == SDL_SCANCODE_F9 &&
+            (gameFlow_.state() == GameFlowState::Base ||
+             gameFlow_.state() == GameFlowState::Raid))
+        {
+            developerPerformanceOverlayOpen_ =
+                !developerPerformanceOverlayOpen_;
+            performanceOverlayLines_ = {};
+            uiMessage_ = developerPerformanceOverlayOpen_
+                ? "DEVELOPER PERFORMANCE OVERLAY OPEN"
+                : "DEVELOPER PERFORMANCE OVERLAY CLOSED";
+            continue;
+        }
+
         if (gameFlow_.state() == GameFlowState::Raid &&
             gameSession_.alphaRaidActive() && !pauseMenu_.isOpen())
         {
@@ -5119,7 +5133,7 @@ void App::renderDebugText()
             renderer_, 980.0F, 132.0F, medicalStatus.c_str());
         uiTextRenderer_.render(
             renderer_, 980.0F, 148.0F,
-            "F10 RUNTIME WEAPON TUNING");
+            "F9 PERFORMANCE | F10 RUNTIME WEAPON TUNING");
 
         for (std::size_t index = 0; index < kWeaponEquipmentSlots.size(); ++index)
         {
@@ -7624,7 +7638,11 @@ void App::renderEnemies()
             SDL_RenderRect(renderer_, &enemyRect);
         }
 
-        if (!enemy.isDead())
+        // Per-enemy text causes texture-cache and draw-call pressure exactly
+        // when enemy density is highest. Keep a bounded sample available as
+        // diagnostics only while the explicit performance overlay is open.
+        if (!enemy.isDead() && developerPerformanceOverlayOpen_ &&
+            enemyIndex < 16U)
         {
             const std::string enemyStateText = fmt::format(
                 "E{} {} {}",
@@ -9295,6 +9313,96 @@ void App::renderRaidSpacePortal()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+void App::renderDeveloperPerformanceOverlay()
+{
+    if (!developerPerformanceOverlayOpen_)
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect panel{344.0F, 12.0F, 592.0F, 174.0F};
+    SDL_SetRenderDrawColor(renderer_, 8, 15, 17, 225);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 88, 181, 165, 255);
+    SDL_RenderRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 224, 238, 230, 255);
+    uiTextRenderer_.render(
+        renderer_, panel.x + 12.0F, panel.y + 10.0F,
+        "RAID PERFORMANCE | F9 CLOSE");
+
+    if (performanceOverlayLines_.front().empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, panel.x + 12.0F, panel.y + 30.0F,
+            "NO FRAME SAMPLES");
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+
+    for (std::size_t index{}; index < performanceOverlayLines_.size(); ++index)
+    {
+        uiTextRenderer_.render(
+            renderer_, panel.x + 12.0F,
+            panel.y + 30.0F + static_cast<float>(index) * 18.0F,
+            performanceOverlayLines_[index].c_str());
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
+void App::refreshDeveloperPerformanceOverlay()
+{
+    const FramePerformanceSummary performance = framePerformance_.summary();
+    if (performance.sampleCount == 0U)
+    {
+        performanceOverlayLines_ = {};
+        return;
+    }
+    const RaidSimulationWorkload workload =
+        gameFlow_.state() == GameFlowState::Raid
+        ? gameSession_.world().simulationWorkloadLastUpdate()
+        : RaidSimulationWorkload{};
+    const float averageFps = performance.average.totalMilliseconds > 0.0F
+        ? 1000.0F / performance.average.totalMilliseconds
+        : 0.0F;
+    const auto timings = [](const FramePhaseDurations &sample)
+    {
+        return fmt::format(
+            "{:.2f}/{:.2f}/{:.2f}/{:.2f}",
+            sample.eventMilliseconds,
+            sample.updateMilliseconds,
+            sample.renderMilliseconds,
+            sample.totalMilliseconds);
+    };
+    const std::string header = fmt::format(
+        "FRAME EVENT/UPDATE/RENDER/TOTAL MS | {:.0f} FPS | {} SAMPLES",
+        averageFps,
+        performance.sampleCount);
+    const std::string average =
+        "AVG  " + timings(performance.average);
+    const std::string percentile =
+        "P95  " + timings(performance.percentile95);
+    const std::string maximum =
+        "MAX  " + timings(performance.maximum);
+    const std::string simulation = fmt::format(
+        "SIM ENEMIES {} | BLOCKERS {} | SUBSTEPS {}",
+        workload.activeEnemies,
+        workload.activeBlockers,
+        workload.enemySubsteps);
+    const std::string navigation = fmt::format(
+        "NAV QUERY {} | DEFERRED {} | NEIGHBOR {}",
+        workload.navigationQueries,
+        workload.navigationRefreshesDeferred,
+        workload.neighborCandidatesExamined);
+    const std::string collision = fmt::format(
+        "LOS TESTS {} | MOVE TESTS {}",
+        workload.lineOfSightBlockersExamined,
+        workload.movementBlockersExamined);
+    performanceOverlayLines_ = {
+        header, average, percentile, maximum,
+        simulation, navigation, collision};
+}
+
 void App::renderBaseAllocation()
 {
     const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
@@ -10939,6 +11047,7 @@ void App::render()
     }
 
     renderPauseMenu();
+    renderDeveloperPerformanceOverlay();
 
     SDL_RenderPresent(
         renderer_);
@@ -11010,9 +11119,32 @@ int App::run()
             static_cast<float>(frequency));
         lastCounter_ = currentCounter;
 
+        const Uint64 frameStart = currentCounter;
         processEvents();
+        const Uint64 eventsComplete = SDL_GetPerformanceCounter();
         update(deltaTime);
+        const Uint64 updateComplete = SDL_GetPerformanceCounter();
         render();
+        const Uint64 renderComplete = SDL_GetPerformanceCounter();
+        const auto milliseconds = [frequency](Uint64 start, Uint64 end)
+        {
+            return frequency == 0U
+                ? 0.0F
+                : static_cast<float>(end - start) * 1000.0F /
+                    static_cast<float>(frequency);
+        };
+        framePerformance_.record(FramePhaseDurations{
+            milliseconds(frameStart, eventsComplete),
+            milliseconds(eventsComplete, updateComplete),
+            milliseconds(updateComplete, renderComplete),
+            milliseconds(frameStart, renderComplete)});
+        ++framePerformanceSequence_;
+        if (developerPerformanceOverlayOpen_ &&
+            (performanceOverlayLines_.front().empty() ||
+             framePerformanceSequence_ % 30U == 0U))
+        {
+            refreshDeveloperPerformanceOverlay();
+        }
         pendingRelativeAimMotion_ = Vec2{};
         input_.endFrame();
     }

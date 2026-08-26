@@ -329,6 +329,8 @@ add_library(raidline_simulation STATIC
     src/raid_tactical_map.h
     src/raid_space_query.cpp
     src/raid_space_query.h
+    src/raid_space_spatial_index.cpp
+    src/raid_space_spatial_index.h
     src/player.cpp
     src/player.h
     src/shot_feedback_presentation.cpp
@@ -367,6 +369,8 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/frame_performance.cpp
+    src/frame_performance.h
     src/frame_timing.h
     src/game_audio.cpp
     src/game_audio.h
@@ -466,6 +470,10 @@ raidline_add_test(
     tests/test_frame_timing.cpp
     raidline::sdl_client)
 raidline_add_test(
+    FramePerformanceTest
+    tests/test_frame_performance.cpp
+    raidline::sdl_client)
+raidline_add_test(
     GameAudioTest
     tests/test_game_audio.cpp
     raidline::sdl_client)
@@ -526,6 +534,10 @@ raidline_add_test(
 raidline_add_test(
     RaidSpaceQueryTest
     tests/test_raid_space_query.cpp
+    raidline::simulation)
+raidline_add_test(
+    RaidSpaceBlockerIndexTest
+    tests/test_raid_space_spatial_index.cpp
     raidline::simulation)
 raidline_add_test(
     StorageCabinetTest

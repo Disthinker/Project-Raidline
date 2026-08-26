@@ -20,12 +20,25 @@
 #include "logical_ballistics.h"
 #include "raid_session.h"
 #include "raid_space_query.h"
+#include "raid_space_spatial_index.h"
 #include "raid_tactical_map.h"
 #include "shot_resolution.h"
 #include "shot_feedback_presentation.h"
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
 #include "weapon_aim.h"
+
+struct RaidSimulationWorkload
+{
+    std::size_t activeEnemies{};
+    std::size_t activeBlockers{};
+    std::size_t enemySubsteps{};
+    std::size_t navigationQueries{};
+    std::size_t navigationRefreshesDeferred{};
+    std::size_t neighborCandidatesExamined{};
+    std::size_t lineOfSightBlockersExamined{};
+    std::size_t movementBlockersExamined{};
+};
 #include "content_registry.h"
 #include "hit_resolution.h"
 #include "medical_types.h"
@@ -315,6 +328,10 @@ public:
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     [[nodiscard]] std::size_t enemiesAlertedLastUpdate() const noexcept;
     [[nodiscard]] std::size_t navigationQueriesLastUpdate() const noexcept;
+    [[nodiscard]] const RaidSimulationWorkload &
+    simulationWorkloadLastUpdate() const noexcept;
+    [[nodiscard]] std::vector<std::uint64_t>
+    navigationRefreshCounts() const;
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(
         const WeaponUseDefinition &definition,
@@ -395,6 +412,7 @@ private:
         float refreshRemainingSeconds{};
         bool targetVisible{};
         bool initialized{};
+        std::uint64_t refreshCount{};
     };
 
     struct InteriorRuntime
@@ -410,6 +428,8 @@ private:
         std::vector<Enemy> enemies;
         std::vector<BallisticBlocker> ballisticBlockers;
         std::vector<EnemyNavigationRuntime> enemyNavigation;
+        std::optional<RaidSpaceBlockerIndex> blockerIndex;
+        std::size_t navigationScheduleCursor{};
     };
 
     struct TracerPresentationSegment
@@ -454,6 +474,8 @@ private:
     std::vector<Enemy> enemies_;
     std::vector<EnemyNavigationRuntime> enemyNavigation_;
     std::vector<BallisticBlocker> ballisticBlockers_;
+    std::optional<RaidSpaceBlockerIndex> outdoorBlockerIndex_;
+    std::size_t outdoorNavigationScheduleCursor_{};
     std::vector<InteriorRuntime> interiors_;
     std::optional<std::size_t> activeInteriorIndex_;
     std::vector<NavigationFieldCache> navigationFieldCache_;
@@ -508,6 +530,8 @@ private:
     bool shotFiredLastUpdate_{};
     std::size_t enemiesAlertedLastUpdate_{};
     std::size_t navigationQueriesLastUpdate_{};
+    RaidSimulationWorkload simulationWorkloadLastUpdate_{};
+    std::vector<std::size_t> blockerQueryScratch_;
     bool alphaRaidWorld_{};
     bool deferPlayerDamageResolution_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;
@@ -538,8 +562,13 @@ private:
     [[nodiscard]] const std::vector<Enemy> &activeEnemies() const noexcept;
     [[nodiscard]] std::vector<EnemyNavigationRuntime> &
     activeEnemyNavigation() noexcept;
+    [[nodiscard]] const std::vector<EnemyNavigationRuntime> &
+    activeEnemyNavigation() const noexcept;
     [[nodiscard]] const std::vector<BallisticBlocker> &
     activeBallisticBlockers() const noexcept;
+    [[nodiscard]] const RaidSpaceBlockerIndex &
+    activeBlockerIndex() const noexcept;
+    [[nodiscard]] std::size_t &activeNavigationScheduleCursor() noexcept;
     [[nodiscard]] RaidSpaceNavigationField *
     activeNavigationField(Vec2 actorSize);
     void cacheNavigationFieldsForSpace(

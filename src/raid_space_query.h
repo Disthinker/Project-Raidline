@@ -2,9 +2,11 @@
 
 #include <optional>
 #include <span>
+#include <cstdint>
 #include <vector>
 
 #include "hit_resolution.h"
+#include "raid_space_spatial_index.h"
 #include "vec2.h"
 
 struct RaidSpaceNavigationQuery
@@ -17,6 +19,11 @@ struct RaidSpaceNavigationQuery
     float clearance{2.0F};
     float goalTolerance{};
 };
+
+[[nodiscard]] bool raidSpaceSegmentIntersectsBlockerInterior(
+    Vec2 start,
+    Vec2 end,
+    Rect blocker) noexcept;
 
 // Immutable navigation geometry for one actor footprint in one Raid space.
 // Static blocker expansion and corner-to-corner visibility are built once and
@@ -45,8 +52,21 @@ private:
     Vec2 worldSize_{};
     float clearance_{};
     std::vector<Rect> expandedBlockers_;
+    std::optional<RaidSpaceBlockerIndex> expandedBlockerIndex_;
     std::vector<Vec2> cornerNodes_;
     std::vector<float> cornerEdges_;
+    bool usesDenseGrid_{};
+    float denseGridCellSize_{};
+    Vec2 denseGridOrigin_{};
+    std::size_t denseGridColumns_{};
+    std::size_t denseGridRows_{};
+    std::vector<std::uint8_t> denseGridWalkable_;
+    std::vector<std::uint8_t> denseGridConnections_;
+
+    [[nodiscard]] std::optional<Vec2> nextDenseGridWaypoint(
+        Vec2 start,
+        Vec2 goal,
+        float goalTolerance) const;
 };
 
 [[nodiscard]] bool raidSpaceHasLineOfSight(
