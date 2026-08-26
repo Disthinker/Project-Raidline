@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <limits>
 
+#include "base_workforce_domain.h"
+
 namespace
 {
 bool hasChildren(const ProfileState &profile, AssetInstanceId ownerId) noexcept
@@ -35,7 +37,27 @@ ResidentTreatmentPlan failure(
         definition.requiredContribution,
         0U,
         definition.durationMinutes,
+        BaseResidentProfession::General,
+        BaseResidentProfession::General,
         {}};
+}
+
+BaseResidentProfession nextInjuredProfession(
+    const BasePopulationState &population) noexcept
+{
+    for (BaseResidentProfession profession : {
+             BaseResidentProfession::Medical,
+             BaseResidentProfession::Engineering,
+             BaseResidentProfession::Combat,
+             BaseResidentProfession::General})
+    {
+        if (population.injuredByProfession[
+                baseProfessionIndex(profession)] > 0U)
+        {
+            return profession;
+        }
+    }
+    return BaseResidentProfession::General;
 }
 }
 
@@ -94,12 +116,49 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             "no injured resident requires treatment",
             definition);
     }
+    if (!profile.baseWorkforce.medicalWorker.has_value())
+    {
+        return failure(
+            profile,
+            DomainErrorCode::Capacity,
+            "the medical facility has no assigned worker",
+            definition);
+    }
+    const BaseResidentProfession workerProfession =
+        *profile.baseWorkforce.medicalWorker;
+    const std::size_t workerIndex = baseProfessionIndex(workerProfession);
+    if (workerIndex >= kBaseResidentProfessionCount ||
+        profile.basePopulation.professionResidents[workerIndex] <=
+            profile.basePopulation.injuredByProfession[workerIndex])
+    {
+        return failure(
+            profile,
+            DomainErrorCode::Capacity,
+            "the assigned medical worker is not healthy",
+            definition);
+    }
+    const BaseResidentProfession patientProfession =
+        nextInjuredProfession(profile.basePopulation);
+    const std::uint32_t adjustedDuration = applyBaseFacilityTaskDuration(
+        definition.durationMinutes,
+        BaseFacilityStaffingKind::Medical,
+        workerProfession,
+        profile.baseConstruction.medicalLevel,
+        content.baseWorkforce());
+    if (adjustedDuration == 0U)
+    {
+        return failure(
+            profile,
+            DomainErrorCode::Capacity,
+            "the medical worker profession is not eligible",
+            definition);
+    }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max() ||
         profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
         profile.worldClock.elapsedWorldMinutes >
             std::numeric_limits<std::uint64_t>::max() -
-                definition.durationMinutes)
+                adjustedDuration)
     {
         return failure(
             profile,
@@ -155,7 +214,9 @@ ResidentTreatmentPlan queryStartResidentTreatment(
         profile.revision,
         definition.requiredContribution,
         0U,
-        definition.durationMinutes,
+        adjustedDuration,
+        patientProfession,
+        workerProfession,
         {}};
     std::uint32_t remaining = definition.requiredContribution;
     for (const Candidate &candidate : candidates)
@@ -239,7 +300,9 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
         jobId,
         candidate.worldClock.elapsedWorldMinutes,
         candidate.worldClock.elapsedWorldMinutes + plan.durationMinutes,
-        plan.plannedContribution};
+        plan.plannedContribution,
+        plan.patientProfession,
+        plan.workerProfession};
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
@@ -275,6 +338,13 @@ ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
     if (profile.basePopulation.injuredResidents > 0U)
     {
         --profile.basePopulation.injuredResidents;
+    }
+    const std::size_t professionIndex = baseProfessionIndex(
+        profile.residentMedical.activeTreatment->patientProfession);
+    if (professionIndex < kBaseResidentProfessionCount &&
+        profile.basePopulation.injuredByProfession[professionIndex] > 0U)
+    {
+        --profile.basePopulation.injuredByProfession[professionIndex];
     }
     profile.residentMedical.activeTreatment.reset();
     return {true, jobId, profile.basePopulation.injuredResidents};

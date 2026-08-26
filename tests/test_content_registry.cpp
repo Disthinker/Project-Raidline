@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-morale-events-content-26");
+        "base-workforce-facilities-content-27");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -95,17 +95,21 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     EXPECT_EQ(registry.maximumBaseConstructionMaterials(), 100U);
-    ASSERT_EQ(registry.baseConstructionProjects().size(), 1U);
+    ASSERT_EQ(registry.baseConstructionProjects().size(), 3U);
     const BaseConstructionProjectDefinition &dormitory =
         registry.baseConstructionProject(
             BaseConstructionProjectDefinitionId{
                 "base_construction.dormitory.level_2"});
-    EXPECT_EQ(dormitory.requiredDormitoryLevel, 1U);
-    EXPECT_EQ(dormitory.targetDormitoryLevel, 2U);
+    EXPECT_EQ(dormitory.target, BaseFacilityUpgradeTarget::Dormitory);
+    EXPECT_EQ(dormitory.requiredLevel, 1U);
+    EXPECT_EQ(dormitory.targetLevel, 2U);
     EXPECT_EQ(dormitory.materialCost, 4U);
     EXPECT_EQ(dormitory.workerCount, 3U);
     EXPECT_EQ(dormitory.durationMinutes, 360U);
     EXPECT_EQ(dormitory.bedCapacityAfter, 14U);
+    EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
+    EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
+    EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
     ASSERT_EQ(registry.baseManufacturingRecipes().size(), 1U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
@@ -434,8 +438,8 @@ TEST(ContentRegistryTest, RejectsInvalidBaseConstructionDefinition)
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(replaceFirst(
             publishedJsonCopy(),
-            "\"target_dormitory_level\": 2",
-            "\"target_dormitory_level\": 3"))),
+            "\"target_level\": 2",
+            "\"target_level\": 3"))),
         ContentRegistryError);
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(replaceFirst(

@@ -6,6 +6,8 @@ struct BaseConstructionProjection {
   std::uint32_t materialUnits{};
   std::uint32_t maximumMaterialUnits{};
   std::uint32_t dormitoryLevel{};
+  std::uint32_t workshopLevel{};
+  std::uint32_t medicalLevel{};
   std::uint32_t bedCapacity{};
   std::uint32_t totalWorkers{};
   std::uint32_t committedWorkers{};
@@ -65,6 +67,9 @@ struct BaseConstructionPlan {
   std::uint32_t materialCost{};
   std::uint32_t workerCount{};
   std::uint32_t durationMinutes{};
+  BaseFacilityUpgradeTarget target{BaseFacilityUpgradeTarget::Dormitory};
+  std::uint32_t currentLevel{};
+  std::uint32_t targetLevel{};
   std::uint32_t bedCapacityAfter{};
 };
 
@@ -76,6 +81,8 @@ struct BaseConstructionReceipt {
   ProfileRevision revision{};
   std::uint32_t materialUnits{};
   std::uint32_t dormitoryLevel{};
+  std::uint32_t workshopLevel{};
+  std::uint32_t medicalLevel{};
   std::uint32_t bedCapacity{};
 };
 
@@ -102,6 +109,9 @@ executeCancelBaseConstruction(ProfileState &profile,
 struct BaseConstructionAdvanceResult {
   bool completed{};
   BaseConstructionProjectDefinitionId definitionId;
+  BaseFacilityUpgradeTarget target{BaseFacilityUpgradeTarget::Dormitory};
+  std::uint32_t levelBefore{};
+  std::uint32_t levelAfter{};
   std::uint32_t bedCapacityBefore{};
   std::uint32_t bedCapacityAfter{};
   std::uint32_t releasedWorkers{};

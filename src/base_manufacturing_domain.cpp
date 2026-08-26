@@ -1,6 +1,7 @@
 #include "base_manufacturing_domain.h"
 
 #include "base_morale_domain.h"
+#include "base_workforce_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -49,23 +50,6 @@ bool hasChildren(
                     ProfileContainerKind::AssetCompartment &&
                 stored->container.ownerAssetId == parent;
         });
-}
-
-std::uint32_t committedConstructionWorkers(
-    const ProfileState &profile) noexcept
-{
-    return profile.baseConstruction.activeProject.has_value()
-        ? profile.baseConstruction.activeProject->committedWorkers
-        : 0U;
-}
-
-std::uint32_t healthyWorkers(const ProfileState &profile) noexcept
-{
-    return profile.basePopulation.ordinaryResidents >
-            profile.basePopulation.injuredResidents
-        ? profile.basePopulation.ordinaryResidents -
-              profile.basePopulation.injuredResidents
-        : 0U;
 }
 
 bool prepareReturns(
@@ -196,23 +180,43 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             "the workshop production slot is occupied",
             profile.revision);
     }
-    const std::uint32_t constructionWorkers =
-        committedConstructionWorkers(profile);
-    const std::uint32_t availableWorkers = healthyWorkers(profile) >
-            constructionWorkers
-        ? healthyWorkers(profile) - constructionWorkers
-        : 0U;
-    if (availableWorkers < recipe->workerCount)
+    if (!profile.baseWorkforce.workshopWorker.has_value() ||
+        recipe->workerCount != 1U)
     {
         return startFailure(
             DomainErrorCode::Capacity,
-            "insufficient healthy Base workers",
+            "the workshop has no assigned worker",
             profile.revision);
     }
-    const std::uint32_t adjustedDuration = applyBaseMoraleDurationPercent(
+    const BaseResidentProfession workerProfession =
+        *profile.baseWorkforce.workshopWorker;
+    const std::size_t workerIndex = baseProfessionIndex(workerProfession);
+    if (workerIndex >= kBaseResidentProfessionCount ||
+        profile.basePopulation.professionResidents[workerIndex] <=
+            profile.basePopulation.injuredByProfession[workerIndex])
+    {
+        return startFailure(
+            DomainErrorCode::Capacity,
+            "the assigned workshop worker is not healthy",
+            profile.revision);
+    }
+    const std::uint32_t moraleDuration = applyBaseMoraleDurationPercent(
         recipe->durationMinutes,
         profile.baseMorale.tier,
         content.baseMorale());
+    const std::uint32_t adjustedDuration = applyBaseFacilityTaskDuration(
+        moraleDuration,
+        BaseFacilityStaffingKind::Workshop,
+        workerProfession,
+        profile.baseConstruction.workshopLevel,
+        content.baseWorkforce());
+    if (adjustedDuration == 0U)
+    {
+        return startFailure(
+            DomainErrorCode::Capacity,
+            "the workshop worker profession is not eligible",
+            profile.revision);
+    }
     if (profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
         profile.assets.nextAssetId() ==
@@ -233,6 +237,7 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
         {},
         profile.revision,
         recipe->workerCount,
+        workerProfession,
         adjustedDuration};
     std::set<AssetInstanceId> selected;
     for (const BaseManufacturingInputDefinition &input : recipe->inputs)
@@ -323,6 +328,7 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
         jobId,
         command.recipeDefinitionId,
         plan.workerCount,
+        plan.workerProfession,
         candidate.worldClock.elapsedWorldMinutes,
         candidate.worldClock.elapsedWorldMinutes + plan.durationMinutes,
         std::move(inputIds),

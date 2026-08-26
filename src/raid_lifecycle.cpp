@@ -312,7 +312,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "base-morale-events-8";
+    snapshot.rulesVersion = "base-workforce-facilities-9";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -331,8 +331,10 @@ DeployReceipt executeDeploy(
         candidate.baseMorale,
         candidate.baseCommunityEvent,
         candidate.baseConstruction,
+        candidate.baseWorkforce,
         candidate.basePopulation.bedCapacity,
         candidate.basePopulation.injuredResidents,
+        candidate.basePopulation.injuredByProfession,
         candidate.residentMedical};
     if (map->rescue.has_value() &&
         !candidate.committedRescues.contains(map->rescue->id))
@@ -344,6 +346,7 @@ DeployReceipt executeDeploy(
             map->rescue->interactionDurationSeconds,
             map->rescue->ordinaryResidentCount,
             map->rescue->injuredResidentCount,
+            map->rescue->profession,
             false};
     }
     for (const EnemySpawnDefinition &enemy : deployment.enemies)
@@ -607,10 +610,14 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingBaseCommunityEvent;
     const BaseConstructionState startingBaseConstruction =
         candidate.pendingRaid->travel.startingBaseConstruction;
+    const BaseWorkforceState startingBaseWorkforce =
+        candidate.pendingRaid->travel.startingBaseWorkforce;
     const std::uint32_t startingBedCapacity =
         candidate.pendingRaid->travel.startingBedCapacity;
     const std::uint32_t startingInjuredResidents =
         candidate.pendingRaid->travel.startingInjuredResidents;
+    const BaseProfessionCounts startingInjuredByProfession =
+        candidate.pendingRaid->travel.startingInjuredByProfession;
     const BaseResidentMedicalState startingResidentMedical =
         candidate.pendingRaid->travel.startingResidentMedical;
     std::set<AssetInstanceId> generatedLoot;
@@ -642,8 +649,11 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.baseMorale = startingBaseMorale;
     candidate.baseCommunityEvent = startingBaseCommunityEvent;
     candidate.baseConstruction = startingBaseConstruction;
+    candidate.baseWorkforce = startingBaseWorkforce;
     candidate.basePopulation.bedCapacity = startingBedCapacity;
     candidate.basePopulation.injuredResidents = startingInjuredResidents;
+    candidate.basePopulation.injuredByProfession =
+        startingInjuredByProfession;
     candidate.residentMedical = startingResidentMedical;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();

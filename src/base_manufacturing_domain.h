@@ -31,6 +31,7 @@ struct BaseManufacturingStartPlan
     std::string message;
     ProfileRevision revision{};
     std::uint32_t workerCount{};
+    BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::uint32_t durationMinutes{};
     std::vector<BaseManufacturingInputSelection> inputs;
 };
@@ -107,4 +108,3 @@ struct BaseManufacturingAdvanceResult
 [[nodiscard]] BaseManufacturingAdvanceResult applyBaseManufacturingThrough(
     ProfileState &profile,
     const ContentRegistry &content);
-

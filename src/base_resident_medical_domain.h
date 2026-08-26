@@ -32,6 +32,8 @@ struct ResidentTreatmentPlan
     std::uint32_t requiredContribution{};
     std::uint32_t plannedContribution{};
     std::uint32_t durationMinutes{};
+    BaseResidentProfession patientProfession{BaseResidentProfession::General};
+    BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::vector<ResidentMedicalSupplySelection> supplies;
 };
 

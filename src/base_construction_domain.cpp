@@ -1,5 +1,7 @@
 #include "base_construction_domain.h"
 
+#include "base_workforce_domain.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -38,7 +40,38 @@ BaseConstructionReceipt receiptFailure(const BaseConstructionPlan &plan,
           profile.revision,
           profile.baseConstruction.materialUnits,
           profile.baseConstruction.dormitoryLevel,
+          profile.baseConstruction.workshopLevel,
+          profile.baseConstruction.medicalLevel,
           profile.basePopulation.bedCapacity};
+}
+
+std::uint32_t facilityLevel(const BaseConstructionState &state,
+                            BaseFacilityUpgradeTarget target) noexcept {
+  switch (target) {
+  case BaseFacilityUpgradeTarget::Dormitory:
+    return state.dormitoryLevel;
+  case BaseFacilityUpgradeTarget::Workshop:
+    return state.workshopLevel;
+  case BaseFacilityUpgradeTarget::Medical:
+    return state.medicalLevel;
+  }
+  return 0U;
+}
+
+void setFacilityLevel(BaseConstructionState &state,
+                      BaseFacilityUpgradeTarget target,
+                      std::uint32_t level) noexcept {
+  switch (target) {
+  case BaseFacilityUpgradeTarget::Dormitory:
+    state.dormitoryLevel = level;
+    break;
+  case BaseFacilityUpgradeTarget::Workshop:
+    state.workshopLevel = level;
+    break;
+  case BaseFacilityUpgradeTarget::Medical:
+    state.medicalLevel = level;
+    break;
+  }
 }
 } // namespace
 
@@ -49,6 +82,8 @@ projectBaseConstruction(const ProfileState &profile,
       profile.baseConstruction.materialUnits,
       content.maximumBaseConstructionMaterials(),
       profile.baseConstruction.dormitoryLevel,
+      profile.baseConstruction.workshopLevel,
+      profile.baseConstruction.medicalLevel,
       profile.basePopulation.bedCapacity,
       profile.basePopulation.ordinaryResidents >
               profile.basePopulation.injuredResidents
@@ -65,17 +100,7 @@ projectBaseConstruction(const ProfileState &profile,
           active.completionWorldMinute - profile.worldClock.elapsedWorldMinutes;
     }
   }
-  const std::uint32_t manufacturingWorkers =
-      profile.baseManufacturing.activeOrder.has_value() &&
-              !profile.baseManufacturing.activeOrder->outputReady
-          ? profile.baseManufacturing.activeOrder->committedWorkers
-          : 0U;
-  projection.availableWorkers =
-      projection.totalWorkers >
-              projection.committedWorkers + manufacturingWorkers
-          ? projection.totalWorkers - projection.committedWorkers -
-                manufacturingWorkers
-          : 0U;
+  projection.availableWorkers = availableBaseWorkers(profile);
   return projection;
 }
 
@@ -199,10 +224,11 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "another Base construction project is active",
                                profile.revision);
   }
-  if (profile.baseConstruction.dormitoryLevel !=
-      definition->requiredDormitoryLevel) {
+  const std::uint32_t currentLevel = facilityLevel(
+      profile.baseConstruction, definition->target);
+  if (currentLevel != definition->requiredLevel) {
     return constructionFailure(DomainErrorCode::IllegalDestination,
-                               "dormitory level does not match this project",
+                               "facility level does not match this project",
                                profile.revision);
   }
   if (profile.baseConstruction.materialUnits < definition->materialCost) {
@@ -210,21 +236,7 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "insufficient Base construction material",
                                profile.revision);
   }
-  const std::uint32_t healthyWorkers =
-      profile.basePopulation.ordinaryResidents >
-              profile.basePopulation.injuredResidents
-          ? profile.basePopulation.ordinaryResidents -
-                profile.basePopulation.injuredResidents
-          : 0U;
-  const std::uint32_t manufacturingWorkers =
-      profile.baseManufacturing.activeOrder.has_value() &&
-              !profile.baseManufacturing.activeOrder->outputReady
-          ? profile.baseManufacturing.activeOrder->committedWorkers
-          : 0U;
-  const std::uint32_t availableWorkers =
-      healthyWorkers > manufacturingWorkers
-          ? healthyWorkers - manufacturingWorkers
-          : 0U;
+  const std::uint32_t availableWorkers = availableBaseWorkers(profile);
   if (availableWorkers < definition->workerCount) {
     return constructionFailure(DomainErrorCode::Capacity,
                                "insufficient available Base workers",
@@ -243,6 +255,9 @@ queryStartBaseConstruction(const ProfileState &profile,
           definition->materialCost,
           definition->workerCount,
           definition->durationMinutes,
+          definition->target,
+          currentLevel,
+          definition->targetLevel,
           definition->bedCapacityAfter};
 }
 
@@ -263,6 +278,8 @@ executeStartBaseConstruction(ProfileState &profile,
             profile.revision,
             profile.baseConstruction.materialUnits,
             profile.baseConstruction.dormitoryLevel,
+            profile.baseConstruction.workshopLevel,
+            profile.baseConstruction.medicalLevel,
             profile.basePopulation.bedCapacity};
   }
   if (context.expectedRevision != profile.revision) {
@@ -300,6 +317,8 @@ executeStartBaseConstruction(ProfileState &profile,
           profile.revision,
           profile.baseConstruction.materialUnits,
           profile.baseConstruction.dormitoryLevel,
+          profile.baseConstruction.workshopLevel,
+          profile.baseConstruction.medicalLevel,
           profile.basePopulation.bedCapacity};
 }
 
@@ -349,6 +368,8 @@ executeCancelBaseConstruction(ProfileState &profile,
             profile.revision,
             profile.baseConstruction.materialUnits,
             profile.baseConstruction.dormitoryLevel,
+            profile.baseConstruction.workshopLevel,
+            profile.baseConstruction.medicalLevel,
             profile.basePopulation.bedCapacity};
   }
   if (context.expectedRevision != profile.revision) {
@@ -387,6 +408,8 @@ executeCancelBaseConstruction(ProfileState &profile,
           profile.revision,
           profile.baseConstruction.materialUnits,
           profile.baseConstruction.dormitoryLevel,
+          profile.baseConstruction.workshopLevel,
+          profile.baseConstruction.medicalLevel,
           profile.basePopulation.bedCapacity};
 }
 
@@ -402,16 +425,26 @@ applyBaseConstructionThrough(ProfileState &profile,
       *profile.baseConstruction.activeProject;
   const BaseConstructionProjectDefinition &definition =
       content.baseConstructionProject(active.definitionId);
-  if (profile.baseConstruction.dormitoryLevel !=
-          definition.requiredDormitoryLevel ||
+  const std::uint32_t beforeLevel = facilityLevel(
+      profile.baseConstruction, definition.target);
+  if (beforeLevel != definition.requiredLevel ||
       active.lockedMaterialUnits != definition.materialCost ||
       active.committedWorkers != definition.workerCount) {
     return {};
   }
   const std::uint32_t before = profile.basePopulation.bedCapacity;
-  profile.baseConstruction.dormitoryLevel = definition.targetDormitoryLevel;
-  profile.basePopulation.bedCapacity = definition.bedCapacityAfter;
+  setFacilityLevel(
+      profile.baseConstruction, definition.target, definition.targetLevel);
+  if (definition.target == BaseFacilityUpgradeTarget::Dormitory) {
+    profile.basePopulation.bedCapacity = definition.bedCapacityAfter;
+  }
   profile.baseConstruction.activeProject.reset();
-  return {true, definition.id, before, definition.bedCapacityAfter,
+  return {true,
+          definition.id,
+          definition.target,
+          beforeLevel,
+          definition.targetLevel,
+          before,
+          profile.basePopulation.bedCapacity,
           active.committedWorkers};
 }

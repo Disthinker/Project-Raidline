@@ -169,6 +169,17 @@ OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(
     candidate.basePopulation.ordinaryResidents = plan.residentsAfter;
     candidate.basePopulation.injuredResidents =
         plan.injuredResidentsAfter;
+    const std::size_t professionIndex = static_cast<std::size_t>(
+        definition->profession);
+    if (professionIndex >= kBaseResidentProfessionCount)
+    {
+        return {false, false, RaidRescueError::InvalidCommand,
+                "rescue profession is invalid", profile.revision};
+    }
+    candidate.basePopulation.professionResidents[professionIndex] +=
+        command.ordinaryResidentCount;
+    candidate.basePopulation.injuredByProfession[professionIndex] +=
+        command.injuredResidentCount;
     candidate.committedRescues.insert(command.rescueDefinitionId);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;

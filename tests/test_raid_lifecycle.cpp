@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "base_workforce_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -100,7 +102,9 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(deploy(
         profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, "base-morale-events-8");
+    EXPECT_EQ(
+        profile.pendingRaid->rulesVersion,
+        "base-workforce-facilities-9");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -152,6 +156,8 @@ TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)
     EXPECT_EQ(profile.basePopulation.bedCapacity, 14U);
     // Models a rescue fact that must survive a later Raid rollback.
     ++profile.basePopulation.ordinaryResidents;
+    ++profile.basePopulation.professionResidents[baseProfessionIndex(
+        BaseResidentProfession::General)];
 
     ASSERT_TRUE(rollbackPendingRaidToBase(
         profile,

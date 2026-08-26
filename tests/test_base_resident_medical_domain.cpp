@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "base_workforce_domain.h"
+
 #include "base_construction_domain.h"
 #include "base_resident_medical_domain.h"
 
@@ -32,6 +34,8 @@ TEST(BaseResidentMedicalDomainTest,
     ProfileState profile = makeNewAlphaProfile(
         "resident-treatment-start", publishedContentRegistry());
     profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     const ItemDefinitionId toiletPaper{"item.loot.toilet_paper"};
     const AssetInstanceId first = createStashAsset(profile, toiletPaper, 2U);
     const AssetInstanceId second = createStashAsset(profile, toiletPaper, 2U);
@@ -79,6 +83,8 @@ TEST(BaseResidentMedicalDomainTest, TreatmentCompletesOnlyAtWorldTimeBoundary)
     ProfileState profile = makeNewAlphaProfile(
         "resident-treatment-complete", publishedContentRegistry());
     profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     const ItemDefinitionId medkit{"item.medical.medkit_alpha"};
     static_cast<void>(createStashAsset(profile, medkit, 1U));
     profile.baseSupplyPolicy.assignments[medkit] =
@@ -113,6 +119,8 @@ TEST(BaseResidentMedicalDomainTest, RejectionsPreserveFingerprint)
     ProfileState profile = makeNewAlphaProfile(
         "resident-treatment-reject", publishedContentRegistry());
     profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(
+        BaseResidentProfession::General)] = 1U;
     const ItemDefinitionId medkit{"item.medical.medkit_alpha"};
     static_cast<void>(createStashAsset(profile, medkit, 1U));
     profile.baseSupplyPolicy.assignments[medkit] = BaseSupplyCategory::Food;
@@ -156,5 +164,5 @@ TEST(BaseResidentMedicalDomainTest, InjuredResidentsAreNotAvailableWorkers)
 
     EXPECT_EQ(medical.healthyResidents, 5U);
     EXPECT_EQ(construction.totalWorkers, 5U);
-    EXPECT_EQ(construction.availableWorkers, 5U);
+    EXPECT_EQ(construction.availableWorkers, 3U);
 }

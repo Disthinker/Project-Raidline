@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-morale-events-content-26",
+  "content_version": "base-workforce-facilities-content-27",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -21,18 +21,44 @@
     "strained_below_reserve_days": 3,
     "supported_at_reserve_days": 7
   },
+  "base_workforce": {
+    "general_fallback_duration_percent": 150,
+    "workshop_level_2_duration_percent": 85,
+    "medical_level_2_duration_percent": 85
+  },
   "base_construction": {
     "maximum_material_units": 100,
     "projects": [
       {
         "id": "base_construction.dormitory.level_2",
         "display_name": "Dormitory Expansion",
-        "required_dormitory_level": 1,
-        "target_dormitory_level": 2,
+        "target_facility": "dormitory",
+        "required_level": 1,
+        "target_level": 2,
         "material_cost": 4,
         "worker_count": 3,
         "duration_minutes": 360,
         "bed_capacity_after": 14
+      },
+      {
+        "id": "base_construction.workshop.level_2",
+        "display_name": "Workshop Upgrade",
+        "target_facility": "workshop",
+        "required_level": 1,
+        "target_level": 2,
+        "material_cost": 6,
+        "worker_count": 3,
+        "duration_minutes": 720
+      },
+      {
+        "id": "base_construction.medical.level_2",
+        "display_name": "Medical Facility Upgrade",
+        "target_facility": "medical",
+        "required_level": 1,
+        "target_level": 2,
+        "material_cost": 6,
+        "worker_count": 3,
+        "duration_minutes": 720
       }
     ]
   },
@@ -801,7 +827,8 @@
         "subject_kind": "ordinary_residents",
         "transfer_point": {"position": {"x": 40, "y": 290}, "size": {"x": 200, "y": 120}},
         "interaction_duration_seconds": 2,
-        "ordinary_resident_count": 1
+        "ordinary_resident_count": 1,
+        "profession": "general"
       },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
@@ -880,7 +907,8 @@
         "subject_kind": "ordinary_residents",
         "transfer_point": {"position": {"x": 1010, "y": 190}, "size": {"x": 170, "y": 90}},
         "interaction_duration_seconds": 2,
-        "ordinary_resident_count": 1
+        "ordinary_resident_count": 1,
+        "profession": "medical"
       },
       "high_risk": {
         "regular_phase_duration_seconds": 180,
@@ -960,7 +988,8 @@
         "transfer_point": {"position": {"x": 400, "y": 430}, "size": {"x": 170, "y": 90}},
         "interaction_duration_seconds": 2,
         "ordinary_resident_count": 1,
-        "injured_resident_count": 1
+        "injured_resident_count": 1,
+        "profession": "engineering"
       },
       "high_risk": {
         "regular_phase_duration_seconds": 180,

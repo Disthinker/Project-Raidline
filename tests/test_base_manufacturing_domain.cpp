@@ -224,6 +224,8 @@ TEST(BaseManufacturingDomainTest,
     ProfileState profile = makeProfile();
     profile.basePopulation.injuredResidents =
         profile.basePopulation.ordinaryResidents;
+    profile.basePopulation.injuredByProfession =
+        profile.basePopulation.professionResidents;
     addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
     addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
     const std::uint64_t before = profileStateFingerprint(profile);
@@ -234,6 +236,7 @@ TEST(BaseManufacturingDomainTest,
     EXPECT_EQ(profileStateFingerprint(profile), before);
 
     profile.basePopulation.injuredResidents = 0U;
+    profile.basePopulation.injuredByProfession = {};
     const ProfileRevision revision = profile.revision;
     const BaseManufacturingReceipt stale = executeStartBaseManufacturing(
         profile,

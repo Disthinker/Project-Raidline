@@ -193,6 +193,88 @@ std::optional<BaseSupplyCategory> parseBaseSupplyCategory(
     return std::nullopt;
 }
 
+std::string baseResidentProfessionValue(BaseResidentProfession profession)
+{
+    switch (profession)
+    {
+    case BaseResidentProfession::General:
+        return "general";
+    case BaseResidentProfession::Medical:
+        return "medical";
+    case BaseResidentProfession::Engineering:
+        return "engineering";
+    case BaseResidentProfession::Combat:
+        return "combat";
+    }
+    return "invalid";
+}
+
+std::optional<BaseResidentProfession> parseBaseResidentProfession(
+    std::string_view value)
+{
+    if (value == "general") return BaseResidentProfession::General;
+    if (value == "medical") return BaseResidentProfession::Medical;
+    if (value == "engineering") return BaseResidentProfession::Engineering;
+    if (value == "combat") return BaseResidentProfession::Combat;
+    return std::nullopt;
+}
+
+Json baseProfessionCountsValue(const BaseProfessionCounts &counts)
+{
+    return {
+        {"general", counts[static_cast<std::size_t>(
+            BaseResidentProfession::General)]},
+        {"medical", counts[static_cast<std::size_t>(
+            BaseResidentProfession::Medical)]},
+        {"engineering", counts[static_cast<std::size_t>(
+            BaseResidentProfession::Engineering)]},
+        {"combat", counts[static_cast<std::size_t>(
+            BaseResidentProfession::Combat)]}};
+}
+
+BaseProfessionCounts parseBaseProfessionCounts(const Json &value)
+{
+    return {
+        value.at("general").get<std::uint32_t>(),
+        value.at("medical").get<std::uint32_t>(),
+        value.at("engineering").get<std::uint32_t>(),
+        value.at("combat").get<std::uint32_t>()};
+}
+
+Json optionalProfessionValue(
+    const std::optional<BaseResidentProfession> &profession)
+{
+    return profession.has_value()
+        ? Json(baseResidentProfessionValue(*profession))
+        : Json(nullptr);
+}
+
+std::optional<BaseResidentProfession> parseOptionalProfession(
+    const Json &value)
+{
+    if (value.is_null())
+    {
+        return std::nullopt;
+    }
+    const auto profession = parseBaseResidentProfession(
+        value.get<std::string>());
+    if (!profession.has_value())
+    {
+        throw std::runtime_error{"Base resident profession is invalid"};
+    }
+    return profession;
+}
+
+BaseResidentProfession parseRequiredProfession(const Json &value)
+{
+    const auto profession = parseOptionalProfession(value);
+    if (!profession.has_value())
+    {
+        throw std::runtime_error{"Base resident profession is required"};
+    }
+    return *profession;
+}
+
 std::string baseMoraleTierValue(BaseMoraleTier tier)
 {
     switch (tier)
@@ -556,12 +638,28 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["base_population"]["injured_residents"] =
                 profile.basePopulation.injuredResidents;
         }
+        if (schemaVersion >= 19)
+        {
+            payload["base_population"]["profession_residents"] =
+                baseProfessionCountsValue(
+                    profile.basePopulation.professionResidents);
+            payload["base_population"]["injured_by_profession"] =
+                baseProfessionCountsValue(
+                    profile.basePopulation.injuredByProfession);
+        }
     }
     if (schemaVersion >= 14)
     {
         payload["base_construction"] = {
             {"material_units", profile.baseConstruction.materialUnits},
             {"dormitory_level", profile.baseConstruction.dormitoryLevel}};
+        if (schemaVersion >= 19)
+        {
+            payload["base_construction"]["workshop_level"] =
+                profile.baseConstruction.workshopLevel;
+            payload["base_construction"]["medical_level"] =
+                profile.baseConstruction.medicalLevel;
+        }
         if (profile.baseConstruction.activeProject.has_value())
         {
             const ActiveBaseConstructionProject &project =
@@ -603,8 +701,16 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     {"started_world_minute", treatment.startedWorldMinute},
                     {"completion_world_minute",
                      treatment.completionWorldMinute},
-                    {"consumed_contribution",
-                     treatment.consumedContribution}}}};
+                     {"consumed_contribution",
+                      treatment.consumedContribution}}}};
+            if (schemaVersion >= 19)
+            {
+                Json &value = payload["resident_medical"]["active_treatment"];
+                value["patient_profession"] =
+                    baseResidentProfessionValue(treatment.patientProfession);
+                value["worker_profession"] =
+                    baseResidentProfessionValue(treatment.workerProfession);
+            }
         }
         else
         {
@@ -623,12 +729,18 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     {"job_id", order.jobId},
                     {"recipe_definition_id",
                      order.recipeDefinitionId.value()},
-                    {"committed_workers", order.committedWorkers},
+                     {"committed_workers", order.committedWorkers},
                     {"started_world_minute", order.startedWorldMinute},
                     {"completion_world_minute", order.completionWorldMinute},
                     {"input_asset_ids", order.inputAssetIds},
                     {"output_asset_id", order.outputAssetId},
-                    {"output_ready", order.outputReady}}}};
+                     {"output_ready", order.outputReady}}}};
+            if (schemaVersion >= 19)
+            {
+                payload["base_manufacturing"]["active_order"]
+                    ["worker_profession"] =
+                        baseResidentProfessionValue(order.workerProfession);
+            }
         }
         else
         {
@@ -640,6 +752,14 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["base_morale"] = baseMoraleValue(profile.baseMorale);
         payload["base_community_event"] = baseCommunityEventValue(
             profile.baseCommunityEvent);
+    }
+    if (schemaVersion >= 19)
+    {
+        payload["base_workforce"] = {
+            {"workshop_worker", optionalProfessionValue(
+                profile.baseWorkforce.workshopWorker)},
+            {"medical_worker", optionalProfessionValue(
+                profile.baseWorkforce.medicalWorker)}};
     }
     if (schemaVersion >= 10)
     {
@@ -797,6 +917,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                      raid.travel.startingBaseConstruction.materialUnits},
                     {"dormitory_level",
                      raid.travel.startingBaseConstruction.dormitoryLevel}};
+                if (schemaVersion >= 19)
+                {
+                    startingConstruction["workshop_level"] =
+                        raid.travel.startingBaseConstruction.workshopLevel;
+                    startingConstruction["medical_level"] =
+                        raid.travel.startingBaseConstruction.medicalLevel;
+                }
                 if (raid.travel.startingBaseConstruction.activeProject
                         .has_value())
                 {
@@ -822,11 +949,29 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["travel"]
                     ["starting_bed_capacity"] =
                         raid.travel.startingBedCapacity;
+                if (schemaVersion >= 19)
+                {
+                    payload["pending_raid"]["travel"]
+                        ["starting_base_workforce"] = {
+                            {"workshop_worker", optionalProfessionValue(
+                                raid.travel.startingBaseWorkforce
+                                    .workshopWorker)},
+                            {"medical_worker", optionalProfessionValue(
+                                raid.travel.startingBaseWorkforce
+                                    .medicalWorker)}};
+                }
                 if (schemaVersion >= 16)
                 {
                     payload["pending_raid"]["travel"]
                         ["starting_injured_residents"] =
                             raid.travel.startingInjuredResidents;
+                    if (schemaVersion >= 19)
+                    {
+                        payload["pending_raid"]["travel"]
+                            ["starting_injured_by_profession"] =
+                                baseProfessionCountsValue(
+                                    raid.travel.startingInjuredByProfession);
+                    }
                     if (raid.travel.startingResidentMedical.activeTreatment
                             .has_value())
                     {
@@ -840,8 +985,19 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                                  treatment.startedWorldMinute},
                                 {"completion_world_minute",
                                  treatment.completionWorldMinute},
-                                {"consumed_contribution",
-                                 treatment.consumedContribution}};
+                                 {"consumed_contribution",
+                                  treatment.consumedContribution}};
+                        if (schemaVersion >= 19)
+                        {
+                            Json &value = payload["pending_raid"]["travel"]
+                                ["starting_resident_treatment"];
+                            value["patient_profession"] =
+                                baseResidentProfessionValue(
+                                    treatment.patientProfession);
+                            value["worker_profession"] =
+                                baseResidentProfessionValue(
+                                    treatment.workerProfession);
+                        }
                     }
                     else
                     {
@@ -873,6 +1029,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     payload["pending_raid"]["rescue"]
                         ["injured_resident_count"] =
                             raid.rescue->injuredResidentCount;
+                }
+                if (schemaVersion >= 19)
+                {
+                    payload["pending_raid"]["rescue"]["profession"] =
+                        baseResidentProfessionValue(
+                            raid.rescue->profession);
                 }
             }
             else
@@ -987,7 +1149,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
-        schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18)
+        schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
+        schemaVersion != 19)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1063,7 +1226,10 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 16 &&
              contentVersion == "base-resident-medical-content-24") ||
             (schemaVersion == 17 &&
-             contentVersion == "base-basic-manufacturing-content-25");
+             contentVersion == "base-basic-manufacturing-content-25") ||
+            (schemaVersion == 18 &&
+             (contentVersion == "base-morale-events-content-26" ||
+              contentVersion == "base-workforce-facilities-content-27"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1072,7 +1238,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 11 && schemaVersion != 12 &&
              schemaVersion != 13 && schemaVersion != 14 &&
              schemaVersion != 15 && schemaVersion != 16 &&
-             schemaVersion != 17 && schemaVersion != 18) ||
+             schemaVersion != 17 && schemaVersion != 18 &&
+             schemaVersion != 19) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1173,14 +1340,34 @@ SaveLoadResult deserializeProfileEnvelope(
         if (schemaVersion >= 12)
         {
             const Json &population = payload.at("base_population");
-            profile.basePopulation = BasePopulationState{
-                population.at("ordinary_residents")
-                    .get<std::uint32_t>(),
-                population.at("bed_capacity").get<std::uint32_t>(),
-                schemaVersion >= 16
-                    ? population.at("injured_residents")
-                          .get<std::uint32_t>()
-                    : 0U};
+            profile.basePopulation.ordinaryResidents = population.at(
+                "ordinary_residents").get<std::uint32_t>();
+            profile.basePopulation.bedCapacity = population.at(
+                "bed_capacity").get<std::uint32_t>();
+            profile.basePopulation.injuredResidents = schemaVersion >= 16
+                ? population.at("injured_residents").get<std::uint32_t>()
+                : 0U;
+            if (schemaVersion >= 19)
+            {
+                profile.basePopulation.professionResidents =
+                    parseBaseProfessionCounts(
+                        population.at("profession_residents"));
+                profile.basePopulation.injuredByProfession =
+                    parseBaseProfessionCounts(
+                        population.at("injured_by_profession"));
+            }
+            else
+            {
+                const std::uint32_t specialists =
+                    std::min(profile.basePopulation.ordinaryResidents, 2U);
+                profile.basePopulation.professionResidents = {
+                    profile.basePopulation.ordinaryResidents - specialists,
+                    specialists >= 1U ? 1U : 0U,
+                    specialists >= 2U ? 1U : 0U,
+                    0U};
+                profile.basePopulation.injuredByProfession = {
+                    profile.basePopulation.injuredResidents, 0U, 0U, 0U};
+            }
         }
         if (schemaVersion >= 14)
         {
@@ -1189,6 +1376,13 @@ SaveLoadResult deserializeProfileEnvelope(
                 "material_units").get<std::uint32_t>();
             profile.baseConstruction.dormitoryLevel = construction.at(
                 "dormitory_level").get<std::uint32_t>();
+            if (schemaVersion >= 19)
+            {
+                profile.baseConstruction.workshopLevel = construction.at(
+                    "workshop_level").get<std::uint32_t>();
+                profile.baseConstruction.medicalLevel = construction.at(
+                    "medical_level").get<std::uint32_t>();
+            }
             if (!construction.at("active_project").is_null())
             {
                 const Json &project = construction.at("active_project");
@@ -1233,15 +1427,27 @@ SaveLoadResult deserializeProfileEnvelope(
             {
                 const Json &treatment =
                     residentMedical.at("active_treatment");
-                profile.residentMedical.activeTreatment =
-                    ActiveResidentTreatment{
-                        treatment.at("job_id").get<BaseServiceJobId>(),
-                        treatment.at("started_world_minute")
-                            .get<std::uint64_t>(),
-                        treatment.at("completion_world_minute")
-                            .get<std::uint64_t>(),
-                        treatment.at("consumed_contribution")
-                            .get<std::uint32_t>()};
+                ActiveResidentTreatment active;
+                active.jobId = treatment.at("job_id").get<BaseServiceJobId>();
+                active.startedWorldMinute = treatment.at(
+                    "started_world_minute").get<std::uint64_t>();
+                active.completionWorldMinute = treatment.at(
+                    "completion_world_minute").get<std::uint64_t>();
+                active.consumedContribution = treatment.at(
+                    "consumed_contribution").get<std::uint32_t>();
+                if (schemaVersion >= 19)
+                {
+                    active.patientProfession = parseRequiredProfession(
+                        treatment.at("patient_profession"));
+                    active.workerProfession = parseRequiredProfession(
+                        treatment.at("worker_profession"));
+                }
+                else
+                {
+                    active.patientProfession = BaseResidentProfession::General;
+                    active.workerProfession = BaseResidentProfession::Medical;
+                }
+                profile.residentMedical.activeTreatment = active;
             }
         }
         if (schemaVersion >= 17)
@@ -1250,23 +1456,26 @@ SaveLoadResult deserializeProfileEnvelope(
             if (!manufacturing.at("active_order").is_null())
             {
                 const Json &order = manufacturing.at("active_order");
-                profile.baseManufacturing.activeOrder =
-                    BaseManufacturingOrder{
-                        order.at("job_id").get<BaseServiceJobId>(),
-                        BaseManufacturingRecipeDefinitionId{
-                            order.at("recipe_definition_id")
-                                .get<std::string>()},
-                        order.at("committed_workers")
-                            .get<std::uint32_t>(),
-                        order.at("started_world_minute")
-                            .get<std::uint64_t>(),
-                        order.at("completion_world_minute")
-                            .get<std::uint64_t>(),
-                        order.at("input_asset_ids")
-                            .get<std::vector<AssetInstanceId>>(),
-                        order.at("output_asset_id")
-                            .get<AssetInstanceId>(),
-                        order.at("output_ready").get<bool>()};
+                BaseManufacturingOrder active;
+                active.jobId = order.at("job_id").get<BaseServiceJobId>();
+                active.recipeDefinitionId =
+                    BaseManufacturingRecipeDefinitionId{
+                        order.at("recipe_definition_id").get<std::string>()};
+                active.committedWorkers = order.at(
+                    "committed_workers").get<std::uint32_t>();
+                active.workerProfession = schemaVersion >= 19
+                    ? parseRequiredProfession(order.at("worker_profession"))
+                    : BaseResidentProfession::Engineering;
+                active.startedWorldMinute = order.at(
+                    "started_world_minute").get<std::uint64_t>();
+                active.completionWorldMinute = order.at(
+                    "completion_world_minute").get<std::uint64_t>();
+                active.inputAssetIds = order.at(
+                    "input_asset_ids").get<std::vector<AssetInstanceId>>();
+                active.outputAssetId = order.at(
+                    "output_asset_id").get<AssetInstanceId>();
+                active.outputReady = order.at("output_ready").get<bool>();
+                profile.baseManufacturing.activeOrder = std::move(active);
             }
         }
         if (schemaVersion >= 18)
@@ -1284,6 +1493,29 @@ SaveLoadResult deserializeProfileEnvelope(
             static_cast<void>(synchronizeBaseCommunityEventThrough(
                 profile,
                 content));
+        }
+        if (schemaVersion >= 19)
+        {
+            const Json &workforce = payload.at("base_workforce");
+            profile.baseWorkforce.workshopWorker = parseOptionalProfession(
+                workforce.at("workshop_worker"));
+            profile.baseWorkforce.medicalWorker = parseOptionalProfession(
+                workforce.at("medical_worker"));
+        }
+        else
+        {
+            profile.baseWorkforce.workshopWorker =
+                profile.baseManufacturing.activeOrder.has_value()
+                ? std::optional<BaseResidentProfession>{
+                      BaseResidentProfession::Engineering}
+                : std::optional<BaseResidentProfession>{
+                      BaseResidentProfession::Engineering};
+            profile.baseWorkforce.medicalWorker =
+                profile.residentMedical.activeTreatment.has_value()
+                ? std::optional<BaseResidentProfession>{
+                      BaseResidentProfession::Medical}
+                : std::optional<BaseResidentProfession>{
+                      BaseResidentProfession::Medical};
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -1318,6 +1550,86 @@ SaveLoadResult deserializeProfileEnvelope(
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "rescue history is invalid"};
+                }
+            }
+        }
+        if (schemaVersion < 19)
+        {
+            const auto moveResidentsToProfession =
+                [&profile](BaseResidentProfession profession,
+                           std::uint32_t ordinaryCount,
+                           std::uint32_t injuredCount)
+            {
+                if (profession == BaseResidentProfession::General)
+                {
+                    return;
+                }
+                const std::size_t general = static_cast<std::size_t>(
+                    BaseResidentProfession::General);
+                const std::size_t target = static_cast<std::size_t>(profession);
+                const std::uint32_t movedResidents = std::min(
+                    ordinaryCount,
+                    profile.basePopulation.professionResidents[general]);
+                profile.basePopulation.professionResidents[general] -=
+                    movedResidents;
+                profile.basePopulation.professionResidents[target] +=
+                    movedResidents;
+                const std::uint32_t movedInjured = std::min({
+                    injuredCount,
+                    profile.basePopulation.injuredByProfession[general],
+                    movedResidents});
+                profile.basePopulation.injuredByProfession[general] -=
+                    movedInjured;
+                profile.basePopulation.injuredByProfession[target] +=
+                    movedInjured;
+            };
+            for (const MapDefinition &map : content.maps())
+            {
+                if (map.rescue.has_value() &&
+                    profile.committedRescues.contains(map.rescue->id))
+                {
+                    moveResidentsToProfession(
+                        map.rescue->profession,
+                        map.rescue->ordinaryResidentCount,
+                        map.rescue->injuredResidentCount);
+                }
+            }
+            const auto ensureHealthyProfession =
+                [&profile](BaseResidentProfession profession)
+            {
+                const std::size_t general = static_cast<std::size_t>(
+                    BaseResidentProfession::General);
+                const std::size_t target = static_cast<std::size_t>(profession);
+                if (profile.basePopulation.professionResidents[target] >
+                        profile.basePopulation.injuredByProfession[target] ||
+                    profile.basePopulation.professionResidents[general] <=
+                        profile.basePopulation.injuredByProfession[general])
+                {
+                    return;
+                }
+                --profile.basePopulation.professionResidents[general];
+                ++profile.basePopulation.professionResidents[target];
+            };
+            if (profile.baseManufacturing.activeOrder.has_value())
+            {
+                ensureHealthyProfession(BaseResidentProfession::Engineering);
+            }
+            if (profile.residentMedical.activeTreatment.has_value())
+            {
+                ensureHealthyProfession(BaseResidentProfession::Medical);
+                for (BaseResidentProfession profession : {
+                         BaseResidentProfession::Medical,
+                         BaseResidentProfession::Engineering,
+                         BaseResidentProfession::Combat,
+                         BaseResidentProfession::General})
+                {
+                    if (profile.basePopulation.injuredByProfession[
+                            static_cast<std::size_t>(profession)] > 0U)
+                    {
+                        profile.residentMedical.activeTreatment
+                            ->patientProfession = profession;
+                        break;
+                    }
                 }
             }
         }
@@ -1676,6 +1988,28 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingBaseConstruction.dormitoryLevel =
                         construction.at("dormitory_level")
                             .get<std::uint32_t>();
+                    if (schemaVersion >= 19)
+                    {
+                        raid.travel.startingBaseConstruction.workshopLevel =
+                            construction.at("workshop_level")
+                                .get<std::uint32_t>();
+                        raid.travel.startingBaseConstruction.medicalLevel =
+                            construction.at("medical_level")
+                                .get<std::uint32_t>();
+                        const Json &workforce = travel.at(
+                            "starting_base_workforce");
+                        raid.travel.startingBaseWorkforce.workshopWorker =
+                            parseOptionalProfession(
+                                workforce.at("workshop_worker"));
+                        raid.travel.startingBaseWorkforce.medicalWorker =
+                            parseOptionalProfession(
+                                workforce.at("medical_worker"));
+                    }
+                    else
+                    {
+                        raid.travel.startingBaseWorkforce =
+                            profile.baseWorkforce;
+                    }
                     if (!construction.at("active_project").is_null())
                     {
                         const Json &project = construction.at(
@@ -1701,20 +2035,45 @@ SaveLoadResult deserializeProfileEnvelope(
                         raid.travel.startingInjuredResidents = travel.at(
                             "starting_injured_residents")
                                 .get<std::uint32_t>();
+                        raid.travel.startingInjuredByProfession =
+                            schemaVersion >= 19
+                            ? parseBaseProfessionCounts(travel.at(
+                                  "starting_injured_by_profession"))
+                            : profile.basePopulation.injuredByProfession;
                         if (!travel.at("starting_resident_treatment").is_null())
                         {
                             const Json &treatment = travel.at(
                                 "starting_resident_treatment");
+                            ActiveResidentTreatment active;
+                            active.jobId = treatment.at("job_id")
+                                .get<BaseServiceJobId>();
+                            active.startedWorldMinute = treatment.at(
+                                "started_world_minute").get<std::uint64_t>();
+                            active.completionWorldMinute = treatment.at(
+                                "completion_world_minute").get<std::uint64_t>();
+                            active.consumedContribution = treatment.at(
+                                "consumed_contribution").get<std::uint32_t>();
+                            if (schemaVersion >= 19)
+                            {
+                                active.patientProfession =
+                                    parseRequiredProfession(treatment.at(
+                                        "patient_profession"));
+                                active.workerProfession =
+                                    parseRequiredProfession(treatment.at(
+                                        "worker_profession"));
+                            }
+                            else if (profile.residentMedical.activeTreatment
+                                         .has_value())
+                            {
+                                active.patientProfession = profile
+                                    .residentMedical.activeTreatment
+                                    ->patientProfession;
+                                active.workerProfession = profile
+                                    .residentMedical.activeTreatment
+                                    ->workerProfession;
+                            }
                             raid.travel.startingResidentMedical
-                                .activeTreatment = ActiveResidentTreatment{
-                                    treatment.at("job_id")
-                                        .get<BaseServiceJobId>(),
-                                    treatment.at("started_world_minute")
-                                        .get<std::uint64_t>(),
-                                    treatment.at("completion_world_minute")
-                                        .get<std::uint64_t>(),
-                                    treatment.at("consumed_contribution")
-                                        .get<std::uint32_t>()};
+                                .activeTreatment = active;
                         }
                     }
                 }
@@ -1722,9 +2081,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 {
                     raid.travel.startingBaseConstruction =
                         profile.baseConstruction;
+                    raid.travel.startingBaseWorkforce = profile.baseWorkforce;
                     raid.travel.startingBedCapacity =
                         profile.basePopulation.bedCapacity;
                     raid.travel.startingInjuredResidents = 0U;
+                    raid.travel.startingInjuredByProfession = {};
                     raid.travel.startingResidentMedical = {};
                 }
             }
@@ -1735,9 +2096,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.travel.startingBasePriority = profile.basePriority;
                 raid.travel.startingBaseConstruction =
                     profile.baseConstruction;
+                raid.travel.startingBaseWorkforce = profile.baseWorkforce;
                 raid.travel.startingBedCapacity =
                     profile.basePopulation.bedCapacity;
                 raid.travel.startingInjuredResidents = 0U;
+                raid.travel.startingInjuredByProfession = {};
                 raid.travel.startingResidentMedical = {};
             }
             if (!raid.travel.startingBaseCommunityEvent.definitionId.valid())
@@ -1764,9 +2127,35 @@ SaveLoadResult deserializeProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "pending rescue subject kind is invalid"};
                 }
+                const RescueDefinitionId rescueId{
+                    rescue.at("definition_id").get<std::string>()};
+                BaseResidentProfession rescueProfession =
+                    BaseResidentProfession::General;
+                if (schemaVersion >= 19)
+                {
+                    const auto parsed = parseBaseResidentProfession(
+                        rescue.at("profession").get<std::string>());
+                    if (!parsed.has_value())
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "pending rescue profession is invalid"};
+                    }
+                    rescueProfession = *parsed;
+                }
+                else
+                {
+                    for (const MapDefinition &map : content.maps())
+                    {
+                        if (map.rescue.has_value() &&
+                            map.rescue->id == rescueId)
+                        {
+                            rescueProfession = map.rescue->profession;
+                            break;
+                        }
+                    }
+                }
                 raid.rescue = RaidRescueSnapshot{
-                    RescueDefinitionId{
-                        rescue.at("definition_id").get<std::string>()},
+                    rescueId,
                     RaidRescueSubjectKind::OrdinaryResidents,
                     ContentRect{
                         parseVector(rescue.at("transfer_point").at("position")),
@@ -1774,9 +2163,10 @@ SaveLoadResult deserializeProfileEnvelope(
                     rescue.at("interaction_duration_seconds").get<float>(),
                     rescue.at("ordinary_resident_count").get<std::uint32_t>(),
                     schemaVersion >= 16
-                        ? rescue.at("injured_resident_count")
-                              .get<std::uint32_t>()
-                        : 0U,
+                         ? rescue.at("injured_resident_count")
+                               .get<std::uint32_t>()
+                         : 0U,
+                    rescueProfession,
                     rescue.at("secured").get<bool>()};
             }
             profile.pendingRaid = std::move(raid);
