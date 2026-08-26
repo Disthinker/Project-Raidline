@@ -1369,6 +1369,62 @@ TEST(SaveRepositoryTest, SchemaV19RoundTripsProfessionsStaffingAndFacilityLevels
     EXPECT_EQ(loaded.profile->baseConstruction.medicalLevel, 2U);
 }
 
+TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-intelligence-v20", publishedContentRegistry());
+    const MapDefinitionId mapId{"map.v0.test"};
+    auto &counts = profile.raidIntelligence.counts[mapId];
+    counts[raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Transport)] = 2U;
+    counts[raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Resource)] = 1U;
+    RaidIntelligenceLoadout loadout;
+    loadout.set(RaidIntelligenceCategory::Transport, true);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{"save-intelligence-raid", "save-intelligence-settle",
+                      99441U, mapId, loadout},
+        {profile.revision, "save-intelligence-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion(), 20),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(loaded.profile->pendingRaid->intelligence, loadout);
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.startingRaidIntelligence.count(
+            mapId, RaidIntelligenceCategory::Transport),
+        2U);
+    EXPECT_EQ(loaded.profile->raidIntelligence.count(
+        mapId, RaidIntelligenceCategory::Transport), 1U);
+}
+
+TEST(SaveRepositoryTest, SchemaV19MigratesToEmptyRaidIntelligenceArchive)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-intelligence-v19", publishedContentRegistry());
+    profile.raidIntelligence.counts[MapDefinitionId{"map.v0.test"}]
+        [raidIntelligenceCategoryIndex(RaidIntelligenceCategory::Enemy)] = 3U;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-workforce-facilities-content-27",
+            19),
+        publishedContentRegistry());
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_TRUE(migrated.profile->raidIntelligence.counts.empty());
+}
+
 TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)
 {
     ProfileState profile = makeNewAlphaProfile(

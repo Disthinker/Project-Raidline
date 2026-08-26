@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-workforce-facilities-content-27",
+  "content_version": "regional-map-intelligence-content-28",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -783,6 +783,7 @@
       "id": "map.v0.test",
       "display_name": "Greyline Depot",
       "route_profile": "BALANCED | OPEN CENTER | LONG FLANKS",
+      "operation_briefing": {"difficulty": "LOW", "warning": "OPEN CENTER; EXPECT LONG SIGHTLINES", "transport_price": 24, "resource_price": 36, "enemy_price": 30},
       "travel": {"outbound_minutes": 45, "return_minutes": 45, "failure_regroup_minutes": 90},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 255, "green": 255, "blue": 255},
@@ -886,6 +887,7 @@
       "id": "map.raid.riverside",
       "display_name": "Riverside Checkpoint",
       "route_profile": "MID-RANGE | CHOKEPOINTS | SAFE OUTER LOOP",
+      "operation_briefing": {"difficulty": "MODERATE", "warning": "CHOKEPOINTS CAN DELAY EXTRACTION", "transport_price": 36, "resource_price": 48, "enemy_price": 42},
       "travel": {"outbound_minutes": 90, "return_minutes": 90, "failure_regroup_minutes": 180},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 190, "green": 220, "blue": 210},
@@ -966,6 +968,7 @@
       "id": "map.raid.industrial",
       "display_name": "Ashworks Yard",
       "route_profile": "CLOSE COVER | SPLIT LANES | RISKY CENTER",
+      "operation_briefing": {"difficulty": "HIGH", "warning": "DENSE COVER; PRESSURE ESCALATES QUICKLY", "transport_price": 52, "resource_price": 66, "enemy_price": 58},
       "travel": {"outbound_minutes": 150, "return_minutes": 150, "failure_regroup_minutes": 300},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 220, "green": 190, "blue": 170},

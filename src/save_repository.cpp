@@ -761,6 +761,21 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"medical_worker", optionalProfessionValue(
                 profile.baseWorkforce.medicalWorker)}};
     }
+    if (schemaVersion >= 20)
+    {
+        payload["raid_intelligence_archive"] = Json::array();
+        for (const auto &[mapId, counts] : profile.raidIntelligence.counts)
+        {
+            payload["raid_intelligence_archive"].push_back({
+                {"map_definition_id", mapId.value()},
+                {"transport", counts[raidIntelligenceCategoryIndex(
+                    RaidIntelligenceCategory::Transport)]},
+                {"resource", counts[raidIntelligenceCategoryIndex(
+                    RaidIntelligenceCategory::Resource)]},
+                {"enemy", counts[raidIntelligenceCategoryIndex(
+                    RaidIntelligenceCategory::Enemy)]}});
+        }
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -857,6 +872,16 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"pain_scream_remaining_ms",
                     raid.startingMedicalStatus.painScreamRemainingMs}};
         }
+        if (schemaVersion >= 20)
+        {
+            payload["pending_raid"]["intelligence"] = {
+                {"transport", raid.intelligence.has(
+                    RaidIntelligenceCategory::Transport)},
+                {"resource", raid.intelligence.has(
+                    RaidIntelligenceCategory::Resource)},
+                {"enemy", raid.intelligence.has(
+                    RaidIntelligenceCategory::Enemy)}};
+        }
         if (schemaVersion >= 9)
         {
             payload["pending_raid"]["travel"] = {
@@ -909,6 +934,25 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     ["starting_base_community_event"] =
                         baseCommunityEventValue(
                             raid.travel.startingBaseCommunityEvent);
+            }
+            if (schemaVersion >= 20)
+            {
+                Json startingArchive = Json::array();
+                for (const auto &[mapId, counts] :
+                     raid.travel.startingRaidIntelligence.counts)
+                {
+                    startingArchive.push_back({
+                        {"map_definition_id", mapId.value()},
+                        {"transport", counts[raidIntelligenceCategoryIndex(
+                            RaidIntelligenceCategory::Transport)]},
+                        {"resource", counts[raidIntelligenceCategoryIndex(
+                            RaidIntelligenceCategory::Resource)]},
+                        {"enemy", counts[raidIntelligenceCategoryIndex(
+                            RaidIntelligenceCategory::Enemy)]}});
+                }
+                payload["pending_raid"]["travel"]
+                    ["starting_raid_intelligence_archive"] =
+                        std::move(startingArchive);
             }
             if (schemaVersion >= 14)
             {
@@ -1150,7 +1194,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
-        schemaVersion != 19)
+        schemaVersion != 19 && schemaVersion != 20)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1229,7 +1273,9 @@ SaveLoadResult deserializeProfileEnvelope(
              contentVersion == "base-basic-manufacturing-content-25") ||
             (schemaVersion == 18 &&
              (contentVersion == "base-morale-events-content-26" ||
-              contentVersion == "base-workforce-facilities-content-27"));
+              contentVersion == "base-workforce-facilities-content-27")) ||
+            (schemaVersion == 19 &&
+             contentVersion == "base-workforce-facilities-content-27");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1239,7 +1285,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 13 && schemaVersion != 14 &&
              schemaVersion != 15 && schemaVersion != 16 &&
              schemaVersion != 17 && schemaVersion != 18 &&
-             schemaVersion != 19) ||
+             schemaVersion != 19 && schemaVersion != 20) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1514,8 +1560,28 @@ SaveLoadResult deserializeProfileEnvelope(
                 profile.residentMedical.activeTreatment.has_value()
                 ? std::optional<BaseResidentProfession>{
                       BaseResidentProfession::Medical}
-                : std::optional<BaseResidentProfession>{
-                      BaseResidentProfession::Medical};
+                    : std::optional<BaseResidentProfession>{
+                          BaseResidentProfession::Medical};
+        }
+        if (schemaVersion >= 20)
+        {
+            for (const Json &entry :
+                 payload.at("raid_intelligence_archive"))
+            {
+                const MapDefinitionId mapId{
+                    entry.at("map_definition_id").get<std::string>()};
+                std::array<std::uint32_t, kRaidIntelligenceCategoryCount>
+                    counts{
+                        entry.at("transport").get<std::uint32_t>(),
+                        entry.at("resource").get<std::uint32_t>(),
+                        entry.at("enemy").get<std::uint32_t>()};
+                if (!profile.raidIntelligence.counts.emplace(
+                        mapId, counts).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Raid intelligence archive is duplicated"};
+                }
+            }
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -1890,6 +1956,19 @@ SaveLoadResult deserializeProfileEnvelope(
                     medical.at("pain_scream_remaining_ms")
                         .get<std::uint32_t>()};
             }
+            if (schemaVersion >= 20)
+            {
+                const Json &intelligence = value.at("intelligence");
+                raid.intelligence.set(
+                    RaidIntelligenceCategory::Transport,
+                    intelligence.at("transport").get<bool>());
+                raid.intelligence.set(
+                    RaidIntelligenceCategory::Resource,
+                    intelligence.at("resource").get<bool>());
+                raid.intelligence.set(
+                    RaidIntelligenceCategory::Enemy,
+                    intelligence.at("enemy").get<bool>());
+            }
             if (schemaVersion >= 9)
             {
                 const Json &travel = value.at("travel");
@@ -1977,6 +2056,32 @@ SaveLoadResult deserializeProfileEnvelope(
                         content));
                     raid.travel.startingBaseCommunityEvent =
                         startingState.baseCommunityEvent;
+                }
+                if (schemaVersion >= 20)
+                {
+                    for (const Json &entry : travel.at(
+                             "starting_raid_intelligence_archive"))
+                    {
+                        const MapDefinitionId mapId{
+                            entry.at("map_definition_id")
+                                .get<std::string>()};
+                        std::array<std::uint32_t,
+                                   kRaidIntelligenceCategoryCount> counts{
+                            entry.at("transport").get<std::uint32_t>(),
+                            entry.at("resource").get<std::uint32_t>(),
+                            entry.at("enemy").get<std::uint32_t>()};
+                        if (!raid.travel.startingRaidIntelligence.counts
+                                 .emplace(mapId, counts).second)
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "starting Raid intelligence is duplicated"};
+                        }
+                    }
+                }
+                else
+                {
+                    raid.travel.startingRaidIntelligence =
+                        profile.raidIntelligence;
                 }
                 if (schemaVersion >= 14)
                 {
@@ -2102,6 +2207,8 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.travel.startingInjuredResidents = 0U;
                 raid.travel.startingInjuredByProfession = {};
                 raid.travel.startingResidentMedical = {};
+                raid.travel.startingRaidIntelligence =
+                    profile.raidIntelligence;
             }
             if (!raid.travel.startingBaseCommunityEvent.definitionId.valid())
             {

@@ -16,6 +16,7 @@
 #include "player.h"
 #include "logical_ballistics.h"
 #include "raid_session.h"
+#include "raid_tactical_map.h"
 #include "shot_resolution.h"
 #include "shot_feedback_presentation.h"
 #include "storage_cabinet.h"
@@ -79,6 +80,7 @@ struct RaidWorldConfig
         float interactionDurationSeconds{};
     };
     std::optional<OrdinarySurvivorRescue> rescue;
+    RaidIntelligenceLoadout intelligence;
 };
 
 struct PlayerDamageObservation
@@ -227,6 +229,8 @@ public:
 
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
+    [[nodiscard]] const RaidTacticalMapState &
+    tacticalMap() const noexcept;
 
     [[nodiscard]] std::size_t aliveEnemyCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskPressureWaveCount() const noexcept;
@@ -377,6 +381,7 @@ private:
     std::optional<ExtractionPoint> conditionalExtractionPoint_;
     std::uint64_t conditionalExtractionMaximumWeightGrams_{};
     RaidSession raidSession_;
+    RaidTacticalMapState tacticalMap_;
 
     std::vector<EnemySpawn> highRiskPressureSpawns_;
     float highRiskWaveIntervalSeconds_{};

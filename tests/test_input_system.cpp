@@ -43,6 +43,7 @@ namespace
             GameAction::Sprint,
             GameAction::Interact,
             GameAction::ToggleInventory,
+            GameAction::ToggleTacticalMap,
             GameAction::InventoryCancel,
             GameAction::ScreenConfirm,
         };
@@ -378,6 +379,20 @@ TEST(
     EXPECT_TRUE(
         input.wasActionJustPressed(
             GameAction::ToggleInventory));
+}
+
+TEST(InputSystemTest, MKeyTogglesTacticalMapOnlyOnceWhileHeld)
+{
+    InputSystem input;
+    const SDL_Event keyDown = makeKeyEvent(
+        SDL_EVENT_KEY_DOWN, SDL_SCANCODE_M);
+    input.handleEvent(keyDown);
+    EXPECT_TRUE(input.isActionPressed(GameAction::ToggleTacticalMap));
+    EXPECT_TRUE(input.wasActionJustPressed(GameAction::ToggleTacticalMap));
+
+    input.endFrame();
+    input.handleEvent(keyDown);
+    EXPECT_FALSE(input.wasActionJustPressed(GameAction::ToggleTacticalMap));
 }
 
 TEST(
@@ -758,7 +773,7 @@ TEST(InputSystemTest, PointerSuppressionDoesNotClearSpaceFire)
 TEST(InputSystemTest, RaidPointerCaptureRequiresUnobstructedFocusedGameplay)
 {
     RaidPointerCaptureContext context{
-        true, true, false, false, false, false, true};
+        true, true, false, false, false, false, false, true};
     EXPECT_TRUE(shouldCaptureRaidPointer(context));
 
     context.inventoryOpen = true;
@@ -773,6 +788,9 @@ TEST(InputSystemTest, RaidPointerCaptureRequiresUnobstructedFocusedGameplay)
     context.pauseMenuOpen = true;
     EXPECT_FALSE(shouldCaptureRaidPointer(context));
     context.pauseMenuOpen = false;
+    context.tacticalMapOpen = true;
+    EXPECT_FALSE(shouldCaptureRaidPointer(context));
+    context.tacticalMapOpen = false;
     context.windowHasInputFocus = false;
     EXPECT_FALSE(shouldCaptureRaidPointer(context));
 }

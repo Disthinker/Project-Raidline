@@ -23,6 +23,7 @@
 #include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
+#include "raid_intelligence_domain.h"
 #include "raid_rescue_domain.h"
 #include "raid_settlement.h"
 #include "save_repository.h"
@@ -170,7 +171,12 @@ public:
 
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,
-        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"});
+        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"},
+        RaidIntelligenceLoadout intelligence = {});
+    [[nodiscard]] RaidIntelligencePurchaseReceipt
+    purchaseRaidIntelligence(
+        const RaidIntelligencePurchaseCommand &command,
+        std::string transactionId);
     [[nodiscard]] bool activeQuitAlphaRaid();
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,

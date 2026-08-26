@@ -13,6 +13,7 @@ enum class RaidLifecycleError
     MissingPendingRaid,
     InvalidProfile,
     Capacity,
+    InsufficientIntelligence,
     RevisionOverflow
 };
 
@@ -22,6 +23,7 @@ struct DeployCommand
     std::string settlementId;
     std::uint64_t seed{};
     MapDefinitionId mapDefinitionId;
+    RaidIntelligenceLoadout intelligence;
 };
 
 struct DeployReceipt

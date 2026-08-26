@@ -259,6 +259,9 @@ add_library(raidline_domain STATIC
     src/profile_combat_domain.h
     src/raid_lifecycle.cpp
     src/raid_lifecycle.h
+    src/raid_intelligence_domain.cpp
+    src/raid_intelligence_domain.h
+    src/raid_intelligence_types.h
     src/raid_rescue_domain.cpp
     src/raid_rescue_domain.h
     src/raid_action.cpp
@@ -320,6 +323,8 @@ add_library(raidline_simulation STATIC
     src/particle.h
     src/particle_system.cpp
     src/particle_system.h
+    src/raid_tactical_map.cpp
+    src/raid_tactical_map.h
     src/player.cpp
     src/player.h
     src/shot_feedback_presentation.cpp
@@ -638,6 +643,14 @@ raidline_add_test(
     RaidLifecycleTest
     tests/test_raid_lifecycle.cpp
     raidline::domain)
+raidline_add_test(
+    RaidIntelligenceDomainTest
+    tests/test_raid_intelligence_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    RaidTacticalMapTest
+    tests/test_raid_tactical_map.cpp
+    raidline::simulation)
 raidline_add_test(
     BaseWorldTest
     tests/test_base_world.cpp

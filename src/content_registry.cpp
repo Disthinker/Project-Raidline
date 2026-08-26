@@ -1591,6 +1591,22 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map display metadata must not be empty");
             }
 
+            const Json &operationBriefing =
+                requiredObject(mapValue, "operation_briefing");
+            definition.operationBriefing.difficulty =
+                requiredString(operationBriefing, "difficulty");
+            definition.operationBriefing.warning =
+                requiredString(operationBriefing, "warning");
+            definition.operationBriefing.prices = {
+                requiredPositiveUint(operationBriefing, "transport_price"),
+                requiredPositiveUint(operationBriefing, "resource_price"),
+                requiredPositiveUint(operationBriefing, "enemy_price")};
+            if (definition.operationBriefing.difficulty.empty() ||
+                definition.operationBriefing.warning.empty())
+            {
+                fail("map operation briefing metadata must not be empty");
+            }
+
             const Json &travel = requiredObject(mapValue, "travel");
             definition.travel = RaidTravelDefinition{
                 requiredPositiveUint(travel, "outbound_minutes"),

@@ -99,6 +99,30 @@ TEST(UiLocalizationTest, ChineseTranslatesGunsmithServiceStatusAndErrors) {
   EXPECT_NE(operations.find("短板 食物"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesRaidIntelligenceAndTacticalMap) {
+  const std::string briefing = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "DIFFICULTY MODERATE | CHOKEPOINTS CAN DELAY EXTRACTION");
+  EXPECT_NE(briefing.find("难度 中"), std::string::npos);
+  EXPECT_NE(briefing.find("狭窄通道可能拖延撤离"), std::string::npos);
+
+  const std::string intelligence = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "TRANSPORT MAP | OWN 2 | SELECTED 0");
+  EXPECT_NE(intelligence.find("交通图"), std::string::npos);
+  EXPECT_NE(intelligence.find("持有 2"), std::string::npos);
+  EXPECT_NE(intelligence.find("已选择"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "TACTICAL MAP CLOSED"),
+            "战术地图已关闭");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "selected Raid intelligence is unavailable"),
+            "所选情报没有可用份数");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesWarehouseRecoveryAndAllocationAccess) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WAREHOUSE"),
             "仓储");

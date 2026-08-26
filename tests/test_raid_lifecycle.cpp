@@ -104,7 +104,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "base-workforce-facilities-9");
+        "regional-map-intelligence-10");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -132,6 +132,91 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.basePriority, startingPriority);
     EXPECT_EQ(profile.baseMorale, startingMorale);
     EXPECT_EQ(profile.baseCommunityEvent, startingEvent);
+}
+
+TEST(RaidLifecycleTest, DeployConsumesOnlySelectedMapIntelligence)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "intelligence-deploy", publishedContentRegistry());
+    const MapDefinitionId selectedMap{"map.raid.riverside"};
+    const MapDefinitionId otherMap{"map.v0.test"};
+    auto &selectedCounts = profile.raidIntelligence.counts[selectedMap];
+    selectedCounts[raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Transport)] = 2U;
+    selectedCounts[raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Enemy)] = 1U;
+    profile.raidIntelligence.counts[otherMap][raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Transport)] = 3U;
+    RaidIntelligenceLoadout loadout;
+    loadout.set(RaidIntelligenceCategory::Transport, true);
+    loadout.set(RaidIntelligenceCategory::Enemy, true);
+
+    const DeployReceipt receipt = executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{"raid-with-intelligence", "settle-with-intelligence",
+                      77331U, selectedMap, loadout},
+        {profile.revision, "deploy-with-intelligence"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_EQ(profile.pendingRaid->intelligence, loadout);
+    EXPECT_EQ(profile.raidIntelligence.count(
+        selectedMap, RaidIntelligenceCategory::Transport), 1U);
+    EXPECT_EQ(profile.raidIntelligence.count(
+        selectedMap, RaidIntelligenceCategory::Enemy), 0U);
+    EXPECT_EQ(profile.raidIntelligence.count(
+        otherMap, RaidIntelligenceCategory::Transport), 3U);
+    EXPECT_EQ(profile.pendingRaid->travel.startingRaidIntelligence.count(
+        selectedMap, RaidIntelligenceCategory::Transport), 2U);
+}
+
+TEST(RaidLifecycleTest, MissingSelectedIntelligenceRejectsWithoutMutation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "intelligence-missing", publishedContentRegistry());
+    RaidIntelligenceLoadout loadout;
+    loadout.set(RaidIntelligenceCategory::Resource, true);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const DeployReceipt receipt = executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{"raid-missing-intelligence",
+                      "settle-missing-intelligence", 77332U,
+                      MapDefinitionId{"map.v0.test"}, loadout},
+        {profile.revision, "deploy-missing-intelligence"});
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, RaidLifecycleError::InsufficientIntelligence);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(RaidLifecycleTest, AbnormalRollbackRestoresConsumedIntelligence)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "intelligence-rollback", publishedContentRegistry());
+    const MapDefinitionId mapId{"map.v0.test"};
+    profile.raidIntelligence.counts[mapId][raidIntelligenceCategoryIndex(
+        RaidIntelligenceCategory::Resource)] = 1U;
+    const RaidIntelligenceArchiveState starting = profile.raidIntelligence;
+    RaidIntelligenceLoadout loadout;
+    loadout.set(RaidIntelligenceCategory::Resource, true);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{"raid-intelligence-rollback",
+                      "settle-intelligence-rollback", 77333U, mapId, loadout},
+        {profile.revision, "deploy-intelligence-rollback"}).succeeded);
+    EXPECT_EQ(profile.raidIntelligence.count(
+        mapId, RaidIntelligenceCategory::Resource), 0U);
+
+    const RaidRollbackReceipt receipt = rollbackPendingRaidToBase(
+        profile, publishedContentRegistry());
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.raidIntelligence, starting);
+    EXPECT_FALSE(profile.pendingRaid.has_value());
 }
 
 TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)

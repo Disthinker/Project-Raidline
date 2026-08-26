@@ -1298,7 +1298,8 @@ GameplayInput App::makeGameplayInput() const
     if (relativeMouseModeActive_ &&
         !inventoryOverlayState_.isOpen() &&
         !medicalWheelOpen_ &&
-        !developerWeaponPanelOpen_)
+        !developerWeaponPanelOpen_ &&
+        !tacticalMapOpen_)
     {
         input.aimMotionDelta = pendingRelativeAimMotion_;
     }
@@ -1381,7 +1382,9 @@ bool App::tryDeployFromBase()
         uiMessage_ = "UNSAFE LOADOUT - CONFIRM DEPLOY AGAIN";
         return false;
     }
-    if (!gameFlow_.deploy(selectedRaidMap().id))
+    if (!gameFlow_.deploy(
+            selectedRaidMap().id,
+            selectedRaidIntelligence_))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1389,6 +1392,7 @@ bool App::tryDeployFromBase()
         return false;
     }
     deploymentWarningArmed_ = false;
+    selectedRaidIntelligence_ = {};
     uiMessage_.clear();
     return true;
 }
@@ -1414,7 +1418,38 @@ void App::cycleSelectedRaidMap(int direction) noexcept
         ? (selectedRaidMapIndex_ + count - 1U) % count
         : (selectedRaidMapIndex_ + 1U) % count;
     deploymentWarningArmed_ = false;
+    selectedRaidIntelligence_ = {};
     uiMessage_.clear();
+}
+
+void App::handleRaidIntelligenceSelection(
+    RaidIntelligenceCategory category)
+{
+    const MapDefinition &map = selectedRaidMap();
+    const std::uint32_t owned = gameSession_.profile().raidIntelligence.count(
+        map.id, category);
+    if (owned == 0U)
+    {
+        const RaidIntelligencePurchaseReceipt receipt =
+            gameSession_.purchaseRaidIntelligence(
+                RaidIntelligencePurchaseCommand{map.id, category},
+                nextProfileTransactionId("raid-intelligence"));
+        if (!receipt.succeeded)
+        {
+            uiMessage_ = receipt.message.empty()
+                ? "INTELLIGENCE PURCHASE BLOCKED"
+                : receipt.message;
+            return;
+        }
+        selectedRaidIntelligence_.set(category, true);
+        uiMessage_ = "INTELLIGENCE PURCHASED AND SELECTED";
+        return;
+    }
+    const bool selected = selectedRaidIntelligence_.has(category);
+    selectedRaidIntelligence_.set(category, !selected);
+    uiMessage_ = selected
+        ? "INTELLIGENCE REMOVED FROM BRIEFING"
+        : "INTELLIGENCE SELECTED FOR DEPLOYMENT";
 }
 
 SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
@@ -1665,6 +1700,15 @@ SDL_FRect App::raidMapNextButton() const noexcept
     return SDL_FRect{804.0F, 226.0F, 54.0F, 42.0F};
 }
 
+SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
+{
+    return SDL_FRect{
+        382.0F,
+        326.0F + static_cast<float>(index) * 48.0F,
+        260.0F,
+        38.0F};
+}
+
 void App::closeInventory() noexcept
 {
     // Tab / browsing Esc closes the inventory and clears all pointer state,
@@ -1803,6 +1847,17 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         {
             cycleSelectedRaidMap(1);
             return;
+        }
+        for (std::size_t index = 0;
+             index < kRaidIntelligenceCategoryCount;
+             ++index)
+        {
+            if (contains(raidIntelligenceButton(index), click.position))
+            {
+                handleRaidIntelligenceSelection(
+                    static_cast<RaidIntelligenceCategory>(index));
+                return;
+            }
         }
         if (screenPrimaryButtonContains(click.position.x, click.position.y))
         {
@@ -4090,6 +4145,7 @@ void App::update(float deltaTime)
     {
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
+        tacticalMapOpen_ = false;
     }
     const bool escapePressed = input_.wasActionJustPressed(
         GameAction::InventoryCancel);
@@ -4113,6 +4169,7 @@ void App::update(float deltaTime)
     const bool existingModalHandlesEscape =
         inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
+        tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
         (gameFlow_.state() == GameFlowState::Base &&
          gameFlow_.activeBaseFacility().has_value());
@@ -4170,6 +4227,24 @@ void App::update(float deltaTime)
         return;
     }
 
+    const bool tacticalToggle = input_.wasActionJustPressed(
+        GameAction::ToggleTacticalMap);
+    if (tacticalMapOpen_ && (tacticalToggle || escapePressed))
+    {
+        tacticalMapOpen_ = false;
+        uiMessage_ = "TACTICAL MAP CLOSED";
+    }
+    else if (tacticalToggle &&
+             gameSession_.world().raidSession().isActive() &&
+             !inventoryOverlayState_.isOpen() &&
+             !medicalWheelOpen_ &&
+             !developerWeaponPanelOpen_)
+    {
+        tacticalMapOpen_ = true;
+        uiMessage_ = "TACTICAL MAP OPEN - WORLD CONTINUES";
+        input_.suppressPrimaryPointerUntilRelease();
+    }
+
     const bool raidAcceptsInventoryInput =
         gameSession_.world().raidSession().isActive();
 
@@ -4177,6 +4252,7 @@ void App::update(float deltaTime)
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
             !developerWeaponPanelBlocksGameplayThisFrame_ &&
+            !tacticalMapOpen_ &&
             raidAcceptsInventoryInput &&
                 input_.wasActionJustPressed(
                     GameAction::ToggleInventory),
@@ -4287,9 +4363,27 @@ void App::update(float deltaTime)
         gameplayInput.interactJustPressed = false;
         gameplayInput.interactPressed = false;
     }
+    if (tacticalMapOpen_)
+    {
+        gameplayInput.movementSpeedMultiplier = 0.45F;
+        gameplayInput.sprint = false;
+        gameplayInput.fireJustPressed = false;
+        gameplayInput.firePressed = false;
+        gameplayInput.aimDownSights = false;
+        gameplayInput.reloadJustPressed = false;
+        gameplayInput.healJustPressed = false;
+        gameplayInput.weaponSlotJustPressed.reset();
+        gameplayInput.quitRaidJustPressed = false;
+        gameplayInput.interactJustPressed = false;
+        gameplayInput.interactPressed = false;
+        gameplayInput.aimWorldPosition =
+            gameSession_.world().weaponAimWorldPosition();
+        gameplayInput.aimMotionDelta = Vec2{};
+    }
     if (gameSession_.world().isAlphaRaidWorld() &&
         gameSession_.world().raidSession().isActive() &&
         !inventoryOverlayState_.isOpen() &&
+        !tacticalMapOpen_ &&
         !developerWeaponPanelOpen_)
     {
         if (input_.wasActionJustPressed(GameAction::Heal) &&
@@ -6944,6 +7038,7 @@ void App::syncRaidPointerCapture() noexcept
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
             pauseMenu_.isOpen(),
+            tacticalMapOpen_,
             windowHasInputFocus_});
 
     if (shouldCapture != relativeMouseModeActive_)
@@ -6974,6 +7069,7 @@ void App::renderAimCrosshair()
 {
     if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
+        tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         pauseMenu_.isOpen() ||
         !gameSession_.world().raidSession().isActive())
@@ -7761,7 +7857,7 @@ void App::renderMainMenu()
         uiTextRenderer_.render(renderer_, 520.0F, 314.0F, "KEYBOARD & MOUSE");
         uiTextRenderer_.render(renderer_, 490.0F, 340.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
         uiTextRenderer_.render(renderer_, 466.0F, 364.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        uiTextRenderer_.render(renderer_, 458.0F, 388.0F, "SHIFT SPRINT  TAB INVENTORY  ESC PAUSE/CLOSE");
+        uiTextRenderer_.render(renderer_, 430.0F, 388.0F, "SHIFT SPRINT  TAB INVENTORY  M TACTICAL MAP  ESC PAUSE/CLOSE");
         const SDL_FRect language = mainMenuButton(0);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &language);
@@ -7850,7 +7946,7 @@ void App::renderPauseMenu()
             "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
         uiTextRenderer_.render(
             renderer_, 448.0F, 286.0F,
-            "TAB INVENTORY  F10 WEAPON TUNING");
+            "TAB INVENTORY  M TACTICAL MAP  F10 WEAPON TUNING");
         const SDL_FRect language = pauseMenuButton(0);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &language);
@@ -10114,6 +10210,11 @@ void App::renderBaseDeployment()
         map.displayName);
     uiTextRenderer_.render(renderer_, 492.0F, 232.0F, mapLabel.c_str());
     uiTextRenderer_.render(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
+    const std::string danger = fmt::format(
+        "DIFFICULTY {} | {}",
+        map.operationBriefing.difficulty,
+        map.operationBriefing.warning);
+    uiTextRenderer_.render(renderer_, 410.0F, 270.0F, danger.c_str());
 
     const ProfileState &profile = gameSession_.profile();
     if (const auto travel = gameSession_.raidTravelPreview(map.id))
@@ -10132,9 +10233,49 @@ void App::renderBaseDeployment()
             "NORMAL TRAVEL {} MIN | FAILURE REGROUP {} MIN",
             travel->returnMinutes,
             travel->failureRegroupMinutes);
-        uiTextRenderer_.render(renderer_, 410.0F, 272.0F, timing.c_str());
+        uiTextRenderer_.render(renderer_, 410.0F, 290.0F, timing.c_str());
         uiTextRenderer_.render(
-            renderer_, 478.0F, 292.0F, returnTiming.c_str());
+            renderer_, 478.0F, 308.0F, returnTiming.c_str());
+    }
+
+    constexpr std::array<const char *, kRaidIntelligenceCategoryCount>
+        intelligenceLabels{"TRANSPORT MAP", "RESOURCE MANIFEST", "ENEMY DOSSIER"};
+    for (std::size_t index = 0;
+         index < kRaidIntelligenceCategoryCount;
+         ++index)
+    {
+        const auto category = static_cast<RaidIntelligenceCategory>(index);
+        const std::uint32_t owned = profile.raidIntelligence.count(
+            map.id, category);
+        const bool selected = selectedRaidIntelligence_.has(category);
+        const SDL_FRect button = raidIntelligenceButton(index);
+        if (selected)
+        {
+            SDL_SetRenderDrawColor(renderer_, 48, 98, 126, 255);
+        }
+        else if (owned > 0U)
+        {
+            SDL_SetRenderDrawColor(renderer_, 48, 82, 62, 255);
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(renderer_, 58, 50, 48, 255);
+        }
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 96 : 180, selected ? 180 : 102,
+            selected ? 220 : 92, 255);
+        SDL_RenderRect(renderer_, &button);
+        const std::string label = fmt::format(
+            "{} | OWN {} | {} {}",
+            intelligenceLabels[index],
+            owned,
+            selected ? "SELECTED" : owned > 0U ? "SELECT" : "BUY",
+            selected || owned > 0U
+                ? 0U
+                : map.operationBriefing.price(category));
+        uiTextRenderer_.render(
+            renderer_, button.x + 10.0F, button.y + 11.0F, label.c_str());
     }
 
     float y = 318.0F;
@@ -10149,7 +10290,7 @@ void App::renderBaseDeployment()
             "{}: {}",
             equipmentSlotLabel(slot),
             name);
-        uiTextRenderer_.render(renderer_, 480.0F, y, row.c_str());
+        uiTextRenderer_.render(renderer_, 666.0F, y, row.c_str());
         y += 18.0F;
     }
 
@@ -10170,19 +10311,18 @@ void App::renderBaseDeployment()
                 : "NO USABLE AMMUNITION";
     uiTextRenderer_.render(
         renderer_,
+        666.0F,
         458.0F,
-        448.0F,
         fireStatus.c_str());
-    uiTextRenderer_.render(
-        renderer_,
-        442.0F,
-        470.0F,
-        capable
-            ? "DEPLOY SAVES A PRE-RAID ROLLBACK POINT"
-            : "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
+    if (!capable)
+    {
+        uiTextRenderer_.render(
+            renderer_, 666.0F, 478.0F,
+            "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
+    }
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
-    uiTextRenderer_.render(renderer_, 454.0F, 590.0F, "CLICK < > TO SELECT | ENTER DEPLOY | ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 420.0F, 590.0F, "CLICK INTELLIGENCE TO BUY/SELECT | ENTER DEPLOY | ESC CLOSE");
 }
 
 void App::renderBase()
@@ -10274,6 +10414,200 @@ void App::renderBase()
     }
 }
 
+void App::renderRaidTacticalMap()
+{
+    if (!tacticalMapOpen_ ||
+        !gameSession_.world().raidSession().isActive())
+    {
+        return;
+    }
+
+    const RaidTacticalMapState &map = gameSession_.world().tacticalMap();
+    if (!map.configured())
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect shade{0.0F, 0.0F,
+                          static_cast<float>(kWindowWidth),
+                          static_cast<float>(kWindowHeight)};
+    SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 210);
+    SDL_RenderFillRect(renderer_, &shade);
+
+    const SDL_FRect panel{104.0F, 54.0F, 1072.0F, 612.0F};
+    const SDL_FRect chart{144.0F, 114.0F, 992.0F, 504.0F};
+    SDL_SetRenderDrawColor(renderer_, 12, 22, 25, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    const float cellWidth = chart.w / static_cast<float>(map.columns());
+    const float cellHeight = chart.h / static_cast<float>(map.rows());
+    for (int row = 0; row < map.rows(); ++row)
+    {
+        for (int column = 0; column < map.columns(); ++column)
+        {
+            const SDL_FRect cell{
+                chart.x + static_cast<float>(column) * cellWidth,
+                chart.y + static_cast<float>(row) * cellHeight,
+                cellWidth + 0.5F,
+                cellHeight + 0.5F};
+            if (map.cellRevealed(column, row))
+            {
+                SDL_SetRenderDrawColor(renderer_, 31, 52, 52, 245);
+            }
+            else
+            {
+                SDL_SetRenderDrawColor(renderer_, 4, 8, 10, 252);
+            }
+            SDL_RenderFillRect(renderer_, &cell);
+        }
+    }
+
+    const Vec2 worldSize = map.worldSize();
+    const auto screenPoint = [chart, worldSize](Vec2 point)
+    {
+        return Vec2{
+            chart.x + point.x / worldSize.x * chart.w,
+            chart.y + point.y / worldSize.y * chart.h};
+    };
+    const auto screenRect = [chart, worldSize](ContentRect rect)
+    {
+        return SDL_FRect{
+            chart.x + rect.position.x / worldSize.x * chart.w,
+            chart.y + rect.position.y / worldSize.y * chart.h,
+            rect.size.x / worldSize.x * chart.w,
+            rect.size.y / worldSize.y * chart.h};
+    };
+
+    SDL_SetRenderDrawColor(renderer_, 76, 88, 88, 220);
+    for (const BallisticBlocker &blocker :
+         gameSession_.world().ballisticBlockers())
+    {
+        const Vec2 center{
+            blocker.bounds.position.x + blocker.bounds.size.x * 0.5F,
+            blocker.bounds.position.y + blocker.bounds.size.y * 0.5F};
+        if (map.pointRevealed(center))
+        {
+            const SDL_FRect rect = screenRect(ContentRect{
+                blocker.bounds.position, blocker.bounds.size});
+            SDL_RenderFillRect(renderer_, &rect);
+        }
+    }
+
+    const auto renderExtraction = [&](
+        RaidMapExtractionKind kind,
+        const std::optional<ContentRect> &rect,
+        const char *label,
+        Uint8 red,
+        Uint8 green,
+        Uint8 blue)
+    {
+        if (!rect.has_value() || !map.extractionVisible(kind))
+        {
+            return;
+        }
+        const SDL_FRect marker = screenRect(*rect);
+        SDL_SetRenderDrawColor(renderer_, red, green, blue, 245);
+        SDL_RenderRect(renderer_, &marker);
+        const SDL_FRect inset{
+            marker.x + 3.0F, marker.y + 3.0F,
+            std::max(0.0F, marker.w - 6.0F),
+            std::max(0.0F, marker.h - 6.0F)};
+        SDL_RenderRect(renderer_, &inset);
+        uiTextRenderer_.render(
+            renderer_, marker.x + 5.0F, marker.y + 4.0F, label);
+    };
+    renderExtraction(
+        RaidMapExtractionKind::Normal,
+        std::optional<ContentRect>{map.normalExtraction()},
+        "N",
+        82, 216, 132);
+    renderExtraction(
+        RaidMapExtractionKind::EmergencySignal,
+        map.emergencyExtraction(),
+        "S",
+        230, 168, 76);
+    renderExtraction(
+        RaidMapExtractionKind::EmergencyConditional,
+        map.conditionalExtraction(),
+        "L",
+        104, 180, 230);
+
+    if (map.hasIntelligence(RaidIntelligenceCategory::Resource) &&
+        map.advancedResourceArea().has_value())
+    {
+        ContentRect coarse = *map.advancedResourceArea();
+        coarse.position.x = std::max(0.0F, coarse.position.x - 90.0F);
+        coarse.position.y = std::max(0.0F, coarse.position.y - 70.0F);
+        coarse.size.x = std::min(
+            worldSize.x - coarse.position.x, coarse.size.x + 180.0F);
+        coarse.size.y = std::min(
+            worldSize.y - coarse.position.y, coarse.size.y + 140.0F);
+        const SDL_FRect resource = screenRect(coarse);
+        SDL_SetRenderDrawColor(renderer_, 218, 188, 82, 110);
+        SDL_RenderFillRect(renderer_, &resource);
+        SDL_SetRenderDrawColor(renderer_, 232, 206, 106, 235);
+        SDL_RenderRect(renderer_, &resource);
+    }
+
+    if (map.hasIntelligence(RaidIntelligenceCategory::Enemy))
+    {
+        for (Vec2 enemy : map.initialEnemyCenters())
+        {
+            const Vec2 center = screenPoint(enemy);
+            const SDL_FRect coarse{
+                center.x - 26.0F, center.y - 20.0F, 52.0F, 40.0F};
+            SDL_SetRenderDrawColor(renderer_, 190, 72, 70, 86);
+            SDL_RenderFillRect(renderer_, &coarse);
+            SDL_SetRenderDrawColor(renderer_, 224, 104, 96, 220);
+            SDL_RenderRect(renderer_, &coarse);
+        }
+    }
+
+    const Player &player = gameSession_.world().player();
+    const Vec2 playerMarker = screenPoint(Vec2{
+        player.position().x + player.size() * 0.5F,
+        player.position().y + player.size() * 0.5F});
+    SDL_SetRenderDrawColor(renderer_, 226, 238, 224, 255);
+    SDL_RenderLine(renderer_, playerMarker.x - 7.0F, playerMarker.y,
+                   playerMarker.x + 7.0F, playerMarker.y);
+    SDL_RenderLine(renderer_, playerMarker.x, playerMarker.y - 7.0F,
+                   playerMarker.x, playerMarker.y + 7.0F);
+
+    uiTextRenderer_.render(
+        renderer_, 144.0F, 76.0F,
+        "TACTICAL MAP | M/ESC CLOSE | WORLD CONTINUES | MOVE 45%");
+    const std::string permissions = fmt::format(
+        "TRANSPORT {} | RESOURCE {} | ENEMY {} | NO LIVE TRACKING",
+        map.hasIntelligence(RaidIntelligenceCategory::Transport)
+            ? "ACTIVE" : "UNKNOWN",
+        map.hasIntelligence(RaidIntelligenceCategory::Resource)
+            ? "ACTIVE" : "UNKNOWN",
+        map.hasIntelligence(RaidIntelligenceCategory::Enemy)
+            ? "ACTIVE" : "UNKNOWN");
+    uiTextRenderer_.render(renderer_, 532.0F, 76.0F, permissions.c_str());
+    if (map.hasIntelligence(RaidIntelligenceCategory::Transport))
+    {
+        const RaidSession &raidSession =
+            gameSession_.world().raidSession();
+        const std::string exitStatus = fmt::format(
+            "EXITS | NORMAL {} | SIGNAL {} | LIGHT {}",
+            raidSession.normalExtractionOpen() ||
+                    raidSession.normalExtractionGraceActive()
+                ? "OPEN" : "CLOSED",
+            raidSession.emergencyExtractionOpen()
+                ? "OPEN" : "LOCKED",
+            raidSession.conditionalExtractionOpen() &&
+                    gameSession_.conditionalExtractionEligible()
+                ? "OPEN" : "LOCKED");
+        uiTextRenderer_.render(
+            renderer_, 430.0F, 638.0F, exitStatus.c_str());
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderRaidScreen()
 {
     // Keep an unshifted background underneath so the sub-two-pixel viewport
@@ -10325,6 +10659,7 @@ void App::renderRaidScreen()
     }
     renderAimCrosshair();
     renderCombatFeedback();
+    renderRaidTacticalMap();
 
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();

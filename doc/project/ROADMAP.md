@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#90 已接受。当前优先交付 **Base：聚合岗位、专业人口与设施升级 v1**；范围合同见 `doc/exec-plans/active/base-workforce-facility-upgrades-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#91 已接受。当前优先交付 **区域地图与对局情报 v1**；范围合同见 `doc/exec-plans/active/regional-map-intelligence-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -49,6 +49,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 宿舍扩建、撤离位置保持与分类自动供给 v1 | PR #87 / merge commit `1be94bf` |
 | 居民伤病与医疗所治疗 v1 | PR #88 / merge commit `987dc6b` |
 | 基础制造队列 v1 | PR #89 / merge commit `194f910` |
+| 正式士气与周期事件 v1 | PR #90 / merge commit `1af0e56` |
+| 聚合岗位、专业人口与设施升级 v1 | PR #91 / merge commit `12a2fa6` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -101,7 +103,13 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main |
 | 基础制造队列 v1 | 工坊用真实废旧零件、损坏电子元件、健康劳动力和世界时间制造真实武器维护包；可取消、可处理仓库满载 | 版本化 Recipe、稳定资产预留、单生产槽、工人预算、Raid 延迟物化、schema v17/content v25 | PR #89 已通过 CI 与用户正常游玩验收，以 `194f910` 进入 main；不扩展多队列、升级、职业、蓝图、品质、电力或自动化 |
 | 正式士气与周期事件 v1 | Allocation 显示居民士气、每日原因和五日事件；低/稳/高士气改变新制造订单耗时 | 独立 BaseMoraleState、每日账本、稳定事件快照、统一日结、Raid 回滚、schema v18/content v26 | PR #90 已通过 CI 与用户正常游玩验收，以 `1af0e56` 进入 main；不实现离队、叛乱或战斗修正 |
-| 聚合岗位、专业人口与设施升级 v1 | Raid 救援带来专业能力；玩家为工坊/医疗所安排人员并投资线性升级，任务时间按资格与等级冻结 | 四类聚合专业、互斥岗位、typed construction target、schema v19/content v27 | 实现、本地 1010/1010 回归和双平台 CI 已完成，等待用户正常游玩验收；不包含具名 NPC、培训、战斗小组、第二服务队列或正式资源 |
+| 聚合岗位、专业人口与设施升级 v1 | Raid 救援带来专业能力；玩家为工坊/医疗所安排人员并投资线性升级，任务时间按资格与等级冻结 | 四类聚合专业、互斥岗位、typed construction target、schema v19/content v27 | PR #91 已通过双平台 CI 与用户正常游玩验收，以 `12a2fa6` 进入 main；不包含具名 NPC、培训、战斗小组、第二服务队列或正式资源 |
+
+## 当前 Regional Operations 切片
+
+| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| 区域地图与对局情报 v1 | 三张固定图显示难度/风险；购买并选择交通、资源、敌情后出击；Raid 内用 `M` 查看不暂停的探索地图 | 地图专属情报归档、原子购买/消耗、冻结情报权限、探索/发现状态、schema v20/content v28 | 当前 `codex/regional-map-intelligence-v1` 实现中；随机地图、正式商人、情报 Loot、跨局地图记忆、哨所和迁徙延期 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -112,6 +112,7 @@ private:
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
     std::size_t selectedRaidMapIndex_{};
+    RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
         BaseSupplyCategory::Food};
     std::string uiMessage_;
@@ -120,6 +121,7 @@ private:
     float playerDamageFeedbackRemaining_{};
     bool lastIncomingDamageReducedByArmor_{};
     bool medicalWheelOpen_{};
+    bool tacticalMapOpen_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
     bool developerWeaponPanelOpen_{};
@@ -165,6 +167,7 @@ private:
     [[nodiscard]] bool tryDeployFromBase();
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
+    void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
 
     [[nodiscard]] std::string nextProfileTransactionId(
         const char *prefix);
@@ -188,6 +191,8 @@ private:
         float y) const noexcept;
 
     [[nodiscard]] SDL_FRect raidMapPreviousButton() const noexcept;
+    [[nodiscard]] SDL_FRect raidIntelligenceButton(
+        std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
 
     void processEvents();
@@ -271,6 +276,7 @@ private:
         std::size_t animationFrame);
     void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
+    void renderRaidTacticalMap();
     void renderScreenPrimaryButton(
         const char *label);
     void renderBackground();

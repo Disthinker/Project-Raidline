@@ -14,6 +14,7 @@
 #include "content_registry.h"
 #include "grid_inventory.h"
 #include "medical_types.h"
+#include "raid_intelligence_types.h"
 #include "world_clock.h"
 
 using AssetInstanceId = std::uint64_t;
@@ -476,6 +477,7 @@ struct RaidTravelSnapshot
     std::uint32_t startingInjuredResidents{};
     BaseProfessionCounts startingInjuredByProfession{};
     BaseResidentMedicalState startingResidentMedical;
+    RaidIntelligenceArchiveState startingRaidIntelligence;
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -499,6 +501,7 @@ struct PendingRaidSnapshot
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
     MedicalStatusState startingMedicalStatus;
+    RaidIntelligenceLoadout intelligence;
     RaidTravelSnapshot travel;
 };
 
@@ -532,6 +535,7 @@ struct ProfileState
     BaseManufacturingState baseManufacturing;
     BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
+    RaidIntelligenceArchiveState raidIntelligence;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;
