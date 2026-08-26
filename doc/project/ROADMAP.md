@@ -130,7 +130,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 建筑内部图永久情报 v1 | Base 一次购买交换站办公室内部图；进入后 `M` 显示固定墙体、出口和玩家，室外入口仍需探索 | 稳定空间 ID 永久授权、原子购买、Deploy 冻结、schema v23/content v32、只读室内地图投影 | PR #97 已通过 CI 与用户验收，以普通 merge commit `a7b3cc2` 进入 main |
 | 空间战术可靠性 v1 | 未暴露的敌人不能隔墙锁定；成功开枪或其他声音暴露后，即使玩家贴墙或躲到单墙后，敌人也会沿合法掩体边缘调查，无遮挡后才恢复攻击 | 当前空间 LOS、actor-expanded 确定性可见图、容差内合法接近点、最后已知位置、成功击发枪声刺激、命中提交前复验 | PR #98 已通过 CI 与用户验收，以普通 merge commit `95fcd23` 进入 main；墙体声学、跨空间追踪和完整 NavMesh 延期 |
 | 第二个代表性地点 v1 | `Frontier Exchange` 同局包含办公室与货运装卸间；两处地点分别探索、进入、清理并购买永久内部图 | 多 RaidSpaceDefinitionId、双地点合法 Socket、入口/返回点可达锚点、全量可见入口投影、rules v15/content v33、v14 pending Raid 兼容 | PR #99 已通过 CI 与用户验收，以普通 merge commit `1d2fea1` 进入 main；第三地点、程序化室内和正式资源延期 |
-| 可扩展性能基础 v1 | 当前正常 Raid 行为和敌人数量不变；F9 可查看帧时间及模拟工作量 | 每空间公平路径轮转、敌人近邻格、静态障碍索引、精确可见图/高密度网格双后端、32/100 敌人压力门槛 | 当前分支已通过 Windows Debug 全目标和 1097/1097 CTest；exact-head CI 与用户正常游玩复验待完成 |
+| 可扩展性能基础 v1 | 当前正常 Raid 行为和敌人数量不变；F9 可查看帧时间及模拟工作量 | 每空间公平路径轮转、敌人近邻格、静态障碍索引、精确可见图/高密度网格双后端、32/100 敌人压力门槛 | 当前分支已通过 Windows Debug 全目标、1097/1097 CTest，以及代码提交 `a5721fa` 的 exact-head Windows/Ubuntu CI；用户正常游玩复验待完成 |
 
 ## 当前 Combat Reliability 缺陷
 
