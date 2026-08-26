@@ -95,7 +95,7 @@ procedural-map, merchant, outpost or migration systems.
 - [x] Tactical map, exploration fog and three information projections complete.
 - [x] Bilingual operation board, focused regression and documentation complete.
 - [x] Windows Debug full build and complete CTest 1026/1026 pass at final source state.
-- [ ] Exact-head CI complete.
+- [x] PR #92 implementation commit `cdce5d0` Windows/Ubuntu CI complete.
 - [ ] User normal-play acceptance complete.
 
 ## Rollback
