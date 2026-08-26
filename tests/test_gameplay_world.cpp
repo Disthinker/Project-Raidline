@@ -2534,6 +2534,7 @@ TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
     RaidInteriorWorldConfig interior;
     interior.id = RaidSpaceDefinitionId{"raid_space.test.office"};
     interior.displayName = "Test Office";
+    interior.layoutKnown = true;
     interior.worldSize = Vec2{480.0F, 360.0F};
     interior.exteriorEntrance =
         ContentRect{Vec2{80.0F, 80.0F}, Vec2{100.0F, 100.0F}};
@@ -2565,6 +2566,14 @@ TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
     EXPECT_EQ(world.enemies().size(), 1U);
     EXPECT_EQ(world.ballisticBlockers().size(), 1U);
     EXPECT_EQ(world.raidSpaceWorldSize().x, 480.0F);
+    const std::optional<RaidInteriorMapProjection> mapProjection =
+        world.activeInteriorMapProjection();
+    ASSERT_TRUE(mapProjection.has_value());
+    EXPECT_EQ(mapProjection->id,
+              RaidSpaceDefinitionId{"raid_space.test.office"});
+    EXPECT_EQ(mapProjection->blockers.size(), 1U);
+    EXPECT_EQ(mapProjection->exit,
+              (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
 
     const Vec2 interiorEnemyBefore = world.enemies().front().position();
     world.update(GameplayInput{}, 0.25F);
@@ -2623,6 +2632,7 @@ TEST(GameplayWorldRaidTest, EnteringPortalDiscoversItBeforeSpaceTransition)
     EXPECT_EQ(
         *world.activeRaidSpacePortal(),
         (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
+    EXPECT_FALSE(world.activeInteriorMapProjection().has_value());
 }
 
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)

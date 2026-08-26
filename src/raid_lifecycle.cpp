@@ -334,7 +334,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-special-location-placement-13";
+    snapshot.rulesVersion = "raid-building-intelligence-14";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -403,6 +403,8 @@ DeployReceipt executeDeploy(
         RaidInteriorSnapshot frozen;
         frozen.id = interior.id;
         frozen.displayName = interior.displayName;
+        frozen.layoutKnown =
+            candidate.raidInteriorIntelligence.knows(interior.id);
         frozen.worldSize = interior.worldSize;
         frozen.exteriorEntrance = interior.exteriorEntrance;
         frozen.exteriorReturn = interior.exteriorReturn;

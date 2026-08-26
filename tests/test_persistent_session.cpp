@@ -341,6 +341,57 @@ TEST(PersistentSessionTest, GunsmithMaintenancePersistsImmediately)
     EXPECT_FALSE(reopened.profile().gunsmithMaintenanceJob.has_value());
 }
 
+TEST(PersistentSessionTest,
+     PermanentInteriorIntelligencePurchaseSurvivesNewProcessSession)
+{
+    SessionSaveDirectory temporary;
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.startNewProfile("persistent-interior-intelligence"));
+    const std::uint32_t startingCurrency = first.profile().currency;
+
+    const RaidInteriorIntelligencePurchaseReceipt receipt =
+        first.purchaseRaidInteriorIntelligence(
+            {interiorId}, "persistent-interior-plan-purchase");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(first.profile().currency, startingCurrency - 180U);
+    EXPECT_TRUE(first.profile().raidInteriorIntelligence.knows(interiorId));
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().currency, startingCurrency - 180U);
+    EXPECT_TRUE(reopened.profile().raidInteriorIntelligence.knows(interiorId));
+}
+
+TEST(PersistentSessionTest,
+     PermanentInteriorIntelligenceSaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    std::filesystem::create_directories(temporary.path());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "interior-intelligence-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    GameSession session;
+    session.configurePersistence(invalidDirectory);
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+
+    const RaidInteriorIntelligencePurchaseReceipt receipt =
+        session.purchaseRaidInteriorIntelligence(
+            {interiorId}, "interior-plan-save-must-not-commit");
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().raidInteriorIntelligence.knows(interiorId));
+}
+
 AssetInstanceId addStashItem(
     ProfileState &profile,
     const ItemDefinitionId &definitionId)

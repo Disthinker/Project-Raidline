@@ -853,6 +853,18 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Raid intelligence archive is invalid"};
     }
+    for (const RaidSpaceDefinitionId &interiorId :
+         profile.raidInteriorIntelligence.knownLayouts)
+    {
+        try
+        {
+            static_cast<void>(content.raidInterior(interiorId));
+        }
+        catch (...)
+        {
+            return {false, "Raid interior intelligence archive is invalid"};
+        }
+    }
     const BaseResourceBundle &resources = profile.baseResources.pool;
     const BaseResourceBundle &shortfall =
         profile.baseResources.lastShortfall;
@@ -1490,7 +1502,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-map-intelligence-10" ||
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
-            raid.rulesVersion == "raid-special-location-placement-13";
+            raid.rulesVersion == "raid-special-location-placement-13" ||
+            raid.rulesVersion == "raid-building-intelligence-14";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1501,16 +1514,22 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-map-intelligence-10" ||
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
-            raid.rulesVersion == "raid-special-location-placement-13";
+            raid.rulesVersion == "raid-special-location-placement-13" ||
+            raid.rulesVersion == "raid-building-intelligence-14";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
-            raid.rulesVersion == "raid-special-location-placement-13";
+            raid.rulesVersion == "raid-special-location-placement-13" ||
+            raid.rulesVersion == "raid-building-intelligence-14";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
-            raid.rulesVersion == "raid-special-location-placement-13";
+            raid.rulesVersion == "raid-special-location-placement-13" ||
+            raid.rulesVersion == "raid-building-intelligence-14";
         const bool specialLocationRules =
-            raid.rulesVersion == "raid-special-location-placement-13";
+            raid.rulesVersion == "raid-special-location-placement-13" ||
+            raid.rulesVersion == "raid-building-intelligence-14";
+        const bool buildingIntelligenceRules =
+            raid.rulesVersion == "raid-building-intelligence-14";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1761,6 +1780,10 @@ ProfileValidationResult validateProfileState(
                               definition.exteriorReturn.y;
                 if (snapshot.id != definition.id ||
                     snapshot.displayName != definition.displayName ||
+                    (buildingIntelligenceRules &&
+                     snapshot.layoutKnown !=
+                         profile.raidInteriorIntelligence.knows(snapshot.id)) ||
+                    (!buildingIntelligenceRules && snapshot.layoutKnown) ||
                     snapshot.worldSize.x != definition.worldSize.x ||
                     snapshot.worldSize.y != definition.worldSize.y ||
                     !portalMatches ||
@@ -2185,6 +2208,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, count);
         }
     }
+    for (const RaidSpaceDefinitionId &interiorId :
+         profile.raidInteriorIntelligence.knownLayouts)
+    {
+        hashBytes(hash, interiorId.value());
+    }
     hashInteger(hash, static_cast<std::uint32_t>(profile.tutorial));
     hashInteger(hash, profile.currentHealth);
     hashInteger(hash, static_cast<std::uint32_t>(
@@ -2438,6 +2466,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashBytes(hash, interior.id.value());
             hashBytes(hash, interior.displayName);
+            hashInteger(hash, interior.layoutKnown ? 1U : 0U);
             hashFloat(hash, interior.worldSize.x);
             hashFloat(hash, interior.worldSize.y);
             hashFloat(hash, interior.exteriorEntrance.position.x);

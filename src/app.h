@@ -168,6 +168,8 @@ private:
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
+    void handleRaidInteriorIntelligencePurchase(
+        const RaidSpaceDefinitionId &interiorId);
 
     [[nodiscard]] std::string nextProfileTransactionId(
         const char *prefix);

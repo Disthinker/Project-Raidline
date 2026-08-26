@@ -139,6 +139,26 @@ TEST(UiLocalizationTest, ChineseTranslatesInteriorPlaceholdersAndPortal)
             "室内地图尚不可用");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesPermanentInteriorIntelligence)
+{
+  const std::string offer = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "INTERIOR PLAN | Exchange Office | BUY 180");
+  EXPECT_NE(offer.find("建筑内部图"), std::string::npos);
+  EXPECT_NE(offer.find("交易所办公室"), std::string::npos);
+
+  const std::string map = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "INTERIOR MAP | Exchange Office | PERMANENT INTELLIGENCE");
+  EXPECT_NE(map.find("建筑内部地图"), std::string::npos);
+  EXPECT_NE(map.find("永久情报"), std::string::npos);
+
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "interior layout is already permanently known"),
+            "已经永久掌握该建筑内部布局");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesWarehouseRecoveryAndAllocationAccess) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WAREHOUSE"),
             "仓储");

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -68,6 +69,7 @@ struct RaidInteriorWorldConfig
 {
     RaidSpaceDefinitionId id;
     std::string displayName;
+    bool layoutKnown{};
     Vec2 worldSize{};
     ContentRect exteriorEntrance;
     Vec2 exteriorReturn{};
@@ -75,6 +77,15 @@ struct RaidInteriorWorldConfig
     ContentRect interiorExit;
     std::vector<EnemySpawn> initialEnemies;
     std::vector<BallisticBlocker> ballisticBlockers;
+};
+
+struct RaidInteriorMapProjection
+{
+    RaidSpaceDefinitionId id;
+    std::string_view displayName;
+    Vec2 worldSize{};
+    ContentRect exit;
+    std::span<const BallisticBlocker> blockers;
 };
 
 struct RaidWorldConfig
@@ -209,6 +220,8 @@ public:
     activeRaidSpacePortal() const noexcept;
     [[nodiscard]] bool raidSpacePortalInteractionInRange() const noexcept;
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
+    [[nodiscard]] std::optional<RaidInteriorMapProjection>
+    activeInteriorMapProjection() const noexcept;
 
     [[nodiscard]]
     const std::vector<Particle> &
@@ -368,6 +381,7 @@ private:
     {
         RaidSpaceDefinitionId id;
         std::string displayName;
+        bool layoutKnown{};
         Vec2 worldSize{};
         ContentRect exteriorEntrance;
         Vec2 exteriorReturn{};

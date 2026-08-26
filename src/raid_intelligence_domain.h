@@ -33,6 +33,30 @@ struct RaidIntelligencePurchaseReceipt
     std::uint32_t ownedAfter{};
 };
 
+struct RaidInteriorIntelligencePurchaseCommand
+{
+    RaidSpaceDefinitionId interiorId;
+};
+
+struct RaidInteriorIntelligencePurchasePlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::uint32_t price{};
+};
+
+struct RaidInteriorIntelligencePurchaseReceipt
+{
+    bool succeeded{};
+    bool idempotent{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::uint32_t currencyPaid{};
+};
+
 [[nodiscard]] RaidIntelligencePurchasePlan queryRaidIntelligencePurchase(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -42,4 +66,17 @@ struct RaidIntelligencePurchaseReceipt
     ProfileState &profile,
     const ContentRegistry &content,
     const RaidIntelligencePurchaseCommand &command,
+    const CommandContext &context);
+
+[[nodiscard]] RaidInteriorIntelligencePurchasePlan
+queryRaidInteriorIntelligencePurchase(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RaidInteriorIntelligencePurchaseCommand &command);
+
+[[nodiscard]] RaidInteriorIntelligencePurchaseReceipt
+executeRaidInteriorIntelligencePurchase(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const RaidInteriorIntelligencePurchaseCommand &command,
     const CommandContext &context);

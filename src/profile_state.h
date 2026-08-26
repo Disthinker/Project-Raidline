@@ -209,6 +209,7 @@ struct RaidInteriorSnapshot
 {
     RaidSpaceDefinitionId id;
     std::string displayName;
+    bool layoutKnown{};
     Vec2 worldSize{};
     ContentRect exteriorEntrance;
     Vec2 exteriorReturn{};
@@ -222,6 +223,7 @@ struct RaidInteriorSnapshot
     {
         return left.id == right.id &&
             left.displayName == right.displayName &&
+            left.layoutKnown == right.layoutKnown &&
             left.worldSize.x == right.worldSize.x &&
             left.worldSize.y == right.worldSize.y &&
             left.exteriorEntrance == right.exteriorEntrance &&
@@ -570,6 +572,7 @@ struct ProfileState
     BaseConstructionState baseConstruction;
     BasePriorityState basePriority;
     RaidIntelligenceArchiveState raidIntelligence;
+    RaidInteriorIntelligenceArchiveState raidInteriorIntelligence;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;

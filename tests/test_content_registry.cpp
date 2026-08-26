@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-special-location-placement-content-31");
+        "raid-building-intelligence-content-32");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -134,6 +134,13 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         frontierWithInterior.interiors.front().id,
         RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"});
+    EXPECT_EQ(
+        frontierWithInterior.interiors.front().intelligencePrice,
+        180U);
+    EXPECT_EQ(
+        &registry.raidInterior(
+            RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"}),
+        &frontierWithInterior.interiors.front());
     EXPECT_EQ(frontierWithInterior.interiors.front().enemies.size(), 2U);
     EXPECT_EQ(frontierWithInterior.interiors.front().lootSlots.size(), 3U);
     ASSERT_EQ(
@@ -1046,6 +1053,18 @@ TEST(ContentRegistryTest, RejectsDuplicateRaidExteriorPlacementId)
         publishedJsonCopy(),
         "\"id\": \"north_exchange\"",
         "\"id\": \"east_gate\"");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsNonPositiveInteriorIntelligencePrice)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"intelligence_price\": 180",
+        "\"intelligence_price\": 0");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

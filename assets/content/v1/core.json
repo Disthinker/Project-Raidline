@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-special-location-placement-content-31",
+  "content_version": "raid-building-intelligence-content-32",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1055,6 +1055,7 @@
         {
           "id": "raid_space.frontier_exchange.office",
           "display_name": "Exchange Office",
+          "intelligence_price": 180,
           "world_size": {"x": 960, "y": 640},
           "exterior_placements": [
             {"id": "east_gate", "entrance": {"position": {"x": 1100, "y": 190}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 1125, "y": 285}},

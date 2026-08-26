@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
 
 #include "definition_id.h"
 
@@ -74,4 +75,19 @@ struct RaidIntelligenceArchiveState
     friend bool operator==(
         const RaidIntelligenceArchiveState &,
         const RaidIntelligenceArchiveState &) = default;
+};
+
+struct RaidInteriorIntelligenceArchiveState
+{
+    std::set<RaidSpaceDefinitionId> knownLayouts;
+
+    [[nodiscard]] bool knows(
+        const RaidSpaceDefinitionId &interiorId) const noexcept
+    {
+        return knownLayouts.contains(interiorId);
+    }
+
+    friend bool operator==(
+        const RaidInteriorIntelligenceArchiveState &,
+        const RaidInteriorIntelligenceArchiveState &) = default;
 };
