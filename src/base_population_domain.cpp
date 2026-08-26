@@ -1,6 +1,7 @@
 #include "base_population_domain.h"
 
 #include "base_construction_domain.h"
+#include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
 
 #include <limits>
@@ -138,6 +139,7 @@ BaseRestReceipt executeBaseRest(
         plan.dailyDemand);
     static_cast<void>(synchronizeBasePriorityThrough(candidate, content));
     static_cast<void>(applyBaseConstructionThrough(candidate, content));
+    static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     static_cast<void>(applyResidentTreatmentThrough(candidate));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;

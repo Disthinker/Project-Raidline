@@ -91,6 +91,7 @@ struct MapDefinitionTag;
 struct BasePriorityDefinitionTag;
 struct RescueDefinitionTag;
 struct BaseConstructionProjectDefinitionTag;
+struct BaseManufacturingRecipeDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
@@ -101,3 +102,5 @@ using BasePriorityDefinitionId = DefinitionId<BasePriorityDefinitionTag>;
 using RescueDefinitionId = DefinitionId<RescueDefinitionTag>;
 using BaseConstructionProjectDefinitionId =
     DefinitionId<BaseConstructionProjectDefinitionTag>;
+using BaseManufacturingRecipeDefinitionId =
+    DefinitionId<BaseManufacturingRecipeDefinitionTag>;

@@ -65,9 +65,16 @@ projectBaseConstruction(const ProfileState &profile,
           active.completionWorldMinute - profile.worldClock.elapsedWorldMinutes;
     }
   }
+  const std::uint32_t manufacturingWorkers =
+      profile.baseManufacturing.activeOrder.has_value() &&
+              !profile.baseManufacturing.activeOrder->outputReady
+          ? profile.baseManufacturing.activeOrder->committedWorkers
+          : 0U;
   projection.availableWorkers =
-      projection.totalWorkers > projection.committedWorkers
-          ? projection.totalWorkers - projection.committedWorkers
+      projection.totalWorkers >
+              projection.committedWorkers + manufacturingWorkers
+          ? projection.totalWorkers - projection.committedWorkers -
+                manufacturingWorkers
           : 0U;
   return projection;
 }
@@ -209,7 +216,16 @@ queryStartBaseConstruction(const ProfileState &profile,
           ? profile.basePopulation.ordinaryResidents -
                 profile.basePopulation.injuredResidents
           : 0U;
-  if (healthyWorkers < definition->workerCount) {
+  const std::uint32_t manufacturingWorkers =
+      profile.baseManufacturing.activeOrder.has_value() &&
+              !profile.baseManufacturing.activeOrder->outputReady
+          ? profile.baseManufacturing.activeOrder->committedWorkers
+          : 0U;
+  const std::uint32_t availableWorkers =
+      healthyWorkers > manufacturingWorkers
+          ? healthyWorkers - manufacturingWorkers
+          : 0U;
+  if (availableWorkers < definition->workerCount) {
     return constructionFailure(DomainErrorCode::Capacity,
                                "insufficient available Base workers",
                                profile.revision);

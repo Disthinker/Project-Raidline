@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-25。
+最后核对：2026-08-26。
 
 ## Git 与交付基线
 
-- `origin/main@1be94bf` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#87 接受的 Base Growth 基线；PR #87 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `1be94bf` 合入。
-- 当前开发分支：`codex/base-resident-medical-treatment-v1`，从干净的 `origin/main@1be94bf` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-resident-medical-treatment-v1.md`。
+- `origin/main@987dc6b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#88 接受的 Base Growth 基线；PR #88 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `987dc6b` 合入。
+- 当前开发分支：`codex/base-basic-manufacturing-v1`，从干净的 `origin/main@987dc6b` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-basic-manufacturing-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#87 已接受。当前分支交付 **Base 居民伤病与医疗所治疗 v1**；外部 GDD 继续只读，新增范围只建立聚合居民、统一自有资产、医疗分类授权和世界时间的实际消费者。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#88 已接受。当前分支交付 **Base 基础制造队列 v1**；外部 GDD 继续只读，本切片只用既有工坊、劳动力、统一资产和世界时间建立一个实际生产消费者。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -42,7 +42,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 27. **Base 居民、床位与睡眠 v1**：PR #85 新增宿舍设施、8 名普通居民/10 个床位的迁移默认值、按人口计算的每日口粮和最多 12 小时的原子休息事务；已通过 CI 和用户验收并以 `2377035` 合入 main。
 28. **Raid 普通幸存者安全转移 v1**：PR #86 为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。已通过 CI 与用户正常游玩验收并以 `ee9ba48` 合入 main。
 29. **Base 宿舍扩建与分类自动供给 v1**：PR #87 允许从统一自有资产显式加工建材并完成宿舍 1→2 级项目；成功撤离保持全部随身物原位置，食物/医疗/娱乐/安全菜单按物品定义保存自动供给授权，只有每日需求不足时才消费。已通过 exact-head CI 和用户正常游玩验收，以 `1be94bf` 进入 main。
-30. **Base 居民伤病与医疗所治疗 v1**：当前分支让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。
+30. **Base 居民伤病与医疗所治疗 v1**：PR #88 让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main。
+31. **Base 基础制造队列 v1**：当前分支为损坏工坊提供一个生产槽；以 1 个废旧零件、1 个损坏电子元件和 1 名健康劳动力经过 6 小时制造一件真实武器维护包。投入物、产物、取消、仓库阻塞和 Raid 时间边界全部保持稳定资产身份与原子性。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -70,8 +71,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #87 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `1be94bf` 进入 main。
-- 当前居民医疗分支已通过 Windows Debug 全目标、完整 CTest 973/973 和 Draft PR #88 exact-head Windows/Ubuntu CI；尚待用户正常游玩验收。开发代理未启动游戏。
+- PR #88 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `987dc6b` 进入 main。
+- 当前基础制造分支已完成领域、存档 schema v17/content v25、Base/Raid 时间接线、工坊占位 UI 及 focused 回归；Windows Debug 全目标构建与完整 CTest 988/988 通过，Draft PR #89 的代码提交 `aed2b1d` 已通过 exact-head Windows/Ubuntu CI。开发代理未启动游戏，等待用户正常游玩验收。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

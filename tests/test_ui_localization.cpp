@@ -201,6 +201,21 @@ TEST(UiLocalizationTest, ChineseTranslatesDormitoryConstructionFlow) {
             "基地建材不足");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesWorkshopManufacturingFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKSHOP & PRODUCTION"),
+            "工坊与生产");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MANUFACTURING STARTED"),
+            "生产已开始");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Stash has no room for the manufacturing output"),
+            "仓库没有容纳生产物品的空间");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesCategorizedAutomaticBaseSupply) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

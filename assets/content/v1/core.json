@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-resident-medical-content-24",
+  "content_version": "base-basic-manufacturing-content-25",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -33,6 +33,21 @@
         "worker_count": 3,
         "duration_minutes": 360,
         "bed_capacity_after": 14
+      }
+    ]
+  },
+  "base_manufacturing": {
+    "recipes": [
+      {
+        "id": "base_manufacturing.weapon_maintenance_kit",
+        "display_name": "Field Weapon Maintenance Kit",
+        "inputs": [
+          {"item": "item.loot.scrap_parts", "quantity": 1},
+          {"item": "item.loot.electronics", "quantity": 1}
+        ],
+        "output": {"item": "item.maintenance.weapon_kit_basic", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 360
       }
     ]
   },

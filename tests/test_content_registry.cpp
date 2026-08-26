@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-resident-medical-content-24");
+        "base-basic-manufacturing-content-25");
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -95,6 +95,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(dormitory.workerCount, 3U);
     EXPECT_EQ(dormitory.durationMinutes, 360U);
     EXPECT_EQ(dormitory.bedCapacityAfter, 14U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 1U);
+    const BaseManufacturingRecipeDefinition &manufacturing =
+        registry.baseManufacturingRecipe(
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"});
+    EXPECT_EQ(manufacturing.inputs.size(), 2U);
+    EXPECT_EQ(
+        manufacturing.outputItemDefinitionId,
+        ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
+    EXPECT_EQ(manufacturing.workerCount, 1U);
+    EXPECT_EQ(manufacturing.durationMinutes, 360U);
     ASSERT_EQ(registry.basePriorities().size(), 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
         BasePriorityDefinitionId{"base_priority.comfort_cola"});
@@ -420,6 +431,28 @@ TEST(ContentRegistryTest, RejectsInvalidBaseConstructionDefinition)
             publishedJsonCopy(),
             "\"base_construction_material\": 4",
             "\"base_construction_material\": 101"))),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidBaseManufacturingDefinition)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"worker_count\": 1",
+            "\"worker_count\": 0"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"item\": \"item.loot.electronics\", \"quantity\": 1",
+            "\"item\": \"item.loot.unknown\", \"quantity\": 1"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"id\": \"base_manufacturing.weapon_maintenance_kit\"",
+            "\"id\": \"item.invalid_recipe\""))),
         ContentRegistryError);
 }
 

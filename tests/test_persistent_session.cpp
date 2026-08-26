@@ -341,6 +341,25 @@ TEST(PersistentSessionTest, GunsmithMaintenancePersistsImmediately)
     EXPECT_FALSE(reopened.profile().gunsmithMaintenanceJob.has_value());
 }
 
+AssetInstanceId addStashItem(
+    ProfileState &profile,
+    const ItemDefinitionId &definitionId)
+{
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(definitionId);
+    const auto origin = findFirstProfileFit(
+        profile,
+        publishedContentRegistry(),
+        ProfileContainerId::stash(),
+        definition,
+        ItemOrientation::Degrees0);
+    EXPECT_TRUE(origin.has_value());
+    return profile.assets.create(
+        definition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin},
+        1);
+}
+
 TEST(PersistentSessionTest, ConstructionCommandsPersistAcrossProcessSessions)
 {
     SessionSaveDirectory temporary;
@@ -754,6 +773,85 @@ TEST(PersistentSessionTest,
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
     EXPECT_FALSE(session.profile().residentMedical.activeTreatment.has_value());
     EXPECT_EQ(session.profile().basePopulation.injuredResidents, 1U);
+}
+
+TEST(PersistentSessionTest,
+     ManufacturingStartCompletionAndRealOutputPersistAcrossProcesses)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-manufacturing",
+        publishedContentRegistry());
+    addStashItem(initial, ItemDefinitionId{"item.loot.scrap_parts"});
+    addStashItem(initial, ItemDefinitionId{"item.loot.electronics"});
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession started;
+    started.configurePersistence(temporary.path());
+    ASSERT_TRUE(started.continueProfile()) << started.persistenceMessage();
+    const BaseManufacturingReceipt receipt =
+        started.executeStartBaseManufacturing(
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"},
+            "persistent-start-manufacturing");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+
+    GameSession processing;
+    processing.configurePersistence(temporary.path());
+    ASSERT_TRUE(processing.continueProfile()) << processing.persistenceMessage();
+    ASSERT_TRUE(processing.profile().baseManufacturing.activeOrder.has_value());
+    processing.advanceBaseWorldClock(360.0F);
+    EXPECT_FALSE(processing.profile().baseManufacturing.activeOrder.has_value());
+
+    GameSession completed;
+    completed.configurePersistence(temporary.path());
+    ASSERT_TRUE(completed.continueProfile()) << completed.persistenceMessage();
+    const AssetRecord *output = completed.profile().assets.find(
+        *receipt.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(
+        output->definitionId,
+        ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+}
+
+TEST(PersistentSessionTest,
+     ManufacturingSaveFailurePreservesInputsAndStableIdentities)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-manufacturing-save",
+        publishedContentRegistry());
+    addStashItem(initial, ItemDefinitionId{"item.loot.scrap_parts"});
+    addStashItem(initial, ItemDefinitionId{"item.loot.electronics"});
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "manufacturing-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BaseManufacturingReceipt receipt =
+        session.executeStartBaseManufacturing(
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.weapon_maintenance_kit"},
+            "manufacturing-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().baseManufacturing.activeOrder.has_value());
 }
 
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)

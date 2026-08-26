@@ -193,6 +193,11 @@ namespace
         return SDL_FRect{710.0F, 384.0F, 340.0F, 58.0F};
     }
 
+    SDL_FRect baseManufacturingButton() noexcept
+    {
+        return SDL_FRect{700.0F, 520.0F, 340.0F, 56.0F};
+    }
+
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
         switch (slot)
@@ -1947,6 +1952,53 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             }
             return;
         }
+        return;
+    }
+
+    if (*facility == BaseFacilityKind::Workshop)
+    {
+        if (!contains(baseManufacturingButton(), click.position))
+        {
+            return;
+        }
+        const ProfileState &profile = gameSession_.profile();
+        const auto &recipes =
+            publishedContentRegistry().baseManufacturingRecipes();
+        if (recipes.empty())
+        {
+            uiMessage_ = "NO PUBLISHED MANUFACTURING RECIPE";
+            gameAudio_.play(SoundEventId::UiDeny);
+            return;
+        }
+        BaseManufacturingReceipt receipt;
+        if (!profile.baseManufacturing.activeOrder.has_value())
+        {
+            receipt = gameSession_.executeStartBaseManufacturing(
+                recipes.front().id,
+                nextProfileTransactionId("start-base-manufacturing"));
+            uiMessage_ = receipt.succeeded
+                ? "MANUFACTURING STARTED"
+                : receipt.message;
+        }
+        else if (profile.baseManufacturing.activeOrder->outputReady)
+        {
+            receipt = gameSession_.executeCollectBaseManufacturing(
+                nextProfileTransactionId("collect-base-manufacturing"));
+            uiMessage_ = receipt.succeeded
+                ? "MANUFACTURED ITEM COLLECTED"
+                : receipt.message;
+        }
+        else
+        {
+            receipt = gameSession_.executeCancelBaseManufacturing(
+                nextProfileTransactionId("cancel-base-manufacturing"));
+            uiMessage_ = receipt.succeeded
+                ? "MANUFACTURING CANCELLED | INPUTS RETURNED"
+                : receipt.message;
+        }
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::UiConfirm
+            : SoundEventId::UiDeny);
         return;
     }
 
@@ -7712,6 +7764,9 @@ void App::renderBaseWorld()
         case BaseFacilityKind::Dormitory:
             SDL_SetRenderDrawColor(renderer_, 66, 64, 78, 255);
             break;
+        case BaseFacilityKind::Workshop:
+            SDL_SetRenderDrawColor(renderer_, 80, 66, 44, 255);
+            break;
         case BaseFacilityKind::RaidGate:
             SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
             break;
@@ -9530,6 +9585,112 @@ void App::renderBaseDormitory()
     }
 }
 
+void App::renderBaseWorkshop()
+{
+    const SDL_FRect panel{120.0F, 90.0F, 1040.0F, 560.0F};
+    SDL_SetRenderDrawColor(renderer_, 30, 27, 22, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 176, 142, 92, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    const ProfileState &profile = gameSession_.profile();
+    const BaseManufacturingRecipeDefinition &recipe =
+        publishedContentRegistry().baseManufacturingRecipes().front();
+    const BaseManufacturingProjection projection =
+        projectBaseManufacturing(profile);
+    SDL_SetRenderDrawColor(renderer_, 232, 222, 196, 255);
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 128.0F,
+        "WORKSHOP & PRODUCTION | TEXT/GEOMETRY PLACEHOLDER");
+    uiTextRenderer_.render(
+        renderer_, 170.0F, 178.0F, recipe.displayName.c_str());
+
+    float y = 228.0F;
+    uiTextRenderer_.render(renderer_, 170.0F, y, "REQUIRED INPUTS");
+    for (const BaseManufacturingInputDefinition &input : recipe.inputs)
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(input.itemDefinitionId);
+        const std::string row = fmt::format(
+            "{} x{}", definition.displayName, input.quantity);
+        y += 30.0F;
+        uiTextRenderer_.render(renderer_, 190.0F, y, row.c_str());
+    }
+    const ItemDefinition &outputDefinition =
+        publishedContentRegistry().item(recipe.outputItemDefinitionId);
+    const std::string output = fmt::format(
+        "OUTPUT {} x{} | {} WORKER | {}H",
+        outputDefinition.displayName,
+        recipe.outputQuantity,
+        recipe.workerCount,
+        recipe.durationMinutes / kWorldMinutesPerHour);
+    uiTextRenderer_.render(renderer_, 170.0F, 338.0F, output.c_str());
+
+    std::string status;
+    const char *buttonLabel{};
+    bool available{};
+    if (!projection.orderPresent)
+    {
+        const BaseManufacturingStartPlan plan =
+            queryStartBaseManufacturing(
+                profile,
+                publishedContentRegistry(),
+                StartBaseManufacturingCommand{recipe.id});
+        status = plan.canCommit
+            ? "WORKSHOP READY | INPUTS REMAIN IN OWNED INVENTORY UNTIL START"
+            : plan.message;
+        buttonLabel = plan.canCommit
+            ? "START PRODUCTION"
+            : "PRODUCTION REQUIREMENTS NOT MET";
+        available = plan.canCommit;
+    }
+    else if (projection.outputReady)
+    {
+        const BaseManufacturingReturnPlan plan =
+            queryCollectBaseManufacturing(
+                profile, publishedContentRegistry());
+        status = "OUTPUT READY | WORKER RELEASED";
+        buttonLabel = plan.canCommit
+            ? "COLLECT TO STASH"
+            : "OUTPUT READY | STASH SPACE REQUIRED";
+        available = plan.canCommit;
+    }
+    else
+    {
+        status = fmt::format(
+            "PRODUCTION ACTIVE | {}H {:02}M LEFT | {} WORKER COMMITTED",
+            projection.remainingMinutes / kWorldMinutesPerHour,
+            projection.remainingMinutes % kWorldMinutesPerHour,
+            projection.committedWorkers);
+        const BaseManufacturingReturnPlan plan =
+            queryCancelBaseManufacturing(
+                profile, publishedContentRegistry());
+        buttonLabel = plan.canCommit
+            ? "CANCEL & RETURN INPUTS"
+            : "CANCEL BLOCKED | STASH SPACE REQUIRED";
+        available = plan.canCommit;
+    }
+    uiTextRenderer_.render(renderer_, 170.0F, 400.0F, status.c_str());
+
+    const SDL_FRect button = baseManufacturingButton();
+    SDL_SetRenderDrawColor(
+        renderer_, available ? 92 : 54,
+        available ? 104 : 58,
+        available ? 72 : 56, 255);
+    SDL_RenderFillRect(renderer_, &button);
+    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
+    SDL_RenderRect(renderer_, &button);
+    uiTextRenderer_.render(
+        renderer_, button.x + 28.0F, button.y + 20.0F, buttonLabel);
+    uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
+    if (!uiMessage_.empty())
+    {
+        SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
+        uiTextRenderer_.render(
+            renderer_, 420.0F, 610.0F, uiMessage_.c_str());
+    }
+}
+
 void App::renderBaseDeployment()
 {
     const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
@@ -9702,6 +9863,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Dormitory:
             renderBaseDormitory();
+            break;
+        case BaseFacilityKind::Workshop:
+            renderBaseWorkshop();
             break;
         case BaseFacilityKind::RaidGate:
             renderBaseDeployment();

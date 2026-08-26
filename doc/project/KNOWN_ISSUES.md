@@ -1,6 +1,6 @@
 # Project Raidline 已知问题与待办
 
-最后核对：2026-08-25。
+最后核对：2026-08-26。
 
 ## 已确认缺陷
 
@@ -30,7 +30,8 @@
 | RL-COMBAT-010 | 完成武器切换时重建 WeaponAimState，导致实际准星跳回相对输入锚点 | PR #74 已通过 exact-head CI 和用户正常游玩验收，以 merge commit `6138da8` 进入 main |
 | RL-ANIM-001 | 角色上下移动动画和停止朝向不完整 | PR #78 已修复 Base 停止时丢失最后水平朝向；Base/Raid 左右移动继续复用六帧资源，上下移动仍用静态图，正式补全延期 |
 | RL-POP-001 | Raid 救援与普通居民聚合池缺少可持久闭环 | PR #86 已以 `ee9ba48` 进入 main；三图一次性安全转移、schema v13 幂等账本与干净恢复检查点已完成，具名 NPC、护送 AI、伤病和职业仍延期 |
-| RL-POP-002 | 受伤居民缺少使用真实库存物资与世界时间的医疗所治疗闭环 | Draft PR #88 建立聚合伤病、医疗分类授权、确定性精确消耗、单治疗槽和 schema v16；Windows Debug、973/973 CTest 与 exact-head CI 已通过，等待用户正常游玩验收 |
+| RL-POP-002 | 受伤居民缺少使用真实库存物资与世界时间的医疗所治疗闭环 | PR #88 已建立聚合伤病、医疗分类授权、确定性精确消耗、单治疗槽和 schema v16；经 exact-head CI 与用户正常游玩验收后以 `987dc6b` 进入 main |
+| RL-BASE-001 | Base 缺少以真实资产、劳动力和世界时间驱动的生产消费者 | 当前 `codex/base-basic-manufacturing-v1` 实现单工坊槽和一项维护包配方；投入/产出保持稳定资产身份，仓库阻塞与 Raid 回滚保持原子性 |
 
 ## 需要未来产品决策
 
@@ -86,8 +87,9 @@
 | Base 居民、床位与睡眠 v1 | PR #85 已通过 CI 和用户验收，以普通 merge commit `2377035` 进入 main |
 | Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
 | Base 宿舍扩建与供给修订 | PR #87 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `1be94bf` 进入 main |
-| Base 居民伤病与医疗所治疗 v1 | Draft PR #88 已完成聚合伤病、真实库存医疗供给消费、限时治疗、救援接线和 schema v16/content v24；Windows Debug、973/973 CTest 与 exact-head CI 已通过，等待用户验收 |
+| Base 居民伤病与医疗所治疗 v1 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `987dc6b` 进入 main |
+| Base 基础制造队列 v1 | Draft PR #89 已实现 schema v17/content v25、真实投入/产出、单劳动力槽、世界时间完成、取消/领取和工坊占位 UI；Windows Debug 全目标、CTest 988/988 与代码提交 exact-head Windows/Ubuntu CI 已通过，等待用户正常游玩验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-resident-medical-treatment-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/base-basic-manufacturing-v1.md`。

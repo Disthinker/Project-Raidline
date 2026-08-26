@@ -148,7 +148,7 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
 {
     const BaseWorld world;
-    ASSERT_EQ(world.facilities().size(), 6U);
+    ASSERT_EQ(world.facilities().size(), 7U);
     EXPECT_NE(
         std::find_if(
             world.facilities().begin(),
@@ -224,4 +224,19 @@ TEST(BaseWorldTest, ExposesAndInteractsWithMedicalFacility)
     EXPECT_EQ(
         world.update(interact, 0.0F),
         BaseFacilityKind::Medical);
+}
+
+TEST(BaseWorldTest, ExposesWorkshopProductionFacility)
+{
+    const BaseWorld world;
+    EXPECT_NE(
+        std::find_if(
+            world.facilities().begin(),
+            world.facilities().end(),
+            [](const BaseFacility &facility)
+            { return facility.kind == BaseFacilityKind::Workshop; }),
+        world.facilities().end());
+    EXPECT_STREQ(
+        baseFacilityName(BaseFacilityKind::Workshop),
+        "WORKSHOP & PRODUCTION");
 }
