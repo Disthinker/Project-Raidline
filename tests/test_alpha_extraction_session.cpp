@@ -97,7 +97,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-building-intelligence-14");
+        "raid-second-representative-location-15");
 }
 
 TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
@@ -108,16 +108,20 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
         88123U,
         MapDefinitionId{"map.raid.frontier_exchange"}));
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
-    ASSERT_EQ(session.profile().pendingRaid->interiors.size(), 1U);
-    ASSERT_EQ(session.world().tacticalMap().specialLocations().size(), 1U);
+    ASSERT_EQ(session.profile().pendingRaid->interiors.size(), 2U);
+    ASSERT_EQ(session.world().tacticalMap().specialLocations().size(), 2U);
 
-    const RaidInteriorSnapshot &snapshot =
-        session.profile().pendingRaid->interiors.front();
-    const RaidSpecialLocationMapState &projection =
-        session.world().tacticalMap().specialLocations().front();
-    EXPECT_EQ(projection.id, snapshot.id);
-    EXPECT_EQ(projection.displayName, snapshot.displayName);
-    EXPECT_EQ(projection.entrance, snapshot.exteriorEntrance);
+    for (std::size_t index{};
+         index < session.profile().pendingRaid->interiors.size(); ++index)
+    {
+        const RaidInteriorSnapshot &snapshot =
+            session.profile().pendingRaid->interiors[index];
+        const RaidSpecialLocationMapState &projection =
+            session.world().tacticalMap().specialLocations()[index];
+        EXPECT_EQ(projection.id, snapshot.id);
+        EXPECT_EQ(projection.displayName, snapshot.displayName);
+        EXPECT_EQ(projection.entrance, snapshot.exteriorEntrance);
+    }
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

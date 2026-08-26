@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "content_registry.h"
 #include "collision.h"
@@ -2609,7 +2611,7 @@ TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
     GameplayWorld world{makeInteriorDiscoveryWorldConfig()};
     const RaidSpaceDefinitionId officeId{"raid_space.test.office"};
 
-    EXPECT_FALSE(world.activeRaidSpacePortal().has_value());
+    EXPECT_TRUE(world.visibleRaidSpacePortals().empty());
     EXPECT_FALSE(world.tacticalMap().specialLocationVisible(officeId));
 
     GameplayInput approach;
@@ -2617,7 +2619,8 @@ TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
     world.update(approach, 1.5F);
 
     EXPECT_TRUE(world.inOutdoorRaidSpace());
-    EXPECT_TRUE(world.activeRaidSpacePortal().has_value());
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
+    EXPECT_EQ(world.visibleRaidSpacePortals().front().id, officeId);
     EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
 }
 
@@ -2634,11 +2637,126 @@ TEST(GameplayWorldRaidTest, EnteringPortalDiscoversItBeforeSpaceTransition)
     EXPECT_FALSE(world.inOutdoorRaidSpace());
     EXPECT_TRUE(world.spaceTransitionedLastUpdate());
     EXPECT_TRUE(world.tacticalMap().specialLocationVisible(officeId));
-    ASSERT_TRUE(world.activeRaidSpacePortal().has_value());
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
     EXPECT_EQ(
-        *world.activeRaidSpacePortal(),
+        world.visibleRaidSpacePortals().front().bounds,
         (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
+    EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
     EXPECT_FALSE(world.activeInteriorMapProjection().has_value());
+}
+
+TEST(GameplayWorldPerformanceTest,
+     MultipleEnemiesRouteThroughDenseStaticCover)
+{
+    RaidWorldConfig config;
+    config.worldSize = Vec2{1280.0F, 720.0F};
+    config.playerSpawn = Vec2{1120.0F, 330.0F};
+    config.extractionPoint =
+        ContentRect{Vec2{1120.0F, 560.0F}, Vec2{100.0F, 100.0F}};
+    config.playerMaximumHealth = 100;
+    config.playerCurrentHealth = 100;
+    config.deferPlayerDamageResolution = true;
+
+    for (std::size_t enemy{}; enemy < 8U; ++enemy)
+    {
+        config.initialEnemies.push_back(
+            EnemySpawn{
+                Vec2{60.0F, 60.0F + static_cast<float>(enemy) * 72.0F},
+                Vec2{50.0F, 50.0F},
+                12});
+    }
+    for (std::uint32_t blocker{}; blocker < 26U; ++blocker)
+    {
+        const std::uint32_t column = blocker % 4U;
+        const std::uint32_t row = blocker / 4U;
+        config.ballisticBlockers.push_back(
+            BallisticBlocker{
+                blocker + 1U,
+                Rect{
+                    Vec2{
+                        240.0F + static_cast<float>(column) * 220.0F,
+                        static_cast<float>(row) * 90.0F +
+                            (column % 2U == 0U ? 0.0F : 35.0F)},
+                    Vec2{60.0F, 50.0F}}});
+    }
+
+    GameplayWorld world{std::move(config)};
+    world.emitPlayerNoise(2000.0F);
+    const auto started = std::chrono::steady_clock::now();
+    std::chrono::microseconds slowestFrame{};
+    std::size_t maximumQueriesInOneFrame{};
+    for (std::size_t frame{}; frame < 120U; ++frame)
+    {
+        const auto frameStarted = std::chrono::steady_clock::now();
+        world.update(GameplayInput{}, 1.0F / 60.0F);
+        maximumQueriesInOneFrame = std::max(
+            maximumQueriesInOneFrame,
+            world.navigationQueriesLastUpdate());
+        slowestFrame = std::max(
+            slowestFrame,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - frameStarted));
+    }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started);
+    std::cout << "dense multi-enemy simulation: "
+              << elapsed.count() << " ms, slowest frame: "
+              << slowestFrame.count() << " us\n";
+    EXPECT_EQ(world.enemies().size(), 8U);
+    std::size_t movedEnemyCount{};
+    for (std::size_t enemy{}; enemy < world.enemies().size(); ++enemy)
+    {
+        const Vec2 position = world.enemies()[enemy].position();
+        movedEnemyCount += std::hypot(
+            position.x - 60.0F,
+            position.y -
+                (60.0F + static_cast<float>(enemy) * 72.0F)) > 1.0F
+            ? 1U
+            : 0U;
+    }
+    EXPECT_EQ(movedEnemyCount, world.enemies().size())
+        << "The bounded navigation budget must not starve later enemies.";
+    EXPECT_LT(elapsed.count(), 1500)
+        << "Dense multi-enemy navigation exceeded the Debug performance "
+           "budget and can stall the single simulation thread.";
+    EXPECT_LE(maximumQueriesInOneFrame, 2U)
+        << "A 60 Hz frame may contain two enemy substeps, each with one "
+           "expensive navigation query.";
+    EXPECT_LT(slowestFrame.count(), 100000)
+        << "One dense navigation frame exceeded the coarse hitch guard.";
+}
+
+TEST(GameplayWorldRaidTest,
+     MultipleDiscoveredInteriorPortalsRemainVisibleAndEnterByStableIdentity)
+{
+    RaidWorldConfig config = makeInteriorDiscoveryWorldConfig();
+    config.playerSpawn = Vec2{230.0F, 90.0F};
+    RaidInteriorWorldConfig freight = config.interiors.front();
+    freight.id = RaidSpaceDefinitionId{"raid_space.test.freight"};
+    freight.displayName = "Test Freight Bay";
+    freight.exteriorEntrance =
+        ContentRect{Vec2{220.0F, 80.0F}, Vec2{100.0F, 100.0F}};
+    freight.exteriorReturn = Vec2{330.0F, 100.0F};
+    config.interiors.push_back(std::move(freight));
+    GameplayWorld world{std::move(config)};
+
+    world.update(GameplayInput{}, 0.0F);
+    const std::vector<RaidSpacePortalProjection> portals =
+        world.visibleRaidSpacePortals();
+    ASSERT_EQ(portals.size(), 2U);
+    EXPECT_EQ(portals[0].id,
+              RaidSpaceDefinitionId{"raid_space.test.office"});
+    EXPECT_EQ(portals[1].id,
+              RaidSpaceDefinitionId{"raid_space.test.freight"});
+
+    GameplayInput enter;
+    enter.interactJustPressed = true;
+    world.update(enter, 0.0F);
+
+    EXPECT_EQ(world.activeRaidSpaceId(),
+              RaidSpaceDefinitionId{"raid_space.test.freight"});
+    ASSERT_EQ(world.visibleRaidSpacePortals().size(), 1U);
+    EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
 }
 
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)

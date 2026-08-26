@@ -19,6 +19,7 @@
 #include "player.h"
 #include "logical_ballistics.h"
 #include "raid_session.h"
+#include "raid_space_query.h"
 #include "raid_tactical_map.h"
 #include "shot_resolution.h"
 #include "shot_feedback_presentation.h"
@@ -86,6 +87,15 @@ struct RaidInteriorMapProjection
     Vec2 worldSize{};
     ContentRect exit;
     std::span<const BallisticBlocker> blockers;
+};
+
+struct RaidSpacePortalProjection
+{
+    RaidSpaceDefinitionId id;
+    std::string_view displayName;
+    ContentRect bounds;
+    bool returnsOutside{};
+    bool interactionInRange{};
 };
 
 struct RaidWorldConfig
@@ -216,8 +226,8 @@ public:
     [[nodiscard]] std::string_view
     activeRaidSpaceDisplayName() const noexcept;
     [[nodiscard]] Vec2 raidSpaceWorldSize() const noexcept;
-    [[nodiscard]] std::optional<ContentRect>
-    activeRaidSpacePortal() const noexcept;
+    [[nodiscard]] std::vector<RaidSpacePortalProjection>
+    visibleRaidSpacePortals() const;
     [[nodiscard]] bool raidSpacePortalInteractionInRange() const noexcept;
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>
@@ -304,6 +314,7 @@ public:
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     [[nodiscard]] std::size_t enemiesAlertedLastUpdate() const noexcept;
+    [[nodiscard]] std::size_t navigationQueriesLastUpdate() const noexcept;
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(
         const WeaponUseDefinition &definition,
@@ -377,6 +388,15 @@ public:
     ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
+    struct EnemyNavigationRuntime
+    {
+        std::optional<Vec2> goal;
+        std::optional<Vec2> waypoint;
+        float refreshRemainingSeconds{};
+        bool targetVisible{};
+        bool initialized{};
+    };
+
     struct InteriorRuntime
     {
         RaidSpaceDefinitionId id;
@@ -389,6 +409,7 @@ private:
         ContentRect interiorExit;
         std::vector<Enemy> enemies;
         std::vector<BallisticBlocker> ballisticBlockers;
+        std::vector<EnemyNavigationRuntime> enemyNavigation;
     };
 
     struct TracerPresentationSegment
@@ -402,6 +423,13 @@ private:
         float lifetimeSeconds{};
         float remainingSeconds{};
         float ageSeconds{};
+    };
+
+    struct NavigationFieldCache
+    {
+        RaidSpaceDefinitionId spaceId;
+        Vec2 actorSize{};
+        RaidSpaceNavigationField field;
     };
 
     struct PlayerHealthOverrideTag
@@ -424,9 +452,11 @@ private:
     ShotId nextShotId_{1};
     CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
+    std::vector<EnemyNavigationRuntime> enemyNavigation_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     std::vector<InteriorRuntime> interiors_;
     std::optional<std::size_t> activeInteriorIndex_;
+    std::vector<NavigationFieldCache> navigationFieldCache_;
     bool spaceTransitionedLastUpdate_{};
     EnemySquadCoordinator enemySquadCoordinator_;
 
@@ -477,6 +507,7 @@ private:
     Vec2 worldSize_{1280.0F, 720.0F};
     bool shotFiredLastUpdate_{};
     std::size_t enemiesAlertedLastUpdate_{};
+    std::size_t navigationQueriesLastUpdate_{};
     bool alphaRaidWorld_{};
     bool deferPlayerDamageResolution_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;
@@ -505,8 +536,17 @@ private:
     [[nodiscard]] Vec2 activeWorldSize() const noexcept;
     [[nodiscard]] std::vector<Enemy> &activeEnemies() noexcept;
     [[nodiscard]] const std::vector<Enemy> &activeEnemies() const noexcept;
+    [[nodiscard]] std::vector<EnemyNavigationRuntime> &
+    activeEnemyNavigation() noexcept;
     [[nodiscard]] const std::vector<BallisticBlocker> &
     activeBallisticBlockers() const noexcept;
+    [[nodiscard]] RaidSpaceNavigationField *
+    activeNavigationField(Vec2 actorSize);
+    void cacheNavigationFieldsForSpace(
+        const RaidSpaceDefinitionId &spaceId,
+        Vec2 worldSize,
+        std::span<const BallisticBlocker> blockers,
+        std::span<const Enemy> enemies);
     [[nodiscard]] std::size_t outdoorAliveEnemyCount() const noexcept;
     [[nodiscard]] bool tryTransitionRaidSpace(
         const GameplayInput &input) noexcept;

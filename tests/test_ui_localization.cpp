@@ -135,6 +135,10 @@ TEST(UiLocalizationTest, ChineseTranslatesInteriorPlaceholdersAndPortal)
             "交易所办公室 | F 进入");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "Freight Service Bay | F ENTER"),
+            "货运装卸间 | F 进入");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "INTERIOR MAP UNAVAILABLE"),
             "室内地图尚不可用");
 }

@@ -40,7 +40,9 @@
 | RL-MAP-004 | 特殊地点入口固定在单一坐标，无法随本局路线变化且缺少动态冲突过滤 | PR #95 已通过本地 1043/1043、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `d2ceb59` 进入 main |
 | RL-MAP-005 | 特殊地点的精确入口和战术地图坐标从开局无条件泄露，探索没有发现价值 | PR #96 已通过本地 1048/1048、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `de3402c` 进入 main |
 | RL-MAP-006 | 固定建筑内部布局没有可永久获取的情报，进入室内后战术地图只能显示占位提示 | PR #97 已通过本地 1058/1058、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main |
-| RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 统一 LOS、最后已知位置、确定性绕障和命中前遮挡复验；验收加固补齐贴墙合法接近点、成功实弹击发的独立枪声刺激和失去视线后的单墙绕行调查；Windows Debug 全目标与完整 CTest 1072/1072 已通过 |
+| RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | PR #98 已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 进入 main |
+| RL-PERF-001 | 多名敌人在程序化密集障碍中同时追击时，主线程每敌人每子步重建可见图并形成追帧雪崩 | PR #99 保持 Draft；旧 8 敌人/18 障碍/120 帧约 6357 ms，静态图缓存、10 Hz 动态刷新、每子步查询预算与 100 ms 帧上限已把更高的 8 敌人/26 障碍场景降至约 422 ms、最慢更新约 6.1 ms；Windows Debug 全目标和 1080/1080 CTest 已通过，exact-head CI 和用户复验待完成 |
+| RL-MAP-008 | 只有办公室一个消费者，室外投影只显示首个已发现入口，无法证明多地点内容、快照、发现和情报没有特判 | 当前 `codex/raid-world-second-representative-location-v1` 增加独立货运装卸间，投影全部已发现入口，并把入口/返回点同时纳入合法放置与可达锚点；schema v23 不变，rules v15/content v33 |
 
 ## 需要未来产品决策
 
@@ -106,8 +108,9 @@
 | Raid World：特殊地点随机合法放置 v1 | PR #95 已通过 CI 与用户验收，以普通 merge commit `d2ceb59` 进入 main |
 | Raid World：特殊地点发现与战术地图投影 v1 | PR #96 已通过 CI 与用户验收，以普通 merge commit `de3402c` 进入 main |
 | Raid World：建筑内部图永久情报 v1 | PR #97 已通过 CI 与用户验收，以普通 merge commit `a7b3cc2` 进入 main |
-| Raid World：空间战术可靠性 v1 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 从 `origin/main@a7b3cc2` 开始；范围见对应 ExecPlan |
+| Raid World：空间战术可靠性 v1 | PR #98 已通过 CI 与用户验收，以普通 merge commit `95fcd23` 进入 main |
+| Raid World：第二个代表性地点 v1 | 当前 `codex/raid-world-second-representative-location-v1` 已通过 302/302 聚焦回归、Windows Debug 全目标与 1074/1074 CTest；exact-head CI 和用户正常游玩验收待完成 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-spatial-tactical-reliability-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/raid-world-second-representative-location-v1.md`。

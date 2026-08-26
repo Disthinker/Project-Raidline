@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice 的程序化室外、独立室内、随机特殊地点、探索发现和永久内部图均已进入主线。当前收束 **空间战术可靠性 v1**，统一当前空间的视觉遮挡、敌人绕障和近战阻断；范围合同见 `doc/exec-plans/active/raid-world-spatial-tactical-reliability-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice 的程序化室外、独立室内、随机特殊地点、探索发现、永久内部图和空间战术可靠性均已进入主线。当前 **第二个代表性地点 v1** 的内容与交互已通过用户验收，但 PR #99 因多人围攻性能阻塞继续保持 Draft；先完成导航预计算、刷新预算、慢帧保护和压力回归，再进入集中稳定性门槛。范围合同见 `doc/exec-plans/active/raid-world-second-representative-location-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -57,6 +57,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 特殊地点随机合法放置 v1 | PR #95 / merge commit `d2ceb59` |
 | 特殊地点发现与战术地图投影 v1 | PR #96 / merge commit `de3402c` |
 | 建筑内部图永久情报 v1 | PR #97 / merge commit `a7b3cc2` |
+| 空间战术可靠性 v1 | PR #98 / merge commit `95fcd23` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -126,7 +127,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 特殊地点随机合法放置 v1 | 同一交换站办公室每局可出现在多个合法室外位置，入口仍使用现有双语文字和代码几何 | 命名候选、动态锚点过滤、独立 PCG32 流、rules v13/content v31、schema v22 最终坐标冻结 | PR #95 已通过 CI 与用户验收，以普通 merge commit `d2ceb59` 进入 main |
 | 特殊地点发现与战术地图投影 v1 | 玩家探索靠近后才看到精确入口与 `M` 地图标记，本局发现后持续可见 | 稳定空间 ID 的瞬态发现投影、同帧交互仲裁、Simulation 权威可见性、双语 SDL 投影 | PR #96 已通过 CI 和用户验收，以普通 merge commit `de3402c` 进入 main |
 | 建筑内部图永久情报 v1 | Base 一次购买交换站办公室内部图；进入后 `M` 显示固定墙体、出口和玩家，室外入口仍需探索 | 稳定空间 ID 永久授权、原子购买、Deploy 冻结、schema v23/content v32、只读室内地图投影 | PR #97 已通过 CI 与用户验收，以普通 merge commit `a7b3cc2` 进入 main |
-| 空间战术可靠性 v1 | 未暴露的敌人不能隔墙锁定；成功开枪或其他声音暴露后，即使玩家贴墙或躲到单墙后，敌人也会沿合法掩体边缘调查，无遮挡后才恢复攻击 | 当前空间 LOS、actor-expanded 确定性可见图、容差内合法接近点、最后已知位置、成功击发枪声刺激、命中提交前复验 | 当前 `codex/raid-world-spatial-tactical-reliability-v1` 实现中；墙体声学、跨空间追踪和完整 NavMesh 延期 |
+| 空间战术可靠性 v1 | 未暴露的敌人不能隔墙锁定；成功开枪或其他声音暴露后，即使玩家贴墙或躲到单墙后，敌人也会沿合法掩体边缘调查，无遮挡后才恢复攻击 | 当前空间 LOS、actor-expanded 确定性可见图、容差内合法接近点、最后已知位置、成功击发枪声刺激、命中提交前复验 | PR #98 已通过 CI 与用户验收，以普通 merge commit `95fcd23` 进入 main；墙体声学、跨空间追踪和完整 NavMesh 延期 |
+| 第二个代表性地点 v1 | `Frontier Exchange` 同局包含办公室与货运装卸间；两处地点分别探索、进入、清理并购买永久内部图 | 多 RaidSpaceDefinitionId、双地点合法 Socket、入口/返回点可达锚点、全量可见入口投影、rules v15/content v33、v14 pending Raid 兼容 | 当前 `codex/raid-world-second-representative-location-v1` 实现中；第三地点、程序化室内和正式资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 

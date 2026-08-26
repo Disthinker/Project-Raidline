@@ -334,7 +334,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-building-intelligence-14";
+    snapshot.rulesVersion = "raid-second-representative-location-15";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -599,9 +599,7 @@ DeployReceipt executeDeploy(
         RaidInteriorSnapshot &interior = snapshot.interiors[interiorIndex];
         interior.exteriorEntrance = placement->entrance;
         interior.exteriorReturn = placement->returnPoint;
-        generationAnchors.occupiedRegions.push_back(
-            interior.exteriorEntrance);
-        addReachableRegion(interior.exteriorEntrance);
+        appendRaidExteriorPlacementAnchors(generationAnchors, *placement);
     }
     snapshot.spatialLayout = generateRaidMapLayout(
         *map,

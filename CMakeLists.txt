@@ -367,6 +367,7 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/frame_timing.h
     src/game_audio.cpp
     src/game_audio.h
     src/input_system.cpp
@@ -459,6 +460,10 @@ raidline_add_test(
 raidline_add_test(
     InputSystemTest
     tests/test_input_system.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    FrameTimingTest
+    tests/test_frame_timing.cpp
     raidline::sdl_client)
 raidline_add_test(
     GameAudioTest

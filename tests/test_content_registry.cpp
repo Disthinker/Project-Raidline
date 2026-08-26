@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-building-intelligence-content-32");
+        "raid-second-representative-location-content-33");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -130,7 +130,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_EQ(registry.items().size(), 21U);
     const MapDefinition &frontierWithInterior = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
-    ASSERT_EQ(frontierWithInterior.interiors.size(), 1U);
+    ASSERT_EQ(frontierWithInterior.interiors.size(), 2U);
     EXPECT_EQ(
         frontierWithInterior.interiors.front().id,
         RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"});
@@ -158,6 +158,23 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         frontierWithInterior.interiors.front().exteriorPlacements.front()
             .returnPoint.y,
         frontierWithInterior.interiors.front().exteriorReturn.y);
+    const RaidInteriorDefinition &freightBay =
+        frontierWithInterior.interiors[1];
+    EXPECT_EQ(
+        freightBay.id,
+        RaidSpaceDefinitionId{
+            "raid_space.frontier_exchange.freight_service_bay"});
+    EXPECT_EQ(freightBay.displayName, "Freight Service Bay");
+    EXPECT_EQ(freightBay.intelligencePrice, 220U);
+    EXPECT_EQ(freightBay.worldSize.x, 1120.0F);
+    EXPECT_EQ(freightBay.worldSize.y, 520.0F);
+    EXPECT_EQ(freightBay.enemies.size(), 3U);
+    EXPECT_EQ(freightBay.lootSlots.size(), 4U);
+    EXPECT_EQ(freightBay.exteriorPlacements.size(), 6U);
+    EXPECT_EQ(&registry.raidInterior(freightBay.id), &freightBay);
+    EXPECT_NE(
+        freightBay.worldSize.x,
+        frontierWithInterior.interiors.front().worldSize.x);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 4U);
@@ -1053,6 +1070,18 @@ TEST(ContentRegistryTest, RejectsDuplicateRaidExteriorPlacementId)
         publishedJsonCopy(),
         "\"id\": \"north_exchange\"",
         "\"id\": \"east_gate\"");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsOverlappingPortalsAcrossInteriorDefinitions)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 70, \"y\": 160}, \"size\": {\"x\": 120, \"y\": 70}}",
+        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 1100, \"y\": 190}, \"size\": {\"x\": 120, \"y\": 80}}");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

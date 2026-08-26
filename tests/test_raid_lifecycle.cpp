@@ -3,6 +3,7 @@
 #include "base_workforce_domain.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <map>
 #include <set>
@@ -105,7 +106,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "raid-building-intelligence-14");
+        "raid-second-representative-location-15");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -145,58 +146,58 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
         MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *profile.pendingRaid;
-    ASSERT_EQ(raid.interiors.size(), 1U);
-    const RaidSpaceDefinitionId interiorId{
-        "raid_space.frontier_exchange.office"};
-    EXPECT_EQ(raid.interiors.front().id, interiorId);
-    EXPECT_FALSE(raid.interiors.front().layoutKnown);
-    const RaidInteriorDefinition &definition =
-        publishedContentRegistry()
-            .map(MapDefinitionId{"map.raid.frontier_exchange"})
-            .interiors.front();
-    EXPECT_TRUE(std::any_of(
-        definition.exteriorPlacements.begin(),
-        definition.exteriorPlacements.end(),
-        [&](const RaidExteriorPlacementDefinition &placement)
-        {
-            return placement.entrance ==
-                    raid.interiors.front().exteriorEntrance &&
-                placement.returnPoint.x ==
-                    raid.interiors.front().exteriorReturn.x &&
-                placement.returnPoint.y ==
-                    raid.interiors.front().exteriorReturn.y;
-        }));
-    EXPECT_EQ(
-        std::count_if(
-            raid.enemies.begin(), raid.enemies.end(),
-            [&](const RaidEnemySnapshot &enemy)
-            { return enemy.spaceId == interiorId; }),
-        2);
-    EXPECT_EQ(
-        std::count_if(
-            raid.loot.begin(), raid.loot.end(),
-            [&](const RaidLootSnapshot &loot)
-            { return loot.spaceId == interiorId; }),
-        3);
-    EXPECT_TRUE(std::none_of(
-        raid.spatialLayout.ballisticBlockers.begin(),
-        raid.spatialLayout.ballisticBlockers.end(),
-        [&](const ContentRect &blocker)
-        {
-            const ContentRect entrance =
-                raid.interiors.front().exteriorEntrance;
-            return blocker.position.x < entrance.position.x + entrance.size.x &&
-                blocker.position.x + blocker.size.x > entrance.position.x &&
-                blocker.position.y < entrance.position.y + entrance.size.y &&
-                blocker.position.y + blocker.size.y > entrance.position.y;
-        }));
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    ASSERT_EQ(raid.interiors.size(), 2U);
+    ASSERT_EQ(raid.interiors.size(), map.interiors.size());
+    for (std::size_t index{}; index < map.interiors.size(); ++index)
+    {
+        const RaidInteriorDefinition &definition = map.interiors[index];
+        const RaidInteriorSnapshot &snapshot = raid.interiors[index];
+        EXPECT_EQ(snapshot.id, definition.id);
+        EXPECT_FALSE(snapshot.layoutKnown);
+        EXPECT_TRUE(std::any_of(
+            definition.exteriorPlacements.begin(),
+            definition.exteriorPlacements.end(),
+            [&](const RaidExteriorPlacementDefinition &placement)
+            {
+                return placement.entrance == snapshot.exteriorEntrance &&
+                    placement.returnPoint.x == snapshot.exteriorReturn.x &&
+                    placement.returnPoint.y == snapshot.exteriorReturn.y;
+            }));
+        EXPECT_EQ(
+            std::count_if(
+                raid.enemies.begin(), raid.enemies.end(),
+                [&](const RaidEnemySnapshot &enemy)
+                { return enemy.spaceId == definition.id; }),
+            static_cast<std::ptrdiff_t>(definition.enemies.size()));
+        EXPECT_EQ(
+            std::count_if(
+                raid.loot.begin(), raid.loot.end(),
+                [&](const RaidLootSnapshot &loot)
+                { return loot.spaceId == definition.id; }),
+            static_cast<std::ptrdiff_t>(definition.lootSlots.size()));
+        EXPECT_TRUE(std::none_of(
+            raid.spatialLayout.ballisticBlockers.begin(),
+            raid.spatialLayout.ballisticBlockers.end(),
+            [&](const ContentRect &blocker)
+            {
+                const ContentRect entrance = snapshot.exteriorEntrance;
+                return blocker.position.x <
+                        entrance.position.x + entrance.size.x &&
+                    blocker.position.x + blocker.size.x > entrance.position.x &&
+                    blocker.position.y <
+                        entrance.position.y + entrance.size.y &&
+                    blocker.position.y + blocker.size.y > entrance.position.y;
+            }));
+    }
 }
 
 TEST(RaidLifecycleTest,
      FrontierDeployFreezesPermanentInteriorLayoutKnowledgeWithoutConsumingIt)
 {
     const RaidSpaceDefinitionId interiorId{
-        "raid_space.frontier_exchange.office"};
+        "raid_space.frontier_exchange.freight_service_bay"};
     ProfileState profile = makeNewAlphaProfile(
         "interior-layout-known", publishedContentRegistry());
     profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
@@ -206,8 +207,9 @@ TEST(RaidLifecycleTest,
         88124U,
         MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    ASSERT_EQ(profile.pendingRaid->interiors.size(), 1U);
-    EXPECT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
+    ASSERT_EQ(profile.pendingRaid->interiors.size(), 2U);
+    EXPECT_FALSE(profile.pendingRaid->interiors.front().layoutKnown);
+    EXPECT_TRUE(profile.pendingRaid->interiors[1].layoutKnown);
     EXPECT_TRUE(profile.raidInteriorIntelligence.knows(interiorId));
 
     ASSERT_TRUE(rollbackPendingRaidToBase(
@@ -226,32 +228,29 @@ TEST(RaidLifecycleTest, SpecialLocationPlacementIsStableAndVariesByRaidSeed)
     ASSERT_TRUE(deploy(repeated, 44119U, mapId).succeeded);
     ASSERT_TRUE(first.pendingRaid.has_value());
     ASSERT_TRUE(repeated.pendingRaid.has_value());
-    ASSERT_EQ(first.pendingRaid->interiors.size(), 1U);
-    ASSERT_EQ(repeated.pendingRaid->interiors.size(), 1U);
-    EXPECT_EQ(
-        first.pendingRaid->interiors.front().exteriorEntrance,
-        repeated.pendingRaid->interiors.front().exteriorEntrance);
-    EXPECT_FLOAT_EQ(
-        first.pendingRaid->interiors.front().exteriorReturn.x,
-        repeated.pendingRaid->interiors.front().exteriorReturn.x);
-    EXPECT_FLOAT_EQ(
-        first.pendingRaid->interiors.front().exteriorReturn.y,
-        repeated.pendingRaid->interiors.front().exteriorReturn.y);
+    ASSERT_EQ(first.pendingRaid->interiors.size(), 2U);
+    ASSERT_EQ(repeated.pendingRaid->interiors.size(), 2U);
+    EXPECT_EQ(first.pendingRaid->interiors, repeated.pendingRaid->interiors);
 
-    std::set<std::pair<int, int>> selectedPositions;
+    std::array<std::set<std::pair<int, int>>, 2> selectedPositions;
     for (std::uint64_t seed = 1U; seed <= 48U; ++seed)
     {
         ProfileState candidate = makeNewAlphaProfile(
             "special-location-variety", publishedContentRegistry());
         ASSERT_TRUE(deploy(candidate, seed, mapId).succeeded);
         ASSERT_TRUE(candidate.pendingRaid.has_value());
-        const Vec2 position = candidate.pendingRaid->interiors.front()
-                                  .exteriorEntrance.position;
-        selectedPositions.emplace(
-            static_cast<int>(position.x),
-            static_cast<int>(position.y));
+        ASSERT_EQ(candidate.pendingRaid->interiors.size(), 2U);
+        for (std::size_t index{}; index < 2U; ++index)
+        {
+            const Vec2 position = candidate.pendingRaid->interiors[index]
+                                      .exteriorEntrance.position;
+            selectedPositions[index].emplace(
+                static_cast<int>(position.x),
+                static_cast<int>(position.y));
+        }
     }
-    EXPECT_GT(selectedPositions.size(), 1U);
+    EXPECT_GT(selectedPositions[0].size(), 1U);
+    EXPECT_GT(selectedPositions[1].size(), 1U);
 }
 
 TEST(RaidLifecycleTest, DeployConsumesOnlySelectedMapIntelligence)
