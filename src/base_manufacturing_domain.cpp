@@ -1,5 +1,7 @@
 #include "base_manufacturing_domain.h"
 
+#include "base_morale_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -207,13 +209,17 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             "insufficient healthy Base workers",
             profile.revision);
     }
+    const std::uint32_t adjustedDuration = applyBaseMoraleDurationPercent(
+        recipe->durationMinutes,
+        profile.baseMorale.tier,
+        content.baseMorale());
     if (profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
         profile.assets.nextAssetId() ==
             std::numeric_limits<AssetInstanceId>::max() ||
         profile.worldClock.elapsedWorldMinutes >
             std::numeric_limits<std::uint64_t>::max() -
-                recipe->durationMinutes)
+                adjustedDuration)
     {
         return startFailure(
             DomainErrorCode::RevisionOverflow,
@@ -227,7 +233,7 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
         {},
         profile.revision,
         recipe->workerCount,
-        recipe->durationMinutes};
+        adjustedDuration};
     std::set<AssetInstanceId> selected;
     for (const BaseManufacturingInputDefinition &input : recipe->inputs)
     {

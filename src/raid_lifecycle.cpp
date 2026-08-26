@@ -2,6 +2,7 @@
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
+#include "base_morale_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -201,12 +202,7 @@ bool advanceProfileWorldTime(
     {
         return false;
     }
-    static_cast<void>(applyBaseDailyDemandWithSupplyThrough(
-        profile,
-        content,
-        advanced.completedDaysAfter,
-        populationAdjustedDailyDemand(profile.basePopulation)));
-    static_cast<void>(synchronizeBasePriorityThrough(profile, content));
+    static_cast<void>(synchronizeBaseDailySystemsThrough(profile, content));
     static_cast<void>(applyBaseConstructionThrough(profile, content));
     static_cast<void>(applyBaseManufacturingThrough(profile, content));
     static_cast<void>(applyResidentTreatmentThrough(profile));
@@ -316,7 +312,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-resident-medical-7";
+    snapshot.rulesVersion = "base-morale-events-8";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -332,6 +328,8 @@ DeployReceipt executeDeploy(
         candidate.worldClock,
         candidate.baseResources,
         candidate.basePriority,
+        candidate.baseMorale,
+        candidate.baseCommunityEvent,
         candidate.baseConstruction,
         candidate.basePopulation.bedCapacity,
         candidate.basePopulation.injuredResidents,
@@ -603,6 +601,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingBaseResources;
     const BasePriorityState startingBasePriority =
         candidate.pendingRaid->travel.startingBasePriority;
+    const BaseMoraleState startingBaseMorale =
+        candidate.pendingRaid->travel.startingBaseMorale;
+    const BaseCommunityEventState startingBaseCommunityEvent =
+        candidate.pendingRaid->travel.startingBaseCommunityEvent;
     const BaseConstructionState startingBaseConstruction =
         candidate.pendingRaid->travel.startingBaseConstruction;
     const std::uint32_t startingBedCapacity =
@@ -637,6 +639,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.worldClock = startingWorldClock;
     candidate.baseResources = startingBaseResources;
     candidate.basePriority = startingBasePriority;
+    candidate.baseMorale = startingBaseMorale;
+    candidate.baseCommunityEvent = startingBaseCommunityEvent;
     candidate.baseConstruction = startingBaseConstruction;
     candidate.basePopulation.bedCapacity = startingBedCapacity;
     candidate.basePopulation.injuredResidents = startingInjuredResidents;

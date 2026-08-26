@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-basic-manufacturing-content-25",
+  "content_version": "base-morale-events-content-26",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -48,6 +48,41 @@
         "output": {"item": "item.maintenance.weapon_kit_basic", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 360
+      }
+    ]
+  },
+  "base_morale": {
+    "recovery_days_from_low": 2,
+    "manufacturing_duration_percent": {
+      "low": 120,
+      "stable": 100,
+      "high": 90
+    },
+    "event_cycle_days": 5,
+    "events": [
+      {
+        "id": "base_event.shared_meal",
+        "display_name": "Shared Meal",
+        "description": "A modest communal meal eases the pressure.",
+        "morale_effect": 1
+      },
+      {
+        "id": "base_event.restless_nights",
+        "display_name": "Restless Nights",
+        "description": "Uneasy nights leave the shelter on edge.",
+        "morale_effect": -1
+      },
+      {
+        "id": "base_event.volunteer_cleanup",
+        "display_name": "Volunteer Cleanup",
+        "description": "Residents organize a careful cleanup shift.",
+        "morale_effect": 1
+      },
+      {
+        "id": "base_event.supply_anxiety",
+        "display_name": "Supply Anxiety",
+        "description": "Rumors of shortages spread through the Base.",
+        "morale_effect": -1
       }
     ]
   },

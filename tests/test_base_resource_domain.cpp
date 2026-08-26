@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "alpha_content_ids.h"
+#include "base_morale_domain.h"
 #include "base_resource_domain.h"
 #include "inventory_domain.h"
 
@@ -187,8 +188,8 @@ TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
         publishedContentRegistry());
     profile.worldClock.elapsedWorldMinutes =
         kInitialWorldMinute + 7200U;
-    const BasePrioritySyncResult first = synchronizeBasePriorityThrough(
-        profile, publishedContentRegistry());
+    const BasePrioritySyncResult first = synchronizeBaseDailySystemsThrough(
+        profile, publishedContentRegistry()).priority;
     EXPECT_TRUE(first.changed);
     EXPECT_EQ(first.cyclesAdvanced, 1U);
     EXPECT_EQ(first.newlyMissedCycles, 1U);
@@ -206,8 +207,8 @@ TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
         CommandContext{profile.revision, "fulfill-perimeter"}).succeeded);
     profile.worldClock.elapsedWorldMinutes =
         kInitialWorldMinute + 21600U;
-    const BasePrioritySyncResult later = synchronizeBasePriorityThrough(
-        profile, publishedContentRegistry());
+    const BasePrioritySyncResult later = synchronizeBaseDailySystemsThrough(
+        profile, publishedContentRegistry()).priority;
     EXPECT_EQ(later.cyclesAdvanced, 2U);
     EXPECT_EQ(later.newlyMissedCycles, 1U);
     EXPECT_EQ(profile.basePriority.missedCycleCount, 2U);

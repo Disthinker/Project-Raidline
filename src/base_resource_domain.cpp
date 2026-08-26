@@ -143,6 +143,26 @@ std::uint32_t consumeCycles(
     return latestShortfall;
 }
 
+std::uint64_t shortageCycles(
+    std::uint64_t available,
+    std::uint64_t demand,
+    std::uint64_t cycles) noexcept
+{
+    if (demand == 0U)
+    {
+        return 0U;
+    }
+    const std::uint64_t fullyCovered = std::min(cycles, available / demand);
+    return cycles - fullyCovered;
+}
+
+void saturatedAdd(std::uint64_t &target, std::uint64_t value) noexcept
+{
+    target = value > std::numeric_limits<std::uint64_t>::max() - target
+        ? std::numeric_limits<std::uint64_t>::max()
+        : target + value;
+}
+
 std::uint32_t &resourceValue(
     BaseResourceBundle &bundle,
     BaseSupplyCategory category) noexcept
@@ -505,6 +525,11 @@ BaseDailyDemandResult applyBaseDailyDemandThrough(
         completedWorldDays - state.resolvedDemandCycleCount;
     BaseResourceBundle &pool = state.pool;
     BaseResourceBundle &shortfall = state.lastShortfall;
+    const std::uint64_t shortageCount = std::max({
+        shortageCycles(pool.food, dailyDemand.food, cycles),
+        shortageCycles(pool.hygiene, dailyDemand.hygiene, cycles),
+        shortageCycles(pool.morale, dailyDemand.morale, cycles),
+        shortageCycles(pool.security, dailyDemand.security, cycles)});
     shortfall.food = consumeCycles(
         pool.food, dailyDemand.food, cycles);
     shortfall.hygiene = consumeCycles(
@@ -514,7 +539,7 @@ BaseDailyDemandResult applyBaseDailyDemandThrough(
     shortfall.security = consumeCycles(
         pool.security, dailyDemand.security, cycles);
     state.resolvedDemandCycleCount = completedWorldDays;
-    return {cycles, shortfall};
+    return {cycles, shortfall, shortageCount};
 }
 
 BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
@@ -613,6 +638,7 @@ BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
     }
 
     BaseResourceBundle latestShortfall;
+    std::uint64_t shortageCount{};
     for (BaseSupplyCategory category : {
              BaseSupplyCategory::Food,
              BaseSupplyCategory::Medical,
@@ -629,6 +655,9 @@ BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
                 std::numeric_limits<std::uint64_t>::max() - baseAvailable
             ? std::numeric_limits<std::uint64_t>::max()
             : baseAvailable + supplied;
+        shortageCount = std::max(
+            shortageCount,
+            shortageCycles(available, demand, cycles));
         const std::uint64_t previousDemand =
             saturatedMultiply(demand, cycles - 1U);
         const std::uint64_t beforeLatest = available > previousDemand
@@ -645,7 +674,7 @@ BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
     }
     state.lastShortfall = latestShortfall;
     state.resolvedDemandCycleCount = completedWorldDays;
-    return {cycles, latestShortfall};
+    return {cycles, latestShortfall, shortageCount};
 }
 
 BasePrioritySyncResult synchronizeBasePriorityThrough(
@@ -685,6 +714,7 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
     state.missedCycleCount = missed > maximum - state.missedCycleCount
         ? maximum
         : state.missedCycleCount + missed;
+    saturatedAdd(profile.baseMorale.pendingMissedWishCount, missed);
     state.cycleIndex = currentCycle;
     state.definitionId = definitions[
         currentCycle % definitions.size()].id;
@@ -809,6 +839,7 @@ BasePriorityReceipt executeBasePrioritySubmission(
     }
     add(candidate.baseResources.pool, plan.reward);
     candidate.basePriority.fulfilled = true;
+    saturatedAdd(candidate.baseMorale.pendingFulfilledWishCount, 1U);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation =

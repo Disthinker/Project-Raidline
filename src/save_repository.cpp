@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "base_resource_domain.h"
+#include "base_morale_domain.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -190,6 +191,134 @@ std::optional<BaseSupplyCategory> parseBaseSupplyCategory(
     if (value == "recreation") return BaseSupplyCategory::Recreation;
     if (value == "security") return BaseSupplyCategory::Security;
     return std::nullopt;
+}
+
+std::string baseMoraleTierValue(BaseMoraleTier tier)
+{
+    switch (tier)
+    {
+    case BaseMoraleTier::Low:
+        return "low";
+    case BaseMoraleTier::Stable:
+        return "stable";
+    case BaseMoraleTier::High:
+        return "high";
+    }
+    return "invalid";
+}
+
+std::optional<BaseMoraleTier> parseBaseMoraleTier(std::string_view value)
+{
+    if (value == "low") return BaseMoraleTier::Low;
+    if (value == "stable") return BaseMoraleTier::Stable;
+    if (value == "high") return BaseMoraleTier::High;
+    return std::nullopt;
+}
+
+std::string baseMoraleTrendValue(BaseMoraleTrend trend)
+{
+    switch (trend)
+    {
+    case BaseMoraleTrend::Falling:
+        return "falling";
+    case BaseMoraleTrend::Steady:
+        return "steady";
+    case BaseMoraleTrend::Rising:
+        return "rising";
+    }
+    return "invalid";
+}
+
+std::optional<BaseMoraleTrend> parseBaseMoraleTrend(std::string_view value)
+{
+    if (value == "falling") return BaseMoraleTrend::Falling;
+    if (value == "steady") return BaseMoraleTrend::Steady;
+    if (value == "rising") return BaseMoraleTrend::Rising;
+    return std::nullopt;
+}
+
+Json baseMoraleValue(const BaseMoraleState &state)
+{
+    return {
+        {"tier", baseMoraleTierValue(state.tier)},
+        {"trend", baseMoraleTrendValue(state.trend)},
+        {"resolved_day_count", state.resolvedDayCount},
+        {"consecutive_low_days", state.consecutiveLowDays},
+        {"supported_recovery_days", state.supportedRecoveryDays},
+        {"pending_fulfilled_wish_count",
+         state.pendingFulfilledWishCount},
+        {"pending_missed_wish_count", state.pendingMissedWishCount},
+        {"pending_positive_event_count", state.pendingPositiveEventCount},
+        {"pending_negative_event_count", state.pendingNegativeEventCount},
+        {"last_ledger", {
+            {"day_index", state.lastLedger.dayIndex},
+            {"shortfall_food", state.lastLedger.resourceShortfall.food},
+            {"shortfall_hygiene",
+             state.lastLedger.resourceShortfall.hygiene},
+            {"shortfall_operations",
+             state.lastLedger.resourceShortfall.morale},
+            {"shortfall_security",
+             state.lastLedger.resourceShortfall.security},
+            {"bed_shortfall", state.lastLedger.bedShortfall},
+            {"fulfilled_wish_count",
+             state.lastLedger.fulfilledWishCount},
+            {"missed_wish_count", state.lastLedger.missedWishCount},
+            {"positive_event_count",
+             state.lastLedger.positiveEventCount},
+            {"negative_event_count",
+             state.lastLedger.negativeEventCount},
+            {"net_score", state.lastLedger.netScore}}}};
+}
+
+BaseMoraleState parseBaseMorale(const Json &value)
+{
+    const auto tier = parseBaseMoraleTier(
+        value.at("tier").get<std::string>());
+    const auto trend = parseBaseMoraleTrend(
+        value.at("trend").get<std::string>());
+    if (!tier.has_value() || !trend.has_value())
+    {
+        throw std::runtime_error{"Base morale enum is invalid"};
+    }
+    const Json &ledger = value.at("last_ledger");
+    return BaseMoraleState{
+        *tier,
+        *trend,
+        value.at("resolved_day_count").get<std::uint64_t>(),
+        value.at("consecutive_low_days").get<std::uint64_t>(),
+        value.at("supported_recovery_days").get<std::uint32_t>(),
+        value.at("pending_fulfilled_wish_count").get<std::uint64_t>(),
+        value.at("pending_missed_wish_count").get<std::uint64_t>(),
+        value.at("pending_positive_event_count").get<std::uint64_t>(),
+        value.at("pending_negative_event_count").get<std::uint64_t>(),
+        BaseMoraleDailyLedger{
+            ledger.at("day_index").get<std::uint64_t>(),
+            BaseResourceBundle{
+                ledger.at("shortfall_food").get<std::uint32_t>(),
+                ledger.at("shortfall_hygiene").get<std::uint32_t>(),
+                ledger.at("shortfall_operations").get<std::uint32_t>(),
+                ledger.at("shortfall_security").get<std::uint32_t>()},
+            ledger.at("bed_shortfall").get<std::uint32_t>(),
+            ledger.at("fulfilled_wish_count").get<std::uint64_t>(),
+            ledger.at("missed_wish_count").get<std::uint64_t>(),
+            ledger.at("positive_event_count").get<std::uint64_t>(),
+            ledger.at("negative_event_count").get<std::uint64_t>(),
+            ledger.at("net_score").get<std::int32_t>()}};
+}
+
+Json baseCommunityEventValue(const BaseCommunityEventState &state)
+{
+    return {
+        {"definition_id", state.definitionId.value()},
+        {"cycle_index", state.cycleIndex}};
+}
+
+BaseCommunityEventState parseBaseCommunityEvent(const Json &value)
+{
+    return {
+        BaseCommunityEventDefinitionId{
+            value.at("definition_id").get<std::string>()},
+        value.at("cycle_index").get<std::uint64_t>()};
 }
 
 Json vectorValue(Vec2 value)
@@ -506,6 +635,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["base_manufacturing"] = {{"active_order", nullptr}};
         }
     }
+    if (schemaVersion >= 18)
+    {
+        payload["base_morale"] = baseMoraleValue(profile.baseMorale);
+        payload["base_community_event"] = baseCommunityEventValue(
+            profile.baseCommunityEvent);
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -645,6 +780,15 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                         {"missed_cycle_count",
                          raid.travel.startingBasePriority
                              .missedCycleCount}};
+            }
+            if (schemaVersion >= 18)
+            {
+                payload["pending_raid"]["travel"]["starting_base_morale"] =
+                    baseMoraleValue(raid.travel.startingBaseMorale);
+                payload["pending_raid"]["travel"]
+                    ["starting_base_community_event"] =
+                        baseCommunityEventValue(
+                            raid.travel.startingBaseCommunityEvent);
             }
             if (schemaVersion >= 14)
             {
@@ -843,7 +987,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 9 && schemaVersion != 10 &&
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
-        schemaVersion != 16 && schemaVersion != 17)
+        schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -917,7 +1061,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 15 &&
              contentVersion == "base-supply-policy-content-23") ||
             (schemaVersion == 16 &&
-             contentVersion == "base-resident-medical-content-24");
+             contentVersion == "base-resident-medical-content-24") ||
+            (schemaVersion == 17 &&
+             contentVersion == "base-basic-manufacturing-content-25");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -926,7 +1072,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 11 && schemaVersion != 12 &&
              schemaVersion != 13 && schemaVersion != 14 &&
              schemaVersion != 15 && schemaVersion != 16 &&
-             schemaVersion != 17) ||
+             schemaVersion != 17 && schemaVersion != 18) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1122,6 +1268,22 @@ SaveLoadResult deserializeProfileEnvelope(
                             .get<AssetInstanceId>(),
                         order.at("output_ready").get<bool>()};
             }
+        }
+        if (schemaVersion >= 18)
+        {
+            profile.baseMorale = parseBaseMorale(
+                payload.at("base_morale"));
+            profile.baseCommunityEvent = parseBaseCommunityEvent(
+                payload.at("base_community_event"));
+        }
+        else
+        {
+            profile.baseMorale = BaseMoraleState{};
+            profile.baseMorale.resolvedDayCount =
+                projectWorldClock(profile.worldClock).completedDays;
+            static_cast<void>(synchronizeBaseCommunityEventThrough(
+                profile,
+                content));
         }
         profile.assets.setNextAssetIdForLoad(
             payload.at("next_asset_id").get<AssetInstanceId>());
@@ -1480,6 +1642,30 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingBasePriority =
                         startingState.basePriority;
                 }
+                if (schemaVersion >= 18)
+                {
+                    raid.travel.startingBaseMorale = parseBaseMorale(
+                        travel.at("starting_base_morale"));
+                    raid.travel.startingBaseCommunityEvent =
+                        parseBaseCommunityEvent(
+                            travel.at("starting_base_community_event"));
+                }
+                else
+                {
+                    raid.travel.startingBaseMorale = BaseMoraleState{};
+                    raid.travel.startingBaseMorale.resolvedDayCount =
+                        projectWorldClock(
+                            raid.travel.startingWorldClock).completedDays;
+                    ProfileState startingState;
+                    startingState.profileId = profile.profileId;
+                    startingState.worldClock =
+                        raid.travel.startingWorldClock;
+                    static_cast<void>(synchronizeBaseCommunityEventThrough(
+                        startingState,
+                        content));
+                    raid.travel.startingBaseCommunityEvent =
+                        startingState.baseCommunityEvent;
+                }
                 if (schemaVersion >= 14)
                 {
                     const Json &construction = travel.at(
@@ -1553,6 +1739,21 @@ SaveLoadResult deserializeProfileEnvelope(
                     profile.basePopulation.bedCapacity;
                 raid.travel.startingInjuredResidents = 0U;
                 raid.travel.startingResidentMedical = {};
+            }
+            if (!raid.travel.startingBaseCommunityEvent.definitionId.valid())
+            {
+                raid.travel.startingBaseMorale = BaseMoraleState{};
+                raid.travel.startingBaseMorale.resolvedDayCount =
+                    projectWorldClock(
+                        raid.travel.startingWorldClock).completedDays;
+                ProfileState startingState;
+                startingState.profileId = profile.profileId;
+                startingState.worldClock = raid.travel.startingWorldClock;
+                static_cast<void>(synchronizeBaseCommunityEventThrough(
+                    startingState,
+                    content));
+                raid.travel.startingBaseCommunityEvent =
+                    startingState.baseCommunityEvent;
             }
             if (schemaVersion >= 13 && !value.at("rescue").is_null())
             {

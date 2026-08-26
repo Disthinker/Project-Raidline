@@ -258,6 +258,64 @@ struct BasePopulationState
         const BasePopulationState &) = default;
 };
 
+enum class BaseMoraleTier
+{
+    Low,
+    Stable,
+    High
+};
+
+enum class BaseMoraleTrend
+{
+    Falling,
+    Steady,
+    Rising
+};
+
+struct BaseMoraleDailyLedger
+{
+    std::uint64_t dayIndex{};
+    BaseResourceBundle resourceShortfall;
+    std::uint32_t bedShortfall{};
+    std::uint64_t fulfilledWishCount{};
+    std::uint64_t missedWishCount{};
+    std::uint64_t positiveEventCount{};
+    std::uint64_t negativeEventCount{};
+    std::int32_t netScore{};
+
+    friend bool operator==(
+        const BaseMoraleDailyLedger &,
+        const BaseMoraleDailyLedger &) = default;
+};
+
+struct BaseMoraleState
+{
+    BaseMoraleTier tier{BaseMoraleTier::Stable};
+    BaseMoraleTrend trend{BaseMoraleTrend::Steady};
+    std::uint64_t resolvedDayCount{};
+    std::uint64_t consecutiveLowDays{};
+    std::uint32_t supportedRecoveryDays{};
+    std::uint64_t pendingFulfilledWishCount{};
+    std::uint64_t pendingMissedWishCount{};
+    std::uint64_t pendingPositiveEventCount{};
+    std::uint64_t pendingNegativeEventCount{};
+    BaseMoraleDailyLedger lastLedger;
+
+    friend bool operator==(
+        const BaseMoraleState &,
+        const BaseMoraleState &) = default;
+};
+
+struct BaseCommunityEventState
+{
+    BaseCommunityEventDefinitionId definitionId;
+    std::uint64_t cycleIndex{};
+
+    friend bool operator==(
+        const BaseCommunityEventState &,
+        const BaseCommunityEventState &) = default;
+};
+
 struct ActiveResidentTreatment
 {
     BaseServiceJobId jobId{};
@@ -363,6 +421,8 @@ struct RaidTravelSnapshot
     WorldClockState startingWorldClock;
     BaseResourceState startingBaseResources;
     BasePriorityState startingBasePriority;
+    BaseMoraleState startingBaseMorale;
+    BaseCommunityEventState startingBaseCommunityEvent;
     BaseConstructionState startingBaseConstruction;
     std::uint32_t startingBedCapacity{10};
     std::uint32_t startingInjuredResidents{};
@@ -416,6 +476,8 @@ struct ProfileState
     BaseResourceState baseResources;
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
+    BaseMoraleState baseMorale;
+    BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;
     BaseManufacturingState baseManufacturing;
     BaseConstructionState baseConstruction;

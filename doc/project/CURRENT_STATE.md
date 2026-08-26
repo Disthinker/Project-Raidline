@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@987dc6b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#88 接受的 Base Growth 基线；PR #88 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `987dc6b` 合入。
-- 当前开发分支：`codex/base-basic-manufacturing-v1`，从干净的 `origin/main@987dc6b` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-basic-manufacturing-v1.md`。
+- `origin/main@194f910` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#89 接受的 Base Growth 基线；PR #89 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `194f910` 合入。
+- 当前开发分支：`codex/base-morale-periodic-events-v1`，从干净的 `origin/main@194f910` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-morale-periodic-events-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#88 已接受。当前分支交付 **Base 基础制造队列 v1**；外部 GDD 继续只读，本切片只用既有工坊、劳动力、统一资产和世界时间建立一个实际生产消费者。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#89 已接受。当前分支交付 **Base 正式士气与周期事件 v1**；外部 GDD 继续只读，本切片把每日供给、床位、愿望与低频事件汇入可解释的三档居民士气，并只影响新制造订单的冻结耗时。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -43,7 +43,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 28. **Raid 普通幸存者安全转移 v1**：PR #86 为三张固定图加入一次性普通幸存者点；连续按住 F 2 秒后立即幂等接纳，后续死亡、主动退出或异常关闭均保留该人口事实，其余 Raid 状态仍回滚。已通过 CI 与用户正常游玩验收并以 `ee9ba48` 合入 main。
 29. **Base 宿舍扩建与分类自动供给 v1**：PR #87 允许从统一自有资产显式加工建材并完成宿舍 1→2 级项目；成功撤离保持全部随身物原位置，食物/医疗/娱乐/安全菜单按物品定义保存自动供给授权，只有每日需求不足时才消费。已通过 exact-head CI 和用户正常游玩验收，以 `1be94bf` 进入 main。
 30. **Base 居民伤病与医疗所治疗 v1**：PR #88 让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main。
-31. **Base 基础制造队列 v1**：当前分支为损坏工坊提供一个生产槽；以 1 个废旧零件、1 个损坏电子元件和 1 名健康劳动力经过 6 小时制造一件真实武器维护包。投入物、产物、取消、仓库阻塞和 Raid 时间边界全部保持稳定资产身份与原子性。
+31. **Base 基础制造队列 v1**：PR #89 为损坏工坊提供一个生产槽；以 1 个废旧零件、1 个损坏电子元件和 1 名健康劳动力经过 6 小时制造一件真实武器维护包。已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `194f910` 进入 main。
+32. **Base 正式士气与周期事件 v1**：当前分支新增独立 `Low / Stable / High` 居民士气、每日原因账本和每五日稳定事件；短缺优先降低士气，受支持运行恢复低士气，完成愿望或正面事件可提升士气。新工坊订单按 120%/100%/90% 冻结耗时，旧订单不追溯变化。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -71,8 +72,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## 当前自动化证据
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
-- PR #88 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `987dc6b` 进入 main。
-- 当前基础制造分支已完成领域、存档 schema v17/content v25、Base/Raid 时间接线、工坊占位 UI 及 focused 回归；Windows Debug 全目标构建与完整 CTest 988/988 通过，Draft PR #89 的代码提交 `aed2b1d` 已通过 exact-head Windows/Ubuntu CI。开发代理未启动游戏，等待用户正常游玩验收。
+- PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
+- 当前士气与周期事件分支已完成领域、schema v18/content v26、统一日结、Raid 回滚、工坊耗时消费者、Allocation 双语占位 UI 与 focused 回归；Windows Debug 全目标构建成功，完整 CTest 1001/1001 与 exact-head Windows/Ubuntu CI 通过。开发代理未启动游戏，用户正常游玩验收待完成。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
@@ -250,7 +251,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 ## Base 周期愿望与物资提交 v1 当前实现
 
 - content v16 提供五日周期和三个稳定愿望定义，分别要求可乐、废旧零件或损坏电子元件，并只奖励既有基地资源；显示名和数值仍是开发期内容。
-- `BasePriorityState` 保存当前稳定定义 ID、周期索引、完成状态和累计错过周期。周期从新 Profile 的初始世界分钟起算，任意大跨度时间均常数时间轮换；错过暂只记录，不施加尚无领域支撑的士气惩罚。
+- `BasePriorityState` 保存当前稳定定义 ID、周期索引、完成状态和累计错过周期。周期从新 Profile 的初始世界分钟起算，任意大跨度时间均常数时间轮换；完成或错过现在写入下一次每日士气账本，不会在同一天被重复提交刷取。
 - 愿望提交只消费玩家明确选中的基地可访问自有资产；正常流程不再要求物品先进入 BaseIntake。Stash、装备与随身容器不会被静默扫描或自动提交，query/execute 共用匹配、数量与容量规则。
 - schema v11 保存愿望状态；schema v10 及更早版本按当前世界时间确定性初始化。Pending Raid 同时冻结出发前愿望，异常退出跨周期也会精确回滚。
 - Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；愿望仍是显式提交，不会被日常自动供给策略代替。
@@ -261,7 +262,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - `BaseOperationalProjection` 只读计算各项整日储备、精确最短板和运营档位，不进入 Profile、revision 或存档。首版状态仅作风险可读投影。
 - 玩家枪械全面维护只消费货币：候选 Profile 原子恢复当前/最大耐久到出厂值并清除故障；不推进世界时间、不创建任务、不移动武器，也不改变枪膛和已装弹匣。运营资源不影响报价或资格。
 - schema 维持 v11，并显式接受 content v16/v17 存档；旧计时任务立即可领取。Allocation 与 Supply 以中英文显示运营状态、最短板和即时维护反馈。
-- 当前四项池仅作为早期运营储备；完整版居民士气仍保留独立三档模型，人口、口粮/床位、生产、居民恢复和自动防守未在本切片提前实现。
+- 当前四项池仍只是早期运营储备；正式居民士气已由独立三档状态实现，不复用旧 `morale` 资源字段。人口、口粮/床位和制造已成为实际消费者，自动防守仍延期。
 
 ## Base 居民、床位与睡眠 v1 当前实现
 
@@ -270,7 +271,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - Base 新增文字/几何占位宿舍。玩家可查看居民、床位/拥挤、口粮储备和下次日结，并正常选择休息 1、6 或 12 小时；休息不治疗玩家。
 - `queryBaseRest/executeBaseRest` 在候选 Profile 上推进唯一 WorldClock、按人口结算跨越的日界线、同步五日愿望并原子保存。非法时长、Raid pending、过期 revision、重复事务和保存失败均不产生部分提交。
 - schema v12/content v20 保存人口与床位；schema v11 及更早版本使用确定性默认值迁移。Base 实时流逝和 Raid 往返跨日也消费同一人口口粮需求。
-- PR #86 已把普通幸存者接纳接入聚合人口；PR #87 增加一项真实建设项目。当前居民医疗切片只区分健康/受伤聚合人数及可用劳动力，岗位/专业、精力、正式士气、具名 NPC 和疾病模拟继续延期。
+- PR #86 已把普通幸存者接纳接入聚合人口；PR #87 增加一项真实建设项目；当前士气切片把聚合居民接入三档正式士气。岗位/专业、精力、具名 NPC 和疾病模拟继续延期。
 
 ## Raid 普通幸存者安全转移 v1 当前实现
 
@@ -305,6 +306,15 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 - 居民治疗预览与提交使用同一确定性计划：贡献高的物品优先，同级按稳定资产 ID；非空容器不可被消费，拒绝、过期 revision 或保存失败均保持 Profile 和资产不变。
 - Base 实时、休息及 Raid 往返共同推进活动治疗；到期只结算一次。schema v16/content v24 保存受伤人数、活动治疗和出击前回滚状态；v15 迁移不会追溯制造伤病。
 - 客户端继续只使用双语文字和几何占位，没有新增或修改正式美术、音频与 manifest。
+
+## Base 正式士气与周期事件 v1 当前实现
+
+- `BaseMoraleState` 与旧运营支持资源完全分离，保存低迷/稳定/高昂档位、趋势、连续低士气天数、恢复进度和上次每日原因账本。
+- 统一日结顺序为需求消耗→士气结算→愿望轮换→事件轮换；愿望和事件写入下一日原因，短缺/床位不足优先，单个世界日最多移动一个档位。
+- content v26 提供四个五日轮换事件和 120%/100%/90% 制造耗时系数。事件由 Profile 与周期确定并保存，打开界面或重启不能重抽；任意大时间跨度只按事件集合大小汇总。
+- schema v18 保存士气、账本、当前事件及出击前回滚快照；v17 确定性迁移为当前日的稳定士气和事件。异常退出 Raid 精确恢复出发前状态。
+- Allocation 显示正式士气、趋势、日结原因、低士气持续时间、当前事件与下次轮换；工坊显示当前士气下新订单耗时。客户端只读取领域投影，不自行推断变化。
+- V1 不移除居民、不触发叛乱、不改变战斗难度，也不阻止出击；更复杂的愿望奖励、事件选择和人口后果后置。
 
 ## 尚未完成
 

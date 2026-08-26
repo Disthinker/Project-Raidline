@@ -18,6 +18,7 @@
 
 #include "content_registry.h"
 #include "alpha_content_ids.h"
+#include "base_morale_domain.h"
 #include "inventory_transfer.h"
 
 namespace
@@ -9051,6 +9052,54 @@ void App::renderBaseAllocation()
         worldTimeOfDayName(clock.timeOfDay));
     uiTextRenderer_.render(renderer_, 80.0F, 500.0F, cycles.c_str());
 
+    const BaseMoraleState &morale = gameSession_.profile().baseMorale;
+    const BaseMoraleDailyLedger &ledger = morale.lastLedger;
+    const BaseMoraleDefinition &moraleRules =
+        publishedContentRegistry().baseMorale();
+    const BaseCommunityEventDefinition &communityEvent =
+        publishedContentRegistry().baseCommunityEvent(
+            gameSession_.profile().baseCommunityEvent.definitionId);
+    const std::uint64_t nextEventDay =
+        (gameSession_.profile().baseCommunityEvent.cycleIndex + 1U) *
+        moraleRules.eventCycleDays;
+    const std::uint64_t daysUntilEvent = nextEventDay > clock.completedDays
+        ? nextEventDay - clock.completedDays
+        : 0U;
+    const std::string moraleSummary = fmt::format(
+        "RESIDENT MORALE {} | TREND {} | LOW DAYS {}",
+        baseMoraleTierName(morale.tier),
+        baseMoraleTrendName(morale.trend),
+        morale.consecutiveLowDays);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 526.0F, moraleSummary.c_str());
+    const bool resourceShortage = ledger.resourceShortfall.food > 0U ||
+        ledger.resourceShortfall.hygiene > 0U ||
+        ledger.resourceShortfall.morale > 0U ||
+        ledger.resourceShortfall.security > 0U;
+    const std::string moraleReport = fmt::format(
+        "LAST DAILY REPORT | SCORE {} | SHORTAGE {} | BED {} | WISH +{}/-{} | EVENT +{}/-{}",
+        ledger.netScore,
+        resourceShortage ? 1 : 0,
+        ledger.bedShortfall,
+        ledger.fulfilledWishCount,
+        ledger.missedWishCount,
+        ledger.positiveEventCount,
+        ledger.negativeEventCount);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 550.0F, moraleReport.c_str());
+    const std::string eventSummary = fmt::format(
+        "ACTIVE EVENT {} | EFFECT {:+} | NEXT ROTATION {}D",
+        communityEvent.displayName,
+        communityEvent.moraleEffect,
+        daysUntilEvent);
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 574.0F, eventSummary.c_str());
+    const std::string productionSummary = fmt::format(
+        "PRODUCTION DURATION {}% | APPLIES WHEN ORDER STARTS",
+        baseManufacturingDurationPercent(morale.tier, moraleRules));
+    uiTextRenderer_.render(
+        renderer_, 80.0F, 598.0F, productionSummary.c_str());
+
     const BasePriorityState &priorityState =
         gameSession_.profile().basePriority;
     const BasePriorityDefinition &priority =
@@ -9618,12 +9667,18 @@ void App::renderBaseWorkshop()
     }
     const ItemDefinition &outputDefinition =
         publishedContentRegistry().item(recipe.outputItemDefinitionId);
+    const std::uint32_t adjustedDuration = applyBaseMoraleDurationPercent(
+        recipe.durationMinutes,
+        profile.baseMorale.tier,
+        publishedContentRegistry().baseMorale());
     const std::string output = fmt::format(
-        "OUTPUT {} x{} | {} WORKER | {}H",
+        "OUTPUT {} x{} | {} WORKER | BASE {}H | CURRENT {}H {:02}M",
         outputDefinition.displayName,
         recipe.outputQuantity,
         recipe.workerCount,
-        recipe.durationMinutes / kWorldMinutesPerHour);
+        recipe.durationMinutes / kWorldMinutesPerHour,
+        adjustedDuration / kWorldMinutesPerHour,
+        adjustedDuration % kWorldMinutesPerHour);
     uiTextRenderer_.render(renderer_, 170.0F, 338.0F, output.c_str());
 
     std::string status;

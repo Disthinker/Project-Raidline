@@ -2,6 +2,7 @@
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
+#include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
 
 #include <algorithm>
@@ -1919,12 +1920,7 @@ void GameSession::advanceWorldClockFromSimulation(
             advanceWorldClock(candidate.worldClock, minutes);
         if (advanced.minutesApplied > 0U)
         {
-            static_cast<void>(applyBaseDailyDemandWithSupplyThrough(
-                candidate,
-                publishedContentRegistry(),
-                advanced.completedDaysAfter,
-                populationAdjustedDailyDemand(candidate.basePopulation)));
-            static_cast<void>(synchronizeBasePriorityThrough(
+            static_cast<void>(synchronizeBaseDailySystemsThrough(
                 candidate,
                 publishedContentRegistry()));
             const BaseConstructionAdvanceResult construction =

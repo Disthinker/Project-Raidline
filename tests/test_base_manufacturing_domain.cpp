@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <array>
+#include <utility>
+
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
 #include "world_clock.h"
@@ -239,4 +242,40 @@ TEST(BaseManufacturingDomainTest,
         CommandContext{revision + 1U, "stale-manufacturing"});
     EXPECT_FALSE(stale.succeeded);
     EXPECT_EQ(stale.error, DomainErrorCode::StaleRevision);
+}
+
+TEST(BaseManufacturingDomainTest,
+     MoraleFreezesLowStableAndHighDurationWhenOrderStarts)
+{
+    const std::array cases{
+        std::pair{BaseMoraleTier::Low, 432U},
+        std::pair{BaseMoraleTier::Stable, 360U},
+        std::pair{BaseMoraleTier::High, 324U}};
+    for (const auto &[tier, expectedDuration] : cases)
+    {
+        ProfileState profile = makeProfile();
+        profile.baseMorale.tier = tier;
+        profile.baseMorale.consecutiveLowDays =
+            tier == BaseMoraleTier::Low ? 1U : 0U;
+        addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+        addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
+        const BaseManufacturingStartPlan plan = queryStartBaseManufacturing(
+            profile,
+            publishedContentRegistry(),
+            StartBaseManufacturingCommand{kWeaponKitRecipe});
+        ASSERT_TRUE(plan.canCommit) << plan.message;
+        EXPECT_EQ(plan.durationMinutes, expectedDuration);
+        const BaseManufacturingReceipt started = startOrder(profile);
+        ASSERT_TRUE(started.succeeded) << started.message;
+        const std::uint64_t frozenCompletion =
+            profile.baseManufacturing.activeOrder->completionWorldMinute;
+        profile.baseMorale.tier = tier == BaseMoraleTier::Low
+            ? BaseMoraleTier::High
+            : BaseMoraleTier::Low;
+        profile.baseMorale.consecutiveLowDays =
+            profile.baseMorale.tier == BaseMoraleTier::Low ? 1U : 0U;
+        EXPECT_EQ(
+            profile.baseManufacturing.activeOrder->completionWorldMinute,
+            frozenCompletion);
+    }
 }

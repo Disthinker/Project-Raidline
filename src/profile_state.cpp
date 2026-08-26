@@ -1,6 +1,7 @@
 #include "profile_state.h"
 
 #include "base_population_domain.h"
+#include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
 
 #include <algorithm>
@@ -387,6 +388,7 @@ ProfileState makeNewAlphaProfile(
     placeNewAsset(profile, content, alpha_content::armorMaintenanceKit);
 
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
+    static_cast<void>(synchronizeBaseCommunityEventThrough(profile, content));
 
     const ProfileValidationResult validation =
         validateProfileState(profile, content);
@@ -511,6 +513,58 @@ bool assetIsCarried(
         return false;
     }
     return false;
+}
+
+namespace
+{
+bool validBaseMoraleSnapshot(
+    const BaseMoraleState &morale,
+    const BaseCommunityEventState &event,
+    std::string_view profileId,
+    const WorldClockState &worldClock,
+    const ContentRegistry &content) noexcept
+{
+    try
+    {
+        const WorldClockProjection clock = projectWorldClock(worldClock);
+        const bool validTier =
+            morale.tier == BaseMoraleTier::Low ||
+            morale.tier == BaseMoraleTier::Stable ||
+            morale.tier == BaseMoraleTier::High;
+        const bool validTrend =
+            morale.trend == BaseMoraleTrend::Falling ||
+            morale.trend == BaseMoraleTrend::Steady ||
+            morale.trend == BaseMoraleTrend::Rising;
+        const BaseResourceBundle &shortfall =
+            morale.lastLedger.resourceShortfall;
+        const std::uint64_t expectedCycle =
+            clock.completedDays / content.baseMorale().eventCycleDays;
+        return validTier && validTrend &&
+            morale.resolvedDayCount <= clock.completedDays &&
+            morale.supportedRecoveryDays <
+                content.baseMorale().recoveryDaysFromLow &&
+            (morale.tier == BaseMoraleTier::Low ||
+             morale.consecutiveLowDays == 0U) &&
+            morale.lastLedger.dayIndex <= morale.resolvedDayCount &&
+            morale.lastLedger.bedShortfall <= kMaximumOrdinaryResidents &&
+            morale.lastLedger.netScore >= -9 &&
+            morale.lastLedger.netScore <= 9 &&
+            shortfall.food <= kMaximumBaseResource &&
+            shortfall.hygiene <= kMaximumBaseResource &&
+            shortfall.morale <= kMaximumBaseResource &&
+            shortfall.security <= kMaximumBaseResource &&
+            event.definitionId.valid() &&
+            event.cycleIndex == expectedCycle &&
+            event.definitionId == selectBaseCommunityEvent(
+                profileId,
+                expectedCycle,
+                content);
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
 }
 
 bool assetIsBaseAccessible(
@@ -776,6 +830,15 @@ ProfileValidationResult validateProfileState(
     if (profile.baseResources.resolvedDemandCycleCount > clock.completedDays)
     {
         return {false, "Base demand cycle is ahead of the world clock"};
+    }
+    if (!validBaseMoraleSnapshot(
+            profile.baseMorale,
+            profile.baseCommunityEvent,
+            profile.profileId,
+            profile.worldClock,
+            content))
+    {
+        return {false, "Base morale state is invalid"};
     }
     if (profile.basePopulation.ordinaryResidents >
             kMaximumOrdinaryResidents ||
@@ -1180,12 +1243,26 @@ ProfileValidationResult validateProfileState(
         const auto *outputService = output != nullptr
             ? std::get_if<BaseServiceAssetLocation>(&output->location)
             : nullptr;
+        const std::uint64_t frozenDuration =
+            order.completionWorldMinute - order.startedWorldMinute;
+        const bool publishedDuration =
+            frozenDuration == applyBaseMoraleDurationPercent(
+                recipe->durationMinutes,
+                BaseMoraleTier::Low,
+                content.baseMorale()) ||
+            frozenDuration == applyBaseMoraleDurationPercent(
+                recipe->durationMinutes,
+                BaseMoraleTier::Stable,
+                content.baseMorale()) ||
+            frozenDuration == applyBaseMoraleDurationPercent(
+                recipe->durationMinutes,
+                BaseMoraleTier::High,
+                content.baseMorale());
         const bool timingValid =
             order.startedWorldMinute < order.completionWorldMinute &&
             order.startedWorldMinute <=
                 profile.worldClock.elapsedWorldMinutes &&
-            order.completionWorldMinute - order.startedWorldMinute ==
-                recipe->durationMinutes;
+            publishedDuration;
         const bool phaseValid = order.outputReady
             ? order.committedWorkers == 0U &&
                 order.inputAssetIds.empty() &&
@@ -1257,12 +1334,14 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
-            raid.rulesVersion == "raid-resident-medical-7";
+            raid.rulesVersion == "raid-resident-medical-7" ||
+            raid.rulesVersion == "base-morale-events-8";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
-            raid.rulesVersion == "raid-resident-medical-7";
+            raid.rulesVersion == "raid-resident-medical-7" ||
+            raid.rulesVersion == "base-morale-events-8";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1394,6 +1473,12 @@ ProfileValidationResult validateProfileState(
                 !validBasePriorityState(
                     raid.travel.startingBasePriority,
                     raid.travel.startingWorldClock.elapsedWorldMinutes,
+                    content) ||
+                !validBaseMoraleSnapshot(
+                    raid.travel.startingBaseMorale,
+                    raid.travel.startingBaseCommunityEvent,
+                    profile.profileId,
+                    raid.travel.startingWorldClock,
                     content) ||
                 !startingConstructionValid ||
                 !startingResidentMedicalValid)
@@ -1542,6 +1627,28 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseResources.lastShortfall.morale);
     hashInteger(hash, profile.baseResources.lastShortfall.security);
     hashInteger(hash, profile.baseResources.resolvedDemandCycleCount);
+    hashInteger(hash, static_cast<std::uint32_t>(profile.baseMorale.tier));
+    hashInteger(hash, static_cast<std::uint32_t>(profile.baseMorale.trend));
+    hashInteger(hash, profile.baseMorale.resolvedDayCount);
+    hashInteger(hash, profile.baseMorale.consecutiveLowDays);
+    hashInteger(hash, profile.baseMorale.supportedRecoveryDays);
+    hashInteger(hash, profile.baseMorale.pendingFulfilledWishCount);
+    hashInteger(hash, profile.baseMorale.pendingMissedWishCount);
+    hashInteger(hash, profile.baseMorale.pendingPositiveEventCount);
+    hashInteger(hash, profile.baseMorale.pendingNegativeEventCount);
+    hashInteger(hash, profile.baseMorale.lastLedger.dayIndex);
+    hashInteger(hash, profile.baseMorale.lastLedger.resourceShortfall.food);
+    hashInteger(hash, profile.baseMorale.lastLedger.resourceShortfall.hygiene);
+    hashInteger(hash, profile.baseMorale.lastLedger.resourceShortfall.morale);
+    hashInteger(hash, profile.baseMorale.lastLedger.resourceShortfall.security);
+    hashInteger(hash, profile.baseMorale.lastLedger.bedShortfall);
+    hashInteger(hash, profile.baseMorale.lastLedger.fulfilledWishCount);
+    hashInteger(hash, profile.baseMorale.lastLedger.missedWishCount);
+    hashInteger(hash, profile.baseMorale.lastLedger.positiveEventCount);
+    hashInteger(hash, profile.baseMorale.lastLedger.negativeEventCount);
+    hashInteger(hash, profile.baseMorale.lastLedger.netScore);
+    hashBytes(hash, profile.baseCommunityEvent.definitionId.value());
+    hashInteger(hash, profile.baseCommunityEvent.cycleIndex);
     for (const auto &[definitionId, category] :
          profile.baseSupplyPolicy.assignments)
     {
@@ -1765,6 +1872,54 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                     raid.travel.startingBasePriority.fulfilled ? 1U : 0U);
         hashInteger(hash,
                     raid.travel.startingBasePriority.missedCycleCount);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.travel.startingBaseMorale.tier));
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.travel.startingBaseMorale.trend));
+        hashInteger(hash, raid.travel.startingBaseMorale.resolvedDayCount);
+        hashInteger(hash, raid.travel.startingBaseMorale.consecutiveLowDays);
+        hashInteger(hash, raid.travel.startingBaseMorale.supportedRecoveryDays);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.pendingFulfilledWishCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.pendingMissedWishCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.pendingPositiveEventCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.pendingNegativeEventCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger.dayIndex);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .resourceShortfall.food);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .resourceShortfall.hygiene);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .resourceShortfall.morale);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .resourceShortfall.security);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger.bedShortfall);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .fulfilledWishCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .missedWishCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .positiveEventCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger
+                        .negativeEventCount);
+        hashInteger(hash,
+                    raid.travel.startingBaseMorale.lastLedger.netScore);
+        hashBytes(hash,
+                  raid.travel.startingBaseCommunityEvent.definitionId.value());
+        hashInteger(hash, raid.travel.startingBaseCommunityEvent.cycleIndex);
         hashInteger(hash,
                     raid.travel.startingBaseConstruction.materialUnits);
         hashInteger(hash,

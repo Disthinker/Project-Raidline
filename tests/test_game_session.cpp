@@ -146,6 +146,9 @@ TEST(GameSessionTest, BaseClockUsesScaledSimulationTimeAndDailyDemand)
     EXPECT_EQ(
         session.profile().baseResources.resolvedDemandCycleCount,
         1U);
+    EXPECT_EQ(session.profile().baseMorale.resolvedDayCount, 1U);
+    EXPECT_EQ(session.profile().baseMorale.tier, BaseMoraleTier::Stable);
+    EXPECT_EQ(session.profile().baseMorale.trend, BaseMoraleTrend::Steady);
 }
 
 TEST(GameSessionTest, RaidTravelPreviewProjectsSelectedMapWithoutMutation)

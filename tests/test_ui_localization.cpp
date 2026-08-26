@@ -214,6 +214,19 @@ TEST(UiLocalizationTest, ChineseTranslatesWorkshopManufacturingFlow) {
                 UiLanguage::SimplifiedChinese,
                 "Stash has no room for the manufacturing output"),
             "仓库没有容纳生产物品的空间");
+
+  const std::string morale = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "RESIDENT MORALE STABLE | TREND RISING | LOW DAYS 0");
+  EXPECT_NE(morale.find("居民士气"), std::string::npos);
+  EXPECT_NE(morale.find("趋势 上升"), std::string::npos);
+  EXPECT_NE(morale.find("低士气天数 0"), std::string::npos);
+  const std::string event = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "ACTIVE EVENT Shared Meal | EFFECT +1 | NEXT ROTATION 5D");
+  EXPECT_NE(event.find("当前事件 共享餐食"), std::string::npos);
+  EXPECT_NE(event.find("影响 +1"), std::string::npos);
+  EXPECT_NE(event.find("距离下次轮换 5D"), std::string::npos);
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesCategorizedAutomaticBaseSupply) {

@@ -9,6 +9,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
+#include "base_morale_domain.h"
 #include "base_resource_domain.h"
 #include "base_service_domain.h"
 #include "economy_domain.h"
@@ -70,6 +71,12 @@ TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndInt
     profile.worldClock.elapsedWorldMinutes =
         7U * kWorldMinutesPerDay + kInitialWorldMinute;
     static_cast<void>(synchronizeBasePriorityThrough(
+        profile,
+        publishedContentRegistry()));
+    profile.baseMorale.resolvedDayCount =
+        projectWorldClock(profile.worldClock).completedDays;
+    profile.baseCommunityEvent = {};
+    static_cast<void>(synchronizeBaseCommunityEventThrough(
         profile,
         publishedContentRegistry()));
     const ItemDefinition &cola = publishedContentRegistry().item(
@@ -1238,6 +1245,89 @@ TEST(SaveRepositoryTest, SchemaV17RoundTripsActiveManufacturingOwnership)
     EXPECT_EQ(
         loaded.profile->baseManufacturing.activeOrder->outputAssetId,
         started.outputAssetId);
+}
+
+TEST(SaveRepositoryTest, SchemaV18RoundTripsMoraleEventAndRaidRollback)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-morale-v18",
+        publishedContentRegistry());
+    profile.baseMorale.pendingFulfilledWishCount = 2U;
+    profile.baseMorale.pendingNegativeEventCount = 1U;
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-morale-raid",
+            "save-morale-settlement",
+            19001U,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "save-morale-deploy"}).succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion(),
+            18),
+        publishedContentRegistry());
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.startingBaseMorale,
+        profile.pendingRaid->travel.startingBaseMorale);
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.startingBaseCommunityEvent,
+        profile.pendingRaid->travel.startingBaseCommunityEvent);
+}
+
+TEST(SaveRepositoryTest, SchemaV17MigratesToStableCurrentMoraleEvent)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-morale-v17-migration",
+        publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes =
+        12U * kWorldMinutesPerDay + kInitialWorldMinute;
+    profile.baseResources.resolvedDemandCycleCount = 12U;
+    profile.baseMorale.resolvedDayCount = 12U;
+    profile.basePriority = {};
+    static_cast<void>(synchronizeBasePriorityThrough(
+        profile,
+        publishedContentRegistry()));
+    profile.baseCommunityEvent = {};
+    static_cast<void>(synchronizeBaseCommunityEventThrough(
+        profile,
+        publishedContentRegistry()));
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "base-basic-manufacturing-content-25",
+            17),
+        publishedContentRegistry());
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->baseMorale.tier, BaseMoraleTier::Stable);
+    EXPECT_EQ(migrated.profile->baseMorale.resolvedDayCount, 12U);
+    EXPECT_EQ(migrated.profile->baseCommunityEvent.cycleIndex, 2U);
+    EXPECT_TRUE(validateProfileState(
+        *migrated.profile,
+        publishedContentRegistry()).valid);
+}
+
+TEST(SaveRepositoryTest, SchemaV18RejectsInvalidMoraleEventSnapshot)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-morale-invalid",
+        publishedContentRegistry());
+    profile.baseCommunityEvent.cycleIndex = 99U;
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            publishedContentRegistry().contentVersion(),
+            18),
+        publishedContentRegistry());
+    EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
+    EXPECT_FALSE(loaded.profile.has_value());
+    EXPECT_NE(loaded.message.find("morale"), std::string::npos);
 }
 
 TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)

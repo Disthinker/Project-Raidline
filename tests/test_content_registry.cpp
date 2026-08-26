@@ -65,7 +65,18 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-basic-manufacturing-content-25");
+        "base-morale-events-content-26");
+    EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
+    EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
+    EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
+    EXPECT_EQ(registry.baseMorale().highManufacturingDurationPercent, 90U);
+    EXPECT_EQ(registry.baseMorale().eventCycleDays, 5U);
+    ASSERT_EQ(registry.baseCommunityEvents().size(), 4U);
+    EXPECT_EQ(
+        registry.baseCommunityEvent(
+            BaseCommunityEventDefinitionId{"base_event.shared_meal"})
+            .moraleEffect,
+        1);
     EXPECT_EQ(registry.gunsmithFullMaintenance().baseCost, 40U);
     EXPECT_EQ(
         registry.gunsmithFullMaintenance().currentDurabilityCostPerPoint,
@@ -453,6 +464,40 @@ TEST(ContentRegistryTest, RejectsInvalidBaseManufacturingDefinition)
             publishedJsonCopy(),
             "\"id\": \"base_manufacturing.weapon_maintenance_kit\"",
             "\"id\": \"item.invalid_recipe\""))),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidBaseMoraleAndCommunityEvents)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"stable\": 100",
+            "\"stable\": 99"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"event_cycle_days\": 5",
+            "\"event_cycle_days\": 31"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"display_name\": \"Shared Meal\"",
+            "\"display_name\": \"\""))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"morale_effect\": 1",
+            "\"morale_effect\": 2"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"id\": \"base_event.restless_nights\"",
+            "\"id\": \"base_event.shared_meal\""))),
         ContentRegistryError);
 }
 
