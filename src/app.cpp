@@ -1452,6 +1452,25 @@ void App::handleRaidIntelligenceSelection(
         : "INTELLIGENCE SELECTED FOR DEPLOYMENT";
 }
 
+void App::handleRaidInteriorIntelligencePurchase(
+    const RaidSpaceDefinitionId &interiorId)
+{
+    if (gameSession_.profile().raidInteriorIntelligence.knows(interiorId))
+    {
+        uiMessage_ = "INTERIOR LAYOUT PERMANENTLY KNOWN";
+        return;
+    }
+    const RaidInteriorIntelligencePurchaseReceipt receipt =
+        gameSession_.purchaseRaidInteriorIntelligence(
+            RaidInteriorIntelligencePurchaseCommand{interiorId},
+            nextProfileTransactionId("raid-interior-intelligence"));
+    uiMessage_ = receipt.succeeded
+        ? "INTERIOR LAYOUT INTELLIGENCE PURCHASED"
+        : receipt.message.empty()
+            ? "INTERIOR INTELLIGENCE PURCHASE BLOCKED"
+            : receipt.message;
+}
+
 SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
 {
     return SDL_FRect{500.0F, 340.0F + static_cast<float>(index) * 58.0F, 280.0F, 46.0F};
@@ -1704,9 +1723,9 @@ SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
         382.0F,
-        326.0F + static_cast<float>(index) * 48.0F,
+        326.0F + static_cast<float>(index) * 42.0F,
         260.0F,
-        38.0F};
+        34.0F};
 }
 
 void App::closeInventory() noexcept
@@ -1856,6 +1875,19 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             {
                 handleRaidIntelligenceSelection(
                     static_cast<RaidIntelligenceCategory>(index));
+                return;
+            }
+        }
+        for (std::size_t index{}; index < selectedRaidMap().interiors.size();
+             ++index)
+        {
+            if (contains(
+                    raidIntelligenceButton(
+                        kRaidIntelligenceCategoryCount + index),
+                    click.position))
+            {
+                handleRaidInteriorIntelligencePurchase(
+                    selectedRaidMap().interiors[index].id);
                 return;
             }
         }
@@ -10340,6 +10372,33 @@ void App::renderBaseDeployment()
         uiTextRenderer_.render(
             renderer_, button.x + 10.0F, button.y + 11.0F, label.c_str());
     }
+    for (std::size_t index{}; index < map.interiors.size(); ++index)
+    {
+        const RaidInteriorDefinition &interior = map.interiors[index];
+        const bool known =
+            profile.raidInteriorIntelligence.knows(interior.id);
+        const SDL_FRect button = raidIntelligenceButton(
+            kRaidIntelligenceCategoryCount + index);
+        SDL_SetRenderDrawColor(
+            renderer_, known ? 42 : 58, known ? 88 : 50,
+            known ? 76 : 48, 255);
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(
+            renderer_, known ? 116 : 180, known ? 210 : 102,
+            known ? 174 : 92, 255);
+        SDL_RenderRect(renderer_, &button);
+        const std::string label = known
+            ? fmt::format(
+                  "INTERIOR PLAN | {} | PERMANENTLY KNOWN",
+                  interior.displayName)
+            : fmt::format(
+                  "INTERIOR PLAN | {} | BUY {}",
+                  interior.displayName,
+                  interior.intelligencePrice);
+        uiTextRenderer_.render(
+            renderer_, button.x + 10.0F, button.y + 11.0F,
+            label.c_str());
+    }
 
     float y = 318.0F;
     for (EquipmentSlotKind slot : kProfileEquipmentSlots)
@@ -10487,23 +10546,83 @@ void App::renderRaidTacticalMap()
 
     if (!gameSession_.world().inOutdoorRaidSpace())
     {
+        const std::optional<RaidInteriorMapProjection> interior =
+            gameSession_.world().activeInteriorMapProjection();
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         const SDL_FRect shade{0.0F, 0.0F,
                               static_cast<float>(kWindowWidth),
                               static_cast<float>(kWindowHeight)};
-        const SDL_FRect panel{252.0F, 188.0F, 776.0F, 344.0F};
         SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 210);
         SDL_RenderFillRect(renderer_, &shade);
+        if (interior.has_value())
+        {
+            const SDL_FRect panel{104.0F, 54.0F, 1072.0F, 612.0F};
+            const SDL_FRect chart{144.0F, 114.0F, 992.0F, 504.0F};
+            SDL_SetRenderDrawColor(renderer_, 12, 22, 25, 248);
+            SDL_RenderFillRect(renderer_, &panel);
+            SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
+            SDL_RenderRect(renderer_, &panel);
+            SDL_SetRenderDrawColor(renderer_, 31, 52, 52, 245);
+            SDL_RenderFillRect(renderer_, &chart);
+            const auto screenRect = [chart, &interior](ContentRect rect)
+            {
+                return SDL_FRect{
+                    chart.x + rect.position.x / interior->worldSize.x * chart.w,
+                    chart.y + rect.position.y / interior->worldSize.y * chart.h,
+                    rect.size.x / interior->worldSize.x * chart.w,
+                    rect.size.y / interior->worldSize.y * chart.h};
+            };
+            for (const BallisticBlocker &blocker : interior->blockers)
+            {
+                const SDL_FRect bounds = screenRect(ContentRect{
+                    blocker.bounds.position, blocker.bounds.size});
+                SDL_SetRenderDrawColor(renderer_, 76, 88, 88, 235);
+                SDL_RenderFillRect(renderer_, &bounds);
+                SDL_SetRenderDrawColor(renderer_, 124, 146, 140, 245);
+                SDL_RenderRect(renderer_, &bounds);
+            }
+            const SDL_FRect exit = screenRect(interior->exit);
+            SDL_SetRenderDrawColor(renderer_, 82, 216, 132, 245);
+            SDL_RenderRect(renderer_, &exit);
+            uiTextRenderer_.render(
+                renderer_, exit.x + 5.0F, exit.y + 4.0F, "EXIT");
+
+            const Player &player = gameSession_.world().player();
+            const Vec2 center{
+                player.position().x + player.size() * 0.5F,
+                player.position().y + player.size() * 0.5F};
+            const Vec2 marker{
+                chart.x + center.x / interior->worldSize.x * chart.w,
+                chart.y + center.y / interior->worldSize.y * chart.h};
+            SDL_SetRenderDrawColor(renderer_, 226, 238, 224, 255);
+            SDL_RenderLine(
+                renderer_, marker.x - 7.0F, marker.y,
+                marker.x + 7.0F, marker.y);
+            SDL_RenderLine(
+                renderer_, marker.x, marker.y - 7.0F,
+                marker.x, marker.y + 7.0F);
+            const std::string title = fmt::format(
+                "INTERIOR MAP | {} | PERMANENT INTELLIGENCE",
+                interior->displayName);
+            uiTextRenderer_.render(
+                renderer_, 144.0F, 76.0F, title.c_str());
+            uiTextRenderer_.render(
+                renderer_, 740.0F, 76.0F,
+                "M/ESC CLOSE | WORLD CONTINUES | MOVE 45%");
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+            return;
+        }
+        const SDL_FRect panel{252.0F, 188.0F, 776.0F, 344.0F};
         SDL_SetRenderDrawColor(renderer_, 12, 22, 25, 248);
         SDL_RenderFillRect(renderer_, &panel);
         SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
         SDL_RenderRect(renderer_, &panel);
         uiTextRenderer_.render(
             renderer_, 322.0F, 246.0F,
-            "INTERIOR MAP UNAVAILABLE");
+            "INTERIOR LAYOUT INTELLIGENCE REQUIRED");
         uiTextRenderer_.render(
             renderer_, 322.0F, 298.0F,
-            "RETURN OUTSIDE TO USE TACTICAL MAP");
+            "BUY THE BUILDING PLAN AT THE RAID GATE");
         uiTextRenderer_.render(
             renderer_, 322.0F, 350.0F,
             "M/ESC CLOSE | WORLD CONTINUES | MOVE 45%");

@@ -368,6 +368,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         InteriorRuntime interior{
             interiorConfig.id,
             std::move(interiorConfig.displayName),
+            interiorConfig.layoutKnown,
             interiorConfig.worldSize,
             interiorConfig.exteriorEntrance,
             interiorConfig.exteriorReturn,
@@ -1503,6 +1504,26 @@ bool GameplayWorld::raidSpacePortalInteractionInRange() const noexcept
 bool GameplayWorld::spaceTransitionedLastUpdate() const noexcept
 {
     return spaceTransitionedLastUpdate_;
+}
+
+std::optional<RaidInteriorMapProjection>
+GameplayWorld::activeInteriorMapProjection() const noexcept
+{
+    if (!activeInteriorIndex_.has_value())
+    {
+        return std::nullopt;
+    }
+    const InteriorRuntime &interior = interiors_[*activeInteriorIndex_];
+    if (!interior.layoutKnown)
+    {
+        return std::nullopt;
+    }
+    return RaidInteriorMapProjection{
+        interior.id,
+        interior.displayName,
+        interior.worldSize,
+        interior.interiorExit,
+        interior.ballisticBlockers};
 }
 
 const std::vector<Particle> &

@@ -776,6 +776,16 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     RaidIntelligenceCategory::Enemy)]}});
         }
     }
+    if (schemaVersion >= 23)
+    {
+        payload["raid_interior_intelligence"] = Json::array();
+        for (const RaidSpaceDefinitionId &interiorId :
+             profile.raidInteriorIntelligence.knownLayouts)
+        {
+            payload["raid_interior_intelligence"].push_back(
+                interiorId.value());
+        }
+    }
     if (schemaVersion >= 10)
     {
         payload["next_base_service_job_id"] =
@@ -920,7 +930,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                         {"position", vectorValue(blocker.position)},
                         {"size", vectorValue(blocker.size)}});
                 }
-                interiors.push_back({
+                Json interiorValue{
                     {"id", interior.id.value()},
                     {"display_name", interior.displayName},
                     {"world_size", vectorValue(interior.worldSize)},
@@ -933,7 +943,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     {"interior_exit", {
                         {"position", vectorValue(interior.interiorExit.position)},
                         {"size", vectorValue(interior.interiorExit.size)}}},
-                    {"ballistic_blockers", std::move(blockers)}});
+                    {"ballistic_blockers", std::move(blockers)}};
+                if (schemaVersion >= 23)
+                {
+                    interiorValue["layout_known"] = interior.layoutKnown;
+                }
+                interiors.push_back(std::move(interiorValue));
             }
             payload["pending_raid"]["interiors"] = std::move(interiors);
         }
@@ -1250,7 +1265,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
-        schemaVersion != 22)
+        schemaVersion != 22 && schemaVersion != 23)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1337,7 +1352,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 21 &&
              contentVersion == "procedural-outdoor-layout-content-29") ||
             (schemaVersion == 22 &&
-             contentVersion == "raid-interior-spaces-content-30");
+             (contentVersion == "raid-interior-spaces-content-30" ||
+              contentVersion ==
+                  "raid-special-location-placement-content-31"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1348,7 +1365,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 15 && schemaVersion != 16 &&
              schemaVersion != 17 && schemaVersion != 18 &&
              schemaVersion != 19 && schemaVersion != 20 &&
-             schemaVersion != 21 && schemaVersion != 22) ||
+             schemaVersion != 21 && schemaVersion != 22 &&
+             schemaVersion != 23) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1643,6 +1661,21 @@ SaveLoadResult deserializeProfileEnvelope(
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "Raid intelligence archive is duplicated"};
+                }
+            }
+        }
+        if (schemaVersion >= 23)
+        {
+            for (const Json &entry :
+                 payload.at("raid_interior_intelligence"))
+            {
+                const RaidSpaceDefinitionId interiorId{
+                    entry.get<std::string>()};
+                if (!profile.raidInteriorIntelligence.knownLayouts
+                         .insert(interiorId).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Raid interior intelligence is duplicated"};
                 }
             }
         }
@@ -2080,6 +2113,9 @@ SaveLoadResult deserializeProfileEnvelope(
                         interior.at("id").get<std::string>()};
                     snapshot.displayName =
                         interior.at("display_name").get<std::string>();
+                    snapshot.layoutKnown = schemaVersion >= 23
+                        ? interior.at("layout_known").get<bool>()
+                        : false;
                     snapshot.worldSize =
                         parseVector(interior.at("world_size"));
                     snapshot.exteriorEntrance = ContentRect{

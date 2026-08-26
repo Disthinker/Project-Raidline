@@ -377,6 +377,7 @@ bool GameSession::deployAlpha(
             RaidInteriorWorldConfig runtime;
             runtime.id = interior.id;
             runtime.displayName = interior.displayName;
+            runtime.layoutKnown = interior.layoutKnown;
             runtime.worldSize = interior.worldSize;
             runtime.exteriorEntrance = interior.exteriorEntrance;
             runtime.exteriorReturn = interior.exteriorReturn;
@@ -3076,6 +3077,36 @@ RaidIntelligencePurchaseReceipt GameSession::purchaseRaidIntelligence(
             DomainErrorCode::InvalidProfile,
             persistenceMessage_,
             profile_.revision};
+    }
+    return receipt;
+}
+
+RaidInteriorIntelligencePurchaseReceipt
+GameSession::purchaseRaidInteriorIntelligence(
+    const RaidInteriorIntelligencePurchaseCommand &command,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RaidInteriorIntelligencePurchaseReceipt receipt =
+        executeRaidInteriorIntelligencePurchase(
+            candidate,
+            publishedContentRegistry(),
+            command,
+            CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return RaidInteriorIntelligencePurchaseReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision,
+            0U};
     }
     return receipt;
 }

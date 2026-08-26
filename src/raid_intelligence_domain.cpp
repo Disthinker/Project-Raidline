@@ -47,7 +47,7 @@ RaidIntelligencePurchasePlan queryRaidIntelligencePurchase(
     {
         map = &content.map(command.mapDefinitionId);
     }
-    catch (...)
+    catch (const std::exception &)
     {
         return planFailure(
             DomainErrorCode::IllegalDestination,
@@ -151,4 +151,128 @@ RaidIntelligencePurchaseReceipt executeRaidIntelligencePurchase(
         profile.revision,
         plan.price,
         plan.ownedBefore + 1U};
+}
+
+RaidInteriorIntelligencePurchasePlan queryRaidInteriorIntelligencePurchase(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RaidInteriorIntelligencePurchaseCommand &command)
+{
+    const auto failure = [&](DomainErrorCode error, std::string message)
+    {
+        return RaidInteriorIntelligencePurchasePlan{
+            false, error, std::move(message), profile.revision, 0U};
+    };
+    if (profile.pendingRaid.has_value())
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "interior intelligence cannot be purchased during a Raid");
+    }
+    const RaidInteriorDefinition *interior{};
+    try
+    {
+        interior = &content.raidInterior(command.interiorId);
+    }
+    catch (const std::exception &)
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "interior intelligence location does not exist");
+    }
+    if (profile.raidInteriorIntelligence.knows(command.interiorId))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "interior layout is already permanently known");
+    }
+    if (profile.currency < interior->intelligencePrice)
+    {
+        return RaidInteriorIntelligencePurchasePlan{
+            false,
+            DomainErrorCode::InvalidQuantity,
+            "currency is insufficient for interior intelligence",
+            profile.revision,
+            interior->intelligencePrice};
+    }
+    return RaidInteriorIntelligencePurchasePlan{
+        true,
+        DomainErrorCode::None,
+        {},
+        profile.revision,
+        interior->intelligencePrice};
+}
+
+RaidInteriorIntelligencePurchaseReceipt executeRaidInteriorIntelligencePurchase(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const RaidInteriorIntelligencePurchaseCommand &command,
+    const CommandContext &context)
+{
+    const auto failure = [&](DomainErrorCode error, std::string message)
+    {
+        return RaidInteriorIntelligencePurchaseReceipt{
+            false,
+            false,
+            error,
+            std::move(message),
+            profile.revision,
+            0U};
+    };
+    if (context.transactionId.empty())
+    {
+        return failure(
+            DomainErrorCode::InvalidTransaction,
+            "transaction ID must not be empty");
+    }
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        return RaidInteriorIntelligencePurchaseReceipt{
+            true,
+            true,
+            DomainErrorCode::None,
+            {},
+            profile.revision,
+            0U};
+    }
+    if (context.expectedRevision != profile.revision)
+    {
+        return failure(
+            DomainErrorCode::StaleRevision,
+            "profile revision is stale");
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return failure(
+            DomainErrorCode::RevisionOverflow,
+            "profile revision cannot advance");
+    }
+
+    const RaidInteriorIntelligencePurchasePlan plan =
+        queryRaidInteriorIntelligencePurchase(profile, content, command);
+    if (!plan.canCommit)
+    {
+        return failure(plan.error, plan.message);
+    }
+
+    ProfileState candidate = profile;
+    candidate.currency -= plan.price;
+    candidate.raidInteriorIntelligence.knownLayouts.insert(command.interiorId);
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return failure(DomainErrorCode::InvalidProfile, validation.message);
+    }
+
+    profile = std::move(candidate);
+    return RaidInteriorIntelligencePurchaseReceipt{
+        true,
+        false,
+        DomainErrorCode::None,
+        {},
+        profile.revision,
+        plan.price};
 }

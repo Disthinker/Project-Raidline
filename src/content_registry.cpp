@@ -1571,6 +1571,8 @@ ContentRegistry ContentRegistry::fromJson(
         }
 
         std::set<RescueDefinitionId> rescueDefinitionIds;
+        std::set<RaidSpaceDefinitionId> raidSpaceDefinitionIds{
+            outdoorRaidSpaceId()};
         for (const Json &mapValue :
              requiredArray(root, "maps"))
         {
@@ -1934,8 +1936,6 @@ ContentRegistry ContentRegistry::fromJson(
 
             if (mapValue.contains("interiors"))
             {
-                std::set<RaidSpaceDefinitionId> spaceIds{
-                    outdoorRaidSpaceId()};
                 for (const Json &interiorValue :
                      requiredArray(mapValue, "interiors"))
                 {
@@ -1943,12 +1943,14 @@ ContentRegistry ContentRegistry::fromJson(
                     interior.id = RaidSpaceDefinitionId{
                         requiredString(interiorValue, "id")};
                     if (!hasPrefix(interior.id.value(), "raid_space.") ||
-                        !spaceIds.insert(interior.id).second)
+                        !raidSpaceDefinitionIds.insert(interior.id).second)
                     {
                         fail("Raid interior space ID is invalid or duplicate");
                     }
                     interior.displayName =
                         requiredString(interiorValue, "display_name");
+                    interior.intelligencePrice = requiredPositiveUint(
+                        interiorValue, "intelligence_price");
                     interior.worldSize =
                         parseVec2(interiorValue, "world_size");
                     std::set<std::string> exteriorPlacementIds;
@@ -2672,6 +2674,24 @@ ContentRegistry::map(
     const MapDefinitionId &id) const
 {
     return lookup(mapIndex_, maps_, id, "map");
+}
+
+const RaidInteriorDefinition &ContentRegistry::raidInterior(
+    const RaidSpaceDefinitionId &id) const
+{
+    for (const MapDefinition &mapDefinition : maps_)
+    {
+        const auto found = std::find_if(
+            mapDefinition.interiors.begin(),
+            mapDefinition.interiors.end(),
+            [&](const RaidInteriorDefinition &interior)
+            { return interior.id == id; });
+        if (found != mapDefinition.interiors.end())
+        {
+            return *found;
+        }
+    }
+    throw ContentRegistryError{"unknown Raid interior definition ID"};
 }
 
 std::string_view publishedContentJson() noexcept

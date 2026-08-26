@@ -105,7 +105,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "raid-special-location-placement-13");
+        "raid-building-intelligence-14");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -149,6 +149,7 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
     const RaidSpaceDefinitionId interiorId{
         "raid_space.frontier_exchange.office"};
     EXPECT_EQ(raid.interiors.front().id, interiorId);
+    EXPECT_FALSE(raid.interiors.front().layoutKnown);
     const RaidInteriorDefinition &definition =
         publishedContentRegistry()
             .map(MapDefinitionId{"map.raid.frontier_exchange"})
@@ -189,6 +190,29 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
                 blocker.position.y < entrance.position.y + entrance.size.y &&
                 blocker.position.y + blocker.size.y > entrance.position.y;
         }));
+}
+
+TEST(RaidLifecycleTest,
+     FrontierDeployFreezesPermanentInteriorLayoutKnowledgeWithoutConsumingIt)
+{
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+    ProfileState profile = makeNewAlphaProfile(
+        "interior-layout-known", publishedContentRegistry());
+    profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
+
+    ASSERT_TRUE(deploy(
+        profile,
+        88124U,
+        MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_EQ(profile.pendingRaid->interiors.size(), 1U);
+    EXPECT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
+    EXPECT_TRUE(profile.raidInteriorIntelligence.knows(interiorId));
+
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        profile, publishedContentRegistry()).succeeded);
+    EXPECT_TRUE(profile.raidInteriorIntelligence.knows(interiorId));
 }
 
 TEST(RaidLifecycleTest, SpecialLocationPlacementIsStableAndVariesByRaidSeed)

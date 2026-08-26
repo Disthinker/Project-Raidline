@@ -6,8 +6,11 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <string_view>
 #include <tuple>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
@@ -45,6 +48,24 @@ public:
 private:
     std::filesystem::path path_;
 };
+
+std::string testSaveChecksum(std::string_view text)
+{
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (const unsigned char byte : text)
+    {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    constexpr char digits[] = "0123456789abcdef";
+    std::string result(16, '0');
+    for (int index = 15; index >= 0; --index)
+    {
+        result[static_cast<std::size_t>(index)] = digits[hash & 0xfU];
+        hash >>= 4U;
+    }
+    return result;
+}
 }
 
 TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndIntake)
@@ -1408,7 +1429,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
         mapId, RaidIntelligenceCategory::Transport), 1U);
 }
 
-TEST(SaveRepositoryTest, SchemaV22FreezesInteriorSpacesAndSpatialLayout)
+TEST(SaveRepositoryTest, SchemaV23FreezesInteriorSpacesAndSpatialLayout)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-procedural-layout-v21", publishedContentRegistry());
@@ -1450,6 +1471,94 @@ TEST(SaveRepositoryTest, SchemaV22FreezesInteriorSpacesAndSpatialLayout)
         publishedContentRegistry());
     EXPECT_FALSE(corrupt.profile.has_value());
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV23RoundTripsPermanentInteriorIntelligenceAndDeployKnowledge)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+    ProfileState profile = makeNewAlphaProfile(
+        "save-interior-intelligence-v23", content);
+    profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-known-interior-raid",
+            "save-known-interior-settle",
+            783312U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-known-interior-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_EQ(profile.pendingRaid->interiors.size(), 1U);
+    ASSERT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 23),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_TRUE(loaded.profile->raidInteriorIntelligence.knows(interiorId));
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_TRUE(loaded.profile->pendingRaid->interiors.front().layoutKnown);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV22MigratesWithNoPermanentInteriorIntelligence)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+    ProfileState profile = makeNewAlphaProfile(
+        "save-interior-intelligence-v22", content);
+    profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-special-location-placement-content-31",
+            22),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(loaded.profile->raidInteriorIntelligence.knownLayouts.empty());
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV23RejectsUnknownOrDuplicateInteriorIntelligenceIds)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+
+    ProfileState unknown = makeNewAlphaProfile(
+        "save-unknown-interior-intelligence-v23", content);
+    unknown.raidInteriorIntelligence.knownLayouts.insert(
+        RaidSpaceDefinitionId{"raid_space.unknown.office"});
+    const SaveLoadResult unknownResult = deserializeProfileEnvelope(
+        serializeProfileEnvelope(unknown, content.contentVersion(), 23),
+        content);
+    EXPECT_FALSE(unknownResult.profile.has_value());
+
+    ProfileState valid = makeNewAlphaProfile(
+        "save-duplicate-interior-intelligence-v23", content);
+    valid.raidInteriorIntelligence.knownLayouts.insert(interiorId);
+    nlohmann::json envelope = nlohmann::json::parse(
+        serializeProfileEnvelope(valid, content.contentVersion(), 23));
+    envelope["payload"]["raid_interior_intelligence"].push_back(
+        interiorId.value());
+    envelope["payload_checksum"] = testSaveChecksum(
+        envelope["payload"].dump());
+
+    const SaveLoadResult duplicateResult = deserializeProfileEnvelope(
+        envelope.dump(), content);
+    EXPECT_FALSE(duplicateResult.profile.has_value());
 }
 
 TEST(SaveRepositoryTest, SchemaV22RejectsUnknownInteriorActorSpace)

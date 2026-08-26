@@ -177,6 +177,10 @@ public:
     purchaseRaidIntelligence(
         const RaidIntelligencePurchaseCommand &command,
         std::string transactionId);
+    [[nodiscard]] RaidInteriorIntelligencePurchaseReceipt
+    purchaseRaidInteriorIntelligence(
+        const RaidInteriorIntelligencePurchaseCommand &command,
+        std::string transactionId);
     [[nodiscard]] bool activeQuitAlphaRaid();
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,

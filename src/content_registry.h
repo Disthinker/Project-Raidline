@@ -180,6 +180,7 @@ struct RaidInteriorDefinition
 {
     RaidSpaceDefinitionId id;
     std::string displayName;
+    std::uint32_t intelligencePrice{};
     Vec2 worldSize{};
     // The first candidate remains the legacy fixed portal for rules v12.
     ContentRect exteriorEntrance;
@@ -509,6 +510,9 @@ public:
     [[nodiscard]]
     const MapDefinition &map(
         const MapDefinitionId &id) const;
+
+    [[nodiscard]] const RaidInteriorDefinition &raidInterior(
+        const RaidSpaceDefinitionId &id) const;
 
 private:
     std::string contentVersion_;
