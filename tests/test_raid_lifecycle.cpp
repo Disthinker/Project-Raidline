@@ -104,7 +104,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-map-intelligence-10");
+        "procedural-outdoor-layout-11");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -523,6 +523,9 @@ TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)
                   second.pendingRaid->spawnExtractionPairId);
         EXPECT_EQ(first.pendingRaid->enemyDeploymentId,
                   second.pendingRaid->enemyDeploymentId);
+        EXPECT_EQ(first.pendingRaid->spatialLayout,
+                  second.pendingRaid->spatialLayout);
+        EXPECT_NE(first.pendingRaid->spatialLayout.layoutHash, 0U);
         ASSERT_EQ(first.pendingRaid->loot.size(), second.pendingRaid->loot.size());
         for (std::size_t index{}; index < first.pendingRaid->loot.size(); ++index)
         {
@@ -536,6 +539,28 @@ TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)
                             second.pendingRaid->loot[index].position.y);
         }
     }
+}
+
+TEST(RaidLifecycleTest, ProceduralMapFreezesGeneratedCoverIntoSnapshot)
+{
+    ProfileState first = makeNewAlphaProfile(
+        "procedural-map-first", publishedContentRegistry());
+    ProfileState second = makeNewAlphaProfile(
+        "procedural-map-second", publishedContentRegistry());
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+
+    ASSERT_TRUE(deploy(first, 817233U, mapId).succeeded);
+    ASSERT_TRUE(deploy(second, 991827U, mapId).succeeded);
+    ASSERT_TRUE(first.pendingRaid.has_value());
+    ASSERT_TRUE(second.pendingRaid.has_value());
+    EXPECT_FALSE(first.pendingRaid->spatialLayout.usedFallback);
+    EXPECT_FALSE(second.pendingRaid->spatialLayout.usedFallback);
+    EXPECT_NE(first.pendingRaid->spatialLayout.layoutHash,
+              second.pendingRaid->spatialLayout.layoutHash);
+    EXPECT_NE(first.pendingRaid->spatialLayout.ballisticBlockers,
+              second.pendingRaid->spatialLayout.ballisticBlockers);
+    EXPECT_TRUE(validateProfileState(
+        first, publishedContentRegistry()).valid);
 }
 
 TEST(RaidLifecycleTest, UnknownRaidMapRejectsWithoutChangingProfile)

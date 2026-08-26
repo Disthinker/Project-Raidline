@@ -1486,7 +1486,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-resident-medical-7" ||
             raid.rulesVersion == "base-morale-events-8" ||
             raid.rulesVersion == "base-workforce-facilities-9" ||
-            raid.rulesVersion == "regional-map-intelligence-10";
+            raid.rulesVersion == "regional-map-intelligence-10" ||
+            raid.rulesVersion == "procedural-outdoor-layout-11";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1494,7 +1495,10 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-resident-medical-7" ||
             raid.rulesVersion == "base-morale-events-8" ||
             raid.rulesVersion == "base-workforce-facilities-9" ||
-            raid.rulesVersion == "regional-map-intelligence-10";
+            raid.rulesVersion == "regional-map-intelligence-10" ||
+            raid.rulesVersion == "procedural-outdoor-layout-11";
+        const bool spatialLayoutRules =
+            raid.rulesVersion == "procedural-outdoor-layout-11";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1515,6 +1519,107 @@ ProfileValidationResult validateProfileState(
             (!advancedLootRules && advancedLootCount != 0U))
         {
             return {false, "pending Raid header is invalid"};
+        }
+        if (spatialLayoutRules)
+        {
+            const auto insideWalkable = [raidMap](ContentRect rect) noexcept
+            {
+                return std::isfinite(rect.position.x) &&
+                    std::isfinite(rect.position.y) &&
+                    std::isfinite(rect.size.x) &&
+                    std::isfinite(rect.size.y) && rect.size.x > 0.0F &&
+                    rect.size.y > 0.0F &&
+                    rect.position.x >=
+                        raidMap->walkableBounds.position.x &&
+                    rect.position.y >=
+                        raidMap->walkableBounds.position.y &&
+                    rect.position.x + rect.size.x <=
+                        raidMap->walkableBounds.position.x +
+                            raidMap->walkableBounds.size.x &&
+                    rect.position.y + rect.size.y <=
+                        raidMap->walkableBounds.position.y +
+                            raidMap->walkableBounds.size.y;
+            };
+            const ProceduralOutdoorDefinition &procedural =
+                raidMap->proceduralOutdoor;
+            const bool generatedCountValid =
+                !procedural.enabled || raid.spatialLayout.usedFallback ||
+                (raid.spatialLayout.ballisticBlockers.size() >=
+                     procedural.minimumBlockers &&
+                 raid.spatialLayout.ballisticBlockers.size() <=
+                     procedural.maximumBlockers);
+            bool fixedLayoutValid = procedural.enabled ||
+                raid.spatialLayout.ballisticBlockers.size() ==
+                    raidMap->ballisticBlockers.size();
+            if (!procedural.enabled && fixedLayoutValid)
+            {
+                for (std::size_t index{};
+                     index < raidMap->ballisticBlockers.size();
+                     ++index)
+                {
+                    fixedLayoutValid = fixedLayoutValid &&
+                        raid.spatialLayout.ballisticBlockers[index] ==
+                            raidMap->ballisticBlockers[index].bounds;
+                }
+            }
+            RaidMapGenerationAnchors anchors;
+            anchors.playerSpawn = raid.playerSpawn;
+            anchors.extractionPoint = raid.extractionPoint;
+            anchors.occupiedRegions = {
+                raidMap->highRisk.emergencyExtractionPoint,
+                raidMap->highRisk.conditionalExtractionPoint,
+                raidMap->highRisk.activationControlPoint,
+                raidMap->highRisk.advancedResourceArea};
+            for (const RaidEnemySnapshot &enemy : raid.enemies)
+            {
+                anchors.occupiedRegions.push_back(
+                    ContentRect{enemy.position, enemy.size});
+                anchors.reachablePoints.push_back(
+                    Vec2{enemy.position.x + enemy.size.x * 0.5F,
+                         enemy.position.y + enemy.size.y * 0.5F});
+            }
+            for (const RaidLootSnapshot &loot : raid.loot)
+            {
+                anchors.reachablePoints.push_back(loot.position);
+            }
+            const auto addRegion = [&anchors](ContentRect region)
+            {
+                anchors.reachablePoints.push_back(
+                    Vec2{region.position.x + region.size.x * 0.5F,
+                         region.position.y + region.size.y * 0.5F});
+            };
+            addRegion(raidMap->highRisk.emergencyExtractionPoint);
+            addRegion(raidMap->highRisk.conditionalExtractionPoint);
+            addRegion(raidMap->highRisk.activationControlPoint);
+            addRegion(raidMap->highRisk.advancedResourceArea);
+            if (raid.rescue.has_value())
+            {
+                anchors.occupiedRegions.push_back(
+                    raid.rescue->transferPoint);
+                addRegion(raid.rescue->transferPoint);
+            }
+            if (raid.spatialLayout.layoutHash == 0U ||
+                raid.spatialLayout.layoutHash != raidMapLayoutHash(
+                    raid.spatialLayout.ballisticBlockers) ||
+                !generatedCountValid || !fixedLayoutValid ||
+                (procedural.enabled &&
+                 (raid.spatialLayout.generationAttempt == 0U ||
+                  raid.spatialLayout.generationAttempt >
+                      procedural.maximumAttempts)) ||
+                (!procedural.enabled &&
+                 (raid.spatialLayout.generationAttempt != 0U ||
+                  raid.spatialLayout.usedFallback)) ||
+                std::any_of(
+                    raid.spatialLayout.ballisticBlockers.begin(),
+                    raid.spatialLayout.ballisticBlockers.end(),
+                    [&insideWalkable](ContentRect blocker)
+                    { return !insideWalkable(blocker); }) ||
+                (procedural.enabled &&
+                 !raidMapLayoutConnectsAnchors(
+                     *raidMap, raid.spatialLayout, anchors)))
+            {
+                return {false, "pending Raid spatial layout is invalid"};
+            }
         }
         if (travelRules)
         {
@@ -2036,6 +2141,17 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashFloat(hash, raid.extractionPoint.position.y);
         hashFloat(hash, raid.extractionPoint.size.x);
         hashFloat(hash, raid.extractionPoint.size.y);
+        hashInteger(hash, raid.spatialLayout.generationAttempt);
+        hashInteger(hash, raid.spatialLayout.layoutHash);
+        hashInteger(hash, raid.spatialLayout.usedFallback ? 1U : 0U);
+        for (const ContentRect &blocker :
+             raid.spatialLayout.ballisticBlockers)
+        {
+            hashFloat(hash, blocker.position.x);
+            hashFloat(hash, blocker.position.y);
+            hashFloat(hash, blocker.size.x);
+            hashFloat(hash, blocker.size.y);
+        }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
             hashFloat(hash, enemy.position.x);

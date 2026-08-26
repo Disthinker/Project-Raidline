@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-map-intelligence-content-28");
+        "procedural-outdoor-layout-content-29");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -130,7 +130,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     ASSERT_EQ(registry.items().size(), 21U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
-    ASSERT_EQ(registry.maps().size(), 3U);
+    ASSERT_EQ(registry.maps().size(), 4U);
 
     std::set<MapDefinitionId> mapIds;
     std::set<EnemyDeploymentDefinitionId> raidDeploymentIds;
@@ -191,12 +191,21 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         for (const EnemyDeploymentDefinitionId &deploymentId :
              publishedMap.raidEnemyDeploymentIds)
         {
-            EXPECT_TRUE(raidDeploymentIds.insert(deploymentId).second);
+            raidDeploymentIds.insert(deploymentId);
         }
     }
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.v0.test"}));
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.riverside"}));
     EXPECT_TRUE(mapIds.contains(MapDefinitionId{"map.raid.industrial"}));
+    EXPECT_TRUE(mapIds.contains(
+        MapDefinitionId{"map.raid.frontier_exchange"}));
+    const MapDefinition &frontier = registry.map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    EXPECT_TRUE(frontier.proceduralOutdoor.enabled);
+    EXPECT_EQ(frontier.proceduralOutdoor.columns, 16U);
+    EXPECT_EQ(frontier.proceduralOutdoor.rows, 9U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumBlockers, 18U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumBlockers, 26U);
     EXPECT_EQ(
         registry.map(MapDefinitionId{"map.raid.industrial"})
             .rescue->injuredResidentCount,
@@ -207,7 +216,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         0U);
     EXPECT_EQ(raidDeploymentIds.size(), 9U);
     EXPECT_EQ(outboundTravelMinutes,
-              (std::set<std::uint32_t>{45U, 90U, 150U}));
+              (std::set<std::uint32_t>{45U, 90U, 150U, 210U}));
 
     const ItemDefinition &ammunition = registry.item(
         ItemDefinitionId{"item.ammunition.9mm_basic"});
@@ -432,6 +441,18 @@ TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
             publishedJsonCopy(),
             "\"supported_at_reserve_days\": 7",
             "\"supported_at_reserve_days\": 2")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnsafeProceduralOutdoorBounds)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"minimum_blockers\": 18, \"maximum_blockers\": 26",
+        "\"minimum_blockers\": 30, \"maximum_blockers\": 20");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
 }
 

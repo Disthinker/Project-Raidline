@@ -11,6 +11,7 @@
 #include "base_resource_domain.h"
 #include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
+#include "raid_map_generation.h"
 #include "stable_random.h"
 
 namespace
@@ -332,7 +333,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "regional-map-intelligence-10";
+    snapshot.rulesVersion = "procedural-outdoor-layout-11";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -460,6 +461,52 @@ DeployReceipt executeDeploy(
             true,
             false});
     }
+
+    RaidMapGenerationAnchors generationAnchors;
+    generationAnchors.playerSpawn = snapshot.playerSpawn;
+    generationAnchors.extractionPoint = snapshot.extractionPoint;
+    generationAnchors.occupiedRegions = {
+        map->highRisk.emergencyExtractionPoint,
+        map->highRisk.conditionalExtractionPoint,
+        map->highRisk.activationControlPoint,
+        map->highRisk.advancedResourceArea};
+    for (const RaidEnemySnapshot &enemy : snapshot.enemies)
+    {
+        generationAnchors.occupiedRegions.push_back(
+            ContentRect{enemy.position, enemy.size});
+        generationAnchors.reachablePoints.push_back(
+            Vec2{enemy.position.x + enemy.size.x * 0.5F,
+                 enemy.position.y + enemy.size.y * 0.5F});
+    }
+    for (const RaidLootSnapshot &loot : snapshot.loot)
+    {
+        generationAnchors.reachablePoints.push_back(loot.position);
+    }
+    for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
+    {
+        generationAnchors.occupiedRegions.push_back(
+            ContentRect{spawn.position, spawn.size});
+    }
+    const auto addReachableRegion = [&generationAnchors](ContentRect region)
+    {
+        generationAnchors.reachablePoints.push_back(
+            Vec2{region.position.x + region.size.x * 0.5F,
+                 region.position.y + region.size.y * 0.5F});
+    };
+    addReachableRegion(map->highRisk.activationControlPoint);
+    addReachableRegion(map->highRisk.advancedResourceArea);
+    addReachableRegion(map->highRisk.emergencyExtractionPoint);
+    addReachableRegion(map->highRisk.conditionalExtractionPoint);
+    if (snapshot.rescue.has_value())
+    {
+        generationAnchors.occupiedRegions.push_back(
+            snapshot.rescue->transferPoint);
+        addReachableRegion(snapshot.rescue->transferPoint);
+    }
+    snapshot.spatialLayout = generateRaidMapLayout(
+        *map,
+        snapshot.seed,
+        generationAnchors);
 
     candidate.pendingRaid = std::move(snapshot);
     if (!advanceProfileWorldTime(

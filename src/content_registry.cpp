@@ -1591,6 +1591,32 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map display metadata must not be empty");
             }
 
+            if (mapValue.contains("procedural_outdoor"))
+            {
+                const Json &procedural =
+                    requiredObject(mapValue, "procedural_outdoor");
+                definition.proceduralOutdoor = ProceduralOutdoorDefinition{
+                    true,
+                    requiredPositiveUint(procedural, "columns"),
+                    requiredPositiveUint(procedural, "rows"),
+                    requiredPositiveUint(procedural, "minimum_blockers"),
+                    requiredPositiveUint(procedural, "maximum_blockers"),
+                    requiredPositiveUint(procedural, "maximum_attempts"),
+                    optionalUint(procedural, "anchor_clearance_cells")};
+                const auto &value = definition.proceduralOutdoor;
+                const std::uint64_t cells =
+                    static_cast<std::uint64_t>(value.columns) * value.rows;
+                if (value.columns < 8U || value.columns > 32U ||
+                    value.rows < 6U || value.rows > 18U ||
+                    value.minimumBlockers > value.maximumBlockers ||
+                    value.maximumBlockers > cells / 2U ||
+                    value.maximumAttempts > 32U ||
+                    value.anchorClearanceCells > 2U)
+                {
+                    fail("procedural outdoor map settings are invalid");
+                }
+            }
+
             const Json &operationBriefing =
                 requiredObject(mapValue, "operation_briefing");
             definition.operationBriefing.difficulty =
