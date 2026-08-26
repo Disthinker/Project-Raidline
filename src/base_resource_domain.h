@@ -117,6 +117,7 @@ struct BaseDailyDemandResult
 {
     std::uint64_t cyclesResolved{};
     BaseResourceBundle latestShortfall;
+    std::uint64_t shortageCycleCount{};
 };
 
 // Resolves every unprocessed daily boundary through completedWorldDays.

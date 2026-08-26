@@ -194,6 +194,31 @@ struct BaseOperationsDefinition
         const BaseOperationsDefinition &) = default;
 };
 
+struct BaseMoraleDefinition
+{
+    std::uint32_t recoveryDaysFromLow{};
+    std::uint32_t lowManufacturingDurationPercent{};
+    std::uint32_t stableManufacturingDurationPercent{};
+    std::uint32_t highManufacturingDurationPercent{};
+    std::uint32_t eventCycleDays{};
+
+    friend bool operator==(
+        const BaseMoraleDefinition &,
+        const BaseMoraleDefinition &) = default;
+};
+
+struct BaseCommunityEventDefinition
+{
+    BaseCommunityEventDefinitionId id;
+    std::string displayName;
+    std::string description;
+    std::int32_t moraleEffect{};
+
+    friend bool operator==(
+        const BaseCommunityEventDefinition &,
+        const BaseCommunityEventDefinition &) = default;
+};
+
 struct BasePriorityDefinition
 {
     BasePriorityDefinitionId id;
@@ -316,6 +341,14 @@ public:
     [[nodiscard]]
     const BaseOperationsDefinition &baseOperations() const noexcept;
 
+    [[nodiscard]] const BaseMoraleDefinition &baseMorale() const noexcept;
+
+    [[nodiscard]] const std::vector<BaseCommunityEventDefinition> &
+    baseCommunityEvents() const noexcept;
+
+    [[nodiscard]] const BaseCommunityEventDefinition &baseCommunityEvent(
+        const BaseCommunityEventDefinitionId &id) const;
+
     [[nodiscard]] std::uint32_t
     basePriorityCycleMinutes() const noexcept;
 
@@ -369,6 +402,8 @@ private:
     PlayerBaseMedicalDefinition playerBaseMedical_;
     ResidentMedicalDefinition residentMedical_;
     BaseOperationsDefinition baseOperations_;
+    BaseMoraleDefinition baseMorale_;
+    std::vector<BaseCommunityEventDefinition> baseCommunityEvents_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
     std::uint32_t maximumBaseConstructionMaterials_{};
@@ -383,6 +418,8 @@ private:
         enemyDeploymentIndex_;
     std::map<MapDefinitionId, std::size_t> mapIndex_;
     std::map<BasePriorityDefinitionId, std::size_t> basePriorityIndex_;
+    std::map<BaseCommunityEventDefinitionId, std::size_t>
+        baseCommunityEventIndex_;
     std::map<BaseConstructionProjectDefinitionId, std::size_t>
         baseConstructionProjectIndex_;
     std::map<BaseManufacturingRecipeDefinitionId, std::size_t>

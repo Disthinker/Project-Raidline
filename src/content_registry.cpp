@@ -162,6 +162,24 @@ namespace
         return static_cast<int>(value);
     }
 
+    std::int32_t requiredSignedInt(
+        const Json &parent,
+        std::string_view field)
+    {
+        const Json &value = parent.at(std::string{field});
+        if (!value.is_number_integer())
+        {
+            fail(std::string{field} + " must be an integer");
+        }
+        const std::int64_t parsed = value.get<std::int64_t>();
+        if (parsed < std::numeric_limits<std::int32_t>::min() ||
+            parsed > std::numeric_limits<std::int32_t>::max())
+        {
+            fail(std::string{field} + " exceeds int32 range");
+        }
+        return static_cast<std::int32_t>(parsed);
+    }
+
     float requiredFiniteFloat(
         const Json &parent,
         std::string_view field,
@@ -774,6 +792,64 @@ ContentRegistry ContentRegistry::fromJson(
             operations.supportedAtReserveDays > maximumReserveDays)
         {
             fail("Base operations definition is invalid");
+        }
+
+        const Json &baseMorale = requiredObject(root, "base_morale");
+        const Json &manufacturingDuration = requiredObject(
+            baseMorale,
+            "manufacturing_duration_percent");
+        registry.baseMorale_ = BaseMoraleDefinition{
+            requiredPositiveUint(baseMorale, "recovery_days_from_low"),
+            requiredPositiveUint(manufacturingDuration, "low"),
+            requiredPositiveUint(manufacturingDuration, "stable"),
+            requiredPositiveUint(manufacturingDuration, "high"),
+            requiredPositiveUint(baseMorale, "event_cycle_days")};
+        const BaseMoraleDefinition &morale = registry.baseMorale_;
+        if (morale.recoveryDaysFromLow > 30U ||
+            morale.eventCycleDays > 30U ||
+            morale.lowManufacturingDurationPercent < 100U ||
+            morale.lowManufacturingDurationPercent > 150U ||
+            morale.stableManufacturingDurationPercent != 100U ||
+            morale.highManufacturingDurationPercent < 75U ||
+            morale.highManufacturingDurationPercent > 100U ||
+            morale.lowManufacturingDurationPercent <
+                morale.stableManufacturingDurationPercent ||
+            morale.stableManufacturingDurationPercent <
+                morale.highManufacturingDurationPercent)
+        {
+            fail("Base morale definition is invalid");
+        }
+        for (const Json &eventValue : requiredArray(baseMorale, "events"))
+        {
+            if (!eventValue.is_object())
+            {
+                fail("Base community event must be an object");
+            }
+            BaseCommunityEventDefinition definition{
+                BaseCommunityEventDefinitionId{
+                    requiredString(eventValue, "id")},
+                requiredString(eventValue, "display_name"),
+                requiredString(eventValue, "description"),
+                requiredSignedInt(eventValue, "morale_effect")};
+            if (!hasPrefix(definition.id.value(), "base_event.") ||
+                definition.moraleEffect == 0 ||
+                definition.moraleEffect < -1 ||
+                definition.moraleEffect > 1)
+            {
+                fail("Base community event definition is invalid");
+            }
+            const std::size_t index = registry.baseCommunityEvents_.size();
+            if (!registry.baseCommunityEventIndex_
+                     .emplace(definition.id, index)
+                     .second)
+            {
+                fail("duplicate Base community event definition ID");
+            }
+            registry.baseCommunityEvents_.push_back(std::move(definition));
+        }
+        if (registry.baseCommunityEvents_.size() < 2U)
+        {
+            fail("at least two Base community events are required");
         }
 
         const Json &baseConstruction = requiredObject(
@@ -2122,6 +2198,27 @@ ContentRegistry::residentMedical() const noexcept
 const BaseOperationsDefinition &ContentRegistry::baseOperations() const noexcept
 {
     return baseOperations_;
+}
+
+const BaseMoraleDefinition &ContentRegistry::baseMorale() const noexcept
+{
+    return baseMorale_;
+}
+
+const std::vector<BaseCommunityEventDefinition> &
+ContentRegistry::baseCommunityEvents() const noexcept
+{
+    return baseCommunityEvents_;
+}
+
+const BaseCommunityEventDefinition &ContentRegistry::baseCommunityEvent(
+    const BaseCommunityEventDefinitionId &id) const
+{
+    return lookup(
+        baseCommunityEventIndex_,
+        baseCommunityEvents_,
+        id,
+        "Base community event");
 }
 
 std::uint32_t ContentRegistry::basePriorityCycleMinutes() const noexcept

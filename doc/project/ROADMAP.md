@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#88 已接受。当前优先交付 **Base：基础制造队列 v1**；范围合同见 `doc/exec-plans/active/base-basic-manufacturing-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#89 已接受。当前优先交付 **Base：正式士气与周期事件 v1**；范围合同见 `doc/exec-plans/active/base-morale-periodic-events-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -48,6 +48,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | Raid 普通幸存者安全转移 v1 | PR #86 / merge commit `ee9ba48` |
 | 宿舍扩建、撤离位置保持与分类自动供给 v1 | PR #87 / merge commit `1be94bf` |
 | 居民伤病与医疗所治疗 v1 | PR #88 / merge commit `987dc6b` |
+| 基础制造队列 v1 | PR #89 / merge commit `194f910` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -93,12 +94,13 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 | 周期愿望与物资提交 v1 | Allocation 显示一个五日轮换愿望；玩家手动提交匹配的基地可访问自有物资，改善既有基地资源 | BasePriorityDefinition/State、显式原子提交、Raid 回滚快照、schema v11 | PR #82 已进入 main；PR #87 已移除对 BaseIntake 的正常流程依赖，愿望仍不自动提交 |
 | 运营状态与即时枪械维护 v1 | 四项资源按最短储备日数形成运营档位；枪械全面维护只扣货币并立即恢复出厂状态 | BaseOperationalProjection、content v18、content v16/v17 兼容、即时维护事务、旧任务立即领取 | PR #83 已通过 exact-head CI 与用户验收，以 `20d9f48` 进入 main |
 | 付费医疗服务 v1 | Base 独立医疗设施显示伤势和报价；支付货币后立即恢复生命并清除流血，个人医疗物保持不变 | PlayerBaseMedicalDefinition、query/execute 原子事务、content v19、schema v11 兼容 v18 | PR #84 已通过 exact-head CI 和用户正常游玩验收，以 `c01d431` 进入 main；居民治疗由后续独立切片消费统一自有资产和世界时间 |
-| 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | PR #85 已通过 CI 和用户验收，以 `2377035` 进入 main；岗位、精力、正式士气和具名 NPC 仍延期 |
+| 居民、床位与睡眠 v1 | 宿舍显示聚合居民、床位/拥挤与人口口粮；玩家可休息 1/6/12 小时推进日结 | BasePopulationState/Projection、人口驱动每日需求、BaseRest 事务、schema v12/content v20 | PR #85 已通过 CI 和用户验收，以 `2377035` 进入 main；当时延期的正式士气由当前新切片承接，岗位、精力和具名 NPC 仍延期 |
 | Raid 普通幸存者安全转移 v1 | 每张固定图可完成一次普通幸存者转移；完成后立即增加聚合人口，不因同局失败回滚 | RescueDefinitionId、冻结快照、幂等接纳、干净恢复检查点、schema v13/content v21 | PR #86 已通过 CI 和用户验收，以 `ee9ba48` 进入 main；不包含护送 AI、具名 NPC、职业、伤病或新正式资源 |
 | 宿舍扩建 v1 | 玩家从统一自有资产中显式加工回收物；宿舍项目占用劳动力并随世界时间完成，取消可返还建材 | BaseConstructionState、query/command/receipt、Raid 回滚快照、schema v14/content v22 | PR #87 已通过 exact-head CI 和用户验收，以 `1be94bf` 进入 main |
 | 分类自动供给 v1 | 食物、医疗、娱乐、安全菜单显示玩家拥有的可用定义；勾选后仅在每日缺口出现时自动消耗，物品此前保持原位 | BaseSupplyPolicyState、定义→唯一分类授权、最低数量日结、schema v15/content v23 | PR #87 已通过 exact-head CI 和用户验收，以 `1be94bf` 进入 main |
 | 居民伤病与医疗所治疗 v1 | Ashworks 救回受伤普通居民；医疗所显示精确物资计划并启动限时治疗，完成后恢复一名健康劳动力 | 聚合伤病、ResidentMedicalDefinition、统一资产授权消费、BaseServiceJob、Raid 回滚、schema v16/content v24 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main |
-| 基础制造队列 v1 | 工坊用真实废旧零件、损坏电子元件、健康劳动力和世界时间制造真实武器维护包；可取消、可处理仓库满载 | 版本化 Recipe、稳定资产预留、单生产槽、工人预算、Raid 延迟物化、schema v17/content v25 | Draft PR #89 的 Windows Debug、CTest 988/988 与 exact-head Windows/Ubuntu CI 已通过，等待用户正常游玩验收；不扩展多队列、升级、职业、蓝图、品质、电力或自动化 |
+| 基础制造队列 v1 | 工坊用真实废旧零件、损坏电子元件、健康劳动力和世界时间制造真实武器维护包；可取消、可处理仓库满载 | 版本化 Recipe、稳定资产预留、单生产槽、工人预算、Raid 延迟物化、schema v17/content v25 | PR #89 已通过 CI 与用户正常游玩验收，以 `194f910` 进入 main；不扩展多队列、升级、职业、蓝图、品质、电力或自动化 |
+| 正式士气与周期事件 v1 | Allocation 显示居民士气、每日原因和五日事件；低/稳/高士气改变新制造订单耗时 | 独立 BaseMoraleState、每日账本、稳定事件快照、统一日结、Raid 回滚、schema v18/content v26 | 当前分支已完成领域、持久化、工坊消费者和双语占位 UI；Windows Debug 与 CTest 1001/1001 通过，等待 exact-head CI 与用户正常游玩验收，不实现离队、叛乱或战斗修正 |
 
 ## 当前 Combat Reliability 缺陷
 

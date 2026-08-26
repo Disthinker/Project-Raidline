@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "alpha_content_ids.h"
+#include "base_morale_domain.h"
 #include "base_population_domain.h"
 #include "profile_state.h"
 #include "raid_lifecycle.h"
@@ -127,6 +128,42 @@ TEST(ProfileStateTest, FingerprintChangesWithAuthoritativeState)
     const std::uint64_t afterClock = profileStateFingerprint(profile);
     ++profile.basePopulation.ordinaryResidents;
     EXPECT_NE(profileStateFingerprint(profile), afterClock);
+
+    const std::uint64_t afterPopulation = profileStateFingerprint(profile);
+    profile.baseMorale.pendingPositiveEventCount = 1U;
+    EXPECT_NE(profileStateFingerprint(profile), afterPopulation);
+}
+
+TEST(ProfileStateTest, InvalidMoraleOrRerolledEventIsRejected)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-morale-invalid",
+        publishedContentRegistry());
+    profile.baseMorale.supportedRecoveryDays =
+        publishedContentRegistry().baseMorale().recoveryDaysFromLow;
+    ProfileValidationResult result = validateProfileState(
+        profile,
+        publishedContentRegistry());
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("morale"), std::string::npos);
+
+    profile = makeNewAlphaProfile(
+        "profile-event-invalid",
+        publishedContentRegistry());
+    profile.baseCommunityEvent.definitionId =
+        BaseCommunityEventDefinitionId{"base_event.shared_meal"};
+    if (profile.baseCommunityEvent.definitionId ==
+        selectBaseCommunityEvent(
+            profile.profileId,
+            profile.baseCommunityEvent.cycleIndex,
+            publishedContentRegistry()))
+    {
+        profile.baseCommunityEvent.definitionId =
+            BaseCommunityEventDefinitionId{"base_event.restless_nights"};
+    }
+    result = validateProfileState(profile, publishedContentRegistry());
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("morale"), std::string::npos);
 }
 
 TEST(ProfileStateTest, DemandCycleCannotAdvanceAheadOfWorldClock)

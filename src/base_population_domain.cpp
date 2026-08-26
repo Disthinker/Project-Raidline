@@ -2,6 +2,7 @@
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
+#include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
 
 #include <limits>
@@ -132,12 +133,8 @@ BaseRestReceipt executeBaseRest(
     ProfileState candidate = profile;
     const WorldClockAdvanceResult advanced = advanceWorldClock(
         candidate.worldClock, plan.worldMinutes);
-    const BaseDailyDemandResult demand = applyBaseDailyDemandWithSupplyThrough(
-        candidate,
-        content,
-        advanced.completedDaysAfter,
-        plan.dailyDemand);
-    static_cast<void>(synchronizeBasePriorityThrough(candidate, content));
+    const BaseDailySystemsResult daily =
+        synchronizeBaseDailySystemsThrough(candidate, content);
     static_cast<void>(applyBaseConstructionThrough(candidate, content));
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     static_cast<void>(applyResidentTreatmentThrough(candidate));
@@ -158,6 +155,6 @@ BaseRestReceipt executeBaseRest(
         {},
         profile.revision,
         advanced.minutesApplied,
-        demand.cyclesResolved,
-        demand.latestShortfall};
+        daily.demand.cyclesResolved,
+        daily.demand.latestShortfall};
 }

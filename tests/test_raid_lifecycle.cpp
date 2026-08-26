@@ -7,6 +7,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
+#include "base_morale_domain.h"
 #include "base_resource_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_rescue_domain.h"
@@ -92,11 +93,14 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     const WorldClockState startingClock = profile.worldClock;
     const BaseResourceState startingResources = profile.baseResources;
     const BasePriorityState startingPriority = profile.basePriority;
+    const BaseMoraleState startingMorale = profile.baseMorale;
+    const BaseCommunityEventState startingEvent =
+        profile.baseCommunityEvent;
 
     ASSERT_TRUE(deploy(
         profile, 77230, MapDefinitionId{"map.raid.riverside"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, "raid-resident-medical-7");
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, "base-morale-events-8");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -110,6 +114,10 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
               startingResources);
     EXPECT_EQ(profile.pendingRaid->travel.startingBasePriority,
               startingPriority);
+    EXPECT_EQ(profile.pendingRaid->travel.startingBaseMorale,
+              startingMorale);
+    EXPECT_EQ(profile.pendingRaid->travel.startingBaseCommunityEvent,
+              startingEvent);
     EXPECT_EQ(profile.worldClock.elapsedWorldMinutes,
               startingClock.elapsedWorldMinutes + 90U);
 
@@ -118,6 +126,8 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.worldClock, startingClock);
     EXPECT_EQ(profile.baseResources, startingResources);
     EXPECT_EQ(profile.basePriority, startingPriority);
+    EXPECT_EQ(profile.baseMorale, startingMorale);
+    EXPECT_EQ(profile.baseCommunityEvent, startingEvent);
 }
 
 TEST(RaidLifecycleTest, OutboundCompletionRollsBackConstructionButNotResidents)
@@ -359,7 +369,7 @@ TEST(RaidLifecycleTest, RollbackRestoresPriorityAcrossCycleBoundary)
     ProfileState profile = makeNewAlphaProfile(
         "priority-cycle-rollback", publishedContentRegistry());
     profile.worldClock.elapsedWorldMinutes = 7630U;
-    static_cast<void>(synchronizeBasePriorityThrough(
+    static_cast<void>(synchronizeBaseDailySystemsThrough(
         profile, publishedContentRegistry()));
     const BasePriorityState startingPriority = profile.basePriority;
 
@@ -408,6 +418,10 @@ TEST(RaidLifecycleTest, EveryPublishedRaidMapCreatesItsOwnDeterministicSnapshot)
             "multi-map-first", publishedContentRegistry());
         ProfileState second = first;
         second.profileId = "multi-map-second";
+        second.baseCommunityEvent = {};
+        static_cast<void>(synchronizeBaseCommunityEventThrough(
+            second,
+            publishedContentRegistry()));
 
         ASSERT_TRUE(deploy(first, 77231, map.id).succeeded) << map.id.value();
         ASSERT_TRUE(deploy(second, 77231, map.id).succeeded) << map.id.value();

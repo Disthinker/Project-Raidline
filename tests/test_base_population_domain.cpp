@@ -54,6 +54,8 @@ TEST(BasePopulationDomainTest, RestCrossesMidnightAndResolvesPopulationDemand)
     EXPECT_EQ(profile.revision, revision + 1U);
     EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{32, 34, 35, 36}));
     EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
+    EXPECT_EQ(profile.baseMorale.resolvedDayCount, 1U);
+    EXPECT_EQ(profile.baseMorale.tier, BaseMoraleTier::Stable);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 

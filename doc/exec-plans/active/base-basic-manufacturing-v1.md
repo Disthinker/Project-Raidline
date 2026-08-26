@@ -80,7 +80,8 @@ player can rest, remain in Base, or complete a Raid while the order advances.
   988/988 pass; Codex did not launch the game.
 - [x] Draft PR #89 open; code commit `aed2b1d` passed the scope gate and
   exact-head Windows/Ubuntu build and test jobs.
-- [ ] User normal-play acceptance complete.
+- [x] User normal-play acceptance complete; PR #89 was normally merged as
+  `194f910` without deleting the branch or rewriting history.
 
 ## Rollback
 
