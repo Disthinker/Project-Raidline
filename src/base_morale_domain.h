@@ -56,4 +56,3 @@ synchronizeBaseCommunityEventThrough(
 
 [[nodiscard]] const char *baseMoraleTierName(BaseMoraleTier tier) noexcept;
 [[nodiscard]] const char *baseMoraleTrendName(BaseMoraleTrend trend) noexcept;
-
