@@ -22,6 +22,22 @@ TEST(UiLocalizationTest, EnglishIsUnchangedAndChineseTranslatesStaticText) {
             "继续游戏");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RAID PERFORMANCE | F9 CLOSE"),
+            "对局性能 | F9 关闭");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "F9 PERFORMANCE | F10 RUNTIME WEAPON TUNING"),
+            "F9 性能 | F10 运行时武器调试");
+  const std::string workload = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "SIM ENEMIES 100 | BLOCKERS 96 | SUBSTEPS 100");
+  EXPECT_NE(workload.find("模拟 敌人 100"), std::string::npos);
+  EXPECT_NE(workload.find("障碍 96"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesFormattedCountersAndContentNames) {
   const std::string translated = localizeUiText(
       UiLanguage::SimplifiedChinese, "Rifle | AMMO 18/30 | DURABILITY 76%");

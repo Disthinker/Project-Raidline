@@ -138,6 +138,41 @@ TEST(EnemySquadCoordinatorTest, ExactOverlapUsesDeterministicSeparation)
     EXPECT_GT(directives[1].separationDirection.x, 0.0F);
 }
 
+TEST(EnemySquadCoordinatorTest, NeighborGridFindsCloseMembersAcrossCellEdge)
+{
+    const EnemySquadCoordinator coordinator;
+    const std::vector<EnemySquadMemberSnapshot> members{
+        alertedMember(Vec2{81.0F, 20.0F}),
+        alertedMember(Vec2{83.0F, 20.0F})};
+    EnemySquadDecisionMetrics metrics;
+
+    const auto directives = coordinator.decide(members, Vec2{}, &metrics);
+
+    ASSERT_EQ(directives.size(), 2U);
+    EXPECT_LT(directives[0].separationDirection.x, 0.0F);
+    EXPECT_GT(directives[1].separationDirection.x, 0.0F);
+    EXPECT_EQ(metrics.neighborCandidatesExamined, 2U);
+}
+
+TEST(EnemySquadCoordinatorTest, SparseHundredMemberSquadAvoidsAllPairsScan)
+{
+    const EnemySquadCoordinator coordinator;
+    std::vector<EnemySquadMemberSnapshot> members;
+    members.reserve(100U);
+    for (std::size_t index{}; index < 100U; ++index)
+    {
+        members.push_back(alertedMember(Vec2{
+            static_cast<float>(index % 10U) * 200.0F,
+            static_cast<float>(index / 10U) * 200.0F}));
+    }
+    EnemySquadDecisionMetrics metrics;
+
+    const auto directives = coordinator.decide(members, Vec2{}, &metrics);
+
+    EXPECT_EQ(directives.size(), members.size());
+    EXPECT_EQ(metrics.neighborCandidatesExamined, 0U);
+}
+
 TEST(EnemySquadCoordinatorTest, InvalidTargetCannotGrantAttackPermission)
 {
     const EnemySquadCoordinator coordinator;

@@ -6,6 +6,8 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 namespace
 {
@@ -35,6 +37,34 @@ namespace
                phase == EnemyAttackPhase::Active ||
                phase == EnemyAttackPhase::Recovery;
     }
+
+    struct EnemyCell
+    {
+        int x{};
+        int y{};
+
+        friend bool operator==(const EnemyCell &, const EnemyCell &) = default;
+    };
+
+    struct EnemyCellHash
+    {
+        std::size_t operator()(EnemyCell cell) const noexcept
+        {
+            const std::size_t x = static_cast<std::size_t>(
+                static_cast<unsigned int>(cell.x));
+            const std::size_t y = static_cast<std::size_t>(
+                static_cast<unsigned int>(cell.y));
+            return x * 0x9E3779B185EBCA87ULL ^
+                   (y + 0x9E3779B97F4A7C15ULL + (x << 6U) + (x >> 2U));
+        }
+    };
+
+    EnemyCell enemyCell(Vec2 position, float cellSize) noexcept
+    {
+        return EnemyCell{
+            static_cast<int>(std::floor(position.x / cellSize)),
+            static_cast<int>(std::floor(position.y / cellSize))};
+    }
 }
 
 EnemySquadCoordinator::EnemySquadCoordinator()
@@ -57,8 +87,13 @@ EnemySquadCoordinator::EnemySquadCoordinator(
 std::vector<EnemyTacticalDirective>
 EnemySquadCoordinator::decide(
     const std::vector<EnemySquadMemberSnapshot> &members,
-    Vec2 targetPosition) const
+    Vec2 targetPosition,
+    EnemySquadDecisionMetrics *metrics) const
 {
+    if (metrics != nullptr)
+    {
+        *metrics = EnemySquadDecisionMetrics{};
+    }
     std::vector<EnemyTacticalDirective> directives(
         members.size());
 
@@ -133,6 +168,23 @@ EnemySquadCoordinator::decide(
 
     const float radiusSquared =
         config_.separationRadius * config_.separationRadius;
+    std::unordered_map<EnemyCell, std::vector<std::size_t>, EnemyCellHash>
+        neighborCells;
+    neighborCells.reserve(members.size());
+    for (std::size_t index{}; index < members.size(); ++index)
+    {
+        if (!members[index].alive || !isFinite(members[index].position))
+        {
+            continue;
+        }
+        neighborCells[enemyCell(
+            members[index].position,
+            config_.separationRadius)]
+            .push_back(index);
+    }
+
+    std::vector<std::size_t> neighborCandidates;
+    neighborCandidates.reserve(members.size());
     for (std::size_t index{0U};
          index < members.size();
          ++index)
@@ -144,15 +196,37 @@ EnemySquadCoordinator::decide(
         }
 
         Vec2 separation{};
-        for (std::size_t neighborIndex{0U};
-             neighborIndex < members.size();
-             ++neighborIndex)
+        neighborCandidates.clear();
+        const EnemyCell center = enemyCell(
+            members[index].position,
+            config_.separationRadius);
+        for (int offsetY{-1}; offsetY <= 1; ++offsetY)
+        {
+            for (int offsetX{-1}; offsetX <= 1; ++offsetX)
+            {
+                const auto found = neighborCells.find(
+                    EnemyCell{center.x + offsetX, center.y + offsetY});
+                if (found != neighborCells.end())
+                {
+                    neighborCandidates.insert(
+                        neighborCandidates.end(),
+                        found->second.begin(),
+                        found->second.end());
+                }
+            }
+        }
+        std::sort(neighborCandidates.begin(), neighborCandidates.end());
+        for (const std::size_t neighborIndex : neighborCandidates)
         {
             if (neighborIndex == index ||
                 !members[neighborIndex].alive ||
                 !isFinite(members[neighborIndex].position))
             {
                 continue;
+            }
+            if (metrics != nullptr)
+            {
+                ++metrics->neighborCandidatesExamined;
             }
 
             Vec2 away{

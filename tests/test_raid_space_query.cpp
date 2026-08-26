@@ -214,3 +214,102 @@ TEST(RaidSpaceQueryTest, InvalidPreparedFieldFailsClosed)
             2.0F)
             .has_value());
 }
+
+TEST(RaidSpaceQueryTest, DenseStaticFieldReturnsLocalGridStepAroundCover)
+{
+    std::vector<BallisticBlocker> blockers;
+    blockers.push_back(BallisticBlocker{
+        1U,
+        Rect{Vec2{780.0F, 200.0F}, Vec2{50.0F, 400.0F}}});
+    for (std::uint32_t index = 1U; index < 48U; ++index)
+    {
+        blockers.push_back(BallisticBlocker{
+            index + 1U,
+            Rect{
+                Vec2{
+                    80.0F + static_cast<float>(index % 16U) * 90.0F,
+                    index % 2U == 0U ? 40.0F : 800.0F},
+                Vec2{24.0F, 24.0F}}});
+    }
+    const std::optional<RaidSpaceNavigationField> field =
+        RaidSpaceNavigationField::build(
+            Vec2{40.0F, 40.0F},
+            Vec2{1600.0F, 900.0F},
+            blockers,
+            2.0F);
+    ASSERT_TRUE(field.has_value());
+
+    const Vec2 start{100.0F, 400.0F};
+    const std::optional<Vec2> waypoint = field->nextWaypoint(
+        start, Vec2{1500.0F, 400.0F}, 20.0F);
+
+    ASSERT_TRUE(waypoint.has_value());
+    const float stepDistance = std::hypot(
+        waypoint->x - start.x,
+        waypoint->y - start.y);
+    EXPECT_GT(stepDistance, 1.0F);
+    EXPECT_LT(stepDistance, 100.0F);
+    EXPECT_TRUE(raidSpaceHasLineOfSight(start, *waypoint, blockers));
+}
+
+TEST(RaidSpaceQueryTest, DenseGridConnectionsDoNotCrossThinSealedWall)
+{
+    std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{
+            1U,
+            Rect{Vec2{396.0F, 0.0F}, Vec2{2.0F, 600.0F}}}};
+    for (std::uint32_t index = 1U; index < 48U; ++index)
+    {
+        blockers.push_back(BallisticBlocker{
+            index + 1U,
+            Rect{
+                Vec2{20.0F + static_cast<float>(index) * 14.0F, 18.0F},
+                Vec2{4.0F, 4.0F}}});
+    }
+    const std::optional<RaidSpaceNavigationField> field =
+        RaidSpaceNavigationField::build(
+            Vec2{40.0F, 40.0F},
+            Vec2{800.0F, 600.0F},
+            blockers,
+            2.0F);
+    ASSERT_TRUE(field.has_value());
+
+    EXPECT_FALSE(field->nextWaypoint(
+        Vec2{100.0F, 300.0F},
+        Vec2{700.0F, 300.0F},
+        20.0F).has_value());
+}
+
+TEST(RaidSpaceQueryTest, DenseGridAcceptsActorNearPartialWorldEdgeCell)
+{
+    std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{
+            1U,
+            Rect{Vec2{590.0F, 90.0F}, Vec2{50.0F, 420.0F}}}};
+    for (std::uint32_t index = 1U; index < 48U; ++index)
+    {
+        blockers.push_back(BallisticBlocker{
+            index + 1U,
+            Rect{
+                Vec2{30.0F + static_cast<float>(index) * 14.0F, 20.0F},
+                Vec2{4.0F, 4.0F}}});
+    }
+    const std::optional<RaidSpaceNavigationField> field =
+        RaidSpaceNavigationField::build(
+            Vec2{40.0F, 40.0F},
+            Vec2{800.0F, 600.0F},
+            blockers,
+            2.0F);
+    ASSERT_TRUE(field.has_value());
+
+    const Vec2 start{780.0F, 300.0F};
+    const std::optional<Vec2> waypoint = field->nextWaypoint(
+        start, Vec2{100.0F, 300.0F}, 20.0F);
+
+    ASSERT_TRUE(waypoint.has_value());
+    EXPECT_GT(std::hypot(
+                  waypoint->x - start.x,
+                  waypoint->y - start.y),
+              1.0F);
+    EXPECT_TRUE(raidSpaceHasLineOfSight(start, *waypoint, blockers));
+}

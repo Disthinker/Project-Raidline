@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 #include "enemy_ai.h"
@@ -20,6 +21,11 @@ struct EnemySquadMemberSnapshot
     EnemyAttackPhase attackPhase{EnemyAttackPhase::Idle};
 };
 
+struct EnemySquadDecisionMetrics
+{
+    std::size_t neighborCandidatesExamined{};
+};
+
 class EnemySquadCoordinator
 {
 public:
@@ -29,7 +35,8 @@ public:
     [[nodiscard]]
     std::vector<EnemyTacticalDirective> decide(
         const std::vector<EnemySquadMemberSnapshot> &members,
-        Vec2 targetPosition) const;
+        Vec2 targetPosition,
+        EnemySquadDecisionMetrics *metrics = nullptr) const;
 
     [[nodiscard]]
     const EnemySquadConfig &config() const noexcept;

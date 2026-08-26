@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <iterator>
 #include <limits>
+#include <queue>
 #include <vector>
 
 namespace
@@ -12,6 +15,10 @@ namespace
     constexpr float kDistanceEpsilon{0.0001F};
     constexpr std::size_t kNoNode =
         std::numeric_limits<std::size_t>::max();
+    constexpr std::size_t kDenseGridBlockerThreshold{48U};
+    constexpr float kDenseNavigationGridCellSize{48.0F};
+    constexpr int kDenseGridNeighborOffsets[4][2]{
+        {0, -1}, {-1, 0}, {1, 0}, {0, 1}};
 
     bool finite(Vec2 value) noexcept
     {
@@ -120,19 +127,6 @@ namespace
                point.y <= worldSize.y - half.y;
     }
 
-    bool segmentClear(
-        Vec2 start,
-        Vec2 end,
-        const std::vector<Rect> &expandedBlockers) noexcept
-    {
-        return std::none_of(
-            expandedBlockers.begin(),
-            expandedBlockers.end(),
-            [&](const Rect &blocker)
-            {
-                return segmentIntersectsRectInterior(start, end, blocker);
-            });
-    }
 }
 
 bool raidSpaceHasLineOfSight(
@@ -148,13 +142,19 @@ bool raidSpaceHasLineOfSight(
     return std::none_of(
         blockers.begin(),
         blockers.end(),
-        [&](const BallisticBlocker &blocker)
-        {
-            return segmentIntersectsRectInterior(
-                start,
-                end,
-                blocker.bounds);
-        });
+            [&](const BallisticBlocker &blocker)
+            {
+                return raidSpaceSegmentIntersectsBlockerInterior(
+                    start, end, blocker.bounds);
+            });
+}
+
+bool raidSpaceSegmentIntersectsBlockerInterior(
+    Vec2 start,
+    Vec2 end,
+    Rect blocker) noexcept
+{
+    return segmentIntersectsRectInterior(start, end, blocker);
 }
 
 std::optional<RaidSpaceNavigationField>
@@ -184,6 +184,122 @@ RaidSpaceNavigationField::build(
         }
         field.expandedBlockers_.push_back(
             expandedForActor(blocker.bounds, actorSize, clearance));
+    }
+    std::vector<BallisticBlocker> expandedBlockers;
+    expandedBlockers.reserve(field.expandedBlockers_.size());
+    for (std::size_t index{}; index < field.expandedBlockers_.size(); ++index)
+    {
+        expandedBlockers.push_back(BallisticBlocker{
+            static_cast<std::uint32_t>(index + 1U),
+            field.expandedBlockers_[index]});
+    }
+    field.expandedBlockerIndex_ = RaidSpaceBlockerIndex::build(
+        worldSize,
+        expandedBlockers);
+    if (!field.expandedBlockerIndex_.has_value())
+    {
+        return std::nullopt;
+    }
+
+    if (field.expandedBlockers_.size() >= kDenseGridBlockerThreshold)
+    {
+        const Vec2 halfActor{actorSize.x * 0.5F, actorSize.y * 0.5F};
+        const Vec2 navigableSize{
+            worldSize.x - actorSize.x,
+            worldSize.y - actorSize.y};
+        if (navigableSize.x < 0.0F || navigableSize.y < 0.0F)
+        {
+            return std::nullopt;
+        }
+        field.usesDenseGrid_ = true;
+        field.denseGridCellSize_ = kDenseNavigationGridCellSize;
+        field.denseGridOrigin_ = halfActor;
+        field.denseGridColumns_ = static_cast<std::size_t>(
+            std::floor(navigableSize.x / kDenseNavigationGridCellSize)) + 1U;
+        field.denseGridRows_ = static_cast<std::size_t>(
+            std::floor(navigableSize.y / kDenseNavigationGridCellSize)) + 1U;
+        const std::size_t gridSize =
+            field.denseGridColumns_ * field.denseGridRows_;
+        field.denseGridWalkable_.assign(gridSize, 1U);
+        for (std::size_t row{}; row < field.denseGridRows_; ++row)
+        {
+            for (std::size_t column{};
+                 column < field.denseGridColumns_;
+                 ++column)
+            {
+                const Vec2 point{
+                    field.denseGridOrigin_.x +
+                        static_cast<float>(column) *
+                            field.denseGridCellSize_,
+                    field.denseGridOrigin_.y +
+                        static_cast<float>(row) *
+                            field.denseGridCellSize_};
+                const bool blocked = std::any_of(
+                    field.expandedBlockers_.begin(),
+                    field.expandedBlockers_.end(),
+                    [&](const Rect &blocker)
+                    {
+                        return pointInsideOpenRect(point, blocker);
+                    });
+                field.denseGridWalkable_[
+                    row * field.denseGridColumns_ + column] =
+                    blocked ? 0U : 1U;
+            }
+        }
+        field.denseGridConnections_.assign(gridSize, 0U);
+        const auto cellPosition = [&](std::size_t row, std::size_t column)
+        {
+            return Vec2{
+                field.denseGridOrigin_.x +
+                    static_cast<float>(column) * field.denseGridCellSize_,
+                field.denseGridOrigin_.y +
+                    static_cast<float>(row) * field.denseGridCellSize_};
+        };
+        for (std::size_t row{}; row < field.denseGridRows_; ++row)
+        {
+            for (std::size_t column{};
+                 column < field.denseGridColumns_;
+                 ++column)
+            {
+                const std::size_t current =
+                    row * field.denseGridColumns_ + column;
+                if (field.denseGridWalkable_[current] == 0U)
+                {
+                    continue;
+                }
+                for (std::size_t direction{};
+                     direction < std::size(kDenseGridNeighborOffsets);
+                     ++direction)
+                {
+                    const int nextColumn = static_cast<int>(column) +
+                        kDenseGridNeighborOffsets[direction][0];
+                    const int nextRow = static_cast<int>(row) +
+                        kDenseGridNeighborOffsets[direction][1];
+                    if (nextColumn < 0 || nextRow < 0 ||
+                        nextColumn >=
+                            static_cast<int>(field.denseGridColumns_) ||
+                        nextRow >= static_cast<int>(field.denseGridRows_))
+                    {
+                        continue;
+                    }
+                    const std::size_t next =
+                        static_cast<std::size_t>(nextRow) *
+                            field.denseGridColumns_ +
+                        static_cast<std::size_t>(nextColumn);
+                    if (field.denseGridWalkable_[next] != 0U &&
+                        field.expandedBlockerIndex_->hasLineOfSight(
+                            cellPosition(row, column),
+                            cellPosition(
+                                static_cast<std::size_t>(nextRow),
+                                static_cast<std::size_t>(nextColumn))))
+                    {
+                        field.denseGridConnections_[current] |=
+                            static_cast<std::uint8_t>(1U << direction);
+                    }
+                }
+            }
+        }
+        return field;
     }
 
     field.cornerNodes_.reserve(field.expandedBlockers_.size() * 4U);
@@ -225,10 +341,9 @@ RaidSpaceNavigationField::build(
              second < cornerCount;
              ++second)
         {
-            if (!segmentClear(
+            if (!field.expandedBlockerIndex_->hasLineOfSight(
                     field.cornerNodes_[first],
-                    field.cornerNodes_[second],
-                    field.expandedBlockers_))
+                    field.cornerNodes_[second]))
             {
                 continue;
             }
@@ -252,7 +367,8 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
     Vec2 goal,
     float goalTolerance) const
 {
-    if (!finite(start) || !finite(goal) ||
+    if (!expandedBlockerIndex_.has_value() ||
+        !finite(start) || !finite(goal) ||
         !std::isfinite(goalTolerance) || goalTolerance < 0.0F ||
         !pointInsideWorldForActor(start, actorSize_, worldSize_) ||
         !pointInsideWorldForActor(goal, actorSize_, worldSize_) ||
@@ -270,6 +386,23 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
     if (distance(start, goal) <= goalTolerance + kDistanceEpsilon)
     {
         return start;
+    }
+
+    const bool exactGoalAvailable = std::none_of(
+        expandedBlockers_.begin(),
+        expandedBlockers_.end(),
+        [&](const Rect &blocker)
+        {
+            return pointInsideOpenRect(goal, blocker);
+        });
+    if (exactGoalAvailable &&
+        expandedBlockerIndex_->hasLineOfSight(start, goal))
+    {
+        return goal;
+    }
+    if (usesDenseGrid_)
+    {
+        return nextDenseGridWaypoint(start, goal, goalTolerance);
     }
 
     std::vector<Vec2> goalNodes;
@@ -329,7 +462,7 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
 
     if (goalNodes.front().x == goal.x &&
         goalNodes.front().y == goal.y &&
-        segmentClear(start, goal, expandedBlockers_))
+        expandedBlockerIndex_->hasLineOfSight(start, goal))
     {
         return goal;
     }
@@ -342,24 +475,21 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
     const std::size_t nodeCount = nodes.size();
     const std::size_t cornerCount = cornerNodes_.size();
     const float infinity = std::numeric_limits<float>::infinity();
-    std::vector<float> edges(nodeCount * nodeCount, infinity);
-    for (std::size_t first{}; first < cornerCount; ++first)
-    {
-        for (std::size_t second{}; second < cornerCount; ++second)
-        {
-            edges[(firstCornerNode + first) * nodeCount +
-                  firstCornerNode + second] =
-                cornerEdges_[first * cornerCount + second];
-        }
-    }
+    // Static corner-to-corner visibility already lives in cornerEdges_. Only
+    // the start/goal rows are dynamic. Keeping those rows separately avoids
+    // copying the full O(corners^2) matrix for every enemy refresh.
+    std::vector<float> dynamicEdges(
+        firstCornerNode * nodeCount,
+        infinity);
     for (std::size_t first{}; first < firstCornerNode; ++first)
     {
-        edges[first * nodeCount + first] = 0.0F;
+        dynamicEdges[first * nodeCount + first] = 0.0F;
         for (std::size_t second = first + 1U;
              second < nodeCount;
              ++second)
         {
-            if (!segmentClear(nodes[first], nodes[second], expandedBlockers_))
+            if (!expandedBlockerIndex_->hasLineOfSight(
+                    nodes[first], nodes[second]))
             {
                 continue;
             }
@@ -369,10 +499,25 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
             {
                 continue;
             }
-            edges[first * nodeCount + second] = edgeDistance;
-            edges[second * nodeCount + first] = edgeDistance;
+            dynamicEdges[first * nodeCount + second] = edgeDistance;
         }
     }
+    const auto edgeWeight = [&](std::size_t first, std::size_t second)
+    {
+        if (first < firstCornerNode)
+        {
+            return first <= second
+                ? dynamicEdges[first * nodeCount + second]
+                : dynamicEdges[second * nodeCount + first];
+        }
+        if (second < firstCornerNode)
+        {
+            return dynamicEdges[second * nodeCount + first];
+        }
+        return cornerEdges_[
+            (first - firstCornerNode) * cornerCount +
+            (second - firstCornerNode)];
+    };
 
     std::vector<float> distances(nodeCount, infinity);
     std::vector<std::size_t> previous(nodeCount, kNoNode);
@@ -405,7 +550,7 @@ std::optional<Vec2> RaidSpaceNavigationField::nextWaypoint(
 
         for (std::size_t neighbor{}; neighbor < nodeCount; ++neighbor)
         {
-            const float edge = edges[current * nodeCount + neighbor];
+            const float edge = edgeWeight(current, neighbor);
             if (visited[neighbor] || !std::isfinite(edge))
             {
                 continue;
@@ -470,6 +615,148 @@ Vec2 RaidSpaceNavigationField::actorSize() const noexcept
 Vec2 RaidSpaceNavigationField::worldSize() const noexcept
 {
     return worldSize_;
+}
+
+std::optional<Vec2> RaidSpaceNavigationField::nextDenseGridWaypoint(
+    Vec2 start,
+    Vec2 goal,
+    float goalTolerance) const
+{
+    if (!usesDenseGrid_ || denseGridColumns_ == 0U ||
+        denseGridRows_ == 0U || denseGridWalkable_.empty() ||
+        denseGridConnections_.size() != denseGridWalkable_.size())
+    {
+        return std::nullopt;
+    }
+
+    const auto cellPosition = [&](std::size_t index)
+    {
+        const std::size_t row = index / denseGridColumns_;
+        const std::size_t column = index % denseGridColumns_;
+        return Vec2{
+            denseGridOrigin_.x +
+                static_cast<float>(column) * denseGridCellSize_,
+            denseGridOrigin_.y +
+                static_cast<float>(row) * denseGridCellSize_};
+    };
+    const auto nearestWalkable = [&](Vec2 point, float maximumDistance)
+        -> std::optional<std::size_t>
+    {
+        std::optional<std::size_t> selected;
+        float selectedDistance = std::numeric_limits<float>::infinity();
+        for (std::size_t index{}; index < denseGridWalkable_.size(); ++index)
+        {
+            if (denseGridWalkable_[index] == 0U)
+            {
+                continue;
+            }
+            const float candidateDistance = distance(point, cellPosition(index));
+            if (candidateDistance > maximumDistance + kGeometryEpsilon)
+            {
+                continue;
+            }
+            // The nearest sample by Euclidean distance can be on the other
+            // side of a thin wall. Requiring a clear segment from the real
+            // actor/goal position keeps snapping from creating a path through
+            // geometry between samples.
+            if (!expandedBlockerIndex_->hasLineOfSight(
+                    point, cellPosition(index)))
+            {
+                continue;
+            }
+            if (!selected.has_value() ||
+                candidateDistance < selectedDistance - kDistanceEpsilon ||
+                (std::abs(candidateDistance - selectedDistance) <=
+                     kDistanceEpsilon &&
+                 index < *selected))
+            {
+                selected = index;
+                selectedDistance = candidateDistance;
+            }
+        }
+        return selected;
+    };
+
+    // A final partial grid cell can leave the navigable world edge almost one
+    // complete cell away from the last sample. The line-of-sight check above
+    // makes this wider snap radius safe while allowing actors near that edge
+    // to enter the cached graph.
+    const float startSnapDistance = denseGridCellSize_ * 1.5F;
+    const float goalSnapDistance = std::max(
+        goalTolerance,
+        denseGridCellSize_ * 1.5F);
+    const std::optional<std::size_t> startCell =
+        nearestWalkable(start, startSnapDistance);
+    const std::optional<std::size_t> goalCell =
+        nearestWalkable(goal, goalSnapDistance);
+    if (!startCell.has_value() || !goalCell.has_value())
+    {
+        return std::nullopt;
+    }
+    if (*startCell == *goalCell)
+    {
+        return cellPosition(*startCell);
+    }
+
+    std::vector<std::size_t> previous(
+        denseGridWalkable_.size(),
+        kNoNode);
+    std::queue<std::size_t> frontier;
+    previous[*startCell] = *startCell;
+    frontier.push(*startCell);
+    while (!frontier.empty() && previous[*goalCell] == kNoNode)
+    {
+        const std::size_t current = frontier.front();
+        frontier.pop();
+        const std::size_t currentRow = current / denseGridColumns_;
+        const std::size_t currentColumn = current % denseGridColumns_;
+        for (std::size_t direction{};
+             direction < std::size(kDenseGridNeighborOffsets);
+             ++direction)
+        {
+            if ((denseGridConnections_[current] &
+                 static_cast<std::uint8_t>(1U << direction)) == 0U)
+            {
+                continue;
+            }
+            const int nextColumn =
+                static_cast<int>(currentColumn) +
+                kDenseGridNeighborOffsets[direction][0];
+            const int nextRow = static_cast<int>(currentRow) +
+                kDenseGridNeighborOffsets[direction][1];
+            if (nextColumn < 0 || nextRow < 0 ||
+                nextColumn >= static_cast<int>(denseGridColumns_) ||
+                nextRow >= static_cast<int>(denseGridRows_))
+            {
+                continue;
+            }
+            const std::size_t next =
+                static_cast<std::size_t>(nextRow) * denseGridColumns_ +
+                static_cast<std::size_t>(nextColumn);
+            if (denseGridWalkable_[next] == 0U || previous[next] != kNoNode)
+            {
+                continue;
+            }
+            previous[next] = current;
+            frontier.push(next);
+        }
+    }
+    if (previous[*goalCell] == kNoNode)
+    {
+        return std::nullopt;
+    }
+
+    std::size_t next = *goalCell;
+    std::size_t guard{};
+    while (previous[next] != *startCell)
+    {
+        next = previous[next];
+        if (next == kNoNode || ++guard > previous.size())
+        {
+            return std::nullopt;
+        }
+    }
+    return cellPosition(next);
 }
 
 std::optional<Vec2> nextRaidSpaceWaypoint(
