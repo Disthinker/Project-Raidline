@@ -88,7 +88,7 @@
 | Raid 普通幸存者安全转移 v1 | PR #86 已通过 CI 和用户正常游玩验收，以普通 merge commit `ee9ba48` 进入 main |
 | Base 宿舍扩建与供给修订 | PR #87 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `1be94bf` 进入 main |
 | Base 居民伤病与医疗所治疗 v1 | PR #88 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `987dc6b` 进入 main |
-| Base 基础制造队列 v1 | 当前分支实现 schema v17/content v25、真实投入/产出、单劳动力槽、世界时间完成、取消/领取和工坊占位 UI；Windows Debug 全目标与 CTest 988/988 已通过，等待 Draft PR CI |
+| Base 基础制造队列 v1 | Draft PR #89 已实现 schema v17/content v25、真实投入/产出、单劳动力槽、世界时间完成、取消/领取和工坊占位 UI；Windows Debug 全目标、CTest 988/988 与代码提交 exact-head Windows/Ubuntu CI 已通过，等待用户正常游玩验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
