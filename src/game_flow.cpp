@@ -55,7 +55,9 @@ bool GameFlow::continueGame()
     return true;
 }
 
-bool GameFlow::deploy(MapDefinitionId mapDefinitionId) noexcept
+bool GameFlow::deploy(
+    MapDefinitionId mapDefinitionId,
+    RaidIntelligenceLoadout intelligence) noexcept
 {
     if (state_ != GameFlowState::Base)
     {
@@ -70,7 +72,10 @@ bool GameFlow::deploy(MapDefinitionId mapDefinitionId) noexcept
         {
             seed = 1;
         }
-        if (!gameSession_.deployAlpha(seed, std::move(mapDefinitionId)))
+        if (!gameSession_.deployAlpha(
+                seed,
+                std::move(mapDefinitionId),
+                intelligence))
         {
             return false;
         }

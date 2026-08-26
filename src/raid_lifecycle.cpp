@@ -300,6 +300,26 @@ DeployReceipt executeDeploy(
             profile.revision);
     }
 
+    for (std::size_t index = 0;
+         index < kRaidIntelligenceCategoryCount;
+         ++index)
+    {
+        if (!command.intelligence.selected[index])
+        {
+            continue;
+        }
+        const auto found = candidate.raidIntelligence.counts.find(
+            command.mapDefinitionId);
+        if (found == candidate.raidIntelligence.counts.end() ||
+            found->second[index] == 0U)
+        {
+            return deployFailure(
+                RaidLifecycleError::InsufficientIntelligence,
+                "selected Raid intelligence is unavailable",
+                profile.revision);
+        }
+    }
+
     Pcg32 configurationRandom{command.seed, 0x6d61702d636f6e66ULL};
     Pcg32 lootRandom{command.seed, 0x6c6f6f742d726169ULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
@@ -312,7 +332,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "base-workforce-facilities-9";
+    snapshot.rulesVersion = "regional-map-intelligence-10";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -321,6 +341,7 @@ DeployReceipt executeDeploy(
     snapshot.extractionPoint = pair.extractionPoint;
     snapshot.startingHealth = candidate.currentHealth;
     snapshot.startingMedicalStatus = candidate.medicalStatus;
+    snapshot.intelligence = command.intelligence;
     snapshot.travel = RaidTravelSnapshot{
         map->travel.outboundMinutes,
         map->travel.returnMinutes,
@@ -335,7 +356,25 @@ DeployReceipt executeDeploy(
         candidate.basePopulation.bedCapacity,
         candidate.basePopulation.injuredResidents,
         candidate.basePopulation.injuredByProfession,
-        candidate.residentMedical};
+        candidate.residentMedical,
+        candidate.raidIntelligence};
+    for (std::size_t index = 0;
+         index < kRaidIntelligenceCategoryCount;
+         ++index)
+    {
+        if (command.intelligence.selected[index])
+        {
+            --candidate.raidIntelligence.counts[command.mapDefinitionId][index];
+        }
+    }
+    if (const auto found = candidate.raidIntelligence.counts.find(
+            command.mapDefinitionId);
+        found != candidate.raidIntelligence.counts.end() &&
+        found->second == std::array<std::uint32_t,
+                                    kRaidIntelligenceCategoryCount>{})
+    {
+        candidate.raidIntelligence.counts.erase(found);
+    }
     if (map->rescue.has_value() &&
         !candidate.committedRescues.contains(map->rescue->id))
     {
@@ -620,6 +659,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingInjuredByProfession;
     const BaseResidentMedicalState startingResidentMedical =
         candidate.pendingRaid->travel.startingResidentMedical;
+    const RaidIntelligenceArchiveState startingRaidIntelligence =
+        candidate.pendingRaid->travel.startingRaidIntelligence;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -655,6 +696,7 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.basePopulation.injuredByProfession =
         startingInjuredByProfession;
     candidate.residentMedical = startingResidentMedical;
+    candidate.raidIntelligence = startingRaidIntelligence;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

@@ -287,7 +287,8 @@ bool GameSession::continueProfile()
 
 bool GameSession::deployAlpha(
     std::uint64_t seed,
-    MapDefinitionId mapDefinitionId)
+    MapDefinitionId mapDefinitionId,
+    RaidIntelligenceLoadout intelligence)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
         mapDefinitionId.value().empty())
@@ -308,7 +309,8 @@ bool GameSession::deployAlpha(
             raidId,
             settlementId,
             seed,
-            std::move(mapDefinitionId)},
+            std::move(mapDefinitionId),
+            intelligence},
         CommandContext{
             profile_.revision,
             "deploy:" + raidId});
@@ -367,6 +369,7 @@ bool GameSession::deployAlpha(
         worldConfig.ballisticBlockers = std::move(blockers);
         worldConfig.normalExtractionDurationSeconds =
             map.raidRules.extractionDurationSeconds;
+        worldConfig.intelligence = snapshot.intelligence;
         if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
         {
             worldConfig.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
@@ -3007,6 +3010,34 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     alphaRaidActive_ = false;
     state_ = GameSessionState::BetweenRaids;
     return true;
+}
+
+RaidIntelligencePurchaseReceipt GameSession::purchaseRaidIntelligence(
+    const RaidIntelligencePurchaseCommand &command,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RaidIntelligencePurchaseReceipt receipt =
+        executeRaidIntelligencePurchase(
+            candidate,
+            publishedContentRegistry(),
+            command,
+            CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return RaidIntelligencePurchaseReceipt{
+            false,
+            false,
+            DomainErrorCode::InvalidProfile,
+            persistenceMessage_,
+            profile_.revision};
+    }
+    return receipt;
 }
 
 bool GameSession::secureOrdinarySurvivorRescue()

@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-workforce-facilities-content-27");
+        "regional-map-intelligence-content-28");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -139,6 +139,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     {
         EXPECT_FALSE(publishedMap.displayName.empty());
         EXPECT_FALSE(publishedMap.routeProfile.empty());
+        EXPECT_FALSE(publishedMap.operationBriefing.difficulty.empty());
+        EXPECT_FALSE(publishedMap.operationBriefing.warning.empty());
+        EXPECT_GT(publishedMap.operationBriefing.price(
+            RaidIntelligenceCategory::Transport), 0U);
+        EXPECT_GT(publishedMap.operationBriefing.price(
+            RaidIntelligenceCategory::Resource), 0U);
+        EXPECT_GT(publishedMap.operationBriefing.price(
+            RaidIntelligenceCategory::Enemy), 0U);
         EXPECT_GT(publishedMap.travel.outboundMinutes, 0U);
         EXPECT_GT(publishedMap.travel.returnMinutes, 0U);
         EXPECT_GE(publishedMap.travel.failureRegroupMinutes,
@@ -425,6 +433,22 @@ TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
             "\"supported_at_reserve_days\": 7",
             "\"supported_at_reserve_days\": 2")),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidMapOperationBriefing)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            R"("transport_price": 24)",
+            R"("transport_price": 0)"))),
+        std::runtime_error);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            R"("difficulty": "LOW")",
+            R"("difficulty": "")"))),
+        std::runtime_error);
 }
 
 TEST(ContentRegistryTest, RejectsInvalidBaseConstructionDefinition)

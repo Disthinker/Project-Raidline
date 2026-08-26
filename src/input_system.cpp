@@ -227,6 +227,9 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_TAB:
         return GameAction::ToggleInventory;
 
+    case SDL_SCANCODE_M:
+        return GameAction::ToggleTacticalMap;
+
     case SDL_SCANCODE_ESCAPE:
         return GameAction::InventoryCancel;
 

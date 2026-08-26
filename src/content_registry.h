@@ -10,6 +10,7 @@
 
 #include "definition_id.h"
 #include "item_definition.h"
+#include "raid_intelligence_types.h"
 #include "vec2.h"
 
 class ContentRegistryError : public std::runtime_error
@@ -146,6 +147,25 @@ struct GunsmithFullMaintenanceDefinition
     friend bool operator==(
         const GunsmithFullMaintenanceDefinition &,
         const GunsmithFullMaintenanceDefinition &) = default;
+};
+
+struct RaidOperationBriefingDefinition
+{
+    std::string difficulty;
+    std::string warning;
+    std::array<std::uint32_t, kRaidIntelligenceCategoryCount> prices{};
+
+    [[nodiscard]] std::uint32_t price(
+        RaidIntelligenceCategory category) const noexcept
+    {
+        return category == RaidIntelligenceCategory::Count
+            ? 0U
+            : prices[raidIntelligenceCategoryIndex(category)];
+    }
+
+    friend bool operator==(
+        const RaidOperationBriefingDefinition &,
+        const RaidOperationBriefingDefinition &) = default;
 };
 
 enum class RaidRescueSubjectKind
@@ -307,6 +327,7 @@ struct MapDefinition
     std::string displayName;
     std::string routeProfile;
     RaidTravelDefinition travel;
+    RaidOperationBriefingDefinition operationBriefing;
     std::string backgroundTexturePath;
     ContentColor backgroundTint;
     Vec2 worldSize{};

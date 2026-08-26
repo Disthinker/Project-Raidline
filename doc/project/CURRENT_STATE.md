@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@1af0e56` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#90 接受的 Base Growth 基线；PR #90 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `1af0e56` 合入。
-- 当前开发分支：`codex/base-workforce-facility-upgrades-v1`，从干净的 `origin/main@1af0e56` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-workforce-facility-upgrades-v1.md`。
+- `origin/main@12a2fa6` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure，以及 PR #78～#91 接受的 Base Growth 基线；PR #91 经 exact-head CI 和用户正常游玩验收后以普通 merge commit `12a2fa6` 合入。
+- 当前开发分支：`codex/regional-map-intelligence-v1`，从干净的 `origin/main@12a2fa6` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-map-intelligence-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#90 已接受。当前分支交付 **Base 聚合岗位、专业人口与设施升级 v1**；外部 GDD 继续只读，本切片让当前工坊、医疗所和 Raid 救援消费同一聚合劳动力与专业资格，并以两个线性设施升级形成长期选择。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growth PR #78～#91 已接受。当前分支交付 **区域地图与对局情报 v1**；外部 GDD 继续只读，本切片以三张既有固定地图验证可消耗情报、出击冻结权限、局内探索迷雾和不暂停战术地图，不提前扩展随机地图、正式商人、哨所或基地迁徙。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -45,7 +45,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 30. **Base 居民伤病与医疗所治疗 v1**：PR #88 让 Ashworks 救援接纳一名受伤普通居民；医疗所从玩家明确授权为医疗供给的基地可访问自有物品中预览并原子消费准确数量，经过权威世界时间后恢复居民。玩家付费医疗仍是独立的货币即时服务。已通过 exact-head CI 与用户正常游玩验收，以 `987dc6b` 进入 main。
 31. **Base 基础制造队列 v1**：PR #89 为损坏工坊提供一个生产槽；以 1 个废旧零件、1 个损坏电子元件和 1 名健康劳动力经过 6 小时制造一件真实武器维护包。已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `194f910` 进入 main。
 32. **Base 正式士气与周期事件 v1**：PR #90 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `1af0e56` 进入 main。
-33. **Base 聚合岗位、专业人口与设施升级 v1**：当前分支从 `origin/main@1af0e56` 开始，已建立通用/医疗/工程/战斗聚合专业、工坊/医疗所显式岗位、专业效率与两个线性设施升级；本地自动化与实现提交 `d59a113` 的 Windows/Ubuntu CI 已通过，等待用户正常游玩验收。
+33. **Base 聚合岗位、专业人口与设施升级 v1**：PR #91 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `12a2fa6` 进入 main。
+34. **区域地图与对局情报 v1**：当前分支从 `origin/main@12a2fa6` 开始；三图出击板提供难度警告、交通图/物资清单/敌情档案购买与选择，部署原子消耗并冻结权限。Raid 中 `M` 打开不暂停战术地图，显示本局探索迷雾、已发现撤离点及所选粗粒度情报；schema v20/content v28 保存归档与回滚合同。当前只使用双语文字和几何占位。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -74,7 +75,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure 与 Base Growt
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90 的士气与周期事件已通过 Windows/Ubuntu CI 和用户正常游玩验收并进入 main。当前岗位与设施升级分支已完成 schema v19/content v27、专业救援、互斥岗位、冻结耗时、三类 typed construction target、双语文字/图形占位 UI 和跨进程持久化回归；Windows Debug 全目标、完整 CTest 1010/1010 及实现提交 `d59a113` 的 Windows/Ubuntu CI 均通过。开发代理未启动游戏，用户正常游玩验收待完成。
+- PR #90 的士气与周期事件及 PR #91 的岗位/设施升级均已通过双平台 CI、用户正常游玩验收并进入 main。当前区域地图与情报分支已完成 schema v20/content v28、购买/部署/回滚领域合同、战术地图、探索迷雾、三类情报投影和双语文字/图形占位；Windows Debug 全目标、完整 CTest 1026/1026 及 PR #92 首个实现提交 `cdce5d0` 的 Windows/Ubuntu CI 均通过。开发代理未启动游戏，等待用户正常游玩验收。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

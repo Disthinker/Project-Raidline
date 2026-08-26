@@ -35,7 +35,8 @@ public:
 
     [[nodiscard]]
     bool deploy(
-        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"}) noexcept;
+        MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"},
+        RaidIntelligenceLoadout intelligence = {}) noexcept;
 
     void updateBase(
         const BaseInput &input,

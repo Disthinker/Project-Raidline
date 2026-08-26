@@ -472,6 +472,29 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             config.highRisk.regularPhaseDurationSeconds,
             config.highRisk.emergencyExtractionDurationSeconds,
             config.highRisk.conditionalExtractionDurationSeconds}}};
+    std::vector<Vec2> initialEnemyCenters;
+    initialEnemyCenters.reserve(enemies_.size());
+    for (const Enemy &enemy : enemies_)
+    {
+        initialEnemyCenters.push_back(enemyCenter(enemy));
+    }
+    tacticalMap_.configure(
+        config.worldSize,
+        config.intelligence,
+        config.extractionPoint,
+        config.highRisk.enabled
+            ? std::optional<ContentRect>{
+                  config.highRisk.emergencyExtractionPoint}
+            : std::nullopt,
+        conditionalExtractionPoint_.has_value()
+            ? std::optional<ContentRect>{
+                  config.highRisk.conditionalExtractionPoint}
+            : std::nullopt,
+        config.highRisk.enabled
+            ? std::optional<ContentRect>{config.highRisk.advancedResourceArea}
+            : std::nullopt,
+        std::move(initialEnemyCenters));
+    tacticalMap_.revealAround(playerCenter(player_));
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -795,6 +818,7 @@ void GameplayWorld::update(
     static_cast<void>(player_.setPosition(resolvedPlayerPosition));
 
     const Vec2 centerAfterMovement = playerCenter(player_);
+    tacticalMap_.revealAround(centerAfterMovement);
     Vec2 desiredAimPosition{
         centerAfterMovement.x + player_.facingDirection().x * 400.0F,
         centerAfterMovement.y + player_.facingDirection().y * 400.0F};
@@ -1390,6 +1414,12 @@ const RaidSession &
 GameplayWorld::raidSession() const noexcept
 {
     return raidSession_;
+}
+
+const RaidTacticalMapState &
+GameplayWorld::tacticalMap() const noexcept
+{
+    return tacticalMap_;
 }
 
 std::size_t GameplayWorld::aliveEnemyCount() const noexcept

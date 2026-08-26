@@ -819,6 +819,39 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "profile medical status is invalid"};
     }
+    const auto validIntelligenceArchive = [&content](
+        const RaidIntelligenceArchiveState &archive) noexcept
+    {
+        for (const auto &[mapId, counts] : archive.counts)
+        {
+            try
+            {
+                static_cast<void>(content.map(mapId));
+            }
+            catch (...)
+            {
+                return false;
+            }
+            bool ownsAnyIntelligence = false;
+            for (std::uint32_t count : counts)
+            {
+                if (count > 1000000U)
+                {
+                    return false;
+                }
+                ownsAnyIntelligence = ownsAnyIntelligence || count > 0U;
+            }
+            if (!ownsAnyIntelligence)
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!validIntelligenceArchive(profile.raidIntelligence))
+    {
+        return {false, "Raid intelligence archive is invalid"};
+    }
     const BaseResourceBundle &resources = profile.baseResources.pool;
     const BaseResourceBundle &shortfall =
         profile.baseResources.lastShortfall;
@@ -1452,14 +1485,16 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
             raid.rulesVersion == "raid-resident-medical-7" ||
             raid.rulesVersion == "base-morale-events-8" ||
-            raid.rulesVersion == "base-workforce-facilities-9";
+            raid.rulesVersion == "base-workforce-facilities-9" ||
+            raid.rulesVersion == "regional-map-intelligence-10";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
             raid.rulesVersion == "raid-ordinary-rescue-6" ||
             raid.rulesVersion == "raid-resident-medical-7" ||
             raid.rulesVersion == "base-morale-events-8" ||
-            raid.rulesVersion == "base-workforce-facilities-9";
+            raid.rulesVersion == "base-workforce-facilities-9" ||
+            raid.rulesVersion == "regional-map-intelligence-10";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1645,7 +1680,9 @@ ProfileValidationResult validateProfileState(
                     raid.travel.startingWorldClock,
                     content) ||
                  !startingConstructionValid || !startingWorkforceValid ||
-                !startingResidentMedicalValid)
+                !startingResidentMedicalValid ||
+                !validIntelligenceArchive(
+                    raid.travel.startingRaidIntelligence))
             {
                 return {false, "pending Raid travel snapshot is invalid"};
             }
@@ -1774,6 +1811,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashBytes(hash, profile.profileId);
     hashInteger(hash, profile.revision);
     hashInteger(hash, profile.currency);
+    for (const auto &[mapId, counts] : profile.raidIntelligence.counts)
+    {
+        hashBytes(hash, mapId.value());
+        for (std::uint32_t count : counts)
+        {
+            hashInteger(hash, count);
+        }
+    }
     hashInteger(hash, static_cast<std::uint32_t>(profile.tutorial));
     hashInteger(hash, profile.currentHealth);
     hashInteger(hash, static_cast<std::uint32_t>(
@@ -2037,11 +2082,24 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, raid.startingMedicalStatus.bleedingDamageRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painkillerRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painScreamRemainingMs);
+        for (bool selected : raid.intelligence.selected)
+        {
+            hashInteger(hash, static_cast<std::uint32_t>(selected));
+        }
         hashInteger(hash, raid.travel.outboundMinutes);
         hashInteger(hash, raid.travel.returnMinutes);
         hashInteger(hash, raid.travel.failureRegroupMinutes);
         hashInteger(hash,
                     raid.travel.startingWorldClock.elapsedWorldMinutes);
+        for (const auto &[mapId, counts] :
+             raid.travel.startingRaidIntelligence.counts)
+        {
+            hashBytes(hash, mapId.value());
+            for (std::uint32_t count : counts)
+            {
+                hashInteger(hash, count);
+            }
+        }
         hashInteger(hash, raid.travel.startingBaseResources.pool.food);
         hashInteger(hash, raid.travel.startingBaseResources.pool.hygiene);
         hashInteger(hash, raid.travel.startingBaseResources.pool.morale);
