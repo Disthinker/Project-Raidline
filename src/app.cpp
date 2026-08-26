@@ -9637,7 +9637,7 @@ void App::renderBaseWorkshop()
                 publishedContentRegistry(),
                 StartBaseManufacturingCommand{recipe.id});
         status = plan.canCommit
-            ? "WORKSHOP READY | INPUTS REMAIN IN STASH UNTIL START"
+            ? "WORKSHOP READY | INPUTS REMAIN IN OWNED INVENTORY UNTIL START"
             : plan.message;
         buttonLabel = plan.canCommit
             ? "START PRODUCTION"
