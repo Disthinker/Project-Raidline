@@ -74,8 +74,8 @@ why morale changed, and can choose the next Raid or Base action accordingly.
   is not reused as formal morale.
 - [x] Domain, content and persistence implemented.
 - [x] GameSession, manufacturing consumer and Allocation UI implemented.
-- [ ] Automated verification complete locally: Windows Debug full build and
-  1001/1001 CTest pass. Exact-head Windows/Ubuntu CI remains pending.
+- [x] Automated verification complete: Windows Debug full build, 1001/1001
+  CTest and exact-head Windows/Ubuntu CI pass.
 - [ ] User normal-play acceptance complete.
 
 ## Rollback
