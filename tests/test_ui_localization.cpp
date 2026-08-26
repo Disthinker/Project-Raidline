@@ -127,6 +127,10 @@ TEST(UiLocalizationTest, ChineseTranslatesInteriorPlaceholdersAndPortal)
 {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "SPECIAL SITE"),
+            "特殊地点");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "EXCHANGE OFFICE | F ENTER"),
             "交易所办公室 | F 进入");
   EXPECT_EQ(localizeUiText(

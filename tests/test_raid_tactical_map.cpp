@@ -14,7 +14,11 @@ RaidTacticalMapState configuredMap(RaidIntelligenceLoadout loadout = {})
         ContentRect{{70.0F, 30.0F}, {60.0F, 70.0F}},
         ContentRect{{430.0F, 220.0F}, {75.0F, 75.0F}},
         ContentRect{{610.0F, 130.0F}, {120.0F, 90.0F}},
-        {{250.0F, 150.0F}, {700.0F, 380.0F}});
+        {{250.0F, 150.0F}, {700.0F, 380.0F}},
+        {{RaidSpaceDefinitionId{"raid_space.test.office"},
+          "Exchange Office",
+          ContentRect{{730.0F, 80.0F}, {120.0F, 100.0F}},
+          false}});
     return map;
 }
 }
@@ -75,4 +79,50 @@ TEST(RaidTacticalMapTest, OutOfBoundsQueriesAreNeverRevealed)
     EXPECT_FALSE(map.pointRevealed({960.0F, 100.0F}));
     EXPECT_FALSE(map.cellRevealed(-1, 0));
     EXPECT_FALSE(map.cellRevealed(map.columns(), 0));
+}
+
+TEST(RaidTacticalMapTest, SpecialLocationRequiresNearbyDiscoveryAndPersists)
+{
+    RaidTacticalMapState map = configuredMap();
+    const RaidSpaceDefinitionId officeId{"raid_space.test.office"};
+    ASSERT_EQ(map.specialLocations().size(), 1U);
+    EXPECT_FALSE(map.specialLocations().front().discovered);
+    EXPECT_FALSE(map.specialLocationVisible(officeId));
+
+    map.revealAround({600.0F, 130.0F});
+    EXPECT_FALSE(map.specialLocationVisible(officeId));
+
+    map.revealAround({650.0F, 130.0F});
+    EXPECT_TRUE(map.specialLocationVisible(officeId));
+    EXPECT_TRUE(map.specialLocations().front().discovered);
+
+    map.revealAround({50.0F, 500.0F});
+    EXPECT_TRUE(map.specialLocationVisible(officeId));
+}
+
+TEST(RaidTacticalMapTest, RejectsInvalidOrDuplicateSpecialLocations)
+{
+    const RaidSpecialLocationMapState office{
+        RaidSpaceDefinitionId{"raid_space.test.office"},
+        "Exchange Office",
+        ContentRect{{730.0F, 80.0F}, {120.0F, 100.0F}},
+        false};
+    const auto configure = [](std::vector<RaidSpecialLocationMapState> sites)
+    {
+        RaidTacticalMapState map;
+        map.configure(
+            {960.0F, 540.0F}, {},
+            {{820.0F, 430.0F}, {80.0F, 60.0F}},
+            std::nullopt, std::nullopt, std::nullopt, {},
+            std::move(sites));
+    };
+
+    EXPECT_THROW(
+        configure({office, office}),
+        std::invalid_argument);
+    RaidSpecialLocationMapState outside = office;
+    outside.entrance.position.x = 900.0F;
+    EXPECT_THROW(
+        configure({std::move(outside)}),
+        std::invalid_argument);
 }
