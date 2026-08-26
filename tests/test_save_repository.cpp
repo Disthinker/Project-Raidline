@@ -1407,7 +1407,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
         mapId, RaidIntelligenceCategory::Transport), 1U);
 }
 
-TEST(SaveRepositoryTest, SchemaV21FreezesAndValidatesProceduralSpatialLayout)
+TEST(SaveRepositoryTest, SchemaV22FreezesInteriorSpacesAndSpatialLayout)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-procedural-layout-v21", publishedContentRegistry());
@@ -1435,6 +1435,12 @@ TEST(SaveRepositoryTest, SchemaV21FreezesAndValidatesProceduralSpatialLayout)
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
     EXPECT_EQ(loaded.profile->pendingRaid->spatialLayout,
               profile.pendingRaid->spatialLayout);
+    EXPECT_EQ(loaded.profile->pendingRaid->interiors,
+              profile.pendingRaid->interiors);
+    ASSERT_FALSE(loaded.profile->pendingRaid->interiors.empty());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->interiors.front().id,
+        RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"});
 
     ++profile.pendingRaid->spatialLayout.layoutHash;
     const SaveLoadResult corrupt = deserializeProfileEnvelope(
@@ -1443,6 +1449,66 @@ TEST(SaveRepositoryTest, SchemaV21FreezesAndValidatesProceduralSpatialLayout)
         publishedContentRegistry());
     EXPECT_FALSE(corrupt.profile.has_value());
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV22RejectsUnknownInteriorActorSpace)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-interior-space-v22", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-interior-raid",
+            "save-interior-settle",
+            883311U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-interior-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const auto enemy = std::find_if(
+        profile.pendingRaid->enemies.begin(),
+        profile.pendingRaid->enemies.end(),
+        [](const RaidEnemySnapshot &candidate)
+        { return candidate.spaceId != outdoorRaidSpaceId(); });
+    ASSERT_NE(enemy, profile.pendingRaid->enemies.end());
+    enemy->spaceId = RaidSpaceDefinitionId{"raid_space.unknown.room"};
+
+    const SaveLoadResult corrupt = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+    EXPECT_FALSE(corrupt.profile.has_value());
+    EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV21MigratesRootActorsWithoutInteriorState)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-root-space-v21", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-root-raid",
+            "save-root-settle",
+            883312U,
+            MapDefinitionId{"map.v0.test"},
+            {}},
+        {profile.revision, "save-root-deploy"}).succeeded);
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, "procedural-outdoor-layout-content-29", 21),
+        publishedContentRegistry());
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    ASSERT_TRUE(migrated.profile->pendingRaid.has_value());
+    EXPECT_TRUE(migrated.profile->pendingRaid->interiors.empty());
+    EXPECT_TRUE(std::all_of(
+        migrated.profile->pendingRaid->enemies.begin(),
+        migrated.profile->pendingRaid->enemies.end(),
+        [](const RaidEnemySnapshot &enemy)
+        { return enemy.spaceId == outdoorRaidSpaceId(); }));
 }
 
 TEST(SaveRepositoryTest, SchemaV19MigratesToEmptyRaidIntelligenceArchive)

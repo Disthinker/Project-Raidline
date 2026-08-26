@@ -281,6 +281,7 @@ private:
         const char *label);
     void renderBackground();
     void renderExtractionPoint();
+    void renderRaidSpacePortal();
     void renderStorageCabinet();
     void renderBallisticBlockers();
     void renderGroundItems();

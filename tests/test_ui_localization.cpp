@@ -123,6 +123,18 @@ TEST(UiLocalizationTest, ChineseTranslatesRaidIntelligenceAndTacticalMap) {
             "所选情报没有可用份数");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesInteriorPlaceholdersAndPortal)
+{
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "EXCHANGE OFFICE | F ENTER"),
+            "交易所办公室 | F 进入");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "INTERIOR MAP UNAVAILABLE"),
+            "室内地图尚不可用");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesWarehouseRecoveryAndAllocationAccess) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WAREHOUSE"),
             "仓储");

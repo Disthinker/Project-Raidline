@@ -104,7 +104,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "procedural-outdoor-layout-11");
+        "raid-interior-spaces-12");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -132,6 +132,46 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.basePriority, startingPriority);
     EXPECT_EQ(profile.baseMorale, startingMorale);
     EXPECT_EQ(profile.baseCommunityEvent, startingEvent);
+}
+
+TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "interior-snapshot", publishedContentRegistry());
+    ASSERT_TRUE(deploy(
+        profile,
+        88123U,
+        MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const PendingRaidSnapshot &raid = *profile.pendingRaid;
+    ASSERT_EQ(raid.interiors.size(), 1U);
+    const RaidSpaceDefinitionId interiorId{
+        "raid_space.frontier_exchange.office"};
+    EXPECT_EQ(raid.interiors.front().id, interiorId);
+    EXPECT_EQ(
+        std::count_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            [&](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == interiorId; }),
+        2);
+    EXPECT_EQ(
+        std::count_if(
+            raid.loot.begin(), raid.loot.end(),
+            [&](const RaidLootSnapshot &loot)
+            { return loot.spaceId == interiorId; }),
+        3);
+    EXPECT_TRUE(std::none_of(
+        raid.spatialLayout.ballisticBlockers.begin(),
+        raid.spatialLayout.ballisticBlockers.end(),
+        [&](const ContentRect &blocker)
+        {
+            const ContentRect entrance =
+                raid.interiors.front().exteriorEntrance;
+            return blocker.position.x < entrance.position.x + entrance.size.x &&
+                blocker.position.x + blocker.size.x > entrance.position.x &&
+                blocker.position.y < entrance.position.y + entrance.size.y &&
+                blocker.position.y + blocker.size.y > entrance.position.y;
+        }));
 }
 
 TEST(RaidLifecycleTest, DeployConsumesOnlySelectedMapIntelligence)

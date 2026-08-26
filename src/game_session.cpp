@@ -328,6 +328,10 @@ bool GameSession::deployAlpha(
         enemies.reserve(snapshot.enemies.size());
         for (const RaidEnemySnapshot &enemy : snapshot.enemies)
         {
+            if (enemy.spaceId != outdoorRaidSpaceId())
+            {
+                continue;
+            }
             enemies.push_back(EnemySpawn{
                 enemy.position,
                 enemy.size,
@@ -367,6 +371,39 @@ bool GameSession::deployAlpha(
         worldConfig.playerCurrentHealth = candidate.currentHealth;
         worldConfig.deferPlayerDamageResolution = true;
         worldConfig.ballisticBlockers = std::move(blockers);
+        worldConfig.interiors.reserve(snapshot.interiors.size());
+        for (const RaidInteriorSnapshot &interior : snapshot.interiors)
+        {
+            RaidInteriorWorldConfig runtime;
+            runtime.id = interior.id;
+            runtime.displayName = interior.displayName;
+            runtime.worldSize = interior.worldSize;
+            runtime.exteriorEntrance = interior.exteriorEntrance;
+            runtime.exteriorReturn = interior.exteriorReturn;
+            runtime.interiorSpawn = interior.interiorSpawn;
+            runtime.interiorExit = interior.interiorExit;
+            runtime.ballisticBlockers.reserve(
+                interior.ballisticBlockers.size());
+            for (std::size_t index{};
+                 index < interior.ballisticBlockers.size(); ++index)
+            {
+                runtime.ballisticBlockers.push_back(BallisticBlocker{
+                    static_cast<BallisticBlockerId>(index + 1U),
+                    Rect{interior.ballisticBlockers[index].position,
+                         interior.ballisticBlockers[index].size}});
+            }
+            for (const RaidEnemySnapshot &enemy : snapshot.enemies)
+            {
+                if (enemy.spaceId == interior.id)
+                {
+                    runtime.initialEnemies.push_back(EnemySpawn{
+                        enemy.position,
+                        enemy.size,
+                        enemy.maximumHealth});
+                }
+            }
+            worldConfig.interiors.push_back(std::move(runtime));
+        }
         worldConfig.normalExtractionDurationSeconds =
             map.raidRules.extractionDurationSeconds;
         worldConfig.intelligence = snapshot.intelligence;
@@ -2216,6 +2253,8 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
+        simulationInput.interactJustPressed = false;
+        simulationInput.interactPressed = false;
         sprintFireIntentPending_ = false;
         sprintFireReadyRemaining_ = 0.0F;
     }
@@ -2763,6 +2802,7 @@ void GameSession::updateAlphaRaid(
     }
 
     if (input.interactJustPressed &&
+        !world_->spaceTransitionedLastUpdate() &&
         !raidActionState_.active().has_value() &&
         !world_->highRiskControlInteractionInRange() &&
         !world_->ordinarySurvivorRescueInteractionInRange())
@@ -3320,9 +3360,10 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
 bool GameSession::raidLootAccessible(
     const RaidLootSnapshot &loot) const noexcept
 {
-    return !loot.requiresHighRisk ||
-           (world_ != nullptr &&
-            world_->raidSession().phase() == RaidPhase::HighRisk);
+    return world_ != nullptr &&
+        loot.spaceId == world_->activeRaidSpaceId() &&
+        (!loot.requiresHighRisk ||
+         world_->raidSession().phase() == RaidPhase::HighRisk);
 }
 
 bool GameSession::commitProfileCandidate(

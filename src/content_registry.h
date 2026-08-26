@@ -157,6 +157,27 @@ struct GunsmithFullMaintenanceDefinition
         const GunsmithFullMaintenanceDefinition &) = default;
 };
 
+[[nodiscard]] const RaidSpaceDefinitionId &outdoorRaidSpaceId();
+
+struct RaidInteriorDefinition
+{
+    RaidSpaceDefinitionId id;
+    std::string displayName;
+    Vec2 worldSize{};
+    ContentRect exteriorEntrance;
+    Vec2 exteriorReturn{};
+    Vec2 interiorSpawn{};
+    ContentRect interiorExit;
+    std::vector<BallisticBlockerDefinition> ballisticBlockers;
+    std::vector<EnemySpawnDefinition> enemies;
+    LootTableDefinitionId lootTableId;
+    std::vector<RaidLootSlotDefinition> lootSlots;
+
+    friend bool operator==(
+        const RaidInteriorDefinition &,
+        const RaidInteriorDefinition &) = default;
+};
+
 struct RaidOperationBriefingDefinition
 {
     std::string difficulty;
@@ -374,6 +395,7 @@ struct MapDefinition
     std::vector<RaidLootSlotDefinition> raidLootSlots;
     LootTableDefinitionId raidLootTableId;
     ProceduralOutdoorDefinition proceduralOutdoor;
+    std::vector<RaidInteriorDefinition> interiors;
 };
 
 class ContentRegistry

@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-outdoor-layout-content-29");
+        "raid-interior-spaces-content-30");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -128,6 +128,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
     ASSERT_EQ(registry.items().size(), 21U);
+    const MapDefinition &frontierWithInterior = registry.map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    ASSERT_EQ(frontierWithInterior.interiors.size(), 1U);
+    EXPECT_EQ(
+        frontierWithInterior.interiors.front().id,
+        RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"});
+    EXPECT_EQ(frontierWithInterior.interiors.front().enemies.size(), 2U);
+    EXPECT_EQ(frontierWithInterior.interiors.front().lootSlots.size(), 3U);
     ASSERT_EQ(registry.lootTables().size(), 3U);
     ASSERT_EQ(registry.enemyDeployments().size(), 10U);
     ASSERT_EQ(registry.maps().size(), 4U);
@@ -442,6 +450,17 @@ TEST(ContentRegistryTest, RejectsInvalidBaseOperationsDefinition)
             "\"supported_at_reserve_days\": 7",
             "\"supported_at_reserve_days\": 2")),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsReservedOutdoorInteriorIdentity)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "raid_space.frontier_exchange.office",
+        "raid_space.outdoor");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        std::runtime_error);
 }
 
 TEST(ContentRegistryTest, RejectsUnsafeProceduralOutdoorBounds)

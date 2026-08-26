@@ -28,6 +28,7 @@ public:
 
     void emitImpact(Vec2 position);
     void update(float deltaTime);
+    void clear() noexcept;
 
     const std::vector<Particle> &particles() const;
 

@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 与区域地图情报已进入主线。当前进入 **Raid World Vertical Slice**，优先交付程序化室外空间基础；范围合同见 `doc/exec-plans/active/raid-world-procedural-outdoor-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报与程序化室外空间基础已进入主线。当前继续 **Raid World Vertical Slice**，优先建立独立室内空间；范围合同见 `doc/exec-plans/active/raid-world-interiors-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -51,6 +51,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 
 | 基础制造队列 v1 | PR #89 / merge commit `194f910` |
 | 正式士气与周期事件 v1 | PR #90 / merge commit `1af0e56` |
 | 聚合岗位、专业人口与设施升级 v1 | PR #91 / merge commit `12a2fa6` |
+| 区域地图与对局情报 v1 | PR #92 / merge commit `bf8baf3` |
+| 程序化室外空间基础 v1 | PR #93 / merge commit `1404b41` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -115,7 +117,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 程序化室外空间基础 v1 | 第四张地图每次出击具有不同但可通行的代码几何掩体；战斗、Loot、救援、高危、撤离和战术地图继续正常工作 | ProceduralOutdoorDefinition、稳定 PCG32、锚点连通性、确定性回退、冻结 SpatialLayout、schema v21/content v29 | 当前 `codex/raid-world-procedural-outdoor-v1` 实现中；独立室内、特殊地点换位、导航网格和正式地图资源延期 |
+| 程序化室外空间基础 v1 | 第四张地图每次出击具有不同但可通行的代码几何掩体；战斗、Loot、救援、高危、撤离和战术地图继续正常工作 | ProceduralOutdoorDefinition、稳定 PCG32、锚点连通性、确定性回退、冻结 SpatialLayout、schema v21/content v29 | PR #93 已通过 CI 与用户验收，以普通 merge commit `1404b41` 进入 main |
+| 独立室内空间 v1 | `Frontier Exchange` 可通过 F 进入交换站办公室，室内有独立障碍、敌人、Loot 和返回出口；室内外非活动状态冻结 | RaidSpaceDefinitionId、稳定入口/返回 Socket、空间化 Actor/Loot、schema v22/content v30、当前空间模拟/投影 | 当前 `codex/raid-world-interiors-v1` 实现中；特殊地点随机换位、程序化室内、门锁/钥匙、永久内部图和正式资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 

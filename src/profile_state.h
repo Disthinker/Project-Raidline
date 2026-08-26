@@ -190,6 +190,7 @@ struct RaidEnemySnapshot
     Vec2 position{};
     Vec2 size{50.0F, 50.0F};
     int maximumHealth{};
+    RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
 };
 
 struct RaidLootSnapshot
@@ -201,6 +202,36 @@ struct RaidLootSnapshot
     Vec2 position{};
     bool requiresHighRisk{};
     bool collected{};
+    RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
+};
+
+struct RaidInteriorSnapshot
+{
+    RaidSpaceDefinitionId id;
+    std::string displayName;
+    Vec2 worldSize{};
+    ContentRect exteriorEntrance;
+    Vec2 exteriorReturn{};
+    Vec2 interiorSpawn{};
+    ContentRect interiorExit;
+    std::vector<ContentRect> ballisticBlockers;
+
+    friend bool operator==(
+        const RaidInteriorSnapshot &left,
+        const RaidInteriorSnapshot &right)
+    {
+        return left.id == right.id &&
+            left.displayName == right.displayName &&
+            left.worldSize.x == right.worldSize.x &&
+            left.worldSize.y == right.worldSize.y &&
+            left.exteriorEntrance == right.exteriorEntrance &&
+            left.exteriorReturn.x == right.exteriorReturn.x &&
+            left.exteriorReturn.y == right.exteriorReturn.y &&
+            left.interiorSpawn.x == right.interiorSpawn.x &&
+            left.interiorSpawn.y == right.interiorSpawn.y &&
+            left.interiorExit == right.interiorExit &&
+            left.ballisticBlockers == right.ballisticBlockers;
+    }
 };
 
 struct BaseResourceState
@@ -500,6 +531,7 @@ struct PendingRaidSnapshot
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
     RaidGeneratedMapLayout spatialLayout;
+    std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;
     int startingHealth{100};
     MedicalStatusState startingMedicalStatus;

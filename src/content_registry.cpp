@@ -708,6 +708,12 @@ namespace
     }
 }
 
+const RaidSpaceDefinitionId &outdoorRaidSpaceId()
+{
+    static const RaidSpaceDefinitionId id{"raid_space.outdoor"};
+    return id;
+}
+
 ContentRegistry ContentRegistry::fromJson(
     std::string_view jsonText)
 {
@@ -1926,6 +1932,96 @@ ContentRegistry ContentRegistry::fromJson(
                 }
             }
 
+            if (mapValue.contains("interiors"))
+            {
+                std::set<RaidSpaceDefinitionId> spaceIds{
+                    outdoorRaidSpaceId()};
+                for (const Json &interiorValue :
+                     requiredArray(mapValue, "interiors"))
+                {
+                    RaidInteriorDefinition interior;
+                    interior.id = RaidSpaceDefinitionId{
+                        requiredString(interiorValue, "id")};
+                    if (!hasPrefix(interior.id.value(), "raid_space.") ||
+                        !spaceIds.insert(interior.id).second)
+                    {
+                        fail("Raid interior space ID is invalid or duplicate");
+                    }
+                    interior.displayName =
+                        requiredString(interiorValue, "display_name");
+                    interior.worldSize =
+                        parseVec2(interiorValue, "world_size");
+                    interior.exteriorEntrance =
+                        parseRect(interiorValue, "exterior_entrance");
+                    interior.exteriorReturn =
+                        parseVec2(interiorValue, "exterior_return");
+                    interior.interiorSpawn =
+                        parseVec2(interiorValue, "interior_spawn");
+                    interior.interiorExit =
+                        parseRect(interiorValue, "interior_exit");
+                    std::set<std::string> blockerIds;
+                    for (const Json &blockerValue :
+                         requiredArray(interiorValue, "ballistic_blockers"))
+                    {
+                        BallisticBlockerDefinition blocker{
+                            requiredString(blockerValue, "id"),
+                            parseRect(blockerValue, "bounds")};
+                        if (!blockerIds.insert(blocker.id).second)
+                        {
+                            fail("Raid interior blocker IDs must be unique");
+                        }
+                        interior.ballisticBlockers.push_back(
+                            std::move(blocker));
+                    }
+                    for (const Json &enemyValue :
+                         requiredArray(interiorValue, "enemies"))
+                    {
+                        const Vec2 size = parseVec2(enemyValue, "size");
+                        interior.enemies.push_back(
+                            EnemySpawnDefinition{
+                                parseVec2(enemyValue, "position"),
+                                size,
+                                requiredPositiveInt(
+                                    enemyValue, "maximum_health")});
+                    }
+                    interior.lootTableId = LootTableDefinitionId{
+                        requiredString(interiorValue, "loot_table")};
+                    if (!registry.lootTableIndex_.contains(
+                            interior.lootTableId))
+                    {
+                        fail("Raid interior references an unknown Loot table");
+                    }
+                    std::set<std::string> slotIds;
+                    for (const Json &slotValue :
+                         requiredArray(interiorValue, "loot_slots"))
+                    {
+                        RaidLootSlotDefinition slot{
+                            requiredString(slotValue, "id"),
+                            "interior",
+                            parseVec2(slotValue, "position")};
+                        if (!slotIds.insert(slot.id).second)
+                        {
+                            fail("Raid interior Loot slot IDs must be unique");
+                        }
+                        interior.lootSlots.push_back(std::move(slot));
+                    }
+                    if (interior.worldSize.x <= 0.0F ||
+                        interior.worldSize.y <= 0.0F ||
+                        interior.enemies.empty() ||
+                        interior.enemies.size() > 6U ||
+                        interior.lootSlots.empty() ||
+                        interior.lootSlots.size() > 6U)
+                    {
+                        fail("Raid interior content counts are invalid");
+                    }
+                    definition.interiors.push_back(std::move(interior));
+                }
+                if (definition.interiors.size() > 4U)
+                {
+                    fail("Raid map has too many interior instances");
+                }
+            }
+
             const ContentRect worldBounds{
                 Vec2{},
                 definition.worldSize};
@@ -1973,6 +2069,96 @@ ContentRegistry ContentRegistry::fromJson(
                         blocker.bounds))
                 {
                     fail("map rescue overlaps a ballistic blocker");
+                }
+            }
+
+            for (const RaidInteriorDefinition &interior :
+                 definition.interiors)
+            {
+                const ContentRect interiorBounds{Vec2{}, interior.worldSize};
+                if (!rectInside(interior.exteriorEntrance,
+                                definition.walkableBounds) ||
+                    !pointInside(interior.exteriorReturn,
+                                 definition.walkableBounds) ||
+                    !pointInside(interior.interiorSpawn, interiorBounds) ||
+                    !rectInside(interior.interiorExit, interiorBounds))
+                {
+                    fail("Raid interior portal geometry is outside its space");
+                }
+                if (rectsOverlap(interior.exteriorEntrance,
+                                 definition.extractionPoint) ||
+                    (definition.rescue.has_value() &&
+                     rectsOverlap(interior.exteriorEntrance,
+                                  definition.rescue->transferPoint)) ||
+                    rectsOverlap(interior.exteriorEntrance,
+                                 definition.highRisk.emergencyExtractionPoint) ||
+                    rectsOverlap(interior.exteriorEntrance,
+                                 definition.highRisk.conditionalExtractionPoint) ||
+                    rectsOverlap(interior.exteriorEntrance,
+                                 definition.highRisk.activationControlPoint) ||
+                    rectsOverlap(interior.exteriorEntrance,
+                                 definition.highRisk.advancedResourceArea) ||
+                    std::any_of(
+                        definition.ballisticBlockers.begin(),
+                        definition.ballisticBlockers.end(),
+                        [&](const BallisticBlockerDefinition &blocker)
+                        {
+                            return rectsOverlap(
+                                interior.exteriorEntrance, blocker.bounds) ||
+                                pointInside(
+                                    interior.exteriorReturn, blocker.bounds);
+                        }))
+                {
+                    fail("Raid interior exterior portal overlaps another anchor");
+                }
+                for (const BallisticBlockerDefinition &blocker :
+                     interior.ballisticBlockers)
+                {
+                    if (!rectInside(blocker.bounds, interiorBounds) ||
+                        rectsOverlap(blocker.bounds, interior.interiorExit))
+                    {
+                        fail("Raid interior blocker geometry is invalid");
+                    }
+                }
+                for (const EnemySpawnDefinition &enemy : interior.enemies)
+                {
+                    const ContentRect enemyBounds{enemy.position, enemy.size};
+                    if (enemy.size.x <= 0.0F || enemy.size.y <= 0.0F ||
+                        !rectInside(enemyBounds, interiorBounds) ||
+                        rectsOverlap(enemyBounds, interior.interiorExit) ||
+                        std::any_of(
+                            interior.ballisticBlockers.begin(),
+                            interior.ballisticBlockers.end(),
+                            [&](const BallisticBlockerDefinition &blocker)
+                            { return rectsOverlap(enemyBounds, blocker.bounds); }))
+                    {
+                        fail("Raid interior enemy geometry is invalid");
+                    }
+                }
+                for (const RaidLootSlotDefinition &slot : interior.lootSlots)
+                {
+                    if (!pointInside(slot.position, interiorBounds) ||
+                        std::any_of(
+                            interior.ballisticBlockers.begin(),
+                            interior.ballisticBlockers.end(),
+                            [&](const BallisticBlockerDefinition &blocker)
+                            { return pointInside(slot.position, blocker.bounds); }))
+                    {
+                        fail("Raid interior Loot slot is outside its space");
+                    }
+                }
+            }
+            for (std::size_t left{}; left < definition.interiors.size(); ++left)
+            {
+                for (std::size_t right = left + 1U;
+                     right < definition.interiors.size(); ++right)
+                {
+                    if (rectsOverlap(
+                            definition.interiors[left].exteriorEntrance,
+                            definition.interiors[right].exteriorEntrance))
+                    {
+                        fail("Raid interior exterior portals overlap");
+                    }
                 }
             }
 

@@ -821,10 +821,15 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         Json enemies = Json::array();
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
-            enemies.push_back({
+            Json enemyValue{
                 {"position", vectorValue(enemy.position)},
                 {"size", vectorValue(enemy.size)},
-                {"maximum_health", enemy.maximumHealth}});
+                {"maximum_health", enemy.maximumHealth}};
+            if (schemaVersion >= 22)
+            {
+                enemyValue["space_id"] = enemy.spaceId.value();
+            }
+            enemies.push_back(std::move(enemyValue));
         }
         Json loot = Json::array();
         for (const RaidLootSnapshot &entry : raid.loot)
@@ -839,6 +844,10 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 lootEntry["definition_id"] = entry.definitionId.value();
                 lootEntry["quantity"] = entry.quantity;
                 lootEntry["collected"] = entry.collected;
+            }
+            if (schemaVersion >= 22)
+            {
+                lootEntry["space_id"] = entry.spaceId.value();
             }
             loot.push_back(std::move(lootEntry));
         }
@@ -898,6 +907,35 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                  raid.spatialLayout.generationAttempt},
                 {"layout_hash", raid.spatialLayout.layoutHash},
                 {"used_fallback", raid.spatialLayout.usedFallback}};
+        }
+        if (schemaVersion >= 22)
+        {
+            Json interiors = Json::array();
+            for (const RaidInteriorSnapshot &interior : raid.interiors)
+            {
+                Json blockers = Json::array();
+                for (const ContentRect &blocker : interior.ballisticBlockers)
+                {
+                    blockers.push_back({
+                        {"position", vectorValue(blocker.position)},
+                        {"size", vectorValue(blocker.size)}});
+                }
+                interiors.push_back({
+                    {"id", interior.id.value()},
+                    {"display_name", interior.displayName},
+                    {"world_size", vectorValue(interior.worldSize)},
+                    {"exterior_entrance", {
+                        {"position", vectorValue(
+                            interior.exteriorEntrance.position)},
+                        {"size", vectorValue(interior.exteriorEntrance.size)}}},
+                    {"exterior_return", vectorValue(interior.exteriorReturn)},
+                    {"interior_spawn", vectorValue(interior.interiorSpawn)},
+                    {"interior_exit", {
+                        {"position", vectorValue(interior.interiorExit.position)},
+                        {"size", vectorValue(interior.interiorExit.size)}}},
+                    {"ballistic_blockers", std::move(blockers)}});
+            }
+            payload["pending_raid"]["interiors"] = std::move(interiors);
         }
         if (schemaVersion >= 9)
         {
@@ -1211,7 +1249,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 11 && schemaVersion != 12 &&
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
-        schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21)
+        schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
+        schemaVersion != 22)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1294,7 +1333,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 19 &&
              contentVersion == "base-workforce-facilities-content-27") ||
             (schemaVersion == 20 &&
-             contentVersion == "regional-map-intelligence-content-28");
+             contentVersion == "regional-map-intelligence-content-28") ||
+            (schemaVersion == 21 &&
+             contentVersion == "procedural-outdoor-layout-content-29");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1305,7 +1346,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 15 && schemaVersion != 16 &&
              schemaVersion != 17 && schemaVersion != 18 &&
              schemaVersion != 19 && schemaVersion != 20 &&
-             schemaVersion != 21) ||
+             schemaVersion != 21 && schemaVersion != 22) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1924,7 +1965,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.enemies.push_back(RaidEnemySnapshot{
                     parseVector(enemy.at("position")),
                     parseVector(enemy.at("size")),
-                    enemy.at("maximum_health").get<int>()});
+                    enemy.at("maximum_health").get<int>(),
+                    schemaVersion >= 22
+                        ? RaidSpaceDefinitionId{
+                              enemy.at("space_id").get<std::string>()}
+                        : outdoorRaidSpaceId()});
             }
             for (const Json &entry : value.at("loot"))
             {
@@ -1948,7 +1993,11 @@ SaveLoadResult deserializeProfileEnvelope(
                     schemaVersion >= 7
                         ? entry.at("collected").get<bool>()
                         : (legacyAsset != nullptr &&
-                           assetIsCarried(profile, assetId))});
+                           assetIsCarried(profile, assetId)),
+                    schemaVersion >= 22
+                        ? RaidSpaceDefinitionId{
+                              entry.at("space_id").get<std::string>()}
+                        : outdoorRaidSpaceId()});
             }
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")
@@ -2019,6 +2068,41 @@ SaveLoadResult deserializeProfileEnvelope(
                         raid.extractionPoint,
                         {},
                         {}});
+            }
+            if (schemaVersion >= 22)
+            {
+                for (const Json &interior : value.at("interiors"))
+                {
+                    RaidInteriorSnapshot snapshot;
+                    snapshot.id = RaidSpaceDefinitionId{
+                        interior.at("id").get<std::string>()};
+                    snapshot.displayName =
+                        interior.at("display_name").get<std::string>();
+                    snapshot.worldSize =
+                        parseVector(interior.at("world_size"));
+                    snapshot.exteriorEntrance = ContentRect{
+                        parseVector(interior.at("exterior_entrance")
+                                        .at("position")),
+                        parseVector(interior.at("exterior_entrance")
+                                        .at("size"))};
+                    snapshot.exteriorReturn =
+                        parseVector(interior.at("exterior_return"));
+                    snapshot.interiorSpawn =
+                        parseVector(interior.at("interior_spawn"));
+                    snapshot.interiorExit = ContentRect{
+                        parseVector(interior.at("interior_exit")
+                                        .at("position")),
+                        parseVector(interior.at("interior_exit")
+                                        .at("size"))};
+                    for (const Json &blocker :
+                         interior.at("ballistic_blockers"))
+                    {
+                        snapshot.ballisticBlockers.push_back(ContentRect{
+                            parseVector(blocker.at("position")),
+                            parseVector(blocker.at("size"))});
+                    }
+                    raid.interiors.push_back(std::move(snapshot));
+                }
             }
             if (schemaVersion >= 9)
             {
