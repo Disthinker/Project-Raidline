@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice 的程序化室外、独立室内、随机特殊地点、探索发现、永久内部图和空间战术可靠性均已进入主线。当前交付 **第二个代表性地点 v1**，用同局两个结构不同的独立室内验证内容、快照、发现、情报、存档和世界投影均无办公室特判；范围合同见 `doc/exec-plans/active/raid-world-second-representative-location-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice 的程序化室外、独立室内、随机特殊地点、探索发现、永久内部图和空间战术可靠性均已进入主线。当前 **第二个代表性地点 v1** 的内容与交互已通过用户验收，但 PR #99 因多人围攻性能阻塞继续保持 Draft；先完成导航预计算、刷新预算、慢帧保护和压力回归，再进入集中稳定性门槛。范围合同见 `doc/exec-plans/active/raid-world-second-representative-location-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 

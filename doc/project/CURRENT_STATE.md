@@ -53,7 +53,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 38. **特殊地点发现与战术地图投影 v1**：PR #96 已通过本地 1048/1048、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `de3402c` 进入 main。玩家接近入口约 145 世界单位后才在本局显示精确世界入口和 `M` 地图特殊地点标记；同帧进入会先记录发现。
 39. **建筑内部图永久情报 v1**：PR #97 已通过本地 1058/1058、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main。content v32 为交换站办公室声明 180 货币的一次性内部图，schema v23 保存永久空间 ID 授权并冻结到 pending Raid。
 40. **空间战术可靠性 v1**：PR #98 已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 进入 main。当前空间 LOS、最后已知位置、确定性绕障、贴墙合法接近点、成功实弹击发枪声刺激和近战遮挡均已接受。
-41. **第二个代表性地点 v1**：当前分支从 `origin/main@95fcd23` 开始；content v33 在 `Frontier Exchange` 增加独立 `Freight Service Bay`，新 rules v15 冻结两个地点并保留 v12～v14 首办公室 pending Raid 兼容。多入口投影、返回点可达锚点、独立 Actor/Loot/内部图和双语代码占位均已实现；schema 仍为 v23。
+41. **第二个代表性地点 v1**：当前分支从 `origin/main@95fcd23` 开始；content v33 在 `Frontier Exchange` 增加独立 `Freight Service Bay`，新 rules v15 冻结两个地点并保留 v12～v14 首办公室 pending Raid 兼容。多入口投影、返回点可达锚点、独立 Actor/Loot/内部图和双语代码占位均已实现并通过用户正常游玩验收；schema 仍为 v23。验收同时暴露多人追击的严重主线程导航开销，PR #99 继续保持 Draft 直到性能修复复验。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -82,7 +82,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#98 均已进入 main；PR #98 的空间战术可靠性已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 合入。当前第二地点切片的 302/302 聚焦回归、Windows Debug 全目标和 1074/1074 CTest 已通过；exact-head CI 待最终提交后记录。开发代理未启动游戏，用户正常游玩验收放在自动化与 CI 之后。
+- PR #90～#98 均已进入 main；PR #98 的空间战术可靠性已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 合入。第二地点旧 head 的 302/302 聚焦回归、Windows Debug 全目标、1074/1074 CTest 与 exact-head CI 已通过。性能修订的 137/137 聚焦回归、Windows Debug 全目标和 1080/1080 CTest 已通过：8 敌人/18 障碍旧路径 120 帧约 6357 ms；新 8 敌人/26 障碍路径约 422 ms，最慢 simulation 更新约 6.1 ms。新 exact-head CI 待完成；开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

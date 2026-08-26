@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 #include "raid_space_query.h"
@@ -154,4 +155,62 @@ TEST(RaidSpaceQueryTest, GoalToleranceRoutesToTargetFlushAgainstCover)
             waypoint->y - 266.0F),
         kTolerance);
     EXPECT_FALSE(pointInside(*waypoint, blockers.front().bounds));
+}
+
+TEST(RaidSpaceQueryTest, PreparedFieldMatchesOneShotMovingQueries)
+{
+    const std::vector<BallisticBlocker> blockers{
+        BallisticBlocker{
+            1,
+            Rect{Vec2{300.0F, 80.0F}, Vec2{80.0F, 300.0F}}},
+        BallisticBlocker{
+            2,
+            Rect{Vec2{620.0F, 300.0F}, Vec2{180.0F, 70.0F}}}};
+    constexpr Vec2 actorSize{50.0F, 50.0F};
+    constexpr Vec2 worldSize{960.0F, 640.0F};
+    const std::optional<RaidSpaceNavigationField> field =
+        RaidSpaceNavigationField::build(
+            actorSize,
+            worldSize,
+            blockers,
+            2.0F);
+    ASSERT_TRUE(field.has_value());
+    EXPECT_FLOAT_EQ(field->actorSize().x, actorSize.x);
+    EXPECT_FLOAT_EQ(field->worldSize().y, worldSize.y);
+
+    const std::vector<std::pair<Vec2, Vec2>> queries{
+        {Vec2{100.0F, 120.0F}, Vec2{860.0F, 120.0F}},
+        {Vec2{100.0F, 520.0F}, Vec2{860.0F, 220.0F}},
+        {Vec2{520.0F, 120.0F}, Vec2{860.0F, 520.0F}}};
+    for (const auto &[start, goal] : queries)
+    {
+        const std::optional<Vec2> prepared =
+            field->nextWaypoint(start, goal, 20.0F);
+        const std::optional<Vec2> oneShot = nextRaidSpaceWaypoint(
+            RaidSpaceNavigationQuery{
+                start,
+                goal,
+                actorSize,
+                worldSize,
+                blockers,
+                2.0F,
+                20.0F});
+        ASSERT_EQ(prepared.has_value(), oneShot.has_value());
+        if (prepared.has_value())
+        {
+            EXPECT_FLOAT_EQ(prepared->x, oneShot->x);
+            EXPECT_FLOAT_EQ(prepared->y, oneShot->y);
+        }
+    }
+}
+
+TEST(RaidSpaceQueryTest, InvalidPreparedFieldFailsClosed)
+{
+    EXPECT_FALSE(
+        RaidSpaceNavigationField::build(
+            Vec2{0.0F, 50.0F},
+            Vec2{960.0F, 640.0F},
+            {},
+            2.0F)
+            .has_value());
 }

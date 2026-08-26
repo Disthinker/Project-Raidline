@@ -41,6 +41,7 @@
 | RL-MAP-005 | 特殊地点的精确入口和战术地图坐标从开局无条件泄露，探索没有发现价值 | PR #96 已通过本地 1048/1048、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `de3402c` 进入 main |
 | RL-MAP-006 | 固定建筑内部布局没有可永久获取的情报，进入室内后战术地图只能显示占位提示 | PR #97 已通过本地 1058/1058、exact-head 双平台 CI 和用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main |
 | RL-MAP-007 | 敌人只按距离获取目标并直线推墙，视觉与近战没有读取当前空间遮挡 | PR #98 已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 进入 main |
+| RL-PERF-001 | 多名敌人在程序化密集障碍中同时追击时，主线程每敌人每子步重建可见图并形成追帧雪崩 | PR #99 保持 Draft；旧 8 敌人/18 障碍/120 帧约 6357 ms，静态图缓存、10 Hz 动态刷新、每子步查询预算与 100 ms 帧上限已把更高的 8 敌人/26 障碍场景降至约 422 ms、最慢更新约 6.1 ms；Windows Debug 全目标和 1080/1080 CTest 已通过，exact-head CI 和用户复验待完成 |
 | RL-MAP-008 | 只有办公室一个消费者，室外投影只显示首个已发现入口，无法证明多地点内容、快照、发现和情报没有特判 | 当前 `codex/raid-world-second-representative-location-v1` 增加独立货运装卸间，投影全部已发现入口，并把入口/返回点同时纳入合法放置与可达锚点；schema v23 不变，rules v15/content v33 |
 
 ## 需要未来产品决策

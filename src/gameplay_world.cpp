@@ -18,6 +18,9 @@ namespace
     constexpr float kLegacyShotExtent{8.0f};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
+    constexpr float kEnemyNavigationRefreshSeconds{0.10F};
+    constexpr float kEnemyNavigationGoalRefreshDistance{32.0F};
+    constexpr std::size_t kMaximumNavigationQueriesPerEnemySubstep{1U};
     constexpr float kMinimumHighRiskSpawnDistance{260.0F};
 
     constexpr int kScorePerEnemy{100};
@@ -412,6 +415,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 spawn.maxHealth,
                 nextCombatTargetId_++);
         }
+        interior.enemyNavigation.resize(interior.enemies.size());
         interiors_.push_back(std::move(interior));
     }
     player_ = Player{
@@ -572,6 +576,19 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         std::move(initialEnemyCenters),
         std::move(specialLocations));
     tacticalMap_.revealAround(playerCenter(player_));
+    cacheNavigationFieldsForSpace(
+        outdoorRaidSpaceId(),
+        worldSize_,
+        ballisticBlockers_,
+        enemies_);
+    for (const InteriorRuntime &interior : interiors_)
+    {
+        cacheNavigationFieldsForSpace(
+            interior.id,
+            interior.worldSize,
+            interior.ballisticBlockers,
+            interior.enemies);
+    }
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -693,6 +710,7 @@ GameplayWorld::GameplayWorld(
             spawn.maxHealth,
             nextCombatTargetId_++);
     }
+    enemyNavigation_.resize(enemies_.size());
 
     groundItems_.reserve(
         initialGroundItems.size());
@@ -851,6 +869,7 @@ void GameplayWorld::update(
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
     enemiesAlertedLastUpdate_ = 0U;
+    navigationQueriesLastUpdate_ = 0U;
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         shotFeedbackPresentation_.update(deltaTime);
@@ -978,6 +997,12 @@ void GameplayWorld::update(
         static_cast<float>(enemySubsteps);
 
     std::vector<Enemy> &activeEnemySet = activeEnemies();
+    std::vector<EnemyNavigationRuntime> &activeNavigationSet =
+        activeEnemyNavigation();
+    if (activeNavigationSet.size() != activeEnemySet.size())
+    {
+        std::terminate();
+    }
     const std::vector<BallisticBlocker> &activeBlockerSet =
         activeBallisticBlockers();
     for (std::size_t step{0U};
@@ -1002,6 +1027,8 @@ void GameplayWorld::update(
             enemySquadCoordinator_.decide(
                 enemySnapshots,
                 playerPosition);
+        std::size_t navigationQueriesRemaining =
+            kMaximumNavigationQueriesPerEnemySubstep;
 
         for (std::size_t enemyIndex{0U};
              enemyIndex < activeEnemySet.size();
@@ -1012,6 +1039,19 @@ void GameplayWorld::update(
                 enemy.awarenessState();
             const Vec2 enemyPositionBeforeMovement = enemy.position();
             const Vec2 enemyPosition = enemyCenter(enemy);
+            if (enemy.isDead())
+            {
+                activeNavigationSet[enemyIndex] = EnemyNavigationRuntime{};
+                static_cast<void>(enemy.updateTowardsTarget(
+                    playerPosition,
+                    directives[enemyIndex],
+                    enemyStepTime,
+                    worldWidth(),
+                    worldHeight(),
+                    false,
+                    std::nullopt));
+                continue;
+            }
             const bool targetVisible = raidSpaceHasLineOfSight(
                 enemyPosition,
                 playerPosition,
@@ -1042,19 +1082,52 @@ void GameplayWorld::update(
                         navigationGoal->y,
                         halfEnemySize.y,
                         worldSize.y - halfEnemySize.y)};
-                navigationTarget = nextRaidSpaceWaypoint(
-                    RaidSpaceNavigationQuery{
-                        enemyPosition,
-                        reachableNavigationGoal,
-                        enemy.size(),
-                        worldSize,
-                        activeBlockerSet,
-                        2.0F,
-                        enemy.navigationGoalTolerance(targetVisible)});
-                if (!navigationTarget.has_value())
+                EnemyNavigationRuntime &navigation =
+                    activeNavigationSet[enemyIndex];
+                navigation.refreshRemainingSeconds = std::max(
+                    0.0F,
+                    navigation.refreshRemainingSeconds - enemyStepTime);
+                const bool goalMoved = !navigation.goal.has_value() ||
+                    distanceSquared(
+                        *navigation.goal,
+                        reachableNavigationGoal) >=
+                        kEnemyNavigationGoalRefreshDistance *
+                            kEnemyNavigationGoalRefreshDistance;
+                const bool perceptionChanged =
+                    navigation.initialized &&
+                    navigation.targetVisible != targetVisible;
+                const bool refreshNavigation =
+                    enemy.attackPhase() == EnemyAttackPhase::Idle &&
+                    (!navigation.initialized || goalMoved ||
+                     perceptionChanged ||
+                     navigation.refreshRemainingSeconds <= 0.0F);
+                if (refreshNavigation && navigationQueriesRemaining > 0U)
                 {
-                    navigationTarget = enemyPosition;
+                    --navigationQueriesRemaining;
+                    ++navigationQueriesLastUpdate_;
+                    RaidSpaceNavigationField *navigationField =
+                        activeNavigationField(enemy.size());
+                    navigation.waypoint = navigationField == nullptr
+                        ? std::nullopt
+                        : navigationField->nextWaypoint(
+                              enemyPosition,
+                              reachableNavigationGoal,
+                              enemy.navigationGoalTolerance(targetVisible));
+                    if (!navigation.waypoint.has_value())
+                    {
+                        navigation.waypoint = enemyPosition;
+                    }
+                    navigation.goal = reachableNavigationGoal;
+                    navigation.targetVisible = targetVisible;
+                    navigation.initialized = true;
+                    navigation.refreshRemainingSeconds =
+                        kEnemyNavigationRefreshSeconds;
                 }
+                navigationTarget = navigation.waypoint;
+            }
+            else
+            {
+                activeNavigationSet[enemyIndex] = EnemyNavigationRuntime{};
             }
 
             static_cast<void>(
@@ -1869,6 +1942,11 @@ std::size_t GameplayWorld::enemiesAlertedLastUpdate() const noexcept
     return enemiesAlertedLastUpdate_;
 }
 
+std::size_t GameplayWorld::navigationQueriesLastUpdate() const noexcept
+{
+    return navigationQueriesLastUpdate_;
+}
+
 void GameplayWorld::configureWeaponFire(
     const WeaponUseDefinition &definition)
 {
@@ -2482,12 +2560,95 @@ const std::vector<Enemy> &GameplayWorld::activeEnemies() const noexcept
         : enemies_;
 }
 
+std::vector<GameplayWorld::EnemyNavigationRuntime> &
+GameplayWorld::activeEnemyNavigation() noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemyNavigation
+        : enemyNavigation_;
+}
+
 const std::vector<BallisticBlocker> &
 GameplayWorld::activeBallisticBlockers() const noexcept
 {
     return activeInteriorIndex_.has_value()
         ? interiors_[*activeInteriorIndex_].ballisticBlockers
         : ballisticBlockers_;
+}
+
+RaidSpaceNavigationField *
+GameplayWorld::activeNavigationField(Vec2 actorSize)
+{
+    const RaidSpaceDefinitionId &spaceId = activeRaidSpaceId();
+    const auto found = std::find_if(
+        navigationFieldCache_.begin(),
+        navigationFieldCache_.end(),
+        [&](const NavigationFieldCache &candidate)
+        {
+            return candidate.spaceId == spaceId &&
+                   candidate.actorSize.x == actorSize.x &&
+                   candidate.actorSize.y == actorSize.y;
+        });
+    if (found != navigationFieldCache_.end())
+    {
+        return &found->field;
+    }
+
+    std::optional<RaidSpaceNavigationField> field =
+        RaidSpaceNavigationField::build(
+            actorSize,
+            activeWorldSize(),
+            activeBallisticBlockers(),
+            2.0F);
+    if (!field.has_value())
+    {
+        return nullptr;
+    }
+    navigationFieldCache_.push_back(
+        NavigationFieldCache{
+            spaceId,
+            actorSize,
+            std::move(*field)});
+    return &navigationFieldCache_.back().field;
+}
+
+void GameplayWorld::cacheNavigationFieldsForSpace(
+    const RaidSpaceDefinitionId &spaceId,
+    Vec2 worldSize,
+    std::span<const BallisticBlocker> blockers,
+    std::span<const Enemy> enemies)
+{
+    for (const Enemy &enemy : enemies)
+    {
+        const Vec2 actorSize = enemy.size();
+        const bool alreadyCached = std::any_of(
+            navigationFieldCache_.begin(),
+            navigationFieldCache_.end(),
+            [&](const NavigationFieldCache &candidate)
+            {
+                return candidate.spaceId == spaceId &&
+                       candidate.actorSize.x == actorSize.x &&
+                       candidate.actorSize.y == actorSize.y;
+            });
+        if (alreadyCached)
+        {
+            continue;
+        }
+        std::optional<RaidSpaceNavigationField> field =
+            RaidSpaceNavigationField::build(
+                actorSize,
+                worldSize,
+                blockers,
+                2.0F);
+        if (field.has_value())
+        {
+            navigationFieldCache_.push_back(
+                NavigationFieldCache{
+                    spaceId,
+                    actorSize,
+                    std::move(*field)});
+        }
+    }
 }
 
 std::size_t GameplayWorld::outdoorAliveEnemyCount() const noexcept
@@ -2676,6 +2837,7 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
                 Vec2{},
                 candidate.maxHealth,
                 nextCombatTargetId_++);
+            enemyNavigation_.emplace_back();
             ++spawned;
             found = true;
             break;

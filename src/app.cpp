@@ -17,6 +17,7 @@
 #include <fmt/core.h>
 
 #include "content_registry.h"
+#include "frame_timing.h"
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
@@ -11004,9 +11005,9 @@ int App::run()
         const Uint64 currentCounter = SDL_GetPerformanceCounter();
         const Uint64 frequency = SDL_GetPerformanceFrequency();
 
-        const float deltaTime =
+        const float deltaTime = boundedFrameDeltaSeconds(
             static_cast<float>(currentCounter - lastCounter_) /
-            static_cast<float>(frequency);
+            static_cast<float>(frequency));
         lastCounter_ = currentCounter;
 
         processEvents();
