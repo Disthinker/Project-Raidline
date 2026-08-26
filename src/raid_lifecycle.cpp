@@ -324,6 +324,7 @@ DeployReceipt executeDeploy(
     Pcg32 configurationRandom{command.seed, 0x6d61702d636f6e66ULL};
     Pcg32 lootRandom{command.seed, 0x6c6f6f742d726169ULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
+    Pcg32 interiorLootRandom{command.seed, 0x696e746572696f72ULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
     const std::size_t deploymentIndex = configurationRandom.bounded(3U);
     const auto &pair = map->spawnExtractionPairs[pairIndex];
@@ -333,7 +334,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "procedural-outdoor-layout-11";
+    snapshot.rulesVersion = "raid-interior-spaces-12";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -393,6 +394,33 @@ DeployReceipt executeDeploy(
     {
         snapshot.enemies.push_back(
             RaidEnemySnapshot{enemy.position, enemy.size, enemy.maximumHealth});
+    }
+    for (const RaidInteriorDefinition &interior : map->interiors)
+    {
+        RaidInteriorSnapshot frozen;
+        frozen.id = interior.id;
+        frozen.displayName = interior.displayName;
+        frozen.worldSize = interior.worldSize;
+        frozen.exteriorEntrance = interior.exteriorEntrance;
+        frozen.exteriorReturn = interior.exteriorReturn;
+        frozen.interiorSpawn = interior.interiorSpawn;
+        frozen.interiorExit = interior.interiorExit;
+        frozen.ballisticBlockers.reserve(
+            interior.ballisticBlockers.size());
+        for (const BallisticBlockerDefinition &blocker :
+             interior.ballisticBlockers)
+        {
+            frozen.ballisticBlockers.push_back(blocker.bounds);
+        }
+        snapshot.interiors.push_back(std::move(frozen));
+        for (const EnemySpawnDefinition &enemy : interior.enemies)
+        {
+            snapshot.enemies.push_back(RaidEnemySnapshot{
+                enemy.position,
+                enemy.size,
+                enemy.maximumHealth,
+                interior.id});
+        }
     }
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::PrimaryWeapon,
@@ -462,6 +490,39 @@ DeployReceipt executeDeploy(
             false});
     }
 
+    std::size_t interiorSlotIndex = map->raidLootSlots.size() +
+        map->highRisk.advancedLootSlots.size();
+    for (const RaidInteriorDefinition &interior : map->interiors)
+    {
+        const LootTableDefinition &interiorLootTable =
+            content.lootTable(interior.lootTableId);
+        for (const RaidLootSlotDefinition &slot : interior.lootSlots)
+        {
+            const LootContentEntry &entry =
+                rollLoot(interiorLootTable, interiorLootRandom);
+            const std::uint32_t range =
+                entry.maximumQuantity - entry.minimumQuantity + 1U;
+            const std::uint32_t quantity = entry.minimumQuantity +
+                interiorLootRandom.bounded(range);
+            const AssetInstanceId assetId = candidate.assets.create(
+                content.item(entry.itemDefinitionId),
+                RaidGroundAssetLocation{
+                    command.raidId,
+                    static_cast<std::uint32_t>(interiorSlotIndex)},
+                quantity);
+            snapshot.loot.push_back(RaidLootSnapshot{
+                assetId,
+                entry.itemDefinitionId,
+                quantity,
+                static_cast<std::uint32_t>(interiorSlotIndex),
+                slot.position,
+                false,
+                false,
+                interior.id});
+            ++interiorSlotIndex;
+        }
+    }
+
     RaidMapGenerationAnchors generationAnchors;
     generationAnchors.playerSpawn = snapshot.playerSpawn;
     generationAnchors.extractionPoint = snapshot.extractionPoint;
@@ -472,6 +533,10 @@ DeployReceipt executeDeploy(
         map->highRisk.advancedResourceArea};
     for (const RaidEnemySnapshot &enemy : snapshot.enemies)
     {
+        if (enemy.spaceId != outdoorRaidSpaceId())
+        {
+            continue;
+        }
         generationAnchors.occupiedRegions.push_back(
             ContentRect{enemy.position, enemy.size});
         generationAnchors.reachablePoints.push_back(
@@ -480,6 +545,10 @@ DeployReceipt executeDeploy(
     }
     for (const RaidLootSnapshot &loot : snapshot.loot)
     {
+        if (loot.spaceId != outdoorRaidSpaceId())
+        {
+            continue;
+        }
         generationAnchors.reachablePoints.push_back(loot.position);
     }
     for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
@@ -502,6 +571,12 @@ DeployReceipt executeDeploy(
         generationAnchors.occupiedRegions.push_back(
             snapshot.rescue->transferPoint);
         addReachableRegion(snapshot.rescue->transferPoint);
+    }
+    for (const RaidInteriorDefinition &interior : map->interiors)
+    {
+        generationAnchors.occupiedRegions.push_back(
+            interior.exteriorEntrance);
+        addReachableRegion(interior.exteriorEntrance);
     }
     snapshot.spatialLayout = generateRaidMapLayout(
         *map,

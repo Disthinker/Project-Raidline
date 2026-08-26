@@ -47,6 +47,10 @@ public:
         AimControlMode controlMode = AimControlMode::Direct) noexcept;
 
     void applyShotRecoil(Vec2 shootingOrigin) noexcept;
+    void reanchor(
+        Vec2 shootingOrigin,
+        Vec2 direction,
+        Vec2 worldSize) noexcept;
     void reconfigure(WeaponAimConfig config);
 
     [[nodiscard]] Vec2 actualWorldPosition() const noexcept;

@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@bf8baf3` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth，以及 PR #92 接受的区域地图与情报基线。
-- 当前开发分支：`codex/raid-world-procedural-outdoor-v1`，从干净的 `origin/main@bf8baf3` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-world-procedural-outdoor-v1.md`。
+- `origin/main@1404b41` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 PR #93 接受的程序化室外空间基础。
+- 当前开发分支：`codex/raid-world-interiors-v1`，从干净的 `origin/main@1404b41` 创建。
+- 当前活动计划：`doc/exec-plans/active/raid-world-interiors-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 与区域地图情报已进入主线。当前分支开始 **Raid World Vertical Slice** 的程序化室外空间基础：新增一张使用文字/几何占位的可重复生成地图，并冻结生成、回退、快照和连通性合同；独立室内、特殊地点换位、哨所和迁徙继续延期。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报与程序化室外空间基础已进入主线。当前分支继续 **Raid World Vertical Slice**：为 `Frontier Exchange` 增加第一个文字/几何占位的独立室内实例，并冻结室外根空间、稳定入口/返回 Socket、空间归属、存档和运行时隔离合同；特殊地点随机换位、程序化室内、哨所和迁徙继续延期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -47,7 +47,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 
 32. **Base 正式士气与周期事件 v1**：PR #90 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `1af0e56` 进入 main。
 33. **Base 聚合岗位、专业人口与设施升级 v1**：PR #91 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `12a2fa6` 进入 main。
 34. **区域地图与对局情报 v1**：PR #92 已通过 exact-head Windows/Ubuntu CI，并按用户连续交付授权以普通 merge commit `bf8baf3` 进入 main。三图出击板提供难度警告、交通图/物资清单/敌情档案购买与选择，部署原子消耗并冻结权限；Raid 中 `M` 打开不暂停战术地图，显示本局探索迷雾、已发现撤离点及所选粗粒度情报。用户正常游玩验收留待后续集中进行。
-35. **程序化室外空间基础 v1**：当前分支从 `origin/main@bf8baf3` 开始；第四图 `Frontier Exchange` 以稳定 PCG32 每局生成不同室外掩体，最多 8 次连通性校验后确定性回退。最终布局由 Pending Raid 唯一拥有，schema v21/content v29 保存并验证哈希、边界与锚点连通性；旧三图仍保持固定障碍。
+35. **程序化室外空间基础 v1**：PR #93 已通过本地 1033/1033、exact-head Windows/Ubuntu CI 和用户集中验收，以普通 merge commit `1404b41` 进入 main。第四图 `Frontier Exchange` 使用稳定 PCG32 生成室外掩体并冻结 schema v21/content v29 布局、连通性与确定性回退合同。
+36. **独立室内空间 v1**：当前分支从 `origin/main@1404b41` 开始；`Frontier Exchange` 的交换站办公室使用稳定空间 ID、独立尺寸/障碍/敌人/Loot 和 F 入口/返回 Socket。Pending Raid 以 schema v22/content v30 冻结空间归属；运行时一次只推进和渲染当前空间，Raid 时钟与室外高危压力继续全局运行。占位表现仅使用双语文字与代码几何。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -76,7 +77,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth 
 
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90 的士气与周期事件、PR #91 的岗位/设施升级均已通过双平台 CI、用户正常游玩验收并进入 main；PR #92 也已通过 exact-head CI，并以普通 merge commit `bf8baf3` 进入 main。当前程序化室外空间分支完成 schema v21/content v29、稳定 PCG32 生成、锚点连通性、确定性回退、冻结布局和第四图文字/几何占位；Windows Debug 全目标、完整 CTest 1033/1033，以及 PR #93 实现提交 `9090d88` 的 exact-head Windows/Ubuntu CI（run `32933559429`）均通过。开发代理未启动游戏，用户正常游玩验收留待后续集中进行。
+- PR #90～#93 均已进入 main；其中 PR #93 的程序化室外空间已通过本地 1033/1033、exact-head Windows/Ubuntu CI 和用户集中验收，以普通 merge commit `1404b41` 合入。当前独立室内分支完成 schema v22/content v30、空间化敌人/Loot、独立碰撞/AI/弹道、F 入口与返回 Socket、室外专属交互门控和双语文字/几何占位；Windows Debug 全目标及完整 CTest 1039/1039 通过，exact-head CI 以 Draft PR 为准。开发代理不启动游戏，用户正常游玩验收留待后续集中进行。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

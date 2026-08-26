@@ -211,6 +211,39 @@ void WeaponAimState::update(
     }
 }
 
+void WeaponAimState::reanchor(
+    Vec2 shootingOrigin,
+    Vec2 direction,
+    Vec2 worldSize) noexcept
+{
+    if (!finite(shootingOrigin) || !finite(direction) || !finite(worldSize) ||
+        worldSize.x <= 0.0F || worldSize.y <= 0.0F)
+    {
+        return;
+    }
+    shootingOrigin_ = shootingOrigin;
+    worldSize_ = worldSize;
+    lastDirection_ = normalizedOr(direction, lastDirection_);
+    const float availableDistance = std::max(
+        1.0F,
+        std::min(config_.effectiveRange * 0.8F, 400.0F));
+    const Vec2 anchor{
+        std::clamp(shootingOrigin_.x + lastDirection_.x * availableDistance,
+                   0.0F,
+                   worldSize_.x),
+        std::clamp(shootingOrigin_.y + lastDirection_.y * availableDistance,
+                   0.0F,
+                   worldSize_.y)};
+    currentWorldPosition_ = anchor;
+    targetWorldPosition_ = anchor;
+    inputWorldPosition_ = anchor;
+    controlVelocity_ = Vec2{};
+    recoilVelocity_ = Vec2{};
+    recoilTargetDirection_ = lastDirection_;
+    recoilBendRemainingSeconds_ = 0.0F;
+    initialized_ = true;
+}
+
 void WeaponAimState::advanceStep(float deltaTime) noexcept
 {
     if (controlMode_ == AimControlMode::HighMagnificationInertial)

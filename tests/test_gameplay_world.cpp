@@ -2500,6 +2500,73 @@ TEST(GameplayWorldRaidTest, StartsActiveRaidWithPublishedExtractionPoint)
     EXPECT_FLOAT_EQ(bounds.size.y, 136.0F);
 }
 
+TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
+{
+    RaidWorldConfig config;
+    config.worldSize = Vec2{800.0F, 600.0F};
+    config.playerSpawn = Vec2{100.0F, 100.0F};
+    config.extractionPoint =
+        ContentRect{Vec2{650.0F, 450.0F}, Vec2{100.0F, 100.0F}};
+    config.initialEnemies = {
+        EnemySpawn{Vec2{620.0F, 100.0F}, Vec2{50.0F, 50.0F}, 12}};
+    RaidInteriorWorldConfig interior;
+    interior.id = RaidSpaceDefinitionId{"raid_space.test.office"};
+    interior.displayName = "Test Office";
+    interior.worldSize = Vec2{480.0F, 360.0F};
+    interior.exteriorEntrance =
+        ContentRect{Vec2{80.0F, 80.0F}, Vec2{100.0F, 100.0F}};
+    interior.exteriorReturn = Vec2{190.0F, 100.0F};
+    interior.interiorSpawn = Vec2{80.0F, 80.0F};
+    interior.interiorExit =
+        ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}};
+    interior.initialEnemies = {
+        EnemySpawn{Vec2{300.0F, 80.0F}, Vec2{50.0F, 50.0F}, 12}};
+    interior.ballisticBlockers = {
+        BallisticBlocker{1U,
+                         Rect{Vec2{220.0F, 160.0F}, Vec2{70.0F, 100.0F}}}};
+    config.interiors.push_back(std::move(interior));
+    GameplayWorld world{std::move(config)};
+
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    ASSERT_EQ(world.enemies().size(), 1U);
+    const Vec2 outdoorEnemyPosition = world.enemies().front().position();
+
+    GameplayInput enter;
+    enter.interactJustPressed = true;
+    world.update(enter, 0.0F);
+
+    EXPECT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_FALSE(world.inOutdoorRaidSpace());
+    EXPECT_EQ(
+        world.activeRaidSpaceId(),
+        RaidSpaceDefinitionId{"raid_space.test.office"});
+    EXPECT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.ballisticBlockers().size(), 1U);
+    EXPECT_EQ(world.raidSpaceWorldSize().x, 480.0F);
+
+    const Vec2 interiorEnemyBefore = world.enemies().front().position();
+    world.update(GameplayInput{}, 0.25F);
+    EXPECT_NE(world.enemies().front().position().x, interiorEnemyBefore.x);
+
+    GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{430.0F, 120.0F};
+    world.update(fire, 0.0F);
+    ASSERT_FALSE(world.logicalBallistics().empty());
+
+    GameplayInput leave;
+    leave.interactJustPressed = true;
+    world.update(leave, 0.0F);
+
+    EXPECT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_TRUE(world.logicalBallistics().empty());
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_FLOAT_EQ(world.enemies().front().position().x,
+                    outdoorEnemyPosition.x);
+    EXPECT_FLOAT_EQ(world.enemies().front().position().y,
+                    outdoorEnemyPosition.y);
+}
+
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)
 {
     RaidWorldConfig config;

@@ -348,6 +348,70 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 "RaidWorldConfig ballistic blocker is invalid"};
         }
     }
+    interiors_.reserve(config.interiors.size());
+    for (RaidInteriorWorldConfig &interiorConfig : config.interiors)
+    {
+        if (interiorConfig.id.value().empty() ||
+            interiorConfig.id == outdoorRaidSpaceId() ||
+            !std::isfinite(interiorConfig.worldSize.x) ||
+            !std::isfinite(interiorConfig.worldSize.y) ||
+            interiorConfig.worldSize.x <= 0.0F ||
+            interiorConfig.worldSize.y <= 0.0F ||
+            std::any_of(
+                interiors_.begin(), interiors_.end(),
+                [&](const InteriorRuntime &candidate)
+                { return candidate.id == interiorConfig.id; }))
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig interior identity is invalid"};
+        }
+        InteriorRuntime interior{
+            interiorConfig.id,
+            std::move(interiorConfig.displayName),
+            interiorConfig.worldSize,
+            interiorConfig.exteriorEntrance,
+            interiorConfig.exteriorReturn,
+            interiorConfig.interiorSpawn,
+            interiorConfig.interiorExit,
+            {},
+            std::move(interiorConfig.ballisticBlockers)};
+        for (const BallisticBlocker &blocker : interior.ballisticBlockers)
+        {
+            if (blocker.id == 0 ||
+                !std::isfinite(blocker.bounds.position.x) ||
+                !std::isfinite(blocker.bounds.position.y) ||
+                !std::isfinite(blocker.bounds.size.x) ||
+                !std::isfinite(blocker.bounds.size.y) ||
+                blocker.bounds.size.x <= 0.0F ||
+                blocker.bounds.size.y <= 0.0F)
+            {
+                throw std::invalid_argument{
+                    "RaidWorldConfig interior blocker is invalid"};
+            }
+        }
+        interior.enemies.reserve(interiorConfig.initialEnemies.size());
+        for (const EnemySpawn &spawn : interiorConfig.initialEnemies)
+        {
+            if (!std::isfinite(spawn.position.x) ||
+                !std::isfinite(spawn.position.y) ||
+                !std::isfinite(spawn.size.x) ||
+                !std::isfinite(spawn.size.y) || spawn.size.x <= 0.0F ||
+                spawn.size.y <= 0.0F || spawn.maxHealth <= 0 ||
+                nextCombatTargetId_ ==
+                    std::numeric_limits<CombatTargetId>::max())
+            {
+                throw std::invalid_argument{
+                    "RaidWorldConfig interior enemy is invalid"};
+            }
+            interior.enemies.emplace_back(
+                spawn.position,
+                spawn.size,
+                Vec2{},
+                spawn.maxHealth,
+                nextCombatTargetId_++);
+        }
+        interiors_.push_back(std::move(interior));
+    }
     player_ = Player{
         config.playerSpawn.x,
         config.playerSpawn.y,
@@ -770,6 +834,7 @@ void GameplayWorld::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    spaceTransitionedLastUpdate_ = false;
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
     enemiesAlertedLastUpdate_ = 0U;
@@ -814,22 +879,27 @@ void GameplayWorld::update(
         playerPositionBeforeMovement,
         Vec2{player_.size(), player_.size()},
         requestedPlayerPosition,
-        ballisticBlockers_);
+        activeBallisticBlockers());
     static_cast<void>(player_.setPosition(resolvedPlayerPosition));
 
+    spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input);
+
     const Vec2 centerAfterMovement = playerCenter(player_);
-    tacticalMap_.revealAround(centerAfterMovement);
+    if (inOutdoorRaidSpace())
+    {
+        tacticalMap_.revealAround(centerAfterMovement);
+    }
     Vec2 desiredAimPosition{
         centerAfterMovement.x + player_.facingDirection().x * 400.0F,
         centerAfterMovement.y + player_.facingDirection().y * 400.0F};
-    if (input.aimWorldPosition.has_value())
+    if (!spaceTransitionedLastUpdate_ && input.aimWorldPosition.has_value())
     {
         desiredAimPosition = *input.aimWorldPosition;
     }
     weaponAim_.update(
         desiredAimPosition,
         centerAfterMovement,
-        worldSize_,
+        activeWorldSize(),
         input.aimDownSights,
         deltaTime,
         input.aimMotionDelta,
@@ -840,15 +910,17 @@ void GameplayWorld::update(
     const float highRiskTimeBeforeUpdate =
         raidSession_.highRiskTimeElapsed();
     const bool playerInEmergencyExtraction =
+        inOutdoorRaidSpace() &&
         emergencyExtractionPoint_.has_value() &&
         emergencyExtractionPoint_->contains(playerCenter(player_));
     const bool playerInConditionalExtraction =
+        inOutdoorRaidSpace() &&
         conditionalExtractionPoint_.has_value() &&
         input.conditionalExtractionEligible &&
         conditionalExtractionPoint_->contains(playerCenter(player_));
     raidSession_.update(
         deltaTime,
-        !player_.isControlled() && extractionPoint_.contains(
+        inOutdoorRaidSpace() && !player_.isControlled() && extractionPoint_.contains(
             playerCenter(player_)),
         !player_.isControlled() && playerInEmergencyExtraction,
         !player_.isControlled() && playerInConditionalExtraction);
@@ -890,6 +962,9 @@ void GameplayWorld::update(
         deltaTime /
         static_cast<float>(enemySubsteps);
 
+    std::vector<Enemy> &activeEnemySet = activeEnemies();
+    const std::vector<BallisticBlocker> &activeBlockerSet =
+        activeBallisticBlockers();
     for (std::size_t step{0U};
          step < enemySubsteps;
          ++step)
@@ -897,8 +972,8 @@ void GameplayWorld::update(
         const Vec2 playerPosition =
             playerCenter(player_);
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
-        enemySnapshots.reserve(enemies_.size());
-        for (const Enemy &enemy : enemies_)
+        enemySnapshots.reserve(activeEnemySet.size());
+        for (const Enemy &enemy : activeEnemySet)
         {
             enemySnapshots.push_back(
                 EnemySquadMemberSnapshot{
@@ -914,10 +989,10 @@ void GameplayWorld::update(
                 playerPosition);
 
         for (std::size_t enemyIndex{0U};
-             enemyIndex < enemies_.size();
+             enemyIndex < activeEnemySet.size();
              ++enemyIndex)
         {
-            Enemy &enemy = enemies_[enemyIndex];
+            Enemy &enemy = activeEnemySet[enemyIndex];
             const EnemyAwarenessState awarenessBefore =
                 enemy.awarenessState();
             const Vec2 enemyPositionBeforeMovement = enemy.position();
@@ -933,7 +1008,7 @@ void GameplayWorld::update(
                 enemyPositionBeforeMovement,
                 enemy.size(),
                 enemy.position(),
-                ballisticBlockers_);
+                activeBlockerSet);
             static_cast<void>(enemy.setPosition(resolvedEnemyPosition));
             if (awarenessBefore != EnemyAwarenessState::Alerted &&
                 enemy.awarenessState() == EnemyAwarenessState::Alerted)
@@ -1032,7 +1107,7 @@ void GameplayWorld::update(
         controlsSuppressedAtFrameStart ||
         player_.isControlled();
 
-    if (!controlsSuppressed &&
+    if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
         input.interactJustPressed)
     {
         tryPickupOne();
@@ -1075,7 +1150,7 @@ void GameplayWorld::update(
         const float boundaryDistance = distanceToWorldBoundary(
             shotOrigin,
             shot->direction,
-            worldSize_);
+            activeWorldSize());
         const float maximumDistance = std::max(
             0.001F,
             std::min(boundaryDistance, weaponMaximumRange_));
@@ -1096,7 +1171,7 @@ void GameplayWorld::update(
                 aimIntentAt(
                     weaponAim_.actualWorldPosition(),
                     shotOrigin,
-                    enemies_)});
+                    activeEnemySet)});
 
         if (!resolution.accepted())
         {
@@ -1178,8 +1253,8 @@ void GameplayWorld::update(
 
     HitResolutionResult hitResult = resolveShotHits(
         collisionCandidates,
-        enemies_,
-        ballisticBlockers_);
+        activeEnemySet,
+        activeBlockerSet);
 
     // A large simulation step can resolve a collision before the requested
     // advance endpoint. Clamp presentation to that authoritative hit so the
@@ -1335,13 +1410,79 @@ Vec2 GameplayWorld::normalizedShotScreenShakeOffset() const noexcept
 const std::vector<Enemy> &
 GameplayWorld::enemies() const
 {
-    return enemies_;
+    return activeEnemies();
 }
 
 const std::vector<BallisticBlocker> &
 GameplayWorld::ballisticBlockers() const noexcept
 {
-    return ballisticBlockers_;
+    return activeBallisticBlockers();
+}
+
+const RaidSpaceDefinitionId &
+GameplayWorld::activeRaidSpaceId() const noexcept
+{
+    if (activeInteriorIndex_.has_value())
+    {
+        return interiors_[*activeInteriorIndex_].id;
+    }
+    return outdoorRaidSpaceId();
+}
+
+bool GameplayWorld::inOutdoorRaidSpace() const noexcept
+{
+    return !activeInteriorIndex_.has_value();
+}
+
+std::string_view GameplayWorld::activeRaidSpaceDisplayName() const noexcept
+{
+    if (activeInteriorIndex_.has_value())
+    {
+        return interiors_[*activeInteriorIndex_].displayName;
+    }
+    return "Outdoor";
+}
+
+Vec2 GameplayWorld::raidSpaceWorldSize() const noexcept
+{
+    return activeWorldSize();
+}
+
+std::optional<ContentRect>
+GameplayWorld::activeRaidSpacePortal() const noexcept
+{
+    if (activeInteriorIndex_.has_value())
+    {
+        return interiors_[*activeInteriorIndex_].interiorExit;
+    }
+    if (!interiors_.empty())
+    {
+        return interiors_.front().exteriorEntrance;
+    }
+    return std::nullopt;
+}
+
+bool GameplayWorld::raidSpacePortalInteractionInRange() const noexcept
+{
+    if (!raidSession_.isActive())
+    {
+        return false;
+    }
+    const Vec2 center = playerCenter(player_);
+    if (activeInteriorIndex_.has_value())
+    {
+        return pointInside(
+            interiors_[*activeInteriorIndex_].interiorExit, center);
+    }
+    return std::any_of(
+        interiors_.begin(), interiors_.end(),
+        [&](const InteriorRuntime &interior)
+        { return pointInside(interior.exteriorEntrance, center); });
+}
+
+bool GameplayWorld::spaceTransitionedLastUpdate() const noexcept
+{
+    return spaceTransitionedLastUpdate_;
 }
 
 const std::vector<Particle> &
@@ -1424,10 +1565,11 @@ GameplayWorld::tacticalMap() const noexcept
 
 std::size_t GameplayWorld::aliveEnemyCount() const noexcept
 {
+    const std::vector<Enemy> &enemySet = activeEnemies();
     return static_cast<std::size_t>(
         std::count_if(
-            enemies_.begin(),
-            enemies_.end(),
+            enemySet.begin(),
+            enemySet.end(),
             [](const Enemy &enemy)
             {
                 return !enemy.isDead();
@@ -1477,7 +1619,7 @@ float GameplayWorld::highRiskControlTimeRemaining() const noexcept
 
 bool GameplayWorld::highRiskControlInteractionInRange() const noexcept
 {
-    if (!highRiskControlPoint_.has_value() ||
+    if (!inOutdoorRaidSpace() || !highRiskControlPoint_.has_value() ||
         raidSession_.phase() != RaidPhase::Regular || !raidSession_.isActive())
     {
         return false;
@@ -1514,7 +1656,7 @@ float GameplayWorld::ordinarySurvivorRescueTimeRemaining() const noexcept
 
 bool GameplayWorld::ordinarySurvivorRescueInteractionInRange() const noexcept
 {
-    return ordinarySurvivorRescuePoint_.has_value() &&
+    return inOutdoorRaidSpace() && ordinarySurvivorRescuePoint_.has_value() &&
            !ordinarySurvivorRescueSecured_ && raidSession_.isActive() &&
            pointInside(*ordinarySurvivorRescuePoint_, playerCenter(player_));
 }
@@ -1758,7 +1900,7 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
     }
     const Vec2 source = playerCenter(player_);
     const float radiusSquared = radius * radius;
-    for (Enemy &enemy : enemies_)
+    for (Enemy &enemy : activeEnemies())
     {
         const Vec2 center = enemyCenter(enemy);
         const float dx = center.x - source.x;
@@ -2203,12 +2345,100 @@ GameplayWorld::nextItemInstanceId() const noexcept
 
 float GameplayWorld::worldWidth() const noexcept
 {
-    return worldSize_.x;
+    return activeWorldSize().x;
 }
 
 float GameplayWorld::worldHeight() const noexcept
 {
-    return worldSize_.y;
+    return activeWorldSize().y;
+}
+
+Vec2 GameplayWorld::activeWorldSize() const noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].worldSize
+        : worldSize_;
+}
+
+std::vector<Enemy> &GameplayWorld::activeEnemies() noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemies
+        : enemies_;
+}
+
+const std::vector<Enemy> &GameplayWorld::activeEnemies() const noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemies
+        : enemies_;
+}
+
+const std::vector<BallisticBlocker> &
+GameplayWorld::activeBallisticBlockers() const noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].ballisticBlockers
+        : ballisticBlockers_;
+}
+
+std::size_t GameplayWorld::outdoorAliveEnemyCount() const noexcept
+{
+    return static_cast<std::size_t>(std::count_if(
+        enemies_.begin(), enemies_.end(),
+        [](const Enemy &enemy) { return !enemy.isDead(); }));
+}
+
+bool GameplayWorld::tryTransitionRaidSpace(
+    const GameplayInput &input) noexcept
+{
+    if (!input.interactJustPressed || input.inventoryOpen ||
+        player_.isControlled() || !raidSession_.isActive())
+    {
+        return false;
+    }
+    const Vec2 center = playerCenter(player_);
+    if (activeInteriorIndex_.has_value())
+    {
+        InteriorRuntime &interior = interiors_[*activeInteriorIndex_];
+        if (!pointInside(interior.interiorExit, center))
+        {
+            return false;
+        }
+        const Vec2 returnPosition = interior.exteriorReturn;
+        activeInteriorIndex_.reset();
+        static_cast<void>(player_.setPosition(returnPosition));
+    }
+    else
+    {
+        const auto interior = std::find_if(
+            interiors_.begin(), interiors_.end(),
+            [&](const InteriorRuntime &candidate)
+            { return pointInside(candidate.exteriorEntrance, center); });
+        if (interior == interiors_.end())
+        {
+            return false;
+        }
+        activeInteriorIndex_ = static_cast<std::size_t>(
+            std::distance(interiors_.begin(), interior));
+        static_cast<void>(player_.setPosition(interior->interiorSpawn));
+    }
+    clearSpatialTransientPresentation();
+    weaponAim_.reanchor(
+        playerCenter(player_),
+        player_.facingDirection(),
+        activeWorldSize());
+    return true;
+}
+
+void GameplayWorld::clearSpatialTransientPresentation() noexcept
+{
+    logicalBallistics_.clear();
+    tracerPresentations_.clear();
+    particleSystem_.clear();
+    shotFeedbackPresentation_.reset();
+    hitResultsLastUpdate_.clear();
+    pendingPlayerDamageObservations_.clear();
 }
 
 void GameplayWorld::updateHighRiskPressure(float highRiskDeltaTime)
@@ -2223,7 +2453,7 @@ void GameplayWorld::updateHighRiskPressure(float highRiskDeltaTime)
 
     highRiskNextWaveSeconds_ -= highRiskDeltaTime;
     while (highRiskNextWaveSeconds_ <= 0.0F &&
-           aliveEnemyCount() < highRiskActiveEnemyCap_)
+           outdoorAliveEnemyCount() < highRiskActiveEnemyCap_)
     {
         if (spawnHighRiskPressureWave() == 0U)
         {
@@ -2242,7 +2472,7 @@ void GameplayWorld::updateHighRiskActivation(
     float deltaTime,
     Vec2 playerPosition)
 {
-    if (!highRiskControlPoint_.has_value() ||
+    if (!inOutdoorRaidSpace() || !highRiskControlPoint_.has_value() ||
         raidSession_.phase() != RaidPhase::Regular || !raidSession_.isActive())
     {
         return;
@@ -2276,7 +2506,7 @@ void GameplayWorld::updateOrdinarySurvivorRescue(
     float deltaTime,
     Vec2 playerPosition)
 {
-    if (!ordinarySurvivorRescuePoint_.has_value() ||
+    if (!inOutdoorRaidSpace() || !ordinarySurvivorRescuePoint_.has_value() ||
         ordinarySurvivorRescueSecured_ || !raidSession_.isActive())
     {
         return;
@@ -2310,7 +2540,7 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
 
     const std::size_t available =
         static_cast<std::size_t>(highRiskActiveEnemyCap_) -
-        aliveEnemyCount();
+        outdoorAliveEnemyCount();
     const std::size_t requested = std::min(
         static_cast<std::size_t>(highRiskWaveSize_),
         available);
@@ -2358,8 +2588,8 @@ bool GameplayWorld::canSpawnHighRiskEnemy(
     const Rect candidate{spawn.position, spawn.size};
     if (candidate.position.x < 0.0F ||
         candidate.position.y < 0.0F ||
-        candidate.position.x + candidate.size.x > worldWidth() ||
-        candidate.position.y + candidate.size.y > worldHeight())
+        candidate.position.x + candidate.size.x > worldSize_.x ||
+        candidate.position.y + candidate.size.y > worldSize_.y)
     {
         return false;
     }
@@ -2367,14 +2597,17 @@ bool GameplayWorld::canSpawnHighRiskEnemy(
     const Vec2 spawnCenter{
         spawn.position.x + spawn.size.x * 0.5F,
         spawn.position.y + spawn.size.y * 0.5F};
-    const Vec2 playerPosition = playerCenter(player_);
-    const float deltaX = spawnCenter.x - playerPosition.x;
-    const float deltaY = spawnCenter.y - playerPosition.y;
-    if (deltaX * deltaX + deltaY * deltaY <
-        kMinimumHighRiskSpawnDistance *
-            kMinimumHighRiskSpawnDistance)
+    if (inOutdoorRaidSpace())
     {
-        return false;
+        const Vec2 playerPosition = playerCenter(player_);
+        const float deltaX = spawnCenter.x - playerPosition.x;
+        const float deltaY = spawnCenter.y - playerPosition.y;
+        if (deltaX * deltaX + deltaY * deltaY <
+            kMinimumHighRiskSpawnDistance *
+                kMinimumHighRiskSpawnDistance)
+        {
+            return false;
+        }
     }
 
     for (const BallisticBlocker &blocker : ballisticBlockers_)

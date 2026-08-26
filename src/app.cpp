@@ -6349,6 +6349,29 @@ void App::renderStashOverlay()
 
 void App::renderBackground()
 {
+    if (gameSession_.world().isAlphaRaidWorld() &&
+        !gameSession_.world().inOutdoorRaidSpace())
+    {
+        SDL_SetRenderDrawColor(renderer_, 17, 20, 18, 255);
+        SDL_RenderClear(renderer_);
+        const Vec2 worldSize = gameSession_.world().raidSpaceWorldSize();
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 54, 59, 51, 75);
+        for (float x = 0.0F; x <= worldSize.x; x += 64.0F)
+        {
+            SDL_RenderLine(renderer_, x, 0.0F, x, worldSize.y);
+        }
+        for (float y = 0.0F; y <= worldSize.y; y += 64.0F)
+        {
+            SDL_RenderLine(renderer_, 0.0F, y, worldSize.x, y);
+        }
+        const SDL_FRect room{1.0F, 1.0F,
+                             worldSize.x - 2.0F, worldSize.y - 2.0F};
+        SDL_SetRenderDrawColor(renderer_, 130, 119, 84, 255);
+        SDL_RenderRect(renderer_, &room);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
     const MapDefinition *map = &defaultV0MapDefinition();
     if (gameSession_.profile().pendingRaid.has_value())
     {
@@ -6365,6 +6388,10 @@ void App::renderBackground()
 
 void App::renderExtractionPoint()
 {
+    if (!gameSession_.world().inOutdoorRaidSpace())
+    {
+        return;
+    }
     const RaidSession &raidSession =
         gameSession_.world().raidSession();
     const bool extracted =
@@ -9202,6 +9229,42 @@ void App::renderBaseSupply()
     }
 }
 
+void App::renderRaidSpacePortal()
+{
+    const std::optional<ContentRect> portal =
+        gameSession_.world().activeRaidSpacePortal();
+    if (!portal.has_value())
+    {
+        return;
+    }
+    const SDL_FRect bounds{
+        portal->position.x,
+        portal->position.y,
+        portal->size.x,
+        portal->size.y};
+    const bool inRange =
+        gameSession_.world().raidSpacePortalInteractionInRange();
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(
+        renderer_, 50, inRange ? 116 : 82, 105, inRange ? 118 : 70);
+    SDL_RenderFillRect(renderer_, &bounds);
+    SDL_SetRenderDrawColor(
+        renderer_, 112, inRange ? 230 : 162, 192, 255);
+    SDL_RenderRect(renderer_, &bounds);
+    const SDL_FRect inset{
+        bounds.x + 5.0F,
+        bounds.y + 5.0F,
+        std::max(0.0F, bounds.w - 10.0F),
+        std::max(0.0F, bounds.h - 10.0F)};
+    SDL_RenderRect(renderer_, &inset);
+    const char *label = gameSession_.world().inOutdoorRaidSpace()
+        ? "EXCHANGE OFFICE | F ENTER"
+        : "OUTDOOR | F EXIT";
+    uiTextRenderer_.render(
+        renderer_, bounds.x + 8.0F, bounds.y + 8.0F, label);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
 void App::renderBaseAllocation()
 {
     const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
@@ -10422,6 +10485,32 @@ void App::renderRaidTacticalMap()
         return;
     }
 
+    if (!gameSession_.world().inOutdoorRaidSpace())
+    {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        const SDL_FRect shade{0.0F, 0.0F,
+                              static_cast<float>(kWindowWidth),
+                              static_cast<float>(kWindowHeight)};
+        const SDL_FRect panel{252.0F, 188.0F, 776.0F, 344.0F};
+        SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 210);
+        SDL_RenderFillRect(renderer_, &shade);
+        SDL_SetRenderDrawColor(renderer_, 12, 22, 25, 248);
+        SDL_RenderFillRect(renderer_, &panel);
+        SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
+        SDL_RenderRect(renderer_, &panel);
+        uiTextRenderer_.render(
+            renderer_, 322.0F, 246.0F,
+            "INTERIOR MAP UNAVAILABLE");
+        uiTextRenderer_.render(
+            renderer_, 322.0F, 298.0F,
+            "RETURN OUTSIDE TO USE TACTICAL MAP");
+        uiTextRenderer_.render(
+            renderer_, 322.0F, 350.0F,
+            "M/ESC CLOSE | WORLD CONTINUES | MOVE 45%");
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+
     const RaidTacticalMapState &map = gameSession_.world().tacticalMap();
     if (!map.configured())
     {
@@ -10628,6 +10717,7 @@ void App::renderRaidScreen()
         renderBackground();
     }
     renderExtractionPoint();
+    renderRaidSpacePortal();
     renderBallisticBlockers();
     if (!gameSession_.world().isAlphaRaidWorld())
     {

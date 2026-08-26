@@ -10,6 +10,7 @@
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <iterator>
 #include <stdexcept>
 #include <type_traits>
 
@@ -1487,7 +1488,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "base-morale-events-8" ||
             raid.rulesVersion == "base-workforce-facilities-9" ||
             raid.rulesVersion == "regional-map-intelligence-10" ||
-            raid.rulesVersion == "procedural-outdoor-layout-11";
+            raid.rulesVersion == "procedural-outdoor-layout-11" ||
+            raid.rulesVersion == "raid-interior-spaces-12";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1496,24 +1498,60 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "base-morale-events-8" ||
             raid.rulesVersion == "base-workforce-facilities-9" ||
             raid.rulesVersion == "regional-map-intelligence-10" ||
-            raid.rulesVersion == "procedural-outdoor-layout-11";
+            raid.rulesVersion == "procedural-outdoor-layout-11" ||
+            raid.rulesVersion == "raid-interior-spaces-12";
         const bool spatialLayoutRules =
-            raid.rulesVersion == "procedural-outdoor-layout-11";
+            raid.rulesVersion == "procedural-outdoor-layout-11" ||
+            raid.rulesVersion == "raid-interior-spaces-12";
+        const bool interiorRules =
+            raid.rulesVersion == "raid-interior-spaces-12";
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
                           [](const RaidLootSnapshot &loot)
                           { return loot.requiresHighRisk; }));
-        const std::size_t regularLootCount =
-            raid.loot.size() - advancedLootCount;
+        const std::size_t outdoorEnemyCount = static_cast<std::size_t>(
+            std::count_if(
+                raid.enemies.begin(), raid.enemies.end(),
+                [](const RaidEnemySnapshot &enemy)
+                { return enemy.spaceId == outdoorRaidSpaceId(); }));
+        const std::size_t interiorEnemyCount =
+            raid.enemies.size() - outdoorEnemyCount;
+        const std::size_t outdoorRegularLootCount = static_cast<std::size_t>(
+            std::count_if(
+                raid.loot.begin(), raid.loot.end(),
+                [](const RaidLootSnapshot &loot)
+                {
+                    return !loot.requiresHighRisk &&
+                        loot.spaceId == outdoorRaidSpaceId();
+                }));
+        const std::size_t interiorLootCount = static_cast<std::size_t>(
+            std::count_if(
+                raid.loot.begin(), raid.loot.end(),
+                [](const RaidLootSnapshot &loot)
+                { return loot.spaceId != outdoorRaidSpaceId(); }));
+        std::size_t expectedInteriorEnemyCount{};
+        std::size_t expectedInteriorLootCount{};
+        for (const RaidInteriorDefinition &interior : raidMap->interiors)
+        {
+            expectedInteriorEnemyCount += interior.enemies.size();
+            expectedInteriorLootCount += interior.lootSlots.size();
+        }
         if (raid.raidId.empty() || raid.settlementId.empty() ||
             raid.rulesVersion.empty() || raid.mapDefinitionId.value().empty() ||
             raid.spawnExtractionPairId.empty() ||
             raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
             !validMedicalStatus(raid.startingMedicalStatus) ||
-            raid.enemies.size() < 4 || raid.enemies.size() > 6 ||
-            regularLootCount < 6 || regularLootCount > 9 ||
+            outdoorEnemyCount < 4 || outdoorEnemyCount > 6 ||
+            outdoorRegularLootCount < 6 || outdoorRegularLootCount > 9 ||
+            (interiorRules &&
+             (raid.interiors.size() != raidMap->interiors.size() ||
+              interiorEnemyCount != expectedInteriorEnemyCount ||
+              interiorLootCount != expectedInteriorLootCount)) ||
+            (!interiorRules &&
+             (!raid.interiors.empty() || interiorEnemyCount != 0U ||
+              interiorLootCount != 0U)) ||
             (advancedLootRules &&
              advancedLootCount != raidMap->highRisk.advancedLootSlots.size()) ||
             (!advancedLootRules && advancedLootCount != 0U))
@@ -1572,6 +1610,10 @@ ProfileValidationResult validateProfileState(
                 raidMap->highRisk.advancedResourceArea};
             for (const RaidEnemySnapshot &enemy : raid.enemies)
             {
+                if (enemy.spaceId != outdoorRaidSpaceId())
+                {
+                    continue;
+                }
                 anchors.occupiedRegions.push_back(
                     ContentRect{enemy.position, enemy.size});
                 anchors.reachablePoints.push_back(
@@ -1580,6 +1622,10 @@ ProfileValidationResult validateProfileState(
             }
             for (const RaidLootSnapshot &loot : raid.loot)
             {
+                if (loot.spaceId != outdoorRaidSpaceId())
+                {
+                    continue;
+                }
                 anchors.reachablePoints.push_back(loot.position);
             }
             const auto addRegion = [&anchors](ContentRect region)
@@ -1597,6 +1643,12 @@ ProfileValidationResult validateProfileState(
                 anchors.occupiedRegions.push_back(
                     raid.rescue->transferPoint);
                 addRegion(raid.rescue->transferPoint);
+            }
+            for (const RaidInteriorSnapshot &interior : raid.interiors)
+            {
+                anchors.occupiedRegions.push_back(
+                    interior.exteriorEntrance);
+                addRegion(interior.exteriorEntrance);
             }
             if (raid.spatialLayout.layoutHash == 0U ||
                 raid.spatialLayout.layoutHash != raidMapLayoutHash(
@@ -1619,6 +1671,62 @@ ProfileValidationResult validateProfileState(
                      *raidMap, raid.spatialLayout, anchors)))
             {
                 return {false, "pending Raid spatial layout is invalid"};
+            }
+        }
+        if (interiorRules)
+        {
+            const auto validRectInSpace = [](ContentRect rect,
+                                             Vec2 worldSize) noexcept
+            {
+                return std::isfinite(rect.position.x) &&
+                    std::isfinite(rect.position.y) &&
+                    std::isfinite(rect.size.x) &&
+                    std::isfinite(rect.size.y) && rect.size.x > 0.0F &&
+                    rect.size.y > 0.0F && rect.position.x >= 0.0F &&
+                    rect.position.y >= 0.0F &&
+                    rect.position.x + rect.size.x <= worldSize.x &&
+                    rect.position.y + rect.size.y <= worldSize.y;
+            };
+            for (std::size_t index{}; index < raid.interiors.size(); ++index)
+            {
+                const RaidInteriorSnapshot &snapshot = raid.interiors[index];
+                const RaidInteriorDefinition &definition =
+                    raidMap->interiors[index];
+                const bool blockersMatch =
+                    snapshot.ballisticBlockers.size() ==
+                        definition.ballisticBlockers.size() &&
+                    std::equal(
+                        snapshot.ballisticBlockers.begin(),
+                        snapshot.ballisticBlockers.end(),
+                        definition.ballisticBlockers.begin(),
+                        [](ContentRect bounds,
+                           const BallisticBlockerDefinition &blocker)
+                        { return bounds == blocker.bounds; });
+                if (snapshot.id != definition.id ||
+                    snapshot.displayName != definition.displayName ||
+                    snapshot.worldSize.x != definition.worldSize.x ||
+                    snapshot.worldSize.y != definition.worldSize.y ||
+                    snapshot.exteriorEntrance != definition.exteriorEntrance ||
+                    snapshot.exteriorReturn.x != definition.exteriorReturn.x ||
+                    snapshot.exteriorReturn.y != definition.exteriorReturn.y ||
+                    snapshot.interiorSpawn.x != definition.interiorSpawn.x ||
+                    snapshot.interiorSpawn.y != definition.interiorSpawn.y ||
+                    snapshot.interiorExit != definition.interiorExit ||
+                    !std::isfinite(snapshot.worldSize.x) ||
+                    !std::isfinite(snapshot.worldSize.y) ||
+                    snapshot.worldSize.x <= 0.0F ||
+                    snapshot.worldSize.y <= 0.0F ||
+                    !validRectInSpace(
+                        snapshot.interiorExit, snapshot.worldSize) ||
+                    !blockersMatch ||
+                    std::any_of(
+                        snapshot.ballisticBlockers.begin(),
+                        snapshot.ballisticBlockers.end(),
+                        [&](ContentRect blocker)
+                        { return !validRectInSpace(blocker, snapshot.worldSize); }))
+                {
+                    return {false, "pending Raid interior snapshot is invalid"};
+                }
             }
         }
         if (travelRules)
@@ -1798,17 +1906,56 @@ ProfileValidationResult validateProfileState(
         {
             const AssetRecord *asset = profile.assets.find(loot.assetId);
             const std::size_t regularSlotCount = raidMap->raidLootSlots.size();
-            const bool validSlot =
-                loot.requiresHighRisk
+            const std::size_t advancedSlotCount =
+                raidMap->highRisk.advancedLootSlots.size();
+            bool validSlot{};
+            bool validPosition{};
+            if (loot.spaceId == outdoorRaidSpaceId())
+            {
+                validSlot = loot.requiresHighRisk
                     ? loot.slotIndex >= regularSlotCount &&
-                          loot.slotIndex <
-                              regularSlotCount +
-                                  raidMap->highRisk.advancedLootSlots.size()
+                          loot.slotIndex < regularSlotCount + advancedSlotCount
                     : loot.slotIndex < regularSlotCount;
+                if (validSlot)
+                {
+                    const Vec2 expected = loot.requiresHighRisk
+                        ? raidMap->highRisk.advancedLootSlots[
+                              loot.slotIndex - regularSlotCount].position
+                        : raidMap->raidLootSlots[loot.slotIndex].position;
+                    validPosition = loot.position.x == expected.x &&
+                        loot.position.y == expected.y;
+                }
+            }
+            else if (!loot.requiresHighRisk)
+            {
+                std::size_t firstInteriorSlot =
+                    regularSlotCount + advancedSlotCount;
+                for (const RaidInteriorDefinition &interior :
+                     raidMap->interiors)
+                {
+                    const std::size_t end =
+                        firstInteriorSlot + interior.lootSlots.size();
+                    if (loot.spaceId == interior.id)
+                    {
+                        validSlot = loot.slotIndex >= firstInteriorSlot &&
+                            loot.slotIndex < end;
+                        if (validSlot)
+                        {
+                            const Vec2 expected = interior.lootSlots[
+                                loot.slotIndex - firstInteriorSlot].position;
+                            validPosition = loot.position.x == expected.x &&
+                                loot.position.y == expected.y;
+                        }
+                        break;
+                    }
+                    firstInteriorSlot = end;
+                }
+            }
             if (loot.assetId == 0 || loot.definitionId.value().empty() ||
                 loot.quantity == 0 ||
                 !snapshotLoot.insert(loot.assetId).second ||
                 !snapshotSlots.insert(loot.slotIndex).second || !validSlot ||
+                !validPosition ||
                 !std::isfinite(loot.position.x) ||
                 !std::isfinite(loot.position.y) ||
                 (!loot.collected && asset == nullptr) ||
@@ -1844,14 +1991,73 @@ ProfileValidationResult validateProfileState(
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
+            Vec2 spaceSize = raidMap->worldSize;
+            if (enemy.spaceId != outdoorRaidSpaceId())
+            {
+                const auto interior = std::find_if(
+                    raid.interiors.begin(), raid.interiors.end(),
+                    [&](const RaidInteriorSnapshot &candidate)
+                    { return candidate.id == enemy.spaceId; });
+                if (interior == raid.interiors.end())
+                {
+                    return {false, "pending Raid enemy space is invalid"};
+                }
+                spaceSize = interior->worldSize;
+            }
             if (!std::isfinite(enemy.position.x) ||
                 !std::isfinite(enemy.position.y) ||
                 !std::isfinite(enemy.size.x) ||
                 !std::isfinite(enemy.size.y) ||
                 enemy.size.x <= 0.0F || enemy.size.y <= 0.0F ||
-                enemy.maximumHealth <= 0)
+                enemy.maximumHealth <= 0 || enemy.position.x < 0.0F ||
+                enemy.position.y < 0.0F ||
+                enemy.position.x + enemy.size.x > spaceSize.x ||
+                enemy.position.y + enemy.size.y > spaceSize.y)
             {
                 return {false, "pending Raid enemy is invalid"};
+            }
+        }
+        const auto enemyMatches = [](const RaidEnemySnapshot &snapshot,
+                                     const EnemySpawnDefinition &definition)
+        {
+            return snapshot.position.x == definition.position.x &&
+                snapshot.position.y == definition.position.y &&
+                snapshot.size.x == definition.size.x &&
+                snapshot.size.y == definition.size.y &&
+                snapshot.maximumHealth == definition.maximumHealth;
+        };
+        const EnemyDeploymentDefinition &deployment =
+            content.enemyDeployment(raid.enemyDeploymentId);
+        std::vector<RaidEnemySnapshot> outdoorEnemies;
+        std::copy_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            std::back_inserter(outdoorEnemies),
+            [](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); });
+        if (outdoorEnemies.size() != deployment.enemies.size() ||
+            !std::equal(
+                outdoorEnemies.begin(), outdoorEnemies.end(),
+                deployment.enemies.begin(), deployment.enemies.end(),
+                enemyMatches))
+        {
+            return {false, "pending Raid outdoor enemies do not match deployment"};
+        }
+        for (const RaidInteriorDefinition &interior : raidMap->interiors)
+        {
+            std::vector<RaidEnemySnapshot> interiorEnemies;
+            std::copy_if(
+                raid.enemies.begin(), raid.enemies.end(),
+                std::back_inserter(interiorEnemies),
+                [&](const RaidEnemySnapshot &enemy)
+                { return enemy.spaceId == interior.id; });
+            if (interiorEnemies.size() != interior.enemies.size() ||
+                !std::equal(
+                    interiorEnemies.begin(), interiorEnemies.end(),
+                    interior.enemies.begin(), interior.enemies.end(),
+                    enemyMatches))
+            {
+                return {false,
+                        "pending Raid interior enemies do not match content"};
             }
         }
         for (AssetInstanceId root : raid.carriedRootAssetIds)
@@ -2159,6 +2365,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, enemy.size.x);
             hashFloat(hash, enemy.size.y);
             hashInteger(hash, enemy.maximumHealth);
+            hashBytes(hash, enemy.spaceId.value());
         }
         for (const RaidLootSnapshot &loot : raid.loot)
         {
@@ -2170,6 +2377,33 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, loot.position.y);
             hashInteger(hash, loot.requiresHighRisk ? 1U : 0U);
             hashInteger(hash, loot.collected ? 1U : 0U);
+            hashBytes(hash, loot.spaceId.value());
+        }
+        for (const RaidInteriorSnapshot &interior : raid.interiors)
+        {
+            hashBytes(hash, interior.id.value());
+            hashBytes(hash, interior.displayName);
+            hashFloat(hash, interior.worldSize.x);
+            hashFloat(hash, interior.worldSize.y);
+            hashFloat(hash, interior.exteriorEntrance.position.x);
+            hashFloat(hash, interior.exteriorEntrance.position.y);
+            hashFloat(hash, interior.exteriorEntrance.size.x);
+            hashFloat(hash, interior.exteriorEntrance.size.y);
+            hashFloat(hash, interior.exteriorReturn.x);
+            hashFloat(hash, interior.exteriorReturn.y);
+            hashFloat(hash, interior.interiorSpawn.x);
+            hashFloat(hash, interior.interiorSpawn.y);
+            hashFloat(hash, interior.interiorExit.position.x);
+            hashFloat(hash, interior.interiorExit.position.y);
+            hashFloat(hash, interior.interiorExit.size.x);
+            hashFloat(hash, interior.interiorExit.size.y);
+            for (const ContentRect &blocker : interior.ballisticBlockers)
+            {
+                hashFloat(hash, blocker.position.x);
+                hashFloat(hash, blocker.position.y);
+                hashFloat(hash, blocker.size.x);
+                hashFloat(hash, blocker.size.y);
+            }
         }
         for (AssetInstanceId root : raid.carriedRootAssetIds)
         {

@@ -13,7 +13,15 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"TACTICAL MAP | M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",
+    {{"RETURN OUTSIDE TO USE TACTICAL MAP", "返回室外后可使用战术地图"},
+     {"INTERIOR MAP UNAVAILABLE", "室内地图尚不可用"},
+     {"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",
+      "M/ESC 关闭 | 世界继续运行 | 移动速度45%"},
+     {"EXCHANGE OFFICE | F ENTER", "交易所办公室 | F 进入"},
+     {"OUTDOOR | F EXIT", "室外 | F 离开"},
+     {"Exchange Office", "交易所办公室"},
+     {"Outdoor", "室外"},
+     {"TACTICAL MAP | M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",
       "战术地图 | M/ESC 关闭 | 世界继续运行 | 移动速度45%"},
      {"TRANSPORT ACTIVE | RESOURCE ACTIVE | ENEMY ACTIVE | NO LIVE TRACKING",
       "交通情报 已启用 | 资源情报 已启用 | 敌情 已启用 | 不追踪实时位置"},

@@ -83,3 +83,8 @@ void ParticleSystem::update(float deltaTime)
             return particle.isExpired();
         });
 }
+
+void ParticleSystem::clear() noexcept
+{
+    particles_.clear();
+}

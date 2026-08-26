@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "enemy.h"
@@ -62,6 +64,19 @@ struct HighRiskWorldConfig
     std::uint64_t conditionalExtractionMaximumWeightGrams{};
 };
 
+struct RaidInteriorWorldConfig
+{
+    RaidSpaceDefinitionId id;
+    std::string displayName;
+    Vec2 worldSize{};
+    ContentRect exteriorEntrance;
+    Vec2 exteriorReturn{};
+    Vec2 interiorSpawn{};
+    ContentRect interiorExit;
+    std::vector<EnemySpawn> initialEnemies;
+    std::vector<BallisticBlocker> ballisticBlockers;
+};
+
 struct RaidWorldConfig
 {
     Vec2 worldSize{1280.0F, 720.0F};
@@ -72,6 +87,7 @@ struct RaidWorldConfig
     int playerCurrentHealth{100};
     bool deferPlayerDamageResolution{};
     std::vector<BallisticBlocker> ballisticBlockers;
+    std::vector<RaidInteriorWorldConfig> interiors;
     float normalExtractionDurationSeconds{3.0F};
     HighRiskWorldConfig highRisk;
     struct OrdinarySurvivorRescue
@@ -182,6 +198,17 @@ public:
     [[nodiscard]]
     const std::vector<BallisticBlocker> &
     ballisticBlockers() const noexcept;
+
+    [[nodiscard]] const RaidSpaceDefinitionId &
+    activeRaidSpaceId() const noexcept;
+    [[nodiscard]] bool inOutdoorRaidSpace() const noexcept;
+    [[nodiscard]] std::string_view
+    activeRaidSpaceDisplayName() const noexcept;
+    [[nodiscard]] Vec2 raidSpaceWorldSize() const noexcept;
+    [[nodiscard]] std::optional<ContentRect>
+    activeRaidSpacePortal() const noexcept;
+    [[nodiscard]] bool raidSpacePortalInteractionInRange() const noexcept;
+    [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
 
     [[nodiscard]]
     const std::vector<Particle> &
@@ -337,6 +364,19 @@ public:
     ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
+    struct InteriorRuntime
+    {
+        RaidSpaceDefinitionId id;
+        std::string displayName;
+        Vec2 worldSize{};
+        ContentRect exteriorEntrance;
+        Vec2 exteriorReturn{};
+        Vec2 interiorSpawn{};
+        ContentRect interiorExit;
+        std::vector<Enemy> enemies;
+        std::vector<BallisticBlocker> ballisticBlockers;
+    };
+
     struct TracerPresentationSegment
     {
         ShotId shotId{kInvalidShotId};
@@ -371,6 +411,9 @@ private:
     CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
     std::vector<BallisticBlocker> ballisticBlockers_;
+    std::vector<InteriorRuntime> interiors_;
+    std::optional<std::size_t> activeInteriorIndex_;
+    bool spaceTransitionedLastUpdate_{};
     EnemySquadCoordinator enemySquadCoordinator_;
 
     std::vector<GroundItem> groundItems_;
@@ -445,6 +488,15 @@ private:
 
     [[nodiscard]] float worldWidth() const noexcept;
     [[nodiscard]] float worldHeight() const noexcept;
+    [[nodiscard]] Vec2 activeWorldSize() const noexcept;
+    [[nodiscard]] std::vector<Enemy> &activeEnemies() noexcept;
+    [[nodiscard]] const std::vector<Enemy> &activeEnemies() const noexcept;
+    [[nodiscard]] const std::vector<BallisticBlocker> &
+    activeBallisticBlockers() const noexcept;
+    [[nodiscard]] std::size_t outdoorAliveEnemyCount() const noexcept;
+    [[nodiscard]] bool tryTransitionRaidSpace(
+        const GameplayInput &input) noexcept;
+    void clearSpatialTransientPresentation() noexcept;
 
     void updateHighRiskPressure(float highRiskDeltaTime);
     void updateHighRiskActivation(const GameplayInput &input,
