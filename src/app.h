@@ -112,6 +112,7 @@ private:
     bool settingsOpen_{};
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
+    bool lostRaidRecordsOpen_{};
     std::size_t selectedRaidMapIndex_{};
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
@@ -201,6 +202,7 @@ private:
     [[nodiscard]] SDL_FRect raidIntelligenceButton(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
+    [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
 
     void processEvents();
     void update(float deltaTime);
@@ -258,6 +260,7 @@ private:
     void renderBaseDormitory();
     void renderBaseWorkshop();
     void renderBaseDeployment();
+    void renderLostRaidRecords();
     void renderProfileGrid(
         ProfileContainerId container,
         float x,

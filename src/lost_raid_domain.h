@@ -46,4 +46,3 @@ struct LostRaidAgingPreview
 
 [[nodiscard]] LostRaidAgingPreview queryLostRaidAging(
     const ProfileState &profile) noexcept;
-

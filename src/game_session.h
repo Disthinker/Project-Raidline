@@ -20,6 +20,7 @@
 #include "base_service_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
+#include "lost_raid_domain.h"
 #include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
@@ -168,6 +169,9 @@ public:
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
     [[nodiscard]] std::optional<RaidTravelPreview> raidTravelPreview(
         const MapDefinitionId &mapDefinitionId) const noexcept;
+    [[nodiscard]] std::vector<LostRaidRecordProjection>
+    lostRaidRecordProjections() const;
+    [[nodiscard]] LostRaidAgingPreview lostRaidAgingPreview() const noexcept;
 
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,

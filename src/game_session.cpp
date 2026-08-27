@@ -2006,6 +2006,17 @@ std::optional<RaidTravelPreview> GameSession::raidTravelPreview(
     }
 }
 
+std::vector<LostRaidRecordProjection>
+GameSession::lostRaidRecordProjections() const
+{
+    return queryLostRaidRecords(profile_, publishedContentRegistry());
+}
+
+LostRaidAgingPreview GameSession::lostRaidAgingPreview() const noexcept
+{
+    return queryLostRaidAging(profile_);
+}
+
 void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)

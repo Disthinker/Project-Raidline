@@ -126,4 +126,3 @@ LostRaidAgingPreview queryLostRaidAging(
     }
     return result;
 }
-
