@@ -98,6 +98,7 @@ struct RegionNodeDefinitionTag;
 struct RegionRouteDefinitionTag;
 struct RegionalOutpostDefinitionTag;
 struct RegionalBaseSiteDefinitionTag;
+struct BaseFacilityDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
@@ -119,3 +120,4 @@ using RegionalOutpostDefinitionId =
     DefinitionId<RegionalOutpostDefinitionTag>;
 using RegionalBaseSiteDefinitionId =
     DefinitionId<RegionalBaseSiteDefinitionTag>;
+using BaseFacilityDefinitionId = DefinitionId<BaseFacilityDefinitionTag>;

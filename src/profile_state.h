@@ -447,9 +447,20 @@ struct RegionalBaseSiteState
         const RegionalBaseSiteState &) = default;
 };
 
+struct TechnologyCoreState
+{
+    std::string instanceId;
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+
+    friend bool operator==(
+        const TechnologyCoreState &,
+        const TechnologyCoreState &) = default;
+};
+
 struct RegionalOperationsState
 {
     RegionNodeDefinitionId activeBaseNodeId;
+    TechnologyCoreState technologyCore;
     std::map<RegionalBaseSiteDefinitionId, RegionalBaseSiteState> baseSites;
     std::map<RegionalOutpostDefinitionId, RegionalOutpostState> outposts;
 
@@ -580,10 +591,20 @@ struct ActiveBaseConstructionProject
 
 struct BaseConstructionState
 {
+    enum class FacilityPlacement
+    {
+        Installed,
+        Reserve
+    };
+
     std::uint32_t materialUnits{};
     std::uint32_t dormitoryLevel{1};
+    std::uint32_t kitchenWaterLevel{};
     std::uint32_t workshopLevel{1};
     std::uint32_t medicalLevel{1};
+    std::map<BaseFacilityDefinitionId, FacilityPlacement> facilities;
+    std::map<BaseFacilityDefinitionId, std::uint64_t>
+        facilityReserveStartedWorldMinutes;
     std::optional<ActiveBaseConstructionProject> activeProject;
 
     friend bool operator==(

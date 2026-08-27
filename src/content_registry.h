@@ -270,6 +270,8 @@ struct RegionalBaseSiteDefinition
     std::string advantage;
     std::string disadvantage;
     std::string uniqueFeature;
+    std::uint32_t migrationMinutes{};
+    std::uint32_t coreFacilitySlots{};
 
     friend bool operator==(
         const RegionalBaseSiteDefinition &,
@@ -417,8 +419,22 @@ struct BasePriorityDefinition
 enum class BaseFacilityUpgradeTarget
 {
     Dormitory,
+    KitchenWater,
     Workshop,
     Medical
+};
+
+struct BaseFacilityDefinition
+{
+    BaseFacilityDefinitionId id;
+    std::string displayName;
+    bool requiredForMigration{};
+    bool initiallyOwned{};
+    bool initiallyInstalled{};
+
+    friend bool operator==(
+        const BaseFacilityDefinition &,
+        const BaseFacilityDefinition &) = default;
 };
 
 struct BaseConstructionProjectDefinition
@@ -590,6 +606,12 @@ public:
     [[nodiscard]] std::uint32_t
     maximumBaseConstructionMaterials() const noexcept;
 
+    [[nodiscard]] const std::vector<BaseFacilityDefinition> &
+    baseFacilities() const noexcept;
+
+    [[nodiscard]] const BaseFacilityDefinition &baseFacility(
+        const BaseFacilityDefinitionId &id) const;
+
     [[nodiscard]] const std::vector<BaseConstructionProjectDefinition> &
     baseConstructionProjects() const noexcept;
 
@@ -641,6 +663,7 @@ private:
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
     std::uint32_t maximumBaseConstructionMaterials_{};
+    std::vector<BaseFacilityDefinition> baseFacilities_;
     std::vector<BaseConstructionProjectDefinition>
         baseConstructionProjects_;
     std::vector<BaseManufacturingRecipeDefinition>
@@ -656,6 +679,7 @@ private:
         baseCommunityEventIndex_;
     std::map<BaseConstructionProjectDefinitionId, std::size_t>
         baseConstructionProjectIndex_;
+    std::map<BaseFacilityDefinitionId, std::size_t> baseFacilityIndex_;
     std::map<BaseManufacturingRecipeDefinitionId, std::size_t>
         baseManufacturingRecipeIndex_;
     std::map<RegionNodeDefinitionId, std::size_t> regionNodeIndex_;

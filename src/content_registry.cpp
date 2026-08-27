@@ -1045,7 +1045,9 @@ ContentRegistry ContentRegistry::fromJson(
                     : std::nullopt,
                 requiredString(siteValue, "advantage"),
                 requiredString(siteValue, "disadvantage"),
-                requiredString(siteValue, "unique_feature")};
+                requiredString(siteValue, "unique_feature"),
+                requiredPositiveUint(siteValue, "migration_minutes"),
+                requiredPositiveUint(siteValue, "core_facility_slots")};
             const auto node = registry.regionNodeIndex_.find(
                 definition.nodeId);
             if (!hasPrefix(
@@ -1054,6 +1056,9 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.advantage.empty() ||
                 definition.disadvantage.empty() ||
                 definition.uniqueFeature.empty() ||
+                definition.migrationMinutes > 7U * 24U * 60U ||
+                definition.coreFacilitySlots < 4U ||
+                definition.coreFacilitySlots > 16U ||
                 node == registry.regionNodeIndex_.end() ||
                 registry.regionalOperations_.nodes[node->second].kind !=
                     RegionNodeKind::Base ||
@@ -1142,6 +1147,46 @@ ContentRegistry ContentRegistry::fromJson(
         {
             fail("Base construction material capacity is invalid");
         }
+        std::size_t requiredMigrationFacilities{};
+        for (const Json &facilityValue :
+             requiredArray(baseConstruction, "facilities"))
+        {
+            BaseFacilityDefinition definition{
+                BaseFacilityDefinitionId{
+                    requiredString(facilityValue, "id")},
+                requiredString(facilityValue, "display_name"),
+                requiredBool(facilityValue, "required_for_migration"),
+                requiredBool(facilityValue, "initially_owned"),
+                requiredBool(facilityValue, "initially_installed")};
+            if (!hasPrefix(definition.id.value(), "base_facility.") ||
+                definition.displayName.empty() ||
+                (definition.initiallyInstalled && !definition.initiallyOwned))
+            {
+                fail("Base facility definition is invalid");
+            }
+            requiredMigrationFacilities += definition.requiredForMigration
+                ? 1U : 0U;
+            const std::size_t index = registry.baseFacilities_.size();
+            if (!registry.baseFacilityIndex_.emplace(
+                    definition.id, index).second)
+            {
+                fail("duplicate Base facility definition ID");
+            }
+            registry.baseFacilities_.push_back(std::move(definition));
+        }
+        if (registry.baseFacilities_.empty() ||
+            requiredMigrationFacilities != 4U)
+        {
+            fail("Base facility definitions are incomplete");
+        }
+        for (const RegionalBaseSiteDefinition &site :
+             registry.regionalOperations_.baseSites)
+        {
+            if (site.coreFacilitySlots < requiredMigrationFacilities)
+            {
+                fail("regional Base site lacks migration facility slots");
+            }
+        }
         for (const Json &projectValue :
              requiredArray(baseConstruction, "projects"))
         {
@@ -1155,6 +1200,10 @@ ContentRegistry ContentRegistry::fromJson(
             if (targetFacility == "dormitory")
             {
                 target = BaseFacilityUpgradeTarget::Dormitory;
+            }
+            else if (targetFacility == "kitchen_water")
+            {
+                target = BaseFacilityUpgradeTarget::KitchenWater;
             }
             else if (targetFacility == "workshop")
             {
@@ -1173,7 +1222,7 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredString(projectValue, "id")},
                 requiredString(projectValue, "display_name"),
                 target,
-                requiredPositiveUint(projectValue, "required_level"),
+                optionalUint(projectValue, "required_level"),
                 requiredPositiveUint(projectValue, "target_level"),
                 requiredPositiveUint(projectValue, "material_cost"),
                 requiredPositiveUint(projectValue, "worker_count"),
@@ -2987,6 +3036,19 @@ const std::vector<BaseConstructionProjectDefinition> &
 ContentRegistry::baseConstructionProjects() const noexcept
 {
     return baseConstructionProjects_;
+}
+
+const std::vector<BaseFacilityDefinition> &
+ContentRegistry::baseFacilities() const noexcept
+{
+    return baseFacilities_;
+}
+
+const BaseFacilityDefinition &ContentRegistry::baseFacility(
+    const BaseFacilityDefinitionId &id) const
+{
+    return lookup(
+        baseFacilityIndex_, baseFacilities_, id, "Base facility");
 }
 
 const BaseConstructionProjectDefinition &

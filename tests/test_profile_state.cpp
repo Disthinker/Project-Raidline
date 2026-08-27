@@ -24,6 +24,15 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     EXPECT_TRUE(validateProfileState(
         profile,
         publishedContentRegistry()).valid);
+    EXPECT_EQ(profile.regionalOperations.technologyCore.instanceId,
+              "technology_core.primary");
+    EXPECT_EQ(profile.regionalOperations.technologyCore.baseSiteDefinitionId,
+              RegionalBaseSiteDefinitionId{
+                  "regional_base_site.greyline_yard"});
+    EXPECT_TRUE(profile.baseConstruction.facilities.contains(
+        BaseFacilityDefinitionId{"base_facility.warehouse"}));
+    EXPECT_FALSE(profile.baseConstruction.facilities.contains(
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}));
 
     std::uint64_t ammunition{};
     std::size_t magazines{};
@@ -244,6 +253,31 @@ TEST(ProfileStateTest, PendingRescueSecuredFlagMustMatchCommittedLedger)
         profile, publishedContentRegistry()).valid);
 }
 
+TEST(ProfileStateTest, PendingRaidRejectsInvalidStartingFacilityOwnership)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-pending-facility-invalid", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "profile-pending-facility-raid",
+            "profile-pending-facility-settlement",
+            9918U,
+            MapDefinitionId{"map.v0.test"}},
+        CommandContext{profile.revision, "profile-pending-facility-deploy"})
+                    .succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+
+    profile.pendingRaid->travel.startingBaseConstruction.facilities.erase(
+        BaseFacilityDefinitionId{"base_facility.warehouse"});
+    const ProfileValidationResult result = validateProfileState(profile, content);
+
+    EXPECT_FALSE(result.valid);
+    EXPECT_NE(result.message.find("travel snapshot"), std::string::npos);
+}
+
 TEST(ProfileStateTest, UnknownCommittedRescueDefinitionIsRejected)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -284,6 +318,42 @@ TEST(ProfileStateTest, InvalidBaseConstructionStateIsRejected)
     EXPECT_FALSE(validateProfileState(
         profile,
         publishedContentRegistry()).valid);
+}
+
+TEST(ProfileStateTest, TechnologyCoreAndFacilityOwnershipMustStayConsistent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "profile-invalid-base-ownership", content);
+
+    profile.regionalOperations.technologyCore.baseSiteDefinitionId =
+        RegionalBaseSiteDefinitionId{
+            "regional_base_site.ashworks_logistics_yard"};
+    EXPECT_FALSE(validateProfileState(profile, content).valid);
+
+    profile = makeNewAlphaProfile(
+        "profile-invalid-facility-ownership", content);
+    profile.baseConstruction.facilities.erase(
+        BaseFacilityDefinitionId{"base_facility.warehouse"});
+    EXPECT_FALSE(validateProfileState(profile, content).valid);
+
+    profile = makeNewAlphaProfile(
+        "profile-invalid-kitchen-ownership", content);
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    EXPECT_FALSE(validateProfileState(profile, content).valid);
+
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+
+    const BaseFacilityDefinitionId workshop{"base_facility.workshop"};
+    profile.baseConstruction.facilities[workshop] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    EXPECT_FALSE(validateProfileState(profile, content).valid);
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[workshop] =
+        profile.worldClock.elapsedWorldMinutes;
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
 TEST(ProfileStateTest, SupplyPolicyRequiresKnownCompatibleContribution)

@@ -45,11 +45,149 @@ BaseConstructionReceipt receiptFailure(const BaseConstructionPlan &plan,
           profile.basePopulation.bedCapacity};
 }
 
-std::uint32_t facilityLevel(const BaseConstructionState &state,
-                            BaseFacilityUpgradeTarget target) noexcept {
+} // namespace
+
+BaseFacilityDefinitionId baseFacilityDefinitionId(
+    BaseFacilityUpgradeTarget target) {
+  switch (target) {
+  case BaseFacilityUpgradeTarget::Dormitory:
+    return BaseFacilityDefinitionId{"base_facility.dormitory"};
+  case BaseFacilityUpgradeTarget::KitchenWater:
+    return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
+  case BaseFacilityUpgradeTarget::Workshop:
+    return BaseFacilityDefinitionId{"base_facility.workshop"};
+  case BaseFacilityUpgradeTarget::Medical:
+    return BaseFacilityDefinitionId{"base_facility.medical"};
+  }
+  return {};
+}
+
+bool baseFacilityOwned(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept {
+  return profile.baseConstruction.facilities.contains(definitionId);
+}
+
+bool baseFacilityInstalled(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept {
+  const auto found = profile.baseConstruction.facilities.find(definitionId);
+  return found != profile.baseConstruction.facilities.end() &&
+      found->second == BaseConstructionState::FacilityPlacement::Installed;
+}
+
+std::optional<std::uint64_t> baseFacilityReserveStartedWorldMinute(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept {
+  const auto found = profile.baseConstruction
+      .facilityReserveStartedWorldMinutes.find(definitionId);
+  return found == profile.baseConstruction
+      .facilityReserveStartedWorldMinutes.end()
+      ? std::nullopt
+      : std::optional<std::uint64_t>{found->second};
+}
+
+namespace {
+bool canShiftDeadline(std::uint64_t deadline, std::uint64_t minutes) noexcept {
+  return deadline <= std::numeric_limits<std::uint64_t>::max() - minutes;
+}
+
+bool constructionUsesFacility(
+    const ProfileState &profile, const ContentRegistry &content,
+    const BaseFacilityDefinitionId &definitionId) {
+  return profile.baseConstruction.activeProject.has_value() &&
+      baseFacilityDefinitionId(content.baseConstructionProject(
+          profile.baseConstruction.activeProject->definitionId).target) ==
+      definitionId;
+}
+} // namespace
+
+bool canShiftBaseFacilityTasks(
+    const ProfileState &profile, const ContentRegistry &content,
+    const BaseFacilityDefinitionId &definitionId,
+    std::uint64_t minutes) noexcept {
+  try {
+    if (constructionUsesFacility(profile, content, definitionId) &&
+        (!canShiftDeadline(
+             profile.baseConstruction.activeProject->startedWorldMinute,
+             minutes) ||
+         !canShiftDeadline(
+             profile.baseConstruction.activeProject->completionWorldMinute,
+             minutes))) {
+      return false;
+    }
+    if (definitionId ==
+            BaseFacilityDefinitionId{"base_facility.workshop"} &&
+        ((profile.baseManufacturing.activeOrder.has_value() &&
+          !profile.baseManufacturing.activeOrder->outputReady &&
+          (!canShiftDeadline(
+               profile.baseManufacturing.activeOrder->startedWorldMinute,
+               minutes) ||
+           !canShiftDeadline(
+               profile.baseManufacturing.activeOrder->completionWorldMinute,
+               minutes))) ||
+         (profile.gunsmithMaintenanceJob.has_value() &&
+          (!canShiftDeadline(
+               profile.gunsmithMaintenanceJob->startedWorldMinute,
+               minutes) ||
+           !canShiftDeadline(
+               profile.gunsmithMaintenanceJob->completionWorldMinute,
+               minutes))))) {
+      return false;
+    }
+    if (definitionId ==
+            BaseFacilityDefinitionId{"base_facility.medical"} &&
+        profile.residentMedical.activeTreatment.has_value() &&
+        (!canShiftDeadline(
+             profile.residentMedical.activeTreatment->startedWorldMinute,
+             minutes) ||
+         !canShiftDeadline(
+             profile.residentMedical.activeTreatment->completionWorldMinute,
+             minutes))) {
+      return false;
+    }
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+void shiftBaseFacilityTasks(
+    ProfileState &profile, const ContentRegistry &content,
+    const BaseFacilityDefinitionId &definitionId,
+    std::uint64_t minutes) {
+  if (minutes == 0U) {
+    return;
+  }
+  if (constructionUsesFacility(profile, content, definitionId)) {
+    profile.baseConstruction.activeProject->startedWorldMinute += minutes;
+    profile.baseConstruction.activeProject->completionWorldMinute += minutes;
+  }
+  if (definitionId == BaseFacilityDefinitionId{"base_facility.workshop"}) {
+    if (profile.baseManufacturing.activeOrder.has_value() &&
+        !profile.baseManufacturing.activeOrder->outputReady) {
+      profile.baseManufacturing.activeOrder->startedWorldMinute += minutes;
+      profile.baseManufacturing.activeOrder->completionWorldMinute += minutes;
+    }
+    if (profile.gunsmithMaintenanceJob.has_value()) {
+      profile.gunsmithMaintenanceJob->startedWorldMinute += minutes;
+      profile.gunsmithMaintenanceJob->completionWorldMinute += minutes;
+    }
+  }
+  if (definitionId == BaseFacilityDefinitionId{"base_facility.medical"} &&
+      profile.residentMedical.activeTreatment.has_value()) {
+    profile.residentMedical.activeTreatment->startedWorldMinute += minutes;
+    profile.residentMedical.activeTreatment->completionWorldMinute += minutes;
+  }
+}
+
+std::uint32_t baseFacilityLevel(const BaseConstructionState &state,
+                                BaseFacilityUpgradeTarget target) noexcept {
   switch (target) {
   case BaseFacilityUpgradeTarget::Dormitory:
     return state.dormitoryLevel;
+  case BaseFacilityUpgradeTarget::KitchenWater:
+    return state.kitchenWaterLevel;
   case BaseFacilityUpgradeTarget::Workshop:
     return state.workshopLevel;
   case BaseFacilityUpgradeTarget::Medical:
@@ -65,6 +203,9 @@ void setFacilityLevel(BaseConstructionState &state,
   case BaseFacilityUpgradeTarget::Dormitory:
     state.dormitoryLevel = level;
     break;
+  case BaseFacilityUpgradeTarget::KitchenWater:
+    state.kitchenWaterLevel = level;
+    break;
   case BaseFacilityUpgradeTarget::Workshop:
     state.workshopLevel = level;
     break;
@@ -73,7 +214,6 @@ void setFacilityLevel(BaseConstructionState &state,
     break;
   }
 }
-} // namespace
 
 BaseConstructionProjection
 projectBaseConstruction(const ProfileState &profile,
@@ -95,9 +235,25 @@ projectBaseConstruction(const ProfileState &profile,
         *profile.baseConstruction.activeProject;
     projection.committedWorkers = active.committedWorkers;
     projection.activeProjectId = active.definitionId;
-    if (active.completionWorldMinute > profile.worldClock.elapsedWorldMinutes) {
+    std::uint64_t progressWorldMinute =
+        profile.worldClock.elapsedWorldMinutes;
+    const auto definition = std::find_if(
+        content.baseConstructionProjects().begin(),
+        content.baseConstructionProjects().end(),
+        [&](const BaseConstructionProjectDefinition &candidate) {
+          return candidate.id == active.definitionId;
+        });
+    if (definition != content.baseConstructionProjects().end()) {
+      if (const std::optional<std::uint64_t> reserveStarted =
+              baseFacilityReserveStartedWorldMinute(
+                  profile, baseFacilityDefinitionId(definition->target));
+          reserveStarted.has_value()) {
+        progressWorldMinute = *reserveStarted;
+      }
+    }
+    if (active.completionWorldMinute > progressWorldMinute) {
       projection.remainingMinutes =
-          active.completionWorldMinute - profile.worldClock.elapsedWorldMinutes;
+          active.completionWorldMinute - progressWorldMinute;
     }
   }
   projection.availableWorkers = availableBaseWorkers(profile);
@@ -224,12 +380,19 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "another Base construction project is active",
                                profile.revision);
   }
-  const std::uint32_t currentLevel = facilityLevel(
+  const std::uint32_t currentLevel = baseFacilityLevel(
       profile.baseConstruction, definition->target);
   if (currentLevel != definition->requiredLevel) {
     return constructionFailure(DomainErrorCode::IllegalDestination,
                                "facility level does not match this project",
                                profile.revision);
+  }
+  if (currentLevel > 0U && !baseFacilityInstalled(
+          profile, baseFacilityDefinitionId(definition->target))) {
+    return constructionFailure(
+        DomainErrorCode::IllegalDestination,
+        "facility must be installed before it can be upgraded",
+        profile.revision);
   }
   if (profile.baseConstruction.materialUnits < definition->materialCost) {
     return constructionFailure(DomainErrorCode::Capacity,
@@ -425,8 +588,12 @@ applyBaseConstructionThrough(ProfileState &profile,
       *profile.baseConstruction.activeProject;
   const BaseConstructionProjectDefinition &definition =
       content.baseConstructionProject(active.definitionId);
-  const std::uint32_t beforeLevel = facilityLevel(
+  const std::uint32_t beforeLevel = baseFacilityLevel(
       profile.baseConstruction, definition.target);
+  if (beforeLevel > 0U && !baseFacilityInstalled(
+          profile, baseFacilityDefinitionId(definition.target))) {
+    return {};
+  }
   if (beforeLevel != definition.requiredLevel ||
       active.lockedMaterialUnits != definition.materialCost ||
       active.committedWorkers != definition.workerCount) {
@@ -435,6 +602,11 @@ applyBaseConstructionThrough(ProfileState &profile,
   const std::uint32_t before = profile.basePopulation.bedCapacity;
   setFacilityLevel(
       profile.baseConstruction, definition.target, definition.targetLevel);
+  if (beforeLevel == 0U && definition.targetLevel > 0U) {
+    profile.baseConstruction.facilities[
+        baseFacilityDefinitionId(definition.target)] =
+        BaseConstructionState::FacilityPlacement::Installed;
+  }
   if (definition.target == BaseFacilityUpgradeTarget::Dormitory) {
     profile.basePopulation.bedCapacity = definition.bedCapacityAfter;
   }
@@ -447,4 +619,98 @@ applyBaseConstructionThrough(ProfileState &profile,
           before,
           profile.basePopulation.bedCapacity,
           active.committedWorkers};
+}
+
+InstallBaseFacilityPlan queryInstallBaseFacility(
+    const ProfileState &profile, const ContentRegistry &content,
+    const InstallBaseFacilityCommand &command) noexcept {
+  try {
+    static_cast<void>(content.baseFacility(command.definitionId));
+  } catch (...) {
+    return {false, DomainErrorCode::IllegalDestination,
+            "Base facility definition does not exist", profile.revision,
+            command.definitionId};
+  }
+  if (profile.pendingRaid.has_value()) {
+    return {false, DomainErrorCode::IllegalDestination,
+            "Base facility installation is unavailable during a Raid",
+            profile.revision, command.definitionId};
+  }
+  const auto found = profile.baseConstruction.facilities.find(
+      command.definitionId);
+  if (found == profile.baseConstruction.facilities.end()) {
+    return {false, DomainErrorCode::MissingAsset,
+            "Base facility is not owned", profile.revision,
+            command.definitionId};
+  }
+  if (found->second != BaseConstructionState::FacilityPlacement::Reserve) {
+    return {false, DomainErrorCode::IllegalDestination,
+            "Base facility is already installed", profile.revision,
+            command.definitionId};
+  }
+  const std::optional<std::uint64_t> reserveStarted =
+      baseFacilityReserveStartedWorldMinute(profile, command.definitionId);
+  if (!reserveStarted.has_value() ||
+      *reserveStarted > profile.worldClock.elapsedWorldMinutes ||
+      !canShiftBaseFacilityTasks(
+          profile, content, command.definitionId,
+          profile.worldClock.elapsedWorldMinutes - *reserveStarted)) {
+    return {false, DomainErrorCode::InvalidProfile,
+            "Base facility reserve timing is invalid", profile.revision,
+            command.definitionId};
+  }
+  return {true, DomainErrorCode::None, {}, profile.revision,
+          command.definitionId};
+}
+
+InstallBaseFacilityReceipt executeInstallBaseFacility(
+    ProfileState &profile, const ContentRegistry &content,
+    const InstallBaseFacilityCommand &command,
+    const CommandContext &context) {
+  if (context.transactionId.empty()) {
+    return {false, false, DomainErrorCode::InvalidTransaction,
+            "transaction ID is empty", profile.revision,
+            command.definitionId};
+  }
+  if (profile.committedTransactions.contains(context.transactionId)) {
+    return {true, true, DomainErrorCode::None, {}, profile.revision,
+            command.definitionId};
+  }
+  if (context.expectedRevision != profile.revision) {
+    return {false, false, DomainErrorCode::StaleRevision,
+            "profile revision is stale", profile.revision,
+            command.definitionId};
+  }
+  if (profile.revision == std::numeric_limits<ProfileRevision>::max()) {
+    return {false, false, DomainErrorCode::RevisionOverflow,
+            "profile revision cannot advance", profile.revision,
+            command.definitionId};
+  }
+  const InstallBaseFacilityPlan plan = queryInstallBaseFacility(
+      profile, content, command);
+  if (!plan.canCommit) {
+    return {false, false, plan.error, plan.message, profile.revision,
+            command.definitionId};
+  }
+  ProfileState candidate = profile;
+  const std::uint64_t reserveStarted = candidate.baseConstruction
+      .facilityReserveStartedWorldMinutes.at(command.definitionId);
+  shiftBaseFacilityTasks(
+      candidate, content, command.definitionId,
+      candidate.worldClock.elapsedWorldMinutes - reserveStarted);
+  candidate.baseConstruction.facilities[command.definitionId] =
+      BaseConstructionState::FacilityPlacement::Installed;
+  candidate.baseConstruction.facilityReserveStartedWorldMinutes.erase(
+      command.definitionId);
+  candidate.committedTransactions.insert(context.transactionId);
+  ++candidate.revision;
+  const ProfileValidationResult validation = validateProfileState(
+      candidate, content);
+  if (!validation.valid) {
+    return {false, false, DomainErrorCode::InvalidProfile,
+            validation.message, profile.revision, command.definitionId};
+  }
+  profile = std::move(candidate);
+  return {true, false, DomainErrorCode::None, {}, profile.revision,
+          command.definitionId};
 }

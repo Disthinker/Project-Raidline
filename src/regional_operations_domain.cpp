@@ -52,6 +52,23 @@ RegionalBaseSiteClearancePlan siteClearanceFailure(
     return {false, error, std::move(message), profile.revision,
             std::move(definitionId)};
 }
+
+bool outpostRepresentsActiveBase(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalOutpostDefinitionId &outpostId) noexcept
+{
+    const auto &sites = content.regionalOperations().baseSites;
+    return std::any_of(
+        sites.begin(), sites.end(),
+        [&](const RegionalBaseSiteDefinition &site)
+        {
+            return site.nodeId ==
+                    profile.regionalOperations.activeBaseNodeId &&
+                site.outpostDefinitionId ==
+                    std::optional<RegionalOutpostDefinitionId>{outpostId};
+        });
+}
 }
 
 std::uint32_t assignedRegionalOutpostStaff(
@@ -261,6 +278,13 @@ RegionalOutpostPlan queryEstablishRegionalOutpost(
                 "regional operations are unavailable during a Raid",
                 command.definitionId);
         }
+        if (outpostRepresentsActiveBase(profile, content, command.definitionId))
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "active main Base cannot be established as an outpost",
+                command.definitionId);
+        }
         if (!state.unlocked)
         {
             return outpostFailure(
@@ -453,6 +477,13 @@ RegionalOutpostStaffingPlan queryRegionalOutpostStaffing(
             return staffingFailure(
                 profile, DomainErrorCode::IllegalDestination,
                 "regional staffing is unavailable during a Raid",
+                command.definitionId);
+        }
+        if (outpostRepresentsActiveBase(profile, content, command.definitionId))
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "active main Base cannot accept an outpost garrison",
                 command.definitionId);
         }
         if (!state.established)

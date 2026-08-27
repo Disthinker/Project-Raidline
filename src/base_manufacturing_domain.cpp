@@ -1,5 +1,6 @@
 #include "base_manufacturing_domain.h"
 
+#include "base_construction_domain.h"
 #include "base_morale_domain.h"
 #include "base_workforce_domain.h"
 
@@ -135,11 +136,20 @@ BaseManufacturingProjection projectBaseManufacturing(
     projection.committedWorkers = order.outputReady
         ? 0U
         : order.committedWorkers;
-    if (!order.outputReady && order.completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    std::uint64_t progressWorldMinute = profile.worldClock.elapsedWorldMinutes;
+    if (const std::optional<std::uint64_t> reserveStarted =
+            baseFacilityReserveStartedWorldMinute(
+                profile,
+                BaseFacilityDefinitionId{"base_facility.workshop"});
+        reserveStarted.has_value())
+    {
+        progressWorldMinute = *reserveStarted;
+    }
+    if (!order.outputReady &&
+        order.completionWorldMinute > progressWorldMinute)
     {
         projection.remainingMinutes = order.completionWorldMinute -
-            profile.worldClock.elapsedWorldMinutes;
+            progressWorldMinute;
     }
     if (order.outputReady)
     {
@@ -178,6 +188,15 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
         return startFailure(
             DomainErrorCode::IllegalDestination,
             "the workshop production slot is occupied",
+            profile.revision);
+    }
+    if (!baseFacilityInstalled(
+            profile,
+            BaseFacilityDefinitionId{"base_facility.workshop"}))
+    {
+        return startFailure(
+            DomainErrorCode::IllegalDestination,
+            "the workshop is stored in the facility reserve",
             profile.revision);
     }
     if (!profile.baseWorkforce.workshopWorker.has_value() ||
@@ -529,7 +548,10 @@ BaseManufacturingAdvanceResult applyBaseManufacturingThrough(
     const ContentRegistry &content)
 {
     if (profile.pendingRaid.has_value() ||
-        !profile.baseManufacturing.activeOrder.has_value())
+        !profile.baseManufacturing.activeOrder.has_value() ||
+        !baseFacilityInstalled(
+            profile,
+            BaseFacilityDefinitionId{"base_facility.workshop"}))
     {
         return {};
     }
