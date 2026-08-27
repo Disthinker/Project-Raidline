@@ -112,7 +112,7 @@
 | Raid World：空间战术可靠性 v1 | PR #98 已通过 CI 与用户验收，以普通 merge commit `95fcd23` 进入 main |
 | Raid World：第二个代表性地点 v1 | PR #99 已通过双平台 CI 与用户正常游玩验收，以普通 merge commit `1d2fea1` 进入 main |
 | Raid World：可扩展性能基础 v1 | PR #100 已通过 CI 与用户正常游玩验收，以普通 merge commit `d7c231b` 进入 main |
-| Regional Operations：失物记录与行动老化 v1 | 当前分支实现死亡/主动退出失物记录、后续行动老化、schema v24/content v34、Base 记录页与到期警告；Windows Debug 全目标、定向回归和 1106/1106 CTest 已通过，exact-head CI 与用户验收待完成；NPC 委托和 Raid 内自力寻回仍延期 |
+| Regional Operations：失物记录与行动老化 v1 | Draft PR #101 实现死亡/主动退出失物记录、后续行动老化、schema v24/content v34、Base 记录页与到期警告；Windows Debug 全目标、定向回归、1106/1106 CTest 和实现 HEAD 的 exact-head CI 已通过，最终证据 HEAD 复核与用户验收待完成；NPC 委托和 Raid 内自力寻回仍延期 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 

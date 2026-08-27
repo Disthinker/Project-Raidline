@@ -45,11 +45,12 @@
 - [x] schema v24、v23 迁移和损坏拒绝。
 - [x] Base 记录页、RaidResult 提示与出击警告。
 - [x] focused tests、Windows Debug 全目标、1106/1106 CTest 与文档。
-- [ ] exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- [x] PR #101 首个实现 HEAD `66d8177` 的 exact-head Windows/Ubuntu CI。
+- [ ] 用户正常游玩验收。
 
 ## 自动化证据
 
 - Windows Debug 全目标构建成功，包含 `Project_Raidline.exe`；开发代理未启动游戏。
 - `AlphaHardeningTest`、`EconomyDomainTest` 与 `LostRaidDomainTest` 定向 13/13 通过。
 - 完整 Windows Debug CTest 1106/1106 通过，覆盖失物树迁移、普通命令不可访问、0～3 次老化、第四次删除、Settlement 重放、异常退出回滚、schema v24 往返、v23 迁移和未知地图拒绝。
-- exact-head Windows/Ubuntu CI 等待 Draft PR 创建后执行；人工验收仍由用户在最后进行。
+- Draft PR #101 的实现 HEAD `66d8177` 已通过 exact-head Windows/Ubuntu CI；本证据文档提交后的最终 HEAD 仍需复核。人工验收仍由用户在最后进行。

@@ -136,7 +136,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | Windows Debug 全目标、定向回归和 1106/1106 CTest 已通过；等待 exact-head CI 与用户验收。异常退出继续精确回滚，不创建或老化记录 |
+| 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | Draft PR #101 的实现 HEAD 已通过 Windows Debug 全目标、定向回归、1106/1106 CTest 和 exact-head Windows/Ubuntu CI；最终证据 HEAD 复核与用户验收待完成。异常退出继续精确回滚，不创建或老化记录 |
 | 单一 NPC 寻回任务 | 从一条记录发起一次按整单计价、耗时的委托，完成后按冻结结果返还 | 单任务槽、记录锁定、价格/时长快照、取消不退款、唯一回收目的地 | 下一宏切片；本轮不提前实现 |
 | Raid 内自力寻回 | 返回来源地图后可找到并自行带回失物，和 NPC 委托共享唯一所有权 | 来源地图约束、Raid 快照引用、原子取回、与委托互斥 | NPC 任务稳定后实施；尸体表现与正式资源延期 |
 
