@@ -1013,26 +1013,6 @@ RaidSettlementReceipt settlePendingRaid(
 
     ProfileState candidate = profile;
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
-    if (outcome == RaidResultOutcome::Extracted &&
-        raidSnapshot.outpostRestoration.has_value() &&
-        !raidSnapshot.outpostRestoration->objectiveSecured)
-    {
-        return settlementFailure(
-            RaidLifecycleError::InvalidCommand,
-            "outpost restoration requires the clearing objective",
-            profile.revision,
-            outcome);
-    }
-    if (outcome == RaidResultOutcome::Extracted &&
-        raidSnapshot.baseSiteClearance.has_value() &&
-        !raidSnapshot.baseSiteClearance->objectiveSecured)
-    {
-        return settlementFailure(
-            RaidLifecycleError::InvalidCommand,
-            "Base site clearance requires the clearing objective",
-            profile.revision,
-            outcome);
-    }
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
     {
@@ -1082,7 +1062,8 @@ RaidSettlementReceipt settlePendingRaid(
             outcome);
     }
     if (outcome == RaidResultOutcome::Extracted &&
-        raidSnapshot.outpostRestoration.has_value())
+        raidSnapshot.outpostRestoration.has_value() &&
+        raidSnapshot.outpostRestoration->objectiveSecured)
     {
         const auto state = candidate.regionalOperations.outposts.find(
             raidSnapshot.outpostRestoration->outpostDefinitionId);
@@ -1099,7 +1080,8 @@ RaidSettlementReceipt settlePendingRaid(
         state->second.shortcutOperationsSinceRestoration = 0U;
     }
     if (outcome == RaidResultOutcome::Extracted &&
-        raidSnapshot.baseSiteClearance.has_value())
+        raidSnapshot.baseSiteClearance.has_value() &&
+        raidSnapshot.baseSiteClearance->objectiveSecured)
     {
         const RegionalBaseSiteDefinition &definition =
             content.regionalBaseSite(

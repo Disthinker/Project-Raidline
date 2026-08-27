@@ -2685,12 +2685,6 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
         profile_.pendingRaid->baseSiteClearance.has_value();
-    const bool clearingObjectiveSecured =
-        (!restorationActive || outpostRestorationObjectiveSecured_) &&
-        (!siteClearanceActive || baseSiteClearanceObjectiveSecured_);
-    simulationInput.extractionEligible =
-        simulationInput.extractionEligible &&
-        clearingObjectiveSecured;
     world_->update(simulationInput, deltaTime);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)

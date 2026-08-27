@@ -119,6 +119,17 @@ TEST(AlphaExtractionSessionTest,
     ASSERT_TRUE(session.profile().pendingRaid->baseSiteClearance.has_value());
     EXPECT_FALSE(session.baseSiteClearanceObjectiveSecured());
 
+    const Rect &extraction = session.world().extractionPoint().bounds();
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+        extraction.position));
+    session.update(GameplayInput{}, 0.1F);
+    EXPECT_EQ(
+        session.world().raidSession().state(),
+        RaidSessionState::Extracting);
+    EXPECT_GT(
+        session.world().raidSession().extractionProgress(), 0.0F);
+    EXPECT_FALSE(session.baseSiteClearanceObjectiveSecured());
+
     for (const Enemy &enemy : session.world().enemies())
     {
         Enemy &mutableEnemy = const_cast<Enemy &>(enemy);

@@ -5411,7 +5411,7 @@ void App::renderDebugText()
             gameSession_.outpostRestorationObjectiveSecured()
             ? "OUTPOST CLEARING COMPLETE | EXTRACT TO RESTORE SHORTCUTS"
             : fmt::format(
-                  "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | EXITS LOCKED",
+                  "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
             renderer_, 20.0F, 212.0F, objective.c_str());
@@ -5423,7 +5423,7 @@ void App::renderDebugText()
             gameSession_.baseSiteClearanceObjectiveSecured()
             ? "BASE SITE SECURED | EXTRACT TO UNLOCK THE LOCATION"
             : fmt::format(
-                  "BASE SITE CLEARING | INITIAL HOSTILES REMAINING {} | EXITS LOCKED",
+                  "BASE SITE CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
             renderer_, 20.0F, 212.0F, objective.c_str());
@@ -12151,25 +12151,14 @@ void App::renderRaidTacticalMap()
     {
         const RaidSession &raidSession =
             gameSession_.world().raidSession();
-        const bool missionExtractionEligible =
-            !gameSession_.profile().pendingRaid.has_value() ||
-            ((!gameSession_.profile().pendingRaid->outpostRestoration
-                  .has_value() ||
-              gameSession_.outpostRestorationObjectiveSecured()) &&
-             (!gameSession_.profile().pendingRaid->baseSiteClearance
-                  .has_value() ||
-              gameSession_.baseSiteClearanceObjectiveSecured()));
         const std::string exitStatus = fmt::format(
             "EXITS | NORMAL {} | SIGNAL {} | LIGHT {}",
-            missionExtractionEligible &&
-                    (raidSession.normalExtractionOpen() ||
-                    raidSession.normalExtractionGraceActive()
-                ) ? "OPEN" : "CLOSED",
-            missionExtractionEligible &&
-                    raidSession.emergencyExtractionOpen()
+            (raidSession.normalExtractionOpen() ||
+             raidSession.normalExtractionGraceActive())
+                ? "OPEN" : "CLOSED",
+            raidSession.emergencyExtractionOpen()
                 ? "OPEN" : "LOCKED",
-            missionExtractionEligible &&
-                    raidSession.conditionalExtractionOpen() &&
+            raidSession.conditionalExtractionOpen() &&
                     gameSession_.conditionalExtractionEligible()
                 ? "OPEN" : "LOCKED");
         uiTextRenderer_.render(

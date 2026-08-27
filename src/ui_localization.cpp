@@ -135,7 +135,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"SHORTCUT THREAT ", "捷径威胁 "},
      {"THREAT ", "威胁 "},
      {" SAFE OPERATION(S) REMAIN", " 次安全行动剩余"},
-     {"EXITS LOCKED", "撤离点已锁定"},
+     {"NORMAL EXITS AVAILABLE", "可使用常规撤离点"},
      {"DISRUPTED", "已中断"},
      {"NO MATERIAL OR WORLD TIME COST IN FOUNDATION V1 | ESC BACK",
       "基础版不消耗材料或世界时间 | ESC 返回"},
