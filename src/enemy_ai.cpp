@@ -134,6 +134,8 @@ const char *enemyTacticalRoleName(
     {
     case EnemyTacticalRole::Engage:
         return "Engage";
+    case EnemyTacticalRole::Pressure:
+        return "Pressure";
     case EnemyTacticalRole::Support:
         return "Support";
     }
@@ -367,6 +369,25 @@ float EnemyAiState::cooldownRemaining(
     }
 
     return 0.0F;
+}
+
+bool EnemyAiState::hasAttackOpportunity(
+    float distance) const noexcept
+{
+    if (!std::isfinite(distance) || distance < 0.0F)
+    {
+        return false;
+    }
+
+    const bool scratchReady =
+        distance <= config_.scratchAttackDistance &&
+        attackReady(EnemyAttackType::Scratch);
+    const bool grabReady =
+        specialChargeArmed_ &&
+        distance >= config_.specialChargeMinDistance &&
+        distance <= config_.specialChargeMaxDistance &&
+        attackReady(EnemyAttackType::Grab);
+    return scratchReady || grabReady;
 }
 
 bool EnemyAiState::specialChargeArmed() const noexcept

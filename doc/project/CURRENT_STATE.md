@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@d7c231b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 PR #93～#100 接受的 Raid World Vertical Slice 与可扩展性能基础。
-- 当前开发分支：`codex/regional-loss-records-v1`，从干净的 `origin/main@d7c231b` 创建。
+- `origin/main@1c62064` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及 PR #102 接受的多人围攻可靠性修复。
+- 当前开发分支：`codex/regional-loss-records-v1`；原始实现从 `d7c231b` 创建，现已合并最新 `origin/main@1c62064` 进行发布复验。
 - 当前活动计划：`doc/exec-plans/active/regional-loss-records-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice/可扩展性能基础均已进入主线。当前进入 **Regional Operations — Loss & Recovery**，首个宏切片把死亡/主动退出的携带资产迁移为独立失物记录，加入后续行动老化、Base 记录页和出击前到期提示；NPC 委托和 Raid 内自力寻回继续由后续切片承担。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础和多人围攻可靠性修复均已进入主线。当前进入 **Regional Operations — Loss & Recovery**：首个宏切片把死亡/主动退出的携带资产迁移为独立失物记录，加入后续行动老化、Base 记录页和出击前到期提示；NPC 委托和 Raid 内自力寻回继续由后续切片承担。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -55,7 +55,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 40. **空间战术可靠性 v1**：PR #98 已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 进入 main。当前空间 LOS、最后已知位置、确定性绕障、贴墙合法接近点、成功实弹击发枪声刺激和近战遮挡均已接受。
 41. **第二个代表性地点 v1**：content v33 在 `Frontier Exchange` 增加独立 `Freight Service Bay`，rules v15 冻结两个地点并保留 v12～v14 首办公室 pending Raid 兼容。多入口投影、返回点可达锚点、独立 Actor/Loot/内部图和双语代码占位均已通过用户正常游玩验收；多人追击热点修复也完成复验。PR #99 已以普通 merge commit `1d2fea1` 进入 main。
 42. **Raid World 可扩展性能基础 v1**：PR #100 已通过 Windows Debug、1097/1097 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `d7c231b` 进入 main。公平轮转、敌人近邻格、每空间静态障碍索引、双导航后端、结构化压力门槛和双语 F9 性能面板成为接受基线。
-43. **失物记录与行动老化 v1**：当前分支从 `origin/main@d7c231b` 开始；死亡/主动退出迁移携带资产树，异常退出继续回滚，schema v24/content v34 保存独立记录、老化窗口与 RaidResult 关联。Base Raid Gate 提供双语代码占位记录页和出击前到期二次确认。
+43. **多敌人追击与攻击意图隔离**：PR #102 已通过 Windows Debug、233/233 定向回归、1108/1108 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `1c62064` 进入 main。最多 10 名敌人可同时攻击，超额成员继续施压并稳定轮转；0.25 秒受伤保护避免同一瞬间连续跳血。
+44. **失物记录与行动老化 v1**：PR #101 已通过首轮 exact-head Windows/Ubuntu CI 和用户正常游玩验收；当前分支已合并最新 `origin/main@1c62064` 进行最终复验。死亡/主动退出迁移携带资产树，异常退出继续回滚，schema v24/content v34 保存独立记录、老化窗口与 RaidResult 关联。Base Raid Gate 提供双语代码占位记录页和出击前到期二次确认。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -82,9 +83,10 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
+- 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#100 均已进入 main；PR #100 的可扩展性能基础已通过双平台 CI 与用户正常游玩验收，以普通 merge commit `d7c231b` 合入。当前 Draft PR #101 已完成 Windows Debug 全目标、相关领域 13/13 定向回归、完整 1106/1106 CTest，且实现 HEAD `66d8177` 的 exact-head Windows/Ubuntu CI 通过；最终证据 HEAD 复核与用户正常游玩验收待完成。开发代理未启动游戏。
+- PR #90～#100 与 PR #102 均已进入 main。当前 Draft PR #101 已在 `origin/main@1c62064` 上完成 Windows Debug 全目标、失物/结算/存档/多人攻击联合定向 178/178 和完整 1117/1117 CTest；首轮 exact-head CI 与用户正常游玩验收已通过，合并主线后的最终 exact-head CI 待复核。开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

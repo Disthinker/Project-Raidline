@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/regional-loss-records-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout、Combat、Raid Pressure、Base Growth 与 Raid World Vertical Slice/可扩展性能基础 PR #78～#100 已接受；旧活动文档保留交付证据。
+当前实现计划：`active/regional-loss-records-v1.md`。PR #102 的多敌人追击、最多 10 名并发攻击与 0.25 秒受伤保护已接受并进入 main；PR #101 的 Regional Loss Records 已通过用户正常游玩验收，当前只在最新主线复验其失物所有权、结算、存档和界面合同。旧活动文档保留交付证据。

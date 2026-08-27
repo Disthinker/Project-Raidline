@@ -333,6 +333,35 @@ EnemyAttackPhase Enemy::attackPhase() const noexcept
   return attack_.phase();
 }
 
+bool Enemy::hasAttackOpportunity(
+    Vec2 targetPosition) const noexcept
+{
+  if (isDead() ||
+      attack_.phase() != EnemyAttackPhase::Idle ||
+      ai_.awarenessState() != EnemyAwarenessState::Alerted ||
+      !std::isfinite(targetPosition.x) ||
+      !std::isfinite(targetPosition.y))
+  {
+    return false;
+  }
+
+  const Vec2 selfPosition{
+      position_.x + size_.x * 0.5F,
+      position_.y + size_.y * 0.5F};
+  const Vec2 offset{
+      targetPosition.x - selfPosition.x,
+      targetPosition.y - selfPosition.y};
+  const float distanceSquared =
+      offset.x * offset.x + offset.y * offset.y;
+  if (!std::isfinite(distanceSquared))
+  {
+    return false;
+  }
+
+  return ai_.hasAttackOpportunity(
+      std::sqrt(distanceSquared));
+}
+
 std::optional<EnemyAttackType>
 Enemy::attackType() const noexcept
 {

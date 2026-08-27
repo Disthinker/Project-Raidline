@@ -6,7 +6,7 @@
 
 ## 基线与分支
 
-- 基线：`origin/main@d7c231b`，PR #100 的 Raid World 可扩展性能基础已通过用户验收并普通合入。
+- 原始实现基线：`origin/main@d7c231b`，PR #100 的 Raid World 可扩展性能基础已通过用户验收并普通合入；发布复验已合并 `origin/main@1c62064`，包含 PR #102 的多人围攻可靠性修复。
 - 分支：`codex/regional-loss-records-v1`。
 - 当前 schema v23、content v33；本切片升级为 schema v24、content v34，并兼容迁移 v23/v33。
 
@@ -44,13 +44,13 @@
 - [x] 领域所有权与失败 Settlement；普通库存和经济命令不能越权使用失物。
 - [x] schema v24、v23 迁移和损坏拒绝。
 - [x] Base 记录页、RaidResult 提示与出击警告。
-- [x] focused tests、Windows Debug 全目标、1106/1106 CTest 与文档。
+- [x] 合并最新主线后的联合 focused tests 178/178、Windows Debug 全目标、1117/1117 CTest 与文档。
 - [x] PR #101 首个实现 HEAD `66d8177` 的 exact-head Windows/Ubuntu CI。
-- [ ] 用户正常游玩验收。
+- [x] 用户正常游玩验收。
 
 ## 自动化证据
 
 - Windows Debug 全目标构建成功，包含 `Project_Raidline.exe`；开发代理未启动游戏。
-- `AlphaHardeningTest`、`EconomyDomainTest` 与 `LostRaidDomainTest` 定向 13/13 通过。
-- 完整 Windows Debug CTest 1106/1106 通过，覆盖失物树迁移、普通命令不可访问、0～3 次老化、第四次删除、Settlement 重放、异常退出回滚、schema v24 往返、v23 迁移和未知地图拒绝。
-- Draft PR #101 的实现 HEAD `66d8177` 已通过 exact-head Windows/Ubuntu CI；本证据文档提交后的最终 HEAD 仍需复核。人工验收仍由用户在最后进行。
+- 合并最新主线后，`LostRaidDomainTest`、`RaidLifecycleTest`、`SaveRepositoryTest`、`AlphaHardeningTest`、`EconomyDomainTest`、`EnemySquadTest` 与 `GameplayWorldTest` 联合定向 178/178 通过。
+- 完整 Windows Debug CTest 1117/1117 通过，覆盖失物树迁移、普通命令不可访问、0～3 次老化、第四次删除、Settlement 重放、异常退出回滚、schema v24 往返、v23 迁移、未知地图拒绝，以及最多 10 名并发攻击与 0.25 秒受伤保护。
+- Draft PR #101 的实现 HEAD `66d8177` 已通过首轮 exact-head Windows/Ubuntu CI，用户正常游玩验收已通过；合并最新主线后的最终 HEAD 仍需重新通过 exact-head CI。

@@ -534,7 +534,10 @@ private:
     std::vector<std::size_t> blockerQueryScratch_;
     bool alphaRaidWorld_{};
     bool deferPlayerDamageResolution_{};
+    float enemyDamageProtectionRemainingSeconds_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;
+
+    static constexpr float kEnemyDamageProtectionDurationSeconds{0.25F};
 
     void spawnGroundItem(
         ItemId definitionId,

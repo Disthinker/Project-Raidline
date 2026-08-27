@@ -15,6 +15,7 @@ enum class EnemyAwarenessState
 enum class EnemyTacticalRole
 {
     Engage,
+    Pressure,
     Support
 };
 
@@ -94,6 +95,10 @@ public:
     [[nodiscard]]
     float cooldownRemaining(
         EnemyAttackType type) const noexcept;
+
+    [[nodiscard]]
+    bool hasAttackOpportunity(
+        float distance) const noexcept;
 
     [[nodiscard]]
     bool specialChargeArmed() const noexcept;
