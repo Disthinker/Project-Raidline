@@ -106,20 +106,24 @@ BaseThreatProjection projectBaseThreat(const ProfileState &profile) noexcept
 {
     const BaseSiegeState &state = profile.baseSiege;
     const std::uint32_t total = totalBaseThreat(state);
+    const std::uint64_t safeRemaining =
+        state.safeUntilWorldMinute > profile.worldClock.elapsedWorldMinutes
+        ? state.safeUntilWorldMinute - profile.worldClock.elapsedWorldMinutes
+        : 0U;
+    const bool siegeQueued =
+        total >= kBaseSiegeThreatThreshold && !state.warningActive &&
+        safeRemaining > 0U;
     BaseThreatTier tier = total < 34U
         ? BaseThreatTier::Low
         : total < 67U ? BaseThreatTier::Elevated
                       : total < kBaseSiegeThreatThreshold
             ? BaseThreatTier::Critical
-            : BaseThreatTier::Warning;
+            : siegeQueued ? BaseThreatTier::Queued
+                          : BaseThreatTier::Warning;
     if (state.warningActive)
     {
         tier = BaseThreatTier::Warning;
     }
-    const std::uint64_t safeRemaining =
-        state.safeUntilWorldMinute > profile.worldClock.elapsedWorldMinutes
-        ? state.safeUntilWorldMinute - profile.worldClock.elapsedWorldMinutes
-        : 0U;
     return {
         tier,
         total,
@@ -127,6 +131,7 @@ BaseThreatProjection projectBaseThreat(const ProfileState &profile) noexcept
         state.populationThreatUnits,
         state.siteThreatUnits,
         safeRemaining,
+        siegeQueued,
         state.warningActive,
         state.warningRemainingSeconds,
         state.autoDefensePresetSaved,
@@ -331,6 +336,7 @@ const char *baseThreatTierName(BaseThreatTier tier) noexcept
     case BaseThreatTier::Low: return "LOW";
     case BaseThreatTier::Elevated: return "ELEVATED";
     case BaseThreatTier::Critical: return "CRITICAL";
+    case BaseThreatTier::Queued: return "QUEUED";
     case BaseThreatTier::Warning: return "WARNING";
     }
     return "LOW";

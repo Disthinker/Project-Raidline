@@ -14,6 +14,7 @@ enum class BaseThreatTier
     Low,
     Elevated,
     Critical,
+    Queued,
     Warning
 };
 
@@ -25,6 +26,7 @@ struct BaseThreatProjection
     std::uint32_t populationThreatUnits{};
     std::uint32_t siteThreatUnits{};
     std::uint64_t safeMinutesRemaining{};
+    bool siegeQueued{};
     bool warningActive{};
     std::uint32_t warningRemainingSeconds{};
     bool autoDefensePresetSaved{};

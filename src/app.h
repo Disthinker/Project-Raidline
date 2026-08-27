@@ -280,6 +280,7 @@ private:
     void renderBaseWorkshop();
     void renderBaseDeployment();
     void renderRegionalOperations();
+    void renderBaseSiegeQueuedNotice();
     void renderBaseSiegeWarning();
     void renderLostRaidRecords();
     void renderProfileGrid(

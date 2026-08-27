@@ -63,7 +63,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 48. **区域基地候选点清剿 v1**：PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main。content v38/schema v29 发布 Greyline 与 Ashworks 候选点、清剿解锁、第二标准前哨和路线收益。
 49. **唯一主基地迁徙 v1**：PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线；迁徙原子推进 12 小时并保持 Stash、装备、人口和资产唯一所有权。
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
-51. **基地威胁预警与自动防守 v1（当前开发）**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。领域、存档、Settlement/异常回滚、门禁、Base 双语投影、Windows Debug 全目标和 1208/1208 CTest 已完成，Draft PR 与 exact-head CI 待收尾。
+51. **基地威胁预警与自动防守 v1（当前开发）**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”；安全期结束后才进入阻断出击的三分钟预警。领域、存档、Settlement/异常回滚、门禁、Base 双语投影、Windows Debug 全目标和 1211/1211 CTest 已完成，Draft PR 与 exact-head CI 待收尾。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -90,7 +90,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
-- 当前基地威胁预警与自动防守分支已完成 Windows Debug 全目标构建与 1208/1208 CTest；覆盖三类威胁、阈值/安全期、首次确认/后续预设、成功/软失败、占用居民保护、schema v31→v32、pending Raid 回滚、Settlement 幂等、迁徙/建设门禁及中英文投影。开发代理未启动游戏。
+- 当前基地威胁预警与自动防守分支已完成 Windows Debug 全目标构建与 1211/1211 CTest；覆盖三类威胁、阈值/安全期排队提示、首次确认/后续预设、成功/软失败、占用居民保护、schema v31→v32、pending Raid 回滚、Settlement 幂等、迁徙/建设门禁及中英文投影。开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

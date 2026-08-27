@@ -54,6 +54,19 @@ TEST(RaidLifecycleTest, SiegeWarningBlocksDeployWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
+TEST(RaidLifecycleTest, QueuedSiegeDuringSafetyStillAllowsDeploy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "siege-safety-allows-deploy", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    ASSERT_TRUE(projectBaseThreat(profile).siegeQueued);
+
+    const DeployReceipt receipt = deploy(profile, 44004U);
+
+    EXPECT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(profile.pendingRaid.has_value());
+}
+
 TEST(RaidLifecycleTest, SettlementAddsThreatOnceAndRollbackRestoresEntryState)
 {
     ProfileState settled = makeNewAlphaProfile(

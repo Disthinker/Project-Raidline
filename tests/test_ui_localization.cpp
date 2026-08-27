@@ -507,6 +507,18 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiteFeatureRepairFlow) {
 
 TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
   EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE SIEGE QUEUED | SAFETY 2D 11H 02M"),
+            "基地尸潮已排队 | 安全期剩余 2D 11H 02M");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RAIDS AVAILABLE | 3-MIN WARNING AFTER SAFETY"),
+            "安全期内可正常出击 | 安全期结束后进入3分钟预警");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE THREAT QUEUED 100/100"),
+            "基地威胁 已排队 100/100");
+  EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese, "BASE SIEGE WARNING"),
             "基地尸潮预警");
   EXPECT_EQ(localizeUiText(

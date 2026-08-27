@@ -52,6 +52,6 @@
 - [x] Step 1：权威状态、内容和 schema v32。
 - [x] Step 2：世界时间、Settlement、回滚和门禁。
 - [x] Step 3：Base 倒计时、自动防守与双语投影。
-- [x] Windows Debug 全目标与完整 CTest（1208/1208）。
+- [x] Windows Debug 全目标与完整 CTest（1211/1211）；补充敌人死亡后导航同步回归，以及满威胁安全期的 `QUEUED` 双语提示和出击/预警边界回归。
 - [ ] Draft PR exact-head Windows/Ubuntu CI。
 - [ ] 用户统一正常游玩验收。

@@ -13,7 +13,11 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED",
+    {{"RAIDS AVAILABLE | 3-MIN WARNING AFTER SAFETY",
+      "安全期内可正常出击 | 安全期结束后进入3分钟预警"},
+     {"BASE SIEGE QUEUED | SAFETY ",
+      "基地尸潮已排队 | 安全期剩余 "},
+     {"BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED",
       "基地防守软失败 | 恢复期已开始"},
      {"BASE DEFENDED | SAFETY PERIOD STARTED",
       "基地防守成功 | 安全期已开始"},
@@ -34,6 +38,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"PROJECTED SUCCESS", "预计成功"},
      {"SOFT FAILURE RISK", "存在软失败风险"},
      {"START AUTO DEFENSE NOW", "立即开始自动防守"},
+     {"QUEUED", "已排队"},
      {"BASE SIEGE WARNING", "基地尸潮预警"},
      {"PREPARATION ", "准备时间 "},
      {"BASE THREAT ", "基地威胁 "},

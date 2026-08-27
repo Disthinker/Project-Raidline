@@ -33,9 +33,22 @@ TEST(BaseSiegeDomainTest, WarningOnlyActivatesAfterThresholdAndSafety)
 {
     ProfileState profile = makeProfile("siege-warning");
     profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    const BaseThreatProjection queued = projectBaseThreat(profile);
+    EXPECT_TRUE(queued.siegeQueued);
+    EXPECT_EQ(queued.tier, BaseThreatTier::Queued);
+    EXPECT_EQ(
+        queued.safeMinutesRemaining,
+        profile.baseSiege.safeUntilWorldMinute -
+            profile.worldClock.elapsedWorldMinutes);
+    EXPECT_STREQ(baseThreatTierName(queued.tier), "QUEUED");
     EXPECT_FALSE(activateBaseSiegeWarningIfEligible(profile));
     profile.worldClock.elapsedWorldMinutes =
         profile.baseSiege.safeUntilWorldMinute;
+
+    const BaseThreatProjection eligible = projectBaseThreat(profile);
+    EXPECT_FALSE(eligible.siegeQueued);
+    EXPECT_EQ(eligible.safeMinutesRemaining, 0U);
+    EXPECT_EQ(eligible.tier, BaseThreatTier::Warning);
 
     EXPECT_TRUE(activateBaseSiegeWarningIfEligible(profile));
     EXPECT_TRUE(profile.baseSiege.warningActive);

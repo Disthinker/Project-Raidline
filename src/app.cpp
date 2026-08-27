@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -143,6 +144,16 @@ namespace
             return "SECURITY";
         }
         return "UNKNOWN";
+    }
+
+    std::string formatWorldMinutesRemaining(
+        std::uint64_t totalMinutes)
+    {
+        const std::uint64_t days = totalMinutes / kWorldMinutesPerDay;
+        const std::uint64_t remainder = totalMinutes % kWorldMinutesPerDay;
+        const std::uint64_t hours = remainder / 60U;
+        const std::uint64_t minutes = remainder % 60U;
+        return fmt::format("{}D {:02}H {:02}M", days, hours, minutes);
     }
 
     // Legacy click-page geometry remains only for the supply/deployment
@@ -11858,6 +11869,7 @@ void App::renderBase()
         threat.totalThreatUnits,
         kBaseSiegeThreatThreshold);
     uiTextRenderer_.render(renderer_, 1010.0F, 108.0F, threatText.c_str());
+    renderBaseSiegeQueuedNotice();
 
     const char *goal = "OBJECTIVE COMPLETE";
     switch (gameSession_.profile().tutorial)
@@ -11908,6 +11920,30 @@ void App::renderBase()
         renderProfileInventory(true, false);
     }
     renderBaseSiegeWarning();
+}
+
+void App::renderBaseSiegeQueuedNotice()
+{
+    const BaseThreatProjection threat = gameSession_.baseThreatProjection();
+    if (!threat.siegeQueued)
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect panel{330.0F, 82.0F, 620.0F, 46.0F};
+    SDL_SetRenderDrawColor(renderer_, 46, 35, 20, 238);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 224, 168, 76, 255);
+    SDL_RenderRect(renderer_, &panel);
+    const std::string queued = fmt::format(
+        "BASE SIEGE QUEUED | SAFETY {}",
+        formatWorldMinutesRemaining(threat.safeMinutesRemaining));
+    uiTextRenderer_.render(
+        renderer_, 350.0F, 90.0F, queued.c_str());
+    uiTextRenderer_.render(
+        renderer_, 350.0F, 108.0F,
+        "RAIDS AVAILABLE | 3-MIN WARNING AFTER SAFETY");
 }
 
 void App::renderBaseSiegeWarning()

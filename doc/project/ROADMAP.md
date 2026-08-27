@@ -145,7 +145,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 区域基地候选点清剿 v1 | 清剿并解锁 Ashworks Logistics Yard；建立、派驻第二前哨后缩短 Industrial/Frontier 路线 | RegionalBaseSiteDefinition/State、强类型清剿快照、原子地点/前哨解锁、schema v29/content v38、最短路径 | PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main |
 | 唯一主基地迁徙 v1 | 建成厨房/净水后把主基地迁往已准备的 Ashworks；旧基地成为离线前哨，工坊可从储备免费重装 | TechnologyCoreState、稳定设施定义/位置、纯查询预览、原子迁徙、队列暂停、schema v30/content v39 | PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main |
 | 区域基地独特设施 v1 | 在已清剿并建立前哨的 Ashworks 预先修复重型物流工坊；迁入后新制造订单缩短，迁出后暂停且回迁自动恢复 | 类型化地点能力、永久修复状态、原子时间事务、active Base 消费者、schema v31/content v40 | PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main |
-| 基地威胁预警与自动防守 v1 | Base 持续显示三类威胁；达到门槛后进入可恢复的三分钟预警，并以公共 Security 提前结算成功或有死档保护的软失败 | BaseSiegeState、日结/Settlement 来源、pending Raid 回滚、首次确认与后续预设、schema v32/content v41 | 当前分支实现、Windows Debug 全目标和 1208/1208 CTest 完成；Draft PR/exact-head CI 和用户统一验收待完成。实时防守、防御设施和战斗小组延期 |
+| 基地威胁预警与自动防守 v1 | Base 持续显示三类威胁；满值安全期显示排队与剩余时间，安全期结束后进入可恢复的三分钟预警，并以公共 Security 提前结算成功或有死档保护的软失败 | BaseSiegeState、日结/Settlement 来源、pending Raid 回滚、首次确认与后续预设、schema v32/content v41 | 当前分支实现、Windows Debug 全目标和 1211/1211 CTest 完成；Draft PR/exact-head CI 和用户统一验收待完成。实时防守、防御设施和战斗小组延期 |
 
 ## 当前 Combat Reliability 缺陷
 
