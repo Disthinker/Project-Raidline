@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-base-site-feature-content-40",
+  "content_version": "regional-base-threat-content-41",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -55,6 +55,7 @@
         "unique_feature_repair_material_units": 0,
         "unique_feature_repair_minutes": 0,
         "unique_feature_manufacturing_duration_percent": 100,
+        "daily_base_threat_units": 1,
         "migration_minutes": 720,
         "core_facility_slots": 4
       },
@@ -73,6 +74,7 @@
         "unique_feature_repair_material_units": 15,
         "unique_feature_repair_minutes": 360,
         "unique_feature_manufacturing_duration_percent": 75,
+        "daily_base_threat_units": 3,
         "migration_minutes": 720,
         "core_facility_slots": 4
       }

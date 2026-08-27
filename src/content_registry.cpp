@@ -1056,6 +1056,9 @@ ContentRegistry ContentRegistry::fromJson(
                 requiredPositiveUint(
                     siteValue,
                     "unique_feature_manufacturing_duration_percent"),
+                requiredPositiveUint(
+                    siteValue,
+                    "daily_base_threat_units"),
                 requiredPositiveUint(siteValue, "migration_minutes"),
                 requiredPositiveUint(siteValue, "core_facility_slots")};
             const auto node = registry.regionNodeIndex_.find(
@@ -1071,6 +1074,7 @@ ContentRegistry ContentRegistry::fromJson(
                     7U * 24U * 60U ||
                 definition.uniqueFeatureManufacturingDurationPercent < 25U ||
                 definition.uniqueFeatureManufacturingDurationPercent > 100U ||
+                definition.dailyBaseThreatUnits > 20U ||
                 (!definition.uniqueFeatureInitiallyRepaired &&
                  (definition.uniqueFeatureRepairMaterialUnits == 0U ||
                   definition.uniqueFeatureRepairMinutes == 0U ||

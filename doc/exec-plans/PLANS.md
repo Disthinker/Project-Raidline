@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/regional-base-site-feature-v1.md`。PR #107 已由用户正常游玩验收并以 `d035181` 进入 main；新宏切片连续交付地点独特设施状态、一次性原子修复和 Ashworks 制造时长消费者，不创建通用加成框架、第二套 Stash 或并行基地服务。
+当前实现计划：`active/regional-base-threat-auto-defense-v1.md`。PR #108 已由用户正常游玩验收并以 `bf0d383` 进入 main；新宏切片连续交付基地威胁来源、可保存的 3 分钟预警和公共资源自动防守闭环，不提前实现实时基地战、防御设施或战斗小组。

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base_population_domain.h"
+#include "base_siege_domain.h"
 
 struct BaseMoraleAdvanceResult
 {
@@ -24,6 +25,7 @@ struct BaseDailySystemsResult
     BaseMoraleAdvanceResult morale;
     BasePrioritySyncResult priority;
     BaseCommunityEventSyncResult event;
+    BaseThreatAdvanceResult threat;
 };
 
 [[nodiscard]] BaseCommunityEventDefinitionId selectBaseCommunityEvent(

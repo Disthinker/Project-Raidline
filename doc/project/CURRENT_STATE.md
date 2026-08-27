@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@d035181` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿和唯一主基地迁徙闭环。
-- 当前开发分支：`codex/regional-base-site-feature-v1`，从 `origin/main@d035181` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-base-site-feature-v1.md`。
+- `origin/main@bf0d383` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙和区域基地独特设施闭环。
+- 当前开发分支：`codex/regional-base-threat-warning-v1`，从 `origin/main@bf0d383` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-base-threat-auto-defense-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿及唯一主基地迁徙均已进入主线。当前宏切片把基地地点独特设施变成可预先修复、可持久化且有制造消费者的真实能力；不创建通用加成框架、第二套 Stash 或并行基地服务。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙及区域基地独特设施均已进入主线。当前宏切片建立可保存的基地威胁、三分钟预警和公共安保自动防守 v1；不提前实现实时尸潮、防御设施、战斗小组或个人装备损失。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -62,7 +62,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 47. **哨所中断与恢复 v1**：PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main。content v37/schema v28 数据化 3 次安全捷径行动阈值和 Riverside 清剿地图；完成目标并成功撤离才原子恢复，失败保留中断，异常退出恢复出击前状态。
 48. **区域基地候选点清剿 v1**：PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main。content v38/schema v29 发布 Greyline 与 Ashworks 候选点、清剿解锁、第二标准前哨和路线收益。
 49. **唯一主基地迁徙 v1**：PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线；迁徙原子推进 12 小时并保持 Stash、装备、人口和资产唯一所有权。
-50. **区域基地独特设施 v1（当前开发）**：content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力。Ashworks 在清剿并建立前哨后可提前消耗 15 建材和一名健康劳动力，用 6 小时原子修复重型物流工坊；只有 Ashworks 成为当前主基地且普通工坊已安装时，新制造订单缩短为 75%，既有订单不追溯变化。Windows Debug 全目标与 1191/1191 CTest 已通过，Draft PR/exact-head CI 待建立。
+50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
+51. **基地威胁预警与自动防守 v1（当前开发）**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。领域、存档、Settlement/异常回滚、门禁、Base 双语投影、Windows Debug 全目标和 1208/1208 CTest 已完成，Draft PR 与 exact-head CI 待收尾。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -89,6 +90,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
+- 当前基地威胁预警与自动防守分支已完成 Windows Debug 全目标构建与 1208/1208 CTest；覆盖三类威胁、阈值/安全期、首次确认/后续预设、成功/软失败、占用居民保护、schema v31→v32、pending Raid 回滚、Settlement 幂等、迁徙/建设门禁及中英文投影。开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
@@ -342,7 +344,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- 唯一主基地迁徙 v1 已建立厨房/供水、设施储备、唯一科技核心、队列暂停和原子地点切换；第二套 Stash、逐格搬运、随机迁徙损失、基地布局编辑、设施耐久/独特效果及尸潮预警门禁仍明确延期。
+- 区域基地威胁 v1 只使用公共 Security 做第一条自动防守路径；实时基地战、敌人波次、防御设施、战斗小组、多档防守投资、个人资产损失和正式表现仍明确延期。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。
 - 正式攻击动画及所有新正式美术/音频生产。
 

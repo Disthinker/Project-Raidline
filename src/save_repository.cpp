@@ -560,6 +560,70 @@ RegionalOperationsState parseRegionalOperations(
     return state;
 }
 
+std::string_view baseSiegeOutcomeValue(BaseSiegeOutcome outcome)
+{
+    switch (outcome)
+    {
+    case BaseSiegeOutcome::None: return "none";
+    case BaseSiegeOutcome::Defended: return "defended";
+    case BaseSiegeOutcome::SoftFailure: return "soft_failure";
+    }
+    throw std::invalid_argument{"unknown Base siege outcome"};
+}
+
+BaseSiegeOutcome parseBaseSiegeOutcome(std::string_view value)
+{
+    if (value == "none") return BaseSiegeOutcome::None;
+    if (value == "defended") return BaseSiegeOutcome::Defended;
+    if (value == "soft_failure") return BaseSiegeOutcome::SoftFailure;
+    throw std::runtime_error{"Base siege outcome is invalid"};
+}
+
+Json baseSiegeValue(const BaseSiegeState &state)
+{
+    return {
+        {"raid_threat_units", state.raidThreatUnits},
+        {"population_threat_units", state.populationThreatUnits},
+        {"site_threat_units", state.siteThreatUnits},
+        {"resolved_day_count", state.resolvedDayCount},
+        {"safe_until_world_minute", state.safeUntilWorldMinute},
+        {"warning_active", state.warningActive},
+        {"warning_remaining_seconds", state.warningRemainingSeconds},
+        {"siege_sequence", state.siegeSequence},
+        {"auto_defense_preset_saved", state.autoDefensePresetSaved},
+        {"last_outcome", baseSiegeOutcomeValue(state.lastOutcome)},
+        {"last_security_spent", state.lastSecuritySpent},
+        {"last_population_lost", state.lastPopulationLost}};
+}
+
+BaseSiegeState defaultBaseSiege(const WorldClockState &clock)
+{
+    BaseSiegeState state;
+    static_cast<void>(clock);
+    state.resolvedDayCount = 0U;
+    state.safeUntilWorldMinute =
+        kInitialWorldMinute + 3U * kWorldMinutesPerDay;
+    return state;
+}
+
+BaseSiegeState parseBaseSiege(const Json &value)
+{
+    return {
+        value.at("raid_threat_units").get<std::uint32_t>(),
+        value.at("population_threat_units").get<std::uint32_t>(),
+        value.at("site_threat_units").get<std::uint32_t>(),
+        value.at("resolved_day_count").get<std::uint64_t>(),
+        value.at("safe_until_world_minute").get<std::uint64_t>(),
+        value.at("warning_active").get<bool>(),
+        value.at("warning_remaining_seconds").get<std::uint32_t>(),
+        value.at("siege_sequence").get<std::uint64_t>(),
+        value.at("auto_defense_preset_saved").get<bool>(),
+        parseBaseSiegeOutcome(
+            value.at("last_outcome").get<std::string>()),
+        value.at("last_security_spent").get<std::uint32_t>(),
+        value.at("last_population_lost").get<std::uint32_t>()};
+}
+
 Json optionalProfessionValue(
     const std::optional<BaseResidentProfession> &profession)
 {
@@ -1189,6 +1253,10 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 "legacy schema cannot represent regional operations"};
         }
     }
+    if (schemaVersion >= 32)
+    {
+        payload["base_siege"] = baseSiegeValue(profile.baseSiege);
+    }
     if (schemaVersion >= 25)
     {
         payload["next_recovery_task_id"] = profile.nextRecoveryTaskId;
@@ -1627,6 +1695,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                             schemaVersion >= 29,
                             schemaVersion >= 30,
                             schemaVersion >= 31);
+                if (schemaVersion >= 32)
+                {
+                    payload["pending_raid"]["travel"]
+                        ["starting_base_siege"] =
+                            baseSiegeValue(raid.travel.startingBaseSiege);
+                }
             }
         }
         if (schemaVersion >= 26)
@@ -1821,7 +1895,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
-        schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31)
+        schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
+        schemaVersion != 32)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1928,7 +2003,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 29 &&
              contentVersion == "regional-base-site-clearance-content-38") ||
             (schemaVersion == 30 &&
-             contentVersion == "regional-main-base-migration-content-39");
+             contentVersion == "regional-main-base-migration-content-39") ||
+            (schemaVersion == 31 &&
+             contentVersion == "regional-base-site-feature-content-40");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1944,7 +2021,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
              schemaVersion != 29 && schemaVersion != 30 &&
-             schemaVersion != 31) ||
+             schemaVersion != 31 && schemaVersion != 32) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2247,6 +2324,9 @@ SaveLoadResult deserializeProfileEnvelope(
             ? parseRegionalOperations(
                   payload.at("regional_operations"), content, schemaVersion)
             : defaultRegionalOperations(content);
+        profile.baseSiege = schemaVersion >= 32
+            ? parseBaseSiege(payload.at("base_siege"))
+            : defaultBaseSiege(profile.worldClock);
         if (schemaVersion >= 20)
         {
             for (const Json &entry :
@@ -2983,6 +3063,9 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingRegionalOperations =
                         profile.regionalOperations;
                 }
+                raid.travel.startingBaseSiege = schemaVersion >= 32
+                    ? parseBaseSiege(travel.at("starting_base_siege"))
+                    : defaultBaseSiege(raid.travel.startingWorldClock);
                 if (schemaVersion >= 14)
                 {
                     const Json &construction = travel.at(

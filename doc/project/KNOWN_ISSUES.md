@@ -1,6 +1,6 @@
 # Project Raidline 已知问题与待办
 
-最后核对：2026-08-26。
+最后核对：2026-08-27。
 
 ## 已确认缺陷
 
@@ -119,8 +119,9 @@
 | Regional Operations：哨所中断与恢复 v1 | PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main。随机遇袭、动态难度、路线事件、哨所伤亡/物资损失和正式表现延期 |
 | Regional Operations：基地候选点清剿 v1 | PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main |
 | Regional Operations：唯一主基地迁徙 v1 | PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。正式基地布局、随机损失、设施耐久和尸潮预警门禁延期 |
-| Regional Operations：区域基地独特设施 v1 | 当前分支已完成 Ashworks 重型物流工坊的一次性修复、schema v31/content v40、active Base 制造时长消费者和双语投影；Windows Debug 全目标与 1191/1191 CTest 通过。Greyline 新事件/商人、持续维护、设施耐久、额外队列/独占配方、威胁副作用和正式表现延期 |
+| Regional Operations：区域基地独特设施 v1 | PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。Greyline 新事件/商人、持续维护、设施耐久、额外队列/独占配方和正式表现延期 |
+| Regional Campaign：基地威胁预警与自动防守 v1 | 当前分支已完成三类威胁、可恢复的 180 秒预警、首次手动确认/后续预设、公共 Security 成败结算、schema v32/content v41 和迁徙/建设门禁。实时尸潮、防御设施、战斗小组、多档投资、个人装备损失及正式表现延期 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-base-site-feature-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-base-threat-auto-defense-v1.md`。

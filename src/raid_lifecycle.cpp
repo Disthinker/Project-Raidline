@@ -3,6 +3,7 @@
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
+#include "base_siege_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -399,6 +400,13 @@ DeployReceipt executeDeploy(
             "a Raid is already pending",
             profile.revision);
     }
+    if (profile.baseSiege.warningActive)
+    {
+        return deployFailure(
+            RaidLifecycleError::InvalidCommand,
+            "resolve the Base siege warning before deploying",
+            profile.revision);
+    }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
     {
         return deployFailure(
@@ -606,6 +614,7 @@ DeployReceipt executeDeploy(
     snapshot.travel.routeIds = travel.routeIds;
     snapshot.travel.startingRegionalOperations =
         candidate.regionalOperations;
+    snapshot.travel.startingBaseSiege = candidate.baseSiege;
     snapshot.outpostRestoration = std::move(outpostRestoration);
     snapshot.baseSiteClearance = std::move(baseSiteClearance);
     for (std::size_t index = 0;
@@ -1048,6 +1057,7 @@ RaidSettlementReceipt settlePendingRaid(
         static_cast<void>(candidate.assets.erase(assetId));
     }
     ageLostRaidRecords(candidate);
+    applySettledRaidBaseThreat(candidate);
     const RegionalOutpostThreatAdvance outpostThreat =
         applySettledRegionalRouteUsage(
             candidate,
@@ -1258,6 +1268,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
             "regional-base-site-clearance-19";
     const RegionalOperationsState startingRegionalOperations =
         candidate.pendingRaid->travel.startingRegionalOperations;
+    const BaseSiegeState startingBaseSiege =
+        candidate.pendingRaid->travel.startingBaseSiege;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -1302,6 +1314,7 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     {
         candidate.regionalOperations = startingRegionalOperations;
     }
+    candidate.baseSiege = startingBaseSiege;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

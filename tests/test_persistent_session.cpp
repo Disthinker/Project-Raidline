@@ -48,6 +48,96 @@ AssetInstanceId findDefinition(
     return 0;
 }
 
+TEST(PersistentSessionTest, SiegeWarningCountdownPersistsAndFirstTimeoutWaits)
+{
+    SessionSaveDirectory temporary;
+    ProfileState profile = makeNewAlphaProfile(
+        "persistent-siege-warning", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    profile.baseSiege.warningActive = true;
+    profile.baseSiege.warningRemainingSeconds = 3U;
+    profile.baseSiege.siegeSequence = 1U;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        profile, publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.continueProfile()) << first.persistenceMessage();
+    first.advanceBaseWorldClock(2.2F);
+    EXPECT_EQ(first.baseThreatProjection().warningRemainingSeconds, 1U);
+    ASSERT_TRUE(first.checkpointWorldClock()) << first.persistenceMessage();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.baseThreatProjection().warningRemainingSeconds, 1U);
+    reopened.advanceBaseWorldClock(2.0F);
+    EXPECT_TRUE(reopened.baseThreatProjection().warningActive);
+    EXPECT_EQ(reopened.baseThreatProjection().warningRemainingSeconds, 0U);
+    EXPECT_TRUE(reopened.baseThreatProjection().requiresFirstPreset);
+
+    const BaseAutoDefenseReceipt receipt = reopened.executeBaseAutoDefense(
+        "persistent-first-auto-defense");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_FALSE(reopened.baseThreatProjection().warningActive);
+    EXPECT_EQ(receipt.outcome, BaseSiegeOutcome::Defended);
+}
+
+TEST(PersistentSessionTest, EligibleSiegeWarningActivationIsImmediatelyDurable)
+{
+    SessionSaveDirectory temporary;
+    ProfileState profile = makeNewAlphaProfile(
+        "persistent-siege-activation", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    profile.baseSiege.safeUntilWorldMinute =
+        profile.worldClock.elapsedWorldMinutes;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        profile, publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    active.advanceBaseWorldClock(0.1F);
+    ASSERT_TRUE(active.baseThreatProjection().warningActive);
+    EXPECT_EQ(active.baseThreatProjection().warningRemainingSeconds,
+              kBaseSiegeWarningSeconds);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(reopened.baseThreatProjection().warningActive);
+    EXPECT_EQ(reopened.baseThreatProjection().warningRemainingSeconds,
+              kBaseSiegeWarningSeconds);
+}
+
+TEST(PersistentSessionTest, SavedAutoDefensePresetResolvesAtTimeout)
+{
+    SessionSaveDirectory temporary;
+    ProfileState profile = makeNewAlphaProfile(
+        "persistent-siege-preset", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    profile.baseSiege.warningActive = true;
+    profile.baseSiege.warningRemainingSeconds = 1U;
+    profile.baseSiege.siegeSequence = 4U;
+    profile.baseSiege.autoDefensePresetSaved = true;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        profile, publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    session.advanceBaseWorldClock(1.0F);
+
+    EXPECT_FALSE(session.baseThreatProjection().warningActive);
+    EXPECT_EQ(session.profile().baseSiege.lastOutcome,
+              BaseSiegeOutcome::Defended);
+    EXPECT_TRUE(session.profile().committedTransactions.contains(
+        "persistent-siege-preset-base-siege-auto-4"));
+}
+
 AssetInstanceId addPendingItem(
     ProfileState &profile,
     const ItemDefinitionId &definitionId)

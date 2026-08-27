@@ -13,6 +13,7 @@
 #include "base_construction_domain.h"
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
+#include "base_siege_domain.h"
 #include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
@@ -183,6 +184,10 @@ public:
     void advanceBaseWorldClock(float deltaTime);
     [[nodiscard]] bool checkpointWorldClock();
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
+    [[nodiscard]] BaseThreatProjection baseThreatProjection() const noexcept;
+    [[nodiscard]] BaseAutoDefensePlan baseAutoDefensePlan() const noexcept;
+    [[nodiscard]] BaseAutoDefenseReceipt executeBaseAutoDefense(
+        std::string transactionId);
     [[nodiscard]] std::optional<RaidTravelPreview> raidTravelPreview(
         const MapDefinitionId &mapDefinitionId) const noexcept;
     [[nodiscard]] std::vector<LostRaidRecordProjection>
@@ -405,6 +410,7 @@ private:
     bool baseSiteClearanceObjectiveSecured_{};
     double pendingWorldSeconds_{};
     float worldClockCheckpointElapsedSeconds_{};
+    float baseSiegeWarningSecondAccumulator_{};
     bool worldClockDirty_{};
     WeaponClearGesture weaponClearGesture_;
     float medicalTickAccumulatorSeconds_{};
@@ -458,6 +464,7 @@ private:
     void advanceWorldClockFromSimulation(
         float deltaTime,
         bool allowPeriodicCheckpoint);
+    void advanceBaseSiegeFromSimulation(float deltaTime);
     void resetWorldClockRuntime() noexcept;
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
     void applyAlphaIncomingDamage();

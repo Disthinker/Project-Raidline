@@ -2096,7 +2096,43 @@ void GameSession::advanceBaseWorldClock(float deltaTime)
     {
         return;
     }
+    advanceBaseSiegeFromSimulation(deltaTime);
     advanceWorldClockFromSimulation(deltaTime, true);
+}
+
+BaseThreatProjection GameSession::baseThreatProjection() const noexcept
+{
+    return projectBaseThreat(profile_);
+}
+
+BaseAutoDefensePlan GameSession::baseAutoDefensePlan() const noexcept
+{
+    return queryBaseAutoDefense(profile_, publishedContentRegistry());
+}
+
+BaseAutoDefenseReceipt GameSession::executeBaseAutoDefense(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseAutoDefenseReceipt receipt = ::executeBaseAutoDefense(
+        candidate,
+        publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+        return receipt;
+    }
+    baseSiegeWarningSecondAccumulator_ = 0.0F;
+    return receipt;
 }
 
 bool GameSession::checkpointWorldClock()
@@ -2347,11 +2383,94 @@ void GameSession::advanceWorldClockFromSimulation(
     }
 }
 
+void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F ||
+        alphaRaidActive_ || profile_.pendingRaid.has_value() ||
+        state_ != GameSessionState::BetweenRaids)
+    {
+        return;
+    }
+
+    ProfileState candidate = profile_;
+    const bool activated = activateBaseSiegeWarningIfEligible(candidate);
+    bool changed = activated;
+    if (activated)
+    {
+        if (candidate.revision ==
+            std::numeric_limits<ProfileRevision>::max())
+        {
+            persistenceMessage_ = "Base siege warning revision overflow";
+            return;
+        }
+        ++candidate.revision;
+        baseSiegeWarningSecondAccumulator_ = 0.0F;
+    }
+
+    if (candidate.baseSiege.warningActive &&
+        candidate.baseSiege.warningRemainingSeconds > 0U)
+    {
+        baseSiegeWarningSecondAccumulator_ += deltaTime;
+        const std::uint32_t wholeSeconds = static_cast<std::uint32_t>(
+            std::floor(baseSiegeWarningSecondAccumulator_));
+        if (wholeSeconds > 0U)
+        {
+            changed = advanceBaseSiegeWarning(candidate, wholeSeconds) ||
+                changed;
+            baseSiegeWarningSecondAccumulator_ -=
+                static_cast<float>(wholeSeconds);
+        }
+    }
+
+    if (!changed)
+    {
+        return;
+    }
+
+    if (candidate.baseSiege.warningActive &&
+        candidate.baseSiege.warningRemainingSeconds == 0U &&
+        candidate.baseSiege.autoDefensePresetSaved)
+    {
+        const std::string transactionId =
+            candidate.profileId + "-base-siege-auto-" +
+            std::to_string(candidate.baseSiege.siegeSequence);
+        const BaseAutoDefenseReceipt receipt = ::executeBaseAutoDefense(
+            candidate,
+            publishedContentRegistry(),
+            CommandContext{candidate.revision, transactionId});
+        if (!receipt.succeeded ||
+            !commitProfileCandidate(std::move(candidate)))
+        {
+            persistenceMessage_ = receipt.message.empty()
+                ? persistenceMessage_
+                : receipt.message;
+        }
+        baseSiegeWarningSecondAccumulator_ = 0.0F;
+        return;
+    }
+
+    const ProfileValidationResult validation = validateProfileState(
+        candidate, publishedContentRegistry());
+    if (!validation.valid)
+    {
+        persistenceMessage_ = validation.message;
+        return;
+    }
+    if (activated)
+    {
+        static_cast<void>(commitProfileCandidate(std::move(candidate)));
+        return;
+    }
+    profile_ = std::move(candidate);
+    worldClockDirty_ = true;
+}
+
 void GameSession::resetWorldClockRuntime() noexcept
 {
     pendingWorldSeconds_ = 0.0;
     worldClockCheckpointElapsedSeconds_ = 0.0F;
     worldClockDirty_ = false;
+    baseSiegeWarningSecondAccumulator_ = 0.0F;
 }
 
 void GameSession::updateAlphaRaid(

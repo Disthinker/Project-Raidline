@@ -370,6 +370,11 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "construction project does not exist",
                                profile.revision);
   }
+  if (profile.baseSiege.warningActive) {
+    return constructionFailure(DomainErrorCode::IllegalDestination,
+                               "new construction is locked during siege warning",
+                               profile.revision);
+  }
   if (profile.pendingRaid.has_value()) {
     return constructionFailure(DomainErrorCode::IllegalDestination,
                                "construction can only start in Base",
@@ -634,6 +639,11 @@ InstallBaseFacilityPlan queryInstallBaseFacility(
   if (profile.pendingRaid.has_value()) {
     return {false, DomainErrorCode::IllegalDestination,
             "Base facility installation is unavailable during a Raid",
+            profile.revision, command.definitionId};
+  }
+  if (profile.baseSiege.warningActive) {
+    return {false, DomainErrorCode::IllegalDestination,
+            "Base facility installation is locked during siege warning",
             profile.revision, command.definitionId};
   }
   const auto found = profile.baseConstruction.facilities.find(
