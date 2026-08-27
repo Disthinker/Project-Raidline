@@ -1072,6 +1072,12 @@ void GameplayWorld::update(
          step < enemySubsteps;
          ++step)
     {
+        if (std::isfinite(enemyStepTime) && enemyStepTime > 0.0F)
+        {
+            enemyDamageProtectionRemainingSeconds_ = std::max(
+                0.0F,
+                enemyDamageProtectionRemainingSeconds_ - enemyStepTime);
+        }
         const Vec2 playerPosition =
             playerCenter(player_);
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
@@ -2244,6 +2250,16 @@ bool GameplayWorld::resolveEnemyAttackDamage(
 {
     if (!deferPlayerDamageResolution_)
     {
+        if (legacyDamage > 0 &&
+            enemyDamageProtectionRemainingSeconds_ > 0.0F)
+        {
+            return false;
+        }
+        if (legacyDamage > 0)
+        {
+            enemyDamageProtectionRemainingSeconds_ =
+                kEnemyDamageProtectionDurationSeconds;
+        }
         return damagePlayer(legacyDamage);
     }
 
@@ -2252,6 +2268,12 @@ bool GameplayWorld::resolveEnemyAttackDamage(
     {
         return false;
     }
+    if (enemyDamageProtectionRemainingSeconds_ > 0.0F)
+    {
+        return false;
+    }
+    enemyDamageProtectionRemainingSeconds_ =
+        kEnemyDamageProtectionDurationSeconds;
     pendingPlayerDamageObservations_.push_back(
         PlayerDamageObservation{
             damage.baseDamage,
