@@ -1046,6 +1046,16 @@ ContentRegistry ContentRegistry::fromJson(
                 requiredString(siteValue, "advantage"),
                 requiredString(siteValue, "disadvantage"),
                 requiredString(siteValue, "unique_feature"),
+                requiredBool(
+                    siteValue, "unique_feature_initially_repaired"),
+                optionalUint(
+                    siteValue,
+                    "unique_feature_repair_material_units"),
+                optionalUint(
+                    siteValue, "unique_feature_repair_minutes"),
+                requiredPositiveUint(
+                    siteValue,
+                    "unique_feature_manufacturing_duration_percent"),
                 requiredPositiveUint(siteValue, "migration_minutes"),
                 requiredPositiveUint(siteValue, "core_facility_slots")};
             const auto node = registry.regionNodeIndex_.find(
@@ -1056,6 +1066,16 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.advantage.empty() ||
                 definition.disadvantage.empty() ||
                 definition.uniqueFeature.empty() ||
+                definition.uniqueFeatureRepairMaterialUnits > 100U ||
+                definition.uniqueFeatureRepairMinutes >
+                    7U * 24U * 60U ||
+                definition.uniqueFeatureManufacturingDurationPercent < 25U ||
+                definition.uniqueFeatureManufacturingDurationPercent > 100U ||
+                (!definition.uniqueFeatureInitiallyRepaired &&
+                 (definition.uniqueFeatureRepairMaterialUnits == 0U ||
+                  definition.uniqueFeatureRepairMinutes == 0U ||
+                  definition.uniqueFeatureManufacturingDurationPercent ==
+                      100U)) ||
                 definition.migrationMinutes > 7U * 24U * 60U ||
                 definition.coreFacilitySlots < 4U ||
                 definition.coreFacilitySlots > 16U ||

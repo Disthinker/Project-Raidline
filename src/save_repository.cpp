@@ -248,7 +248,8 @@ Json regionalOperationsValue(
     const RegionalOperationsState &state,
     bool includeShortcutThreat,
     bool includeBaseSites,
-    bool includeTechnologyCore)
+    bool includeTechnologyCore,
+    bool includeUniqueFeatureState)
 {
     Json outposts = Json::array();
     for (const auto &[outpostId, outpost] : state.outposts)
@@ -281,9 +282,15 @@ Json regionalOperationsValue(
         Json baseSites = Json::array();
         for (const auto &[siteId, site] : state.baseSites)
         {
-            baseSites.push_back({
+            Json entry{
                 {"definition_id", siteId.value()},
-                {"unlocked", site.unlocked}});
+                {"unlocked", site.unlocked}};
+            if (includeUniqueFeatureState)
+            {
+                entry["unique_feature_repaired"] =
+                    site.uniqueFeatureRepaired;
+            }
+            baseSites.push_back(std::move(entry));
         }
         value["base_sites"] = std::move(baseSites);
     }
@@ -441,7 +448,9 @@ RegionalOperationsState defaultRegionalOperations(
     {
         state.baseSites.emplace(
             definition.id,
-            RegionalBaseSiteState{definition.initiallyUnlocked});
+            RegionalBaseSiteState{
+                definition.initiallyUnlocked,
+                definition.uniqueFeatureInitiallyRepaired});
     }
     for (const RegionalOutpostDefinition &definition :
          content.regionalOperations().outposts)
@@ -466,7 +475,9 @@ RegionalOperationsState parseRegionalOperations(
     {
         state.baseSites.emplace(
             definition.id,
-            RegionalBaseSiteState{definition.initiallyUnlocked});
+            RegionalBaseSiteState{
+                definition.initiallyUnlocked,
+                definition.uniqueFeatureInitiallyRepaired});
     }
     if (schemaVersion >= 29)
     {
@@ -483,6 +494,11 @@ RegionalOperationsState parseRegionalOperations(
             }
             state.baseSites.at(definitionId).unlocked =
                 entry.at("unlocked").get<bool>();
+            if (schemaVersion >= 31)
+            {
+                state.baseSites.at(definitionId).uniqueFeatureRepaired =
+                    entry.at("unique_feature_repaired").get<bool>();
+            }
         }
         if (parsed.size() != content.regionalOperations().baseSites.size())
         {
@@ -1146,7 +1162,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 profile.regionalOperations,
                 schemaVersion >= 28,
                 schemaVersion >= 29,
-                schemaVersion >= 30);
+                schemaVersion >= 30,
+                schemaVersion >= 31);
     }
     else
     {
@@ -1608,7 +1625,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                             raid.travel.startingRegionalOperations,
                             schemaVersion >= 28,
                             schemaVersion >= 29,
-                            schemaVersion >= 30);
+                            schemaVersion >= 30,
+                            schemaVersion >= 31);
             }
         }
         if (schemaVersion >= 26)
@@ -1803,7 +1821,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
-        schemaVersion != 29 && schemaVersion != 30)
+        schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1908,7 +1926,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 28 &&
              contentVersion == "regional-outpost-disruption-content-37") ||
             (schemaVersion == 29 &&
-             contentVersion == "regional-base-site-clearance-content-38");
+             contentVersion == "regional-base-site-clearance-content-38") ||
+            (schemaVersion == 30 &&
+             contentVersion == "regional-main-base-migration-content-39");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1923,7 +1943,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 23 && schemaVersion != 24 &&
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
-             schemaVersion != 29 && schemaVersion != 30) ||
+             schemaVersion != 29 && schemaVersion != 30 &&
+             schemaVersion != 31) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};

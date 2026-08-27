@@ -441,6 +441,7 @@ struct RegionalOutpostState
 struct RegionalBaseSiteState
 {
     bool unlocked{};
+    bool uniqueFeatureRepaired{};
 
     friend bool operator==(
         const RegionalBaseSiteState &,

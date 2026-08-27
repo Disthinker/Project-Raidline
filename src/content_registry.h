@@ -270,6 +270,10 @@ struct RegionalBaseSiteDefinition
     std::string advantage;
     std::string disadvantage;
     std::string uniqueFeature;
+    bool uniqueFeatureInitiallyRepaired{};
+    std::uint32_t uniqueFeatureRepairMaterialUnits{};
+    std::uint32_t uniqueFeatureRepairMinutes{};
+    std::uint32_t uniqueFeatureManufacturingDurationPercent{100U};
     std::uint32_t migrationMinutes{};
     std::uint32_t coreFacilitySlots{};
 

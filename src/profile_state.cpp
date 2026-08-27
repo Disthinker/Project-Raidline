@@ -383,7 +383,9 @@ ProfileState makeNewAlphaProfile(
     {
         profile.regionalOperations.baseSites.emplace(
             site.id,
-            RegionalBaseSiteState{site.initiallyUnlocked});
+            RegionalBaseSiteState{
+                site.initiallyUnlocked,
+                site.uniqueFeatureInitiallyRepaired});
     }
     for (const RegionalOutpostDefinition &outpost :
          content.regionalOperations().outposts)
@@ -936,6 +938,13 @@ ProfileValidationResult validateProfileState(
         if (found == profile.regionalOperations.baseSites.end())
         {
             return {false, "regional Base site state is missing"};
+        }
+        if (found->second.uniqueFeatureRepaired &&
+            !found->second.unlocked &&
+            !definition.uniqueFeatureInitiallyRepaired)
+        {
+            return {false,
+                    "locked regional Base site has a repaired feature"};
         }
         if (definition.nodeId ==
             profile.regionalOperations.activeBaseNodeId)
@@ -1751,13 +1760,27 @@ ProfileValidationResult validateProfileState(
                     content.baseMorale());
             for (std::uint32_t facilityLevel : {1U, 2U})
             {
-                publishedDuration = publishedDuration ||
-                    frozenDuration == applyBaseFacilityTaskDuration(
+                const std::uint32_t staffedDuration =
+                    applyBaseFacilityTaskDuration(
                         moraleDuration,
                         BaseFacilityStaffingKind::Workshop,
                         order.workerProfession,
                         facilityLevel,
                         content.baseWorkforce());
+                publishedDuration = publishedDuration ||
+                    frozenDuration == staffedDuration;
+                for (const RegionalBaseSiteDefinition &site :
+                     content.regionalOperations().baseSites)
+                {
+                    const std::uint64_t adjusted =
+                        (static_cast<std::uint64_t>(staffedDuration) *
+                             site.uniqueFeatureManufacturingDurationPercent +
+                         99U) /
+                        100U;
+                    publishedDuration = publishedDuration ||
+                        frozenDuration ==
+                            std::max<std::uint64_t>(1U, adjusted);
+                }
             }
         }
         const bool timingValid =
@@ -2994,6 +3017,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     {
         hashBytes(hash, siteId.value());
         hashInteger(hash, state.unlocked ? 1U : 0U);
+        hashInteger(hash, state.uniqueFeatureRepaired ? 1U : 0U);
     }
     for (const auto &[outpostId, state] :
          profile.regionalOperations.outposts)
@@ -3389,6 +3413,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashBytes(hash, siteId.value());
             hashInteger(hash, state.unlocked ? 1U : 0U);
+            hashInteger(hash, state.uniqueFeatureRepaired ? 1U : 0U);
         }
         for (const auto &[outpostId, state] :
              raid.travel.startingRegionalOperations.outposts)

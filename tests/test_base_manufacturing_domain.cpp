@@ -5,6 +5,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
+#include "base_site_feature_domain.h"
 #include "world_clock.h"
 
 namespace
@@ -281,4 +282,43 @@ TEST(BaseManufacturingDomainTest,
             profile.baseManufacturing.activeOrder->completionWorldMinute,
             frozenCompletion);
     }
+}
+
+TEST(BaseManufacturingDomainTest,
+     RepairedAshworksFeatureChangesOnlyNewOrderDuration)
+{
+    ProfileState profile = makeProfile();
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId ashworksOutpost{
+        "regional_outpost.ashworks_logistics_yard"};
+    profile.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    profile.regionalOperations.baseSites.at(ashworksSite)
+        .uniqueFeatureRepaired = true;
+    profile.regionalOperations.outposts.at(ashworksOutpost).unlocked = true;
+    profile.regionalOperations.activeBaseNodeId =
+        RegionNodeDefinitionId{"region_node.base.ashworks_logistics_yard"};
+    profile.regionalOperations.technologyCore.baseSiteDefinitionId =
+        ashworksSite;
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
+
+    const BaseManufacturingStartPlan plan = queryStartBaseManufacturing(
+        profile,
+        publishedContentRegistry(),
+        StartBaseManufacturingCommand{kWeaponKitRecipe});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.activeSiteDurationPercent, 75U);
+    EXPECT_EQ(plan.durationMinutes, 270U);
+    const BaseManufacturingReceipt started = startOrder(profile);
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const std::uint64_t frozenCompletion =
+        profile.baseManufacturing.activeOrder->completionWorldMinute;
+
+    profile.regionalOperations.activeBaseNodeId =
+        RegionNodeDefinitionId{"region_node.base.greyline_yard"};
+    profile.regionalOperations.technologyCore.baseSiteDefinitionId =
+        RegionalBaseSiteDefinitionId{"regional_base_site.greyline_yard"};
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->completionWorldMinute,
+              frozenCompletion);
 }

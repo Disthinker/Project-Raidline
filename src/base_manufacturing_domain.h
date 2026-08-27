@@ -33,6 +33,7 @@ struct BaseManufacturingStartPlan
     std::uint32_t workerCount{};
     BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::uint32_t durationMinutes{};
+    std::uint32_t activeSiteDurationPercent{100U};
     std::vector<BaseManufacturingInputSelection> inputs;
 };
 

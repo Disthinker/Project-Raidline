@@ -215,6 +215,8 @@ add_library(raidline_domain STATIC
     src/base_construction_domain.h
     src/base_migration_domain.cpp
     src/base_migration_domain.h
+    src/base_site_feature_domain.cpp
+    src/base_site_feature_domain.h
     src/base_population_domain.cpp
     src/base_population_domain.h
     src/base_workforce_domain.cpp
@@ -652,6 +654,10 @@ raidline_add_test(
 raidline_add_test(
     BaseMigrationDomainTest
     tests/test_base_migration_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseSiteFeatureDomainTest
+    tests/test_base_site_feature_domain.cpp
     raidline::domain)
 raidline_add_test(
     RaidRescueDomainTest

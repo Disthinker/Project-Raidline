@@ -2,6 +2,7 @@
 
 #include "base_construction_domain.h"
 #include "base_morale_domain.h"
+#include "base_site_feature_domain.h"
 #include "base_workforce_domain.h"
 
 #include <algorithm>
@@ -236,13 +237,18 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             "the workshop worker profession is not eligible",
             profile.revision);
     }
+    const std::uint32_t siteDurationPercent =
+        activeBaseSiteManufacturingDurationPercent(profile, content);
+    const std::uint32_t finalDuration =
+        applyActiveBaseSiteManufacturingDuration(
+            adjustedDuration, profile, content);
     if (profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
         profile.assets.nextAssetId() ==
             std::numeric_limits<AssetInstanceId>::max() ||
         profile.worldClock.elapsedWorldMinutes >
             std::numeric_limits<std::uint64_t>::max() -
-                adjustedDuration)
+                finalDuration)
     {
         return startFailure(
             DomainErrorCode::RevisionOverflow,
@@ -257,7 +263,8 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
         profile.revision,
         recipe->workerCount,
         workerProfession,
-        adjustedDuration};
+        finalDuration,
+        siteDurationPercent};
     std::set<AssetInstanceId> selected;
     for (const BaseManufacturingInputDefinition &input : recipe->inputs)
     {
