@@ -1776,13 +1776,18 @@ SDL_FRect App::regionalBaseSiteClearanceButton() const noexcept
     return SDL_FRect{300.0F, 360.0F, 520.0F, 40.0F};
 }
 
+SDL_FRect App::regionalFacilityReserveButton() const noexcept
+{
+    return SDL_FRect{300.0F, 405.0F, 420.0F, 32.0F};
+}
+
 SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
         755.0F,
-        420.0F + static_cast<float>(index) * 82.0F,
+        446.0F + static_cast<float>(index) * 62.0F,
         360.0F,
-        42.0F};
+        36.0F};
 }
 
 SDL_FRect App::lostRaidRecordRow(std::size_t index) const noexcept
@@ -1972,21 +1977,99 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 publishedContentRegistry().regionalOperations().outposts;
             const auto &baseSites =
                 publishedContentRegistry().regionalOperations().baseSites;
-            for (const RegionalBaseSiteDefinition &site : baseSites)
+            const auto candidate = std::find_if(
+                baseSites.begin(), baseSites.end(),
+                [&](const RegionalBaseSiteDefinition &site)
+                {
+                    return site.nodeId != gameSession_.profile()
+                        .regionalOperations.activeBaseNodeId;
+                });
+            if (candidate != baseSites.end() &&
+                contains(regionalBaseSiteClearanceButton(), click.position))
             {
                 const RegionalBaseSiteState &state = gameSession_.profile()
-                    .regionalOperations.baseSites.at(site.id);
-                if (!state.unlocked &&
-                    contains(
-                        regionalBaseSiteClearanceButton(), click.position))
+                    .regionalOperations.baseSites.at(candidate->id);
+                if (!state.unlocked)
                 {
                     const bool deployed = tryDeployFromBase(
-                        std::nullopt, site.id);
+                        std::nullopt, candidate->id);
                     gameAudio_.play(deployed
                         ? SoundEventId::UiConfirm
                         : SoundEventId::UiDeny);
                     return;
                 }
+                const BaseFacilityDefinitionId kitchenWater{
+                    "base_facility.kitchen_water"};
+                if (!baseFacilityOwned(gameSession_.profile(), kitchenWater))
+                {
+                    const auto &projects = publishedContentRegistry()
+                        .baseConstructionProjects();
+                    const auto project = std::find_if(
+                        projects.begin(), projects.end(),
+                        [](const BaseConstructionProjectDefinition &entry)
+                        {
+                            return entry.target ==
+                                BaseFacilityUpgradeTarget::KitchenWater;
+                        });
+                    if (project == projects.end())
+                    {
+                        uiMessage_ = "KITCHEN & WATER PROJECT IS NOT PUBLISHED";
+                        gameAudio_.play(SoundEventId::UiDeny);
+                        return;
+                    }
+                    const auto &active = gameSession_.profile()
+                        .baseConstruction.activeProject;
+                    const bool cancelling = active.has_value() &&
+                        active->definitionId == project->id;
+                    const BaseConstructionReceipt receipt = cancelling
+                        ? gameSession_.executeCancelBaseConstruction(
+                            project->id,
+                            nextProfileTransactionId(
+                                "cancel-kitchen-water"))
+                        : gameSession_.executeStartBaseConstruction(
+                            project->id,
+                            nextProfileTransactionId(
+                                "start-kitchen-water"));
+                    uiMessage_ = receipt.succeeded
+                        ? cancelling
+                            ? "KITCHEN & WATER CONSTRUCTION CANCELLED"
+                            : "KITCHEN & WATER CONSTRUCTION STARTED"
+                        : receipt.message;
+                    gameAudio_.play(receipt.succeeded
+                        ? SoundEventId::UiConfirm
+                        : SoundEventId::UiDeny);
+                    return;
+                }
+                const BaseMigrationReceipt receipt =
+                    gameSession_.executeBaseMigration(
+                        candidate->id,
+                        nextProfileTransactionId("migrate-main-base"));
+                uiMessage_ = receipt.succeeded
+                    ? "MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                return;
+            }
+            const BaseFacilityDefinitionId workshop{
+                "base_facility.workshop"};
+            if (contains(regionalFacilityReserveButton(), click.position) &&
+                baseFacilityOwned(gameSession_.profile(), workshop) &&
+                !baseFacilityInstalled(gameSession_.profile(), workshop))
+            {
+                const InstallBaseFacilityReceipt receipt =
+                    gameSession_.executeInstallBaseFacility(
+                        workshop,
+                        nextProfileTransactionId(
+                            "install-reserve-facility"));
+                uiMessage_ = receipt.succeeded
+                    ? "WORKSHOP INSTALLED FROM FACILITY RESERVE"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                return;
             }
             for (std::size_t index{}; index < outposts.size(); ++index)
             {
@@ -2395,6 +2478,15 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Workshop)
     {
+        const BaseFacilityDefinitionId workshop{
+            "base_facility.workshop"};
+        if (!baseFacilityInstalled(gameSession_.profile(), workshop))
+        {
+            uiMessage_ =
+                "WORKSHOP IS IN FACILITY RESERVE | INSTALL IT ON REGIONAL PAGE";
+            gameAudio_.play(SoundEventId::UiDeny);
+            return;
+        }
         if (contains(baseFacilityStaffingButton(), click.position))
         {
             const bool assigned = gameSession_.profile().baseWorkforce
@@ -10622,6 +10714,23 @@ void App::renderBaseWorkshop()
     SDL_RenderRect(renderer_, &panel);
 
     const ProfileState &profile = gameSession_.profile();
+    const BaseFacilityDefinitionId workshopFacility{
+        "base_facility.workshop"};
+    if (!baseFacilityInstalled(profile, workshopFacility))
+    {
+        SDL_SetRenderDrawColor(renderer_, 232, 222, 196, 255);
+        uiTextRenderer_.render(
+            renderer_, 170.0F, 128.0F,
+            "WORKSHOP & PRODUCTION | FACILITY RESERVE");
+        uiTextRenderer_.render(
+            renderer_, 170.0F, 200.0F,
+            "WORKSHOP IS PACKED | PRODUCTION AND UPGRADES ARE PAUSED");
+        uiTextRenderer_.render(
+            renderer_, 170.0F, 228.0F,
+            "INSTALL IT FREE ON THE REGIONAL PAGE TO RESUME EXACT PROGRESS");
+        uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
+        return;
+    }
     const BaseManufacturingRecipeDefinition &recipe =
         publishedContentRegistry().baseManufacturingRecipes().front();
     const BaseManufacturingProjection projection =
@@ -11040,14 +11149,14 @@ void App::renderBaseDeployment()
 void App::renderRegionalOperations()
 {
     const SDL_FRect panel{
-        kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
+        100.0F, 120.0F, 1080.0F, 580.0F};
     SDL_SetRenderDrawColor(renderer_, 18, 25, 22, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 110, 156, 128, 255);
     SDL_RenderRect(renderer_, &panel);
 
     uiTextRenderer_.render(
-        renderer_, 500.0F, 170.0F,
+        renderer_, 430.0F, 150.0F,
         "REGIONAL BASE SITES, ROUTES & OUTPOSTS");
     const SDL_FRect back = raidRegionalOperationsButton();
     SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
@@ -11063,14 +11172,24 @@ void App::renderRegionalOperations()
     const RegionNodeDefinition &base = content.regionNode(
         profile.regionalOperations.activeBaseNodeId);
     const std::string baseLabel = fmt::format(
-        "ACTIVE MAIN BASE | {}", base.displayName);
+        "ACTIVE MAIN BASE | {} | TECHNOLOGY CORE {}",
+        base.displayName,
+        profile.regionalOperations.technologyCore.instanceId);
     uiTextRenderer_.render(
         renderer_, 300.0F, 232.0F, baseLabel.c_str());
     uiTextRenderer_.render(
         renderer_, 300.0F, 258.0F,
-        "CLEARING UNLOCKS A SITE; MIGRATION REMAINS A LATER FACILITY SLICE");
+        "CLEAR SITE > ESTABLISH STAGING OUTPOST > BUILD CORE FACILITIES > MIGRATE");
 
     const auto &baseSites = content.regionalOperations().baseSites;
+    const auto activeSite = std::find_if(
+        baseSites.begin(), baseSites.end(),
+        [&](const RegionalBaseSiteDefinition &site)
+        { return site.nodeId == profile.regionalOperations.activeBaseNodeId; });
+    const std::optional<RegionalOutpostDefinitionId> activeBaseOutpost =
+        activeSite != baseSites.end()
+            ? activeSite->outpostDefinitionId
+            : std::nullopt;
     const auto candidate = std::find_if(
         baseSites.begin(), baseSites.end(),
         [&](const RegionalBaseSiteDefinition &site)
@@ -11091,34 +11210,122 @@ void App::renderRegionalOperations()
             renderer_, 300.0F, 288.0F, siteStatus.c_str());
         const std::string advantage = fmt::format(
             "ADVANTAGE | {}", candidate->advantage);
-        const std::string disadvantage = fmt::format(
-            "DRAWBACK | {}", candidate->disadvantage);
-        const std::string feature = fmt::format(
-            "FIXED FEATURE | {}", candidate->uniqueFeature);
         uiTextRenderer_.render(
             renderer_, 300.0F, 310.0F, advantage.c_str());
+        const BaseFacilityDefinitionId warehouse{
+            "base_facility.warehouse"};
+        const BaseFacilityDefinitionId dormitory{
+            "base_facility.dormitory"};
+        const BaseFacilityDefinitionId kitchenWater{
+            "base_facility.kitchen_water"};
+        const BaseFacilityDefinitionId medical{
+            "base_facility.medical"};
+        const auto facilityStatus = [&](const BaseFacilityDefinitionId &id)
+        {
+            return baseFacilityOwned(profile, id) ? "READY" : "MISSING";
+        };
+        const std::string infrastructure = fmt::format(
+            "MIGRATION CORE | WAREHOUSE {} | DORMITORY FACILITY {} | KITCHEN/WATER {} | MEDICAL FACILITY {}",
+            facilityStatus(warehouse),
+            facilityStatus(dormitory),
+            facilityStatus(kitchenWater),
+            facilityStatus(medical));
         uiTextRenderer_.render(
-            renderer_, 300.0F, 330.0F, disadvantage.c_str());
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 350.0F, feature.c_str());
+            renderer_, 300.0F, 334.0F, infrastructure.c_str());
+
         const RegionalBaseSiteClearancePlan clearance =
             queryRegionalBaseSiteClearance(profile, content, candidate->id);
+        bool actionAvailable{};
+        std::string actionLabel;
+        if (!siteState.unlocked)
+        {
+            actionAvailable = clearance.canDeploy;
+            actionLabel = deploymentWarningArmed_
+                ? "CONFIRM BASE SITE CLEARING RAID"
+                : "DEPLOY BASE SITE CLEARING RAID";
+        }
+        else if (!baseFacilityOwned(profile, kitchenWater))
+        {
+            const auto &projects = content.baseConstructionProjects();
+            const auto project = std::find_if(
+                projects.begin(), projects.end(),
+                [](const BaseConstructionProjectDefinition &entry)
+                {
+                    return entry.target ==
+                        BaseFacilityUpgradeTarget::KitchenWater;
+                });
+            if (project == projects.end())
+            {
+                actionLabel = "KITCHEN & WATER PROJECT NOT PUBLISHED";
+            }
+            else
+            {
+                const auto &active = profile.baseConstruction.activeProject;
+                const bool cancelling = active.has_value() &&
+                    active->definitionId == project->id;
+                const BaseConstructionPlan plan = cancelling
+                    ? queryCancelBaseConstruction(
+                        profile, content,
+                        CancelBaseConstructionCommand{project->id})
+                    : queryStartBaseConstruction(
+                        profile, content,
+                        StartBaseConstructionCommand{project->id});
+                actionAvailable = plan.canCommit;
+                actionLabel = cancelling
+                    ? fmt::format(
+                        "CANCEL KITCHEN & WATER | {} MIN REMAINING",
+                        profile.baseConstruction.activeProject
+                            ->completionWorldMinute -
+                            profile.worldClock.elapsedWorldMinutes)
+                    : plan.canCommit
+                        ? fmt::format(
+                            "BUILD KITCHEN & WATER | MATERIAL {} | WORKERS {} | {}H",
+                            plan.materialCost,
+                            plan.workerCount,
+                            plan.durationMinutes / kWorldMinutesPerHour)
+                        : "KITCHEN & WATER REQUIREMENTS NOT MET";
+            }
+        }
+        else
+        {
+            const BaseMigrationPlan migration = queryBaseMigration(
+                profile, content, BaseMigrationCommand{candidate->id});
+            actionAvailable = migration.canCommit;
+            actionLabel = migration.canCommit
+                ? fmt::format(
+                    "MIGRATE MAIN BASE | {}H | OLD BASE BECOMES OUTPOST",
+                    migration.migrationMinutes / kWorldMinutesPerHour)
+                : "MIGRATION BLOCKED | ESTABLISH TARGET OUTPOST";
+        }
         const SDL_FRect action = regionalBaseSiteClearanceButton();
         SDL_SetRenderDrawColor(
-            renderer_, clearance.canDeploy ? 56 : 42,
-            clearance.canDeploy ? 92 : 52,
-            clearance.canDeploy ? 70 : 52, 255);
+            renderer_, actionAvailable ? 56 : 42,
+            actionAvailable ? 92 : 52,
+            actionAvailable ? 70 : 52, 255);
         SDL_RenderFillRect(renderer_, &action);
         SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
         SDL_RenderRect(renderer_, &action);
         uiTextRenderer_.render(
             renderer_, action.x + 34.0F, action.y + 12.0F,
-            siteState.unlocked
-                ? "SITE UNLOCKED | STANDARD OUTPOST AVAILABLE BELOW"
-                : deploymentWarningArmed_
-                    ? "CONFIRM BASE SITE CLEARING RAID"
-                    : "DEPLOY BASE SITE CLEARING RAID");
+            actionLabel.c_str());
     }
+
+    const BaseFacilityDefinitionId workshop{"base_facility.workshop"};
+    const bool workshopInReserve = baseFacilityOwned(profile, workshop) &&
+        !baseFacilityInstalled(profile, workshop);
+    const SDL_FRect reserveButton = regionalFacilityReserveButton();
+    SDL_SetRenderDrawColor(
+        renderer_, workshopInReserve ? 54 : 38,
+        workshopInReserve ? 86 : 48,
+        workshopInReserve ? 72 : 50, 255);
+    SDL_RenderFillRect(renderer_, &reserveButton);
+    SDL_SetRenderDrawColor(renderer_, 142, 184, 158, 255);
+    SDL_RenderRect(renderer_, &reserveButton);
+    uiTextRenderer_.render(
+        renderer_, reserveButton.x + 16.0F, reserveButton.y + 8.0F,
+        workshopInReserve
+            ? "FACILITY RESERVE | WORKSHOP | INSTALL FREE"
+            : "FACILITY RESERVE | EMPTY");
 
     const auto &definitions = content.regionalOperations().outposts;
     for (std::size_t index{}; index < definitions.size(); ++index)
@@ -11126,28 +11333,36 @@ void App::renderRegionalOperations()
         const RegionalOutpostDefinition &definition = definitions[index];
         const RegionalOutpostState &state =
             profile.regionalOperations.outposts.at(definition.id);
-        const float rowY = 414.0F + static_cast<float>(index) * 82.0F;
+        const float rowY = 444.0F + static_cast<float>(index) * 62.0F;
+        const bool representsActiveBase =
+            activeBaseOutpost.has_value() &&
+            *activeBaseOutpost == definition.id;
         const std::string status = fmt::format(
             "{} | {} | STAFF {}/{} | {}",
             definition.displayName,
-            state.established ? "ESTABLISHED" :
+            representsActiveBase ? "MAIN BASE" :
+                state.established ? "ESTABLISHED" :
                 state.unlocked ? "UNLOCKED" : "LOCKED",
             assignedRegionalOutpostStaff(state),
             definition.requiredStaff,
-            state.disrupted
+            representsActiveBase
+                ? "CORE ACTIVE"
+                : state.disrupted
                 ? "DISRUPTED"
                 : regionalOutpostOnline(profile, content, definition.id)
                     ? "ONLINE" : "OFFLINE");
         uiTextRenderer_.render(renderer_, 300.0F, rowY, status.c_str());
-        const std::string threat = fmt::format(
-            "THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
-            state.shortcutOperationsSinceRestoration,
-            definition.safeShortcutOperations,
-            definition.safeShortcutOperations >
-                    state.shortcutOperationsSinceRestoration
-                ? definition.safeShortcutOperations -
-                      state.shortcutOperationsSinceRestoration
-                : 0U);
+        const std::string threat = representsActiveBase
+            ? "ACTIVE MAIN BASE LOCATION | NOT A LIGHT OUTPOST"
+            : fmt::format(
+                "THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
+                state.shortcutOperationsSinceRestoration,
+                definition.safeShortcutOperations,
+                definition.safeShortcutOperations >
+                        state.shortcutOperationsSinceRestoration
+                    ? definition.safeShortcutOperations -
+                          state.shortcutOperationsSinceRestoration
+                    : 0U);
         uiTextRenderer_.render(
             renderer_, 300.0F, rowY + 22.0F, threat.c_str());
 
@@ -11162,13 +11377,13 @@ void App::renderRegionalOperations()
                 profile, content,
                 RegionalOutpostStaffingCommand{
                     definition.id, !hasGarrison});
-        const bool canCommit = state.disrupted
+        const bool canCommit = !representsActiveBase && (state.disrupted
             ? state.established &&
                 assignedRegionalOutpostStaff(state) ==
                     definition.requiredStaff
             : state.established
                 ? staffingPlan.canCommit
-                : establishPlan.canCommit;
+                : establishPlan.canCommit);
         const SDL_FRect action = regionalOutpostActionButton(index);
         SDL_SetRenderDrawColor(
             renderer_, canCommit ? 48 : 42,
@@ -11179,7 +11394,9 @@ void App::renderRegionalOperations()
         SDL_RenderRect(renderer_, &action);
         uiTextRenderer_.render(
             renderer_, action.x + 18.0F, action.y + 13.0F,
-            state.disrupted
+            representsActiveBase
+                ? "MAIN BASE | TECHNOLOGY CORE ACTIVE"
+                : state.disrupted
                 ? deploymentWarningArmed_
                     ? "CONFIRM OUTPOST CLEARING RAID"
                     : "DEPLOY OUTPOST CLEARING RAID"
@@ -11208,15 +11425,15 @@ void App::renderRegionalOperations()
         industrial.travelMinutes,
         frontier.travelMinutes);
     uiTextRenderer_.render(
-        renderer_, 300.0F, 588.0F, routeSummary.c_str());
+        renderer_, 300.0F, 642.0F, routeSummary.c_str());
     uiTextRenderer_.render(
-        renderer_, 300.0F, 610.0F,
+        renderer_, 300.0F, 664.0F,
         "OUTPOSTS HAVE NO STORAGE OR SERVICES | ESC BACK");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 632.0F, uiMessage_.c_str());
+            renderer_, 300.0F, 686.0F, uiMessage_.c_str());
     }
 }
 

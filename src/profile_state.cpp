@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include "alpha_content_ids.h"
+#include "base_construction_domain.h"
 #include "base_resource_domain.h"
 #include "recovery_task_domain.h"
 #include "regional_operations_domain.h"
@@ -366,6 +367,17 @@ ProfileState makeNewAlphaProfile(
     profile.currency = 200;
     profile.regionalOperations.activeBaseNodeId =
         content.regionalOperations().initialBaseNodeId;
+    const auto initialSite = std::find_if(
+        content.regionalOperations().baseSites.begin(),
+        content.regionalOperations().baseSites.end(),
+        [&](const RegionalBaseSiteDefinition &site)
+        { return site.nodeId == profile.regionalOperations.activeBaseNodeId; });
+    if (initialSite == content.regionalOperations().baseSites.end())
+    {
+        throw std::logic_error{"initial regional Base site is missing"};
+    }
+    profile.regionalOperations.technologyCore = TechnologyCoreState{
+        "technology_core.primary", initialSite->id};
     for (const RegionalBaseSiteDefinition &site :
          content.regionalOperations().baseSites)
     {
@@ -379,6 +391,24 @@ ProfileState makeNewAlphaProfile(
         profile.regionalOperations.outposts.emplace(
             outpost.id,
             RegionalOutpostState{outpost.initiallyUnlocked});
+    }
+    for (const BaseFacilityDefinition &facility : content.baseFacilities())
+    {
+        if (facility.initiallyOwned)
+        {
+            profile.baseConstruction.facilities.emplace(
+                facility.id,
+                facility.initiallyInstalled
+                    ? BaseConstructionState::FacilityPlacement::Installed
+                    : BaseConstructionState::FacilityPlacement::Reserve);
+            if (!facility.initiallyInstalled)
+            {
+                profile.baseConstruction.facilityReserveStartedWorldMinutes
+                    .emplace(
+                        facility.id,
+                        profile.worldClock.elapsedWorldMinutes);
+            }
+        }
     }
 
     placeNewAsset(profile, content, alpha_content::rifle);
@@ -535,22 +565,6 @@ bool assetIsCarried(
     return false;
 }
 
-std::uint32_t baseFacilityLevel(
-    const BaseConstructionState &state,
-    BaseFacilityUpgradeTarget target) noexcept
-{
-    switch (target)
-    {
-    case BaseFacilityUpgradeTarget::Dormitory:
-        return state.dormitoryLevel;
-    case BaseFacilityUpgradeTarget::Workshop:
-        return state.workshopLevel;
-    case BaseFacilityUpgradeTarget::Medical:
-        return state.medicalLevel;
-    }
-    return 0U;
-}
-
 bool publishedBaseFacilityLevel(
     const BaseConstructionState &state,
     BaseFacilityUpgradeTarget target,
@@ -560,6 +574,17 @@ bool publishedBaseFacilityLevel(
     if (level == 1U)
     {
         return true;
+    }
+    if (level == 0U)
+    {
+        return std::any_of(
+            content.baseConstructionProjects().begin(),
+            content.baseConstructionProjects().end(),
+            [target](const BaseConstructionProjectDefinition &definition)
+            {
+                return definition.target == target &&
+                    definition.requiredLevel == 0U;
+            });
     }
     return std::any_of(
         content.baseConstructionProjects().begin(),
@@ -902,6 +927,7 @@ ProfileValidationResult validateProfileState(
         return {false, "regional Base site state set is incomplete"};
     }
     bool activeBaseSiteUnlocked{};
+    const RegionalBaseSiteDefinition *activeBaseSite{};
     for (const RegionalBaseSiteDefinition &definition :
          content.regionalOperations().baseSites)
     {
@@ -915,6 +941,7 @@ ProfileValidationResult validateProfileState(
             profile.regionalOperations.activeBaseNodeId)
         {
             activeBaseSiteUnlocked = found->second.unlocked;
+            activeBaseSite = &definition;
         }
         if (definition.outpostDefinitionId.has_value())
         {
@@ -931,6 +958,14 @@ ProfileValidationResult validateProfileState(
     if (!activeBaseSiteUnlocked)
     {
         return {false, "regional active Base site is locked"};
+    }
+    if (activeBaseSite == nullptr ||
+        profile.regionalOperations.technologyCore.instanceId !=
+            "technology_core.primary" ||
+        profile.regionalOperations.technologyCore.baseSiteDefinitionId !=
+            activeBaseSite->id)
+    {
+        return {false, "technology core and active Base site disagree"};
     }
     std::uint32_t establishedOutposts{};
     BaseProfessionCounts regionalStaffByProfession{};
@@ -969,6 +1004,12 @@ ProfileValidationResult validateProfileState(
                  definition.safeShortcutOperations))
         {
             return {false, "regional outpost state is invalid"};
+        }
+        if (activeBaseSite->outpostDefinitionId ==
+                std::optional<RegionalOutpostDefinitionId>{definition.id} &&
+            (state.established || assigned != 0U))
+        {
+            return {false, "active Base cannot also operate as an outpost"};
         }
     }
     if (establishedOutposts >
@@ -1101,9 +1142,69 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base construction material state is invalid"};
     }
+    for (const auto &[definitionId, placement] :
+         profile.baseConstruction.facilities)
+    {
+        try
+        {
+            static_cast<void>(content.baseFacility(definitionId));
+        }
+        catch (...)
+        {
+            return {false, "Base facility ownership is invalid"};
+        }
+        if (placement != BaseConstructionState::FacilityPlacement::Installed &&
+            placement != BaseConstructionState::FacilityPlacement::Reserve)
+        {
+            return {false, "Base facility placement is invalid"};
+        }
+        const auto reserveStarted = profile.baseConstruction
+            .facilityReserveStartedWorldMinutes.find(definitionId);
+        if ((placement ==
+                 BaseConstructionState::FacilityPlacement::Reserve) !=
+                (reserveStarted != profile.baseConstruction
+                    .facilityReserveStartedWorldMinutes.end()) ||
+            (reserveStarted != profile.baseConstruction
+                    .facilityReserveStartedWorldMinutes.end() &&
+             reserveStarted->second >
+                 profile.worldClock.elapsedWorldMinutes))
+        {
+            return {false, "Base facility reserve timing is invalid"};
+        }
+    }
+    for (const auto &[definitionId, reserveStarted] :
+         profile.baseConstruction.facilityReserveStartedWorldMinutes)
+    {
+        static_cast<void>(reserveStarted);
+        if (!profile.baseConstruction.facilities.contains(definitionId))
+        {
+            return {false, "Base facility reserve owner is missing"};
+        }
+    }
+    const auto ownsFacility = [&](std::string_view value)
+    {
+        return profile.baseConstruction.facilities.contains(
+            BaseFacilityDefinitionId{std::string{value}});
+    };
+    if (!ownsFacility("base_facility.warehouse") ||
+        (profile.baseConstruction.dormitoryLevel > 0U) !=
+            ownsFacility("base_facility.dormitory") ||
+        (profile.baseConstruction.kitchenWaterLevel > 0U) !=
+            ownsFacility("base_facility.kitchen_water") ||
+        (profile.baseConstruction.workshopLevel > 0U) !=
+            ownsFacility("base_facility.workshop") ||
+        (profile.baseConstruction.medicalLevel > 0U) !=
+            ownsFacility("base_facility.medical"))
+    {
+        return {false, "Base facility ownership and levels disagree"};
+    }
     if (!publishedBaseFacilityLevel(
             profile.baseConstruction,
             BaseFacilityUpgradeTarget::Dormitory,
+            content) ||
+        !publishedBaseFacilityLevel(
+            profile.baseConstruction,
+            BaseFacilityUpgradeTarget::KitchenWater,
             content) ||
         !publishedBaseFacilityLevel(
             profile.baseConstruction,
@@ -1132,6 +1233,16 @@ ProfileValidationResult validateProfileState(
         }
         const std::uint32_t maximum =
             content.maximumBaseConstructionMaterials();
+        std::uint64_t projectProgressWorldMinute =
+            profile.worldClock.elapsedWorldMinutes;
+        if (const std::optional<std::uint64_t> reserveStarted =
+                baseFacilityReserveStartedWorldMinute(
+                    profile,
+                    baseFacilityDefinitionId(definition->target));
+            reserveStarted.has_value())
+        {
+            projectProgressWorldMinute = *reserveStarted;
+        }
         if (baseFacilityLevel(profile.baseConstruction, definition->target) !=
                 definition->requiredLevel ||
             active.lockedMaterialUnits != definition->materialCost ||
@@ -1142,8 +1253,7 @@ ProfileValidationResult validateProfileState(
             active.startedWorldMinute >= active.completionWorldMinute ||
             active.completionWorldMinute - active.startedWorldMinute !=
                 definition->durationMinutes ||
-            active.completionWorldMinute <=
-                profile.worldClock.elapsedWorldMinutes ||
+            active.completionWorldMinute <= projectProgressWorldMinute ||
             active.lockedMaterialUnits > maximum ||
             profile.baseConstruction.materialUnits >
                 maximum - active.lockedMaterialUnits)
@@ -1624,6 +1734,10 @@ ProfileValidationResult validateProfileState(
             : nullptr;
         const std::uint64_t frozenDuration =
             order.completionWorldMinute - order.startedWorldMinute;
+        const std::optional<std::uint64_t> workshopReserveStarted =
+            baseFacilityReserveStartedWorldMinute(
+                profile,
+                BaseFacilityDefinitionId{"base_facility.workshop"});
         bool publishedDuration = false;
         for (BaseMoraleTier tier : {
                  BaseMoraleTier::Low,
@@ -1659,8 +1773,9 @@ ProfileValidationResult validateProfileState(
             : order.committedWorkers == recipe->workerCount &&
                 order.inputAssetIds.size() == recipe->inputs.size() &&
                 (order.completionWorldMinute >
-                     profile.worldClock.elapsedWorldMinutes ||
-                 profile.pendingRaid.has_value());
+                     workshopReserveStarted.value_or(
+                         profile.worldClock.elapsedWorldMinutes) ||
+                  profile.pendingRaid.has_value());
         if (order.jobId == 0U ||
             order.jobId >= profile.nextBaseServiceJobId ||
             !baseFacilityAcceptsProfession(
@@ -2294,10 +2409,67 @@ ProfileValidationResult validateProfileState(
                 raid.travel.startingBedCapacity <= kMaximumBedCapacity &&
                 raid.travel.startingInjuredResidents <=
                     profile.basePopulation.ordinaryResidents;
+            for (const auto &[definitionId, placement] :
+                 raid.travel.startingBaseConstruction.facilities)
+            {
+                try
+                {
+                    static_cast<void>(content.baseFacility(definitionId));
+                }
+                catch (...)
+                {
+                    startingConstructionValid = false;
+                }
+                startingConstructionValid = startingConstructionValid &&
+                    (placement ==
+                         BaseConstructionState::FacilityPlacement::Installed ||
+                     placement ==
+                         BaseConstructionState::FacilityPlacement::Reserve);
+                const auto reserveStarted = raid.travel
+                    .startingBaseConstruction
+                    .facilityReserveStartedWorldMinutes.find(definitionId);
+                startingConstructionValid = startingConstructionValid &&
+                    ((placement ==
+                          BaseConstructionState::FacilityPlacement::Reserve) ==
+                     (reserveStarted != raid.travel.startingBaseConstruction
+                         .facilityReserveStartedWorldMinutes.end())) &&
+                    (reserveStarted == raid.travel.startingBaseConstruction
+                         .facilityReserveStartedWorldMinutes.end() ||
+                     reserveStarted->second <= raid.travel.startingWorldClock
+                         .elapsedWorldMinutes);
+            }
+            for (const auto &[definitionId, reserveStarted] : raid.travel
+                     .startingBaseConstruction
+                     .facilityReserveStartedWorldMinutes)
+            {
+                static_cast<void>(reserveStarted);
+                startingConstructionValid = startingConstructionValid &&
+                    raid.travel.startingBaseConstruction.facilities.contains(
+                        definitionId);
+            }
+            const auto startingOwnsFacility = [&](std::string_view value)
+            {
+                return raid.travel.startingBaseConstruction.facilities.contains(
+                    BaseFacilityDefinitionId{std::string{value}});
+            };
+            startingConstructionValid = startingConstructionValid &&
+                startingOwnsFacility("base_facility.warehouse") &&
+                (raid.travel.startingBaseConstruction.dormitoryLevel > 0U) ==
+                    startingOwnsFacility("base_facility.dormitory") &&
+                (raid.travel.startingBaseConstruction.kitchenWaterLevel > 0U) ==
+                    startingOwnsFacility("base_facility.kitchen_water") &&
+                (raid.travel.startingBaseConstruction.workshopLevel > 0U) ==
+                    startingOwnsFacility("base_facility.workshop") &&
+                (raid.travel.startingBaseConstruction.medicalLevel > 0U) ==
+                    startingOwnsFacility("base_facility.medical");
             startingConstructionValid = startingConstructionValid &&
                 publishedBaseFacilityLevel(
                     raid.travel.startingBaseConstruction,
                     BaseFacilityUpgradeTarget::Dormitory,
+                    content) &&
+                publishedBaseFacilityLevel(
+                    raid.travel.startingBaseConstruction,
+                    BaseFacilityUpgradeTarget::KitchenWater,
                     content) &&
                 publishedBaseFacilityLevel(
                     raid.travel.startingBaseConstruction,
@@ -2318,6 +2490,18 @@ ProfileValidationResult validateProfileState(
                         content.baseConstructionProject(active.definitionId);
                     const std::uint32_t maximum =
                         content.maximumBaseConstructionMaterials();
+                    std::uint64_t projectProgressWorldMinute =
+                        raid.travel.startingWorldClock.elapsedWorldMinutes;
+                    const BaseFacilityDefinitionId facilityId =
+                        baseFacilityDefinitionId(definition.target);
+                    const auto reserveStarted = raid.travel
+                        .startingBaseConstruction
+                        .facilityReserveStartedWorldMinutes.find(facilityId);
+                    if (reserveStarted != raid.travel.startingBaseConstruction
+                            .facilityReserveStartedWorldMinutes.end())
+                    {
+                        projectProgressWorldMinute = reserveStarted->second;
+                    }
                     startingConstructionValid = startingConstructionValid &&
                         baseFacilityLevel(
                             raid.travel.startingBaseConstruction,
@@ -2333,8 +2517,7 @@ ProfileValidationResult validateProfileState(
                                 active.startedWorldMinute ==
                             definition.durationMinutes &&
                         active.completionWorldMinute >
-                            raid.travel.startingWorldClock
-                                .elapsedWorldMinutes &&
+                            projectProgressWorldMinute &&
                         active.lockedMaterialUnits <= maximum &&
                         raid.travel.startingBaseConstruction.materialUnits <=
                             maximum - active.lockedMaterialUnits;
@@ -2802,6 +2985,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             *profile.baseWorkforce.medicalWorker));
     }
     hashBytes(hash, profile.regionalOperations.activeBaseNodeId.value());
+    hashBytes(hash, profile.regionalOperations.technologyCore.instanceId);
+    hashBytes(
+        hash,
+        profile.regionalOperations.technologyCore.baseSiteDefinitionId.value());
     for (const auto &[siteId, state] :
          profile.regionalOperations.baseSites)
     {
@@ -2823,8 +3010,21 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     }
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
+    hashInteger(hash, profile.baseConstruction.kitchenWaterLevel);
     hashInteger(hash, profile.baseConstruction.workshopLevel);
     hashInteger(hash, profile.baseConstruction.medicalLevel);
+    for (const auto &[definitionId, placement] :
+         profile.baseConstruction.facilities)
+    {
+        hashBytes(hash, definitionId.value());
+        hashInteger(hash, static_cast<std::uint32_t>(placement));
+    }
+    for (const auto &[definitionId, reserveStarted] :
+         profile.baseConstruction.facilityReserveStartedWorldMinutes)
+    {
+        hashBytes(hash, definitionId.value());
+        hashInteger(hash, reserveStarted);
+    }
     if (profile.baseConstruction.activeProject.has_value())
     {
         const ActiveBaseConstructionProject &project =
@@ -3177,6 +3377,13 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(
             hash,
             raid.travel.startingRegionalOperations.activeBaseNodeId.value());
+        hashBytes(
+            hash,
+            raid.travel.startingRegionalOperations.technologyCore.instanceId);
+        hashBytes(
+            hash,
+            raid.travel.startingRegionalOperations.technologyCore
+                .baseSiteDefinitionId.value());
         for (const auto &[siteId, state] :
              raid.travel.startingRegionalOperations.baseSites)
         {
@@ -3271,9 +3478,24 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash,
                     raid.travel.startingBaseConstruction.dormitoryLevel);
         hashInteger(hash,
+                    raid.travel.startingBaseConstruction.kitchenWaterLevel);
+        hashInteger(hash,
                     raid.travel.startingBaseConstruction.workshopLevel);
         hashInteger(hash,
                     raid.travel.startingBaseConstruction.medicalLevel);
+        for (const auto &[definitionId, placement] :
+             raid.travel.startingBaseConstruction.facilities)
+        {
+            hashBytes(hash, definitionId.value());
+            hashInteger(hash, static_cast<std::uint32_t>(placement));
+        }
+        for (const auto &[definitionId, reserveStarted] : raid.travel
+                 .startingBaseConstruction
+                 .facilityReserveStartedWorldMinutes)
+        {
+            hashBytes(hash, definitionId.value());
+            hashInteger(hash, reserveStarted);
+        }
         hashInteger(hash,
                     raid.travel.startingBaseWorkforce.workshopWorker.has_value()
                         ? 1U

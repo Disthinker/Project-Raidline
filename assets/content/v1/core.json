@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-base-site-clearance-content-38",
+  "content_version": "regional-main-base-migration-content-39",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -37,7 +37,8 @@
       {"id": "region_node.raid.frontier_exchange", "display_name": "Frontier Exchange", "kind": "raid", "map_definition_id": "map.raid.frontier_exchange"},
       {"id": "region_node.outpost.old_service_relay", "display_name": "Old Service Relay", "kind": "outpost"},
       {"id": "region_node.base.ashworks_logistics_yard", "display_name": "Ashworks Logistics Yard", "kind": "base"},
-      {"id": "region_node.outpost.ashworks_logistics_yard", "display_name": "Ashworks Logistics Yard Relay", "kind": "outpost"}
+      {"id": "region_node.outpost.ashworks_logistics_yard", "display_name": "Ashworks Logistics Yard Relay", "kind": "outpost"},
+      {"id": "region_node.outpost.greyline_yard", "display_name": "Greyline Yard Relay", "kind": "outpost"}
     ],
     "base_sites": [
       {
@@ -46,9 +47,12 @@
         "node_id": "region_node.base.greyline_yard",
         "tier": "basic",
         "initially_unlocked": true,
+        "outpost_definition_id": "regional_outpost.greyline_yard",
         "advantage": "Balanced access to the current Raid network.",
         "disadvantage": "No specialized regional advantage.",
-        "unique_feature": "Greyline storage core."
+        "unique_feature": "Greyline storage core.",
+        "migration_minutes": 720,
+        "core_facility_slots": 4
       },
       {
         "id": "regional_base_site.ashworks_logistics_yard",
@@ -60,7 +64,9 @@
         "outpost_definition_id": "regional_outpost.ashworks_logistics_yard",
         "advantage": "Industrial access and shorter eastern routes.",
         "disadvantage": "A noisy and exposed perimeter.",
-        "unique_feature": "Heavy logistics workshop site."
+        "unique_feature": "Heavy logistics workshop site.",
+        "migration_minutes": 720,
+        "core_facility_slots": 4
       }
     ],
     "outposts": [
@@ -81,6 +87,15 @@
         "required_staff": 2,
         "safe_shortcut_operations": 3,
         "restoration_map_definition_id": "map.raid.industrial"
+      },
+      {
+        "id": "regional_outpost.greyline_yard",
+        "display_name": "Greyline Yard Relay",
+        "node_id": "region_node.outpost.greyline_yard",
+        "initially_unlocked": true,
+        "required_staff": 2,
+        "safe_shortcut_operations": 3,
+        "restoration_map_definition_id": "map.v0.test"
       }
     ],
     "routes": [
@@ -94,12 +109,36 @@
       {"id": "region_route.relay_frontier_shortcut", "display_name": "Frontier Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.frontier_exchange", "travel_minutes": 90, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
       {"id": "region_route.ashworks_yard_access", "display_name": "Ashworks Yard Access", "from": "region_node.base.greyline_yard", "to": "region_node.outpost.ashworks_logistics_yard", "travel_minutes": 50, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"},
       {"id": "region_route.ashworks_industrial_shortcut", "display_name": "Industrial Service Spur", "from": "region_node.outpost.ashworks_logistics_yard", "to": "region_node.raid.industrial", "travel_minutes": 25, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"},
-      {"id": "region_route.ashworks_frontier_shortcut", "display_name": "Eastern Freight Cut", "from": "region_node.outpost.ashworks_logistics_yard", "to": "region_node.raid.frontier_exchange", "travel_minutes": 65, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"}
+      {"id": "region_route.ashworks_frontier_shortcut", "display_name": "Eastern Freight Cut", "from": "region_node.outpost.ashworks_logistics_yard", "to": "region_node.raid.frontier_exchange", "travel_minutes": 65, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"},
+      {"id": "region_route.ashworks_base_greyline", "display_name": "Western Freight Link", "from": "region_node.base.ashworks_logistics_yard", "to": "region_node.raid.greyline_west", "travel_minutes": 120},
+      {"id": "region_route.ashworks_base_riverside", "display_name": "Ashworks Riverside Road", "from": "region_node.base.ashworks_logistics_yard", "to": "region_node.raid.riverside", "travel_minutes": 135},
+      {"id": "region_route.ashworks_base_industrial", "display_name": "Ashworks Industrial Road", "from": "region_node.base.ashworks_logistics_yard", "to": "region_node.raid.industrial", "travel_minutes": 40},
+      {"id": "region_route.ashworks_base_frontier", "display_name": "Ashworks Frontier Road", "from": "region_node.base.ashworks_logistics_yard", "to": "region_node.raid.frontier_exchange", "travel_minutes": 105},
+      {"id": "region_route.greyline_relay_access", "display_name": "Greyline Relay Access", "from": "region_node.base.ashworks_logistics_yard", "to": "region_node.outpost.greyline_yard", "travel_minutes": 70, "requires_online_outpost_id": "regional_outpost.greyline_yard"},
+      {"id": "region_route.greyline_relay_west", "display_name": "Greyline Local Cut", "from": "region_node.outpost.greyline_yard", "to": "region_node.raid.greyline_west", "travel_minutes": 20, "requires_online_outpost_id": "regional_outpost.greyline_yard"},
+      {"id": "region_route.greyline_relay_riverside", "display_name": "Greyline Riverside Cut", "from": "region_node.outpost.greyline_yard", "to": "region_node.raid.riverside", "travel_minutes": 45, "requires_online_outpost_id": "regional_outpost.greyline_yard"}
     ]
   },
   "base_construction": {
     "maximum_material_units": 100,
+    "facilities": [
+      {"id": "base_facility.warehouse", "display_name": "Warehouse", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
+      {"id": "base_facility.dormitory", "display_name": "Dormitory", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
+      {"id": "base_facility.kitchen_water", "display_name": "Kitchen & Water Station", "required_for_migration": true, "initially_owned": false, "initially_installed": false},
+      {"id": "base_facility.medical", "display_name": "Medical Facility", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
+      {"id": "base_facility.workshop", "display_name": "Workshop", "required_for_migration": false, "initially_owned": true, "initially_installed": true}
+    ],
     "projects": [
+      {
+        "id": "base_construction.kitchen_water.level_1",
+        "display_name": "Kitchen & Water Station",
+        "target_facility": "kitchen_water",
+        "required_level": 0,
+        "target_level": 1,
+        "material_cost": 5,
+        "worker_count": 2,
+        "duration_minutes": 480
+      },
       {
         "id": "base_construction.dormitory.level_2",
         "display_name": "Dormitory Expansion",

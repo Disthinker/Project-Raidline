@@ -1034,6 +1034,99 @@ TEST(PersistentSessionTest,
     EXPECT_FALSE(session.profile().baseManufacturing.activeOrder.has_value());
 }
 
+TEST(PersistentSessionTest,
+     MainBaseMigrationAndFacilityReinstallPersistAcrossProcesses)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-main-base-migration", content);
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId ashworksOutpost{
+        "regional_outpost.ashworks_logistics_yard"};
+    const BaseFacilityDefinitionId kitchenWater{
+        "base_facility.kitchen_water"};
+    const BaseFacilityDefinitionId workshop{
+        "base_facility.workshop"};
+    initial.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    initial.regionalOperations.outposts.at(ashworksOutpost).unlocked = true;
+    initial.regionalOperations.outposts.at(ashworksOutpost).established = true;
+    initial.baseConstruction.kitchenWaterLevel = 1U;
+    initial.baseConstruction.facilities[kitchenWater] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    ASSERT_TRUE(validateProfileState(initial, content).valid);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);
+
+    GameSession migrated;
+    migrated.configurePersistence(temporary.path());
+    ASSERT_TRUE(migrated.continueProfile()) << migrated.persistenceMessage();
+    const BaseMigrationReceipt receipt = migrated.executeBaseMigration(
+        ashworksSite, "persistent-migrate-main-base");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_FALSE(baseFacilityInstalled(migrated.profile(), workshop));
+
+    GameSession packed;
+    packed.configurePersistence(temporary.path());
+    ASSERT_TRUE(packed.continueProfile()) << packed.persistenceMessage();
+    EXPECT_EQ(packed.profile().regionalOperations.activeBaseNodeId,
+              RegionNodeDefinitionId{
+                  "region_node.base.ashworks_logistics_yard"});
+    EXPECT_FALSE(baseFacilityInstalled(packed.profile(), workshop));
+    const InstallBaseFacilityReceipt installed =
+        packed.executeInstallBaseFacility(
+            workshop, "persistent-install-workshop");
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(baseFacilityInstalled(reopened.profile(), workshop));
+    EXPECT_EQ(reopened.profile().regionalOperations.technologyCore
+                  .baseSiteDefinitionId,
+              ashworksSite);
+}
+
+TEST(PersistentSessionTest, MainBaseMigrationSaveFailureIsZeroCommit)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-main-base-migration", content);
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId ashworksOutpost{
+        "regional_outpost.ashworks_logistics_yard"};
+    initial.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    initial.regionalOperations.outposts.at(ashworksOutpost).unlocked = true;
+    initial.regionalOperations.outposts.at(ashworksOutpost).established = true;
+    initial.baseConstruction.kitchenWaterLevel = 1U;
+    initial.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    ASSERT_TRUE(validateProfileState(initial, content).valid);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "migration-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const BaseMigrationReceipt receipt = session.executeBaseMigration(
+        ashworksSite, "migration-save-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;

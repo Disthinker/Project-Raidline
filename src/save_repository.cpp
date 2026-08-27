@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -246,7 +247,8 @@ BaseProfessionCounts parseBaseProfessionCounts(const Json &value)
 Json regionalOperationsValue(
     const RegionalOperationsState &state,
     bool includeShortcutThreat,
-    bool includeBaseSites)
+    bool includeBaseSites,
+    bool includeTechnologyCore)
 {
     Json outposts = Json::array();
     for (const auto &[outpostId, outpost] : state.outposts)
@@ -285,7 +287,142 @@ Json regionalOperationsValue(
         }
         value["base_sites"] = std::move(baseSites);
     }
+    if (includeTechnologyCore)
+    {
+        value["technology_core"] = {
+            {"instance_id", state.technologyCore.instanceId},
+            {"base_site_definition_id",
+             state.technologyCore.baseSiteDefinitionId.value()}};
+    }
     return value;
+}
+
+const RegionalBaseSiteDefinition &baseSiteAtNode(
+    const ContentRegistry &content,
+    const RegionNodeDefinitionId &nodeId)
+{
+    const auto &sites = content.regionalOperations().baseSites;
+    const auto found = std::find_if(
+        sites.begin(), sites.end(),
+        [&](const RegionalBaseSiteDefinition &site)
+        {
+            return site.nodeId == nodeId;
+        });
+    if (found == sites.end())
+    {
+        throw std::runtime_error{"active Base node has no Base site"};
+    }
+    return *found;
+}
+
+void initializeLegacyFacilityOwnership(
+    BaseConstructionState &state,
+    const ContentRegistry &content,
+    std::uint64_t currentWorldMinute)
+{
+    state.kitchenWaterLevel = 0U;
+    state.facilities.clear();
+    state.facilityReserveStartedWorldMinutes.clear();
+    for (const BaseFacilityDefinition &facility : content.baseFacilities())
+    {
+        if (facility.initiallyOwned)
+        {
+            state.facilities.emplace(
+                facility.id,
+                facility.initiallyInstalled
+                    ? BaseConstructionState::FacilityPlacement::Installed
+                    : BaseConstructionState::FacilityPlacement::Reserve);
+            if (!facility.initiallyInstalled)
+            {
+                state.facilityReserveStartedWorldMinutes.emplace(
+                    facility.id, currentWorldMinute);
+            }
+        }
+    }
+}
+
+std::string_view facilityPlacementName(
+    BaseConstructionState::FacilityPlacement placement)
+{
+    switch (placement)
+    {
+    case BaseConstructionState::FacilityPlacement::Installed:
+        return "installed";
+    case BaseConstructionState::FacilityPlacement::Reserve:
+        return "reserve";
+    }
+    throw std::invalid_argument{"unknown Base facility placement"};
+}
+
+BaseConstructionState::FacilityPlacement parseFacilityPlacement(
+    std::string_view value)
+{
+    if (value == "installed")
+    {
+        return BaseConstructionState::FacilityPlacement::Installed;
+    }
+    if (value == "reserve")
+    {
+        return BaseConstructionState::FacilityPlacement::Reserve;
+    }
+    throw std::runtime_error{"Base facility placement is invalid"};
+}
+
+void appendFacilityState(Json &value, const BaseConstructionState &state)
+{
+    value["kitchen_water_level"] = state.kitchenWaterLevel;
+    Json facilities = Json::array();
+    for (const auto &[definitionId, placement] : state.facilities)
+    {
+        Json entry{
+            {"definition_id", definitionId.value()},
+            {"placement", facilityPlacementName(placement)}};
+        if (placement == BaseConstructionState::FacilityPlacement::Reserve)
+        {
+            entry["reserve_started_world_minute"] =
+                state.facilityReserveStartedWorldMinutes.at(definitionId);
+        }
+        facilities.push_back(std::move(entry));
+    }
+    value["facilities"] = std::move(facilities);
+}
+
+void parseFacilityState(
+    const Json &value,
+    BaseConstructionState &state,
+    const ContentRegistry &content)
+{
+    state.kitchenWaterLevel = value.at("kitchen_water_level")
+        .get<std::uint32_t>();
+    state.facilities.clear();
+    state.facilityReserveStartedWorldMinutes.clear();
+    std::set<BaseFacilityDefinitionId> parsed;
+    for (const Json &entry : value.at("facilities"))
+    {
+        const BaseFacilityDefinitionId definitionId{
+            entry.at("definition_id").get<std::string>()};
+        static_cast<void>(content.baseFacility(definitionId));
+        if (!parsed.insert(definitionId).second)
+        {
+            throw std::runtime_error{"Base facility state is duplicated"};
+        }
+        const BaseConstructionState::FacilityPlacement placement =
+            parseFacilityPlacement(
+                entry.at("placement").get<std::string>());
+        state.facilities.emplace(definitionId, placement);
+        if (placement == BaseConstructionState::FacilityPlacement::Reserve)
+        {
+            state.facilityReserveStartedWorldMinutes.emplace(
+                definitionId,
+                entry.at("reserve_started_world_minute")
+                    .get<std::uint64_t>());
+        }
+        else if (entry.contains("reserve_started_world_minute"))
+        {
+            throw std::runtime_error{
+                "installed Base facility has reserve timing"};
+        }
+    }
 }
 
 RegionalOperationsState defaultRegionalOperations(
@@ -294,6 +431,11 @@ RegionalOperationsState defaultRegionalOperations(
     RegionalOperationsState state;
     state.activeBaseNodeId =
         content.regionalOperations().initialBaseNodeId;
+    const RegionalBaseSiteDefinition &activeSite =
+        baseSiteAtNode(content, state.activeBaseNodeId);
+    state.technologyCore = {
+        "technology_core.primary",
+        activeSite.id};
     for (const RegionalBaseSiteDefinition &definition :
          content.regionalOperations().baseSites)
     {
@@ -376,6 +518,22 @@ RegionalOperationsState parseRegionalOperations(
                 definition.id,
                 RegionalOutpostState{definition.initiallyUnlocked});
         }
+    }
+    const RegionalBaseSiteDefinition &activeSite =
+        baseSiteAtNode(content, state.activeBaseNodeId);
+    if (schemaVersion >= 30)
+    {
+        const Json &core = value.at("technology_core");
+        state.technologyCore = {
+            core.at("instance_id").get<std::string>(),
+            RegionalBaseSiteDefinitionId{
+                core.at("base_site_definition_id").get<std::string>()}};
+    }
+    else
+    {
+        state.technologyCore = {
+            "technology_core.primary",
+            activeSite.id};
     }
     static_cast<void>(content.regionNode(state.activeBaseNodeId));
     for (const auto &[definitionId, outpost] : state.outposts)
@@ -831,6 +989,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["base_construction"]["medical_level"] =
                 profile.baseConstruction.medicalLevel;
         }
+        if (schemaVersion >= 30)
+        {
+            appendFacilityState(
+                payload["base_construction"],
+                profile.baseConstruction);
+        }
         if (profile.baseConstruction.activeProject.has_value())
         {
             const ActiveBaseConstructionProject &project =
@@ -981,7 +1145,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             regionalOperationsValue(
                 profile.regionalOperations,
                 schemaVersion >= 28,
-                schemaVersion >= 29);
+                schemaVersion >= 29,
+                schemaVersion >= 30);
     }
     else
     {
@@ -1304,6 +1469,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     startingConstruction["medical_level"] =
                         raid.travel.startingBaseConstruction.medicalLevel;
                 }
+                if (schemaVersion >= 30)
+                {
+                    appendFacilityState(
+                        startingConstruction,
+                        raid.travel.startingBaseConstruction);
+                }
                 if (raid.travel.startingBaseConstruction.activeProject
                         .has_value())
                 {
@@ -1436,7 +1607,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                         regionalOperationsValue(
                             raid.travel.startingRegionalOperations,
                             schemaVersion >= 28,
-                            schemaVersion >= 29);
+                            schemaVersion >= 29,
+                            schemaVersion >= 30);
             }
         }
         if (schemaVersion >= 26)
@@ -1631,7 +1803,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
-        schemaVersion != 29)
+        schemaVersion != 29 && schemaVersion != 30)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1734,7 +1906,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 27 &&
              contentVersion == "regional-route-outpost-content-36") ||
             (schemaVersion == 28 &&
-             contentVersion == "regional-outpost-disruption-content-37");
+             contentVersion == "regional-outpost-disruption-content-37") ||
+            (schemaVersion == 29 &&
+             contentVersion == "regional-base-site-clearance-content-38");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1749,7 +1923,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 23 && schemaVersion != 24 &&
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
-             schemaVersion != 29) ||
+             schemaVersion != 29 && schemaVersion != 30) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1893,6 +2067,20 @@ SaveLoadResult deserializeProfileEnvelope(
                 profile.baseConstruction.medicalLevel = construction.at(
                     "medical_level").get<std::uint32_t>();
             }
+            if (schemaVersion >= 30)
+            {
+                parseFacilityState(
+                    construction,
+                    profile.baseConstruction,
+                    content);
+            }
+            else
+            {
+                initializeLegacyFacilityOwnership(
+                    profile.baseConstruction,
+                    content,
+                    profile.worldClock.elapsedWorldMinutes);
+            }
             if (!construction.at("active_project").is_null())
             {
                 const Json &project = construction.at("active_project");
@@ -1910,6 +2098,13 @@ SaveLoadResult deserializeProfileEnvelope(
                         project.at("completion_world_minute")
                             .get<std::uint64_t>()};
             }
+        }
+        else
+        {
+            initializeLegacyFacilityOwnership(
+                profile.baseConstruction,
+                content,
+                profile.worldClock.elapsedWorldMinutes);
         }
         if (schemaVersion >= 15)
         {
@@ -2798,6 +2993,21 @@ SaveLoadResult deserializeProfileEnvelope(
                     {
                         raid.travel.startingBaseWorkforce =
                             profile.baseWorkforce;
+                    }
+                    if (schemaVersion >= 30)
+                    {
+                        parseFacilityState(
+                            construction,
+                            raid.travel.startingBaseConstruction,
+                            content);
+                    }
+                    else
+                    {
+                        initializeLegacyFacilityOwnership(
+                            raid.travel.startingBaseConstruction,
+                            content,
+                            raid.travel.startingWorldClock
+                                .elapsedWorldMinutes);
                     }
                     if (!construction.at("active_project").is_null())
                     {

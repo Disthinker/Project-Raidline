@@ -212,6 +212,7 @@ private:
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
     [[nodiscard]] SDL_FRect raidRegionalOperationsButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalBaseSiteClearanceButton() const noexcept;
+    [[nodiscard]] SDL_FRect regionalFacilityReserveButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalOutpostActionButton(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect lostRaidRecordRow(

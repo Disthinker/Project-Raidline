@@ -1785,6 +1785,117 @@ TEST(SaveRepositoryTest,
 }
 
 TEST(SaveRepositoryTest,
+     SchemaV30RoundTripPreservesTechnologyCoreFacilityReserveAndRaidRollback)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-main-base-migration-v30", content);
+    const RegionalBaseSiteDefinitionId greylineSite{
+        "regional_base_site.greyline_yard"};
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId greylineOutpost{
+        "regional_outpost.greyline_yard"};
+    const RegionalOutpostDefinitionId ashworksOutpost{
+        "regional_outpost.ashworks_logistics_yard"};
+    profile.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    profile.regionalOperations.activeBaseNodeId = RegionNodeDefinitionId{
+        "region_node.base.ashworks_logistics_yard"};
+    profile.regionalOperations.technologyCore.baseSiteDefinitionId =
+        ashworksSite;
+    profile.regionalOperations.outposts.at(ashworksOutpost).unlocked = true;
+    profile.regionalOperations.outposts.at(ashworksOutpost).established = false;
+    profile.regionalOperations.outposts.at(greylineOutpost).unlocked = true;
+    profile.regionalOperations.outposts.at(greylineOutpost).established = true;
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.workshop"}] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[
+        BaseFacilityDefinitionId{"base_facility.workshop"}] =
+        profile.worldClock.elapsedWorldMinutes;
+    const std::uint64_t reserveStartedWorldMinute =
+        profile.worldClock.elapsedWorldMinutes;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v30-raid",
+            "save-v30-settlement",
+            30001U,
+            MapDefinitionId{"map.raid.industrial"},
+            {}},
+        CommandContext{profile.revision, "save-v30-deploy"})
+                    .succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion(), 30U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_EQ(loaded.profile->regionalOperations.technologyCore
+                  .baseSiteDefinitionId,
+              ashworksSite);
+    EXPECT_EQ(loaded.profile->baseConstruction.facilities.at(
+                  BaseFacilityDefinitionId{"base_facility.workshop"}),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(loaded.profile->baseConstruction
+                  .facilityReserveStartedWorldMinutes.at(
+                      BaseFacilityDefinitionId{"base_facility.workshop"}),
+              reserveStartedWorldMinute);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(loaded.profile->pendingRaid->travel.startingRegionalOperations
+                  .technologyCore.baseSiteDefinitionId,
+              ashworksSite);
+    EXPECT_EQ(loaded.profile->pendingRaid->travel.startingBaseConstruction
+                  .facilities.at(BaseFacilityDefinitionId{
+                      "base_facility.workshop"}),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(loaded.profile->pendingRaid->travel.startingBaseConstruction
+                  .facilityReserveStartedWorldMinutes.at(
+                      BaseFacilityDefinitionId{"base_facility.workshop"}),
+              profile.pendingRaid->travel.startingWorldClock
+                  .elapsedWorldMinutes);
+    static_cast<void>(greylineSite);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV29MigrationCreatesGreylineCoreAndInitialFacilityOwnership)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-main-base-migration-v29", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "regional-base-site-clearance-content-38",
+            29U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(loaded.profile->regionalOperations.technologyCore.instanceId,
+              "technology_core.primary");
+    EXPECT_EQ(loaded.profile->regionalOperations.technologyCore
+                  .baseSiteDefinitionId,
+              RegionalBaseSiteDefinitionId{
+                  "regional_base_site.greyline_yard"});
+    EXPECT_EQ(loaded.profile->baseConstruction.kitchenWaterLevel, 0U);
+    EXPECT_FALSE(loaded.profile->baseConstruction.facilities.contains(
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}));
+    EXPECT_EQ(loaded.profile->baseConstruction.facilities.at(
+                  BaseFacilityDefinitionId{"base_facility.workshop"}),
+              BaseConstructionState::FacilityPlacement::Installed);
+    EXPECT_TRUE(validateProfileState(*loaded.profile, content).valid);
+}
+
+TEST(SaveRepositoryTest,
      SchemaV28MigrationDefaultsPublishedBaseSiteStates)
 {
     const ContentRegistry &content = publishedContentRegistry();

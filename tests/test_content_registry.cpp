@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-base-site-clearance-content-38");
+        "regional-main-base-migration-content-39");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -73,6 +73,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
             "regional_base_site.ashworks_logistics_yard"});
     EXPECT_EQ(ashworks.tier, RegionalBaseSiteTier::Mature);
     EXPECT_FALSE(ashworks.initiallyUnlocked);
+    EXPECT_EQ(ashworks.migrationMinutes, 720U);
+    EXPECT_EQ(ashworks.coreFacilitySlots, 4U);
     EXPECT_EQ(
         ashworks.clearanceMapDefinitionId,
         MapDefinitionId{"map.raid.industrial"});
@@ -120,7 +122,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     EXPECT_EQ(registry.maximumBaseConstructionMaterials(), 100U);
-    ASSERT_EQ(registry.baseConstructionProjects().size(), 3U);
+    ASSERT_EQ(registry.baseConstructionProjects().size(), 4U);
+    EXPECT_EQ(registry.baseFacilities().size(), 5U);
+    EXPECT_TRUE(registry.baseFacility(BaseFacilityDefinitionId{
+        "base_facility.kitchen_water"}).requiredForMigration);
+    EXPECT_FALSE(registry.baseFacility(BaseFacilityDefinitionId{
+        "base_facility.kitchen_water"}).initiallyOwned);
+    EXPECT_FALSE(registry.baseFacility(BaseFacilityDefinitionId{
+        "base_facility.workshop"}).requiredForMigration);
     const BaseConstructionProjectDefinition &dormitory =
         registry.baseConstructionProject(
             BaseConstructionProjectDefinitionId{
@@ -574,6 +583,22 @@ TEST(ContentRegistryTest, RejectsInvalidBaseConstructionDefinition)
             publishedJsonCopy(),
             "\"base_construction_material\": 4",
             "\"base_construction_material\": 101"))),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInsufficientMigrationFacilitySlots)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"core_facility_slots\": 4",
+            "\"core_facility_slots\": 3"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"required_for_migration\": false",
+            "\"required_for_migration\": true"))),
         ContentRegistryError);
 }
 

@@ -464,6 +464,31 @@ TEST(UiLocalizationTest, ChineseTranslatesRegionalBaseSiteClearanceFlow) {
             "基地候选点已经解锁");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesMainBaseMigrationFlow) {
+  const std::string facilities = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "MIGRATION CORE | WAREHOUSE READY | DORMITORY FACILITY READY | KITCHEN/WATER MISSING | MEDICAL FACILITY READY");
+  EXPECT_NE(facilities.find("迁徙核心设施"), std::string::npos);
+  EXPECT_NE(facilities.find("厨房/净水 缺失"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "FACILITY RESERVE | WORKSHOP | INSTALL FREE"),
+            "设施储备 | 工坊 | 免费安装");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST"),
+            "主基地迁徙完成 | 旧基地已转为前哨");
+  const std::string migration = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "MIGRATE MAIN BASE | 12H | OLD BASE BECOMES OUTPOST");
+  EXPECT_NE(migration.find("迁徙主基地 | 12H"), std::string::npos);
+  EXPECT_NE(migration.find("旧基地转为前哨"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "target Base site outpost must be established first"),
+            "必须先在目标基地地点建立前哨");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

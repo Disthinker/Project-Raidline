@@ -2,6 +2,38 @@
 
 #include "inventory_domain.h"
 
+[[nodiscard]] BaseFacilityDefinitionId baseFacilityDefinitionId(
+    BaseFacilityUpgradeTarget target);
+
+[[nodiscard]] bool baseFacilityOwned(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept;
+
+[[nodiscard]] bool baseFacilityInstalled(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept;
+
+[[nodiscard]] std::optional<std::uint64_t>
+baseFacilityReserveStartedWorldMinute(
+    const ProfileState &profile,
+    const BaseFacilityDefinitionId &definitionId) noexcept;
+
+[[nodiscard]] bool canShiftBaseFacilityTasks(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const BaseFacilityDefinitionId &definitionId,
+    std::uint64_t minutes) noexcept;
+
+void shiftBaseFacilityTasks(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const BaseFacilityDefinitionId &definitionId,
+    std::uint64_t minutes);
+
+[[nodiscard]] std::uint32_t baseFacilityLevel(
+    const BaseConstructionState &state,
+    BaseFacilityUpgradeTarget target) noexcept;
+
 struct BaseConstructionProjection {
   std::uint32_t materialUnits{};
   std::uint32_t maximumMaterialUnits{};
@@ -122,3 +154,33 @@ struct BaseConstructionAdvanceResult {
 [[nodiscard]] BaseConstructionAdvanceResult
 applyBaseConstructionThrough(ProfileState &profile,
                              const ContentRegistry &content);
+
+struct InstallBaseFacilityCommand {
+  BaseFacilityDefinitionId definitionId;
+};
+
+struct InstallBaseFacilityPlan {
+  bool canCommit{};
+  DomainErrorCode error{DomainErrorCode::None};
+  std::string message;
+  ProfileRevision revision{};
+  BaseFacilityDefinitionId definitionId;
+};
+
+struct InstallBaseFacilityReceipt {
+  bool succeeded{};
+  bool alreadyCommitted{};
+  DomainErrorCode error{DomainErrorCode::None};
+  std::string message;
+  ProfileRevision revision{};
+  BaseFacilityDefinitionId definitionId;
+};
+
+[[nodiscard]] InstallBaseFacilityPlan queryInstallBaseFacility(
+    const ProfileState &profile, const ContentRegistry &content,
+    const InstallBaseFacilityCommand &command) noexcept;
+
+[[nodiscard]] InstallBaseFacilityReceipt executeInstallBaseFacility(
+    ProfileState &profile, const ContentRegistry &content,
+    const InstallBaseFacilityCommand &command,
+    const CommandContext &context);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "base_construction_domain.h"
 #include "base_workforce_domain.h"
 
 namespace
@@ -106,6 +107,16 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             profile,
             DomainErrorCode::IllegalDestination,
             "resident treatment is already active",
+            definition);
+    }
+    if (!baseFacilityInstalled(
+            profile,
+            BaseFacilityDefinitionId{"base_facility.medical"}))
+    {
+        return failure(
+            profile,
+            DomainErrorCode::IllegalDestination,
+            "the medical facility is stored in the facility reserve",
             definition);
     }
     if (profile.basePopulation.injuredResidents == 0U)

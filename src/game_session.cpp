@@ -1441,6 +1441,57 @@ BaseConstructionReceipt GameSession::executeCancelBaseConstruction(
     return receipt;
 }
 
+BaseMigrationReceipt GameSession::executeBaseMigration(
+    RegionalBaseSiteDefinitionId targetSiteDefinitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseMigrationReceipt receipt = ::executeBaseMigration(
+        candidate,
+        publishedContentRegistry(),
+        BaseMigrationCommand{std::move(targetSiteDefinitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+        return receipt;
+    }
+    worldClockDirty_ = false;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
+    return receipt;
+}
+
+InstallBaseFacilityReceipt GameSession::executeInstallBaseFacility(
+    BaseFacilityDefinitionId definitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    InstallBaseFacilityReceipt receipt = ::executeInstallBaseFacility(
+        candidate,
+        publishedContentRegistry(),
+        InstallBaseFacilityCommand{std::move(definitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 RegionalOutpostReceipt GameSession::executeEstablishRegionalOutpost(
     RegionalOutpostDefinitionId definitionId,
     std::string transactionId)
