@@ -4,6 +4,41 @@
 #include "regional_operations_domain.h"
 
 TEST(RegionalOperationsDomainTest,
+     BaseSiteClearanceQueryIsPureAndUsesPublishedMissionMap)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "regional-base-site-clearance-query", content);
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.ashworks_logistics_yard"};
+    ASSERT_TRUE(profile.regionalOperations.baseSites.at(
+        RegionalBaseSiteDefinitionId{"regional_base_site.greyline_yard"})
+                    .unlocked);
+    ASSERT_FALSE(profile.regionalOperations.baseSites.at(siteId).unlocked);
+    ASSERT_FALSE(profile.regionalOperations.outposts.at(outpostId).unlocked);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const RegionalBaseSiteClearancePlan plan =
+        queryRegionalBaseSiteClearance(profile, content, siteId);
+
+    ASSERT_TRUE(plan.canDeploy) << plan.message;
+    EXPECT_EQ(plan.mapDefinitionId, MapDefinitionId{"map.raid.industrial"});
+    EXPECT_FALSE(plan.unlocked);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    profile.pendingRaid = PendingRaidSnapshot{};
+    const std::uint64_t pendingFingerprint =
+        profileStateFingerprint(profile);
+    const RegionalBaseSiteClearancePlan blocked =
+        queryRegionalBaseSiteClearance(profile, content, siteId);
+    EXPECT_FALSE(blocked.canDeploy);
+    EXPECT_EQ(blocked.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), pendingFingerprint);
+}
+
+TEST(RegionalOperationsDomainTest,
      NewProfileUsesStableDirectRouteWithoutMutation)
 {
     const ContentRegistry &content = publishedContentRegistry();

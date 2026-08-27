@@ -65,7 +65,21 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-outpost-disruption-content-37");
+        "regional-base-site-clearance-content-38");
+    ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
+    EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
+    const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
+        RegionalBaseSiteDefinitionId{
+            "regional_base_site.ashworks_logistics_yard"});
+    EXPECT_EQ(ashworks.tier, RegionalBaseSiteTier::Mature);
+    EXPECT_FALSE(ashworks.initiallyUnlocked);
+    EXPECT_EQ(
+        ashworks.clearanceMapDefinitionId,
+        MapDefinitionId{"map.raid.industrial"});
+    EXPECT_EQ(
+        ashworks.outpostDefinitionId,
+        RegionalOutpostDefinitionId{
+            "regional_outpost.ashworks_logistics_yard"});
     const RegionalOutpostDefinition &relay = registry.regionalOutpost(
         RegionalOutpostDefinitionId{
             "regional_outpost.old_service_relay"});
@@ -874,6 +888,16 @@ TEST(ContentRegistryTest, RejectsUnknownOutpostRestorationMap)
             publishedJsonCopy(),
             "\"restoration_map_definition_id\": \"map.raid.riverside\"",
             "\"restoration_map_definition_id\": \"map.raid.missing\"")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnknownBaseSiteClearanceMap)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"clearance_map_definition_id\": \"map.raid.industrial\"",
+            "\"clearance_map_definition_id\": \"map.raid.missing\"")),
         ContentRegistryError);
 }
 

@@ -433,11 +433,12 @@ DeployReceipt executeDeploy(
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     if (command.outpostRestorationId.has_value())
     {
-        if (command.selfRecoveryRecordId.has_value())
+        if (command.selfRecoveryRecordId.has_value() ||
+            command.baseSiteClearanceId.has_value())
         {
             return deployFailure(
                 RaidLifecycleError::InvalidCommand,
-                "outpost restoration cannot be combined with self-recovery",
+                "outpost restoration cannot be combined with another regional operation",
                 profile.revision);
         }
         try
@@ -470,6 +471,33 @@ DeployReceipt executeDeploy(
                 "outpost restoration definition does not exist",
                 profile.revision);
         }
+    }
+    std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
+    if (command.baseSiteClearanceId.has_value())
+    {
+        if (command.selfRecoveryRecordId.has_value() ||
+            command.outpostRestorationId.has_value())
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "Base site clearance cannot be combined with another regional operation",
+                profile.revision);
+        }
+        const RegionalBaseSiteClearancePlan plan =
+            queryRegionalBaseSiteClearance(
+                candidate, content, *command.baseSiteClearanceId);
+        if (!plan.canDeploy || plan.mapDefinitionId != command.mapDefinitionId)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                plan.message.empty()
+                    ? "Base site clearance deployment is unavailable"
+                    : plan.message,
+                profile.revision);
+        }
+        baseSiteClearance = RegionalBaseSiteClearanceSnapshot{
+            *command.baseSiteClearanceId,
+            false};
     }
     const RaidTravelPreview travel = queryRaidTravel(
         candidate, content, *map);
@@ -549,7 +577,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "regional-outpost-restoration-18";
+    snapshot.rulesVersion = "regional-base-site-clearance-19";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -579,6 +607,7 @@ DeployReceipt executeDeploy(
     snapshot.travel.startingRegionalOperations =
         candidate.regionalOperations;
     snapshot.outpostRestoration = std::move(outpostRestoration);
+    snapshot.baseSiteClearance = std::move(baseSiteClearance);
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -994,6 +1023,16 @@ RaidSettlementReceipt settlePendingRaid(
             profile.revision,
             outcome);
     }
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.baseSiteClearance.has_value() &&
+        !raidSnapshot.baseSiteClearance->objectiveSecured)
+    {
+        return settlementFailure(
+            RaidLifecycleError::InvalidCommand,
+            "Base site clearance requires the clearing objective",
+            profile.revision,
+            outcome);
+    }
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
     {
@@ -1058,6 +1097,38 @@ RaidSettlementReceipt settlePendingRaid(
         }
         state->second.disrupted = false;
         state->second.shortcutOperationsSinceRestoration = 0U;
+    }
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.baseSiteClearance.has_value())
+    {
+        const RegionalBaseSiteDefinition &definition =
+            content.regionalBaseSite(
+                raidSnapshot.baseSiteClearance->baseSiteDefinitionId);
+        const auto state = candidate.regionalOperations.baseSites.find(
+            definition.id);
+        if (state == candidate.regionalOperations.baseSites.end() ||
+            state->second.unlocked ||
+            !definition.outpostDefinitionId.has_value())
+        {
+            return settlementFailure(
+                RaidLifecycleError::InvalidProfile,
+                "Base site clearance target is no longer locked",
+                profile.revision,
+                outcome);
+        }
+        auto outpost = candidate.regionalOperations.outposts.find(
+            *definition.outpostDefinitionId);
+        if (outpost == candidate.regionalOperations.outposts.end() ||
+            outpost->second.unlocked)
+        {
+            return settlementFailure(
+                RaidLifecycleError::InvalidProfile,
+                "Base site clearance outpost state is invalid",
+                profile.revision,
+                outcome);
+        }
+        state->second.unlocked = true;
+        outpost->second.unlocked = true;
     }
     std::optional<std::string> lostRecordId;
     if (outcome != RaidResultOutcome::Extracted)
@@ -1200,7 +1271,9 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->rulesVersion ==
             "regional-route-network-17" ||
         candidate.pendingRaid->rulesVersion ==
-            "regional-outpost-restoration-18";
+            "regional-outpost-restoration-18" ||
+        candidate.pendingRaid->rulesVersion ==
+            "regional-base-site-clearance-19";
     const RegionalOperationsState startingRegionalOperations =
         candidate.pendingRaid->travel.startingRegionalOperations;
     std::set<AssetInstanceId> generatedLoot;

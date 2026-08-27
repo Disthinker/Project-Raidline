@@ -175,7 +175,9 @@ private:
     void commitMedicalWheelSelection();
     [[nodiscard]] bool tryDeployFromBase(
         std::optional<RegionalOutpostDefinitionId>
-            outpostRestorationId = std::nullopt);
+            outpostRestorationId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            baseSiteClearanceId = std::nullopt);
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
@@ -209,7 +211,9 @@ private:
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
     [[nodiscard]] SDL_FRect raidRegionalOperationsButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalOutpostActionButton() const noexcept;
+    [[nodiscard]] SDL_FRect regionalBaseSiteClearanceButton() const noexcept;
+    [[nodiscard]] SDL_FRect regionalOutpostActionButton(
+        std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect lostRaidRecordRow(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect recoveryTaskPrimaryButton() const noexcept;

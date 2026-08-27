@@ -1002,6 +1002,93 @@ ContentRegistry ContentRegistry::fromJson(
         {
             fail("regional outpost definitions are incomplete");
         }
+        for (const Json &siteValue :
+             requiredArray(regional, "base_sites"))
+        {
+            const std::string tierName = requiredString(siteValue, "tier");
+            RegionalBaseSiteTier tier{};
+            if (tierName == "basic")
+            {
+                tier = RegionalBaseSiteTier::Basic;
+            }
+            else if (tierName == "mature")
+            {
+                tier = RegionalBaseSiteTier::Mature;
+            }
+            else if (tierName == "strategic")
+            {
+                tier = RegionalBaseSiteTier::Strategic;
+            }
+            else
+            {
+                fail("regional Base site tier is invalid");
+            }
+            const std::optional<std::string> clearanceMap = optionalString(
+                siteValue, "clearance_map_definition_id");
+            const std::optional<std::string> outpostId = optionalString(
+                siteValue, "outpost_definition_id");
+            RegionalBaseSiteDefinition definition{
+                RegionalBaseSiteDefinitionId{
+                    requiredString(siteValue, "id")},
+                requiredString(siteValue, "display_name"),
+                RegionNodeDefinitionId{
+                    requiredString(siteValue, "node_id")},
+                tier,
+                requiredBool(siteValue, "initially_unlocked"),
+                clearanceMap.has_value()
+                    ? std::optional<MapDefinitionId>{
+                          MapDefinitionId{*clearanceMap}}
+                    : std::nullopt,
+                outpostId.has_value()
+                    ? std::optional<RegionalOutpostDefinitionId>{
+                          RegionalOutpostDefinitionId{*outpostId}}
+                    : std::nullopt,
+                requiredString(siteValue, "advantage"),
+                requiredString(siteValue, "disadvantage"),
+                requiredString(siteValue, "unique_feature")};
+            const auto node = registry.regionNodeIndex_.find(
+                definition.nodeId);
+            if (!hasPrefix(
+                    definition.id.value(), "regional_base_site.") ||
+                definition.displayName.empty() ||
+                definition.advantage.empty() ||
+                definition.disadvantage.empty() ||
+                definition.uniqueFeature.empty() ||
+                node == registry.regionNodeIndex_.end() ||
+                registry.regionalOperations_.nodes[node->second].kind !=
+                    RegionNodeKind::Base ||
+                (!definition.initiallyUnlocked &&
+                 (!definition.clearanceMapDefinitionId.has_value() ||
+                  !definition.outpostDefinitionId.has_value())) ||
+                (definition.outpostDefinitionId.has_value() &&
+                 !registry.regionalOutpostIndex_.contains(
+                     *definition.outpostDefinitionId)))
+            {
+                fail("regional Base site definition is invalid");
+            }
+            const std::size_t index =
+                registry.regionalOperations_.baseSites.size();
+            if (!registry.regionalBaseSiteIndex_.emplace(
+                    definition.id, index).second)
+            {
+                fail("duplicate regional Base site definition ID");
+            }
+            registry.regionalOperations_.baseSites.push_back(
+                std::move(definition));
+        }
+        const auto initialSite = std::find_if(
+            registry.regionalOperations_.baseSites.begin(),
+            registry.regionalOperations_.baseSites.end(),
+            [&](const RegionalBaseSiteDefinition &site)
+            {
+                return site.nodeId ==
+                    registry.regionalOperations_.initialBaseNodeId;
+            });
+        if (initialSite == registry.regionalOperations_.baseSites.end() ||
+            !initialSite->initiallyUnlocked)
+        {
+            fail("regional initial Base site is invalid");
+        }
         std::set<std::pair<RegionNodeDefinitionId, RegionNodeDefinitionId>>
             routePairs;
         for (const Json &routeValue : requiredArray(regional, "routes"))
@@ -2670,6 +2757,16 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("regional outpost restoration map is invalid");
             }
         }
+        for (const RegionalBaseSiteDefinition &site :
+             registry.regionalOperations_.baseSites)
+        {
+            if (site.clearanceMapDefinitionId.has_value() &&
+                !registry.mapIndex_.contains(
+                    *site.clearanceMapDefinitionId))
+            {
+                fail("regional Base site clearance map is invalid");
+            }
+        }
         std::map<RegionNodeDefinitionId, std::uint64_t> directDistances;
         for (const RegionNodeDefinition &node :
              registry.regionalOperations_.nodes)
@@ -2827,6 +2924,14 @@ const RegionalOutpostDefinition &ContentRegistry::regionalOutpost(
 {
     return lookup(regionalOutpostIndex_, regionalOperations_.outposts, id,
                   "regional outpost");
+}
+
+const RegionalBaseSiteDefinition &ContentRegistry::regionalBaseSite(
+    const RegionalBaseSiteDefinitionId &id) const
+{
+    return lookup(
+        regionalBaseSiteIndex_, regionalOperations_.baseSites, id,
+        "regional Base site");
 }
 
 const RegionRouteDefinition &ContentRegistry::regionRoute(

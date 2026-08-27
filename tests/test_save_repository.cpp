@@ -1741,6 +1741,80 @@ TEST(SaveRepositoryTest,
 }
 
 TEST(SaveRepositoryTest,
+     SchemaV29RoundTripPreservesPendingBaseSiteClearance)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-site-clearance-v29", content);
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-base-site-clearance-raid",
+            "save-base-site-clearance-settlement",
+            29001U,
+            MapDefinitionId{"map.raid.industrial"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{profile.revision,
+                       "deploy:save-base-site-clearance"})
+                    .succeeded);
+    profile.pendingRaid->baseSiteClearance->objectiveSecured = true;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    ASSERT_TRUE(loaded.profile->pendingRaid->baseSiteClearance.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->baseSiteClearance
+            ->baseSiteDefinitionId,
+        siteId);
+    EXPECT_TRUE(
+        loaded.profile->pendingRaid->baseSiteClearance
+            ->objectiveSecured);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV28MigrationDefaultsPublishedBaseSiteStates)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-base-site-clearance-v28-migration", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "regional-outpost-disruption-content-37",
+            28U),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    EXPECT_TRUE(loaded.profile->regionalOperations.baseSites.at(
+        RegionalBaseSiteDefinitionId{"regional_base_site.greyline_yard"})
+                    .unlocked);
+    EXPECT_FALSE(loaded.profile->regionalOperations.baseSites.at(
+        RegionalBaseSiteDefinitionId{
+            "regional_base_site.ashworks_logistics_yard"})
+                    .unlocked);
+    EXPECT_FALSE(loaded.profile->regionalOperations.outposts.at(
+        RegionalOutpostDefinitionId{
+            "regional_outpost.ashworks_logistics_yard"})
+                    .unlocked);
+    EXPECT_TRUE(validateProfileState(*loaded.profile, content).valid);
+}
+
+TEST(SaveRepositoryTest,
      SchemaV25RoundTripsRecoveryTaskOwnershipFrozenResultAndHighWater)
 {
     const ContentRegistry &content = publishedContentRegistry();

@@ -116,8 +116,9 @@
 | Regional Operations：失物记录与行动老化 v1 | PR #101 已通过 exact-head CI 和用户正常游玩验收，以 `7185d55` 进入 main |
 | Regional Operations：Loss & Recovery v1 | PR #103 已通过 exact-head CI 和用户统一正常游玩验收，以普通 merge commit `f31d91a` 进入 main；尸体表现、敌对幸存者携带和正式资源继续延期 |
 | Regional Operations：区域路线与轻量哨所基础 | PR #104 已通过 exact-head CI 和用户统一正常游玩验收，以普通 merge commit `dc19745` 进入 main。主基地选址/迁徙、哨所库存/服务/升级和正式资源继续延期 |
-| Regional Operations：哨所中断与恢复 v1 | 当前分支已完成捷径威胁、Settlement 后中断、对应清剿 Raid、全撤离门控、成功恢复、schema v28/content v37 与双语投影；定向 209/209 通过。随机遇袭、动态难度、路线事件、哨所伤亡/物资损失和正式表现延期 |
+| Regional Operations：哨所中断与恢复 v1 | PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main。随机遇袭、动态难度、路线事件、哨所伤亡/物资损失和正式表现延期 |
+| Regional Operations：基地候选点清剿 v1 | 当前分支已完成稳定候选点、Ashworks 清剿 Raid、成功原子解锁、第二前哨与路线收益、schema v29/content v38 和双语投影；相关回归 233/233、完整 1169/1169 CTest 与 exact-head CI 通过。正式主基地迁移仍缺少厨房/供水、设施存储、迁移清单/损失事务，不得把当前地点解锁静默解释为迁移完成 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-outpost-disruption-restoration-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-base-site-clearance-v1.md`。

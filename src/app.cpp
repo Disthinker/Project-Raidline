@@ -1373,7 +1373,8 @@ bool App::handleScreenConfirm()
 }
 
 bool App::tryDeployFromBase(
-    std::optional<RegionalOutpostDefinitionId> outpostRestorationId)
+    std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
+    std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId)
 {
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
@@ -1402,19 +1403,25 @@ bool App::tryDeployFromBase(
         }
         return false;
     }
+    const bool regionalMission = outpostRestorationId.has_value() ||
+        baseSiteClearanceId.has_value();
     const MapDefinition &targetMap = outpostRestorationId.has_value()
         ? content.map(content.regionalOutpost(
               *outpostRestorationId).restorationMapDefinitionId)
-        : selectedRaidMap();
+        : baseSiteClearanceId.has_value()
+            ? content.map(*content.regionalBaseSite(
+                  *baseSiteClearanceId).clearanceMapDefinitionId)
+            : selectedRaidMap();
     if (!gameFlow_.deploy(
             targetMap.id,
-            outpostRestorationId.has_value()
+            regionalMission
                 ? RaidIntelligenceLoadout{}
                 : selectedRaidIntelligence_,
-            outpostRestorationId.has_value()
+            regionalMission
                 ? std::optional<std::string>{}
                 : selectedRaidSelfRecoveryRecordId_,
-            outpostRestorationId))
+            outpostRestorationId,
+            baseSiteClearanceId))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1764,9 +1771,18 @@ SDL_FRect App::raidRegionalOperationsButton() const noexcept
     return SDL_FRect{700.0F, 184.0F, 200.0F, 34.0F};
 }
 
-SDL_FRect App::regionalOutpostActionButton() const noexcept
+SDL_FRect App::regionalBaseSiteClearanceButton() const noexcept
 {
-    return SDL_FRect{470.0F, 454.0F, 340.0F, 46.0F};
+    return SDL_FRect{300.0F, 360.0F, 520.0F, 40.0F};
+}
+
+SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
+{
+    return SDL_FRect{
+        755.0F,
+        420.0F + static_cast<float>(index) * 82.0F,
+        360.0F,
+        42.0F};
 }
 
 SDL_FRect App::lostRaidRecordRow(std::size_t index) const noexcept
@@ -1954,15 +1970,38 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             }
             const auto &outposts =
                 publishedContentRegistry().regionalOperations().outposts;
-            if (!outposts.empty() &&
-                contains(regionalOutpostActionButton(), click.position))
+            const auto &baseSites =
+                publishedContentRegistry().regionalOperations().baseSites;
+            for (const RegionalBaseSiteDefinition &site : baseSites)
             {
+                const RegionalBaseSiteState &state = gameSession_.profile()
+                    .regionalOperations.baseSites.at(site.id);
+                if (!state.unlocked &&
+                    contains(
+                        regionalBaseSiteClearanceButton(), click.position))
+                {
+                    const bool deployed = tryDeployFromBase(
+                        std::nullopt, site.id);
+                    gameAudio_.play(deployed
+                        ? SoundEventId::UiConfirm
+                        : SoundEventId::UiDeny);
+                    return;
+                }
+            }
+            for (std::size_t index{}; index < outposts.size(); ++index)
+            {
+                if (!contains(
+                        regionalOutpostActionButton(index), click.position))
+                {
+                    continue;
+                }
+                const RegionalOutpostDefinition &definition = outposts[index];
                 const RegionalOutpostState &state = gameSession_.profile()
-                    .regionalOperations.outposts.at(outposts.front().id);
+                    .regionalOperations.outposts.at(definition.id);
                 if (state.disrupted)
                 {
                     const bool deployed = tryDeployFromBase(
-                        outposts.front().id);
+                        definition.id);
                     gameAudio_.play(deployed
                         ? SoundEventId::UiConfirm
                         : SoundEventId::UiDeny);
@@ -1972,7 +2011,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 {
                     const RegionalOutpostReceipt receipt =
                         gameSession_.executeEstablishRegionalOutpost(
-                            outposts.front().id,
+                            definition.id,
                             nextProfileTransactionId("establish-outpost"));
                     uiMessage_ = receipt.succeeded
                         ? "REGIONAL OUTPOST ESTABLISHED"
@@ -1986,7 +2025,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     assignedRegionalOutpostStaff(state) == 0U;
                 const RegionalOutpostStaffingReceipt receipt =
                     gameSession_.executeRegionalOutpostStaffing(
-                        outposts.front().id,
+                        definition.id,
                         assign,
                         nextProfileTransactionId(
                             assign ? "assign-outpost-garrison"
@@ -1999,6 +2038,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 gameAudio_.play(receipt.succeeded
                     ? SoundEventId::UiConfirm
                     : SoundEventId::UiDeny);
+                return;
             }
             return;
         }
@@ -5217,6 +5257,18 @@ void App::renderDebugText()
             ? "OUTPOST CLEARING COMPLETE | EXTRACT TO RESTORE SHORTCUTS"
             : fmt::format(
                   "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | EXITS LOCKED",
+                  gameSession_.world().aliveInitialEnemyCount());
+        uiTextRenderer_.render(
+            renderer_, 20.0F, 212.0F, objective.c_str());
+    }
+    else if (gameSession_.profile().pendingRaid.has_value() &&
+             gameSession_.profile().pendingRaid->baseSiteClearance.has_value())
+    {
+        const std::string objective =
+            gameSession_.baseSiteClearanceObjectiveSecured()
+            ? "BASE SITE SECURED | EXTRACT TO UNLOCK THE LOCATION"
+            : fmt::format(
+                  "BASE SITE CLEARING | INITIAL HOSTILES REMAINING {} | EXITS LOCKED",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
             renderer_, 20.0F, 212.0F, objective.c_str());
@@ -10996,7 +11048,7 @@ void App::renderRegionalOperations()
 
     uiTextRenderer_.render(
         renderer_, 500.0F, 170.0F,
-        "REGIONAL ROUTES & LIGHT OUTPOSTS");
+        "REGIONAL BASE SITES, ROUTES & OUTPOSTS");
     const SDL_FRect back = raidRegionalOperationsButton();
     SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
     SDL_RenderFillRect(renderer_, &back);
@@ -11015,135 +11067,156 @@ void App::renderRegionalOperations()
     uiTextRenderer_.render(
         renderer_, 300.0F, 232.0F, baseLabel.c_str());
     uiTextRenderer_.render(
-        renderer_, 300.0F, 260.0F,
-        "OUTPOSTS ARE ROUTE NODES, NOT SECOND BASES");
+        renderer_, 300.0F, 258.0F,
+        "CLEARING UNLOCKS A SITE; MIGRATION REMAINS A LATER FACILITY SLICE");
+
+    const auto &baseSites = content.regionalOperations().baseSites;
+    const auto candidate = std::find_if(
+        baseSites.begin(), baseSites.end(),
+        [&](const RegionalBaseSiteDefinition &site)
+        { return site.nodeId != profile.regionalOperations.activeBaseNodeId; });
+    if (candidate != baseSites.end())
+    {
+        const RegionalBaseSiteState &siteState =
+            profile.regionalOperations.baseSites.at(candidate->id);
+        const char *tier = candidate->tier == RegionalBaseSiteTier::Basic
+            ? "BASIC"
+            : candidate->tier == RegionalBaseSiteTier::Mature
+                ? "MATURE" : "STRATEGIC";
+        const std::string siteStatus = fmt::format(
+            "CANDIDATE SITE | {} | {} | {}",
+            candidate->displayName, tier,
+            siteState.unlocked ? "UNLOCKED" : "LOCKED");
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 288.0F, siteStatus.c_str());
+        const std::string advantage = fmt::format(
+            "ADVANTAGE | {}", candidate->advantage);
+        const std::string disadvantage = fmt::format(
+            "DRAWBACK | {}", candidate->disadvantage);
+        const std::string feature = fmt::format(
+            "FIXED FEATURE | {}", candidate->uniqueFeature);
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 310.0F, advantage.c_str());
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 330.0F, disadvantage.c_str());
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 350.0F, feature.c_str());
+        const RegionalBaseSiteClearancePlan clearance =
+            queryRegionalBaseSiteClearance(profile, content, candidate->id);
+        const SDL_FRect action = regionalBaseSiteClearanceButton();
+        SDL_SetRenderDrawColor(
+            renderer_, clearance.canDeploy ? 56 : 42,
+            clearance.canDeploy ? 92 : 52,
+            clearance.canDeploy ? 70 : 52, 255);
+        SDL_RenderFillRect(renderer_, &action);
+        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
+        SDL_RenderRect(renderer_, &action);
+        uiTextRenderer_.render(
+            renderer_, action.x + 34.0F, action.y + 12.0F,
+            siteState.unlocked
+                ? "SITE UNLOCKED | STANDARD OUTPOST AVAILABLE BELOW"
+                : deploymentWarningArmed_
+                    ? "CONFIRM BASE SITE CLEARING RAID"
+                    : "DEPLOY BASE SITE CLEARING RAID");
+    }
 
     const auto &definitions = content.regionalOperations().outposts;
-    if (definitions.empty())
+    for (std::size_t index{}; index < definitions.size(); ++index)
     {
+        const RegionalOutpostDefinition &definition = definitions[index];
+        const RegionalOutpostState &state =
+            profile.regionalOperations.outposts.at(definition.id);
+        const float rowY = 414.0F + static_cast<float>(index) * 82.0F;
+        const std::string status = fmt::format(
+            "{} | {} | STAFF {}/{} | {}",
+            definition.displayName,
+            state.established ? "ESTABLISHED" :
+                state.unlocked ? "UNLOCKED" : "LOCKED",
+            assignedRegionalOutpostStaff(state),
+            definition.requiredStaff,
+            state.disrupted
+                ? "DISRUPTED"
+                : regionalOutpostOnline(profile, content, definition.id)
+                    ? "ONLINE" : "OFFLINE");
+        uiTextRenderer_.render(renderer_, 300.0F, rowY, status.c_str());
+        const std::string threat = fmt::format(
+            "THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
+            state.shortcutOperationsSinceRestoration,
+            definition.safeShortcutOperations,
+            definition.safeShortcutOperations >
+                    state.shortcutOperationsSinceRestoration
+                ? definition.safeShortcutOperations -
+                      state.shortcutOperationsSinceRestoration
+                : 0U);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 320.0F,
-            "NO REGIONAL OUTPOST LOCATION IS PUBLISHED");
-        return;
-    }
-    const RegionalOutpostDefinition &definition = definitions.front();
-    const RegionalOutpostState &state =
-        profile.regionalOperations.outposts.at(definition.id);
-    const std::string status = fmt::format(
-        "{} | {} | STAFF {}/{} | {}",
-        definition.displayName,
-        state.established ? "ESTABLISHED" :
-            state.unlocked ? "UNLOCKED" : "LOCKED",
-        assignedRegionalOutpostStaff(state),
-        definition.requiredStaff,
-        state.disrupted
-            ? "DISRUPTED"
-            : regionalOutpostOnline(profile, content, definition.id)
-                ? "ONLINE" : "OFFLINE");
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 330.0F, status.c_str());
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 366.0F,
-        "ESTABLISHING CLAIMS THE SITE; IT PROVIDES NO SERVICE OR STORAGE");
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 392.0F,
-        "FIXED SHORTCUTS REQUIRE A FULL HEALTHY GARRISON");
-    const std::string threat = fmt::format(
-        "SHORTCUT THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
-        state.shortcutOperationsSinceRestoration,
-        definition.safeShortcutOperations,
-        definition.safeShortcutOperations >
-                state.shortcutOperationsSinceRestoration
-            ? definition.safeShortcutOperations -
-                  state.shortcutOperationsSinceRestoration
-            : 0U);
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 408.0F, threat.c_str());
-    if (state.disrupted)
-    {
-        const MapDefinition &restorationMap = content.map(
-            definition.restorationMapDefinitionId);
-        const std::string restoration = fmt::format(
-            "SHORTCUTS DISRUPTED | CLEAR INITIAL HOSTILES AT {} AND EXTRACT",
-            restorationMap.displayName);
+            renderer_, 300.0F, rowY + 22.0F, threat.c_str());
+
+        const bool hasGarrison =
+            assignedRegionalOutpostStaff(state) != 0U;
+        const RegionalOutpostPlan establishPlan =
+            queryEstablishRegionalOutpost(
+                profile, content,
+                EstablishRegionalOutpostCommand{definition.id});
+        const RegionalOutpostStaffingPlan staffingPlan =
+            queryRegionalOutpostStaffing(
+                profile, content,
+                RegionalOutpostStaffingCommand{
+                    definition.id, !hasGarrison});
+        const bool canCommit = state.disrupted
+            ? state.established &&
+                assignedRegionalOutpostStaff(state) ==
+                    definition.requiredStaff
+            : state.established
+                ? staffingPlan.canCommit
+                : establishPlan.canCommit;
+        const SDL_FRect action = regionalOutpostActionButton(index);
+        SDL_SetRenderDrawColor(
+            renderer_, canCommit ? 48 : 42,
+            canCommit ? 98 : 52,
+            canCommit ? 74 : 52, 255);
+        SDL_RenderFillRect(renderer_, &action);
+        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
+        SDL_RenderRect(renderer_, &action);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 432.0F, restoration.c_str());
-    }
-    else if (regionalOutpostOnline(profile, content, definition.id))
-    {
-        const RegionalRoutePlan riverside = queryRegionalRoute(
-            profile, content, MapDefinitionId{"map.raid.riverside"});
-        const RegionalRoutePlan industrial = queryRegionalRoute(
-            profile, content, MapDefinitionId{"map.raid.industrial"});
-        const RegionalRoutePlan frontier = queryRegionalRoute(
-            profile, content,
-            MapDefinitionId{"map.raid.frontier_exchange"});
-        const std::string benefits = fmt::format(
-            "SHORTCUTS ONLINE | RIVERSIDE {} | ASHWORKS {} | FRONTIER {} MIN",
-            riverside.travelMinutes,
-            industrial.travelMinutes,
-            frontier.travelMinutes);
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 432.0F, benefits.c_str());
-    }
-    else if (state.established)
-    {
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 432.0F,
-            "SHORTCUTS OFFLINE | ASSIGN 2 HEALTHY RESIDENTS");
+            renderer_, action.x + 18.0F, action.y + 13.0F,
+            state.disrupted
+                ? deploymentWarningArmed_
+                    ? "CONFIRM OUTPOST CLEARING RAID"
+                    : "DEPLOY OUTPOST CLEARING RAID"
+                : state.established
+                    ? hasGarrison
+                        ? "RETURN OUTPOST GARRISON"
+                        : staffingPlan.canCommit
+                            ? "ASSIGN FULL GARRISON | ACTIVATE SHORTCUTS"
+                            : "GARRISON ASSIGNMENT BLOCKED"
+                    : establishPlan.canCommit
+                        ? "ESTABLISH LIGHT OUTPOST"
+                        : state.unlocked
+                            ? "OUTPOST ESTABLISHMENT BLOCKED"
+                            : "CLEAR BASE SITE TO UNLOCK");
     }
 
-    const bool hasGarrison =
-        assignedRegionalOutpostStaff(state) != 0U;
-    const RegionalOutpostPlan establishPlan =
-        queryEstablishRegionalOutpost(
-            profile,
-            content,
-            EstablishRegionalOutpostCommand{definition.id});
-    const RegionalOutpostStaffingPlan staffingPlan =
-        queryRegionalOutpostStaffing(
-            profile,
-            content,
-            RegionalOutpostStaffingCommand{
-                definition.id, !hasGarrison});
-    const bool canCommit = state.disrupted
-        ? state.established &&
-            assignedRegionalOutpostStaff(state) ==
-                definition.requiredStaff
-        : state.established
-            ? staffingPlan.canCommit
-            : establishPlan.canCommit;
-    const SDL_FRect action = regionalOutpostActionButton();
-    SDL_SetRenderDrawColor(
-        renderer_, canCommit ? 48 : 42,
-        canCommit ? 98 : 52,
-        canCommit ? 74 : 52, 255);
-    SDL_RenderFillRect(renderer_, &action);
-    SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
-    SDL_RenderRect(renderer_, &action);
+    const RegionalRoutePlan riverside = queryRegionalRoute(
+        profile, content, MapDefinitionId{"map.raid.riverside"});
+    const RegionalRoutePlan industrial = queryRegionalRoute(
+        profile, content, MapDefinitionId{"map.raid.industrial"});
+    const RegionalRoutePlan frontier = queryRegionalRoute(
+        profile, content, MapDefinitionId{"map.raid.frontier_exchange"});
+    const std::string routeSummary = fmt::format(
+        "CURRENT ONE-WAY ROUTES | RIVERSIDE {} | ASHWORKS {} | FRONTIER {} MIN",
+        riverside.travelMinutes,
+        industrial.travelMinutes,
+        frontier.travelMinutes);
     uiTextRenderer_.render(
-        renderer_, action.x + 52.0F, action.y + 16.0F,
-        state.disrupted
-            ? deploymentWarningArmed_
-                ? "CONFIRM OUTPOST CLEARING RAID"
-                : "DEPLOY OUTPOST CLEARING RAID"
-            : state.established
-            ? hasGarrison
-                ? "RETURN OUTPOST GARRISON"
-                : staffingPlan.canCommit
-                    ? "ASSIGN FULL GARRISON | ACTIVATE SHORTCUTS"
-                    : "GARRISON ASSIGNMENT BLOCKED"
-            : establishPlan.canCommit
-                ? "ESTABLISH LIGHT OUTPOST"
-                : "OUTPOST ESTABLISHMENT BLOCKED");
+        renderer_, 300.0F, 588.0F, routeSummary.c_str());
     uiTextRenderer_.render(
-        renderer_, 300.0F, 558.0F,
-        "EACH SETTLED SHORTCUT RAID BUILDS THREAT | ESC BACK");
+        renderer_, 300.0F, 610.0F,
+        "OUTPOSTS HAVE NO STORAGE OR SERVICES | ESC BACK");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 590.0F, uiMessage_.c_str());
+            renderer_, 300.0F, 632.0F, uiMessage_.c_str());
     }
 }
 
@@ -11741,9 +11814,12 @@ void App::renderRaidTacticalMap()
             gameSession_.world().raidSession();
         const bool missionExtractionEligible =
             !gameSession_.profile().pendingRaid.has_value() ||
-            !gameSession_.profile().pendingRaid->outpostRestoration
-                 .has_value() ||
-            gameSession_.outpostRestorationObjectiveSecured();
+            ((!gameSession_.profile().pendingRaid->outpostRestoration
+                  .has_value() ||
+              gameSession_.outpostRestorationObjectiveSecured()) &&
+             (!gameSession_.profile().pendingRaid->baseSiteClearance
+                  .has_value() ||
+              gameSession_.baseSiteClearanceObjectiveSecured()));
         const std::string exitStatus = fmt::format(
             "EXITS | NORMAL {} | SIGNAL {} | LIGHT {}",
             missionExtractionEligible &&

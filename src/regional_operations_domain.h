@@ -89,6 +89,17 @@ struct RegionalOutpostThreatAdvance
     std::vector<RegionalOutpostDefinitionId> newlyDisruptedOutpostIds;
 };
 
+struct RegionalBaseSiteClearancePlan
+{
+    bool canDeploy{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    RegionalBaseSiteDefinitionId definitionId;
+    MapDefinitionId mapDefinitionId;
+    bool unlocked{};
+};
+
 [[nodiscard]] std::uint32_t assignedRegionalOutpostStaff(
     const RegionalOutpostState &state) noexcept;
 
@@ -106,6 +117,11 @@ struct RegionalOutpostThreatAdvance
     const ProfileState &profile,
     const ContentRegistry &content,
     const EstablishRegionalOutpostCommand &command) noexcept;
+
+[[nodiscard]] RegionalBaseSiteClearancePlan queryRegionalBaseSiteClearance(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalBaseSiteDefinitionId &definitionId) noexcept;
 
 [[nodiscard]] RegionalOutpostReceipt executeEstablishRegionalOutpost(
     ProfileState &profile,

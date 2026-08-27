@@ -97,6 +97,7 @@ struct BaseManufacturingRecipeDefinitionTag;
 struct RegionNodeDefinitionTag;
 struct RegionRouteDefinitionTag;
 struct RegionalOutpostDefinitionTag;
+struct RegionalBaseSiteDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
@@ -116,3 +117,5 @@ using RegionNodeDefinitionId = DefinitionId<RegionNodeDefinitionTag>;
 using RegionRouteDefinitionId = DefinitionId<RegionRouteDefinitionTag>;
 using RegionalOutpostDefinitionId =
     DefinitionId<RegionalOutpostDefinitionTag>;
+using RegionalBaseSiteDefinitionId =
+    DefinitionId<RegionalBaseSiteDefinitionTag>;
