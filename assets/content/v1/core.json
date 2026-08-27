@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-recovery-task-content-35",
+  "content_version": "regional-route-outpost-content-36",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -25,6 +25,37 @@
     "general_fallback_duration_percent": 150,
     "workshop_level_2_duration_percent": 85,
     "medical_level_2_duration_percent": 85
+  },
+  "regional_operations": {
+    "initial_base_node_id": "region_node.base.greyline_yard",
+    "maximum_established_outposts": 1,
+    "nodes": [
+      {"id": "region_node.base.greyline_yard", "display_name": "Greyline Yard", "kind": "base"},
+      {"id": "region_node.raid.greyline_west", "display_name": "Greyline West", "kind": "raid", "map_definition_id": "map.v0.test"},
+      {"id": "region_node.raid.riverside", "display_name": "Riverside Service Road", "kind": "raid", "map_definition_id": "map.raid.riverside"},
+      {"id": "region_node.raid.industrial", "display_name": "Ashworks Industrial", "kind": "raid", "map_definition_id": "map.raid.industrial"},
+      {"id": "region_node.raid.frontier_exchange", "display_name": "Frontier Exchange", "kind": "raid", "map_definition_id": "map.raid.frontier_exchange"},
+      {"id": "region_node.outpost.old_service_relay", "display_name": "Old Service Relay", "kind": "outpost"}
+    ],
+    "outposts": [
+      {
+        "id": "regional_outpost.old_service_relay",
+        "display_name": "Old Service Relay",
+        "node_id": "region_node.outpost.old_service_relay",
+        "initially_unlocked": true,
+        "required_staff": 2
+      }
+    ],
+    "routes": [
+      {"id": "region_route.greyline_direct", "display_name": "Greyline Access Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.greyline_west", "travel_minutes": 45},
+      {"id": "region_route.riverside_direct", "display_name": "Riverside Main Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.riverside", "travel_minutes": 90},
+      {"id": "region_route.industrial_direct", "display_name": "Ashworks Freight Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.industrial", "travel_minutes": 150},
+      {"id": "region_route.frontier_direct", "display_name": "Frontier Trunk Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.frontier_exchange", "travel_minutes": 210},
+      {"id": "region_route.relay_access", "display_name": "Old Relay Access", "from": "region_node.base.greyline_yard", "to": "region_node.outpost.old_service_relay", "travel_minutes": 35, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
+      {"id": "region_route.relay_riverside_shortcut", "display_name": "Riverside Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.riverside", "travel_minutes": 20, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
+      {"id": "region_route.relay_industrial_shortcut", "display_name": "Freight Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.industrial", "travel_minutes": 60, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
+      {"id": "region_route.relay_frontier_shortcut", "display_name": "Frontier Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.frontier_exchange", "travel_minutes": 90, "requires_online_outpost_id": "regional_outpost.old_service_relay"}
+    ]
   },
   "base_construction": {
     "maximum_material_units": 100,

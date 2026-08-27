@@ -10681,8 +10681,20 @@ void App::renderBaseDeployment()
             travel->arrival.minute,
             worldTimeOfDayName(travel->arrival.timeOfDay),
             travel->outboundMinutes);
+        std::string routeLabel;
+        for (const RegionRouteDefinitionId &routeId : travel->routeIds)
+        {
+            if (!routeLabel.empty())
+            {
+                routeLabel += " > ";
+            }
+            routeLabel += publishedContentRegistry()
+                .regionRoute(routeId).displayName;
+        }
         const std::string returnTiming = fmt::format(
-            "NORMAL TRAVEL {} MIN | FAILURE REGROUP {} MIN",
+            "ROUTE {}{} | RETURN {} MIN | FAILURE {} MIN",
+            routeLabel,
+            travel->usesOnlineOutpost ? " [OUTPOST]" : "",
             travel->returnMinutes,
             travel->failureRegroupMinutes);
         uiTextRenderer_.render(renderer_, 410.0F, 290.0F, timing.c_str());

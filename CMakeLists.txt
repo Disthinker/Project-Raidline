@@ -262,6 +262,8 @@ add_library(raidline_domain STATIC
     src/profile_combat_domain.cpp
     src/profile_combat_domain.h
     src/raid_lifecycle.cpp
+    src/regional_operations_domain.cpp
+    src/regional_operations_domain.h
     src/self_recovery_domain.cpp
     src/raid_lifecycle.h
     src/raid_map_generation.cpp
@@ -688,6 +690,10 @@ raidline_add_test(
 raidline_add_test(
     SelfRecoveryDomainTest
     tests/test_self_recovery_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    RegionalOperationsDomainTest
+    tests/test_regional_operations_domain.cpp
     raidline::domain)
 raidline_add_test(
     RaidIntelligenceDomainTest

@@ -76,7 +76,8 @@ TEST(RaidLifecycleTest, TravelPreviewUsesMapTimeWithoutMutatingProfile)
     const MapDefinition &map = publishedContentRegistry().map(
         MapDefinitionId{"map.raid.industrial"});
 
-    const RaidTravelPreview preview = queryRaidTravel(profile, map);
+    const RaidTravelPreview preview = queryRaidTravel(
+        profile, publishedContentRegistry(), map);
 
     EXPECT_EQ(preview.outboundMinutes, 150U);
     EXPECT_EQ(preview.returnMinutes, 150U);
@@ -106,7 +107,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "raid-self-recovery-16");
+        "regional-route-network-17");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -115,6 +116,13 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 180U);
+    ASSERT_EQ(profile.pendingRaid->travel.routeIds.size(), 1U);
+    EXPECT_EQ(
+        profile.pendingRaid->travel.routeIds.front(),
+        RegionRouteDefinitionId{"region_route.riverside_direct"});
+    EXPECT_EQ(
+        profile.pendingRaid->travel.startingRegionalOperations,
+        profile.regionalOperations);
     EXPECT_EQ(profile.pendingRaid->travel.startingWorldClock, startingClock);
     EXPECT_EQ(profile.pendingRaid->travel.startingBaseResources,
               startingResources);

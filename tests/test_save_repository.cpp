@@ -1550,6 +1550,59 @@ TEST(SaveRepositoryTest, SchemaV23MigratesToEmptyLostRecordState)
 }
 
 TEST(SaveRepositoryTest,
+     SchemaV27RoundTripPreservesRegionalRouteSnapshot)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-regional-route-v27", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "raid-regional-v27",
+            "settlement-regional-v27",
+            27001U,
+            MapDefinitionId{"map.raid.industrial"}},
+        CommandContext{profile.revision, "deploy-regional-v27"})
+                    .succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.routeIds,
+        profile.pendingRaid->travel.routeIds);
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.startingRegionalOperations,
+        profile.pendingRaid->travel.startingRegionalOperations);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV26MigrationCreatesDefaultRegionalNetwork)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-regional-route-v26", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 26U),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    EXPECT_EQ(
+        loaded.profile->regionalOperations,
+        profile.regionalOperations);
+}
+
+TEST(SaveRepositoryTest,
      SchemaV25RoundTripsRecoveryTaskOwnershipFrozenResultAndHighWater)
 {
     const ContentRegistry &content = publishedContentRegistry();

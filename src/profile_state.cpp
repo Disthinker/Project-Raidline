@@ -17,6 +17,7 @@
 #include "alpha_content_ids.h"
 #include "base_resource_domain.h"
 #include "recovery_task_domain.h"
+#include "regional_operations_domain.h"
 
 namespace
 {
@@ -363,6 +364,15 @@ ProfileState makeNewAlphaProfile(
     ProfileState profile;
     profile.profileId = std::move(profileId);
     profile.currency = 200;
+    profile.regionalOperations.activeBaseNodeId =
+        content.regionalOperations().initialBaseNodeId;
+    for (const RegionalOutpostDefinition &outpost :
+         content.regionalOperations().outposts)
+    {
+        profile.regionalOperations.outposts.emplace(
+            outpost.id,
+            RegionalOutpostState{outpost.initiallyUnlocked});
+    }
 
     placeNewAsset(profile, content, alpha_content::rifle);
     placeNewAsset(profile, content, alpha_content::pistol);
@@ -866,6 +876,56 @@ ProfileValidationResult validateProfileState(
             return {false, "Raid interior intelligence archive is invalid"};
         }
     }
+    try
+    {
+        if (content.regionNode(
+                profile.regionalOperations.activeBaseNodeId).kind !=
+            RegionNodeKind::Base)
+        {
+            return {false, "regional active Base node is invalid"};
+        }
+    }
+    catch (...)
+    {
+        return {false, "regional active Base node is unknown"};
+    }
+    std::uint32_t establishedOutposts{};
+    BaseProfessionCounts regionalStaffByProfession{};
+    if (profile.regionalOperations.outposts.size() !=
+        content.regionalOperations().outposts.size())
+    {
+        return {false, "regional outpost state set is incomplete"};
+    }
+    for (const RegionalOutpostDefinition &definition :
+         content.regionalOperations().outposts)
+    {
+        const auto found = profile.regionalOperations.outposts.find(
+            definition.id);
+        if (found == profile.regionalOperations.outposts.end())
+        {
+            return {false, "regional outpost state is missing"};
+        }
+        const RegionalOutpostState &state = found->second;
+        std::uint32_t assigned{};
+        for (std::size_t index{}; index < state.assignedStaff.size(); ++index)
+        {
+            assigned += state.assignedStaff[index];
+            regionalStaffByProfession[index] += state.assignedStaff[index];
+        }
+        establishedOutposts += state.established ? 1U : 0U;
+        if ((state.established && !state.unlocked) ||
+            (state.disrupted && !state.established) ||
+            assigned > definition.requiredStaff ||
+            (!state.established && assigned != 0U))
+        {
+            return {false, "regional outpost state is invalid"};
+        }
+    }
+    if (establishedOutposts >
+        content.regionalOperations().maximumEstablishedOutposts)
+    {
+        return {false, "regional outpost capacity is exceeded"};
+    }
     const BaseResourceBundle &resources = profile.baseResources.pool;
     const BaseResourceBundle &shortfall =
         profile.baseResources.lastShortfall;
@@ -959,6 +1019,10 @@ ProfileValidationResult validateProfileState(
         {
             ++assignedByProfession[baseProfessionIndex(*worker)];
         }
+    }
+    for (std::size_t index{}; index < assignedByProfession.size(); ++index)
+    {
+        assignedByProfession[index] += regionalStaffByProfession[index];
     }
     bool professionAssignmentsValid = true;
     for (std::size_t index = 0; index < assignedByProfession.size(); ++index)
@@ -1620,7 +1684,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1634,34 +1699,41 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         const bool selfRecoveryRules =
-            raid.rulesVersion == "raid-self-recovery-16";
+            raid.rulesVersion == "raid-self-recovery-16" ||
+            raid.rulesVersion == "regional-route-network-17";
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -2180,6 +2252,30 @@ ProfileValidationResult validateProfileState(
                         definition.requiredContribution &&
                     raid.travel.startingInjuredResidents > 0U;
             }
+            bool regionalTravelValid = true;
+            if (raid.rulesVersion == "regional-route-network-17")
+            {
+                ProfileState startingRouteProfile = profile;
+                startingRouteProfile.regionalOperations =
+                    raid.travel.startingRegionalOperations;
+                const RegionalRoutePlan route = queryRegionalRoute(
+                    startingRouteProfile, content, raid.mapDefinitionId);
+                regionalTravelValid =
+                    route.reachable &&
+                    route.routeIds == raid.travel.routeIds &&
+                    route.travelMinutes == raid.travel.outboundMinutes &&
+                    route.travelMinutes == raid.travel.returnMinutes &&
+                    route.travelMinutes <=
+                        std::numeric_limits<std::uint32_t>::max() / 2U &&
+                    route.travelMinutes * 2U ==
+                        raid.travel.failureRegroupMinutes &&
+                    raid.travel.startingRegionalOperations ==
+                        profile.regionalOperations;
+            }
+            else
+            {
+                regionalTravelValid = raid.travel.routeIds.empty();
+            }
             if (raid.travel.outboundMinutes == 0U ||
                 raid.travel.returnMinutes == 0U ||
                 raid.travel.failureRegroupMinutes <
@@ -2210,6 +2306,7 @@ ProfileValidationResult validateProfileState(
                     content) ||
                  !startingConstructionValid || !startingWorkforceValid ||
                 !startingResidentMedicalValid ||
+                !regionalTravelValid ||
                 !validIntelligenceArchive(
                     raid.travel.startingRaidIntelligence))
             {
@@ -2544,6 +2641,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, static_cast<std::uint32_t>(
             *profile.baseWorkforce.medicalWorker));
     }
+    hashBytes(hash, profile.regionalOperations.activeBaseNodeId.value());
+    for (const auto &[outpostId, state] :
+         profile.regionalOperations.outposts)
+    {
+        hashBytes(hash, outpostId.value());
+        hashInteger(hash, state.unlocked ? 1U : 0U);
+        hashInteger(hash, state.established ? 1U : 0U);
+        hashInteger(hash, state.disrupted ? 1U : 0U);
+        for (std::uint32_t count : state.assignedStaff)
+        {
+            hashInteger(hash, count);
+        }
+    }
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
     hashInteger(hash, profile.baseConstruction.workshopLevel);
@@ -2870,6 +2980,26 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashBytes(hash, mapId.value());
             for (std::uint32_t count : counts)
+            {
+                hashInteger(hash, count);
+            }
+        }
+        for (const RegionRouteDefinitionId &routeId :
+             raid.travel.routeIds)
+        {
+            hashBytes(hash, routeId.value());
+        }
+        hashBytes(
+            hash,
+            raid.travel.startingRegionalOperations.activeBaseNodeId.value());
+        for (const auto &[outpostId, state] :
+             raid.travel.startingRegionalOperations.outposts)
+        {
+            hashBytes(hash, outpostId.value());
+            hashInteger(hash, state.unlocked ? 1U : 0U);
+            hashInteger(hash, state.established ? 1U : 0U);
+            hashInteger(hash, state.disrupted ? 1U : 0U);
+            for (std::uint32_t count : state.assignedStaff)
             {
                 hashInteger(hash, count);
             }

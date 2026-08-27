@@ -2001,6 +2001,7 @@ std::optional<RaidTravelPreview> GameSession::raidTravelPreview(
     {
         return queryRaidTravel(
             profile_,
+            publishedContentRegistry(),
             publishedContentRegistry().map(mapDefinitionId));
     }
     catch (...)
