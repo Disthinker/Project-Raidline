@@ -389,6 +389,32 @@ TEST(EnemyTest, AiPursuitMovesVerticallyAndAdvancesAnimation)
     EXPECT_EQ(enemy.currentAnimationFrameIndex(), 2U);
 }
 
+TEST(EnemyTest, AttackOpportunityRequiresAwarenessRangeAndReadyAttack)
+{
+    Enemy enemy{
+        Vec2{100.0F, 100.0F},
+        Vec2{50.0F, 50.0F},
+        Vec2{},
+        3};
+    const Vec2 closeTarget{175.0F, 125.0F};
+
+    EXPECT_FALSE(enemy.hasAttackOpportunity(closeTarget));
+    enemy.hearTarget(closeTarget);
+    EXPECT_TRUE(enemy.hasAttackOpportunity(closeTarget));
+    EXPECT_FALSE(enemy.hasAttackOpportunity(Vec2{600.0F, 125.0F}));
+
+    static_cast<void>(
+        enemy.updateTowardsTarget(
+            closeTarget,
+            engageDirective(),
+            1.0F / 120.0F,
+            1280.0F,
+            720.0F));
+
+    EXPECT_NE(enemy.attackPhase(), EnemyAttackPhase::Idle);
+    EXPECT_FALSE(enemy.hasAttackOpportunity(closeTarget));
+}
+
 TEST(EnemyTest, ActiveAttackKeepsLockedDirectionAndSuppressesAiMovement)
 {
     Enemy enemy{

@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/raid-world-scalability-foundation-v1.md`。Persistent Base、Extraction Loop、Alpha Hardening、Survival Loadout、Combat、Raid Pressure、Base Growth 与 Raid World 第二个代表性地点 PR #78～#99 已接受；旧活动文档保留交付证据。
+当前实现计划：`active/enemy-attack-intent-isolation.md`。PR #100 的 Raid World 可扩展性能基础已接受并进入 main；PR #101 的 Regional Loss Records 保持独立 Draft。当前修复只处理多敌人追击与攻击许可耦合，不混入结算、存档或新内容；旧活动文档保留交付证据。

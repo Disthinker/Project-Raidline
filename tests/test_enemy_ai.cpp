@@ -288,6 +288,37 @@ TEST(EnemyAiStateTest, SupportRoleCannotAttackAndRetreatsWhenTooClose)
     EXPECT_LT(decision.moveDirection.x, 0.0F);
 }
 
+TEST(EnemyAiStateTest, PressureRoleCannotAttackButKeepsClosing)
+{
+    EnemyAiState ai;
+
+    const EnemyAiDecision decision = ai.update(
+        makeInput(
+            Vec2{130.0F, 0.0F},
+            0.0F,
+            EnemyTacticalRole::Pressure,
+            false));
+
+    EXPECT_FALSE(decision.attackRequest.has_value());
+    EXPECT_GT(decision.moveDirection.x, 0.0F);
+    EXPECT_NEAR(decision.moveDirection.y, 0.0F, kTolerance);
+}
+
+TEST(EnemyAiStateTest, AttackOpportunityReflectsRangeCooldownAndSpecialCharge)
+{
+    EnemyAiState ai;
+
+    EXPECT_TRUE(ai.hasAttackOpportunity(50.0F));
+    EXPECT_FALSE(ai.hasAttackOpportunity(90.0F));
+    EXPECT_FALSE(ai.hasAttackOpportunity(130.0F));
+
+    ai.recordAttackStarted(EnemyAttackType::Scratch);
+
+    EXPECT_FALSE(ai.hasAttackOpportunity(50.0F));
+    EXPECT_TRUE(ai.hasAttackOpportunity(130.0F));
+    EXPECT_FALSE(ai.hasAttackOpportunity(-1.0F));
+}
+
 TEST(EnemyAiStateTest, SupportRoleOrbitsInsideItsDistanceBand)
 {
     EnemyAiState ai;

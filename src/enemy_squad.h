@@ -11,6 +11,7 @@ struct EnemySquadConfig
 {
     float separationRadius{82.0F};
     float maximumSeparationWeight{1.25F};
+    std::size_t maximumConcurrentAttackers{10U};
 };
 
 struct EnemySquadMemberSnapshot
@@ -19,6 +20,7 @@ struct EnemySquadMemberSnapshot
     bool alive{};
     EnemyAwarenessState awareness{EnemyAwarenessState::Unaware};
     EnemyAttackPhase attackPhase{EnemyAttackPhase::Idle};
+    bool hasAttackOpportunity{};
 };
 
 struct EnemySquadDecisionMetrics
@@ -36,11 +38,13 @@ public:
     std::vector<EnemyTacticalDirective> decide(
         const std::vector<EnemySquadMemberSnapshot> &members,
         Vec2 targetPosition,
-        EnemySquadDecisionMetrics *metrics = nullptr) const;
+        EnemySquadDecisionMetrics *metrics = nullptr);
 
     [[nodiscard]]
     const EnemySquadConfig &config() const noexcept;
 
 private:
     EnemySquadConfig config_;
+    std::size_t attackScheduleCursor_{};
+    std::vector<std::size_t> reservedAttackers_;
 };

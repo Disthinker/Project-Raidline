@@ -3,10 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <limits>
-#include <optional>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace
@@ -77,10 +76,12 @@ EnemySquadCoordinator::EnemySquadCoordinator(
     : config_{config}
 {
     if (!isFinitePositive(config_.separationRadius) ||
-        !isFinitePositive(config_.maximumSeparationWeight))
+        !isFinitePositive(config_.maximumSeparationWeight) ||
+        config_.maximumConcurrentAttackers == 0U)
     {
         throw std::invalid_argument{
-            "EnemySquadConfig requires finite positive values"};
+            "EnemySquadConfig requires positive finite movement values "
+            "and at least one concurrent attacker"};
     }
 }
 
@@ -88,7 +89,7 @@ std::vector<EnemyTacticalDirective>
 EnemySquadCoordinator::decide(
     const std::vector<EnemySquadMemberSnapshot> &members,
     Vec2 targetPosition,
-    EnemySquadDecisionMetrics *metrics) const
+    EnemySquadDecisionMetrics *metrics)
 {
     if (metrics != nullptr)
     {
@@ -103,9 +104,17 @@ EnemySquadCoordinator::decide(
     {
         directives[index].supportSide =
             index % 2U == 0U ? 1.0F : -1.0F;
+        if (members[index].alive &&
+            members[index].awareness == EnemyAwarenessState::Alerted)
+        {
+            // Pursuit pressure is independent from the bounded permission to
+            // start an attack. Alerted teammates must keep closing while all
+            // concurrent attack slots are occupied.
+            directives[index].role = EnemyTacticalRole::Pressure;
+        }
     }
 
-    std::optional<std::size_t> engageIndex;
+    std::size_t occupiedAttackSlots{};
     for (std::size_t index{0U};
          index < members.size();
          ++index)
@@ -113,16 +122,17 @@ EnemySquadCoordinator::decide(
         if (members[index].alive &&
             occupiesAttackToken(members[index].attackPhase))
         {
-            engageIndex = index;
-            break;
+            directives[index].role = EnemyTacticalRole::Engage;
+            ++occupiedAttackSlots;
         }
     }
 
-    if (!engageIndex.has_value() &&
+    std::vector<bool> attackCandidates(
+        members.size(),
+        false);
+    if (occupiedAttackSlots < config_.maximumConcurrentAttackers &&
         isFinite(targetPosition))
     {
-        float nearestDistanceSquared =
-            std::numeric_limits<float>::max();
         for (std::size_t index{0U};
              index < members.size();
              ++index)
@@ -132,6 +142,7 @@ EnemySquadCoordinator::decide(
             if (!member.alive ||
                 member.awareness != EnemyAwarenessState::Alerted ||
                 member.attackPhase != EnemyAttackPhase::Idle ||
+                !member.hasAttackOpportunity ||
                 !isFinite(member.position))
             {
                 continue;
@@ -145,26 +156,61 @@ EnemySquadCoordinator::decide(
             {
                 continue;
             }
-
-            if (!engageIndex.has_value() ||
-                distanceSquared < nearestDistanceSquared)
-            {
-                engageIndex = index;
-                nearestDistanceSquared = distanceSquared;
-            }
+            attackCandidates[index] = true;
         }
     }
 
-    if (engageIndex.has_value())
+    const std::size_t availableAttackSlots =
+        occupiedAttackSlots >= config_.maximumConcurrentAttackers
+            ? 0U
+            : config_.maximumConcurrentAttackers - occupiedAttackSlots;
+    std::vector<std::size_t> retainedReservations;
+    retainedReservations.reserve(availableAttackSlots);
+    std::vector<bool> granted(members.size(), false);
+    for (const std::size_t memberIndex : reservedAttackers_)
     {
-        directives[*engageIndex].role =
+        if (retainedReservations.size() >= availableAttackSlots ||
+            memberIndex >= members.size() ||
+            !attackCandidates[memberIndex])
+        {
+            continue;
+        }
+        directives[memberIndex].role =
             EnemyTacticalRole::Engage;
-        directives[*engageIndex].canStartAttack =
-            members[*engageIndex].attackPhase ==
-                EnemyAttackPhase::Idle &&
-            members[*engageIndex].awareness ==
-                EnemyAwarenessState::Alerted;
+        directives[memberIndex].canStartAttack = true;
+        granted[memberIndex] = true;
+        retainedReservations.push_back(memberIndex);
     }
+
+    if (members.empty())
+    {
+        attackScheduleCursor_ = 0U;
+    }
+    else
+    {
+        attackScheduleCursor_ %= members.size();
+        const std::size_t scheduleStart = attackScheduleCursor_;
+        for (std::size_t scanned{};
+             scanned < members.size() &&
+             retainedReservations.size() < availableAttackSlots;
+             ++scanned)
+        {
+            const std::size_t memberIndex =
+                (scheduleStart + scanned) % members.size();
+            if (!attackCandidates[memberIndex] || granted[memberIndex])
+            {
+                continue;
+            }
+            directives[memberIndex].role =
+                EnemyTacticalRole::Engage;
+            directives[memberIndex].canStartAttack = true;
+            granted[memberIndex] = true;
+            retainedReservations.push_back(memberIndex);
+            attackScheduleCursor_ =
+                (memberIndex + 1U) % members.size();
+        }
+    }
+    reservedAttackers_ = std::move(retainedReservations);
 
     const float radiusSquared =
         config_.separationRadius * config_.separationRadius;

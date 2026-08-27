@@ -1,17 +1,18 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-26。
+最后核对：2026-08-27。
 
 ## Git 与交付基线
 
-- `origin/main@1d2fea1` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 PR #93～#99 接受的 Raid World Vertical Slice 基线。
-- 当前开发分支：`codex/raid-world-scalability-foundation-v1`，从干净的 `origin/main@1d2fea1` 创建。
-- 当前活动计划：`doc/exec-plans/active/raid-world-scalability-foundation-v1.md`。
+- `origin/main@d7c231b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Raid World Vertical Slice，以及 PR #100 接受的可扩展性能基础。
+- 当前开发分支：`codex/enemy-attack-intent-isolation`，从干净的 `origin/main@d7c231b` 创建。
+- 当前活动计划：`doc/exec-plans/active/enemy-attack-intent-isolation.md`。
+- PR #101 `codex/regional-loss-records-v1` 已通过用户正常游玩验收，但仍为未合并 Draft；本分支不携带其丢失记录、schema 或结算改动。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及程序化室外、两个独立室内地点、随机特殊地点、探索发现、永久内部图和空间战术可靠性均已进入主线。当前分支开发 **Raid World 可扩展性能基础 v1**：不增加正常玩法敌人数量，而建立公平路径预算、近邻/障碍空间索引、高密度静态网格、确定性工作计数、F9 帧时间面板及 32/100 敌人压力门槛。第三地点、程序化室内、正式资源和最终发行百敌承诺继续延期。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice 与可扩展性能基础均已进入主线。当前分支修复 **多敌人追击与攻击意图隔离**：最多 10 名敌人可同时进入攻击阶段，超额成员继续施压并稳定轮转；玩家受到敌人伤害后有 0.25 秒保护，避免同一瞬间连续跳血。第三地点、程序化室内、正式资源和最终发行百敌承诺继续延期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -54,7 +55,9 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 39. **建筑内部图永久情报 v1**：PR #97 已通过本地 1058/1058、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `a7b3cc2` 进入 main。content v32 为交换站办公室声明 180 货币的一次性内部图，schema v23 保存永久空间 ID 授权并冻结到 pending Raid。
 40. **空间战术可靠性 v1**：PR #98 已通过 Windows Debug、1072/1072 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `95fcd23` 进入 main。当前空间 LOS、最后已知位置、确定性绕障、贴墙合法接近点、成功实弹击发枪声刺激和近战遮挡均已接受。
 41. **第二个代表性地点 v1**：content v33 在 `Frontier Exchange` 增加独立 `Freight Service Bay`，rules v15 冻结两个地点并保留 v12～v14 首办公室 pending Raid 兼容。多入口投影、返回点可达锚点、独立 Actor/Loot/内部图和双语代码占位均已通过用户正常游玩验收；多人追击热点修复也完成复验。PR #99 已以普通 merge commit `1d2fea1` 进入 main。
-42. **Raid World 可扩展性能基础 v1**：当前分支从 `origin/main@1d2fea1` 开始；公平轮转、敌人近邻格、每空间静态障碍索引、低密度精确可见图/高密度预验证网格双后端、确定性工作计数和双语 F9 性能面板已实现。无 schema/content/产品数值变化，正常敌人数量不变。
+42. **Raid World 可扩展性能基础 v1**：PR #100 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `d7c231b` 进入 main。公平轮转、敌人近邻格、每空间静态障碍索引、双导航后端、确定性工作计数和双语 F9 性能面板已接受。
+43. **Regional Loss Records v1**：PR #101 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，但仍是未合并 Draft；其分支、schema、结算和丢失记录保持独立。
+44. **多敌人追击与攻击意图隔离**：当前分支从 `origin/main@d7c231b` 开始；已把持续追击压力从有上限的攻击许可中拆开。用户将第一版单槽合同修订为最多 10 名并发攻击、稳定轮转和 0.25 秒受伤保护；Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest 已通过，无 schema/content 变化。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -81,6 +84,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
+- 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
 - PR #90～#99 均已进入 main；PR #99 的第二地点和多人围攻热点修复已通过双平台 CI 与用户正常游玩验收，以普通 merge commit `1d2fea1` 合入。当前性能基础分支已完成 Windows Debug 全目标和 1097/1097 CTest：32 敌人/64 障碍/120 子步约 117 ms、最慢约 1.28 ms；100 敌人/96 障碍/120 子步约 173 ms、最慢约 2.29 ms，全部敌人在 120 子步内获得路径刷新。代码提交 `a5721fa` 的 exact-head Windows/Ubuntu CI 全部通过；开发代理未启动游戏。
