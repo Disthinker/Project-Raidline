@@ -18,7 +18,7 @@
 ## 状态所有权与不变量
 
 - `BaseFacilityDefinitionId` 是设施稳定身份；ContentRegistry 定义仓储区、宿舍、厨房与净水站、医疗所和工坊，以及是否为迁徙必需设施。
-- `BaseConstructionState` 唯一保存当前已拥有设施的 `Installed` / `Reserve` 位置；设施储备不占 Stash，不复制物品资产。现有三类设施等级继续由同一状态保存，作为消费者安全迁移的过渡结构。
+- `BaseConstructionState` 唯一保存当前已拥有设施的 `Installed` / `Reserve` 位置和入库世界分钟；设施储备不占 Stash，不复制物品资产。重装按入库时间整体平移相关队列，保证等待多久都保留精确剩余进度。现有三类设施等级继续由同一状态保存，作为消费者安全迁移的过渡结构。
 - `TechnologyCoreState` 保存唯一不可丢失核心的稳定实例 ID 与当前基地地点；它必须与 `activeBaseNodeId` 指向同一地点。
 - 迁徙预览是纯查询。拒绝迁徙时 Profile 指纹、revision、世界时间、日结、设施位置、前哨驻守与队列完成时间全部不变。
 - 迁徙提交在一个候选 Profile 中完成：推进世界时间和正常日结；将设施队列完成时间整体后移以冻结其精确剩余进度；迁移核心；切换唯一 active Base；把目标地点关联前哨关闭并释放驻守；把旧基地关联前哨建立为离线状态；全部验证、保存成功后才交换内存。
@@ -59,8 +59,9 @@
 
 - [x] PR #106 经用户验收并普通合入；从 `origin/main@e6721e4` 创建独立分支。
 - [x] 只读核对 GDD 迁徙、设施储备和队列暂停合同。
-- [ ] Step 1：设施、厨房/净水、科技核心和 schema v30。
-- [ ] Step 2：原子迁徙、队列暂停、旧基地转前哨和动态路线。
-- [ ] Step 3：工坊储备/重装与双语区域/Base 投影。
-- [ ] Windows Debug 全目标、完整 CTest 和 exact-head CI。
+- [x] Step 1：设施、厨房/净水、科技核心和 schema v30。
+- [x] Step 2：原子迁徙、队列暂停、旧基地转前哨和动态路线。
+- [x] Step 3：工坊储备/重装与双语区域/Base 投影。
+- [x] Windows Debug 全目标与完整 1180/1180 CTest。
+- [ ] Draft PR exact-head Windows/Ubuntu CI。
 - [ ] 用户统一正常游玩验收。

@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@cf555a1` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所，以及已接受的哨所中断/清剿恢复闭环。
-- 当前开发分支：`codex/regional-base-site-clearance`，从 `origin/main@cf555a1` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-base-site-clearance-v1.md`。
+- `origin/main@e6721e4` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复和基地候选点清剿闭环。
+- 当前开发分支：`codex/regional-main-base-migration`，从 `origin/main@e6721e4` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-main-base-migration-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所及哨所中断/恢复均已进入主线。当前宏切片让玩家清剿并解锁 Ashworks Logistics Yard，随后建立、派驻第二个标准前哨以缩短东部路线；正式主基地迁移仍等待 GDD 规定的厨房/供水和设施存储门槛。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复及基地候选点清剿均已进入主线。当前宏切片建立唯一科技核心、厨房/净水和设施储备合同，并让玩家在 Greyline 与 Ashworks 之间原子迁移唯一主基地；不创建第二套 Stash 或并行基地服务。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -60,7 +60,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 45. **NPC 寻回任务与 Raid 自行寻回 v1**：PR #103 已通过 exact-head CI 和用户统一正常游玩验收，以普通 merge commit `f31d91a` 进入 main。schema v26/content v35 支持整单 NPC 委托与来源地图内自力寻回，两条路径共享唯一资产所有权。
 46. **区域路线与轻量哨所基础**：PR #104 已通过 exact-head CI 与用户统一正常游玩验收，以普通 merge commit `dc19745` 进入 main。content v36/schema v27 建立稳定区域节点、路线和哨所 ID；满员 Old Service Relay 把 Riverside/Industrial/Frontier 单程最短时间从 90/150/210 分钟降为 55/95/125 分钟。
 47. **哨所中断与恢复 v1**：PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main。content v37/schema v28 数据化 3 次安全捷径行动阈值和 Riverside 清剿地图；完成目标并成功撤离才原子恢复，失败保留中断，异常退出恢复出击前状态。
-48. **区域基地候选点清剿 v1（当前开发）**：content v38/schema v29 发布 Greyline 与锁定的 Ashworks Logistics Yard；Ashworks 清剿行动在初始敌人清除前锁定撤离，成功撤离同时解锁候选点与关联前哨。玩家仍需显式建立和派驻第二前哨，Online 后 Industrial/Frontier 单程路线降为 75/115 分钟。正式基地迁移、第二仓库与设施搬运不在本切片。
+48. **区域基地候选点清剿 v1**：PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main。content v38/schema v29 发布 Greyline 与 Ashworks 候选点、清剿解锁、第二标准前哨和路线收益。
+49. **唯一主基地迁徙 v1（当前开发）**：content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线。迁徙以原子 Profile 候选推进 12 小时、冻结设施队列剩余进度、切换唯一 active Base、把旧基地转为离线前哨；Stash、装备、人口和资产不复制。Windows Debug 全目标与 1180/1180 CTest 已通过，Draft PR/exact-head CI 待建立。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -340,7 +341,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- 正式主基地迁移必须先补齐 GDD 要求的厨房/供水、设施存储与迁移清单/损失事务；当前解锁 Ashworks 只建立候选地点和标准轻量前哨，不创建第二套 Stash 或服务。
+- 唯一主基地迁徙 v1 已建立厨房/供水、设施储备、唯一科技核心、队列暂停和原子地点切换；第二套 Stash、逐格搬运、随机迁徙损失、基地布局编辑、设施耐久/独特效果及尸潮预警门禁仍明确延期。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。
 - 正式攻击动画及所有新正式美术/音频生产。
 
