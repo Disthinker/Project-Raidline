@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-second-representative-location-content-33");
+        "regional-loss-record-content-34");
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);

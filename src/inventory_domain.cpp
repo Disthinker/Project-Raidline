@@ -1,5 +1,7 @@
 #include "inventory_domain.h"
 
+#include "lost_raid_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -79,6 +81,13 @@ InventoryReceipt applyMove(
         return failure(
             DomainErrorCode::MissingAsset,
             "asset does not exist",
+            candidate.revision);
+    }
+    if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction",
             candidate.revision);
     }
 
@@ -289,6 +298,13 @@ InventoryReceipt applyEquip(
         return failure(
             DomainErrorCode::MissingAsset,
             "asset does not exist",
+            candidate.revision);
+    }
+    if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction",
             candidate.revision);
     }
     const ItemDefinition &definition = content.item(source->definitionId);

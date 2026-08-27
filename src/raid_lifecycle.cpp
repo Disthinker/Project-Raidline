@@ -11,6 +11,7 @@
 #include "base_resource_domain.h"
 #include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
+#include "lost_raid_domain.h"
 #include "raid_map_generation.h"
 #include "stable_random.h"
 
@@ -208,6 +209,85 @@ bool advanceProfileWorldTime(
     static_cast<void>(applyBaseManufacturingThrough(profile, content));
     static_cast<void>(applyResidentTreatmentThrough(profile));
     return true;
+}
+
+void ageLostRaidRecords(ProfileState &profile)
+{
+    std::vector<std::string> expiredRecordIds;
+    for (auto &[recordId, record] : profile.lostRaidRecords)
+    {
+        if (record.subsequentRaidSettlementCount >=
+            kLostRaidRecordRetainedSettlementCount)
+        {
+            expiredRecordIds.push_back(recordId);
+        }
+        else
+        {
+            ++record.subsequentRaidSettlementCount;
+        }
+    }
+
+    for (const std::string &recordId : expiredRecordIds)
+    {
+        std::vector<AssetInstanceId> expiredAssets;
+        for (const auto &[assetId, asset] : profile.assets.records())
+        {
+            static_cast<void>(asset);
+            const std::optional<std::string> owner =
+                lostRaidRecordForAsset(profile, assetId);
+            if (owner.has_value() && *owner == recordId)
+            {
+                expiredAssets.push_back(assetId);
+            }
+        }
+        for (AssetInstanceId assetId : expiredAssets)
+        {
+            static_cast<void>(profile.assets.erase(assetId));
+        }
+        profile.lostRaidRecords.erase(recordId);
+    }
+}
+
+std::optional<std::string> createLostRaidRecord(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const PendingRaidSnapshot &raid,
+    RaidResultOutcome outcome)
+{
+    std::vector<std::pair<AssetInstanceId, EquipmentSlotKind>> roots;
+    for (const auto &[assetId, asset] : profile.assets.records())
+    {
+        if (const auto *equipped =
+                std::get_if<EquippedAssetLocation>(&asset.location))
+        {
+            roots.emplace_back(assetId, equipped->slot);
+        }
+    }
+    if (roots.empty())
+    {
+        return std::nullopt;
+    }
+
+    const MapDefinition &map = content.map(raid.mapDefinitionId);
+    LostRaidRecord record{
+        raid.settlementId,
+        raid.raidId,
+        raid.settlementId,
+        raid.mapDefinitionId,
+        map.operationBriefing.difficulty,
+        outcome,
+        profile.worldClock.elapsedWorldMinutes,
+        0U};
+    if (!profile.lostRaidRecords.emplace(record.recordId, record).second)
+    {
+        return std::nullopt;
+    }
+    for (const auto &[assetId, slot] : roots)
+    {
+        profile.assets.findMutable(assetId)->location =
+            LostRaidAssetLocation{record.recordId, slot};
+    }
+    return record.recordId;
 }
 }
 
@@ -704,9 +784,7 @@ RaidSettlementReceipt settlePendingRaid(
     {
         const bool onGround =
             std::holds_alternative<RaidGroundAssetLocation>(asset.location);
-        const bool carried = assetIsCarried(candidate, assetId);
-        if (onGround ||
-            (outcome != RaidResultOutcome::Extracted && carried))
+        if (onGround)
         {
             eraseIds.push_back(assetId);
         }
@@ -714,6 +792,13 @@ RaidSettlementReceipt settlePendingRaid(
     for (AssetInstanceId assetId : eraseIds)
     {
         static_cast<void>(candidate.assets.erase(assetId));
+    }
+    ageLostRaidRecords(candidate);
+    std::optional<std::string> lostRecordId;
+    if (outcome != RaidResultOutcome::Extracted)
+    {
+        lostRecordId = createLostRaidRecord(
+            candidate, content, raidSnapshot, outcome);
     }
     if (outcome != RaidResultOutcome::Extracted)
     {
@@ -732,6 +817,11 @@ RaidSettlementReceipt settlePendingRaid(
             profile.revision,
             outcome);
     }
+    if (lostRecordId.has_value())
+    {
+        candidate.lostRaidRecords.at(*lostRecordId).createdWorldMinute =
+            candidate.worldClock.elapsedWorldMinutes;
+    }
     candidate.pendingRaid.reset();
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     candidate.committedSettlements.insert(id);
@@ -746,7 +836,8 @@ RaidSettlementReceipt settlePendingRaid(
             : 0U,
         raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
             ? raidSnapshot.rescue->injuredResidentCount
-            : 0U};
+            : 0U,
+        lostRecordId};
     ++candidate.revision;
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);

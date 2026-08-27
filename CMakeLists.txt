@@ -248,6 +248,8 @@ add_library(raidline_domain STATIC
     src/inventory_transfer.h
     src/loot_table.cpp
     src/loot_table.h
+    src/lost_raid_domain.cpp
+    src/lost_raid_domain.h
     src/maintenance_domain.cpp
     src/maintenance_domain.h
     src/medical_domain.cpp
@@ -671,6 +673,10 @@ raidline_add_test(
 raidline_add_test(
     RaidLifecycleTest
     tests/test_raid_lifecycle.cpp
+    raidline::domain)
+raidline_add_test(
+    LostRaidDomainTest
+    tests/test_lost_raid_domain.cpp
     raidline::domain)
 raidline_add_test(
     RaidIntelligenceDomainTest

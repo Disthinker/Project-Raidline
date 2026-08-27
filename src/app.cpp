@@ -1352,6 +1352,7 @@ bool App::handleScreenConfirm()
     case GameFlowState::Base:
         transitioned =
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+            !lostRaidRecordsOpen_ &&
             tryDeployFromBase();
         break;
     case GameFlowState::Raid:
@@ -1377,10 +1378,25 @@ bool App::tryDeployFromBase()
     const std::size_t usableRounds = readiness.compatibleMagazineRounds +
         (readiness.hasChamberedRound ? 1U : 0U);
     const bool unsafe = !readiness.hasWeapon || usableRounds == 0;
-    if (unsafe && !deploymentWarningArmed_)
+    const LostRaidAgingPreview aging = gameSession_.lostRaidAgingPreview();
+    const bool expiring = aging.recordsExpiringOnNextSettlement > 0U;
+    if ((unsafe || expiring) && !deploymentWarningArmed_)
     {
         deploymentWarningArmed_ = true;
-        uiMessage_ = "UNSAFE LOADOUT - CONFIRM DEPLOY AGAIN";
+        if (unsafe && expiring)
+        {
+            uiMessage_ =
+                "UNSAFE LOADOUT AND LOST RECORD EXPIRY - CONFIRM AGAIN";
+        }
+        else if (expiring)
+        {
+            uiMessage_ =
+                "LOST RECORD EXPIRES AFTER THIS RAID - CONFIRM AGAIN";
+        }
+        else
+        {
+            uiMessage_ = "UNSAFE LOADOUT - CONFIRM DEPLOY AGAIN";
+        }
         return false;
     }
     if (!gameFlow_.deploy(
@@ -1393,6 +1409,7 @@ bool App::tryDeployFromBase()
         return false;
     }
     deploymentWarningArmed_ = false;
+    lostRaidRecordsOpen_ = false;
     selectedRaidIntelligence_ = {};
     uiMessage_.clear();
     return true;
@@ -1720,6 +1737,11 @@ SDL_FRect App::raidMapNextButton() const noexcept
     return SDL_FRect{804.0F, 226.0F, 54.0F, 42.0F};
 }
 
+SDL_FRect App::raidLostRecordsButton() const noexcept
+{
+    return SDL_FRect{920.0F, 184.0F, 200.0F, 34.0F};
+}
+
 SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -1775,6 +1797,7 @@ void App::updateBase(float deltaTime)
     if (inventoryDecision.controlAction == InventoryFrameControlAction::OpenInventory)
     {
         gameFlow_.closeBaseFacility();
+        lostRaidRecordsOpen_ = false;
         inventoryOverlayState_.openContainerInventory();
         uiMessage_.clear();
     }
@@ -1809,10 +1832,19 @@ void App::updateBase(float deltaTime)
     {
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+                lostRaidRecordsOpen_)
+            {
+                lostRaidRecordsOpen_ = false;
+                pendingBaseClicks_.clear();
+                uiMessage_.clear();
+                return;
+            }
             gameFlow_.closeBaseFacility();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
+            lostRaidRecordsOpen_ = false;
             uiMessage_.clear();
             return;
         }
@@ -1858,6 +1890,22 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::RaidGate)
     {
+        if (lostRaidRecordsOpen_)
+        {
+            if (contains(raidLostRecordsButton(), click.position))
+            {
+                lostRaidRecordsOpen_ = false;
+                uiMessage_.clear();
+            }
+            return;
+        }
+        if (contains(raidLostRecordsButton(), click.position))
+        {
+            lostRaidRecordsOpen_ = true;
+            deploymentWarningArmed_ = false;
+            uiMessage_.clear();
+            return;
+        }
         if (contains(raidMapPreviousButton(), click.position))
         {
             cycleSelectedRaidMap(-1);
@@ -6230,7 +6278,9 @@ void App::renderStashOverlay()
                     "ALL CARRIED ASSETS WERE LOST");
                 uiTextRenderer_.render(
                     renderer_, panel.x + 24.0F, panel.y + 190.0F,
-                    "NO LOST-ITEM LIST IS GENERATED");
+                    result->lostRaidRecordId.has_value()
+                        ? "A LOST RAID RECORD IS AVAILABLE AT THE RAID GATE"
+                        : "NO GEAR WAS CARRIED; NO LOST RECORD WAS CREATED");
             }
         }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -10386,6 +10436,11 @@ void App::renderBaseWorkshop()
 
 void App::renderBaseDeployment()
 {
+    if (lostRaidRecordsOpen_)
+    {
+        renderLostRaidRecords();
+        return;
+    }
     const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
     SDL_SetRenderDrawColor(renderer_, 28, 18, 18, 248);
     SDL_RenderFillRect(renderer_, &panel);
@@ -10548,9 +10603,134 @@ void App::renderBaseDeployment()
             renderer_, 666.0F, 478.0F,
             "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     }
+    const LostRaidAgingPreview aging = gameSession_.lostRaidAgingPreview();
+    const SDL_FRect recordsButton = raidLostRecordsButton();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        aging.recordsExpiringOnNextSettlement > 0U ? 104 : 54,
+        aging.recordsExpiringOnNextSettlement > 0U ? 62 : 70,
+        58, 255);
+    SDL_RenderFillRect(renderer_, &recordsButton);
+    SDL_SetRenderDrawColor(renderer_, 190, 132, 102, 255);
+    SDL_RenderRect(renderer_, &recordsButton);
+    const std::string recordsLabel = fmt::format(
+        "LOST RECORDS {} | OPEN",
+        aging.activeRecordCount);
+    uiTextRenderer_.render(
+        renderer_, recordsButton.x + 18.0F, recordsButton.y + 13.0F,
+        recordsLabel.c_str());
+    if (aging.recordsExpiringOnNextSettlement > 0U)
+    {
+        const std::string expiry = fmt::format(
+            "WARNING: {} RECORD(S) EXPIRE AFTER NEXT RAID SETTLEMENT",
+            aging.recordsExpiringOnNextSettlement);
+        uiTextRenderer_.render(renderer_, 700.0F, 560.0F, expiry.c_str());
+    }
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     uiTextRenderer_.render(renderer_, 420.0F, 590.0F, "CLICK INTELLIGENCE TO BUY/SELECT | ENTER DEPLOY | ESC CLOSE");
+}
+
+void App::renderLostRaidRecords()
+{
+    const SDL_FRect panel{kFlowPanelX, kFlowPanelY,
+                          kFlowPanelWidth, kFlowPanelHeight};
+    SDL_SetRenderDrawColor(renderer_, 24, 20, 18, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 182, 132, 92, 255);
+    SDL_RenderRect(renderer_, &panel);
+    uiTextRenderer_.render(renderer_, 522.0F, 190.0F,
+                           "LOST RAID RECORDS");
+
+    const std::vector<LostRaidRecordProjection> records =
+        gameSession_.lostRaidRecordProjections();
+    if (records.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, 454.0F, 300.0F,
+            "NO RECOVERABLE LOST LOADOUTS");
+        uiTextRenderer_.render(
+            renderer_, 414.0F, 326.0F,
+            "DEATH OR ACTIVE QUIT CREATES A RECORD WHEN GEAR IS CARRIED");
+    }
+    else
+    {
+        float y = 222.0F;
+        for (const LostRaidRecordProjection &record : records)
+        {
+            const SDL_FRect row{350.0F, y, 580.0F, 82.0F};
+            const bool finalOpportunity =
+                record.retainedSettlementsRemaining == 0U;
+            SDL_SetRenderDrawColor(
+                renderer_, finalOpportunity ? 78 : 42,
+                finalOpportunity ? 42 : 50,
+                finalOpportunity ? 36 : 44, 255);
+            SDL_RenderFillRect(renderer_, &row);
+            SDL_SetRenderDrawColor(
+                renderer_, finalOpportunity ? 218 : 142,
+                finalOpportunity ? 104 : 152,
+                finalOpportunity ? 82 : 112, 255);
+            SDL_RenderRect(renderer_, &row);
+
+            const std::string heading = fmt::format(
+                "{} | DIFFICULTY {} | {}",
+                record.mapDisplayName,
+                record.difficulty,
+                record.outcome == RaidResultOutcome::PlayerDead
+                    ? "PLAYER DEAD"
+                    : "RAID ABANDONED");
+            uiTextRenderer_.render(
+                renderer_, row.x + 12.0F, row.y + 10.0F,
+                heading.c_str());
+            const std::string retention = finalOpportunity
+                ? "FINAL OPPORTUNITY | NEXT RAID SETTLEMENT DESTROYS RECORD"
+                : fmt::format(
+                      "FOLLOW-UP RAIDS {}/{} | {} REMAIN BEFORE FINAL OPPORTUNITY",
+                      record.subsequentRaidSettlementCount,
+                      kLostRaidRecordRetainedSettlementCount,
+                      record.retainedSettlementsRemaining);
+            uiTextRenderer_.render(
+                renderer_, row.x + 12.0F, row.y + 31.0F,
+                retention.c_str());
+            std::string assetSummary = fmt::format(
+                "ASSETS {} | ", record.assets.size());
+            std::size_t listed{};
+            for (const LostRaidAssetProjection &asset : record.assets)
+            {
+                if (listed >= 4U)
+                {
+                    assetSummary += "...";
+                    break;
+                }
+                if (listed > 0U)
+                {
+                    assetSummary += ", ";
+                }
+                assetSummary += publishedContentRegistry().item(
+                    asset.definitionId).displayName;
+                if (asset.quantity > 1U)
+                {
+                    assetSummary += fmt::format(" x{}", asset.quantity);
+                }
+                ++listed;
+            }
+            uiTextRenderer_.render(
+                renderer_, row.x + 12.0F, row.y + 53.0F,
+                assetSummary.c_str());
+            y += 92.0F;
+        }
+    }
+
+    const SDL_FRect back = raidLostRecordsButton();
+    SDL_SetRenderDrawColor(renderer_, 64, 58, 48, 255);
+    SDL_RenderFillRect(renderer_, &back);
+    SDL_SetRenderDrawColor(renderer_, 190, 132, 102, 255);
+    SDL_RenderRect(renderer_, &back);
+    uiTextRenderer_.render(
+        renderer_, back.x + 36.0F, back.y + 13.0F,
+        "BACK TO RAID BRIEFING");
+    uiTextRenderer_.render(renderer_, 470.0F, 600.0F,
+                           "RECORDS AGE ONLY WHEN A RAID SETTLES | ESC BACK");
 }
 
 void App::renderBase()

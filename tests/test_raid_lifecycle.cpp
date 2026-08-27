@@ -979,7 +979,7 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
         profile, ProfileContainerId::baseIntake()).empty());
 }
 
-TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
+TEST(RaidLifecycleTest, DeathTransfersCarriedAssetsToLostRecordAndResetsHealth)
 {
     ProfileState profile = makeNewAlphaProfile(
         "raid-lifecycle-failure",
@@ -1017,6 +1017,12 @@ TEST(RaidLifecycleTest, DeathRemovesAllRaidAssetsAndResetsHealth)
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::BodyArmor).has_value());
+    ASSERT_EQ(profile.lostRaidRecords.size(), 1U);
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    ASSERT_TRUE(profile.lastRaidResult->lostRaidRecordId.has_value());
+    EXPECT_EQ(
+        *profile.lastRaidResult->lostRaidRecordId,
+        "settlement-alpha-test");
     for (const auto &[id, asset] : profile.assets.records())
     {
         static_cast<void>(id);

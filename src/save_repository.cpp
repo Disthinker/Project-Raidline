@@ -506,18 +506,31 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"raid_id", ground->raidId},
                 {"loot_slot_index", ground->lootSlotIndex}};
         }
-        else
+        else if (const auto *service =
+                     std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
             if (schemaVersion < 10)
             {
                 throw std::invalid_argument{
                     "legacy schema cannot represent Base service assets"};
             }
-            const auto &service =
-                std::get<BaseServiceAssetLocation>(asset.location);
             location = {
                 {"type", "base_service"},
-                {"job_id", service.jobId}};
+                {"job_id", service->jobId}};
+        }
+        else
+        {
+            if (schemaVersion < 24)
+            {
+                throw std::invalid_argument{
+                    "legacy schema cannot represent lost Raid assets"};
+            }
+            const auto &lost =
+                std::get<LostRaidAssetLocation>(asset.location);
+            location = {
+                {"type", "lost_raid"},
+                {"record_id", lost.recordId},
+                {"source_slot", slotName(lost.sourceSlot)}};
         }
 
         Json value{
@@ -784,6 +797,24 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             payload["raid_interior_intelligence"].push_back(
                 interiorId.value());
+        }
+    }
+    if (schemaVersion >= 24)
+    {
+        payload["lost_raid_records"] = Json::array();
+        for (const auto &[recordId, record] : profile.lostRaidRecords)
+        {
+            static_cast<void>(recordId);
+            payload["lost_raid_records"].push_back({
+                {"record_id", record.recordId},
+                {"raid_id", record.raidId},
+                {"settlement_id", record.settlementId},
+                {"map_definition_id", record.mapDefinitionId.value()},
+                {"difficulty", record.difficulty},
+                {"outcome", raidOutcomeName(record.outcome)},
+                {"created_world_minute", record.createdWorldMinute},
+                {"subsequent_raid_settlement_count",
+                 record.subsequentRaidSettlementCount}});
         }
     }
     if (schemaVersion >= 10)
@@ -1190,6 +1221,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["last_raid_result"]["rescued_injured_residents"] =
                 profile.lastRaidResult->rescuedInjuredResidents;
         }
+        if (schemaVersion >= 24)
+        {
+            payload["last_raid_result"]["lost_raid_record_id"] =
+                profile.lastRaidResult->lostRaidRecordId.has_value()
+                    ? Json(*profile.lastRaidResult->lostRaidRecordId)
+                    : Json(nullptr);
+        }
     }
     else
     {
@@ -1265,7 +1303,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
-        schemaVersion != 22 && schemaVersion != 23)
+        schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1354,7 +1392,11 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 22 &&
              (contentVersion == "raid-interior-spaces-content-30" ||
               contentVersion ==
-                  "raid-special-location-placement-content-31"));
+                  "raid-special-location-placement-content-31")) ||
+            (schemaVersion == 23 &&
+             (contentVersion == "raid-building-intelligence-content-32" ||
+              contentVersion ==
+                  "raid-second-representative-location-content-33"));
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1366,7 +1408,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 17 && schemaVersion != 18 &&
              schemaVersion != 19 && schemaVersion != 20 &&
              schemaVersion != 21 && schemaVersion != 22 &&
-             schemaVersion != 23) ||
+             schemaVersion != 23 && schemaVersion != 24) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1715,6 +1757,36 @@ SaveLoadResult deserializeProfileEnvelope(
                 }
             }
         }
+        if (schemaVersion >= 24)
+        {
+            for (const Json &value : payload.at("lost_raid_records"))
+            {
+                const auto outcome = parseRaidOutcome(
+                    value.at("outcome").get<std::string>());
+                if (!outcome.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "lost Raid record outcome is invalid"};
+                }
+                LostRaidRecord record{
+                    value.at("record_id").get<std::string>(),
+                    value.at("raid_id").get<std::string>(),
+                    value.at("settlement_id").get<std::string>(),
+                    MapDefinitionId{value.at("map_definition_id")
+                        .get<std::string>()},
+                    value.at("difficulty").get<std::string>(),
+                    *outcome,
+                    value.at("created_world_minute").get<std::uint64_t>(),
+                    value.at("subsequent_raid_settlement_count")
+                        .get<std::uint32_t>()};
+                if (!profile.lostRaidRecords.emplace(
+                        record.recordId, record).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "lost Raid record is duplicated"};
+                }
+            }
+        }
         if (schemaVersion < 19)
         {
             const auto moveResidentsToProfession =
@@ -1947,6 +2019,19 @@ SaveLoadResult deserializeProfileEnvelope(
             {
                 asset.location = BaseServiceAssetLocation{
                     location.at("job_id").get<BaseServiceJobId>()};
+            }
+            else if (schemaVersion >= 24 && locationType == "lost_raid")
+            {
+                const auto slot = parseSlot(
+                    location.at("source_slot").get<std::string>());
+                if (!slot.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "lost Raid source slot is invalid"};
+                }
+                asset.location = LostRaidAssetLocation{
+                    location.at("record_id").get<std::string>(),
+                    *slot};
             }
             else
             {
@@ -2484,6 +2569,12 @@ SaveLoadResult deserializeProfileEnvelope(
                 ? value.at("rescued_injured_residents")
                       .get<std::uint32_t>()
                 : 0U;
+            if (schemaVersion >= 24 &&
+                !value.at("lost_raid_record_id").is_null())
+            {
+                result.lostRaidRecordId = value.at("lost_raid_record_id")
+                    .get<std::string>();
+            }
             profile.lastRaidResult = std::move(result);
         }
 

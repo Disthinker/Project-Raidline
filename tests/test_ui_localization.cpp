@@ -363,6 +363,22 @@ TEST(UiLocalizationTest, ChineseTranslatesWorkforceAndFacilityUpgrades) {
       "将医疗设施升级至2级");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesLostRaidRecordFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "A LOST RAID RECORD IS AVAILABLE AT THE RAID GATE"),
+            "出击入口已有一条可查看的失物记录");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "FINAL OPPORTUNITY | NEXT RAID SETTLEMENT DESTROYS RECORD"),
+            "最后机会 | 下一次行动结算将销毁该记录");
+  const std::string warning = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "WARNING: 2 RECORD(S) EXPIRE AFTER NEXT RAID SETTLEMENT");
+  EXPECT_NE(warning.find("警告：2 条记录"), std::string::npos);
+  EXPECT_NE(warning.find("下一次行动结算后到期"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

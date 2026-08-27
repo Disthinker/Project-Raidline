@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "lost_raid_domain.h"
 
 namespace
 {
@@ -50,8 +51,8 @@ RaidCapabilityInventory raidCapabilityInventory(
     std::vector<ItemDefinitionId> ownedMagazineDefinitions;
     for (const auto &[id, asset] : profile.assets.records())
     {
-        static_cast<void>(id);
-        if (std::holds_alternative<RaidGroundAssetLocation>(asset.location))
+        if (std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
+            lostRaidRecordForAsset(profile, id).has_value())
         {
             continue;
         }
@@ -199,6 +200,13 @@ EconomyReceipt applyRecycle(
         return failure(
             DomainErrorCode::MissingAsset,
             "asset does not exist",
+            candidate.revision);
+    }
+    if (lostRaidRecordForAsset(candidate, asset->instanceId).has_value())
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction",
             candidate.revision);
     }
     const ItemDefinition &definition = content.item(asset->definitionId);

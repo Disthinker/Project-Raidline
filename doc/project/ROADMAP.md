@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-26。
+最后核对：2026-08-27。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报，以及 Raid World Vertical Slice 的程序化室外、两个独立室内地点、探索发现、永久内部图和空间战术可靠性均已进入主线。PR #99 已完成第二地点与多人追击热点修复并以 `1d2fea1` 合入。当前先交付 **Raid World 可扩展性能基础 v1**，为后续更多敌人、建筑和障碍建立公平预算、空间索引、结构化压力门槛与 F9 遥测，再进入集中稳定性。范围合同见 `doc/exec-plans/active/raid-world-scalability-foundation-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报和 Raid World Vertical Slice 均已进入主线；PR #100 的可扩展性能基础已以 `d7c231b` 合入。当前进入 **Regional Operations — Loss & Recovery**，先交付失物记录与行动老化，再依次建立单一 NPC 寻回任务和 Raid 内自力寻回。当前范围合同见 `doc/exec-plans/active/regional-loss-records-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -130,7 +130,15 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 建筑内部图永久情报 v1 | Base 一次购买交换站办公室内部图；进入后 `M` 显示固定墙体、出口和玩家，室外入口仍需探索 | 稳定空间 ID 永久授权、原子购买、Deploy 冻结、schema v23/content v32、只读室内地图投影 | PR #97 已通过 CI 与用户验收，以普通 merge commit `a7b3cc2` 进入 main |
 | 空间战术可靠性 v1 | 未暴露的敌人不能隔墙锁定；成功开枪或其他声音暴露后，即使玩家贴墙或躲到单墙后，敌人也会沿合法掩体边缘调查，无遮挡后才恢复攻击 | 当前空间 LOS、actor-expanded 确定性可见图、容差内合法接近点、最后已知位置、成功击发枪声刺激、命中提交前复验 | PR #98 已通过 CI 与用户验收，以普通 merge commit `95fcd23` 进入 main；墙体声学、跨空间追踪和完整 NavMesh 延期 |
 | 第二个代表性地点 v1 | `Frontier Exchange` 同局包含办公室与货运装卸间；两处地点分别探索、进入、清理并购买永久内部图 | 多 RaidSpaceDefinitionId、双地点合法 Socket、入口/返回点可达锚点、全量可见入口投影、rules v15/content v33、v14 pending Raid 兼容 | PR #99 已通过 CI 与用户验收，以普通 merge commit `1d2fea1` 进入 main；第三地点、程序化室内和正式资源延期 |
-| 可扩展性能基础 v1 | 当前正常 Raid 行为和敌人数量不变；F9 可查看帧时间及模拟工作量 | 每空间公平路径轮转、敌人近邻格、静态障碍索引、精确可见图/高密度网格双后端、32/100 敌人压力门槛 | 当前分支已通过 Windows Debug 全目标、1097/1097 CTest，以及代码提交 `a5721fa` 的 exact-head Windows/Ubuntu CI；用户正常游玩复验待完成 |
+| 可扩展性能基础 v1 | 当前正常 Raid 行为和敌人数量不变；F9 可查看帧时间及模拟工作量 | 每空间公平路径轮转、敌人近邻格、静态障碍索引、精确可见图/高密度网格双后端、32/100 敌人压力门槛 | PR #100 已通过 CI 与用户验收，以普通 merge commit `d7c231b` 进入 main |
+
+## 当前 Regional Operations — Loss & Recovery
+
+| 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | Draft PR #101 的实现 HEAD 已通过 Windows Debug 全目标、定向回归、1106/1106 CTest 和 exact-head Windows/Ubuntu CI；最终证据 HEAD 复核与用户验收待完成。异常退出继续精确回滚，不创建或老化记录 |
+| 单一 NPC 寻回任务 | 从一条记录发起一次按整单计价、耗时的委托，完成后按冻结结果返还 | 单任务槽、记录锁定、价格/时长快照、取消不退款、唯一回收目的地 | 下一宏切片；本轮不提前实现 |
+| Raid 内自力寻回 | 返回来源地图后可找到并自行带回失物，和 NPC 委托共享唯一所有权 | 来源地图约束、Raid 快照引用、原子取回、与委托互斥 | NPC 任务稳定后实施；尸体表现与正式资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 
