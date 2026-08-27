@@ -93,12 +93,26 @@ struct BaseServiceAssetLocation
         const BaseServiceAssetLocation &) = default;
 };
 
+// A failed Raid transfers only the carried ownership roots into this location.
+// Installed magazines and container contents keep their existing parent
+// relationship so an entire lost loadout remains one coherent asset tree.
+struct LostRaidAssetLocation
+{
+    std::string recordId;
+    EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
+
+    friend bool operator==(
+        const LostRaidAssetLocation &,
+        const LostRaidAssetLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
     InstalledMagazineLocation,
     RaidGroundAssetLocation,
-    BaseServiceAssetLocation>;
+    BaseServiceAssetLocation,
+    LostRaidAssetLocation>;
 
 struct MagazineRoundRecord
 {
@@ -183,6 +197,24 @@ enum class RaidResultOutcome
     PlayerDead,
     ActiveQuit,
     AbnormalQuit
+};
+
+inline constexpr std::uint32_t kLostRaidRecordRetainedSettlementCount = 3U;
+
+struct LostRaidRecord
+{
+    std::string recordId;
+    std::string raidId;
+    std::string settlementId;
+    MapDefinitionId mapDefinitionId;
+    std::string difficulty;
+    RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
+    std::uint64_t createdWorldMinute{};
+    std::uint32_t subsequentRaidSettlementCount{};
+
+    friend bool operator==(
+        const LostRaidRecord &,
+        const LostRaidRecord &) = default;
 };
 
 struct RaidEnemySnapshot
@@ -550,6 +582,7 @@ struct LastRaidResult
     std::uint32_t travelMinutesApplied{};
     std::uint32_t rescuedOrdinaryResidents{};
     std::uint32_t rescuedInjuredResidents{};
+    std::optional<std::string> lostRaidRecordId;
 };
 
 struct ProfileState
@@ -576,6 +609,7 @@ struct ProfileState
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;
+    std::map<std::string, LostRaidRecord> lostRaidRecords;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
     std::set<RescueDefinitionId> committedRescues;

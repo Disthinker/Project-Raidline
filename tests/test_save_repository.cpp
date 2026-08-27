@@ -1473,6 +1473,118 @@ TEST(SaveRepositoryTest, SchemaV23FreezesInteriorSpacesAndSpatialLayout)
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
 }
 
+TEST(SaveRepositoryTest, SchemaV24RoundTripsLostRaidOwnershipAndReceipt)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-lost-raid-v24", content);
+    const auto rifle = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, profile.assets.records().end());
+    const std::string recordId{"lost-save-settlement"};
+    profile.committedSettlements.insert(recordId);
+    profile.lostRaidRecords.emplace(
+        recordId,
+        LostRaidRecord{
+            recordId,
+            "lost-save-raid",
+            recordId,
+            MapDefinitionId{"map.raid.riverside"},
+            "MODERATE",
+            RaidResultOutcome::PlayerDead,
+            profile.worldClock.elapsedWorldMinutes,
+            2U});
+    profile.assets.findMutable(rifle->first)->location =
+        LostRaidAssetLocation{recordId, EquipmentSlotKind::PrimaryWeapon};
+    profile.lastRaidResult = LastRaidResult{};
+    profile.lastRaidResult->settlementId = recordId;
+    profile.lastRaidResult->outcome = RaidResultOutcome::PlayerDead;
+    profile.lastRaidResult->lostRaidRecordId = recordId;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 24),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->lostRaidRecords.contains(recordId));
+    EXPECT_EQ(
+        loaded.profile->lostRaidRecords.at(recordId)
+            .subsequentRaidSettlementCount,
+        2U);
+    ASSERT_TRUE(loaded.profile->lastRaidResult.has_value());
+    EXPECT_EQ(
+        loaded.profile->lastRaidResult->lostRaidRecordId,
+        std::optional<std::string>{recordId});
+    const auto *location = std::get_if<LostRaidAssetLocation>(
+        &loaded.profile->assets.find(rifle->first)->location);
+    ASSERT_NE(location, nullptr);
+    EXPECT_EQ(location->recordId, recordId);
+}
+
+TEST(SaveRepositoryTest, SchemaV23MigratesToEmptyLostRecordState)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-lost-raid-v23-migration", content);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "raid-second-representative-location-content-33",
+            23),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(loaded.profile->lostRaidRecords.empty());
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest, SchemaV24RejectsUnknownLostRecordMap)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-lost-raid-invalid-map", content);
+    const auto rifle = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, profile.assets.records().end());
+    profile.committedSettlements.insert("lost-invalid-settlement");
+    profile.lostRaidRecords.emplace(
+        "lost-invalid-settlement",
+        LostRaidRecord{
+            "lost-invalid-settlement",
+            "lost-invalid-raid",
+            "lost-invalid-settlement",
+            MapDefinitionId{"map.raid.unknown"},
+            "UNKNOWN",
+            RaidResultOutcome::ActiveQuit,
+            profile.worldClock.elapsedWorldMinutes,
+            0U});
+    profile.assets.findMutable(rifle->first)->location =
+        LostRaidAssetLocation{
+            "lost-invalid-settlement",
+            EquipmentSlotKind::PrimaryWeapon};
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 24),
+        content);
+
+    EXPECT_FALSE(loaded.profile.has_value());
+    EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
+    EXPECT_EQ(loaded.message, "lost Raid record is invalid");
+}
+
 TEST(SaveRepositoryTest,
      SchemaV23RoundTripsPermanentInteriorIntelligenceAndDeployKnowledge)
 {

@@ -1121,6 +1121,29 @@ ProfileValidationResult validateProfileState(
             return {false, "committed rescue ID is invalid or unknown"};
         }
     }
+    for (const auto &[recordId, record] : profile.lostRaidRecords)
+    {
+        bool mapPublished{};
+        try
+        {
+            static_cast<void>(content.map(record.mapDefinitionId));
+            mapPublished = true;
+        }
+        catch (...)
+        {
+        }
+        if (recordId.empty() || record.recordId != recordId ||
+            record.raidId.empty() || record.settlementId != recordId ||
+            record.difficulty.empty() || !mapPublished ||
+            !profile.committedSettlements.contains(record.settlementId) ||
+            (record.outcome != RaidResultOutcome::PlayerDead &&
+             record.outcome != RaidResultOutcome::ActiveQuit) ||
+            record.subsequentRaidSettlementCount >
+                kLostRaidRecordRetainedSettlementCount)
+        {
+            return {false, "lost Raid record is invalid"};
+        }
+    }
     if (!validBasePriorityState(
             profile.basePriority,
             profile.worldClock.elapsedWorldMinutes,
@@ -1134,6 +1157,8 @@ ProfileValidationResult validateProfileState(
     std::set<AssetInstanceId> installedWeaponIds;
     std::set<AssetInstanceId> groundAssetIds;
     std::set<AssetInstanceId> serviceAssetIds;
+    std::set<std::pair<std::string, EquipmentSlotKind>> lostSourceSlots;
+    std::set<std::string> lostRecordsWithRoots;
     for (const auto &[id, asset] : profile.assets.records())
     {
         if (id == 0 || id != asset.instanceId)
@@ -1293,6 +1318,20 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (const auto *lost =
+                std::get_if<LostRaidAssetLocation>(&asset.location))
+        {
+            if (!profile.lostRaidRecords.contains(lost->recordId) ||
+                !itemCanEquipInSlot(*definition, lost->sourceSlot) ||
+                !lostSourceSlots.emplace(
+                    lost->recordId, lost->sourceSlot).second)
+            {
+                return {false, "lost Raid asset ownership is invalid"};
+            }
+            lostRecordsWithRoots.insert(lost->recordId);
+            continue;
+        }
+
         const auto &stored = std::get<StoredAssetLocation>(asset.location);
         if (!placementFits(
                 profile,
@@ -1334,6 +1373,10 @@ ProfileValidationResult validateProfileState(
     if (profile.assets.nextAssetId() <= maximumId)
     {
         return {false, "asset high-water mark moved backward"};
+    }
+    if (lostRecordsWithRoots.size() != profile.lostRaidRecords.size())
+    {
+        return {false, "lost Raid record has no owned asset root"};
     }
 
     std::set<AssetInstanceId> claimedServiceAssetIds;
@@ -2212,7 +2255,12 @@ ProfileValidationResult validateProfileState(
         (profile.lastRaidResult->settlementId.empty() ||
          profile.lastRaidResult->rescuedOrdinaryResidents > 16U ||
          profile.lastRaidResult->rescuedInjuredResidents >
-             profile.lastRaidResult->rescuedOrdinaryResidents))
+             profile.lastRaidResult->rescuedOrdinaryResidents ||
+         (profile.lastRaidResult->lostRaidRecordId.has_value() &&
+          (!profile.lostRaidRecords.contains(
+               *profile.lastRaidResult->lostRaidRecordId) ||
+           (profile.lastRaidResult->outcome != RaidResultOutcome::PlayerDead &&
+            profile.lastRaidResult->outcome != RaidResultOutcome::ActiveQuit)))))
     {
         return {false, "last Raid result is invalid"};
     }
@@ -2367,6 +2415,17 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, job.paidCurrency);
         hashInteger(hash, job.targetFactoryDurabilityCenti);
     }
+    for (const auto &[recordId, record] : profile.lostRaidRecords)
+    {
+        hashBytes(hash, recordId);
+        hashBytes(hash, record.raidId);
+        hashBytes(hash, record.settlementId);
+        hashBytes(hash, record.mapDefinitionId.value());
+        hashBytes(hash, record.difficulty);
+        hashInteger(hash, static_cast<std::uint32_t>(record.outcome));
+        hashInteger(hash, record.createdWorldMinute);
+        hashInteger(hash, record.subsequentRaidSettlementCount);
+    }
     hashInteger(hash, profile.assets.nextAssetId());
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -2419,12 +2478,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, ground->raidId);
             hashInteger(hash, ground->lootSlotIndex);
         }
+        else if (const auto *service =
+                     std::get_if<BaseServiceAssetLocation>(&asset.location))
+        {
+            hashInteger(hash, 4U);
+            hashInteger(hash, service->jobId);
+        }
         else
         {
-            const auto &service =
-                std::get<BaseServiceAssetLocation>(asset.location);
-            hashInteger(hash, 4U);
-            hashInteger(hash, service.jobId);
+            const auto &lost =
+                std::get<LostRaidAssetLocation>(asset.location);
+            hashInteger(hash, 5U);
+            hashBytes(hash, lost.recordId);
+            hashInteger(hash, static_cast<std::uint32_t>(lost.sourceSlot));
         }
     }
     for (const std::string &transaction : profile.committedTransactions)
@@ -2700,6 +2766,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, profile.lastRaidResult->travelMinutesApplied);
         hashInteger(hash, profile.lastRaidResult->rescuedOrdinaryResidents);
         hashInteger(hash, profile.lastRaidResult->rescuedInjuredResidents);
+        hashBytes(hash,
+                  profile.lastRaidResult->lostRaidRecordId.value_or(""));
     }
     return hash;
 }

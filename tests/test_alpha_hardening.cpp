@@ -11,6 +11,7 @@
 #include "alpha_content_ids.h"
 #include "economy_domain.h"
 #include "game_session.h"
+#include "lost_raid_domain.h"
 #include "raid_lifecycle.h"
 #include "save_repository.h"
 #include "weapon_ammo_domain.h"
@@ -47,7 +48,8 @@ std::vector<AssetInstanceId> assets(
     std::vector<AssetInstanceId> result;
     for (const auto &[id, asset] : profile.assets.records())
     {
-        if (asset.definitionId == definitionId)
+        if (asset.definitionId == definitionId &&
+            !lostRaidRecordForAsset(profile, id).has_value())
         {
             result.push_back(id);
         }
