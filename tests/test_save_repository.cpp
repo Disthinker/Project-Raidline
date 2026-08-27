@@ -23,6 +23,7 @@
 #include "raid_rescue_domain.h"
 #include "recovery_task_domain.h"
 #include "save_repository.h"
+#include "self_recovery_domain.h"
 #include "weapon_ammo_domain.h"
 
 namespace
@@ -1623,6 +1624,95 @@ TEST(SaveRepositoryTest,
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_FALSE(loaded.profile->recoveryTask.has_value());
     EXPECT_EQ(loaded.profile->nextRecoveryTaskId, 1U);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV26RoundTripsUnopenedAndOpenedRaidSelfRecovery)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-self-recovery-v26", content);
+    const auto rifle = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, profile.assets.records().end());
+    const std::string recordId{"save-self-recovery-record"};
+    profile.committedSettlements.insert(recordId);
+    profile.lostRaidRecords.emplace(
+        recordId,
+        LostRaidRecord{
+            recordId,
+            "save-self-recovery-source-raid",
+            recordId,
+            MapDefinitionId{"map.v0.test"},
+            "LOW",
+            RaidResultOutcome::PlayerDead,
+            profile.worldClock.elapsedWorldMinutes,
+            1U});
+    profile.assets.findMutable(rifle->first)->location =
+        LostRaidAssetLocation{
+            recordId, EquipmentSlotKind::PrimaryWeapon};
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-self-recovery-raid",
+            "save-self-recovery-settlement",
+            8661U,
+            MapDefinitionId{"map.v0.test"},
+            {},
+            recordId},
+        CommandContext{profile.revision, "save-self-recovery-deploy"})
+                    .succeeded);
+    ASSERT_TRUE(profile.pendingRaid->selfRecovery.has_value());
+    const std::uint64_t unopenedFingerprint =
+        profileStateFingerprint(profile);
+
+    SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), unopenedFingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid->selfRecovery.has_value());
+    EXPECT_FALSE(loaded.profile->pendingRaid->selfRecovery->opened);
+
+    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+        profile,
+        content,
+        CommandContext{profile.revision, "save-self-recovery-open"})
+                    .succeeded);
+    const std::uint64_t openedFingerprint = profileStateFingerprint(profile);
+    loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), openedFingerprint);
+    EXPECT_TRUE(loaded.profile->pendingRaid->selfRecovery->opened);
+    EXPECT_FALSE(loaded.profile->lostRaidRecords.contains(recordId));
+}
+
+TEST(SaveRepositoryTest, SchemaV25MigratesWithoutRaidSelfRecoveryTarget)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-self-recovery-v25-migration", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v25-raid", "save-v25-settlement", 9331U,
+            MapDefinitionId{"map.v0.test"}, {}, std::nullopt},
+        CommandContext{profile.revision, "save-v25-deploy"}).succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion(), 25),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_FALSE(loaded.profile->pendingRaid->selfRecovery.has_value());
 }
 
 TEST(SaveRepositoryTest, SchemaV24RejectsUnknownLostRecordMap)

@@ -13,7 +13,22 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"SELECT ONE COMPLETE RECORD TO COMMISSION NPC RECOVERY",
+    {{"RAID SELF-RECOVERY TARGET SET | RESERVE CARRY SPACE",
+      "已设置行动自行寻回目标 | 请预留携带空间"},
+     {"RAID SELF-RECOVERY TARGET CLEARED", "已取消行动自行寻回目标"},
+     {"RAID RECOVERY TARGET IS NO LONGER AVAILABLE",
+      "行动寻回目标已不可用"},
+     {"RAID RECOVERY | ", "行动寻回 | "},
+     {"RECOVER IN NEXT RAID", "在下一次行动中自行寻回"},
+     {"CLEAR RAID RECOVERY TARGET", "取消行动寻回目标"},
+     {"NPC TASK OR RAID RECOVERY | ONE OWNER PER RECORD",
+      "NPC 委托或行动寻回 | 每条记录只有一个所有者"},
+     {"CANCEL NPC | NO REFUND", "取消 NPC 委托 | 不退款"},
+     {"LOST CACHE | HOLD F", "失物缓存 | 按住 F 开启"},
+     {"LOST CACHE", "失物缓存"},
+     {"RAID TARGET", "行动目标"},
+     {"RESERVE SPACE", "预留空间"},
+     {"SELECT ONE COMPLETE RECORD TO COMMISSION NPC RECOVERY",
       "选择一条完整记录以委托 NPC 寻回"},
      {"ONE WHOLE RECORD PER TASK | TASK RECORD DOES NOT AGE",
       "每项任务处理整条记录 | 任务中的记录不会老化"},

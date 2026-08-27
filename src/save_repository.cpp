@@ -902,6 +902,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        if (schemaVersion < 26 && raid.selfRecovery.has_value())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent Raid self-recovery"};
+        }
         Json enemies = Json::array();
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
@@ -1230,6 +1235,49 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["rescue"] = nullptr;
             }
         }
+        if (schemaVersion >= 26)
+        {
+            if (raid.selfRecovery.has_value())
+            {
+                const RaidSelfRecoverySnapshot &recovery =
+                    *raid.selfRecovery;
+                Json roots = Json::array();
+                for (const RaidSelfRecoveryRootSnapshot &root :
+                     recovery.roots)
+                {
+                    roots.push_back({
+                        {"asset_id", root.assetId},
+                        {"source_slot", slotName(root.sourceSlot)},
+                        {"loot_slot_index", root.lootSlotIndex},
+                        {"position", vectorValue(root.position)}});
+                }
+                payload["pending_raid"]["self_recovery"] = {
+                    {"source_record", {
+                        {"record_id", recovery.sourceRecord.recordId},
+                        {"raid_id", recovery.sourceRecord.raidId},
+                        {"settlement_id",
+                         recovery.sourceRecord.settlementId},
+                        {"map_definition_id",
+                         recovery.sourceRecord.mapDefinitionId.value()},
+                        {"difficulty", recovery.sourceRecord.difficulty},
+                        {"outcome", raidOutcomeName(
+                            recovery.sourceRecord.outcome)},
+                        {"created_world_minute",
+                         recovery.sourceRecord.createdWorldMinute},
+                        {"subsequent_raid_settlement_count",
+                         recovery.sourceRecord
+                             .subsequentRaidSettlementCount}}},
+                    {"cache_position", vectorValue(recovery.cachePosition)},
+                    {"interaction_duration_seconds",
+                     recovery.interactionDurationSeconds},
+                    {"opened", recovery.opened},
+                    {"roots", std::move(roots)}};
+            }
+            else
+            {
+                payload["pending_raid"]["self_recovery"] = nullptr;
+            }
+        }
     }
     else
     {
@@ -1347,7 +1395,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
-        schemaVersion != 25)
+        schemaVersion != 25 && schemaVersion != 26)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1455,7 +1503,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 19 && schemaVersion != 20 &&
              schemaVersion != 21 && schemaVersion != 22 &&
              schemaVersion != 23 && schemaVersion != 24 &&
-             schemaVersion != 25) ||
+             schemaVersion != 25 && schemaVersion != 26) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2643,6 +2691,54 @@ SaveLoadResult deserializeProfileEnvelope(
                          : 0U,
                     rescueProfession,
                     rescue.at("secured").get<bool>()};
+            }
+            if (schemaVersion >= 26 &&
+                !value.at("self_recovery").is_null())
+            {
+                const Json &self = value.at("self_recovery");
+                const Json &source = self.at("source_record");
+                const auto outcome = parseRaidOutcome(
+                    source.at("outcome").get<std::string>());
+                if (!outcome.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "self-recovery outcome is invalid"};
+                }
+                RaidSelfRecoverySnapshot recovery;
+                recovery.sourceRecord = LostRaidRecord{
+                    source.at("record_id").get<std::string>(),
+                    source.at("raid_id").get<std::string>(),
+                    source.at("settlement_id").get<std::string>(),
+                    MapDefinitionId{source.at("map_definition_id")
+                        .get<std::string>()},
+                    source.at("difficulty").get<std::string>(),
+                    *outcome,
+                    source.at("created_world_minute").get<std::uint64_t>(),
+                    source.at("subsequent_raid_settlement_count")
+                        .get<std::uint32_t>()};
+                recovery.cachePosition = parseVector(
+                    self.at("cache_position"));
+                recovery.interactionDurationSeconds = self.at(
+                    "interaction_duration_seconds").get<float>();
+                recovery.opened = self.at("opened").get<bool>();
+                for (const Json &root : self.at("roots"))
+                {
+                    const auto slot = parseSlot(
+                        root.at("source_slot").get<std::string>());
+                    if (!slot.has_value())
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "self-recovery source slot is invalid"};
+                    }
+                    recovery.roots.push_back(
+                        RaidSelfRecoveryRootSnapshot{
+                            root.at("asset_id").get<AssetInstanceId>(),
+                            *slot,
+                            root.at("loot_slot_index")
+                                .get<std::uint32_t>(),
+                            parseVector(root.at("position"))});
+                }
+                raid.selfRecovery = std::move(recovery);
             }
             profile.pendingRaid = std::move(raid);
         }

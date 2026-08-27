@@ -1401,7 +1401,8 @@ bool App::tryDeployFromBase()
     }
     if (!gameFlow_.deploy(
             selectedRaidMap().id,
-            selectedRaidIntelligence_))
+            selectedRaidIntelligence_,
+            selectedRaidSelfRecoveryRecordId_))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1411,6 +1412,7 @@ bool App::tryDeployFromBase()
     deploymentWarningArmed_ = false;
     lostRaidRecordsOpen_ = false;
     selectedLostRaidRecordId_.reset();
+    selectedRaidSelfRecoveryRecordId_.reset();
     selectedRaidIntelligence_ = {};
     uiMessage_.clear();
     return true;
@@ -1438,6 +1440,7 @@ void App::cycleSelectedRaidMap(int direction) noexcept
         : (selectedRaidMapIndex_ + 1U) % count;
     deploymentWarningArmed_ = false;
     selectedRaidIntelligence_ = {};
+    selectedRaidSelfRecoveryRecordId_.reset();
     uiMessage_.clear();
 }
 
@@ -1760,6 +1763,11 @@ SDL_FRect App::recoveryTaskSecondaryButton() const noexcept
     return SDL_FRect{650.0F, 474.0F, 270.0F, 40.0F};
 }
 
+SDL_FRect App::recoveryTaskCancelButton() const noexcept
+{
+    return SDL_FRect{940.0F, 474.0F, 170.0F, 40.0F};
+}
+
 SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -1960,6 +1968,11 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                         : receipt.message;
                     if (receipt.succeeded)
                     {
+                        if (selectedRaidSelfRecoveryRecordId_ ==
+                            selectedLostRaidRecordId_)
+                        {
+                            selectedRaidSelfRecoveryRecordId_.reset();
+                        }
                         selectedLostRaidRecordId_.reset();
                     }
                 }
@@ -1971,8 +1984,50 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 }
                 return;
             }
-            if (task.has_value() &&
+            if (selectedLostRaidRecordId_.has_value() &&
                 contains(recoveryTaskSecondaryButton(), click.position))
+            {
+                if (selectedRaidSelfRecoveryRecordId_ ==
+                    selectedLostRaidRecordId_)
+                {
+                    selectedRaidSelfRecoveryRecordId_.reset();
+                    uiMessage_ = "RAID SELF-RECOVERY TARGET CLEARED";
+                    return;
+                }
+                const auto selected = std::find_if(
+                    records.begin(), records.end(),
+                    [&](const LostRaidRecordProjection &record)
+                    {
+                        return record.recordId ==
+                            *selectedLostRaidRecordId_;
+                    });
+                if (selected == records.end())
+                {
+                    uiMessage_ = "SELECT A LOST RAID RECORD";
+                    return;
+                }
+                const auto &maps = publishedContentRegistry().maps();
+                const auto map = std::find_if(
+                    maps.begin(), maps.end(),
+                    [&](const MapDefinition &definition)
+                    { return definition.id == selected->mapDefinitionId; });
+                if (map == maps.end())
+                {
+                    uiMessage_ = "LOST RAID MAP IS UNAVAILABLE";
+                    return;
+                }
+                selectedRaidMapIndex_ = static_cast<std::size_t>(
+                    std::distance(maps.begin(), map));
+                selectedRaidSelfRecoveryRecordId_ = selected->recordId;
+                selectedRaidIntelligence_ = {};
+                deploymentWarningArmed_ = false;
+                lostRaidRecordsOpen_ = false;
+                uiMessage_ =
+                    "RAID SELF-RECOVERY TARGET SET | RESERVE CARRY SPACE";
+                return;
+            }
+            if (task.has_value() &&
+                contains(recoveryTaskCancelButton(), click.position))
             {
                 const std::string recordId = task->recordId;
                 const RecoveryTaskReceipt receipt =
@@ -9192,6 +9247,56 @@ void App::renderAlphaRaidLoot()
     {
         return;
     }
+    const std::optional<RaidSelfRecoveryProjection> recovery =
+        gameSession_.raidSelfRecoveryProjection();
+    if (recovery.has_value() && !recovery->opened &&
+        gameSession_.world().inOutdoorRaidSpace())
+    {
+        const SDL_FRect glow{
+            recovery->cachePosition.x - 38.0F,
+            recovery->cachePosition.y - 30.0F,
+            76.0F,
+            60.0F};
+        const SDL_FRect cache{
+            recovery->cachePosition.x - 30.0F,
+            recovery->cachePosition.y - 22.0F,
+            60.0F,
+            44.0F};
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(
+            renderer_, 196, 132, 72,
+            recovery->interactionInRange ? 76 : 38);
+        SDL_RenderFillRect(renderer_, &glow);
+        SDL_SetRenderDrawColor(renderer_, 72, 58, 44, 245);
+        SDL_RenderFillRect(renderer_, &cache);
+        SDL_SetRenderDrawColor(
+            renderer_, 232,
+            recovery->interactionInRange ? 206 : 166,
+            116, 255);
+        SDL_RenderRect(renderer_, &cache);
+        SDL_RenderLine(
+            renderer_, cache.x + 8.0F, cache.y + 12.0F,
+            cache.x + cache.w - 8.0F, cache.y + 12.0F);
+        uiTextRenderer_.render(
+            renderer_, cache.x - 18.0F, cache.y - 22.0F,
+            recovery->interactionInRange
+                ? "LOST CACHE | HOLD F"
+                : "LOST CACHE");
+        if (recovery->interactionProgress > 0.0F)
+        {
+            const SDL_FRect progressBack{
+                cache.x, cache.y + cache.h + 5.0F, cache.w, 6.0F};
+            const SDL_FRect progress{
+                progressBack.x, progressBack.y,
+                progressBack.w * recovery->interactionProgress,
+                progressBack.h};
+            SDL_SetRenderDrawColor(renderer_, 40, 34, 28, 220);
+            SDL_RenderFillRect(renderer_, &progressBack);
+            SDL_SetRenderDrawColor(renderer_, 236, 190, 92, 255);
+            SDL_RenderFillRect(renderer_, &progress);
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
         if (!gameSession_.raidLootAccessible(loot))
@@ -10694,6 +10799,25 @@ void App::renderBaseDeployment()
             renderer_, 666.0F, 478.0F,
             "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     }
+    if (selectedRaidSelfRecoveryRecordId_.has_value())
+    {
+        const auto records = gameSession_.lostRaidRecordProjections();
+        const auto target = std::find_if(
+            records.begin(), records.end(),
+            [&](const LostRaidRecordProjection &record)
+            {
+                return record.recordId ==
+                    *selectedRaidSelfRecoveryRecordId_;
+            });
+        const std::string targetText = target == records.end()
+            ? "RAID RECOVERY TARGET IS NO LONGER AVAILABLE"
+            : fmt::format(
+                  "RAID RECOVERY | {} | {} ASSETS | RESERVE SPACE",
+                  target->mapDisplayName,
+                  target->assets.size());
+        uiTextRenderer_.render(
+            renderer_, 666.0F, 500.0F, targetText.c_str());
+    }
     const LostRaidAgingPreview aging = gameSession_.lostRaidAgingPreview();
     const SDL_FRect recordsButton = raidLostRecordsButton();
     SDL_SetRenderDrawColor(
@@ -10793,12 +10917,16 @@ void App::renderLostRaidRecords()
             SDL_RenderRect(renderer_, &row);
 
             const std::string heading = fmt::format(
-                "{} | DIFFICULTY {} | {}",
+                "{} | DIFFICULTY {} | {}{}",
                 record.mapDisplayName,
                 record.difficulty,
                 record.outcome == RaidResultOutcome::PlayerDead
                     ? "PLAYER DEAD"
-                    : "RAID ABANDONED");
+                    : "RAID ABANDONED",
+                selectedRaidSelfRecoveryRecordId_ ==
+                        std::optional<std::string>{record.recordId}
+                    ? " | RAID TARGET"
+                    : "");
             uiTextRenderer_.render(
                 renderer_, row.x + 12.0F, row.y + 8.0F,
                 heading.c_str());
@@ -10883,16 +11011,38 @@ void App::renderLostRaidRecords()
         renderer_, primary.x + 8.0F, primary.y + 13.0F,
         primaryLabel.c_str());
 
-    if (task.has_value())
+    if (selectedLostRaidRecordId_.has_value())
     {
         const SDL_FRect secondary = recoveryTaskSecondaryButton();
-        SDL_SetRenderDrawColor(renderer_, 88, 54, 48, 255);
+        const bool alreadyTarget = selectedRaidSelfRecoveryRecordId_ ==
+            selectedLostRaidRecordId_;
+        SDL_SetRenderDrawColor(
+            renderer_, alreadyTarget ? 88 : 52,
+            alreadyTarget ? 54 : 82,
+            alreadyTarget ? 48 : 98, 255);
         SDL_RenderFillRect(renderer_, &secondary);
-        SDL_SetRenderDrawColor(renderer_, 190, 112, 92, 255);
+        SDL_SetRenderDrawColor(
+            renderer_, alreadyTarget ? 190 : 112,
+            alreadyTarget ? 112 : 174,
+            alreadyTarget ? 92 : 204, 255);
         SDL_RenderRect(renderer_, &secondary);
         uiTextRenderer_.render(
-            renderer_, secondary.x + 45.0F, secondary.y + 13.0F,
-            "CANCEL | NO REFUND");
+            renderer_, secondary.x + 22.0F, secondary.y + 13.0F,
+            alreadyTarget
+                ? "CLEAR RAID RECOVERY TARGET"
+                : "RECOVER IN NEXT RAID");
+    }
+
+    if (task.has_value())
+    {
+        const SDL_FRect cancel = recoveryTaskCancelButton();
+        SDL_SetRenderDrawColor(renderer_, 88, 54, 48, 255);
+        SDL_RenderFillRect(renderer_, &cancel);
+        SDL_SetRenderDrawColor(renderer_, 190, 112, 92, 255);
+        SDL_RenderRect(renderer_, &cancel);
+        uiTextRenderer_.render(
+            renderer_, cancel.x + 12.0F, cancel.y + 13.0F,
+            "CANCEL NPC | NO REFUND");
     }
 
     const SDL_FRect back = raidLostRecordsButton();
@@ -10904,7 +11054,7 @@ void App::renderLostRaidRecords()
         renderer_, back.x + 36.0F, back.y + 13.0F,
         "BACK TO RAID BRIEFING");
     uiTextRenderer_.render(renderer_, 390.0F, 532.0F,
-                           "ONE WHOLE RECORD PER TASK | TASK RECORD DOES NOT AGE");
+                           "NPC TASK OR RAID RECOVERY | ONE OWNER PER RECORD");
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(

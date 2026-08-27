@@ -267,6 +267,34 @@ struct RaidLootSnapshot
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
 };
 
+// A pending self-recovery snapshot is a non-owning reference until the cache
+// is opened. Asset ownership remains with LostRaidRecord before that atomic
+// transition, then moves to RaidGround/one carried tree.
+struct RaidSelfRecoveryRootSnapshot
+{
+    AssetInstanceId assetId{};
+    EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
+    std::uint32_t lootSlotIndex{};
+    Vec2 position{};
+
+    friend bool operator==(
+        const RaidSelfRecoveryRootSnapshot &,
+        const RaidSelfRecoveryRootSnapshot &) = default;
+};
+
+struct RaidSelfRecoverySnapshot
+{
+    LostRaidRecord sourceRecord;
+    Vec2 cachePosition{};
+    float interactionDurationSeconds{2.0F};
+    bool opened{};
+    std::vector<RaidSelfRecoveryRootSnapshot> roots;
+
+    friend bool operator==(
+        const RaidSelfRecoverySnapshot &,
+        const RaidSelfRecoverySnapshot &) = default;
+};
+
 struct RaidInteriorSnapshot
 {
     RaidSpaceDefinitionId id;
@@ -594,6 +622,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
+    std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;

@@ -36,7 +36,8 @@ public:
     [[nodiscard]]
     bool deploy(
         MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"},
-        RaidIntelligenceLoadout intelligence = {}) noexcept;
+        RaidIntelligenceLoadout intelligence = {},
+        std::optional<std::string> selfRecoveryRecordId = std::nullopt) noexcept;
 
     void updateBase(
         const BaseInput &input,

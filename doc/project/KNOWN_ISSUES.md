@@ -114,8 +114,8 @@
 | Raid World：第二个代表性地点 v1 | PR #99 已通过双平台 CI 与用户正常游玩验收，以普通 merge commit `1d2fea1` 进入 main |
 | Raid World：可扩展性能基础 v1 | PR #100 已通过 CI 与用户正常游玩验收，以普通 merge commit `d7c231b` 进入 main |
 | Regional Operations：失物记录与行动老化 v1 | PR #101 已通过 exact-head CI 和用户正常游玩验收，以 `7185d55` 进入 main |
-| Regional Operations：单一 NPC 寻回任务 v1 | 整单单槽委托、地图报价/耗时、冻结结果、取消不退款和领取事务已实现；Windows Debug 全目标与 1126/1126 CTest 通过，exact-head CI 和用户正常游玩验收待完成。Raid 内自力寻回仍延期 |
+| Regional Operations：Loss & Recovery v1 | NPC 整单单槽委托与 Raid 内自行寻回均已实现；缓存开启前后、成功/失败/异常退出和双路径并存均有所有权回归。Windows Debug 全目标与 1137/1137 CTest 通过，PR #103 exact-head CI 和用户统一正常游玩验收待完成；尸体表现、敌对幸存者携带和正式资源继续延期 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 
-具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-recovery-task-v1.md`。
+具体依赖、自动化、人工验收和回滚见 `doc/exec-plans/active/regional-self-recovery-v1.md`。

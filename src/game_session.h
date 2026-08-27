@@ -29,6 +29,7 @@
 #include "raid_rescue_domain.h"
 #include "raid_settlement.h"
 #include "save_repository.h"
+#include "self_recovery_domain.h"
 #include "stash.h"
 #include "maintenance_domain.h"
 #include "weapon_clear_gesture.h"
@@ -98,6 +99,17 @@ struct DeveloperWeaponTuningSnapshot
     WeaponUseDefinition weaponUse;
     WeaponHandlingParameters handling;
     bool overridden{};
+};
+
+struct RaidSelfRecoveryProjection
+{
+    std::string recordId;
+    MapDefinitionId mapDefinitionId;
+    Vec2 cachePosition{};
+    std::size_t rootCount{};
+    bool opened{};
+    bool interactionInRange{};
+    float interactionProgress{};
 };
 
 // 当前会话组合根。ProfileState 是新版 Base 的跨进程权威状态；旧 Stash、
@@ -188,7 +200,10 @@ public:
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,
         MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"},
-        RaidIntelligenceLoadout intelligence = {});
+        RaidIntelligenceLoadout intelligence = {},
+        std::optional<std::string> selfRecoveryRecordId = std::nullopt);
+    [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
+    raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt
     purchaseRaidIntelligence(
         const RaidIntelligencePurchaseCommand &command,
@@ -354,6 +369,7 @@ private:
     std::uint64_t woundRandomSequence_{};
     std::uint64_t weaponFaultSequence_{};
     float raidElapsedSeconds_{};
+    float selfRecoveryInteractionSeconds_{};
     double pendingWorldSeconds_{};
     float worldClockCheckpointElapsedSeconds_{};
     bool worldClockDirty_{};
@@ -425,6 +441,7 @@ private:
     [[nodiscard]] bool secureOrdinarySurvivorRescue();
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
+    [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
 };
 
 [[nodiscard]]

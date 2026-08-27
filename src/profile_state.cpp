@@ -1619,7 +1619,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1632,27 +1633,44 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
         const bool multipleInteriorRules =
-            raid.rulesVersion == "raid-second-representative-location-15";
+            raid.rulesVersion == "raid-second-representative-location-15" ||
+            raid.rulesVersion == "raid-self-recovery-16";
+        const bool selfRecoveryRules =
+            raid.rulesVersion == "raid-self-recovery-16";
+        std::set<AssetInstanceId> selfRecoveryRootIds;
+        if (raid.selfRecovery.has_value())
+        {
+            for (const RaidSelfRecoveryRootSnapshot &root :
+                 raid.selfRecovery->roots)
+            {
+                selfRecoveryRootIds.insert(root.assetId);
+            }
+        }
         const std::size_t advancedLootCount = static_cast<std::size_t>(
             std::count_if(raid.loot.begin(),
                           raid.loot.end(),
@@ -1668,10 +1686,11 @@ ProfileValidationResult validateProfileState(
         const std::size_t outdoorRegularLootCount = static_cast<std::size_t>(
             std::count_if(
                 raid.loot.begin(), raid.loot.end(),
-                [](const RaidLootSnapshot &loot)
+                [&](const RaidLootSnapshot &loot)
                 {
                     return !loot.requiresHighRisk &&
-                        loot.spaceId == outdoorRaidSpaceId();
+                        loot.spaceId == outdoorRaidSpaceId() &&
+                        !selfRecoveryRootIds.contains(loot.assetId);
                 }));
         const std::size_t interiorLootCount = static_cast<std::size_t>(
             std::count_if(
@@ -1709,6 +1728,77 @@ ProfileValidationResult validateProfileState(
             (!advancedLootRules && advancedLootCount != 0U))
         {
             return {false, "pending Raid header is invalid"};
+        }
+        if (!selfRecoveryRules && raid.selfRecovery.has_value())
+        {
+            return {false, "pending Raid self-recovery rules are invalid"};
+        }
+        if (raid.selfRecovery.has_value())
+        {
+            const RaidSelfRecoverySnapshot &recovery = *raid.selfRecovery;
+            const auto record = profile.lostRaidRecords.find(
+                recovery.sourceRecord.recordId);
+            const bool sourceOwnershipValid = recovery.opened
+                ? record == profile.lostRaidRecords.end()
+                : record != profile.lostRaidRecords.end() &&
+                    record->second == recovery.sourceRecord;
+            const bool cacheMatches = std::any_of(
+                raidMap->raidLootSlots.begin(),
+                raidMap->raidLootSlots.end(),
+                [&](const RaidLootSlotDefinition &slot)
+                {
+                    return slot.position.x == recovery.cachePosition.x &&
+                        slot.position.y == recovery.cachePosition.y;
+                });
+            std::set<EquipmentSlotKind> sourceSlots;
+            std::set<std::uint32_t> recoverySlots;
+            bool rootsValid = !recovery.roots.empty();
+            for (const RaidSelfRecoveryRootSnapshot &root : recovery.roots)
+            {
+                const AssetRecord *asset = profile.assets.find(root.assetId);
+                const auto *lost = asset != nullptr
+                    ? std::get_if<LostRaidAssetLocation>(&asset->location)
+                    : nullptr;
+                const auto *ground = asset != nullptr
+                    ? std::get_if<RaidGroundAssetLocation>(&asset->location)
+                    : nullptr;
+                const bool carried = asset != nullptr &&
+                    assetIsCarried(profile, root.assetId);
+                const auto loot = std::find_if(
+                    raid.loot.begin(), raid.loot.end(),
+                    [&](const RaidLootSnapshot &candidate)
+                    { return candidate.assetId == root.assetId; });
+                const bool phaseValid = recovery.opened
+                    ? asset != nullptr && (carried ||
+                        (ground != nullptr &&
+                         ground->raidId == raid.raidId &&
+                         ground->lootSlotIndex == root.lootSlotIndex)) &&
+                        loot != raid.loot.end() &&
+                        loot->slotIndex == root.lootSlotIndex &&
+                        loot->position.x == root.position.x &&
+                        loot->position.y == root.position.y &&
+                        loot->collected == carried
+                    : lost != nullptr &&
+                        lost->recordId == recovery.sourceRecord.recordId &&
+                        lost->sourceSlot == root.sourceSlot &&
+                        loot == raid.loot.end();
+                rootsValid = rootsValid && root.assetId != 0U &&
+                    std::isfinite(root.position.x) &&
+                    std::isfinite(root.position.y) && phaseValid &&
+                    sourceSlots.insert(root.sourceSlot).second &&
+                    recoverySlots.insert(root.lootSlotIndex).second;
+            }
+            if (recovery.sourceRecord.recordId.empty() ||
+                recovery.sourceRecord.mapDefinitionId != raid.mapDefinitionId ||
+                !std::isfinite(recovery.cachePosition.x) ||
+                !std::isfinite(recovery.cachePosition.y) ||
+                !std::isfinite(recovery.interactionDurationSeconds) ||
+                recovery.interactionDurationSeconds <= 0.0F ||
+                recovery.interactionDurationSeconds > 10.0F ||
+                !cacheMatches || !sourceOwnershipValid || !rootsValid)
+            {
+                return {false, "pending Raid self-recovery snapshot is invalid"};
+            }
         }
         if (spatialLayoutRules)
         {
@@ -1778,7 +1868,16 @@ ProfileValidationResult validateProfileState(
                 {
                     continue;
                 }
+                if (selfRecoveryRootIds.contains(loot.assetId))
+                {
+                    continue;
+                }
                 anchors.reachablePoints.push_back(loot.position);
+            }
+            if (raid.selfRecovery.has_value())
+            {
+                anchors.reachablePoints.push_back(
+                    raid.selfRecovery->cachePosition);
             }
             for (const EnemySpawnDefinition &spawn :
                  raidMap->highRisk.pressureSpawns)
@@ -2127,7 +2226,28 @@ ProfileValidationResult validateProfileState(
                 raidMap->highRisk.advancedLootSlots.size();
             bool validSlot{};
             bool validPosition{};
-            if (loot.spaceId == outdoorRaidSpaceId())
+            const RaidSelfRecoveryRootSnapshot *recoveryRoot{};
+            if (raid.selfRecovery.has_value())
+            {
+                const auto found = std::find_if(
+                    raid.selfRecovery->roots.begin(),
+                    raid.selfRecovery->roots.end(),
+                    [&](const RaidSelfRecoveryRootSnapshot &root)
+                    { return root.assetId == loot.assetId; });
+                if (found != raid.selfRecovery->roots.end())
+                {
+                    recoveryRoot = &*found;
+                }
+            }
+            if (recoveryRoot != nullptr)
+            {
+                validSlot = loot.slotIndex == recoveryRoot->lootSlotIndex;
+                validPosition = loot.position.x == recoveryRoot->position.x &&
+                    loot.position.y == recoveryRoot->position.y &&
+                    !loot.requiresHighRisk &&
+                    loot.spaceId == outdoorRaidSpaceId();
+            }
+            else if (loot.spaceId == outdoorRaidSpaceId())
             {
                 validSlot = loot.requiresHighRisk
                     ? loot.slotIndex >= regularSlotCount &&
@@ -2702,6 +2822,32 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, static_cast<std::uint32_t>(
                 raid.rescue->profession));
             hashInteger(hash, raid.rescue->secured ? 1U : 0U);
+        }
+        if (raid.selfRecovery.has_value())
+        {
+            const RaidSelfRecoverySnapshot &recovery = *raid.selfRecovery;
+            hashBytes(hash, recovery.sourceRecord.recordId);
+            hashBytes(hash, recovery.sourceRecord.raidId);
+            hashBytes(hash, recovery.sourceRecord.settlementId);
+            hashBytes(hash, recovery.sourceRecord.mapDefinitionId.value());
+            hashBytes(hash, recovery.sourceRecord.difficulty);
+            hashInteger(hash, static_cast<std::uint32_t>(
+                recovery.sourceRecord.outcome));
+            hashInteger(hash, recovery.sourceRecord.createdWorldMinute);
+            hashInteger(hash,
+                recovery.sourceRecord.subsequentRaidSettlementCount);
+            hashFloat(hash, recovery.cachePosition.x);
+            hashFloat(hash, recovery.cachePosition.y);
+            hashFloat(hash, recovery.interactionDurationSeconds);
+            hashInteger(hash, recovery.opened ? 1U : 0U);
+            for (const RaidSelfRecoveryRootSnapshot &root : recovery.roots)
+            {
+                hashInteger(hash, root.assetId);
+                hashInteger(hash, static_cast<std::uint32_t>(root.sourceSlot));
+                hashInteger(hash, root.lootSlotIndex);
+                hashFloat(hash, root.position.x);
+                hashFloat(hash, root.position.y);
+            }
         }
         hashInteger(hash, raid.startingHealth);
         hashInteger(hash, static_cast<std::uint32_t>(

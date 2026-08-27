@@ -159,6 +159,23 @@ TEST(UiLocalizationTest, ChineseTranslatesInteriorPlaceholdersAndPortal)
             "室内地图尚不可用");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesRaidSelfRecoveryFlow)
+{
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "LOST CACHE | HOLD F"),
+            "失物缓存 | 按住 F 开启");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RECOVER IN NEXT RAID"),
+            "在下一次行动中自行寻回");
+  const std::string target = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "RAID RECOVERY | Greyline Block | 3 ASSETS | RESERVE SPACE");
+  EXPECT_NE(target.find("行动寻回"), std::string::npos);
+  EXPECT_NE(target.find("预留空间"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesPermanentInteriorIntelligence)
 {
   const std::string offer = localizeUiText(

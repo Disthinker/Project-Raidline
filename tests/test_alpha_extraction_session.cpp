@@ -97,7 +97,54 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "raid-second-representative-location-15");
+        "raid-self-recovery-16");
+}
+
+TEST(AlphaExtractionSessionTest,
+     HeldWorldInteractionOpensSelectedLostCacheThroughSessionBoundary)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-self-recovery"));
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::PrimaryWeapon},
+        "self-recovery-session-equip").succeeded);
+    ASSERT_TRUE(session.deployAlpha(
+        77191U, MapDefinitionId{"map.v0.test"}));
+    ASSERT_TRUE(session.activeQuitAlphaRaid());
+    const auto records = session.lostRaidRecordProjections();
+    ASSERT_EQ(records.size(), 1U);
+
+    ASSERT_TRUE(session.deployAlpha(
+        77192U,
+        MapDefinitionId{"map.v0.test"},
+        {},
+        records.front().recordId));
+    const auto recovery = session.raidSelfRecoveryProjection();
+    ASSERT_TRUE(recovery.has_value());
+    ASSERT_FALSE(recovery->opened);
+    const float half = session.world().player().size() * 0.5F;
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+        Vec2{recovery->cachePosition.x - half,
+             recovery->cachePosition.y - half}));
+    ASSERT_TRUE(session.raidSelfRecoveryProjection()->interactionInRange);
+
+    GameplayInput held;
+    held.interactPressed = true;
+    session.update(held, 2.1F);
+
+    const auto opened = session.raidSelfRecoveryProjection();
+    ASSERT_TRUE(opened.has_value());
+    EXPECT_TRUE(opened->opened);
+    EXPECT_FALSE(session.profile().lostRaidRecords.contains(
+        records.front().recordId));
+    EXPECT_TRUE(std::any_of(
+        session.profile().pendingRaid->loot.begin(),
+        session.profile().pendingRaid->loot.end(),
+        [rifle](const RaidLootSnapshot &loot)
+        { return loot.assetId == rifle && !loot.collected; }));
 }
 
 TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)

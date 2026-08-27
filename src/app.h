@@ -114,6 +114,7 @@ private:
     bool deploymentWarningArmed_{};
     bool lostRaidRecordsOpen_{};
     std::optional<std::string> selectedLostRaidRecordId_;
+    std::optional<std::string> selectedRaidSelfRecoveryRecordId_;
     std::size_t selectedRaidMapIndex_{};
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
@@ -208,6 +209,7 @@ private:
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect recoveryTaskPrimaryButton() const noexcept;
     [[nodiscard]] SDL_FRect recoveryTaskSecondaryButton() const noexcept;
+    [[nodiscard]] SDL_FRect recoveryTaskCancelButton() const noexcept;
 
     void processEvents();
     void update(float deltaTime);
