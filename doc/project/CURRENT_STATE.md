@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@7185d55` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、多人围攻可靠性修复，以及已接受的失物记录与行动老化 v1。
-- 当前开发分支：`codex/regional-recovery-task-v1`，从 `origin/main@7185d55` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-recovery-task-v1.md`。
+- `origin/main@f31d91a` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及已接受的 Regional Operations 失物记录、NPC 寻回和 Raid 自力寻回闭环。
+- 当前开发分支：`codex/regional-route-outpost-foundation`，从 `origin/main@f31d91a` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-route-outpost-foundation.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、多人围攻可靠性修复，以及失物记录与行动老化均已进入主线。当前 Draft PR #103 正在统一交付 **Regional Operations — Loss & Recovery**：既包含整单、单槽、耗时且幂等的 NPC 寻回任务，也包含回到来源地图、打开失物缓存、携带并成功撤离的玩家自行寻回。两条路径共享唯一资产所有权，用户统一正常游玩验收前不合并。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础和 **Regional Operations — Loss & Recovery** 均已进入主线。当前宏切片连续完成区域路线拓扑、轻量哨所建立和聚合人口驻守三个步骤；Online 哨所为后续出击开放固定捷径，但用户统一正常游玩验收前不合并。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -57,7 +57,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 42. **Raid World 可扩展性能基础 v1**：PR #100 已通过 Windows Debug、1097/1097 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `d7c231b` 进入 main。公平轮转、敌人近邻格、每空间静态障碍索引、双导航后端、结构化压力门槛和双语 F9 性能面板成为接受基线。
 43. **多敌人追击与攻击意图隔离**：PR #102 已通过 Windows Debug、233/233 定向回归、1108/1108 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `1c62064` 进入 main。最多 10 名敌人可同时攻击，超额成员继续施压并稳定轮转；0.25 秒受伤保护避免同一瞬间连续跳血。
 44. **失物记录与行动老化 v1**：PR #101 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `7185d55` 进入 main。死亡/主动退出迁移携带资产树，异常退出继续回滚，schema v24/content v34 保存独立记录、老化窗口与 RaidResult 关联。Base Raid Gate 提供双语代码占位记录页和出击前到期二次确认。
-45. **NPC 寻回任务与 Raid 自行寻回 v1（开发中）**：当前分支首先建立整单单槽 NPC 任务、地图定义报价/耗时、冻结结果、取消不退款与到时领取；随后以独立提交增加来源地图约束、冻结缓存位置、持续交互、原子开放、携带撤离及异常退出精确恢复。schema v26/content v35 支持两条路径跨进程恢复和互斥所有权。Windows Debug 全目标与 1137/1137 CTest 已通过，开发代理未启动游戏；PR #103 exact-head CI 与用户统一正常游玩验收待完成。
+45. **NPC 寻回任务与 Raid 自行寻回 v1**：PR #103 已通过 exact-head CI 和用户统一正常游玩验收，以普通 merge commit `f31d91a` 进入 main。schema v26/content v35 支持整单 NPC 委托与来源地图内自力寻回，两条路径共享唯一资产所有权。
+46. **区域路线与轻量哨所基础（待统一验收）**：content v36/schema v27 建立稳定区域节点、路线和哨所 ID；Raid Gate 可建立 Old Service Relay 并从聚合人口池派驻/撤回 2 名健康居民。满员 Online 后，Riverside/Industrial/Frontier 单程最短时间从 90/150/210 分钟降为 55/95/125 分钟，Greyline 保持 45 分钟。Deploy 冻结路线与出发前区域状态；Windows Debug 全目标和 1150/1150 CTest 已通过，开发代理未启动游戏。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -87,7 +88,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#102 均已进入 main。当前 Loss & Recovery 分支已在 `origin/main@7185d55` 上完成 Windows Debug 全目标和完整 1137/1137 CTest；NPC 委托与另一条记录的自行寻回可并存，同一记录不可重复拥有。PR #103 exact-head CI 与用户统一正常游玩验收待完成，开发代理未启动游戏。
+- PR #90～#103 均已进入 main。当前区域路线/哨所分支在 `origin/main@f31d91a` 上完成三个可回滚开发步骤、Windows Debug 全目标和完整 1150/1150 CTest；exact-head CI 与用户统一正常游玩验收待完成，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

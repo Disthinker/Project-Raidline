@@ -56,7 +56,7 @@ Project_Raidline.exe
 - `ProfileId`、`ProfileRevision`、保存版本和各身份域高水位；
 - 唯一 `AssetRegistry`；
 - 七槽 Equipment、Economy、引导标志和已提交事务凭证；
-- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、BasePopulationState、pending Raid、已提交 Settlement/Rescue ID 与最近一次 RaidResult。
+- 当前 HP、MedicalStatus、WorldClock、BaseResourceState、BasePopulationState、RegionalOperationsState、pending Raid、已提交 Settlement/Rescue ID 与最近一次 RaidResult。
 
 Persistent Base 已实例化资产、基础装备、货币/救济和引导；Extraction Loop 已加入 pending Raid、弹药状态与幂等结算；Survival Loadout 已扩展为两长枪、手枪、防具、胸挂与背包七槽。未启用的长期系统只通过后续显式迁移加入。
 
@@ -68,7 +68,7 @@ Persistent Base 已实例化资产、基础装备、货币/救济和引导；Ext
 - 结算中转；
 - 后续正式加入的丢失记录或 NPC 任务位置。
 
-设施、人口、任务和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。
+设施、人口、任务、区域节点/路线/哨所和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。当前轻量哨所只持有建立、失联和聚合驻守状态；不拥有第二套 Stash、资产、世界时钟或服务队列。
 
 弹药堆是带数量的资产实例；弹匣实例保存有序 `AmmoDefinitionId` 序列；枪膛保存可选弹药定义。普通弹药单位不为每发分配 AssetInstanceId，但散装数量、弹匣序列、枪膛和击发消耗必须守恒。
 
@@ -144,7 +144,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是五项 V0 物品、Alpha/Survival Loadout 武器与弹匣、容器/防具/四类医疗/武器维护/防具维护/Loot、装备槽、类型化能力、价格、三张固定 Raid 地图、基础弹道障碍与持续高危配置的单一内容输入；当前内容版本为 `raid-control-resource-content-11`，地图定义包含展示元数据、独立出生/撤离、敌人、普通/高级 Loot、障碍、信号撤离、有界压力出生、主动控制地标和高级资源区。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线和轻量哨所配置的单一内容输入；当前内容版本为 `regional-route-outpost-content-36`。区域加载验证稳定 ID、跨定义引用、重复双向边、地图目的地唯一性和主基地直达兼容路线。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -153,7 +153,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop 与 Survival Loadout 依次升级到 v2～v6，Base 资源分配/时间/服务/人口依次演进到 v12；普通幸存者安全转移使用 schema v13 保存稳定救援账本、pending 救援快照和结果人数。v12 迁移为空救援账本；内容版本兼容仍独立于 Profile schema。
+- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Loss & Recovery 逐步演进；当前 schema v27 保存 RegionalOperationsState、pending Raid 路线 ID 与出发前区域快照。v26 及更早档案确定性迁移为初始主基地、未建立哨所，并保留旧地图直达时间合同；内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
