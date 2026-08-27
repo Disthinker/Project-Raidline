@@ -15,6 +15,7 @@
 #include "base_resource_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_rescue_domain.h"
+#include "regional_operations_domain.h"
 
 namespace
 {
@@ -76,7 +77,8 @@ TEST(RaidLifecycleTest, TravelPreviewUsesMapTimeWithoutMutatingProfile)
     const MapDefinition &map = publishedContentRegistry().map(
         MapDefinitionId{"map.raid.industrial"});
 
-    const RaidTravelPreview preview = queryRaidTravel(profile, map);
+    const RaidTravelPreview preview = queryRaidTravel(
+        profile, publishedContentRegistry(), map);
 
     EXPECT_EQ(preview.outboundMinutes, 150U);
     EXPECT_EQ(preview.returnMinutes, 150U);
@@ -106,7 +108,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "raid-self-recovery-16");
+        "regional-route-network-17");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -115,6 +117,13 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 90U);
     EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 180U);
+    ASSERT_EQ(profile.pendingRaid->travel.routeIds.size(), 1U);
+    EXPECT_EQ(
+        profile.pendingRaid->travel.routeIds.front(),
+        RegionRouteDefinitionId{"region_route.riverside_direct"});
+    EXPECT_EQ(
+        profile.pendingRaid->travel.startingRegionalOperations,
+        profile.regionalOperations);
     EXPECT_EQ(profile.pendingRaid->travel.startingWorldClock, startingClock);
     EXPECT_EQ(profile.pendingRaid->travel.startingBaseResources,
               startingResources);
@@ -134,6 +143,60 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     EXPECT_EQ(profile.basePriority, startingPriority);
     EXPECT_EQ(profile.baseMorale, startingMorale);
     EXPECT_EQ(profile.baseCommunityEvent, startingEvent);
+}
+
+TEST(RaidLifecycleTest,
+     OnlineOutpostRouteIsFrozenAndStaffingCannotChangeDuringRaid)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-online-outpost", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "travel-establish-outpost"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "travel-staff-outpost"})
+                    .succeeded);
+    const std::uint64_t startingMinute =
+        profile.worldClock.elapsedWorldMinutes;
+
+    ASSERT_TRUE(deploy(
+        profile, 17001U,
+        MapDefinitionId{"map.raid.industrial"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 95U);
+    EXPECT_EQ(profile.pendingRaid->travel.returnMinutes, 95U);
+    EXPECT_EQ(profile.pendingRaid->travel.failureRegroupMinutes, 190U);
+    ASSERT_EQ(profile.pendingRaid->travel.routeIds.size(), 2U);
+    const std::uint64_t pendingFingerprint =
+        profileStateFingerprint(profile);
+
+    const RegionalOutpostStaffingReceipt blocked =
+        executeRegionalOutpostStaffing(
+            profile,
+            content,
+            RegionalOutpostStaffingCommand{outpostId, false},
+            CommandContext{profile.revision, "travel-clear-pending"});
+    EXPECT_FALSE(blocked.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), pendingFingerprint);
+
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "settlement-alpha-test",
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_EQ(
+        profile.worldClock.elapsedWorldMinutes,
+        startingMinute + 190U);
 }
 
 TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)

@@ -404,6 +404,24 @@ TEST(UiLocalizationTest, ChineseTranslatesLostRaidRecordFlow) {
   EXPECT_NE(warning.find("下一次行动结算后到期"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesRegionalOutpostFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "REGIONAL ROUTES & LIGHT OUTPOSTS"),
+            "区域路线与轻量哨所");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ASSIGN FULL GARRISON | ACTIVATE SHORTCUTS"),
+            "派驻满员驻军 | 启用捷径");
+  const std::string status = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "Old Service Relay | ESTABLISHED | STAFF 2/2 | ONLINE");
+  EXPECT_NE(status.find("老旧服务中继站"), std::string::npos);
+  EXPECT_NE(status.find("已建立"), std::string::npos);
+  EXPECT_NE(status.find("驻守 2/2"), std::string::npos);
+  EXPECT_NE(status.find("在线"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

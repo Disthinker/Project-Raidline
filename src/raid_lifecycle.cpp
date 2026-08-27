@@ -10,6 +10,7 @@
 #include <set>
 
 #include "base_resource_domain.h"
+#include "regional_operations_domain.h"
 #include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
 #include "lost_raid_domain.h"
@@ -328,28 +329,41 @@ std::optional<std::string> createLostRaidRecord(
 
 RaidTravelPreview queryRaidTravel(
     const ProfileState &profile,
+    const ContentRegistry &content,
     const MapDefinition &map) noexcept
 {
+    const RegionalRoutePlan route = queryRegionalRoute(
+        profile, content, map.id);
+    if (!route.reachable || route.travelMinutes == 0U ||
+        route.travelMinutes > std::numeric_limits<std::uint32_t>::max() / 2U)
+    {
+        return {};
+    }
+    const std::uint32_t returnMinutes = route.travelMinutes;
+    const std::uint32_t failureMinutes = route.travelMinutes * 2U;
     WorldClockState arrivalClock = profile.worldClock;
     static_cast<void>(advanceWorldClock(
         arrivalClock,
-        map.travel.outboundMinutes));
+        route.travelMinutes));
     WorldClockState extractedClock = arrivalClock;
     static_cast<void>(advanceWorldClock(
         extractedClock,
-        map.travel.returnMinutes));
+        returnMinutes));
     WorldClockState failureClock = arrivalClock;
     static_cast<void>(advanceWorldClock(
         failureClock,
-        map.travel.failureRegroupMinutes));
+        failureMinutes));
     return RaidTravelPreview{
-        map.travel.outboundMinutes,
-        map.travel.returnMinutes,
-        map.travel.failureRegroupMinutes,
+        true,
+        route.travelMinutes,
+        returnMinutes,
+        failureMinutes,
         projectWorldClock(profile.worldClock),
         projectWorldClock(arrivalClock),
         projectWorldClock(extractedClock),
-        projectWorldClock(failureClock)};
+        projectWorldClock(failureClock),
+        route.routeIds,
+        route.usesOnlineOutpost};
 }
 
 DeployReceipt executeDeploy(
@@ -413,6 +427,15 @@ DeployReceipt executeDeploy(
         return deployFailure(
             RaidLifecycleError::InvalidCommand,
             "Deploy map has no validated Alpha configuration",
+            profile.revision);
+    }
+    const RaidTravelPreview travel = queryRaidTravel(
+        candidate, content, *map);
+    if (!travel.reachable)
+    {
+        return deployFailure(
+            RaidLifecycleError::InvalidCommand,
+            "Deploy destination has no active regional route",
             profile.revision);
     }
 
@@ -484,7 +507,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-self-recovery-16";
+    snapshot.rulesVersion = "regional-route-network-17";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -495,9 +518,9 @@ DeployReceipt executeDeploy(
     snapshot.startingMedicalStatus = candidate.medicalStatus;
     snapshot.intelligence = command.intelligence;
     snapshot.travel = RaidTravelSnapshot{
-        map->travel.outboundMinutes,
-        map->travel.returnMinutes,
-        map->travel.failureRegroupMinutes,
+        travel.outboundMinutes,
+        travel.returnMinutes,
+        travel.failureRegroupMinutes,
         candidate.worldClock,
         candidate.baseResources,
         candidate.basePriority,
@@ -510,6 +533,9 @@ DeployReceipt executeDeploy(
         candidate.basePopulation.injuredByProfession,
         candidate.residentMedical,
         candidate.raidIntelligence};
+    snapshot.travel.routeIds = travel.routeIds;
+    snapshot.travel.startingRegionalOperations =
+        candidate.regionalOperations;
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -1087,6 +1113,11 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingResidentMedical;
     const RaidIntelligenceArchiveState startingRaidIntelligence =
         candidate.pendingRaid->travel.startingRaidIntelligence;
+    const bool restoreRegionalOperations =
+        candidate.pendingRaid->rulesVersion ==
+            "regional-route-network-17";
+    const RegionalOperationsState startingRegionalOperations =
+        candidate.pendingRaid->travel.startingRegionalOperations;
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
@@ -1127,6 +1158,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         startingInjuredByProfession;
     candidate.residentMedical = startingResidentMedical;
     candidate.raidIntelligence = startingRaidIntelligence;
+    if (restoreRegionalOperations)
+    {
+        candidate.regionalOperations = startingRegionalOperations;
+    }
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

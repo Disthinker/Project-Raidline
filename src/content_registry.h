@@ -217,6 +217,61 @@ struct RaidOperationBriefingDefinition
         const RaidOperationBriefingDefinition &) = default;
 };
 
+enum class RegionNodeKind
+{
+    Base,
+    Raid,
+    Outpost
+};
+
+struct RegionNodeDefinition
+{
+    RegionNodeDefinitionId id;
+    std::string displayName;
+    RegionNodeKind kind{RegionNodeKind::Raid};
+    std::optional<MapDefinitionId> mapDefinitionId;
+
+    friend bool operator==(
+        const RegionNodeDefinition &,
+        const RegionNodeDefinition &) = default;
+};
+
+struct RegionalOutpostDefinition
+{
+    RegionalOutpostDefinitionId id;
+    std::string displayName;
+    RegionNodeDefinitionId nodeId;
+    bool initiallyUnlocked{};
+    std::uint32_t requiredStaff{};
+
+    friend bool operator==(
+        const RegionalOutpostDefinition &,
+        const RegionalOutpostDefinition &) = default;
+};
+
+struct RegionRouteDefinition
+{
+    RegionRouteDefinitionId id;
+    std::string displayName;
+    RegionNodeDefinitionId from;
+    RegionNodeDefinitionId to;
+    std::uint32_t travelMinutes{};
+    std::optional<RegionalOutpostDefinitionId> requiredOnlineOutpostId;
+
+    friend bool operator==(
+        const RegionRouteDefinition &,
+        const RegionRouteDefinition &) = default;
+};
+
+struct RegionalOperationsDefinition
+{
+    RegionNodeDefinitionId initialBaseNodeId;
+    std::uint32_t maximumEstablishedOutposts{};
+    std::vector<RegionNodeDefinition> nodes;
+    std::vector<RegionalOutpostDefinition> outposts;
+    std::vector<RegionRouteDefinition> routes;
+};
+
 struct RaidRecoveryDefinition
 {
     std::uint32_t serviceFee{};
@@ -474,6 +529,18 @@ public:
 
     [[nodiscard]] const BaseWorkforceDefinition &baseWorkforce() const noexcept;
 
+    [[nodiscard]] const RegionalOperationsDefinition &
+    regionalOperations() const noexcept;
+
+    [[nodiscard]] const RegionNodeDefinition &regionNode(
+        const RegionNodeDefinitionId &id) const;
+
+    [[nodiscard]] const RegionalOutpostDefinition &regionalOutpost(
+        const RegionalOutpostDefinitionId &id) const;
+
+    [[nodiscard]] const RegionRouteDefinition &regionRoute(
+        const RegionRouteDefinitionId &id) const;
+
     [[nodiscard]] const std::vector<BaseCommunityEventDefinition> &
     baseCommunityEvents() const noexcept;
 
@@ -538,6 +605,7 @@ private:
     BaseOperationsDefinition baseOperations_;
     BaseMoraleDefinition baseMorale_;
     BaseWorkforceDefinition baseWorkforce_;
+    RegionalOperationsDefinition regionalOperations_;
     std::vector<BaseCommunityEventDefinition> baseCommunityEvents_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
@@ -559,6 +627,10 @@ private:
         baseConstructionProjectIndex_;
     std::map<BaseManufacturingRecipeDefinitionId, std::size_t>
         baseManufacturingRecipeIndex_;
+    std::map<RegionNodeDefinitionId, std::size_t> regionNodeIndex_;
+    std::map<RegionalOutpostDefinitionId, std::size_t>
+        regionalOutpostIndex_;
+    std::map<RegionRouteDefinitionId, std::size_t> regionRouteIndex_;
 };
 
 [[nodiscard]]

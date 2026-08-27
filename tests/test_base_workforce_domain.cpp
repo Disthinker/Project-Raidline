@@ -131,3 +131,26 @@ TEST(BaseWorkforceDomainTest, DurationCombinesProfessionAndFacilityLevel)
         2U,
         definition), 459U);
 }
+
+TEST(BaseWorkforceDomainTest,
+     RegionalGarrisonIsIncludedInSharedWorkforceProjection)
+{
+    ProfileState profile = makeProfile();
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.established = true;
+    outpost.assignedStaff[baseProfessionIndex(
+        BaseResidentProfession::General)] = 2U;
+
+    const BaseWorkforceProjection projection =
+        projectBaseWorkforce(profile);
+
+    EXPECT_EQ(projection.assignedResidents, 4U);
+    EXPECT_EQ(projection.availableResidents, 4U);
+    EXPECT_EQ(
+        projection.availableByProfession[baseProfessionIndex(
+            BaseResidentProfession::General)],
+        4U);
+}

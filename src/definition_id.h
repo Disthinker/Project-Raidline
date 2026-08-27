@@ -94,6 +94,9 @@ struct BaseCommunityEventDefinitionTag;
 struct RescueDefinitionTag;
 struct BaseConstructionProjectDefinitionTag;
 struct BaseManufacturingRecipeDefinitionTag;
+struct RegionNodeDefinitionTag;
+struct RegionRouteDefinitionTag;
+struct RegionalOutpostDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
@@ -109,3 +112,7 @@ using BaseConstructionProjectDefinitionId =
     DefinitionId<BaseConstructionProjectDefinitionTag>;
 using BaseManufacturingRecipeDefinitionId =
     DefinitionId<BaseManufacturingRecipeDefinitionTag>;
+using RegionNodeDefinitionId = DefinitionId<RegionNodeDefinitionTag>;
+using RegionRouteDefinitionId = DefinitionId<RegionRouteDefinitionTag>;
+using RegionalOutpostDefinitionId =
+    DefinitionId<RegionalOutpostDefinitionTag>;

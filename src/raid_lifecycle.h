@@ -56,6 +56,7 @@ struct RaidRollbackReceipt
 
 struct RaidTravelPreview
 {
+    bool reachable{};
     std::uint32_t outboundMinutes{};
     std::uint32_t returnMinutes{};
     std::uint32_t failureRegroupMinutes{};
@@ -63,10 +64,13 @@ struct RaidTravelPreview
     WorldClockProjection arrival;
     WorldClockProjection extractedReturn;
     WorldClockProjection failureReturn;
+    std::vector<RegionRouteDefinitionId> routeIds;
+    bool usesOnlineOutpost{};
 };
 
 [[nodiscard]] RaidTravelPreview queryRaidTravel(
     const ProfileState &profile,
+    const ContentRegistry &content,
     const MapDefinition &map) noexcept;
 
 [[nodiscard]] DeployReceipt executeDeploy(

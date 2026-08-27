@@ -425,6 +425,28 @@ struct BaseWorkforceState
         const BaseWorkforceState &) = default;
 };
 
+struct RegionalOutpostState
+{
+    bool unlocked{};
+    bool established{};
+    bool disrupted{};
+    BaseProfessionCounts assignedStaff{};
+
+    friend bool operator==(
+        const RegionalOutpostState &,
+        const RegionalOutpostState &) = default;
+};
+
+struct RegionalOperationsState
+{
+    RegionNodeDefinitionId activeBaseNodeId;
+    std::map<RegionalOutpostDefinitionId, RegionalOutpostState> outposts;
+
+    friend bool operator==(
+        const RegionalOperationsState &,
+        const RegionalOperationsState &) = default;
+};
+
 enum class BaseMoraleTier
 {
     Low,
@@ -602,6 +624,8 @@ struct RaidTravelSnapshot
     BaseProfessionCounts startingInjuredByProfession{};
     BaseResidentMedicalState startingResidentMedical;
     RaidIntelligenceArchiveState startingRaidIntelligence;
+    std::vector<RegionRouteDefinitionId> routeIds;
+    RegionalOperationsState startingRegionalOperations;
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -657,6 +681,7 @@ struct ProfileState
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
     BaseWorkforceState baseWorkforce;
+    RegionalOperationsState regionalOperations;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;

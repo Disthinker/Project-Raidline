@@ -41,7 +41,7 @@ BaseResidentProfession preferredProfession(
         : BaseResidentProfession::Medical;
 }
 
-BaseProfessionCounts assignedCounts(
+BaseProfessionCounts facilityAssignedCounts(
     const BaseWorkforceState &state) noexcept
 {
     BaseProfessionCounts counts{};
@@ -56,11 +56,32 @@ BaseProfessionCounts assignedCounts(
     return counts;
 }
 
+BaseProfessionCounts regionalAssignedCounts(
+    const ProfileState &profile) noexcept
+{
+    BaseProfessionCounts counts{};
+    for (const auto &[definitionId, outpost] :
+         profile.regionalOperations.outposts)
+    {
+        static_cast<void>(definitionId);
+        for (std::size_t index{}; index < counts.size(); ++index)
+        {
+            counts[index] += outpost.assignedStaff[index];
+        }
+    }
+    return counts;
+}
+
 BaseProfessionCounts availableCounts(
     const ProfileState &profile,
     const BaseWorkforceState &state) noexcept
 {
-    const BaseProfessionCounts assigned = assignedCounts(state);
+    BaseProfessionCounts assigned = facilityAssignedCounts(state);
+    const BaseProfessionCounts regional = regionalAssignedCounts(profile);
+    for (std::size_t index{}; index < assigned.size(); ++index)
+    {
+        assigned[index] += regional[index];
+    }
     BaseProfessionCounts available{};
     for (std::size_t index = 0; index < available.size(); ++index)
     {
@@ -267,12 +288,14 @@ BaseWorkforceProjection projectBaseWorkforce(
     projection.medicalWorker = profile.baseWorkforce.medicalWorker;
     projection.healthyResidents = healthyBaseResidents(
         profile.basePopulation);
-    const BaseProfessionCounts assigned = assignedCounts(profile.baseWorkforce);
+    BaseProfessionCounts assigned = facilityAssignedCounts(
+        profile.baseWorkforce);
+    const BaseProfessionCounts regional = regionalAssignedCounts(profile);
     for (std::size_t index = 0; index < kBaseResidentProfessionCount; ++index)
     {
         projection.availableResidents +=
             projection.availableByProfession[index];
-        projection.assignedResidents += assigned[index];
+        projection.assignedResidents += assigned[index] + regional[index];
     }
     const std::uint32_t constructionWorkers =
         profile.baseConstruction.activeProject.has_value()

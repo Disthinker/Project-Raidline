@@ -22,6 +22,7 @@
 #include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
 #include "recovery_task_domain.h"
+#include "regional_operations_domain.h"
 #include "save_repository.h"
 #include "self_recovery_domain.h"
 #include "weapon_ammo_domain.h"
@@ -1547,6 +1548,96 @@ TEST(SaveRepositoryTest, SchemaV23MigratesToEmptyLostRecordState)
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_TRUE(loaded.profile->lostRaidRecords.empty());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV27RoundTripPreservesRegionalRouteSnapshot)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-regional-route-v27", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "raid-regional-v27",
+            "settlement-regional-v27",
+            27001U,
+            MapDefinitionId{"map.raid.industrial"}},
+        CommandContext{profile.revision, "deploy-regional-v27"})
+                    .succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.routeIds,
+        profile.pendingRaid->travel.routeIds);
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->travel.startingRegionalOperations,
+        profile.pendingRaid->travel.startingRegionalOperations);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV26MigrationCreatesDefaultRegionalNetwork)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-regional-route-v26", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 26U),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    EXPECT_EQ(
+        loaded.profile->regionalOperations,
+        profile.regionalOperations);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV27RoundTripPreservesEstablishedStaffedOutpost)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-established-outpost-v27", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "save-establish-outpost"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "save-staff-outpost"})
+                    .succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    const RegionalOutpostState &loadedOutpost =
+        loaded.profile->regionalOperations.outposts.at(outpostId);
+    EXPECT_TRUE(loadedOutpost.established);
+    EXPECT_EQ(assignedRegionalOutpostStaff(loadedOutpost), 2U);
+    EXPECT_TRUE(regionalOutpostOnline(*loaded.profile, content, outpostId));
+    EXPECT_EQ(
+        profileStateFingerprint(*loaded.profile),
+        profileStateFingerprint(profile));
 }
 
 TEST(SaveRepositoryTest,

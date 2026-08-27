@@ -1,5 +1,6 @@
 #include "save_repository.h"
 
+#include <algorithm>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -9,6 +10,7 @@
 
 #include "base_resource_domain.h"
 #include "base_morale_domain.h"
+#include "regional_operations_domain.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -239,6 +241,71 @@ BaseProfessionCounts parseBaseProfessionCounts(const Json &value)
         value.at("medical").get<std::uint32_t>(),
         value.at("engineering").get<std::uint32_t>(),
         value.at("combat").get<std::uint32_t>()};
+}
+
+Json regionalOperationsValue(const RegionalOperationsState &state)
+{
+    Json outposts = Json::array();
+    for (const auto &[outpostId, outpost] : state.outposts)
+    {
+        outposts.push_back({
+            {"definition_id", outpostId.value()},
+            {"unlocked", outpost.unlocked},
+            {"established", outpost.established},
+            {"disrupted", outpost.disrupted},
+            {"assigned_staff",
+             baseProfessionCountsValue(outpost.assignedStaff)}});
+    }
+    return {
+        {"active_base_node_id", state.activeBaseNodeId.value()},
+        {"outposts", std::move(outposts)}};
+}
+
+RegionalOperationsState defaultRegionalOperations(
+    const ContentRegistry &content)
+{
+    RegionalOperationsState state;
+    state.activeBaseNodeId =
+        content.regionalOperations().initialBaseNodeId;
+    for (const RegionalOutpostDefinition &definition :
+         content.regionalOperations().outposts)
+    {
+        state.outposts.emplace(
+            definition.id,
+            RegionalOutpostState{definition.initiallyUnlocked});
+    }
+    return state;
+}
+
+RegionalOperationsState parseRegionalOperations(
+    const Json &value,
+    const ContentRegistry &content)
+{
+    RegionalOperationsState state;
+    state.activeBaseNodeId = RegionNodeDefinitionId{
+        value.at("active_base_node_id").get<std::string>()};
+    for (const Json &entry : value.at("outposts"))
+    {
+        const RegionalOutpostDefinitionId definitionId{
+            entry.at("definition_id").get<std::string>()};
+        RegionalOutpostState outpost{
+            entry.at("unlocked").get<bool>(),
+            entry.at("established").get<bool>(),
+            entry.at("disrupted").get<bool>(),
+            parseBaseProfessionCounts(entry.at("assigned_staff"))};
+        if (!state.outposts.emplace(definitionId, outpost).second)
+        {
+            throw std::runtime_error{
+                "regional outpost state is duplicated"};
+        }
+    }
+    static_cast<void>(content.regionNode(state.activeBaseNodeId));
+    for (const auto &[definitionId, outpost] : state.outposts)
+    {
+        static_cast<void>(outpost);
+        static_cast<void>(content.regionalOutpost(definitionId));
+    }
+    return state;
 }
 
 Json optionalProfessionValue(
@@ -830,6 +897,35 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                  record.subsequentRaidSettlementCount}});
         }
     }
+    if (schemaVersion >= 27)
+    {
+        payload["regional_operations"] =
+            regionalOperationsValue(profile.regionalOperations);
+    }
+    else
+    {
+        bool hasUnrepresentableRegionalState =
+            profile.regionalOperations.activeBaseNodeId !=
+                RegionNodeDefinitionId{
+                    "region_node.base.greyline_yard"};
+        for (const auto &[outpostId, outpost] :
+             profile.regionalOperations.outposts)
+        {
+            static_cast<void>(outpostId);
+            hasUnrepresentableRegionalState =
+                hasUnrepresentableRegionalState || outpost.established ||
+                outpost.disrupted ||
+                std::any_of(
+                    outpost.assignedStaff.begin(),
+                    outpost.assignedStaff.end(),
+                    [](std::uint32_t count) { return count != 0U; });
+        }
+        if (hasUnrepresentableRegionalState)
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent regional operations"};
+        }
+    }
     if (schemaVersion >= 25)
     {
         payload["next_recovery_task_id"] = profile.nextRecoveryTaskId;
@@ -1234,6 +1330,21 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {
                 payload["pending_raid"]["rescue"] = nullptr;
             }
+            if (schemaVersion >= 27)
+            {
+                Json routes = Json::array();
+                for (const RegionRouteDefinitionId &routeId :
+                     raid.travel.routeIds)
+                {
+                    routes.push_back(routeId.value());
+                }
+                payload["pending_raid"]["travel"]["route_ids"] =
+                    std::move(routes);
+                payload["pending_raid"]["travel"]
+                    ["starting_regional_operations"] =
+                        regionalOperationsValue(
+                            raid.travel.startingRegionalOperations);
+            }
         }
         if (schemaVersion >= 26)
         {
@@ -1395,7 +1506,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
-        schemaVersion != 25 && schemaVersion != 26)
+        schemaVersion != 25 && schemaVersion != 26 &&
+        schemaVersion != 27)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1490,7 +1602,11 @@ SaveLoadResult deserializeProfileEnvelope(
               contentVersion ==
                   "raid-second-representative-location-content-33")) ||
             (schemaVersion == 24 &&
-             contentVersion == "regional-loss-record-content-34");
+             contentVersion == "regional-loss-record-content-34") ||
+            (schemaVersion == 25 &&
+             contentVersion == "regional-recovery-task-content-35") ||
+            (schemaVersion == 26 &&
+             contentVersion == "regional-recovery-task-content-35");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1503,7 +1619,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 19 && schemaVersion != 20 &&
              schemaVersion != 21 && schemaVersion != 22 &&
              schemaVersion != 23 && schemaVersion != 24 &&
-             schemaVersion != 25 && schemaVersion != 26) ||
+             schemaVersion != 25 && schemaVersion != 26 &&
+             schemaVersion != 27) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1781,6 +1898,10 @@ SaveLoadResult deserializeProfileEnvelope(
                     : std::optional<BaseResidentProfession>{
                           BaseResidentProfession::Medical};
         }
+        profile.regionalOperations = schemaVersion >= 27
+            ? parseRegionalOperations(
+                  payload.at("regional_operations"), content)
+            : defaultRegionalOperations(content);
         if (schemaVersion >= 20)
         {
             for (const Json &entry :
@@ -2499,6 +2620,23 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingRaidIntelligence =
                         profile.raidIntelligence;
                 }
+                if (schemaVersion >= 27)
+                {
+                    for (const Json &route : travel.at("route_ids"))
+                    {
+                        raid.travel.routeIds.emplace_back(
+                            route.get<std::string>());
+                    }
+                    raid.travel.startingRegionalOperations =
+                        parseRegionalOperations(
+                            travel.at("starting_regional_operations"),
+                            content);
+                }
+                else
+                {
+                    raid.travel.startingRegionalOperations =
+                        profile.regionalOperations;
+                }
                 if (schemaVersion >= 14)
                 {
                     const Json &construction = travel.at(
@@ -2625,6 +2763,31 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.travel.startingResidentMedical = {};
                 raid.travel.startingRaidIntelligence =
                     profile.raidIntelligence;
+                raid.travel.startingRegionalOperations =
+                    profile.regionalOperations;
+            }
+            if (schemaVersion < 27 &&
+                raid.rulesVersion == "regional-route-network-17")
+            {
+                ProfileState startingRouteProfile = profile;
+                startingRouteProfile.regionalOperations =
+                    raid.travel.startingRegionalOperations;
+                const RegionalRoutePlan route = queryRegionalRoute(
+                    startingRouteProfile,
+                    content,
+                    raid.mapDefinitionId);
+                if (!route.reachable ||
+                    route.travelMinutes != raid.travel.outboundMinutes ||
+                    route.travelMinutes != raid.travel.returnMinutes ||
+                    route.travelMinutes >
+                        std::numeric_limits<std::uint32_t>::max() / 2U ||
+                    route.travelMinutes * 2U !=
+                        raid.travel.failureRegroupMinutes)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "legacy regional route snapshot is invalid"};
+                }
+                raid.travel.routeIds = route.routeIds;
             }
             if (!raid.travel.startingBaseCommunityEvent.definitionId.valid())
             {

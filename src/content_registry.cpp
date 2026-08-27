@@ -893,6 +893,151 @@ ContentRegistry ContentRegistry::fromJson(
             fail("Base workforce definition is invalid");
         }
 
+        const Json &regional = requiredObject(root, "regional_operations");
+        registry.regionalOperations_.initialBaseNodeId =
+            RegionNodeDefinitionId{
+                requiredString(regional, "initial_base_node_id")};
+        registry.regionalOperations_.maximumEstablishedOutposts =
+            requiredPositiveUint(
+                regional, "maximum_established_outposts");
+        if (registry.regionalOperations_.maximumEstablishedOutposts > 16U)
+        {
+            fail("regional outpost capacity is invalid");
+        }
+        for (const Json &nodeValue : requiredArray(regional, "nodes"))
+        {
+            const std::string kindName = requiredString(nodeValue, "kind");
+            RegionNodeKind kind{};
+            if (kindName == "base")
+            {
+                kind = RegionNodeKind::Base;
+            }
+            else if (kindName == "raid")
+            {
+                kind = RegionNodeKind::Raid;
+            }
+            else if (kindName == "outpost")
+            {
+                kind = RegionNodeKind::Outpost;
+            }
+            else
+            {
+                fail("regional node kind is invalid");
+            }
+            const std::optional<std::string> mapId = optionalString(
+                nodeValue, "map_definition_id");
+            RegionNodeDefinition definition{
+                RegionNodeDefinitionId{requiredString(nodeValue, "id")},
+                requiredString(nodeValue, "display_name"),
+                kind,
+                mapId.has_value()
+                    ? std::optional<MapDefinitionId>{MapDefinitionId{*mapId}}
+                    : std::nullopt};
+            if (!hasPrefix(definition.id.value(), "region_node.") ||
+                definition.displayName.empty() ||
+                (definition.kind == RegionNodeKind::Raid) !=
+                    definition.mapDefinitionId.has_value())
+            {
+                fail("regional node definition is invalid");
+            }
+            const std::size_t index =
+                registry.regionalOperations_.nodes.size();
+            if (!registry.regionNodeIndex_.emplace(
+                    definition.id, index).second)
+            {
+                fail("duplicate regional node definition ID");
+            }
+            registry.regionalOperations_.nodes.push_back(
+                std::move(definition));
+        }
+        const auto initialBase = registry.regionNodeIndex_.find(
+            registry.regionalOperations_.initialBaseNodeId);
+        if (initialBase == registry.regionNodeIndex_.end() ||
+            registry.regionalOperations_.nodes[initialBase->second].kind !=
+                RegionNodeKind::Base)
+        {
+            fail("regional initial Base node is invalid");
+        }
+        for (const Json &outpostValue :
+             requiredArray(regional, "outposts"))
+        {
+            RegionalOutpostDefinition definition{
+                RegionalOutpostDefinitionId{
+                    requiredString(outpostValue, "id")},
+                requiredString(outpostValue, "display_name"),
+                RegionNodeDefinitionId{
+                    requiredString(outpostValue, "node_id")},
+                requiredBool(outpostValue, "initially_unlocked"),
+                requiredPositiveUint(outpostValue, "required_staff")};
+            const auto node = registry.regionNodeIndex_.find(
+                definition.nodeId);
+            if (!hasPrefix(
+                    definition.id.value(), "regional_outpost.") ||
+                definition.displayName.empty() ||
+                definition.requiredStaff > 16U ||
+                node == registry.regionNodeIndex_.end() ||
+                registry.regionalOperations_.nodes[node->second].kind !=
+                    RegionNodeKind::Outpost)
+            {
+                fail("regional outpost definition is invalid");
+            }
+            const std::size_t index =
+                registry.regionalOperations_.outposts.size();
+            if (!registry.regionalOutpostIndex_.emplace(
+                    definition.id, index).second)
+            {
+                fail("duplicate regional outpost definition ID");
+            }
+            registry.regionalOperations_.outposts.push_back(
+                std::move(definition));
+        }
+        if (registry.regionalOperations_.outposts.empty() ||
+            registry.regionalOperations_.maximumEstablishedOutposts >
+                registry.regionalOperations_.outposts.size())
+        {
+            fail("regional outpost definitions are incomplete");
+        }
+        std::set<std::pair<RegionNodeDefinitionId, RegionNodeDefinitionId>>
+            routePairs;
+        for (const Json &routeValue : requiredArray(regional, "routes"))
+        {
+            const std::optional<std::string> requiredOutpost =
+                optionalString(routeValue, "requires_online_outpost_id");
+            RegionRouteDefinition definition{
+                RegionRouteDefinitionId{requiredString(routeValue, "id")},
+                requiredString(routeValue, "display_name"),
+                RegionNodeDefinitionId{requiredString(routeValue, "from")},
+                RegionNodeDefinitionId{requiredString(routeValue, "to")},
+                requiredPositiveUint(routeValue, "travel_minutes"),
+                requiredOutpost.has_value()
+                    ? std::optional<RegionalOutpostDefinitionId>{
+                          RegionalOutpostDefinitionId{*requiredOutpost}}
+                    : std::nullopt};
+            auto pair = std::minmax(definition.from, definition.to);
+            if (!hasPrefix(definition.id.value(), "region_route.") ||
+                definition.displayName.empty() ||
+                definition.from == definition.to ||
+                definition.travelMinutes > 7U * 24U * 60U ||
+                !registry.regionNodeIndex_.contains(definition.from) ||
+                !registry.regionNodeIndex_.contains(definition.to) ||
+                (definition.requiredOnlineOutpostId.has_value() &&
+                 !registry.regionalOutpostIndex_.contains(
+                     *definition.requiredOnlineOutpostId)) ||
+                !routePairs.emplace(pair.first, pair.second).second)
+            {
+                fail("regional route definition is invalid");
+            }
+            const std::size_t index =
+                registry.regionalOperations_.routes.size();
+            if (!registry.regionRouteIndex_.emplace(
+                    definition.id, index).second)
+            {
+                fail("duplicate regional route definition ID");
+            }
+            registry.regionalOperations_.routes.push_back(
+                std::move(definition));
+        }
+
         const Json &baseConstruction = requiredObject(
             root,
             "base_construction");
@@ -2493,6 +2638,81 @@ ContentRegistry ContentRegistry::fromJson(
             fail("content schema v1 requires every current definition domain");
         }
 
+        std::set<MapDefinitionId> regionalMapIds;
+        for (const RegionNodeDefinition &node :
+             registry.regionalOperations_.nodes)
+        {
+            if (!node.mapDefinitionId.has_value())
+            {
+                continue;
+            }
+            if (!registry.mapIndex_.contains(*node.mapDefinitionId) ||
+                !regionalMapIds.insert(*node.mapDefinitionId).second)
+            {
+                fail("regional Raid node map reference is invalid");
+            }
+        }
+        if (regionalMapIds.size() != registry.maps_.size())
+        {
+            fail("every Raid map requires one regional node");
+        }
+        std::map<RegionNodeDefinitionId, std::uint64_t> directDistances;
+        for (const RegionNodeDefinition &node :
+             registry.regionalOperations_.nodes)
+        {
+            directDistances.emplace(
+                node.id, std::numeric_limits<std::uint64_t>::max());
+        }
+        directDistances[registry.regionalOperations_.initialBaseNodeId] = 0U;
+        for (std::size_t pass{};
+             pass < registry.regionalOperations_.nodes.size(); ++pass)
+        {
+            bool changed{};
+            for (const RegionRouteDefinition &route :
+                 registry.regionalOperations_.routes)
+            {
+                if (route.requiredOnlineOutpostId.has_value())
+                {
+                    continue;
+                }
+                const auto relax = [&](const RegionNodeDefinitionId &from,
+                                       const RegionNodeDefinitionId &to)
+                {
+                    if (directDistances[from] ==
+                        std::numeric_limits<std::uint64_t>::max())
+                    {
+                        return;
+                    }
+                    const std::uint64_t candidate =
+                        directDistances[from] + route.travelMinutes;
+                    if (candidate < directDistances[to])
+                    {
+                        directDistances[to] = candidate;
+                        changed = true;
+                    }
+                };
+                relax(route.from, route.to);
+                relax(route.to, route.from);
+            }
+            if (!changed)
+            {
+                break;
+            }
+        }
+        for (const RegionNodeDefinition &node :
+             registry.regionalOperations_.nodes)
+        {
+            if (!node.mapDefinitionId.has_value())
+            {
+                continue;
+            }
+            const MapDefinition &map = registry.map(*node.mapDefinitionId);
+            if (directDistances[node.id] != map.travel.outboundMinutes)
+            {
+                fail("regional direct route must preserve published map travel");
+            }
+        }
+
         return registry;
     }
     catch (const ContentRegistryError &)
@@ -2573,6 +2793,33 @@ const BaseMoraleDefinition &ContentRegistry::baseMorale() const noexcept
 const BaseWorkforceDefinition &ContentRegistry::baseWorkforce() const noexcept
 {
     return baseWorkforce_;
+}
+
+const RegionalOperationsDefinition &
+ContentRegistry::regionalOperations() const noexcept
+{
+    return regionalOperations_;
+}
+
+const RegionNodeDefinition &ContentRegistry::regionNode(
+    const RegionNodeDefinitionId &id) const
+{
+    return lookup(regionNodeIndex_, regionalOperations_.nodes, id,
+                  "regional node");
+}
+
+const RegionalOutpostDefinition &ContentRegistry::regionalOutpost(
+    const RegionalOutpostDefinitionId &id) const
+{
+    return lookup(regionalOutpostIndex_, regionalOperations_.outposts, id,
+                  "regional outpost");
+}
+
+const RegionRouteDefinition &ContentRegistry::regionRoute(
+    const RegionRouteDefinitionId &id) const
+{
+    return lookup(regionRouteIndex_, regionalOperations_.routes, id,
+                  "regional route");
 }
 
 const std::vector<BaseCommunityEventDefinition> &

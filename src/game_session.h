@@ -22,6 +22,7 @@
 #include "inventory_domain.h"
 #include "lost_raid_domain.h"
 #include "recovery_task_domain.h"
+#include "regional_operations_domain.h"
 #include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
@@ -279,6 +280,16 @@ public:
 
     [[nodiscard]] BaseConstructionReceipt executeCancelBaseConstruction(
         BaseConstructionProjectDefinitionId definitionId,
+        std::string transactionId);
+
+    [[nodiscard]] RegionalOutpostReceipt executeEstablishRegionalOutpost(
+        RegionalOutpostDefinitionId definitionId,
+        std::string transactionId);
+
+    [[nodiscard]] RegionalOutpostStaffingReceipt
+    executeRegionalOutpostStaffing(
+        RegionalOutpostDefinitionId definitionId,
+        bool assign,
         std::string transactionId);
 
     [[nodiscard]] BaseWorkforceReceipt executeAssignBestBaseWorker(

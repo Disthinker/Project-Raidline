@@ -1425,6 +1425,58 @@ BaseConstructionReceipt GameSession::executeCancelBaseConstruction(
     return receipt;
 }
 
+RegionalOutpostReceipt GameSession::executeEstablishRegionalOutpost(
+    RegionalOutpostDefinitionId definitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RegionalOutpostReceipt receipt = ::executeEstablishRegionalOutpost(
+        candidate,
+        publishedContentRegistry(),
+        EstablishRegionalOutpostCommand{std::move(definitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+RegionalOutpostStaffingReceipt
+GameSession::executeRegionalOutpostStaffing(
+    RegionalOutpostDefinitionId definitionId,
+    bool assign,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RegionalOutpostStaffingReceipt receipt =
+        ::executeRegionalOutpostStaffing(
+            candidate,
+            publishedContentRegistry(),
+            RegionalOutpostStaffingCommand{
+                std::move(definitionId), assign},
+            CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 BaseWorkforceReceipt GameSession::executeAssignBestBaseWorker(
     BaseFacilityStaffingKind facility,
     std::string transactionId)
@@ -2001,6 +2053,7 @@ std::optional<RaidTravelPreview> GameSession::raidTravelPreview(
     {
         return queryRaidTravel(
             profile_,
+            publishedContentRegistry(),
             publishedContentRegistry().map(mapDefinitionId));
     }
     catch (...)
