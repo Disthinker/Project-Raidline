@@ -142,7 +142,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 区域路线拓扑 | 出击页显示实际路线、是否使用哨所和抵达/返程时间 | 稳定节点/路线 ID、确定性最短路径、Deploy 路线快照、schema v27/content v36 | PR #104 已通过 CI 与用户验收，以 `dc19745` 进入 main |
 | 轻量哨所建立与驻守 | 建立 Old Service Relay 后派驻/撤回 2 名健康居民；满员自动开放远程固定捷径 | 原子建立/驻守命令、共享劳动力投影、施工预留、Online 路线门控和 Raid 冻结 | PR #104 已以普通 merge commit `dc19745` 进入 main |
 | 哨所中断与清剿恢复 v1 | 捷径行动累积可见威胁；失联后改走直达路线；从区域页完成清剿 Raid 后恢复 | Settlement 去重计数、内容阈值/恢复地图、目标撤离门控、schema v28/content v37、异常回滚 | PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main |
-| 区域基地候选点清剿 v1 | 清剿并解锁 Ashworks Logistics Yard；建立、派驻第二前哨后缩短 Industrial/Frontier 路线 | RegionalBaseSiteDefinition/State、强类型清剿快照、原子地点/前哨解锁、schema v29/content v38、最短路径 | 当前分支三个步骤完成；相关回归 233/233、Windows Debug 全目标与完整 1169/1169 CTest 通过，exact-head CI 和用户统一验收待完成。正式主基地迁移等待厨房/供水与设施存储门槛 |
+| 区域基地候选点清剿 v1 | 清剿并解锁 Ashworks Logistics Yard；建立、派驻第二前哨后缩短 Industrial/Frontier 路线 | RegionalBaseSiteDefinition/State、强类型清剿快照、原子地点/前哨解锁、schema v29/content v38、最短路径 | 当前分支三个步骤完成；相关回归 233/233、Windows Debug 全目标、完整 1169/1169 CTest 与 exact-head CI 通过，用户统一验收待完成。正式主基地迁移等待厨房/供水与设施存储门槛 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -63,5 +63,5 @@
 - [x] Step 2：清剿 Raid、撤离门控、成功解锁和失败/异常回滚。
 - [x] Step 3：第二前哨、路线收益和双语区域页/HUD。
 - [x] Windows Debug 全目标与完整 1169/1169 CTest。
-- [ ] exact-head Windows/Ubuntu CI。
+- [x] exact-head Windows/Ubuntu CI。
 - [ ] 用户统一正常游玩验收。

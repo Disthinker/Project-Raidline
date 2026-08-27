@@ -90,7 +90,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#105 均已进入 main。当前候选点清剿分支已完成候选点/schema、清剿 Raid、第二前哨/路线收益三个玩家闭环步骤；相关领域、存档、生命周期、GameSession 和双语回归 233/233、Windows Debug 全目标与完整 1169/1169 CTest 通过，exact-head CI 待运行，开发代理未启动游戏。
+- PR #90～#105 均已进入 main。当前候选点清剿分支已完成候选点/schema、清剿 Raid、第二前哨/路线收益三个玩家闭环步骤；相关领域、存档、生命周期、GameSession 和双语回归 233/233、Windows Debug 全目标、完整 1169/1169 CTest 与 exact-head Windows/Ubuntu CI 通过，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。
