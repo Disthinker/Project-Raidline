@@ -1410,6 +1410,7 @@ bool App::tryDeployFromBase()
     }
     deploymentWarningArmed_ = false;
     lostRaidRecordsOpen_ = false;
+    selectedLostRaidRecordId_.reset();
     selectedRaidIntelligence_ = {};
     uiMessage_.clear();
     return true;
@@ -1742,6 +1743,23 @@ SDL_FRect App::raidLostRecordsButton() const noexcept
     return SDL_FRect{920.0F, 184.0F, 200.0F, 34.0F};
 }
 
+SDL_FRect App::lostRaidRecordRow(std::size_t index) const noexcept
+{
+    return SDL_FRect{
+        350.0F, 238.0F + static_cast<float>(index) * 56.0F,
+        580.0F, 52.0F};
+}
+
+SDL_FRect App::recoveryTaskPrimaryButton() const noexcept
+{
+    return SDL_FRect{360.0F, 474.0F, 270.0F, 40.0F};
+}
+
+SDL_FRect App::recoveryTaskSecondaryButton() const noexcept
+{
+    return SDL_FRect{650.0F, 474.0F, 270.0F, 40.0F};
+}
+
 SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -1798,6 +1816,7 @@ void App::updateBase(float deltaTime)
     {
         gameFlow_.closeBaseFacility();
         lostRaidRecordsOpen_ = false;
+        selectedLostRaidRecordId_.reset();
         inventoryOverlayState_.openContainerInventory();
         uiMessage_.clear();
     }
@@ -1836,6 +1855,7 @@ void App::updateBase(float deltaTime)
                 lostRaidRecordsOpen_)
             {
                 lostRaidRecordsOpen_ = false;
+                selectedLostRaidRecordId_.reset();
                 pendingBaseClicks_.clear();
                 uiMessage_.clear();
                 return;
@@ -1845,6 +1865,7 @@ void App::updateBase(float deltaTime)
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
             lostRaidRecordsOpen_ = false;
+            selectedLostRaidRecordId_.reset();
             uiMessage_.clear();
             return;
         }
@@ -1895,13 +1916,83 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             if (contains(raidLostRecordsButton(), click.position))
             {
                 lostRaidRecordsOpen_ = false;
+                selectedLostRaidRecordId_.reset();
                 uiMessage_.clear();
+                return;
+            }
+            const std::vector<LostRaidRecordProjection> records =
+                gameSession_.lostRaidRecordProjections();
+            for (std::size_t index{};
+                 index < records.size() && index < 4U;
+                 ++index)
+            {
+                if (contains(lostRaidRecordRow(index), click.position))
+                {
+                    selectedLostRaidRecordId_ = records[index].recordId;
+                    uiMessage_.clear();
+                    return;
+                }
+            }
+            const std::optional<RecoveryTaskProjection> task =
+                gameSession_.recoveryTaskProjection();
+            if (contains(recoveryTaskPrimaryButton(), click.position))
+            {
+                RecoveryTaskReceipt receipt;
+                if (task.has_value() && task->readyForCollection)
+                {
+                    receipt = gameSession_.collectRecoveryTask(
+                        nextProfileTransactionId("recovery-collect"));
+                    uiMessage_ = receipt.succeeded
+                        ? fmt::format(
+                              "RECOVERY COLLECTED | {} RETURNED | {} LOST",
+                              receipt.recoveredAssetCount,
+                              receipt.lostAssetCount)
+                        : receipt.message;
+                }
+                else if (!task.has_value() &&
+                         selectedLostRaidRecordId_.has_value())
+                {
+                    receipt = gameSession_.startRecoveryTask(
+                        *selectedLostRaidRecordId_,
+                        nextProfileTransactionId("recovery-start"));
+                    uiMessage_ = receipt.succeeded
+                        ? "RECOVERY TASK STARTED"
+                        : receipt.message;
+                    if (receipt.succeeded)
+                    {
+                        selectedLostRaidRecordId_.reset();
+                    }
+                }
+                else
+                {
+                    uiMessage_ = task.has_value()
+                        ? "RECOVERY TASK IS STILL IN PROGRESS"
+                        : "SELECT A LOST RAID RECORD";
+                }
+                return;
+            }
+            if (task.has_value() &&
+                contains(recoveryTaskSecondaryButton(), click.position))
+            {
+                const std::string recordId = task->recordId;
+                const RecoveryTaskReceipt receipt =
+                    gameSession_.cancelRecoveryTask(
+                        nextProfileTransactionId("recovery-cancel"));
+                uiMessage_ = receipt.succeeded
+                    ? "RECOVERY CANCELLED | NO REFUND"
+                    : receipt.message;
+                if (receipt.succeeded)
+                {
+                    selectedLostRaidRecordId_ = recordId;
+                }
+                return;
             }
             return;
         }
         if (contains(raidLostRecordsButton(), click.position))
         {
             lostRaidRecordsOpen_ = true;
+            selectedLostRaidRecordId_.reset();
             deploymentWarningArmed_ = false;
             uiMessage_.clear();
             return;
@@ -10639,37 +10730,66 @@ void App::renderLostRaidRecords()
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 182, 132, 92, 255);
     SDL_RenderRect(renderer_, &panel);
-    uiTextRenderer_.render(renderer_, 522.0F, 190.0F,
-                           "LOST RAID RECORDS");
+    uiTextRenderer_.render(renderer_, 500.0F, 166.0F,
+                           "LOST RAID RECORDS & RECOVERY");
+
+    const std::optional<RecoveryTaskProjection> task =
+        gameSession_.recoveryTaskProjection();
+    if (task.has_value())
+    {
+        const std::string taskStatus = task->readyForCollection
+            ? fmt::format(
+                  "NPC RECOVERY READY | {} | RESULT {}/{}",
+                  task->mapDisplayName,
+                  task->recoveredAssetCount,
+                  task->totalAssetCount)
+            : fmt::format(
+                  "NPC RECOVERY ACTIVE | {} | REMAINING {}H {:02}M",
+                  task->mapDisplayName,
+                  task->remainingWorldMinutes / kWorldMinutesPerHour,
+                  task->remainingWorldMinutes % kWorldMinutesPerHour);
+        uiTextRenderer_.render(
+            renderer_, 360.0F, 210.0F, taskStatus.c_str());
+    }
+    else
+    {
+        uiTextRenderer_.render(
+            renderer_, 360.0F, 210.0F,
+            "SELECT ONE COMPLETE RECORD TO COMMISSION NPC RECOVERY");
+    }
 
     const std::vector<LostRaidRecordProjection> records =
         gameSession_.lostRaidRecordProjections();
     if (records.empty())
     {
         uiTextRenderer_.render(
-            renderer_, 454.0F, 300.0F,
+            renderer_, 454.0F, 330.0F,
             "NO RECOVERABLE LOST LOADOUTS");
         uiTextRenderer_.render(
-            renderer_, 414.0F, 326.0F,
+            renderer_, 414.0F, 352.0F,
             "DEATH OR ACTIVE QUIT CREATES A RECORD WHEN GEAR IS CARRIED");
     }
     else
     {
-        float y = 222.0F;
-        for (const LostRaidRecordProjection &record : records)
+        for (std::size_t index{};
+             index < records.size() && index < 4U;
+             ++index)
         {
-            const SDL_FRect row{350.0F, y, 580.0F, 82.0F};
+            const LostRaidRecordProjection &record = records[index];
+            const SDL_FRect row = lostRaidRecordRow(index);
             const bool finalOpportunity =
                 record.retainedSettlementsRemaining == 0U;
+            const bool selected = selectedLostRaidRecordId_.has_value() &&
+                *selectedLostRaidRecordId_ == record.recordId;
             SDL_SetRenderDrawColor(
-                renderer_, finalOpportunity ? 78 : 42,
-                finalOpportunity ? 42 : 50,
-                finalOpportunity ? 36 : 44, 255);
+                renderer_, selected ? 54 : (finalOpportunity ? 78 : 42),
+                selected ? 78 : (finalOpportunity ? 42 : 50),
+                selected ? 66 : (finalOpportunity ? 36 : 44), 255);
             SDL_RenderFillRect(renderer_, &row);
             SDL_SetRenderDrawColor(
-                renderer_, finalOpportunity ? 218 : 142,
-                finalOpportunity ? 104 : 152,
-                finalOpportunity ? 82 : 112, 255);
+                renderer_, selected ? 116 : (finalOpportunity ? 218 : 142),
+                selected ? 218 : (finalOpportunity ? 104 : 152),
+                selected ? 166 : (finalOpportunity ? 82 : 112), 255);
             SDL_RenderRect(renderer_, &row);
 
             const std::string heading = fmt::format(
@@ -10680,7 +10800,7 @@ void App::renderLostRaidRecords()
                     ? "PLAYER DEAD"
                     : "RAID ABANDONED");
             uiTextRenderer_.render(
-                renderer_, row.x + 12.0F, row.y + 10.0F,
+                renderer_, row.x + 12.0F, row.y + 8.0F,
                 heading.c_str());
             const std::string retention = finalOpportunity
                 ? "FINAL OPPORTUNITY | NEXT RAID SETTLEMENT DESTROYS RECORD"
@@ -10690,7 +10810,7 @@ void App::renderLostRaidRecords()
                       kLostRaidRecordRetainedSettlementCount,
                       record.retainedSettlementsRemaining);
             uiTextRenderer_.render(
-                renderer_, row.x + 12.0F, row.y + 31.0F,
+                renderer_, row.x + 12.0F, row.y + 27.0F,
                 retention.c_str());
             std::string assetSummary = fmt::format(
                 "ASSETS {} | ", record.assets.size());
@@ -10715,10 +10835,64 @@ void App::renderLostRaidRecords()
                 ++listed;
             }
             uiTextRenderer_.render(
-                renderer_, row.x + 12.0F, row.y + 53.0F,
+                renderer_, row.x + 12.0F, row.y + 44.0F,
                 assetSummary.c_str());
-            y += 92.0F;
         }
+        if (records.size() > 4U)
+        {
+            const std::string more = fmt::format(
+                "+{} OLDER RECORD(S) | NEWEST FOUR SHOWN",
+                records.size() - 4U);
+            uiTextRenderer_.render(renderer_, 650.0F, 458.0F, more.c_str());
+        }
+    }
+
+    const SDL_FRect primary = recoveryTaskPrimaryButton();
+    const bool primaryAvailable =
+        (task.has_value() && task->readyForCollection) ||
+        (!task.has_value() && selectedLostRaidRecordId_.has_value());
+    SDL_SetRenderDrawColor(
+        renderer_, primaryAvailable ? 72 : 50,
+        primaryAvailable ? 104 : 54,
+        primaryAvailable ? 82 : 52, 255);
+    SDL_RenderFillRect(renderer_, &primary);
+    SDL_SetRenderDrawColor(renderer_, 150, 188, 158, 255);
+    SDL_RenderRect(renderer_, &primary);
+    std::string primaryLabel = "SELECT A RECORD";
+    if (task.has_value())
+    {
+        primaryLabel = task->readyForCollection
+            ? "COLLECT RECOVERED ASSETS"
+            : "RECOVERY IN PROGRESS";
+    }
+    else if (selectedLostRaidRecordId_.has_value())
+    {
+        const RecoveryTaskQuote quote = gameSession_.recoveryTaskQuote(
+            *selectedLostRaidRecordId_);
+        primaryLabel = quote.canCommit
+            ? fmt::format(
+                  "START | COST {} | {}H {:02}M | HIGH-TENDENCY {} LOW-TENDENCY {}",
+                  quote.serviceFee,
+                  quote.durationMinutes / kWorldMinutesPerHour,
+                  quote.durationMinutes % kWorldMinutesPerHour,
+                  quote.highTendencyAssets,
+                  quote.lowTendencyAssets)
+            : quote.message;
+    }
+    uiTextRenderer_.render(
+        renderer_, primary.x + 8.0F, primary.y + 13.0F,
+        primaryLabel.c_str());
+
+    if (task.has_value())
+    {
+        const SDL_FRect secondary = recoveryTaskSecondaryButton();
+        SDL_SetRenderDrawColor(renderer_, 88, 54, 48, 255);
+        SDL_RenderFillRect(renderer_, &secondary);
+        SDL_SetRenderDrawColor(renderer_, 190, 112, 92, 255);
+        SDL_RenderRect(renderer_, &secondary);
+        uiTextRenderer_.render(
+            renderer_, secondary.x + 45.0F, secondary.y + 13.0F,
+            "CANCEL | NO REFUND");
     }
 
     const SDL_FRect back = raidLostRecordsButton();
@@ -10729,8 +10903,13 @@ void App::renderLostRaidRecords()
     uiTextRenderer_.render(
         renderer_, back.x + 36.0F, back.y + 13.0F,
         "BACK TO RAID BRIEFING");
-    uiTextRenderer_.render(renderer_, 470.0F, 600.0F,
-                           "RECORDS AGE ONLY WHEN A RAID SETTLES | ESC BACK");
+    uiTextRenderer_.render(renderer_, 390.0F, 532.0F,
+                           "ONE WHOLE RECORD PER TASK | TASK RECORD DOES NOT AGE");
+    if (!uiMessage_.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, 390.0F, 554.0F, uiMessage_.c_str());
+    }
 }
 
 void App::renderBase()

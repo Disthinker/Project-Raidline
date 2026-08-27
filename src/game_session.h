@@ -21,6 +21,7 @@
 #include "gameplay_world.h"
 #include "inventory_domain.h"
 #include "lost_raid_domain.h"
+#include "recovery_task_domain.h"
 #include "profile_combat_domain.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
@@ -172,6 +173,17 @@ public:
     [[nodiscard]] std::vector<LostRaidRecordProjection>
     lostRaidRecordProjections() const;
     [[nodiscard]] LostRaidAgingPreview lostRaidAgingPreview() const noexcept;
+    [[nodiscard]] RecoveryTaskQuote recoveryTaskQuote(
+        const std::string &recordId) const;
+    [[nodiscard]] std::optional<RecoveryTaskProjection>
+    recoveryTaskProjection() const;
+    [[nodiscard]] RecoveryTaskReceipt startRecoveryTask(
+        const std::string &recordId,
+        std::string transactionId);
+    [[nodiscard]] RecoveryTaskReceipt cancelRecoveryTask(
+        std::string transactionId);
+    [[nodiscard]] RecoveryTaskReceipt collectRecoveryTask(
+        std::string transactionId);
 
     [[nodiscard]] bool deployAlpha(
         std::uint64_t seed,

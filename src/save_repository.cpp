@@ -518,19 +518,32 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"type", "base_service"},
                 {"job_id", service->jobId}};
         }
-        else
+        else if (const auto *lost =
+                     std::get_if<LostRaidAssetLocation>(&asset.location))
         {
             if (schemaVersion < 24)
             {
                 throw std::invalid_argument{
                     "legacy schema cannot represent lost Raid assets"};
             }
-            const auto &lost =
-                std::get<LostRaidAssetLocation>(asset.location);
             location = {
                 {"type", "lost_raid"},
-                {"record_id", lost.recordId},
-                {"source_slot", slotName(lost.sourceSlot)}};
+                {"record_id", lost->recordId},
+                {"source_slot", slotName(lost->sourceSlot)}};
+        }
+        else
+        {
+            if (schemaVersion < 25)
+            {
+                throw std::invalid_argument{
+                    "legacy schema cannot represent recovery task assets"};
+            }
+            const auto &task =
+                std::get<RecoveryTaskAssetLocation>(asset.location);
+            location = {
+                {"type", "recovery_task"},
+                {"task_id", task.taskId},
+                {"source_slot", slotName(task.sourceSlot)}};
         }
 
         Json value{
@@ -815,6 +828,36 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"created_world_minute", record.createdWorldMinute},
                 {"subsequent_raid_settlement_count",
                  record.subsequentRaidSettlementCount}});
+        }
+    }
+    if (schemaVersion >= 25)
+    {
+        payload["next_recovery_task_id"] = profile.nextRecoveryTaskId;
+        if (profile.recoveryTask.has_value())
+        {
+            const RecoveryTask &task = *profile.recoveryTask;
+            payload["recovery_task"] = {
+                {"task_id", task.taskId},
+                {"record_id", task.sourceRecord.recordId},
+                {"raid_id", task.sourceRecord.raidId},
+                {"settlement_id", task.sourceRecord.settlementId},
+                {"map_definition_id",
+                 task.sourceRecord.mapDefinitionId.value()},
+                {"difficulty", task.sourceRecord.difficulty},
+                {"outcome", raidOutcomeName(task.sourceRecord.outcome)},
+                {"created_world_minute",
+                 task.sourceRecord.createdWorldMinute},
+                {"subsequent_raid_settlement_count",
+                 task.sourceRecord.subsequentRaidSettlementCount},
+                {"paid_currency", task.paidCurrency},
+                {"started_world_minute", task.startedWorldMinute},
+                {"completion_world_minute", task.completionWorldMinute},
+                {"ready_for_collection", task.readyForCollection},
+                {"recovered_asset_ids", task.recoveredAssetIds}};
+        }
+        else
+        {
+            payload["recovery_task"] = nullptr;
         }
     }
     if (schemaVersion >= 10)
@@ -1303,7 +1346,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 13 && schemaVersion != 14 && schemaVersion != 15 &&
         schemaVersion != 16 && schemaVersion != 17 && schemaVersion != 18 &&
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
-        schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24)
+        schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
+        schemaVersion != 25)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1396,7 +1440,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 23 &&
              (contentVersion == "raid-building-intelligence-content-32" ||
               contentVersion ==
-                  "raid-second-representative-location-content-33"));
+                  "raid-second-representative-location-content-33")) ||
+            (schemaVersion == 24 &&
+             contentVersion == "regional-loss-record-content-34");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1408,7 +1454,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 17 && schemaVersion != 18 &&
              schemaVersion != 19 && schemaVersion != 20 &&
              schemaVersion != 21 && schemaVersion != 22 &&
-             schemaVersion != 23 && schemaVersion != 24) ||
+             schemaVersion != 23 && schemaVersion != 24 &&
+             schemaVersion != 25) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1787,6 +1834,55 @@ SaveLoadResult deserializeProfileEnvelope(
                 }
             }
         }
+        if (schemaVersion >= 25)
+        {
+            profile.nextRecoveryTaskId =
+                payload.at("next_recovery_task_id")
+                    .get<RecoveryTaskId>();
+            if (!payload.at("recovery_task").is_null())
+            {
+                const Json &value = payload.at("recovery_task");
+                const auto outcome = parseRaidOutcome(
+                    value.at("outcome").get<std::string>());
+                if (!outcome.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "recovery task outcome is invalid"};
+                }
+                RecoveryTask task;
+                task.taskId = value.at("task_id").get<RecoveryTaskId>();
+                task.sourceRecord = LostRaidRecord{
+                    value.at("record_id").get<std::string>(),
+                    value.at("raid_id").get<std::string>(),
+                    value.at("settlement_id").get<std::string>(),
+                    MapDefinitionId{value.at("map_definition_id")
+                        .get<std::string>()},
+                    value.at("difficulty").get<std::string>(),
+                    *outcome,
+                    value.at("created_world_minute").get<std::uint64_t>(),
+                    value.at("subsequent_raid_settlement_count")
+                        .get<std::uint32_t>()};
+                task.paidCurrency =
+                    value.at("paid_currency").get<std::uint32_t>();
+                task.startedWorldMinute =
+                    value.at("started_world_minute").get<std::uint64_t>();
+                task.completionWorldMinute =
+                    value.at("completion_world_minute").get<std::uint64_t>();
+                task.readyForCollection =
+                    value.at("ready_for_collection").get<bool>();
+                for (const Json &assetId :
+                     value.at("recovered_asset_ids"))
+                {
+                    if (!task.recoveredAssetIds.insert(
+                            assetId.get<AssetInstanceId>()).second)
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "recovery result contains duplicate assets"};
+                    }
+                }
+                profile.recoveryTask = std::move(task);
+            }
+        }
         if (schemaVersion < 19)
         {
             const auto moveResidentsToProfession =
@@ -2031,6 +2127,20 @@ SaveLoadResult deserializeProfileEnvelope(
                 }
                 asset.location = LostRaidAssetLocation{
                     location.at("record_id").get<std::string>(),
+                    *slot};
+            }
+            else if (schemaVersion >= 25 &&
+                     locationType == "recovery_task")
+            {
+                const auto slot = parseSlot(
+                    location.at("source_slot").get<std::string>());
+                if (!slot.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "recovery task source slot is invalid"};
+                }
+                asset.location = RecoveryTaskAssetLocation{
+                    location.at("task_id").get<RecoveryTaskId>(),
                     *slot};
             }
             else

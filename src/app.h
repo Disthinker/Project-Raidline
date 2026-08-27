@@ -113,6 +113,7 @@ private:
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
     bool lostRaidRecordsOpen_{};
+    std::optional<std::string> selectedLostRaidRecordId_;
     std::size_t selectedRaidMapIndex_{};
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
@@ -203,6 +204,10 @@ private:
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
+    [[nodiscard]] SDL_FRect lostRaidRecordRow(
+        std::size_t index) const noexcept;
+    [[nodiscard]] SDL_FRect recoveryTaskPrimaryButton() const noexcept;
+    [[nodiscard]] SDL_FRect recoveryTaskSecondaryButton() const noexcept;
 
     void processEvents();
     void update(float deltaTime);

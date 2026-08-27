@@ -21,6 +21,7 @@
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
 using BaseServiceJobId = std::uint64_t;
+using RecoveryTaskId = std::uint64_t;
 
 enum class ProfileContainerKind
 {
@@ -106,13 +107,27 @@ struct LostRaidAssetLocation
         const LostRaidAssetLocation &) = default;
 };
 
+// An NPC recovery task exclusively owns the complete lost loadout while it is
+// in progress or waiting for collection. Children retain their parent
+// locations; only the equipment roots move here.
+struct RecoveryTaskAssetLocation
+{
+    RecoveryTaskId taskId{};
+    EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
+
+    friend bool operator==(
+        const RecoveryTaskAssetLocation &,
+        const RecoveryTaskAssetLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
     InstalledMagazineLocation,
     RaidGroundAssetLocation,
     BaseServiceAssetLocation,
-    LostRaidAssetLocation>;
+    LostRaidAssetLocation,
+    RecoveryTaskAssetLocation>;
 
 struct MagazineRoundRecord
 {
@@ -215,6 +230,21 @@ struct LostRaidRecord
     friend bool operator==(
         const LostRaidRecord &,
         const LostRaidRecord &) = default;
+};
+
+struct RecoveryTask
+{
+    RecoveryTaskId taskId{};
+    LostRaidRecord sourceRecord;
+    std::uint32_t paidCurrency{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+    bool readyForCollection{};
+    std::set<AssetInstanceId> recoveredAssetIds;
+
+    friend bool operator==(
+        const RecoveryTask &,
+        const RecoveryTask &) = default;
 };
 
 struct RaidEnemySnapshot
@@ -610,6 +640,8 @@ struct ProfileState
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;
     std::map<std::string, LostRaidRecord> lostRaidRecords;
+    RecoveryTaskId nextRecoveryTaskId{1};
+    std::optional<RecoveryTask> recoveryTask;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
     std::set<RescueDefinitionId> committedRescues;

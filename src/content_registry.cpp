@@ -1658,6 +1658,17 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("map travel definition is invalid");
             }
 
+            const Json &recovery = requiredObject(mapValue, "recovery");
+            definition.recovery = RaidRecoveryDefinition{
+                requiredPositiveUint(recovery, "service_fee"),
+                requiredPositiveUint(recovery, "duration_minutes")};
+            if (definition.recovery.serviceFee > 1000000U ||
+                definition.recovery.durationMinutes >
+                    30U * 24U * 60U)
+            {
+                fail("map recovery definition is invalid");
+            }
+
             definition.backgroundTexturePath =
                 requiredString(mapValue, "background_texture");
             const Json &backgroundTint =

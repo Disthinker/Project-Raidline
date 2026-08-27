@@ -65,7 +65,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-loss-record-content-34");
+        "regional-recovery-task-content-35");
+    EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})
+                  .recovery.serviceFee, 60U);
+    EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})
+                  .recovery.durationMinutes, 360U);
     EXPECT_EQ(registry.baseMorale().recoveryDaysFromLow, 2U);
     EXPECT_EQ(registry.baseMorale().lowManufacturingDurationPercent, 120U);
     EXPECT_EQ(registry.baseMorale().stableManufacturingDurationPercent, 100U);
@@ -866,6 +870,16 @@ TEST(ContentRegistryTest, RejectsFailureRegroupShorterThanReturnTravel)
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidMapRecoveryQuote)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"recovery\": {\"service_fee\": 60, \"duration_minutes\": 360}",
+            "\"recovery\": {\"service_fee\": 0, \"duration_minutes\": 360}")),
+        std::runtime_error);
 }
 
 TEST(ContentRegistryTest, RejectsOutOfRangeMapBackgroundTint)

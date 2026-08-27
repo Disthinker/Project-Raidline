@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-loss-record-content-34",
+  "content_version": "regional-recovery-task-content-35",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -785,6 +785,7 @@
       "route_profile": "BALANCED | OPEN CENTER | LONG FLANKS",
       "operation_briefing": {"difficulty": "LOW", "warning": "OPEN CENTER; EXPECT LONG SIGHTLINES", "transport_price": 24, "resource_price": 36, "enemy_price": 30},
       "travel": {"outbound_minutes": 45, "return_minutes": 45, "failure_regroup_minutes": 90},
+      "recovery": {"service_fee": 60, "duration_minutes": 360},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 255, "green": 255, "blue": 255},
       "world_size": {"x": 1280, "y": 720},
@@ -889,6 +890,7 @@
       "route_profile": "MID-RANGE | CHOKEPOINTS | SAFE OUTER LOOP",
       "operation_briefing": {"difficulty": "MODERATE", "warning": "CHOKEPOINTS CAN DELAY EXTRACTION", "transport_price": 36, "resource_price": 48, "enemy_price": 42},
       "travel": {"outbound_minutes": 90, "return_minutes": 90, "failure_regroup_minutes": 180},
+      "recovery": {"service_fee": 90, "duration_minutes": 540},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 190, "green": 220, "blue": 210},
       "world_size": {"x": 1280, "y": 720},
@@ -970,6 +972,7 @@
       "route_profile": "CLOSE COVER | SPLIT LANES | RISKY CENTER",
       "operation_briefing": {"difficulty": "HIGH", "warning": "DENSE COVER; PRESSURE ESCALATES QUICKLY", "transport_price": 52, "resource_price": 66, "enemy_price": 58},
       "travel": {"outbound_minutes": 150, "return_minutes": 150, "failure_regroup_minutes": 300},
+      "recovery": {"service_fee": 120, "duration_minutes": 720},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 220, "green": 190, "blue": 170},
       "world_size": {"x": 1280, "y": 720},
@@ -1122,6 +1125,7 @@
       ],
       "operation_briefing": {"difficulty": "HIGH", "warning": "COVER LAYOUT CHANGES EACH DEPLOYMENT", "transport_price": 58, "resource_price": 74, "enemy_price": 66},
       "travel": {"outbound_minutes": 210, "return_minutes": 210, "failure_regroup_minutes": 420},
+      "recovery": {"service_fee": 150, "duration_minutes": 900},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 185, "green": 195, "blue": 165},
       "world_size": {"x": 1280, "y": 720},

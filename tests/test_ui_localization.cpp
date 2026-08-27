@@ -366,6 +366,14 @@ TEST(UiLocalizationTest, ChineseTranslatesWorkforceAndFacilityUpgrades) {
 TEST(UiLocalizationTest, ChineseTranslatesLostRaidRecordFlow) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "LOST RAID RECORDS & RECOVERY"),
+            "行动失物记录与寻回");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ONE WHOLE RECORD PER TASK | TASK RECORD DOES NOT AGE"),
+            "每项任务处理整条记录 | 任务中的记录不会老化");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "A LOST RAID RECORD IS AVAILABLE AT THE RAID GATE"),
             "出击入口已有一条可查看的失物记录");
   EXPECT_EQ(localizeUiText(

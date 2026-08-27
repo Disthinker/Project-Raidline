@@ -2017,6 +2017,83 @@ LostRaidAgingPreview GameSession::lostRaidAgingPreview() const noexcept
     return queryLostRaidAging(profile_);
 }
 
+RecoveryTaskQuote GameSession::recoveryTaskQuote(
+    const std::string &recordId) const
+{
+    return queryStartRecoveryTask(
+        profile_, publishedContentRegistry(), recordId);
+}
+
+std::optional<RecoveryTaskProjection>
+GameSession::recoveryTaskProjection() const
+{
+    return queryRecoveryTask(profile_, publishedContentRegistry());
+}
+
+RecoveryTaskReceipt GameSession::startRecoveryTask(
+    const std::string &recordId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeStartRecoveryTask(
+        candidate, publishedContentRegistry(), recordId,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+RecoveryTaskReceipt GameSession::cancelRecoveryTask(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeCancelRecoveryTask(
+        candidate, publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+RecoveryTaskReceipt GameSession::collectRecoveryTask(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeCollectRecoveryTask(
+        candidate, publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)
@@ -2063,8 +2140,10 @@ void GameSession::advanceWorldClockFromSimulation(
                     publishedContentRegistry());
             const ResidentTreatmentAdvanceResult residentTreatment =
                 applyResidentTreatmentThrough(candidate);
+            const RecoveryTaskAdvanceResult recovery =
+                applyRecoveryTaskThrough(candidate);
             if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed)
+                residentTreatment.completed || recovery.becameReady)
             {
                 if (candidate.revision ==
                     std::numeric_limits<ProfileRevision>::max())
@@ -2086,7 +2165,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 return;
             }
             if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed)
+                residentTreatment.completed || recovery.becameReady)
             {
                 if (!commitProfileCandidate(std::move(candidate)))
                 {

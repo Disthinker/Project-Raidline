@@ -217,6 +217,16 @@ struct RaidOperationBriefingDefinition
         const RaidOperationBriefingDefinition &) = default;
 };
 
+struct RaidRecoveryDefinition
+{
+    std::uint32_t serviceFee{};
+    std::uint32_t durationMinutes{};
+
+    friend bool operator==(
+        const RaidRecoveryDefinition &,
+        const RaidRecoveryDefinition &) = default;
+};
+
 enum class RaidRescueSubjectKind
 {
     OrdinaryResidents
@@ -394,6 +404,7 @@ struct MapDefinition
     std::string displayName;
     std::string routeProfile;
     RaidTravelDefinition travel;
+    RaidRecoveryDefinition recovery;
     RaidOperationBriefingDefinition operationBriefing;
     std::string backgroundTexturePath;
     ContentColor backgroundTint;

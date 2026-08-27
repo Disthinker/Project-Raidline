@@ -895,6 +895,67 @@ TEST(PersistentSessionTest,
 }
 
 TEST(PersistentSessionTest,
+     RecoveryTaskPersistsAcrossRestartAndBaseRestMakesItCollectable)
+{
+    SessionSaveDirectory temporary;
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-recovery-task",
+        publishedContentRegistry());
+    const auto rifle = std::find_if(
+        initial.assets.records().begin(),
+        initial.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, initial.assets.records().end());
+    const std::string recordId{"persistent-recovery-settlement"};
+    initial.committedSettlements.insert(recordId);
+    initial.lostRaidRecords.emplace(
+        recordId,
+        LostRaidRecord{
+            recordId,
+            "persistent-recovery-raid",
+            recordId,
+            MapDefinitionId{"map.v0.test"},
+            "LOW",
+            RaidResultOutcome::PlayerDead,
+            initial.worldClock.elapsedWorldMinutes,
+            0U});
+    initial.assets.findMutable(rifle->first)->location =
+        LostRaidAssetLocation{
+            recordId, EquipmentSlotKind::PrimaryWeapon};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const RecoveryTaskReceipt started = session.startRecoveryTask(
+        recordId, "persistent-recovery-start");
+    ASSERT_TRUE(started.succeeded) << started.message;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.recoveryTaskProjection().has_value());
+    EXPECT_FALSE(reopened.recoveryTaskProjection()->readyForCollection);
+    ASSERT_TRUE(reopened.executeBaseRest(
+        6U, "persistent-recovery-rest").succeeded);
+    ASSERT_TRUE(reopened.recoveryTaskProjection().has_value());
+    EXPECT_TRUE(reopened.recoveryTaskProjection()->readyForCollection);
+
+    GameSession ready;
+    ready.configurePersistence(temporary.path());
+    ASSERT_TRUE(ready.continueProfile()) << ready.persistenceMessage();
+    ASSERT_TRUE(ready.recoveryTaskProjection().has_value());
+    const RecoveryTaskReceipt collected = ready.collectRecoveryTask(
+        "persistent-recovery-collect");
+    ASSERT_TRUE(collected.succeeded) << collected.message;
+    EXPECT_FALSE(ready.recoveryTaskProjection().has_value());
+}
+
+TEST(PersistentSessionTest,
      ManufacturingStartCompletionAndRealOutputPersistAcrossProcesses)
 {
     SessionSaveDirectory temporary;
