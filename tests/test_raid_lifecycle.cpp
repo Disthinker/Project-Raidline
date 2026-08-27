@@ -331,7 +331,7 @@ TEST(RaidLifecycleTest,
 }
 
 TEST(RaidLifecycleTest,
-     RestorationRequiresClearingAndSuccessfulExtractionResetsThreat)
+     RestorationOnlyCommitsAfterClearingButEarlyExtractionRemainsValid)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
@@ -365,15 +365,20 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(profile.pendingRaid->outpostRestoration.has_value());
     EXPECT_FALSE(profile.pendingRaid->outpostRestoration->objectiveSecured);
 
-    const std::uint64_t blockedFingerprint =
-        profileStateFingerprint(profile);
-    const RaidSettlementReceipt blocked = settlePendingRaid(
-        profile,
+    ProfileState earlyExtraction = profile;
+    const RaidSettlementReceipt early = settlePendingRaid(
+        earlyExtraction,
         content,
         "restoration-settlement",
         RaidResultOutcome::Extracted);
-    EXPECT_FALSE(blocked.succeeded);
-    EXPECT_EQ(profileStateFingerprint(profile), blockedFingerprint);
+    ASSERT_TRUE(early.succeeded) << early.message;
+    EXPECT_FALSE(earlyExtraction.pendingRaid.has_value());
+    EXPECT_TRUE(earlyExtraction.regionalOperations.outposts.at(outpostId)
+                    .disrupted);
+    EXPECT_EQ(
+        earlyExtraction.regionalOperations.outposts.at(outpostId)
+            .shortcutOperationsSinceRestoration,
+        3U);
 
     profile.pendingRaid->outpostRestoration->objectiveSecured = true;
     const RaidSettlementReceipt settled = settlePendingRaid(
@@ -478,7 +483,7 @@ TEST(RaidLifecycleTest,
 }
 
 TEST(RaidLifecycleTest,
-     BaseSiteClearanceRequiresObjectiveAndUnlocksLinkedOutpostAtomically)
+     BaseSiteClearanceOnlyUnlocksAfterObjectiveButEarlyExtractionIsValid)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
@@ -508,18 +513,20 @@ TEST(RaidLifecycleTest,
         "regional-base-site-clearance-19");
     EXPECT_FALSE(profile.pendingRaid->baseSiteClearance->objectiveSecured);
 
-    const std::uint64_t blockedFingerprint =
-        profileStateFingerprint(profile);
-    const RaidSettlementReceipt blocked = settlePendingRaid(
-        profile,
+    ProfileState earlyExtraction = profile;
+    const RaidSettlementReceipt early = settlePendingRaid(
+        earlyExtraction,
         content,
         "base-site-clearance-settlement",
         RaidResultOutcome::Extracted);
-    EXPECT_FALSE(blocked.succeeded);
-    EXPECT_EQ(profileStateFingerprint(profile), blockedFingerprint);
+    ASSERT_TRUE(early.succeeded) << early.message;
+    EXPECT_FALSE(earlyExtraction.pendingRaid.has_value());
+    EXPECT_FALSE(
+        earlyExtraction.regionalOperations.baseSites.at(siteId).unlocked);
+    EXPECT_FALSE(
+        earlyExtraction.regionalOperations.outposts.at(outpostId).unlocked);
 
     profile.pendingRaid->baseSiteClearance->objectiveSecured = true;
-    EXPECT_NE(profileStateFingerprint(profile), blockedFingerprint);
     const RaidSettlementReceipt settled = settlePendingRaid(
         profile,
         content,

@@ -1866,6 +1866,71 @@ TEST(SaveRepositoryTest,
 }
 
 TEST(SaveRepositoryTest,
+     SchemaV31RoundTripPreservesBaseSiteFeatureStateInProfileAndRaidSnapshot)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-base-site-feature-v31", content);
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    profile.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    profile.regionalOperations.outposts.at(
+        RegionalOutpostDefinitionId{
+            "regional_outpost.ashworks_logistics_yard"}).unlocked = true;
+    profile.regionalOperations.baseSites.at(ashworksSite)
+        .uniqueFeatureRepaired = true;
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v31-raid",
+            "save-v31-settlement",
+            31001U,
+            MapDefinitionId{"map.v0.test"},
+            {}},
+        CommandContext{profile.revision, "save-v31-deploy"})
+                    .succeeded);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    EXPECT_TRUE(loaded.profile->regionalOperations.baseSites.at(ashworksSite)
+                    .uniqueFeatureRepaired);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_TRUE(loaded.profile->pendingRaid->travel
+                    .startingRegionalOperations.baseSites.at(ashworksSite)
+                    .uniqueFeatureRepaired);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV30MigrationUsesPublishedInitialBaseSiteFeatureState)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-base-site-feature-v30", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "regional-main-base-migration-content-39",
+            30U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_TRUE(loaded.profile->regionalOperations.baseSites.at(
+        RegionalBaseSiteDefinitionId{"regional_base_site.greyline_yard"})
+                    .uniqueFeatureRepaired);
+    EXPECT_FALSE(loaded.profile->regionalOperations.baseSites.at(
+        RegionalBaseSiteDefinitionId{
+            "regional_base_site.ashworks_logistics_yard"})
+                    .uniqueFeatureRepaired);
+    EXPECT_TRUE(validateProfileState(*loaded.profile, content).valid);
+}
+
+TEST(SaveRepositoryTest,
      SchemaV29MigrationCreatesGreylineCoreAndInitialFacilityOwnership)
 {
     const ContentRegistry &content = publishedContentRegistry();

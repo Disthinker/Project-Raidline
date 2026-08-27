@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复及基地候选点清剿均已进入主线。当前宏切片交付唯一科技核心、迁徙必需设施、设施储备和原子主基地迁徙；范围合同见 `doc/exec-plans/active/regional-main-base-migration-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿及唯一主基地迁徙均已进入主线。当前宏切片交付地点独特设施的一次性修复、持久状态和 Ashworks 制造时长消费者；范围合同见 `doc/exec-plans/active/regional-base-site-feature-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -143,7 +143,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 轻量哨所建立与驻守 | 建立 Old Service Relay 后派驻/撤回 2 名健康居民；满员自动开放远程固定捷径 | 原子建立/驻守命令、共享劳动力投影、施工预留、Online 路线门控和 Raid 冻结 | PR #104 已以普通 merge commit `dc19745` 进入 main |
 | 哨所中断与清剿恢复 v1 | 捷径行动累积可见威胁；失联后改走直达路线；从区域页完成清剿 Raid 后恢复 | Settlement 去重计数、内容阈值/恢复地图、目标撤离门控、schema v28/content v37、异常回滚 | PR #105 已通过 exact-head CI 与用户正常游玩验收，以普通 merge commit `cf555a1` 进入 main |
 | 区域基地候选点清剿 v1 | 清剿并解锁 Ashworks Logistics Yard；建立、派驻第二前哨后缩短 Industrial/Frontier 路线 | RegionalBaseSiteDefinition/State、强类型清剿快照、原子地点/前哨解锁、schema v29/content v38、最短路径 | PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main |
-| 唯一主基地迁徙 v1 | 建成厨房/净水后把主基地迁往已准备的 Ashworks；旧基地成为离线前哨，工坊可从储备免费重装 | TechnologyCoreState、稳定设施定义/位置、纯查询预览、原子迁徙、队列暂停、schema v30/content v39 | 当前分支实现完成；Windows Debug 全目标与 1180/1180 CTest 通过，Draft PR/exact-head CI 和用户统一验收待完成 |
+| 唯一主基地迁徙 v1 | 建成厨房/净水后把主基地迁往已准备的 Ashworks；旧基地成为离线前哨，工坊可从储备免费重装 | TechnologyCoreState、稳定设施定义/位置、纯查询预览、原子迁徙、队列暂停、schema v30/content v39 | PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main |
+| 区域基地独特设施 v1 | 在已清剿并建立前哨的 Ashworks 预先修复重型物流工坊；迁入后新制造订单缩短，迁出后暂停且回迁自动恢复 | 类型化地点能力、永久修复状态、原子时间事务、active Base 消费者、schema v31/content v40 | 当前分支实现完成；Windows Debug 全目标与 1191/1191 CTest 通过，Draft PR/exact-head CI 和用户统一验收待完成 |
 
 ## 当前 Combat Reliability 缺陷
 

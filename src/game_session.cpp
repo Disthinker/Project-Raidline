@@ -1468,6 +1468,33 @@ BaseMigrationReceipt GameSession::executeBaseMigration(
     return receipt;
 }
 
+BaseSiteFeatureRepairReceipt GameSession::executeBaseSiteFeatureRepair(
+    RegionalBaseSiteDefinitionId siteDefinitionId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    BaseSiteFeatureRepairReceipt receipt = ::executeBaseSiteFeatureRepair(
+        candidate,
+        publishedContentRegistry(),
+        BaseSiteFeatureRepairCommand{std::move(siteDefinitionId)},
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+        return receipt;
+    }
+    worldClockDirty_ = false;
+    worldClockCheckpointElapsedSeconds_ = 0.0F;
+    return receipt;
+}
+
 InstallBaseFacilityReceipt GameSession::executeInstallBaseFacility(
     BaseFacilityDefinitionId definitionId,
     std::string transactionId)
@@ -2658,12 +2685,6 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
         profile_.pendingRaid->baseSiteClearance.has_value();
-    const bool clearingObjectiveSecured =
-        (!restorationActive || outpostRestorationObjectiveSecured_) &&
-        (!siteClearanceActive || baseSiteClearanceObjectiveSecured_);
-    simulationInput.extractionEligible =
-        simulationInput.extractionEligible &&
-        clearingObjectiveSecured;
     world_->update(simulationInput, deltaTime);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)

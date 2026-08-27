@@ -12,6 +12,7 @@
 #include "economy_domain.h"
 #include "base_construction_domain.h"
 #include "base_migration_domain.h"
+#include "base_site_feature_domain.h"
 #include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
@@ -291,6 +292,10 @@ public:
 
     [[nodiscard]] BaseMigrationReceipt executeBaseMigration(
         RegionalBaseSiteDefinitionId targetSiteDefinitionId,
+        std::string transactionId);
+
+    [[nodiscard]] BaseSiteFeatureRepairReceipt executeBaseSiteFeatureRepair(
+        RegionalBaseSiteDefinitionId siteDefinitionId,
         std::string transactionId);
 
     [[nodiscard]] InstallBaseFacilityReceipt executeInstallBaseFacility(

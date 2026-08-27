@@ -432,9 +432,9 @@ TEST(UiLocalizationTest, ChineseTranslatesRegionalOutpostFlow) {
             "出发执行哨所清剿行动");
   const std::string objective = localizeUiText(
       UiLanguage::SimplifiedChinese,
-      "OUTPOST CLEARING | INITIAL HOSTILES REMAINING 4 | EXITS LOCKED");
+      "OUTPOST CLEARING | INITIAL HOSTILES REMAINING 4 | NORMAL EXITS AVAILABLE");
   EXPECT_NE(objective.find("初始敌人剩余 4"), std::string::npos);
-  EXPECT_NE(objective.find("撤离点已锁定"), std::string::npos);
+  EXPECT_NE(objective.find("可使用常规撤离点"), std::string::npos);
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesRegionalBaseSiteClearanceFlow) {
@@ -454,10 +454,10 @@ TEST(UiLocalizationTest, ChineseTranslatesRegionalBaseSiteClearanceFlow) {
             "出发执行基地候选点清剿行动");
   const std::string objective = localizeUiText(
       UiLanguage::SimplifiedChinese,
-      "BASE SITE CLEARING | INITIAL HOSTILES REMAINING 4 | EXITS LOCKED");
+      "BASE SITE CLEARING | INITIAL HOSTILES REMAINING 4 | NORMAL EXITS AVAILABLE");
   EXPECT_NE(objective.find("基地候选点清剿"), std::string::npos);
   EXPECT_NE(objective.find("初始敌人剩余 4"), std::string::npos);
-  EXPECT_NE(objective.find("撤离点已锁定"), std::string::npos);
+  EXPECT_NE(objective.find("可使用常规撤离点"), std::string::npos);
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
                 "regional Base site is already unlocked"),
@@ -487,6 +487,22 @@ TEST(UiLocalizationTest, ChineseTranslatesMainBaseMigrationFlow) {
                 UiLanguage::SimplifiedChinese,
                 "target Base site outpost must be established first"),
             "必须先在目标基地地点建立前哨");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesBaseSiteFeatureRepairFlow) {
+  const std::string repair = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "REPAIR FEATURE | 15 MAT | 6H | TIME 75%");
+  EXPECT_NE(repair.find("修复地点设施"), std::string::npos);
+  EXPECT_NE(repair.find("15 建材"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE"),
+            "基地地点设施已修复 | 仅在此处作为主基地时运行");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "workshop must be installed before repairing the site feature"),
+            "修复地点设施前必须安装普通工坊");
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

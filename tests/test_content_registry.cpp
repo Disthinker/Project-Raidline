@@ -65,13 +65,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-main-base-migration-content-39");
+        "regional-base-site-feature-content-40");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
         RegionalBaseSiteDefinitionId{
             "regional_base_site.ashworks_logistics_yard"});
     EXPECT_EQ(ashworks.tier, RegionalBaseSiteTier::Mature);
+    EXPECT_FALSE(ashworks.uniqueFeatureInitiallyRepaired);
+    EXPECT_EQ(ashworks.uniqueFeatureRepairMaterialUnits, 15U);
+    EXPECT_EQ(ashworks.uniqueFeatureRepairMinutes, 360U);
+    EXPECT_EQ(ashworks.uniqueFeatureManufacturingDurationPercent, 75U);
     EXPECT_FALSE(ashworks.initiallyUnlocked);
     EXPECT_EQ(ashworks.migrationMinutes, 720U);
     EXPECT_EQ(ashworks.coreFacilitySlots, 4U);
@@ -600,6 +604,18 @@ TEST(ContentRegistryTest, RejectsInsufficientMigrationFacilitySlots)
             "\"required_for_migration\": false",
             "\"required_for_migration\": true"))),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsBaseSiteFeatureWithoutRepairConsumer)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"unique_feature_manufacturing_duration_percent\": 75",
+        "\"unique_feature_manufacturing_duration_percent\": 100");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        std::runtime_error);
 }
 
 TEST(ContentRegistryTest, RejectsInvalidBaseManufacturingDefinition)

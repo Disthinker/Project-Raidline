@@ -68,7 +68,7 @@ Persistent Base 已实例化资产、基础装备、货币/救济和引导；Ext
 - 结算中转；
 - 后续正式加入的丢失记录或 NPC 任务位置。
 
-设施、人口、任务、区域节点/路线/基地候选点/哨所和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。基地候选点持有长期解锁事实和内容定义的迁徙容量/耗时；唯一 `TechnologyCoreState` 与 active Base 必须指向同一地点。`BaseConstructionState` 唯一保存已拥有设施的 Installed/Reserve 位置和进入储备的世界分钟，设施储备不占 Stash；重装时按该时间戳整体平移相关队列，使储备期间不损失剩余进度。轻量哨所只持有解锁/建立、聚合驻守、中断状态和自上次恢复以来的捷径行动计数；任何地点均不拥有第二套 Stash、资产、世界时钟或服务队列。清剿与恢复目标作为 Pending Raid 的强类型快照存在，不让 UI 通过地图名猜测任务。
+设施、人口、任务、区域节点/路线/基地候选点/哨所和 NPC 使用各自稳定 ID 与领域状态，不塞入物品 AssetRegistry。基地候选点持有长期解锁与独特设施修复事实，以及内容定义的迁徙容量/耗时和独特设施效果；唯一 `TechnologyCoreState` 与 active Base 必须指向同一地点。`BaseConstructionState` 唯一保存已拥有设施的 Installed/Reserve 位置和进入储备的世界分钟，设施储备不占 Stash；重装时按该时间戳整体平移相关队列，使储备期间不损失剩余进度。轻量哨所只持有解锁/建立、聚合驻守、中断状态和自上次恢复以来的捷径行动计数；任何地点均不拥有第二套 Stash、资产、世界时钟或服务队列。清剿与恢复目标作为 Pending Raid 的强类型快照存在，不让 UI 通过地图名猜测任务。
 
 弹药堆是带数量的资产实例；弹匣实例保存有序 `AmmoDefinitionId` 序列；枪膛保存可选弹药定义。普通弹药单位不为每发分配 AssetInstanceId，但散装数量、弹匣序列、枪膛和击发消耗必须守恒。
 
@@ -104,7 +104,7 @@ SessionProjection snapshot() const;
 - 领域事实由 GameSession 显式交给引导、任务或统计消费者，不支持任意订阅的全局事件总线。
 - Base 持久事务采用“复制候选 ProfileState -> 执行与校验 -> 持久化候选 -> 成功后交换内存状态”。在性能数据证明有问题前，不引入复杂回滚日志。
 - Raid 帧内模拟不每帧保存；Deploy 先原子保存精确的出击前 Profile，再仅在内存建立 pending Raid 和本局生成资产。普通幸存者安全转移完成时，GameSession 同时构造活动候选与不含当前 Raid 瞬态的干净恢复候选，只保存后者；保存成功后才交换内存并确认世界状态。正式终局仍以同一 SettlementId 原子提交；进程关闭或异常退出后加载最近干净恢复档，因此只保留已提交救援，装备、Loot、HP 和 Raid 时间仍回滚。
-- 区域路线在 Deploy 时冻结；一次 Settlement 对同一哨所最多累积一次捷径威胁，即使路线含多个受该哨所门控的边。达到内容阈值只影响结算后的后续查询，不改写本局冻结返程。哨所恢复与基地候选点清剿均由 GameSession 把“初始敌人已清除”投影为统一撤离资格位，Simulation 不读取 Profile，SDL client 不决定长期解锁或恢复成功。主基地迁徙使用独立纯查询与原子命令：推进内容定义时间和日结，冻结设施队列剩余进度，迁移唯一科技核心，切换 active Base，并把新旧地点的主基地/哨所角色互换；Stash、资产和人口不复制。
+- 区域路线在 Deploy 时冻结；一次 Settlement 对同一哨所最多累积一次捷径威胁，即使路线含多个受该哨所门控的边。达到内容阈值只影响结算后的后续查询，不改写本局冻结返程。哨所恢复与基地候选点清剿均由 GameSession 把“初始敌人已清除”投影为统一撤离资格位，Simulation 不读取 Profile，SDL client 不决定长期解锁或恢复成功。主基地迁徙使用独立纯查询与原子命令：推进内容定义时间和日结，冻结设施队列剩余进度，迁移唯一科技核心，切换 active Base，并把新旧地点的主基地/哨所角色互换；Stash、资产和人口不复制。地点独特设施使用另一条纯查询/原子命令，可在当前主基地或已建立前哨的已解锁候选点预先修复；修复事实永久属于地点，实际效果只在该地点是 active Base 时由明确消费者读取。
 - 当前 GridInventory 适配器的整堆拖拽预览与提交共用同一领域规则：空目标保持 transform/transfer，同定义未满堆按上限部分填满；拒绝时源、目标、高水位和 ID 序列不变。Ctrl/Shift 数量拖拽继续使用独立的精确数量原子合同。
 
 ## 动作、模拟、射击与随机
@@ -145,7 +145,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `regional-main-base-migration-content-39`。区域加载验证稳定 ID、候选点清剿地图/关联前哨、迁徙耗时/核心槽、必需设施、跨定义引用、重复双向边、地图目的地唯一性和各主基地直达兼容路线。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `regional-base-site-feature-content-40`。区域加载验证稳定 ID、候选点清剿地图/关联前哨、迁徙耗时/核心槽、必需设施、独特设施修复成本/时长/真实消费者、跨定义引用、重复双向边、地图目的地唯一性和各主基地直达兼容路线。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -154,7 +154,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v30 保存唯一科技核心、设施所有权/位置、基地候选点、哨所、pending Raid 强类型区域任务、路线 ID 与出发前区域/设施快照。v29 及更早档案确定性迁移为 Greyline 核心、既有已建设施和未建厨房/净水，并保留解锁/驻守和旧地图直达时间合同；内容版本兼容仍独立于 Profile schema。
+- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v31 保存唯一科技核心、设施所有权/位置、基地候选点及独特设施修复状态、哨所、pending Raid 强类型区域任务、路线 ID 与出发前区域/设施快照。v30 档案按内容定义的初始值迁移地点独特设施事实；更早档案再沿既有路径确定性迁移 Greyline 核心、既有已建设施和未建厨房/净水，并保留解锁/驻守和旧地图直达时间合同；内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。

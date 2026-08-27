@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/regional-main-base-migration-v1.md`。PR #106 已由用户正常游玩验收并以 `e6721e4` 进入 main；新宏切片连续交付唯一科技核心、厨房/净水与设施储备、原子主基地迁徙、旧基地转前哨及新路线运行三个可回滚步骤，不创建第二套 Stash 或并行基地服务。
+当前实现计划：`active/regional-base-site-feature-v1.md`。PR #107 已由用户正常游玩验收并以 `d035181` 进入 main；新宏切片连续交付地点独特设施状态、一次性原子修复和 Ashworks 制造时长消费者，不创建通用加成框架、第二套 Stash 或并行基地服务。

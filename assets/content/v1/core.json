@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-main-base-migration-content-39",
+  "content_version": "regional-base-site-feature-content-40",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -51,6 +51,10 @@
         "advantage": "Balanced access to the current Raid network.",
         "disadvantage": "No specialized regional advantage.",
         "unique_feature": "Greyline storage core.",
+        "unique_feature_initially_repaired": true,
+        "unique_feature_repair_material_units": 0,
+        "unique_feature_repair_minutes": 0,
+        "unique_feature_manufacturing_duration_percent": 100,
         "migration_minutes": 720,
         "core_facility_slots": 4
       },
@@ -65,6 +69,10 @@
         "advantage": "Industrial access and shorter eastern routes.",
         "disadvantage": "A noisy and exposed perimeter.",
         "unique_feature": "Heavy logistics workshop site.",
+        "unique_feature_initially_repaired": false,
+        "unique_feature_repair_material_units": 15,
+        "unique_feature_repair_minutes": 360,
+        "unique_feature_manufacturing_duration_percent": 75,
         "migration_minutes": 720,
         "core_facility_slots": 4
       }
