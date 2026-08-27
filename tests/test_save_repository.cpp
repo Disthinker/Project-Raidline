@@ -22,6 +22,7 @@
 #include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
 #include "recovery_task_domain.h"
+#include "regional_operations_domain.h"
 #include "save_repository.h"
 #include "self_recovery_domain.h"
 #include "weapon_ammo_domain.h"
@@ -1600,6 +1601,36 @@ TEST(SaveRepositoryTest,
     EXPECT_EQ(
         loaded.profile->regionalOperations,
         profile.regionalOperations);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV27RoundTripPreservesEstablishedOfflineOutpost)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-established-outpost-v27", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "save-establish-outpost"})
+                    .succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    const RegionalOutpostState &loadedOutpost =
+        loaded.profile->regionalOperations.outposts.at(outpostId);
+    EXPECT_TRUE(loadedOutpost.established);
+    EXPECT_FALSE(regionalOutpostOnline(*loaded.profile, content, outpostId));
+    EXPECT_EQ(
+        profileStateFingerprint(*loaded.profile),
+        profileStateFingerprint(profile));
 }
 
 TEST(SaveRepositoryTest,

@@ -1353,6 +1353,7 @@ bool App::handleScreenConfirm()
         transitioned =
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
             !lostRaidRecordsOpen_ &&
+            !regionalOperationsOpen_ &&
             tryDeployFromBase();
         break;
     case GameFlowState::Raid:
@@ -1411,6 +1412,7 @@ bool App::tryDeployFromBase()
     }
     deploymentWarningArmed_ = false;
     lostRaidRecordsOpen_ = false;
+    regionalOperationsOpen_ = false;
     selectedLostRaidRecordId_.reset();
     selectedRaidSelfRecoveryRecordId_.reset();
     selectedRaidIntelligence_ = {};
@@ -1746,6 +1748,16 @@ SDL_FRect App::raidLostRecordsButton() const noexcept
     return SDL_FRect{920.0F, 184.0F, 200.0F, 34.0F};
 }
 
+SDL_FRect App::raidRegionalOperationsButton() const noexcept
+{
+    return SDL_FRect{700.0F, 184.0F, 200.0F, 34.0F};
+}
+
+SDL_FRect App::regionalOutpostActionButton() const noexcept
+{
+    return SDL_FRect{470.0F, 454.0F, 340.0F, 46.0F};
+}
+
 SDL_FRect App::lostRaidRecordRow(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -1824,6 +1836,7 @@ void App::updateBase(float deltaTime)
     {
         gameFlow_.closeBaseFacility();
         lostRaidRecordsOpen_ = false;
+        regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
         inventoryOverlayState_.openContainerInventory();
         uiMessage_.clear();
@@ -1919,12 +1932,46 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::RaidGate)
     {
+        if (regionalOperationsOpen_)
+        {
+            if (contains(raidRegionalOperationsButton(), click.position))
+            {
+                regionalOperationsOpen_ = false;
+                uiMessage_.clear();
+                return;
+            }
+            const auto &outposts =
+                publishedContentRegistry().regionalOperations().outposts;
+            if (!outposts.empty() &&
+                contains(regionalOutpostActionButton(), click.position))
+            {
+                const RegionalOutpostReceipt receipt =
+                    gameSession_.executeEstablishRegionalOutpost(
+                        outposts.front().id,
+                        nextProfileTransactionId("establish-outpost"));
+                uiMessage_ = receipt.succeeded
+                    ? "REGIONAL OUTPOST ESTABLISHED"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+            }
+            return;
+        }
         if (lostRaidRecordsOpen_)
         {
             if (contains(raidLostRecordsButton(), click.position))
             {
                 lostRaidRecordsOpen_ = false;
                 selectedLostRaidRecordId_.reset();
+                uiMessage_.clear();
+                return;
+            }
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+                regionalOperationsOpen_)
+            {
+                regionalOperationsOpen_ = false;
+                pendingBaseClicks_.clear();
                 uiMessage_.clear();
                 return;
             }
@@ -2021,7 +2068,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 selectedRaidSelfRecoveryRecordId_ = selected->recordId;
                 selectedRaidIntelligence_ = {};
                 deploymentWarningArmed_ = false;
-                lostRaidRecordsOpen_ = false;
+            lostRaidRecordsOpen_ = false;
+            regionalOperationsOpen_ = false;
                 uiMessage_ =
                     "RAID SELF-RECOVERY TARGET SET | RESERVE CARRY SPACE";
                 return;
@@ -2048,6 +2096,14 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         {
             lostRaidRecordsOpen_ = true;
             selectedLostRaidRecordId_.reset();
+            deploymentWarningArmed_ = false;
+            uiMessage_.clear();
+            return;
+        }
+        if (contains(raidRegionalOperationsButton(), click.position))
+        {
+            regionalOperationsOpen_ = true;
+            lostRaidRecordsOpen_ = false;
             deploymentWarningArmed_ = false;
             uiMessage_.clear();
             return;
@@ -10632,6 +10688,11 @@ void App::renderBaseWorkshop()
 
 void App::renderBaseDeployment()
 {
+    if (regionalOperationsOpen_)
+    {
+        renderRegionalOperations();
+        return;
+    }
     if (lostRaidRecordsOpen_)
     {
         renderLostRaidRecords();
@@ -10643,6 +10704,15 @@ void App::renderBaseDeployment()
     SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
     SDL_RenderRect(renderer_, &panel);
     uiTextRenderer_.render(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
+
+    const SDL_FRect regionalButton = raidRegionalOperationsButton();
+    SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
+    SDL_RenderFillRect(renderer_, &regionalButton);
+    SDL_SetRenderDrawColor(renderer_, 126, 166, 142, 255);
+    SDL_RenderRect(renderer_, &regionalButton);
+    uiTextRenderer_.render(
+        renderer_, regionalButton.x + 16.0F,
+        regionalButton.y + 10.0F, "REGIONAL ROUTES");
 
     const MapDefinition &map = selectedRaidMap();
     const SDL_FRect previous = raidMapPreviousButton();
@@ -10856,6 +10926,98 @@ void App::renderBaseDeployment()
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     uiTextRenderer_.render(renderer_, 420.0F, 590.0F, "CLICK INTELLIGENCE TO BUY/SELECT | ENTER DEPLOY | ESC CLOSE");
+}
+
+void App::renderRegionalOperations()
+{
+    const SDL_FRect panel{
+        kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
+    SDL_SetRenderDrawColor(renderer_, 18, 25, 22, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 110, 156, 128, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    uiTextRenderer_.render(
+        renderer_, 500.0F, 170.0F,
+        "REGIONAL ROUTES & LIGHT OUTPOSTS");
+    const SDL_FRect back = raidRegionalOperationsButton();
+    SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
+    SDL_RenderFillRect(renderer_, &back);
+    SDL_SetRenderDrawColor(renderer_, 126, 166, 142, 255);
+    SDL_RenderRect(renderer_, &back);
+    uiTextRenderer_.render(
+        renderer_, back.x + 24.0F, back.y + 10.0F,
+        "BACK TO BRIEFING");
+
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState &profile = gameSession_.profile();
+    const RegionNodeDefinition &base = content.regionNode(
+        profile.regionalOperations.activeBaseNodeId);
+    const std::string baseLabel = fmt::format(
+        "ACTIVE MAIN BASE | {}", base.displayName);
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 232.0F, baseLabel.c_str());
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 260.0F,
+        "OUTPOSTS ARE ROUTE NODES, NOT SECOND BASES");
+
+    const auto &definitions = content.regionalOperations().outposts;
+    if (definitions.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 320.0F,
+            "NO REGIONAL OUTPOST LOCATION IS PUBLISHED");
+        return;
+    }
+    const RegionalOutpostDefinition &definition = definitions.front();
+    const RegionalOutpostState &state =
+        profile.regionalOperations.outposts.at(definition.id);
+    const std::string status = fmt::format(
+        "{} | {} | STAFF {}/{} | {}",
+        definition.displayName,
+        state.established ? "ESTABLISHED" :
+            state.unlocked ? "UNLOCKED" : "LOCKED",
+        assignedRegionalOutpostStaff(state),
+        definition.requiredStaff,
+        regionalOutpostOnline(profile, content, definition.id)
+            ? "ONLINE" : "OFFLINE");
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 330.0F, status.c_str());
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 366.0F,
+        "ESTABLISHING CLAIMS THE SITE; IT PROVIDES NO SERVICE OR STORAGE");
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 392.0F,
+        "FIXED SHORTCUTS REQUIRE A FULL HEALTHY GARRISON");
+
+    const RegionalOutpostPlan plan = queryEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{definition.id});
+    const SDL_FRect action = regionalOutpostActionButton();
+    SDL_SetRenderDrawColor(
+        renderer_, plan.canCommit ? 48 : 42,
+        plan.canCommit ? 98 : 52,
+        plan.canCommit ? 74 : 52, 255);
+    SDL_RenderFillRect(renderer_, &action);
+    SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
+    SDL_RenderRect(renderer_, &action);
+    uiTextRenderer_.render(
+        renderer_, action.x + 52.0F, action.y + 16.0F,
+        state.established
+            ? "OUTPOST ESTABLISHED | STAFFING NEXT"
+            : plan.canCommit
+                ? "ESTABLISH LIGHT OUTPOST"
+                : "OUTPOST ESTABLISHMENT BLOCKED");
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 558.0F,
+        "NO MATERIAL OR WORLD TIME COST IN FOUNDATION V1 | ESC BACK");
+    if (!uiMessage_.empty())
+    {
+        SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 590.0F, uiMessage_.c_str());
+    }
 }
 
 void App::renderLostRaidRecords()

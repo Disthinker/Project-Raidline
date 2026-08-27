@@ -113,6 +113,7 @@ private:
     PauseMenuState pauseMenu_;
     bool deploymentWarningArmed_{};
     bool lostRaidRecordsOpen_{};
+    bool regionalOperationsOpen_{};
     std::optional<std::string> selectedLostRaidRecordId_;
     std::optional<std::string> selectedRaidSelfRecoveryRecordId_;
     std::size_t selectedRaidMapIndex_{};
@@ -205,6 +206,8 @@ private:
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
+    [[nodiscard]] SDL_FRect raidRegionalOperationsButton() const noexcept;
+    [[nodiscard]] SDL_FRect regionalOutpostActionButton() const noexcept;
     [[nodiscard]] SDL_FRect lostRaidRecordRow(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect recoveryTaskPrimaryButton() const noexcept;
@@ -267,6 +270,7 @@ private:
     void renderBaseDormitory();
     void renderBaseWorkshop();
     void renderBaseDeployment();
+    void renderRegionalOperations();
     void renderLostRaidRecords();
     void renderProfileGrid(
         ProfileContainerId container,

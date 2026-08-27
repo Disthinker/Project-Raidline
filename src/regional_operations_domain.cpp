@@ -19,6 +19,16 @@ RegionalRoutePlan failure(
     return {false, error, std::move(message), profile.revision,
             std::move(mapDefinitionId)};
 }
+
+RegionalOutpostPlan outpostFailure(
+    const ProfileState &profile,
+    DomainErrorCode error,
+    std::string message,
+    RegionalOutpostDefinitionId definitionId = {})
+{
+    return {false, error, std::move(message), profile.revision,
+            std::move(definitionId)};
+}
 }
 
 std::uint32_t assignedRegionalOutpostStaff(
@@ -201,4 +211,134 @@ RegionalRoutePlan queryRegionalRoute(
             profile, DomainErrorCode::InvalidProfile,
             error.what(), mapDefinitionId);
     }
+}
+
+RegionalOutpostPlan queryEstablishRegionalOutpost(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const EstablishRegionalOutpostCommand &command) noexcept
+{
+    try
+    {
+        const RegionalOutpostDefinition &definition =
+            content.regionalOutpost(command.definitionId);
+        const auto found = profile.regionalOperations.outposts.find(
+            command.definitionId);
+        if (found == profile.regionalOperations.outposts.end())
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::InvalidProfile,
+                "regional outpost state is missing", command.definitionId);
+        }
+        const RegionalOutpostState &state = found->second;
+        if (profile.pendingRaid.has_value())
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional operations are unavailable during a Raid",
+                command.definitionId);
+        }
+        if (!state.unlocked)
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional outpost location is locked",
+                command.definitionId);
+        }
+        if (state.established)
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional outpost is already established",
+                command.definitionId);
+        }
+        const std::size_t established = static_cast<std::size_t>(
+            std::count_if(
+                profile.regionalOperations.outposts.begin(),
+                profile.regionalOperations.outposts.end(),
+                [](const auto &entry)
+                { return entry.second.established; }));
+        if (established >=
+            content.regionalOperations().maximumEstablishedOutposts)
+        {
+            return outpostFailure(
+                profile, DomainErrorCode::Capacity,
+                "regional outpost capacity is full",
+                command.definitionId);
+        }
+        return {true,
+                DomainErrorCode::None,
+                {},
+                profile.revision,
+                command.definitionId,
+                state.unlocked,
+                state.established,
+                regionalOutpostOnline(profile, content, command.definitionId),
+                definition.requiredStaff,
+                assignedRegionalOutpostStaff(state)};
+    }
+    catch (const std::exception &error)
+    {
+        return outpostFailure(
+            profile, DomainErrorCode::IllegalDestination,
+            error.what(), command.definitionId);
+    }
+}
+
+RegionalOutpostReceipt executeEstablishRegionalOutpost(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const EstablishRegionalOutpostCommand &command,
+    const CommandContext &context)
+{
+    if (context.transactionId.empty())
+    {
+        return {false, false, DomainErrorCode::InvalidTransaction,
+                "transaction ID is empty", profile.revision,
+                command.definitionId, false};
+    }
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        const auto found = profile.regionalOperations.outposts.find(
+            command.definitionId);
+        return {true, true, DomainErrorCode::None, {}, profile.revision,
+                command.definitionId,
+                found != profile.regionalOperations.outposts.end() &&
+                    found->second.established};
+    }
+    if (context.expectedRevision != profile.revision)
+    {
+        return {false, false, DomainErrorCode::StaleRevision,
+                "profile revision is stale", profile.revision,
+                command.definitionId, false};
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return {false, false, DomainErrorCode::RevisionOverflow,
+                "profile revision cannot advance", profile.revision,
+                command.definitionId, false};
+    }
+    const RegionalOutpostPlan plan = queryEstablishRegionalOutpost(
+        profile, content, command);
+    if (!plan.canCommit)
+    {
+        return {false, false, plan.error, plan.message, profile.revision,
+                command.definitionId, false};
+    }
+    ProfileState candidate = profile;
+    candidate.regionalOperations.outposts.at(command.definitionId)
+        .established = true;
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                validation.message, profile.revision,
+                command.definitionId, false};
+    }
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision,
+            command.definitionId, true};
 }
