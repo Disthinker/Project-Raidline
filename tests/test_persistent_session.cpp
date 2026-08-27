@@ -1127,6 +1127,69 @@ TEST(PersistentSessionTest, MainBaseMigrationSaveFailureIsZeroCommit)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest,
+     BaseSiteFeatureRepairPersistsAndSaveFailureIsZeroCommit)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile(
+        "persistent-base-site-feature", content);
+    const RegionalBaseSiteDefinitionId ashworksSite{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId ashworksOutpost{
+        "regional_outpost.ashworks_logistics_yard"};
+    initial.regionalOperations.baseSites.at(ashworksSite).unlocked = true;
+    initial.regionalOperations.outposts.at(ashworksOutpost).unlocked = true;
+    initial.regionalOperations.activeBaseNodeId =
+        RegionNodeDefinitionId{"region_node.base.ashworks_logistics_yard"};
+    initial.regionalOperations.technologyCore.baseSiteDefinitionId =
+        ashworksSite;
+    initial.baseConstruction.materialUnits = 20U;
+    ASSERT_TRUE(validateProfileState(initial, content).valid);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);
+
+    GameSession repaired;
+    repaired.configurePersistence(temporary.path());
+    ASSERT_TRUE(repaired.continueProfile()) << repaired.persistenceMessage();
+    const BaseSiteFeatureRepairReceipt receipt =
+        repaired.executeBaseSiteFeatureRepair(
+            ashworksSite, "persistent-repair-site-feature");
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(repaired.profile().baseConstruction.materialUnits, 5U);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(reopened.profile().regionalOperations.baseSites.at(
+        ashworksSite).uniqueFeatureRepaired);
+    EXPECT_EQ(reopened.profile().baseConstruction.materialUnits, 5U);
+
+    SessionSaveDirectory failedTemporary;
+    SaveRepository failedRepository{failedTemporary.path()};
+    ASSERT_TRUE(failedRepository.save(initial, content.contentVersion())
+                    .succeeded);
+    GameSession failedSession;
+    failedSession.configurePersistence(failedTemporary.path());
+    ASSERT_TRUE(failedSession.continueProfile())
+        << failedSession.persistenceMessage();
+    const std::uint64_t before =
+        profileStateFingerprint(failedSession.profile());
+    const std::filesystem::path invalidDirectory =
+        failedTemporary.path() / "feature-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    failedSession.configurePersistence(invalidDirectory);
+
+    const BaseSiteFeatureRepairReceipt failed =
+        failedSession.executeBaseSiteFeatureRepair(
+            ashworksSite, "site-feature-save-must-not-commit");
+    EXPECT_FALSE(failed.succeeded);
+    EXPECT_EQ(profileStateFingerprint(failedSession.profile()), before);
+}
+
 TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
 {
     SessionSaveDirectory temporary;

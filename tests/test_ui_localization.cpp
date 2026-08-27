@@ -489,6 +489,22 @@ TEST(UiLocalizationTest, ChineseTranslatesMainBaseMigrationFlow) {
             "必须先在目标基地地点建立前哨");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesBaseSiteFeatureRepairFlow) {
+  const std::string repair = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "REPAIR FEATURE | 15 MAT | 6H | TIME 75%");
+  EXPECT_NE(repair.find("修复地点设施"), std::string::npos);
+  EXPECT_NE(repair.find("15 建材"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE"),
+            "基地地点设施已修复 | 仅在此处作为主基地时运行");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "workshop must be installed before repairing the site feature"),
+            "修复地点设施前必须安装普通工坊");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

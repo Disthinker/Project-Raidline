@@ -1781,6 +1781,11 @@ SDL_FRect App::regionalFacilityReserveButton() const noexcept
     return SDL_FRect{300.0F, 405.0F, 420.0F, 32.0F};
 }
 
+SDL_FRect App::regionalBaseSiteFeatureButton() const noexcept
+{
+    return SDL_FRect{740.0F, 405.0F, 375.0F, 32.0F};
+}
+
 SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -2069,6 +2074,64 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 gameAudio_.play(receipt.succeeded
                     ? SoundEventId::UiConfirm
                     : SoundEventId::UiDeny);
+                return;
+            }
+            const auto activeSite = std::find_if(
+                baseSites.begin(), baseSites.end(),
+                [&](const RegionalBaseSiteDefinition &site)
+                {
+                    return site.nodeId == gameSession_.profile()
+                        .regionalOperations.activeBaseNodeId;
+                });
+            const RegionalBaseSiteDefinition *featureSite =
+                activeSite != baseSites.end() ? &*activeSite : nullptr;
+            if (featureSite != nullptr &&
+                gameSession_.profile().regionalOperations.baseSites.at(
+                    featureSite->id).uniqueFeatureRepaired)
+            {
+                const auto stagedSite = std::find_if(
+                    baseSites.begin(), baseSites.end(),
+                    [&](const RegionalBaseSiteDefinition &site)
+                    {
+                        const RegionalBaseSiteState &state =
+                            gameSession_.profile().regionalOperations
+                                .baseSites.at(site.id);
+                        return site.id != featureSite->id &&
+                            state.unlocked &&
+                            !state.uniqueFeatureRepaired;
+                    });
+                if (stagedSite != baseSites.end())
+                {
+                    featureSite = &*stagedSite;
+                }
+            }
+            if (featureSite != nullptr &&
+                contains(regionalBaseSiteFeatureButton(), click.position))
+            {
+                const BaseSiteFeatureRepairPlan plan =
+                    queryBaseSiteFeatureRepair(
+                        gameSession_.profile(),
+                        publishedContentRegistry(),
+                        BaseSiteFeatureRepairCommand{featureSite->id});
+                if (plan.canCommit)
+                {
+                    const BaseSiteFeatureRepairReceipt receipt =
+                        gameSession_.executeBaseSiteFeatureRepair(
+                            featureSite->id,
+                            nextProfileTransactionId(
+                                "repair-base-site-feature"));
+                    uiMessage_ = receipt.succeeded
+                        ? "BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE"
+                        : receipt.message;
+                    gameAudio_.play(receipt.succeeded
+                        ? SoundEventId::UiConfirm
+                        : SoundEventId::UiDeny);
+                }
+                else
+                {
+                    uiMessage_ = plan.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                }
                 return;
             }
             for (std::size_t index{}; index < outposts.size(); ++index)
@@ -10768,7 +10831,7 @@ void App::renderBaseWorkshop()
         recipe.durationMinutes,
         profile.baseMorale.tier,
         publishedContentRegistry().baseMorale());
-    const std::uint32_t adjustedDuration = workforce.workshopWorker.has_value()
+    const std::uint32_t staffedDuration = workforce.workshopWorker.has_value()
         ? applyBaseFacilityTaskDuration(
             moraleDuration,
             BaseFacilityStaffingKind::Workshop,
@@ -10776,12 +10839,20 @@ void App::renderBaseWorkshop()
             profile.baseConstruction.workshopLevel,
             publishedContentRegistry().baseWorkforce())
         : 0U;
+    const std::uint32_t adjustedDuration = staffedDuration == 0U
+        ? 0U
+        : applyActiveBaseSiteManufacturingDuration(
+            staffedDuration, profile, publishedContentRegistry());
+    const std::uint32_t sitePercent =
+        activeBaseSiteManufacturingDurationPercent(
+            profile, publishedContentRegistry());
     const std::string output = fmt::format(
-        "OUTPUT {} x{} | {} WORKER | BASE {}H | CURRENT {}H {:02}M",
+        "OUTPUT {} x{} | {} WORKER | BASE {}H | SITE {}% | CURRENT {}H {:02}M",
         outputDefinition.displayName,
         recipe.outputQuantity,
         recipe.workerCount,
         recipe.durationMinutes / kWorldMinutesPerHour,
+        sitePercent,
         adjustedDuration / kWorldMinutesPerHour,
         adjustedDuration % kWorldMinutesPerHour);
     uiTextRenderer_.render(renderer_, 170.0F, 338.0F, output.c_str());
@@ -11326,6 +11397,57 @@ void App::renderRegionalOperations()
         workshopInReserve
             ? "FACILITY RESERVE | WORKSHOP | INSTALL FREE"
             : "FACILITY RESERVE | EMPTY");
+
+    const RegionalBaseSiteDefinition *featureSite =
+        activeSite != baseSites.end() ? &*activeSite : nullptr;
+    if (featureSite != nullptr &&
+        profile.regionalOperations.baseSites.at(featureSite->id)
+            .uniqueFeatureRepaired &&
+        candidate != baseSites.end())
+    {
+        const RegionalBaseSiteState &candidateState =
+            profile.regionalOperations.baseSites.at(candidate->id);
+        if (candidateState.unlocked &&
+            !candidateState.uniqueFeatureRepaired)
+        {
+            featureSite = &*candidate;
+        }
+    }
+    if (featureSite != nullptr)
+    {
+        const RegionalBaseSiteState &state =
+            profile.regionalOperations.baseSites.at(featureSite->id);
+        const BaseSiteFeatureRepairPlan repair =
+            queryBaseSiteFeatureRepair(
+                profile, content,
+                BaseSiteFeatureRepairCommand{featureSite->id});
+        const SDL_FRect featureButton = regionalBaseSiteFeatureButton();
+        SDL_SetRenderDrawColor(
+            renderer_,
+            state.uniqueFeatureRepaired ? 54 : repair.canCommit ? 66 : 42,
+            state.uniqueFeatureRepaired ? 90 : repair.canCommit ? 104 : 52,
+            state.uniqueFeatureRepaired ? 72 : repair.canCommit ? 78 : 52,
+            255);
+        SDL_RenderFillRect(renderer_, &featureButton);
+        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
+        SDL_RenderRect(renderer_, &featureButton);
+        const std::string featureLabel = state.uniqueFeatureRepaired
+            ? featureSite->uniqueFeatureManufacturingDurationPercent < 100U
+                ? fmt::format(
+                    "FEATURE ONLINE | TIME {}%",
+                    featureSite->uniqueFeatureManufacturingDurationPercent)
+                : "SITE FEATURE ONLINE | BASELINE EFFECT"
+            : repair.canCommit
+                ? fmt::format(
+                    "REPAIR FEATURE | {} MAT | {}H | TIME {}%",
+                    repair.materialUnits,
+                    repair.durationMinutes / kWorldMinutesPerHour,
+                    repair.manufacturingDurationPercent)
+                : "SITE FEATURE REPAIR BLOCKED";
+        uiTextRenderer_.render(
+            renderer_, featureButton.x + 12.0F,
+            featureButton.y + 8.0F, featureLabel.c_str());
+    }
 
     const auto &definitions = content.regionalOperations().outposts;
     for (std::size_t index{}; index < definitions.size(); ++index)
