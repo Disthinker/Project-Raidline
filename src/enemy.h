@@ -73,6 +73,10 @@ public:
     EnemyAttackPhase attackPhase() const noexcept;
 
     [[nodiscard]]
+    bool hasAttackOpportunity(
+        Vec2 targetPosition) const noexcept;
+
+    [[nodiscard]]
     std::optional<EnemyAttackType> attackType() const noexcept;
 
     [[nodiscard]]

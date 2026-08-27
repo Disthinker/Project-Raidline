@@ -295,7 +295,7 @@ TEST(GameplayWorldTest, InitialEnemiesState)
     }
 }
 
-TEST(GameplayWorldTest, DefaultSquadAcquiresPlayerAndAssignsOneEngager)
+TEST(GameplayWorldTest, DefaultSquadAcquiresPlayerAndAppliesPursuitPressure)
 {
     GameplayWorld world;
 
@@ -303,6 +303,7 @@ TEST(GameplayWorldTest, DefaultSquadAcquiresPlayerAndAssignsOneEngager)
     world.update(GameplayInput{}, 1.0F / 120.0F);
 
     std::size_t engageCount{};
+    std::size_t pressureCount{};
     for (const Enemy &enemy : world.enemies())
     {
         EXPECT_EQ(
@@ -312,9 +313,14 @@ TEST(GameplayWorldTest, DefaultSquadAcquiresPlayerAndAssignsOneEngager)
         {
             ++engageCount;
         }
+        else if (enemy.tacticalRole() == EnemyTacticalRole::Pressure)
+        {
+            ++pressureCount;
+        }
     }
 
-    EXPECT_EQ(engageCount, 1U);
+    EXPECT_EQ(engageCount, 0U);
+    EXPECT_EQ(pressureCount, 3U);
 }
 
 TEST(GameplayWorldTest, CloseSquadStartsAtMostOneAttackPerSubstep)
@@ -339,6 +345,71 @@ TEST(GameplayWorldTest, CloseSquadStartsAtMostOneAttackPerSubstep)
     }
 
     EXPECT_EQ(activeAttackCount, 1U);
+}
+
+TEST(GameplayWorldTest,
+     ActiveAttackDoesNotCancelOtherAlertedEnemiesPursuitPressure)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{670.0F, 360.0F}},
+            EnemySpawn{Vec2{535.0F, 360.0F}},
+            EnemySpawn{Vec2{640.0F, 490.0F}}},
+        100};
+
+    world.update(GameplayInput{}, 0.0F);
+    world.update(GameplayInput{}, 1.0F / 120.0F);
+
+    ASSERT_EQ(world.enemies().size(), 3U);
+    ASSERT_NE(world.enemies()[0].attackPhase(), EnemyAttackPhase::Idle);
+    const Player &player = world.player();
+    const Vec2 playerCenter{
+        player.position().x + player.size() * 0.5F,
+        player.position().y + player.size() * 0.5F};
+    const auto distanceToPlayer = [&playerCenter](const Enemy &enemy)
+    {
+        const Vec2 center{
+            enemy.position().x + enemy.size().x * 0.5F,
+            enemy.position().y + enemy.size().y * 0.5F};
+        return std::hypot(
+            center.x - playerCenter.x,
+            center.y - playerCenter.y);
+    };
+    const float secondBefore = distanceToPlayer(world.enemies()[1]);
+    const float thirdBefore = distanceToPlayer(world.enemies()[2]);
+
+    for (int frame = 0; frame < 48; ++frame)
+    {
+        world.update(GameplayInput{}, 1.0F / 120.0F);
+    }
+
+    EXPECT_NE(world.enemies()[0].attackPhase(), EnemyAttackPhase::Idle);
+    EXPECT_EQ(
+        world.enemies()[1].tacticalRole(),
+        EnemyTacticalRole::Pressure);
+    EXPECT_EQ(
+        world.enemies()[2].tacticalRole(),
+        EnemyTacticalRole::Pressure);
+    EXPECT_LT(distanceToPlayer(world.enemies()[1]), secondBefore - 1.0F);
+    EXPECT_LT(distanceToPlayer(world.enemies()[2]), thirdBefore - 1.0F);
+
+    std::size_t activeAttackCount{};
+    for (const Enemy &enemy : world.enemies())
+    {
+        activeAttackCount +=
+            enemy.attackPhase() != EnemyAttackPhase::Idle ? 1U : 0U;
+    }
+    EXPECT_EQ(activeAttackCount, 1U);
+
+    bool teammateStartedAttack{};
+    for (int frame = 0; frame < 360 && !teammateStartedAttack; ++frame)
+    {
+        world.update(GameplayInput{}, 1.0F / 120.0F);
+        teammateStartedAttack =
+            world.enemies()[1].attackPhase() != EnemyAttackPhase::Idle ||
+            world.enemies()[2].attackPhase() != EnemyAttackPhase::Idle;
+    }
+    EXPECT_TRUE(teammateStartedAttack);
 }
 
 TEST(GameplayWorldTest, OverlappingSquadUsesSnapshotSeparation)
@@ -3680,7 +3751,13 @@ TEST(GameplayWorldRaidTest, InteriorCoverBlocksVisualAcquisition)
 
 TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoesNotFire)
 {
-    GameplayWorld world;
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{
+                Vec2{600.0F, 100.0F},
+                Vec2{50.0F, 50.0F},
+                3}},
+        3};
 
     ASSERT_TRUE(advanceUntilFirstScratchHits(world));
     ASSERT_EQ(world.player().health(), 2);
@@ -3703,7 +3780,13 @@ TEST(GameplayWorldRaidTest, AttackWindowsReplacePassiveContactAndLethalFrameDoes
 
 TEST(GameplayWorldRaidTest, SurvivingBiteSuppressesMovementAndFire)
 {
-    GameplayWorld world{3, 5};
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{
+                Vec2{600.0F, 100.0F},
+                Vec2{50.0F, 50.0F},
+                3}},
+        5};
 
     ASSERT_TRUE(advanceUntilFirstScratchHits(world));
     ASSERT_EQ(world.player().health(), 4);

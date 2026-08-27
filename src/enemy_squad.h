@@ -19,6 +19,7 @@ struct EnemySquadMemberSnapshot
     bool alive{};
     EnemyAwarenessState awareness{EnemyAwarenessState::Unaware};
     EnemyAttackPhase attackPhase{EnemyAttackPhase::Idle};
+    bool hasAttackOpportunity{};
 };
 
 struct EnemySquadDecisionMetrics

@@ -103,6 +103,14 @@ EnemySquadCoordinator::decide(
     {
         directives[index].supportSide =
             index % 2U == 0U ? 1.0F : -1.0F;
+        if (members[index].alive &&
+            members[index].awareness == EnemyAwarenessState::Alerted)
+        {
+            // Pursuit pressure is independent from the single permission to
+            // start an attack. Alerted teammates must keep closing while one
+            // member owns the active attack token.
+            directives[index].role = EnemyTacticalRole::Pressure;
+        }
     }
 
     std::optional<std::size_t> engageIndex;
@@ -132,6 +140,7 @@ EnemySquadCoordinator::decide(
             if (!member.alive ||
                 member.awareness != EnemyAwarenessState::Alerted ||
                 member.attackPhase != EnemyAttackPhase::Idle ||
+                !member.hasAttackOpportunity ||
                 !isFinite(member.position))
             {
                 continue;

@@ -1083,7 +1083,8 @@ void GameplayWorld::update(
                     enemyCenter(enemy),
                     !enemy.isDead(),
                     enemy.awarenessState(),
-                    enemy.attackPhase()});
+                    enemy.attackPhase(),
+                    enemy.hasAttackOpportunity(playerPosition)});
         }
 
         EnemySquadDecisionMetrics squadMetrics;

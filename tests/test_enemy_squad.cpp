@@ -10,13 +10,15 @@ namespace
 {
     EnemySquadMemberSnapshot alertedMember(
         Vec2 position,
-        EnemyAttackPhase phase = EnemyAttackPhase::Idle)
+        EnemyAttackPhase phase = EnemyAttackPhase::Idle,
+        bool hasAttackOpportunity = true)
     {
         return EnemySquadMemberSnapshot{
             position,
             true,
             EnemyAwarenessState::Alerted,
-            phase};
+            phase,
+            hasAttackOpportunity};
     }
 }
 
@@ -41,9 +43,11 @@ TEST(EnemySquadCoordinatorTest, NearestAlertedIdleMemberGetsAttackPermission)
 
     ASSERT_EQ(directives.size(), 3U);
     EXPECT_FALSE(directives[0].canStartAttack);
+    EXPECT_EQ(directives[0].role, EnemyTacticalRole::Pressure);
     EXPECT_TRUE(directives[1].canStartAttack);
     EXPECT_EQ(directives[1].role, EnemyTacticalRole::Engage);
     EXPECT_FALSE(directives[2].canStartAttack);
+    EXPECT_EQ(directives[2].role, EnemyTacticalRole::Pressure);
 }
 
 TEST(EnemySquadCoordinatorTest, EqualDistanceTieUsesStableLowestIndex)
@@ -60,6 +64,25 @@ TEST(EnemySquadCoordinatorTest, EqualDistanceTieUsesStableLowestIndex)
     EXPECT_FALSE(directives[1].canStartAttack);
 }
 
+TEST(EnemySquadCoordinatorTest, CoolingNearestMemberYieldsPermissionToReadyTeammate)
+{
+    const EnemySquadCoordinator coordinator;
+    const std::vector<EnemySquadMemberSnapshot> members{
+        alertedMember(
+            Vec2{40.0F, 0.0F},
+            EnemyAttackPhase::Idle,
+            false),
+        alertedMember(Vec2{70.0F, 0.0F})};
+
+    const auto directives =
+        coordinator.decide(members, Vec2{});
+
+    EXPECT_EQ(directives[0].role, EnemyTacticalRole::Pressure);
+    EXPECT_FALSE(directives[0].canStartAttack);
+    EXPECT_EQ(directives[1].role, EnemyTacticalRole::Engage);
+    EXPECT_TRUE(directives[1].canStartAttack);
+}
+
 TEST(EnemySquadCoordinatorTest, ExistingAttackKeepsTokenWithoutRestartPermission)
 {
     const EnemySquadCoordinator coordinator;
@@ -73,6 +96,7 @@ TEST(EnemySquadCoordinatorTest, ExistingAttackKeepsTokenWithoutRestartPermission
         coordinator.decide(members, Vec2{});
 
     EXPECT_FALSE(directives[0].canStartAttack);
+    EXPECT_EQ(directives[0].role, EnemyTacticalRole::Pressure);
     EXPECT_EQ(directives[1].role, EnemyTacticalRole::Engage);
     EXPECT_FALSE(directives[1].canStartAttack);
 }
