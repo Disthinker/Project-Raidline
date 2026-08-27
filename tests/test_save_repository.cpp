@@ -21,7 +21,9 @@
 #include "raid_lifecycle.h"
 #include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
+#include "recovery_task_domain.h"
 #include "save_repository.h"
+#include "self_recovery_domain.h"
 #include "weapon_ammo_domain.h"
 
 namespace
@@ -1545,6 +1547,172 @@ TEST(SaveRepositoryTest, SchemaV23MigratesToEmptyLostRecordState)
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_TRUE(loaded.profile->lostRaidRecords.empty());
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV25RoundTripsRecoveryTaskOwnershipFrozenResultAndHighWater)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-recovery-task-v25", content);
+    const auto rifle = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, profile.assets.records().end());
+    const AssetInstanceId rifleId = rifle->first;
+    const std::string recordId{"save-recovery-settlement"};
+    profile.committedSettlements.insert(recordId);
+    profile.lostRaidRecords.emplace(
+        recordId,
+        LostRaidRecord{
+            recordId,
+            "save-recovery-raid",
+            recordId,
+            MapDefinitionId{"map.raid.riverside"},
+            "MODERATE",
+            RaidResultOutcome::ActiveQuit,
+            profile.worldClock.elapsedWorldMinutes,
+            1U});
+    profile.assets.findMutable(rifleId)->location =
+        LostRaidAssetLocation{
+            recordId, EquipmentSlotKind::PrimaryWeapon};
+    ASSERT_TRUE(executeStartRecoveryTask(
+        profile,
+        content,
+        recordId,
+        CommandContext{profile.revision, "save-recovery-start"})
+                    .succeeded);
+    ASSERT_TRUE(profile.recoveryTask.has_value());
+    profile.worldClock.elapsedWorldMinutes =
+        profile.recoveryTask->completionWorldMinute;
+    ASSERT_TRUE(applyRecoveryTaskThrough(profile).becameReady);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->recoveryTask.has_value());
+    EXPECT_TRUE(loaded.profile->recoveryTask->readyForCollection);
+    EXPECT_EQ(
+        loaded.profile->recoveryTask->recoveredAssetIds,
+        profile.recoveryTask->recoveredAssetIds);
+    EXPECT_EQ(
+        loaded.profile->nextRecoveryTaskId,
+        profile.nextRecoveryTaskId);
+    EXPECT_TRUE(std::holds_alternative<RecoveryTaskAssetLocation>(
+        loaded.profile->assets.find(rifleId)->location));
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV24PreviousContentMigratesToEmptyRecoveryTaskState)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-recovery-v24-migration", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, "regional-loss-record-content-34", 24),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_FALSE(loaded.profile->recoveryTask.has_value());
+    EXPECT_EQ(loaded.profile->nextRecoveryTaskId, 1U);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV26RoundTripsUnopenedAndOpenedRaidSelfRecovery)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-self-recovery-v26", content);
+    const auto rifle = std::find_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [](const auto &entry)
+        { return entry.second.definitionId == alpha_content::rifle; });
+    ASSERT_NE(rifle, profile.assets.records().end());
+    const std::string recordId{"save-self-recovery-record"};
+    profile.committedSettlements.insert(recordId);
+    profile.lostRaidRecords.emplace(
+        recordId,
+        LostRaidRecord{
+            recordId,
+            "save-self-recovery-source-raid",
+            recordId,
+            MapDefinitionId{"map.v0.test"},
+            "LOW",
+            RaidResultOutcome::PlayerDead,
+            profile.worldClock.elapsedWorldMinutes,
+            1U});
+    profile.assets.findMutable(rifle->first)->location =
+        LostRaidAssetLocation{
+            recordId, EquipmentSlotKind::PrimaryWeapon};
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-self-recovery-raid",
+            "save-self-recovery-settlement",
+            8661U,
+            MapDefinitionId{"map.v0.test"},
+            {},
+            recordId},
+        CommandContext{profile.revision, "save-self-recovery-deploy"})
+                    .succeeded);
+    ASSERT_TRUE(profile.pendingRaid->selfRecovery.has_value());
+    const std::uint64_t unopenedFingerprint =
+        profileStateFingerprint(profile);
+
+    SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), unopenedFingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid->selfRecovery.has_value());
+    EXPECT_FALSE(loaded.profile->pendingRaid->selfRecovery->opened);
+
+    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+        profile,
+        content,
+        CommandContext{profile.revision, "save-self-recovery-open"})
+                    .succeeded);
+    const std::uint64_t openedFingerprint = profileStateFingerprint(profile);
+    loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), openedFingerprint);
+    EXPECT_TRUE(loaded.profile->pendingRaid->selfRecovery->opened);
+    EXPECT_FALSE(loaded.profile->lostRaidRecords.contains(recordId));
+}
+
+TEST(SaveRepositoryTest, SchemaV25MigratesWithoutRaidSelfRecoveryTarget)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-self-recovery-v25-migration", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v25-raid", "save-v25-settlement", 9331U,
+            MapDefinitionId{"map.v0.test"}, {}, std::nullopt},
+        CommandContext{profile.revision, "save-v25-deploy"}).succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion(), 25),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_FALSE(loaded.profile->pendingRaid->selfRecovery.has_value());
 }
 
 TEST(SaveRepositoryTest, SchemaV24RejectsUnknownLostRecordMap)

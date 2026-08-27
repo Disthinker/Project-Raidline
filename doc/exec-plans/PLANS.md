@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/regional-loss-records-v1.md`。PR #102 的多敌人追击、最多 10 名并发攻击与 0.25 秒受伤保护已接受并进入 main；PR #101 的 Regional Loss Records 已通过用户正常游玩验收，当前只在最新主线复验其失物所有权、结算、存档和界面合同。旧活动文档保留交付证据。
+当前实现计划：`active/regional-self-recovery-v1.md`。PR #103 以两个可独立回滚提交交付同一 `Regional Operations — Loss & Recovery` 宏切片：先加入单槽、整单、耗时且幂等的 NPC 寻回任务，再加入必须回到原地图、打开失物缓存、携带并成功撤离的玩家自行寻回。用户统一验收前不合并；旧活动文档保留交付证据。

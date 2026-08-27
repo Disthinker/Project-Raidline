@@ -57,7 +57,8 @@ bool GameFlow::continueGame()
 
 bool GameFlow::deploy(
     MapDefinitionId mapDefinitionId,
-    RaidIntelligenceLoadout intelligence) noexcept
+    RaidIntelligenceLoadout intelligence,
+    std::optional<std::string> selfRecoveryRecordId) noexcept
 {
     if (state_ != GameFlowState::Base)
     {
@@ -75,7 +76,8 @@ bool GameFlow::deploy(
         if (!gameSession_.deployAlpha(
                 seed,
                 std::move(mapDefinitionId),
-                intelligence))
+                intelligence,
+                std::move(selfRecoveryRecordId)))
         {
             return false;
         }

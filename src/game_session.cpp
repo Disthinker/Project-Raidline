@@ -296,7 +296,8 @@ bool GameSession::continueProfile()
 bool GameSession::deployAlpha(
     std::uint64_t seed,
     MapDefinitionId mapDefinitionId,
-    RaidIntelligenceLoadout intelligence)
+    RaidIntelligenceLoadout intelligence,
+    std::optional<std::string> selfRecoveryRecordId)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
         mapDefinitionId.value().empty())
@@ -318,7 +319,8 @@ bool GameSession::deployAlpha(
             settlementId,
             seed,
             std::move(mapDefinitionId),
-            intelligence},
+            intelligence,
+            std::move(selfRecoveryRecordId)},
         CommandContext{
             profile_.revision,
             "deploy:" + raidId});
@@ -480,6 +482,7 @@ bool GameSession::deployAlpha(
     woundRandomSequence_ = 0;
     weaponFaultSequence_ = 0;
     raidElapsedSeconds_ = 0.0F;
+    selfRecoveryInteractionSeconds_ = 0.0F;
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
@@ -2017,6 +2020,83 @@ LostRaidAgingPreview GameSession::lostRaidAgingPreview() const noexcept
     return queryLostRaidAging(profile_);
 }
 
+RecoveryTaskQuote GameSession::recoveryTaskQuote(
+    const std::string &recordId) const
+{
+    return queryStartRecoveryTask(
+        profile_, publishedContentRegistry(), recordId);
+}
+
+std::optional<RecoveryTaskProjection>
+GameSession::recoveryTaskProjection() const
+{
+    return queryRecoveryTask(profile_, publishedContentRegistry());
+}
+
+RecoveryTaskReceipt GameSession::startRecoveryTask(
+    const std::string &recordId,
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeStartRecoveryTask(
+        candidate, publishedContentRegistry(), recordId,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+RecoveryTaskReceipt GameSession::cancelRecoveryTask(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeCancelRecoveryTask(
+        candidate, publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+RecoveryTaskReceipt GameSession::collectRecoveryTask(
+    std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    RecoveryTaskReceipt receipt = executeCollectRecoveryTask(
+        candidate, publishedContentRegistry(),
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
 void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)
@@ -2063,8 +2143,10 @@ void GameSession::advanceWorldClockFromSimulation(
                     publishedContentRegistry());
             const ResidentTreatmentAdvanceResult residentTreatment =
                 applyResidentTreatmentThrough(candidate);
+            const RecoveryTaskAdvanceResult recovery =
+                applyRecoveryTaskThrough(candidate);
             if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed)
+                residentTreatment.completed || recovery.becameReady)
             {
                 if (candidate.revision ==
                     std::numeric_limits<ProfileRevision>::max())
@@ -2086,7 +2168,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 return;
             }
             if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed)
+                residentTreatment.completed || recovery.becameReady)
             {
                 if (!commitProfileCandidate(std::move(candidate)))
                 {
@@ -2277,6 +2359,15 @@ void GameSession::updateAlphaRaid(
         simulationInput.interactPressed = false;
         sprintFireIntentPending_ = false;
         sprintFireReadyRemaining_ = 0.0F;
+    }
+    const bool selfRecoveryOwnsInteraction =
+        selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
+        profile_.pendingRaid->selfRecovery.has_value() &&
+        !profile_.pendingRaid->selfRecovery->opened;
+    if (selfRecoveryOwnsInteraction)
+    {
+        simulationInput.interactJustPressed = false;
+        simulationInput.interactPressed = false;
     }
     if (fireSuppressedUntilRelease_)
     {
@@ -2475,6 +2566,49 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(secureOrdinarySurvivorRescue());
     }
     advanceAlphaMedicalStatus(deltaTime);
+
+    if (profile_.pendingRaid->selfRecovery.has_value() &&
+        !profile_.pendingRaid->selfRecovery->opened)
+    {
+        const bool canContinue = selfRecoveryCacheInRange() &&
+            input.interactPressed && !input.inventoryOpen &&
+            !raidActionState_.active().has_value() &&
+            !world_->player().isControlled();
+        if (canContinue && std::isfinite(deltaTime) && deltaTime > 0.0F)
+        {
+            selfRecoveryInteractionSeconds_ += deltaTime;
+        }
+        else
+        {
+            selfRecoveryInteractionSeconds_ = 0.0F;
+        }
+        const float duration = profile_.pendingRaid->selfRecovery
+            ->interactionDurationSeconds;
+        if (selfRecoveryInteractionSeconds_ >= duration)
+        {
+            ProfileState candidate = profile_;
+            const InventoryReceipt opened = executeOpenRaidSelfRecovery(
+                candidate,
+                publishedContentRegistry(),
+                CommandContext{
+                    profile_.revision,
+                    nextRaidTransaction("self-recovery-open")});
+            if (opened.succeeded)
+            {
+                static_cast<void>(commitProfileCandidate(
+                    std::move(candidate), false));
+            }
+            else
+            {
+                persistenceMessage_ = opened.message;
+            }
+            selfRecoveryInteractionSeconds_ = 0.0F;
+        }
+    }
+    else
+    {
+        selfRecoveryInteractionSeconds_ = 0.0F;
+    }
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
@@ -3060,6 +3194,7 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     raidActionState_.cancel();
     weaponClearGesture_.reset();
     raidElapsedSeconds_ = 0.0F;
+    selfRecoveryInteractionSeconds_ = 0.0F;
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
@@ -3415,6 +3550,56 @@ bool GameSession::raidLootAccessible(
         loot.spaceId == world_->activeRaidSpaceId() &&
         (!loot.requiresHighRisk ||
          world_->raidSession().phase() == RaidPhase::HighRisk);
+}
+
+bool GameSession::selfRecoveryCacheInRange() const noexcept
+{
+    if (!alphaRaidActive_ || world_ == nullptr ||
+        !profile_.pendingRaid.has_value() ||
+        !profile_.pendingRaid->selfRecovery.has_value() ||
+        profile_.pendingRaid->selfRecovery->opened ||
+        world_->activeRaidSpaceId() != outdoorRaidSpaceId())
+    {
+        return false;
+    }
+    const Vec2 playerPosition = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const Vec2 playerCenter{
+        playerPosition.x + half,
+        playerPosition.y + half};
+    const Vec2 cache = profile_.pendingRaid->selfRecovery->cachePosition;
+    const float dx = cache.x - playerCenter.x;
+    const float dy = cache.y - playerCenter.y;
+    constexpr float kInteractionRadius = 82.0F;
+    return dx * dx + dy * dy <=
+        kInteractionRadius * kInteractionRadius;
+}
+
+std::optional<RaidSelfRecoveryProjection>
+GameSession::raidSelfRecoveryProjection() const noexcept
+{
+    if (!profile_.pendingRaid.has_value() ||
+        !profile_.pendingRaid->selfRecovery.has_value())
+    {
+        return std::nullopt;
+    }
+    const RaidSelfRecoverySnapshot &recovery =
+        *profile_.pendingRaid->selfRecovery;
+    const float progress = recovery.opened
+        ? 1.0F
+        : std::clamp(
+              selfRecoveryInteractionSeconds_ /
+                  recovery.interactionDurationSeconds,
+              0.0F,
+              1.0F);
+    return RaidSelfRecoveryProjection{
+        recovery.sourceRecord.recordId,
+        recovery.sourceRecord.mapDefinitionId,
+        recovery.cachePosition,
+        recovery.roots.size(),
+        recovery.opened,
+        selfRecoveryCacheInRange(),
+        progress};
 }
 
 bool GameSession::commitProfileCandidate(

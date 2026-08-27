@@ -21,6 +21,7 @@
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
 using BaseServiceJobId = std::uint64_t;
+using RecoveryTaskId = std::uint64_t;
 
 enum class ProfileContainerKind
 {
@@ -106,13 +107,27 @@ struct LostRaidAssetLocation
         const LostRaidAssetLocation &) = default;
 };
 
+// An NPC recovery task exclusively owns the complete lost loadout while it is
+// in progress or waiting for collection. Children retain their parent
+// locations; only the equipment roots move here.
+struct RecoveryTaskAssetLocation
+{
+    RecoveryTaskId taskId{};
+    EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
+
+    friend bool operator==(
+        const RecoveryTaskAssetLocation &,
+        const RecoveryTaskAssetLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
     InstalledMagazineLocation,
     RaidGroundAssetLocation,
     BaseServiceAssetLocation,
-    LostRaidAssetLocation>;
+    LostRaidAssetLocation,
+    RecoveryTaskAssetLocation>;
 
 struct MagazineRoundRecord
 {
@@ -217,6 +232,21 @@ struct LostRaidRecord
         const LostRaidRecord &) = default;
 };
 
+struct RecoveryTask
+{
+    RecoveryTaskId taskId{};
+    LostRaidRecord sourceRecord;
+    std::uint32_t paidCurrency{};
+    std::uint64_t startedWorldMinute{};
+    std::uint64_t completionWorldMinute{};
+    bool readyForCollection{};
+    std::set<AssetInstanceId> recoveredAssetIds;
+
+    friend bool operator==(
+        const RecoveryTask &,
+        const RecoveryTask &) = default;
+};
+
 struct RaidEnemySnapshot
 {
     Vec2 position{};
@@ -235,6 +265,34 @@ struct RaidLootSnapshot
     bool requiresHighRisk{};
     bool collected{};
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
+};
+
+// A pending self-recovery snapshot is a non-owning reference until the cache
+// is opened. Asset ownership remains with LostRaidRecord before that atomic
+// transition, then moves to RaidGround/one carried tree.
+struct RaidSelfRecoveryRootSnapshot
+{
+    AssetInstanceId assetId{};
+    EquipmentSlotKind sourceSlot{EquipmentSlotKind::PrimaryWeapon};
+    std::uint32_t lootSlotIndex{};
+    Vec2 position{};
+
+    friend bool operator==(
+        const RaidSelfRecoveryRootSnapshot &,
+        const RaidSelfRecoveryRootSnapshot &) = default;
+};
+
+struct RaidSelfRecoverySnapshot
+{
+    LostRaidRecord sourceRecord;
+    Vec2 cachePosition{};
+    float interactionDurationSeconds{2.0F};
+    bool opened{};
+    std::vector<RaidSelfRecoveryRootSnapshot> roots;
+
+    friend bool operator==(
+        const RaidSelfRecoverySnapshot &,
+        const RaidSelfRecoverySnapshot &) = default;
 };
 
 struct RaidInteriorSnapshot
@@ -564,6 +622,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
+    std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;
@@ -610,6 +669,8 @@ struct ProfileState
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;
     std::map<std::string, LostRaidRecord> lostRaidRecords;
+    RecoveryTaskId nextRecoveryTaskId{1};
+    std::optional<RecoveryTask> recoveryTask;
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
     std::set<RescueDefinitionId> committedRescues;

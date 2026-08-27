@@ -24,6 +24,7 @@ struct DeployCommand
     std::uint64_t seed{};
     MapDefinitionId mapDefinitionId;
     RaidIntelligenceLoadout intelligence;
+    std::optional<std::string> selfRecoveryRecordId;
 };
 
 struct DeployReceipt

@@ -4,6 +4,7 @@
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
+#include "recovery_task_domain.h"
 
 #include <limits>
 #include <utility>
@@ -138,6 +139,7 @@ BaseRestReceipt executeBaseRest(
     static_cast<void>(applyBaseConstructionThrough(candidate, content));
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     static_cast<void>(applyResidentTreatmentThrough(candidate));
+    static_cast<void>(applyRecoveryTaskThrough(candidate));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(

@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报和 Raid World Vertical Slice 均已进入主线；PR #100 的可扩展性能基础已以 `d7c231b` 合入。当前进入 **Regional Operations — Loss & Recovery**，先交付失物记录与行动老化，再依次建立单一 NPC 寻回任务和 Raid 内自力寻回。当前范围合同见 `doc/exec-plans/active/regional-loss-records-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报和 Raid World Vertical Slice 均已进入主线；PR #101 的失物记录与行动老化已以 `7185d55` 合入。当前 Draft PR #103 以两个可独立回滚提交统一交付 **Regional Operations — Loss & Recovery** 的 NPC 寻回和 Raid 内自力寻回；当前范围合同见 `doc/exec-plans/active/regional-self-recovery-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -136,9 +136,9 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | Draft PR #101 的实现 HEAD 已通过 Windows Debug 全目标、定向回归、1106/1106 CTest 和 exact-head Windows/Ubuntu CI；最终证据 HEAD 复核与用户验收待完成。异常退出继续精确回滚，不创建或老化记录 |
-| 单一 NPC 寻回任务 | 从一条记录发起一次按整单计价、耗时的委托，完成后按冻结结果返还 | 单任务槽、记录锁定、价格/时长快照、取消不退款、唯一回收目的地 | 下一宏切片；本轮不提前实现 |
-| Raid 内自力寻回 | 返回来源地图后可找到并自行带回失物，和 NPC 委托共享唯一所有权 | 来源地图约束、Raid 快照引用、原子取回、与委托互斥 | NPC 任务稳定后实施；尸体表现与正式资源延期 |
+| 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | PR #101 已通过 CI 和用户正常游玩验收，以 `7185d55` 进入 main。异常退出继续精确回滚，不创建或老化记录 |
+| 单一 NPC 寻回任务 | 从一条记录发起一次按整单计价、耗时的委托，完成后按冻结结果返还 | 单任务槽、记录锁定、地图定义价格/时长、冻结结果、取消不退款、唯一回收目的地、schema v25/content v35 | PR #103 第一提交已实现；与自行寻回统一验收，尚未合并 |
+| Raid 内自力寻回 | 返回来源地图后打开失物缓存，自行携带并成功撤离；未打开记录继续老化，异常退出恢复出击前状态 | 来源地图约束、冻结 Raid 快照、缓存开启时原子迁移、成功/失败结算、与委托共享唯一所有权、schema v26 | PR #103 第二提交已实现，Windows Debug 全目标与 1137/1137 CTest 通过；exact-head CI 和用户统一正常游玩验收待完成。尸体表现与正式资源延期 |
 
 ## 当前 Combat Reliability 缺陷
 

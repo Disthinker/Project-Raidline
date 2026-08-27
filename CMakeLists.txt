@@ -257,9 +257,12 @@ add_library(raidline_domain STATIC
     src/medical_types.h
     src/profile_state.cpp
     src/profile_state.h
+    src/recovery_task_domain.cpp
+    src/recovery_task_domain.h
     src/profile_combat_domain.cpp
     src/profile_combat_domain.h
     src/raid_lifecycle.cpp
+    src/self_recovery_domain.cpp
     src/raid_lifecycle.h
     src/raid_map_generation.cpp
     src/raid_map_generation.h
@@ -677,6 +680,14 @@ raidline_add_test(
 raidline_add_test(
     LostRaidDomainTest
     tests/test_lost_raid_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    RecoveryTaskDomainTest
+    tests/test_recovery_task_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    SelfRecoveryDomainTest
+    tests/test_self_recovery_domain.cpp
     raidline::domain)
 raidline_add_test(
     RaidIntelligenceDomainTest

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 #include <set>
 
 #include "base_resource_domain.h"
@@ -135,6 +136,40 @@ bool hasStoredChildren(
         }
     }
     return false;
+}
+
+std::set<AssetInstanceId> assetTreeIds(
+    const ProfileState &profile,
+    AssetInstanceId rootId)
+{
+    std::set<AssetInstanceId> result{rootId};
+    bool changed = true;
+    while (changed)
+    {
+        changed = false;
+        for (const auto &[assetId, asset] : profile.assets.records())
+        {
+            bool child{};
+            if (const auto *stored =
+                    std::get_if<StoredAssetLocation>(&asset.location))
+            {
+                child = stored->container.kind ==
+                        ProfileContainerKind::AssetCompartment &&
+                    result.contains(stored->container.ownerAssetId);
+            }
+            else if (const auto *installed =
+                         std::get_if<InstalledMagazineLocation>(
+                             &asset.location))
+            {
+                child = result.contains(installed->weaponAssetId);
+            }
+            if (child && result.insert(assetId).second)
+            {
+                changed = true;
+            }
+        }
+    }
+    return result;
 }
 
 // Abnormal Raid rollback removes exactly the generated quantity even when a
@@ -381,6 +416,41 @@ DeployReceipt executeDeploy(
             profile.revision);
     }
 
+    std::optional<LostRaidRecord> selfRecoveryRecord;
+    std::vector<std::pair<AssetInstanceId, EquipmentSlotKind>>
+        selfRecoveryRoots;
+    if (command.selfRecoveryRecordId.has_value())
+    {
+        const auto record = candidate.lostRaidRecords.find(
+            *command.selfRecoveryRecordId);
+        if (command.selfRecoveryRecordId->empty() ||
+            record == candidate.lostRaidRecords.end() ||
+            record->second.mapDefinitionId != command.mapDefinitionId)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "self-recovery record is unavailable on this map",
+                profile.revision);
+        }
+        selfRecoveryRecord = record->second;
+        for (const auto &[assetId, asset] : candidate.assets.records())
+        {
+            const auto *lost =
+                std::get_if<LostRaidAssetLocation>(&asset.location);
+            if (lost != nullptr && lost->recordId == record->first)
+            {
+                selfRecoveryRoots.emplace_back(assetId, lost->sourceSlot);
+            }
+        }
+        if (selfRecoveryRoots.empty())
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidProfile,
+                "self-recovery record has no owned roots",
+                profile.revision);
+        }
+    }
+
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -414,7 +484,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "raid-second-representative-location-15";
+    snapshot.rulesVersion = "raid-self-recovery-16";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -611,6 +681,85 @@ DeployReceipt executeDeploy(
         }
     }
 
+    if (selfRecoveryRecord.has_value())
+    {
+        std::set<std::size_t> occupiedRegularSlots;
+        for (const RaidLootSnapshot &loot : snapshot.loot)
+        {
+            if (loot.spaceId == outdoorRaidSpaceId() &&
+                !loot.requiresHighRisk &&
+                loot.slotIndex < map->raidLootSlots.size())
+            {
+                occupiedRegularSlots.insert(loot.slotIndex);
+            }
+        }
+        if (occupiedRegularSlots.size() == map->raidLootSlots.size())
+        {
+            const auto removed = std::find_if(
+                snapshot.loot.rbegin(), snapshot.loot.rend(),
+                [&](const RaidLootSnapshot &loot)
+                {
+                    return loot.spaceId == outdoorRaidSpaceId() &&
+                        !loot.requiresHighRisk &&
+                        loot.slotIndex < map->raidLootSlots.size();
+                });
+            if (removed == snapshot.loot.rend())
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "self-recovery cache has no legal map location",
+                    profile.revision);
+            }
+            const std::size_t freed = removed->slotIndex;
+            static_cast<void>(candidate.assets.erase(removed->assetId));
+            snapshot.loot.erase(std::next(removed).base());
+            occupiedRegularSlots.erase(freed);
+        }
+
+        std::vector<std::size_t> candidates;
+        for (std::size_t index{}; index < map->raidLootSlots.size(); ++index)
+        {
+            if (!occupiedRegularSlots.contains(index))
+            {
+                candidates.push_back(index);
+            }
+        }
+        if (candidates.empty())
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "self-recovery cache has no legal map location",
+                profile.revision);
+        }
+        Pcg32 recoveryRandom{command.seed, 0x7265636f76657279ULL};
+        const std::size_t cacheSlot = candidates[
+            recoveryRandom.bounded(
+                static_cast<std::uint32_t>(candidates.size()))];
+        const Vec2 cachePosition = map->raidLootSlots[cacheSlot].position;
+        RaidSelfRecoverySnapshot recovery;
+        recovery.sourceRecord = *selfRecoveryRecord;
+        recovery.cachePosition = cachePosition;
+        const std::uint32_t firstSyntheticSlot = static_cast<std::uint32_t>(
+            map->raidLootSlots.size() +
+            map->highRisk.advancedLootSlots.size() +
+            std::accumulate(
+                map->interiors.begin(), map->interiors.end(), std::size_t{},
+                [](std::size_t total, const RaidInteriorDefinition &interior)
+                { return total + interior.lootSlots.size(); }));
+        for (std::size_t index{}; index < selfRecoveryRoots.size(); ++index)
+        {
+            const float column = static_cast<float>(index % 3U) - 1.0F;
+            const float row = static_cast<float>(index / 3U);
+            recovery.roots.push_back(RaidSelfRecoveryRootSnapshot{
+                selfRecoveryRoots[index].first,
+                selfRecoveryRoots[index].second,
+                firstSyntheticSlot + static_cast<std::uint32_t>(index),
+                Vec2{cachePosition.x + column * 32.0F,
+                     cachePosition.y + row * 32.0F}});
+        }
+        snapshot.selfRecovery = std::move(recovery);
+    }
+
     RaidMapGenerationAnchors generationAnchors;
     generationAnchors.playerSpawn = snapshot.playerSpawn;
     generationAnchors.extractionPoint = snapshot.extractionPoint;
@@ -638,6 +787,11 @@ DeployReceipt executeDeploy(
             continue;
         }
         generationAnchors.reachablePoints.push_back(loot.position);
+    }
+    if (snapshot.selfRecovery.has_value())
+    {
+        generationAnchors.reachablePoints.push_back(
+            snapshot.selfRecovery->cachePosition);
     }
     for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
     {
@@ -779,14 +933,16 @@ RaidSettlementReceipt settlePendingRaid(
         // same location-preserving settlement rule.
     }
 
-    std::vector<AssetInstanceId> eraseIds;
+    std::set<AssetInstanceId> eraseIds;
     for (const auto &[assetId, asset] : candidate.assets.records())
     {
         const bool onGround =
             std::holds_alternative<RaidGroundAssetLocation>(asset.location);
         if (onGround)
         {
-            eraseIds.push_back(assetId);
+            const std::set<AssetInstanceId> tree =
+                assetTreeIds(candidate, assetId);
+            eraseIds.insert(tree.begin(), tree.end());
         }
     }
     for (AssetInstanceId assetId : eraseIds)
@@ -870,6 +1026,40 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     }
 
     ProfileState candidate = profile;
+    std::set<AssetInstanceId> selfRecoveryAssetIds;
+    if (candidate.pendingRaid->selfRecovery.has_value())
+    {
+        const RaidSelfRecoverySnapshot recovery =
+            *candidate.pendingRaid->selfRecovery;
+        for (const RaidSelfRecoveryRootSnapshot &root : recovery.roots)
+        {
+            selfRecoveryAssetIds.insert(root.assetId);
+        }
+        if (recovery.opened)
+        {
+            if (!candidate.lostRaidRecords.emplace(
+                    recovery.sourceRecord.recordId,
+                    recovery.sourceRecord).second)
+            {
+                return {false, RaidLifecycleError::InvalidProfile,
+                        "self-recovery record cannot be restored",
+                        profile.revision};
+            }
+            for (const RaidSelfRecoveryRootSnapshot &root : recovery.roots)
+            {
+                AssetRecord *asset = candidate.assets.findMutable(root.assetId);
+                if (asset == nullptr)
+                {
+                    return {false, RaidLifecycleError::InvalidProfile,
+                            "self-recovery asset cannot be restored",
+                            profile.revision};
+                }
+                asset->location = LostRaidAssetLocation{
+                    recovery.sourceRecord.recordId,
+                    root.sourceSlot};
+            }
+        }
+    }
     const int startingHealth = candidate.pendingRaid->startingHealth;
     const MedicalStatusState startingMedicalStatus =
         candidate.pendingRaid->startingMedicalStatus;
@@ -900,6 +1090,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
+        if (selfRecoveryAssetIds.contains(loot.assetId))
+        {
+            continue;
+        }
         if (loot.collected)
         {
             if (!consumeCollectedLoot(candidate, loot))
@@ -985,7 +1179,7 @@ InventoryReceipt pickupRaidLoot(
         [assetId](const RaidLootSnapshot &loot)
         { return loot.assetId == assetId; });
     candidateSnapshot->collected = true;
-    const auto commitMove = [&](const InventoryMoveCommand &command)
+    const auto commitMove = [&](const InventoryCommand &command)
     {
         InventoryReceipt receipt = executeInventory(
             candidateProfile,
@@ -999,6 +1193,21 @@ InventoryReceipt pickupRaidLoot(
         }
         return receipt;
     };
+    for (EquipmentSlotKind slot : {
+             EquipmentSlotKind::PrimaryWeapon,
+             EquipmentSlotKind::SecondaryWeapon,
+             EquipmentSlotKind::Sidearm,
+             EquipmentSlotKind::ChestRig,
+             EquipmentSlotKind::Backpack,
+             EquipmentSlotKind::Helmet,
+             EquipmentSlotKind::BodyArmor})
+    {
+        if (itemCanEquipInSlot(definition, slot) &&
+            !equippedAsset(candidateProfile, slot).has_value())
+        {
+            return commitMove(InventoryEquipCommand{assetId, slot});
+        }
+    }
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::Backpack,
              EquipmentSlotKind::ChestRig})
