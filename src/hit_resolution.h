@@ -32,6 +32,10 @@ struct HitResolutionResult
 {
     std::vector<HitResult> hits;
     std::vector<ShotId> consumedShotIds;
+    // Indices refer to the enemy vector as it existed when resolution began.
+    // GameplayWorld uses them to remove parallel per-enemy runtime state after
+    // resolveShotHits has removed the killed Enemy objects.
+    std::vector<std::size_t> removedEnemyIndices;
     std::size_t enemiesKilled{0};
 };
 

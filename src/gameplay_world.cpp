@@ -1531,6 +1531,27 @@ void GameplayWorld::update(
         activeEnemySet,
         activeBlockerSet);
 
+    // Hit resolution removes dead Enemy objects. Keep the one-to-one
+    // navigation runtime in the same transaction so the next simulation frame
+    // cannot observe mismatched parallel arrays and terminate.
+    for (auto removed = hitResult.removedEnemyIndices.rbegin();
+         removed != hitResult.removedEnemyIndices.rend();
+         ++removed)
+    {
+        if (*removed >= activeNavigationSet.size())
+        {
+            std::terminate();
+        }
+        activeNavigationSet.erase(
+            activeNavigationSet.begin() +
+            static_cast<std::vector<EnemyNavigationRuntime>::difference_type>(
+                *removed));
+    }
+    if (activeNavigationSet.size() != activeEnemySet.size())
+    {
+        std::terminate();
+    }
+
     // A large simulation step can resolve a collision before the requested
     // advance endpoint. Clamp presentation to that authoritative hit so the
     // longer streak never appears past an obstacle or enemy.
