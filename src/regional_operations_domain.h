@@ -48,6 +48,38 @@ struct RegionalOutpostReceipt
     bool established{};
 };
 
+struct RegionalOutpostStaffingCommand
+{
+    RegionalOutpostDefinitionId definitionId;
+    bool assign{};
+};
+
+struct RegionalOutpostStaffingPlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    RegionalOutpostDefinitionId definitionId;
+    BaseProfessionCounts resultingStaff{};
+    std::uint32_t assignedStaff{};
+    std::uint32_t requiredStaff{};
+    bool online{};
+};
+
+struct RegionalOutpostStaffingReceipt
+{
+    bool succeeded{};
+    bool alreadyCommitted{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    RegionalOutpostDefinitionId definitionId;
+    BaseProfessionCounts assignedByProfession{};
+    std::uint32_t assignedStaff{};
+    bool online{};
+};
+
 [[nodiscard]] std::uint32_t assignedRegionalOutpostStaff(
     const RegionalOutpostState &state) noexcept;
 
@@ -70,4 +102,15 @@ struct RegionalOutpostReceipt
     ProfileState &profile,
     const ContentRegistry &content,
     const EstablishRegionalOutpostCommand &command,
+    const CommandContext &context);
+
+[[nodiscard]] RegionalOutpostStaffingPlan queryRegionalOutpostStaffing(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalOutpostStaffingCommand &command) noexcept;
+
+[[nodiscard]] RegionalOutpostStaffingReceipt executeRegionalOutpostStaffing(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalOutpostStaffingCommand &command,
     const CommandContext &context);

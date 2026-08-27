@@ -1604,7 +1604,7 @@ TEST(SaveRepositoryTest,
 }
 
 TEST(SaveRepositoryTest,
-     SchemaV27RoundTripPreservesEstablishedOfflineOutpost)
+     SchemaV27RoundTripPreservesEstablishedStaffedOutpost)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
@@ -1617,6 +1617,12 @@ TEST(SaveRepositoryTest,
         EstablishRegionalOutpostCommand{outpostId},
         CommandContext{profile.revision, "save-establish-outpost"})
                     .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "save-staff-outpost"})
+                    .succeeded);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(profile, content.contentVersion()),
@@ -1627,7 +1633,8 @@ TEST(SaveRepositoryTest,
     const RegionalOutpostState &loadedOutpost =
         loaded.profile->regionalOperations.outposts.at(outpostId);
     EXPECT_TRUE(loadedOutpost.established);
-    EXPECT_FALSE(regionalOutpostOnline(*loaded.profile, content, outpostId));
+    EXPECT_EQ(assignedRegionalOutpostStaff(loadedOutpost), 2U);
+    EXPECT_TRUE(regionalOutpostOnline(*loaded.profile, content, outpostId));
     EXPECT_EQ(
         profileStateFingerprint(*loaded.profile),
         profileStateFingerprint(profile));

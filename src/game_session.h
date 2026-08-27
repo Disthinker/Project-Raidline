@@ -286,6 +286,12 @@ public:
         RegionalOutpostDefinitionId definitionId,
         std::string transactionId);
 
+    [[nodiscard]] RegionalOutpostStaffingReceipt
+    executeRegionalOutpostStaffing(
+        RegionalOutpostDefinitionId definitionId,
+        bool assign,
+        std::string transactionId);
+
     [[nodiscard]] BaseWorkforceReceipt executeAssignBestBaseWorker(
         BaseFacilityStaffingKind facility,
         std::string transactionId);

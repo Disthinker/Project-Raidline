@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-recovery-task-content-35");
+        "regional-route-outpost-content-36");
     EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})
                   .recovery.serviceFee, 60U);
     EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})

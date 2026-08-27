@@ -1,5 +1,7 @@
 #include "regional_operations_domain.h"
 
+#include "base_workforce_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -21,6 +23,16 @@ RegionalRoutePlan failure(
 }
 
 RegionalOutpostPlan outpostFailure(
+    const ProfileState &profile,
+    DomainErrorCode error,
+    std::string message,
+    RegionalOutpostDefinitionId definitionId = {})
+{
+    return {false, error, std::move(message), profile.revision,
+            std::move(definitionId)};
+}
+
+RegionalOutpostStaffingPlan staffingFailure(
     const ProfileState &profile,
     DomainErrorCode error,
     std::string message,
@@ -341,4 +353,192 @@ RegionalOutpostReceipt executeEstablishRegionalOutpost(
     profile = std::move(candidate);
     return {true, false, DomainErrorCode::None, {}, profile.revision,
             command.definitionId, true};
+}
+
+RegionalOutpostStaffingPlan queryRegionalOutpostStaffing(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalOutpostStaffingCommand &command) noexcept
+{
+    try
+    {
+        const RegionalOutpostDefinition &definition =
+            content.regionalOutpost(command.definitionId);
+        const auto found = profile.regionalOperations.outposts.find(
+            command.definitionId);
+        if (found == profile.regionalOperations.outposts.end())
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::InvalidProfile,
+                "regional outpost state is missing", command.definitionId);
+        }
+        const RegionalOutpostState &state = found->second;
+        if (profile.pendingRaid.has_value())
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional staffing is unavailable during a Raid",
+                command.definitionId);
+        }
+        if (!state.established)
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional outpost must be established before staffing",
+                command.definitionId);
+        }
+        const std::uint32_t assigned = assignedRegionalOutpostStaff(state);
+        if (!command.assign)
+        {
+            if (assigned == 0U)
+            {
+                return staffingFailure(
+                    profile, DomainErrorCode::IllegalDestination,
+                    "regional outpost garrison is already empty",
+                    command.definitionId);
+            }
+            return {true, DomainErrorCode::None, {}, profile.revision,
+                    command.definitionId, {}, 0U,
+                    definition.requiredStaff, false};
+        }
+        if (state.disrupted)
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "disrupted regional outpost cannot accept a garrison",
+                command.definitionId);
+        }
+        if (assigned != 0U)
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional outpost garrison is already assigned",
+                command.definitionId);
+        }
+        const BaseWorkforceProjection workforce =
+            projectBaseWorkforce(profile);
+        if (workforce.availableResidents < definition.requiredStaff)
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::Capacity,
+                "insufficient unassigned healthy residents",
+                command.definitionId);
+        }
+        BaseProfessionCounts resulting{};
+        std::uint32_t remaining = definition.requiredStaff;
+        constexpr std::array<BaseResidentProfession,
+                             kBaseResidentProfessionCount> priority{
+            BaseResidentProfession::General,
+            BaseResidentProfession::Combat,
+            BaseResidentProfession::Engineering,
+            BaseResidentProfession::Medical};
+        for (BaseResidentProfession profession : priority)
+        {
+            const std::size_t index = baseProfessionIndex(profession);
+            const std::uint32_t selected = std::min(
+                remaining, workforce.availableByProfession[index]);
+            resulting[index] = selected;
+            remaining -= selected;
+        }
+        if (remaining != 0U)
+        {
+            return staffingFailure(
+                profile, DomainErrorCode::Capacity,
+                "healthy resident professions cannot satisfy garrison",
+                command.definitionId);
+        }
+        return {true,
+                DomainErrorCode::None,
+                {},
+                profile.revision,
+                command.definitionId,
+                resulting,
+                definition.requiredStaff,
+                definition.requiredStaff,
+                true};
+    }
+    catch (const std::exception &error)
+    {
+        return staffingFailure(
+            profile, DomainErrorCode::IllegalDestination,
+            error.what(), command.definitionId);
+    }
+}
+
+RegionalOutpostStaffingReceipt executeRegionalOutpostStaffing(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalOutpostStaffingCommand &command,
+    const CommandContext &context)
+{
+    if (context.transactionId.empty())
+    {
+        return {false, false, DomainErrorCode::InvalidTransaction,
+                "transaction ID is empty", profile.revision,
+                command.definitionId};
+    }
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        const auto found = profile.regionalOperations.outposts.find(
+            command.definitionId);
+        if (found == profile.regionalOperations.outposts.end())
+        {
+            return {false, false, DomainErrorCode::InvalidProfile,
+                    "regional outpost state is missing", profile.revision,
+                    command.definitionId};
+        }
+        return {true,
+                true,
+                DomainErrorCode::None,
+                {},
+                profile.revision,
+                command.definitionId,
+                found->second.assignedStaff,
+                assignedRegionalOutpostStaff(found->second),
+                regionalOutpostOnline(profile, content, command.definitionId)};
+    }
+    if (context.expectedRevision != profile.revision)
+    {
+        return {false, false, DomainErrorCode::StaleRevision,
+                "profile revision is stale", profile.revision,
+                command.definitionId};
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return {false, false, DomainErrorCode::RevisionOverflow,
+                "profile revision cannot advance", profile.revision,
+                command.definitionId};
+    }
+    const RegionalOutpostStaffingPlan plan =
+        queryRegionalOutpostStaffing(profile, content, command);
+    if (!plan.canCommit)
+    {
+        return {false, false, plan.error, plan.message, profile.revision,
+                command.definitionId};
+    }
+    ProfileState candidate = profile;
+    candidate.regionalOperations.outposts.at(command.definitionId)
+        .assignedStaff = plan.resultingStaff;
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return {false, false, DomainErrorCode::InvalidProfile,
+                validation.message, profile.revision,
+                command.definitionId};
+    }
+    profile = std::move(candidate);
+    const RegionalOutpostState &state =
+        profile.regionalOperations.outposts.at(command.definitionId);
+    return {true,
+            false,
+            DomainErrorCode::None,
+            {},
+            profile.revision,
+            command.definitionId,
+            state.assignedStaff,
+            assignedRegionalOutpostStaff(state),
+            regionalOutpostOnline(profile, content, command.definitionId)};
 }

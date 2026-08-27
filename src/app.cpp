@@ -1945,12 +1945,35 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             if (!outposts.empty() &&
                 contains(regionalOutpostActionButton(), click.position))
             {
-                const RegionalOutpostReceipt receipt =
-                    gameSession_.executeEstablishRegionalOutpost(
+                const RegionalOutpostState &state = gameSession_.profile()
+                    .regionalOperations.outposts.at(outposts.front().id);
+                if (!state.established)
+                {
+                    const RegionalOutpostReceipt receipt =
+                        gameSession_.executeEstablishRegionalOutpost(
+                            outposts.front().id,
+                            nextProfileTransactionId("establish-outpost"));
+                    uiMessage_ = receipt.succeeded
+                        ? "REGIONAL OUTPOST ESTABLISHED"
+                        : receipt.message;
+                    gameAudio_.play(receipt.succeeded
+                        ? SoundEventId::UiConfirm
+                        : SoundEventId::UiDeny);
+                    return;
+                }
+                const bool assign =
+                    assignedRegionalOutpostStaff(state) == 0U;
+                const RegionalOutpostStaffingReceipt receipt =
+                    gameSession_.executeRegionalOutpostStaffing(
                         outposts.front().id,
-                        nextProfileTransactionId("establish-outpost"));
+                        assign,
+                        nextProfileTransactionId(
+                            assign ? "assign-outpost-garrison"
+                                   : "clear-outpost-garrison"));
                 uiMessage_ = receipt.succeeded
-                    ? "REGIONAL OUTPOST ESTABLISHED"
+                    ? assign
+                        ? "OUTPOST GARRISON ASSIGNED | SHORTCUTS ONLINE"
+                        : "OUTPOST GARRISON RETURNED | SHORTCUTS OFFLINE"
                     : receipt.message;
                 gameAudio_.play(receipt.succeeded
                     ? SoundEventId::UiConfirm
@@ -10989,24 +11012,63 @@ void App::renderRegionalOperations()
     uiTextRenderer_.render(
         renderer_, 300.0F, 392.0F,
         "FIXED SHORTCUTS REQUIRE A FULL HEALTHY GARRISON");
+    if (regionalOutpostOnline(profile, content, definition.id))
+    {
+        const RegionalRoutePlan riverside = queryRegionalRoute(
+            profile, content, MapDefinitionId{"map.raid.riverside"});
+        const RegionalRoutePlan industrial = queryRegionalRoute(
+            profile, content, MapDefinitionId{"map.raid.industrial"});
+        const RegionalRoutePlan frontier = queryRegionalRoute(
+            profile, content,
+            MapDefinitionId{"map.raid.frontier_exchange"});
+        const std::string benefits = fmt::format(
+            "SHORTCUTS ONLINE | RIVERSIDE {} | ASHWORKS {} | FRONTIER {} MIN",
+            riverside.travelMinutes,
+            industrial.travelMinutes,
+            frontier.travelMinutes);
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 420.0F, benefits.c_str());
+    }
+    else if (state.established)
+    {
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 420.0F,
+            "SHORTCUTS OFFLINE | ASSIGN 2 HEALTHY RESIDENTS");
+    }
 
-    const RegionalOutpostPlan plan = queryEstablishRegionalOutpost(
-        profile,
-        content,
-        EstablishRegionalOutpostCommand{definition.id});
+    const bool hasGarrison =
+        assignedRegionalOutpostStaff(state) != 0U;
+    const RegionalOutpostPlan establishPlan =
+        queryEstablishRegionalOutpost(
+            profile,
+            content,
+            EstablishRegionalOutpostCommand{definition.id});
+    const RegionalOutpostStaffingPlan staffingPlan =
+        queryRegionalOutpostStaffing(
+            profile,
+            content,
+            RegionalOutpostStaffingCommand{
+                definition.id, !hasGarrison});
+    const bool canCommit = state.established
+        ? staffingPlan.canCommit
+        : establishPlan.canCommit;
     const SDL_FRect action = regionalOutpostActionButton();
     SDL_SetRenderDrawColor(
-        renderer_, plan.canCommit ? 48 : 42,
-        plan.canCommit ? 98 : 52,
-        plan.canCommit ? 74 : 52, 255);
+        renderer_, canCommit ? 48 : 42,
+        canCommit ? 98 : 52,
+        canCommit ? 74 : 52, 255);
     SDL_RenderFillRect(renderer_, &action);
     SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
     SDL_RenderRect(renderer_, &action);
     uiTextRenderer_.render(
         renderer_, action.x + 52.0F, action.y + 16.0F,
         state.established
-            ? "OUTPOST ESTABLISHED | STAFFING NEXT"
-            : plan.canCommit
+            ? hasGarrison
+                ? "RETURN OUTPOST GARRISON"
+                : staffingPlan.canCommit
+                    ? "ASSIGN FULL GARRISON | ACTIVATE SHORTCUTS"
+                    : "GARRISON ASSIGNMENT BLOCKED"
+            : establishPlan.canCommit
                 ? "ESTABLISH LIGHT OUTPOST"
                 : "OUTPOST ESTABLISHMENT BLOCKED");
     uiTextRenderer_.render(
