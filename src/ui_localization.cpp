@@ -13,7 +13,21 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"NO MATERIAL OR WORLD TIME COST IN FOUNDATION V1 | ESC BACK",
+    {{"OUTPOST CLEARING COMPLETE | EXTRACT TO RESTORE SHORTCUTS",
+      "哨所清剿完成 | 撤离后恢复捷径"},
+     {"OUTPOST CLEARING | INITIAL HOSTILES REMAINING ",
+      "哨所清剿 | 初始敌人剩余 "},
+     {"SHORTCUTS DISRUPTED | CLEAR INITIAL HOSTILES AT ",
+      "捷径已中断 | 清除以下地点的初始敌人并撤离："},
+     {"EACH SETTLED SHORTCUT RAID BUILDS THREAT | ESC BACK",
+      "每次使用捷径并完成行动结算都会累积威胁 | ESC 返回"},
+     {"CONFIRM OUTPOST CLEARING RAID", "确认哨所清剿行动"},
+     {"DEPLOY OUTPOST CLEARING RAID", "出发执行哨所清剿行动"},
+     {"SHORTCUT THREAT ", "捷径威胁 "},
+     {" SAFE OPERATION(S) REMAIN", " 次安全行动剩余"},
+     {"EXITS LOCKED", "撤离点已锁定"},
+     {"DISRUPTED", "已中断"},
+     {"NO MATERIAL OR WORLD TIME COST IN FOUNDATION V1 | ESC BACK",
       "基础版不消耗材料或世界时间 | ESC 返回"},
      {"OUTPOST GARRISON ASSIGNED | SHORTCUTS ONLINE",
       "哨所驻军已派驻 | 捷径已启用"},

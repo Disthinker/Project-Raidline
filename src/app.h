@@ -173,7 +173,9 @@ private:
     void openMedicalWheel();
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
-    [[nodiscard]] bool tryDeployFromBase();
+    [[nodiscard]] bool tryDeployFromBase(
+        std::optional<RegionalOutpostDefinitionId>
+            outpostRestorationId = std::nullopt);
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);

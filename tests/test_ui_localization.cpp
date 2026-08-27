@@ -420,6 +420,21 @@ TEST(UiLocalizationTest, ChineseTranslatesRegionalOutpostFlow) {
   EXPECT_NE(status.find("已建立"), std::string::npos);
   EXPECT_NE(status.find("驻守 2/2"), std::string::npos);
   EXPECT_NE(status.find("在线"), std::string::npos);
+
+  const std::string threat = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "SHORTCUT THREAT 2/3 | 1 SAFE OPERATION(S) REMAIN");
+  EXPECT_NE(threat.find("捷径威胁 2/3"), std::string::npos);
+  EXPECT_NE(threat.find("1 次安全行动剩余"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DEPLOY OUTPOST CLEARING RAID"),
+            "出发执行哨所清剿行动");
+  const std::string objective = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "OUTPOST CLEARING | INITIAL HOSTILES REMAINING 4 | EXITS LOCKED");
+  EXPECT_NE(objective.find("初始敌人剩余 4"), std::string::npos);
+  EXPECT_NE(objective.find("撤离点已锁定"), std::string::npos);
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-route-outpost-content-36",
+  "content_version": "regional-outpost-disruption-content-37",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -43,7 +43,9 @@
         "display_name": "Old Service Relay",
         "node_id": "region_node.outpost.old_service_relay",
         "initially_unlocked": true,
-        "required_staff": 2
+        "required_staff": 2,
+        "safe_shortcut_operations": 3,
+        "restoration_map_definition_id": "map.raid.riverside"
       }
     ],
     "routes": [

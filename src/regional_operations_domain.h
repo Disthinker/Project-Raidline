@@ -80,6 +80,15 @@ struct RegionalOutpostStaffingReceipt
     bool online{};
 };
 
+struct RegionalOutpostThreatAdvance
+{
+    bool succeeded{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    std::vector<RegionalOutpostDefinitionId> usedOutpostIds;
+    std::vector<RegionalOutpostDefinitionId> newlyDisruptedOutpostIds;
+};
+
 [[nodiscard]] std::uint32_t assignedRegionalOutpostStaff(
     const RegionalOutpostState &state) noexcept;
 
@@ -114,3 +123,12 @@ struct RegionalOutpostStaffingReceipt
     const ContentRegistry &content,
     const RegionalOutpostStaffingCommand &command,
     const CommandContext &context);
+
+// Applies one already-authorized, already-settled regional journey inside the
+// enclosing Raid Settlement transaction. A route can contain several edges
+// gated by the same outpost, but one Raid advances that outpost only once.
+[[nodiscard]] RegionalOutpostThreatAdvance
+applySettledRegionalRouteUsage(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<RegionRouteDefinitionId> &routeIds) noexcept;

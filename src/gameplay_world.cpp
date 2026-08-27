@@ -435,6 +435,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 spawn.maxHealth,
                 nextCombatTargetId_++);
         }
+        interior.initialEnemyCount = interior.enemies.size();
         interior.enemyNavigation.resize(interior.enemies.size());
         interior.blockerIndex = RaidSpaceBlockerIndex::build(
             interior.worldSize,
@@ -746,6 +747,7 @@ GameplayWorld::GameplayWorld(
             spawn.maxHealth,
             nextCombatTargetId_++);
     }
+    initialOutdoorEnemyCount_ = enemies_.size();
     enemyNavigation_.resize(enemies_.size());
     outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
         worldSize_,
@@ -1001,10 +1003,13 @@ void GameplayWorld::update(
         conditionalExtractionPoint_->contains(playerCenter(player_));
     raidSession_.update(
         deltaTime,
-        inOutdoorRaidSpace() && !player_.isControlled() && extractionPoint_.contains(
-            playerCenter(player_)),
-        !player_.isControlled() && playerInEmergencyExtraction,
-        !player_.isControlled() && playerInConditionalExtraction);
+        input.extractionEligible && inOutdoorRaidSpace() &&
+            !player_.isControlled() && extractionPoint_.contains(
+                playerCenter(player_)),
+        input.extractionEligible && !player_.isControlled() &&
+            playerInEmergencyExtraction,
+        input.extractionEligible && !player_.isControlled() &&
+            playerInConditionalExtraction);
     updateHighRiskActivation(input, deltaTime, centerAfterMovement);
     updateOrdinarySurvivorRescue(input, deltaTime, centerAfterMovement);
     if (raidSession_.phase() == RaidPhase::HighRisk)
@@ -1882,6 +1887,28 @@ std::size_t GameplayWorld::aliveEnemyCount() const noexcept
             {
                 return !enemy.isDead();
             }));
+}
+
+std::size_t GameplayWorld::aliveInitialEnemyCount() const noexcept
+{
+    const auto countAlivePrefix = [](
+        const std::vector<Enemy> &enemies,
+        std::size_t initialCount)
+    {
+        const std::size_t count = std::min(initialCount, enemies.size());
+        return static_cast<std::size_t>(std::count_if(
+            enemies.begin(), enemies.begin() + count,
+            [](const Enemy &enemy) { return !enemy.isDead(); }));
+    };
+
+    std::size_t alive = countAlivePrefix(
+        enemies_, initialOutdoorEnemyCount_);
+    for (const InteriorRuntime &interior : interiors_)
+    {
+        alive += countAlivePrefix(
+            interior.enemies, interior.initialEnemyCount);
+    }
+    return alive;
 }
 
 std::uint32_t GameplayWorld::highRiskPressureWaveCount() const noexcept

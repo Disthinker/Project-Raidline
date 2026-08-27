@@ -296,6 +296,7 @@ public:
     tacticalMap() const noexcept;
 
     [[nodiscard]] std::size_t aliveEnemyCount() const noexcept;
+    [[nodiscard]] std::size_t aliveInitialEnemyCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskPressureWaveCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskActiveEnemyCap() const noexcept;
 
@@ -430,6 +431,7 @@ private:
         std::vector<EnemyNavigationRuntime> enemyNavigation;
         std::optional<RaidSpaceBlockerIndex> blockerIndex;
         std::size_t navigationScheduleCursor{};
+        std::size_t initialEnemyCount{};
     };
 
     struct TracerPresentationSegment
@@ -472,6 +474,7 @@ private:
     ShotId nextShotId_{1};
     CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
+    std::size_t initialOutdoorEnemyCount_{};
     std::vector<EnemyNavigationRuntime> enemyNavigation_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     std::optional<RaidSpaceBlockerIndex> outdoorBlockerIndex_;

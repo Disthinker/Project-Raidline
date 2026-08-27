@@ -1604,7 +1604,7 @@ TEST(SaveRepositoryTest,
 }
 
 TEST(SaveRepositoryTest,
-     SchemaV27RoundTripPreservesEstablishedStaffedOutpost)
+     SchemaV28RoundTripPreservesDisruptedOutpostThreat)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
@@ -1624,6 +1624,11 @@ TEST(SaveRepositoryTest,
         CommandContext{profile.revision, "save-staff-outpost"})
                     .succeeded);
 
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.shortcutOperationsSinceRestoration = 3U;
+    outpost.disrupted = true;
+
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(profile, content.contentVersion()),
         content);
@@ -1634,7 +1639,102 @@ TEST(SaveRepositoryTest,
         loaded.profile->regionalOperations.outposts.at(outpostId);
     EXPECT_TRUE(loadedOutpost.established);
     EXPECT_EQ(assignedRegionalOutpostStaff(loadedOutpost), 2U);
+    EXPECT_TRUE(loadedOutpost.disrupted);
+    EXPECT_EQ(loadedOutpost.shortcutOperationsSinceRestoration, 3U);
+    EXPECT_FALSE(regionalOutpostOnline(*loaded.profile, content, outpostId));
+    EXPECT_EQ(
+        profileStateFingerprint(*loaded.profile),
+        profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV27MigrationDefaultsEstablishedOutpostThreatToZero)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-established-outpost-v27", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "save-v27-establish-outpost"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "save-v27-staff-outpost"})
+                    .succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 27U),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    const RegionalOutpostState &loadedOutpost =
+        loaded.profile->regionalOperations.outposts.at(outpostId);
+    EXPECT_TRUE(loadedOutpost.established);
+    EXPECT_EQ(assignedRegionalOutpostStaff(loadedOutpost), 2U);
+    EXPECT_FALSE(loadedOutpost.disrupted);
+    EXPECT_EQ(loadedOutpost.shortcutOperationsSinceRestoration, 0U);
     EXPECT_TRUE(regionalOutpostOnline(*loaded.profile, content, outpostId));
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV28RoundTripPreservesPendingOutpostRestoration)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-outpost-restoration-v28", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile, content, EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "save-restore-establish"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile, content, RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "save-restore-staff"})
+                    .succeeded);
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.shortcutOperationsSinceRestoration = 3U;
+    outpost.disrupted = true;
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-restoration-raid",
+            "save-restoration-settlement",
+            28001U,
+            MapDefinitionId{"map.raid.riverside"},
+            {},
+            std::nullopt,
+            outpostId},
+        CommandContext{profile.revision, "deploy:save-restoration"})
+                    .succeeded);
+    profile.pendingRaid->outpostRestoration->objectiveSecured = true;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()),
+        content);
+
+    ASSERT_EQ(loaded.status, SaveLoadStatus::LoadedPrimary);
+    ASSERT_TRUE(loaded.profile.has_value());
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    ASSERT_TRUE(
+        loaded.profile->pendingRaid->outpostRestoration.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->outpostRestoration
+            ->outpostDefinitionId,
+        outpostId);
+    EXPECT_TRUE(
+        loaded.profile->pendingRaid->outpostRestoration
+            ->objectiveSecured);
     EXPECT_EQ(
         profileStateFingerprint(*loaded.profile),
         profileStateFingerprint(profile));

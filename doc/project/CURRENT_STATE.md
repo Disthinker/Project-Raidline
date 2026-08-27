@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@f31d91a` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及已接受的 Regional Operations 失物记录、NPC 寻回和 Raid 自力寻回闭环。
-- 当前开发分支：`codex/regional-route-outpost-foundation`，从 `origin/main@f31d91a` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-route-outpost-foundation.md`。
+- `origin/main@dc19745` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回闭环，以及已接受的区域路线与轻量哨所基础。
+- 当前开发分支：`codex/regional-outpost-disruption-restoration`，从 `origin/main@dc19745` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-outpost-disruption-restoration-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础和 **Regional Operations — Loss & Recovery** 均已进入主线。当前宏切片连续完成区域路线拓扑、轻量哨所建立和聚合人口驻守三个步骤；Online 哨所为后续出击开放固定捷径，但用户统一正常游玩验收前不合并。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery** 和区域路线/轻量哨所基础均已进入主线。当前宏切片让 Online 哨所随已结算的捷径行动累积威胁，在阈值后中断，并通过对应清剿 Raid 成功撤离恢复；人工验收前不合并。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -58,7 +58,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 43. **多敌人追击与攻击意图隔离**：PR #102 已通过 Windows Debug、233/233 定向回归、1108/1108 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以普通 merge commit `1c62064` 进入 main。最多 10 名敌人可同时攻击，超额成员继续施压并稳定轮转；0.25 秒受伤保护避免同一瞬间连续跳血。
 44. **失物记录与行动老化 v1**：PR #101 已通过 exact-head Windows/Ubuntu CI 和用户正常游玩验收，以普通 merge commit `7185d55` 进入 main。死亡/主动退出迁移携带资产树，异常退出继续回滚，schema v24/content v34 保存独立记录、老化窗口与 RaidResult 关联。Base Raid Gate 提供双语代码占位记录页和出击前到期二次确认。
 45. **NPC 寻回任务与 Raid 自行寻回 v1**：PR #103 已通过 exact-head CI 和用户统一正常游玩验收，以普通 merge commit `f31d91a` 进入 main。schema v26/content v35 支持整单 NPC 委托与来源地图内自力寻回，两条路径共享唯一资产所有权。
-46. **区域路线与轻量哨所基础（待统一验收）**：content v36/schema v27 建立稳定区域节点、路线和哨所 ID；Raid Gate 可建立 Old Service Relay 并从聚合人口池派驻/撤回 2 名健康居民。满员 Online 后，Riverside/Industrial/Frontier 单程最短时间从 90/150/210 分钟降为 55/95/125 分钟，Greyline 保持 45 分钟。Deploy 冻结路线与出发前区域状态；Windows Debug 全目标和 1150/1150 CTest 已通过，开发代理未启动游戏。
+46. **区域路线与轻量哨所基础**：PR #104 已通过 exact-head CI 与用户统一正常游玩验收，以普通 merge commit `dc19745` 进入 main。content v36/schema v27 建立稳定区域节点、路线和哨所 ID；满员 Old Service Relay 把 Riverside/Industrial/Frontier 单程最短时间从 90/150/210 分钟降为 55/95/125 分钟。
+47. **哨所中断与恢复 v1（当前开发）**：content v37/schema v28 数据化 3 次安全捷径行动阈值和 Riverside 清剿地图。只有冻结路线实际使用哨所且正式 Settlement 完成才增长一次威胁；阈值结算后下一局关闭捷径。清剿 Raid 消灭全部初始敌人前锁定所有撤离，完成并成功撤离才原子恢复；失败保留中断，异常退出恢复出击前状态。区域页和 Raid HUD 使用中英文文字/几何投影。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -88,7 +89,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
-- PR #90～#103 均已进入 main。当前区域路线/哨所分支在 `origin/main@f31d91a` 上完成三个可回滚开发步骤、Windows Debug 全目标和完整 1150/1150 CTest；exact-head CI 与用户统一正常游玩验收待完成，开发代理未启动游戏。
+- PR #90～#104 均已进入 main。当前哨所中断/恢复分支已完成三个玩家闭环步骤；领域、服务、Simulation、存档、客户端和双语定向回归 209/209、Windows Debug 全目标与完整 1161/1161 CTest 通过，exact-head CI 待运行，开发代理未启动游戏。
 - ProfileCombatDomain、ContentRegistry、SaveRepository、HitResolution、GameplayWorld、InventoryDomain、RaidLifecycle 与 AlphaExtractionSession focused 通过。
 - PR #61 的 Windows Debug 全目标、663/663 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收均通过。
 - PR #62 的医疗切片 Windows Debug、680/680 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均已通过。

@@ -243,18 +243,32 @@ BaseProfessionCounts parseBaseProfessionCounts(const Json &value)
         value.at("combat").get<std::uint32_t>()};
 }
 
-Json regionalOperationsValue(const RegionalOperationsState &state)
+Json regionalOperationsValue(
+    const RegionalOperationsState &state,
+    bool includeShortcutThreat)
 {
     Json outposts = Json::array();
     for (const auto &[outpostId, outpost] : state.outposts)
     {
-        outposts.push_back({
+        if (!includeShortcutThreat &&
+            outpost.shortcutOperationsSinceRestoration != 0U)
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent regional outpost threat"};
+        }
+        Json entry{
             {"definition_id", outpostId.value()},
             {"unlocked", outpost.unlocked},
             {"established", outpost.established},
             {"disrupted", outpost.disrupted},
             {"assigned_staff",
-             baseProfessionCountsValue(outpost.assignedStaff)}});
+             baseProfessionCountsValue(outpost.assignedStaff)}};
+        if (includeShortcutThreat)
+        {
+            entry["shortcut_operations_since_restoration"] =
+                outpost.shortcutOperationsSinceRestoration;
+        }
+        outposts.push_back(std::move(entry));
     }
     return {
         {"active_base_node_id", state.activeBaseNodeId.value()},
@@ -279,7 +293,8 @@ RegionalOperationsState defaultRegionalOperations(
 
 RegionalOperationsState parseRegionalOperations(
     const Json &value,
-    const ContentRegistry &content)
+    const ContentRegistry &content,
+    std::uint32_t schemaVersion)
 {
     RegionalOperationsState state;
     state.activeBaseNodeId = RegionNodeDefinitionId{
@@ -292,7 +307,11 @@ RegionalOperationsState parseRegionalOperations(
             entry.at("unlocked").get<bool>(),
             entry.at("established").get<bool>(),
             entry.at("disrupted").get<bool>(),
-            parseBaseProfessionCounts(entry.at("assigned_staff"))};
+            parseBaseProfessionCounts(entry.at("assigned_staff")),
+            schemaVersion >= 28
+                ? entry.at("shortcut_operations_since_restoration")
+                      .get<std::uint32_t>()
+                : 0U};
         if (!state.outposts.emplace(definitionId, outpost).second)
         {
             throw std::runtime_error{
@@ -900,7 +919,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     if (schemaVersion >= 27)
     {
         payload["regional_operations"] =
-            regionalOperationsValue(profile.regionalOperations);
+            regionalOperationsValue(
+                profile.regionalOperations,
+                schemaVersion >= 28);
     }
     else
     {
@@ -1002,6 +1023,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             throw std::invalid_argument{
                 "legacy schema cannot represent Raid self-recovery"};
+        }
+        if (schemaVersion < 28 && raid.outpostRestoration.has_value())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent outpost restoration"};
         }
         Json enemies = Json::array();
         for (const RaidEnemySnapshot &enemy : raid.enemies)
@@ -1343,7 +1369,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["travel"]
                     ["starting_regional_operations"] =
                         regionalOperationsValue(
-                            raid.travel.startingRegionalOperations);
+                            raid.travel.startingRegionalOperations,
+                            schemaVersion >= 28);
             }
         }
         if (schemaVersion >= 26)
@@ -1387,6 +1414,21 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             else
             {
                 payload["pending_raid"]["self_recovery"] = nullptr;
+            }
+        }
+        if (schemaVersion >= 28)
+        {
+            if (raid.outpostRestoration.has_value())
+            {
+                payload["pending_raid"]["outpost_restoration"] = {
+                    {"outpost_definition_id",
+                     raid.outpostRestoration->outpostDefinitionId.value()},
+                    {"objective_secured",
+                     raid.outpostRestoration->objectiveSecured}};
+            }
+            else
+            {
+                payload["pending_raid"]["outpost_restoration"] = nullptr;
             }
         }
     }
@@ -1507,7 +1549,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
         schemaVersion != 25 && schemaVersion != 26 &&
-        schemaVersion != 27)
+        schemaVersion != 27 && schemaVersion != 28)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1606,7 +1648,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 25 &&
              contentVersion == "regional-recovery-task-content-35") ||
             (schemaVersion == 26 &&
-             contentVersion == "regional-recovery-task-content-35");
+             contentVersion == "regional-recovery-task-content-35") ||
+            (schemaVersion == 27 &&
+             contentVersion == "regional-route-outpost-content-36");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1620,7 +1664,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 21 && schemaVersion != 22 &&
              schemaVersion != 23 && schemaVersion != 24 &&
              schemaVersion != 25 && schemaVersion != 26 &&
-             schemaVersion != 27) ||
+             schemaVersion != 27 && schemaVersion != 28) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -1900,7 +1944,7 @@ SaveLoadResult deserializeProfileEnvelope(
         }
         profile.regionalOperations = schemaVersion >= 27
             ? parseRegionalOperations(
-                  payload.at("regional_operations"), content)
+                  payload.at("regional_operations"), content, schemaVersion)
             : defaultRegionalOperations(content);
         if (schemaVersion >= 20)
         {
@@ -2630,7 +2674,8 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingRegionalOperations =
                         parseRegionalOperations(
                             travel.at("starting_regional_operations"),
-                            content);
+                            content,
+                            schemaVersion);
                 }
                 else
                 {
@@ -2767,7 +2812,9 @@ SaveLoadResult deserializeProfileEnvelope(
                     profile.regionalOperations;
             }
             if (schemaVersion < 27 &&
-                raid.rulesVersion == "regional-route-network-17")
+                (raid.rulesVersion == "regional-route-network-17" ||
+                 raid.rulesVersion ==
+                     "regional-outpost-restoration-18"))
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2902,6 +2949,19 @@ SaveLoadResult deserializeProfileEnvelope(
                             parseVector(root.at("position"))});
                 }
                 raid.selfRecovery = std::move(recovery);
+            }
+            if (schemaVersion >= 28 &&
+                !value.at("outpost_restoration").is_null())
+            {
+                const Json &restoration =
+                    value.at("outpost_restoration");
+                raid.outpostRestoration =
+                    RegionalOutpostRestorationSnapshot{
+                        RegionalOutpostDefinitionId{
+                            restoration.at("outpost_definition_id")
+                                .get<std::string>()},
+                        restoration.at("objective_secured")
+                            .get<bool>()};
             }
             profile.pendingRaid = std::move(raid);
         }

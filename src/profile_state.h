@@ -431,6 +431,7 @@ struct RegionalOutpostState
     bool established{};
     bool disrupted{};
     BaseProfessionCounts assignedStaff{};
+    std::uint32_t shortcutOperationsSinceRestoration{};
 
     friend bool operator==(
         const RegionalOutpostState &,
@@ -632,6 +633,16 @@ struct RaidTravelSnapshot
         const RaidTravelSnapshot &) = default;
 };
 
+struct RegionalOutpostRestorationSnapshot
+{
+    RegionalOutpostDefinitionId outpostDefinitionId;
+    bool objectiveSecured{};
+
+    friend bool operator==(
+        const RegionalOutpostRestorationSnapshot &,
+        const RegionalOutpostRestorationSnapshot &) = default;
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -647,6 +658,7 @@ struct PendingRaidSnapshot
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
+    std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;

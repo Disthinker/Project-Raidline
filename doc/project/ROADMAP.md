@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice 和 **Regional Operations — Loss & Recovery** 均已进入主线。当前宏切片用三个可独立回滚提交统一交付区域路线拓扑、轻量哨所建立和聚合人口驻守捷径；范围合同见 `doc/exec-plans/active/regional-route-outpost-foundation.md`，外部 GDD 继续只读。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、**Regional Operations — Loss & Recovery** 和区域路线/轻量哨所基础均已进入主线。当前宏切片统一交付哨所威胁、中断与清剿恢复闭环；范围合同见 `doc/exec-plans/active/regional-outpost-disruption-restoration-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -139,8 +139,9 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 失物记录与行动老化 v1 | 失败后可在 Raid Gate 查看地图、难度、资产摘要和剩余行动窗口；即将到期时出击需再次确认 | AssetRegistry 唯一所有权、失物根位置、Settlement 幂等老化、schema v24/content v34 | PR #101 已通过 CI 和用户正常游玩验收，以 `7185d55` 进入 main。异常退出继续精确回滚，不创建或老化记录 |
 | 单一 NPC 寻回任务 | 从一条记录发起一次按整单计价、耗时的委托，完成后按冻结结果返还 | 单任务槽、记录锁定、地图定义价格/时长、冻结结果、取消不退款、唯一回收目的地、schema v25/content v35 | PR #103 已通过 CI 和用户统一验收，以普通 merge commit `f31d91a` 进入 main |
 | Raid 内自力寻回 | 返回来源地图后打开失物缓存，自行携带并成功撤离；未打开记录继续老化，异常退出恢复出击前状态 | 来源地图约束、冻结 Raid 快照、缓存开启时原子迁移、成功/失败结算、与委托共享唯一所有权、schema v26 | PR #103 已以 `f31d91a` 进入 main；尸体表现与正式资源延期 |
-| 区域路线拓扑 | 出击页显示实际路线、是否使用哨所和抵达/返程时间 | 稳定节点/路线 ID、确定性最短路径、Deploy 路线快照、schema v27/content v36 | 当前分支 Step 1 完成；无哨所时兼容既有 45/90/150/210 分钟节奏 |
-| 轻量哨所建立与驻守 | 建立 Old Service Relay 后派驻/撤回 2 名健康居民；满员自动开放远程固定捷径 | 原子建立/驻守命令、共享劳动力投影、施工预留、Online 路线门控和 Raid 冻结 | 当前分支 Step 2/3 完成；Windows Debug 全目标与 1150/1150 CTest 通过，统一游玩验收及 exact-head CI 待完成 |
+| 区域路线拓扑 | 出击页显示实际路线、是否使用哨所和抵达/返程时间 | 稳定节点/路线 ID、确定性最短路径、Deploy 路线快照、schema v27/content v36 | PR #104 已通过 CI 与用户验收，以 `dc19745` 进入 main |
+| 轻量哨所建立与驻守 | 建立 Old Service Relay 后派驻/撤回 2 名健康居民；满员自动开放远程固定捷径 | 原子建立/驻守命令、共享劳动力投影、施工预留、Online 路线门控和 Raid 冻结 | PR #104 已以普通 merge commit `dc19745` 进入 main |
+| 哨所中断与清剿恢复 v1 | 捷径行动累积可见威胁；失联后改走直达路线；从区域页完成清剿 Raid 后恢复 | Settlement 去重计数、内容阈值/恢复地图、目标撤离门控、schema v28/content v37、异常回滚 | 当前分支三个步骤完成；定向 209/209、Windows Debug 全目标与完整 1161/1161 CTest 通过，exact-head CI 和用户统一验收待完成 |
 
 ## 当前 Combat Reliability 缺陷
 
