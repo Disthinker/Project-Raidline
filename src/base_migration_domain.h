@@ -45,4 +45,3 @@ struct BaseMigrationReceipt
     const ContentRegistry &content,
     const BaseMigrationCommand &command,
     const CommandContext &context);
-
