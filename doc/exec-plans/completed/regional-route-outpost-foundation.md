@@ -54,5 +54,5 @@
 - [x] Step 2：轻量哨所建立领域命令及区域页交互。Windows Debug 游戏、领域、存档和本地化目标构建通过；相关定向 93/93 通过。
 - [x] Step 3：人口驻守、捷径激活与路线重算。驻守计入共享劳动力、施工预留不可抢占、Raid 期间不可变更且结算使用冻结路线；Windows Debug 相关目标构建通过，定向 130/130 通过。
 - [x] Windows Debug 全目标与全量 1150/1150 CTest。
-- [ ] exact-head Windows/Ubuntu CI。
-- [ ] 用户统一正常游玩验收。
+- [x] exact-head Windows/Ubuntu CI。
+- [x] 用户统一正常游玩验收；PR #104 以普通 merge commit `dc19745` 进入 main。

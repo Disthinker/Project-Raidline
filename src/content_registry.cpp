@@ -968,13 +968,18 @@ ContentRegistry ContentRegistry::fromJson(
                 RegionNodeDefinitionId{
                     requiredString(outpostValue, "node_id")},
                 requiredBool(outpostValue, "initially_unlocked"),
-                requiredPositiveUint(outpostValue, "required_staff")};
+                requiredPositiveUint(outpostValue, "required_staff"),
+                requiredPositiveUint(
+                    outpostValue, "safe_shortcut_operations"),
+                MapDefinitionId{requiredString(
+                    outpostValue, "restoration_map_definition_id")}};
             const auto node = registry.regionNodeIndex_.find(
                 definition.nodeId);
             if (!hasPrefix(
                     definition.id.value(), "regional_outpost.") ||
                 definition.displayName.empty() ||
                 definition.requiredStaff > 16U ||
+                definition.safeShortcutOperations > 1000U ||
                 node == registry.regionNodeIndex_.end() ||
                 registry.regionalOperations_.nodes[node->second].kind !=
                     RegionNodeKind::Outpost)
@@ -2655,6 +2660,15 @@ ContentRegistry ContentRegistry::fromJson(
         if (regionalMapIds.size() != registry.maps_.size())
         {
             fail("every Raid map requires one regional node");
+        }
+        for (const RegionalOutpostDefinition &outpost :
+             registry.regionalOperations_.outposts)
+        {
+            if (!registry.mapIndex_.contains(
+                    outpost.restorationMapDefinitionId))
+            {
+                fail("regional outpost restoration map is invalid");
+            }
         }
         std::map<RegionNodeDefinitionId, std::uint64_t> directDistances;
         for (const RegionNodeDefinition &node :

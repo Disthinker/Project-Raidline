@@ -1372,8 +1372,10 @@ bool App::handleScreenConfirm()
     return transitioned;
 }
 
-bool App::tryDeployFromBase()
+bool App::tryDeployFromBase(
+    std::optional<RegionalOutpostDefinitionId> outpostRestorationId)
 {
+    const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
     const WeaponReadiness readiness = weaponReadiness(profile);
     const std::size_t usableRounds = readiness.compatibleMagazineRounds +
@@ -1400,10 +1402,19 @@ bool App::tryDeployFromBase()
         }
         return false;
     }
+    const MapDefinition &targetMap = outpostRestorationId.has_value()
+        ? content.map(content.regionalOutpost(
+              *outpostRestorationId).restorationMapDefinitionId)
+        : selectedRaidMap();
     if (!gameFlow_.deploy(
-            selectedRaidMap().id,
-            selectedRaidIntelligence_,
-            selectedRaidSelfRecoveryRecordId_))
+            targetMap.id,
+            outpostRestorationId.has_value()
+                ? RaidIntelligenceLoadout{}
+                : selectedRaidIntelligence_,
+            outpostRestorationId.has_value()
+                ? std::optional<std::string>{}
+                : selectedRaidSelfRecoveryRecordId_,
+            outpostRestorationId))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1937,6 +1948,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             if (contains(raidRegionalOperationsButton(), click.position))
             {
                 regionalOperationsOpen_ = false;
+                deploymentWarningArmed_ = false;
                 uiMessage_.clear();
                 return;
             }
@@ -1947,6 +1959,15 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             {
                 const RegionalOutpostState &state = gameSession_.profile()
                     .regionalOperations.outposts.at(outposts.front().id);
+                if (state.disrupted)
+                {
+                    const bool deployed = tryDeployFromBase(
+                        outposts.front().id);
+                    gameAudio_.play(deployed
+                        ? SoundEventId::UiConfirm
+                        : SoundEventId::UiDeny);
+                    return;
+                }
                 if (!state.established)
                 {
                     const RegionalOutpostReceipt receipt =
@@ -5187,6 +5208,19 @@ void App::renderDebugText()
         20.0F,
         196.0F,
         worldTimeText.c_str());
+
+    if (gameSession_.profile().pendingRaid.has_value() &&
+        gameSession_.profile().pendingRaid->outpostRestoration.has_value())
+    {
+        const std::string objective =
+            gameSession_.outpostRestorationObjectiveSecured()
+            ? "OUTPOST CLEARING COMPLETE | EXTRACT TO RESTORE SHORTCUTS"
+            : fmt::format(
+                  "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | EXITS LOCKED",
+                  gameSession_.world().aliveInitialEnemyCount());
+        uiTextRenderer_.render(
+            renderer_, 20.0F, 212.0F, objective.c_str());
+    }
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()
         ? fmt::format(
@@ -11002,8 +11036,10 @@ void App::renderRegionalOperations()
             state.unlocked ? "UNLOCKED" : "LOCKED",
         assignedRegionalOutpostStaff(state),
         definition.requiredStaff,
-        regionalOutpostOnline(profile, content, definition.id)
-            ? "ONLINE" : "OFFLINE");
+        state.disrupted
+            ? "DISRUPTED"
+            : regionalOutpostOnline(profile, content, definition.id)
+                ? "ONLINE" : "OFFLINE");
     uiTextRenderer_.render(
         renderer_, 300.0F, 330.0F, status.c_str());
     uiTextRenderer_.render(
@@ -11012,7 +11048,28 @@ void App::renderRegionalOperations()
     uiTextRenderer_.render(
         renderer_, 300.0F, 392.0F,
         "FIXED SHORTCUTS REQUIRE A FULL HEALTHY GARRISON");
-    if (regionalOutpostOnline(profile, content, definition.id))
+    const std::string threat = fmt::format(
+        "SHORTCUT THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
+        state.shortcutOperationsSinceRestoration,
+        definition.safeShortcutOperations,
+        definition.safeShortcutOperations >
+                state.shortcutOperationsSinceRestoration
+            ? definition.safeShortcutOperations -
+                  state.shortcutOperationsSinceRestoration
+            : 0U);
+    uiTextRenderer_.render(
+        renderer_, 300.0F, 408.0F, threat.c_str());
+    if (state.disrupted)
+    {
+        const MapDefinition &restorationMap = content.map(
+            definition.restorationMapDefinitionId);
+        const std::string restoration = fmt::format(
+            "SHORTCUTS DISRUPTED | CLEAR INITIAL HOSTILES AT {} AND EXTRACT",
+            restorationMap.displayName);
+        uiTextRenderer_.render(
+            renderer_, 300.0F, 432.0F, restoration.c_str());
+    }
+    else if (regionalOutpostOnline(profile, content, definition.id))
     {
         const RegionalRoutePlan riverside = queryRegionalRoute(
             profile, content, MapDefinitionId{"map.raid.riverside"});
@@ -11027,12 +11084,12 @@ void App::renderRegionalOperations()
             industrial.travelMinutes,
             frontier.travelMinutes);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 420.0F, benefits.c_str());
+            renderer_, 300.0F, 432.0F, benefits.c_str());
     }
     else if (state.established)
     {
         uiTextRenderer_.render(
-            renderer_, 300.0F, 420.0F,
+            renderer_, 300.0F, 432.0F,
             "SHORTCUTS OFFLINE | ASSIGN 2 HEALTHY RESIDENTS");
     }
 
@@ -11049,9 +11106,13 @@ void App::renderRegionalOperations()
             content,
             RegionalOutpostStaffingCommand{
                 definition.id, !hasGarrison});
-    const bool canCommit = state.established
-        ? staffingPlan.canCommit
-        : establishPlan.canCommit;
+    const bool canCommit = state.disrupted
+        ? state.established &&
+            assignedRegionalOutpostStaff(state) ==
+                definition.requiredStaff
+        : state.established
+            ? staffingPlan.canCommit
+            : establishPlan.canCommit;
     const SDL_FRect action = regionalOutpostActionButton();
     SDL_SetRenderDrawColor(
         renderer_, canCommit ? 48 : 42,
@@ -11062,7 +11123,11 @@ void App::renderRegionalOperations()
     SDL_RenderRect(renderer_, &action);
     uiTextRenderer_.render(
         renderer_, action.x + 52.0F, action.y + 16.0F,
-        state.established
+        state.disrupted
+            ? deploymentWarningArmed_
+                ? "CONFIRM OUTPOST CLEARING RAID"
+                : "DEPLOY OUTPOST CLEARING RAID"
+            : state.established
             ? hasGarrison
                 ? "RETURN OUTPOST GARRISON"
                 : staffingPlan.canCommit
@@ -11073,7 +11138,7 @@ void App::renderRegionalOperations()
                 : "OUTPOST ESTABLISHMENT BLOCKED");
     uiTextRenderer_.render(
         renderer_, 300.0F, 558.0F,
-        "NO MATERIAL OR WORLD TIME COST IN FOUNDATION V1 | ESC BACK");
+        "EACH SETTLED SHORTCUT RAID BUILDS THREAT | ESC BACK");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
@@ -11674,14 +11739,22 @@ void App::renderRaidTacticalMap()
     {
         const RaidSession &raidSession =
             gameSession_.world().raidSession();
+        const bool missionExtractionEligible =
+            !gameSession_.profile().pendingRaid.has_value() ||
+            !gameSession_.profile().pendingRaid->outpostRestoration
+                 .has_value() ||
+            gameSession_.outpostRestorationObjectiveSecured();
         const std::string exitStatus = fmt::format(
             "EXITS | NORMAL {} | SIGNAL {} | LIGHT {}",
-            raidSession.normalExtractionOpen() ||
+            missionExtractionEligible &&
+                    (raidSession.normalExtractionOpen() ||
                     raidSession.normalExtractionGraceActive()
-                ? "OPEN" : "CLOSED",
-            raidSession.emergencyExtractionOpen()
+                ) ? "OPEN" : "CLOSED",
+            missionExtractionEligible &&
+                    raidSession.emergencyExtractionOpen()
                 ? "OPEN" : "LOCKED",
-            raidSession.conditionalExtractionOpen() &&
+            missionExtractionEligible &&
+                    raidSession.conditionalExtractionOpen() &&
                     gameSession_.conditionalExtractionEligible()
                 ? "OPEN" : "LOCKED");
         uiTextRenderer_.render(

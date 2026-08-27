@@ -71,6 +71,74 @@ TEST(RegionalOperationsDomainTest,
 }
 
 TEST(RegionalOperationsDomainTest,
+     SettledShortcutAdvancesOneThreatStepAcrossSeveralRouteEdges)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "outpost-threat-route", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.established = true;
+    outpost.assignedStaff[static_cast<std::size_t>(
+        BaseResidentProfession::General)] = 2U;
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const RegionalOutpostThreatAdvance advanced =
+        applySettledRegionalRouteUsage(
+            profile,
+            content,
+            {RegionRouteDefinitionId{"region_route.relay_access"},
+             RegionRouteDefinitionId{
+                 "region_route.relay_industrial_shortcut"}});
+
+    ASSERT_TRUE(advanced.succeeded) << advanced.message;
+    ASSERT_EQ(advanced.usedOutpostIds.size(), 1U);
+    EXPECT_TRUE(advanced.newlyDisruptedOutpostIds.empty());
+    EXPECT_EQ(outpost.shortcutOperationsSinceRestoration, 1U);
+    EXPECT_FALSE(outpost.disrupted);
+    EXPECT_NE(profileStateFingerprint(profile), before);
+}
+
+TEST(RegionalOperationsDomainTest,
+     ThreatThresholdDisruptsOutpostAndInvalidRouteLeavesStateUnchanged)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "outpost-threat-threshold", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.established = true;
+    outpost.assignedStaff[static_cast<std::size_t>(
+        BaseResidentProfession::General)] = 2U;
+    outpost.shortcutOperationsSinceRestoration = 2U;
+
+    const RegionalOutpostThreatAdvance disrupted =
+        applySettledRegionalRouteUsage(
+            profile,
+            content,
+            {RegionRouteDefinitionId{"region_route.relay_access"}});
+    ASSERT_TRUE(disrupted.succeeded) << disrupted.message;
+    ASSERT_EQ(disrupted.newlyDisruptedOutpostIds.size(), 1U);
+    EXPECT_EQ(disrupted.newlyDisruptedOutpostIds.front(), outpostId);
+    EXPECT_EQ(outpost.shortcutOperationsSinceRestoration, 3U);
+    EXPECT_TRUE(outpost.disrupted);
+    EXPECT_FALSE(regionalOutpostOnline(profile, content, outpostId));
+
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const RegionalOutpostThreatAdvance rejected =
+        applySettledRegionalRouteUsage(
+            profile,
+            content,
+            {RegionRouteDefinitionId{"region_route.relay_access"}});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(RegionalOperationsDomainTest,
      EstablishOutpostIsAtomicIdempotentAndStillOffline)
 {
     const ContentRegistry &content = publishedContentRegistry();

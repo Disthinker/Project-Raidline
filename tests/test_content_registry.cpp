@@ -65,7 +65,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-route-outpost-content-36");
+        "regional-outpost-disruption-content-37");
+    const RegionalOutpostDefinition &relay = registry.regionalOutpost(
+        RegionalOutpostDefinitionId{
+            "regional_outpost.old_service_relay"});
+    EXPECT_EQ(relay.safeShortcutOperations, 3U);
+    EXPECT_EQ(
+        relay.restorationMapDefinitionId,
+        MapDefinitionId{"map.raid.riverside"});
     EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})
                   .recovery.serviceFee, 60U);
     EXPECT_EQ(registry.map(MapDefinitionId{"map.v0.test"})
@@ -847,6 +854,26 @@ TEST(ContentRegistryTest, RejectsUnknownMapDefinitionReference)
         "\"enemy_deployment\": \"enemy_deployment.v0.missing\"");
     EXPECT_THROW(
         ContentRegistry::fromJson(invalid),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidOutpostDisruptionThreshold)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"safe_shortcut_operations\": 3",
+            "\"safe_shortcut_operations\": 0")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnknownOutpostRestorationMap)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"restoration_map_definition_id\": \"map.raid.riverside\"",
+            "\"restoration_map_definition_id\": \"map.raid.missing\"")),
         ContentRegistryError);
 }
 

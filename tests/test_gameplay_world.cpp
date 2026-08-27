@@ -3100,6 +3100,29 @@ TEST(GameplayWorldRaidTest, MovingCenterIntoPointStartsExtraction)
                     world.player().size() / 2.0F}));
 }
 
+TEST(GameplayWorldRaidTest, MissionObjectiveCanGateNormalExtraction)
+{
+    GameplayWorld world;
+    GameplayInput blocked;
+    blocked.extractionEligible = false;
+    blocked.moveLeft = true;
+    world.update(blocked, 2.0F);
+    blocked.moveLeft = false;
+    blocked.moveDown = true;
+    world.update(blocked, 0.65F);
+
+    ASSERT_TRUE(world.extractionPoint().contains(Vec2{
+        world.player().position().x + world.player().size() / 2.0F,
+        world.player().position().y + world.player().size() / 2.0F}));
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(world.raidSession().extractionProgress(), 0.0F);
+
+    GameplayInput eligible;
+    world.update(eligible, 0.1F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::Extracting);
+    EXPECT_GT(world.raidSession().extractionProgress(), 0.0F);
+}
+
 TEST(GameplayWorldRaidTest, LeavingPointCancelsExtraction)
 {
     GameplayWorld world;

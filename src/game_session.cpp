@@ -297,7 +297,8 @@ bool GameSession::deployAlpha(
     std::uint64_t seed,
     MapDefinitionId mapDefinitionId,
     RaidIntelligenceLoadout intelligence,
-    std::optional<std::string> selfRecoveryRecordId)
+    std::optional<std::string> selfRecoveryRecordId,
+    std::optional<RegionalOutpostDefinitionId> outpostRestorationId)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
         mapDefinitionId.value().empty())
@@ -320,7 +321,8 @@ bool GameSession::deployAlpha(
             seed,
             std::move(mapDefinitionId),
             intelligence,
-            std::move(selfRecoveryRecordId)},
+            std::move(selfRecoveryRecordId),
+            std::move(outpostRestorationId)},
         CommandContext{
             profile_.revision,
             "deploy:" + raidId});
@@ -483,6 +485,7 @@ bool GameSession::deployAlpha(
     weaponFaultSequence_ = 0;
     raidElapsedSeconds_ = 0.0F;
     selfRecoveryInteractionSeconds_ = 0.0F;
+    outpostRestorationObjectiveSecured_ = false;
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
@@ -492,6 +495,11 @@ bool GameSession::deployAlpha(
     configuredWeaponAssetId_.reset();
     synchronizeActiveAlphaWeapon();
     return true;
+}
+
+bool GameSession::outpostRestorationObjectiveSecured() const noexcept
+{
+    return outpostRestorationObjectiveSecured_;
 }
 
 bool GameSession::activeQuitAlphaRaid()
@@ -2272,6 +2280,7 @@ void GameSession::updateAlphaRaid(
     if (!profile_.pendingRaid.has_value())
     {
         alphaRaidActive_ = false;
+        outpostRestorationObjectiveSecured_ = false;
         state_ = GameSessionState::BetweenRaids;
         return;
     }
@@ -2585,7 +2594,17 @@ void GameSession::updateAlphaRaid(
         simulationInput.firePressed = false;
     }
 
+    const bool restorationActive =
+        profile_.pendingRaid->outpostRestoration.has_value();
+    simulationInput.extractionEligible =
+        simulationInput.extractionEligible &&
+        (!restorationActive || outpostRestorationObjectiveSecured_);
     world_->update(simulationInput, deltaTime);
+    if (restorationActive && !outpostRestorationObjectiveSecured_ &&
+        world_->aliveInitialEnemyCount() == 0U)
+    {
+        outpostRestorationObjectiveSecured_ = true;
+    }
     if (world_->shotFiredLastUpdate())
     {
         if (!firedCandidate.has_value())
@@ -3228,6 +3247,11 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     }
     ProfileState candidate = profile_;
     candidate.currentHealth = std::max(1, world_->player().health());
+    if (candidate.pendingRaid->outpostRestoration.has_value())
+    {
+        candidate.pendingRaid->outpostRestoration->objectiveSecured =
+            outpostRestorationObjectiveSecured_;
+    }
     const RaidSettlementReceipt receipt = settlePendingRaid(
         candidate,
         publishedContentRegistry(),
@@ -3248,6 +3272,7 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     weaponClearGesture_.reset();
     raidElapsedSeconds_ = 0.0F;
     selfRecoveryInteractionSeconds_ = 0.0F;
+    outpostRestorationObjectiveSecured_ = false;
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;

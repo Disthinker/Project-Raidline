@@ -41,4 +41,7 @@ struct GameplayInput
     // Service-owned profile query; the world only consumes this eligibility
     // bit and never inspects asset ownership.
     bool conditionalExtractionEligible{};
+    // Service-owned mission objective gate. All extraction types remain
+    // unavailable until the active mission contract is complete.
+    bool extractionEligible{true};
 };

@@ -202,7 +202,10 @@ public:
         std::uint64_t seed,
         MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"},
         RaidIntelligenceLoadout intelligence = {},
-        std::optional<std::string> selfRecoveryRecordId = std::nullopt);
+        std::optional<std::string> selfRecoveryRecordId = std::nullopt,
+        std::optional<RegionalOutpostDefinitionId>
+            outpostRestorationId = std::nullopt);
+    [[nodiscard]] bool outpostRestorationObjectiveSecured() const noexcept;
     [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
     raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt
@@ -381,6 +384,7 @@ private:
     std::uint64_t weaponFaultSequence_{};
     float raidElapsedSeconds_{};
     float selfRecoveryInteractionSeconds_{};
+    bool outpostRestorationObjectiveSecured_{};
     double pendingWorldSeconds_{};
     float worldClockCheckpointElapsedSeconds_{};
     bool worldClockDirty_{};

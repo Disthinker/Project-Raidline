@@ -429,6 +429,48 @@ DeployReceipt executeDeploy(
             "Deploy map has no validated Alpha configuration",
             profile.revision);
     }
+
+    std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
+    if (command.outpostRestorationId.has_value())
+    {
+        if (command.selfRecoveryRecordId.has_value())
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "outpost restoration cannot be combined with self-recovery",
+                profile.revision);
+        }
+        try
+        {
+            const RegionalOutpostDefinition &definition =
+                content.regionalOutpost(*command.outpostRestorationId);
+            const auto state = candidate.regionalOperations.outposts.find(
+                definition.id);
+            if (definition.restorationMapDefinitionId !=
+                    command.mapDefinitionId ||
+                state == candidate.regionalOperations.outposts.end() ||
+                !state->second.unlocked || !state->second.established ||
+                !state->second.disrupted ||
+                assignedRegionalOutpostStaff(state->second) !=
+                    definition.requiredStaff)
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "outpost restoration deployment is unavailable",
+                    profile.revision);
+            }
+            outpostRestoration = RegionalOutpostRestorationSnapshot{
+                definition.id,
+                false};
+        }
+        catch (...)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "outpost restoration definition does not exist",
+                profile.revision);
+        }
+    }
     const RaidTravelPreview travel = queryRaidTravel(
         candidate, content, *map);
     if (!travel.reachable)
@@ -507,7 +549,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "regional-route-network-17";
+    snapshot.rulesVersion = "regional-outpost-restoration-18";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -536,6 +578,7 @@ DeployReceipt executeDeploy(
     snapshot.travel.routeIds = travel.routeIds;
     snapshot.travel.startingRegionalOperations =
         candidate.regionalOperations;
+    snapshot.outpostRestoration = std::move(outpostRestoration);
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -941,6 +984,16 @@ RaidSettlementReceipt settlePendingRaid(
 
     ProfileState candidate = profile;
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.outpostRestoration.has_value() &&
+        !raidSnapshot.outpostRestoration->objectiveSecured)
+    {
+        return settlementFailure(
+            RaidLifecycleError::InvalidCommand,
+            "outpost restoration requires the clearing objective",
+            profile.revision,
+            outcome);
+    }
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
     {
@@ -976,6 +1029,36 @@ RaidSettlementReceipt settlePendingRaid(
         static_cast<void>(candidate.assets.erase(assetId));
     }
     ageLostRaidRecords(candidate);
+    const RegionalOutpostThreatAdvance outpostThreat =
+        applySettledRegionalRouteUsage(
+            candidate,
+            content,
+            raidSnapshot.travel.routeIds);
+    if (!outpostThreat.succeeded)
+    {
+        return settlementFailure(
+            RaidLifecycleError::InvalidProfile,
+            outpostThreat.message,
+            profile.revision,
+            outcome);
+    }
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.outpostRestoration.has_value())
+    {
+        const auto state = candidate.regionalOperations.outposts.find(
+            raidSnapshot.outpostRestoration->outpostDefinitionId);
+        if (state == candidate.regionalOperations.outposts.end() ||
+            !state->second.established || !state->second.disrupted)
+        {
+            return settlementFailure(
+                RaidLifecycleError::InvalidProfile,
+                "outpost restoration target is no longer disrupted",
+                profile.revision,
+                outcome);
+        }
+        state->second.disrupted = false;
+        state->second.shortcutOperationsSinceRestoration = 0U;
+    }
     std::optional<std::string> lostRecordId;
     if (outcome != RaidResultOutcome::Extracted)
     {
@@ -1115,7 +1198,9 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->travel.startingRaidIntelligence;
     const bool restoreRegionalOperations =
         candidate.pendingRaid->rulesVersion ==
-            "regional-route-network-17";
+            "regional-route-network-17" ||
+        candidate.pendingRaid->rulesVersion ==
+            "regional-outpost-restoration-18";
     const RegionalOperationsState startingRegionalOperations =
         candidate.pendingRaid->travel.startingRegionalOperations;
     std::set<AssetInstanceId> generatedLoot;

@@ -6,6 +6,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <set>
 
 namespace
 {
@@ -541,4 +542,70 @@ RegionalOutpostStaffingReceipt executeRegionalOutpostStaffing(
             state.assignedStaff,
             assignedRegionalOutpostStaff(state),
             regionalOutpostOnline(profile, content, command.definitionId)};
+}
+
+RegionalOutpostThreatAdvance applySettledRegionalRouteUsage(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<RegionRouteDefinitionId> &routeIds) noexcept
+{
+    try
+    {
+        std::set<RegionalOutpostDefinitionId> used;
+        for (const RegionRouteDefinitionId &routeId : routeIds)
+        {
+            const RegionRouteDefinition &route = content.regionRoute(routeId);
+            if (route.requiredOnlineOutpostId.has_value())
+            {
+                used.insert(*route.requiredOnlineOutpostId);
+            }
+        }
+
+        for (const RegionalOutpostDefinitionId &outpostId : used)
+        {
+            const RegionalOutpostDefinition &definition =
+                content.regionalOutpost(outpostId);
+            const auto found = candidate.regionalOperations.outposts.find(
+                outpostId);
+            if (found == candidate.regionalOperations.outposts.end() ||
+                !found->second.unlocked || !found->second.established ||
+                found->second.disrupted ||
+                assignedRegionalOutpostStaff(found->second) !=
+                    definition.requiredStaff ||
+                found->second.shortcutOperationsSinceRestoration >=
+                    definition.safeShortcutOperations)
+            {
+                return {
+                    false,
+                    DomainErrorCode::InvalidProfile,
+                    "settled regional route does not match an online outpost"};
+            }
+        }
+
+        RegionalOutpostThreatAdvance result;
+        result.succeeded = true;
+        result.usedOutpostIds.assign(used.begin(), used.end());
+        for (const RegionalOutpostDefinitionId &outpostId : used)
+        {
+            const RegionalOutpostDefinition &definition =
+                content.regionalOutpost(outpostId);
+            RegionalOutpostState &state =
+                candidate.regionalOperations.outposts.at(outpostId);
+            ++state.shortcutOperationsSinceRestoration;
+            if (state.shortcutOperationsSinceRestoration ==
+                definition.safeShortcutOperations)
+            {
+                state.disrupted = true;
+                result.newlyDisruptedOutpostIds.push_back(outpostId);
+            }
+        }
+        return result;
+    }
+    catch (const std::exception &error)
+    {
+        return {
+            false,
+            DomainErrorCode::InvalidProfile,
+            error.what()};
+    }
 }

@@ -25,6 +25,7 @@ struct DeployCommand
     MapDefinitionId mapDefinitionId;
     RaidIntelligenceLoadout intelligence;
     std::optional<std::string> selfRecoveryRecordId;
+    std::optional<RegionalOutpostDefinitionId> outpostRestorationId;
 };
 
 struct DeployReceipt

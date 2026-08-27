@@ -916,7 +916,14 @@ ProfileValidationResult validateProfileState(
         if ((state.established && !state.unlocked) ||
             (state.disrupted && !state.established) ||
             assigned > definition.requiredStaff ||
-            (!state.established && assigned != 0U))
+            (!state.established && assigned != 0U) ||
+            state.shortcutOperationsSinceRestoration >
+                definition.safeShortcutOperations ||
+            (!state.established &&
+             state.shortcutOperationsSinceRestoration != 0U) ||
+            (state.disrupted &&
+             state.shortcutOperationsSinceRestoration !=
+                 definition.safeShortcutOperations))
         {
             return {false, "regional outpost state is invalid"};
         }
@@ -1685,7 +1692,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1700,7 +1708,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
@@ -1708,32 +1717,40 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
         const bool selfRecoveryRules =
             raid.rulesVersion == "raid-self-recovery-16" ||
-            raid.rulesVersion == "regional-route-network-17";
+            raid.rulesVersion == "regional-route-network-17" ||
+            raid.rulesVersion == "regional-outpost-restoration-18";
+        const bool outpostRestorationRules =
+            raid.rulesVersion == "regional-outpost-restoration-18";
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -1804,6 +1821,48 @@ ProfileValidationResult validateProfileState(
         if (!selfRecoveryRules && raid.selfRecovery.has_value())
         {
             return {false, "pending Raid self-recovery rules are invalid"};
+        }
+        if (!outpostRestorationRules &&
+            raid.outpostRestoration.has_value())
+        {
+            return {false,
+                    "pending Raid outpost restoration rules are invalid"};
+        }
+        if (raid.outpostRestoration.has_value())
+        {
+            if (raid.selfRecovery.has_value())
+            {
+                return {false,
+                        "pending Raid mission modes cannot be combined"};
+            }
+            try
+            {
+                const RegionalOutpostRestorationSnapshot &restoration =
+                    *raid.outpostRestoration;
+                const RegionalOutpostDefinition &definition =
+                    content.regionalOutpost(
+                        restoration.outpostDefinitionId);
+                const auto state = raid.travel.startingRegionalOperations
+                    .outposts.find(definition.id);
+                if (definition.restorationMapDefinitionId !=
+                        raid.mapDefinitionId ||
+                    state == raid.travel.startingRegionalOperations
+                        .outposts.end() ||
+                    !state->second.unlocked ||
+                    !state->second.established ||
+                    !state->second.disrupted ||
+                    assignedRegionalOutpostStaff(state->second) !=
+                        definition.requiredStaff)
+                {
+                    return {false,
+                            "pending Raid outpost restoration is invalid"};
+                }
+            }
+            catch (...)
+            {
+                return {false,
+                        "pending Raid outpost restoration is invalid"};
+            }
         }
         if (raid.selfRecovery.has_value())
         {
@@ -2253,7 +2312,8 @@ ProfileValidationResult validateProfileState(
                     raid.travel.startingInjuredResidents > 0U;
             }
             bool regionalTravelValid = true;
-            if (raid.rulesVersion == "regional-route-network-17")
+            if (raid.rulesVersion == "regional-route-network-17" ||
+                raid.rulesVersion == "regional-outpost-restoration-18")
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2653,6 +2713,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashInteger(hash, count);
         }
+        hashInteger(hash, state.shortcutOperationsSinceRestoration);
     }
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
@@ -2959,6 +3020,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashFloat(hash, root.position.y);
             }
         }
+        if (raid.outpostRestoration.has_value())
+        {
+            hashBytes(
+                hash,
+                raid.outpostRestoration->outpostDefinitionId.value());
+            hashInteger(
+                hash,
+                raid.outpostRestoration->objectiveSecured ? 1U : 0U);
+        }
         hashInteger(hash, raid.startingHealth);
         hashInteger(hash, static_cast<std::uint32_t>(
             raid.startingMedicalStatus.bleeding));
@@ -3003,6 +3073,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             {
                 hashInteger(hash, count);
             }
+            hashInteger(hash, state.shortcutOperationsSinceRestoration);
         }
         hashInteger(hash, raid.travel.startingBaseResources.pool.food);
         hashInteger(hash, raid.travel.startingBaseResources.pool.hygiene);

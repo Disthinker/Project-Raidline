@@ -108,7 +108,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-route-network-17");
+        "regional-outpost-restoration-18");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -197,6 +197,284 @@ TEST(RaidLifecycleTest,
     EXPECT_EQ(
         profile.worldClock.elapsedWorldMinutes,
         startingMinute + 190U);
+}
+
+TEST(RaidLifecycleTest,
+     ThreeSettledShortcutRaidsDisruptOnlyAfterFrozenReturn)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-outpost-disruption", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "threat-establish"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "threat-staff"})
+                    .succeeded);
+
+    for (std::uint32_t index{}; index < 3U; ++index)
+    {
+        const std::string raidId = "threat-raid-" +
+            std::to_string(index);
+        const std::string settlementId = "threat-settlement-" +
+            std::to_string(index);
+        const DeployReceipt deployed = executeDeploy(
+            profile,
+            content,
+            DeployCommand{
+                raidId,
+                settlementId,
+                81000U + index,
+                MapDefinitionId{"map.raid.industrial"}},
+            CommandContext{
+                profile.revision,
+                "deploy:" + raidId});
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(profile.pendingRaid.has_value());
+        EXPECT_EQ(profile.pendingRaid->travel.outboundMinutes, 95U);
+        EXPECT_EQ(
+            profile.regionalOperations.outposts.at(outpostId)
+                .shortcutOperationsSinceRestoration,
+            index);
+
+        const RaidSettlementReceipt settled = settlePendingRaid(
+            profile,
+            content,
+            settlementId,
+            RaidResultOutcome::Extracted);
+        ASSERT_TRUE(settled.succeeded) << settled.message;
+        const RegionalOutpostState &state =
+            profile.regionalOperations.outposts.at(outpostId);
+        EXPECT_EQ(
+            state.shortcutOperationsSinceRestoration,
+            index + 1U);
+        EXPECT_EQ(state.disrupted, index == 2U);
+
+        const std::uint64_t fingerprint = profileStateFingerprint(profile);
+        const RaidSettlementReceipt replay = settlePendingRaid(
+            profile,
+            content,
+            settlementId,
+            RaidResultOutcome::Extracted);
+        ASSERT_TRUE(replay.succeeded);
+        EXPECT_TRUE(replay.alreadyCommitted);
+        EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    }
+
+    const RegionalRoutePlan direct = queryRegionalRoute(
+        profile,
+        content,
+        MapDefinitionId{"map.raid.industrial"});
+    ASSERT_TRUE(direct.reachable);
+    EXPECT_FALSE(direct.usesOnlineOutpost);
+    EXPECT_EQ(direct.travelMinutes, 150U);
+}
+
+TEST(RaidLifecycleTest,
+     DirectRouteAndAbnormalRollbackDoNotAdvanceOutpostThreat)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "travel-outpost-no-threat", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+
+    ASSERT_TRUE(deploy(
+        profile,
+        82001U,
+        MapDefinitionId{"map.raid.industrial"}).succeeded);
+    ASSERT_TRUE(settlePendingRaid(
+        profile,
+        content,
+        "settlement-alpha-test",
+        RaidResultOutcome::Extracted).succeeded);
+    EXPECT_EQ(
+        profile.regionalOperations.outposts.at(outpostId)
+            .shortcutOperationsSinceRestoration,
+        0U);
+
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile,
+        content,
+        EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "rollback-establish"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile,
+        content,
+        RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "rollback-staff"})
+                    .succeeded);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "rollback-threat-raid",
+            "rollback-threat-settlement",
+            82002U,
+            MapDefinitionId{"map.raid.industrial"}},
+        CommandContext{profile.revision, "deploy:rollback-threat"})
+                    .succeeded);
+    ASSERT_TRUE(rollbackPendingRaidToBase(profile, content).succeeded);
+    EXPECT_EQ(
+        profile.regionalOperations.outposts.at(outpostId)
+            .shortcutOperationsSinceRestoration,
+        0U);
+}
+
+TEST(RaidLifecycleTest,
+     RestorationRequiresClearingAndSuccessfulExtractionResetsThreat)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "outpost-restoration-success", content);
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile, content, EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "restore-establish"}).succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile, content, RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "restore-staff"}).succeeded);
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.shortcutOperationsSinceRestoration = 3U;
+    outpost.disrupted = true;
+
+    const DeployReceipt deployed = executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "restoration-raid",
+            "restoration-settlement",
+            83001U,
+            MapDefinitionId{"map.raid.riverside"},
+            {},
+            std::nullopt,
+            outpostId},
+        CommandContext{profile.revision, "deploy:restoration"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid->outpostRestoration.has_value());
+    EXPECT_FALSE(profile.pendingRaid->outpostRestoration->objectiveSecured);
+
+    const std::uint64_t blockedFingerprint =
+        profileStateFingerprint(profile);
+    const RaidSettlementReceipt blocked = settlePendingRaid(
+        profile,
+        content,
+        "restoration-settlement",
+        RaidResultOutcome::Extracted);
+    EXPECT_FALSE(blocked.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), blockedFingerprint);
+
+    profile.pendingRaid->outpostRestoration->objectiveSecured = true;
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "restoration-settlement",
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    const RegionalOutpostState &restored =
+        profile.regionalOperations.outposts.at(outpostId);
+    EXPECT_FALSE(restored.disrupted);
+    EXPECT_EQ(restored.shortcutOperationsSinceRestoration, 0U);
+    EXPECT_TRUE(regionalOutpostOnline(profile, content, outpostId));
+}
+
+TEST(RaidLifecycleTest,
+     FailedOrAbnormalRestorationKeepsDisruption)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.old_service_relay"};
+    for (const RaidResultOutcome outcome : {
+             RaidResultOutcome::PlayerDead,
+             RaidResultOutcome::ActiveQuit})
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            outcome == RaidResultOutcome::PlayerDead
+                ? "outpost-restoration-death"
+                : "outpost-restoration-quit",
+            content);
+        ASSERT_TRUE(executeEstablishRegionalOutpost(
+            profile, content, EstablishRegionalOutpostCommand{outpostId},
+            CommandContext{profile.revision, "failed-restore-establish"})
+                        .succeeded);
+        ASSERT_TRUE(executeRegionalOutpostStaffing(
+            profile, content,
+            RegionalOutpostStaffingCommand{outpostId, true},
+            CommandContext{profile.revision, "failed-restore-staff"})
+                        .succeeded);
+        RegionalOutpostState &outpost =
+            profile.regionalOperations.outposts.at(outpostId);
+        outpost.shortcutOperationsSinceRestoration = 3U;
+        outpost.disrupted = true;
+        ASSERT_TRUE(executeDeploy(
+            profile,
+            content,
+            DeployCommand{
+                "failed-restoration-raid",
+                "failed-restoration-settlement",
+                83002U,
+                MapDefinitionId{"map.raid.riverside"},
+                {},
+                std::nullopt,
+                outpostId},
+            CommandContext{profile.revision, "deploy:failed-restoration"})
+                        .succeeded);
+        profile.pendingRaid->outpostRestoration->objectiveSecured = true;
+        ASSERT_TRUE(settlePendingRaid(
+            profile,
+            content,
+            "failed-restoration-settlement",
+            outcome).succeeded);
+        const RegionalOutpostState &stillDisrupted =
+            profile.regionalOperations.outposts.at(outpostId);
+        EXPECT_TRUE(stillDisrupted.disrupted);
+        EXPECT_EQ(
+            stillDisrupted.shortcutOperationsSinceRestoration,
+            3U);
+    }
+
+    ProfileState rollback = makeNewAlphaProfile(
+        "outpost-restoration-rollback", content);
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        rollback, content, EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{rollback.revision, "rollback-restore-establish"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        rollback, content, RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{rollback.revision, "rollback-restore-staff"})
+                    .succeeded);
+    RegionalOutpostState &rollbackOutpost =
+        rollback.regionalOperations.outposts.at(outpostId);
+    rollbackOutpost.shortcutOperationsSinceRestoration = 3U;
+    rollbackOutpost.disrupted = true;
+    const RegionalOperationsState startingRegional =
+        rollback.regionalOperations;
+    ASSERT_TRUE(executeDeploy(
+        rollback,
+        content,
+        DeployCommand{
+            "rollback-restoration-raid",
+            "rollback-restoration-settlement",
+            83003U,
+            MapDefinitionId{"map.raid.riverside"},
+            {},
+            std::nullopt,
+            outpostId},
+        CommandContext{rollback.revision, "deploy:rollback-restoration"})
+                    .succeeded);
+    ASSERT_TRUE(rollbackPendingRaidToBase(rollback, content).succeeded);
+    EXPECT_EQ(rollback.regionalOperations, startingRegional);
 }
 
 TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)

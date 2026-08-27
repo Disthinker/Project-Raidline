@@ -243,6 +243,8 @@ struct RegionalOutpostDefinition
     RegionNodeDefinitionId nodeId;
     bool initiallyUnlocked{};
     std::uint32_t requiredStaff{};
+    std::uint32_t safeShortcutOperations{};
+    MapDefinitionId restorationMapDefinitionId;
 
     friend bool operator==(
         const RegionalOutpostDefinition &,
