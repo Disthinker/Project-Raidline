@@ -251,6 +251,31 @@ struct RegionalOutpostDefinition
         const RegionalOutpostDefinition &) = default;
 };
 
+enum class RegionalBaseSiteTier
+{
+    Basic,
+    Mature,
+    Strategic
+};
+
+struct RegionalBaseSiteDefinition
+{
+    RegionalBaseSiteDefinitionId id;
+    std::string displayName;
+    RegionNodeDefinitionId nodeId;
+    RegionalBaseSiteTier tier{RegionalBaseSiteTier::Basic};
+    bool initiallyUnlocked{};
+    std::optional<MapDefinitionId> clearanceMapDefinitionId;
+    std::optional<RegionalOutpostDefinitionId> outpostDefinitionId;
+    std::string advantage;
+    std::string disadvantage;
+    std::string uniqueFeature;
+
+    friend bool operator==(
+        const RegionalBaseSiteDefinition &,
+        const RegionalBaseSiteDefinition &) = default;
+};
+
 struct RegionRouteDefinition
 {
     RegionRouteDefinitionId id;
@@ -270,6 +295,7 @@ struct RegionalOperationsDefinition
     RegionNodeDefinitionId initialBaseNodeId;
     std::uint32_t maximumEstablishedOutposts{};
     std::vector<RegionNodeDefinition> nodes;
+    std::vector<RegionalBaseSiteDefinition> baseSites;
     std::vector<RegionalOutpostDefinition> outposts;
     std::vector<RegionRouteDefinition> routes;
 };
@@ -540,6 +566,9 @@ public:
     [[nodiscard]] const RegionalOutpostDefinition &regionalOutpost(
         const RegionalOutpostDefinitionId &id) const;
 
+    [[nodiscard]] const RegionalBaseSiteDefinition &regionalBaseSite(
+        const RegionalBaseSiteDefinitionId &id) const;
+
     [[nodiscard]] const RegionRouteDefinition &regionRoute(
         const RegionRouteDefinitionId &id) const;
 
@@ -632,6 +661,8 @@ private:
     std::map<RegionNodeDefinitionId, std::size_t> regionNodeIndex_;
     std::map<RegionalOutpostDefinitionId, std::size_t>
         regionalOutpostIndex_;
+    std::map<RegionalBaseSiteDefinitionId, std::size_t>
+        regionalBaseSiteIndex_;
     std::map<RegionRouteDefinitionId, std::size_t> regionRouteIndex_;
 };
 

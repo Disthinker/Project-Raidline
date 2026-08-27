@@ -437,6 +437,33 @@ TEST(UiLocalizationTest, ChineseTranslatesRegionalOutpostFlow) {
   EXPECT_NE(objective.find("撤离点已锁定"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesRegionalBaseSiteClearanceFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "REGIONAL BASE SITES, ROUTES & OUTPOSTS"),
+            "区域基地候选点、路线与前哨");
+  const std::string candidate = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "CANDIDATE SITE | Ashworks Logistics Yard | MATURE | LOCKED");
+  EXPECT_NE(candidate.find("候选地点"), std::string::npos);
+  EXPECT_NE(candidate.find("灰烬工场物流场站"), std::string::npos);
+  EXPECT_NE(candidate.find("锁定"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DEPLOY BASE SITE CLEARING RAID"),
+            "出发执行基地候选点清剿行动");
+  const std::string objective = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "BASE SITE CLEARING | INITIAL HOSTILES REMAINING 4 | EXITS LOCKED");
+  EXPECT_NE(objective.find("基地候选点清剿"), std::string::npos);
+  EXPECT_NE(objective.find("初始敌人剩余 4"), std::string::npos);
+  EXPECT_NE(objective.find("撤离点已锁定"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "regional Base site is already unlocked"),
+            "基地候选点已经解锁");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

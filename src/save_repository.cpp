@@ -245,7 +245,8 @@ BaseProfessionCounts parseBaseProfessionCounts(const Json &value)
 
 Json regionalOperationsValue(
     const RegionalOperationsState &state,
-    bool includeShortcutThreat)
+    bool includeShortcutThreat,
+    bool includeBaseSites)
 {
     Json outposts = Json::array();
     for (const auto &[outpostId, outpost] : state.outposts)
@@ -270,9 +271,21 @@ Json regionalOperationsValue(
         }
         outposts.push_back(std::move(entry));
     }
-    return {
+    Json value{
         {"active_base_node_id", state.activeBaseNodeId.value()},
         {"outposts", std::move(outposts)}};
+    if (includeBaseSites)
+    {
+        Json baseSites = Json::array();
+        for (const auto &[siteId, site] : state.baseSites)
+        {
+            baseSites.push_back({
+                {"definition_id", siteId.value()},
+                {"unlocked", site.unlocked}});
+        }
+        value["base_sites"] = std::move(baseSites);
+    }
+    return value;
 }
 
 RegionalOperationsState defaultRegionalOperations(
@@ -281,6 +294,13 @@ RegionalOperationsState defaultRegionalOperations(
     RegionalOperationsState state;
     state.activeBaseNodeId =
         content.regionalOperations().initialBaseNodeId;
+    for (const RegionalBaseSiteDefinition &definition :
+         content.regionalOperations().baseSites)
+    {
+        state.baseSites.emplace(
+            definition.id,
+            RegionalBaseSiteState{definition.initiallyUnlocked});
+    }
     for (const RegionalOutpostDefinition &definition :
          content.regionalOperations().outposts)
     {
@@ -299,6 +319,35 @@ RegionalOperationsState parseRegionalOperations(
     RegionalOperationsState state;
     state.activeBaseNodeId = RegionNodeDefinitionId{
         value.at("active_base_node_id").get<std::string>()};
+    for (const RegionalBaseSiteDefinition &definition :
+         content.regionalOperations().baseSites)
+    {
+        state.baseSites.emplace(
+            definition.id,
+            RegionalBaseSiteState{definition.initiallyUnlocked});
+    }
+    if (schemaVersion >= 29)
+    {
+        std::set<RegionalBaseSiteDefinitionId> parsed;
+        for (const Json &entry : value.at("base_sites"))
+        {
+            const RegionalBaseSiteDefinitionId definitionId{
+                entry.at("definition_id").get<std::string>()};
+            static_cast<void>(content.regionalBaseSite(definitionId));
+            if (!parsed.insert(definitionId).second)
+            {
+                throw std::runtime_error{
+                    "regional Base site state is duplicated"};
+            }
+            state.baseSites.at(definitionId).unlocked =
+                entry.at("unlocked").get<bool>();
+        }
+        if (parsed.size() != content.regionalOperations().baseSites.size())
+        {
+            throw std::runtime_error{
+                "regional Base site state is incomplete"};
+        }
+    }
     for (const Json &entry : value.at("outposts"))
     {
         const RegionalOutpostDefinitionId definitionId{
@@ -316,6 +365,16 @@ RegionalOperationsState parseRegionalOperations(
         {
             throw std::runtime_error{
                 "regional outpost state is duplicated"};
+        }
+    }
+    if (schemaVersion < 29)
+    {
+        for (const RegionalOutpostDefinition &definition :
+             content.regionalOperations().outposts)
+        {
+            state.outposts.try_emplace(
+                definition.id,
+                RegionalOutpostState{definition.initiallyUnlocked});
         }
     }
     static_cast<void>(content.regionNode(state.activeBaseNodeId));
@@ -921,7 +980,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["regional_operations"] =
             regionalOperationsValue(
                 profile.regionalOperations,
-                schemaVersion >= 28);
+                schemaVersion >= 28,
+                schemaVersion >= 29);
     }
     else
     {
@@ -1028,6 +1088,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {
             throw std::invalid_argument{
                 "legacy schema cannot represent outpost restoration"};
+        }
+        if (schemaVersion < 29 && raid.baseSiteClearance.has_value())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent Base site clearance"};
         }
         Json enemies = Json::array();
         for (const RaidEnemySnapshot &enemy : raid.enemies)
@@ -1370,7 +1435,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     ["starting_regional_operations"] =
                         regionalOperationsValue(
                             raid.travel.startingRegionalOperations,
-                            schemaVersion >= 28);
+                            schemaVersion >= 28,
+                            schemaVersion >= 29);
             }
         }
         if (schemaVersion >= 26)
@@ -1429,6 +1495,21 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             else
             {
                 payload["pending_raid"]["outpost_restoration"] = nullptr;
+            }
+        }
+        if (schemaVersion >= 29)
+        {
+            if (raid.baseSiteClearance.has_value())
+            {
+                payload["pending_raid"]["base_site_clearance"] = {
+                    {"base_site_definition_id",
+                     raid.baseSiteClearance->baseSiteDefinitionId.value()},
+                    {"objective_secured",
+                     raid.baseSiteClearance->objectiveSecured}};
+            }
+            else
+            {
+                payload["pending_raid"]["base_site_clearance"] = nullptr;
             }
         }
     }
@@ -1549,7 +1630,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 19 && schemaVersion != 20 && schemaVersion != 21 &&
         schemaVersion != 22 && schemaVersion != 23 && schemaVersion != 24 &&
         schemaVersion != 25 && schemaVersion != 26 &&
-        schemaVersion != 27 && schemaVersion != 28)
+        schemaVersion != 27 && schemaVersion != 28 &&
+        schemaVersion != 29)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -1650,7 +1732,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 26 &&
              contentVersion == "regional-recovery-task-content-35") ||
             (schemaVersion == 27 &&
-             contentVersion == "regional-route-outpost-content-36");
+             contentVersion == "regional-route-outpost-content-36") ||
+            (schemaVersion == 28 &&
+             contentVersion == "regional-outpost-disruption-content-37");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -1664,7 +1748,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 21 && schemaVersion != 22 &&
              schemaVersion != 23 && schemaVersion != 24 &&
              schemaVersion != 25 && schemaVersion != 26 &&
-             schemaVersion != 27 && schemaVersion != 28) ||
+             schemaVersion != 27 && schemaVersion != 28 &&
+             schemaVersion != 29) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2814,7 +2899,9 @@ SaveLoadResult deserializeProfileEnvelope(
             if (schemaVersion < 27 &&
                 (raid.rulesVersion == "regional-route-network-17" ||
                  raid.rulesVersion ==
-                     "regional-outpost-restoration-18"))
+                     "regional-outpost-restoration-18" ||
+                 raid.rulesVersion ==
+                     "regional-base-site-clearance-19"))
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2962,6 +3049,17 @@ SaveLoadResult deserializeProfileEnvelope(
                                 .get<std::string>()},
                         restoration.at("objective_secured")
                             .get<bool>()};
+            }
+            if (schemaVersion >= 29 &&
+                !value.at("base_site_clearance").is_null())
+            {
+                const Json &clearance = value.at("base_site_clearance");
+                raid.baseSiteClearance =
+                    RegionalBaseSiteClearanceSnapshot{
+                        RegionalBaseSiteDefinitionId{
+                            clearance.at("base_site_definition_id")
+                                .get<std::string>()},
+                        clearance.at("objective_secured").get<bool>()};
             }
             profile.pendingRaid = std::move(raid);
         }

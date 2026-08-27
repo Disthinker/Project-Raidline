@@ -438,9 +438,19 @@ struct RegionalOutpostState
         const RegionalOutpostState &) = default;
 };
 
+struct RegionalBaseSiteState
+{
+    bool unlocked{};
+
+    friend bool operator==(
+        const RegionalBaseSiteState &,
+        const RegionalBaseSiteState &) = default;
+};
+
 struct RegionalOperationsState
 {
     RegionNodeDefinitionId activeBaseNodeId;
+    std::map<RegionalBaseSiteDefinitionId, RegionalBaseSiteState> baseSites;
     std::map<RegionalOutpostDefinitionId, RegionalOutpostState> outposts;
 
     friend bool operator==(
@@ -643,6 +653,16 @@ struct RegionalOutpostRestorationSnapshot
         const RegionalOutpostRestorationSnapshot &) = default;
 };
 
+struct RegionalBaseSiteClearanceSnapshot
+{
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    bool objectiveSecured{};
+
+    friend bool operator==(
+        const RegionalBaseSiteClearanceSnapshot &,
+        const RegionalBaseSiteClearanceSnapshot &) = default;
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -659,6 +679,7 @@ struct PendingRaidSnapshot
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
+    std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;

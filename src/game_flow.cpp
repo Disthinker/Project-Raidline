@@ -60,7 +60,9 @@ bool GameFlow::deploy(
     RaidIntelligenceLoadout intelligence,
     std::optional<std::string> selfRecoveryRecordId,
     std::optional<RegionalOutpostDefinitionId>
-        outpostRestorationId) noexcept
+        outpostRestorationId,
+    std::optional<RegionalBaseSiteDefinitionId>
+        baseSiteClearanceId) noexcept
 {
     if (state_ != GameFlowState::Base)
     {
@@ -80,7 +82,8 @@ bool GameFlow::deploy(
                 std::move(mapDefinitionId),
                 intelligence,
                 std::move(selfRecoveryRecordId),
-                std::move(outpostRestorationId)))
+                std::move(outpostRestorationId),
+                std::move(baseSiteClearanceId)))
         {
             return false;
         }

@@ -366,6 +366,13 @@ ProfileState makeNewAlphaProfile(
     profile.currency = 200;
     profile.regionalOperations.activeBaseNodeId =
         content.regionalOperations().initialBaseNodeId;
+    for (const RegionalBaseSiteDefinition &site :
+         content.regionalOperations().baseSites)
+    {
+        profile.regionalOperations.baseSites.emplace(
+            site.id,
+            RegionalBaseSiteState{site.initiallyUnlocked});
+    }
     for (const RegionalOutpostDefinition &outpost :
          content.regionalOperations().outposts)
     {
@@ -888,6 +895,42 @@ ProfileValidationResult validateProfileState(
     catch (...)
     {
         return {false, "regional active Base node is unknown"};
+    }
+    if (profile.regionalOperations.baseSites.size() !=
+        content.regionalOperations().baseSites.size())
+    {
+        return {false, "regional Base site state set is incomplete"};
+    }
+    bool activeBaseSiteUnlocked{};
+    for (const RegionalBaseSiteDefinition &definition :
+         content.regionalOperations().baseSites)
+    {
+        const auto found = profile.regionalOperations.baseSites.find(
+            definition.id);
+        if (found == profile.regionalOperations.baseSites.end())
+        {
+            return {false, "regional Base site state is missing"};
+        }
+        if (definition.nodeId ==
+            profile.regionalOperations.activeBaseNodeId)
+        {
+            activeBaseSiteUnlocked = found->second.unlocked;
+        }
+        if (definition.outpostDefinitionId.has_value())
+        {
+            const auto outpost = profile.regionalOperations.outposts.find(
+                *definition.outpostDefinitionId);
+            if (outpost == profile.regionalOperations.outposts.end() ||
+                outpost->second.unlocked != found->second.unlocked)
+            {
+                return {false,
+                        "regional Base site and outpost unlock state differ"};
+            }
+        }
+    }
+    if (!activeBaseSiteUnlocked)
+    {
+        return {false, "regional active Base site is locked"};
     }
     std::uint32_t establishedOutposts{};
     BaseProfessionCounts regionalStaffByProfession{};
@@ -1693,7 +1736,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1709,7 +1753,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
@@ -1718,7 +1763,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
@@ -1726,31 +1772,39 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool selfRecoveryRules =
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
         const bool outpostRestorationRules =
-            raid.rulesVersion == "regional-outpost-restoration-18";
+            raid.rulesVersion == "regional-outpost-restoration-18" ||
+            raid.rulesVersion == "regional-base-site-clearance-19";
+        const bool baseSiteClearanceRules =
+            raid.rulesVersion == "regional-base-site-clearance-19";
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -1827,6 +1881,51 @@ ProfileValidationResult validateProfileState(
         {
             return {false,
                     "pending Raid outpost restoration rules are invalid"};
+        }
+        if (!baseSiteClearanceRules && raid.baseSiteClearance.has_value())
+        {
+            return {false,
+                    "pending Raid Base site clearance rules are invalid"};
+        }
+        if (raid.baseSiteClearance.has_value())
+        {
+            if (raid.selfRecovery.has_value() ||
+                raid.outpostRestoration.has_value())
+            {
+                return {false,
+                        "pending Raid mission modes cannot be combined"};
+            }
+            try
+            {
+                const RegionalBaseSiteDefinition &definition =
+                    content.regionalBaseSite(
+                        raid.baseSiteClearance->baseSiteDefinitionId);
+                const auto state = raid.travel.startingRegionalOperations
+                    .baseSites.find(definition.id);
+                const auto outpost = definition.outpostDefinitionId.has_value()
+                    ? raid.travel.startingRegionalOperations.outposts.find(
+                          *definition.outpostDefinitionId)
+                    : raid.travel.startingRegionalOperations.outposts.end();
+                if (!definition.clearanceMapDefinitionId.has_value() ||
+                    *definition.clearanceMapDefinitionId !=
+                        raid.mapDefinitionId ||
+                    !definition.outpostDefinitionId.has_value() ||
+                    state == raid.travel.startingRegionalOperations
+                        .baseSites.end() ||
+                    state->second.unlocked ||
+                    outpost == raid.travel.startingRegionalOperations
+                        .outposts.end() ||
+                    outpost->second.unlocked)
+                {
+                    return {false,
+                            "pending Raid Base site clearance is invalid"};
+                }
+            }
+            catch (...)
+            {
+                return {false,
+                        "pending Raid Base site clearance is invalid"};
+            }
         }
         if (raid.outpostRestoration.has_value())
         {
@@ -2313,7 +2412,8 @@ ProfileValidationResult validateProfileState(
             }
             bool regionalTravelValid = true;
             if (raid.rulesVersion == "regional-route-network-17" ||
-                raid.rulesVersion == "regional-outpost-restoration-18")
+                raid.rulesVersion == "regional-outpost-restoration-18" ||
+                raid.rulesVersion == "regional-base-site-clearance-19")
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2702,6 +2802,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             *profile.baseWorkforce.medicalWorker));
     }
     hashBytes(hash, profile.regionalOperations.activeBaseNodeId.value());
+    for (const auto &[siteId, state] :
+         profile.regionalOperations.baseSites)
+    {
+        hashBytes(hash, siteId.value());
+        hashInteger(hash, state.unlocked ? 1U : 0U);
+    }
     for (const auto &[outpostId, state] :
          profile.regionalOperations.outposts)
     {
@@ -3029,6 +3135,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hash,
                 raid.outpostRestoration->objectiveSecured ? 1U : 0U);
         }
+        if (raid.baseSiteClearance.has_value())
+        {
+            hashBytes(
+                hash,
+                raid.baseSiteClearance->baseSiteDefinitionId.value());
+            hashInteger(
+                hash,
+                raid.baseSiteClearance->objectiveSecured ? 1U : 0U);
+        }
         hashInteger(hash, raid.startingHealth);
         hashInteger(hash, static_cast<std::uint32_t>(
             raid.startingMedicalStatus.bleeding));
@@ -3062,6 +3177,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(
             hash,
             raid.travel.startingRegionalOperations.activeBaseNodeId.value());
+        for (const auto &[siteId, state] :
+             raid.travel.startingRegionalOperations.baseSites)
+        {
+            hashBytes(hash, siteId.value());
+            hashInteger(hash, state.unlocked ? 1U : 0U);
+        }
         for (const auto &[outpostId, state] :
              raid.travel.startingRegionalOperations.outposts)
         {

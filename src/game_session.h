@@ -204,8 +204,11 @@ public:
         RaidIntelligenceLoadout intelligence = {},
         std::optional<std::string> selfRecoveryRecordId = std::nullopt,
         std::optional<RegionalOutpostDefinitionId>
-            outpostRestorationId = std::nullopt);
+            outpostRestorationId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            baseSiteClearanceId = std::nullopt);
     [[nodiscard]] bool outpostRestorationObjectiveSecured() const noexcept;
+    [[nodiscard]] bool baseSiteClearanceObjectiveSecured() const noexcept;
     [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
     raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt
@@ -385,6 +388,7 @@ private:
     float raidElapsedSeconds_{};
     float selfRecoveryInteractionSeconds_{};
     bool outpostRestorationObjectiveSecured_{};
+    bool baseSiteClearanceObjectiveSecured_{};
     double pendingWorldSeconds_{};
     float worldClockCheckpointElapsedSeconds_{};
     bool worldClockDirty_{};

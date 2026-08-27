@@ -108,7 +108,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-outpost-restoration-18");
+        "regional-base-site-clearance-19");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -473,6 +473,158 @@ TEST(RaidLifecycleTest,
             outpostId},
         CommandContext{rollback.revision, "deploy:rollback-restoration"})
                     .succeeded);
+    ASSERT_TRUE(rollbackPendingRaidToBase(rollback, content).succeeded);
+    EXPECT_EQ(rollback.regionalOperations, startingRegional);
+}
+
+TEST(RaidLifecycleTest,
+     BaseSiteClearanceRequiresObjectiveAndUnlocksLinkedOutpostAtomically)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-site-clearance-success", content);
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.ashworks_logistics_yard"};
+
+    const DeployReceipt deployed = executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "base-site-clearance-raid",
+            "base-site-clearance-settlement",
+            84001U,
+            MapDefinitionId{"map.raid.industrial"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{profile.revision, "deploy:base-site-clearance"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid->baseSiteClearance.has_value());
+    EXPECT_EQ(
+        profile.pendingRaid->rulesVersion,
+        "regional-base-site-clearance-19");
+    EXPECT_FALSE(profile.pendingRaid->baseSiteClearance->objectiveSecured);
+
+    const std::uint64_t blockedFingerprint =
+        profileStateFingerprint(profile);
+    const RaidSettlementReceipt blocked = settlePendingRaid(
+        profile,
+        content,
+        "base-site-clearance-settlement",
+        RaidResultOutcome::Extracted);
+    EXPECT_FALSE(blocked.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), blockedFingerprint);
+
+    profile.pendingRaid->baseSiteClearance->objectiveSecured = true;
+    EXPECT_NE(profileStateFingerprint(profile), blockedFingerprint);
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "base-site-clearance-settlement",
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_TRUE(profile.regionalOperations.baseSites.at(siteId).unlocked);
+    EXPECT_TRUE(profile.regionalOperations.outposts.at(outpostId).unlocked);
+    EXPECT_FALSE(profile.regionalOperations.outposts.at(outpostId).established);
+
+    const ProfileRevision settledRevision = profile.revision;
+    const std::uint64_t settledFingerprint =
+        profileStateFingerprint(profile);
+    const RaidSettlementReceipt replay = settlePendingRaid(
+        profile,
+        content,
+        "base-site-clearance-settlement",
+        RaidResultOutcome::Extracted);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyCommitted);
+    EXPECT_EQ(profile.revision, settledRevision);
+    EXPECT_EQ(profileStateFingerprint(profile), settledFingerprint);
+
+    ASSERT_TRUE(executeEstablishRegionalOutpost(
+        profile, content, EstablishRegionalOutpostCommand{outpostId},
+        CommandContext{profile.revision, "establish:ashworks-yard"})
+                    .succeeded);
+    ASSERT_TRUE(executeRegionalOutpostStaffing(
+        profile, content, RegionalOutpostStaffingCommand{outpostId, true},
+        CommandContext{profile.revision, "staff:ashworks-yard"})
+                    .succeeded);
+    const RegionalRoutePlan industrial = queryRegionalRoute(
+        profile, content, MapDefinitionId{"map.raid.industrial"});
+    ASSERT_TRUE(industrial.reachable);
+    EXPECT_TRUE(industrial.usesOnlineOutpost);
+    EXPECT_EQ(industrial.travelMinutes, 75U);
+    const RegionalRoutePlan frontier = queryRegionalRoute(
+        profile, content, MapDefinitionId{"map.raid.frontier_exchange"});
+    ASSERT_TRUE(frontier.reachable);
+    EXPECT_TRUE(frontier.usesOnlineOutpost);
+    EXPECT_EQ(frontier.travelMinutes, 115U);
+}
+
+TEST(RaidLifecycleTest,
+     FailedOrAbnormalBaseSiteClearanceLeavesSiteAndOutpostLocked)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.ashworks_logistics_yard"};
+    for (const RaidResultOutcome outcome : {
+             RaidResultOutcome::PlayerDead,
+             RaidResultOutcome::ActiveQuit})
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            outcome == RaidResultOutcome::PlayerDead
+                ? "base-site-clearance-death"
+                : "base-site-clearance-quit",
+            content);
+        ASSERT_TRUE(executeDeploy(
+            profile,
+            content,
+            DeployCommand{
+                "failed-base-site-clearance-raid",
+                "failed-base-site-clearance-settlement",
+                84002U,
+                MapDefinitionId{"map.raid.industrial"},
+                {},
+                std::nullopt,
+                std::nullopt,
+                siteId},
+            CommandContext{profile.revision,
+                           "deploy:failed-base-site-clearance"})
+                        .succeeded);
+        profile.pendingRaid->baseSiteClearance->objectiveSecured = true;
+        ASSERT_TRUE(settlePendingRaid(
+            profile,
+            content,
+            "failed-base-site-clearance-settlement",
+            outcome).succeeded);
+        EXPECT_FALSE(profile.regionalOperations.baseSites.at(siteId).unlocked);
+        EXPECT_FALSE(profile.regionalOperations.outposts.at(outpostId).unlocked);
+    }
+
+    ProfileState rollback = makeNewAlphaProfile(
+        "base-site-clearance-rollback", content);
+    const RegionalOperationsState startingRegional =
+        rollback.regionalOperations;
+    ASSERT_TRUE(executeDeploy(
+        rollback,
+        content,
+        DeployCommand{
+            "rollback-base-site-clearance-raid",
+            "rollback-base-site-clearance-settlement",
+            84003U,
+            MapDefinitionId{"map.raid.industrial"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{rollback.revision,
+                       "deploy:rollback-base-site-clearance"})
+                    .succeeded);
+    rollback.pendingRaid->baseSiteClearance->objectiveSecured = true;
     ASSERT_TRUE(rollbackPendingRaidToBase(rollback, content).succeeded);
     EXPECT_EQ(rollback.regionalOperations, startingRegional);
 }

@@ -97,7 +97,42 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "regional-outpost-restoration-18");
+        "regional-base-site-clearance-19");
+}
+
+TEST(AlphaExtractionSessionTest,
+     BaseSiteClearingObjectiveFollowsInitialEnemiesAndFailureStaysLocked)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-base-site-clearance"));
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.ashworks_logistics_yard"};
+    ASSERT_TRUE(session.deployAlpha(
+        77239U,
+        MapDefinitionId{"map.raid.industrial"},
+        {},
+        std::nullopt,
+        std::nullopt,
+        siteId));
+    ASSERT_TRUE(session.profile().pendingRaid->baseSiteClearance.has_value());
+    EXPECT_FALSE(session.baseSiteClearanceObjectiveSecured());
+
+    for (const Enemy &enemy : session.world().enemies())
+    {
+        Enemy &mutableEnemy = const_cast<Enemy &>(enemy);
+        static_cast<void>(mutableEnemy.takeDamage(mutableEnemy.maxHealth()));
+    }
+    ASSERT_EQ(session.world().aliveInitialEnemyCount(), 0U);
+    session.update(GameplayInput{}, 0.0F);
+    EXPECT_TRUE(session.baseSiteClearanceObjectiveSecured());
+
+    ASSERT_TRUE(session.activeQuitAlphaRaid());
+    EXPECT_FALSE(session.profile().regionalOperations.baseSites.at(siteId)
+                     .unlocked);
+    EXPECT_FALSE(session.profile().regionalOperations.outposts.at(outpostId)
+                     .unlocked);
 }
 
 TEST(AlphaExtractionSessionTest,

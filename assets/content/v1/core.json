@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-outpost-disruption-content-37",
+  "content_version": "regional-base-site-clearance-content-38",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -28,14 +28,40 @@
   },
   "regional_operations": {
     "initial_base_node_id": "region_node.base.greyline_yard",
-    "maximum_established_outposts": 1,
+    "maximum_established_outposts": 2,
     "nodes": [
       {"id": "region_node.base.greyline_yard", "display_name": "Greyline Yard", "kind": "base"},
       {"id": "region_node.raid.greyline_west", "display_name": "Greyline West", "kind": "raid", "map_definition_id": "map.v0.test"},
       {"id": "region_node.raid.riverside", "display_name": "Riverside Service Road", "kind": "raid", "map_definition_id": "map.raid.riverside"},
       {"id": "region_node.raid.industrial", "display_name": "Ashworks Industrial", "kind": "raid", "map_definition_id": "map.raid.industrial"},
       {"id": "region_node.raid.frontier_exchange", "display_name": "Frontier Exchange", "kind": "raid", "map_definition_id": "map.raid.frontier_exchange"},
-      {"id": "region_node.outpost.old_service_relay", "display_name": "Old Service Relay", "kind": "outpost"}
+      {"id": "region_node.outpost.old_service_relay", "display_name": "Old Service Relay", "kind": "outpost"},
+      {"id": "region_node.base.ashworks_logistics_yard", "display_name": "Ashworks Logistics Yard", "kind": "base"},
+      {"id": "region_node.outpost.ashworks_logistics_yard", "display_name": "Ashworks Logistics Yard Relay", "kind": "outpost"}
+    ],
+    "base_sites": [
+      {
+        "id": "regional_base_site.greyline_yard",
+        "display_name": "Greyline Yard",
+        "node_id": "region_node.base.greyline_yard",
+        "tier": "basic",
+        "initially_unlocked": true,
+        "advantage": "Balanced access to the current Raid network.",
+        "disadvantage": "No specialized regional advantage.",
+        "unique_feature": "Greyline storage core."
+      },
+      {
+        "id": "regional_base_site.ashworks_logistics_yard",
+        "display_name": "Ashworks Logistics Yard",
+        "node_id": "region_node.base.ashworks_logistics_yard",
+        "tier": "mature",
+        "initially_unlocked": false,
+        "clearance_map_definition_id": "map.raid.industrial",
+        "outpost_definition_id": "regional_outpost.ashworks_logistics_yard",
+        "advantage": "Industrial access and shorter eastern routes.",
+        "disadvantage": "A noisy and exposed perimeter.",
+        "unique_feature": "Heavy logistics workshop site."
+      }
     ],
     "outposts": [
       {
@@ -46,6 +72,15 @@
         "required_staff": 2,
         "safe_shortcut_operations": 3,
         "restoration_map_definition_id": "map.raid.riverside"
+      },
+      {
+        "id": "regional_outpost.ashworks_logistics_yard",
+        "display_name": "Ashworks Logistics Yard Relay",
+        "node_id": "region_node.outpost.ashworks_logistics_yard",
+        "initially_unlocked": false,
+        "required_staff": 2,
+        "safe_shortcut_operations": 3,
+        "restoration_map_definition_id": "map.raid.industrial"
       }
     ],
     "routes": [
@@ -56,7 +91,10 @@
       {"id": "region_route.relay_access", "display_name": "Old Relay Access", "from": "region_node.base.greyline_yard", "to": "region_node.outpost.old_service_relay", "travel_minutes": 35, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
       {"id": "region_route.relay_riverside_shortcut", "display_name": "Riverside Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.riverside", "travel_minutes": 20, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
       {"id": "region_route.relay_industrial_shortcut", "display_name": "Freight Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.industrial", "travel_minutes": 60, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
-      {"id": "region_route.relay_frontier_shortcut", "display_name": "Frontier Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.frontier_exchange", "travel_minutes": 90, "requires_online_outpost_id": "regional_outpost.old_service_relay"}
+      {"id": "region_route.relay_frontier_shortcut", "display_name": "Frontier Service Cut", "from": "region_node.outpost.old_service_relay", "to": "region_node.raid.frontier_exchange", "travel_minutes": 90, "requires_online_outpost_id": "regional_outpost.old_service_relay"},
+      {"id": "region_route.ashworks_yard_access", "display_name": "Ashworks Yard Access", "from": "region_node.base.greyline_yard", "to": "region_node.outpost.ashworks_logistics_yard", "travel_minutes": 50, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"},
+      {"id": "region_route.ashworks_industrial_shortcut", "display_name": "Industrial Service Spur", "from": "region_node.outpost.ashworks_logistics_yard", "to": "region_node.raid.industrial", "travel_minutes": 25, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"},
+      {"id": "region_route.ashworks_frontier_shortcut", "display_name": "Eastern Freight Cut", "from": "region_node.outpost.ashworks_logistics_yard", "to": "region_node.raid.frontier_exchange", "travel_minutes": 65, "requires_online_outpost_id": "regional_outpost.ashworks_logistics_yard"}
     ]
   },
   "base_construction": {

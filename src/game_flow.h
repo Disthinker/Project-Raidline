@@ -39,7 +39,9 @@ public:
         RaidIntelligenceLoadout intelligence = {},
         std::optional<std::string> selfRecoveryRecordId = std::nullopt,
         std::optional<RegionalOutpostDefinitionId>
-            outpostRestorationId = std::nullopt) noexcept;
+            outpostRestorationId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            baseSiteClearanceId = std::nullopt) noexcept;
 
     void updateBase(
         const BaseInput &input,

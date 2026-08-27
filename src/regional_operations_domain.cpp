@@ -42,6 +42,16 @@ RegionalOutpostStaffingPlan staffingFailure(
     return {false, error, std::move(message), profile.revision,
             std::move(definitionId)};
 }
+
+RegionalBaseSiteClearancePlan siteClearanceFailure(
+    const ProfileState &profile,
+    DomainErrorCode error,
+    std::string message,
+    RegionalBaseSiteDefinitionId definitionId = {})
+{
+    return {false, error, std::move(message), profile.revision,
+            std::move(definitionId)};
+}
 }
 
 std::uint32_t assignedRegionalOutpostStaff(
@@ -295,6 +305,70 @@ RegionalOutpostPlan queryEstablishRegionalOutpost(
         return outpostFailure(
             profile, DomainErrorCode::IllegalDestination,
             error.what(), command.definitionId);
+    }
+}
+
+RegionalBaseSiteClearancePlan queryRegionalBaseSiteClearance(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalBaseSiteDefinitionId &definitionId) noexcept
+{
+    try
+    {
+        const RegionalBaseSiteDefinition &definition =
+            content.regionalBaseSite(definitionId);
+        const auto state = profile.regionalOperations.baseSites.find(
+            definitionId);
+        if (state == profile.regionalOperations.baseSites.end())
+        {
+            return siteClearanceFailure(
+                profile, DomainErrorCode::InvalidProfile,
+                "regional Base site state is missing", definitionId);
+        }
+        if (profile.pendingRaid.has_value())
+        {
+            return siteClearanceFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional Base site clearance is unavailable during a Raid",
+                definitionId);
+        }
+        if (state->second.unlocked)
+        {
+            return siteClearanceFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional Base site is already unlocked", definitionId);
+        }
+        if (!definition.clearanceMapDefinitionId.has_value() ||
+            !definition.outpostDefinitionId.has_value())
+        {
+            return siteClearanceFailure(
+                profile, DomainErrorCode::IllegalDestination,
+                "regional Base site has no clearance operation",
+                definitionId);
+        }
+        const auto outpost = profile.regionalOperations.outposts.find(
+            *definition.outpostDefinitionId);
+        if (outpost == profile.regionalOperations.outposts.end() ||
+            outpost->second.unlocked)
+        {
+            return siteClearanceFailure(
+                profile, DomainErrorCode::InvalidProfile,
+                "regional Base site outpost state is invalid",
+                definitionId);
+        }
+        return {true,
+                DomainErrorCode::None,
+                {},
+                profile.revision,
+                definitionId,
+                *definition.clearanceMapDefinitionId,
+                false};
+    }
+    catch (const std::exception &error)
+    {
+        return siteClearanceFailure(
+            profile, DomainErrorCode::IllegalDestination,
+            error.what(), definitionId);
     }
 }
 

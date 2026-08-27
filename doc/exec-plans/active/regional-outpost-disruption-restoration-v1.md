@@ -51,5 +51,5 @@
 - [x] Step 2：清理 Raid、目标门控和成功恢复。
 - [x] Step 3：区域页/HUD 双语投影。
 - [x] Windows Debug 全目标与完整 1161/1161 CTest。
-- [ ] exact-head 双平台 CI。
-- [ ] 用户统一正常游玩验收。
+- [x] exact-head 双平台 CI。
+- [x] 用户统一正常游玩验收；PR #105 以普通 merge commit `cf555a1` 进入 main。
