@@ -16,6 +16,7 @@
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
+#include "base_siege_domain.h"
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
@@ -2555,4 +2556,63 @@ TEST(SaveRepositoryTest, SchemaV13MigratesToDefaultBaseConstruction)
     EXPECT_FALSE(migrated.profile->baseConstruction.activeProject.has_value());
     // Population was already part of schema v13 and remains authoritative.
     EXPECT_EQ(migrated.profile->basePopulation.bedCapacity, 10U);
+}
+
+TEST(SaveRepositoryTest, SchemaV32RoundTripsSiegeWarningAndRaidRollbackState)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState warning = makeNewAlphaProfile("save-siege-warning", content);
+    warning.baseSiege.raidThreatUnits = 70U;
+    warning.baseSiege.populationThreatUnits = 20U;
+    warning.baseSiege.siteThreatUnits = 10U;
+    warning.baseSiege.warningActive = true;
+    warning.baseSiege.warningRemainingSeconds = 73U;
+    warning.baseSiege.siegeSequence = 2U;
+    const std::uint64_t warningFingerprint = profileStateFingerprint(warning);
+    const SaveLoadResult warningLoaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(warning, content.contentVersion()), content);
+    ASSERT_TRUE(warningLoaded.profile.has_value()) << warningLoaded.message;
+    EXPECT_EQ(
+        profileStateFingerprint(*warningLoaded.profile),
+        warningFingerprint);
+
+    ProfileState pending = makeNewAlphaProfile("save-siege-pending", content);
+    pending.baseSiege.raidThreatUnits = 45U;
+    ASSERT_TRUE(executeDeploy(
+        pending,
+        content,
+        DeployCommand{"save-siege-raid", "save-siege-settlement", 55221U,
+                      MapDefinitionId{"map.v0.test"}},
+        CommandContext{pending.revision, "save-siege-deploy"}).succeeded);
+    const std::uint64_t pendingFingerprint = profileStateFingerprint(pending);
+    const SaveLoadResult pendingLoaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(pending, content.contentVersion()), content);
+    ASSERT_TRUE(pendingLoaded.profile.has_value()) << pendingLoaded.message;
+    EXPECT_EQ(
+        profileStateFingerprint(*pendingLoaded.profile),
+        pendingFingerprint);
+    EXPECT_EQ(
+        pendingLoaded.profile->pendingRaid->travel.startingBaseSiege
+            .raidThreatUnits,
+        45U);
+}
+
+TEST(SaveRepositoryTest, SchemaV31MigratesToSafeEmptySiegeState)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-siege-v31-migration", content);
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "regional-base-site-feature-content-40",
+            31U),
+        content);
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(totalBaseThreat(migrated.profile->baseSiege), 0U);
+    EXPECT_FALSE(migrated.profile->baseSiege.warningActive);
+    EXPECT_EQ(
+        migrated.profile->baseSiege.safeUntilWorldMinute,
+        kInitialWorldMinute + 3U * kWorldMinutesPerDay);
 }

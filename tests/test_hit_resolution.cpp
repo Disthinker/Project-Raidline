@@ -41,6 +41,8 @@ TEST(HitResolutionTest, LethalHitConsumesShotAndEnemy)
     ASSERT_EQ(result.consumedShotIds.size(), 1U);
     EXPECT_EQ(result.consumedShotIds[0], 1U);
     EXPECT_EQ(result.enemiesKilled, 1U);
+    ASSERT_EQ(result.removedEnemyIndices.size(), 1U);
+    EXPECT_EQ(result.removedEnemyIndices.front(), 0U);
 }
 
 TEST(HitResolutionTest, NoHitKeepsEnemiesAndDoesNotConsumeShot)
@@ -317,6 +319,9 @@ TEST(HitResolutionTest, LaterShotCanHitNextEnemyAfterEarlierKill)
     EXPECT_TRUE(enemies.empty());
     EXPECT_EQ(result.hits.size(), 2U);
     EXPECT_EQ(result.enemiesKilled, 2U);
+    EXPECT_EQ(
+        result.removedEnemyIndices,
+        (std::vector<std::size_t>{0U, 1U}));
 }
 
 TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
@@ -335,6 +340,23 @@ TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
     EXPECT_EQ(result.consumedShotIds[0], 1U);
     EXPECT_EQ(result.hits.size(), 1U);
     EXPECT_EQ(result.enemiesKilled, 1U);
+}
+
+TEST(HitResolutionTest, PreDeadEnemyReportsItsPrunedParallelIndex)
+{
+    std::vector<Enemy> enemies{
+        Enemy{Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}},
+        Enemy{Vec2{30.0F, 10.0F}, Vec2{10.0F, 10.0F}}};
+    ASSERT_TRUE(enemies.front().takeDamage(enemies.front().maxHealth()));
+
+    const HitResolutionResult result = resolveShotEnemyHits({}, enemies);
+
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_FLOAT_EQ(enemies.front().position().x, 30.0F);
+    EXPECT_EQ(result.enemiesKilled, 0U);
+    EXPECT_EQ(
+        result.removedEnemyIndices,
+        (std::vector<std::size_t>{0U}));
 }
 
 TEST(HitResolutionTest, InvalidCandidateCannotDamageOrBeConsumed)

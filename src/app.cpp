@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -143,6 +144,16 @@ namespace
             return "SECURITY";
         }
         return "UNKNOWN";
+    }
+
+    std::string formatWorldMinutesRemaining(
+        std::uint64_t totalMinutes)
+    {
+        const std::uint64_t days = totalMinutes / kWorldMinutesPerDay;
+        const std::uint64_t remainder = totalMinutes % kWorldMinutesPerDay;
+        const std::uint64_t hours = remainder / 60U;
+        const std::uint64_t minutes = remainder % 60U;
+        return fmt::format("{}D {:02}H {:02}M", days, hours, minutes);
     }
 
     // Legacy click-page geometry remains only for the supply/deployment
@@ -1786,6 +1797,11 @@ SDL_FRect App::regionalBaseSiteFeatureButton() const noexcept
     return SDL_FRect{740.0F, 405.0F, 375.0F, 32.0F};
 }
 
+SDL_FRect App::baseAutoDefenseButton() const noexcept
+{
+    return SDL_FRect{470.0F, 474.0F, 340.0F, 52.0F};
+}
+
 SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
 {
     return SDL_FRect{
@@ -1863,6 +1879,40 @@ void App::handleInventoryCancel()
 
 void App::updateBase(float deltaTime)
 {
+    gameSession_.advanceBaseWorldClock(deltaTime);
+    if (gameSession_.baseThreatProjection().warningActive)
+    {
+        closeInventory();
+        gameFlow_.closeBaseFacility();
+        lostRaidRecordsOpen_ = false;
+        regionalOperationsOpen_ = false;
+        selectedLostRaidRecordId_.reset();
+        profileContextMenu_.reset();
+        for (const BasePointerClick &click : pendingBaseClicks_)
+        {
+            if (!contains(baseAutoDefenseButton(), click.position))
+            {
+                continue;
+            }
+            const BaseAutoDefenseReceipt receipt =
+                gameSession_.executeBaseAutoDefense(
+                    nextProfileTransactionId("base-auto-defense"));
+            uiMessage_ = receipt.succeeded
+                ? receipt.outcome == BaseSiegeOutcome::Defended
+                    ? "BASE DEFENDED | SAFETY PERIOD STARTED"
+                    : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            break;
+        }
+        pendingBaseClicks_.clear();
+        pendingInventoryUiEvents_.clear();
+        pendingProfileRightClicks_.clear();
+        return;
+    }
+
     const InventoryFrameInputDecision inventoryDecision =
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
@@ -1950,7 +2000,6 @@ void App::updateBase(float deltaTime)
     input.interactJustPressed =
         input_.wasActionJustPressed(GameAction::Interact);
     gameFlow_.updateBase(input, deltaTime);
-    gameSession_.advanceBaseWorldClock(deltaTime);
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage)
     {
         gameFlow_.closeBaseFacility();
@@ -11813,6 +11862,14 @@ void App::renderBase()
         clock.minute,
         worldTimeOfDayName(clock.timeOfDay));
     uiTextRenderer_.render(renderer_, 1010.0F, 90.0F, clockText.c_str());
+    const BaseThreatProjection threat = gameSession_.baseThreatProjection();
+    const std::string threatText = fmt::format(
+        "BASE THREAT {} {}/{}",
+        baseThreatTierName(threat.tier),
+        threat.totalThreatUnits,
+        kBaseSiegeThreatThreshold);
+    uiTextRenderer_.render(renderer_, 1010.0F, 108.0F, threatText.c_str());
+    renderBaseSiegeQueuedNotice();
 
     const char *goal = "OBJECTIVE COMPLETE";
     switch (gameSession_.profile().tutorial)
@@ -11861,6 +11918,105 @@ void App::renderBase()
     if (inventoryOverlayState_.isOpen())
     {
         renderProfileInventory(true, false);
+    }
+    renderBaseSiegeWarning();
+}
+
+void App::renderBaseSiegeQueuedNotice()
+{
+    const BaseThreatProjection threat = gameSession_.baseThreatProjection();
+    if (!threat.siegeQueued)
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect panel{330.0F, 82.0F, 620.0F, 46.0F};
+    SDL_SetRenderDrawColor(renderer_, 46, 35, 20, 238);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 224, 168, 76, 255);
+    SDL_RenderRect(renderer_, &panel);
+    const std::string queued = fmt::format(
+        "BASE SIEGE QUEUED | SAFETY {}",
+        formatWorldMinutesRemaining(threat.safeMinutesRemaining));
+    uiTextRenderer_.render(
+        renderer_, 350.0F, 90.0F, queued.c_str());
+    uiTextRenderer_.render(
+        renderer_, 350.0F, 108.0F,
+        "RAIDS AVAILABLE | 3-MIN WARNING AFTER SAFETY");
+}
+
+void App::renderBaseSiegeWarning()
+{
+    const BaseThreatProjection threat = gameSession_.baseThreatProjection();
+    if (!threat.warningActive)
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 12, 10, 8, 214);
+    const SDL_FRect shade{
+        0.0F, 0.0F,
+        static_cast<float>(kWindowWidth),
+        static_cast<float>(kWindowHeight)};
+    SDL_RenderFillRect(renderer_, &shade);
+    const SDL_FRect panel{330.0F, 190.0F, 620.0F, 390.0F};
+    SDL_SetRenderDrawColor(renderer_, 38, 32, 28, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 205, 92, 62, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    uiTextRenderer_.render(
+        renderer_, 500.0F, 220.0F, "BASE SIEGE WARNING");
+    const std::string timer = threat.warningRemainingSeconds > 0U
+        ? fmt::format(
+              "PREPARATION {:02}:{:02}",
+              threat.warningRemainingSeconds / 60U,
+              threat.warningRemainingSeconds % 60U)
+        : "PREPARATION COMPLETE | MANUAL CONFIRMATION REQUIRED";
+    uiTextRenderer_.render(renderer_, 430.0F, 254.0F, timer.c_str());
+    const std::string sources = fmt::format(
+        "THREAT SOURCES | RAID {} | POPULATION {} | SITE {}",
+        threat.raidThreatUnits,
+        threat.populationThreatUnits,
+        threat.siteThreatUnits);
+    uiTextRenderer_.render(renderer_, 390.0F, 294.0F, sources.c_str());
+
+    const BaseAutoDefensePlan defense = gameSession_.baseAutoDefensePlan();
+    const std::string requirement = fmt::format(
+        "AUTO DEFENSE | SECURITY {}/{} | {}",
+        defense.availableSecurity,
+        defense.requiredSecurity,
+        defense.projectedSuccess ? "PROJECTED SUCCESS" : "SOFT FAILURE RISK");
+    uiTextRenderer_.render(renderer_, 390.0F, 332.0F, requirement.c_str());
+    uiTextRenderer_.render(
+        renderer_, 390.0F, 362.0F,
+        "SUCCESS: MATERIAL +8, MORALE SUPPORT, 7 SAFE DAYS");
+    uiTextRenderer_.render(
+        renderer_, 390.0F, 390.0F,
+        "FAILURE: LIMITED PUBLIC LOSS, 12 SAFE DAYS, NO PERSONAL GEAR LOSS");
+    uiTextRenderer_.render(
+        renderer_, 390.0F, 420.0F,
+        !threat.autoDefensePresetSaved
+            ? "FIRST SIEGE WILL NOT RESOLVE UNTIL YOU CONFIRM"
+            : "SAVED PRESET WILL RESOLVE WHEN THE TIMER ENDS");
+
+    const SDL_FRect button = baseAutoDefenseButton();
+    SDL_SetRenderDrawColor(
+        renderer_, defense.projectedSuccess ? 48 : 92,
+        defense.projectedSuccess ? 88 : 52,
+        defense.projectedSuccess ? 58 : 44, 255);
+    SDL_RenderFillRect(renderer_, &button);
+    SDL_SetRenderDrawColor(renderer_, 220, 190, 120, 255);
+    SDL_RenderRect(renderer_, &button);
+    uiTextRenderer_.render(
+        renderer_, button.x + 58.0F, button.y + 18.0F,
+        "START AUTO DEFENSE NOW");
+    if (!uiMessage_.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, 390.0F, 546.0F, uiMessage_.c_str());
     }
 }
 

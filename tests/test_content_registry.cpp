@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-base-site-feature-content-40");
+        "regional-base-threat-content-41");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -76,6 +76,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(ashworks.uniqueFeatureRepairMaterialUnits, 15U);
     EXPECT_EQ(ashworks.uniqueFeatureRepairMinutes, 360U);
     EXPECT_EQ(ashworks.uniqueFeatureManufacturingDurationPercent, 75U);
+    EXPECT_EQ(ashworks.dailyBaseThreatUnits, 3U);
     EXPECT_FALSE(ashworks.initiallyUnlocked);
     EXPECT_EQ(ashworks.migrationMinutes, 720U);
     EXPECT_EQ(ashworks.coreFacilitySlots, 4U);
@@ -477,6 +478,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FLOAT_EQ(deployment.enemies[0].position.x, 600.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[1].position.y, 500.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[2].position.x, 930.0F);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidRegionalBaseThreatRate)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"daily_base_threat_units\": 1",
+        "\"daily_base_threat_units\": 0");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, RejectsInvalidBasePriorityDefinitions)

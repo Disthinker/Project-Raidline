@@ -1026,6 +1026,23 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "regional outpost capacity is exceeded"};
     }
+    const BaseSiegeState &siege = profile.baseSiege;
+    if (siege.raidThreatUnits > kBaseSiegeThreatThreshold ||
+        siege.populationThreatUnits > kBaseSiegeThreatThreshold ||
+        siege.siteThreatUnits > kBaseSiegeThreatThreshold ||
+        siege.resolvedDayCount >
+            projectWorldClock(profile.worldClock).completedDays ||
+        siege.warningRemainingSeconds > kBaseSiegeWarningSeconds ||
+        (!siege.warningActive && siege.warningRemainingSeconds != 0U) ||
+        (siege.warningActive &&
+         totalBaseThreat(siege) < kBaseSiegeThreatThreshold) ||
+        (siege.lastOutcome == BaseSiegeOutcome::None &&
+         (siege.lastSecuritySpent != 0U ||
+          siege.lastPopulationLost != 0U)) ||
+        siege.lastPopulationLost > 1U)
+    {
+        return {false, "Base siege state is invalid"};
+    }
     const BaseResourceBundle &resources = profile.baseResources.pool;
     const BaseResourceBundle &shortfall =
         profile.baseResources.lastShortfall;
@@ -2642,6 +2659,18 @@ ProfileValidationResult validateProfileState(
             {
                 regionalTravelValid = raid.travel.routeIds.empty();
             }
+            const BaseSiegeState &startingSiege =
+                raid.travel.startingBaseSiege;
+            const bool startingSiegeValid =
+                startingSiege.raidThreatUnits <=
+                    kBaseSiegeThreatThreshold &&
+                startingSiege.populationThreatUnits <=
+                    kBaseSiegeThreatThreshold &&
+                startingSiege.siteThreatUnits <=
+                    kBaseSiegeThreatThreshold &&
+                startingSiege.resolvedDayCount <= startingCompletedDays &&
+                !startingSiege.warningActive &&
+                startingSiege.warningRemainingSeconds == 0U;
             if (raid.travel.outboundMinutes == 0U ||
                 raid.travel.returnMinutes == 0U ||
                 raid.travel.failureRegroupMinutes <
@@ -2664,6 +2693,7 @@ ProfileValidationResult validateProfileState(
                     raid.travel.startingBasePriority,
                     raid.travel.startingWorldClock.elapsedWorldMinutes,
                     content) ||
+                !startingSiegeValid ||
                 !validBaseMoraleSnapshot(
                     raid.travel.startingBaseMorale,
                     raid.travel.startingBaseCommunityEvent,
@@ -3032,6 +3062,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         }
         hashInteger(hash, state.shortcutOperationsSinceRestoration);
     }
+    hashInteger(hash, profile.baseSiege.raidThreatUnits);
+    hashInteger(hash, profile.baseSiege.populationThreatUnits);
+    hashInteger(hash, profile.baseSiege.siteThreatUnits);
+    hashInteger(hash, profile.baseSiege.resolvedDayCount);
+    hashInteger(hash, profile.baseSiege.safeUntilWorldMinute);
+    hashInteger(hash, profile.baseSiege.warningActive ? 1U : 0U);
+    hashInteger(hash, profile.baseSiege.warningRemainingSeconds);
+    hashInteger(hash, profile.baseSiege.siegeSequence);
+    hashInteger(hash, profile.baseSiege.autoDefensePresetSaved ? 1U : 0U);
+    hashInteger(hash, static_cast<std::uint32_t>(
+        profile.baseSiege.lastOutcome));
+    hashInteger(hash, profile.baseSiege.lastSecuritySpent);
+    hashInteger(hash, profile.baseSiege.lastPopulationLost);
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
     hashInteger(hash, profile.baseConstruction.kitchenWaterLevel);
@@ -3428,6 +3471,24 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             }
             hashInteger(hash, state.shortcutOperationsSinceRestoration);
         }
+        hashInteger(hash, raid.travel.startingBaseSiege.raidThreatUnits);
+        hashInteger(
+            hash, raid.travel.startingBaseSiege.populationThreatUnits);
+        hashInteger(hash, raid.travel.startingBaseSiege.siteThreatUnits);
+        hashInteger(hash, raid.travel.startingBaseSiege.resolvedDayCount);
+        hashInteger(hash, raid.travel.startingBaseSiege.safeUntilWorldMinute);
+        hashInteger(
+            hash, raid.travel.startingBaseSiege.warningActive ? 1U : 0U);
+        hashInteger(
+            hash, raid.travel.startingBaseSiege.warningRemainingSeconds);
+        hashInteger(hash, raid.travel.startingBaseSiege.siegeSequence);
+        hashInteger(
+            hash,
+            raid.travel.startingBaseSiege.autoDefensePresetSaved ? 1U : 0U);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.travel.startingBaseSiege.lastOutcome));
+        hashInteger(hash, raid.travel.startingBaseSiege.lastSecuritySpent);
+        hashInteger(hash, raid.travel.startingBaseSiege.lastPopulationLost);
         hashInteger(hash, raid.travel.startingBaseResources.pool.food);
         hashInteger(hash, raid.travel.startingBaseResources.pool.hygiene);
         hashInteger(hash, raid.travel.startingBaseResources.pool.morale);

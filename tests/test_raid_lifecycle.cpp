@@ -13,6 +13,7 @@
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
+#include "base_siege_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
@@ -31,6 +32,75 @@ AssetInstanceId firstAsset(
             return entry.second.definitionId == definitionId;
         });
     return found == profile.assets.records().end() ? 0 : found->first;
+}
+
+DeployReceipt deploy(
+    ProfileState &profile,
+    std::uint64_t seed = 9917,
+    MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"});
+
+TEST(RaidLifecycleTest, SiegeWarningBlocksDeployWithoutMutation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "siege-blocks-deploy", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    profile.baseSiege.warningActive = true;
+    profile.baseSiege.warningRemainingSeconds = kBaseSiegeWarningSeconds;
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const DeployReceipt receipt = deploy(profile, 44001U);
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(RaidLifecycleTest, QueuedSiegeDuringSafetyStillAllowsDeploy)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "siege-safety-allows-deploy", publishedContentRegistry());
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    ASSERT_TRUE(projectBaseThreat(profile).siegeQueued);
+
+    const DeployReceipt receipt = deploy(profile, 44004U);
+
+    EXPECT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(profile.pendingRaid.has_value());
+}
+
+TEST(RaidLifecycleTest, SettlementAddsThreatOnceAndRollbackRestoresEntryState)
+{
+    ProfileState settled = makeNewAlphaProfile(
+        "siege-settlement", publishedContentRegistry());
+    ASSERT_TRUE(deploy(settled, 44002U).succeeded);
+    const std::string settlementId = settled.pendingRaid->settlementId;
+    ASSERT_TRUE(settlePendingRaid(
+        settled,
+        publishedContentRegistry(),
+        settlementId,
+        RaidResultOutcome::Extracted).succeeded);
+    EXPECT_EQ(
+        settled.baseSiege.raidThreatUnits,
+        kBaseSiegeRaidThreatUnits);
+    const std::uint64_t committed = profileStateFingerprint(settled);
+    const RaidSettlementReceipt replay = settlePendingRaid(
+        settled,
+        publishedContentRegistry(),
+        settlementId,
+        RaidResultOutcome::Extracted);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(settled), committed);
+
+    ProfileState rolledBack = makeNewAlphaProfile(
+        "siege-rollback", publishedContentRegistry());
+    rolledBack.baseSiege.raidThreatUnits = 37U;
+    ASSERT_TRUE(deploy(rolledBack, 44003U).succeeded);
+    rolledBack.baseSiege.raidThreatUnits = 99U;
+    rolledBack.baseSiege.populationThreatUnits = 40U;
+    ASSERT_TRUE(rollbackPendingRaidToBase(
+        rolledBack, publishedContentRegistry()).succeeded);
+    EXPECT_EQ(rolledBack.baseSiege.raidThreatUnits, 37U);
+    EXPECT_EQ(rolledBack.baseSiege.populationThreatUnits, 0U);
 }
 
 void equipAlphaLoadout(ProfileState &profile)
@@ -55,8 +125,8 @@ void equipAlphaLoadout(ProfileState &profile)
 
 DeployReceipt deploy(
     ProfileState &profile,
-    std::uint64_t seed = 9917,
-    MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"})
+    std::uint64_t seed,
+    MapDefinitionId mapDefinitionId)
 {
     return executeDeploy(
         profile,

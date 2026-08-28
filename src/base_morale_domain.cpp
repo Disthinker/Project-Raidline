@@ -276,6 +276,7 @@ BaseDailySystemsResult synchronizeBaseDailySystemsThrough(
     result.morale = applyBaseMoraleThrough(profile, content, result.demand);
     result.priority = synchronizeBasePriorityThrough(profile, content);
     result.event = synchronizeBaseCommunityEventThrough(profile, content);
+    result.threat = synchronizeBaseThreatThrough(profile, content);
     return result;
 }
 

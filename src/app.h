@@ -214,6 +214,7 @@ private:
     [[nodiscard]] SDL_FRect regionalBaseSiteClearanceButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalFacilityReserveButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalBaseSiteFeatureButton() const noexcept;
+    [[nodiscard]] SDL_FRect baseAutoDefenseButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalOutpostActionButton(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect lostRaidRecordRow(
@@ -279,6 +280,8 @@ private:
     void renderBaseWorkshop();
     void renderBaseDeployment();
     void renderRegionalOperations();
+    void renderBaseSiegeQueuedNotice();
+    void renderBaseSiegeWarning();
     void renderLostRaidRecords();
     void renderProfileGrid(
         ProfileContainerId container,

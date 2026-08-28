@@ -4,6 +4,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_construction_domain.h"
+#include "base_siege_domain.h"
 #include "world_clock.h"
 
 namespace {
@@ -198,4 +199,29 @@ TEST(BaseConstructionDomainTest, RejectionsLeaveProfileUnchanged) {
                    CommandContext{profile.revision, "overflow"})
                    .succeeded);
   EXPECT_EQ(profileStateFingerprint(profile), overflow);
+}
+
+TEST(BaseConstructionDomainTest,
+     SiegeWarningBlocksNewConstructionWithoutMutation) {
+  ProfileState profile = makeNewAlphaProfile(
+      "construction-siege-warning", publishedContentRegistry());
+  profile.baseConstruction.materialUnits = 4U;
+  profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+  profile.baseSiege.safeUntilWorldMinute =
+      profile.worldClock.elapsedWorldMinutes;
+  ASSERT_TRUE(activateBaseSiegeWarningIfEligible(profile));
+  const std::uint64_t before = profileStateFingerprint(profile);
+
+  const BaseConstructionPlan plan = queryStartBaseConstruction(
+      profile, publishedContentRegistry(),
+      StartBaseConstructionCommand{kDormitoryExpansion});
+  EXPECT_FALSE(plan.canCommit);
+  EXPECT_EQ(plan.error, DomainErrorCode::IllegalDestination);
+  const BaseConstructionReceipt receipt = executeStartBaseConstruction(
+      profile, publishedContentRegistry(),
+      StartBaseConstructionCommand{kDormitoryExpansion},
+      CommandContext{profile.revision, "construction-during-warning"});
+  EXPECT_FALSE(receipt.succeeded);
+  EXPECT_EQ(receipt.error, DomainErrorCode::IllegalDestination);
+  EXPECT_EQ(profileStateFingerprint(profile), before);
 }

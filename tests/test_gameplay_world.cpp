@@ -1018,6 +1018,46 @@ TEST(
     }
 }
 
+TEST(
+    GameplayWorldTest,
+    LethalSecondHitKeepsEnemyNavigationRuntimeSynchronized)
+{
+    GameplayWorld world{
+        std::vector<EnemySpawn>{
+            EnemySpawn{Vec2{600.0F, 100.0F}, Vec2{50.0F, 50.0F}, 2}},
+        3};
+    GameplayInput fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{625.0F, 125.0F};
+
+    for (int shot = 0; shot < 2; ++shot)
+    {
+        world.update(fire, 0.0F);
+        ASSERT_TRUE(world.shotFiredLastUpdate());
+
+        constexpr int kMaximumFrames{20};
+        int simulatedFrames{};
+        while (!world.logicalBallistics().empty() &&
+               simulatedFrames < kMaximumFrames)
+        {
+            world.update(GameplayInput{}, 1.0F / 60.0F);
+            ++simulatedFrames;
+        }
+        ASSERT_LT(simulatedFrames, kMaximumFrames);
+        if (shot == 0)
+        {
+            world.update(GameplayInput{}, 0.20F);
+        }
+    }
+
+    ASSERT_TRUE(world.enemies().empty());
+
+    // Regression: the frame after the lethal hit used to call terminate()
+    // because the Enemy had been removed but its navigation runtime remained.
+    world.update(GameplayInput{}, 1.0F / 60.0F);
+    EXPECT_TRUE(world.enemies().empty());
+    EXPECT_EQ(world.score(), 100);
+}
+
 TEST(GameplayWorldTest, FastLogicalBallisticDoesNotTunnelDuringLargeFrame)
 {
     GameplayWorld world;

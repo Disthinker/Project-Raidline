@@ -3,6 +3,7 @@
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
 #include "base_migration_domain.h"
+#include "base_siege_domain.h"
 #include "regional_operations_domain.h"
 
 namespace
@@ -237,4 +238,43 @@ TEST(BaseMigrationDomainTest,
     EXPECT_EQ(profile.baseConstruction.facilities.at(kWorkshop),
               BaseConstructionState::FacilityPlacement::Reserve);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseMigrationDomainTest,
+     SiegeWarningBlocksMigrationAndReserveInstallationWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "migration-siege-warning", content);
+    prepareAshworks(profile);
+    completeKitchenWater(profile);
+    profile.baseConstruction.facilities[kWorkshop] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[kWorkshop] =
+        profile.worldClock.elapsedWorldMinutes;
+    profile.baseSiege.raidThreatUnits = kBaseSiegeThreatThreshold;
+    profile.baseSiege.safeUntilWorldMinute =
+        profile.worldClock.elapsedWorldMinutes;
+    ASSERT_TRUE(activateBaseSiegeWarningIfEligible(profile));
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const BaseMigrationPlan migration = queryBaseMigration(
+        profile, content, BaseMigrationCommand{kAshworksSite});
+    EXPECT_FALSE(migration.canCommit);
+    EXPECT_EQ(migration.error, DomainErrorCode::IllegalDestination);
+    EXPECT_FALSE(executeBaseMigration(
+        profile, content, BaseMigrationCommand{kAshworksSite},
+        CommandContext{profile.revision, "migration-during-warning"})
+                     .succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const InstallBaseFacilityPlan installation = queryInstallBaseFacility(
+        profile, content, InstallBaseFacilityCommand{kWorkshop});
+    EXPECT_FALSE(installation.canCommit);
+    EXPECT_EQ(installation.error, DomainErrorCode::IllegalDestination);
+    EXPECT_FALSE(executeInstallBaseFacility(
+        profile, content, InstallBaseFacilityCommand{kWorkshop},
+        CommandContext{profile.revision, "install-during-warning"})
+                     .succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
 }

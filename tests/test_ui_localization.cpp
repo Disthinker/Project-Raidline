@@ -505,6 +505,38 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiteFeatureRepairFlow) {
             "修复地点设施前必须安装普通工坊");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE SIEGE QUEUED | SAFETY 2D 11H 02M"),
+            "基地尸潮已排队 | 安全期剩余 2D 11H 02M");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RAIDS AVAILABLE | 3-MIN WARNING AFTER SAFETY"),
+            "安全期内可正常出击 | 安全期结束后进入3分钟预警");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE THREAT QUEUED 100/100"),
+            "基地威胁 已排队 100/100");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese, "BASE SIEGE WARNING"),
+            "基地尸潮预警");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "START AUTO DEFENSE NOW"),
+            "立即开始自动防守");
+  const std::string requirement = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "AUTO DEFENSE | SECURITY 12/18 | SOFT FAILURE RISK");
+  EXPECT_NE(requirement.find("自动防守"), std::string::npos);
+  EXPECT_NE(requirement.find("安保 12/18"), std::string::npos);
+  EXPECT_NE(requirement.find("存在软失败风险"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "resolve the Base siege warning before deploying"),
+            "出击前必须先处理基地攻城预警");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

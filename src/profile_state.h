@@ -470,6 +470,34 @@ struct RegionalOperationsState
         const RegionalOperationsState &) = default;
 };
 
+enum class BaseSiegeOutcome
+{
+    None,
+    Defended,
+    SoftFailure
+};
+
+struct BaseSiegeState
+{
+    std::uint32_t raidThreatUnits{};
+    std::uint32_t populationThreatUnits{};
+    std::uint32_t siteThreatUnits{};
+    std::uint64_t resolvedDayCount{};
+    std::uint64_t safeUntilWorldMinute{
+        kInitialWorldMinute + 3U * kWorldMinutesPerDay};
+    bool warningActive{};
+    std::uint32_t warningRemainingSeconds{};
+    std::uint64_t siegeSequence{};
+    bool autoDefensePresetSaved{};
+    BaseSiegeOutcome lastOutcome{BaseSiegeOutcome::None};
+    std::uint32_t lastSecuritySpent{};
+    std::uint32_t lastPopulationLost{};
+
+    friend bool operator==(
+        const BaseSiegeState &,
+        const BaseSiegeState &) = default;
+};
+
 enum class BaseMoraleTier
 {
     Low,
@@ -659,6 +687,7 @@ struct RaidTravelSnapshot
     RaidIntelligenceArchiveState startingRaidIntelligence;
     std::vector<RegionRouteDefinitionId> routeIds;
     RegionalOperationsState startingRegionalOperations;
+    BaseSiegeState startingBaseSiege;
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -737,6 +766,7 @@ struct ProfileState
     BasePopulationState basePopulation;
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
+    BaseSiegeState baseSiege;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;

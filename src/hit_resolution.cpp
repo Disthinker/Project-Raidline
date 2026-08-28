@@ -252,6 +252,18 @@ HitResolutionResult resolveShotHits(
         }
     }
 
+    // Prune every dead object, including enemies that were marked dead by a
+    // scenario/test command before this resolver ran. Reporting the complete
+    // sorted index set lets the owning world prune all parallel per-enemy
+    // runtime state with the exact same shape change.
+    for (std::size_t index{}; index < enemies.size(); ++index)
+    {
+        if (enemies[index].isDead())
+        {
+            result.removedEnemyIndices.push_back(index);
+        }
+    }
+
     std::erase_if(
         enemies,
         [](const Enemy &enemy)
