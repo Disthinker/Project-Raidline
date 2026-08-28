@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-base-perimeter-sweep-content-42");
+        "procedural-playable-outdoor-layout-content-43");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -219,7 +219,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         freightBay.worldSize.x,
         frontierWithInterior.interiors.front().worldSize.x);
     ASSERT_EQ(registry.lootTables().size(), 3U);
-    ASSERT_EQ(registry.enemyDeployments().size(), 10U);
+    ASSERT_EQ(registry.enemyDeployments().size(), 13U);
     ASSERT_EQ(registry.maps().size(), 4U);
 
     std::set<MapDefinitionId> mapIds;
@@ -292,10 +292,15 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     const MapDefinition &frontier = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_TRUE(frontier.proceduralOutdoor.enabled);
-    EXPECT_EQ(frontier.proceduralOutdoor.columns, 16U);
-    EXPECT_EQ(frontier.proceduralOutdoor.rows, 9U);
-    EXPECT_EQ(frontier.proceduralOutdoor.minimumBlockers, 18U);
-    EXPECT_EQ(frontier.proceduralOutdoor.maximumBlockers, 26U);
+    EXPECT_EQ(frontier.proceduralOutdoor.layoutVersion, 2U);
+    EXPECT_EQ(frontier.proceduralOutdoor.columns, 32U);
+    EXPECT_EQ(frontier.proceduralOutdoor.rows, 18U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumBranchRoads, 3U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumBranchRoads, 5U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumBlockers, 70U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumBlockers, 95U);
+    EXPECT_EQ(frontier.worldSize.x, 2560.0F);
+    EXPECT_EQ(frontier.worldSize.y, 1440.0F);
     EXPECT_EQ(
         registry.map(MapDefinitionId{"map.raid.industrial"})
             .rescue->injuredResidentCount,
@@ -304,7 +309,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         registry.map(MapDefinitionId{"map.v0.test"})
             .rescue->injuredResidentCount,
         0U);
-    EXPECT_EQ(raidDeploymentIds.size(), 9U);
+    EXPECT_EQ(raidDeploymentIds.size(), 12U);
     EXPECT_EQ(outboundTravelMinutes,
               (std::set<std::uint32_t>{45U, 90U, 150U, 210U}));
 
@@ -560,8 +565,8 @@ TEST(ContentRegistryTest, RejectsUnsafeProceduralOutdoorBounds)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"minimum_blockers\": 18, \"maximum_blockers\": 26",
-        "\"minimum_blockers\": 30, \"maximum_blockers\": 20");
+        "\"minimum_blockers\": 70, \"maximum_blockers\": 95",
+        "\"minimum_blockers\": 96, \"maximum_blockers\": 70");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
@@ -1222,8 +1227,8 @@ TEST(ContentRegistryTest, RejectsOverlappingPortalsAcrossInteriorDefinitions)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 70, \"y\": 160}, \"size\": {\"x\": 120, \"y\": 70}}",
-        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 1100, \"y\": 190}, \"size\": {\"x\": 120, \"y\": 80}}");
+        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 180, \"y\": 280}, \"size\": {\"x\": 120, \"y\": 70}}",
+        "{\"id\": \"northwest_service\", \"entrance\": {\"position\": {\"x\": 2220, \"y\": 380}, \"size\": {\"x\": 120, \"y\": 80}}");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

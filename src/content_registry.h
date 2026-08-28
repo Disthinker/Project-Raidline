@@ -492,8 +492,11 @@ struct BaseManufacturingRecipeDefinition
 struct ProceduralOutdoorDefinition
 {
     bool enabled{};
+    std::uint32_t layoutVersion{1};
     std::uint32_t columns{16};
     std::uint32_t rows{9};
+    std::uint32_t minimumBranchRoads{2};
+    std::uint32_t maximumBranchRoads{4};
     std::uint32_t minimumBlockers{18};
     std::uint32_t maximumBlockers{26};
     std::uint32_t maximumAttempts{8};

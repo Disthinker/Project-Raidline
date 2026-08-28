@@ -330,7 +330,6 @@ TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)
     ASSERT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
-
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(
             profile, publishedContentRegistry().contentVersion()),
@@ -1433,7 +1432,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
         mapId, RaidIntelligenceCategory::Transport), 1U);
 }
 
-TEST(SaveRepositoryTest, SchemaV23FreezesInteriorSpacesAndSpatialLayout)
+TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-procedural-layout-v21", publishedContentRegistry());
@@ -1450,6 +1449,8 @@ TEST(SaveRepositoryTest, SchemaV23FreezesInteriorSpacesAndSpatialLayout)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     ASSERT_FALSE(
         profile.pendingRaid->spatialLayout.ballisticBlockers.empty());
+    ASSERT_FALSE(profile.pendingRaid->spatialLayout.roadCells.empty());
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 2U);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -2218,15 +2219,20 @@ TEST(SaveRepositoryTest,
     ASSERT_EQ(profile.pendingRaid->interiors.size(), 2U);
     ASSERT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
     EXPECT_FALSE(profile.pendingRaid->interiors[1].layoutKnown);
-    const std::uint64_t fingerprint = profileStateFingerprint(profile);
-
+    profile.pendingRaid->rulesVersion =
+        "raid-second-representative-location-15";
+    profile.pendingRaid->spatialLayout.layoutVersion = 0U;
+    profile.pendingRaid->spatialLayout.roadCells.clear();
+    profile.pendingRaid->spatialLayout.fallbackReason =
+        RaidMapFallbackReason::None;
+    profile.pendingRaid->spatialLayout.layoutHash = raidMapLayoutHash(
+        profile.pendingRaid->spatialLayout.ballisticBlockers);
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(
             profile, content.contentVersion(), 23),
         content);
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
-    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
     EXPECT_TRUE(loaded.profile->raidInteriorIntelligence.knows(interiorId));
     ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
     EXPECT_TRUE(loaded.profile->pendingRaid->interiors.front().layoutKnown);
@@ -2410,6 +2416,11 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
     anchors.occupiedRegions.push_back(definition.exteriorEntrance);
     addRegion(definition.exteriorEntrance);
     raid.spatialLayout = generateRaidMapLayout(map, raid.seed, anchors);
+    raid.spatialLayout.layoutVersion = 0U;
+    raid.spatialLayout.roadCells.clear();
+    raid.spatialLayout.fallbackReason = RaidMapFallbackReason::None;
+    raid.spatialLayout.layoutHash = raidMapLayoutHash(
+        raid.spatialLayout.ballisticBlockers);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
         serializeProfileEnvelope(

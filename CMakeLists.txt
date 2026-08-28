@@ -394,6 +394,8 @@ add_library(raidline_sdl_client STATIC
     src/pause_menu.h
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
+    src/raid_camera.cpp
+    src/raid_camera.h
     src/raid_pointer_capture.h
     src/sound_event.cpp
     src/sound_event.h
@@ -568,6 +570,10 @@ raidline_add_test(
     RaidMapGenerationTest
     tests/test_raid_map_generation.cpp
     raidline::domain)
+raidline_add_test(
+    RaidCameraTest
+    tests/test_raid_camera.cpp
+    raidline::sdl_client)
 raidline_add_test(
     RaidSettlementTest
     tests/test_raid_settlement.cpp

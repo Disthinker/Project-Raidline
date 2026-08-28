@@ -603,7 +603,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "regional-base-perimeter-sweep-20";
+    snapshot.rulesVersion = "procedural-playable-outdoor-layout-21";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -1312,7 +1312,9 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->rulesVersion ==
             "regional-base-site-clearance-19" ||
         candidate.pendingRaid->rulesVersion ==
-            "regional-base-perimeter-sweep-20";
+            "regional-base-perimeter-sweep-20" ||
+        candidate.pendingRaid->rulesVersion ==
+            "procedural-playable-outdoor-layout-21";
     const RegionalOperationsState startingRegionalOperations =
         candidate.pendingRaid->travel.startingRegionalOperations;
     const BaseSiegeState startingBaseSiege =

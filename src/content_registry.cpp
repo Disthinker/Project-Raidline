@@ -1923,8 +1923,13 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredObject(mapValue, "procedural_outdoor");
                 definition.proceduralOutdoor = ProceduralOutdoorDefinition{
                     true,
+                    requiredPositiveUint(procedural, "layout_version"),
                     requiredPositiveUint(procedural, "columns"),
                     requiredPositiveUint(procedural, "rows"),
+                    requiredPositiveUint(
+                        procedural, "minimum_branch_roads"),
+                    requiredPositiveUint(
+                        procedural, "maximum_branch_roads"),
                     requiredPositiveUint(procedural, "minimum_blockers"),
                     requiredPositiveUint(procedural, "maximum_blockers"),
                     requiredPositiveUint(procedural, "maximum_attempts"),
@@ -1932,8 +1937,11 @@ ContentRegistry ContentRegistry::fromJson(
                 const auto &value = definition.proceduralOutdoor;
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
-                if (value.columns < 8U || value.columns > 32U ||
+                if (value.layoutVersion != 2U ||
+                    value.columns < 8U || value.columns > 48U ||
                     value.rows < 6U || value.rows > 18U ||
+                    value.minimumBranchRoads > value.maximumBranchRoads ||
+                    value.maximumBranchRoads > 8U ||
                     value.minimumBlockers > value.maximumBlockers ||
                     value.maximumBlockers > cells / 2U ||
                     value.maximumAttempts > 32U ||

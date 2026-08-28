@@ -1439,6 +1439,25 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                  raid.spatialLayout.generationAttempt},
                 {"layout_hash", raid.spatialLayout.layoutHash},
                 {"used_fallback", raid.spatialLayout.usedFallback}};
+            if (schemaVersion >= 34)
+            {
+                Json roads = Json::array();
+                for (const RaidOutdoorRoadCell &cell :
+                     raid.spatialLayout.roadCells)
+                {
+                    roads.push_back({
+                        {"column", cell.column},
+                        {"row", cell.row},
+                        {"kind", static_cast<std::uint32_t>(cell.kind)}});
+                }
+                payload["pending_raid"]["spatial_layout"]
+                    ["layout_version"] = raid.spatialLayout.layoutVersion;
+                payload["pending_raid"]["spatial_layout"]
+                    ["road_cells"] = std::move(roads);
+                payload["pending_raid"]["spatial_layout"]
+                    ["fallback_reason"] = static_cast<std::uint32_t>(
+                        raid.spatialLayout.fallbackReason);
+            }
         }
         if (schemaVersion >= 22)
         {
@@ -1684,7 +1703,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["rescue"] = nullptr;
             }
             if (schemaVersion >= 27 ||
-                raid.rulesVersion == "regional-base-perimeter-sweep-20")
+                raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+                raid.rulesVersion == "procedural-playable-outdoor-layout-21")
             {
                 Json routes = Json::array();
                 for (const RegionRouteDefinitionId &routeId :
@@ -1925,7 +1945,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
-        schemaVersion != 32 && schemaVersion != 33)
+        schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2036,7 +2056,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 31 &&
              contentVersion == "regional-base-site-feature-content-40") ||
             (schemaVersion == 32 &&
-             contentVersion == "regional-base-threat-content-41");
+             contentVersion == "regional-base-threat-content-41") ||
+            (schemaVersion == 33 &&
+             contentVersion == "regional-base-perimeter-sweep-content-42");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2052,8 +2074,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
              schemaVersion != 29 && schemaVersion != 30 &&
-             schemaVersion != 31 && schemaVersion != 32 &&
-             schemaVersion != 33) ||
+              schemaVersion != 31 && schemaVersion != 32 &&
+              schemaVersion != 33 && schemaVersion != 34) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2915,6 +2937,36 @@ SaveLoadResult deserializeProfileEnvelope(
                     layout.at("layout_hash").get<std::uint64_t>();
                 raid.spatialLayout.usedFallback =
                     layout.at("used_fallback").get<bool>();
+                if (schemaVersion >= 34)
+                {
+                    raid.spatialLayout.layoutVersion =
+                        layout.at("layout_version").get<std::uint32_t>();
+                    for (const Json &road : layout.at("road_cells"))
+                    {
+                        const std::uint32_t kind =
+                            road.at("kind").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidOutdoorRoadKind::Primary))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid road kind is invalid"};
+                        }
+                        raid.spatialLayout.roadCells.push_back({
+                            road.at("column").get<std::uint16_t>(),
+                            road.at("row").get<std::uint16_t>(),
+                            static_cast<RaidOutdoorRoadKind>(kind)});
+                    }
+                    const std::uint32_t fallbackReason =
+                        layout.at("fallback_reason").get<std::uint32_t>();
+                    if (fallbackReason > static_cast<std::uint32_t>(
+                            RaidMapFallbackReason::AttemptsExhausted))
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "Raid layout fallback reason is invalid"};
+                    }
+                    raid.spatialLayout.fallbackReason =
+                        static_cast<RaidMapFallbackReason>(fallbackReason);
+                }
             }
             else
             {

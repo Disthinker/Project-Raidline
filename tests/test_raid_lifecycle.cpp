@@ -309,7 +309,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-base-perimeter-sweep-20");
+        "procedural-playable-outdoor-layout-21");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -711,7 +711,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(profile.pendingRaid->baseSiteClearance.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-base-perimeter-sweep-20");
+        "procedural-playable-outdoor-layout-21");
     EXPECT_FALSE(profile.pendingRaid->baseSiteClearance->objectiveSecured);
 
     ProfileState earlyExtraction = profile;

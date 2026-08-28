@@ -1877,6 +1877,8 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
+        const bool playableOutdoorRules =
+            raid.rulesVersion == "procedural-playable-outdoor-layout-21";
         const bool advancedLootRules =
             raid.rulesVersion == "raid-control-resource-2" ||
             raid.rulesVersion == "raid-conditional-extraction-3" ||
@@ -1896,7 +1898,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1914,7 +1917,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
@@ -1925,7 +1929,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
@@ -1935,7 +1940,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
@@ -1944,7 +1950,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
@@ -1952,29 +1959,35 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool selfRecoveryRules =
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool outpostRestorationRules =
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool baseSiteClearanceRules =
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool basePerimeterSweepRules =
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -2271,6 +2284,19 @@ ProfileValidationResult validateProfileState(
                      procedural.minimumBlockers &&
                  raid.spatialLayout.ballisticBlockers.size() <=
                      procedural.maximumBlockers);
+            const bool layoutVersionValid = !playableOutdoorRules ||
+                (!procedural.enabled
+                     ? raid.spatialLayout.layoutVersion == 0U &&
+                           raid.spatialLayout.roadCells.empty()
+                     : raid.spatialLayout.layoutVersion ==
+                           procedural.layoutVersion &&
+                           !raid.spatialLayout.roadCells.empty());
+            const bool fallbackStateValid =
+                raid.spatialLayout.usedFallback
+                    ? raid.spatialLayout.fallbackReason ==
+                          RaidMapFallbackReason::AttemptsExhausted
+                    : raid.spatialLayout.fallbackReason ==
+                          RaidMapFallbackReason::None;
             bool fixedLayoutValid = procedural.enabled ||
                 raid.spatialLayout.ballisticBlockers.size() ==
                     raidMap->ballisticBlockers.size();
@@ -2388,9 +2414,12 @@ ProfileValidationResult validateProfileState(
                     addRegion(interior.exteriorEntrance);
                 }
             }
+            const std::uint64_t expectedLayoutHash = playableOutdoorRules
+                ? raidMapLayoutHash(raid.spatialLayout)
+                : raidMapLayoutHash(raid.spatialLayout.ballisticBlockers);
             if (raid.spatialLayout.layoutHash == 0U ||
-                raid.spatialLayout.layoutHash != raidMapLayoutHash(
-                    raid.spatialLayout.ballisticBlockers) ||
+                raid.spatialLayout.layoutHash != expectedLayoutHash ||
+                !layoutVersionValid || !fallbackStateValid ||
                 !generatedCountValid || !fixedLayoutValid ||
                 (procedural.enabled &&
                  (raid.spatialLayout.generationAttempt == 0U ||
@@ -2695,7 +2724,8 @@ ProfileValidationResult validateProfileState(
             if (raid.rulesVersion == "regional-route-network-17" ||
                 raid.rulesVersion == "regional-outpost-restoration-18" ||
                 raid.rulesVersion == "regional-base-site-clearance-19" ||
-                raid.rulesVersion == "regional-base-perimeter-sweep-20")
+                raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+                playableOutdoorRules)
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -3362,9 +3392,18 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashFloat(hash, raid.extractionPoint.position.y);
         hashFloat(hash, raid.extractionPoint.size.x);
         hashFloat(hash, raid.extractionPoint.size.y);
+        hashInteger(hash, raid.spatialLayout.layoutVersion);
         hashInteger(hash, raid.spatialLayout.generationAttempt);
         hashInteger(hash, raid.spatialLayout.layoutHash);
         hashInteger(hash, raid.spatialLayout.usedFallback ? 1U : 0U);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.spatialLayout.fallbackReason));
+        for (const RaidOutdoorRoadCell &road : raid.spatialLayout.roadCells)
+        {
+            hashInteger(hash, road.column);
+            hashInteger(hash, road.row);
+            hashInteger(hash, static_cast<std::uint32_t>(road.kind));
+        }
         for (const ContentRect &blocker :
              raid.spatialLayout.ballisticBlockers)
         {

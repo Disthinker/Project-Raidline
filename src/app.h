@@ -328,6 +328,7 @@ private:
     void renderPlayer();
     void renderShotPresentations();
     void renderShotFeedbackPresentations();
+    [[nodiscard]] Vec2 raidWorldCameraOffset() const noexcept;
     [[nodiscard]] Vec2 raidWorldScreenShakePixels() const noexcept;
     void renderAimCrosshair();
     void renderCombatFeedback();

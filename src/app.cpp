@@ -22,6 +22,7 @@
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
+#include "raid_camera.h"
 
 namespace
 {
@@ -1304,8 +1305,11 @@ GameplayInput App::makeGameplayInput() const
 
     input.aimDownSights = input_.isSecondaryPointerPressed();
 
-    input.aimWorldPosition =
-        pointerWorldPosition_;
+    if (pointerWorldPosition_.has_value())
+    {
+        input.aimWorldPosition = raidScreenToWorld(
+            *pointerWorldPosition_, raidWorldCameraOffset());
+    }
 
     if (relativeMouseModeActive_ &&
         !inventoryOverlayState_.isOpen() &&
@@ -7043,6 +7047,68 @@ void App::renderBackground()
         map = &publishedContentRegistry().map(
             gameSession_.profile().pendingRaid->mapDefinitionId);
     }
+    if (map->proceduralOutdoor.enabled &&
+        gameSession_.world().inOutdoorRaidSpace() &&
+        gameSession_.profile().pendingRaid.has_value() &&
+        gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >= 2U)
+    {
+        const SDL_FRect ground{
+            map->walkableBounds.position.x,
+            map->walkableBounds.position.y,
+            map->walkableBounds.size.x,
+            map->walkableBounds.size.y};
+        SDL_SetRenderDrawColor(renderer_, 45, 49, 36, 255);
+        SDL_RenderFillRect(renderer_, &ground);
+
+        const float cellWidth = map->walkableBounds.size.x /
+            static_cast<float>(map->proceduralOutdoor.columns);
+        const float cellHeight = map->walkableBounds.size.y /
+            static_cast<float>(map->proceduralOutdoor.rows);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 82, 86, 62, 70);
+        for (std::uint32_t column{};
+             column <= map->proceduralOutdoor.columns;
+             ++column)
+        {
+            const float x = map->walkableBounds.position.x +
+                static_cast<float>(column) * cellWidth;
+            SDL_RenderLine(renderer_, x, ground.y, x, ground.y + ground.h);
+        }
+        for (std::uint32_t row{}; row <= map->proceduralOutdoor.rows; ++row)
+        {
+            const float y = map->walkableBounds.position.y +
+                static_cast<float>(row) * cellHeight;
+            SDL_RenderLine(renderer_, ground.x, y, ground.x + ground.w, y);
+        }
+        for (const RaidOutdoorRoadCell &road :
+             gameSession_.profile().pendingRaid->spatialLayout.roadCells)
+        {
+            const SDL_FRect roadBounds{
+                map->walkableBounds.position.x + road.column * cellWidth + 2.0F,
+                map->walkableBounds.position.y + road.row * cellHeight + 2.0F,
+                cellWidth - 4.0F,
+                cellHeight - 4.0F};
+            if (road.kind == RaidOutdoorRoadKind::Primary)
+            {
+                SDL_SetRenderDrawColor(renderer_, 104, 103, 90, 255);
+            }
+            else if (road.kind == RaidOutdoorRoadKind::Secondary)
+            {
+                SDL_SetRenderDrawColor(renderer_, 88, 89, 77, 255);
+            }
+            else
+            {
+                SDL_SetRenderDrawColor(renderer_, 73, 75, 65, 255);
+            }
+            SDL_RenderFillRect(renderer_, &roadBounds);
+            SDL_SetRenderDrawColor(renderer_, 133, 126, 96, 150);
+            SDL_RenderRect(renderer_, &roadBounds);
+        }
+        SDL_SetRenderDrawColor(renderer_, 139, 127, 86, 220);
+        SDL_RenderRect(renderer_, &ground);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
     SDL_SetTextureColorMod(
         backgroundTexture_.get(),
         map->backgroundTint.red,
@@ -7553,6 +7619,25 @@ void App::renderShotPresentations()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+Vec2 App::raidWorldCameraOffset() const noexcept
+{
+    if (!gameFlow_.isRaidScreen() ||
+        !gameSession_.world().raidSession().isActive() ||
+        !gameSession_.world().inOutdoorRaidSpace())
+    {
+        return {};
+    }
+    const Player &player = gameSession_.world().player();
+    const Vec2 focus{
+        player.position().x + player.size() * 0.5F,
+        player.position().y + player.size() * 0.5F};
+    return ::raidCameraOffset(
+        focus,
+        gameSession_.world().raidSpaceWorldSize(),
+        {static_cast<float>(kWindowWidth),
+         static_cast<float>(kWindowHeight)});
+}
+
 Vec2 App::raidWorldScreenShakePixels() const noexcept
 {
     const Vec2 normalized =
@@ -7775,9 +7860,11 @@ void App::renderAimCrosshair()
         10.0F,
         accuracy.reticleRadius));
     constexpr float kArmLength{15.0F};
+    const Vec2 screenCenter = raidWorldToScreen(
+        accuracy.center, raidWorldCameraOffset());
     const Vec2 center{
-        std::round(accuracy.center.x),
-        std::round(accuracy.center.y)};
+        std::round(screenCenter.x),
+        std::round(screenCenter.y)};
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (accuracy.beyondEffectiveRange)
@@ -12237,6 +12324,39 @@ void App::renderRaidTacticalMap()
         }
     }
 
+    if (gameSession_.profile().pendingRaid.has_value())
+    {
+        for (const RaidOutdoorRoadCell &road :
+             gameSession_.profile().pendingRaid->spatialLayout.roadCells)
+        {
+            const int column = static_cast<int>(road.column);
+            const int row = static_cast<int>(road.row);
+            if (column < 0 || row < 0 || column >= map.columns() ||
+                row >= map.rows() || !map.cellRevealed(column, row))
+            {
+                continue;
+            }
+            const SDL_FRect roadCell{
+                chart.x + static_cast<float>(column) * cellWidth + 1.0F,
+                chart.y + static_cast<float>(row) * cellHeight + 1.0F,
+                std::max(1.0F, cellWidth - 2.0F),
+                std::max(1.0F, cellHeight - 2.0F)};
+            if (road.kind == RaidOutdoorRoadKind::Primary)
+            {
+                SDL_SetRenderDrawColor(renderer_, 146, 142, 116, 235);
+            }
+            else if (road.kind == RaidOutdoorRoadKind::Secondary)
+            {
+                SDL_SetRenderDrawColor(renderer_, 112, 116, 98, 225);
+            }
+            else
+            {
+                SDL_SetRenderDrawColor(renderer_, 82, 98, 86, 215);
+            }
+            SDL_RenderFillRect(renderer_, &roadCell);
+        }
+    }
+
     const Vec2 worldSize = map.worldSize();
     const auto screenPoint = [chart, worldSize](Vec2 point)
     {
@@ -12405,21 +12525,25 @@ void App::renderRaidTacticalMap()
 
 void App::renderRaidScreen()
 {
-    // Keep an unshifted background underneath so the sub-two-pixel viewport
-    // displacement never exposes black edge strips.
+    // Keep an unshifted ground layer underneath camera and screen-shake
+    // translation so viewport edges never expose black strips.
     renderBackground();
+    const Vec2 cameraOffset = raidWorldCameraOffset();
     const Vec2 shakePixels = raidWorldScreenShakePixels();
-    const SDL_Rect shakenViewport{
-        static_cast<int>(std::lround(shakePixels.x)),
-        static_cast<int>(std::lround(shakePixels.y)),
-        kWindowWidth,
-        kWindowHeight};
-    const bool worldIsShaken =
-        shakenViewport.x != 0 || shakenViewport.y != 0;
-    if (worldIsShaken)
+    const Vec2 activeWorldSize = gameSession_.world().raidSpaceWorldSize();
+    const SDL_Rect worldViewport{
+        static_cast<int>(std::lround(shakePixels.x - cameraOffset.x)),
+        static_cast<int>(std::lround(shakePixels.y - cameraOffset.y)),
+        static_cast<int>(std::ceil(std::max(
+            activeWorldSize.x, static_cast<float>(kWindowWidth)))),
+        static_cast<int>(std::ceil(std::max(
+            activeWorldSize.y, static_cast<float>(kWindowHeight))))};
+    const bool worldIsTranslated =
+        worldViewport.x != 0 || worldViewport.y != 0;
+    if (worldIsTranslated)
     {
         static_cast<void>(
-            SDL_SetRenderViewport(renderer_, &shakenViewport));
+            SDL_SetRenderViewport(renderer_, &worldViewport));
         renderBackground();
     }
     renderExtractionPoint();
@@ -12449,7 +12573,7 @@ void App::renderRaidScreen()
 
     // Crosshair and every UI/modal layer stay in stable screen coordinates;
     // screen shake therefore cannot alter aiming or inventory interaction.
-    if (worldIsShaken)
+    if (worldIsTranslated)
     {
         static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     }

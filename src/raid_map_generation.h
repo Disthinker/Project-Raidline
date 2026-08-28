@@ -13,12 +13,39 @@ struct RaidMapGenerationAnchors
     std::vector<Vec2> reachablePoints;
 };
 
+enum class RaidOutdoorRoadKind : std::uint8_t
+{
+    Access,
+    Secondary,
+    Primary
+};
+
+struct RaidOutdoorRoadCell
+{
+    std::uint16_t column{};
+    std::uint16_t row{};
+    RaidOutdoorRoadKind kind{RaidOutdoorRoadKind::Access};
+
+    friend bool operator==(
+        const RaidOutdoorRoadCell &,
+        const RaidOutdoorRoadCell &) = default;
+};
+
+enum class RaidMapFallbackReason : std::uint8_t
+{
+    None,
+    AttemptsExhausted
+};
+
 struct RaidGeneratedMapLayout
 {
+    std::uint32_t layoutVersion{};
+    std::vector<RaidOutdoorRoadCell> roadCells;
     std::vector<ContentRect> ballisticBlockers;
     std::uint32_t generationAttempt{};
     std::uint64_t layoutHash{};
     bool usedFallback{};
+    RaidMapFallbackReason fallbackReason{RaidMapFallbackReason::None};
 
     friend bool operator==(
         const RaidGeneratedMapLayout &,
@@ -52,3 +79,6 @@ void appendRaidExteriorPlacementAnchors(
 
 [[nodiscard]] std::uint64_t raidMapLayoutHash(
     const std::vector<ContentRect> &ballisticBlockers) noexcept;
+
+[[nodiscard]] std::uint64_t raidMapLayoutHash(
+    const RaidGeneratedMapLayout &layout) noexcept;

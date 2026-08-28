@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "content_registry.h"
 #include "raid_map_generation.h"
 
@@ -71,6 +73,16 @@ TEST(RaidMapGenerationTest, ProceduralMapIsDeterministicAndConnected)
     EXPECT_TRUE(map.proceduralOutdoor.enabled);
     EXPECT_EQ(first, repeated);
     EXPECT_FALSE(first.usedFallback);
+    EXPECT_EQ(first.layoutVersion, 2U);
+    EXPECT_FALSE(first.roadCells.empty());
+    EXPECT_TRUE(std::any_of(
+        first.roadCells.begin(), first.roadCells.end(),
+        [](const RaidOutdoorRoadCell &cell)
+        { return cell.kind == RaidOutdoorRoadKind::Primary; }));
+    EXPECT_TRUE(std::any_of(
+        first.roadCells.begin(), first.roadCells.end(),
+        [](const RaidOutdoorRoadCell &cell)
+        { return cell.kind == RaidOutdoorRoadKind::Secondary; }));
     EXPECT_GE(first.ballisticBlockers.size(),
               map.proceduralOutdoor.minimumBlockers);
     EXPECT_LE(first.ballisticBlockers.size(),
@@ -92,7 +104,26 @@ TEST(RaidMapGenerationTest, DifferentSeedsVaryAcceptedOutdoorCover)
     EXPECT_FALSE(first.usedFallback);
     EXPECT_FALSE(second.usedFallback);
     EXPECT_NE(first.layoutHash, second.layoutHash);
+    EXPECT_NE(first.roadCells, second.roadCells);
     EXPECT_NE(first.ballisticBlockers, second.ballisticBlockers);
+}
+
+TEST(RaidMapGenerationTest, PublishedOutdoorLayoutRemainsLegalAcrossSeeds)
+{
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    const RaidMapGenerationAnchors anchors = publishedAnchors(map);
+
+    for (std::uint64_t seed = 1U; seed <= 64U; ++seed)
+    {
+        const RaidGeneratedMapLayout layout = generateRaidMapLayout(
+            map, seed, anchors);
+        EXPECT_FALSE(layout.usedFallback) << "seed " << seed;
+        EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, anchors))
+            << "seed " << seed;
+        EXPECT_EQ(layout.layoutHash, raidMapLayoutHash(layout))
+            << "seed " << seed;
+    }
 }
 
 TEST(RaidMapGenerationTest, InvalidSeedRejectsInsteadOfInventingLayout)
@@ -103,6 +134,28 @@ TEST(RaidMapGenerationTest, InvalidSeedRejectsInsteadOfInventingLayout)
         static_cast<void>(generateRaidMapLayout(
             map, 0U, publishedAnchors(map))),
         std::invalid_argument);
+}
+
+TEST(RaidMapGenerationTest, ExhaustedAttemptsUseDeterministicConnectedFallback)
+{
+    MapDefinition map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    map.proceduralOutdoor.minimumBlockers = 500U;
+    map.proceduralOutdoor.maximumBlockers = 500U;
+    const RaidMapGenerationAnchors anchors = publishedAnchors(map);
+
+    const RaidGeneratedMapLayout first = generateRaidMapLayout(
+        map, 77119U, anchors);
+    const RaidGeneratedMapLayout repeated = generateRaidMapLayout(
+        map, 77119U, anchors);
+
+    EXPECT_EQ(first, repeated);
+    EXPECT_TRUE(first.usedFallback);
+    EXPECT_EQ(first.fallbackReason,
+              RaidMapFallbackReason::AttemptsExhausted);
+    EXPECT_FALSE(first.roadCells.empty());
+    EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, first, anchors));
+    EXPECT_EQ(first.layoutHash, raidMapLayoutHash(first));
 }
 
 TEST(RaidMapGenerationTest, SelectsOnlyLegalSpecialLocationCandidate)

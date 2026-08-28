@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <queue>
 #include <stdexcept>
 #include <utility>
@@ -15,6 +16,12 @@ struct Cell
 {
     std::uint32_t column{};
     std::uint32_t row{};
+};
+
+struct RoadSkeleton
+{
+    std::vector<RaidOutdoorRoadCell> cells;
+    std::vector<std::uint8_t> ranks;
 };
 
 bool finitePositive(Vec2 value) noexcept
@@ -65,6 +72,337 @@ std::uint64_t calculateLayoutHash(
         add(static_cast<std::uint32_t>(std::lround(blocker.size.y * 10.0F)));
     }
     return hash;
+}
+
+void hashValue(std::uint64_t &hash, std::uint32_t value) noexcept
+{
+    constexpr std::uint64_t prime{1099511628211ULL};
+    for (int byte = 0; byte < 4; ++byte)
+    {
+        hash ^= static_cast<std::uint8_t>(value >> (byte * 8));
+        hash *= prime;
+    }
+}
+
+std::uint8_t roadRank(RaidOutdoorRoadKind kind) noexcept
+{
+    return static_cast<std::uint8_t>(kind) + 1U;
+}
+
+std::optional<Cell> cellForPoint(
+    const MapDefinition &map,
+    const ProceduralOutdoorDefinition &definition,
+    Vec2 point) noexcept;
+
+void addRoadCell(
+    RoadSkeleton &roads,
+    const ProceduralOutdoorDefinition &definition,
+    Cell cell,
+    RaidOutdoorRoadKind kind)
+{
+    if (cell.column >= definition.columns || cell.row >= definition.rows)
+    {
+        return;
+    }
+    const std::size_t index = static_cast<std::size_t>(cell.row) *
+        definition.columns + cell.column;
+    const std::uint8_t rank = roadRank(kind);
+    if (roads.ranks[index] >= rank)
+    {
+        return;
+    }
+    roads.ranks[index] = rank;
+}
+
+void connectToSpine(
+    RoadSkeleton &roads,
+    const ProceduralOutdoorDefinition &definition,
+    Cell cell,
+    std::uint32_t spineColumn,
+    std::uint32_t spineRow)
+{
+    const std::uint32_t firstColumn = std::min(cell.column, spineColumn);
+    const std::uint32_t lastColumn = std::max(cell.column, spineColumn);
+    for (std::uint32_t column = firstColumn; column <= lastColumn; ++column)
+    {
+        addRoadCell(roads, definition, {column, cell.row},
+                    RaidOutdoorRoadKind::Access);
+    }
+    const std::uint32_t firstRow = std::min(cell.row, spineRow);
+    const std::uint32_t lastRow = std::max(cell.row, spineRow);
+    for (std::uint32_t row = firstRow; row <= lastRow; ++row)
+    {
+        addRoadCell(roads, definition, {spineColumn, row},
+                    RaidOutdoorRoadKind::Access);
+    }
+}
+
+RoadSkeleton buildRoadSkeleton(
+    const MapDefinition &map,
+    const RaidMapGenerationAnchors &anchors,
+    Pcg32 *random)
+{
+    const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
+    RoadSkeleton roads;
+    roads.ranks.resize(
+        static_cast<std::size_t>(definition.columns) * definition.rows, 0U);
+    const std::uint32_t spineColumn = definition.columns / 3U +
+        (random == nullptr ? definition.columns / 6U
+                           : random->bounded(std::max(1U, definition.columns / 3U)));
+    const std::uint32_t spineRow = definition.rows / 3U +
+        (random == nullptr ? definition.rows / 6U
+                           : random->bounded(std::max(1U, definition.rows / 3U)));
+
+    for (std::uint32_t column{}; column < definition.columns; ++column)
+    {
+        addRoadCell(roads, definition, {column, spineRow},
+                    RaidOutdoorRoadKind::Primary);
+    }
+    for (std::uint32_t row{}; row < definition.rows; ++row)
+    {
+        addRoadCell(roads, definition, {spineColumn, row},
+                    RaidOutdoorRoadKind::Primary);
+    }
+
+    const std::uint32_t branchRange = definition.maximumBranchRoads -
+        definition.minimumBranchRoads + 1U;
+    const std::uint32_t branchCount = definition.minimumBranchRoads +
+        (random == nullptr ? 0U : random->bounded(branchRange));
+    std::vector<std::uint32_t> horizontalLines{spineRow};
+    std::vector<std::uint32_t> verticalLines{spineColumn};
+    for (std::uint32_t branch{}; branch < branchCount; ++branch)
+    {
+        const bool horizontal = branch % 2U == 0U;
+        const std::uint32_t limit = horizontal ? definition.rows : definition.columns;
+        std::uint32_t coordinate = random == nullptr
+            ? ((branch + 1U) * limit) / (branchCount + 1U)
+            : random->bounded(limit);
+        auto &lines = horizontal ? horizontalLines : verticalLines;
+        for (std::uint32_t probe{};
+             probe < limit && std::find(lines.begin(), lines.end(), coordinate) != lines.end();
+             ++probe)
+        {
+            coordinate = (coordinate + 1U) % limit;
+        }
+        if (std::find(lines.begin(), lines.end(), coordinate) != lines.end())
+        {
+            continue;
+        }
+        lines.push_back(coordinate);
+        if (horizontal)
+        {
+            for (std::uint32_t column{}; column < definition.columns; ++column)
+            {
+                addRoadCell(roads, definition, {column, coordinate},
+                            RaidOutdoorRoadKind::Secondary);
+            }
+        }
+        else
+        {
+            for (std::uint32_t row{}; row < definition.rows; ++row)
+            {
+                addRoadCell(roads, definition, {coordinate, row},
+                            RaidOutdoorRoadKind::Secondary);
+            }
+        }
+    }
+
+    std::vector<Vec2> required = anchors.reachablePoints;
+    required.push_back(anchors.playerSpawn);
+    required.push_back({
+        anchors.extractionPoint.position.x + anchors.extractionPoint.size.x * 0.5F,
+        anchors.extractionPoint.position.y + anchors.extractionPoint.size.y * 0.5F});
+    for (Vec2 point : required)
+    {
+        if (const auto cell = cellForPoint(map, definition, point))
+        {
+            connectToSpine(roads, definition, *cell, spineColumn, spineRow);
+        }
+    }
+
+    for (std::uint32_t row{}; row < definition.rows; ++row)
+    {
+        for (std::uint32_t column{}; column < definition.columns; ++column)
+        {
+            const std::uint8_t rank = roads.ranks[
+                static_cast<std::size_t>(row) * definition.columns + column];
+            if (rank > 0U)
+            {
+                roads.cells.push_back({
+                    static_cast<std::uint16_t>(column),
+                    static_cast<std::uint16_t>(row),
+                    static_cast<RaidOutdoorRoadKind>(rank - 1U)});
+            }
+        }
+    }
+    return roads;
+}
+
+std::vector<ContentRect> generateBuildings(
+    const MapDefinition &map,
+    const RaidMapGenerationAnchors &anchors,
+    const RoadSkeleton &roads,
+    Pcg32 *random,
+    std::uint32_t target)
+{
+    const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
+    const float cellWidth = map.walkableBounds.size.x /
+        static_cast<float>(definition.columns);
+    const float cellHeight = map.walkableBounds.size.y /
+        static_cast<float>(definition.rows);
+    const float clearance = static_cast<float>(definition.anchorClearanceCells) *
+        std::max(cellWidth, cellHeight);
+    std::vector<ContentRect> reserved = anchors.occupiedRegions;
+    reserved.push_back(inflated(anchors.extractionPoint, clearance));
+    reserved.push_back(pointRegion(anchors.playerSpawn, clearance + 50.0F));
+    for (Vec2 point : anchors.reachablePoints)
+    {
+        reserved.push_back(pointRegion(point, clearance + 35.0F));
+    }
+
+    std::vector<Cell> candidates;
+    for (std::uint32_t row{}; row < definition.rows; ++row)
+    {
+        for (std::uint32_t column{}; column < definition.columns; ++column)
+        {
+            const std::size_t index = static_cast<std::size_t>(row) *
+                definition.columns + column;
+            if (roads.ranks[index] == 0U)
+            {
+                candidates.push_back({column, row});
+            }
+        }
+    }
+    if (random != nullptr)
+    {
+        for (std::size_t index = candidates.size(); index > 1U; --index)
+        {
+            const std::size_t selected = random->bounded(
+                static_cast<std::uint32_t>(index));
+            std::swap(candidates[index - 1U], candidates[selected]);
+        }
+    }
+
+    std::vector<bool> occupied(roads.ranks.size(), false);
+    std::vector<ContentRect> result;
+    result.reserve(target);
+    constexpr float inset{5.0F};
+    for (Cell origin : candidates)
+    {
+        if (result.size() >= target)
+        {
+            break;
+        }
+        const std::uint32_t widthCells = random == nullptr
+            ? 1U : 1U + (random->bounded(4U) == 0U ? 1U : 0U);
+        const std::uint32_t heightCells = random == nullptr
+            ? 1U : 1U + (random->bounded(4U) == 0U ? 1U : 0U);
+        if (origin.column + widthCells > definition.columns ||
+            origin.row + heightCells > definition.rows)
+        {
+            continue;
+        }
+        bool legal = true;
+        for (std::uint32_t row = origin.row; row < origin.row + heightCells; ++row)
+        {
+            for (std::uint32_t column = origin.column;
+                 column < origin.column + widthCells;
+                 ++column)
+            {
+                const std::size_t index = static_cast<std::size_t>(row) *
+                    definition.columns + column;
+                legal = legal && roads.ranks[index] == 0U && !occupied[index];
+            }
+        }
+        const ContentRect building{
+            {map.walkableBounds.position.x + origin.column * cellWidth + inset,
+             map.walkableBounds.position.y + origin.row * cellHeight + inset},
+            {widthCells * cellWidth - inset * 2.0F,
+             heightCells * cellHeight - inset * 2.0F}};
+        legal = legal && std::none_of(
+            reserved.begin(), reserved.end(),
+            [building](ContentRect value) { return overlaps(building, value); });
+        if (!legal)
+        {
+            continue;
+        }
+        result.push_back(building);
+        for (std::uint32_t row = origin.row; row < origin.row + heightCells; ++row)
+        {
+            for (std::uint32_t column = origin.column;
+                 column < origin.column + widthCells;
+                 ++column)
+            {
+                occupied[static_cast<std::size_t>(row) * definition.columns +
+                         column] = true;
+            }
+        }
+    }
+    return result;
+}
+
+bool roadLayoutIsValid(
+    const MapDefinition &map,
+    const RaidGeneratedMapLayout &layout,
+    const RaidMapGenerationAnchors &anchors) noexcept
+{
+    const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
+    const std::size_t cellCount = static_cast<std::size_t>(definition.columns) *
+        definition.rows;
+    std::vector<bool> road(cellCount, false);
+    bool hasPrimary = false;
+    for (const RaidOutdoorRoadCell &cell : layout.roadCells)
+    {
+        if (cell.column >= definition.columns || cell.row >= definition.rows)
+        {
+            return false;
+        }
+        const std::size_t index = static_cast<std::size_t>(cell.row) *
+            definition.columns + cell.column;
+        if (road[index])
+        {
+            return false;
+        }
+        road[index] = true;
+        hasPrimary = hasPrimary || cell.kind == RaidOutdoorRoadKind::Primary;
+    }
+    if (!hasPrimary || layout.roadCells.empty())
+    {
+        return false;
+    }
+    std::vector<Vec2> required = anchors.reachablePoints;
+    required.push_back(anchors.playerSpawn);
+    required.push_back({
+        anchors.extractionPoint.position.x + anchors.extractionPoint.size.x * 0.5F,
+        anchors.extractionPoint.position.y + anchors.extractionPoint.size.y * 0.5F});
+    for (Vec2 point : required)
+    {
+        const auto cell = cellForPoint(map, definition, point);
+        if (!cell.has_value() || !road[static_cast<std::size_t>(cell->row) *
+                                      definition.columns + cell->column])
+        {
+            return false;
+        }
+    }
+    const float cellWidth = map.walkableBounds.size.x /
+        static_cast<float>(definition.columns);
+    const float cellHeight = map.walkableBounds.size.y /
+        static_cast<float>(definition.rows);
+    for (const RaidOutdoorRoadCell &cell : layout.roadCells)
+    {
+        const ContentRect bounds{
+            {map.walkableBounds.position.x + cell.column * cellWidth,
+             map.walkableBounds.position.y + cell.row * cellHeight},
+            {cellWidth, cellHeight}};
+        if (std::any_of(layout.ballisticBlockers.begin(),
+                        layout.ballisticBlockers.end(),
+                        [bounds](ContentRect blocker)
+                        { return overlaps(bounds, blocker); }))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::vector<ContentRect> fallbackBlockers(const MapDefinition &map)
@@ -275,80 +613,42 @@ RaidGeneratedMapLayout generateRaidMapLayout(
     }
 
     const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
-    const float cellWidth = map.walkableBounds.size.x /
-        static_cast<float>(definition.columns);
-    const float cellHeight = map.walkableBounds.size.y /
-        static_cast<float>(definition.rows);
-    const float clearance = static_cast<float>(definition.anchorClearanceCells) *
-        std::max(cellWidth, cellHeight);
-    std::vector<ContentRect> reserved = anchors.occupiedRegions;
-    reserved.push_back(inflated(anchors.extractionPoint, clearance));
-    reserved.push_back(pointRegion(anchors.playerSpawn, clearance + 50.0F));
-    for (Vec2 point : anchors.reachablePoints)
-    {
-        reserved.push_back(pointRegion(point, clearance + 35.0F));
-    }
-
-    std::vector<Cell> candidates;
-    for (std::uint32_t row = 0; row < definition.rows; ++row)
-    {
-        for (std::uint32_t column = 0; column < definition.columns; ++column)
-        {
-            const ContentRect cell{
-                {map.walkableBounds.position.x + column * cellWidth,
-                 map.walkableBounds.position.y + row * cellHeight},
-                {cellWidth, cellHeight}};
-            if (std::none_of(reserved.begin(), reserved.end(),
-                             [cell](ContentRect value)
-                             { return overlaps(cell, value); }))
-            {
-                candidates.push_back(Cell{column, row});
-            }
-        }
-    }
-
     for (std::uint32_t attempt = 1U;
          attempt <= definition.maximumAttempts;
          ++attempt)
     {
         Pcg32 random{raidSeed ^ (static_cast<std::uint64_t>(attempt) << 32U),
                      0x726169642d6d6170ULL};
-        std::vector<Cell> shuffled = candidates;
-        for (std::size_t index = shuffled.size(); index > 1U; --index)
-        {
-            const std::size_t selected = random.bounded(
-                static_cast<std::uint32_t>(index));
-            std::swap(shuffled[index - 1U], shuffled[selected]);
-        }
         const std::uint32_t range =
             definition.maximumBlockers - definition.minimumBlockers + 1U;
-        const std::size_t target = std::min<std::size_t>(
-            definition.minimumBlockers + random.bounded(range),
-            shuffled.size());
+        const std::uint32_t target = definition.minimumBlockers +
+            random.bounded(range);
+        const RoadSkeleton roads = buildRoadSkeleton(map, anchors, &random);
         RaidGeneratedMapLayout layout;
+        layout.layoutVersion = definition.layoutVersion;
         layout.generationAttempt = attempt;
-        layout.ballisticBlockers.reserve(target);
-        constexpr float inset{5.0F};
-        for (std::size_t index = 0; index < target; ++index)
+        layout.roadCells = roads.cells;
+        layout.ballisticBlockers = generateBuildings(
+            map, anchors, roads, &random, target);
+        if (layout.ballisticBlockers.size() >= definition.minimumBlockers &&
+            roadLayoutIsValid(map, layout, anchors) &&
+            layoutConnects(map, layout, anchors))
         {
-            const Cell cell = shuffled[index];
-            layout.ballisticBlockers.push_back({
-                {map.walkableBounds.position.x + cell.column * cellWidth + inset,
-                 map.walkableBounds.position.y + cell.row * cellHeight + inset},
-                {cellWidth - inset * 2.0F, cellHeight - inset * 2.0F}});
-        }
-        if (layoutConnects(map, layout, anchors))
-        {
-            layout.layoutHash = calculateLayoutHash(layout.ballisticBlockers);
+            layout.layoutHash = raidMapLayoutHash(layout);
             return layout;
         }
     }
 
+    const RoadSkeleton roads = buildRoadSkeleton(map, anchors, nullptr);
     RaidGeneratedMapLayout fallback;
-    fallback.ballisticBlockers = fallbackBlockers(map);
+    fallback.layoutVersion = definition.layoutVersion;
+    fallback.roadCells = roads.cells;
+    fallback.ballisticBlockers = generateBuildings(
+        map, anchors, roads, nullptr, definition.minimumBlockers);
     fallback.generationAttempt = definition.maximumAttempts;
-    fallback.layoutHash = calculateLayoutHash(fallback.ballisticBlockers);
     fallback.usedFallback = true;
+    fallback.fallbackReason = RaidMapFallbackReason::AttemptsExhausted;
+    fallback.layoutHash = raidMapLayoutHash(fallback);
     return fallback;
 }
 
@@ -357,11 +657,49 @@ bool raidMapLayoutConnectsAnchors(
     const RaidGeneratedMapLayout &layout,
     const RaidMapGenerationAnchors &anchors) noexcept
 {
-    return layoutConnects(map, layout, anchors);
+    return (!map.proceduralOutdoor.enabled || layout.layoutVersion == 0U ||
+            roadLayoutIsValid(map, layout, anchors)) &&
+        layoutConnects(map, layout, anchors);
 }
 
 std::uint64_t raidMapLayoutHash(
     const std::vector<ContentRect> &ballisticBlockers) noexcept
 {
     return calculateLayoutHash(ballisticBlockers);
+}
+
+std::uint64_t raidMapLayoutHash(
+    const RaidGeneratedMapLayout &layout) noexcept
+{
+    if (layout.layoutVersion == 0U && layout.roadCells.empty() &&
+        layout.fallbackReason == RaidMapFallbackReason::None)
+    {
+        return calculateLayoutHash(layout.ballisticBlockers);
+    }
+    constexpr std::uint64_t offset{1469598103934665603ULL};
+    std::uint64_t hash = offset;
+    hashValue(hash, layout.layoutVersion);
+    hashValue(hash, layout.generationAttempt);
+    hashValue(hash, layout.usedFallback ? 1U : 0U);
+    hashValue(hash, static_cast<std::uint32_t>(layout.fallbackReason));
+    hashValue(hash, static_cast<std::uint32_t>(layout.roadCells.size()));
+    for (const RaidOutdoorRoadCell &cell : layout.roadCells)
+    {
+        hashValue(hash, cell.column);
+        hashValue(hash, cell.row);
+        hashValue(hash, static_cast<std::uint32_t>(cell.kind));
+    }
+    hashValue(hash, static_cast<std::uint32_t>(layout.ballisticBlockers.size()));
+    for (const ContentRect &blocker : layout.ballisticBlockers)
+    {
+        hashValue(hash, static_cast<std::uint32_t>(
+            std::lround(blocker.position.x * 10.0F)));
+        hashValue(hash, static_cast<std::uint32_t>(
+            std::lround(blocker.position.y * 10.0F)));
+        hashValue(hash, static_cast<std::uint32_t>(
+            std::lround(blocker.size.x * 10.0F)));
+        hashValue(hash, static_cast<std::uint32_t>(
+            std::lround(blocker.size.y * 10.0F)));
+    }
+    return hash;
 }
