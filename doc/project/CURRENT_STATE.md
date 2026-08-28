@@ -65,7 +65,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。�
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
 51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
 52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
-53. **程序化可玩室外布局 v1（当前开发）**：content v43 把 `Frontier Exchange` 扩展为 2560×1440、32×18 逻辑格的代码占位地图；每局冻结主/次/接入道路、70～95 个街区建筑、生成尝试、回退原因和完整布局哈希。schema v34 保存道路与空间布局，旧 schema v33 继续按旧布局合同迁移。SDL client 使用跟随玩家并在边界钳制的纯投影视口，输入与准星显式进行屏幕/世界坐标转换；旧整图背景不再用于该随机地图。Windows Debug 全目标和完整 CTest 1229/1229 已通过；PR exact-head CI 与用户正常游玩验收待收束。
+53. **程序化可玩室外布局 v1（当前开发）**：content v43 把 `Frontier Exchange` 扩展为 2560×1440、32×18 逻辑格的代码占位地图；每局冻结主/次/接入道路、70～95 个街区建筑、生成尝试、回退原因和完整布局哈希。schema v34 保存道路与空间布局，旧 schema v33 继续按旧布局合同迁移。SDL client 使用跟随玩家并在边界钳制的纯投影视口，输入与准星显式进行屏幕/世界坐标转换；相对鼠标准星同时消费镜头滚动产生的世界锚点位移，保持同一屏幕位置和射击方向连续。旧整图背景不再用于该随机地图。Windows Debug 全目标和完整 CTest 1230/1230 已通过；PR exact-head CI 与用户正常游玩验收待收束。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -92,7 +92,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。�
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。当前程序化大地图分支已通过 Windows Debug 全目标、完整 CTest 1229/1229，以及地图生成、存档、生命周期、完整出击、内容加载和镜头聚焦回归；开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。当前程序化大地图分支已通过 Windows Debug 全目标、完整 CTest 1230/1230，以及地图生成、存档、生命周期、完整出击、内容加载、镜头和准星滚动跟随回归；开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

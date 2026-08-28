@@ -108,6 +108,7 @@ Pending Raid 是布局唯一事实。GameplayWorld、碰撞、导航、战术地
 - [x] 从最新 `origin/main@7bd3b02` 创建独立分支并完成现状审计。
 - [x] 冻结 content v43、layout v2、schema v34、摄像机与迁移合同。
 - [x] 实现完整室外布局生成、冻结快照和代码几何表现。
-- [x] 完成定向回归、Windows Debug 全目标和完整 CTest 1229/1229。
+- [x] 完成定向回归、Windows Debug 全目标和完整 CTest 1230/1230。
+- [x] 验收加固：相对鼠标准星同时消费滚动视口映射的世界位移，镜头移动时保持屏幕锚点与射击方向连续。
 - [ ] Draft PR exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。

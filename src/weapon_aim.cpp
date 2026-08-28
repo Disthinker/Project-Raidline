@@ -145,7 +145,16 @@ void WeaponAimState::update(
         Vec2 motion{};
         if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
         {
-            motion = *inputMotionDelta;
+            // A captured pointer remains at one screen anchor while a
+            // scrolling camera changes the world position represented by
+            // that anchor. Preserve both contributions: relative device
+            // motion moves the pointer on screen, while the absolute input
+            // delta carries the same screen anchor through world space.
+            motion = Vec2{
+                inputMotionDelta->x +
+                    clampedInputPosition.x - inputWorldPosition_.x,
+                inputMotionDelta->y +
+                    clampedInputPosition.y - inputWorldPosition_.y};
             inputWorldPosition_ = clampedInputPosition;
         }
         else
@@ -157,8 +166,9 @@ void WeaponAimState::update(
         }
 
         // Relative mouse input is consumed as motion, not as a bounded OS
-        // cursor position. This keeps aiming continuous while the pointer is
-        // captured at a window edge and avoids a dead zone when reversing.
+        // cursor position. The mapped world anchor delta above only follows
+        // viewport translation; it does not reintroduce a window-edge dead
+        // zone when the player reverses mouse direction.
         targetWorldPosition_.x = std::clamp(
             targetWorldPosition_.x + motion.x,
             0.0F,
