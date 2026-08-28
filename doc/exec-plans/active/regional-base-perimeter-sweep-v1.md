@@ -48,5 +48,5 @@
 - [x] 冻结外围清剿范围、普通撤离与失败/回滚合同。
 - [x] 内容、领域、Pending Raid、Settlement、GameSession、双语 UI 和 schema v33 实现。
 - [x] Windows Debug 全目标构建成功，完整 CTest 1223/1223 通过；开发代理未启动游戏。
-- [ ] Draft PR exact-head Windows/Ubuntu CI。
+- [x] Draft PR #110 exact-head Windows/Ubuntu CI 通过。
 - [ ] 用户正常游玩验收。
