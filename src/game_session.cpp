@@ -2341,6 +2341,59 @@ void GameSession::advanceWorldClockFromSimulation(
 
     if (minutes > 0U)
     {
+        if (!allowPeriodicCheckpoint && alphaRaidActive_ &&
+            profile_.pendingRaid.has_value())
+        {
+            // The active Raid owns an already validated, in-memory Profile.
+            // Copying that Profile once per world minute also copied the full
+            // frozen megamap (several MiB) and produced a deterministic
+            // ~70 ms main-thread hitch every real second. Advance the owned
+            // runtime state in place instead. Each time consumer is an
+            // idempotent domain operation; Settlement still performs the
+            // ordinary full candidate validation and atomic save.
+            const WorldClockAdvanceResult advanced =
+                advanceWorldClock(profile_.worldClock, minutes);
+            if (advanced.minutesApplied == 0U)
+            {
+                persistenceMessage_ = "active Raid world clock overflow";
+                pendingWorldSeconds_ = scaledSeconds;
+                return;
+            }
+            const BaseDailySystemsResult daily =
+                synchronizeBaseDailySystemsThrough(
+                    profile_, publishedContentRegistry());
+            const BaseConstructionAdvanceResult construction =
+                applyBaseConstructionThrough(
+                    profile_, publishedContentRegistry());
+            const BaseManufacturingAdvanceResult manufacturing =
+                applyBaseManufacturingThrough(
+                    profile_, publishedContentRegistry());
+            const ResidentTreatmentAdvanceResult residentTreatment =
+                applyResidentTreatmentThrough(profile_);
+            const RecoveryTaskAdvanceResult recovery =
+                applyRecoveryTaskThrough(profile_);
+            const bool revisionRequired =
+                construction.completed || manufacturing.completed ||
+                residentTreatment.completed || recovery.becameReady;
+            if (revisionRequired)
+            {
+                if (profile_.revision ==
+                    std::numeric_limits<ProfileRevision>::max())
+                {
+                    persistenceMessage_ =
+                        "active Raid timed completion revision overflow";
+                    state_ = GameSessionState::SettlementBlocked;
+                    pendingWorldSeconds_ = scaledSeconds;
+                    return;
+                }
+                ++profile_.revision;
+            }
+            static_cast<void>(daily);
+            worldClockDirty_ = true;
+            pendingWorldSeconds_ = remainingWorldSeconds;
+            return;
+        }
+
         ProfileState candidate = profile_;
         const WorldClockAdvanceResult advanced =
             advanceWorldClock(candidate.worldClock, minutes);

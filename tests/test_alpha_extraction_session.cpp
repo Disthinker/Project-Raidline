@@ -146,6 +146,39 @@ TEST(AlphaExtractionSessionTest,
                      .unlocked);
 }
 
+TEST(AlphaExtractionSessionPerformanceTest,
+     ActiveFrontierClockUpdatesStayInsideOneFrameBudget)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-frontier-clock-performance"));
+    ASSERT_TRUE(session.deployAlpha(
+        7723401U, MapDefinitionId{"map.raid.frontier_exchange"}));
+    const std::uint64_t startingWorldMinute =
+        session.profile().worldClock.elapsedWorldMinutes;
+
+    std::chrono::microseconds slowestUpdate{};
+    for (std::size_t frame{}; frame < 180U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        session.update(GameplayInput{}, 1.0F / 60.0F);
+        slowestUpdate = std::max(
+            slowestUpdate,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started));
+    }
+
+    std::cout << "active Frontier clock slowest update: "
+              << slowestUpdate.count() << " us\n";
+    EXPECT_EQ(
+        session.profile().worldClock.elapsedWorldMinutes,
+        startingWorldMinute + 3U);
+    EXPECT_TRUE(validateProfileState(
+        session.profile(), publishedContentRegistry()).valid);
+    EXPECT_LT(slowestUpdate.count(), 25000)
+        << "Advancing one world minute must not copy and validate the full "
+           "frozen megamap on the simulation thread.";
+}
+
 TEST(AlphaExtractionSessionTest,
      BasePerimeterSweepObjectiveFollowsInitialEnemies)
 {

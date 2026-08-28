@@ -48,18 +48,18 @@ Rect raidReticleWorldBounds(
     Vec2 cameraOffset,
     Vec2 worldSize,
     Vec2 viewportSize,
-    float inset) noexcept
+    float outsideMargin) noexcept
 {
     if (!finite(cameraOffset) || !finite(worldSize) ||
         !finite(viewportSize) || worldSize.x <= 0.0F ||
         worldSize.y <= 0.0F || viewportSize.x <= 0.0F ||
-        viewportSize.y <= 0.0F || !std::isfinite(inset))
+        viewportSize.y <= 0.0F || !std::isfinite(outsideMargin))
     {
         return {};
     }
 
-    const float safeInset = std::max(0.0F, inset);
-    const auto axisBounds = [safeInset](
+    const float safeOutsideMargin = std::max(0.0F, outsideMargin);
+    const auto axisBounds = [safeOutsideMargin](
                                 float camera,
                                 float world,
                                 float viewport)
@@ -67,11 +67,10 @@ Rect raidReticleWorldBounds(
         const float visibleStart = std::clamp(camera, 0.0F, world);
         const float visibleEnd = std::clamp(
             camera + viewport, visibleStart, world);
-        const float midpoint = (visibleStart + visibleEnd) * 0.5F;
-        const float minimum = std::min(
-            visibleStart + safeInset, midpoint);
-        const float maximum = std::max(
-            visibleEnd - safeInset, midpoint);
+        const float minimum = std::max(
+            0.0F, visibleStart - safeOutsideMargin);
+        const float maximum = std::min(
+            world, visibleEnd + safeOutsideMargin);
         return std::pair{minimum, maximum};
     };
 

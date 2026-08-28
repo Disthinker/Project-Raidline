@@ -29,7 +29,9 @@ namespace
 {
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
-    constexpr float kReticleViewportInset{48.0F};
+    // Roughly one current reticle diameter. Relative aiming may briefly move
+    // the reticle center this far beyond the viewport, but never farther.
+    constexpr float kReticleViewportOutsideMargin{48.0F};
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
@@ -1362,7 +1364,7 @@ GameplayInput App::makeGameplayInput() const
         gameSession_.world().raidSpaceWorldSize(),
         {static_cast<float>(kWindowWidth),
          static_cast<float>(kWindowHeight)},
-        kReticleViewportInset);
+        kReticleViewportOutsideMargin);
 
     if (relativeMouseModeActive_ &&
         !inventoryOverlayState_.isOpen() &&

@@ -16,11 +16,11 @@
     Vec2 screenPosition,
     Vec2 cameraOffset) noexcept;
 
-// World-space rectangle in which the reticle center remains visibly inside
-// the current viewport. The inset also protects against one-frame camera
-// translation while input is being applied.
+// World-space rectangle in which the reticle center may move. outsideMargin
+// permits a small, recoverable excursion beyond the current viewport while
+// the world bounds still remain authoritative.
 [[nodiscard]] Rect raidReticleWorldBounds(
     Vec2 cameraOffset,
     Vec2 worldSize,
     Vec2 viewportSize,
-    float inset) noexcept;
+    float outsideMargin) noexcept;
