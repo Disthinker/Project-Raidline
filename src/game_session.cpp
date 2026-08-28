@@ -299,7 +299,8 @@ bool GameSession::deployAlpha(
     RaidIntelligenceLoadout intelligence,
     std::optional<std::string> selfRecoveryRecordId,
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
-    std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId)
+    std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
+    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
         mapDefinitionId.value().empty())
@@ -324,7 +325,8 @@ bool GameSession::deployAlpha(
             intelligence,
             std::move(selfRecoveryRecordId),
             std::move(outpostRestorationId),
-            std::move(baseSiteClearanceId)},
+            std::move(baseSiteClearanceId),
+            std::move(basePerimeterSweepId)},
         CommandContext{
             profile_.revision,
             "deploy:" + raidId});
@@ -489,6 +491,7 @@ bool GameSession::deployAlpha(
     selfRecoveryInteractionSeconds_ = 0.0F;
     outpostRestorationObjectiveSecured_ = false;
     baseSiteClearanceObjectiveSecured_ = false;
+    basePerimeterSweepObjectiveSecured_ = false;
     weaponClearGesture_.reset();
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;
@@ -508,6 +511,11 @@ bool GameSession::outpostRestorationObjectiveSecured() const noexcept
 bool GameSession::baseSiteClearanceObjectiveSecured() const noexcept
 {
     return baseSiteClearanceObjectiveSecured_;
+}
+
+bool GameSession::basePerimeterSweepObjectiveSecured() const noexcept
+{
+    return basePerimeterSweepObjectiveSecured_;
 }
 
 bool GameSession::activeQuitAlphaRaid()
@@ -2487,6 +2495,7 @@ void GameSession::updateAlphaRaid(
         alphaRaidActive_ = false;
         outpostRestorationObjectiveSecured_ = false;
         baseSiteClearanceObjectiveSecured_ = false;
+        basePerimeterSweepObjectiveSecured_ = false;
         state_ = GameSessionState::BetweenRaids;
         return;
     }
@@ -2804,6 +2813,8 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
         profile_.pendingRaid->baseSiteClearance.has_value();
+    const bool perimeterSweepActive =
+        profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->update(simulationInput, deltaTime);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)
@@ -2814,6 +2825,11 @@ void GameSession::updateAlphaRaid(
         world_->aliveInitialEnemyCount() == 0U)
     {
         baseSiteClearanceObjectiveSecured_ = true;
+    }
+    if (perimeterSweepActive && !basePerimeterSweepObjectiveSecured_ &&
+        world_->aliveInitialEnemyCount() == 0U)
+    {
+        basePerimeterSweepObjectiveSecured_ = true;
     }
     if (world_->shotFiredLastUpdate())
     {
@@ -3467,6 +3483,11 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         candidate.pendingRaid->baseSiteClearance->objectiveSecured =
             baseSiteClearanceObjectiveSecured_;
     }
+    if (candidate.pendingRaid->basePerimeterSweep.has_value())
+    {
+        candidate.pendingRaid->basePerimeterSweep->objectiveSecured =
+            basePerimeterSweepObjectiveSecured_;
+    }
     const RaidSettlementReceipt receipt = settlePendingRaid(
         candidate,
         publishedContentRegistry(),
@@ -3489,6 +3510,7 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     selfRecoveryInteractionSeconds_ = 0.0F;
     outpostRestorationObjectiveSecured_ = false;
     baseSiteClearanceObjectiveSecured_ = false;
+    basePerimeterSweepObjectiveSecured_ = false;
     medicalTickAccumulatorSeconds_ = 0.0F;
     fireSuppressedUntilRelease_ = false;
     sprintSuppressedUntilRelease_ = false;

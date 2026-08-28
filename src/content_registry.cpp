@@ -1059,6 +1059,12 @@ ContentRegistry ContentRegistry::fromJson(
                 requiredPositiveUint(
                     siteValue,
                     "daily_base_threat_units"),
+                MapDefinitionId{requiredString(
+                    siteValue,
+                    "perimeter_sweep_map_definition_id")},
+                requiredPositiveUint(
+                    siteValue,
+                    "perimeter_sweep_threat_reduction_units"),
                 requiredPositiveUint(siteValue, "migration_minutes"),
                 requiredPositiveUint(siteValue, "core_facility_slots")};
             const auto node = registry.regionNodeIndex_.find(
@@ -1075,6 +1081,8 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.uniqueFeatureManufacturingDurationPercent < 25U ||
                 definition.uniqueFeatureManufacturingDurationPercent > 100U ||
                 definition.dailyBaseThreatUnits > 20U ||
+                definition.perimeterSweepThreatReductionUnits <= 20U ||
+                definition.perimeterSweepThreatReductionUnits > 100U ||
                 (!definition.uniqueFeatureInitiallyRepaired &&
                  (definition.uniqueFeatureRepairMaterialUnits == 0U ||
                   definition.uniqueFeatureRepairMinutes == 0U ||
@@ -2838,6 +2846,11 @@ ContentRegistry ContentRegistry::fromJson(
                     *site.clearanceMapDefinitionId))
             {
                 fail("regional Base site clearance map is invalid");
+            }
+            if (!registry.mapIndex_.contains(
+                    site.perimeterSweepMapDefinitionId))
+            {
+                fail("regional Base perimeter sweep map is invalid");
             }
         }
         std::map<RegionNodeDefinitionId, std::uint64_t> directDistances;

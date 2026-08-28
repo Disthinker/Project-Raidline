@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "regional-base-threat-content-41",
+  "content_version": "regional-base-perimeter-sweep-content-42",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -56,6 +56,8 @@
         "unique_feature_repair_minutes": 0,
         "unique_feature_manufacturing_duration_percent": 100,
         "daily_base_threat_units": 1,
+        "perimeter_sweep_map_definition_id": "map.v0.test",
+        "perimeter_sweep_threat_reduction_units": 40,
         "migration_minutes": 720,
         "core_facility_slots": 4
       },
@@ -75,6 +77,8 @@
         "unique_feature_repair_minutes": 360,
         "unique_feature_manufacturing_duration_percent": 75,
         "daily_base_threat_units": 3,
+        "perimeter_sweep_map_definition_id": "map.raid.industrial",
+        "perimeter_sweep_threat_reduction_units": 40,
         "migration_minutes": 720,
         "core_facility_slots": 4
       }

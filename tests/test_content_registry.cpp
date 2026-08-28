@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "regional-base-threat-content-41");
+        "regional-base-perimeter-sweep-content-42");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -77,6 +77,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(ashworks.uniqueFeatureRepairMinutes, 360U);
     EXPECT_EQ(ashworks.uniqueFeatureManufacturingDurationPercent, 75U);
     EXPECT_EQ(ashworks.dailyBaseThreatUnits, 3U);
+    EXPECT_EQ(
+        ashworks.perimeterSweepMapDefinitionId,
+        MapDefinitionId{"map.raid.industrial"});
+    EXPECT_EQ(ashworks.perimeterSweepThreatReductionUnits, 40U);
     EXPECT_FALSE(ashworks.initiallyUnlocked);
     EXPECT_EQ(ashworks.migrationMinutes, 720U);
     EXPECT_EQ(ashworks.coreFacilitySlots, 4U);
@@ -951,6 +955,26 @@ TEST(ContentRegistryTest, RejectsUnknownBaseSiteClearanceMap)
             publishedJsonCopy(),
             "\"clearance_map_definition_id\": \"map.raid.industrial\"",
             "\"clearance_map_definition_id\": \"map.raid.missing\"")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnknownBasePerimeterSweepMap)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"perimeter_sweep_map_definition_id\": \"map.v0.test\"",
+            "\"perimeter_sweep_map_definition_id\": \"map.raid.missing\"")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsIneffectiveBasePerimeterSweepReduction)
+{
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"perimeter_sweep_threat_reduction_units\": 40",
+            "\"perimeter_sweep_threat_reduction_units\": 20")),
         ContentRegistryError);
 }
 

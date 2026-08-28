@@ -714,6 +714,17 @@ struct RegionalBaseSiteClearanceSnapshot
         const RegionalBaseSiteClearanceSnapshot &) = default;
 };
 
+struct BasePerimeterSweepSnapshot
+{
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    std::uint32_t threatReductionUnits{};
+    bool objectiveSecured{};
+
+    friend bool operator==(
+        const BasePerimeterSweepSnapshot &,
+        const BasePerimeterSweepSnapshot &) = default;
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -731,6 +742,7 @@ struct PendingRaidSnapshot
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
+    std::optional<BasePerimeterSweepSnapshot> basePerimeterSweep;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;
@@ -750,6 +762,7 @@ struct LastRaidResult
     std::uint32_t rescuedOrdinaryResidents{};
     std::uint32_t rescuedInjuredResidents{};
     std::optional<std::string> lostRaidRecordId;
+    std::uint32_t baseThreatReducedUnits{};
 };
 
 struct ProfileState

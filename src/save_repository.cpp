@@ -11,6 +11,7 @@
 
 #include "base_resource_domain.h"
 #include "base_morale_domain.h"
+#include "base_siege_domain.h"
 #include "regional_operations_domain.h"
 
 #ifdef _WIN32
@@ -1344,6 +1345,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             throw std::invalid_argument{
                 "legacy schema cannot represent Base site clearance"};
         }
+        if (schemaVersion < 33 && raid.basePerimeterSweep.has_value())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent Base perimeter sweep"};
+        }
         Json enemies = Json::array();
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
@@ -1677,7 +1683,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {
                 payload["pending_raid"]["rescue"] = nullptr;
             }
-            if (schemaVersion >= 27)
+            if (schemaVersion >= 27 ||
+                raid.rulesVersion == "regional-base-perimeter-sweep-20")
             {
                 Json routes = Json::array();
                 for (const RegionRouteDefinitionId &routeId :
@@ -1776,6 +1783,23 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["base_site_clearance"] = nullptr;
             }
         }
+        if (schemaVersion >= 33)
+        {
+            if (raid.basePerimeterSweep.has_value())
+            {
+                payload["pending_raid"]["base_perimeter_sweep"] = {
+                    {"base_site_definition_id",
+                     raid.basePerimeterSweep->baseSiteDefinitionId.value()},
+                    {"threat_reduction_units",
+                     raid.basePerimeterSweep->threatReductionUnits},
+                    {"objective_secured",
+                     raid.basePerimeterSweep->objectiveSecured}};
+            }
+            else
+            {
+                payload["pending_raid"]["base_perimeter_sweep"] = nullptr;
+            }
+        }
     }
     else
     {
@@ -1816,6 +1840,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 profile.lastRaidResult->lostRaidRecordId.has_value()
                     ? Json(*profile.lastRaidResult->lostRaidRecordId)
                     : Json(nullptr);
+        }
+        if (schemaVersion >= 33)
+        {
+            payload["last_raid_result"]["base_threat_reduced_units"] =
+                profile.lastRaidResult->baseThreatReducedUnits;
         }
     }
     else
@@ -1896,7 +1925,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
-        schemaVersion != 32)
+        schemaVersion != 32 && schemaVersion != 33)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2005,7 +2034,9 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 30 &&
              contentVersion == "regional-main-base-migration-content-39") ||
             (schemaVersion == 31 &&
-             contentVersion == "regional-base-site-feature-content-40");
+             contentVersion == "regional-base-site-feature-content-40") ||
+            (schemaVersion == 32 &&
+             contentVersion == "regional-base-threat-content-41");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2021,7 +2052,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
              schemaVersion != 29 && schemaVersion != 30 &&
-             schemaVersion != 31 && schemaVersion != 32) ||
+             schemaVersion != 31 && schemaVersion != 32 &&
+             schemaVersion != 33) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2327,6 +2359,10 @@ SaveLoadResult deserializeProfileEnvelope(
         profile.baseSiege = schemaVersion >= 32
             ? parseBaseSiege(payload.at("base_siege"))
             : defaultBaseSiege(profile.worldClock);
+        if (schemaVersion < 33)
+        {
+            normalizeBaseThreatCapacity(profile.baseSiege);
+        }
         if (schemaVersion >= 20)
         {
             for (const Json &entry :
@@ -3045,7 +3081,8 @@ SaveLoadResult deserializeProfileEnvelope(
                     raid.travel.startingRaidIntelligence =
                         profile.raidIntelligence;
                 }
-                if (schemaVersion >= 27)
+                if (travel.contains("route_ids") &&
+                    travel.contains("starting_regional_operations"))
                 {
                     for (const Json &route : travel.at("route_ids"))
                     {
@@ -3066,6 +3103,11 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.travel.startingBaseSiege = schemaVersion >= 32
                     ? parseBaseSiege(travel.at("starting_base_siege"))
                     : defaultBaseSiege(raid.travel.startingWorldClock);
+                if (schemaVersion < 33)
+                {
+                    normalizeBaseThreatCapacity(
+                        raid.travel.startingBaseSiege);
+                }
                 if (schemaVersion >= 14)
                 {
                     const Json &construction = travel.at(
@@ -3375,6 +3417,18 @@ SaveLoadResult deserializeProfileEnvelope(
                                 .get<std::string>()},
                         clearance.at("objective_secured").get<bool>()};
             }
+            if (schemaVersion >= 33 &&
+                !value.at("base_perimeter_sweep").is_null())
+            {
+                const Json &sweep = value.at("base_perimeter_sweep");
+                raid.basePerimeterSweep = BasePerimeterSweepSnapshot{
+                    RegionalBaseSiteDefinitionId{
+                        sweep.at("base_site_definition_id")
+                            .get<std::string>()},
+                    sweep.at("threat_reduction_units")
+                        .get<std::uint32_t>(),
+                    sweep.at("objective_secured").get<bool>()};
+            }
             profile.pendingRaid = std::move(raid);
         }
 
@@ -3416,6 +3470,10 @@ SaveLoadResult deserializeProfileEnvelope(
                 result.lostRaidRecordId = value.at("lost_raid_record_id")
                     .get<std::string>();
             }
+            result.baseThreatReducedUnits = schemaVersion >= 33
+                ? value.at("base_threat_reduced_units")
+                      .get<std::uint32_t>()
+                : 0U;
             profile.lastRaidResult = std::move(result);
         }
 

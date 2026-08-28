@@ -55,7 +55,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 32);
+    std::uint32_t schemaVersion = 33);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

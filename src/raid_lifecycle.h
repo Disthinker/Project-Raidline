@@ -27,6 +27,7 @@ struct DeployCommand
     std::optional<std::string> selfRecoveryRecordId;
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId;
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
+    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
 };
 
 struct DeployReceipt

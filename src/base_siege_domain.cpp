@@ -3,17 +3,64 @@
 #include "base_workforce_domain.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 
 namespace
 {
-std::uint32_t saturatedThreatAdd(
-    std::uint32_t current,
-    std::uint64_t added) noexcept
+std::uint64_t rawThreatTotal(const BaseSiegeState &state) noexcept
 {
-    return static_cast<std::uint32_t>(std::min<std::uint64_t>(
-        kBaseSiegeThreatThreshold,
-        static_cast<std::uint64_t>(current) + added));
+    return static_cast<std::uint64_t>(state.raidThreatUnits) +
+        state.populationThreatUnits + state.siteThreatUnits;
+}
+
+std::uint32_t addThreatWithinSharedCapacity(
+    BaseSiegeState &state,
+    std::uint32_t &source,
+    std::uint64_t requested) noexcept
+{
+    const std::uint64_t total = rawThreatTotal(state);
+    const std::uint64_t available = total < kBaseSiegeThreatThreshold
+        ? kBaseSiegeThreatThreshold - total
+        : 0U;
+    const std::uint32_t added = static_cast<std::uint32_t>(
+        std::min(requested, available));
+    source += added;
+    return added;
+}
+
+void scaleThreatSourcesToTotal(
+    BaseSiegeState &state,
+    std::uint32_t targetTotal) noexcept
+{
+    const std::uint64_t total = rawThreatTotal(state);
+    if (total == 0U || total == targetTotal)
+    {
+        return;
+    }
+    std::array<std::uint32_t *, 3> sources{
+        &state.raidThreatUnits,
+        &state.populationThreatUnits,
+        &state.siteThreatUnits};
+    std::array<std::uint64_t, 3> remainders{};
+    std::uint32_t assigned{};
+    for (std::size_t index{}; index < sources.size(); ++index)
+    {
+        const std::uint64_t scaled =
+            static_cast<std::uint64_t>(*sources[index]) * targetTotal;
+        *sources[index] = static_cast<std::uint32_t>(scaled / total);
+        remainders[index] = scaled % total;
+        assigned += *sources[index];
+    }
+    while (assigned < targetTotal)
+    {
+        const auto largest = std::max_element(
+            remainders.begin(), remainders.end());
+        ++*sources[static_cast<std::size_t>(
+            std::distance(remainders.begin(), largest))];
+        *largest = 0U;
+        ++assigned;
+    }
 }
 
 const RegionalBaseSiteDefinition *activeSite(
@@ -95,9 +142,7 @@ void clearThreatForSafetyPeriod(
 
 std::uint32_t totalBaseThreat(const BaseSiegeState &state) noexcept
 {
-    const std::uint64_t total =
-        static_cast<std::uint64_t>(state.raidThreatUnits) +
-        state.populationThreatUnits + state.siteThreatUnits;
+    const std::uint64_t total = rawThreatTotal(state);
     return static_cast<std::uint32_t>(std::min<std::uint64_t>(
         kBaseSiegeThreatThreshold, total));
 }
@@ -157,27 +202,100 @@ BaseThreatAdvanceResult synchronizeBaseThreatThrough(
     const std::uint32_t sitePerDay = site != nullptr
         ? site->dailyBaseThreatUnits
         : 1U;
-    const std::uint32_t previousPopulation = state.populationThreatUnits;
-    const std::uint32_t previousSite = state.siteThreatUnits;
-    state.populationThreatUnits = saturatedThreatAdd(
-        state.populationThreatUnits,
-        days * populationPerDay);
-    state.siteThreatUnits = saturatedThreatAdd(
-        state.siteThreatUnits,
-        days * sitePerDay);
+    const std::uint32_t populationAdded = addThreatWithinSharedCapacity(
+        state, state.populationThreatUnits, days * populationPerDay);
+    const std::uint32_t siteAdded = addThreatWithinSharedCapacity(
+        state, state.siteThreatUnits, days * sitePerDay);
     state.resolvedDayCount = completedDays;
     return {
         true,
         days,
-        state.populationThreatUnits - previousPopulation,
-        state.siteThreatUnits - previousSite};
+        populationAdded,
+        siteAdded};
 }
 
 void applySettledRaidBaseThreat(ProfileState &profile) noexcept
 {
-    profile.baseSiege.raidThreatUnits = saturatedThreatAdd(
+    static_cast<void>(addThreatWithinSharedCapacity(
+        profile.baseSiege,
         profile.baseSiege.raidThreatUnits,
-        kBaseSiegeRaidThreatUnits);
+        kBaseSiegeRaidThreatUnits));
+}
+
+std::uint32_t applyBasePerimeterSweepThreatReduction(
+    ProfileState &profile,
+    std::uint32_t requestedUnits) noexcept
+{
+    const std::uint32_t before = totalBaseThreat(profile.baseSiege);
+    const std::uint32_t after = requestedUnits >= before
+        ? 0U
+        : before - requestedUnits;
+    scaleThreatSourcesToTotal(profile.baseSiege, after);
+    if (after < kBaseSiegeThreatThreshold)
+    {
+        profile.baseSiege.warningActive = false;
+        profile.baseSiege.warningRemainingSeconds = 0U;
+    }
+    return before - after;
+}
+
+void normalizeBaseThreatCapacity(BaseSiegeState &state) noexcept
+{
+    if (rawThreatTotal(state) > kBaseSiegeThreatThreshold)
+    {
+        scaleThreatSourcesToTotal(state, kBaseSiegeThreatThreshold);
+    }
+}
+
+BasePerimeterSweepPlan queryBasePerimeterSweep(
+    const ProfileState &profile,
+    const ContentRegistry &content) noexcept
+{
+    BasePerimeterSweepPlan plan;
+    plan.revision = profile.revision;
+    plan.currentThreatUnits = totalBaseThreat(profile.baseSiege);
+    if (profile.pendingRaid.has_value())
+    {
+        plan.error = DomainErrorCode::IllegalDestination;
+        plan.message = "Base perimeter sweep is unavailable during a Raid";
+        return plan;
+    }
+    if (profile.baseSiege.warningActive)
+    {
+        plan.error = DomainErrorCode::IllegalDestination;
+        plan.message = "Base siege warning must be resolved first";
+        return plan;
+    }
+    if (plan.currentThreatUnits < kBasePerimeterSweepMinimumThreat)
+    {
+        plan.error = DomainErrorCode::IllegalDestination;
+        plan.message = "Base threat is below the perimeter sweep threshold";
+        return plan;
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        plan.error = DomainErrorCode::RevisionOverflow;
+        plan.message = "profile revision cannot advance";
+        return plan;
+    }
+    const RegionalBaseSiteDefinition *site = activeSite(profile, content);
+    if (site == nullptr)
+    {
+        plan.error = DomainErrorCode::InvalidProfile;
+        plan.message = "active Base site is unavailable";
+        return plan;
+    }
+    plan.baseSiteDefinitionId = site->id;
+    plan.mapDefinitionId = site->perimeterSweepMapDefinitionId;
+    plan.threatReductionUnits = site->perimeterSweepThreatReductionUnits;
+    ProfileState projected = profile;
+    applySettledRaidBaseThreat(projected);
+    static_cast<void>(applyBasePerimeterSweepThreatReduction(
+        projected, plan.threatReductionUnits));
+    plan.projectedThreatAfterSettlement = totalBaseThreat(
+        projected.baseSiege);
+    plan.canDeploy = true;
+    return plan;
 }
 
 bool activateBaseSiegeWarningIfEligible(ProfileState &profile) noexcept

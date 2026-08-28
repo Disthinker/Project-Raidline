@@ -1030,6 +1030,9 @@ ProfileValidationResult validateProfileState(
     if (siege.raidThreatUnits > kBaseSiegeThreatThreshold ||
         siege.populationThreatUnits > kBaseSiegeThreatThreshold ||
         siege.siteThreatUnits > kBaseSiegeThreatThreshold ||
+        static_cast<std::uint64_t>(siege.raidThreatUnits) +
+                siege.populationThreatUnits + siege.siteThreatUnits >
+            kBaseSiegeThreatThreshold ||
         siege.resolvedDayCount >
             projectWorldClock(profile.worldClock).completedDays ||
         siege.warningRemainingSeconds > kBaseSiegeWarningSeconds ||
@@ -1892,7 +1895,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1909,7 +1913,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
@@ -1919,7 +1924,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
@@ -1928,7 +1934,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
@@ -1936,30 +1943,38 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool selfRecoveryRules =
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool outpostRestorationRules =
             raid.rulesVersion == "regional-outpost-restoration-18" ||
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         const bool baseSiteClearanceRules =
-            raid.rulesVersion == "regional-base-site-clearance-19";
+            raid.rulesVersion == "regional-base-site-clearance-19" ||
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+        const bool basePerimeterSweepRules =
+            raid.rulesVersion == "regional-base-perimeter-sweep-20";
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -2041,6 +2056,49 @@ ProfileValidationResult validateProfileState(
         {
             return {false,
                     "pending Raid Base site clearance rules are invalid"};
+        }
+        if (!basePerimeterSweepRules &&
+            raid.basePerimeterSweep.has_value())
+        {
+            return {false,
+                    "pending Raid Base perimeter sweep rules are invalid"};
+        }
+        const std::size_t regionalMissionCount =
+            static_cast<std::size_t>(raid.selfRecovery.has_value()) +
+            static_cast<std::size_t>(raid.outpostRestoration.has_value()) +
+            static_cast<std::size_t>(raid.baseSiteClearance.has_value()) +
+            static_cast<std::size_t>(raid.basePerimeterSweep.has_value());
+        if (regionalMissionCount > 1U)
+        {
+            return {false, "pending Raid mission modes cannot be combined"};
+        }
+        if (raid.basePerimeterSweep.has_value())
+        {
+            try
+            {
+                const BasePerimeterSweepSnapshot &sweep =
+                    *raid.basePerimeterSweep;
+                const RegionalBaseSiteDefinition &definition =
+                    content.regionalBaseSite(sweep.baseSiteDefinitionId);
+                if (definition.nodeId != raid.travel
+                        .startingRegionalOperations.activeBaseNodeId ||
+                    definition.perimeterSweepMapDefinitionId !=
+                        raid.mapDefinitionId ||
+                    definition.perimeterSweepThreatReductionUnits !=
+                        sweep.threatReductionUnits ||
+                    sweep.threatReductionUnits == 0U ||
+                    totalBaseThreat(raid.travel.startingBaseSiege) <
+                        kBasePerimeterSweepMinimumThreat)
+                {
+                    return {false,
+                            "pending Raid Base perimeter sweep is invalid"};
+                }
+            }
+            catch (...)
+            {
+                return {false,
+                        "pending Raid Base perimeter sweep is invalid"};
+            }
         }
         if (raid.baseSiteClearance.has_value())
         {
@@ -2636,7 +2694,8 @@ ProfileValidationResult validateProfileState(
             bool regionalTravelValid = true;
             if (raid.rulesVersion == "regional-route-network-17" ||
                 raid.rulesVersion == "regional-outpost-restoration-18" ||
-                raid.rulesVersion == "regional-base-site-clearance-19")
+                raid.rulesVersion == "regional-base-site-clearance-19" ||
+                raid.rulesVersion == "regional-base-perimeter-sweep-20")
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2668,9 +2727,24 @@ ProfileValidationResult validateProfileState(
                     kBaseSiegeThreatThreshold &&
                 startingSiege.siteThreatUnits <=
                     kBaseSiegeThreatThreshold &&
+                static_cast<std::uint64_t>(
+                    startingSiege.raidThreatUnits) +
+                        startingSiege.populationThreatUnits +
+                        startingSiege.siteThreatUnits <=
+                    kBaseSiegeThreatThreshold &&
                 startingSiege.resolvedDayCount <= startingCompletedDays &&
                 !startingSiege.warningActive &&
                 startingSiege.warningRemainingSeconds == 0U;
+            if (!startingSiegeValid)
+            {
+                return {false,
+                        "pending Raid starting Base siege snapshot is invalid"};
+            }
+            if (!regionalTravelValid)
+            {
+                return {false,
+                        "pending Raid regional travel snapshot is invalid"};
+            }
             if (raid.travel.outboundMinutes == 0U ||
                 raid.travel.returnMinutes == 0U ||
                 raid.travel.failureRegroupMinutes <
@@ -2693,7 +2767,6 @@ ProfileValidationResult validateProfileState(
                     raid.travel.startingBasePriority,
                     raid.travel.startingWorldClock.elapsedWorldMinutes,
                     content) ||
-                !startingSiegeValid ||
                 !validBaseMoraleSnapshot(
                     raid.travel.startingBaseMorale,
                     raid.travel.startingBaseCommunityEvent,
@@ -2702,7 +2775,6 @@ ProfileValidationResult validateProfileState(
                     content) ||
                  !startingConstructionValid || !startingWorkforceValid ||
                 !startingResidentMedicalValid ||
-                !regionalTravelValid ||
                 !validIntelligenceArchive(
                     raid.travel.startingRaidIntelligence))
             {
@@ -2938,6 +3010,8 @@ ProfileValidationResult validateProfileState(
 
     if (profile.lastRaidResult.has_value() &&
         (profile.lastRaidResult->settlementId.empty() ||
+         profile.lastRaidResult->baseThreatReducedUnits >
+             kBaseSiegeThreatThreshold ||
          profile.lastRaidResult->rescuedOrdinaryResidents > 16U ||
          profile.lastRaidResult->rescuedInjuredResidents >
              profile.lastRaidResult->rescuedOrdinaryResidents ||
@@ -3471,6 +3545,18 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             }
             hashInteger(hash, state.shortcutOperationsSinceRestoration);
         }
+        if (raid.basePerimeterSweep.has_value())
+        {
+            hashBytes(
+                hash,
+                raid.basePerimeterSweep->baseSiteDefinitionId.value());
+            hashInteger(
+                hash,
+                raid.basePerimeterSweep->threatReductionUnits);
+            hashInteger(
+                hash,
+                raid.basePerimeterSweep->objectiveSecured ? 1U : 0U);
+        }
         hashInteger(hash, raid.travel.startingBaseSiege.raidThreatUnits);
         hashInteger(
             hash, raid.travel.startingBaseSiege.populationThreatUnits);
@@ -3647,6 +3733,9 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, profile.lastRaidResult->rescuedInjuredResidents);
         hashBytes(hash,
                   profile.lastRaidResult->lostRaidRecordId.value_or(""));
+        hashInteger(
+            hash,
+            profile.lastRaidResult->baseThreatReducedUnits);
     }
     return hash;
 }

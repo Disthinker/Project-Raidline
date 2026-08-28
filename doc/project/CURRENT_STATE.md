@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-27。
+最后核对：2026-08-28。
 
 ## Git 与交付基线
 
-- `origin/main@bf0d383` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙和区域基地独特设施闭环。
-- 当前开发分支：`codex/regional-base-threat-warning-v1`，从 `origin/main@bf0d383` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-base-threat-auto-defense-v1.md`。
+- `origin/main@fab9f32` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守闭环。
+- 当前开发分支：`codex/regional-base-perimeter-sweep-v1`，从 `origin/main@fab9f32` 创建。
+- 当前活动计划：`doc/exec-plans/active/regional-base-perimeter-sweep-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙及区域基地独特设施均已进入主线。当前宏切片建立可保存的基地威胁、三分钟预警和公共安保自动防守 v1；不提前实现实时尸潮、防御设施、战斗小组或个人装备损失。
+Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守均已进入主线。当前宏切片增加保持常规撤离开放的基地外围清剿，让玩家主动降低威胁；不提前实现实时尸潮、防御设施或战斗小组。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -63,7 +63,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 48. **区域基地候选点清剿 v1**：PR #106 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `e6721e4` 进入 main。content v38/schema v29 发布 Greyline 与 Ashworks 候选点、清剿解锁、第二标准前哨和路线收益。
 49. **唯一主基地迁徙 v1**：PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线；迁徙原子推进 12 小时并保持 Stash、装备、人口和资产唯一所有权。
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
-51. **基地威胁预警与自动防守 v1（当前开发）**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”；安全期结束后才进入阻断出击的三分钟预警。领域、存档、Settlement/异常回滚、门禁、Base 双语投影、Windows Debug 全目标和 1211/1211 CTest 已完成，Draft PR 与 exact-head CI 待收尾。
+51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
+52. **基地外围清剿 v1（当前开发）**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。领域、持久化、GameSession、双语代码占位和回归已实现，Windows Debug 全目标构建成功，完整 CTest 1223/1223 通过；Draft PR 与 exact-head CI 待收束。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -90,7 +91,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
-- 当前基地威胁预警与自动防守分支已完成 Windows Debug 全目标构建与 1211/1211 CTest；覆盖三类威胁、阈值/安全期排队提示、首次确认/后续预设、成功/软失败、占用居民保护、schema v31→v32、pending Raid 回滚、Settlement 幂等、迁徙/建设门禁及中英文投影。开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。当前外围清剿分支已完成 Windows Debug 全目标、定向领域/会话/存档/UI 回归和完整 CTest 1223/1223。开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
@@ -283,7 +284,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - `BaseOperationalProjection` 只读计算各项整日储备、精确最短板和运营档位，不进入 Profile、revision 或存档。首版状态仅作风险可读投影。
 - 玩家枪械全面维护只消费货币：候选 Profile 原子恢复当前/最大耐久到出厂值并清除故障；不推进世界时间、不创建任务、不移动武器，也不改变枪膛和已装弹匣。运营资源不影响报价或资格。
 - schema 维持 v11，并显式接受 content v16/v17 存档；旧计时任务立即可领取。Allocation 与 Supply 以中英文显示运营状态、最短板和即时维护反馈。
-- 当前四项池仍只是早期运营储备；正式居民士气已由独立三档状态实现，不复用旧 `morale` 资源字段。人口、口粮/床位和制造已成为实际消费者，自动防守仍延期。
+- 当前四项池仍只是早期运营储备；正式居民士气已由独立三档状态实现，不复用旧 `morale` 资源字段。人口、口粮/床位、制造和自动防守已成为实际消费者；更复杂的防御设施与实时守城仍延期。
 
 ## Base 居民、床位与睡眠 v1 当前实现
 
@@ -344,7 +345,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 组件级耐久和改枪台后续独立切片；当前枪匠服务只消费已有武器实例耐久与故障，不建立人口岗位或通用任务框架。
 - 疼痛叫声的墙/门遮挡等待正式空间遮挡查询；当前只提供有消费者的距离刺激，不能扩张为通用音频事件总线。
 - 旧 V0 `ItemId`/`ItemInstance` 与旧 GameplayWorld 路径仍保留给历史回归；生产 Alpha 已绕过，后续按消费者安全退场。
-- 区域基地威胁 v1 只使用公共 Security 做第一条自动防守路径；实时基地战、敌人波次、防御设施、战斗小组、多档防守投资、个人资产损失和正式表现仍明确延期。
+- 区域基地威胁已包含公共 Security 自动防守和主动外围清剿两条路径；实时基地战、敌人波次、防御设施、战斗小组、多档防守投资、个人资产损失和正式表现仍明确延期。
 - Week29 分支继续不整体合并；已接受反馈均由后续独立切片按新边界实现。
 - 正式攻击动画及所有新正式美术/音频生产。
 
