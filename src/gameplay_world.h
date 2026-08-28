@@ -152,6 +152,7 @@ struct RaidOutdoorPresentationProjection
     std::vector<RaidOutdoorPropSnapshot> props;
     std::vector<RaidOutdoorLabelProjection> labels;
     std::size_t queriedChunkCount{};
+    std::uint64_t cacheRevision{};
 };
 
 struct PlayerDamageObservation
@@ -266,7 +267,7 @@ public:
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>
     activeInteriorMapProjection() const noexcept;
-    [[nodiscard]] RaidOutdoorPresentationProjection
+    [[nodiscard]] const RaidOutdoorPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
 
     [[nodiscard]]
@@ -516,6 +517,19 @@ private:
     std::uint32_t outdoorChunkColumns_{};
     std::uint32_t outdoorChunkRows_{};
     std::vector<OutdoorPresentationChunk> outdoorPresentationChunks_;
+    mutable RaidOutdoorPresentationProjection outdoorPresentationCache_;
+    mutable bool outdoorPresentationCacheValid_{};
+    mutable std::uint32_t outdoorPresentationFirstChunkColumn_{};
+    mutable std::uint32_t outdoorPresentationLastChunkColumn_{};
+    mutable std::uint32_t outdoorPresentationFirstChunkRow_{};
+    mutable std::uint32_t outdoorPresentationLastChunkRow_{};
+    mutable std::uint32_t outdoorPresentationVisitSequence_{};
+    mutable std::uint64_t outdoorPresentationCacheRevision_{};
+    mutable std::vector<std::uint32_t> outdoorTerrainVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorRoadVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorPropVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorLandmarkVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorDistrictVisitStamps_;
     std::optional<RaidSpaceBlockerIndex> outdoorBlockerIndex_;
     std::size_t outdoorNavigationScheduleCursor_{};
     std::vector<InteriorRuntime> interiors_;

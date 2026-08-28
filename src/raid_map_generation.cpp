@@ -710,6 +710,11 @@ std::vector<RaidDistrictArchetypeDefinition> expandedDistricts(
         {
             RaidDistrictArchetypeDefinition expanded = archetype;
             expanded.id += "." + std::to_string(instance + 1U);
+            if (archetype.instanceCount > 1U)
+            {
+                expanded.displayName +=
+                    " " + std::to_string(instance + 1U);
+            }
             expanded.instanceCount = 1U;
             result.push_back(std::move(expanded));
         }
@@ -720,84 +725,117 @@ std::vector<RaidDistrictArchetypeDefinition> expandedDistricts(
 struct DistrictField
 {
     std::vector<std::uint16_t> owners;
-    std::vector<Cell> seeds;
+    std::array<std::uint32_t, 5U> columnBoundaries{};
+    std::array<std::uint32_t, 3U> rowBoundaries{};
 };
 
 DistrictField generateDistrictField(
     const ProceduralOutdoorDefinition &definition,
-    std::size_t districtCount,
+    const std::vector<RaidDistrictArchetypeDefinition> &districts,
     Pcg32 &random)
 {
     DistrictField result;
-    result.seeds.reserve(districtCount);
-    for (std::size_t district{}; district < districtCount; ++district)
+    result.columnBoundaries = {
+        0U,
+        definition.districtColumns / 4U,
+        definition.districtColumns / 2U,
+        definition.districtColumns * 3U / 4U,
+        definition.districtColumns};
+    result.rowBoundaries = {
+        0U,
+        definition.districtRows / 2U,
+        definition.districtRows};
+
+    // Preserve a readable four-by-two zoning plan. Seed variation may nudge
+    // internal boundaries by one coarse cell, but can no longer dissolve the
+    // map into random Voronoi blobs.
+    for (std::size_t boundary = 1U; boundary + 1U <
+         result.columnBoundaries.size(); ++boundary)
     {
-        Cell selected{};
-        bool accepted = false;
-        for (std::uint32_t attempt{}; attempt < 256U && !accepted; ++attempt)
-        {
-            selected = {
-                random.bounded(definition.districtColumns),
-                random.bounded(definition.districtRows)};
-            accepted = std::none_of(
-                result.seeds.begin(), result.seeds.end(),
-                [&](Cell existing)
-                {
-                    const std::uint32_t distance =
-                        static_cast<std::uint32_t>(std::abs(
-                            static_cast<int>(selected.column) -
-                            static_cast<int>(existing.column))) +
-                        static_cast<std::uint32_t>(std::abs(
-                            static_cast<int>(selected.row) -
-                            static_cast<int>(existing.row)));
-                    return distance < 4U;
-                });
-        }
-        if (!accepted)
-        {
-            selected = {
-                static_cast<std::uint32_t>(district *
-                    definition.districtColumns / districtCount),
-                static_cast<std::uint32_t>((district % 2U) *
-                    (definition.districtRows - 1U))};
-        }
-        result.seeds.push_back(selected);
+        const int jitter = static_cast<int>(random.bounded(3U)) - 1;
+        const std::uint32_t minimum =
+            result.columnBoundaries[boundary - 1U] + 1U;
+        const std::uint32_t remainingSectors = static_cast<std::uint32_t>(
+            result.columnBoundaries.size() - boundary - 1U);
+        const std::uint32_t maximum =
+            definition.districtColumns - remainingSectors;
+        result.columnBoundaries[boundary] = std::clamp(
+            static_cast<std::uint32_t>(
+                std::max(0, static_cast<int>(
+                    result.columnBoundaries[boundary]) + jitter)),
+            minimum, maximum);
     }
+    result.rowBoundaries[1U] = std::clamp(
+        static_cast<std::uint32_t>(std::max(
+            0, static_cast<int>(result.rowBoundaries[1U]) +
+                   static_cast<int>(random.bounded(3U)) - 1)),
+        1U, definition.districtRows - 1U);
 
     result.owners.resize(
         static_cast<std::size_t>(definition.districtColumns) *
         definition.districtRows);
-    for (std::uint32_t row{}; row < definition.districtRows; ++row)
+
+    const auto indicesFor = [&](RaidDistrictKind kind)
     {
-        for (std::uint32_t column{};
-             column < definition.districtColumns;
-             ++column)
+        std::vector<std::uint16_t> resultIndices;
+        for (std::size_t index{}; index < districts.size(); ++index)
+            if (districts[index].kind == kind)
+                resultIndices.push_back(static_cast<std::uint16_t>(index));
+        return resultIndices;
+    };
+    const auto industrial = indicesFor(RaidDistrictKind::Industrial);
+    const auto logistics = indicesFor(RaidDistrictKind::Logistics);
+    const auto highway = indicesFor(RaidDistrictKind::Highway);
+    const auto openGround = indicesFor(RaidDistrictKind::OpenGround);
+    const auto greenbelt = indicesFor(RaidDistrictKind::Greenbelt);
+    const auto roadside = indicesFor(RaidDistrictKind::RoadsideService);
+    const bool expectedArchetypes = districts.size() == 8U &&
+        industrial.size() == 2U && logistics.size() == 2U &&
+        highway.size() == 1U && openGround.size() == 1U &&
+        greenbelt.size() == 1U && roadside.size() == 1U;
+
+    std::array<std::uint16_t, 8U> sectors{};
+    if (expectedArchetypes)
+    {
+        const bool reverseWorkingDistricts = random.bounded(2U) != 0U;
+        sectors = reverseWorkingDistricts
+            ? std::array<std::uint16_t, 8U>{
+                  greenbelt.front(), logistics[0], industrial[0],
+                  highway.front(), openGround.front(), industrial[1],
+                  logistics[1], roadside.front()}
+            : std::array<std::uint16_t, 8U>{
+                  greenbelt.front(), industrial[0], logistics[0],
+                  highway.front(), openGround.front(), logistics[1],
+                  industrial[1], roadside.front()};
+    }
+    else
+    {
+        for (std::size_t index{}; index < sectors.size(); ++index)
+            sectors[index] = static_cast<std::uint16_t>(
+                std::min(index, districts.size() - 1U));
+    }
+
+    const bool mirrorHorizontally = random.bounded(2U) != 0U;
+    const bool mirrorVertically = random.bounded(2U) != 0U;
+    for (std::uint32_t sectorRow{}; sectorRow < 2U; ++sectorRow)
+    {
+        for (std::uint32_t sectorColumn{}; sectorColumn < 4U;
+             ++sectorColumn)
         {
-            std::size_t selected{};
-            std::uint32_t selectedDistance =
-                std::numeric_limits<std::uint32_t>::max();
-            for (std::size_t district{};
-                 district < result.seeds.size();
-                 ++district)
-            {
-                const Cell seed = result.seeds[district];
-                const std::uint32_t distance =
-                    static_cast<std::uint32_t>(std::abs(
-                        static_cast<int>(column) -
-                        static_cast<int>(seed.column))) +
-                    static_cast<std::uint32_t>(std::abs(
-                        static_cast<int>(row) -
-                        static_cast<int>(seed.row)));
-                if (distance < selectedDistance ||
-                    (distance == selectedDistance && district < selected))
-                {
-                    selected = district;
-                    selectedDistance = distance;
-                }
-            }
-            result.owners[static_cast<std::size_t>(row) *
-                definition.districtColumns + column] =
-                static_cast<std::uint16_t>(selected);
+            const std::uint32_t sourceRow = mirrorVertically
+                ? 1U - sectorRow : sectorRow;
+            const std::uint32_t sourceColumn = mirrorHorizontally
+                ? 3U - sectorColumn : sectorColumn;
+            const std::uint16_t owner = sectors[
+                static_cast<std::size_t>(sourceRow) * 4U + sourceColumn];
+            for (std::uint32_t row = result.rowBoundaries[sectorRow];
+                 row < result.rowBoundaries[sectorRow + 1U]; ++row)
+                for (std::uint32_t column =
+                         result.columnBoundaries[sectorColumn];
+                     column < result.columnBoundaries[sectorColumn + 1U];
+                     ++column)
+                    result.owners[static_cast<std::size_t>(row) *
+                        definition.districtColumns + column] = owner;
         }
     }
     return result;
@@ -888,15 +926,29 @@ std::vector<RaidDistrictSnapshot> freezeDistricts(
 
 RoadSkeleton buildV3Roads(
     const ProceduralOutdoorDefinition &definition,
+    const DistrictField &districtField,
     Pcg32 &random)
 {
     RoadSkeleton roads;
     roads.ranks.resize(
         static_cast<std::size_t>(definition.columns) * definition.rows, 0U);
-    const std::uint32_t spineColumn = definition.columns / 3U +
-        random.bounded(definition.columns / 3U);
-    const std::uint32_t spineRow = definition.rows / 3U +
-        random.bounded(definition.rows / 3U);
+    const auto fineColumn = [&](std::uint32_t districtColumn)
+    {
+        return std::min(
+            definition.columns - 1U,
+            districtColumn * definition.columns /
+                definition.districtColumns);
+    };
+    const auto fineRow = [&](std::uint32_t districtRow)
+    {
+        return std::min(
+            definition.rows - 1U,
+            districtRow * definition.rows / definition.districtRows);
+    };
+    const std::uint32_t spineColumn = fineColumn(
+        districtField.columnBoundaries[2U]);
+    const std::uint32_t spineRow = fineRow(
+        districtField.rowBoundaries[1U]);
     paintRoadWidth(
         roads, definition,
         {0U, spineRow}, {definition.columns - 1U, spineRow},
@@ -905,25 +957,68 @@ RoadSkeleton buildV3Roads(
         roads, definition,
         {spineColumn, 0U}, {spineColumn, definition.rows - 1U},
         RaidOutdoorRoadKind::Primary, 4U);
+
+    for (const std::size_t boundary : {1U, 3U})
+    {
+        const std::uint32_t column = fineColumn(
+            districtField.columnBoundaries[boundary]);
+        paintRoadWidth(
+            roads, definition,
+            {column, 0U}, {column, definition.rows - 1U},
+            RaidOutdoorRoadKind::Secondary, 3U);
+    }
+    const std::uint32_t upperRouteRow = spineRow / 2U;
+    const std::uint32_t lowerRouteRow =
+        spineRow + (definition.rows - 1U - spineRow) / 2U;
+    for (const std::uint32_t row : {upperRouteRow, lowerRouteRow})
+        paintRoadWidth(
+            roads, definition,
+            {0U, row}, {definition.columns - 1U, row},
+            RaidOutdoorRoadKind::Secondary, 3U);
+
     const std::uint32_t branchCount = randomBetween(
         random, definition.minimumBranchRoads,
         definition.maximumBranchRoads);
-    for (std::uint32_t branch{}; branch < branchCount; ++branch)
+    const std::uint32_t baseBranchCount = 4U;
+    for (std::uint32_t branch = baseBranchCount;
+         branch < branchCount; ++branch)
     {
         if (branch % 2U == 0U)
         {
-            const std::uint32_t row = random.bounded(definition.rows);
+            const std::uint32_t sectorColumn = random.bounded(4U);
+            const std::uint32_t sectorRow = random.bounded(2U);
+            const std::uint32_t firstColumn = fineColumn(
+                districtField.columnBoundaries[sectorColumn]);
+            const std::uint32_t lastColumn = fineColumn(
+                districtField.columnBoundaries[sectorColumn + 1U]);
+            const std::uint32_t firstRow = fineRow(
+                districtField.rowBoundaries[sectorRow]);
+            const std::uint32_t lastRow = fineRow(
+                districtField.rowBoundaries[sectorRow + 1U]);
+            const std::uint32_t row = firstRow +
+                (lastRow - firstRow) * (1U + random.bounded(3U)) / 4U;
             paintRoadWidth(
                 roads, definition,
-                {0U, row}, {definition.columns - 1U, row},
+                {firstColumn, row}, {lastColumn, row},
                 RaidOutdoorRoadKind::Secondary, 3U);
         }
         else
         {
-            const std::uint32_t column = random.bounded(definition.columns);
+            const std::uint32_t sectorColumn = random.bounded(4U);
+            const std::uint32_t sectorRow = random.bounded(2U);
+            const std::uint32_t firstColumn = fineColumn(
+                districtField.columnBoundaries[sectorColumn]);
+            const std::uint32_t lastColumn = fineColumn(
+                districtField.columnBoundaries[sectorColumn + 1U]);
+            const std::uint32_t firstRow = fineRow(
+                districtField.rowBoundaries[sectorRow]);
+            const std::uint32_t lastRow = fineRow(
+                districtField.rowBoundaries[sectorRow + 1U]);
+            const std::uint32_t column = firstColumn +
+                (lastColumn - firstColumn) * (1U + random.bounded(3U)) / 4U;
             paintRoadWidth(
                 roads, definition,
-                {column, 0U}, {column, definition.rows - 1U},
+                {column, firstRow}, {column, lastRow},
                 RaidOutdoorRoadKind::Secondary, 3U);
         }
     }
@@ -1446,8 +1541,11 @@ void populateProps(
         if (occupied[cellIndex(definition, cell.column, cell.row)] != 0U)
             continue;
         occupied[cellIndex(definition, cell.column, cell.row)] = 1U;
-        const bool truck = index % 4U == 0U;
-        const Vec2 size = truck ? Vec2{68.0F, 42.0F} : Vec2{48.0F, 30.0F};
+        const bool barrier = index % 7U == 0U;
+        const bool truck = !barrier && index % 4U == 0U;
+        const Vec2 size = barrier
+            ? Vec2{64.0F, 18.0F}
+            : (truck ? Vec2{68.0F, 42.0F} : Vec2{48.0F, 30.0F});
         const Vec2 center{
             map.walkableBounds.position.x +
                 (static_cast<float>(cell.column) + 0.5F) * cellWidth,
@@ -1455,7 +1553,9 @@ void populateProps(
                 (static_cast<float>(cell.row) + 0.5F) * cellHeight};
         appendProp(
             layout,
-            truck ? RaidOutdoorPropKind::Truck : RaidOutdoorPropKind::Car,
+            barrier ? RaidOutdoorPropKind::RoadBarrier
+                    : (truck ? RaidOutdoorPropKind::Truck
+                             : RaidOutdoorPropKind::Car),
             index % 3U == 0U ? RaidOutdoorPropState::Damaged
                              : RaidOutdoorPropState::Abandoned,
             {{center.x - size.x * 0.5F, center.y - size.y * 0.5F}, size},
@@ -1473,6 +1573,78 @@ void populateProps(
                 return prop.kind == RaidOutdoorPropKind::Factory ||
                     prop.kind == RaidOutdoorPropKind::Warehouse;
             }));
+
+    // Place the large silhouettes on a district-aligned compound grid before
+    // filling small blockers. They remain seed-varied, but read as planned
+    // factory/warehouse blocks instead of isolated random rectangles.
+    std::vector<Cell> compoundCandidates;
+    const std::uint32_t compoundColumnPhase = 2U + random.bounded(4U);
+    const std::uint32_t compoundRowPhase = 2U + random.bounded(3U);
+    for (std::uint32_t row = compoundRowPhase;
+         row + 4U < definition.rows; row += 7U)
+        for (std::uint32_t column = compoundColumnPhase;
+             column + 6U < definition.columns; column += 9U)
+        {
+            const std::uint16_t district = districtAtFineCell(
+                definition, districtField, column, row);
+            const RaidDistrictKind kind = districtDefinitions[district].kind;
+            if (kind == RaidDistrictKind::Industrial ||
+                kind == RaidDistrictKind::Logistics)
+                compoundCandidates.push_back({column, row});
+        }
+    for (std::size_t remaining = compoundCandidates.size();
+         remaining > 1U; --remaining)
+    {
+        const std::size_t selected = random.bounded(
+            static_cast<std::uint32_t>(remaining));
+        std::swap(compoundCandidates[selected],
+                  compoundCandidates[remaining - 1U]);
+    }
+    for (const Cell origin : compoundCandidates)
+    {
+        if (largeBuildingCount >= largeBuildingTarget)
+            break;
+        const std::uint16_t district = districtAtFineCell(
+            definition, districtField, origin.column, origin.row);
+        const RaidDistrictKind districtKind =
+            districtDefinitions[district].kind;
+        const std::uint32_t widthCells = 4U + random.bounded(3U);
+        const std::uint32_t heightCells = 3U + random.bounded(2U);
+        bool legal = origin.column + widthCells < definition.columns &&
+            origin.row + heightCells < definition.rows;
+        for (std::uint32_t row = origin.row;
+             legal && row < origin.row + heightCells; ++row)
+            for (std::uint32_t column = origin.column;
+                 legal && column < origin.column + widthCells; ++column)
+                legal =
+                    districtAtFineCell(
+                        definition, districtField, column, row) == district &&
+                    occupied[cellIndex(definition, column, row)] == 0U &&
+                    roads.ranks[cellIndex(definition, column, row)] == 0U;
+        if (!legal)
+            continue;
+        for (std::uint32_t row = origin.row;
+             row < origin.row + heightCells; ++row)
+            for (std::uint32_t column = origin.column;
+                 column < origin.column + widthCells; ++column)
+                occupied[cellIndex(definition, column, row)] = 1U;
+        const ContentRect bounds{
+            {map.walkableBounds.position.x + origin.column * cellWidth + 7.0F,
+             map.walkableBounds.position.y + origin.row * cellHeight + 7.0F},
+            {widthCells * cellWidth - 14.0F,
+             heightCells * cellHeight - 14.0F}};
+        appendProp(
+            layout,
+            districtKind == RaidDistrictKind::Industrial
+                ? RaidOutdoorPropKind::Factory
+                : RaidOutdoorPropKind::Warehouse,
+            RaidOutdoorPropState::Weathered,
+            bounds,
+            bounds.size.x >= bounds.size.y ? 0U : 1U,
+            true);
+        ++largeBuildingCount;
+    }
+
     for (std::uint32_t attempt{};
          layout.ballisticBlockers.size() < blockerTarget &&
          attempt < blockerTarget * 80U && !openCells.empty();
@@ -1486,11 +1658,12 @@ void populateProps(
             definition, districtField, origin.column, origin.row);
         const RaidDistrictKind districtKind =
             districtDefinitions[district].kind;
-        const bool large = largeBuildingCount < largeBuildingTarget &&
-            (districtKind == RaidDistrictKind::Industrial ||
-             districtKind == RaidDistrictKind::Logistics);
-        const std::uint32_t widthCells = large ? 3U + random.bounded(4U) : 1U;
-        const std::uint32_t heightCells = large ? 2U + random.bounded(3U) : 1U;
+        if ((districtKind == RaidDistrictKind::Greenbelt ||
+             districtKind == RaidDistrictKind::OpenGround) &&
+            random.bounded(4U) != 0U)
+            continue;
+        constexpr std::uint32_t widthCells{1U};
+        constexpr std::uint32_t heightCells{1U};
         if (origin.column + widthCells >= definition.columns ||
             origin.row + heightCells >= definition.rows)
             continue;
@@ -1515,17 +1688,20 @@ void populateProps(
             {widthCells * cellWidth - 14.0F,
              heightCells * cellHeight - 14.0F}};
         RaidOutdoorPropKind kind = RaidOutdoorPropKind::Container;
-        if (large)
+        if (districtKind == RaidDistrictKind::Industrial)
+            kind = layout.ballisticBlockers.size() % 3U == 0U
+                ? RaidOutdoorPropKind::EngineeringEquipment
+                : RaidOutdoorPropKind::Container;
+        else if (districtKind == RaidDistrictKind::Highway ||
+                 districtKind == RaidDistrictKind::OpenGround ||
+                 districtKind == RaidDistrictKind::Greenbelt)
+            kind = RaidOutdoorPropKind::Container;
+        else if (districtKind == RaidDistrictKind::RoadsideService)
             kind = layout.ballisticBlockers.size() % 2U == 0U
-                ? RaidOutdoorPropKind::Factory
-                : RaidOutdoorPropKind::Warehouse;
-        else if (districtKind == RaidDistrictKind::Industrial &&
-                 layout.ballisticBlockers.size() % 3U == 0U)
-            kind = RaidOutdoorPropKind::EngineeringEquipment;
+                ? RaidOutdoorPropKind::EngineeringEquipment
+                : RaidOutdoorPropKind::Container;
         appendProp(layout, kind, RaidOutdoorPropState::Weathered,
                    bounds, static_cast<std::uint8_t>(random.bounded(4U)), true);
-        if (large)
-            ++largeBuildingCount;
     }
 
     const std::uint32_t decorativeTarget = randomBetween(
@@ -1597,8 +1773,9 @@ RaidGeneratedMapLayout generateV3Layout(
     const std::vector<RaidDistrictArchetypeDefinition> districts =
         expandedDistricts(definition);
     const DistrictField districtField = generateDistrictField(
-        definition, districts.size(), districtRandom);
-    RoadSkeleton roads = buildV3Roads(definition, roadRandom);
+        definition, districts, districtRandom);
+    RoadSkeleton roads = buildV3Roads(
+        definition, districtField, roadRandom);
     std::vector<RaidLandmarkPlacementSnapshot> landmarks = placeLandmarks(
         map, districtField, districts, roads, landmarkRandom);
     if (landmarks.size() != definition.landmarkTemplates.size())

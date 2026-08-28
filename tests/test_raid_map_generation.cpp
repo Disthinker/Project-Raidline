@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <queue>
 
 #include "content_registry.h"
@@ -142,6 +143,75 @@ bool districtIsContinuous(
     }
     return reached == expected;
 }
+
+float districtRectangularFillRatio(const RaidDistrictSnapshot &district)
+{
+    std::uint32_t firstColumn = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t lastColumn{};
+    std::uint32_t firstRow = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t lastRow{};
+    std::size_t cells{};
+    for (const RaidGridSpan &span : district.cells)
+    {
+        firstColumn = std::min<std::uint32_t>(firstColumn, span.firstColumn);
+        lastColumn = std::max<std::uint32_t>(
+            lastColumn, span.firstColumn + span.length - 1U);
+        firstRow = std::min<std::uint32_t>(firstRow, span.row);
+        lastRow = std::max<std::uint32_t>(lastRow, span.row);
+        cells += span.length;
+    }
+    const std::size_t boundingCells =
+        static_cast<std::size_t>(lastColumn - firstColumn + 1U) *
+        (lastRow - firstRow + 1U);
+    return static_cast<float>(cells) /
+        static_cast<float>(boundingCells);
+}
+
+bool districtTouchesKind(
+    const std::vector<RaidDistrictSnapshot> &districts,
+    const RaidDistrictSnapshot &subject,
+    RaidDistrictKind neighborKind,
+    std::uint32_t columns,
+    std::uint32_t rows)
+{
+    std::vector<std::uint16_t> owners(
+        static_cast<std::size_t>(columns) * rows, 0U);
+    for (const RaidDistrictSnapshot &district : districts)
+        for (const RaidGridSpan &span : district.cells)
+            for (std::uint32_t column = span.firstColumn;
+                 column < span.firstColumn + span.length; ++column)
+                owners[static_cast<std::size_t>(span.row) * columns + column] =
+                    district.instanceId;
+    const auto kindForOwner = [&](std::uint16_t owner)
+    {
+        const auto found = std::find_if(
+            districts.begin(), districts.end(),
+            [owner](const RaidDistrictSnapshot &district)
+            { return district.instanceId == owner; });
+        return found == districts.end()
+            ? RaidDistrictKind::OpenGround : found->kind;
+    };
+    for (const RaidGridSpan &span : subject.cells)
+        for (std::uint32_t column = span.firstColumn;
+             column < span.firstColumn + span.length; ++column)
+        {
+            const auto matches = [&](std::uint32_t nextColumn,
+                                     std::uint32_t nextRow)
+            {
+                return kindForOwner(owners[
+                    static_cast<std::size_t>(nextRow) * columns +
+                    nextColumn]) == neighborKind;
+            };
+            if ((column > 0U && matches(column - 1U, span.row)) ||
+                (column + 1U < columns &&
+                 matches(column + 1U, span.row)) ||
+                (span.row > 0U && matches(column, span.row - 1U)) ||
+                (span.row + 1U < rows &&
+                 matches(column, span.row + 1U)))
+                return true;
+        }
+    return false;
+}
 }
 
 TEST(RaidMapGenerationTest, FixedMapsPreservePublishedBlockers)
@@ -280,11 +350,22 @@ TEST(RaidMapGenerationTest, PublishedOutdoorLayoutRemainsLegalAcrossSeeds)
         EXPECT_EQ(layout.anchorPlacements.size(), anchors.requests.size())
             << "seed " << seed;
         for (const RaidDistrictSnapshot &district : layout.districts)
+        {
             EXPECT_TRUE(districtIsContinuous(
                 district,
                 map.proceduralOutdoor.districtColumns,
                 map.proceduralOutdoor.districtRows))
                 << "seed " << seed << " district " << district.instanceId;
+            EXPECT_GE(districtRectangularFillRatio(district), 0.95F)
+                << "seed " << seed << " district " << district.instanceId;
+            if (district.kind == RaidDistrictKind::Industrial)
+                EXPECT_TRUE(districtTouchesKind(
+                    layout.districts, district, RaidDistrictKind::Logistics,
+                    map.proceduralOutdoor.districtColumns,
+                    map.proceduralOutdoor.districtRows))
+                    << "seed " << seed << " district "
+                    << district.instanceId;
+        }
         EXPECT_GE(layout.ballisticBlockers.size(),
                   map.proceduralOutdoor.minimumBlockers)
             << "seed " << seed;

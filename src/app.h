@@ -316,7 +316,7 @@ private:
     void renderRaidTacticalMap();
     void renderScreenPrimaryButton(
         const char *label);
-    void renderBackground();
+    void renderBackground(bool drawOutdoorDetails = true);
     void renderExtractionPoint();
     void renderRaidSpacePortal();
     void renderStorageCabinet();

@@ -557,6 +557,22 @@ TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {
             "基地外围已清剿 | 撤离后降低基地威胁");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesOutdoorPlaceholderIdentities) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: ENGINEERING EQUIPMENT"),
+            "工程设备");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: ROAD BARRIER"),
+            "道路障碍");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: CONTAINER"),
+            "集装箱");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "PROP: CAR"),
+            "车辆");
+  EXPECT_EQ(localizeUiText(UiLanguage::English, "PROP: FACTORY"),
+            "PROP: FACTORY");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

@@ -3993,8 +3993,16 @@ TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
          RaidMapAnchorKind::PlayerSpawn, {50.0F, 50.0F}},
         {std::string{kRaidAnchorNormalExtraction},
          RaidMapAnchorKind::NormalExtraction, {160.0F, 140.0F}}};
-    const RaidGeneratedMapLayout layout = generateRaidMapLayout(
+    RaidGeneratedMapLayout layout = generateRaidMapLayout(
         map, 771122U, anchors);
+    const RaidTerrainSpan crossingSpan{
+        10U,
+        static_cast<std::uint16_t>(
+            map.proceduralOutdoor.chunkSizeCells - 1U),
+        static_cast<std::uint16_t>(
+            map.proceduralOutdoor.chunkSizeCells + 4U),
+        RaidTerrainKind::Grass};
+    layout.terrainSpans.push_back(crossingSpan);
     const RaidAnchorPlacementSnapshot *player = findRaidAnchorPlacement(
         layout, kRaidAnchorPlayerSpawn);
     const RaidAnchorPlacementSnapshot *extraction = findRaidAnchorPlacement(
@@ -4018,13 +4026,45 @@ TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
              layout.ballisticBlockers[index].size}});
 
     GameplayWorld world{std::move(config)};
+    const ContentRect visibleBounds{
+        {12000.0F, 6800.0F}, {1280.0F, 720.0F}};
     const RaidOutdoorPresentationProjection projection =
-        world.outdoorPresentation({{12000.0F, 6800.0F}, {1280.0F, 720.0F}});
+        world.outdoorPresentation(visibleBounds);
     EXPECT_GT(projection.queriedChunkCount, 0U);
     EXPECT_LE(projection.queriedChunkCount, 12U);
     EXPECT_FALSE(projection.terrainSpans.empty());
     EXPECT_FALSE(projection.roadCells.empty());
     EXPECT_LT(projection.props.size(), layout.props.size());
+
+    const std::uint64_t cachedRevision = projection.cacheRevision;
+    const RaidOutdoorPresentationProjection &cached =
+        world.outdoorPresentation(visibleBounds);
+    EXPECT_EQ(cached.cacheRevision, cachedRevision);
+    EXPECT_EQ(cached.terrainSpans, projection.terrainSpans);
+    EXPECT_EQ(cached.roadCells, projection.roadCells);
+    EXPECT_EQ(cached.props, projection.props);
+
+    const RaidOutdoorPresentationProjection &shifted =
+        world.outdoorPresentation(
+            {{visibleBounds.position.x + 1600.0F,
+              visibleBounds.position.y},
+             visibleBounds.size});
+    EXPECT_GT(shifted.cacheRevision, cachedRevision);
+
+    const float cellWidth = map.worldSize.x /
+        static_cast<float>(map.proceduralOutdoor.columns);
+    const float cellHeight = map.worldSize.y /
+        static_cast<float>(map.proceduralOutdoor.rows);
+    const RaidOutdoorPresentationProjection &crossingProjection =
+        world.outdoorPresentation({
+            {(crossingSpan.firstColumn + crossingSpan.length - 1U) *
+                 cellWidth,
+             crossingSpan.row * cellHeight},
+            {160.0F, 160.0F}});
+    EXPECT_NE(std::find(
+                  crossingProjection.terrainSpans.begin(),
+                  crossingProjection.terrainSpans.end(), crossingSpan),
+              crossingProjection.terrainSpans.end());
 }
 
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)

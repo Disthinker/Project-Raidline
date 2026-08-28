@@ -421,6 +421,30 @@ namespace
         return "UNKNOWN";
     }
 
+    const char *raidOutdoorPropLabel(RaidOutdoorPropKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case RaidOutdoorPropKind::Factory:
+            return "PROP: FACTORY";
+        case RaidOutdoorPropKind::Warehouse:
+            return "PROP: WAREHOUSE";
+        case RaidOutdoorPropKind::Container:
+            return "PROP: CONTAINER";
+        case RaidOutdoorPropKind::EngineeringEquipment:
+            return "PROP: ENGINEERING EQUIPMENT";
+        case RaidOutdoorPropKind::Car:
+            return "PROP: CAR";
+        case RaidOutdoorPropKind::Truck:
+            return "PROP: TRUCK";
+        case RaidOutdoorPropKind::RoadBarrier:
+            return "PROP: ROAD BARRIER";
+        case RaidOutdoorPropKind::Debris:
+            return "PROP: DEBRIS";
+        }
+        return "PROP: UNKNOWN";
+    }
+
     struct BaseSupplyDefinitionProjection
     {
         const ItemDefinition *definition{};
@@ -7016,7 +7040,7 @@ void App::renderStashOverlay()
         SDL_BLENDMODE_NONE);
 }
 
-void App::renderBackground()
+void App::renderBackground(bool drawOutdoorDetails)
 {
     if (gameSession_.world().isAlphaRaidWorld() &&
         !gameSession_.world().inOutdoorRaidSpace())
@@ -7067,8 +7091,12 @@ void App::renderBackground()
         if (gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >=
             3U)
         {
+            if (!drawOutdoorDetails)
+            {
+                return;
+            }
             const Vec2 camera = raidWorldCameraOffset();
-            const RaidOutdoorPresentationProjection projection =
+            const RaidOutdoorPresentationProjection &projection =
                 gameSession_.world().outdoorPresentation(ContentRect{
                     camera,
                     {static_cast<float>(kWindowWidth),
@@ -7844,13 +7872,27 @@ void App::renderBallisticBlockers()
         gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >= 3U)
     {
         const Vec2 camera = raidWorldCameraOffset();
-        const RaidOutdoorPresentationProjection projection =
-            gameSession_.world().outdoorPresentation(ContentRect{
-                camera,
-                {static_cast<float>(kWindowWidth),
-                 static_cast<float>(kWindowHeight)}});
+        const ContentRect visibleWorldBounds{
+            camera,
+            {static_cast<float>(kWindowWidth),
+             static_cast<float>(kWindowHeight)}};
+        const RaidOutdoorPresentationProjection &projection =
+            gameSession_.world().outdoorPresentation(visibleWorldBounds);
+        const auto visible = [&visibleWorldBounds](ContentRect bounds)
+        {
+            return bounds.position.x <
+                    visibleWorldBounds.position.x + visibleWorldBounds.size.x &&
+                bounds.position.x + bounds.size.x >
+                    visibleWorldBounds.position.x &&
+                bounds.position.y <
+                    visibleWorldBounds.position.y + visibleWorldBounds.size.y &&
+                bounds.position.y + bounds.size.y >
+                    visibleWorldBounds.position.y;
+        };
         for (const RaidOutdoorPropSnapshot &prop : projection.props)
         {
+            if (!visible(prop.bounds))
+                continue;
             const SDL_FRect bounds{
                 prop.bounds.position.x,
                 prop.bounds.position.y,
@@ -7889,9 +7931,22 @@ void App::renderBallisticBlockers()
                 SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
                 SDL_RenderRect(renderer_, &bounds);
             }
+            SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
+            uiTextRenderer_.render(
+                renderer_, bounds.x + 3.0F,
+                prop.collidable ? bounds.y + 3.0F : bounds.y - 14.0F,
+                raidOutdoorPropLabel(prop.kind));
         }
+        SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
         for (const RaidOutdoorLabelProjection &label : projection.labels)
         {
+            if (label.position.x < visibleWorldBounds.position.x ||
+                label.position.y < visibleWorldBounds.position.y ||
+                label.position.x > visibleWorldBounds.position.x +
+                    visibleWorldBounds.size.x ||
+                label.position.y > visibleWorldBounds.position.y +
+                    visibleWorldBounds.size.y)
+                continue;
             uiTextRenderer_.render(
                 renderer_, label.position.x, label.position.y,
                 label.text.c_str());
@@ -12432,7 +12487,28 @@ void App::renderRaidTacticalMap()
                 cellHeight + 0.5F};
             if (map.cellRevealed(column, row))
             {
-                SDL_SetRenderDrawColor(renderer_, 31, 52, 52, 245);
+                switch (map.outdoorDistrictKind(column, row).value_or(
+                    RaidDistrictKind::OpenGround))
+                {
+                case RaidDistrictKind::Industrial:
+                    SDL_SetRenderDrawColor(renderer_, 58, 64, 61, 245);
+                    break;
+                case RaidDistrictKind::Logistics:
+                    SDL_SetRenderDrawColor(renderer_, 67, 62, 50, 245);
+                    break;
+                case RaidDistrictKind::Highway:
+                    SDL_SetRenderDrawColor(renderer_, 48, 51, 50, 245);
+                    break;
+                case RaidDistrictKind::OpenGround:
+                    SDL_SetRenderDrawColor(renderer_, 72, 57, 39, 245);
+                    break;
+                case RaidDistrictKind::Greenbelt:
+                    SDL_SetRenderDrawColor(renderer_, 43, 61, 42, 245);
+                    break;
+                case RaidDistrictKind::RoadsideService:
+                    SDL_SetRenderDrawColor(renderer_, 69, 66, 47, 245);
+                    break;
+                }
             }
             else
             {
@@ -12650,9 +12726,6 @@ void App::renderRaidTacticalMap()
 
 void App::renderRaidScreen()
 {
-    // Keep an unshifted ground layer underneath camera and screen-shake
-    // translation so viewport edges never expose black strips.
-    renderBackground();
     const Vec2 cameraOffset = raidWorldCameraOffset();
     const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 activeWorldSize = gameSession_.world().raidSpaceWorldSize();
@@ -12667,10 +12740,14 @@ void App::renderRaidScreen()
         worldViewport.x != 0 || worldViewport.y != 0;
     if (worldIsTranslated)
     {
+        // Keep only the inexpensive ground layer underneath camera and
+        // screen-shake translation so viewport edges never expose black
+        // strips. Outdoor details are queried and drawn once in world space.
+        renderBackground(false);
         static_cast<void>(
             SDL_SetRenderViewport(renderer_, &worldViewport));
-        renderBackground();
     }
+    renderBackground();
     renderExtractionPoint();
     renderRaidSpacePortal();
     renderBallisticBlockers();

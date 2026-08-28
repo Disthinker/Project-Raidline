@@ -397,8 +397,23 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
              index < outdoorLayout_.terrainSpans.size(); ++index)
         {
             const RaidTerrainSpan &span = outdoorLayout_.terrainSpans[index];
-            bucket(span.firstColumn, span.row)
-                .terrainSpanIndices.push_back(index);
+            const std::uint32_t lastColumn = std::min(
+                outdoorColumns_ - 1U,
+                static_cast<std::uint32_t>(span.firstColumn) +
+                    static_cast<std::uint32_t>(span.length) - 1U);
+            const std::uint32_t firstChunkColumn =
+                span.firstColumn / outdoorChunkSizeCells_;
+            const std::uint32_t lastChunkColumn =
+                lastColumn / outdoorChunkSizeCells_;
+            for (std::uint32_t chunkColumn = firstChunkColumn;
+                 chunkColumn <= lastChunkColumn; ++chunkColumn)
+            {
+                outdoorPresentationChunks_[
+                    static_cast<std::size_t>(
+                        span.row / outdoorChunkSizeCells_) *
+                        outdoorChunkColumns_ + chunkColumn]
+                    .terrainSpanIndices.push_back(index);
+            }
         }
         for (std::size_t index{};
              index < outdoorLayout_.roadCells.size(); ++index)
@@ -468,6 +483,14 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                        static_cast<float>(outdoorRows_ - 1U))))
                 .districtLabelIndices.push_back(index);
         }
+        outdoorTerrainVisitStamps_.resize(
+            outdoorLayout_.terrainSpans.size());
+        outdoorRoadVisitStamps_.resize(outdoorLayout_.roadCells.size());
+        outdoorPropVisitStamps_.resize(outdoorLayout_.props.size());
+        outdoorLandmarkVisitStamps_.resize(
+            outdoorLayout_.landmarks.size());
+        outdoorDistrictVisitStamps_.resize(
+            outdoorLayout_.districts.size());
     }
     for (const BallisticBlocker &blocker : ballisticBlockers_)
     {
@@ -1932,10 +1955,9 @@ GameplayWorld::activeInteriorMapProjection() const noexcept
         interior.ballisticBlockers};
 }
 
-RaidOutdoorPresentationProjection GameplayWorld::outdoorPresentation(
+const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
     ContentRect visibleWorldBounds) const
 {
-    RaidOutdoorPresentationProjection result;
     if (!inOutdoorRaidSpace() || outdoorLayout_.layoutVersion < 3U ||
         outdoorPresentationChunks_.empty() ||
         !std::isfinite(visibleWorldBounds.position.x) ||
@@ -1945,7 +1967,9 @@ RaidOutdoorPresentationProjection GameplayWorld::outdoorPresentation(
         visibleWorldBounds.size.x <= 0.0F ||
         visibleWorldBounds.size.y <= 0.0F)
     {
-        return result;
+        outdoorPresentationCache_ = {};
+        outdoorPresentationCacheValid_ = false;
+        return outdoorPresentationCache_;
     }
 
     const float cellWidth = worldSize_.x /
@@ -1981,11 +2005,43 @@ RaidOutdoorPresentationProjection GameplayWorld::outdoorPresentation(
         static_cast<std::uint32_t>(lastY / chunkHeight),
         outdoorChunkRows_ - 1U);
 
-    std::vector<bool> terrainSeen(outdoorLayout_.terrainSpans.size(), false);
-    std::vector<bool> roadSeen(outdoorLayout_.roadCells.size(), false);
-    std::vector<bool> propSeen(outdoorLayout_.props.size(), false);
-    std::vector<bool> landmarkSeen(outdoorLayout_.landmarks.size(), false);
-    std::vector<bool> districtSeen(outdoorLayout_.districts.size(), false);
+    if (outdoorPresentationCacheValid_ &&
+        firstChunkColumn == outdoorPresentationFirstChunkColumn_ &&
+        lastChunkColumn == outdoorPresentationLastChunkColumn_ &&
+        firstChunkRow == outdoorPresentationFirstChunkRow_ &&
+        lastChunkRow == outdoorPresentationLastChunkRow_)
+    {
+        return outdoorPresentationCache_;
+    }
+
+    outdoorPresentationCacheValid_ = true;
+    outdoorPresentationFirstChunkColumn_ = firstChunkColumn;
+    outdoorPresentationLastChunkColumn_ = lastChunkColumn;
+    outdoorPresentationFirstChunkRow_ = firstChunkRow;
+    outdoorPresentationLastChunkRow_ = lastChunkRow;
+    ++outdoorPresentationVisitSequence_;
+    if (outdoorPresentationVisitSequence_ == 0U)
+    {
+        std::fill(outdoorTerrainVisitStamps_.begin(),
+                  outdoorTerrainVisitStamps_.end(), 0U);
+        std::fill(outdoorRoadVisitStamps_.begin(),
+                  outdoorRoadVisitStamps_.end(), 0U);
+        std::fill(outdoorPropVisitStamps_.begin(),
+                  outdoorPropVisitStamps_.end(), 0U);
+        std::fill(outdoorLandmarkVisitStamps_.begin(),
+                  outdoorLandmarkVisitStamps_.end(), 0U);
+        std::fill(outdoorDistrictVisitStamps_.begin(),
+                  outdoorDistrictVisitStamps_.end(), 0U);
+        outdoorPresentationVisitSequence_ = 1U;
+    }
+    const std::uint32_t visitSequence = outdoorPresentationVisitSequence_;
+    auto &result = outdoorPresentationCache_;
+    result.terrainSpans.clear();
+    result.roadCells.clear();
+    result.props.clear();
+    result.labels.clear();
+    result.queriedChunkCount = 0U;
+    result.cacheRevision = ++outdoorPresentationCacheRevision_;
     for (std::uint32_t row = firstChunkRow; row <= lastChunkRow; ++row)
     {
         for (std::uint32_t column = firstChunkColumn;
@@ -1997,29 +2053,29 @@ RaidOutdoorPresentationProjection GameplayWorld::outdoorPresentation(
                     static_cast<std::size_t>(row) *
                         outdoorChunkColumns_ + column];
             for (const std::size_t index : chunk.terrainSpanIndices)
-                if (!terrainSeen[index])
+                if (outdoorTerrainVisitStamps_[index] != visitSequence)
                 {
-                    terrainSeen[index] = true;
+                    outdoorTerrainVisitStamps_[index] = visitSequence;
                     result.terrainSpans.push_back(
                         outdoorLayout_.terrainSpans[index]);
                 }
             for (const std::size_t index : chunk.roadCellIndices)
-                if (!roadSeen[index])
+                if (outdoorRoadVisitStamps_[index] != visitSequence)
                 {
-                    roadSeen[index] = true;
+                    outdoorRoadVisitStamps_[index] = visitSequence;
                     result.roadCells.push_back(
                         outdoorLayout_.roadCells[index]);
                 }
             for (const std::size_t index : chunk.propIndices)
-                if (!propSeen[index])
+                if (outdoorPropVisitStamps_[index] != visitSequence)
                 {
-                    propSeen[index] = true;
+                    outdoorPropVisitStamps_[index] = visitSequence;
                     result.props.push_back(outdoorLayout_.props[index]);
                 }
             for (const std::size_t index : chunk.landmarkIndices)
-                if (!landmarkSeen[index])
+                if (outdoorLandmarkVisitStamps_[index] != visitSequence)
                 {
-                    landmarkSeen[index] = true;
+                    outdoorLandmarkVisitStamps_[index] = visitSequence;
                     const auto &landmark = outdoorLayout_.landmarks[index];
                     result.labels.push_back({
                         landmark.displayName,
@@ -2029,9 +2085,9 @@ RaidOutdoorPresentationProjection GameplayWorld::outdoorPresentation(
                         true});
                 }
             for (const std::size_t index : chunk.districtLabelIndices)
-                if (!districtSeen[index])
+                if (outdoorDistrictVisitStamps_[index] != visitSequence)
                 {
-                    districtSeen[index] = true;
+                    outdoorDistrictVisitStamps_[index] = visitSequence;
                     result.labels.push_back({
                         outdoorLayout_.districts[index].displayName,
                         outdoorLayout_.districts[index].labelPosition,
