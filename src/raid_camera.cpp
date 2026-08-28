@@ -2,9 +2,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace
 {
+bool finite(Vec2 value) noexcept
+{
+    return std::isfinite(value.x) && std::isfinite(value.y);
+}
+
 float cameraAxis(float focus, float world, float viewport) noexcept
 {
     if (!std::isfinite(focus) || !std::isfinite(world) ||
@@ -36,4 +42,44 @@ Vec2 raidScreenToWorld(Vec2 screenPosition, Vec2 cameraOffset) noexcept
 {
     return {screenPosition.x + cameraOffset.x,
             screenPosition.y + cameraOffset.y};
+}
+
+Rect raidReticleWorldBounds(
+    Vec2 cameraOffset,
+    Vec2 worldSize,
+    Vec2 viewportSize,
+    float inset) noexcept
+{
+    if (!finite(cameraOffset) || !finite(worldSize) ||
+        !finite(viewportSize) || worldSize.x <= 0.0F ||
+        worldSize.y <= 0.0F || viewportSize.x <= 0.0F ||
+        viewportSize.y <= 0.0F || !std::isfinite(inset))
+    {
+        return {};
+    }
+
+    const float safeInset = std::max(0.0F, inset);
+    const auto axisBounds = [safeInset](
+                                float camera,
+                                float world,
+                                float viewport)
+    {
+        const float visibleStart = std::clamp(camera, 0.0F, world);
+        const float visibleEnd = std::clamp(
+            camera + viewport, visibleStart, world);
+        const float midpoint = (visibleStart + visibleEnd) * 0.5F;
+        const float minimum = std::min(
+            visibleStart + safeInset, midpoint);
+        const float maximum = std::max(
+            visibleEnd - safeInset, midpoint);
+        return std::pair{minimum, maximum};
+    };
+
+    const auto [minimumX, maximumX] = axisBounds(
+        cameraOffset.x, worldSize.x, viewportSize.x);
+    const auto [minimumY, maximumY] = axisBounds(
+        cameraOffset.y, worldSize.y, viewportSize.y);
+    return Rect{
+        {minimumX, minimumY},
+        {maximumX - minimumX, maximumY - minimumY}};
 }

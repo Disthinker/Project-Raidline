@@ -48,3 +48,28 @@ TEST(RaidCameraTest, NonFiniteInputFallsBackToStableOrigin)
     EXPECT_FLOAT_EQ(offset.x, 0.0F);
     EXPECT_FLOAT_EQ(offset.y, 0.0F);
 }
+
+TEST(RaidCameraTest, ReticleBoundsStayInsetInsideVisibleWorld)
+{
+    const Rect bounds = raidReticleWorldBounds(
+        {640.0F, 360.0F},
+        {2560.0F, 1440.0F},
+        {1280.0F, 720.0F},
+        48.0F);
+
+    EXPECT_FLOAT_EQ(bounds.position.x, 688.0F);
+    EXPECT_FLOAT_EQ(bounds.position.y, 408.0F);
+    EXPECT_FLOAT_EQ(bounds.size.x, 1184.0F);
+    EXPECT_FLOAT_EQ(bounds.size.y, 624.0F);
+}
+
+TEST(RaidCameraTest, ReticleBoundsCollapseSafelyForTinyWorld)
+{
+    const Rect bounds = raidReticleWorldBounds(
+        {}, {96.0F, 64.0F}, {1280.0F, 720.0F}, 48.0F);
+
+    EXPECT_FLOAT_EQ(bounds.position.x, 48.0F);
+    EXPECT_FLOAT_EQ(bounds.position.y, 32.0F);
+    EXPECT_FLOAT_EQ(bounds.size.x, 0.0F);
+    EXPECT_FLOAT_EQ(bounds.size.y, 0.0F);
+}

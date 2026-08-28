@@ -1123,6 +1123,10 @@ void GameplayWorld::update(
         deltaTime,
         input.aimMotionDelta,
         AimControlMode::Direct);
+    if (!spaceTransitionedLastUpdate_ && input.aimWorldBounds.has_value())
+    {
+        weaponAim_.constrainToBounds(*input.aimWorldBounds);
+    }
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。

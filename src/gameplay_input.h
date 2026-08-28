@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "item_definition.h"
+#include "rect.h"
 #include "vec2.h"
 
 struct GameplayInput
@@ -31,6 +32,11 @@ struct GameplayInput
     // SDL relative mouse motion is an explicit per-frame delta. Simulation
     // tests and legacy callers may keep using the absolute position above.
     std::optional<Vec2> aimMotionDelta;
+
+    // Client-provided world-space visibility constraint. Gameplay simulation
+    // clamps both the actual reticle and its control target to this rectangle,
+    // so rendering and authoritative firing direction cannot diverge.
+    std::optional<Rect> aimWorldBounds;
 
     // 只在 F 从未按下变为按下的这一帧为 true。
     bool interactJustPressed{};

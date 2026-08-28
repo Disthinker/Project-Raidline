@@ -1412,6 +1412,28 @@ TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)
     EXPECT_LT(world.weaponAimWorldPosition().x, displacedAimX);
 }
 
+TEST(GameplayWorldTest, RelativeAimCannotLeaveClientVisibleBounds)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    GameplayInput initialize{};
+    initialize.aimWorldPosition = Vec2{640.0F, 360.0F};
+    initialize.aimWorldBounds = Rect{
+        {48.0F, 48.0F}, {1184.0F, 624.0F}};
+    world.update(initialize, 0.0F);
+
+    GameplayInput outward = initialize;
+    outward.aimMotionDelta = Vec2{5000.0F, -5000.0F};
+    world.update(outward, 1.0F / 60.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, 1232.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, 48.0F);
+
+    GameplayInput reverse = initialize;
+    reverse.aimMotionDelta = Vec2{-20.0F, 20.0F};
+    world.update(reverse, 1.0F / 60.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, 1212.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, 68.0F);
+}
+
 // 斜向射击
 TEST(GameplayWorldTest, FireAfterDiagonalFacingMovesBallisticDiagonally)
 {

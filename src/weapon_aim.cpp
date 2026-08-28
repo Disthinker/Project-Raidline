@@ -410,6 +410,50 @@ void WeaponAimState::reconfigure(WeaponAimConfig config)
     }
 }
 
+void WeaponAimState::constrainToBounds(Rect bounds) noexcept
+{
+    if (!initialized_ || !finite(bounds.position) ||
+        !finite(bounds.size) || bounds.size.x < 0.0F ||
+        bounds.size.y < 0.0F)
+    {
+        return;
+    }
+
+    const Vec2 minimum = bounds.position;
+    const Vec2 maximum{
+        bounds.position.x + bounds.size.x,
+        bounds.position.y + bounds.size.y};
+    const auto clampPosition = [&](Vec2 value)
+    {
+        return Vec2{
+            std::clamp(value.x, minimum.x, maximum.x),
+            std::clamp(value.y, minimum.y, maximum.y)};
+    };
+    currentWorldPosition_ = clampPosition(currentWorldPosition_);
+    targetWorldPosition_ = clampPosition(targetWorldPosition_);
+
+    const auto removeOutwardVelocity = [&](Vec2 &velocity)
+    {
+        if ((currentWorldPosition_.x <= minimum.x && velocity.x < 0.0F) ||
+            (currentWorldPosition_.x >= maximum.x && velocity.x > 0.0F))
+        {
+            velocity.x = 0.0F;
+        }
+        if ((currentWorldPosition_.y <= minimum.y && velocity.y < 0.0F) ||
+            (currentWorldPosition_.y >= maximum.y && velocity.y > 0.0F))
+        {
+            velocity.y = 0.0F;
+        }
+    };
+    removeOutwardVelocity(controlVelocity_);
+    removeOutwardVelocity(recoilVelocity_);
+    lastDirection_ = normalizedOr(
+        Vec2{
+            currentWorldPosition_.x - shootingOrigin_.x,
+            currentWorldPosition_.y - shootingOrigin_.y},
+        lastDirection_);
+}
+
 Vec2 WeaponAimState::actualWorldPosition() const noexcept
 {
     return currentWorldPosition_;

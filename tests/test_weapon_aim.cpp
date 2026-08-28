@@ -265,3 +265,21 @@ TEST(WeaponAimStateTest, AdsAndActualRangeProjectionAreDeterministic)
     EXPECT_TRUE(aim.beyondMaximumRange());
     EXPECT_FLOAT_EQ(aim.damageMultiplier(), 0.25F);
 }
+
+TEST(WeaponAimStateTest, VisibleBoundsClampAimAndDiscardOutwardVelocity)
+{
+    WeaponAimState aim;
+    aim.update(Vec2{300.0F, 200.0F}, kOrigin, kWorld, false, 0.0F);
+    aim.update(
+        Vec2{300.0F, 200.0F}, kOrigin, kWorld, false, 0.1F,
+        Vec2{1000.0F, -1000.0F});
+
+    aim.constrainToBounds(Rect{{100.0F, 80.0F}, {300.0F, 200.0F}});
+
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, 400.0F);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y, 80.0F);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, 400.0F);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().y, 80.0F);
+    EXPECT_FLOAT_EQ(aim.controlVelocity().x, 0.0F);
+    EXPECT_FLOAT_EQ(aim.controlVelocity().y, 0.0F);
+}

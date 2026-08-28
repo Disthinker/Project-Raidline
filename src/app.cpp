@@ -29,6 +29,7 @@ namespace
 {
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
+    constexpr float kReticleViewportInset{48.0F};
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
@@ -1350,11 +1351,18 @@ GameplayInput App::makeGameplayInput() const
     input.aimDownSights = input_.isSecondaryPointerPressed();
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
 
+    const Vec2 aimCamera = raidWorldCameraOffset();
     if (pointerWorldPosition_.has_value())
     {
         input.aimWorldPosition = raidScreenToWorld(
-            *pointerWorldPosition_, raidWorldCameraOffset());
+            *pointerWorldPosition_, aimCamera);
     }
+    input.aimWorldBounds = raidReticleWorldBounds(
+        aimCamera,
+        gameSession_.world().raidSpaceWorldSize(),
+        {static_cast<float>(kWindowWidth),
+         static_cast<float>(kWindowHeight)},
+        kReticleViewportInset);
 
     if (relativeMouseModeActive_ &&
         !inventoryOverlayState_.isOpen() &&

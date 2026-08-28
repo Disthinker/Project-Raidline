@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "rect.h"
 #include "stable_random.h"
 #include "vec2.h"
 
@@ -52,6 +53,7 @@ public:
         Vec2 direction,
         Vec2 worldSize) noexcept;
     void reconfigure(WeaponAimConfig config);
+    void constrainToBounds(Rect bounds) noexcept;
 
     [[nodiscard]] Vec2 actualWorldPosition() const noexcept;
     [[nodiscard]] Vec2 targetWorldPosition() const noexcept;
