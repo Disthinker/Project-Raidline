@@ -330,10 +330,11 @@ TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)
     ASSERT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const std::string serialized = serializeProfileEnvelope(
+        profile, publishedContentRegistry().contentVersion());
+    EXPECT_LT(serialized.size(), 4U * 1024U * 1024U);
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
-            profile, publishedContentRegistry().contentVersion()),
-        publishedContentRegistry());
+        serialized, publishedContentRegistry());
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
@@ -1450,7 +1451,13 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
     ASSERT_FALSE(
         profile.pendingRaid->spatialLayout.ballisticBlockers.empty());
     ASSERT_FALSE(profile.pendingRaid->spatialLayout.roadCells.empty());
-    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 2U);
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 3U);
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.districts.size(), 8U);
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.landmarks.size(), 3U);
+    EXPECT_FALSE(profile.pendingRaid->spatialLayout.terrainSpans.empty());
+    EXPECT_FALSE(profile.pendingRaid->spatialLayout.props.empty());
+    EXPECT_FALSE(
+        profile.pendingRaid->spatialLayout.anchorPlacements.empty());
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1476,6 +1483,123 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
         publishedContentRegistry());
     EXPECT_FALSE(corrupt.profile.has_value());
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-procedural-layout-v34", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-layout-v2-raid",
+            "save-layout-v2-settle",
+            783319U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-layout-v2-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    PendingRaidSnapshot &raid = *profile.pendingRaid;
+    const MapDefinition &publishedMap = content.map(raid.mapDefinitionId);
+    raid.rulesVersion = "procedural-playable-outdoor-layout-21";
+    const auto pair = std::find_if(
+        publishedMap.spawnExtractionPairs.begin(),
+        publishedMap.spawnExtractionPairs.end(),
+        [&](const SpawnExtractionPairDefinition &candidate)
+        { return candidate.id == raid.spawnExtractionPairId; });
+    ASSERT_NE(pair, publishedMap.spawnExtractionPairs.end());
+    raid.playerSpawn = pair->playerSpawn;
+    raid.extractionPoint = pair->extractionPoint;
+    const EnemyDeploymentDefinition &deployment =
+        content.enemyDeployment(raid.enemyDeploymentId);
+    std::size_t outdoorEnemyIndex{};
+    for (RaidEnemySnapshot &enemy : raid.enemies)
+        if (enemy.spaceId == outdoorRaidSpaceId())
+            enemy.position = deployment.enemies[outdoorEnemyIndex++].position;
+    for (RaidLootSnapshot &loot : raid.loot)
+    {
+        if (loot.spaceId != outdoorRaidSpaceId())
+            continue;
+        loot.position = loot.requiresHighRisk
+            ? publishedMap.highRisk.advancedLootSlots[
+                  loot.slotIndex - publishedMap.raidLootSlots.size()].position
+            : publishedMap.raidLootSlots[loot.slotIndex].position;
+    }
+    if (raid.rescue.has_value())
+        raid.rescue->transferPoint = publishedMap.rescue->transferPoint;
+
+    RaidMapGenerationAnchors anchors;
+    anchors.playerSpawn = raid.playerSpawn;
+    anchors.extractionPoint = raid.extractionPoint;
+    anchors.occupiedRegions = {
+        publishedMap.highRisk.emergencyExtractionPoint,
+        publishedMap.highRisk.conditionalExtractionPoint,
+        publishedMap.highRisk.activationControlPoint,
+        publishedMap.highRisk.advancedResourceArea};
+    const auto addRegion = [&anchors](ContentRect region)
+    {
+        anchors.reachablePoints.push_back({
+            region.position.x + region.size.x * 0.5F,
+            region.position.y + region.size.y * 0.5F});
+    };
+    for (const RaidEnemySnapshot &enemy : raid.enemies)
+        if (enemy.spaceId == outdoorRaidSpaceId())
+        {
+            anchors.occupiedRegions.push_back({enemy.position, enemy.size});
+            addRegion({enemy.position, enemy.size});
+        }
+    for (const RaidLootSnapshot &loot : raid.loot)
+        if (loot.spaceId == outdoorRaidSpaceId())
+            anchors.reachablePoints.push_back(loot.position);
+    for (const EnemySpawnDefinition &spawn : publishedMap.highRisk.pressureSpawns)
+        anchors.occupiedRegions.push_back({spawn.position, spawn.size});
+    addRegion(publishedMap.highRisk.emergencyExtractionPoint);
+    addRegion(publishedMap.highRisk.conditionalExtractionPoint);
+    addRegion(publishedMap.highRisk.activationControlPoint);
+    addRegion(publishedMap.highRisk.advancedResourceArea);
+    if (raid.rescue.has_value())
+    {
+        anchors.occupiedRegions.push_back(raid.rescue->transferPoint);
+        addRegion(raid.rescue->transferPoint);
+    }
+    for (std::size_t index{}; index < raid.interiors.size(); ++index)
+    {
+        const RaidExteriorPlacementDefinition *placement =
+            selectRaidExteriorPlacement(
+                publishedMap.interiors[index], raid.seed, index, anchors);
+        ASSERT_NE(placement, nullptr);
+        raid.interiors[index].exteriorEntrance = placement->entrance;
+        raid.interiors[index].exteriorReturn = placement->returnPoint;
+        appendRaidExteriorPlacementAnchors(anchors, *placement);
+    }
+
+    MapDefinition legacyMap = publishedMap;
+    legacyMap.worldSize = {2560.0F, 1440.0F};
+    legacyMap.walkableBounds = {{0.0F, 0.0F}, {2560.0F, 1440.0F}};
+    legacyMap.proceduralOutdoor.layoutVersion = 2U;
+    legacyMap.proceduralOutdoor.columns = 32U;
+    legacyMap.proceduralOutdoor.rows = 18U;
+    legacyMap.proceduralOutdoor.minimumBranchRoads = 3U;
+    legacyMap.proceduralOutdoor.maximumBranchRoads = 5U;
+    legacyMap.proceduralOutdoor.minimumBlockers = 70U;
+    legacyMap.proceduralOutdoor.maximumBlockers = 95U;
+    raid.spatialLayout = generateRaidMapLayout(legacyMap, raid.seed, anchors);
+    ASSERT_EQ(raid.spatialLayout.layoutVersion, 2U);
+    const RaidGeneratedMapLayout expected = raid.spatialLayout;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-playable-outdoor-layout-content-43",
+            34U),
+        content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(loaded.profile->pendingRaid->spatialLayout, expected);
+    EXPECT_EQ(loaded.profile->pendingRaid->rulesVersion,
+              "procedural-playable-outdoor-layout-21");
 }
 
 TEST(SaveRepositoryTest, SchemaV24RoundTripsLostRaidOwnershipAndReceipt)
@@ -2221,8 +2345,65 @@ TEST(SaveRepositoryTest,
     EXPECT_FALSE(profile.pendingRaid->interiors[1].layoutKnown);
     profile.pendingRaid->rulesVersion =
         "raid-second-representative-location-15";
+    const MapDefinition &legacyMap = content.map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    const auto pair = std::find_if(
+        legacyMap.spawnExtractionPairs.begin(),
+        legacyMap.spawnExtractionPairs.end(),
+        [&](const SpawnExtractionPairDefinition &candidate)
+        {
+            return candidate.id ==
+                profile.pendingRaid->spawnExtractionPairId;
+        });
+    ASSERT_NE(pair, legacyMap.spawnExtractionPairs.end());
+    profile.pendingRaid->playerSpawn = pair->playerSpawn;
+    profile.pendingRaid->extractionPoint = pair->extractionPoint;
+    const EnemyDeploymentDefinition &deployment = content.enemyDeployment(
+        profile.pendingRaid->enemyDeploymentId);
+    std::size_t outdoorEnemyIndex{};
+    for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
+    {
+        if (enemy.spaceId == outdoorRaidSpaceId())
+            enemy.position = deployment.enemies[outdoorEnemyIndex++].position;
+    }
+    for (RaidLootSnapshot &loot : profile.pendingRaid->loot)
+    {
+        if (loot.spaceId != outdoorRaidSpaceId())
+            continue;
+        loot.position = loot.requiresHighRisk
+            ? legacyMap.highRisk.advancedLootSlots[
+                  loot.slotIndex - legacyMap.raidLootSlots.size()].position
+            : legacyMap.raidLootSlots[loot.slotIndex].position;
+    }
+    if (profile.pendingRaid->rescue.has_value())
+        profile.pendingRaid->rescue->transferPoint =
+            legacyMap.rescue->transferPoint;
+    for (std::size_t index{};
+         index < profile.pendingRaid->interiors.size(); ++index)
+    {
+        const RaidExteriorPlacementDefinition &placement =
+            content.map(MapDefinitionId{"map.raid.frontier_exchange"})
+                .interiors[index].exteriorPlacements.front();
+        profile.pendingRaid->interiors[index].exteriorEntrance =
+            placement.entrance;
+        profile.pendingRaid->interiors[index].exteriorReturn =
+            placement.returnPoint;
+    }
     profile.pendingRaid->spatialLayout.layoutVersion = 0U;
+    profile.pendingRaid->spatialLayout.districts.clear();
+    profile.pendingRaid->spatialLayout.terrainSpans.clear();
     profile.pendingRaid->spatialLayout.roadCells.clear();
+    profile.pendingRaid->spatialLayout.props.clear();
+    profile.pendingRaid->spatialLayout.anchorPlacements.clear();
+    profile.pendingRaid->spatialLayout.landmarks.clear();
+    profile.pendingRaid->spatialLayout.ballisticBlockers.clear();
+    for (std::uint32_t index{}; index < 18U; ++index)
+    {
+        profile.pendingRaid->spatialLayout.ballisticBlockers.push_back({
+            {24000.0F + static_cast<float>(index) * 12.0F, 13600.0F},
+            {4.0F, 4.0F}});
+    }
+    profile.pendingRaid->spatialLayout.usedFallback = false;
     profile.pendingRaid->spatialLayout.fallbackReason =
         RaidMapFallbackReason::None;
     profile.pendingRaid->spatialLayout.layoutHash = raidMapLayoutHash(
@@ -2370,54 +2551,43 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
     raid.interiors.front().exteriorEntrance = definition.exteriorEntrance;
     raid.interiors.front().exteriorReturn = definition.exteriorReturn;
 
-    RaidMapGenerationAnchors anchors;
-    anchors.playerSpawn = raid.playerSpawn;
-    anchors.extractionPoint = raid.extractionPoint;
-    anchors.occupiedRegions = {
-        map.highRisk.emergencyExtractionPoint,
-        map.highRisk.conditionalExtractionPoint,
-        map.highRisk.activationControlPoint,
-        map.highRisk.advancedResourceArea};
-    const auto addRegion = [&anchors](ContentRect region)
-    {
-        anchors.reachablePoints.push_back(
-            {region.position.x + region.size.x * 0.5F,
-             region.position.y + region.size.y * 0.5F});
-    };
-    for (const RaidEnemySnapshot &enemy : raid.enemies)
+    const auto pair = std::find_if(
+        map.spawnExtractionPairs.begin(), map.spawnExtractionPairs.end(),
+        [&](const SpawnExtractionPairDefinition &candidate)
+        { return candidate.id == raid.spawnExtractionPairId; });
+    ASSERT_NE(pair, map.spawnExtractionPairs.end());
+    raid.playerSpawn = pair->playerSpawn;
+    raid.extractionPoint = pair->extractionPoint;
+    const EnemyDeploymentDefinition &deployment =
+        content.enemyDeployment(raid.enemyDeploymentId);
+    std::size_t outdoorEnemyIndex{};
+    for (RaidEnemySnapshot &enemy : raid.enemies)
     {
         if (enemy.spaceId == outdoorRaidSpaceId())
-        {
-            anchors.occupiedRegions.push_back(
-                {enemy.position, enemy.size});
-            addRegion({enemy.position, enemy.size});
-        }
+            enemy.position = deployment.enemies[outdoorEnemyIndex++].position;
     }
-    for (const RaidLootSnapshot &loot : raid.loot)
+    for (RaidLootSnapshot &loot : raid.loot)
     {
-        if (loot.spaceId == outdoorRaidSpaceId())
-        {
-            anchors.reachablePoints.push_back(loot.position);
-        }
+        if (loot.spaceId != outdoorRaidSpaceId())
+            continue;
+        loot.position = loot.requiresHighRisk
+            ? map.highRisk.advancedLootSlots[
+                  loot.slotIndex - map.raidLootSlots.size()].position
+            : map.raidLootSlots[loot.slotIndex].position;
     }
-    for (const EnemySpawnDefinition &spawn : map.highRisk.pressureSpawns)
-    {
-        anchors.occupiedRegions.push_back({spawn.position, spawn.size});
-    }
-    addRegion(map.highRisk.emergencyExtractionPoint);
-    addRegion(map.highRisk.conditionalExtractionPoint);
-    addRegion(map.highRisk.activationControlPoint);
-    addRegion(map.highRisk.advancedResourceArea);
     if (raid.rescue.has_value())
-    {
-        anchors.occupiedRegions.push_back(raid.rescue->transferPoint);
-        addRegion(raid.rescue->transferPoint);
-    }
-    anchors.occupiedRegions.push_back(definition.exteriorEntrance);
-    addRegion(definition.exteriorEntrance);
-    raid.spatialLayout = generateRaidMapLayout(map, raid.seed, anchors);
+        raid.rescue->transferPoint = map.rescue->transferPoint;
+
+    raid.spatialLayout = {};
     raid.spatialLayout.layoutVersion = 0U;
-    raid.spatialLayout.roadCells.clear();
+    raid.spatialLayout.generationAttempt = 1U;
+    for (std::uint32_t index{}; index < 18U; ++index)
+    {
+        raid.spatialLayout.ballisticBlockers.push_back({
+            {24000.0F + static_cast<float>(index) * 12.0F, 13600.0F},
+            {4.0F, 4.0F}});
+    }
+    raid.spatialLayout.usedFallback = false;
     raid.spatialLayout.fallbackReason = RaidMapFallbackReason::None;
     raid.spatialLayout.layoutHash = raidMapLayoutHash(
         raid.spatialLayout.ballisticBlockers);

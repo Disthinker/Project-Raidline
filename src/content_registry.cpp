@@ -164,6 +164,26 @@ namespace
         fail(std::string{field} + " is not a supported resident profession");
     }
 
+    RaidDistrictKind parseRaidDistrictKind(
+        const Json &parent,
+        std::string_view field)
+    {
+        const std::string value = requiredString(parent, field);
+        if (value == "industrial")
+            return RaidDistrictKind::Industrial;
+        if (value == "logistics")
+            return RaidDistrictKind::Logistics;
+        if (value == "highway")
+            return RaidDistrictKind::Highway;
+        if (value == "open_ground")
+            return RaidDistrictKind::OpenGround;
+        if (value == "greenbelt")
+            return RaidDistrictKind::Greenbelt;
+        if (value == "roadside_service")
+            return RaidDistrictKind::RoadsideService;
+        fail(std::string{field} + " is not a supported Raid district kind");
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -1921,31 +1941,114 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 const Json &procedural =
                     requiredObject(mapValue, "procedural_outdoor");
-                definition.proceduralOutdoor = ProceduralOutdoorDefinition{
-                    true,
-                    requiredPositiveUint(procedural, "layout_version"),
-                    requiredPositiveUint(procedural, "columns"),
-                    requiredPositiveUint(procedural, "rows"),
-                    requiredPositiveUint(
-                        procedural, "minimum_branch_roads"),
-                    requiredPositiveUint(
-                        procedural, "maximum_branch_roads"),
-                    requiredPositiveUint(procedural, "minimum_blockers"),
-                    requiredPositiveUint(procedural, "maximum_blockers"),
-                    requiredPositiveUint(procedural, "maximum_attempts"),
-                    optionalUint(procedural, "anchor_clearance_cells")};
-                const auto &value = definition.proceduralOutdoor;
+                auto &value = definition.proceduralOutdoor;
+                value.enabled = true;
+                value.layoutVersion =
+                    requiredPositiveUint(procedural, "layout_version");
+                value.columns = requiredPositiveUint(procedural, "columns");
+                value.rows = requiredPositiveUint(procedural, "rows");
+                value.districtColumns =
+                    requiredPositiveUint(procedural, "district_columns");
+                value.districtRows =
+                    requiredPositiveUint(procedural, "district_rows");
+                value.chunkSizeCells =
+                    requiredPositiveUint(procedural, "chunk_size_cells");
+                value.minimumBranchRoads = requiredPositiveUint(
+                    procedural, "minimum_branch_roads");
+                value.maximumBranchRoads = requiredPositiveUint(
+                    procedural, "maximum_branch_roads");
+                value.minimumBlockers =
+                    requiredPositiveUint(procedural, "minimum_blockers");
+                value.maximumBlockers =
+                    requiredPositiveUint(procedural, "maximum_blockers");
+                value.minimumDecorativeProps = requiredPositiveUint(
+                    procedural, "minimum_decorative_props");
+                value.maximumDecorativeProps = requiredPositiveUint(
+                    procedural, "maximum_decorative_props");
+                value.minimumRoadObstacles = requiredPositiveUint(
+                    procedural, "minimum_road_obstacles");
+                value.maximumRoadObstacles = requiredPositiveUint(
+                    procedural, "maximum_road_obstacles");
+                value.minimumPuddlePatches = requiredPositiveUint(
+                    procedural, "minimum_puddle_patches");
+                value.maximumPuddlePatches = requiredPositiveUint(
+                    procedural, "maximum_puddle_patches");
+                value.maximumAttempts =
+                    requiredPositiveUint(procedural, "maximum_attempts");
+                value.anchorClearanceCells =
+                    optionalUint(procedural, "anchor_clearance_cells");
+                std::set<std::string> districtIds;
+                std::uint32_t districtInstances{};
+                for (const Json &district :
+                     requiredArray(procedural, "district_archetypes"))
+                {
+                    RaidDistrictArchetypeDefinition archetype;
+                    archetype.id = requiredString(district, "id");
+                    archetype.displayName =
+                        requiredString(district, "display_name");
+                    archetype.kind = parseRaidDistrictKind(district, "kind");
+                    archetype.instanceCount =
+                        requiredPositiveUint(district, "instance_count");
+                    if (!districtIds.insert(archetype.id).second ||
+                        archetype.instanceCount > 4U)
+                    {
+                        fail("procedural district archetype is invalid");
+                    }
+                    districtInstances += archetype.instanceCount;
+                    value.districtArchetypes.push_back(std::move(archetype));
+                }
+                std::set<std::string> landmarkIds;
+                for (const Json &landmark :
+                     requiredArray(procedural, "landmark_templates"))
+                {
+                    RaidLandmarkTemplateDefinition landmarkDefinition;
+                    landmarkDefinition.id = requiredString(landmark, "id");
+                    landmarkDefinition.displayName =
+                        requiredString(landmark, "display_name");
+                    landmarkDefinition.districtKind =
+                        parseRaidDistrictKind(landmark, "district_kind");
+                    landmarkDefinition.footprintCells =
+                        parseVec2(landmark, "footprint_cells");
+                    if (!landmarkIds.insert(landmarkDefinition.id).second ||
+                        landmarkDefinition.footprintCells.x < 4.0F ||
+                        landmarkDefinition.footprintCells.y < 4.0F ||
+                        landmarkDefinition.footprintCells.x > 24.0F ||
+                        landmarkDefinition.footprintCells.y > 24.0F)
+                    {
+                        fail("procedural landmark template is invalid");
+                    }
+                    value.landmarkTemplates.push_back(
+                        std::move(landmarkDefinition));
+                }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
-                if (value.layoutVersion != 2U ||
-                    value.columns < 8U || value.columns > 48U ||
-                    value.rows < 6U || value.rows > 18U ||
+                if (value.layoutVersion != 3U ||
+                    value.columns < 8U || value.columns > 512U ||
+                    value.rows < 6U || value.rows > 288U ||
+                    value.districtColumns < 4U ||
+                    value.districtRows < 3U ||
+                    value.columns % value.districtColumns != 0U ||
+                    value.rows % value.districtRows != 0U ||
+                    value.chunkSizeCells < 4U ||
+                    value.chunkSizeCells > 32U ||
+                    value.columns % value.chunkSizeCells != 0U ||
                     value.minimumBranchRoads > value.maximumBranchRoads ||
-                    value.maximumBranchRoads > 8U ||
+                    value.maximumBranchRoads > 16U ||
                     value.minimumBlockers > value.maximumBlockers ||
                     value.maximumBlockers > cells / 2U ||
+                    value.minimumDecorativeProps >
+                        value.maximumDecorativeProps ||
+                    value.maximumDecorativeProps > cells ||
+                    value.minimumRoadObstacles >
+                        value.maximumRoadObstacles ||
+                    value.maximumRoadObstacles > cells / 4U ||
+                    value.minimumPuddlePatches >
+                        value.maximumPuddlePatches ||
+                    value.maximumPuddlePatches > cells / 4U ||
                     value.maximumAttempts > 32U ||
-                    value.anchorClearanceCells > 2U)
+                    value.anchorClearanceCells > 4U ||
+                    districtInstances != 8U ||
+                    value.landmarkTemplates.size() != 3U)
                 {
                     fail("procedural outdoor map settings are invalid");
                 }

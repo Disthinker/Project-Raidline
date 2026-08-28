@@ -13,7 +13,16 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT",
+    {{"FREIGHT EXCHANGE COMPLEX", "货运换装中心"},
+     {"HIGHWAY SERVICE PLAZA", "公路服务中心"},
+     {"CONSTRUCTION OPEN GROUND", "施工空地"},
+     {"HIGHWAY INTERCHANGE", "公路换装区"},
+     {"DRAINAGE GREENBELT", "排水绿地"},
+     {"FABRICATION PLANT", "制造厂区"},
+     {"INDUSTRIAL PLANT", "工业厂区"},
+     {"LOGISTICS YARD", "物流堆场"},
+     {"ROADSIDE SERVICE", "公路服务区"},
+     {"PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT",
       "基地外围已清剿 | 撤离后降低基地威胁"},
      {"PERIMETER SWEEP | INITIAL HOSTILES REMAINING ",
       "基地外围清剿 | 初始敌人剩余 "},

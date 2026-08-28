@@ -603,7 +603,10 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "procedural-playable-outdoor-layout-21";
+    snapshot.rulesVersion = map->proceduralOutdoor.enabled &&
+            map->proceduralOutdoor.layoutVersion >= 3U
+        ? "procedural-frontier-district-layout-22"
+        : "procedural-playable-outdoor-layout-21";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -889,82 +892,277 @@ DeployReceipt executeDeploy(
     RaidMapGenerationAnchors generationAnchors;
     generationAnchors.playerSpawn = snapshot.playerSpawn;
     generationAnchors.extractionPoint = snapshot.extractionPoint;
-    generationAnchors.occupiedRegions = {
-        map->highRisk.emergencyExtractionPoint,
-        map->highRisk.conditionalExtractionPoint,
-        map->highRisk.activationControlPoint,
-        map->highRisk.advancedResourceArea};
-    for (const RaidEnemySnapshot &enemy : snapshot.enemies)
+    const bool districtLayout = map->proceduralOutdoor.enabled &&
+        map->proceduralOutdoor.layoutVersion >= 3U;
+    if (districtLayout)
     {
-        if (enemy.spaceId != outdoorRaidSpaceId())
+        const auto addRequest = [&generationAnchors](
+                                    std::string id,
+                                    RaidMapAnchorKind kind,
+                                    Vec2 size)
         {
-            continue;
-        }
-        generationAnchors.occupiedRegions.push_back(
-            ContentRect{enemy.position, enemy.size});
-        generationAnchors.reachablePoints.push_back(
-            Vec2{enemy.position.x + enemy.size.x * 0.5F,
-                 enemy.position.y + enemy.size.y * 0.5F});
-    }
-    for (const RaidLootSnapshot &loot : snapshot.loot)
-    {
-        if (loot.spaceId != outdoorRaidSpaceId())
+            generationAnchors.requests.push_back(
+                RaidMapAnchorRequest{std::move(id), kind, size});
+        };
+        addRequest(std::string{kRaidAnchorPlayerSpawn},
+                   RaidMapAnchorKind::PlayerSpawn,
+                   {50.0F, 50.0F});
+        addRequest(std::string{kRaidAnchorNormalExtraction},
+                   RaidMapAnchorKind::NormalExtraction,
+                   snapshot.extractionPoint.size);
+        addRequest(std::string{kRaidAnchorEmergencyExtraction},
+                   RaidMapAnchorKind::EmergencyExtraction,
+                   map->highRisk.emergencyExtractionPoint.size);
+        addRequest(std::string{kRaidAnchorConditionalExtraction},
+                   RaidMapAnchorKind::ConditionalExtraction,
+                   map->highRisk.conditionalExtractionPoint.size);
+        addRequest(std::string{kRaidAnchorHighRiskControl},
+                   RaidMapAnchorKind::HighRiskControl,
+                   map->highRisk.activationControlPoint.size);
+        addRequest(std::string{kRaidAnchorAdvancedResource},
+                   RaidMapAnchorKind::AdvancedResource,
+                   map->highRisk.advancedResourceArea.size);
+        if (snapshot.rescue.has_value())
         {
-            continue;
+            addRequest(std::string{kRaidAnchorRescue},
+                       RaidMapAnchorKind::Rescue,
+                       snapshot.rescue->transferPoint.size);
         }
-        generationAnchors.reachablePoints.push_back(loot.position);
+        if (snapshot.selfRecovery.has_value())
+        {
+            addRequest(std::string{kRaidAnchorSelfRecovery},
+                       RaidMapAnchorKind::SelfRecovery,
+                       {96.0F, 96.0F});
+        }
+        for (std::size_t index{}; index < snapshot.enemies.size(); ++index)
+        {
+            const RaidEnemySnapshot &enemy = snapshot.enemies[index];
+            if (enemy.spaceId == outdoorRaidSpaceId())
+            {
+                addRequest(raidIndexedAnchorId("enemy", index),
+                           RaidMapAnchorKind::Enemy,
+                           enemy.size);
+            }
+        }
+        for (std::size_t index{}; index < snapshot.loot.size(); ++index)
+        {
+            const RaidLootSnapshot &loot = snapshot.loot[index];
+            if (loot.spaceId == outdoorRaidSpaceId() &&
+                !loot.requiresHighRisk)
+            {
+                addRequest(raidIndexedAnchorId("loot", index),
+                           RaidMapAnchorKind::Loot,
+                           {32.0F, 32.0F});
+            }
+        }
+        for (std::size_t index{};
+             index < map->highRisk.pressureSpawns.size(); ++index)
+        {
+            addRequest(raidIndexedAnchorId("pressure", index),
+                       RaidMapAnchorKind::PressureSpawn,
+                       map->highRisk.pressureSpawns[index].size);
+        }
+        for (std::size_t index{}; index < snapshot.interiors.size(); ++index)
+        {
+            addRequest(raidIndexedAnchorId("interior", index),
+                       RaidMapAnchorKind::InteriorEntrance,
+                       snapshot.interiors[index].exteriorEntrance.size);
+        }
     }
-    if (snapshot.selfRecovery.has_value())
+    else
     {
-        generationAnchors.reachablePoints.push_back(
-            snapshot.selfRecovery->cachePosition);
+        generationAnchors.occupiedRegions = {
+            map->highRisk.emergencyExtractionPoint,
+            map->highRisk.conditionalExtractionPoint,
+            map->highRisk.activationControlPoint,
+            map->highRisk.advancedResourceArea};
+        for (const RaidEnemySnapshot &enemy : snapshot.enemies)
+        {
+            if (enemy.spaceId != outdoorRaidSpaceId())
+                continue;
+            generationAnchors.occupiedRegions.push_back(
+                ContentRect{enemy.position, enemy.size});
+            generationAnchors.reachablePoints.push_back(
+                Vec2{enemy.position.x + enemy.size.x * 0.5F,
+                     enemy.position.y + enemy.size.y * 0.5F});
+        }
+        for (const RaidLootSnapshot &loot : snapshot.loot)
+        {
+            if (loot.spaceId == outdoorRaidSpaceId())
+                generationAnchors.reachablePoints.push_back(loot.position);
+        }
+        if (snapshot.selfRecovery.has_value())
+            generationAnchors.reachablePoints.push_back(
+                snapshot.selfRecovery->cachePosition);
+        for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
+            generationAnchors.occupiedRegions.push_back(
+                ContentRect{spawn.position, spawn.size});
+        const auto addReachableRegion = [&generationAnchors](
+                                            ContentRect region)
+        {
+            generationAnchors.reachablePoints.push_back(
+                Vec2{region.position.x + region.size.x * 0.5F,
+                     region.position.y + region.size.y * 0.5F});
+        };
+        addReachableRegion(map->highRisk.activationControlPoint);
+        addReachableRegion(map->highRisk.advancedResourceArea);
+        addReachableRegion(map->highRisk.emergencyExtractionPoint);
+        addReachableRegion(map->highRisk.conditionalExtractionPoint);
+        if (snapshot.rescue.has_value())
+        {
+            generationAnchors.occupiedRegions.push_back(
+                snapshot.rescue->transferPoint);
+            addReachableRegion(snapshot.rescue->transferPoint);
+        }
+        for (std::size_t interiorIndex{};
+             interiorIndex < map->interiors.size(); ++interiorIndex)
+        {
+            const RaidExteriorPlacementDefinition *placement =
+                selectRaidExteriorPlacement(
+                    map->interiors[interiorIndex],
+                    snapshot.seed,
+                    interiorIndex,
+                    generationAnchors);
+            if (placement == nullptr)
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "Raid special location has no legal exterior placement",
+                    profile.revision);
+            }
+            RaidInteriorSnapshot &interior =
+                snapshot.interiors[interiorIndex];
+            interior.exteriorEntrance = placement->entrance;
+            interior.exteriorReturn = placement->returnPoint;
+            appendRaidExteriorPlacementAnchors(
+                generationAnchors, *placement);
+        }
     }
-    for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
+    snapshot.spatialLayout = generateRaidMapLayout(
+        *map, snapshot.seed, generationAnchors);
+
+    if (districtLayout)
     {
-        generationAnchors.occupiedRegions.push_back(
-            ContentRect{spawn.position, spawn.size});
-    }
-    const auto addReachableRegion = [&generationAnchors](ContentRect region)
-    {
-        generationAnchors.reachablePoints.push_back(
-            Vec2{region.position.x + region.size.x * 0.5F,
-                 region.position.y + region.size.y * 0.5F});
-    };
-    addReachableRegion(map->highRisk.activationControlPoint);
-    addReachableRegion(map->highRisk.advancedResourceArea);
-    addReachableRegion(map->highRisk.emergencyExtractionPoint);
-    addReachableRegion(map->highRisk.conditionalExtractionPoint);
-    if (snapshot.rescue.has_value())
-    {
-        generationAnchors.occupiedRegions.push_back(
-            snapshot.rescue->transferPoint);
-        addReachableRegion(snapshot.rescue->transferPoint);
-    }
-    for (std::size_t interiorIndex{};
-         interiorIndex < map->interiors.size(); ++interiorIndex)
-    {
-        const RaidExteriorPlacementDefinition *placement =
-            selectRaidExteriorPlacement(
-                map->interiors[interiorIndex],
-                snapshot.seed,
-                interiorIndex,
-                generationAnchors);
-        if (placement == nullptr)
+        const auto placement = [&snapshot](std::string_view id)
+            -> const RaidAnchorPlacementSnapshot *
+        {
+            return findRaidAnchorPlacement(snapshot.spatialLayout, id);
+        };
+        const auto center = [](ContentRect bounds) noexcept
+        {
+            return Vec2{bounds.position.x + bounds.size.x * 0.5F,
+                        bounds.position.y + bounds.size.y * 0.5F};
+        };
+        const auto *player = placement(kRaidAnchorPlayerSpawn);
+        const auto *extraction = placement(kRaidAnchorNormalExtraction);
+        if (player == nullptr || extraction == nullptr)
         {
             return deployFailure(
                 RaidLifecycleError::InvalidCommand,
-                "Raid special location has no legal exterior placement",
+                "generated Raid omitted mandatory anchors",
                 profile.revision);
         }
-        RaidInteriorSnapshot &interior = snapshot.interiors[interiorIndex];
-        interior.exteriorEntrance = placement->entrance;
-        interior.exteriorReturn = placement->returnPoint;
-        appendRaidExteriorPlacementAnchors(generationAnchors, *placement);
+        snapshot.playerSpawn = player->bounds.position;
+        snapshot.extractionPoint = extraction->bounds;
+        if (snapshot.rescue.has_value())
+        {
+            const auto *anchor = placement(kRaidAnchorRescue);
+            if (anchor == nullptr)
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid omitted rescue anchor",
+                    profile.revision);
+            snapshot.rescue->transferPoint = anchor->bounds;
+        }
+        for (std::size_t index{}; index < snapshot.enemies.size(); ++index)
+        {
+            RaidEnemySnapshot &enemy = snapshot.enemies[index];
+            if (enemy.spaceId != outdoorRaidSpaceId())
+                continue;
+            const auto *anchor = placement(raidIndexedAnchorId("enemy", index));
+            if (anchor == nullptr)
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid omitted enemy anchor",
+                    profile.revision);
+            enemy.position = anchor->bounds.position;
+        }
+        for (std::size_t index{}; index < snapshot.loot.size(); ++index)
+        {
+            RaidLootSnapshot &loot = snapshot.loot[index];
+            if (loot.spaceId != outdoorRaidSpaceId())
+                continue;
+            if (loot.requiresHighRisk)
+            {
+                const auto *resource = placement(kRaidAnchorAdvancedResource);
+                if (resource == nullptr)
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted advanced resource anchor",
+                        profile.revision);
+                const std::size_t ordinal = loot.slotIndex -
+                    map->raidLootSlots.size();
+                const std::size_t count =
+                    map->highRisk.advancedLootSlots.size();
+                loot.position = {
+                    resource->bounds.position.x +
+                        resource->bounds.size.x *
+                            static_cast<float>(ordinal + 1U) /
+                            static_cast<float>(count + 1U),
+                    resource->bounds.position.y +
+                        resource->bounds.size.y * 0.5F};
+            }
+            else
+            {
+                const auto *anchor = placement(
+                    raidIndexedAnchorId("loot", index));
+                if (anchor == nullptr)
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted loot anchor",
+                        profile.revision);
+                loot.position = center(anchor->bounds);
+            }
+        }
+        if (snapshot.selfRecovery.has_value())
+        {
+            const auto *anchor = placement(kRaidAnchorSelfRecovery);
+            if (anchor == nullptr)
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid omitted self-recovery anchor",
+                    profile.revision);
+            RaidSelfRecoverySnapshot &recovery = *snapshot.selfRecovery;
+            recovery.cachePosition = center(anchor->bounds);
+            for (std::size_t index{}; index < recovery.roots.size(); ++index)
+            {
+                const float column = static_cast<float>(index % 3U) - 1.0F;
+                const float row = static_cast<float>(index / 3U);
+                recovery.roots[index].position = {
+                    recovery.cachePosition.x + column * 32.0F,
+                    recovery.cachePosition.y + row * 32.0F};
+            }
+        }
+        for (std::size_t index{}; index < snapshot.interiors.size(); ++index)
+        {
+            const auto *anchor = placement(
+                raidIndexedAnchorId("interior", index));
+            if (anchor == nullptr)
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid omitted interior anchor",
+                    profile.revision);
+            RaidInteriorSnapshot &interior = snapshot.interiors[index];
+            interior.exteriorEntrance = anchor->bounds;
+            const Vec2 entranceCenter = center(anchor->bounds);
+            interior.exteriorReturn = {
+                entranceCenter.x,
+                std::min(map->walkableBounds.position.y +
+                             map->walkableBounds.size.y - 50.0F,
+                         anchor->bounds.position.y +
+                             anchor->bounds.size.y + 70.0F)};
+        }
     }
-    snapshot.spatialLayout = generateRaidMapLayout(
-        *map,
-        snapshot.seed,
-        generationAnchors);
 
     candidate.pendingRaid = std::move(snapshot);
     if (!advanceProfileWorldTime(

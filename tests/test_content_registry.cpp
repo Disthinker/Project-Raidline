@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-playable-outdoor-layout-content-43");
+        "procedural-frontier-district-layout-content-44");
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -252,7 +252,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_TRUE(publishedMap.highRisk.enabled);
         EXPECT_FLOAT_EQ(
             publishedMap.highRisk.regularPhaseDurationSeconds,
-            180.0F);
+            publishedMap.id ==
+                    MapDefinitionId{"map.raid.frontier_exchange"}
+                ? 1200.0F
+                : 180.0F);
         EXPECT_FLOAT_EQ(
             publishedMap.highRisk.emergencyExtractionDurationSeconds,
             12.0F);
@@ -292,15 +295,26 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     const MapDefinition &frontier = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_TRUE(frontier.proceduralOutdoor.enabled);
-    EXPECT_EQ(frontier.proceduralOutdoor.layoutVersion, 2U);
-    EXPECT_EQ(frontier.proceduralOutdoor.columns, 32U);
-    EXPECT_EQ(frontier.proceduralOutdoor.rows, 18U);
-    EXPECT_EQ(frontier.proceduralOutdoor.minimumBranchRoads, 3U);
-    EXPECT_EQ(frontier.proceduralOutdoor.maximumBranchRoads, 5U);
-    EXPECT_EQ(frontier.proceduralOutdoor.minimumBlockers, 70U);
-    EXPECT_EQ(frontier.proceduralOutdoor.maximumBlockers, 95U);
-    EXPECT_EQ(frontier.worldSize.x, 2560.0F);
-    EXPECT_EQ(frontier.worldSize.y, 1440.0F);
+    EXPECT_EQ(frontier.proceduralOutdoor.layoutVersion, 3U);
+    EXPECT_EQ(frontier.proceduralOutdoor.columns, 320U);
+    EXPECT_EQ(frontier.proceduralOutdoor.rows, 180U);
+    EXPECT_EQ(frontier.proceduralOutdoor.districtColumns, 40U);
+    EXPECT_EQ(frontier.proceduralOutdoor.districtRows, 20U);
+    EXPECT_EQ(frontier.proceduralOutdoor.chunkSizeCells, 16U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumBranchRoads, 6U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumBranchRoads, 10U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumBlockers, 700U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumBlockers, 1100U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumDecorativeProps, 1200U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumDecorativeProps, 1800U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumRoadObstacles, 140U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumRoadObstacles, 220U);
+    EXPECT_EQ(frontier.proceduralOutdoor.minimumPuddlePatches, 60U);
+    EXPECT_EQ(frontier.proceduralOutdoor.maximumPuddlePatches, 100U);
+    EXPECT_EQ(frontier.proceduralOutdoor.districtArchetypes.size(), 6U);
+    EXPECT_EQ(frontier.proceduralOutdoor.landmarkTemplates.size(), 3U);
+    EXPECT_EQ(frontier.worldSize.x, 25600.0F);
+    EXPECT_EQ(frontier.worldSize.y, 14400.0F);
     EXPECT_EQ(
         registry.map(MapDefinitionId{"map.raid.industrial"})
             .rescue->injuredResidentCount,
@@ -565,8 +579,8 @@ TEST(ContentRegistryTest, RejectsUnsafeProceduralOutdoorBounds)
 {
     const std::string invalid = replaceFirst(
         publishedJsonCopy(),
-        "\"minimum_blockers\": 70, \"maximum_blockers\": 95",
-        "\"minimum_blockers\": 96, \"maximum_blockers\": 70");
+        "\"minimum_blockers\": 700,",
+        "\"minimum_blockers\": 1200,");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

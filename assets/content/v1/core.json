@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-playable-outdoor-layout-content-43",
+  "content_version": "procedural-frontier-district-layout-content-44",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1206,8 +1206,40 @@
     {
       "id": "map.raid.frontier_exchange",
       "display_name": "Frontier Exchange",
-      "route_profile": "GENERATED ROAD GRID | LARGE OUTDOOR | MULTIPLE ROUTES",
-      "procedural_outdoor": {"layout_version": 2, "columns": 32, "rows": 18, "minimum_branch_roads": 3, "maximum_branch_roads": 5, "minimum_blockers": 70, "maximum_blockers": 95, "maximum_attempts": 12, "anchor_clearance_cells": 1},
+      "route_profile": "DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS",
+      "procedural_outdoor": {
+        "layout_version": 3,
+        "columns": 320,
+        "rows": 180,
+        "district_columns": 40,
+        "district_rows": 20,
+        "chunk_size_cells": 16,
+        "minimum_branch_roads": 6,
+        "maximum_branch_roads": 10,
+        "minimum_blockers": 700,
+        "maximum_blockers": 1100,
+        "minimum_decorative_props": 1200,
+        "maximum_decorative_props": 1800,
+        "minimum_road_obstacles": 140,
+        "maximum_road_obstacles": 220,
+        "minimum_puddle_patches": 60,
+        "maximum_puddle_patches": 100,
+        "maximum_attempts": 12,
+        "anchor_clearance_cells": 2,
+        "district_archetypes": [
+          {"id": "district.frontier.industrial", "display_name": "INDUSTRIAL PLANT", "kind": "industrial", "instance_count": 2},
+          {"id": "district.frontier.logistics", "display_name": "LOGISTICS YARD", "kind": "logistics", "instance_count": 2},
+          {"id": "district.frontier.highway", "display_name": "HIGHWAY INTERCHANGE", "kind": "highway", "instance_count": 1},
+          {"id": "district.frontier.open_ground", "display_name": "CONSTRUCTION OPEN GROUND", "kind": "open_ground", "instance_count": 1},
+          {"id": "district.frontier.greenbelt", "display_name": "DRAINAGE GREENBELT", "kind": "greenbelt", "instance_count": 1},
+          {"id": "district.frontier.roadside_service", "display_name": "ROADSIDE SERVICE", "kind": "roadside_service", "instance_count": 1}
+        ],
+        "landmark_templates": [
+          {"id": "landmark.frontier.freight_exchange", "display_name": "FREIGHT EXCHANGE COMPLEX", "district_kind": "logistics", "footprint_cells": {"x": 18, "y": 12}},
+          {"id": "landmark.frontier.fabrication_plant", "display_name": "FABRICATION PLANT", "district_kind": "industrial", "footprint_cells": {"x": 16, "y": 12}},
+          {"id": "landmark.frontier.highway_service", "display_name": "HIGHWAY SERVICE PLAZA", "district_kind": "roadside_service", "footprint_cells": {"x": 14, "y": 10}}
+        ]
+      },
       "interiors": [
         {
           "id": "raid_space.frontier_exchange.office",
@@ -1282,15 +1314,15 @@
       "recovery": {"service_fee": 150, "duration_minutes": 900},
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {"red": 185, "green": 195, "blue": 165},
-      "world_size": {"x": 2560, "y": 1440},
-      "walkable_bounds": {"position": {"x": 0, "y": 0}, "size": {"x": 2560, "y": 1440}},
+      "world_size": {"x": 25600, "y": 14400},
+      "walkable_bounds": {"position": {"x": 0, "y": 0}, "size": {"x": 25600, "y": 14400}},
       "player_spawn": {"x": 160, "y": 720},
       "default_inventory": {"width": 10, "height": 6},
       "ballistic_blockers": [],
       "ground_items": [],
       "storage_cabinet": {"bounds": {"position": {"x": 20, "y": 20}, "size": {"x": 64, "y": 64}}, "interaction_range": 64, "inventory": {"width": 6, "height": 6}},
       "extraction_point": {"position": {"x": 2260, "y": 1120}, "size": {"x": 160, "y": 140}},
-      "raid_rules": {"duration_seconds": 180, "extraction_duration_seconds": 3},
+      "raid_rules": {"duration_seconds": 1200, "extraction_duration_seconds": 3},
       "rescue": {
         "id": "rescue.ordinary.frontier_exchange",
         "subject_kind": "ordinary_residents",
@@ -1300,7 +1332,7 @@
         "profession": "combat"
       },
       "high_risk": {
-        "regular_phase_duration_seconds": 180,
+        "regular_phase_duration_seconds": 1200,
         "emergency_extraction_point": {"position": {"x": 170, "y": 560}, "size": {"x": 170, "y": 130}},
         "emergency_extraction_duration_seconds": 12,
         "conditional_extraction_point": {"position": {"x": 1780, "y": 140}, "size": {"x": 170, "y": 130}},

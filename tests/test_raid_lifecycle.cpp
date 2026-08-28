@@ -841,10 +841,11 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
 {
     ProfileState profile = makeNewAlphaProfile(
         "interior-snapshot", publishedContentRegistry());
-    ASSERT_TRUE(deploy(
+    const DeployReceipt receipt = deploy(
         profile,
         88123U,
-        MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
     ASSERT_TRUE(profile.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *profile.pendingRaid;
     const MapDefinition &map = publishedContentRegistry().map(
@@ -857,15 +858,13 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
         const RaidInteriorSnapshot &snapshot = raid.interiors[index];
         EXPECT_EQ(snapshot.id, definition.id);
         EXPECT_FALSE(snapshot.layoutKnown);
-        EXPECT_TRUE(std::any_of(
-            definition.exteriorPlacements.begin(),
-            definition.exteriorPlacements.end(),
-            [&](const RaidExteriorPlacementDefinition &placement)
-            {
-                return placement.entrance == snapshot.exteriorEntrance &&
-                    placement.returnPoint.x == snapshot.exteriorReturn.x &&
-                    placement.returnPoint.y == snapshot.exteriorReturn.y;
-            }));
+        const RaidAnchorPlacementSnapshot *placement =
+            findRaidAnchorPlacement(
+                raid.spatialLayout,
+                raidIndexedAnchorId("interior", index));
+        ASSERT_NE(placement, nullptr);
+        EXPECT_EQ(placement->kind, RaidMapAnchorKind::InteriorEntrance);
+        EXPECT_EQ(placement->bounds, snapshot.exteriorEntrance);
         EXPECT_EQ(
             std::count_if(
                 raid.enemies.begin(), raid.enemies.end(),

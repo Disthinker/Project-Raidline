@@ -369,14 +369,30 @@ bool GameSession::deployAlpha(
         }
         std::vector<EnemySpawn> pressureSpawns;
         pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
-        for (const EnemySpawnDefinition &spawn :
-             map.highRisk.pressureSpawns)
+        for (std::size_t index{};
+             index < map.highRisk.pressureSpawns.size(); ++index)
         {
+            const EnemySpawnDefinition &spawn =
+                map.highRisk.pressureSpawns[index];
+            const RaidAnchorPlacementSnapshot *placement =
+                findRaidAnchorPlacement(
+                    snapshot.spatialLayout,
+                    raidIndexedAnchorId("pressure", index));
             pressureSpawns.push_back(EnemySpawn{
-                spawn.position,
+                placement != nullptr
+                    ? placement->bounds.position
+                    : spawn.position,
                 spawn.size,
                 spawn.maximumHealth});
         }
+
+        const auto frozenRegion = [&](std::string_view id,
+                                      ContentRect fallback)
+        {
+            const RaidAnchorPlacementSnapshot *placement =
+                findRaidAnchorPlacement(snapshot.spatialLayout, id);
+            return placement != nullptr ? placement->bounds : fallback;
+        };
 
         RaidWorldConfig worldConfig;
         worldConfig.worldSize = map.worldSize;
@@ -387,6 +403,11 @@ bool GameSession::deployAlpha(
         worldConfig.playerCurrentHealth = candidate.currentHealth;
         worldConfig.deferPlayerDamageResolution = true;
         worldConfig.ballisticBlockers = std::move(blockers);
+        worldConfig.outdoorLayout = snapshot.spatialLayout;
+        worldConfig.outdoorColumns = map.proceduralOutdoor.columns;
+        worldConfig.outdoorRows = map.proceduralOutdoor.rows;
+        worldConfig.outdoorChunkSizeCells =
+            map.proceduralOutdoor.chunkSizeCells;
         worldConfig.interiors.reserve(snapshot.interiors.size());
         for (const RaidInteriorSnapshot &interior : snapshot.interiors)
         {
@@ -433,18 +454,22 @@ bool GameSession::deployAlpha(
         worldConfig.highRisk = HighRiskWorldConfig{
             map.highRisk.enabled,
             map.highRisk.regularPhaseDurationSeconds,
-            map.highRisk.emergencyExtractionPoint,
+            frozenRegion(kRaidAnchorEmergencyExtraction,
+                         map.highRisk.emergencyExtractionPoint),
             map.highRisk.emergencyExtractionDurationSeconds,
             map.highRisk.initialWaveDelaySeconds,
             map.highRisk.waveIntervalSeconds,
             map.highRisk.waveSize,
             map.highRisk.activeEnemyCap,
             std::move(pressureSpawns),
-            map.highRisk.activationControlPoint,
+            frozenRegion(kRaidAnchorHighRiskControl,
+                         map.highRisk.activationControlPoint),
             map.highRisk.activationDurationSeconds,
-            map.highRisk.advancedResourceArea,
+            frozenRegion(kRaidAnchorAdvancedResource,
+                         map.highRisk.advancedResourceArea),
             snapshot.seed,
-            map.highRisk.conditionalExtractionPoint,
+            frozenRegion(kRaidAnchorConditionalExtraction,
+                         map.highRisk.conditionalExtractionPoint),
             map.highRisk.conditionalExtractionDurationSeconds,
             map.highRisk.conditionalExtractionMaximumWeightGrams};
         candidateWorld =

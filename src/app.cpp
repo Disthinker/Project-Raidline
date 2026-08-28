@@ -7064,6 +7064,63 @@ void App::renderBackground()
             static_cast<float>(map->proceduralOutdoor.columns);
         const float cellHeight = map->walkableBounds.size.y /
             static_cast<float>(map->proceduralOutdoor.rows);
+        if (gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >=
+            3U)
+        {
+            const Vec2 camera = raidWorldCameraOffset();
+            const RaidOutdoorPresentationProjection projection =
+                gameSession_.world().outdoorPresentation(ContentRect{
+                    camera,
+                    {static_cast<float>(kWindowWidth),
+                     static_cast<float>(kWindowHeight)}});
+            for (const RaidTerrainSpan &span : projection.terrainSpans)
+            {
+                switch (span.kind)
+                {
+                case RaidTerrainKind::Grass:
+                    SDL_SetRenderDrawColor(renderer_, 54, 66, 42, 255);
+                    break;
+                case RaidTerrainKind::Concrete:
+                    SDL_SetRenderDrawColor(renderer_, 76, 75, 68, 255);
+                    break;
+                case RaidTerrainKind::Dirt:
+                    SDL_SetRenderDrawColor(renderer_, 84, 69, 49, 255);
+                    break;
+                case RaidTerrainKind::Asphalt:
+                    SDL_SetRenderDrawColor(renderer_, 50, 52, 50, 255);
+                    break;
+                case RaidTerrainKind::Puddle:
+                    SDL_SetRenderDrawColor(renderer_, 48, 70, 76, 255);
+                    break;
+                }
+                const SDL_FRect terrain{
+                    map->walkableBounds.position.x +
+                        span.firstColumn * cellWidth,
+                    map->walkableBounds.position.y + span.row * cellHeight,
+                    span.length * cellWidth + 0.5F,
+                    cellHeight + 0.5F};
+                SDL_RenderFillRect(renderer_, &terrain);
+            }
+            for (const RaidOutdoorRoadCell &road : projection.roadCells)
+            {
+                const SDL_FRect roadBounds{
+                    map->walkableBounds.position.x +
+                        road.column * cellWidth,
+                    map->walkableBounds.position.y + road.row * cellHeight,
+                    cellWidth + 0.5F,
+                    cellHeight + 0.5F};
+                if (road.kind == RaidOutdoorRoadKind::Primary)
+                    SDL_SetRenderDrawColor(renderer_, 91, 91, 83, 255);
+                else if (road.kind == RaidOutdoorRoadKind::Secondary)
+                    SDL_SetRenderDrawColor(renderer_, 76, 78, 72, 255);
+                else
+                    SDL_SetRenderDrawColor(renderer_, 66, 69, 62, 255);
+                SDL_RenderFillRect(renderer_, &roadBounds);
+            }
+            SDL_SetRenderDrawColor(renderer_, 139, 127, 86, 220);
+            SDL_RenderRect(renderer_, &ground);
+            return;
+        }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 82, 86, 62, 70);
         for (std::uint32_t column{};
@@ -7781,6 +7838,67 @@ void App::renderShotFeedbackPresentations()
 void App::renderBallisticBlockers()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    if (gameSession_.world().isAlphaRaidWorld() &&
+        gameSession_.world().inOutdoorRaidSpace() &&
+        gameSession_.profile().pendingRaid.has_value() &&
+        gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >= 3U)
+    {
+        const Vec2 camera = raidWorldCameraOffset();
+        const RaidOutdoorPresentationProjection projection =
+            gameSession_.world().outdoorPresentation(ContentRect{
+                camera,
+                {static_cast<float>(kWindowWidth),
+                 static_cast<float>(kWindowHeight)}});
+        for (const RaidOutdoorPropSnapshot &prop : projection.props)
+        {
+            const SDL_FRect bounds{
+                prop.bounds.position.x,
+                prop.bounds.position.y,
+                prop.bounds.size.x,
+                prop.bounds.size.y};
+            switch (prop.kind)
+            {
+            case RaidOutdoorPropKind::Factory:
+                SDL_SetRenderDrawColor(renderer_, 62, 66, 62, 242);
+                break;
+            case RaidOutdoorPropKind::Warehouse:
+                SDL_SetRenderDrawColor(renderer_, 69, 67, 57, 242);
+                break;
+            case RaidOutdoorPropKind::Container:
+                SDL_SetRenderDrawColor(renderer_, 91, 72, 48, 235);
+                break;
+            case RaidOutdoorPropKind::EngineeringEquipment:
+                SDL_SetRenderDrawColor(renderer_, 112, 89, 43, 235);
+                break;
+            case RaidOutdoorPropKind::Car:
+                SDL_SetRenderDrawColor(renderer_, 69, 78, 73, 235);
+                break;
+            case RaidOutdoorPropKind::Truck:
+                SDL_SetRenderDrawColor(renderer_, 79, 76, 61, 235);
+                break;
+            case RaidOutdoorPropKind::RoadBarrier:
+                SDL_SetRenderDrawColor(renderer_, 119, 103, 70, 235);
+                break;
+            case RaidOutdoorPropKind::Debris:
+                SDL_SetRenderDrawColor(renderer_, 97, 91, 75, 160);
+                break;
+            }
+            SDL_RenderFillRect(renderer_, &bounds);
+            if (prop.collidable)
+            {
+                SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
+                SDL_RenderRect(renderer_, &bounds);
+            }
+        }
+        for (const RaidOutdoorLabelProjection &label : projection.labels)
+        {
+            uiTextRenderer_.render(
+                renderer_, label.position.x, label.position.y,
+                label.text.c_str());
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
     for (const BallisticBlocker &blocker :
          gameSession_.world().ballisticBlockers())
     {
@@ -12324,13 +12442,12 @@ void App::renderRaidTacticalMap()
         }
     }
 
-    if (gameSession_.profile().pendingRaid.has_value())
+    if (!map.outdoorRoadCells().empty())
     {
-        for (const RaidOutdoorRoadCell &road :
-             gameSession_.profile().pendingRaid->spatialLayout.roadCells)
+        for (const RaidTacticalRoadCell &road : map.outdoorRoadCells())
         {
-            const int column = static_cast<int>(road.column);
-            const int row = static_cast<int>(road.row);
+            const int column = road.column;
+            const int row = road.row;
             if (column < 0 || row < 0 || column >= map.columns() ||
                 row >= map.rows() || !map.cellRevealed(column, row))
             {
@@ -12372,6 +12489,14 @@ void App::renderRaidTacticalMap()
             rect.size.x / worldSize.x * chart.w,
             rect.size.y / worldSize.y * chart.h};
     };
+    for (const RaidTacticalWorldLabel &label : map.outdoorLabels())
+    {
+        if (!map.pointRevealed(label.position))
+            continue;
+        const Vec2 point = screenPoint(label.position);
+        uiTextRenderer_.render(
+            renderer_, point.x, point.y, label.text.c_str());
+    }
 
     SDL_SetRenderDrawColor(renderer_, 76, 88, 88, 220);
     for (const BallisticBlocker &blocker :
