@@ -12,6 +12,7 @@
 #include "game_flow.h"
 #include "game_audio.h"
 #include "gameplay_input.h"
+#include "frame_pacing.h"
 #include "frame_performance.h"
 #include "input_system.h"
 #include "inventory_interaction.h"
@@ -132,10 +133,13 @@ private:
     bool developerWeaponPanelOpen_{};
     bool developerWeaponPanelBlocksGameplayThisFrame_{};
     std::size_t developerWeaponParameterIndex_{};
+    bool developerMapFogEnabled_{true};
     bool developerPerformanceOverlayOpen_{};
+    FramePacingConfiguration framePacingConfiguration_{};
+    SoftwareFramePacer softwareFramePacer_{};
     FramePerformanceMonitor framePerformance_;
     std::uint64_t framePerformanceSequence_{};
-    std::array<std::string, 7U> performanceOverlayLines_{};
+    std::array<std::string, 8U> performanceOverlayLines_{};
 
     Texture backgroundTexture_;
     Texture playerTexture_;

@@ -84,6 +84,8 @@ public:
     outdoorRoadCells() const noexcept;
     [[nodiscard]] std::optional<RaidDistrictKind>
     outdoorDistrictKind(int column, int row) const noexcept;
+    [[nodiscard]] std::optional<RaidTerrainKind>
+    outdoorTerrainKind(int column, int row) const noexcept;
     [[nodiscard]] const std::vector<RaidTacticalWorldLabel> &
     outdoorLabels() const noexcept;
 
@@ -98,6 +100,7 @@ private:
     std::vector<RaidSpecialLocationMapState> specialLocations_;
     std::vector<RaidTacticalRoadCell> outdoorRoadCells_;
     std::vector<std::optional<RaidDistrictKind>> outdoorDistrictKinds_;
+    std::vector<std::optional<RaidTerrainKind>> outdoorTerrainKinds_;
     std::vector<RaidTacticalWorldLabel> outdoorLabels_;
     int columns_{32};
     int rows_{18};

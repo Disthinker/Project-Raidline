@@ -29,8 +29,12 @@ TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
             "对局性能 | F9 关闭");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
-                "F9 PERFORMANCE | F10 RUNTIME WEAPON TUNING"),
-            "F9 性能 | F10 运行时武器调试");
+                "F9 PERFORMANCE | F10 RUNTIME DEVELOPER PANEL"),
+            "F9 性能 | F10 运行时开发面板");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PACING SOFTWARE FALLBACK | TARGET 60.0 HZ"),
+            "帧节奏 软件回退 | 目标 60.0 HZ");
   const std::string workload = localizeUiText(
       UiLanguage::SimplifiedChinese,
       "SIM ENEMIES 100 | BLOCKERS 96 | SUBSTEPS 100");
@@ -535,6 +539,21 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
                 UiLanguage::SimplifiedChinese,
                 "resolve the Base siege warning before deploying"),
             "出击前必须先处理基地攻城预警");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesRuntimeMapFogControls) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MAP FOG OF WAR: ENABLED"),
+            "地图战争迷雾：已启用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MAP FOG OF WAR DISABLED - FULL STATIC MAP"),
+            "地图战争迷雾已关闭 - 显示完整静态地图");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "TACTICAL MAP | FULL STATIC MAP | M/ESC CLOSE"),
+            "战术地图 | 完整静态地图 | M/ESC 关闭");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {

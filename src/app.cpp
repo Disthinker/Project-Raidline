@@ -23,6 +23,7 @@
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
 #include "raid_camera.h"
+#include "raid_tactical_map_presentation.h"
 
 namespace
 {
@@ -1277,6 +1278,25 @@ bool App::initialize()
         return false;
     }
 
+    float displayRefreshHz{};
+    const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window_);
+    if (displayId != 0U)
+    {
+        if (const SDL_DisplayMode *displayMode =
+                SDL_GetCurrentDisplayMode(displayId))
+        {
+            displayRefreshHz = displayMode->refresh_rate;
+        }
+    }
+    int actualVSync{};
+    const bool vsyncEnabled = SDL_SetRenderVSync(renderer_, 1) &&
+        SDL_GetRenderVSync(renderer_, &actualVSync) &&
+        actualVSync != 0;
+    framePacingConfiguration_ = configureFramePacing(
+        vsyncEnabled, displayRefreshHz);
+    softwareFramePacer_.setTargetInterval(
+        framePacingConfiguration_.targetIntervalNanoseconds);
+
     if (!uiTextRenderer_.initialize(renderer_))
     {
         fmt::print("UI font initialization failed: {}\n", SDL_GetError());
@@ -1480,6 +1500,7 @@ bool App::tryDeployFromBase(
     selectedLostRaidRecordId_.reset();
     selectedRaidSelfRecoveryRecordId_.reset();
     selectedRaidIntelligence_ = {};
+    developerMapFogEnabled_ = true;
     uiMessage_.clear();
     return true;
 }
@@ -4569,12 +4590,13 @@ void App::processEvents()
                     closeInventory();
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
+                    tacticalMapOpen_ = false;
                     profileContextMenu_.reset();
-                    uiMessage_ = "DEVELOPER WEAPON TUNING OPEN";
+                    uiMessage_ = "DEVELOPER RUNTIME PANEL OPEN";
                 }
                 else
                 {
-                    uiMessage_ = "DEVELOPER WEAPON TUNING CLOSED";
+                    uiMessage_ = "DEVELOPER RUNTIME PANEL CLOSED";
                 }
                 continue;
             }
@@ -4619,9 +4641,16 @@ void App::processEvents()
                             ? "RUNTIME WEAPON TUNING RESET"
                             : "WEAPON ALREADY USES CONTENT DEFAULTS";
                         break;
+                    case SDL_SCANCODE_F:
+                        developerMapFogEnabled_ =
+                            !developerMapFogEnabled_;
+                        uiMessage_ = developerMapFogEnabled_
+                            ? "MAP FOG OF WAR ENABLED"
+                            : "MAP FOG OF WAR DISABLED - FULL STATIC MAP";
+                        break;
                     case SDL_SCANCODE_ESCAPE:
                         developerWeaponPanelOpen_ = false;
-                        uiMessage_ = "DEVELOPER WEAPON TUNING CLOSED";
+                        uiMessage_ = "DEVELOPER RUNTIME PANEL CLOSED";
                         break;
                     default:
                         break;
@@ -5768,7 +5797,7 @@ void App::renderDebugText()
             renderer_, 980.0F, 132.0F, medicalStatus.c_str());
         uiTextRenderer_.render(
             renderer_, 980.0F, 148.0F,
-            "F9 PERFORMANCE | F10 RUNTIME WEAPON TUNING");
+            "F9 PERFORMANCE | F10 RUNTIME DEVELOPER PANEL");
 
         for (std::size_t index = 0; index < kWeaponEquipmentSlots.size(); ++index)
         {
@@ -8902,7 +8931,7 @@ void App::renderPauseMenu()
             "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
         uiTextRenderer_.render(
             renderer_, 448.0F, 286.0F,
-            "TAB INVENTORY  M TACTICAL MAP  F10 WEAPON TUNING");
+            "TAB INVENTORY  M TACTICAL MAP  F10 DEVELOPER PANEL");
         const SDL_FRect language = pauseMenuButton(0);
         SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
         SDL_RenderFillRect(renderer_, &language);
@@ -9579,15 +9608,21 @@ void App::renderDeveloperWeaponPanel()
     SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 18.0F,
-        "DEVELOPER WEAPON TUNING - RUNTIME ONLY");
+        "DEVELOPER RUNTIME PANEL - RUNTIME ONLY");
+    const char *fogStatus = developerMapFogEnabled_
+        ? "MAP FOG OF WAR: ENABLED"
+        : "MAP FOG OF WAR: DISABLED - FULL STATIC MAP";
     if (!tuning.has_value())
     {
         uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 52.0F,
+            renderer_, panel.x + 22.0F, panel.y + 38.0F,
+            fogStatus);
+        uiTextRenderer_.render(
+            renderer_, panel.x + 22.0F, panel.y + 56.0F,
             "NO ACTIVE WEAPON");
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
-            "F10 / ESC CLOSE");
+            "F TOGGLE MAP FOG | F10 / ESC CLOSE");
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -9602,7 +9637,7 @@ void App::renderDeveloperWeaponPanel()
         weaponLine.c_str());
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 54.0F,
-        "CHANGES ARE NOT SAVED");
+        fogStatus);
 
     constexpr std::array<const char *,
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
@@ -9765,7 +9800,10 @@ void App::renderDeveloperWeaponPanel()
         derived.c_str());
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + panel.h - 34.0F,
-        "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET | F10/ESC CLOSE");
+        "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET");
+    uiTextRenderer_.render(
+        renderer_, panel.x + 22.0F, panel.y + panel.h - 18.0F,
+        "F MAP FOG | F10/ESC CLOSE");
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
@@ -10249,7 +10287,7 @@ void App::renderDeveloperPerformanceOverlay()
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    const SDL_FRect panel{344.0F, 12.0F, 592.0F, 174.0F};
+    const SDL_FRect panel{344.0F, 12.0F, 592.0F, 192.0F};
     SDL_SetRenderDrawColor(renderer_, 8, 15, 17, 225);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 88, 181, 165, 255);
@@ -10296,16 +10334,23 @@ void App::refreshDeveloperPerformanceOverlay()
     const auto timings = [](const FramePhaseDurations &sample)
     {
         return fmt::format(
-            "{:.2f}/{:.2f}/{:.2f}/{:.2f}",
+            "{:.2f}/{:.2f}/{:.2f}/{:.2f}/{:.2f}",
             sample.eventMilliseconds,
             sample.updateMilliseconds,
             sample.renderMilliseconds,
+            sample.pacingMilliseconds,
             sample.totalMilliseconds);
     };
     const std::string header = fmt::format(
-        "FRAME EVENT/UPDATE/RENDER/TOTAL MS | {:.0f} FPS | {} SAMPLES",
+        "FRAME EVENT/UPDATE/PRESENT/PACING/TOTAL MS | {:.0f} FPS | {} SAMPLES",
         averageFps,
         performance.sampleCount);
+    const std::string pacing = fmt::format(
+        "PACING {} | TARGET {:.1f} HZ",
+        framePacingConfiguration_.mode == FramePacingMode::VSync
+            ? "VSYNC"
+            : "SOFTWARE FALLBACK",
+        framePacingConfiguration_.targetRefreshHz);
     const std::string average =
         "AVG  " + timings(performance.average);
     const std::string percentile =
@@ -10328,7 +10373,7 @@ void App::refreshDeveloperPerformanceOverlay()
         workload.movementBlockersExamined);
     performanceOverlayLines_ = {
         header, average, percentile, maximum,
-        simulation, navigation, collision};
+        pacing, simulation, navigation, collision};
 }
 
 void App::renderBaseAllocation()
@@ -12459,6 +12504,10 @@ void App::renderRaidTacticalMap()
     {
         return;
     }
+    const RaidTacticalMapPresentationMode presentationMode =
+        developerMapFogEnabled_
+            ? RaidTacticalMapPresentationMode::FogOfWar
+            : RaidTacticalMapPresentationMode::FullStaticMap;
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const SDL_FRect shade{0.0F, 0.0F,
@@ -12476,6 +12525,51 @@ void App::renderRaidTacticalMap()
 
     const float cellWidth = chart.w / static_cast<float>(map.columns());
     const float cellHeight = chart.h / static_cast<float>(map.rows());
+    const auto setDistrictColor = [&](RaidDistrictKind district)
+    {
+        switch (district)
+        {
+        case RaidDistrictKind::Industrial:
+            SDL_SetRenderDrawColor(renderer_, 58, 64, 61, 245);
+            break;
+        case RaidDistrictKind::Logistics:
+            SDL_SetRenderDrawColor(renderer_, 67, 62, 50, 245);
+            break;
+        case RaidDistrictKind::Highway:
+            SDL_SetRenderDrawColor(renderer_, 48, 51, 50, 245);
+            break;
+        case RaidDistrictKind::OpenGround:
+            SDL_SetRenderDrawColor(renderer_, 72, 57, 39, 245);
+            break;
+        case RaidDistrictKind::Greenbelt:
+            SDL_SetRenderDrawColor(renderer_, 43, 61, 42, 245);
+            break;
+        case RaidDistrictKind::RoadsideService:
+            SDL_SetRenderDrawColor(renderer_, 69, 66, 47, 245);
+            break;
+        }
+    };
+    const auto setTerrainColor = [&](RaidTerrainKind terrain)
+    {
+        switch (terrain)
+        {
+        case RaidTerrainKind::Grass:
+            SDL_SetRenderDrawColor(renderer_, 78, 112, 70, 220);
+            break;
+        case RaidTerrainKind::Concrete:
+            SDL_SetRenderDrawColor(renderer_, 132, 138, 128, 220);
+            break;
+        case RaidTerrainKind::Dirt:
+            SDL_SetRenderDrawColor(renderer_, 126, 91, 55, 220);
+            break;
+        case RaidTerrainKind::Asphalt:
+            SDL_SetRenderDrawColor(renderer_, 86, 92, 91, 220);
+            break;
+        case RaidTerrainKind::Puddle:
+            SDL_SetRenderDrawColor(renderer_, 58, 112, 132, 230);
+            break;
+        }
+    };
     for (int row = 0; row < map.rows(); ++row)
     {
         for (int column = 0; column < map.columns(); ++column)
@@ -12485,36 +12579,30 @@ void App::renderRaidTacticalMap()
                 chart.y + static_cast<float>(row) * cellHeight,
                 cellWidth + 0.5F,
                 cellHeight + 0.5F};
-            if (map.cellRevealed(column, row))
+            const bool visible = tacticalMapCellVisible(
+                map, column, row, presentationMode);
+            if (visible)
             {
-                switch (map.outdoorDistrictKind(column, row).value_or(
-                    RaidDistrictKind::OpenGround))
-                {
-                case RaidDistrictKind::Industrial:
-                    SDL_SetRenderDrawColor(renderer_, 58, 64, 61, 245);
-                    break;
-                case RaidDistrictKind::Logistics:
-                    SDL_SetRenderDrawColor(renderer_, 67, 62, 50, 245);
-                    break;
-                case RaidDistrictKind::Highway:
-                    SDL_SetRenderDrawColor(renderer_, 48, 51, 50, 245);
-                    break;
-                case RaidDistrictKind::OpenGround:
-                    SDL_SetRenderDrawColor(renderer_, 72, 57, 39, 245);
-                    break;
-                case RaidDistrictKind::Greenbelt:
-                    SDL_SetRenderDrawColor(renderer_, 43, 61, 42, 245);
-                    break;
-                case RaidDistrictKind::RoadsideService:
-                    SDL_SetRenderDrawColor(renderer_, 69, 66, 47, 245);
-                    break;
-                }
+                setDistrictColor(map.outdoorDistrictKind(
+                    column, row).value_or(RaidDistrictKind::OpenGround));
             }
             else
             {
                 SDL_SetRenderDrawColor(renderer_, 4, 8, 10, 252);
             }
             SDL_RenderFillRect(renderer_, &cell);
+            const std::optional<RaidTerrainKind> terrain =
+                visible ? map.outdoorTerrainKind(column, row) : std::nullopt;
+            if (terrain.has_value())
+            {
+                const SDL_FRect terrainMark{
+                    cell.x + cell.w * 0.32F,
+                    cell.y + cell.h * 0.32F,
+                    std::max(2.0F, cell.w * 0.36F),
+                    std::max(2.0F, cell.h * 0.36F)};
+                setTerrainColor(*terrain);
+                SDL_RenderFillRect(renderer_, &terrainMark);
+            }
         }
     }
 
@@ -12525,7 +12613,8 @@ void App::renderRaidTacticalMap()
             const int column = road.column;
             const int row = road.row;
             if (column < 0 || row < 0 || column >= map.columns() ||
-                row >= map.rows() || !map.cellRevealed(column, row))
+                row >= map.rows() || !tacticalMapCellVisible(
+                    map, column, row, presentationMode))
             {
                 continue;
             }
@@ -12567,7 +12656,8 @@ void App::renderRaidTacticalMap()
     };
     for (const RaidTacticalWorldLabel &label : map.outdoorLabels())
     {
-        if (!map.pointRevealed(label.position))
+        if (!tacticalMapPointVisible(
+                map, label.position, presentationMode))
             continue;
         const Vec2 point = screenPoint(label.position);
         uiTextRenderer_.render(
@@ -12581,7 +12671,7 @@ void App::renderRaidTacticalMap()
         const Vec2 center{
             blocker.bounds.position.x + blocker.bounds.size.x * 0.5F,
             blocker.bounds.position.y + blocker.bounds.size.y * 0.5F};
-        if (map.pointRevealed(center))
+        if (tacticalMapPointVisible(map, center, presentationMode))
         {
             const SDL_FRect rect = screenRect(ContentRect{
                 blocker.bounds.position, blocker.bounds.size});
@@ -12597,7 +12687,8 @@ void App::renderRaidTacticalMap()
         Uint8 green,
         Uint8 blue)
     {
-        if (!rect.has_value() || !map.extractionVisible(kind))
+        if (!rect.has_value() || !tacticalMapExtractionVisible(
+                map, kind, presentationMode))
         {
             return;
         }
@@ -12628,8 +12719,7 @@ void App::renderRaidTacticalMap()
         "L",
         104, 180, 230);
 
-    if (map.hasIntelligence(RaidIntelligenceCategory::Resource) &&
-        map.advancedResourceArea().has_value())
+    if (tacticalMapAdvancedResourceVisible(map, presentationMode))
     {
         ContentRect coarse = *map.advancedResourceArea();
         coarse.position.x = std::max(0.0F, coarse.position.x - 90.0F);
@@ -12645,7 +12735,7 @@ void App::renderRaidTacticalMap()
         SDL_RenderRect(renderer_, &resource);
     }
 
-    if (map.hasIntelligence(RaidIntelligenceCategory::Enemy))
+    if (tacticalMapEnemyDeploymentVisible(map))
     {
         for (Vec2 enemy : map.initialEnemyCenters())
         {
@@ -12662,7 +12752,8 @@ void App::renderRaidTacticalMap()
     for (const RaidSpecialLocationMapState &location :
          map.specialLocations())
     {
-        if (!location.discovered)
+        if (!tacticalMapSpecialLocationVisible(
+                location, presentationMode))
         {
             continue;
         }
@@ -12682,6 +12773,21 @@ void App::renderRaidTacticalMap()
             "SPECIAL SITE");
     }
 
+    if (presentationMode ==
+            RaidTacticalMapPresentationMode::FullStaticMap &&
+        gameSession_.world().highRiskControlPoint().has_value())
+    {
+        const SDL_FRect marker = screenRect(
+            *gameSession_.world().highRiskControlPoint());
+        SDL_SetRenderDrawColor(renderer_, 224, 110, 72, 100);
+        SDL_RenderFillRect(renderer_, &marker);
+        SDL_SetRenderDrawColor(renderer_, 242, 148, 96, 245);
+        SDL_RenderRect(renderer_, &marker);
+        uiTextRenderer_.render(
+            renderer_, marker.x + 5.0F, marker.y + 4.0F,
+            "HIGH-RISK CONTROL");
+    }
+
     const Player &player = gameSession_.world().player();
     const Vec2 playerMarker = screenPoint(Vec2{
         player.position().x + player.size() * 0.5F,
@@ -12692,9 +12798,14 @@ void App::renderRaidTacticalMap()
     SDL_RenderLine(renderer_, playerMarker.x, playerMarker.y - 7.0F,
                    playerMarker.x, playerMarker.y + 7.0F);
 
+    const char *mapMode = developerMapFogEnabled_
+        ? "FOG OF WAR"
+        : "FULL STATIC MAP";
+    const std::string tacticalTitle = fmt::format(
+        "TACTICAL MAP | {} | M/ESC CLOSE",
+        mapMode);
     uiTextRenderer_.render(
-        renderer_, 144.0F, 76.0F,
-        "TACTICAL MAP | M/ESC CLOSE | WORLD CONTINUES | MOVE 45%");
+        renderer_, 144.0F, 76.0F, tacticalTitle.c_str());
     const std::string permissions = fmt::format(
         "TRANSPORT {} | RESOURCE {} | ENEMY {} | NO LIVE TRACKING",
         map.hasIntelligence(RaidIntelligenceCategory::Transport)
@@ -12892,6 +13003,11 @@ int App::run()
 
     running_ = true;
     lastCounter_ = SDL_GetPerformanceCounter();
+    if (framePacingConfiguration_.mode ==
+        FramePacingMode::SoftwareFallback)
+    {
+        softwareFramePacer_.reset(SDL_GetTicksNS());
+    }
 
     while (running_)
     {
@@ -12910,6 +13026,17 @@ int App::run()
         const Uint64 updateComplete = SDL_GetPerformanceCounter();
         render();
         const Uint64 renderComplete = SDL_GetPerformanceCounter();
+        if (framePacingConfiguration_.mode ==
+            FramePacingMode::SoftwareFallback)
+        {
+            const Uint64 waitNanoseconds =
+                softwareFramePacer_.waitDuration(SDL_GetTicksNS());
+            if (waitNanoseconds > 0U)
+            {
+                SDL_DelayPrecise(waitNanoseconds);
+            }
+        }
+        const Uint64 pacingComplete = SDL_GetPerformanceCounter();
         const auto milliseconds = [frequency](Uint64 start, Uint64 end)
         {
             return frequency == 0U
@@ -12921,7 +13048,8 @@ int App::run()
             milliseconds(frameStart, eventsComplete),
             milliseconds(eventsComplete, updateComplete),
             milliseconds(updateComplete, renderComplete),
-            milliseconds(frameStart, renderComplete)});
+            milliseconds(renderComplete, pacingComplete),
+            milliseconds(frameStart, pacingComplete)});
         ++framePerformanceSequence_;
         if (developerPerformanceOverlayOpen_ &&
             (performanceOverlayLines_.front().empty() ||

@@ -8,6 +8,7 @@ struct FramePhaseDurations
     float eventMilliseconds{};
     float updateMilliseconds{};
     float renderMilliseconds{};
+    float pacingMilliseconds{};
     float totalMilliseconds{};
 };
 

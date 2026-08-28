@@ -152,3 +152,25 @@ TEST(RaidTacticalMapTest, OutdoorLayoutProjectsReadableDistrictKinds)
               RaidDistrictKind::Greenbelt);
     EXPECT_FALSE(map.outdoorDistrictKind(-1, 0).has_value());
 }
+
+TEST(RaidTacticalMapTest, OutdoorLayoutProjectsTerrainWithoutChangingReveal)
+{
+    RaidTacticalMapState map;
+    map.configure(
+        {25600.0F, 14400.0F}, {},
+        {{25000.0F, 13800.0F}, {100.0F, 100.0F}},
+        std::nullopt, std::nullopt, std::nullopt, {});
+    RaidGeneratedMapLayout layout;
+    layout.layoutVersion = 3U;
+    layout.terrainSpans = {
+        RaidTerrainSpan{0U, 0U, 320U, RaidTerrainKind::Asphalt},
+        RaidTerrainSpan{176U, 0U, 320U, RaidTerrainKind::Grass}};
+
+    map.configureOutdoorLayout(layout, 320U, 180U);
+
+    EXPECT_EQ(map.outdoorTerrainKind(0, 0), RaidTerrainKind::Asphalt);
+    EXPECT_EQ(
+        map.outdoorTerrainKind(map.columns() - 1, map.rows() - 1),
+        RaidTerrainKind::Grass);
+    EXPECT_FALSE(map.cellRevealed(0, 0));
+}

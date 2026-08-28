@@ -382,6 +382,8 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/frame_pacing.cpp
+    src/frame_pacing.h
     src/frame_performance.cpp
     src/frame_performance.h
     src/frame_timing.h
@@ -397,6 +399,8 @@ add_library(raidline_sdl_client STATIC
     src/raid_camera.cpp
     src/raid_camera.h
     src/raid_pointer_capture.h
+    src/raid_tactical_map_presentation.cpp
+    src/raid_tactical_map_presentation.h
     src/sound_event.cpp
     src/sound_event.h
     src/texture.cpp
@@ -489,6 +493,10 @@ raidline_add_test(
     tests/test_frame_performance.cpp
     raidline::sdl_client)
 raidline_add_test(
+    FramePacingTest
+    tests/test_frame_pacing.cpp
+    raidline::sdl_client)
+raidline_add_test(
     GameAudioTest
     tests/test_game_audio.cpp
     raidline::sdl_client)
@@ -573,6 +581,10 @@ raidline_add_test(
 raidline_add_test(
     RaidCameraTest
     tests/test_raid_camera.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    RaidTacticalMapPresentationTest
+    tests/test_raid_tactical_map_presentation.cpp
     raidline::sdl_client)
 raidline_add_test(
     RaidSettlementTest

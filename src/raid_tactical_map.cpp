@@ -154,6 +154,7 @@ void RaidTacticalMapState::configureOutdoorLayout(
 {
     outdoorRoadCells_.clear();
     outdoorDistrictKinds_.clear();
+    outdoorTerrainKinds_.clear();
     outdoorLabels_.clear();
     if (!configured() || layout.layoutVersion < 3U || sourceColumns == 0U ||
         sourceRows == 0U)
@@ -189,6 +190,45 @@ void RaidTacticalMapState::configureOutdoorLayout(
                 cells[static_cast<std::size_t>(row * columns_ + column)];
             if (kind.has_value())
                 outdoorRoadCells_.push_back({column, row, *kind});
+        }
+
+    std::vector<std::optional<RaidTerrainKind>> sourceTerrainKinds(
+        static_cast<std::size_t>(sourceColumns) * sourceRows);
+    for (const RaidTerrainSpan &span : layout.terrainSpans)
+    {
+        if (span.row >= sourceRows || span.firstColumn >= sourceColumns)
+        {
+            continue;
+        }
+        const std::uint32_t endColumn = std::min<std::uint32_t>(
+            sourceColumns,
+            static_cast<std::uint32_t>(span.firstColumn) + span.length);
+        for (std::uint32_t column = span.firstColumn;
+             column < endColumn; ++column)
+        {
+            sourceTerrainKinds[
+                static_cast<std::size_t>(span.row) * sourceColumns +
+                column] = span.kind;
+        }
+    }
+    outdoorTerrainKinds_.resize(
+        static_cast<std::size_t>(columns_ * rows_));
+    for (int row{}; row < rows_; ++row)
+        for (int column{}; column < columns_; ++column)
+        {
+            const std::uint32_t sourceColumn = std::min(
+                sourceColumns - 1U,
+                static_cast<std::uint32_t>(column) * sourceColumns /
+                    static_cast<std::uint32_t>(columns_));
+            const std::uint32_t sourceRow = std::min(
+                sourceRows - 1U,
+                static_cast<std::uint32_t>(row) * sourceRows /
+                    static_cast<std::uint32_t>(rows_));
+            outdoorTerrainKinds_[
+                static_cast<std::size_t>(row * columns_ + column)] =
+                sourceTerrainKinds[
+                    static_cast<std::size_t>(sourceRow) * sourceColumns +
+                    sourceColumn];
         }
 
     std::uint32_t districtColumns{};
@@ -353,6 +393,20 @@ std::optional<RaidDistrictKind> RaidTacticalMapState::outdoorDistrictKind(
         return std::nullopt;
     }
     return outdoorDistrictKinds_[
+        static_cast<std::size_t>(row * columns_ + column)];
+}
+
+std::optional<RaidTerrainKind> RaidTacticalMapState::outdoorTerrainKind(
+    int column,
+    int row) const noexcept
+{
+    if (column < 0 || row < 0 || column >= columns_ || row >= rows_ ||
+        outdoorTerrainKinds_.size() !=
+            static_cast<std::size_t>(columns_ * rows_))
+    {
+        return std::nullopt;
+    }
+    return outdoorTerrainKinds_[
         static_cast<std::size_t>(row * columns_ + column)];
 }
 
