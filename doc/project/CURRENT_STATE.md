@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@fab9f32` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守闭环。
-- 当前开发分支：`codex/regional-base-perimeter-sweep-v1`，从 `origin/main@fab9f32` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-base-perimeter-sweep-v1.md`。
+- `origin/main@7bd3b02` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及 Regional Operations 的失物/两条寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、地点独特设施、基地威胁/自动防守和外围清剿闭环。
+- 当前开发分支：`codex/procedural-raid-layout-v1`，从 `origin/main@7bd3b02` 创建。
+- 当前活动计划：`doc/exec-plans/active/procedural-raid-playable-outdoor-layout-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守均已进入主线。当前宏切片增加保持常规撤离开放的基地外围清剿，让玩家主动降低威胁；不提前实现实时尸潮、防御设施或战斗小组。
+Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。当前唯一主阶段为 **程序化 Raid 内容扩展——首张可玩随机大地图**；Macro 1 先把 `Frontier Exchange` 扩展为具有滚动镜头、冻结道路骨架、街区建筑与确定性坏种子回退的 2560×1440 室外地图，不提前实现资源点生态、遭遇生态、程序化室内、多主题、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -64,7 +64,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 49. **唯一主基地迁徙 v1**：PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线；迁徙原子推进 12 小时并保持 Stash、装备、人口和资产唯一所有权。
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
 51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
-52. **基地外围清剿 v1（当前开发）**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。领域、持久化、GameSession、双语代码占位和回归已实现，Windows Debug 全目标、完整 CTest 1223/1223 及 PR #110 exact-head Windows/Ubuntu CI 均已通过；等待用户正常游玩验收。
+52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
+53. **程序化可玩室外布局 v1（当前开发）**：content v43 把 `Frontier Exchange` 扩展为 2560×1440、32×18 逻辑格的代码占位地图；每局冻结主/次/接入道路、70～95 个街区建筑、生成尝试、回退原因和完整布局哈希。schema v34 保存道路与空间布局，旧 schema v33 继续按旧布局合同迁移。SDL client 使用跟随玩家并在边界钳制的纯投影视口，输入与准星显式进行屏幕/世界坐标转换；旧整图背景不再用于该随机地图。Windows Debug 全目标和完整 CTest 1229/1229 已通过；PR exact-head CI 与用户正常游玩验收待收束。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -91,7 +92,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。当前外围清剿分支已完成 Windows Debug 全目标、定向领域/会话/存档/UI 回归、完整 CTest 1223/1223 与 PR #110 exact-head Windows/Ubuntu CI。开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。当前程序化大地图分支已通过 Windows Debug 全目标、完整 CTest 1229/1229，以及地图生成、存档、生命周期、完整出击、内容加载和镜头聚焦回归；开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

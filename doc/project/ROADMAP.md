@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-27。
+最后核对：2026-08-28。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守均已进入主线。当前宏切片交付基地外围清剿 v1；范围合同见 `doc/exec-plans/active/regional-base-perimeter-sweep-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。当前唯一主阶段为 **程序化 Raid 内容扩展——首张可玩随机大地图**；当前 Macro 1 交付完整室外布局生成 v1，范围合同见 `doc/exec-plans/active/procedural-raid-playable-outdoor-layout-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -59,6 +59,17 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 建筑内部图永久情报 v1 | PR #97 / merge commit `a7b3cc2` |
 | 空间战术可靠性 v1 | PR #98 / merge commit `95fcd23` |
 | 第二个代表性地点 v1 | PR #99 / merge commit `1d2fea1` |
+| Raid World 可扩展性能基础 v1 | PR #100 / merge commit `d7c231b` |
+| 失物记录与行动老化 v1 | PR #101 / merge commit `7185d55` |
+| 多敌人追击与攻击意图隔离 | PR #102 / merge commit `1c62064` |
+| NPC 寻回与 Raid 自力寻回 v1 | PR #103 / merge commit `f31d91a` |
+| 区域路线与轻量哨所基础 | PR #104 / merge commit `dc19745` |
+| 哨所中断与恢复 v1 | PR #105 / merge commit `cf555a1` |
+| 区域基地候选点清剿 v1 | PR #106 / merge commit `e6721e4` |
+| 唯一主基地迁徙 v1 | PR #107 / merge commit `d035181` |
+| 区域基地独特设施 v1 | PR #108 / merge commit `bf0d383` |
+| 基地威胁预警与自动防守 v1 | PR #109 / merge commit `fab9f32` |
+| 基地外围清剿 v1 | PR #110 / merge commit `7bd3b02` |
 
 ## Core Extraction Alpha 宏切片
 
@@ -146,7 +157,16 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 唯一主基地迁徙 v1 | 建成厨房/净水后把主基地迁往已准备的 Ashworks；旧基地成为离线前哨，工坊可从储备免费重装 | TechnologyCoreState、稳定设施定义/位置、纯查询预览、原子迁徙、队列暂停、schema v30/content v39 | PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main |
 | 区域基地独特设施 v1 | 在已清剿并建立前哨的 Ashworks 预先修复重型物流工坊；迁入后新制造订单缩短，迁出后暂停且回迁自动恢复 | 类型化地点能力、永久修复状态、原子时间事务、active Base 消费者、schema v31/content v40 | PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main |
 | 基地威胁预警与自动防守 v1 | Base 持续显示三类威胁；满值安全期显示排队与剩余时间，安全期结束后进入可恢复的三分钟预警，并以公共 Security 提前结算成功或有死档保护的软失败 | BaseSiegeState、日结/Settlement 来源、pending Raid 回滚、首次确认与后续预设、schema v32/content v41 | PR #109 已通过用户正常游玩验收，以普通 merge commit `fab9f32` 进入 main。实时防守、防御设施和战斗小组延期 |
-| 基地外围清剿 v1 | 威胁达到 40 后从区域页出击；清空初始敌人并撤离降低威胁，提前撤离仍合法但不获得减值 | 显式地点地图/减值、共享 100 点容量、BasePerimeterSweepSnapshot、幂等 Settlement、schema v33/content v42 | 当前分支已完成领域、持久化、GameSession、双语代码占位与定向回归；完整构建、CTest、PR/CI 和用户验收待收束 |
+| 基地外围清剿 v1 | 威胁达到 40 后从区域页出击；清空初始敌人并撤离降低威胁，提前撤离仍合法但不获得减值 | 显式地点地图/减值、共享 100 点容量、BasePerimeterSweepSnapshot、幂等 Settlement、schema v33/content v42 | PR #110 已通过 CI 与用户正常游玩验收，以普通 merge commit `7bd3b02` 进入 main |
+
+## 当前程序化 Raid 内容扩展阶段
+
+| 宏切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
+| --- | --- | --- | --- |
+| Macro 1：完整室外布局生成 v1 | `Frontier Exchange` 成为可滚动的大地图；不同 seed 形成明显不同的道路、街区和建筑阻挡，关键目标始终可达 | layout v2、主/次/接入道路、合法区、确定性回退、冻结布局哈希、schema v34/content v43、纯镜头投影 | 当前 `codex/procedural-raid-layout-v1` 实现；只使用代码图形/文字及既有批准物品图，不接入旧整图背景或新美术 |
+| Macro 2：资源点生态 v1 | 普通、高价值和地点专属资源点形成路线风险、背包容量与撤离距离取舍 | 资源点定义、容量/Loot 池/风险/空间、命名随机流与开局冻结 | 等待 Macro 1 验收并进入 main 后开始；不重做完整经济 |
+| Macro 3：遭遇与部署生态 v1 | 不同路线出现巡逻、守点、伏击和声响响应压力 | 群组模板、部署合法区、道路/资源点/特殊地点关系、有限敌人 | 等待 Macro 2；复用现有 AI 与性能预算，不开启新 AI 大阶段 |
+| Macro 4：既有消费者整合 v1 | 高危、普通/条件/信号撤离、情报、救援、寻回和外围清剿都能在随机布局正常运行与结算 | 共享合法区、稳定 Map/Space/Socket 身份、冻结快照、唯一 Settlement | 等待 Macro 3；固定独立室内继续复用，不做程序化室内 |
 
 ## 当前 Combat Reliability 缺陷
 
@@ -161,10 +181,10 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 | 阶段 | 目标 | 不提前进入 Alpha 的代表系统 |
 | --- | --- | --- |
 | Survival Loadout | 增加真实配装、损耗与医疗取舍 | 其余装备槽、防具、流血/疼痛、耐久/故障、维修、组件、战术电子 |
-| Raid Pressure & Variety | 增加路线、地图与持续压力差异 | 多固定地图、高危、特殊撤离、情报、尸体、更多敌人；随机地图后置 |
+| Raid Pressure & Variety | 增加路线、地图与持续压力差异 | 多固定地图、高危、特殊撤离和情报已完成；当前推进一张可玩随机室外大地图 |
 | Base Growth | 把带回物转化为长期能力和人群选择 | 唯一 WorldClock、商人、任务、制造、设施、人口、士气 |
 | Regional Campaign | 形成空间战略和周期危机 | 地点、旅行、迁徙、哨所、战斗小组、外围行动、尸潮攻城 |
-| Content Beta | 形成正式内容体量和叙事路线 | 派系、敌人生态、主线、系统商店、随机地图候选；每项另有范围合同 |
+| Content Beta | 形成正式内容体量和叙事路线 | 派系、更多敌人生态、主线、系统商店和更多地图主题；每项另有范围合同 |
 | Release Candidate | 形成可发布 Windows 产品 | 正式美术/音频、性能、可访问性、本地化、打包、诊断和迁移演练 |
 
 ## 不混写边界

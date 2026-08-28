@@ -6,7 +6,7 @@
 
 - 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
 - Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
-- 当前交付已进入 Alpha 后的 Regional Operations。长期系统只保留被当前消费者需要的稳定边界；世界时钟、建设、人口、设施储备、区域路线、唯一主基地迁徙、公共资源自动防守和主动外围清剿已有实际消费者，具名 NPC、实时攻城运行时或联机状态仍不得空转创建。
+- Regional Operations 基础阶段已收束；当前交付进入“程序化 Raid 内容扩展——首张可玩随机大地图”。长期系统只保留被当前消费者需要的稳定边界；具名 NPC、实时攻城运行时、AI 小队或联机状态仍不得空转创建。
 - 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
 - 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
 
@@ -113,6 +113,7 @@ SessionProjection snapshot() const;
 - 当前武器选择是 Raid 运行时的装备槽值，不复制资产也不进入不可续玩的 pending Raid 存档。弹药、枪膛、耐久与故障仍只保存在对应 AssetRecord；切换完成后重建射击表现瞬态，射击/换弹/清障必须查询当前实例。
 - Raid 目标模拟步长为 60 Hz；渲染与模拟分离仍需后续完整迁移。当前生产 App 把单次帧时间限制为 100 ms，避免失焦、远程桌面或慢帧触发无界追帧。每个 Raid 空间构造不可变障碍宽阶段索引；敌人分离使用稳定近邻格，视线/移动只读取候选障碍。低密度导航保留 actor-expanded 精确可见图，高密度静态空间改用预验证四邻接网格；动态目标 10 Hz 刷新且每子步最多一条查询，各空间轮转游标保证后序敌人不饥饿。Simulation 只发布确定性工作计数；SDL client 的 `F9` 面板独立记录 120 帧 wall time。数量级回退由 `doc/architecture/PERFORMANCE_BUDGETS.md` 的 8/32/100 敌人 Debug 门槛阻断。
 - 地图、Loot、敌人部署和其他规则随机使用跨编译器稳定的 PCG32 与无偏整数抽取。各消费者使用命名随机流；配置选择写入 RaidSnapshot，非续玩 Raid 的战斗伤势使用独立会话序列。
+- 程序化室外 layout v2 先冻结主路、次路和关键锚点接入路，再在非道路合法格生成街区建筑。道路格、建筑阻挡、生成尝试、回退原因和完整哈希共同进入 pending Raid；任何关键出生、撤离、特殊地点、Loot 或敌人锚点都必须位于道路接入格且可达。达到尝试上限只能使用同版本的确定性连通回退，不能保留半合法结果或在加载后重抽。SDL client 的代码地面/道路/建筑和跟随镜头只是冻结快照的投影；屏幕/世界坐标转换不得进入领域真值。
 - 正式射击不创建可渲染/可碰撞场景实体弹丸，而保存短生命逻辑飞行记录并连续扫掠。
 - `WeaponAimState` 独立保存实际准星世界位置、输入锚点、可推移控制目标、玩家控制速度、后坐力当前速度/目标方向、短弯曲阶段、右键瞄准进度与命名 PCG32 随机状态。绝对输入用于测试/初始化，Active Raid 的 SDL client 提交每帧相对鼠标位移。腰射与当前按住右键的瞄准状态使用 `Direct` 模式同帧响应；未来合法高倍率瞄具才使用 `HighMagnificationInertial` 模式按速度/加速度追赶。击发立即刷新一份径向初速，再连续弯向有界随机角度并减速到零；不累加无界冲量，也不把准星位置自动拉回旧点。
 - 实际准星中心决定总体射击方向；`WeaponFireState` 再在当前散布内产生确定性随机偏移并冻结本发。精准度控制最小散布，稳定性控制最大散布及射击/快速移准带来的增长，操控速度控制停火收缩；两端包络随距离平滑增长，近距离接近零，静止散布目标在最大有效射程处达到当前上下文最大包络。玩家移动和快速移准会立即抬升一段可读的散布下限，再连续增长，避免只有内部数值变化而 UI 不可见。App 不得把鼠标点或准星图形当成命中权威。
@@ -145,7 +146,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `regional-base-perimeter-sweep-content-42`。区域加载额外验证每个基地地点的每日威胁强度、外围清剿地图和有效减值；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `procedural-playable-outdoor-layout-content-43`。程序化室外加载额外验证 layout v2、网格、道路分支、建筑数量、尝试次数和锚点间距；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -154,7 +155,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v33 保存外围清剿 Pending Raid/结果减值，并继续保存 schema v32 的 `BaseSiegeState` 及出击前威胁快照。v32 档案若三类来源和超过 100，会按比例和稳定余数顺序迁移到共享容量 100；v31 及更早档案再沿既有迁移链补齐威胁、区域与设施状态。内容版本兼容仍独立于 Profile schema。
+- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v34 在 v33 外围清剿合同之上保存程序化道路格、layout version 和回退原因，使整张室外布局可校验地冻结。schema v33 及更早档案沿既有迁移链补齐旧布局/威胁/区域/设施状态；内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。
@@ -188,5 +189,6 @@ Content Registry 的当前落地边界：
 20. `codex/raid-high-risk-control-resource-v1`：PR #76 / merge commit `bc26337`，交付每图主动高危控制地标、可中断按住交互、开局冻结的高级 Loot 与阶段访问门控。
 21. `codex/base-resource-pressure-v1`：PR #78 / merge commit `ba8283f`，交付待分配区、个人保留/基地捐献、四项资源、共享连续碰撞与中英文设置。
 22. `codex/base-world-clock-daily-needs-v1`：当前切片，交付唯一世界分钟时钟、每日需求、schema v8、Base 检查点与 Raid 时间提交/回滚。
+23. `codex/procedural-raid-layout-v1`：当前主阶段 Macro 1，交付可滚动大地图、layout v2 道路/街区生成、确定性回退、schema v34/content v43 与代码占位投影。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。
