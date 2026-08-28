@@ -6,7 +6,7 @@
 
 - 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
 - Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。
-- 当前交付已进入 Alpha 后的 Regional Operations。长期系统只保留被当前消费者需要的稳定边界；世界时钟、建设、人口、设施储备、区域路线、唯一主基地迁徙和公共资源自动防守已有实际消费者，具名 NPC、实时攻城运行时或联机状态仍不得空转创建。
+- 当前交付已进入 Alpha 后的 Regional Operations。长期系统只保留被当前消费者需要的稳定边界；世界时钟、建设、人口、设施储备、区域路线、唯一主基地迁徙、公共资源自动防守和主动外围清剿已有实际消费者，具名 NPC、实时攻城运行时或联机状态仍不得空转创建。
 - 纯单机领域保持确定性命令、种子和快照，但不为合作模式、服务器权威或网络回滚付出复杂度。
 - 定义、长期状态、活动快照、场景瞬态和 UI 投影分层保存；任何一层都不能通过显示名称、贴图、动画或场景地址反推领域事实。
 
@@ -145,7 +145,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `regional-base-threat-content-41`。区域加载额外验证每个基地地点的正数且有界的每日威胁强度；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前内容版本为 `regional-base-perimeter-sweep-content-42`。区域加载额外验证每个基地地点的每日威胁强度、外围清剿地图和有效减值；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -154,7 +154,7 @@ Content Registry 的当前落地边界：
 
 ## 存档与平台文件
 
-- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v32 保存 `BaseSiegeState` 及 pending Raid 出击前威胁快照，并继续保存 schema v31 的唯一科技核心、设施位置和地点独特设施事实。v31 档案确定性初始化为无历史攻城且具有首轮安全窗口；更早档案再沿既有迁移链补齐区域与设施状态。内容版本兼容仍独立于 Profile schema。
+- Persistent Base 落地 schema v1，Extraction Loop、Survival Loadout、Base Growth、Raid World 和 Regional Operations 逐步演进；当前 schema v33 保存外围清剿 Pending Raid/结果减值，并继续保存 schema v32 的 `BaseSiegeState` 及出击前威胁快照。v32 档案若三类来源和超过 100，会按比例和稳定余数顺序迁移到共享容量 100；v31 及更早档案再沿既有迁移链补齐威胁、区域与设施状态。内容版本兼容仍独立于 Profile schema。
 - 存档外壳至少包含 schema version、profile ID、revision、内容版本、payload checksum 和 payload。
 - 保存流程已实现为：复制并验证候选 Profile、写临时文件、刷新、回读校验、更新最近有效安全备份、原子替换主档、最后交换内存状态。
 - Windows 原子替换封装在文件系统适配器中；存档目录由 SDL 首选数据目录提供给 services，领域层不依赖 SDL。

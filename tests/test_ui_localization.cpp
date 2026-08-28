@@ -537,6 +537,26 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
             "出击前必须先处理基地攻城预警");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {
+  const std::string deploy = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "PERIMETER SWEEP | THREAT 70 | SUCCESS -40 | RAID +20 | NORMAL EXITS OPEN");
+  EXPECT_NE(deploy.find("基地外围清剿"), std::string::npos);
+  EXPECT_NE(deploy.find("威胁 70"), std::string::npos);
+  EXPECT_NE(deploy.find("成功清剿 -40"), std::string::npos);
+  EXPECT_NE(deploy.find("常规撤离开放"), std::string::npos);
+
+  const std::string objective = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "PERIMETER SWEEP | INITIAL HOSTILES REMAINING 4 | NORMAL EXITS AVAILABLE");
+  EXPECT_NE(objective.find("初始敌人剩余 4"), std::string::npos);
+  EXPECT_NE(objective.find("可使用常规撤离点"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT"),
+            "基地外围已清剿 | 撤离后降低基地威胁");
+}
+
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);

@@ -103,6 +103,137 @@ TEST(RaidLifecycleTest, SettlementAddsThreatOnceAndRollbackRestoresEntryState)
     EXPECT_EQ(rolledBack.baseSiege.populationThreatUnits, 0U);
 }
 
+TEST(RaidLifecycleTest,
+     BasePerimeterSweepKeepsNormalExtractionOpenAndRequiresObjective)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.greyline_yard"};
+    ProfileState profile = makeNewAlphaProfile(
+        "perimeter-early-extraction", content);
+    profile.baseSiege.raidThreatUnits = 40U;
+
+    const DeployReceipt deployed = executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "perimeter-early-raid",
+            "perimeter-early-settlement",
+            44010U,
+            MapDefinitionId{"map.v0.test"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{profile.revision, "deploy:perimeter-early"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid->basePerimeterSweep.has_value());
+    EXPECT_FALSE(profile.pendingRaid->basePerimeterSweep->objectiveSecured);
+
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "perimeter-early-settlement",
+        RaidResultOutcome::Extracted);
+
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_EQ(totalBaseThreat(profile.baseSiege), 60U);
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    EXPECT_EQ(profile.lastRaidResult->baseThreatReducedUnits, 0U);
+}
+
+TEST(RaidLifecycleTest,
+     SecuredBasePerimeterSweepReducesThreatOnceAtExtraction)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.greyline_yard"};
+    ProfileState profile = makeNewAlphaProfile(
+        "perimeter-success", content);
+    profile.baseSiege.raidThreatUnits = 70U;
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "perimeter-success-raid",
+            "perimeter-success-settlement",
+            44011U,
+            MapDefinitionId{"map.v0.test"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{profile.revision, "deploy:perimeter-success"})
+                    .succeeded);
+    profile.pendingRaid->basePerimeterSweep->objectiveSecured = true;
+
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "perimeter-success-settlement",
+        RaidResultOutcome::Extracted);
+
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_EQ(totalBaseThreat(profile.baseSiege), 50U);
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    EXPECT_EQ(profile.lastRaidResult->baseThreatReducedUnits, 40U);
+    const std::uint64_t committed = profileStateFingerprint(profile);
+    const RaidSettlementReceipt replay = settlePendingRaid(
+        profile,
+        content,
+        "perimeter-success-settlement",
+        RaidResultOutcome::Extracted);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+}
+
+TEST(RaidLifecycleTest,
+     FailedOrAbnormalBasePerimeterSweepDoesNotReduceThreat)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.greyline_yard"};
+    ProfileState failed = makeNewAlphaProfile("perimeter-failed", content);
+    failed.baseSiege.raidThreatUnits = 70U;
+    ASSERT_TRUE(executeDeploy(
+        failed,
+        content,
+        DeployCommand{
+            "perimeter-failed-raid", "perimeter-failed-settlement",
+            44012U, MapDefinitionId{"map.v0.test"}, {},
+            std::nullopt, std::nullopt, std::nullopt, siteId},
+        CommandContext{failed.revision, "deploy:perimeter-failed"})
+                    .succeeded);
+    failed.pendingRaid->basePerimeterSweep->objectiveSecured = true;
+    ASSERT_TRUE(settlePendingRaid(
+        failed,
+        content,
+        "perimeter-failed-settlement",
+        RaidResultOutcome::PlayerDead).succeeded);
+    EXPECT_EQ(totalBaseThreat(failed.baseSiege), 90U);
+    EXPECT_EQ(failed.lastRaidResult->baseThreatReducedUnits, 0U);
+
+    ProfileState rollback = makeNewAlphaProfile(
+        "perimeter-rollback", content);
+    rollback.baseSiege.raidThreatUnits = 70U;
+    ASSERT_TRUE(executeDeploy(
+        rollback,
+        content,
+        DeployCommand{
+            "perimeter-rollback-raid", "perimeter-rollback-settlement",
+            44013U, MapDefinitionId{"map.v0.test"}, {},
+            std::nullopt, std::nullopt, std::nullopt, siteId},
+        CommandContext{rollback.revision, "deploy:perimeter-rollback"})
+                    .succeeded);
+    rollback.pendingRaid->basePerimeterSweep->objectiveSecured = true;
+    ASSERT_TRUE(rollbackPendingRaidToBase(rollback, content).succeeded);
+    EXPECT_EQ(totalBaseThreat(rollback.baseSiege), 70U);
+    EXPECT_FALSE(rollback.lastRaidResult.has_value());
+}
+
 void equipAlphaLoadout(ProfileState &profile)
 {
     for (const auto &[definitionId, slot, transaction] :
@@ -178,7 +309,7 @@ TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-base-site-clearance-19");
+        "regional-base-perimeter-sweep-20");
     ASSERT_TRUE(profile.pendingRaid->rescue.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rescue->definitionId,
@@ -580,7 +711,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(profile.pendingRaid->baseSiteClearance.has_value());
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
-        "regional-base-site-clearance-19");
+        "regional-base-perimeter-sweep-20");
     EXPECT_FALSE(profile.pendingRaid->baseSiteClearance->objectiveSecured);
 
     ProfileState earlyExtraction = profile;

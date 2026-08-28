@@ -1385,7 +1385,8 @@ bool App::handleScreenConfirm()
 
 bool App::tryDeployFromBase(
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
-    std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId)
+    std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
+    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId)
 {
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
@@ -1415,14 +1416,19 @@ bool App::tryDeployFromBase(
         return false;
     }
     const bool regionalMission = outpostRestorationId.has_value() ||
-        baseSiteClearanceId.has_value();
+        baseSiteClearanceId.has_value() ||
+        basePerimeterSweepId.has_value();
     const MapDefinition &targetMap = outpostRestorationId.has_value()
         ? content.map(content.regionalOutpost(
               *outpostRestorationId).restorationMapDefinitionId)
         : baseSiteClearanceId.has_value()
             ? content.map(*content.regionalBaseSite(
                   *baseSiteClearanceId).clearanceMapDefinitionId)
-            : selectedRaidMap();
+            : basePerimeterSweepId.has_value()
+                ? content.map(content.regionalBaseSite(
+                      *basePerimeterSweepId)
+                          .perimeterSweepMapDefinitionId)
+                : selectedRaidMap();
     if (!gameFlow_.deploy(
             targetMap.id,
             regionalMission
@@ -1432,7 +1438,8 @@ bool App::tryDeployFromBase(
                 ? std::optional<std::string>{}
                 : selectedRaidSelfRecoveryRecordId_,
             outpostRestorationId,
-            baseSiteClearanceId))
+            baseSiteClearanceId,
+            basePerimeterSweepId))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1797,6 +1804,11 @@ SDL_FRect App::regionalBaseSiteFeatureButton() const noexcept
     return SDL_FRect{740.0F, 405.0F, 375.0F, 32.0F};
 }
 
+SDL_FRect App::regionalBasePerimeterSweepButton() const noexcept
+{
+    return SDL_FRect{300.0F, 610.0F, 815.0F, 34.0F};
+}
+
 SDL_FRect App::baseAutoDefenseButton() const noexcept
 {
     return SDL_FRect{470.0F, 474.0F, 340.0F, 52.0F};
@@ -2031,6 +2043,26 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 publishedContentRegistry().regionalOperations().outposts;
             const auto &baseSites =
                 publishedContentRegistry().regionalOperations().baseSites;
+            if (contains(
+                    regionalBasePerimeterSweepButton(), click.position))
+            {
+                const BasePerimeterSweepPlan plan = queryBasePerimeterSweep(
+                    gameSession_.profile(), publishedContentRegistry());
+                if (!plan.canDeploy)
+                {
+                    uiMessage_ = plan.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                    return;
+                }
+                const bool deployed = tryDeployFromBase(
+                    std::nullopt,
+                    std::nullopt,
+                    plan.baseSiteDefinitionId);
+                gameAudio_.play(deployed
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                return;
+            }
             const auto candidate = std::find_if(
                 baseSites.begin(), baseSites.end(),
                 [&](const RegionalBaseSiteDefinition &site)
@@ -5477,6 +5509,18 @@ void App::renderDebugText()
         uiTextRenderer_.render(
             renderer_, 20.0F, 212.0F, objective.c_str());
     }
+    else if (gameSession_.profile().pendingRaid.has_value() &&
+             gameSession_.profile().pendingRaid->basePerimeterSweep.has_value())
+    {
+        const std::string objective =
+            gameSession_.basePerimeterSweepObjectiveSecured()
+            ? "PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT"
+            : fmt::format(
+                  "PERIMETER SWEEP | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
+                  gameSession_.world().aliveInitialEnemyCount());
+        uiTextRenderer_.render(
+            renderer_, 20.0F, 212.0F, objective.c_str());
+    }
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()
         ? fmt::format(
@@ -6765,6 +6809,15 @@ void App::renderStashOverlay()
             uiTextRenderer_.render(
                 renderer_, panel.x + 24.0F, panel.y + 136.0F,
                 rescued.c_str());
+            if (result->baseThreatReducedUnits > 0U)
+            {
+                const std::string threat = fmt::format(
+                    "BASE THREAT REDUCED: -{}",
+                    result->baseThreatReducedUnits);
+                uiTextRenderer_.render(
+                    renderer_, panel.x + 250.0F, panel.y + 136.0F,
+                    threat.c_str());
+            }
             if (result->outcome == RaidResultOutcome::Extracted)
             {
                 const std::string count = fmt::format(
@@ -11584,6 +11637,33 @@ void App::renderRegionalOperations()
                             : "CLEAR BASE SITE TO UNLOCK");
     }
 
+    const BasePerimeterSweepPlan sweep = queryBasePerimeterSweep(
+        profile, content);
+    const SDL_FRect sweepButton = regionalBasePerimeterSweepButton();
+    SDL_SetRenderDrawColor(
+        renderer_,
+        sweep.canDeploy ? 64 : 42,
+        sweep.canDeploy ? 96 : 52,
+        sweep.canDeploy ? 62 : 52,
+        255);
+    SDL_RenderFillRect(renderer_, &sweepButton);
+    SDL_SetRenderDrawColor(renderer_, 204, 184, 104, 255);
+    SDL_RenderRect(renderer_, &sweepButton);
+    const std::string sweepLabel = sweep.canDeploy
+        ? fmt::format(
+              "{}PERIMETER SWEEP | THREAT {} | SUCCESS -{} | RAID +{} | NORMAL EXITS OPEN",
+              deploymentWarningArmed_ ? "CONFIRM " : "",
+              sweep.currentThreatUnits,
+              sweep.threatReductionUnits,
+              kBaseSiegeRaidThreatUnits)
+        : fmt::format(
+              "PERIMETER SWEEP LOCKED | THREAT {}/{}",
+              sweep.currentThreatUnits,
+              kBasePerimeterSweepMinimumThreat);
+    uiTextRenderer_.render(
+        renderer_, sweepButton.x + 14.0F, sweepButton.y + 10.0F,
+        sweepLabel.c_str());
+
     const RegionalRoutePlan riverside = queryRegionalRoute(
         profile, content, MapDefinitionId{"map.raid.riverside"});
     const RegionalRoutePlan industrial = queryRegionalRoute(
@@ -11596,15 +11676,15 @@ void App::renderRegionalOperations()
         industrial.travelMinutes,
         frontier.travelMinutes);
     uiTextRenderer_.render(
-        renderer_, 300.0F, 642.0F, routeSummary.c_str());
+        renderer_, 300.0F, 650.0F, routeSummary.c_str());
     uiTextRenderer_.render(
-        renderer_, 300.0F, 664.0F,
+        renderer_, 300.0F, 672.0F,
         "OUTPOSTS HAVE NO STORAGE OR SERVICES | ESC BACK");
     if (!uiMessage_.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
         uiTextRenderer_.render(
-            renderer_, 300.0F, 686.0F, uiMessage_.c_str());
+            renderer_, 300.0F, 694.0F, uiMessage_.c_str());
     }
 }
 

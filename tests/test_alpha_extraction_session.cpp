@@ -97,7 +97,7 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(session.world().highRiskActiveEnemyCap(), 8U);
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
-        "regional-base-site-clearance-19");
+        "regional-base-perimeter-sweep-20");
 }
 
 TEST(AlphaExtractionSessionTest,
@@ -144,6 +144,38 @@ TEST(AlphaExtractionSessionTest,
                      .unlocked);
     EXPECT_FALSE(session.profile().regionalOperations.outposts.at(outpostId)
                      .unlocked);
+}
+
+TEST(AlphaExtractionSessionTest,
+     BasePerimeterSweepObjectiveFollowsInitialEnemies)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-perimeter-sweep"));
+    const_cast<ProfileState &>(session.profile())
+        .baseSiege.raidThreatUnits = 70U;
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.greyline_yard"};
+    ASSERT_TRUE(session.deployAlpha(
+        77240U,
+        MapDefinitionId{"map.v0.test"},
+        {},
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        siteId));
+    ASSERT_TRUE(session.profile().pendingRaid->basePerimeterSweep.has_value());
+    EXPECT_FALSE(session.basePerimeterSweepObjectiveSecured());
+
+    for (const Enemy &enemy : session.world().enemies())
+    {
+        Enemy &mutableEnemy = const_cast<Enemy &>(enemy);
+        static_cast<void>(mutableEnemy.takeDamage(mutableEnemy.maxHealth()));
+    }
+    session.update(GameplayInput{}, 0.0F);
+
+    EXPECT_TRUE(session.basePerimeterSweepObjectiveSecured());
+    ASSERT_TRUE(session.activeQuitAlphaRaid());
+    EXPECT_EQ(session.profile().lastRaidResult->baseThreatReducedUnits, 0U);
 }
 
 TEST(AlphaExtractionSessionTest,

@@ -213,9 +213,12 @@ public:
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            baseSiteClearanceId = std::nullopt);
+            baseSiteClearanceId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            basePerimeterSweepId = std::nullopt);
     [[nodiscard]] bool outpostRestorationObjectiveSecured() const noexcept;
     [[nodiscard]] bool baseSiteClearanceObjectiveSecured() const noexcept;
+    [[nodiscard]] bool basePerimeterSweepObjectiveSecured() const noexcept;
     [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
     raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt
@@ -408,6 +411,7 @@ private:
     float selfRecoveryInteractionSeconds_{};
     bool outpostRestorationObjectiveSecured_{};
     bool baseSiteClearanceObjectiveSecured_{};
+    bool basePerimeterSweepObjectiveSecured_{};
     double pendingWorldSeconds_{};
     float worldClockCheckpointElapsedSeconds_{};
     float baseSiegeWarningSecondAccumulator_{};

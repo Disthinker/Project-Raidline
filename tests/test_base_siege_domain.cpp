@@ -29,6 +29,66 @@ TEST(BaseSiegeDomainTest, DailyThreatUsesPopulationAndActiveSite)
     EXPECT_EQ(totalBaseThreat(profile.baseSiege), 2U);
 }
 
+TEST(BaseSiegeDomainTest, ThreatSourcesShareOneVisibleCapacity)
+{
+    ProfileState profile = makeProfile("siege-shared-capacity");
+    profile.baseSiege.raidThreatUnits = 90U;
+    profile.baseSiege.populationThreatUnits = 5U;
+    profile.baseSiege.siteThreatUnits = 5U;
+
+    applySettledRaidBaseThreat(profile);
+    ASSERT_EQ(advanceWorldClock(
+        profile.worldClock, kWorldMinutesPerDay).minutesApplied,
+        kWorldMinutesPerDay);
+    const BaseThreatAdvanceResult daily = synchronizeBaseThreatThrough(
+        profile, publishedContentRegistry());
+
+    EXPECT_EQ(totalBaseThreat(profile.baseSiege), 100U);
+    EXPECT_EQ(profile.baseSiege.raidThreatUnits, 90U);
+    EXPECT_EQ(daily.populationThreatAdded, 0U);
+    EXPECT_EQ(daily.siteThreatAdded, 0U);
+}
+
+TEST(BaseSiegeDomainTest, LegacyOverCapacityThreatNormalizesProportionally)
+{
+    BaseSiegeState state;
+    state.raidThreatUnits = 80U;
+    state.populationThreatUnits = 60U;
+    state.siteThreatUnits = 20U;
+
+    normalizeBaseThreatCapacity(state);
+
+    EXPECT_EQ(state.raidThreatUnits, 50U);
+    EXPECT_EQ(state.populationThreatUnits, 38U);
+    EXPECT_EQ(state.siteThreatUnits, 12U);
+    EXPECT_EQ(totalBaseThreat(state), 100U);
+}
+
+TEST(BaseSiegeDomainTest, PerimeterSweepQueryUsesActiveSiteAndIsPure)
+{
+    ProfileState profile = makeProfile("siege-perimeter-query");
+    const std::uint64_t belowFingerprint = profileStateFingerprint(profile);
+    const BasePerimeterSweepPlan blocked = queryBasePerimeterSweep(
+        profile, publishedContentRegistry());
+    EXPECT_FALSE(blocked.canDeploy);
+    EXPECT_EQ(profileStateFingerprint(profile), belowFingerprint);
+
+    profile.baseSiege.raidThreatUnits = 70U;
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const BasePerimeterSweepPlan plan = queryBasePerimeterSweep(
+        profile, publishedContentRegistry());
+
+    ASSERT_TRUE(plan.canDeploy) << plan.message;
+    EXPECT_EQ(
+        plan.baseSiteDefinitionId,
+        RegionalBaseSiteDefinitionId{"regional_base_site.greyline_yard"});
+    EXPECT_EQ(plan.mapDefinitionId, MapDefinitionId{"map.v0.test"});
+    EXPECT_EQ(plan.currentThreatUnits, 70U);
+    EXPECT_EQ(plan.threatReductionUnits, 40U);
+    EXPECT_EQ(plan.projectedThreatAfterSettlement, 50U);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
 TEST(BaseSiegeDomainTest, WarningOnlyActivatesAfterThresholdAndSafety)
 {
     ProfileState profile = makeProfile("siege-warning");

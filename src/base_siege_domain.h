@@ -8,6 +8,7 @@ inline constexpr std::uint32_t kBaseSiegeRaidThreatUnits = 20U;
 inline constexpr std::uint32_t kBaseSiegeSuccessSafeDays = 7U;
 inline constexpr std::uint32_t kBaseSiegeFailureSafeDays = 12U;
 inline constexpr std::uint32_t kBaseSiegeMinimumResidents = 4U;
+inline constexpr std::uint32_t kBasePerimeterSweepMinimumThreat = 40U;
 
 enum class BaseThreatTier
 {
@@ -65,6 +66,19 @@ struct BaseAutoDefenseReceipt
     std::uint64_t safeUntilWorldMinute{};
 };
 
+struct BasePerimeterSweepPlan
+{
+    bool canDeploy{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    MapDefinitionId mapDefinitionId;
+    std::uint32_t currentThreatUnits{};
+    std::uint32_t threatReductionUnits{};
+    std::uint32_t projectedThreatAfterSettlement{};
+};
+
 [[nodiscard]] std::uint32_t totalBaseThreat(
     const BaseSiegeState &state) noexcept;
 [[nodiscard]] BaseThreatProjection projectBaseThreat(
@@ -73,6 +87,13 @@ struct BaseAutoDefenseReceipt
     ProfileState &profile,
     const ContentRegistry &content) noexcept;
 void applySettledRaidBaseThreat(ProfileState &profile) noexcept;
+[[nodiscard]] std::uint32_t applyBasePerimeterSweepThreatReduction(
+    ProfileState &profile,
+    std::uint32_t requestedUnits) noexcept;
+void normalizeBaseThreatCapacity(BaseSiegeState &state) noexcept;
+[[nodiscard]] BasePerimeterSweepPlan queryBasePerimeterSweep(
+    const ProfileState &profile,
+    const ContentRegistry &content) noexcept;
 [[nodiscard]] bool activateBaseSiegeWarningIfEligible(
     ProfileState &profile) noexcept;
 [[nodiscard]] bool advanceBaseSiegeWarning(

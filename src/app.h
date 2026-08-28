@@ -177,7 +177,9 @@ private:
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            baseSiteClearanceId = std::nullopt);
+            baseSiteClearanceId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            basePerimeterSweepId = std::nullopt);
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
@@ -214,6 +216,7 @@ private:
     [[nodiscard]] SDL_FRect regionalBaseSiteClearanceButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalFacilityReserveButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalBaseSiteFeatureButton() const noexcept;
+    [[nodiscard]] SDL_FRect regionalBasePerimeterSweepButton() const noexcept;
     [[nodiscard]] SDL_FRect baseAutoDefenseButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalOutpostActionButton(
         std::size_t index) const noexcept;

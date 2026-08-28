@@ -438,17 +438,22 @@ DeployReceipt executeDeploy(
             profile.revision);
     }
 
+    const std::size_t regionalMissionCount =
+        static_cast<std::size_t>(command.selfRecoveryRecordId.has_value()) +
+        static_cast<std::size_t>(command.outpostRestorationId.has_value()) +
+        static_cast<std::size_t>(command.baseSiteClearanceId.has_value()) +
+        static_cast<std::size_t>(command.basePerimeterSweepId.has_value());
+    if (regionalMissionCount > 1U)
+    {
+        return deployFailure(
+            RaidLifecycleError::InvalidCommand,
+            "regional mission modes cannot be combined",
+            profile.revision);
+    }
+
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     if (command.outpostRestorationId.has_value())
     {
-        if (command.selfRecoveryRecordId.has_value() ||
-            command.baseSiteClearanceId.has_value())
-        {
-            return deployFailure(
-                RaidLifecycleError::InvalidCommand,
-                "outpost restoration cannot be combined with another regional operation",
-                profile.revision);
-        }
         try
         {
             const RegionalOutpostDefinition &definition =
@@ -483,14 +488,6 @@ DeployReceipt executeDeploy(
     std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
     if (command.baseSiteClearanceId.has_value())
     {
-        if (command.selfRecoveryRecordId.has_value() ||
-            command.outpostRestorationId.has_value())
-        {
-            return deployFailure(
-                RaidLifecycleError::InvalidCommand,
-                "Base site clearance cannot be combined with another regional operation",
-                profile.revision);
-        }
         const RegionalBaseSiteClearancePlan plan =
             queryRegionalBaseSiteClearance(
                 candidate, content, *command.baseSiteClearanceId);
@@ -505,6 +502,27 @@ DeployReceipt executeDeploy(
         }
         baseSiteClearance = RegionalBaseSiteClearanceSnapshot{
             *command.baseSiteClearanceId,
+            false};
+    }
+    std::optional<BasePerimeterSweepSnapshot> basePerimeterSweep;
+    if (command.basePerimeterSweepId.has_value())
+    {
+        const BasePerimeterSweepPlan plan = queryBasePerimeterSweep(
+            candidate, content);
+        if (!plan.canDeploy ||
+            plan.baseSiteDefinitionId != *command.basePerimeterSweepId ||
+            plan.mapDefinitionId != command.mapDefinitionId)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                plan.message.empty()
+                    ? "Base perimeter sweep deployment is unavailable"
+                    : plan.message,
+                profile.revision);
+        }
+        basePerimeterSweep = BasePerimeterSweepSnapshot{
+            plan.baseSiteDefinitionId,
+            plan.threatReductionUnits,
             false};
     }
     const RaidTravelPreview travel = queryRaidTravel(
@@ -585,7 +603,7 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = "regional-base-site-clearance-19";
+    snapshot.rulesVersion = "regional-base-perimeter-sweep-20";
     snapshot.mapDefinitionId = command.mapDefinitionId;
     snapshot.seed = command.seed;
     snapshot.spawnExtractionPairId = pair.id;
@@ -617,6 +635,7 @@ DeployReceipt executeDeploy(
     snapshot.travel.startingBaseSiege = candidate.baseSiege;
     snapshot.outpostRestoration = std::move(outpostRestoration);
     snapshot.baseSiteClearance = std::move(baseSiteClearance);
+    snapshot.basePerimeterSweep = std::move(basePerimeterSweep);
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -1122,6 +1141,31 @@ RaidSettlementReceipt settlePendingRaid(
         state->second.unlocked = true;
         outpost->second.unlocked = true;
     }
+    std::uint32_t baseThreatReducedUnits{};
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.basePerimeterSweep.has_value() &&
+        raidSnapshot.basePerimeterSweep->objectiveSecured)
+    {
+        const RegionalBaseSiteDefinition &definition =
+            content.regionalBaseSite(
+                raidSnapshot.basePerimeterSweep->baseSiteDefinitionId);
+        if (definition.nodeId !=
+                candidate.regionalOperations.activeBaseNodeId ||
+            raidSnapshot.basePerimeterSweep->threatReductionUnits == 0U ||
+            raidSnapshot.basePerimeterSweep->threatReductionUnits >
+                kBaseSiegeThreatThreshold)
+        {
+            return settlementFailure(
+                RaidLifecycleError::InvalidProfile,
+                "Base perimeter sweep target is no longer valid",
+                profile.revision,
+                outcome);
+        }
+        baseThreatReducedUnits =
+            applyBasePerimeterSweepThreatReduction(
+                candidate,
+                raidSnapshot.basePerimeterSweep->threatReductionUnits);
+    }
     std::optional<std::string> lostRecordId;
     if (outcome != RaidResultOutcome::Extracted)
     {
@@ -1165,7 +1209,8 @@ RaidSettlementReceipt settlePendingRaid(
         raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
             ? raidSnapshot.rescue->injuredResidentCount
             : 0U,
-        lostRecordId};
+        lostRecordId,
+        baseThreatReducedUnits};
     ++candidate.revision;
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);
@@ -1265,7 +1310,9 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.pendingRaid->rulesVersion ==
             "regional-outpost-restoration-18" ||
         candidate.pendingRaid->rulesVersion ==
-            "regional-base-site-clearance-19";
+            "regional-base-site-clearance-19" ||
+        candidate.pendingRaid->rulesVersion ==
+            "regional-base-perimeter-sweep-20";
     const RegionalOperationsState startingRegionalOperations =
         candidate.pendingRaid->travel.startingRegionalOperations;
     const BaseSiegeState startingBaseSiege =

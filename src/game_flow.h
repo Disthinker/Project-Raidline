@@ -41,7 +41,9 @@ public:
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            baseSiteClearanceId = std::nullopt) noexcept;
+            baseSiteClearanceId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId>
+            basePerimeterSweepId = std::nullopt) noexcept;
 
     void updateBase(
         const BaseInput &input,

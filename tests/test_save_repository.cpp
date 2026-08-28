@@ -2616,3 +2616,72 @@ TEST(SaveRepositoryTest, SchemaV31MigratesToSafeEmptySiegeState)
         migrated.profile->baseSiege.safeUntilWorldMinute,
         kInitialWorldMinute + 3U * kWorldMinutesPerDay);
 }
+
+TEST(SaveRepositoryTest, SchemaV32NormalizesHiddenThreatOverflow)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-siege-v32-capacity", content);
+    profile.baseSiege.raidThreatUnits = 80U;
+    profile.baseSiege.populationThreatUnits = 60U;
+    profile.baseSiege.siteThreatUnits = 20U;
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "regional-base-threat-content-41",
+            32U),
+        content);
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(totalBaseThreat(migrated.profile->baseSiege), 100U);
+    EXPECT_EQ(migrated.profile->baseSiege.raidThreatUnits, 50U);
+    EXPECT_EQ(migrated.profile->baseSiege.populationThreatUnits, 38U);
+    EXPECT_EQ(migrated.profile->baseSiege.siteThreatUnits, 12U);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV33RoundTripsPendingPerimeterSweepAndResultReduction)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.greyline_yard"};
+    ProfileState pending = makeNewAlphaProfile(
+        "save-perimeter-pending", content);
+    pending.baseSiege.raidThreatUnits = 70U;
+    ASSERT_TRUE(executeDeploy(
+        pending,
+        content,
+        DeployCommand{
+            "save-perimeter-raid", "save-perimeter-settlement",
+            55222U, MapDefinitionId{"map.v0.test"}, {},
+            std::nullopt, std::nullopt, std::nullopt, siteId},
+        CommandContext{pending.revision, "save-perimeter-deploy"})
+                    .succeeded);
+    pending.pendingRaid->basePerimeterSweep->objectiveSecured = true;
+    const SaveLoadResult pendingLoaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(pending, content.contentVersion()), content);
+    ASSERT_TRUE(pendingLoaded.profile.has_value()) << pendingLoaded.message;
+    ASSERT_TRUE(
+        pendingLoaded.profile->pendingRaid->basePerimeterSweep.has_value());
+    EXPECT_EQ(
+        pendingLoaded.profile->pendingRaid->basePerimeterSweep
+            ->threatReductionUnits,
+        40U);
+    EXPECT_TRUE(
+        pendingLoaded.profile->pendingRaid->basePerimeterSweep
+            ->objectiveSecured);
+
+    ASSERT_TRUE(settlePendingRaid(
+        pending,
+        content,
+        "save-perimeter-settlement",
+        RaidResultOutcome::Extracted).succeeded);
+    const SaveLoadResult settledLoaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(pending, content.contentVersion()), content);
+    ASSERT_TRUE(settledLoaded.profile.has_value()) << settledLoaded.message;
+    ASSERT_TRUE(settledLoaded.profile->lastRaidResult.has_value());
+    EXPECT_EQ(
+        settledLoaded.profile->lastRaidResult->baseThreatReducedUnits,
+        40U);
+}
