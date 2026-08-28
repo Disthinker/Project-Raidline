@@ -2801,6 +2801,25 @@ void GameSession::updateAlphaRaid(
             CommandContext{
                 profile_.revision,
                 nextRaidTransaction("fire")});
+        if (input.developerInfiniteAmmo && fire.succeeded &&
+            fire.result == WeaponAmmoResult::Chambered)
+        {
+            // The ordinary command deliberately separates chambering and
+            // firing. In infinite-ammo developer mode, run both against the
+            // disposable candidate so an initially empty chamber can still
+            // fire when the installed magazine contains a compatible round.
+            // Neither candidate transaction is committed to ProfileState.
+            fire = executeWeaponAmmo(
+                candidate,
+                publishedContentRegistry(),
+                FireWeaponCommand{
+                    *weapon,
+                    faultRandom.bounded(10000U),
+                    faultRandom.next()},
+                CommandContext{
+                    candidate.revision,
+                    nextRaidTransaction("developer-infinite-fire")});
+        }
         if (fire.succeeded && fire.result == WeaponAmmoResult::Chambered)
         {
             static_cast<void>(commitProfileCandidate(
@@ -2815,7 +2834,10 @@ void GameSession::updateAlphaRaid(
                  (fire.result == WeaponAmmoResult::Fired ||
                   fire.result == WeaponAmmoResult::FiredAndMalfunctioned))
         {
-            firedCandidate = std::move(candidate);
+            if (!input.developerInfiniteAmmo)
+            {
+                firedCandidate = std::move(candidate);
+            }
         }
         else
         {
@@ -2858,15 +2880,21 @@ void GameSession::updateAlphaRaid(
     }
     if (world_->shotFiredLastUpdate())
     {
-        if (!firedCandidate.has_value())
+        if (!input.developerInfiniteAmmo && !firedCandidate.has_value())
         {
             std::terminate();
         }
-        static_cast<void>(commitProfileCandidate(
-            std::move(*firedCandidate),
-            false));
+        if (firedCandidate.has_value())
+        {
+            static_cast<void>(commitProfileCandidate(
+                std::move(*firedCandidate),
+                false));
+        }
         world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius);
-        ++weaponFaultSequence_;
+        if (!input.developerInfiniteAmmo)
+        {
+            ++weaponFaultSequence_;
+        }
         const AssetRecord *currentWeapon = weapon.has_value()
             ? profile_.assets.find(*weapon)
             : nullptr;

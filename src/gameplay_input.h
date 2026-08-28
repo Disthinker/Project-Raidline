@@ -18,6 +18,12 @@ struct GameplayInput
     bool aimDownSights{};
     bool forceMaximumWeaponSpread{};
 
+    // Runtime developer override supplied by the SDL client. It never enters
+    // ProfileState or persistence. The service still validates that the
+    // equipped weapon can cycle ammunition; successful shots simply discard
+    // the candidate ammo mutation instead of committing it.
+    bool developerInfiniteAmmo{};
+
     // World-space pointer aim. Absence preserves the movement/previous facing
     // direction so the Space-key regression path remains available.
     std::optional<Vec2> aimWorldPosition;

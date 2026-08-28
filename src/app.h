@@ -134,6 +134,7 @@ private:
     bool developerWeaponPanelBlocksGameplayThisFrame_{};
     std::size_t developerWeaponParameterIndex_{};
     bool developerMapFogEnabled_{true};
+    bool developerInfiniteAmmoEnabled_{};
     bool developerPerformanceOverlayOpen_{};
     FramePacingConfiguration framePacingConfiguration_{};
     SoftwareFramePacer softwareFramePacer_{};

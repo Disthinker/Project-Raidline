@@ -1348,6 +1348,7 @@ GameplayInput App::makeGameplayInput() const
         input_.isPrimaryPointerPressed();
 
     input.aimDownSights = input_.isSecondaryPointerPressed();
+    input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
 
     if (pointerWorldPosition_.has_value())
     {
@@ -1501,6 +1502,7 @@ bool App::tryDeployFromBase(
     selectedRaidSelfRecoveryRecordId_.reset();
     selectedRaidIntelligence_ = {};
     developerMapFogEnabled_ = true;
+    developerInfiniteAmmoEnabled_ = false;
     uiMessage_.clear();
     return true;
 }
@@ -4647,6 +4649,13 @@ void App::processEvents()
                         uiMessage_ = developerMapFogEnabled_
                             ? "MAP FOG OF WAR ENABLED"
                             : "MAP FOG OF WAR DISABLED - FULL STATIC MAP";
+                        break;
+                    case SDL_SCANCODE_I:
+                        developerInfiniteAmmoEnabled_ =
+                            !developerInfiniteAmmoEnabled_;
+                        uiMessage_ = developerInfiniteAmmoEnabled_
+                            ? "DEVELOPER INFINITE AMMO ENABLED"
+                            : "DEVELOPER INFINITE AMMO DISABLED";
                         break;
                     case SDL_SCANCODE_ESCAPE:
                         developerWeaponPanelOpen_ = false;
@@ -8360,8 +8369,13 @@ void App::renderPlayerAvatar(
 {
     const float spriteW = kPlayerSpriteWidth;
     const float spriteH = kPlayerSpriteHeight;
-    const float spriteX = position.x + (bodySize.x - spriteW) / 2.0F;
-    const float spriteY = position.y + (bodySize.y - spriteH) / 2.0F;
+    // The camera is committed through an integer SDL viewport. Align the
+    // player to the same pixel grid so fractional simulation positions cannot
+    // make the centered avatar oscillate by one pixel against the world.
+    const float spriteX = std::round(
+        position.x + (bodySize.x - spriteW) / 2.0F);
+    const float spriteY = std::round(
+        position.y + (bodySize.y - spriteH) / 2.0F);
 
     SDL_FRect playerRect{
         spriteX,
@@ -9612,6 +9626,9 @@ void App::renderDeveloperWeaponPanel()
     const char *fogStatus = developerMapFogEnabled_
         ? "MAP FOG OF WAR: ENABLED"
         : "MAP FOG OF WAR: DISABLED - FULL STATIC MAP";
+    const char *infiniteAmmoStatus = developerInfiniteAmmoEnabled_
+        ? "INFINITE AMMO: ENABLED"
+        : "INFINITE AMMO: DISABLED";
     if (!tuning.has_value())
     {
         uiTextRenderer_.render(
@@ -9619,10 +9636,13 @@ void App::renderDeveloperWeaponPanel()
             fogStatus);
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + 56.0F,
+            infiniteAmmoStatus);
+        uiTextRenderer_.render(
+            renderer_, panel.x + 22.0F, panel.y + 74.0F,
             "NO ACTIVE WEAPON");
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
-            "F TOGGLE MAP FOG | F10 / ESC CLOSE");
+            "F MAP FOG | I INFINITE AMMO | F10 / ESC CLOSE");
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -9638,6 +9658,9 @@ void App::renderDeveloperWeaponPanel()
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 54.0F,
         fogStatus);
+    uiTextRenderer_.render(
+        renderer_, panel.x + 440.0F, panel.y + 54.0F,
+        infiniteAmmoStatus);
 
     constexpr std::array<const char *,
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
@@ -9803,7 +9826,7 @@ void App::renderDeveloperWeaponPanel()
         "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET");
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + panel.h - 18.0F,
-        "F MAP FOG | F10/ESC CLOSE");
+        "F MAP FOG | I INFINITE AMMO | F10/ESC CLOSE");
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
@@ -10348,8 +10371,8 @@ void App::refreshDeveloperPerformanceOverlay()
     const std::string pacing = fmt::format(
         "PACING {} | TARGET {:.1f} HZ",
         framePacingConfiguration_.mode == FramePacingMode::VSync
-            ? "VSYNC"
-            : "SOFTWARE FALLBACK",
+            ? "VSYNC + DEADLINE"
+            : "SOFTWARE DEADLINE",
         framePacingConfiguration_.targetRefreshHz);
     const std::string average =
         "AVG  " + timings(performance.average);
@@ -13003,11 +13026,7 @@ int App::run()
 
     running_ = true;
     lastCounter_ = SDL_GetPerformanceCounter();
-    if (framePacingConfiguration_.mode ==
-        FramePacingMode::SoftwareFallback)
-    {
-        softwareFramePacer_.reset(SDL_GetTicksNS());
-    }
+    softwareFramePacer_.reset(SDL_GetTicksNS());
 
     while (running_)
     {
@@ -13026,8 +13045,7 @@ int App::run()
         const Uint64 updateComplete = SDL_GetPerformanceCounter();
         render();
         const Uint64 renderComplete = SDL_GetPerformanceCounter();
-        if (framePacingConfiguration_.mode ==
-            FramePacingMode::SoftwareFallback)
+        if (framePacingConfiguration_.absoluteDeadlineEnabled)
         {
             const Uint64 waitNanoseconds =
                 softwareFramePacer_.waitDuration(SDL_GetTicksNS());

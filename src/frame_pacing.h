@@ -13,15 +13,18 @@ struct FramePacingConfiguration
     FramePacingMode mode{FramePacingMode::SoftwareFallback};
     float targetRefreshHz{60.0F};
     std::uint64_t targetIntervalNanoseconds{16'666'667U};
+    bool absoluteDeadlineEnabled{true};
 };
 
 [[nodiscard]] FramePacingConfiguration configureFramePacing(
     bool vsyncEnabled,
     float reportedRefreshHz) noexcept;
 
-// Absolute-deadline software pacing. A missed deadline is abandoned instead
-// of being replayed, so one long frame cannot create a burst of catch-up
-// frames and another visible cadence discontinuity.
+// Absolute-deadline presentation pacing. It remains active even when a driver
+// reports VSync: some remote/high-refresh presentation paths accept VSync but
+// return from Present without a stable display cadence. If Present already
+// blocked until the deadline this adds no second frame interval. A missed
+// deadline is abandoned instead of being replayed.
 class SoftwareFramePacer
 {
 public:

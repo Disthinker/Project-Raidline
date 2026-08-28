@@ -1,22 +1,31 @@
 #include "frame_pacing.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace
 {
 constexpr float kFallbackRefreshHz{60.0F};
+constexpr float kMaximumPresentationRefreshHz{60.0F};
 
 float usableRefreshRate(float reportedRefreshHz) noexcept
 {
     // Reject stale/invalid display reports. The broad upper bound keeps high
     // refresh-rate panels valid without accepting values that would collapse
     // the software deadline into a busy loop.
-    return std::isfinite(reportedRefreshHz) &&
+    const float refresh = std::isfinite(reportedRefreshHz) &&
                    reportedRefreshHz >= 24.0F &&
                    reportedRefreshHz <= 500.0F
         ? reportedRefreshHz
         : kFallbackRefreshHz;
+    // Project Raidline currently advances simulation once per presented
+    // frame. Its locomotion values and pixel-art camera are authored around a
+    // stable 60 Hz presentation cadence. Capping high-refresh/RDP reports here
+    // prevents 144-240 Hz frame sampling from aliasing whole-pixel camera
+    // movement into a visibly uneven rhythm. A later fixed-step/interpolated
+    // simulation may lift this cap without changing the pacer contract.
+    return std::min(refresh, kMaximumPresentationRefreshHz);
 }
 
 std::uint64_t intervalFor(float refreshHz) noexcept
@@ -46,7 +55,8 @@ FramePacingConfiguration configureFramePacing(
             ? FramePacingMode::VSync
             : FramePacingMode::SoftwareFallback,
         refreshHz,
-        intervalFor(refreshHz)};
+        intervalFor(refreshHz),
+        true};
 }
 
 SoftwareFramePacer::SoftwareFramePacer(

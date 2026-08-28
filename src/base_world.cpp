@@ -26,7 +26,7 @@ float distanceSquaredToRect(Vec2 point, const Rect &rect) noexcept
 AnimationClip makeBasePlayerMoveClip()
 {
     return AnimationClip{
-        std::vector<AnimationFrame>(6, AnimationFrame{0.09F})};
+        std::vector<AnimationFrame>(6, AnimationFrame{0.10F})};
 }
 
 float resolveHorizontalMovement(

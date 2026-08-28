@@ -5,20 +5,33 @@
 
 #include "frame_pacing.h"
 
-TEST(FramePacingTest, VSyncAndSoftwareFallbackAreExclusive)
+TEST(FramePacingTest, HighRefreshIsCappedAndDeadlineBacksBothModes)
 {
     const FramePacingConfiguration vsync =
         configureFramePacing(true, 144.0F);
     EXPECT_EQ(vsync.mode, FramePacingMode::VSync);
-    EXPECT_FLOAT_EQ(vsync.targetRefreshHz, 144.0F);
+    EXPECT_FLOAT_EQ(vsync.targetRefreshHz, 60.0F);
+    EXPECT_TRUE(vsync.absoluteDeadlineEnabled);
 
     const FramePacingConfiguration fallback =
         configureFramePacing(false, 144.0F);
     EXPECT_EQ(fallback.mode, FramePacingMode::SoftwareFallback);
-    EXPECT_FLOAT_EQ(fallback.targetRefreshHz, 144.0F);
+    EXPECT_FLOAT_EQ(fallback.targetRefreshHz, 60.0F);
+    EXPECT_TRUE(fallback.absoluteDeadlineEnabled);
     EXPECT_NEAR(
         static_cast<double>(fallback.targetIntervalNanoseconds),
-        1'000'000'000.0 / 144.0,
+        1'000'000'000.0 / 60.0,
+        1.0);
+}
+
+TEST(FramePacingTest, LowerRefreshDisplayKeepsItsNativeCadence)
+{
+    const FramePacingConfiguration configuration =
+        configureFramePacing(true, 50.0F);
+    EXPECT_FLOAT_EQ(configuration.targetRefreshHz, 50.0F);
+    EXPECT_NEAR(
+        static_cast<double>(configuration.targetIntervalNanoseconds),
+        1'000'000'000.0 / 50.0,
         1.0);
 }
 

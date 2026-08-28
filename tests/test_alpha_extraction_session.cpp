@@ -687,6 +687,46 @@ TEST(AlphaExtractionSessionTest,
     EXPECT_FALSE(session.resetDeveloperWeaponTuning());
 }
 
+TEST(AlphaExtractionSessionTest,
+     DeveloperInfiniteAmmoFiresWithoutMutatingProfileAmmunition)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-infinite-ammo"));
+    prepareArmedLoadout(session);
+    const AssetInstanceId rifle = assets(
+        session.profile(), alpha_content::rifle).front();
+    const AssetInstanceId magazine = *installedMagazine(
+        session.profile(), rifle);
+    ASSERT_TRUE(session.deployAlpha(90826));
+
+    const std::size_t roundsBefore = magazineRoundCount(
+        session.profile(), magazine);
+    const ProfileRevision revisionBefore = session.profile().revision;
+    const std::uint64_t fingerprintBefore =
+        profileStateFingerprint(session.profile());
+
+    GameplayInput fire{};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    fire.developerInfiniteAmmo = true;
+    session.update(fire, 0.0F);
+    ASSERT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine), roundsBefore);
+    EXPECT_EQ(session.profile().revision, revisionBefore);
+    EXPECT_EQ(
+        profileStateFingerprint(session.profile()), fingerprintBefore);
+
+    session.update(GameplayInput{}, 0.20F);
+    session.update(fire, 0.0F);
+    ASSERT_TRUE(session.world().shotFiredLastUpdate());
+    EXPECT_EQ(
+        magazineRoundCount(session.profile(), magazine), roundsBefore);
+    EXPECT_EQ(session.profile().revision, revisionBefore);
+    EXPECT_EQ(
+        profileStateFingerprint(session.profile()), fingerprintBefore);
+}
+
 TEST(AlphaExtractionSessionTest, DeveloperWeaponTuningRejectsInvalidAccess)
 {
     GameSession session;

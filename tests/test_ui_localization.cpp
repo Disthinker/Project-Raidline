@@ -33,8 +33,12 @@ TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
             "F9 性能 | F10 运行时开发面板");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
-                "PACING SOFTWARE FALLBACK | TARGET 60.0 HZ"),
-            "帧节奏 软件回退 | 目标 60.0 HZ");
+                "PACING SOFTWARE DEADLINE | TARGET 60.0 HZ"),
+            "帧节奏 软件截止时间 | 目标 60.0 HZ");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PACING VSYNC + DEADLINE | TARGET 60.0 HZ"),
+            "帧节奏 垂直同步加截止时间 | 目标 60.0 HZ");
   const std::string workload = localizeUiText(
       UiLanguage::SimplifiedChinese,
       "SIM ENEMIES 100 | BLOCKERS 96 | SUBSTEPS 100");
@@ -590,6 +594,16 @@ TEST(UiLocalizationTest, ChineseTranslatesOutdoorPlaceholderIdentities) {
             "车辆");
   EXPECT_EQ(localizeUiText(UiLanguage::English, "PROP: FACTORY"),
             "PROP: FACTORY");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesRuntimeDeveloperCheats) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "INFINITE AMMO: ENABLED"),
+            "无限弹药：已启用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "F MAP FOG | I INFINITE AMMO | F10/ESC CLOSE"),
+            "F 地图迷雾 | I 无限弹药 | F10/ESC 关闭");
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

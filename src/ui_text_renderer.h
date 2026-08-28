@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 
@@ -29,9 +30,11 @@ private:
     Texture texture;
     float width{};
     float height{};
+    std::uint64_t lastUsedSequence{};
   };
 
   void *platformFont_{};
   UiLanguage language_{UiLanguage::SimplifiedChinese};
   std::unordered_map<std::string, CachedText> cache_;
+  std::uint64_t cacheUseSequence_{};
 };
