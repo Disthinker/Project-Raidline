@@ -486,18 +486,73 @@ struct BaseManufacturingRecipeDefinition
         const BaseManufacturingRecipeDefinition &) = default;
 };
 
-// A deliberately narrow first consumer for the future procedural Raid world.
-// Content still owns every gameplay anchor; generation only varies outdoor
-// cover between those validated anchors and freezes the accepted result.
+enum class RaidDistrictKind : std::uint8_t
+{
+    Industrial,
+    Logistics,
+    Highway,
+    OpenGround,
+    Greenbelt,
+    RoadsideService
+};
+
+struct RaidDistrictArchetypeDefinition
+{
+    std::string id;
+    std::string displayName;
+    RaidDistrictKind kind{RaidDistrictKind::OpenGround};
+    std::uint32_t instanceCount{1};
+
+    friend bool operator==(
+        const RaidDistrictArchetypeDefinition &,
+        const RaidDistrictArchetypeDefinition &) = default;
+};
+
+struct RaidLandmarkTemplateDefinition
+{
+    std::string id;
+    std::string displayName;
+    RaidDistrictKind districtKind{RaidDistrictKind::Logistics};
+    Vec2 footprintCells{8.0F, 6.0F};
+
+    friend bool operator==(
+        const RaidLandmarkTemplateDefinition &left,
+        const RaidLandmarkTemplateDefinition &right)
+    {
+        return left.id == right.id &&
+            left.displayName == right.displayName &&
+            left.districtKind == right.districtKind &&
+            left.footprintCells.x == right.footprintCells.x &&
+            left.footprintCells.y == right.footprintCells.y;
+    }
+};
+
+// Content owns the theme grammar while every accepted per-Raid result is
+// frozen in PendingRaidSnapshot. Layout v3 uses a fine outdoor grid plus a
+// coarser district grid and presentation chunks; fixed maps remain unchanged.
 struct ProceduralOutdoorDefinition
 {
     bool enabled{};
+    std::uint32_t layoutVersion{1};
     std::uint32_t columns{16};
     std::uint32_t rows{9};
+    std::uint32_t districtColumns{8};
+    std::uint32_t districtRows{4};
+    std::uint32_t chunkSizeCells{16};
+    std::uint32_t minimumBranchRoads{2};
+    std::uint32_t maximumBranchRoads{4};
     std::uint32_t minimumBlockers{18};
     std::uint32_t maximumBlockers{26};
+    std::uint32_t minimumDecorativeProps{};
+    std::uint32_t maximumDecorativeProps{};
+    std::uint32_t minimumRoadObstacles{};
+    std::uint32_t maximumRoadObstacles{};
+    std::uint32_t minimumPuddlePatches{};
+    std::uint32_t maximumPuddlePatches{};
     std::uint32_t maximumAttempts{8};
     std::uint32_t anchorClearanceCells{1};
+    std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;
+    std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
 
     friend bool operator==(
         const ProceduralOutdoorDefinition &,

@@ -230,10 +230,18 @@ namespace
         std::size_t blockerCount)
     {
         RaidWorldConfig config;
-        config.worldSize = Vec2{4000.0F, 2400.0F};
-        config.playerSpawn = Vec2{3700.0F, 1080.0F};
+        const bool largeWorld = blockerCount >= 500U;
+        config.worldSize = largeWorld
+            ? Vec2{25600.0F, 14400.0F}
+            : Vec2{4000.0F, 2400.0F};
+        config.playerSpawn = largeWorld
+            ? Vec2{24000.0F, 7000.0F}
+            : Vec2{3700.0F, 1080.0F};
         config.extractionPoint =
-            ContentRect{Vec2{3700.0F, 2200.0F}, Vec2{120.0F, 120.0F}};
+            ContentRect{
+                largeWorld ? Vec2{24200.0F, 13600.0F}
+                           : Vec2{3700.0F, 2200.0F},
+                Vec2{120.0F, 120.0F}};
         config.playerMaximumHealth = 100;
         config.playerCurrentHealth = 100;
         config.deferPlayerDamageResolution = true;
@@ -250,14 +258,17 @@ namespace
         config.ballisticBlockers.reserve(blockerCount);
         for (std::size_t blocker{}; blocker < blockerCount; ++blocker)
         {
-            const std::size_t column = blocker % 12U;
-            const std::size_t row = blocker / 12U;
+            const std::size_t columns = largeWorld ? 50U : 12U;
+            const std::size_t column = blocker % columns;
+            const std::size_t row = blocker / columns;
             config.ballisticBlockers.push_back(BallisticBlocker{
                 static_cast<std::uint32_t>(blocker + 1U),
                 Rect{
                     Vec2{
-                        1250.0F + static_cast<float>(column) * 190.0F,
-                        60.0F + static_cast<float>(row) * 270.0F +
+                        (largeWorld ? 3000.0F : 1250.0F) +
+                            static_cast<float>(column) * 190.0F,
+                        60.0F + static_cast<float>(row) *
+                            (largeWorld ? 520.0F : 270.0F) +
                             (column % 2U == 0U ? 0.0F : 70.0F)},
                     Vec2{48.0F, 90.0F}}});
         }
@@ -1399,6 +1410,28 @@ TEST(GameplayWorldTest, StationaryPointerDoesNotAutomaticallyRecoverAimRecoil)
     counterMove.aimWorldPosition = Vec2{950.0F, 376.0F};
     world.update(counterMove, 0.5F);
     EXPECT_LT(world.weaponAimWorldPosition().x, displacedAimX);
+}
+
+TEST(GameplayWorldTest, RelativeAimCannotLeaveClientVisibleBounds)
+{
+    GameplayWorld world{std::vector<EnemySpawn>{}, 3};
+    GameplayInput initialize{};
+    initialize.aimWorldPosition = Vec2{640.0F, 360.0F};
+    initialize.aimWorldBounds = Rect{
+        {48.0F, 48.0F}, {1184.0F, 624.0F}};
+    world.update(initialize, 0.0F);
+
+    GameplayInput outward = initialize;
+    outward.aimMotionDelta = Vec2{5000.0F, -5000.0F};
+    world.update(outward, 1.0F / 60.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, 1232.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, 48.0F);
+
+    GameplayInput reverse = initialize;
+    reverse.aimMotionDelta = Vec2{-20.0F, 20.0F};
+    world.update(reverse, 1.0F / 60.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, 1212.0F);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, 68.0F);
 }
 
 // 斜向射击
@@ -3945,6 +3978,115 @@ TEST(GameplayWorldTest, ReportsAnAlertTransitionOnlyOnTheTransitionFrame)
 
     world.update(GameplayInput{}, 0.0F);
     EXPECT_EQ(world.enemiesAlertedLastUpdate(), 0U);
+}
+
+TEST(GameplayWorldPerformanceTest,
+     HugeWorldThousandBlockersKeepsOneHundredEnemySubstepsBounded)
+{
+    constexpr std::size_t kEnemyCount{100U};
+    constexpr std::size_t kBlockerCount{1000U};
+    GameplayWorld world{
+        makeScalabilityWorldConfig(kEnemyCount, kBlockerCount)};
+    world.emitPlayerNoise(30000.0F);
+
+    std::chrono::microseconds slowestFrame{};
+    for (std::size_t frame{}; frame < 30U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        world.update(GameplayInput{}, 1.0F / 120.0F);
+        slowestFrame = std::max(
+            slowestFrame,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started));
+        EXPECT_LE(
+            world.simulationWorkloadLastUpdate().navigationQueries, 1U);
+    }
+    EXPECT_LT(slowestFrame.count(), 25000)
+        << "The huge-world Debug simulation substep exceeded 25 ms.";
+}
+
+TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
+{
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    RaidMapGenerationAnchors anchors;
+    anchors.requests = {
+        {std::string{kRaidAnchorPlayerSpawn},
+         RaidMapAnchorKind::PlayerSpawn, {50.0F, 50.0F}},
+        {std::string{kRaidAnchorNormalExtraction},
+         RaidMapAnchorKind::NormalExtraction, {160.0F, 140.0F}}};
+    RaidGeneratedMapLayout layout = generateRaidMapLayout(
+        map, 771122U, anchors);
+    const RaidTerrainSpan crossingSpan{
+        10U,
+        static_cast<std::uint16_t>(
+            map.proceduralOutdoor.chunkSizeCells - 1U),
+        static_cast<std::uint16_t>(
+            map.proceduralOutdoor.chunkSizeCells + 4U),
+        RaidTerrainKind::Grass};
+    layout.terrainSpans.push_back(crossingSpan);
+    const RaidAnchorPlacementSnapshot *player = findRaidAnchorPlacement(
+        layout, kRaidAnchorPlayerSpawn);
+    const RaidAnchorPlacementSnapshot *extraction = findRaidAnchorPlacement(
+        layout, kRaidAnchorNormalExtraction);
+    ASSERT_NE(player, nullptr);
+    ASSERT_NE(extraction, nullptr);
+
+    RaidWorldConfig config;
+    config.worldSize = map.worldSize;
+    config.playerSpawn = player->bounds.position;
+    config.extractionPoint = extraction->bounds;
+    config.outdoorLayout = layout;
+    config.outdoorColumns = map.proceduralOutdoor.columns;
+    config.outdoorRows = map.proceduralOutdoor.rows;
+    config.outdoorChunkSizeCells =
+        map.proceduralOutdoor.chunkSizeCells;
+    for (std::size_t index{}; index < layout.ballisticBlockers.size(); ++index)
+        config.ballisticBlockers.push_back({
+            static_cast<BallisticBlockerId>(index + 1U),
+            {layout.ballisticBlockers[index].position,
+             layout.ballisticBlockers[index].size}});
+
+    GameplayWorld world{std::move(config)};
+    const ContentRect visibleBounds{
+        {12000.0F, 6800.0F}, {1280.0F, 720.0F}};
+    const RaidOutdoorPresentationProjection projection =
+        world.outdoorPresentation(visibleBounds);
+    EXPECT_GT(projection.queriedChunkCount, 0U);
+    EXPECT_LE(projection.queriedChunkCount, 12U);
+    EXPECT_FALSE(projection.terrainSpans.empty());
+    EXPECT_FALSE(projection.roadCells.empty());
+    EXPECT_LT(projection.props.size(), layout.props.size());
+
+    const std::uint64_t cachedRevision = projection.cacheRevision;
+    const RaidOutdoorPresentationProjection &cached =
+        world.outdoorPresentation(visibleBounds);
+    EXPECT_EQ(cached.cacheRevision, cachedRevision);
+    EXPECT_EQ(cached.terrainSpans, projection.terrainSpans);
+    EXPECT_EQ(cached.roadCells, projection.roadCells);
+    EXPECT_EQ(cached.props, projection.props);
+
+    const RaidOutdoorPresentationProjection &shifted =
+        world.outdoorPresentation(
+            {{visibleBounds.position.x + 1600.0F,
+              visibleBounds.position.y},
+             visibleBounds.size});
+    EXPECT_GT(shifted.cacheRevision, cachedRevision);
+
+    const float cellWidth = map.worldSize.x /
+        static_cast<float>(map.proceduralOutdoor.columns);
+    const float cellHeight = map.worldSize.y /
+        static_cast<float>(map.proceduralOutdoor.rows);
+    const RaidOutdoorPresentationProjection &crossingProjection =
+        world.outdoorPresentation({
+            {(crossingSpan.firstColumn + crossingSpan.length - 1U) *
+                 cellWidth,
+             crossingSpan.row * cellHeight},
+            {160.0F, 160.0F}});
+    EXPECT_NE(std::find(
+                  crossingProjection.terrainSpans.begin(),
+                  crossingProjection.terrainSpans.end(), crossingSpan),
+              crossingProjection.terrainSpans.end());
 }
 
 TEST(GameplayWorldRaidTest, RaidTimeoutIsTerminalAndFreezesWorld)

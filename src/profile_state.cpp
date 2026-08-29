@@ -1877,6 +1877,12 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
+        const bool legacyPlayableOutdoorRules =
+            raid.rulesVersion == "procedural-playable-outdoor-layout-21";
+        const bool districtLayoutRules =
+            raid.rulesVersion == "procedural-frontier-district-layout-22";
+        const bool playableOutdoorRules =
+            legacyPlayableOutdoorRules || districtLayoutRules;
         const bool advancedLootRules =
             raid.rulesVersion == "raid-control-resource-2" ||
             raid.rulesVersion == "raid-conditional-extraction-3" ||
@@ -1896,7 +1902,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool travelRules =
             raid.rulesVersion == "raid-travel-time-4" ||
             raid.rulesVersion == "base-periodic-priority-5" ||
@@ -1914,7 +1921,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool spatialLayoutRules =
             raid.rulesVersion == "procedural-outdoor-layout-11" ||
             raid.rulesVersion == "raid-interior-spaces-12" ||
@@ -1925,7 +1933,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool interiorRules =
             raid.rulesVersion == "raid-interior-spaces-12" ||
             raid.rulesVersion == "raid-special-location-placement-13" ||
@@ -1935,7 +1944,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool specialLocationRules =
             raid.rulesVersion == "raid-special-location-placement-13" ||
             raid.rulesVersion == "raid-building-intelligence-14" ||
@@ -1944,7 +1954,8 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool buildingIntelligenceRules =
             raid.rulesVersion == "raid-building-intelligence-14" ||
             raid.rulesVersion == "raid-second-representative-location-15" ||
@@ -1952,29 +1963,35 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool multipleInteriorRules =
             raid.rulesVersion == "raid-second-representative-location-15" ||
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool selfRecoveryRules =
             raid.rulesVersion == "raid-self-recovery-16" ||
             raid.rulesVersion == "regional-route-network-17" ||
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool outpostRestorationRules =
             raid.rulesVersion == "regional-outpost-restoration-18" ||
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool baseSiteClearanceRules =
             raid.rulesVersion == "regional-base-site-clearance-19" ||
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         const bool basePerimeterSweepRules =
-            raid.rulesVersion == "regional-base-perimeter-sweep-20";
+            raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+            playableOutdoorRules;
         std::set<AssetInstanceId> selfRecoveryRootIds;
         if (raid.selfRecovery.has_value())
         {
@@ -2185,14 +2202,27 @@ ProfileValidationResult validateProfileState(
                 ? record == profile.lostRaidRecords.end()
                 : record != profile.lostRaidRecords.end() &&
                     record->second == recovery.sourceRecord;
-            const bool cacheMatches = std::any_of(
-                raidMap->raidLootSlots.begin(),
-                raidMap->raidLootSlots.end(),
-                [&](const RaidLootSlotDefinition &slot)
-                {
-                    return slot.position.x == recovery.cachePosition.x &&
-                        slot.position.y == recovery.cachePosition.y;
-                });
+            const RaidAnchorPlacementSnapshot *recoveryAnchor =
+                districtLayoutRules
+                    ? findRaidAnchorPlacement(
+                          raid.spatialLayout, kRaidAnchorSelfRecovery)
+                    : nullptr;
+            const bool cacheMatches = districtLayoutRules
+                ? recoveryAnchor != nullptr &&
+                    recovery.cachePosition.x ==
+                        recoveryAnchor->bounds.position.x +
+                            recoveryAnchor->bounds.size.x * 0.5F &&
+                    recovery.cachePosition.y ==
+                        recoveryAnchor->bounds.position.y +
+                            recoveryAnchor->bounds.size.y * 0.5F
+                : std::any_of(
+                      raidMap->raidLootSlots.begin(),
+                      raidMap->raidLootSlots.end(),
+                      [&](const RaidLootSlotDefinition &slot)
+                      {
+                          return slot.position.x == recovery.cachePosition.x &&
+                              slot.position.y == recovery.cachePosition.y;
+                      });
             std::set<EquipmentSlotKind> sourceSlots;
             std::set<std::uint32_t> recoverySlots;
             bool rootsValid = !recovery.roots.empty();
@@ -2265,12 +2295,36 @@ ProfileValidationResult validateProfileState(
             };
             const ProceduralOutdoorDefinition &procedural =
                 raidMap->proceduralOutdoor;
-            const bool generatedCountValid =
-                !procedural.enabled || raid.spatialLayout.usedFallback ||
-                (raid.spatialLayout.ballisticBlockers.size() >=
-                     procedural.minimumBlockers &&
-                 raid.spatialLayout.ballisticBlockers.size() <=
-                     procedural.maximumBlockers);
+            const bool legacyScatterLayoutRules =
+                spatialLayoutRules && !playableOutdoorRules;
+            const bool generatedCountValid = !procedural.enabled ||
+                raid.spatialLayout.usedFallback ||
+                (legacyScatterLayoutRules
+                     ? raid.spatialLayout.ballisticBlockers.size() >= 18U &&
+                           raid.spatialLayout.ballisticBlockers.size() <= 26U
+                     : legacyPlayableOutdoorRules
+                         ? raid.spatialLayout.ballisticBlockers.size() >= 70U &&
+                               raid.spatialLayout.ballisticBlockers.size() <= 95U
+                         : raid.spatialLayout.ballisticBlockers.size() >=
+                                   procedural.minimumBlockers &&
+                               raid.spatialLayout.ballisticBlockers.size() <=
+                                   procedural.maximumBlockers);
+            const bool layoutVersionValid = !playableOutdoorRules ||
+                (!procedural.enabled
+                     ? raid.spatialLayout.layoutVersion == 0U &&
+                           raid.spatialLayout.roadCells.empty()
+                     : legacyPlayableOutdoorRules
+                         ? raid.spatialLayout.layoutVersion == 2U &&
+                               !raid.spatialLayout.roadCells.empty()
+                         : raid.spatialLayout.layoutVersion ==
+                                   procedural.layoutVersion &&
+                               !raid.spatialLayout.roadCells.empty());
+            const bool fallbackStateValid =
+                raid.spatialLayout.usedFallback
+                    ? raid.spatialLayout.fallbackReason ==
+                          RaidMapFallbackReason::AttemptsExhausted
+                    : raid.spatialLayout.fallbackReason ==
+                          RaidMapFallbackReason::None;
             bool fixedLayoutValid = procedural.enabled ||
                 raid.spatialLayout.ballisticBlockers.size() ==
                     raidMap->ballisticBlockers.size();
@@ -2349,7 +2403,7 @@ ProfileValidationResult validateProfileState(
             {
                 const RaidInteriorSnapshot &interior =
                     raid.interiors[interiorIndex];
-                if (specialLocationRules)
+                if (specialLocationRules && !districtLayoutRules)
                 {
                     const RaidInteriorDefinition &definition =
                         raidMap->interiors[interiorIndex];
@@ -2388,28 +2442,171 @@ ProfileValidationResult validateProfileState(
                     addRegion(interior.exteriorEntrance);
                 }
             }
+            const std::uint64_t expectedLayoutHash = playableOutdoorRules
+                ? raidMapLayoutHash(raid.spatialLayout)
+                : raidMapLayoutHash(raid.spatialLayout.ballisticBlockers);
+            bool districtSnapshotValid = true;
+            if (districtLayoutRules)
+            {
+                std::set<std::string> anchorIds;
+                std::set<std::uint16_t> districtIds;
+                for (const RaidDistrictSnapshot &district :
+                     raid.spatialLayout.districts)
+                    districtSnapshotValid = districtSnapshotValid &&
+                        district.instanceId != 0U &&
+                        districtIds.insert(district.instanceId).second &&
+                        !district.definitionId.empty() &&
+                        !district.displayName.empty() &&
+                        !district.cells.empty();
+                for (const RaidAnchorPlacementSnapshot &placement :
+                     raid.spatialLayout.anchorPlacements)
+                    districtSnapshotValid = districtSnapshotValid &&
+                        !placement.id.empty() &&
+                        anchorIds.insert(placement.id).second &&
+                        districtIds.contains(placement.districtInstanceId) &&
+                        insideWalkable(placement.bounds);
+                const auto matchesRect = [&](std::string_view id,
+                                             RaidMapAnchorKind kind,
+                                             ContentRect bounds)
+                {
+                    const auto *placement = findRaidAnchorPlacement(
+                        raid.spatialLayout, id);
+                    return placement != nullptr && placement->kind == kind &&
+                        placement->bounds == bounds;
+                };
+                const auto matchesPoint = [&](std::string_view id,
+                                              RaidMapAnchorKind kind,
+                                              Vec2 point,
+                                              bool useCenter)
+                {
+                    const auto *placement = findRaidAnchorPlacement(
+                        raid.spatialLayout, id);
+                    if (placement == nullptr || placement->kind != kind)
+                        return false;
+                    const Vec2 expected = useCenter
+                        ? Vec2{placement->bounds.position.x +
+                                   placement->bounds.size.x * 0.5F,
+                               placement->bounds.position.y +
+                                   placement->bounds.size.y * 0.5F}
+                        : placement->bounds.position;
+                    return point.x == expected.x && point.y == expected.y;
+                };
+                districtSnapshotValid = districtSnapshotValid &&
+                    raid.spatialLayout.layoutVersion == 3U &&
+                    raid.spatialLayout.districts.size() == 8U &&
+                    raid.spatialLayout.landmarks.size() == 3U &&
+                    !raid.spatialLayout.terrainSpans.empty() &&
+                    !raid.spatialLayout.props.empty() &&
+                    matchesPoint(kRaidAnchorPlayerSpawn,
+                                 RaidMapAnchorKind::PlayerSpawn,
+                                 raid.playerSpawn, false) &&
+                    matchesRect(kRaidAnchorNormalExtraction,
+                                RaidMapAnchorKind::NormalExtraction,
+                                raid.extractionPoint) &&
+                    findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorEmergencyExtraction) != nullptr &&
+                    findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorConditionalExtraction) != nullptr &&
+                    findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorHighRiskControl) != nullptr &&
+                    findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorAdvancedResource) != nullptr;
+                if (raid.rescue.has_value())
+                    districtSnapshotValid = districtSnapshotValid &&
+                        matchesRect(kRaidAnchorRescue,
+                                    RaidMapAnchorKind::Rescue,
+                                    raid.rescue->transferPoint);
+                for (std::size_t index{}; index < raid.enemies.size(); ++index)
+                {
+                    const RaidEnemySnapshot &enemy = raid.enemies[index];
+                    if (enemy.spaceId == outdoorRaidSpaceId())
+                        districtSnapshotValid = districtSnapshotValid &&
+                            matchesPoint(raidIndexedAnchorId("enemy", index),
+                                         RaidMapAnchorKind::Enemy,
+                                         enemy.position, false);
+                }
+                for (std::size_t index{}; index < raid.loot.size(); ++index)
+                {
+                    const RaidLootSnapshot &loot = raid.loot[index];
+                    if (loot.spaceId == outdoorRaidSpaceId() &&
+                        !selfRecoveryRootIds.contains(loot.assetId))
+                    {
+                        if (loot.requiresHighRisk)
+                        {
+                            const auto *resource = findRaidAnchorPlacement(
+                                raid.spatialLayout,
+                                kRaidAnchorAdvancedResource);
+                            const std::size_t ordinal = loot.slotIndex -
+                                raidMap->raidLootSlots.size();
+                            const std::size_t count = raidMap->highRisk
+                                .advancedLootSlots.size();
+                            districtSnapshotValid = districtSnapshotValid &&
+                                resource != nullptr &&
+                                loot.position.x ==
+                                    resource->bounds.position.x +
+                                        resource->bounds.size.x *
+                                            static_cast<float>(ordinal + 1U) /
+                                            static_cast<float>(count + 1U) &&
+                                loot.position.y ==
+                                    resource->bounds.position.y +
+                                        resource->bounds.size.y * 0.5F;
+                        }
+                        else
+                            districtSnapshotValid = districtSnapshotValid &&
+                                matchesPoint(
+                                    raidIndexedAnchorId("loot", index),
+                                    RaidMapAnchorKind::Loot,
+                                    loot.position, true);
+                    }
+                }
+                for (std::size_t index{}; index < raid.interiors.size(); ++index)
+                    districtSnapshotValid = districtSnapshotValid &&
+                        matchesRect(raidIndexedAnchorId("interior", index),
+                                    RaidMapAnchorKind::InteriorEntrance,
+                                    raid.interiors[index].exteriorEntrance);
+                const std::size_t expectedAnchorCount = 6U +
+                    static_cast<std::size_t>(raid.rescue.has_value()) +
+                    static_cast<std::size_t>(raid.selfRecovery.has_value()) +
+                    outdoorEnemyCount + outdoorRegularLootCount +
+                    raidMap->highRisk.pressureSpawns.size() +
+                    raid.interiors.size();
+                districtSnapshotValid = districtSnapshotValid &&
+                    raid.spatialLayout.anchorPlacements.size() ==
+                        expectedAnchorCount;
+            }
             if (raid.spatialLayout.layoutHash == 0U ||
-                raid.spatialLayout.layoutHash != raidMapLayoutHash(
-                    raid.spatialLayout.ballisticBlockers) ||
-                !generatedCountValid || !fixedLayoutValid ||
-                (procedural.enabled &&
+                raid.spatialLayout.layoutHash != expectedLayoutHash)
+                return {false, "pending Raid spatial layout hash is invalid"};
+            if (!layoutVersionValid)
+                return {false, "pending Raid spatial layout version is invalid"};
+            if (!fallbackStateValid)
+                return {false, "pending Raid spatial fallback is invalid"};
+            if (!generatedCountValid || !fixedLayoutValid)
+                return {false, "pending Raid spatial blocker set is invalid"};
+            if (!districtSnapshotValid)
+                return {false, "pending Raid district snapshot is invalid"};
+            if ((procedural.enabled &&
                  (raid.spatialLayout.generationAttempt == 0U ||
                   raid.spatialLayout.generationAttempt >
                       procedural.maximumAttempts)) ||
                 (!procedural.enabled &&
                  (raid.spatialLayout.generationAttempt != 0U ||
-                  raid.spatialLayout.usedFallback)) ||
-                std::any_of(
+                  raid.spatialLayout.usedFallback)))
+                return {false, "pending Raid generation attempt is invalid"};
+            if (std::any_of(
                     raid.spatialLayout.ballisticBlockers.begin(),
                     raid.spatialLayout.ballisticBlockers.end(),
                     [&insideWalkable](ContentRect blocker)
-                    { return !insideWalkable(blocker); }) ||
-                (procedural.enabled &&
-                 !raidMapLayoutConnectsAnchors(
-                     *raidMap, raid.spatialLayout, anchors)))
-            {
-                return {false, "pending Raid spatial layout is invalid"};
-            }
+                    { return !insideWalkable(blocker); }))
+                return {false, "pending Raid spatial blocker bounds are invalid"};
+            if (procedural.enabled && !legacyPlayableOutdoorRules &&
+                !raidMapLayoutConnectsAnchors(
+                    *raidMap, raid.spatialLayout, anchors))
+                return {false, "pending Raid spatial connectivity is invalid"};
         }
         if (interiorRules)
         {
@@ -2440,7 +2637,22 @@ ProfileValidationResult validateProfileState(
                         [](ContentRect bounds,
                            const BallisticBlockerDefinition &blocker)
                         { return bounds == blocker.bounds; });
-                const bool portalMatches = specialLocationRules
+                const RaidAnchorPlacementSnapshot *districtPortal =
+                    districtLayoutRules
+                        ? findRaidAnchorPlacement(
+                              raid.spatialLayout,
+                              raidIndexedAnchorId("interior", index))
+                        : nullptr;
+                const bool portalMatches = districtLayoutRules
+                    ? districtPortal != nullptr &&
+                          districtPortal->bounds == snapshot.exteriorEntrance &&
+                          std::isfinite(snapshot.exteriorReturn.x) &&
+                          std::isfinite(snapshot.exteriorReturn.y) &&
+                          snapshot.exteriorReturn.x >= 0.0F &&
+                          snapshot.exteriorReturn.y >= 0.0F &&
+                          snapshot.exteriorReturn.x <= raidMap->worldSize.x &&
+                          snapshot.exteriorReturn.y <= raidMap->worldSize.y
+                    : specialLocationRules
                     ? std::any_of(
                           definition.exteriorPlacements.begin(),
                           definition.exteriorPlacements.end(),
@@ -2695,7 +2907,8 @@ ProfileValidationResult validateProfileState(
             if (raid.rulesVersion == "regional-route-network-17" ||
                 raid.rulesVersion == "regional-outpost-restoration-18" ||
                 raid.rulesVersion == "regional-base-site-clearance-19" ||
-                raid.rulesVersion == "regional-base-perimeter-sweep-20")
+                raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+                playableOutdoorRules)
             {
                 ProfileState startingRouteProfile = profile;
                 startingRouteProfile.regionalOperations =
@@ -2783,8 +2996,10 @@ ProfileValidationResult validateProfileState(
         }
         std::set<AssetInstanceId> snapshotLoot;
         std::set<std::uint32_t> snapshotSlots;
-        for (const RaidLootSnapshot &loot : raid.loot)
+        for (std::size_t lootIndex{};
+             lootIndex < raid.loot.size(); ++lootIndex)
         {
+            const RaidLootSnapshot &loot = raid.loot[lootIndex];
             const AssetRecord *asset = profile.assets.find(loot.assetId);
             const std::size_t regularSlotCount = raidMap->raidLootSlots.size();
             const std::size_t advancedSlotCount =
@@ -2820,12 +3035,51 @@ ProfileValidationResult validateProfileState(
                     : loot.slotIndex < regularSlotCount;
                 if (validSlot)
                 {
-                    const Vec2 expected = loot.requiresHighRisk
-                        ? raidMap->highRisk.advancedLootSlots[
-                              loot.slotIndex - regularSlotCount].position
-                        : raidMap->raidLootSlots[loot.slotIndex].position;
-                    validPosition = loot.position.x == expected.x &&
-                        loot.position.y == expected.y;
+                    const RaidAnchorPlacementSnapshot *anchor =
+                        districtLayoutRules
+                            ? findRaidAnchorPlacement(
+                                  raid.spatialLayout,
+                                  raidIndexedAnchorId("loot", lootIndex))
+                            : nullptr;
+                    if (districtLayoutRules)
+                    {
+                        if (loot.requiresHighRisk)
+                        {
+                            const auto *resource = findRaidAnchorPlacement(
+                                raid.spatialLayout,
+                                kRaidAnchorAdvancedResource);
+                            const std::size_t ordinal = loot.slotIndex -
+                                regularSlotCount;
+                            validPosition = resource != nullptr &&
+                                loot.position.x ==
+                                    resource->bounds.position.x +
+                                        resource->bounds.size.x *
+                                            static_cast<float>(ordinal + 1U) /
+                                            static_cast<float>(
+                                                advancedSlotCount + 1U) &&
+                                loot.position.y ==
+                                    resource->bounds.position.y +
+                                        resource->bounds.size.y * 0.5F;
+                        }
+                        else
+                            validPosition = anchor != nullptr &&
+                                anchor->kind == RaidMapAnchorKind::Loot &&
+                                loot.position.x ==
+                                    anchor->bounds.position.x +
+                                        anchor->bounds.size.x * 0.5F &&
+                                loot.position.y ==
+                                    anchor->bounds.position.y +
+                                        anchor->bounds.size.y * 0.5F;
+                    }
+                    else
+                    {
+                        const Vec2 expected = loot.requiresHighRisk
+                            ? raidMap->highRisk.advancedLootSlots[
+                                  loot.slotIndex - regularSlotCount].position
+                            : raidMap->raidLootSlots[loot.slotIndex].position;
+                        validPosition = loot.position.x == expected.x &&
+                            loot.position.y == expected.y;
+                    }
                 }
             }
             else if (!loot.requiresHighRisk)
@@ -2940,7 +3194,16 @@ ProfileValidationResult validateProfileState(
             !std::equal(
                 outdoorEnemies.begin(), outdoorEnemies.end(),
                 deployment.enemies.begin(), deployment.enemies.end(),
-                enemyMatches))
+                [&](const RaidEnemySnapshot &snapshot,
+                    const EnemySpawnDefinition &definition)
+                {
+                    return districtLayoutRules
+                        ? snapshot.size.x == definition.size.x &&
+                              snapshot.size.y == definition.size.y &&
+                              snapshot.maximumHealth ==
+                                  definition.maximumHealth
+                        : enemyMatches(snapshot, definition);
+                }))
         {
             return {false, "pending Raid outdoor enemies do not match deployment"};
         }
@@ -3362,9 +3625,41 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashFloat(hash, raid.extractionPoint.position.y);
         hashFloat(hash, raid.extractionPoint.size.x);
         hashFloat(hash, raid.extractionPoint.size.y);
+        hashInteger(hash, raid.spatialLayout.layoutVersion);
         hashInteger(hash, raid.spatialLayout.generationAttempt);
         hashInteger(hash, raid.spatialLayout.layoutHash);
         hashInteger(hash, raid.spatialLayout.usedFallback ? 1U : 0U);
+        hashInteger(hash, static_cast<std::uint32_t>(
+            raid.spatialLayout.fallbackReason));
+        for (const RaidDistrictSnapshot &district :
+             raid.spatialLayout.districts)
+        {
+            hashInteger(hash, district.instanceId);
+            hashBytes(hash, district.definitionId);
+            hashBytes(hash, district.displayName);
+            hashInteger(hash, static_cast<std::uint32_t>(district.kind));
+            hashFloat(hash, district.labelPosition.x);
+            hashFloat(hash, district.labelPosition.y);
+            for (const RaidGridSpan &span : district.cells)
+            {
+                hashInteger(hash, span.row);
+                hashInteger(hash, span.firstColumn);
+                hashInteger(hash, span.length);
+            }
+        }
+        for (const RaidTerrainSpan &span : raid.spatialLayout.terrainSpans)
+        {
+            hashInteger(hash, span.row);
+            hashInteger(hash, span.firstColumn);
+            hashInteger(hash, span.length);
+            hashInteger(hash, static_cast<std::uint32_t>(span.kind));
+        }
+        for (const RaidOutdoorRoadCell &road : raid.spatialLayout.roadCells)
+        {
+            hashInteger(hash, road.column);
+            hashInteger(hash, road.row);
+            hashInteger(hash, static_cast<std::uint32_t>(road.kind));
+        }
         for (const ContentRect &blocker :
              raid.spatialLayout.ballisticBlockers)
         {
@@ -3372,6 +3667,52 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, blocker.position.y);
             hashFloat(hash, blocker.size.x);
             hashFloat(hash, blocker.size.y);
+        }
+        for (const RaidOutdoorPropSnapshot &prop : raid.spatialLayout.props)
+        {
+            hashInteger(hash, prop.instanceId);
+            hashInteger(hash, static_cast<std::uint32_t>(prop.kind));
+            hashInteger(hash, static_cast<std::uint32_t>(prop.state));
+            hashFloat(hash, prop.bounds.position.x);
+            hashFloat(hash, prop.bounds.position.y);
+            hashFloat(hash, prop.bounds.size.x);
+            hashFloat(hash, prop.bounds.size.y);
+            hashInteger(hash, prop.quarterTurns);
+            hashInteger(hash, prop.collidable ? 1U : 0U);
+        }
+        for (const RaidAnchorPlacementSnapshot &placement :
+             raid.spatialLayout.anchorPlacements)
+        {
+            hashBytes(hash, placement.id);
+            hashInteger(hash, static_cast<std::uint32_t>(placement.kind));
+            hashFloat(hash, placement.bounds.position.x);
+            hashFloat(hash, placement.bounds.position.y);
+            hashFloat(hash, placement.bounds.size.x);
+            hashFloat(hash, placement.bounds.size.y);
+            hashInteger(hash, placement.districtInstanceId);
+        }
+        for (const RaidLandmarkPlacementSnapshot &landmark :
+             raid.spatialLayout.landmarks)
+        {
+            hashBytes(hash, landmark.definitionId);
+            hashBytes(hash, landmark.displayName);
+            hashFloat(hash, landmark.bounds.position.x);
+            hashFloat(hash, landmark.bounds.position.y);
+            hashFloat(hash, landmark.bounds.size.x);
+            hashFloat(hash, landmark.bounds.size.y);
+            hashInteger(hash, landmark.districtInstanceId);
+            for (const ContentRect &structure : landmark.structures)
+            {
+                hashFloat(hash, structure.position.x);
+                hashFloat(hash, structure.position.y);
+                hashFloat(hash, structure.size.x);
+                hashFloat(hash, structure.size.y);
+            }
+            for (Vec2 socket : landmark.roadSockets)
+            {
+                hashFloat(hash, socket.x);
+                hashFloat(hash, socket.y);
+            }
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {

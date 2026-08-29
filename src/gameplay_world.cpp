@@ -358,6 +358,140 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     ballisticBlockers_ = std::move(config.ballisticBlockers);
+    outdoorLayout_ = std::move(config.outdoorLayout);
+    outdoorColumns_ = config.outdoorColumns;
+    outdoorRows_ = config.outdoorRows;
+    outdoorChunkSizeCells_ = config.outdoorChunkSizeCells;
+    if (outdoorLayout_.layoutVersion >= 3U)
+    {
+        if (outdoorColumns_ == 0U || outdoorRows_ == 0U ||
+            outdoorChunkSizeCells_ == 0U)
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig outdoor presentation grid is invalid"};
+        }
+        outdoorChunkColumns_ =
+            (outdoorColumns_ + outdoorChunkSizeCells_ - 1U) /
+            outdoorChunkSizeCells_;
+        outdoorChunkRows_ =
+            (outdoorRows_ + outdoorChunkSizeCells_ - 1U) /
+            outdoorChunkSizeCells_;
+        outdoorPresentationChunks_.resize(
+            static_cast<std::size_t>(outdoorChunkColumns_) *
+            outdoorChunkRows_);
+        const auto bucket = [&](std::uint32_t column,
+                                std::uint32_t row)
+            -> OutdoorPresentationChunk &
+        {
+            const std::uint32_t chunkColumn = std::min(
+                column / outdoorChunkSizeCells_,
+                outdoorChunkColumns_ - 1U);
+            const std::uint32_t chunkRow = std::min(
+                row / outdoorChunkSizeCells_,
+                outdoorChunkRows_ - 1U);
+            return outdoorPresentationChunks_[
+                static_cast<std::size_t>(chunkRow) *
+                    outdoorChunkColumns_ + chunkColumn];
+        };
+        for (std::size_t index{};
+             index < outdoorLayout_.terrainSpans.size(); ++index)
+        {
+            const RaidTerrainSpan &span = outdoorLayout_.terrainSpans[index];
+            const std::uint32_t lastColumn = std::min(
+                outdoorColumns_ - 1U,
+                static_cast<std::uint32_t>(span.firstColumn) +
+                    static_cast<std::uint32_t>(span.length) - 1U);
+            const std::uint32_t firstChunkColumn =
+                span.firstColumn / outdoorChunkSizeCells_;
+            const std::uint32_t lastChunkColumn =
+                lastColumn / outdoorChunkSizeCells_;
+            for (std::uint32_t chunkColumn = firstChunkColumn;
+                 chunkColumn <= lastChunkColumn; ++chunkColumn)
+            {
+                outdoorPresentationChunks_[
+                    static_cast<std::size_t>(
+                        span.row / outdoorChunkSizeCells_) *
+                        outdoorChunkColumns_ + chunkColumn]
+                    .terrainSpanIndices.push_back(index);
+            }
+        }
+        for (std::size_t index{};
+             index < outdoorLayout_.roadCells.size(); ++index)
+        {
+            const RaidOutdoorRoadCell &cell =
+                outdoorLayout_.roadCells[index];
+            bucket(cell.column, cell.row).roadCellIndices.push_back(index);
+        }
+        const float cellWidth = worldSize_.x /
+            static_cast<float>(outdoorColumns_);
+        const float cellHeight = worldSize_.y /
+            static_cast<float>(outdoorRows_);
+        const auto appendRect = [&](ContentRect bounds,
+                                    std::size_t index,
+                                    auto member)
+        {
+            const std::uint32_t firstColumn = static_cast<std::uint32_t>(
+                std::clamp(std::floor(bounds.position.x / cellWidth),
+                           0.0F,
+                           static_cast<float>(outdoorColumns_ - 1U)));
+            const std::uint32_t lastColumn = static_cast<std::uint32_t>(
+                std::clamp(std::floor(
+                               (bounds.position.x + bounds.size.x) /
+                               cellWidth),
+                           0.0F,
+                           static_cast<float>(outdoorColumns_ - 1U)));
+            const std::uint32_t firstRow = static_cast<std::uint32_t>(
+                std::clamp(std::floor(bounds.position.y / cellHeight),
+                           0.0F,
+                           static_cast<float>(outdoorRows_ - 1U)));
+            const std::uint32_t lastRow = static_cast<std::uint32_t>(
+                std::clamp(std::floor(
+                               (bounds.position.y + bounds.size.y) /
+                               cellHeight),
+                           0.0F,
+                           static_cast<float>(outdoorRows_ - 1U)));
+            for (std::uint32_t row = firstRow / outdoorChunkSizeCells_;
+                 row <= lastRow / outdoorChunkSizeCells_; ++row)
+            {
+                for (std::uint32_t column =
+                         firstColumn / outdoorChunkSizeCells_;
+                     column <= lastColumn / outdoorChunkSizeCells_; ++column)
+                {
+                    auto &indices = outdoorPresentationChunks_[
+                        static_cast<std::size_t>(row) *
+                            outdoorChunkColumns_ + column].*member;
+                    indices.push_back(index);
+                }
+            }
+        };
+        for (std::size_t index{}; index < outdoorLayout_.props.size(); ++index)
+            appendRect(outdoorLayout_.props[index].bounds, index,
+                       &OutdoorPresentationChunk::propIndices);
+        for (std::size_t index{};
+             index < outdoorLayout_.landmarks.size(); ++index)
+            appendRect(outdoorLayout_.landmarks[index].bounds, index,
+                       &OutdoorPresentationChunk::landmarkIndices);
+        for (std::size_t index{};
+             index < outdoorLayout_.districts.size(); ++index)
+        {
+            const Vec2 point = outdoorLayout_.districts[index].labelPosition;
+            bucket(static_cast<std::uint32_t>(std::clamp(
+                       std::floor(point.x / cellWidth), 0.0F,
+                       static_cast<float>(outdoorColumns_ - 1U))),
+                   static_cast<std::uint32_t>(std::clamp(
+                       std::floor(point.y / cellHeight), 0.0F,
+                       static_cast<float>(outdoorRows_ - 1U))))
+                .districtLabelIndices.push_back(index);
+        }
+        outdoorTerrainVisitStamps_.resize(
+            outdoorLayout_.terrainSpans.size());
+        outdoorRoadVisitStamps_.resize(outdoorLayout_.roadCells.size());
+        outdoorPropVisitStamps_.resize(outdoorLayout_.props.size());
+        outdoorLandmarkVisitStamps_.resize(
+            outdoorLayout_.landmarks.size());
+        outdoorDistrictVisitStamps_.resize(
+            outdoorLayout_.districts.size());
+    }
     for (const BallisticBlocker &blocker : ballisticBlockers_)
     {
         if (blocker.id == 0 ||
@@ -604,6 +738,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             : std::nullopt,
         std::move(initialEnemyCenters),
         std::move(specialLocations));
+    tacticalMap_.configureOutdoorLayout(
+        outdoorLayout_, outdoorColumns_, outdoorRows_);
     tacticalMap_.revealAround(playerCenter(player_));
     outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
         worldSize_,
@@ -987,6 +1123,10 @@ void GameplayWorld::update(
         deltaTime,
         input.aimMotionDelta,
         AimControlMode::Direct);
+    if (!spaceTransitionedLastUpdate_ && input.aimWorldBounds.has_value())
+    {
+        weaponAim_.constrainToBounds(*input.aimWorldBounds);
+    }
     static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
@@ -1817,6 +1957,149 @@ GameplayWorld::activeInteriorMapProjection() const noexcept
         interior.worldSize,
         interior.interiorExit,
         interior.ballisticBlockers};
+}
+
+const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
+    ContentRect visibleWorldBounds) const
+{
+    if (!inOutdoorRaidSpace() || outdoorLayout_.layoutVersion < 3U ||
+        outdoorPresentationChunks_.empty() ||
+        !std::isfinite(visibleWorldBounds.position.x) ||
+        !std::isfinite(visibleWorldBounds.position.y) ||
+        !std::isfinite(visibleWorldBounds.size.x) ||
+        !std::isfinite(visibleWorldBounds.size.y) ||
+        visibleWorldBounds.size.x <= 0.0F ||
+        visibleWorldBounds.size.y <= 0.0F)
+    {
+        outdoorPresentationCache_ = {};
+        outdoorPresentationCacheValid_ = false;
+        return outdoorPresentationCache_;
+    }
+
+    const float cellWidth = worldSize_.x /
+        static_cast<float>(outdoorColumns_);
+    const float cellHeight = worldSize_.y /
+        static_cast<float>(outdoorRows_);
+    const float bufferX = cellWidth * 2.0F;
+    const float bufferY = cellHeight * 2.0F;
+    const float firstX = std::clamp(
+        visibleWorldBounds.position.x - bufferX, 0.0F, worldSize_.x);
+    const float firstY = std::clamp(
+        visibleWorldBounds.position.y - bufferY, 0.0F, worldSize_.y);
+    const float lastX = std::clamp(
+        visibleWorldBounds.position.x + visibleWorldBounds.size.x + bufferX,
+        0.0F, worldSize_.x);
+    const float lastY = std::clamp(
+        visibleWorldBounds.position.y + visibleWorldBounds.size.y + bufferY,
+        0.0F, worldSize_.y);
+    const float chunkWidth = cellWidth *
+        static_cast<float>(outdoorChunkSizeCells_);
+    const float chunkHeight = cellHeight *
+        static_cast<float>(outdoorChunkSizeCells_);
+    const std::uint32_t firstChunkColumn = std::min(
+        static_cast<std::uint32_t>(firstX / chunkWidth),
+        outdoorChunkColumns_ - 1U);
+    const std::uint32_t lastChunkColumn = std::min(
+        static_cast<std::uint32_t>(lastX / chunkWidth),
+        outdoorChunkColumns_ - 1U);
+    const std::uint32_t firstChunkRow = std::min(
+        static_cast<std::uint32_t>(firstY / chunkHeight),
+        outdoorChunkRows_ - 1U);
+    const std::uint32_t lastChunkRow = std::min(
+        static_cast<std::uint32_t>(lastY / chunkHeight),
+        outdoorChunkRows_ - 1U);
+
+    if (outdoorPresentationCacheValid_ &&
+        firstChunkColumn == outdoorPresentationFirstChunkColumn_ &&
+        lastChunkColumn == outdoorPresentationLastChunkColumn_ &&
+        firstChunkRow == outdoorPresentationFirstChunkRow_ &&
+        lastChunkRow == outdoorPresentationLastChunkRow_)
+    {
+        return outdoorPresentationCache_;
+    }
+
+    outdoorPresentationCacheValid_ = true;
+    outdoorPresentationFirstChunkColumn_ = firstChunkColumn;
+    outdoorPresentationLastChunkColumn_ = lastChunkColumn;
+    outdoorPresentationFirstChunkRow_ = firstChunkRow;
+    outdoorPresentationLastChunkRow_ = lastChunkRow;
+    ++outdoorPresentationVisitSequence_;
+    if (outdoorPresentationVisitSequence_ == 0U)
+    {
+        std::fill(outdoorTerrainVisitStamps_.begin(),
+                  outdoorTerrainVisitStamps_.end(), 0U);
+        std::fill(outdoorRoadVisitStamps_.begin(),
+                  outdoorRoadVisitStamps_.end(), 0U);
+        std::fill(outdoorPropVisitStamps_.begin(),
+                  outdoorPropVisitStamps_.end(), 0U);
+        std::fill(outdoorLandmarkVisitStamps_.begin(),
+                  outdoorLandmarkVisitStamps_.end(), 0U);
+        std::fill(outdoorDistrictVisitStamps_.begin(),
+                  outdoorDistrictVisitStamps_.end(), 0U);
+        outdoorPresentationVisitSequence_ = 1U;
+    }
+    const std::uint32_t visitSequence = outdoorPresentationVisitSequence_;
+    auto &result = outdoorPresentationCache_;
+    result.terrainSpans.clear();
+    result.roadCells.clear();
+    result.props.clear();
+    result.labels.clear();
+    result.queriedChunkCount = 0U;
+    result.cacheRevision = ++outdoorPresentationCacheRevision_;
+    for (std::uint32_t row = firstChunkRow; row <= lastChunkRow; ++row)
+    {
+        for (std::uint32_t column = firstChunkColumn;
+             column <= lastChunkColumn; ++column)
+        {
+            ++result.queriedChunkCount;
+            const OutdoorPresentationChunk &chunk =
+                outdoorPresentationChunks_[
+                    static_cast<std::size_t>(row) *
+                        outdoorChunkColumns_ + column];
+            for (const std::size_t index : chunk.terrainSpanIndices)
+                if (outdoorTerrainVisitStamps_[index] != visitSequence)
+                {
+                    outdoorTerrainVisitStamps_[index] = visitSequence;
+                    result.terrainSpans.push_back(
+                        outdoorLayout_.terrainSpans[index]);
+                }
+            for (const std::size_t index : chunk.roadCellIndices)
+                if (outdoorRoadVisitStamps_[index] != visitSequence)
+                {
+                    outdoorRoadVisitStamps_[index] = visitSequence;
+                    result.roadCells.push_back(
+                        outdoorLayout_.roadCells[index]);
+                }
+            for (const std::size_t index : chunk.propIndices)
+                if (outdoorPropVisitStamps_[index] != visitSequence)
+                {
+                    outdoorPropVisitStamps_[index] = visitSequence;
+                    result.props.push_back(outdoorLayout_.props[index]);
+                }
+            for (const std::size_t index : chunk.landmarkIndices)
+                if (outdoorLandmarkVisitStamps_[index] != visitSequence)
+                {
+                    outdoorLandmarkVisitStamps_[index] = visitSequence;
+                    const auto &landmark = outdoorLayout_.landmarks[index];
+                    result.labels.push_back({
+                        landmark.displayName,
+                        {landmark.bounds.position.x +
+                             landmark.bounds.size.x * 0.5F,
+                         landmark.bounds.position.y + 20.0F},
+                        true});
+                }
+            for (const std::size_t index : chunk.districtLabelIndices)
+                if (outdoorDistrictVisitStamps_[index] != visitSequence)
+                {
+                    outdoorDistrictVisitStamps_[index] = visitSequence;
+                    result.labels.push_back({
+                        outdoorLayout_.districts[index].displayName,
+                        outdoorLayout_.districts[index].labelPosition,
+                        false});
+                }
+        }
+    }
+    return result;
 }
 
 const std::vector<Particle> &

@@ -121,6 +121,39 @@ TEST(WeaponAimStateTest, RelativeMotionMovesAimWithoutAbsoluteCursorTravel)
     EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, 879.0F);
 }
 
+TEST(WeaponAimStateTest, RelativeAimFollowsScrollingViewportWorldAnchor)
+{
+    WeaponAimState aim{WeaponAimConfig{
+        3000.0F, 9000.0F, 0.0F, 600.0F, 0.0F, 0.05F,
+        0.25F, 100.0F, 500.0F}};
+    constexpr Vec2 initialOrigin{400.0F, 300.0F};
+    constexpr Vec2 initialWorldAnchor{900.0F, 360.0F};
+    aim.update(initialWorldAnchor, initialOrigin, kWorld, false, 0.0F);
+    const Vec2 initialDirection = aim.actualDirection();
+
+    constexpr Vec2 viewportWorldDelta{72.0F, 36.0F};
+    const Vec2 movedOrigin{
+        initialOrigin.x + viewportWorldDelta.x,
+        initialOrigin.y + viewportWorldDelta.y};
+    const Vec2 movedWorldAnchor{
+        initialWorldAnchor.x + viewportWorldDelta.x,
+        initialWorldAnchor.y + viewportWorldDelta.y};
+    aim.update(
+        movedWorldAnchor,
+        movedOrigin,
+        kWorld,
+        false,
+        0.1F,
+        Vec2{});
+
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, movedWorldAnchor.x);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y, movedWorldAnchor.y);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, movedWorldAnchor.x);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().y, movedWorldAnchor.y);
+    EXPECT_NEAR(aim.actualDirection().x, initialDirection.x, 0.0001F);
+    EXPECT_NEAR(aim.actualDirection().y, initialDirection.y, 0.0001F);
+}
+
 TEST(WeaponAimStateTest, HipAndLowPowerAdsRespondDirectlyToPointerMotion)
 {
     WeaponAimState hip;
@@ -231,4 +264,22 @@ TEST(WeaponAimStateTest, AdsAndActualRangeProjectionAreDeterministic)
     aim.update(Vec2{301.0F, 100.0F}, kOrigin, kWorld, true, 1.0F);
     EXPECT_TRUE(aim.beyondMaximumRange());
     EXPECT_FLOAT_EQ(aim.damageMultiplier(), 0.25F);
+}
+
+TEST(WeaponAimStateTest, VisibleBoundsClampAimAndDiscardOutwardVelocity)
+{
+    WeaponAimState aim;
+    aim.update(Vec2{300.0F, 200.0F}, kOrigin, kWorld, false, 0.0F);
+    aim.update(
+        Vec2{300.0F, 200.0F}, kOrigin, kWorld, false, 0.1F,
+        Vec2{1000.0F, -1000.0F});
+
+    aim.constrainToBounds(Rect{{100.0F, 80.0F}, {300.0F, 200.0F}});
+
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, 400.0F);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y, 80.0F);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().x, 400.0F);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().y, 80.0F);
+    EXPECT_FLOAT_EQ(aim.controlVelocity().x, 0.0F);
+    EXPECT_FLOAT_EQ(aim.controlVelocity().y, 0.0F);
 }

@@ -161,6 +161,7 @@ bool UiTextRenderer::initialize(SDL_Renderer *renderer) {
 
 void UiTextRenderer::shutdown() noexcept {
   cache_.clear();
+  cacheUseSequence_ = 0U;
 #if defined(_WIN32)
   if (platformFont_ != nullptr) {
     DeleteObject(static_cast<HFONT>(platformFont_));
@@ -175,6 +176,7 @@ void UiTextRenderer::setLanguage(UiLanguage language) noexcept {
   }
   language_ = language;
   cache_.clear();
+  cacheUseSequence_ = 0U;
 }
 
 UiLanguage UiTextRenderer::language() const noexcept { return language_; }
@@ -200,10 +202,30 @@ void UiTextRenderer::render(SDL_Renderer *renderer, float x, float y,
   static_cast<void>(
       SDL_GetRenderDrawColor(renderer, &red, &green, &blue, &alpha));
   const std::string key = cacheKey(localized, red, green, blue, alpha);
+  ++cacheUseSequence_;
+  if (cacheUseSequence_ == 0U) {
+    for (auto &[cachedKey, cached] : cache_) {
+      static_cast<void>(cachedKey);
+      cached.lastUsedSequence = 0U;
+    }
+    cacheUseSequence_ = 1U;
+  }
   auto found = cache_.find(key);
   if (found == cache_.end()) {
     if (cache_.size() >= kMaximumCachedLabels) {
-      cache_.clear();
+      // Dynamic HUD/performance values continuously introduce new strings.
+      // Clearing the complete cache used to recreate every visible label on
+      // one frame, producing a regular GDI/texture-upload hitch. Evict one
+      // least-recently-used entry so the work remains bounded and stable.
+      const auto oldest = std::min_element(
+          cache_.begin(), cache_.end(),
+          [](const auto &left, const auto &right) {
+            return left.second.lastUsedSequence <
+                   right.second.lastUsedSequence;
+          });
+      if (oldest != cache_.end()) {
+        cache_.erase(oldest);
+      }
     }
     PlatformRenderedText rendered = createWindowsTextTexture(
         renderer, platformFont_, localized, red, green, blue, alpha);
@@ -211,8 +233,10 @@ void UiTextRenderer::render(SDL_Renderer *renderer, float x, float y,
       return;
     }
     CachedText cached{std::move(rendered.texture), rendered.width,
-                      rendered.height};
+                      rendered.height, cacheUseSequence_};
     found = cache_.emplace(key, std::move(cached)).first;
+  } else {
+    found->second.lastUsedSequence = cacheUseSequence_;
   }
   const SDL_FRect destination{x, y, found->second.width, found->second.height};
   SDL_RenderTexture(renderer, found->second.texture.get(), nullptr,

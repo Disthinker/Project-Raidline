@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <queue>
@@ -221,6 +222,7 @@ RaidSpaceNavigationField::build(
         const std::size_t gridSize =
             field.denseGridColumns_ * field.denseGridRows_;
         field.denseGridWalkable_.assign(gridSize, 1U);
+        std::vector<std::size_t> blockerCandidates;
         for (std::size_t row{}; row < field.denseGridRows_; ++row)
         {
             for (std::size_t column{};
@@ -234,12 +236,15 @@ RaidSpaceNavigationField::build(
                     field.denseGridOrigin_.y +
                         static_cast<float>(row) *
                             field.denseGridCellSize_};
+                field.expandedBlockerIndex_->queryCandidateIndices(
+                    Rect{point, {0.0F, 0.0F}}, blockerCandidates);
                 const bool blocked = std::any_of(
-                    field.expandedBlockers_.begin(),
-                    field.expandedBlockers_.end(),
-                    [&](const Rect &blocker)
+                    blockerCandidates.begin(),
+                    blockerCandidates.end(),
+                    [&](std::size_t index)
                     {
-                        return pointInsideOpenRect(point, blocker);
+                        return pointInsideOpenRect(
+                            point, field.expandedBlockers_[index]);
                     });
                 field.denseGridWalkable_[
                     row * field.denseGridColumns_ + column] =
@@ -296,6 +301,54 @@ RaidSpaceNavigationField::build(
                         field.denseGridConnections_[current] |=
                             static_cast<std::uint8_t>(1U << direction);
                     }
+                }
+            }
+        }
+        field.portalChunkSizeCells_ = 16U;
+        field.portalChunkColumns_ =
+            (field.denseGridColumns_ + field.portalChunkSizeCells_ - 1U) /
+            field.portalChunkSizeCells_;
+        field.portalChunkRows_ =
+            (field.denseGridRows_ + field.portalChunkSizeCells_ - 1U) /
+            field.portalChunkSizeCells_;
+        field.portalChunkConnections_.assign(
+            field.portalChunkColumns_ * field.portalChunkRows_, 0U);
+        for (std::size_t row{}; row < field.denseGridRows_; ++row)
+        {
+            for (std::size_t column{}; column < field.denseGridColumns_;
+                 ++column)
+            {
+                const std::size_t current =
+                    row * field.denseGridColumns_ + column;
+                const std::size_t chunkRow =
+                    row / field.portalChunkSizeCells_;
+                const std::size_t chunkColumn =
+                    column / field.portalChunkSizeCells_;
+                const std::size_t chunk =
+                    chunkRow * field.portalChunkColumns_ + chunkColumn;
+                for (std::size_t direction{};
+                     direction < std::size(kDenseGridNeighborOffsets);
+                     ++direction)
+                {
+                    if ((field.denseGridConnections_[current] &
+                         static_cast<std::uint8_t>(1U << direction)) == 0U)
+                        continue;
+                    const int nextColumn = static_cast<int>(column) +
+                        kDenseGridNeighborOffsets[direction][0];
+                    const int nextRow = static_cast<int>(row) +
+                        kDenseGridNeighborOffsets[direction][1];
+                    if (nextColumn < 0 || nextRow < 0)
+                        continue;
+                    const std::size_t nextChunkColumn =
+                        static_cast<std::size_t>(nextColumn) /
+                        field.portalChunkSizeCells_;
+                    const std::size_t nextChunkRow =
+                        static_cast<std::size_t>(nextRow) /
+                        field.portalChunkSizeCells_;
+                    if (nextChunkColumn != chunkColumn ||
+                        nextChunkRow != chunkRow)
+                        field.portalChunkConnections_[chunk] |=
+                            static_cast<std::uint8_t>(1U << direction);
                 }
             }
         }
@@ -644,34 +697,46 @@ std::optional<Vec2> RaidSpaceNavigationField::nextDenseGridWaypoint(
     {
         std::optional<std::size_t> selected;
         float selectedDistance = std::numeric_limits<float>::infinity();
-        for (std::size_t index{}; index < denseGridWalkable_.size(); ++index)
+        const int centerColumn = std::clamp(
+            static_cast<int>(std::lround(
+                (point.x - denseGridOrigin_.x) / denseGridCellSize_)),
+            0, static_cast<int>(denseGridColumns_ - 1U));
+        const int centerRow = std::clamp(
+            static_cast<int>(std::lround(
+                (point.y - denseGridOrigin_.y) / denseGridCellSize_)),
+            0, static_cast<int>(denseGridRows_ - 1U));
+        const int radius = static_cast<int>(
+            std::ceil(maximumDistance / denseGridCellSize_)) + 1;
+        const int firstColumn = std::max(0, centerColumn - radius);
+        const int lastColumn = std::min(
+            static_cast<int>(denseGridColumns_ - 1U),
+            centerColumn + radius);
+        const int firstRow = std::max(0, centerRow - radius);
+        const int lastRow = std::min(
+            static_cast<int>(denseGridRows_ - 1U), centerRow + radius);
+        for (int row = firstRow; row <= lastRow; ++row)
         {
-            if (denseGridWalkable_[index] == 0U)
+            for (int column = firstColumn; column <= lastColumn; ++column)
             {
-                continue;
-            }
-            const float candidateDistance = distance(point, cellPosition(index));
-            if (candidateDistance > maximumDistance + kGeometryEpsilon)
-            {
-                continue;
-            }
-            // The nearest sample by Euclidean distance can be on the other
-            // side of a thin wall. Requiring a clear segment from the real
-            // actor/goal position keeps snapping from creating a path through
-            // geometry between samples.
-            if (!expandedBlockerIndex_->hasLineOfSight(
-                    point, cellPosition(index)))
-            {
-                continue;
-            }
-            if (!selected.has_value() ||
-                candidateDistance < selectedDistance - kDistanceEpsilon ||
-                (std::abs(candidateDistance - selectedDistance) <=
-                     kDistanceEpsilon &&
-                 index < *selected))
-            {
-                selected = index;
-                selectedDistance = candidateDistance;
+                const std::size_t index = static_cast<std::size_t>(row) *
+                    denseGridColumns_ + static_cast<std::size_t>(column);
+                if (denseGridWalkable_[index] == 0U)
+                    continue;
+                const float candidateDistance =
+                    distance(point, cellPosition(index));
+                if (candidateDistance > maximumDistance + kGeometryEpsilon ||
+                    !expandedBlockerIndex_->hasLineOfSight(
+                        point, cellPosition(index)))
+                    continue;
+                if (!selected.has_value() ||
+                    candidateDistance < selectedDistance - kDistanceEpsilon ||
+                    (std::abs(candidateDistance - selectedDistance) <=
+                         kDistanceEpsilon &&
+                     index < *selected))
+                {
+                    selected = index;
+                    selectedDistance = candidateDistance;
+                }
             }
         }
         return selected;
@@ -698,15 +763,155 @@ std::optional<Vec2> RaidSpaceNavigationField::nextDenseGridWaypoint(
         return cellPosition(*startCell);
     }
 
+    std::size_t denseGoalCell = *goalCell;
+    const std::size_t startCellRow = *startCell / denseGridColumns_;
+    const std::size_t startCellColumn = *startCell % denseGridColumns_;
+    const std::size_t goalCellRow = *goalCell / denseGridColumns_;
+    const std::size_t goalCellColumn = *goalCell % denseGridColumns_;
+    const std::size_t startChunkRow =
+        startCellRow / portalChunkSizeCells_;
+    const std::size_t startChunkColumn =
+        startCellColumn / portalChunkSizeCells_;
+    const std::size_t goalChunkRow = goalCellRow / portalChunkSizeCells_;
+    const std::size_t goalChunkColumn =
+        goalCellColumn / portalChunkSizeCells_;
+    const std::size_t startChunk =
+        startChunkRow * portalChunkColumns_ + startChunkColumn;
+    const std::size_t goalChunk =
+        goalChunkRow * portalChunkColumns_ + goalChunkColumn;
+    if (startChunk != goalChunk && !portalChunkConnections_.empty())
+    {
+        std::vector<std::size_t> chunkPrevious(
+            portalChunkConnections_.size(), kNoNode);
+        std::queue<std::size_t> chunkFrontier;
+        chunkPrevious[startChunk] = startChunk;
+        chunkFrontier.push(startChunk);
+        while (!chunkFrontier.empty() &&
+               chunkPrevious[goalChunk] == kNoNode)
+        {
+            const std::size_t current = chunkFrontier.front();
+            chunkFrontier.pop();
+            const std::size_t row = current / portalChunkColumns_;
+            const std::size_t column = current % portalChunkColumns_;
+            for (std::size_t direction{};
+                 direction < std::size(kDenseGridNeighborOffsets);
+                 ++direction)
+            {
+                if ((portalChunkConnections_[current] &
+                     static_cast<std::uint8_t>(1U << direction)) == 0U)
+                    continue;
+                const int nextColumn = static_cast<int>(column) +
+                    kDenseGridNeighborOffsets[direction][0];
+                const int nextRow = static_cast<int>(row) +
+                    kDenseGridNeighborOffsets[direction][1];
+                if (nextColumn < 0 || nextRow < 0 ||
+                    nextColumn >= static_cast<int>(portalChunkColumns_) ||
+                    nextRow >= static_cast<int>(portalChunkRows_))
+                    continue;
+                const std::size_t next =
+                    static_cast<std::size_t>(nextRow) * portalChunkColumns_ +
+                    static_cast<std::size_t>(nextColumn);
+                if (chunkPrevious[next] != kNoNode)
+                    continue;
+                chunkPrevious[next] = current;
+                chunkFrontier.push(next);
+            }
+        }
+        if (chunkPrevious[goalChunk] == kNoNode)
+            return std::nullopt;
+        std::size_t nextChunk = goalChunk;
+        while (chunkPrevious[nextChunk] != startChunk)
+        {
+            nextChunk = chunkPrevious[nextChunk];
+            if (nextChunk == kNoNode)
+                return std::nullopt;
+        }
+        const std::size_t nextChunkRow = nextChunk / portalChunkColumns_;
+        const std::size_t nextChunkColumn = nextChunk % portalChunkColumns_;
+        std::size_t direction{};
+        if (nextChunkRow < startChunkRow) direction = 0U;
+        else if (nextChunkColumn < startChunkColumn) direction = 1U;
+        else if (nextChunkColumn > startChunkColumn) direction = 2U;
+        else direction = 3U;
+        const std::size_t firstRow =
+            startChunkRow * portalChunkSizeCells_;
+        const std::size_t lastRow = std::min(
+            denseGridRows_, firstRow + portalChunkSizeCells_);
+        const std::size_t firstColumn =
+            startChunkColumn * portalChunkSizeCells_;
+        const std::size_t lastColumn = std::min(
+            denseGridColumns_, firstColumn + portalChunkSizeCells_);
+        std::optional<std::size_t> selectedPortal;
+        std::size_t selectedDistance = std::numeric_limits<std::size_t>::max();
+        for (std::size_t row = firstRow; row < lastRow; ++row)
+        {
+            for (std::size_t column = firstColumn;
+                 column < lastColumn; ++column)
+            {
+                const std::size_t cell = row * denseGridColumns_ + column;
+                if ((denseGridConnections_[cell] &
+                     static_cast<std::uint8_t>(1U << direction)) == 0U)
+                    continue;
+                const int neighborColumn = static_cast<int>(column) +
+                    kDenseGridNeighborOffsets[direction][0];
+                const int neighborRow = static_cast<int>(row) +
+                    kDenseGridNeighborOffsets[direction][1];
+                if (neighborColumn < 0 || neighborRow < 0)
+                    continue;
+                const std::size_t neighbor =
+                    static_cast<std::size_t>(neighborRow) * denseGridColumns_ +
+                    static_cast<std::size_t>(neighborColumn);
+                const std::size_t neighborChunk =
+                    (static_cast<std::size_t>(neighborRow) /
+                         portalChunkSizeCells_) * portalChunkColumns_ +
+                    static_cast<std::size_t>(neighborColumn) /
+                        portalChunkSizeCells_;
+                if (neighborChunk != nextChunk)
+                    continue;
+                const std::size_t score =
+                    std::max(static_cast<std::size_t>(neighborRow), goalCellRow) -
+                        std::min(static_cast<std::size_t>(neighborRow), goalCellRow) +
+                    std::max(static_cast<std::size_t>(neighborColumn), goalCellColumn) -
+                        std::min(static_cast<std::size_t>(neighborColumn), goalCellColumn);
+                if (!selectedPortal.has_value() || score < selectedDistance ||
+                    (score == selectedDistance && neighbor < *selectedPortal))
+                {
+                    selectedPortal = neighbor;
+                    selectedDistance = score;
+                }
+            }
+        }
+        if (!selectedPortal.has_value())
+            return std::nullopt;
+        denseGoalCell = *selectedPortal;
+    }
+
     std::vector<std::size_t> previous(
         denseGridWalkable_.size(),
         kNoNode);
-    std::queue<std::size_t> frontier;
-    previous[*startCell] = *startCell;
-    frontier.push(*startCell);
-    while (!frontier.empty() && previous[*goalCell] == kNoNode)
+    std::vector<float> costs(
+        denseGridWalkable_.size(),
+        std::numeric_limits<float>::infinity());
+    using FrontierEntry = std::pair<float, std::size_t>;
+    std::priority_queue<FrontierEntry,
+                        std::vector<FrontierEntry>,
+                        std::greater<FrontierEntry>> frontier;
+    const std::size_t goalRow = denseGoalCell / denseGridColumns_;
+    const std::size_t goalColumn = denseGoalCell % denseGridColumns_;
+    const auto heuristic = [&](std::size_t index)
     {
-        const std::size_t current = frontier.front();
+        const std::size_t row = index / denseGridColumns_;
+        const std::size_t column = index % denseGridColumns_;
+        return static_cast<float>(
+            std::max(row, goalRow) - std::min(row, goalRow) +
+            std::max(column, goalColumn) - std::min(column, goalColumn));
+    };
+    previous[*startCell] = *startCell;
+    costs[*startCell] = 0.0F;
+    frontier.push({heuristic(*startCell), *startCell});
+    while (!frontier.empty() && previous[denseGoalCell] == kNoNode)
+    {
+        const std::size_t current = frontier.top().second;
         frontier.pop();
         const std::size_t currentRow = current / denseGridColumns_;
         const std::size_t currentColumn = current % denseGridColumns_;
@@ -733,20 +938,22 @@ std::optional<Vec2> RaidSpaceNavigationField::nextDenseGridWaypoint(
             const std::size_t next =
                 static_cast<std::size_t>(nextRow) * denseGridColumns_ +
                 static_cast<std::size_t>(nextColumn);
-            if (denseGridWalkable_[next] == 0U || previous[next] != kNoNode)
-            {
+            if (denseGridWalkable_[next] == 0U)
                 continue;
-            }
+            const float candidate = costs[current] + 1.0F;
+            if (candidate + kDistanceEpsilon >= costs[next])
+                continue;
+            costs[next] = candidate;
             previous[next] = current;
-            frontier.push(next);
+            frontier.push({candidate + heuristic(next), next});
         }
     }
-    if (previous[*goalCell] == kNoNode)
+    if (previous[denseGoalCell] == kNoNode)
     {
         return std::nullopt;
     }
 
-    std::size_t next = *goalCell;
+    std::size_t next = denseGoalCell;
     std::size_t guard{};
     while (previous[next] != *startCell)
     {

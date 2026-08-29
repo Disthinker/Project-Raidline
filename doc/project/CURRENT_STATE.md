@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@fab9f32` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、Regional Operations 失物/寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守闭环。
-- 当前开发分支：`codex/regional-base-perimeter-sweep-v1`，从 `origin/main@fab9f32` 创建。
-- 当前活动计划：`doc/exec-plans/active/regional-base-perimeter-sweep-v1.md`。
+- `origin/main@7bd3b02` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及 Regional Operations 的失物/两条寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、地点独特设施、基地威胁/自动防守和外围清剿闭环。
+- 当前开发分支：`codex/procedural-raid-layout-v1`，从 `origin/main@7bd3b02` 创建。
+- 当前活动计划：`doc/exec-plans/active/procedural-raid-playable-outdoor-layout-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础、**Regional Operations — Loss & Recovery**、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、区域基地独特设施及基地威胁/自动防守均已进入主线。当前宏切片增加保持常规撤离开放的基地外围清剿，让玩家主动降低威胁；不提前实现实时尸潮、防御设施或战斗小组。
+Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。当前唯一主阶段为 **程序化 Raid 内容扩展——首张可玩随机大地图**；Macro 1 正把 `Frontier Exchange` 扩展为 25600×14400 的单一无缝室外空间，先生成八个连续主题分区，再放置三个固定内部地标、程序道路、环境填充和全部玩法 Socket。不提前实现完整资源点生态、遭遇生态、程序化室内、多主题、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -64,7 +64,8 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 49. **唯一主基地迁徙 v1**：PR #107 已通过 exact-head CI 和用户正常游玩验收，以普通 merge commit `d035181` 进入 main。content v39/schema v30 发布唯一科技核心、五类稳定设施、厨房/净水建设、设施 Installed/Reserve 位置和两处基地的迁徙路线；迁徙原子推进 12 小时并保持 Stash、装备、人口和资产唯一所有权。
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
 51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
-52. **基地外围清剿 v1（当前开发）**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。领域、持久化、GameSession、双语代码占位和回归已实现，Windows Debug 全目标、完整 CTest 1223/1223 及 PR #110 exact-head Windows/Ubuntu CI 均已通过；等待用户正常游玩验收。
+52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
+53. **Frontier Exchange 超大主题分区随机地图 v3（当前开发）**：Draft PR #111 的原 2560×1440 验收范围已作废。当前分支使用 content v44/layout v3/schema v35，把 `Frontier Exchange` 扩展为 25600×14400、320×180 基础格、20×12 运行时区块；每局冻结八个连续主题分区、三个固定地标、主/次/接入道路、五类地表、约 700～1100 个可碰撞物、1200～1800 个非碰撞环境物以及全部既有玩法锚点。schema v34/layout v2 只读取原快照，不在迁移时重生成。验收返工把随机 Voronoi 分区改为带有限边界偏移和镜像变化的 4×2 宏观规划，工业与物流区保持相邻，路网沿分区边界形成稳定骨架，厂房/仓库按区内 compound 网格成组放置；战术地图为已探索分区着色，全部可见环境占位显示中英文身份。SDL client 复用相机区块投影缓存，不再一帧三次分配/重建同一投影；导航继续使用静态索引、局部环形搜索与远距离区块门户。第三轮验收返工不再信任驱动报告的 VSync 或高刷新/RDP 值：显示提交最高 60 Hz，VSync 成功时仍由同一绝对截止时间补足剩余预算；玩家 Sprite/六帧动画与 60 Hz 像素节拍对齐，文本缓存改为单项 LRU 淘汰，避免动态文字触发整库纹理重建。F10 现在统一承载武器参数、地图迷雾和不提交 Profile 的无限弹药。迷雾切换已由用户正常游玩确认可用。权威准星和控制目标现可越出当前屏幕约 48px（约一个当前准星直径），到达外扩边界后清除外向速度，显示、朝向和击发仍共用同一状态。用户 F9 证据把规律性顿挫收窄到 simulation Update 偶发约 69.24ms 峰值；真实 Frontier 回归稳定复现 `69.97～71.58 ms`，并确认根因是 Active Raid 每秒复制和校验包含完整冻结大地图的 Profile，而非导航或显示提交。当前分支改为在已验证的活动 Profile 上原位推进世界时间和幂等时间消费者，Settlement 继续完整校验并原子保存；相同回归连续十次的最慢 Update 降至 `0.59～0.76 ms`。最新返工把车辆、卡车、集装箱、工程设备和厂房/仓库按角色尺度放大并保持真实长宽方向，非碎屑物件以完整矩形唯一占位；128-seed 回归验证道路物件密度、锚点可达和两两无重叠。进入 layout v3 地图前会先提交双语加载画面，再执行冻结生成。当前 Windows Debug 全目标与完整 CTest 1255/1255 通过，其余返工待 exact-head CI 和新一轮正常游玩收束。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -91,7 +92,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。当前外围清剿分支已完成 Windows Debug 全目标、定向领域/会话/存档/UI 回归、完整 CTest 1223/1223 与 PR #110 exact-head Windows/Ubuntu CI。开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。当前程序化大地图分支已通过 Windows Debug 全目标、准星外扩边界、Active Raid 世界时间帧预算、128-seed 真实尺度/无重叠地图生成、加载画面双语、帧节奏/性能统计、迷雾表现、战术地图和完整 CTest 1255/1255；exact-head CI 待最终提交后记录。开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
@@ -145,7 +146,7 @@ Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth�
 - 奔跑不能直接击发；奔跑中按射击会先结束奔跑，经过由操控速度决定的短促举枪准备后只提交一次原射击意图，准备完成前不消耗弹药。
 - 超过有效射程后准星立即以领域投影标红，散布和伤害质量继续平滑恶化，到最大射程只保留 25% 基础伤害。五项属性、基础伤害、射程和逻辑弹速来自版本化 WeaponUse 内容定义，App 不按名称猜测。
 - Alpha 首图从 JSON 读取三个代码表现障碍；玩家和逻辑弹道不能穿过，内容加载拒绝越界、重复 ID 或与任一合法敌人部署重叠的障碍。敌人移动阻挡和正式墙/车辆视觉仍不是通用物理系统。
-- Raid 中按 `F10` 打开开发者武器面板，使用上下选择、左右微调、Shift 大步长、R 重置。面板覆盖按当前武器实例隔离，立即重配置射击瞬态，但不修改 ContentRegistry、Profile、revision、存档、结算或 manifest；关闭进程即清除。
+- Raid 中按 `F10` 打开运行时开发面板；其中武器参数仍使用上下选择、左右微调、Shift 大步长、R 重置，`F` 切换只读战术地图迷雾表现，`I` 切换无限弹药。武器覆盖按当前实例隔离；迷雾和无限弹药在每个新 Raid 分别恢复为启用与关闭。三者均不修改 ContentRegistry 或 manifest；武器覆盖和迷雾不进入领域状态，无限弹药只在可丢弃候选 Profile 中验证循环供弹并拒绝提交弹药、revision、高水位或存档，关闭进程即清除。
 - F10 在原有参数外新增逻辑弹速、移准扩散率、近距散布比例、有效射程 Distance Bloom 与弱曳光寿命；准星 UI 直接消费 simulation 的当前/最小/最大角散布和世界半径投影。
 - App 不再绘制移动弹头矩形、光球或余烬；每个 Weak 曳光是等宽五像素的亮黄外沿与白亮核心连续短线，并且只覆盖逻辑弹道已经推进过的区段。验收后的默认曳光长度为 30px，F10 仍可会话内调整；准星使用三像素粗、15 像素长的四臂表现。
 

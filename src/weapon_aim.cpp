@@ -145,7 +145,16 @@ void WeaponAimState::update(
         Vec2 motion{};
         if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
         {
-            motion = *inputMotionDelta;
+            // A captured pointer remains at one screen anchor while a
+            // scrolling camera changes the world position represented by
+            // that anchor. Preserve both contributions: relative device
+            // motion moves the pointer on screen, while the absolute input
+            // delta carries the same screen anchor through world space.
+            motion = Vec2{
+                inputMotionDelta->x +
+                    clampedInputPosition.x - inputWorldPosition_.x,
+                inputMotionDelta->y +
+                    clampedInputPosition.y - inputWorldPosition_.y};
             inputWorldPosition_ = clampedInputPosition;
         }
         else
@@ -157,8 +166,9 @@ void WeaponAimState::update(
         }
 
         // Relative mouse input is consumed as motion, not as a bounded OS
-        // cursor position. This keeps aiming continuous while the pointer is
-        // captured at a window edge and avoids a dead zone when reversing.
+        // cursor position. The mapped world anchor delta above only follows
+        // viewport translation; it does not reintroduce a window-edge dead
+        // zone when the player reverses mouse direction.
         targetWorldPosition_.x = std::clamp(
             targetWorldPosition_.x + motion.x,
             0.0F,
@@ -398,6 +408,50 @@ void WeaponAimState::reconfigure(WeaponAimConfig config)
             direction.x * config_.maximumReticleSpeed,
             direction.y * config_.maximumReticleSpeed};
     }
+}
+
+void WeaponAimState::constrainToBounds(Rect bounds) noexcept
+{
+    if (!initialized_ || !finite(bounds.position) ||
+        !finite(bounds.size) || bounds.size.x < 0.0F ||
+        bounds.size.y < 0.0F)
+    {
+        return;
+    }
+
+    const Vec2 minimum = bounds.position;
+    const Vec2 maximum{
+        bounds.position.x + bounds.size.x,
+        bounds.position.y + bounds.size.y};
+    const auto clampPosition = [&](Vec2 value)
+    {
+        return Vec2{
+            std::clamp(value.x, minimum.x, maximum.x),
+            std::clamp(value.y, minimum.y, maximum.y)};
+    };
+    currentWorldPosition_ = clampPosition(currentWorldPosition_);
+    targetWorldPosition_ = clampPosition(targetWorldPosition_);
+
+    const auto removeOutwardVelocity = [&](Vec2 &velocity)
+    {
+        if ((currentWorldPosition_.x <= minimum.x && velocity.x < 0.0F) ||
+            (currentWorldPosition_.x >= maximum.x && velocity.x > 0.0F))
+        {
+            velocity.x = 0.0F;
+        }
+        if ((currentWorldPosition_.y <= minimum.y && velocity.y < 0.0F) ||
+            (currentWorldPosition_.y >= maximum.y && velocity.y > 0.0F))
+        {
+            velocity.y = 0.0F;
+        }
+    };
+    removeOutwardVelocity(controlVelocity_);
+    removeOutwardVelocity(recoilVelocity_);
+    lastDirection_ = normalizedOr(
+        Vec2{
+            currentWorldPosition_.x - shootingOrigin_.x,
+            currentWorldPosition_.y - shootingOrigin_.y},
+        lastDirection_);
 }
 
 Vec2 WeaponAimState::actualWorldPosition() const noexcept

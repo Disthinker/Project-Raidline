@@ -7,7 +7,11 @@
 namespace
 {
     constexpr std::size_t kPlayerMoveFrameCount{6};
-    constexpr float kPlayerMoveFrameDuration{0.09f};
+    // Ten animation frames per second divides evenly into the current stable
+    // 60 Hz presentation cadence. The former 0.09 s duration alternated
+    // between five and six presented frames and created a visible rhythmic
+    // hitch while the camera followed the player.
+    constexpr float kPlayerMoveFrameDuration{0.10f};
     constexpr float kImpactSlowDurationSeconds{0.18F};
     constexpr float kImpactSlowTimeMultiplier{0.28F};
     constexpr float kSprintSpeedMultiplier{1.5F};

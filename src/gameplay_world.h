@@ -19,6 +19,7 @@
 #include "player.h"
 #include "logical_ballistics.h"
 #include "raid_session.h"
+#include "raid_map_generation.h"
 #include "raid_space_query.h"
 #include "raid_space_spatial_index.h"
 #include "raid_tactical_map.h"
@@ -121,6 +122,10 @@ struct RaidWorldConfig
     int playerCurrentHealth{100};
     bool deferPlayerDamageResolution{};
     std::vector<BallisticBlocker> ballisticBlockers;
+    RaidGeneratedMapLayout outdoorLayout;
+    std::uint32_t outdoorColumns{};
+    std::uint32_t outdoorRows{};
+    std::uint32_t outdoorChunkSizeCells{};
     std::vector<RaidInteriorWorldConfig> interiors;
     float normalExtractionDurationSeconds{3.0F};
     HighRiskWorldConfig highRisk;
@@ -131,6 +136,23 @@ struct RaidWorldConfig
     };
     std::optional<OrdinarySurvivorRescue> rescue;
     RaidIntelligenceLoadout intelligence;
+};
+
+struct RaidOutdoorLabelProjection
+{
+    std::string text;
+    Vec2 position{};
+    bool landmark{};
+};
+
+struct RaidOutdoorPresentationProjection
+{
+    std::vector<RaidTerrainSpan> terrainSpans;
+    std::vector<RaidOutdoorRoadCell> roadCells;
+    std::vector<RaidOutdoorPropSnapshot> props;
+    std::vector<RaidOutdoorLabelProjection> labels;
+    std::size_t queriedChunkCount{};
+    std::uint64_t cacheRevision{};
 };
 
 struct PlayerDamageObservation
@@ -245,6 +267,8 @@ public:
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>
     activeInteriorMapProjection() const noexcept;
+    [[nodiscard]] const RaidOutdoorPresentationProjection &
+    outdoorPresentation(ContentRect visibleWorldBounds) const;
 
     [[nodiscard]]
     const std::vector<Particle> &
@@ -454,6 +478,15 @@ private:
         RaidSpaceNavigationField field;
     };
 
+    struct OutdoorPresentationChunk
+    {
+        std::vector<std::size_t> terrainSpanIndices;
+        std::vector<std::size_t> roadCellIndices;
+        std::vector<std::size_t> propIndices;
+        std::vector<std::size_t> landmarkIndices;
+        std::vector<std::size_t> districtLabelIndices;
+    };
+
     struct PlayerHealthOverrideTag
     {
     };
@@ -477,6 +510,26 @@ private:
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<EnemyNavigationRuntime> enemyNavigation_;
     std::vector<BallisticBlocker> ballisticBlockers_;
+    RaidGeneratedMapLayout outdoorLayout_;
+    std::uint32_t outdoorColumns_{};
+    std::uint32_t outdoorRows_{};
+    std::uint32_t outdoorChunkSizeCells_{};
+    std::uint32_t outdoorChunkColumns_{};
+    std::uint32_t outdoorChunkRows_{};
+    std::vector<OutdoorPresentationChunk> outdoorPresentationChunks_;
+    mutable RaidOutdoorPresentationProjection outdoorPresentationCache_;
+    mutable bool outdoorPresentationCacheValid_{};
+    mutable std::uint32_t outdoorPresentationFirstChunkColumn_{};
+    mutable std::uint32_t outdoorPresentationLastChunkColumn_{};
+    mutable std::uint32_t outdoorPresentationFirstChunkRow_{};
+    mutable std::uint32_t outdoorPresentationLastChunkRow_{};
+    mutable std::uint32_t outdoorPresentationVisitSequence_{};
+    mutable std::uint64_t outdoorPresentationCacheRevision_{};
+    mutable std::vector<std::uint32_t> outdoorTerrainVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorRoadVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorPropVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorLandmarkVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorDistrictVisitStamps_;
     std::optional<RaidSpaceBlockerIndex> outdoorBlockerIndex_;
     std::size_t outdoorNavigationScheduleCursor_{};
     std::vector<InteriorRuntime> interiors_;

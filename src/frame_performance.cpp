@@ -17,6 +17,7 @@ namespace
         sample.eventMilliseconds = sanitize(sample.eventMilliseconds);
         sample.updateMilliseconds = sanitize(sample.updateMilliseconds);
         sample.renderMilliseconds = sanitize(sample.renderMilliseconds);
+        sample.pacingMilliseconds = sanitize(sample.pacingMilliseconds);
         sample.totalMilliseconds = sanitize(sample.totalMilliseconds);
         return sample;
     }
@@ -28,6 +29,7 @@ namespace
         destination.eventMilliseconds += sample.eventMilliseconds;
         destination.updateMilliseconds += sample.updateMilliseconds;
         destination.renderMilliseconds += sample.renderMilliseconds;
+        destination.pacingMilliseconds += sample.pacingMilliseconds;
         destination.totalMilliseconds += sample.totalMilliseconds;
     }
 
@@ -38,6 +40,7 @@ namespace
         value.eventMilliseconds /= divisor;
         value.updateMilliseconds /= divisor;
         value.renderMilliseconds /= divisor;
+        value.pacingMilliseconds /= divisor;
         value.totalMilliseconds /= divisor;
         return value;
     }
@@ -52,6 +55,8 @@ namespace
             current.updateMilliseconds, sample.updateMilliseconds);
         current.renderMilliseconds = std::max(
             current.renderMilliseconds, sample.renderMilliseconds);
+        current.pacingMilliseconds = std::max(
+            current.pacingMilliseconds, sample.pacingMilliseconds);
         current.totalMilliseconds = std::max(
             current.totalMilliseconds, sample.totalMilliseconds);
         return current;
@@ -77,10 +82,12 @@ FramePerformanceSummary FramePerformanceMonitor::summary() const
     std::vector<float> events;
     std::vector<float> updates;
     std::vector<float> renders;
+    std::vector<float> pacing;
     std::vector<float> totals;
     events.reserve(sampleCount_);
     updates.reserve(sampleCount_);
     renders.reserve(sampleCount_);
+    pacing.reserve(sampleCount_);
     totals.reserve(sampleCount_);
     for (std::size_t index{}; index < sampleCount_; ++index)
     {
@@ -90,6 +97,7 @@ FramePerformanceSummary FramePerformanceMonitor::summary() const
         events.push_back(sample.eventMilliseconds);
         updates.push_back(sample.updateMilliseconds);
         renders.push_back(sample.renderMilliseconds);
+        pacing.push_back(sample.pacingMilliseconds);
         totals.push_back(sample.totalMilliseconds);
     }
     result.average = divided(
@@ -106,6 +114,7 @@ FramePerformanceSummary FramePerformanceMonitor::summary() const
         percentile(std::move(events)),
         percentile(std::move(updates)),
         percentile(std::move(renders)),
+        percentile(std::move(pacing)),
         percentile(std::move(totals))};
     return result;
 }

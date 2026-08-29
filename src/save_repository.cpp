@@ -1439,6 +1439,117 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                  raid.spatialLayout.generationAttempt},
                 {"layout_hash", raid.spatialLayout.layoutHash},
                 {"used_fallback", raid.spatialLayout.usedFallback}};
+            if (schemaVersion >= 34)
+            {
+                Json roads = Json::array();
+                for (const RaidOutdoorRoadCell &cell :
+                     raid.spatialLayout.roadCells)
+                {
+                    roads.push_back({
+                        {"column", cell.column},
+                        {"row", cell.row},
+                        {"kind", static_cast<std::uint32_t>(cell.kind)}});
+                }
+                payload["pending_raid"]["spatial_layout"]
+                    ["layout_version"] = raid.spatialLayout.layoutVersion;
+                payload["pending_raid"]["spatial_layout"]
+                    ["road_cells"] = std::move(roads);
+                payload["pending_raid"]["spatial_layout"]
+                    ["fallback_reason"] = static_cast<std::uint32_t>(
+                        raid.spatialLayout.fallbackReason);
+            }
+            if (schemaVersion >= 35)
+            {
+                Json districts = Json::array();
+                for (const RaidDistrictSnapshot &district :
+                     raid.spatialLayout.districts)
+                {
+                    Json cells = Json::array();
+                    for (const RaidGridSpan &cell : district.cells)
+                    {
+                        cells.push_back({
+                            {"row", cell.row},
+                            {"first_column", cell.firstColumn},
+                            {"length", cell.length}});
+                    }
+                    districts.push_back({
+                        {"instance_id", district.instanceId},
+                        {"definition_id", district.definitionId},
+                        {"display_name", district.displayName},
+                        {"kind", static_cast<std::uint32_t>(district.kind)},
+                        {"cells", std::move(cells)},
+                        {"label_position", vectorValue(
+                            district.labelPosition)}});
+                }
+                Json terrain = Json::array();
+                for (const RaidTerrainSpan &span :
+                     raid.spatialLayout.terrainSpans)
+                {
+                    terrain.push_back({
+                        {"row", span.row},
+                        {"first_column", span.firstColumn},
+                        {"length", span.length},
+                        {"kind", static_cast<std::uint32_t>(span.kind)}});
+                }
+                Json props = Json::array();
+                for (const RaidOutdoorPropSnapshot &prop :
+                     raid.spatialLayout.props)
+                {
+                    props.push_back({
+                        {"instance_id", prop.instanceId},
+                        {"kind", static_cast<std::uint32_t>(prop.kind)},
+                        {"state", static_cast<std::uint32_t>(prop.state)},
+                        {"bounds", {
+                            {"position", vectorValue(prop.bounds.position)},
+                            {"size", vectorValue(prop.bounds.size)}}},
+                        {"quarter_turns", prop.quarterTurns},
+                        {"collidable", prop.collidable}});
+                }
+                Json anchors = Json::array();
+                for (const RaidAnchorPlacementSnapshot &anchor :
+                     raid.spatialLayout.anchorPlacements)
+                {
+                    anchors.push_back({
+                        {"id", anchor.id},
+                        {"kind", static_cast<std::uint32_t>(anchor.kind)},
+                        {"bounds", {
+                            {"position", vectorValue(anchor.bounds.position)},
+                            {"size", vectorValue(anchor.bounds.size)}}},
+                        {"district_instance_id",
+                         anchor.districtInstanceId}});
+                }
+                Json landmarks = Json::array();
+                for (const RaidLandmarkPlacementSnapshot &landmark :
+                     raid.spatialLayout.landmarks)
+                {
+                    Json structures = Json::array();
+                    for (ContentRect structure : landmark.structures)
+                    {
+                        structures.push_back({
+                            {"position", vectorValue(structure.position)},
+                            {"size", vectorValue(structure.size)}});
+                    }
+                    Json sockets = Json::array();
+                    for (Vec2 socket : landmark.roadSockets)
+                        sockets.push_back(vectorValue(socket));
+                    landmarks.push_back({
+                        {"definition_id", landmark.definitionId},
+                        {"display_name", landmark.displayName},
+                        {"bounds", {
+                            {"position", vectorValue(landmark.bounds.position)},
+                            {"size", vectorValue(landmark.bounds.size)}}},
+                        {"district_instance_id",
+                         landmark.districtInstanceId},
+                        {"structures", std::move(structures)},
+                        {"road_sockets", std::move(sockets)}});
+                }
+                Json &layout = payload["pending_raid"]["spatial_layout"];
+                layout["districts"] = std::move(districts);
+                layout["terrain_spans"] = std::move(terrain);
+                layout["props"] = std::move(props);
+                layout["anchor_placements"] = std::move(anchors);
+                layout["landmarks"] = std::move(landmarks);
+            }
         }
         if (schemaVersion >= 22)
         {
@@ -1684,7 +1795,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["rescue"] = nullptr;
             }
             if (schemaVersion >= 27 ||
-                raid.rulesVersion == "regional-base-perimeter-sweep-20")
+                raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
+                raid.rulesVersion == "procedural-playable-outdoor-layout-21" ||
+                raid.rulesVersion == "procedural-frontier-district-layout-22")
             {
                 Json routes = Json::array();
                 for (const RegionRouteDefinitionId &routeId :
@@ -1925,7 +2038,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 25 && schemaVersion != 26 &&
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
-        schemaVersion != 32 && schemaVersion != 33)
+        schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
+        schemaVersion != 35)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2036,7 +2150,12 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 31 &&
              contentVersion == "regional-base-site-feature-content-40") ||
             (schemaVersion == 32 &&
-             contentVersion == "regional-base-threat-content-41");
+             contentVersion == "regional-base-threat-content-41") ||
+            (schemaVersion == 33 &&
+             contentVersion == "regional-base-perimeter-sweep-content-42") ||
+            (schemaVersion == 34 &&
+             contentVersion ==
+                 "procedural-playable-outdoor-layout-content-43");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2052,8 +2171,9 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 25 && schemaVersion != 26 &&
              schemaVersion != 27 && schemaVersion != 28 &&
              schemaVersion != 29 && schemaVersion != 30 &&
-             schemaVersion != 31 && schemaVersion != 32 &&
-             schemaVersion != 33) ||
+              schemaVersion != 31 && schemaVersion != 32 &&
+              schemaVersion != 33 && schemaVersion != 34 &&
+              schemaVersion != 35) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2915,6 +3035,156 @@ SaveLoadResult deserializeProfileEnvelope(
                     layout.at("layout_hash").get<std::uint64_t>();
                 raid.spatialLayout.usedFallback =
                     layout.at("used_fallback").get<bool>();
+                if (schemaVersion >= 34)
+                {
+                    raid.spatialLayout.layoutVersion =
+                        layout.at("layout_version").get<std::uint32_t>();
+                    for (const Json &road : layout.at("road_cells"))
+                    {
+                        const std::uint32_t kind =
+                            road.at("kind").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidOutdoorRoadKind::Primary))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid road kind is invalid"};
+                        }
+                        raid.spatialLayout.roadCells.push_back({
+                            road.at("column").get<std::uint16_t>(),
+                            road.at("row").get<std::uint16_t>(),
+                            static_cast<RaidOutdoorRoadKind>(kind)});
+                    }
+                    const std::uint32_t fallbackReason =
+                        layout.at("fallback_reason").get<std::uint32_t>();
+                    if (fallbackReason > static_cast<std::uint32_t>(
+                            RaidMapFallbackReason::AttemptsExhausted))
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "Raid layout fallback reason is invalid"};
+                    }
+                    raid.spatialLayout.fallbackReason =
+                        static_cast<RaidMapFallbackReason>(fallbackReason);
+                }
+                if (schemaVersion >= 35)
+                {
+                    for (const Json &district : layout.at("districts"))
+                    {
+                        const std::uint32_t kind =
+                            district.at("kind").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidDistrictKind::RoadsideService))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid district kind is invalid"};
+                        }
+                        RaidDistrictSnapshot snapshot;
+                        snapshot.instanceId = district.at("instance_id")
+                            .get<std::uint16_t>();
+                        snapshot.definitionId = district.at("definition_id")
+                            .get<std::string>();
+                        snapshot.displayName = district.at("display_name")
+                            .get<std::string>();
+                        snapshot.kind = static_cast<RaidDistrictKind>(kind);
+                        snapshot.labelPosition = parseVector(
+                            district.at("label_position"));
+                        for (const Json &cell : district.at("cells"))
+                        {
+                            snapshot.cells.push_back({
+                                cell.at("row").get<std::uint16_t>(),
+                                cell.at("first_column")
+                                    .get<std::uint16_t>(),
+                                cell.at("length").get<std::uint16_t>()});
+                        }
+                        raid.spatialLayout.districts.push_back(
+                            std::move(snapshot));
+                    }
+                    for (const Json &span : layout.at("terrain_spans"))
+                    {
+                        const std::uint32_t kind =
+                            span.at("kind").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidTerrainKind::Puddle))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid terrain kind is invalid"};
+                        }
+                        raid.spatialLayout.terrainSpans.push_back({
+                            span.at("row").get<std::uint16_t>(),
+                            span.at("first_column").get<std::uint16_t>(),
+                            span.at("length").get<std::uint16_t>(),
+                            static_cast<RaidTerrainKind>(kind)});
+                    }
+                    for (const Json &prop : layout.at("props"))
+                    {
+                        const std::uint32_t kind =
+                            prop.at("kind").get<std::uint32_t>();
+                        const std::uint32_t state =
+                            prop.at("state").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidOutdoorPropKind::Debris) ||
+                            state > static_cast<std::uint32_t>(
+                                RaidOutdoorPropState::Abandoned))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid outdoor prop is invalid"};
+                        }
+                        const Json &bounds = prop.at("bounds");
+                        raid.spatialLayout.props.push_back({
+                            prop.at("instance_id").get<std::uint32_t>(),
+                            static_cast<RaidOutdoorPropKind>(kind),
+                            static_cast<RaidOutdoorPropState>(state),
+                            {parseVector(bounds.at("position")),
+                             parseVector(bounds.at("size"))},
+                            prop.at("quarter_turns").get<std::uint8_t>(),
+                            prop.at("collidable").get<bool>()});
+                    }
+                    for (const Json &anchor :
+                         layout.at("anchor_placements"))
+                    {
+                        const std::uint32_t kind =
+                            anchor.at("kind").get<std::uint32_t>();
+                        if (kind > static_cast<std::uint32_t>(
+                                RaidMapAnchorKind::InteriorEntrance))
+                        {
+                            return {SaveLoadStatus::Failed, std::nullopt,
+                                    "Raid anchor kind is invalid"};
+                        }
+                        const Json &bounds = anchor.at("bounds");
+                        raid.spatialLayout.anchorPlacements.push_back({
+                            anchor.at("id").get<std::string>(),
+                            static_cast<RaidMapAnchorKind>(kind),
+                            {parseVector(bounds.at("position")),
+                             parseVector(bounds.at("size"))},
+                            anchor.at("district_instance_id")
+                                .get<std::uint16_t>()});
+                    }
+                    for (const Json &landmark : layout.at("landmarks"))
+                    {
+                        RaidLandmarkPlacementSnapshot snapshot;
+                        snapshot.definitionId = landmark.at("definition_id")
+                            .get<std::string>();
+                        snapshot.displayName = landmark.at("display_name")
+                            .get<std::string>();
+                        snapshot.bounds = {
+                            parseVector(landmark.at("bounds").at("position")),
+                            parseVector(landmark.at("bounds").at("size"))};
+                        snapshot.districtInstanceId =
+                            landmark.at("district_instance_id")
+                                .get<std::uint16_t>();
+                        for (const Json &structure :
+                             landmark.at("structures"))
+                        {
+                            snapshot.structures.push_back({
+                                parseVector(structure.at("position")),
+                                parseVector(structure.at("size"))});
+                        }
+                        for (const Json &socket :
+                             landmark.at("road_sockets"))
+                            snapshot.roadSockets.push_back(parseVector(socket));
+                        raid.spatialLayout.landmarks.push_back(
+                            std::move(snapshot));
+                    }
+                }
             }
             else
             {

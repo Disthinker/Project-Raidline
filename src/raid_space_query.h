@@ -62,6 +62,10 @@ private:
     std::size_t denseGridRows_{};
     std::vector<std::uint8_t> denseGridWalkable_;
     std::vector<std::uint8_t> denseGridConnections_;
+    std::size_t portalChunkSizeCells_{};
+    std::size_t portalChunkColumns_{};
+    std::size_t portalChunkRows_{};
+    std::vector<std::uint8_t> portalChunkConnections_;
 
     [[nodiscard]] std::optional<Vec2> nextDenseGridWaypoint(
         Vec2 start,

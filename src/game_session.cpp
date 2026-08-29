@@ -369,14 +369,30 @@ bool GameSession::deployAlpha(
         }
         std::vector<EnemySpawn> pressureSpawns;
         pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
-        for (const EnemySpawnDefinition &spawn :
-             map.highRisk.pressureSpawns)
+        for (std::size_t index{};
+             index < map.highRisk.pressureSpawns.size(); ++index)
         {
+            const EnemySpawnDefinition &spawn =
+                map.highRisk.pressureSpawns[index];
+            const RaidAnchorPlacementSnapshot *placement =
+                findRaidAnchorPlacement(
+                    snapshot.spatialLayout,
+                    raidIndexedAnchorId("pressure", index));
             pressureSpawns.push_back(EnemySpawn{
-                spawn.position,
+                placement != nullptr
+                    ? placement->bounds.position
+                    : spawn.position,
                 spawn.size,
                 spawn.maximumHealth});
         }
+
+        const auto frozenRegion = [&](std::string_view id,
+                                      ContentRect fallback)
+        {
+            const RaidAnchorPlacementSnapshot *placement =
+                findRaidAnchorPlacement(snapshot.spatialLayout, id);
+            return placement != nullptr ? placement->bounds : fallback;
+        };
 
         RaidWorldConfig worldConfig;
         worldConfig.worldSize = map.worldSize;
@@ -387,6 +403,11 @@ bool GameSession::deployAlpha(
         worldConfig.playerCurrentHealth = candidate.currentHealth;
         worldConfig.deferPlayerDamageResolution = true;
         worldConfig.ballisticBlockers = std::move(blockers);
+        worldConfig.outdoorLayout = snapshot.spatialLayout;
+        worldConfig.outdoorColumns = map.proceduralOutdoor.columns;
+        worldConfig.outdoorRows = map.proceduralOutdoor.rows;
+        worldConfig.outdoorChunkSizeCells =
+            map.proceduralOutdoor.chunkSizeCells;
         worldConfig.interiors.reserve(snapshot.interiors.size());
         for (const RaidInteriorSnapshot &interior : snapshot.interiors)
         {
@@ -433,18 +454,22 @@ bool GameSession::deployAlpha(
         worldConfig.highRisk = HighRiskWorldConfig{
             map.highRisk.enabled,
             map.highRisk.regularPhaseDurationSeconds,
-            map.highRisk.emergencyExtractionPoint,
+            frozenRegion(kRaidAnchorEmergencyExtraction,
+                         map.highRisk.emergencyExtractionPoint),
             map.highRisk.emergencyExtractionDurationSeconds,
             map.highRisk.initialWaveDelaySeconds,
             map.highRisk.waveIntervalSeconds,
             map.highRisk.waveSize,
             map.highRisk.activeEnemyCap,
             std::move(pressureSpawns),
-            map.highRisk.activationControlPoint,
+            frozenRegion(kRaidAnchorHighRiskControl,
+                         map.highRisk.activationControlPoint),
             map.highRisk.activationDurationSeconds,
-            map.highRisk.advancedResourceArea,
+            frozenRegion(kRaidAnchorAdvancedResource,
+                         map.highRisk.advancedResourceArea),
             snapshot.seed,
-            map.highRisk.conditionalExtractionPoint,
+            frozenRegion(kRaidAnchorConditionalExtraction,
+                         map.highRisk.conditionalExtractionPoint),
             map.highRisk.conditionalExtractionDurationSeconds,
             map.highRisk.conditionalExtractionMaximumWeightGrams};
         candidateWorld =
@@ -2316,6 +2341,59 @@ void GameSession::advanceWorldClockFromSimulation(
 
     if (minutes > 0U)
     {
+        if (!allowPeriodicCheckpoint && alphaRaidActive_ &&
+            profile_.pendingRaid.has_value())
+        {
+            // The active Raid owns an already validated, in-memory Profile.
+            // Copying that Profile once per world minute also copied the full
+            // frozen megamap (several MiB) and produced a deterministic
+            // ~70 ms main-thread hitch every real second. Advance the owned
+            // runtime state in place instead. Each time consumer is an
+            // idempotent domain operation; Settlement still performs the
+            // ordinary full candidate validation and atomic save.
+            const WorldClockAdvanceResult advanced =
+                advanceWorldClock(profile_.worldClock, minutes);
+            if (advanced.minutesApplied == 0U)
+            {
+                persistenceMessage_ = "active Raid world clock overflow";
+                pendingWorldSeconds_ = scaledSeconds;
+                return;
+            }
+            const BaseDailySystemsResult daily =
+                synchronizeBaseDailySystemsThrough(
+                    profile_, publishedContentRegistry());
+            const BaseConstructionAdvanceResult construction =
+                applyBaseConstructionThrough(
+                    profile_, publishedContentRegistry());
+            const BaseManufacturingAdvanceResult manufacturing =
+                applyBaseManufacturingThrough(
+                    profile_, publishedContentRegistry());
+            const ResidentTreatmentAdvanceResult residentTreatment =
+                applyResidentTreatmentThrough(profile_);
+            const RecoveryTaskAdvanceResult recovery =
+                applyRecoveryTaskThrough(profile_);
+            const bool revisionRequired =
+                construction.completed || manufacturing.completed ||
+                residentTreatment.completed || recovery.becameReady;
+            if (revisionRequired)
+            {
+                if (profile_.revision ==
+                    std::numeric_limits<ProfileRevision>::max())
+                {
+                    persistenceMessage_ =
+                        "active Raid timed completion revision overflow";
+                    state_ = GameSessionState::SettlementBlocked;
+                    pendingWorldSeconds_ = scaledSeconds;
+                    return;
+                }
+                ++profile_.revision;
+            }
+            static_cast<void>(daily);
+            worldClockDirty_ = true;
+            pendingWorldSeconds_ = remainingWorldSeconds;
+            return;
+        }
+
         ProfileState candidate = profile_;
         const WorldClockAdvanceResult advanced =
             advanceWorldClock(candidate.worldClock, minutes);
@@ -2776,6 +2854,25 @@ void GameSession::updateAlphaRaid(
             CommandContext{
                 profile_.revision,
                 nextRaidTransaction("fire")});
+        if (input.developerInfiniteAmmo && fire.succeeded &&
+            fire.result == WeaponAmmoResult::Chambered)
+        {
+            // The ordinary command deliberately separates chambering and
+            // firing. In infinite-ammo developer mode, run both against the
+            // disposable candidate so an initially empty chamber can still
+            // fire when the installed magazine contains a compatible round.
+            // Neither candidate transaction is committed to ProfileState.
+            fire = executeWeaponAmmo(
+                candidate,
+                publishedContentRegistry(),
+                FireWeaponCommand{
+                    *weapon,
+                    faultRandom.bounded(10000U),
+                    faultRandom.next()},
+                CommandContext{
+                    candidate.revision,
+                    nextRaidTransaction("developer-infinite-fire")});
+        }
         if (fire.succeeded && fire.result == WeaponAmmoResult::Chambered)
         {
             static_cast<void>(commitProfileCandidate(
@@ -2790,7 +2887,10 @@ void GameSession::updateAlphaRaid(
                  (fire.result == WeaponAmmoResult::Fired ||
                   fire.result == WeaponAmmoResult::FiredAndMalfunctioned))
         {
-            firedCandidate = std::move(candidate);
+            if (!input.developerInfiniteAmmo)
+            {
+                firedCandidate = std::move(candidate);
+            }
         }
         else
         {
@@ -2833,15 +2933,21 @@ void GameSession::updateAlphaRaid(
     }
     if (world_->shotFiredLastUpdate())
     {
-        if (!firedCandidate.has_value())
+        if (!input.developerInfiniteAmmo && !firedCandidate.has_value())
         {
             std::terminate();
         }
-        static_cast<void>(commitProfileCandidate(
-            std::move(*firedCandidate),
-            false));
+        if (firedCandidate.has_value())
+        {
+            static_cast<void>(commitProfileCandidate(
+                std::move(*firedCandidate),
+                false));
+        }
         world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius);
-        ++weaponFaultSequence_;
+        if (!input.developerInfiniteAmmo)
+        {
+            ++weaponFaultSequence_;
+        }
         const AssetRecord *currentWeapon = weapon.has_value()
             ? profile_.assets.find(*weapon)
             : nullptr;

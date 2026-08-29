@@ -29,8 +29,16 @@ TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
             "对局性能 | F9 关闭");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
-                "F9 PERFORMANCE | F10 RUNTIME WEAPON TUNING"),
-            "F9 性能 | F10 运行时武器调试");
+                "F9 PERFORMANCE | F10 RUNTIME DEVELOPER PANEL"),
+            "F9 性能 | F10 运行时开发面板");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PACING SOFTWARE DEADLINE | TARGET 60.0 HZ"),
+            "帧节奏 软件截止时间 | 目标 60.0 HZ");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PACING VSYNC + DEADLINE | TARGET 60.0 HZ"),
+            "帧节奏 垂直同步加截止时间 | 目标 60.0 HZ");
   const std::string workload = localizeUiText(
       UiLanguage::SimplifiedChinese,
       "SIM ENEMIES 100 | BLOCKERS 96 | SUBSTEPS 100");
@@ -537,6 +545,37 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
             "出击前必须先处理基地攻城预警");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
+{
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PREPARING RAID"),
+            "正在准备突袭");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "GENERATING LARGE OUTDOOR MAP"),
+            "正在生成大型室外地图");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "VALIDATING ROUTES AND EXTRACTION POINTS"),
+            "正在验证路线和撤离点");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesRuntimeMapFogControls) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MAP FOG OF WAR: ENABLED"),
+            "地图战争迷雾：已启用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MAP FOG OF WAR DISABLED - FULL STATIC MAP"),
+            "地图战争迷雾已关闭 - 显示完整静态地图");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "TACTICAL MAP | FULL STATIC MAP | M/ESC CLOSE"),
+            "战术地图 | 完整静态地图 | M/ESC 关闭");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {
   const std::string deploy = localizeUiText(
       UiLanguage::SimplifiedChinese,
@@ -555,6 +594,32 @@ TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {
                 UiLanguage::SimplifiedChinese,
                 "PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT"),
             "基地外围已清剿 | 撤离后降低基地威胁");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesOutdoorPlaceholderIdentities) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: ENGINEERING EQUIPMENT"),
+            "工程设备");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: ROAD BARRIER"),
+            "道路障碍");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "PROP: CONTAINER"),
+            "集装箱");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "PROP: CAR"),
+            "车辆");
+  EXPECT_EQ(localizeUiText(UiLanguage::English, "PROP: FACTORY"),
+            "PROP: FACTORY");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesRuntimeDeveloperCheats) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "INFINITE AMMO: ENABLED"),
+            "无限弹药：已启用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "F MAP FOG | I INFINITE AMMO | F10/ESC CLOSE"),
+            "F 地图迷雾 | I 无限弹药 | F10/ESC 关闭");
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

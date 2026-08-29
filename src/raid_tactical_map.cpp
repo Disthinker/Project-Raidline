@@ -60,6 +60,16 @@ void RaidTacticalMapState::configure(
         location.discovered = false;
     }
     worldSize_ = worldSize;
+    if (worldSize.x >= 10000.0F || worldSize.y >= 6000.0F)
+    {
+        columns_ = 80;
+        rows_ = 45;
+    }
+    else
+    {
+        columns_ = 32;
+        rows_ = 18;
+    }
     intelligence_ = intelligence;
     normalExtraction_ = normalExtraction;
     emergencyExtraction_ = emergencyExtraction;
@@ -79,13 +89,29 @@ void RaidTacticalMapState::revealAround(Vec2 worldPosition) noexcept
     {
         return;
     }
-    constexpr float revealRadius{155.0F};
-    constexpr float discoveryRadius{145.0F};
+    const float revealRadius = worldSize_.x >= 10000.0F ? 480.0F : 155.0F;
+    const float discoveryRadius = worldSize_.x >= 10000.0F ? 420.0F : 145.0F;
     const float cellWidth = worldSize_.x / static_cast<float>(columns_);
     const float cellHeight = worldSize_.y / static_cast<float>(rows_);
-    for (int row = 0; row < rows_; ++row)
+    const int firstColumn = std::clamp(
+        static_cast<int>(std::floor(
+            (worldPosition.x - revealRadius) / cellWidth)),
+        0, columns_ - 1);
+    const int lastColumn = std::clamp(
+        static_cast<int>(std::floor(
+            (worldPosition.x + revealRadius) / cellWidth)),
+        0, columns_ - 1);
+    const int firstRow = std::clamp(
+        static_cast<int>(std::floor(
+            (worldPosition.y - revealRadius) / cellHeight)),
+        0, rows_ - 1);
+    const int lastRow = std::clamp(
+        static_cast<int>(std::floor(
+            (worldPosition.y + revealRadius) / cellHeight)),
+        0, rows_ - 1);
+    for (int row = firstRow; row <= lastRow; ++row)
     {
-        for (int column = 0; column < columns_; ++column)
+        for (int column = firstColumn; column <= lastColumn; ++column)
         {
             const Vec2 center{
                 (static_cast<float>(column) + 0.5F) * cellWidth,
@@ -119,6 +145,142 @@ void RaidTacticalMapState::revealAround(Vec2 worldPosition) noexcept
             distanceSquared(centerOf(location.entrance), worldPosition) <=
                 discoveryRadius * discoveryRadius;
     }
+}
+
+void RaidTacticalMapState::configureOutdoorLayout(
+    const RaidGeneratedMapLayout &layout,
+    std::uint32_t sourceColumns,
+    std::uint32_t sourceRows)
+{
+    outdoorRoadCells_.clear();
+    outdoorDistrictKinds_.clear();
+    outdoorTerrainKinds_.clear();
+    outdoorLabels_.clear();
+    if (!configured() || layout.layoutVersion < 3U || sourceColumns == 0U ||
+        sourceRows == 0U)
+    {
+        return;
+    }
+    std::vector<std::optional<RaidOutdoorRoadKind>> cells(
+        static_cast<std::size_t>(columns_ * rows_));
+    for (const RaidOutdoorRoadCell &road : layout.roadCells)
+    {
+        const int column = std::clamp(
+            static_cast<int>((static_cast<std::uint64_t>(road.column) *
+                              static_cast<std::uint64_t>(columns_)) /
+                             sourceColumns),
+            0, columns_ - 1);
+        const int row = std::clamp(
+            static_cast<int>((static_cast<std::uint64_t>(road.row) *
+                              static_cast<std::uint64_t>(rows_)) /
+                             sourceRows),
+            0, rows_ - 1);
+        auto &stored = cells[static_cast<std::size_t>(row * columns_ + column)];
+        if (!stored.has_value() ||
+            static_cast<std::uint8_t>(road.kind) >
+                static_cast<std::uint8_t>(*stored))
+        {
+            stored = road.kind;
+        }
+    }
+    for (int row{}; row < rows_; ++row)
+        for (int column{}; column < columns_; ++column)
+        {
+            const auto &kind =
+                cells[static_cast<std::size_t>(row * columns_ + column)];
+            if (kind.has_value())
+                outdoorRoadCells_.push_back({column, row, *kind});
+        }
+
+    std::vector<std::optional<RaidTerrainKind>> sourceTerrainKinds(
+        static_cast<std::size_t>(sourceColumns) * sourceRows);
+    for (const RaidTerrainSpan &span : layout.terrainSpans)
+    {
+        if (span.row >= sourceRows || span.firstColumn >= sourceColumns)
+        {
+            continue;
+        }
+        const std::uint32_t endColumn = std::min<std::uint32_t>(
+            sourceColumns,
+            static_cast<std::uint32_t>(span.firstColumn) + span.length);
+        for (std::uint32_t column = span.firstColumn;
+             column < endColumn; ++column)
+        {
+            sourceTerrainKinds[
+                static_cast<std::size_t>(span.row) * sourceColumns +
+                column] = span.kind;
+        }
+    }
+    outdoorTerrainKinds_.resize(
+        static_cast<std::size_t>(columns_ * rows_));
+    for (int row{}; row < rows_; ++row)
+        for (int column{}; column < columns_; ++column)
+        {
+            const std::uint32_t sourceColumn = std::min(
+                sourceColumns - 1U,
+                static_cast<std::uint32_t>(column) * sourceColumns /
+                    static_cast<std::uint32_t>(columns_));
+            const std::uint32_t sourceRow = std::min(
+                sourceRows - 1U,
+                static_cast<std::uint32_t>(row) * sourceRows /
+                    static_cast<std::uint32_t>(rows_));
+            outdoorTerrainKinds_[
+                static_cast<std::size_t>(row * columns_ + column)] =
+                sourceTerrainKinds[
+                    static_cast<std::size_t>(sourceRow) * sourceColumns +
+                    sourceColumn];
+        }
+
+    std::uint32_t districtColumns{};
+    std::uint32_t districtRows{};
+    for (const RaidDistrictSnapshot &district : layout.districts)
+        for (const RaidGridSpan &span : district.cells)
+        {
+            districtColumns = std::max<std::uint32_t>(
+                districtColumns, span.firstColumn + span.length);
+            districtRows = std::max<std::uint32_t>(
+                districtRows, span.row + 1U);
+        }
+    if (districtColumns > 0U && districtRows > 0U)
+    {
+        std::vector<std::optional<RaidDistrictKind>> sourceDistrictKinds(
+            static_cast<std::size_t>(districtColumns) * districtRows);
+        for (const RaidDistrictSnapshot &district : layout.districts)
+            for (const RaidGridSpan &span : district.cells)
+                for (std::uint32_t column = span.firstColumn;
+                     column < span.firstColumn + span.length; ++column)
+                    sourceDistrictKinds[
+                        static_cast<std::size_t>(span.row) *
+                            districtColumns + column] = district.kind;
+        outdoorDistrictKinds_.resize(
+            static_cast<std::size_t>(columns_ * rows_));
+        for (int row{}; row < rows_; ++row)
+            for (int column{}; column < columns_; ++column)
+            {
+                const std::uint32_t sourceColumn = std::min(
+                    districtColumns - 1U,
+                    static_cast<std::uint32_t>(column) * districtColumns /
+                        static_cast<std::uint32_t>(columns_));
+                const std::uint32_t sourceRow = std::min(
+                    districtRows - 1U,
+                    static_cast<std::uint32_t>(row) * districtRows /
+                        static_cast<std::uint32_t>(rows_));
+                outdoorDistrictKinds_[
+                    static_cast<std::size_t>(row * columns_ + column)] =
+                    sourceDistrictKinds[
+                        static_cast<std::size_t>(sourceRow) *
+                            districtColumns + sourceColumn];
+            }
+    }
+    for (const RaidDistrictSnapshot &district : layout.districts)
+        outdoorLabels_.push_back(
+            {district.displayName, district.labelPosition, false});
+    for (const RaidLandmarkPlacementSnapshot &landmark : layout.landmarks)
+        outdoorLabels_.push_back({
+            landmark.displayName,
+            {landmark.bounds.position.x + landmark.bounds.size.x * 0.5F,
+             landmark.bounds.position.y + landmark.bounds.size.y * 0.5F},
+            true});
 }
 
 bool RaidTacticalMapState::configured() const noexcept
@@ -212,4 +374,44 @@ bool RaidTacticalMapState::specialLocationVisible(
         [&](const RaidSpecialLocationMapState &location)
         { return location.id == id; });
     return found != specialLocations_.end() && found->discovered;
+}
+
+const std::vector<RaidTacticalRoadCell> &
+RaidTacticalMapState::outdoorRoadCells() const noexcept
+{
+    return outdoorRoadCells_;
+}
+
+std::optional<RaidDistrictKind> RaidTacticalMapState::outdoorDistrictKind(
+    int column,
+    int row) const noexcept
+{
+    if (column < 0 || row < 0 || column >= columns_ || row >= rows_ ||
+        outdoorDistrictKinds_.size() !=
+            static_cast<std::size_t>(columns_ * rows_))
+    {
+        return std::nullopt;
+    }
+    return outdoorDistrictKinds_[
+        static_cast<std::size_t>(row * columns_ + column)];
+}
+
+std::optional<RaidTerrainKind> RaidTacticalMapState::outdoorTerrainKind(
+    int column,
+    int row) const noexcept
+{
+    if (column < 0 || row < 0 || column >= columns_ || row >= rows_ ||
+        outdoorTerrainKinds_.size() !=
+            static_cast<std::size_t>(columns_ * rows_))
+    {
+        return std::nullopt;
+    }
+    return outdoorTerrainKinds_[
+        static_cast<std::size_t>(row * columns_ + column)];
+}
+
+const std::vector<RaidTacticalWorldLabel> &
+RaidTacticalMapState::outdoorLabels() const noexcept
+{
+    return outdoorLabels_;
 }

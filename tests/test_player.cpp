@@ -251,7 +251,7 @@ namespace
     constexpr float kPlayerAnimationTestWorldWidth{1280.0f};
     constexpr float kPlayerAnimationTestWorldHeight{720.0f};
 
-    // Player 当前移动动画每帧持续 0.09 秒。
+    // Player 当前移动动画每帧持续 0.10 秒。
     constexpr float kBelowPlayerMoveFrameDuration{0.05f};
     constexpr float kPastPlayerMoveFrameDuration{0.10f};
 }
@@ -281,7 +281,7 @@ TEST(PlayerTest, MoveRightSetsMovingState)
 
     EXPECT_TRUE(player.isMoving());
 
-    // 0.01 秒小于单帧 0.09 秒，因此仍处于 frame 0。
+    // 0.01 秒小于单帧 0.10 秒，因此仍处于 frame 0。
     EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
 }
 
@@ -308,7 +308,7 @@ TEST(PlayerTest, MovementTimeAccumulatesAndAdvancesAnimationFrame)
         kPlayerAnimationTestWorldWidth,
         kPlayerAnimationTestWorldHeight);
 
-    // 0.05 + 0.05 = 0.10，已超过一帧的 0.09 秒。
+    // 0.05 + 0.05 = 0.10，恰好进入下一帧。
     EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
 }
 
@@ -434,11 +434,11 @@ TEST(PlayerTest, MovementAnimationLoopsAcrossSixFrames)
 
     Player player(640.0f, 360.0f);
 
-    // 一轮时长为 6 × 0.09 = 0.54 秒。
-    // 使用 0.55 秒可完整跨过一轮，并在 frame 0 中保留少量时间。
+    // 一轮时长为 6 × 0.10 = 0.60 秒。
+    // 使用 0.61 秒可完整跨过一轮，并在 frame 0 中保留少量时间。
     player.update(
         input,
-        0.55f,
+        0.61f,
         kPlayerAnimationTestWorldWidth,
         kPlayerAnimationTestWorldHeight);
 
