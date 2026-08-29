@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-encounter-ecology-content-47",
+  "content_version": "procedural-frontier-encounter-ecology-hardening-content-48",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1226,6 +1226,7 @@
         "maximum_puddle_patches": 100,
         "minimum_initial_enemies": 36,
         "maximum_initial_enemies": 48,
+        "minimum_enemy_spawn_distance": 1200,
         "maximum_attempts": 12,
         "anchor_clearance_cells": 2,
         "district_archetypes": [

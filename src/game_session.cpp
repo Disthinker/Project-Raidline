@@ -1305,6 +1305,15 @@ InventoryReceipt GameSession::executeProfileInventory(
     const InventoryCommand &command,
     std::string transactionId)
 {
+    if (alphaRaidActive_)
+    {
+        return executeInventory(
+            profile_,
+            publishedContentRegistry(),
+            command,
+            CommandContext{profile_.revision, std::move(transactionId)});
+    }
+
     ProfileState candidate = profile_;
     std::string saveMessage;
     InventoryReceipt receipt = executeInventory(
@@ -3398,9 +3407,8 @@ void GameSession::updateAlphaRaid(
     {
         if (const auto loot = nearbyRaidLoot())
         {
-            ProfileState candidate = profile_;
             const InventoryReceipt receipt = pickupRaidLoot(
-                candidate,
+                profile_,
                 publishedContentRegistry(),
                 *loot,
                 CommandContext{
@@ -3408,9 +3416,6 @@ void GameSession::updateAlphaRaid(
                     nextRaidTransaction("pickup")});
             if (receipt.succeeded)
             {
-                static_cast<void>(commitProfileCandidate(
-                    std::move(candidate),
-                    false));
                 presentationEvents_.push_back(
                     GameSessionPresentationEvent::LootPickedUp);
             }

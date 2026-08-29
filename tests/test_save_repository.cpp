@@ -1740,6 +1740,24 @@ TEST(SaveRepositoryTest, CurrentSchemaRejectsOutOfRangeEncounterMember)
     EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
 }
 
+TEST(SaveRepositoryTest, SchemaV37LoadsPreviousEncounterEcologyContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-encounter-ecology-content-v47", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-encounter-ecology-content-47",
+            37U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile),
+              profileStateFingerprint(profile));
+}
+
 TEST(SaveRepositoryTest,
      SchemaV35KeepsFrozenLayoutV3WithoutInventingResourcePoints)
 {

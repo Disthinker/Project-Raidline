@@ -603,26 +603,35 @@ InventoryReceipt executeInventory(
             profile.revision);
     }
 
-    ProfileState candidate = profile;
-    InventoryReceipt receipt = apply(candidate, content, command, true);
+    AssetRegistry originalAssets = profile.assets;
+    std::set<std::string> committedTransactions =
+        profile.committedTransactions;
+    committedTransactions.insert(context.transactionId);
+
+    InventoryReceipt receipt;
+    try
+    {
+        // Inventory commands can only mutate the asset registry. Validate that
+        // bounded participant graph here; the frozen Raid layout and the other
+        // profile aggregates are validated at deploy, persistence, recovery,
+        // and settlement boundaries instead of rescanning the megamap for
+        // every pickup or drag.
+        receipt = apply(profile, content, command, false);
+    }
+    catch (...)
+    {
+        profile.assets = std::move(originalAssets);
+        throw;
+    }
     if (!receipt.succeeded)
     {
+        profile.assets = std::move(originalAssets);
         receipt.revision = profile.revision;
         return receipt;
     }
 
-    candidate.committedTransactions.insert(context.transactionId);
-    ++candidate.revision;
-    const ProfileValidationResult validation =
-        validateProfileState(candidate, content);
-    if (!validation.valid)
-    {
-        return failure(
-            DomainErrorCode::InvalidProfile,
-            validation.message,
-            profile.revision);
-    }
-    profile = std::move(candidate);
+    profile.committedTransactions = std::move(committedTransactions);
+    ++profile.revision;
     receipt.revision = profile.revision;
     return receipt;
 }

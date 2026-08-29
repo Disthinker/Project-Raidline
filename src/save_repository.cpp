@@ -2234,7 +2234,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-resource-ecology-content-45") ||
             (schemaVersion == 36 &&
              contentVersion ==
-                 "procedural-frontier-resource-ecology-hardening-content-46");
+                 "procedural-frontier-resource-ecology-hardening-content-46") ||
+            (schemaVersion == 37 &&
+             contentVersion ==
+                 "procedural-frontier-encounter-ecology-content-47");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

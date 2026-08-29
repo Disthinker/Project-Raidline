@@ -1356,6 +1356,18 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
             {
                 continue;
             }
+            if (request.minimumPlayerSpawnDistance > 0.0F &&
+                playerCenter.has_value())
+            {
+                const float radius = request.minimumPlayerSpawnDistance;
+                const ContentRect playerExclusion{
+                    {playerCenter->x - radius, playerCenter->y - radius},
+                    {radius * 2.0F, radius * 2.0F}};
+                if (overlaps(playerExclusion, bounds))
+                {
+                    continue;
+                }
+            }
             if (requiredLandmark != nullptr)
             {
                 const ContentRect vicinity = inflated(

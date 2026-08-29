@@ -935,7 +935,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-encounter-ecology-25");
+              "procedural-frontier-encounter-ecology-26");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
@@ -1096,6 +1096,33 @@ TEST(RaidLifecycleTest,
         EXPECT_GE(raid.spatialLayout.resourcePoints.size(), 15U);
         EXPECT_LE(raid.spatialLayout.resourcePoints.size(), 18U);
         layoutHashes.insert(raid.spatialLayout.layoutHash);
+
+        const float safeDistance = content.map(mapId).proceduralOutdoor
+            .minimumEnemySpawnDistance;
+        const RaidAnchorPlacementSnapshot *playerAnchor =
+            findRaidAnchorPlacement(
+                raid.spatialLayout,
+                kRaidAnchorPlayerSpawn);
+        ASSERT_NE(playerAnchor, nullptr);
+        const Vec2 playerCenter{
+            playerAnchor->bounds.position.x +
+                playerAnchor->bounds.size.x * 0.5F,
+            playerAnchor->bounds.position.y +
+                playerAnchor->bounds.size.y * 0.5F};
+        for (const RaidEnemySnapshot &enemy : raid.enemies)
+        {
+            if (enemy.spaceId != outdoorRaidSpaceId())
+            {
+                continue;
+            }
+            const Vec2 enemyCenter{
+                enemy.position.x + enemy.size.x * 0.5F,
+                enemy.position.y + enemy.size.y * 0.5F};
+            EXPECT_TRUE(
+                std::abs(enemyCenter.x - playerCenter.x) >= safeDistance ||
+                std::abs(enemyCenter.y - playerCenter.y) >= safeDistance)
+                << "seed " << seed;
+        }
 
         std::set<std::string> pointIds;
         std::set<std::uint32_t> regularSlots;
@@ -1906,6 +1933,31 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
         ProfileContainerId::compartment(backpack, 0));
     EXPECT_TRUE(assetsInContainer(
         profile, ProfileContainerId::baseIntake()).empty());
+}
+
+TEST(RaidLifecycleTest, RejectedPickupRestoresFrozenLootMarker)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "raid-lifecycle-rejected-pickup",
+        publishedContentRegistry());
+    equipAlphaLoadout(profile);
+    ASSERT_TRUE(deploy(profile, 8822).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    const AssetInstanceId loot = profile.pendingRaid->loot.front().assetId;
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const InventoryReceipt rejected = pickupRaidLoot(
+        profile,
+        publishedContentRegistry(),
+        loot,
+        CommandContext{profile.revision + 1U, "stale-pickup"});
+
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(rejected.error, DomainErrorCode::StaleRevision);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_FALSE(profile.pendingRaid->loot.front().collected);
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
 }
 
 TEST(RaidLifecycleTest, DeathTransfersCarriedAssetsToLostRecordAndResetsHealth)

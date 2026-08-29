@@ -99,6 +99,14 @@ bool overlaps(
            leftOrigin.y + left.height > rightOrigin.y;
 }
 
+bool overlaps(ContentRect left, ContentRect right) noexcept
+{
+    return left.position.x < right.position.x + right.size.x &&
+           left.position.x + left.size.x > right.position.x &&
+           left.position.y < right.position.y + right.size.y &&
+           left.position.y + left.size.y > right.position.y;
+}
+
 bool pointInside(
     GridPosition point,
     GridPosition origin,
@@ -1886,9 +1894,13 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
         const bool expandedResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-24" ||
-            raid.rulesVersion == "procedural-frontier-encounter-ecology-25";
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
         const bool encounterEcologyRules =
-            raid.rulesVersion == "procedural-frontier-encounter-ecology-25";
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+        const bool protectedEncounterSpawnRules =
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
         const bool resourceEcologyRules =
             legacyResourceEcologyRules || expandedResourceEcologyRules;
         const bool districtLayoutRules =
@@ -2654,6 +2666,9 @@ ProfileValidationResult validateProfileState(
                                     raid.rescue->transferPoint);
                 if (encounterEcologyRules)
                 {
+                    const auto *playerAnchor = findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorPlayerSpawn);
                     for (std::size_t index{};
                          index < raid.encounterGroups.size(); ++index)
                     {
@@ -2696,10 +2711,30 @@ ProfileValidationResult validateProfileState(
                                 definition->allowedDistrictKinds.end(),
                                 district->kind) !=
                                 definition->allowedDistrictKinds.end();
+                        bool outsidePlayerSpawn =
+                            !protectedEncounterSpawnRules;
+                        if (protectedEncounterSpawnRules &&
+                            playerAnchor != nullptr)
+                        {
+                            const Vec2 playerCenter{
+                                playerAnchor->bounds.position.x +
+                                    playerAnchor->bounds.size.x * 0.5F,
+                                playerAnchor->bounds.position.y +
+                                    playerAnchor->bounds.size.y * 0.5F};
+                            const float radius = raidMap->proceduralOutdoor
+                                .minimumEnemySpawnDistance;
+                            const ContentRect exclusion{
+                                {playerCenter.x - radius,
+                                 playerCenter.y - radius},
+                                {radius * 2.0F, radius * 2.0F}};
+                            outsidePlayerSpawn =
+                                !overlaps(exclusion, anchor->bounds);
+                        }
                         districtSnapshotValid = districtSnapshotValid &&
                             anchor != nullptr &&
                             anchor->kind == RaidMapAnchorKind::Enemy &&
                             districtAllowed &&
+                            outsidePlayerSpawn &&
                             group.homePosition.x == anchorCenter.x &&
                             group.homePosition.y == anchorCenter.y;
                         for (std::uint32_t memberIndex :

@@ -320,6 +320,49 @@ TEST(AlphaExtractionSessionPerformanceTest,
            "validate the frozen megamap on the simulation thread.";
     EXPECT_LT(slowestFireUpdate.count(), 250000)
         << "A single firing update must not exhibit an unbounded stall.";
+
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    const auto loot = std::find_if(
+        session.profile().pendingRaid->loot.begin(),
+        session.profile().pendingRaid->loot.end(),
+        [](const RaidLootSnapshot &entry)
+        {
+            return entry.spaceId == outdoorRaidSpaceId() &&
+                !entry.requiresHighRisk && !entry.collected &&
+                publishedContentRegistry()
+                        .item(entry.definitionId)
+                        .maxStackSize == 1U;
+        });
+    ASSERT_NE(loot, session.profile().pendingRaid->loot.end());
+    const AssetInstanceId lootAssetId = loot->assetId;
+    const Vec2 lootPosition = loot->position;
+    const float playerHalf = session.world().player().size() * 0.5F;
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+        {lootPosition.x - playerHalf, lootPosition.y - playerHalf}));
+    GameplayInput pickup;
+    pickup.interactJustPressed = true;
+    const auto pickupStarted = std::chrono::steady_clock::now();
+    session.update(pickup, 0.0F);
+    const auto pickupElapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - pickupStarted);
+
+    const AssetRecord *pickedUp = session.profile().assets.find(lootAssetId);
+    ASSERT_NE(pickedUp, nullptr);
+    EXPECT_FALSE(std::holds_alternative<RaidGroundAssetLocation>(
+        pickedUp->location));
+    EXPECT_TRUE(std::find_if(
+        session.profile().pendingRaid->loot.begin(),
+        session.profile().pendingRaid->loot.end(),
+        [lootAssetId](const RaidLootSnapshot &entry)
+        { return entry.assetId == lootAssetId && entry.collected; }) !=
+        session.profile().pendingRaid->loot.end());
+    EXPECT_TRUE(validateProfileState(
+        session.profile(), publishedContentRegistry()).valid);
+    std::cout << "Frontier Loot pickup update: "
+              << pickupElapsed.count() << " us\n";
+    EXPECT_LT(pickupElapsed.count(), 25000)
+        << "Picking up one item must not copy the frozen megamap.";
 }
 
 TEST(AlphaExtractionSessionTest,

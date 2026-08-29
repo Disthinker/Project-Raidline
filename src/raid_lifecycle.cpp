@@ -645,7 +645,7 @@ DeployReceipt executeDeploy(
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
     snapshot.rulesVersion = encounterEcologyRules
-        ? "procedural-frontier-encounter-ecology-25"
+        ? "procedural-frontier-encounter-ecology-26"
         : resourceEcologyRules
         ? "procedural-frontier-resource-ecology-24"
         : map->proceduralOutdoor.enabled &&
@@ -1130,6 +1130,8 @@ DeployReceipt executeDeploy(
                     RaidMapAnchorKind::Enemy,
                     footprint,
                     archetype->allowedDistrictKinds};
+                request.minimumPlayerSpawnDistance =
+                    map->proceduralOutdoor.minimumEnemySpawnDistance;
                 if (group.kind == RaidEncounterKind::Guard)
                 {
                     request.landmarkDefinitionId =
@@ -1983,24 +1985,26 @@ InventoryReceipt pickupRaidLoot(
     }
 
     const ItemDefinition &definition = content.item(asset->definitionId);
-    ProfileState candidateProfile = profile;
-    auto candidateSnapshot = std::find_if(
-        candidateProfile.pendingRaid->loot.begin(),
-        candidateProfile.pendingRaid->loot.end(),
-        [assetId](const RaidLootSnapshot &loot)
-        { return loot.assetId == assetId; });
-    candidateSnapshot->collected = true;
     const auto commitMove = [&](const InventoryCommand &command)
     {
-        InventoryReceipt receipt = executeInventory(
-            candidateProfile,
-            content,
-            command,
-            context);
-        if (receipt.succeeded)
+        snapshot->collected = true;
+        InventoryReceipt receipt;
+        try
         {
-            profile = std::move(candidateProfile);
-            receipt.revision = profile.revision;
+            receipt = executeInventory(
+                profile,
+                content,
+                command,
+                context);
+        }
+        catch (...)
+        {
+            snapshot->collected = false;
+            throw;
+        }
+        if (!receipt.succeeded)
+        {
+            snapshot->collected = false;
         }
         return receipt;
     };
@@ -2014,7 +2018,7 @@ InventoryReceipt pickupRaidLoot(
              EquipmentSlotKind::BodyArmor})
     {
         if (itemCanEquipInSlot(definition, slot) &&
-            !equippedAsset(candidateProfile, slot).has_value())
+            !equippedAsset(profile, slot).has_value())
         {
             return commitMove(InventoryEquipCommand{assetId, slot});
         }
@@ -2024,10 +2028,10 @@ InventoryReceipt pickupRaidLoot(
              EquipmentSlotKind::ChestRig})
     {
         for (ProfileContainerId container :
-             carriedContainers(candidateProfile, content, slot))
+             carriedContainers(profile, content, slot))
         {
             for (const auto &[candidateId, candidate] :
-                 candidateProfile.assets.records())
+                 profile.assets.records())
             {
                 static_cast<void>(candidateId);
                 const auto *stored =
@@ -2048,7 +2052,7 @@ InventoryReceipt pickupRaidLoot(
                         candidate.orientation});
             }
             const auto origin = findFirstProfileFit(
-                candidateProfile,
+                profile,
                 content,
                 container,
                 definition,

@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-encounter-ecology-content-47");
+        "procedural-frontier-encounter-ecology-hardening-content-48");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -74,6 +74,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(
         frontierEnemyPopulation.proceduralOutdoor.maximumInitialEnemies,
         48U);
+    EXPECT_FLOAT_EQ(
+        frontierEnemyPopulation.proceduralOutdoor.minimumEnemySpawnDistance,
+        1200.0F);
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -1039,6 +1042,18 @@ TEST(ContentRegistryTest, RejectsInvalidProceduralInitialEnemyRange)
         publishedJsonCopy(),
         "\"minimum_initial_enemies\": 36",
         "\"minimum_initial_enemies\": 64");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsUnsafeEnemySpawnExclusionDistance)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"minimum_enemy_spawn_distance\": 1200",
+        "\"minimum_enemy_spawn_distance\": 200");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

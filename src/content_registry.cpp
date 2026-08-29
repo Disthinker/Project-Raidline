@@ -2005,6 +2005,8 @@ ContentRegistry ContentRegistry::fromJson(
                     procedural, "minimum_initial_enemies");
                 value.maximumInitialEnemies = optionalUint(
                     procedural, "maximum_initial_enemies");
+                value.minimumEnemySpawnDistance = requiredFiniteFloat(
+                    procedural, "minimum_enemy_spawn_distance", true);
                 value.maximumAttempts =
                     requiredPositiveUint(procedural, "maximum_attempts");
                 value.anchorClearanceCells =
@@ -2226,7 +2228,9 @@ ContentRegistry ContentRegistry::fromJson(
                     value.landmarkTemplates.size() != 3U ||
                     (value.layoutVersion >= 4U &&
                      (value.resourcePointArchetypes.empty() ||
-                      value.minimumInitialEnemies == 0U)) ||
+                      value.minimumInitialEnemies == 0U ||
+                      value.minimumEnemySpawnDistance < 800.0F ||
+                      value.minimumEnemySpawnDistance > 4000.0F)) ||
                     (value.layoutVersion >= 4U &&
                      value.encounterArchetypes.empty()) ||
                     (value.layoutVersion < 4U &&
