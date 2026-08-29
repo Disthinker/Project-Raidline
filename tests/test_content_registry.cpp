@@ -65,7 +65,15 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-resource-ecology-content-45");
+        "procedural-frontier-resource-ecology-hardening-content-46");
+    const MapDefinition &frontierEnemyPopulation = registry.map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    EXPECT_EQ(
+        frontierEnemyPopulation.proceduralOutdoor.minimumInitialEnemies,
+        36U);
+    EXPECT_EQ(
+        frontierEnemyPopulation.proceduralOutdoor.maximumInitialEnemies,
+        48U);
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -266,7 +274,12 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
             publishedMap.highRisk.conditionalExtractionMaximumWeightGrams,
             22000U);
         EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
-        EXPECT_EQ(publishedMap.highRisk.activeEnemyCap, 8U);
+        EXPECT_EQ(
+            publishedMap.highRisk.activeEnemyCap,
+            publishedMap.id ==
+                    MapDefinitionId{"map.raid.frontier_exchange"}
+                ? 48U
+                : 8U);
         EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
         EXPECT_FLOAT_EQ(publishedMap.highRisk.activationDurationSeconds, 4.0F);
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
@@ -1017,6 +1030,18 @@ TEST(ContentRegistryTest, RejectsInvalidProceduralResourcePointContracts)
             publishedJsonCopy(),
             "\"minimum_instances\": 5, \"maximum_instances\": 6",
             "\"minimum_instances\": 7, \"maximum_instances\": 6"))),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidProceduralInitialEnemyRange)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"minimum_initial_enemies\": 36",
+        "\"minimum_initial_enemies\": 64");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
 }
 

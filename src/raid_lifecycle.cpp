@@ -377,7 +377,8 @@ DeployReceipt executeDeploy(
     ProfileState &profile,
     const ContentRegistry &content,
     const DeployCommand &command,
-    const CommandContext &context)
+    const CommandContext &context,
+    const RaidDeploymentProgressCallback &progress)
 {
     if (context.transactionId.empty() || command.raidId.empty() ||
         command.settlementId.empty() || command.seed == 0 ||
@@ -443,6 +444,8 @@ DeployReceipt executeDeploy(
             "Deploy map has no validated Alpha configuration",
             profile.revision);
     }
+    reportRaidDeploymentProgress(
+        progress, 0.16F, RaidDeploymentProgressStage::PreparingSnapshot);
 
     const std::size_t regionalMissionCount =
         static_cast<std::size_t>(command.selfRecoveryRecordId.has_value()) +
@@ -600,6 +603,7 @@ DeployReceipt executeDeploy(
     Pcg32 lootRandom{command.seed, 0x6c6f6f742d726169ULL};
     Pcg32 resourcePointRandom{command.seed, 0x7265736f75726365ULL};
     Pcg32 resourceLootRandom{command.seed, 0x7265732d6c6f6f74ULL};
+    Pcg32 enemyPopulationRandom{command.seed, 0x656e656d792d706fULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
     Pcg32 interiorLootRandom{command.seed, 0x696e746572696f72ULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
@@ -638,7 +642,7 @@ DeployReceipt executeDeploy(
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
     snapshot.rulesVersion = resourceEcologyRules
-        ? "procedural-frontier-resource-ecology-23"
+        ? "procedural-frontier-resource-ecology-24"
         : map->proceduralOutdoor.enabled &&
               map->proceduralOutdoor.layoutVersion >= 3U
         ? "procedural-frontier-district-layout-22"
@@ -705,8 +709,17 @@ DeployReceipt executeDeploy(
             map->rescue->profession,
             false};
     }
-    for (const EnemySpawnDefinition &enemy : deployment.enemies)
+    const std::size_t outdoorEnemyTarget = resourceEcologyRules
+        ? static_cast<std::size_t>(
+              map->proceduralOutdoor.minimumInitialEnemies +
+              enemyPopulationRandom.bounded(
+                  map->proceduralOutdoor.maximumInitialEnemies -
+                      map->proceduralOutdoor.minimumInitialEnemies + 1U))
+        : deployment.enemies.size();
+    for (std::size_t index{}; index < outdoorEnemyTarget; ++index)
     {
+        const EnemySpawnDefinition &enemy =
+            deployment.enemies[index % deployment.enemies.size()];
         snapshot.enemies.push_back(
             RaidEnemySnapshot{enemy.position, enemy.size, enemy.maximumHealth});
     }
@@ -1092,8 +1105,12 @@ DeployReceipt executeDeploy(
                 generationAnchors, *placement);
         }
     }
+    reportRaidDeploymentProgress(
+        progress, 0.30F, RaidDeploymentProgressStage::GeneratingLayout);
     snapshot.spatialLayout = generateRaidMapLayout(
         *map, snapshot.seed, generationAnchors);
+    reportRaidDeploymentProgress(
+        progress, 0.68F, RaidDeploymentProgressStage::FreezingLoot);
 
     if (districtLayout)
     {
@@ -1299,6 +1316,8 @@ DeployReceipt executeDeploy(
     candidate.lastRaidResult.reset();
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
+    reportRaidDeploymentProgress(
+        progress, 0.78F, RaidDeploymentProgressStage::ValidatingSnapshot);
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);
     if (!validation.valid)

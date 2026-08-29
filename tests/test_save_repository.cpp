@@ -71,11 +71,54 @@ std::string testSaveChecksum(std::string_view text)
     return result;
 }
 
+void downgradeFrontierEnemiesToLegacyDeployment(
+    PendingRaidSnapshot &raid,
+    const ContentRegistry &content)
+{
+    const EnemyDeploymentDefinition &deployment =
+        content.enemyDeployment(raid.enemyDeploymentId);
+    std::size_t outdoorEnemyIndex{};
+    std::erase_if(
+        raid.enemies,
+        [&](RaidEnemySnapshot &enemy)
+        {
+            if (enemy.spaceId != outdoorRaidSpaceId())
+                return false;
+            if (outdoorEnemyIndex >= deployment.enemies.size())
+                return true;
+            const EnemySpawnDefinition &legacy =
+                deployment.enemies[outdoorEnemyIndex++];
+            enemy.position = legacy.position;
+            enemy.size = legacy.size;
+            enemy.maximumHealth = legacy.maximumHealth;
+            return false;
+        });
+
+    std::size_t outdoorAnchorIndex{};
+    std::erase_if(
+        raid.spatialLayout.anchorPlacements,
+        [&](RaidAnchorPlacementSnapshot &anchor)
+        {
+            if (anchor.kind != RaidMapAnchorKind::Enemy)
+                return false;
+            if (outdoorAnchorIndex >= deployment.enemies.size())
+                return true;
+            const EnemySpawnDefinition &legacy =
+                deployment.enemies[outdoorAnchorIndex];
+            anchor.id = raidIndexedAnchorId(
+                "enemy", outdoorAnchorIndex++);
+            anchor.bounds = {legacy.position, legacy.size};
+            return false;
+        });
+}
+
 void downgradeFrontierLootToLegacySlots(
     ProfileState &profile,
     const MapDefinition &map)
 {
     PendingRaidSnapshot &raid = *profile.pendingRaid;
+    downgradeFrontierEnemiesToLegacyDeployment(
+        raid, publishedContentRegistry());
     std::size_t keptRegular{};
     std::vector<AssetInstanceId> removed;
     std::erase_if(
@@ -134,6 +177,8 @@ void downgradeFrontierResourceEcologyToLayoutV3(
     const MapDefinition &map)
 {
     PendingRaidSnapshot &raid = *profile.pendingRaid;
+    downgradeFrontierEnemiesToLegacyDeployment(
+        raid, publishedContentRegistry());
     std::size_t keptRegular{};
     std::vector<AssetInstanceId> removed;
     std::erase_if(
@@ -1620,6 +1665,24 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
         publishedContentRegistry());
     EXPECT_FALSE(corrupt.profile.has_value());
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV36LoadsPreviousResourceEcologyContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-resource-ecology-content-v45", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-resource-ecology-content-45",
+            36U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile),
+              profileStateFingerprint(profile));
 }
 
 TEST(SaveRepositoryTest,

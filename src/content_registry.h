@@ -575,6 +575,8 @@ struct ProceduralOutdoorDefinition
     std::uint32_t maximumRoadObstacles{};
     std::uint32_t minimumPuddlePatches{};
     std::uint32_t maximumPuddlePatches{};
+    std::uint32_t minimumInitialEnemies{};
+    std::uint32_t maximumInitialEnemies{};
     std::uint32_t maximumAttempts{8};
     std::uint32_t anchorClearanceCells{1};
     std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;

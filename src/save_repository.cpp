@@ -1834,7 +1834,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 raid.rulesVersion == "procedural-playable-outdoor-layout-21" ||
                 raid.rulesVersion == "procedural-frontier-district-layout-22" ||
                 raid.rulesVersion ==
-                    "procedural-frontier-resource-ecology-23")
+                    "procedural-frontier-resource-ecology-23" ||
+                raid.rulesVersion ==
+                    "procedural-frontier-resource-ecology-24")
             {
                 Json routes = Json::array();
                 for (const RegionRouteDefinitionId &routeId :
@@ -2195,7 +2197,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-playable-outdoor-layout-content-43") ||
             (schemaVersion == 35 &&
              contentVersion ==
-                 "procedural-frontier-district-layout-content-44");
+                 "procedural-frontier-district-layout-content-44") ||
+            (schemaVersion == 36 &&
+             contentVersion ==
+                 "procedural-frontier-resource-ecology-content-45");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

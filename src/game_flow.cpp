@@ -64,7 +64,8 @@ bool GameFlow::deploy(
     std::optional<RegionalBaseSiteDefinitionId>
         baseSiteClearanceId,
     std::optional<RegionalBaseSiteDefinitionId>
-        basePerimeterSweepId) noexcept
+        basePerimeterSweepId,
+    const RaidDeploymentProgressCallback &progress) noexcept
 {
     if (state_ != GameFlowState::Base)
     {
@@ -86,7 +87,8 @@ bool GameFlow::deploy(
                 std::move(selfRecoveryRecordId),
                 std::move(outpostRestorationId),
                 std::move(baseSiteClearanceId),
-                std::move(basePerimeterSweepId)))
+                std::move(basePerimeterSweepId),
+                progress))
         {
             return false;
         }

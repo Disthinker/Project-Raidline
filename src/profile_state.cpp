@@ -1882,8 +1882,12 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-playable-outdoor-layout-21";
         const bool legacyDistrictLayoutRules =
             raid.rulesVersion == "procedural-frontier-district-layout-22";
-        const bool resourceEcologyRules =
+        const bool legacyResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
+        const bool expandedResourceEcologyRules =
+            raid.rulesVersion == "procedural-frontier-resource-ecology-24";
+        const bool resourceEcologyRules =
+            legacyResourceEcologyRules || expandedResourceEcologyRules;
         const bool districtLayoutRules =
             legacyDistrictLayoutRules || resourceEcologyRules;
         const bool playableOutdoorRules =
@@ -2058,7 +2062,12 @@ ProfileValidationResult validateProfileState(
             raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
             !validMedicalStatus(raid.startingMedicalStatus) ||
-            outdoorEnemyCount < 4 || outdoorEnemyCount > 6 ||
+            (expandedResourceEcologyRules
+                 ? outdoorEnemyCount <
+                           raidMap->proceduralOutdoor.minimumInitialEnemies ||
+                       outdoorEnemyCount >
+                           raidMap->proceduralOutdoor.maximumInitialEnemies
+                 : outdoorEnemyCount < 4 || outdoorEnemyCount > 6) ||
             (resourceEcologyRules
                  ? outdoorRegularLootCount != expectedResourceLootCount
                  : outdoorRegularLootCount < 6 ||
@@ -3400,20 +3409,45 @@ ProfileValidationResult validateProfileState(
             std::back_inserter(outdoorEnemies),
             [](const RaidEnemySnapshot &enemy)
             { return enemy.spaceId == outdoorRaidSpaceId(); });
-        if (outdoorEnemies.size() != deployment.enemies.size() ||
-            !std::equal(
-                outdoorEnemies.begin(), outdoorEnemies.end(),
-                deployment.enemies.begin(), deployment.enemies.end(),
-                [&](const RaidEnemySnapshot &snapshot,
-                    const EnemySpawnDefinition &definition)
+        const auto districtEnemyMatches = [](
+            const RaidEnemySnapshot &snapshot,
+            const EnemySpawnDefinition &definition)
+        {
+            return snapshot.size.x == definition.size.x &&
+                snapshot.size.y == definition.size.y &&
+                snapshot.maximumHealth == definition.maximumHealth;
+        };
+        bool outdoorEnemiesMatch{};
+        if (expandedResourceEcologyRules && !deployment.enemies.empty())
+        {
+            outdoorEnemiesMatch = true;
+            for (std::size_t index{}; index < outdoorEnemies.size(); ++index)
+            {
+                if (!districtEnemyMatches(
+                        outdoorEnemies[index],
+                        deployment.enemies[index % deployment.enemies.size()]))
                 {
-                    return districtLayoutRules
-                        ? snapshot.size.x == definition.size.x &&
-                              snapshot.size.y == definition.size.y &&
-                              snapshot.maximumHealth ==
-                                  definition.maximumHealth
-                        : enemyMatches(snapshot, definition);
-                }))
+                    outdoorEnemiesMatch = false;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            outdoorEnemiesMatch =
+                outdoorEnemies.size() == deployment.enemies.size() &&
+                std::equal(
+                    outdoorEnemies.begin(), outdoorEnemies.end(),
+                    deployment.enemies.begin(), deployment.enemies.end(),
+                    [&](const RaidEnemySnapshot &snapshot,
+                        const EnemySpawnDefinition &definition)
+                    {
+                        return districtLayoutRules
+                            ? districtEnemyMatches(snapshot, definition)
+                            : enemyMatches(snapshot, definition);
+                    });
+        }
+        if (!outdoorEnemiesMatch)
         {
             return {false, "pending Raid outdoor enemies do not match deployment"};
         }

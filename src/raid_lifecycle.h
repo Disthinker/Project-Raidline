@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include "inventory_domain.h"
@@ -29,6 +30,46 @@ struct DeployCommand
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
 };
+
+enum class RaidDeploymentProgressStage
+{
+    Validating,
+    PreparingSnapshot,
+    GeneratingLayout,
+    FreezingLoot,
+    ValidatingSnapshot,
+    BuildingWorld,
+    SavingProfile,
+    Complete
+};
+
+struct RaidDeploymentProgress
+{
+    float completion{};
+    RaidDeploymentProgressStage stage{
+        RaidDeploymentProgressStage::Validating};
+};
+
+using RaidDeploymentProgressCallback =
+    std::function<void(const RaidDeploymentProgress &)>;
+
+inline void reportRaidDeploymentProgress(
+    const RaidDeploymentProgressCallback &callback,
+    float completion,
+    RaidDeploymentProgressStage stage) noexcept
+{
+    if (!callback)
+        return;
+    try
+    {
+        callback({completion, stage});
+    }
+    catch (...)
+    {
+        // Presentation progress is observational and must never affect the
+        // atomic Deploy transaction or turn a committed Raid into a failure.
+    }
+}
 
 struct DeployReceipt
 {
@@ -80,7 +121,8 @@ struct RaidTravelPreview
     ProfileState &profile,
     const ContentRegistry &content,
     const DeployCommand &command,
-    const CommandContext &context);
+    const CommandContext &context,
+    const RaidDeploymentProgressCallback &progress = {});
 
 [[nodiscard]] RaidSettlementReceipt settlePendingRaid(
     ProfileState &profile,

@@ -10,7 +10,7 @@
 
 ## 明确排除
 
-- Macro 3 的巡逻、守点、伏击和声响响应遭遇生态；本轮不增加敌人数量或重构 AI。
+- Macro 3 的巡逻、守点、伏击和声响响应遭遇生态；本轮仅把超大地图初始敌人提高到内容定义的 36～48 名密度基线，不增加群组行为或重构 AI。
 - 完整经济重做、动态价格、资源刷新、无限再生和全部正式物品内容。
 - 程序化室内、第二地图主题、正式 Prefab 编辑器、AI 小队和实时尸潮。
 - 正式美术、Grab/Scratch/Bite 动画和 P1 音效扩展。
@@ -37,7 +37,8 @@
 - 新内容：content v45。
 - 新存档：schema v36。
 - 新布局：layout v4。
-- 新 Raid rules：`procedural-frontier-resource-ecology-23`。
+- 验收加固内容：content v46；schema 与 layout 仍为 v36/v4。
+- 新 Raid rules：`procedural-frontier-resource-ecology-24`；旧 rules v23/content v45 继续读取。
 - schema v35/content v44/layout v3 Pending Raid 保持原样可读；迁移不生成资源点，也不修改旧布局哈希。
 
 ## 实施步骤与退出条件
@@ -47,6 +48,8 @@
 3. 按资源点容量生成真实 Loot，冻结稳定资产、槽位和位置；验证资产唯一所有权、数量范围、同 seed 一致及不同 seed 差异。
 4. 接入世界区块投影、双语标签和战术地图的揭图/资源情报权限。
 5. 通过 Windows Debug 全目标、完整 CTest、提交、推送和 exact-head Windows/Ubuntu CI，再交由用户正常游玩验收。
+
+用户首轮检查后追加同 PR 加固：碎屑与所有建筑/车辆/集装箱/工程设备共享视觉占用避让；Frontier 初始敌人按独立命名随机流冻结 36～48 名；加载页消费真实 Deploy 阶段进度；F10 以鼠标按钮操作迷雾、无限弹药、重置和全部枪械参数。上述改动不引入新 AI 行为、碰撞碎屑或持久化调试设置。
 
 ## 自动化与人工验收
 
@@ -72,5 +75,8 @@
 - [x] 实现资源点容量、Loot 生成和稳定快照。
 - [x] 接入世界投影、战术地图、资源情报和双语表现。
 - [x] 通过定向回归、Windows Debug 全目标和完整 CTest（1261/1261）。
-- [ ] 提交、推送并通过 exact-head Windows/Ubuntu CI。
+- [x] 首轮提交、推送并通过 exact-head Windows/Ubuntu CI（`75048df`）。
+- [x] 实现首轮验收追加的碎屑避让、敌人密度、真实加载进度和鼠标 F10 加固。
+- [x] 验收加固通过 Windows Debug 全目标和完整 CTest（1267/1267）。
+- [ ] 追加提交并通过新的 exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。

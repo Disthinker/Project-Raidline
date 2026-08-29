@@ -300,7 +300,8 @@ bool GameSession::deployAlpha(
     std::optional<std::string> selfRecoveryRecordId,
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
-    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId)
+    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId,
+    const RaidDeploymentProgressCallback &progress)
 {
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
         mapDefinitionId.value().empty())
@@ -314,6 +315,8 @@ bool GameSession::deployAlpha(
         std::to_string(number);
     const std::string settlementId = candidate.profileId + "-settlement-" +
         std::to_string(number);
+    reportRaidDeploymentProgress(
+        progress, 0.08F, RaidDeploymentProgressStage::Validating);
     const DeployReceipt receipt = executeDeploy(
         candidate,
         publishedContentRegistry(),
@@ -329,7 +332,8 @@ bool GameSession::deployAlpha(
             std::move(basePerimeterSweepId)},
         CommandContext{
             profile_.revision,
-            "deploy:" + raidId});
+            "deploy:" + raidId},
+        progress);
     if (!receipt.succeeded || !candidate.pendingRaid.has_value())
     {
         persistenceMessage_ = receipt.message;
@@ -339,6 +343,8 @@ bool GameSession::deployAlpha(
     std::unique_ptr<GameplayWorld> candidateWorld;
     try
     {
+        reportRaidDeploymentProgress(
+            progress, 0.82F, RaidDeploymentProgressStage::BuildingWorld);
         const PendingRaidSnapshot &snapshot = *candidate.pendingRaid;
         std::vector<EnemySpawn> enemies;
         enemies.reserve(snapshot.enemies.size());
@@ -481,6 +487,8 @@ bool GameSession::deployAlpha(
         return false;
     }
     std::string saveMessage;
+    reportRaidDeploymentProgress(
+        progress, 0.93F, RaidDeploymentProgressStage::SavingProfile);
     if (saveRepository_.has_value())
     {
         const SaveWriteResult saved = saveRepository_->save(
@@ -525,6 +533,8 @@ bool GameSession::deployAlpha(
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
     synchronizeActiveAlphaWeapon();
+    reportRaidDeploymentProgress(
+        progress, 1.0F, RaidDeploymentProgressStage::Complete);
     return true;
 }
 

@@ -146,7 +146,7 @@ SDL client 只在 Active Raid 且没有模态 UI、终局或失焦时启用窗�
 
 Content Registry 的当前落地边界：
 
-- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前开发内容版本为 `procedural-frontier-resource-ecology-content-45`。程序化室外加载额外验证 layout v4、320×180 基础格、20×12 区块、八个分区实例、三个地标模板、道路/物件/水洼密度、资源点稳定 ID、Loot 表引用、实例数量、容量、风险和分区/地标约束；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
+- `assets/content/v1/core.json` 是物品、容器、装备、经济、地图、敌人/Loot、基地、区域节点/路线、基地候选点、地点独特设施、稳定设施和轻量哨所配置的单一内容输入；当前开发内容版本为 `procedural-frontier-resource-ecology-hardening-content-46`。程序化室外加载额外验证 layout v4、320×180 基础格、20×12 区块、八个分区实例、三个地标模板、道路/物件/水洼密度、36～48 名初始敌人范围、资源点稳定 ID、Loot 表引用、实例数量、容量、风险和分区/地标约束；稳定 ID、清剿/前哨引用、迁徙/设施和既有内容约束继续统一生效。CMake 配置时压缩行空白、分块为合法编译器字符串并嵌入只读生产代码。
 - `DefinitionId<Tag>` 隔离物品、Loot 表、敌人部署和地图 ID；`ContentRegistry` 构造后只提供 `const` 查询。
 - v1 验证 schema/content version、命名空间、重复 ID/资源、字段类型与范围、跨定义引用、Loot 上限、单矩形开放地图连通边界、障碍边界/重复 ID/敌人出生重叠和已发布资源引用；测试同时核对物理文件存在。
 - 价格拒绝回收价高于非零买价；容器分区只使用类型化能力。运行时容器循环由 Profile 校验拒绝。
@@ -190,6 +190,6 @@ Content Registry 的当前落地边界：
 21. `codex/base-resource-pressure-v1`：PR #78 / merge commit `ba8283f`，交付待分配区、个人保留/基地捐献、四项资源、共享连续碰撞与中英文设置。
 22. `codex/base-world-clock-daily-needs-v1`：当前切片，交付唯一世界分钟时钟、每日需求、schema v8、Base 检查点与 Raid 时间提交/回滚。
 23. `codex/procedural-raid-layout-v1`：PR #111 / merge commit `636a40b`，交付 25600×14400 超大主题分区地图、layout v3 分区/地标/道路/地表/环境/玩法 Socket、确定性回退、区块投影、分层导航、schema v35/content v44 与代码占位表现。
-24. `codex/procedural-raid-resource-ecology-v1`：当前 Macro 2，交付 layout v4 普通/高价值/地点专属资源点、容量与 Loot 来源冻结、资源情报投影、schema v36/content v45。
+24. `codex/procedural-raid-resource-ecology-v1`：当前 Macro 2，交付 layout v4 普通/高价值/地点专属资源点、容量与 Loot 来源冻结、资源情报投影、36～48 名冻结初始敌人、真实加载进度、鼠标 F10、schema v36/content v46。
 
 每个分支从最新已接受的 `origin/main` 创建。Week29 不整体合并；代码反馈以后按新的表现投影边界重新接入，正式美术继续暂停。

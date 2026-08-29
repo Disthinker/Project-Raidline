@@ -415,6 +415,18 @@ TEST(RaidMapGenerationTest,
         }
     }
 
+    for (const RaidOutdoorPropSnapshot &prop : layout.props)
+    {
+        if (prop.kind != RaidOutdoorPropKind::Debris)
+            continue;
+        for (const RaidOutdoorPropSnapshot *reserved : reservedProps)
+        {
+            EXPECT_FALSE(overlapsStrict(prop.bounds, reserved->bounds))
+                << "debris " << prop.instanceId << " overlaps prop "
+                << reserved->instanceId;
+        }
+    }
+
     for (std::size_t count : kindCounts)
         EXPECT_GT(count, 0U);
 }
@@ -481,12 +493,11 @@ TEST(RaidMapGenerationTest, PublishedOutdoorLayoutRemainsLegalAcrossSeeds)
         for (std::size_t first{};
              first < layout.props.size() && !forbiddenOverlap; ++first)
         {
-            if (layout.props[first].kind == RaidOutdoorPropKind::Debris)
-                continue;
             for (std::size_t second = first + 1U;
                  second < layout.props.size(); ++second)
             {
-                if (layout.props[second].kind == RaidOutdoorPropKind::Debris)
+                if (layout.props[first].kind == RaidOutdoorPropKind::Debris &&
+                    layout.props[second].kind == RaidOutdoorPropKind::Debris)
                     continue;
                 if (overlapsStrict(
                         layout.props[first].bounds,

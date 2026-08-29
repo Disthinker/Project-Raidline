@@ -54,6 +54,35 @@ TEST(RaidLifecycleTest, SiegeWarningBlocksDeployWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
+TEST(RaidLifecycleTest, DeployReportsMonotonicRealLoadingStages)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "deployment-progress", publishedContentRegistry());
+    std::vector<RaidDeploymentProgress> observed;
+    const DeployReceipt receipt = executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "progress-raid",
+            "progress-settlement",
+            7712100U,
+            MapDefinitionId{"map.raid.frontier_exchange"}},
+        CommandContext{profile.revision, "deploy:progress"},
+        [&](const RaidDeploymentProgress &progress)
+        { observed.push_back(progress); });
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_GE(observed.size(), 4U);
+    EXPECT_EQ(
+        observed.front().stage,
+        RaidDeploymentProgressStage::PreparingSnapshot);
+    EXPECT_EQ(
+        observed.back().stage,
+        RaidDeploymentProgressStage::ValidatingSnapshot);
+    for (std::size_t index = 1U; index < observed.size(); ++index)
+        EXPECT_GT(observed[index].completion, observed[index - 1U].completion);
+}
+
 TEST(RaidLifecycleTest, QueuedSiegeDuringSafetyStillAllowsDeploy)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -906,10 +935,24 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-resource-ecology-23");
+              "procedural-frontier-resource-ecology-24");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
+    EXPECT_GE(
+        std::count_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            [](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); }),
+        static_cast<std::ptrdiff_t>(
+            content.map(mapId).proceduralOutdoor.minimumInitialEnemies));
+    EXPECT_LE(
+        std::count_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            [](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); }),
+        static_cast<std::ptrdiff_t>(
+            content.map(mapId).proceduralOutdoor.maximumInitialEnemies));
 
     const auto ordinaryCount = std::count_if(
         raid.spatialLayout.resourcePoints.begin(),

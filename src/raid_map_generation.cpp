@@ -1827,8 +1827,11 @@ void populateProps(
     const std::uint32_t decorativeTarget = randomBetween(
         random, definition.minimumDecorativeProps,
         definition.maximumDecorativeProps);
-    for (std::uint32_t index{};
-         index < decorativeTarget && !openCells.empty(); ++index)
+    std::uint32_t decorativePlaced{};
+    for (std::uint32_t attempt{};
+         decorativePlaced < decorativeTarget && !openCells.empty() &&
+         attempt < decorativeTarget * 24U;
+         ++attempt)
     {
         const Cell cell = openCells[random.bounded(
             static_cast<std::uint32_t>(openCells.size()))];
@@ -1841,7 +1844,7 @@ void populateProps(
                 (static_cast<float>(cell.row) + 0.2F +
                  static_cast<float>(random.bounded(60U)) / 100.0F) *
                     cellHeight};
-        if (index % 8U == 0U)
+        if (decorativePlaced % 8U == 0U)
         {
             const std::uint16_t district = districtAtFineCell(
                 definition, districtField, cell.column, cell.row);
@@ -1861,17 +1864,23 @@ void populateProps(
                         RaidOutdoorPropKind::EngineeringEquipment,
                         RaidOutdoorPropState::Weathered,
                         equipmentBounds, quarterTurns, false);
+                    ++decorativePlaced;
                     continue;
                 }
             }
         }
         const float debrisSize =
             10.0F + static_cast<float>(random.bounded(20U));
-        appendProp(
-            layout, RaidOutdoorPropKind::Debris,
+        const ContentRect debrisBounds = centeredBounds(
+            center, {debrisSize, debrisSize});
+        if (!rectIsAvailable(debrisBounds, false, std::nullopt))
+            continue;
+        appendReservedProp(
+            RaidOutdoorPropKind::Debris,
             RaidOutdoorPropState::Weathered,
-            centeredBounds(center, {debrisSize, debrisSize}),
+            debrisBounds,
             static_cast<std::uint8_t>(random.bounded(4U)), false);
+        ++decorativePlaced;
     }
 }
 

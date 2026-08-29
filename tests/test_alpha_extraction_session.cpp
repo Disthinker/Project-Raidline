@@ -152,7 +152,8 @@ TEST(AlphaExtractionSessionPerformanceTest,
     GameSession session;
     ASSERT_TRUE(session.startNewProfile("alpha-frontier-clock-performance"));
     ASSERT_TRUE(session.deployAlpha(
-        7723401U, MapDefinitionId{"map.raid.frontier_exchange"}));
+        7723401U, MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
     const std::uint64_t startingWorldMinute =
         session.profile().worldClock.elapsedWorldMinutes;
 
@@ -264,7 +265,8 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
     ASSERT_TRUE(session.startNewProfile("alpha-session-special-location"));
     ASSERT_TRUE(session.deployAlpha(
         88123U,
-        MapDefinitionId{"map.raid.frontier_exchange"}));
+        MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
     ASSERT_EQ(session.profile().pendingRaid->interiors.size(), 2U);
     ASSERT_EQ(session.world().tacticalMap().specialLocations().size(), 2U);

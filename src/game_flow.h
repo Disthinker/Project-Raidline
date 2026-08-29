@@ -43,7 +43,8 @@ public:
         std::optional<RegionalBaseSiteDefinitionId>
             baseSiteClearanceId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            basePerimeterSweepId = std::nullopt) noexcept;
+            basePerimeterSweepId = std::nullopt,
+        const RaidDeploymentProgressCallback &progress = {}) noexcept;
 
     void updateBase(
         const BaseInput &input,

@@ -1987,6 +1987,10 @@ ContentRegistry ContentRegistry::fromJson(
                     procedural, "minimum_puddle_patches");
                 value.maximumPuddlePatches = requiredPositiveUint(
                     procedural, "maximum_puddle_patches");
+                value.minimumInitialEnemies = optionalUint(
+                    procedural, "minimum_initial_enemies");
+                value.maximumInitialEnemies = optionalUint(
+                    procedural, "maximum_initial_enemies");
                 value.maximumAttempts =
                     requiredPositiveUint(procedural, "maximum_attempts");
                 value.anchorClearanceCells =
@@ -2139,12 +2143,18 @@ ContentRegistry ContentRegistry::fromJson(
                     value.minimumPuddlePatches >
                         value.maximumPuddlePatches ||
                     value.maximumPuddlePatches > cells / 4U ||
+                    value.minimumInitialEnemies >
+                        value.maximumInitialEnemies ||
+                    value.maximumInitialEnemies > 128U ||
+                    ((value.minimumInitialEnemies == 0U) !=
+                     (value.maximumInitialEnemies == 0U)) ||
                     value.maximumAttempts > 32U ||
                     value.anchorClearanceCells > 4U ||
                     districtInstances != 8U ||
                     value.landmarkTemplates.size() != 3U ||
                     (value.layoutVersion >= 4U &&
-                     value.resourcePointArchetypes.empty()) ||
+                     (value.resourcePointArchetypes.empty() ||
+                      value.minimumInitialEnemies == 0U)) ||
                     (value.layoutVersion < 4U &&
                      !value.resourcePointArchetypes.empty()))
                 {
@@ -2976,6 +2986,13 @@ ContentRegistry ContentRegistry::fromJson(
                             }
                         }
                     }
+                }
+                if (definition.proceduralOutdoor.enabled &&
+                    definition.proceduralOutdoor.layoutVersion >= 4U &&
+                    definition.proceduralOutdoor.maximumInitialEnemies >
+                        definition.highRisk.activeEnemyCap)
+                {
+                    fail("procedural initial enemy population exceeds high-risk active cap");
                 }
             }
 

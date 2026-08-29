@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-resource-ecology-content-45",
+  "content_version": "procedural-frontier-resource-ecology-hardening-content-46",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1224,6 +1224,8 @@
         "maximum_road_obstacles": 220,
         "minimum_puddle_patches": 60,
         "maximum_puddle_patches": 100,
+        "minimum_initial_enemies": 36,
+        "maximum_initial_enemies": 48,
         "maximum_attempts": 12,
         "anchor_clearance_cells": 2,
         "district_archetypes": [
@@ -1349,7 +1351,7 @@
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
-        "active_enemy_cap": 8,
+        "active_enemy_cap": 48,
         "activation_control_point": {"position": {"x": 2160, "y": 620}, "size": {"x": 150, "y": 84}},
         "activation_duration_seconds": 4,
         "advanced_resource_area": {"position": {"x": 1080, "y": 980}, "size": {"x": 360, "y": 230}},
