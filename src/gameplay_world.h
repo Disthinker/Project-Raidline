@@ -58,6 +58,11 @@ struct EnemySpawn
     Vec2 position{};
     Vec2 size{50.0F, 50.0F};
     int maxHealth{3};
+    std::string encounterGroupInstanceId;
+    RaidEncounterKind encounterKind{RaidEncounterKind::Guard};
+    Vec2 encounterHome{};
+    std::vector<Vec2> patrolPoints;
+    float ambushActivationDistance{240.0F};
 };
 
 struct HighRiskWorldConfig
@@ -441,6 +446,16 @@ private:
         std::uint64_t refreshCount{};
     };
 
+    struct EnemyEncounterRuntime
+    {
+        std::string groupInstanceId;
+        RaidEncounterKind kind{RaidEncounterKind::Guard};
+        Vec2 home{};
+        std::vector<Vec2> patrolPoints;
+        std::size_t patrolPointIndex{};
+        float ambushActivationDistance{240.0F};
+    };
+
     struct InteriorRuntime
     {
         RaidSpaceDefinitionId id;
@@ -454,6 +469,7 @@ private:
         std::vector<Enemy> enemies;
         std::vector<BallisticBlocker> ballisticBlockers;
         std::vector<EnemyNavigationRuntime> enemyNavigation;
+        std::vector<EnemyEncounterRuntime> enemyEncounters;
         std::optional<RaidSpaceBlockerIndex> blockerIndex;
         std::size_t navigationScheduleCursor{};
         std::size_t initialEnemyCount{};
@@ -511,6 +527,7 @@ private:
     std::vector<Enemy> enemies_;
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<EnemyNavigationRuntime> enemyNavigation_;
+    std::vector<EnemyEncounterRuntime> enemyEncounters_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     RaidGeneratedMapLayout outdoorLayout_;
     std::uint32_t outdoorColumns_{};
@@ -626,6 +643,10 @@ private:
     activeEnemyNavigation() noexcept;
     [[nodiscard]] const std::vector<EnemyNavigationRuntime> &
     activeEnemyNavigation() const noexcept;
+    [[nodiscard]] std::vector<EnemyEncounterRuntime> &
+    activeEnemyEncounters() noexcept;
+    [[nodiscard]] const std::vector<EnemyEncounterRuntime> &
+    activeEnemyEncounters() const noexcept;
     [[nodiscard]] const std::vector<BallisticBlocker> &
     activeBallisticBlockers() const noexcept;
     [[nodiscard]] const RaidSpaceBlockerIndex &

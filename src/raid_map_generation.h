@@ -33,6 +33,7 @@ struct RaidMapAnchorRequest
     Vec2 size{32.0F, 32.0F};
     std::vector<RaidDistrictKind> allowedDistrictKinds;
     std::string landmarkDefinitionId;
+    float minimumPlayerSpawnDistance{};
 };
 
 struct RaidMapGenerationAnchors

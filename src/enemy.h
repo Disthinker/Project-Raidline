@@ -62,7 +62,8 @@ public:
         float worldWidth,
         float worldHeight,
         bool targetVisible = true,
-        std::optional<Vec2> navigationTarget = std::nullopt);
+        std::optional<Vec2> navigationTarget = std::nullopt,
+        bool allowUnawareNavigation = false);
 
     [[nodiscard]]
     bool tryStartAttack(
@@ -116,6 +117,7 @@ public:
     [[nodiscard]] std::optional<Vec2> lastKnownTargetPosition() const noexcept;
     [[nodiscard]] float navigationGoalTolerance(
         bool targetVisible) const noexcept;
+    [[nodiscard]] float acquireTargetDistance() const noexcept;
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);

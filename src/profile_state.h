@@ -253,6 +253,51 @@ struct RaidEnemySnapshot
     Vec2 size{50.0F, 50.0F};
     int maximumHealth{};
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
+    std::string encounterGroupInstanceId;
+
+    friend bool operator==(
+        const RaidEnemySnapshot &left,
+        const RaidEnemySnapshot &right)
+    {
+        return left.position.x == right.position.x &&
+            left.position.y == right.position.y &&
+            left.size.x == right.size.x && left.size.y == right.size.y &&
+            left.maximumHealth == right.maximumHealth &&
+            left.spaceId == right.spaceId &&
+            left.encounterGroupInstanceId ==
+                right.encounterGroupInstanceId;
+    }
+};
+
+struct RaidEncounterGroupSnapshot
+{
+    std::string instanceId;
+    std::string definitionId;
+    RaidEncounterKind kind{RaidEncounterKind::Guard};
+    RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
+    Vec2 homePosition{};
+    std::vector<Vec2> patrolPoints;
+    std::vector<std::uint32_t> memberEnemyIndices;
+    float activationDistance{240.0F};
+
+    friend bool operator==(
+        const RaidEncounterGroupSnapshot &left,
+        const RaidEncounterGroupSnapshot &right)
+    {
+        return left.instanceId == right.instanceId &&
+            left.definitionId == right.definitionId &&
+            left.kind == right.kind && left.spaceId == right.spaceId &&
+            left.homePosition.x == right.homePosition.x &&
+            left.homePosition.y == right.homePosition.y &&
+            left.memberEnemyIndices == right.memberEnemyIndices &&
+            left.activationDistance == right.activationDistance &&
+            left.patrolPoints.size() == right.patrolPoints.size() &&
+            std::equal(
+                left.patrolPoints.begin(), left.patrolPoints.end(),
+                right.patrolPoints.begin(),
+                [](Vec2 first, Vec2 second)
+                { return first.x == second.x && first.y == second.y; });
+    }
 };
 
 struct RaidLootSnapshot
@@ -758,6 +803,7 @@ struct PendingRaidSnapshot
     Vec2 playerSpawn{};
     ContentRect extractionPoint;
     std::vector<RaidEnemySnapshot> enemies;
+    std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;

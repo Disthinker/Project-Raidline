@@ -99,6 +99,14 @@ bool overlaps(
            leftOrigin.y + left.height > rightOrigin.y;
 }
 
+bool overlaps(ContentRect left, ContentRect right) noexcept
+{
+    return left.position.x < right.position.x + right.size.x &&
+           left.position.x + left.size.x > right.position.x &&
+           left.position.y < right.position.y + right.size.y &&
+           left.position.y + left.size.y > right.position.y;
+}
+
 bool pointInside(
     GridPosition point,
     GridPosition origin,
@@ -1885,7 +1893,14 @@ ProfileValidationResult validateProfileState(
         const bool legacyResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
         const bool expandedResourceEcologyRules =
-            raid.rulesVersion == "procedural-frontier-resource-ecology-24";
+            raid.rulesVersion == "procedural-frontier-resource-ecology-24" ||
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+        const bool encounterEcologyRules =
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+        const bool protectedEncounterSpawnRules =
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
         const bool resourceEcologyRules =
             legacyResourceEcologyRules || expandedResourceEcologyRules;
         const bool districtLayoutRules =
@@ -2649,14 +2664,116 @@ ProfileValidationResult validateProfileState(
                         matchesRect(kRaidAnchorRescue,
                                     RaidMapAnchorKind::Rescue,
                                     raid.rescue->transferPoint);
-                for (std::size_t index{}; index < raid.enemies.size(); ++index)
+                if (encounterEcologyRules)
                 {
-                    const RaidEnemySnapshot &enemy = raid.enemies[index];
-                    if (enemy.spaceId == outdoorRaidSpaceId())
+                    const auto *playerAnchor = findRaidAnchorPlacement(
+                        raid.spatialLayout,
+                        kRaidAnchorPlayerSpawn);
+                    for (std::size_t index{};
+                         index < raid.encounterGroups.size(); ++index)
+                    {
+                        const RaidEncounterGroupSnapshot &group =
+                            raid.encounterGroups[index];
+                        const auto *anchor = findRaidAnchorPlacement(
+                            raid.spatialLayout,
+                            raidIndexedAnchorId("encounter", index));
+                        if (anchor == nullptr)
+                        {
+                            districtSnapshotValid = false;
+                            continue;
+                        }
+                        const Vec2 anchorCenter{
+                            anchor->bounds.position.x +
+                                anchor->bounds.size.x * 0.5F,
+                            anchor->bounds.position.y +
+                                anchor->bounds.size.y * 0.5F};
+                        const auto definition = std::find_if(
+                            raidMap->proceduralOutdoor
+                                .encounterArchetypes.begin(),
+                            raidMap->proceduralOutdoor
+                                .encounterArchetypes.end(),
+                            [&](const RaidEncounterArchetypeDefinition &value)
+                            { return value.id == group.definitionId; });
+                        const auto district = std::find_if(
+                            raid.spatialLayout.districts.begin(),
+                            raid.spatialLayout.districts.end(),
+                            [&](const RaidDistrictSnapshot &value)
+                            {
+                                return value.instanceId ==
+                                    anchor->districtInstanceId;
+                            });
+                        const bool districtAllowed =
+                            definition != raidMap->proceduralOutdoor
+                                .encounterArchetypes.end() &&
+                            district != raid.spatialLayout.districts.end() &&
+                            std::find(
+                                definition->allowedDistrictKinds.begin(),
+                                definition->allowedDistrictKinds.end(),
+                                district->kind) !=
+                                definition->allowedDistrictKinds.end();
+                        bool outsidePlayerSpawn =
+                            !protectedEncounterSpawnRules;
+                        if (protectedEncounterSpawnRules &&
+                            playerAnchor != nullptr)
+                        {
+                            const Vec2 playerCenter{
+                                playerAnchor->bounds.position.x +
+                                    playerAnchor->bounds.size.x * 0.5F,
+                                playerAnchor->bounds.position.y +
+                                    playerAnchor->bounds.size.y * 0.5F};
+                            const float radius = raidMap->proceduralOutdoor
+                                .minimumEnemySpawnDistance;
+                            const ContentRect exclusion{
+                                {playerCenter.x - radius,
+                                 playerCenter.y - radius},
+                                {radius * 2.0F, radius * 2.0F}};
+                            outsidePlayerSpawn =
+                                !overlaps(exclusion, anchor->bounds);
+                        }
                         districtSnapshotValid = districtSnapshotValid &&
-                            matchesPoint(raidIndexedAnchorId("enemy", index),
-                                         RaidMapAnchorKind::Enemy,
-                                         enemy.position, false);
+                            anchor != nullptr &&
+                            anchor->kind == RaidMapAnchorKind::Enemy &&
+                            districtAllowed &&
+                            outsidePlayerSpawn &&
+                            group.homePosition.x == anchorCenter.x &&
+                            group.homePosition.y == anchorCenter.y;
+                        for (std::uint32_t memberIndex :
+                             group.memberEnemyIndices)
+                        {
+                            if (memberIndex >= raid.enemies.size())
+                            {
+                                districtSnapshotValid = false;
+                                continue;
+                            }
+                            const RaidEnemySnapshot &enemy =
+                                raid.enemies[memberIndex];
+                            districtSnapshotValid = districtSnapshotValid &&
+                                enemy.position.x >= anchor->bounds.position.x &&
+                                enemy.position.y >= anchor->bounds.position.y &&
+                                enemy.position.x + enemy.size.x <=
+                                    anchor->bounds.position.x +
+                                        anchor->bounds.size.x &&
+                                enemy.position.y + enemy.size.y <=
+                                    anchor->bounds.position.y +
+                                        anchor->bounds.size.y;
+                        }
+                    }
+                }
+                else
+                {
+                    for (std::size_t index{};
+                         index < raid.enemies.size(); ++index)
+                    {
+                        const RaidEnemySnapshot &enemy = raid.enemies[index];
+                        if (enemy.spaceId == outdoorRaidSpaceId())
+                        {
+                            districtSnapshotValid = districtSnapshotValid &&
+                                matchesPoint(
+                                    raidIndexedAnchorId("enemy", index),
+                                    RaidMapAnchorKind::Enemy,
+                                    enemy.position, false);
+                        }
+                    }
                 }
                 for (std::size_t index{}; index < raid.loot.size(); ++index)
                 {
@@ -2724,7 +2841,9 @@ ProfileValidationResult validateProfileState(
                 const std::size_t expectedAnchorCount = 6U +
                     static_cast<std::size_t>(raid.rescue.has_value()) +
                     static_cast<std::size_t>(raid.selfRecovery.has_value()) +
-                    outdoorEnemyCount +
+                    (encounterEcologyRules
+                         ? raid.encounterGroups.size()
+                         : outdoorEnemyCount) +
                     (resourceEcologyRules
                          ? raid.spatialLayout.resourcePoints.size()
                          : outdoorRegularLootCount) +
@@ -3392,6 +3511,88 @@ ProfileValidationResult validateProfileState(
                 return {false, "pending Raid enemy is invalid"};
             }
         }
+        if (encounterEcologyRules)
+        {
+            std::set<std::string> groupIds;
+            std::set<std::uint32_t> memberIndices;
+            for (const RaidEncounterGroupSnapshot &group :
+                 raid.encounterGroups)
+            {
+                const auto definition = std::find_if(
+                    raidMap->proceduralOutdoor.encounterArchetypes.begin(),
+                    raidMap->proceduralOutdoor.encounterArchetypes.end(),
+                    [&](const RaidEncounterArchetypeDefinition &candidate)
+                    { return candidate.id == group.definitionId; });
+                const bool patrolPointsValid = std::all_of(
+                    group.patrolPoints.begin(), group.patrolPoints.end(),
+                    [&](Vec2 point)
+                    {
+                        return std::isfinite(point.x) &&
+                            std::isfinite(point.y) && point.x >= 0.0F &&
+                            point.y >= 0.0F && point.x <= raidMap->worldSize.x &&
+                            point.y <= raidMap->worldSize.y;
+                    });
+                if (group.instanceId.empty() ||
+                    !groupIds.insert(group.instanceId).second ||
+                    group.spaceId != outdoorRaidSpaceId() ||
+                    definition ==
+                        raidMap->proceduralOutdoor.encounterArchetypes.end() ||
+                    group.kind != definition->kind ||
+                    group.activationDistance != definition->activationDistance ||
+                    !std::isfinite(group.homePosition.x) ||
+                    !std::isfinite(group.homePosition.y) ||
+                    group.homePosition.x < 0.0F ||
+                    group.homePosition.y < 0.0F ||
+                    group.homePosition.x > raidMap->worldSize.x ||
+                    group.homePosition.y > raidMap->worldSize.y ||
+                    group.memberEnemyIndices.size() <
+                        definition->minimumMembers ||
+                    group.memberEnemyIndices.size() >
+                        definition->maximumMembers ||
+                    group.patrolPoints.empty() || !patrolPointsValid)
+                {
+                    return {false, "pending Raid encounter group is invalid"};
+                }
+                for (std::uint32_t memberIndex : group.memberEnemyIndices)
+                {
+                    if (memberIndex >= raid.enemies.size() ||
+                        !memberIndices.insert(memberIndex).second ||
+                        raid.enemies[memberIndex].spaceId !=
+                            outdoorRaidSpaceId() ||
+                        raid.enemies[memberIndex].encounterGroupInstanceId !=
+                            group.instanceId)
+                    {
+                        return {false,
+                                "pending Raid encounter membership is invalid"};
+                    }
+                }
+            }
+            if (memberIndices.size() != outdoorEnemyCount)
+            {
+                return {false, "pending Raid encounter membership is incomplete"};
+            }
+            for (const RaidEncounterArchetypeDefinition &definition :
+                 raidMap->proceduralOutdoor.encounterArchetypes)
+            {
+                const std::size_t count = std::count_if(
+                    raid.encounterGroups.begin(), raid.encounterGroups.end(),
+                    [&](const RaidEncounterGroupSnapshot &group)
+                    { return group.definitionId == definition.id; });
+                if (count < definition.minimumGroups ||
+                    count > definition.maximumGroups)
+                {
+                    return {false, "pending Raid encounter count is invalid"};
+                }
+            }
+        }
+        else if (!raid.encounterGroups.empty() ||
+                 std::any_of(
+                     raid.enemies.begin(), raid.enemies.end(),
+                     [](const RaidEnemySnapshot &enemy)
+                     { return !enemy.encounterGroupInstanceId.empty(); }))
+        {
+            return {false, "legacy Raid unexpectedly has encounter metadata"};
+        }
         const auto enemyMatches = [](const RaidEnemySnapshot &snapshot,
                                      const EnemySpawnDefinition &definition)
         {
@@ -3966,6 +4167,24 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashFloat(hash, enemy.size.y);
             hashInteger(hash, enemy.maximumHealth);
             hashBytes(hash, enemy.spaceId.value());
+            hashBytes(hash, enemy.encounterGroupInstanceId);
+        }
+        for (const RaidEncounterGroupSnapshot &group : raid.encounterGroups)
+        {
+            hashBytes(hash, group.instanceId);
+            hashBytes(hash, group.definitionId);
+            hashInteger(hash, static_cast<std::uint32_t>(group.kind));
+            hashBytes(hash, group.spaceId.value());
+            hashFloat(hash, group.homePosition.x);
+            hashFloat(hash, group.homePosition.y);
+            for (Vec2 point : group.patrolPoints)
+            {
+                hashFloat(hash, point.x);
+                hashFloat(hash, point.y);
+            }
+            for (std::uint32_t memberIndex : group.memberEnemyIndices)
+                hashInteger(hash, memberIndex);
+            hashFloat(hash, group.activationDistance);
         }
         for (const RaidLootSnapshot &loot : raid.loot)
         {

@@ -1351,6 +1351,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 "legacy schema cannot represent Base perimeter sweep"};
         }
         Json enemies = Json::array();
+        if (schemaVersion < 37 && !raid.encounterGroups.empty())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent Raid encounter groups"};
+        }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
             Json enemyValue{
@@ -1361,7 +1366,32 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {
                 enemyValue["space_id"] = enemy.spaceId.value();
             }
+            if (schemaVersion >= 37)
+            {
+                enemyValue["encounter_group_instance_id"] =
+                    enemy.encounterGroupInstanceId;
+            }
             enemies.push_back(std::move(enemyValue));
+        }
+        Json encounterGroups = Json::array();
+        if (schemaVersion >= 37)
+        {
+            for (const RaidEncounterGroupSnapshot &group :
+                 raid.encounterGroups)
+            {
+                Json patrolPoints = Json::array();
+                for (Vec2 point : group.patrolPoints)
+                    patrolPoints.push_back(vectorValue(point));
+                encounterGroups.push_back({
+                    {"instance_id", group.instanceId},
+                    {"definition_id", group.definitionId},
+                    {"kind", static_cast<std::uint32_t>(group.kind)},
+                    {"space_id", group.spaceId.value()},
+                    {"home_position", vectorValue(group.homePosition)},
+                    {"patrol_points", std::move(patrolPoints)},
+                    {"member_enemy_indices", group.memberEnemyIndices},
+                    {"activation_distance", group.activationDistance}});
+            }
         }
         Json loot = Json::array();
         for (const RaidLootSnapshot &entry : raid.loot)
@@ -1403,6 +1433,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"position", vectorValue(raid.extractionPoint.position)},
                 {"size", vectorValue(raid.extractionPoint.size)}}},
             {"enemies", std::move(enemies)},
+            {"encounter_groups", std::move(encounterGroups)},
             {"loot", std::move(loot)},
             {"carried_root_asset_ids", raid.carriedRootAssetIds},
             {"starting_health", raid.startingHealth}};
@@ -2078,7 +2109,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
-        schemaVersion != 35 && schemaVersion != 36)
+        schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2200,7 +2231,13 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-district-layout-content-44") ||
             (schemaVersion == 36 &&
              contentVersion ==
-                 "procedural-frontier-resource-ecology-content-45");
+                 "procedural-frontier-resource-ecology-content-45") ||
+            (schemaVersion == 36 &&
+             contentVersion ==
+                 "procedural-frontier-resource-ecology-hardening-content-46") ||
+            (schemaVersion == 37 &&
+             contentVersion ==
+                 "procedural-frontier-encounter-ecology-content-47");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2218,7 +2255,8 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 29 && schemaVersion != 30 &&
               schemaVersion != 31 && schemaVersion != 32 &&
               schemaVersion != 33 && schemaVersion != 34 &&
-              schemaVersion != 35 && schemaVersion != 36) ||
+              schemaVersion != 35 && schemaVersion != 36 &&
+              schemaVersion != 37) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2994,7 +3032,43 @@ SaveLoadResult deserializeProfileEnvelope(
                     schemaVersion >= 22
                         ? RaidSpaceDefinitionId{
                               enemy.at("space_id").get<std::string>()}
-                        : outdoorRaidSpaceId()});
+                        : outdoorRaidSpaceId(),
+                    schemaVersion >= 37
+                        ? enemy.at("encounter_group_instance_id")
+                              .get<std::string>()
+                        : std::string{}});
+            }
+            if (schemaVersion >= 37)
+            {
+                for (const Json &entry : value.at("encounter_groups"))
+                {
+                    RaidEncounterGroupSnapshot group;
+                    group.instanceId =
+                        entry.at("instance_id").get<std::string>();
+                    group.definitionId =
+                        entry.at("definition_id").get<std::string>();
+                    const std::uint32_t kind =
+                        entry.at("kind").get<std::uint32_t>();
+                    if (kind > static_cast<std::uint32_t>(
+                                   RaidEncounterKind::Ambush))
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "Raid encounter kind is invalid"};
+                    }
+                    group.kind = static_cast<RaidEncounterKind>(kind);
+                    group.spaceId = RaidSpaceDefinitionId{
+                        entry.at("space_id").get<std::string>()};
+                    group.homePosition =
+                        parseVector(entry.at("home_position"));
+                    for (const Json &point : entry.at("patrol_points"))
+                        group.patrolPoints.push_back(parseVector(point));
+                    group.memberEnemyIndices =
+                        entry.at("member_enemy_indices")
+                            .get<std::vector<std::uint32_t>>();
+                    group.activationDistance =
+                        entry.at("activation_distance").get<float>();
+                    raid.encounterGroups.push_back(std::move(group));
+                }
             }
             for (const Json &entry : value.at("loot"))
             {

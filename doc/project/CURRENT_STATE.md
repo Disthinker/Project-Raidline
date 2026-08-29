@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-29。
+最后核对：2026-08-30。
 
 ## Git 与交付基线
 
-- `origin/main@636a40b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1 的超大主题分区室外布局。
-- 当前开发分支：`codex/procedural-raid-resource-ecology-v1`，从 `origin/main@636a40b` 创建。
-- 当前活动计划：`doc/exec-plans/active/procedural-raid-resource-point-ecology-v1.md`。
+- `origin/main@85f90ff` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1～2。
+- 当前开发分支：`codex/procedural-raid-encounter-ecology-v1`，从 `origin/main@85f90ff` 创建。
+- 当前活动计划：`doc/exec-plans/active/procedural-raid-encounter-ecology-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1 均已进入主线。当前唯一工作是 Macro 2：让 `Frontier Exchange` 在既有 25600×14400 布局中冻结普通、高价值和地点专属资源点，形成路线风险、容量与撤离距离取舍。不提前启动遭遇生态、程序化室内、多主题、实时尸潮或 AI 小队。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～2 均已进入主线。当前唯一工作是 Macro 3：把 `Frontier Exchange` 的 36～48 名初始敌人组织为巡逻、地标守点和路线伏击群组，并让枪声按群组传播警觉。不增加新敌人类型，不启动程序化室内、多主题、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -66,7 +66,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
 52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
 53. **Frontier Exchange 超大主题分区随机地图 v3**：PR #111 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `636a40b` 进入 main。content v44/layout v3/schema v35 将地图扩展为 25600×14400，并冻结八个连续主题分区、三个固定地标、程序道路、五类地表、真实比例环境物件和全部既有玩法锚点；同时交付区块投影、分层导航、双语加载画面、F10 开发面板、准星边界和大地图帧顿挫修复。
-54. **Frontier Exchange 资源点生态 v1（当前开发）**：当前分支以 content v46/layout v4/schema v36 建立普通、高价值和地点专属资源点定义，按独立命名随机流在 Deploy 时冻结数量、容量、Loot 表、风险、分区/地标约束和点内槽位；旧 schema v35/layout v3 与 schema v36/content v45 继续读取。首轮验收加固让碎屑避让全部大型环境物件，将超大地图初始敌人提高为每局冻结 36～48 名，并增加实际部署阶段加载进度及鼠标可点击的 F10 迷雾、无限弹药、重置和枪械参数控件。连续射击热路径已从整份 Profile 候选复制/全量地图校验迁移为武器与已装弹匣的窄原子事务；背包拖拽预览也只复制资产子域并局部验证格位、容器、装备和弹药规则，正式提交仍保留完整 Profile 原子校验。世界与战术地图继续只消费只读投影。完整自动化通过，exact-head CI 和用户复验待最终收束。
+54. **Frontier Exchange 资源点生态 v1**：PR #112 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `85f90ff` 进入 main。content v46/layout v4/schema v36 冻结普通、高价值和地点专属资源点、36～48 名初始敌人、真实加载阶段和鼠标 F10；连续射击和背包拖拽热路径不再复制整份超大地图 Profile。
+55. **Frontier Exchange 遭遇与部署生态 v1（当前开发）**：当前分支建立 content v48/schema v37/rules v26 的巡逻、守点和伏击群组原型；Deploy 通过独立随机流冻结群组身份、成员、合法分区、地标外围守点、巡逻点和伏击激活距离，并强制全部初始群组避开玩家出生点周围 1200 世界单位。运行时复用现有视线、搜索记忆、声响和有预算寻路：巡逻组未警觉时沿冻结路线移动，守点组搜索结束后回岗，伏击组只在近距视线或声响触发后追击，同组成员共享声响警觉。layout 保持 v4；旧 schema v37/content v47/rules v25 与 schema v36/content v45～v46 继续读取且不重生成既有 Raid。Raid 拾取和局内库存事务已改为仅复制、校验可修改的资产参与者，不再逐次扫描冻结超大地图。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -93,7 +94,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。PR #111 的超大主题分区随机地图已通过完整自动化、CI 与用户验收并进入 main。当前 Macro 2 验收加固已完成 Windows Debug 全目标、128-seed 布局/资源生态、旧冻结快照迁移、真实加载阶段、鼠标 F10 和 1268/1268 完整 CTest。世界时钟、背包预览与连续射击共用一个真实 Frontier 性能场景：本机 Debug 中两类拖拽查询合计 P95/最慢约 0.6/0.8 ms，连续 240 帧、30 次实弹击发约 4.4/6.4 ms；两条高频路径均不再复制或全量校验冻结超大地图。exact-head CI 待本次修复收束，开发代理未启动游戏。
+- PR #112 的资源点生态与性能加固已通过完整自动化、exact-head CI 和用户正常游玩验收并进入 main。当前 Macro 3 已完成 Windows Debug 全目标构建和 1276/1276 完整 CTest；内容解析、群组冻结、schema v37 往返与旧 content v47 读取、损坏成员索引拒绝、死亡同步、巡逻、伏击、同组声响、128-seed 合法性与出生保护、100 敌人大世界性能均通过。拾取热路径从约 69.6 ms 降至约 2.8 ms，并新增拒绝拾取零修改回归；exact-head CI 尚待本轮推送后执行。开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

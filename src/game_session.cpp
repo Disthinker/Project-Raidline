@@ -354,10 +354,27 @@ bool GameSession::deployAlpha(
             {
                 continue;
             }
-            enemies.push_back(EnemySpawn{
+            const auto group = std::find_if(
+                snapshot.encounterGroups.begin(),
+                snapshot.encounterGroups.end(),
+                [&](const RaidEncounterGroupSnapshot &candidate)
+                {
+                    return candidate.instanceId ==
+                        enemy.encounterGroupInstanceId;
+                });
+            EnemySpawn spawn{
                 enemy.position,
                 enemy.size,
-                enemy.maximumHealth});
+                enemy.maximumHealth};
+            if (group != snapshot.encounterGroups.end())
+            {
+                spawn.encounterGroupInstanceId = group->instanceId;
+                spawn.encounterKind = group->kind;
+                spawn.encounterHome = group->homePosition;
+                spawn.patrolPoints = group->patrolPoints;
+                spawn.ambushActivationDistance = group->activationDistance;
+            }
+            enemies.push_back(std::move(spawn));
         }
         const MapDefinition &map =
             publishedContentRegistry().map(snapshot.mapDefinitionId);
@@ -1288,6 +1305,15 @@ InventoryReceipt GameSession::executeProfileInventory(
     const InventoryCommand &command,
     std::string transactionId)
 {
+    if (alphaRaidActive_)
+    {
+        return executeInventory(
+            profile_,
+            publishedContentRegistry(),
+            command,
+            CommandContext{profile_.revision, std::move(transactionId)});
+    }
+
     ProfileState candidate = profile_;
     std::string saveMessage;
     InventoryReceipt receipt = executeInventory(
@@ -3381,9 +3407,8 @@ void GameSession::updateAlphaRaid(
     {
         if (const auto loot = nearbyRaidLoot())
         {
-            ProfileState candidate = profile_;
             const InventoryReceipt receipt = pickupRaidLoot(
-                candidate,
+                profile_,
                 publishedContentRegistry(),
                 *loot,
                 CommandContext{
@@ -3391,9 +3416,6 @@ void GameSession::updateAlphaRaid(
                     nextRaidTransaction("pickup")});
             if (receipt.succeeded)
             {
-                static_cast<void>(commitProfileCandidate(
-                    std::move(candidate),
-                    false));
                 presentationEvents_.push_back(
                     GameSessionPresentationEvent::LootPickedUp);
             }

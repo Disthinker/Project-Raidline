@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string_view>
 #include <tuple>
 #include <vector>
@@ -75,6 +76,7 @@ void downgradeFrontierEnemiesToLegacyDeployment(
     PendingRaidSnapshot &raid,
     const ContentRegistry &content)
 {
+    raid.encounterGroups.clear();
     const EnemyDeploymentDefinition &deployment =
         content.enemyDeployment(raid.enemyDeploymentId);
     std::size_t outdoorEnemyIndex{};
@@ -91,6 +93,7 @@ void downgradeFrontierEnemiesToLegacyDeployment(
             enemy.position = legacy.position;
             enemy.size = legacy.size;
             enemy.maximumHealth = legacy.maximumHealth;
+            enemy.encounterGroupInstanceId.clear();
             return false;
         });
 
@@ -109,6 +112,27 @@ void downgradeFrontierEnemiesToLegacyDeployment(
                 "enemy", outdoorAnchorIndex++);
             anchor.bounds = {legacy.position, legacy.size};
             return false;
+        });
+    std::erase_if(
+        raid.spatialLayout.ballisticBlockers,
+        [&](const ContentRect &blocker)
+        {
+            return std::any_of(
+                raid.enemies.begin(), raid.enemies.end(),
+                [&](const RaidEnemySnapshot &enemy)
+                {
+                    if (enemy.spaceId != outdoorRaidSpaceId())
+                        return false;
+                    constexpr float clearance{4.0F};
+                    return blocker.position.x <
+                            enemy.position.x + enemy.size.x + clearance &&
+                        blocker.position.x + blocker.size.x >
+                            enemy.position.x - clearance &&
+                        blocker.position.y <
+                            enemy.position.y + enemy.size.y + clearance &&
+                        blocker.position.y + blocker.size.y >
+                            enemy.position.y - clearance;
+                });
         });
 }
 
@@ -1640,6 +1664,7 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
     EXPECT_FALSE(
         profile.pendingRaid->spatialLayout.anchorPlacements.empty());
     EXPECT_FALSE(profile.pendingRaid->spatialLayout.resourcePoints.empty());
+    EXPECT_FALSE(profile.pendingRaid->encounterGroups.empty());
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1653,6 +1678,8 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
               profile.pendingRaid->spatialLayout);
     EXPECT_EQ(loaded.profile->pendingRaid->interiors,
               profile.pendingRaid->interiors);
+    EXPECT_EQ(loaded.profile->pendingRaid->encounterGroups,
+              profile.pendingRaid->encounterGroups);
     ASSERT_FALSE(loaded.profile->pendingRaid->interiors.empty());
     EXPECT_EQ(
         loaded.profile->pendingRaid->interiors.front().id,
@@ -1678,6 +1705,52 @@ TEST(SaveRepositoryTest, SchemaV36LoadsPreviousResourceEcologyContent)
             profile,
             "procedural-frontier-resource-ecology-content-45",
             36U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile),
+              profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, CurrentSchemaRejectsOutOfRangeEncounterMember)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "save-invalid-encounter-member", publishedContentRegistry());
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "save-invalid-encounter-raid",
+            "save-invalid-encounter-settle",
+            783312U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-invalid-encounter-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_FALSE(profile.pendingRaid->encounterGroups.empty());
+    profile.pendingRaid->encounterGroups.front().memberEnemyIndices.front() =
+        std::numeric_limits<std::uint32_t>::max();
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, publishedContentRegistry().contentVersion()),
+        publishedContentRegistry());
+
+    EXPECT_FALSE(loaded.profile.has_value());
+    EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
+}
+
+TEST(SaveRepositoryTest, SchemaV37LoadsPreviousEncounterEcologyContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-encounter-ecology-content-v47", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-encounter-ecology-content-47",
+            37U),
         content);
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;

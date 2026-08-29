@@ -191,7 +191,8 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
     float worldWidth,
     float worldHeight,
     bool targetVisible,
-    std::optional<Vec2> navigationTarget)
+    std::optional<Vec2> navigationTarget,
+    bool allowUnawareNavigation)
 {
   if (isDead())
   {
@@ -228,7 +229,8 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
                 activeDirective,
                 deltaTime,
                 targetVisible,
-                navigationTarget}));
+                navigationTarget,
+                allowUnawareNavigation}));
     return updateActiveAttack(
         targetOffset,
         effectiveDeltaTime,
@@ -244,7 +246,8 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
               tacticalDirective,
               deltaTime,
               targetVisible,
-              navigationTarget});
+              navigationTarget,
+              allowUnawareNavigation});
 
   if (decision.attackRequest.has_value() &&
       tryStartAttack(
@@ -522,6 +525,11 @@ float Enemy::movementSpeed() const noexcept
 EnemyAwarenessState Enemy::awarenessState() const noexcept
 {
   return ai_.awarenessState();
+}
+
+float Enemy::acquireTargetDistance() const noexcept
+{
+  return ai_.config().acquireTargetDistance;
 }
 
 EnemyTacticalRole Enemy::tacticalRole() const noexcept

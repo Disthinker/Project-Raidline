@@ -555,6 +555,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             }
         }
         interior.enemies.reserve(interiorConfig.initialEnemies.size());
+        interior.enemyEncounters.reserve(interiorConfig.initialEnemies.size());
         for (const EnemySpawn &spawn : interiorConfig.initialEnemies)
         {
             if (!std::isfinite(spawn.position.x) ||
@@ -574,6 +575,18 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 Vec2{},
                 spawn.maxHealth,
                 nextCombatTargetId_++);
+            const Vec2 spawnCenter{
+                spawn.position.x + spawn.size.x * 0.5F,
+                spawn.position.y + spawn.size.y * 0.5F};
+            interior.enemyEncounters.push_back(EnemyEncounterRuntime{
+                spawn.encounterGroupInstanceId,
+                spawn.encounterKind,
+                spawn.encounterGroupInstanceId.empty()
+                    ? spawnCenter
+                    : spawn.encounterHome,
+                spawn.patrolPoints,
+                0U,
+                spawn.ambushActivationDistance});
         }
         interior.initialEnemyCount = interior.enemies.size();
         interior.enemyNavigation.resize(interior.enemies.size());
@@ -868,6 +881,7 @@ GameplayWorld::GameplayWorld(
             "GameplayWorld does not have enough CombatTargetId values"};
     }
     enemies_.reserve(initialEnemies.size());
+    enemyEncounters_.reserve(initialEnemies.size());
     for (const EnemySpawn &spawn : initialEnemies)
     {
         if (!std::isfinite(spawn.position.x) ||
@@ -888,6 +902,18 @@ GameplayWorld::GameplayWorld(
             Vec2{},
             spawn.maxHealth,
             nextCombatTargetId_++);
+        const Vec2 spawnCenter{
+            spawn.position.x + spawn.size.x * 0.5F,
+            spawn.position.y + spawn.size.y * 0.5F};
+        enemyEncounters_.push_back(EnemyEncounterRuntime{
+            spawn.encounterGroupInstanceId,
+            spawn.encounterKind,
+            spawn.encounterGroupInstanceId.empty()
+                ? spawnCenter
+                : spawn.encounterHome,
+            spawn.patrolPoints,
+            0U,
+            spawn.ambushActivationDistance});
     }
     initialOutdoorEnemyCount_ = enemies_.size();
     enemyNavigation_.resize(enemies_.size());
@@ -1197,7 +1223,10 @@ void GameplayWorld::update(
     std::vector<Enemy> &activeEnemySet = activeEnemies();
     std::vector<EnemyNavigationRuntime> &activeNavigationSet =
         activeEnemyNavigation();
-    if (activeNavigationSet.size() != activeEnemySet.size())
+    std::vector<EnemyEncounterRuntime> &activeEncounterSet =
+        activeEnemyEncounters();
+    if (activeNavigationSet.size() != activeEnemySet.size() ||
+        activeEncounterSet.size() != activeEnemySet.size())
     {
         std::terminate();
     }
@@ -1215,6 +1244,7 @@ void GameplayWorld::update(
         bool targetVisible{};
         bool refreshRequired{};
         bool selectedForRefresh{};
+        bool allowUnawareNavigation{};
         std::optional<Vec2> reachableGoal;
     };
     std::vector<EnemyNavigationIntent> navigationIntents(
@@ -1275,6 +1305,8 @@ void GameplayWorld::update(
             Enemy &enemy = activeEnemySet[enemyIndex];
             EnemyNavigationRuntime &navigation =
                 activeNavigationSet[enemyIndex];
+            EnemyEncounterRuntime &encounter =
+                activeEncounterSet[enemyIndex];
             if (enemy.isDead())
             {
                 navigation = EnemyNavigationRuntime{};
@@ -1285,9 +1317,53 @@ void GameplayWorld::update(
             intent.targetVisible = hasLineOfSight(
                 enemyPosition,
                 playerPosition);
-            const std::optional<Vec2> navigationGoal = intent.targetVisible
+            if (encounter.kind == RaidEncounterKind::Ambush &&
+                enemy.awarenessState() == EnemyAwarenessState::Unaware &&
+                distanceSquared(enemyPosition, playerPosition) >
+                    encounter.ambushActivationDistance *
+                        encounter.ambushActivationDistance)
+            {
+                intent.targetVisible = false;
+            }
+            std::optional<Vec2> passiveGoal;
+            if (enemy.awarenessState() == EnemyAwarenessState::Unaware)
+            {
+                if (encounter.kind == RaidEncounterKind::Patrol &&
+                    !encounter.patrolPoints.empty())
+                {
+                    encounter.patrolPointIndex %= encounter.patrolPoints.size();
+                    if (distanceSquared(
+                            enemyPosition,
+                            encounter.patrolPoints[encounter.patrolPointIndex]) <=
+                        48.0F * 48.0F)
+                    {
+                        encounter.patrolPointIndex =
+                            (encounter.patrolPointIndex + 1U) %
+                            encounter.patrolPoints.size();
+                    }
+                    passiveGoal =
+                        encounter.patrolPoints[encounter.patrolPointIndex];
+                }
+                else if (encounter.kind == RaidEncounterKind::Guard &&
+                         distanceSquared(enemyPosition, encounter.home) >
+                             64.0F * 64.0F)
+                {
+                    passiveGoal = encounter.home;
+                }
+            }
+            const bool visibleTargetIsRelevant = intent.targetVisible &&
+                (enemy.awarenessState() != EnemyAwarenessState::Unaware ||
+                 distanceSquared(enemyPosition, playerPosition) <=
+                     enemy.acquireTargetDistance() *
+                         enemy.acquireTargetDistance());
+            const std::optional<Vec2> navigationGoal = visibleTargetIsRelevant
                 ? std::optional<Vec2>{playerPosition}
-                : enemy.lastKnownTargetPosition();
+                : enemy.lastKnownTargetPosition().has_value()
+                ? enemy.lastKnownTargetPosition()
+                : passiveGoal;
+            intent.allowUnawareNavigation = passiveGoal.has_value() &&
+                !visibleTargetIsRelevant &&
+                !enemy.lastKnownTargetPosition().has_value();
             if (!navigationGoal.has_value())
             {
                 navigation = EnemyNavigationRuntime{};
@@ -1416,7 +1492,8 @@ void GameplayWorld::update(
                     worldWidth(),
                     worldHeight(),
                     intent.targetVisible,
-                    navigationTarget));
+                    navigationTarget,
+                    intent.allowUnawareNavigation));
             const Vec2 resolvedEnemyPosition = resolveMovementAgainstBlockers(
                 enemyPositionBeforeMovement,
                 enemy.size(),
@@ -1684,7 +1761,8 @@ void GameplayWorld::update(
          removed != hitResult.removedEnemyIndices.rend();
          ++removed)
     {
-        if (*removed >= activeNavigationSet.size())
+        if (*removed >= activeNavigationSet.size() ||
+            *removed >= activeEncounterSet.size())
         {
             std::terminate();
         }
@@ -1692,8 +1770,13 @@ void GameplayWorld::update(
             activeNavigationSet.begin() +
             static_cast<std::vector<EnemyNavigationRuntime>::difference_type>(
                 *removed));
+        activeEncounterSet.erase(
+            activeEncounterSet.begin() +
+            static_cast<std::vector<EnemyEncounterRuntime>::difference_type>(
+                *removed));
     }
-    if (activeNavigationSet.size() != activeEnemySet.size())
+    if (activeNavigationSet.size() != activeEnemySet.size() ||
+        activeEncounterSet.size() != activeEnemySet.size())
     {
         std::terminate();
     }
@@ -2579,14 +2662,43 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
     }
     const Vec2 source = playerCenter(player_);
     const float radiusSquared = radius * radius;
-    for (Enemy &enemy : activeEnemies())
+    std::vector<Enemy> &enemies = activeEnemies();
+    std::vector<EnemyEncounterRuntime> &encounters = activeEnemyEncounters();
+    if (enemies.size() != encounters.size())
     {
+        std::terminate();
+    }
+    std::vector<std::string_view> alertedGroups;
+    for (std::size_t index{}; index < enemies.size(); ++index)
+    {
+        Enemy &enemy = enemies[index];
         const Vec2 center = enemyCenter(enemy);
         const float dx = center.x - source.x;
         const float dy = center.y - source.y;
         if (dx * dx + dy * dy <= radiusSquared)
         {
             enemy.hearTarget(source);
+            const std::string &group = encounters[index].groupInstanceId;
+            if (!group.empty() &&
+                std::find(alertedGroups.begin(), alertedGroups.end(), group) ==
+                    alertedGroups.end())
+            {
+                alertedGroups.push_back(group);
+            }
+        }
+    }
+    if (alertedGroups.empty())
+    {
+        return;
+    }
+    for (std::size_t index{}; index < enemies.size(); ++index)
+    {
+        const std::string &group = encounters[index].groupInstanceId;
+        if (!group.empty() &&
+            std::find(alertedGroups.begin(), alertedGroups.end(), group) !=
+                alertedGroups.end())
+        {
+            enemies[index].hearTarget(source);
         }
     }
 }
@@ -3085,6 +3197,22 @@ GameplayWorld::activeEnemyNavigation() const noexcept
         : enemyNavigation_;
 }
 
+std::vector<GameplayWorld::EnemyEncounterRuntime> &
+GameplayWorld::activeEnemyEncounters() noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemyEncounters
+        : enemyEncounters_;
+}
+
+const std::vector<GameplayWorld::EnemyEncounterRuntime> &
+GameplayWorld::activeEnemyEncounters() const noexcept
+{
+    return activeInteriorIndex_.has_value()
+        ? interiors_[*activeInteriorIndex_].enemyEncounters
+        : enemyEncounters_;
+}
+
 const std::vector<BallisticBlocker> &
 GameplayWorld::activeBallisticBlockers() const noexcept
 {
@@ -3376,6 +3504,11 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
                 candidate.maxHealth,
                 nextCombatTargetId_++);
             enemyNavigation_.emplace_back();
+            enemyEncounters_.push_back(EnemyEncounterRuntime{
+                {},
+                RaidEncounterKind::Guard,
+                Vec2{candidate.position.x + candidate.size.x * 0.5F,
+                     candidate.position.y + candidate.size.y * 0.5F}});
             ++spawned;
             found = true;
             break;
