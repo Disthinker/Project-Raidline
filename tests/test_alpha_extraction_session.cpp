@@ -156,9 +156,12 @@ TEST(AlphaExtractionSessionPerformanceTest,
     const auto magazines = assets(session.profile(), alpha_content::magazine);
     const auto ammunition = assets(
         session.profile(), alpha_content::ammunition);
+    const auto backpacks = assets(
+        session.profile(), alpha_content::backpack);
     ASSERT_EQ(rifles.size(), 1U);
     ASSERT_GE(magazines.size(), 1U);
-    ASSERT_GE(ammunition.size(), 1U);
+    ASSERT_GE(ammunition.size(), 2U);
+    ASSERT_EQ(backpacks.size(), 1U);
     ASSERT_TRUE(session.executeProfileWeaponAmmo(
         LoadMagazineCommand{magazines[0], ammunition[0], 30},
         "frontier-performance-load").succeeded);
@@ -166,6 +169,27 @@ TEST(AlphaExtractionSessionPerformanceTest,
         InventoryEquipCommand{
             rifles[0], EquipmentSlotKind::PrimaryWeapon},
         "frontier-performance-equip").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            backpacks[0], EquipmentSlotKind::Backpack},
+        "frontier-performance-equip-backpack").succeeded);
+    const ProfileContainerId backpackGrid =
+        ProfileContainerId::compartment(backpacks[0], 0);
+    const auto ammunitionFit = findFirstProfileFit(
+        session.profile(),
+        publishedContentRegistry(),
+        backpackGrid,
+        publishedContentRegistry().item(alpha_content::ammunition),
+        ItemOrientation::Degrees0,
+        ammunition[1]);
+    ASSERT_TRUE(ammunitionFit.has_value());
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            ammunition[1],
+            0,
+            StoredAssetLocation{backpackGrid, *ammunitionFit},
+            ItemOrientation::Degrees0},
+        "frontier-performance-store-ammunition").succeeded);
     ASSERT_TRUE(session.executeProfileWeaponAmmo(
         InstallMagazineAndChamberCommand{rifles[0], magazines[0]},
         "frontier-performance-install").succeeded);
@@ -205,6 +229,52 @@ TEST(AlphaExtractionSessionPerformanceTest,
            "frozen megamap on the simulation thread.";
     EXPECT_LT(slowestClockUpdate.count(), 250000)
         << "A single update must not exhibit an unbounded stall.";
+
+    const std::uint64_t inventoryFingerprint =
+        profileStateFingerprint(session.profile());
+    std::chrono::microseconds slowestInventoryQuery{};
+    std::vector<std::chrono::microseconds> inventoryQuerySamples;
+    inventoryQuerySamples.reserve(240U);
+    for (std::size_t frame{}; frame < 240U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        const InventoryPlan movePlan = queryInventory(
+            session.profile(),
+            publishedContentRegistry(),
+            InventoryMoveCommand{
+                ammunition[1],
+                0,
+                StoredAssetLocation{backpackGrid, *ammunitionFit},
+                ItemOrientation::Degrees0});
+        const WeaponAmmoPlan loadPlan = queryWeaponAmmo(
+            session.profile(),
+            publishedContentRegistry(),
+            LoadMagazineCommand{magazines[0], ammunition[1], 1});
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started);
+        ASSERT_TRUE(movePlan.canCommit) << movePlan.message;
+        ASSERT_TRUE(loadPlan.canCommit) << loadPlan.message;
+        inventoryQuerySamples.push_back(elapsed);
+        slowestInventoryQuery = std::max(
+            slowestInventoryQuery, elapsed);
+    }
+    std::sort(
+        inventoryQuerySamples.begin(), inventoryQuerySamples.end());
+    const auto inventoryQueryP95 =
+        inventoryQuerySamples[static_cast<std::size_t>(
+            std::ceil(inventoryQuerySamples.size() * 0.95)) - 1U];
+
+    std::cout << "Frontier inventory preview p95/max query: "
+              << inventoryQueryP95.count() << "/"
+              << slowestInventoryQuery.count() << " us\n";
+    EXPECT_EQ(
+        profileStateFingerprint(session.profile()), inventoryFingerprint);
+    EXPECT_LT(inventoryQueryP95.count(), 25000)
+        << "Drag previews must inspect only inventory participants and must "
+           "not copy or validate the frozen megamap each render frame.";
+    EXPECT_LT(slowestInventoryQuery.count(), 250000)
+        << "A single drag preview must not exhibit an unbounded stall.";
 
     GameplayInput fire;
     fire.fireJustPressed = true;

@@ -270,12 +270,18 @@ WeaponAmmoReceipt applyUninstall(
     }
     magazine->location = command.destination;
     magazine->orientation = command.destinationOrientation;
-    const ProfileValidationResult validation =
-        validateProfileState(candidate, content);
-    if (!validation.valid)
+    if (!profilePlacementFits(
+            candidate,
+            content,
+            command.destination.container,
+            command.destination.origin,
+            definition,
+            command.destinationOrientation,
+            magazine->instanceId))
     {
         return failure(DomainErrorCode::Capacity,
-                       validation.message, candidate.revision);
+                       "magazine does not fit at destination",
+                       candidate.revision);
     }
     return {true, false, DomainErrorCode::None, {}, candidate.revision,
             WeaponAmmoResult::Uninstalled, std::nullopt};
@@ -660,7 +666,9 @@ WeaponAmmoPlan queryWeaponAmmo(
     const ContentRegistry &content,
     const WeaponAmmoCommand &command)
 {
-    ProfileState candidate = profile;
+    ProfileState candidate;
+    candidate.revision = profile.revision;
+    candidate.assets = profile.assets;
     const WeaponAmmoReceipt receipt = apply(candidate, content, command);
     return WeaponAmmoPlan{
         receipt.succeeded,
