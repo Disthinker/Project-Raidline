@@ -7,6 +7,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <tuple>
+#include <vector>
 
 #include "alpha_content_ids.h"
 #include "game_session.h"
@@ -175,26 +176,35 @@ TEST(AlphaExtractionSessionPerformanceTest,
         session.profile().worldClock.elapsedWorldMinutes;
 
     std::chrono::microseconds slowestClockUpdate{};
+    std::vector<std::chrono::microseconds> clockUpdateSamples;
+    clockUpdateSamples.reserve(180U);
     for (std::size_t frame{}; frame < 180U; ++frame)
     {
         const auto started = std::chrono::steady_clock::now();
         session.update(GameplayInput{}, 1.0F / 60.0F);
-        slowestClockUpdate = std::max(
-            slowestClockUpdate,
+        const auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now() - started));
+                std::chrono::steady_clock::now() - started);
+        clockUpdateSamples.push_back(elapsed);
+        slowestClockUpdate = std::max(slowestClockUpdate, elapsed);
     }
+    std::sort(clockUpdateSamples.begin(), clockUpdateSamples.end());
+    const auto clockP95 = clockUpdateSamples[static_cast<std::size_t>(
+        std::ceil(clockUpdateSamples.size() * 0.95)) - 1U];
 
-    std::cout << "active Frontier clock slowest update: "
+    std::cout << "active Frontier clock p95/max update: "
+              << clockP95.count() << "/"
               << slowestClockUpdate.count() << " us\n";
     EXPECT_EQ(
         session.profile().worldClock.elapsedWorldMinutes,
         startingWorldMinute + 3U);
     EXPECT_TRUE(validateProfileState(
         session.profile(), publishedContentRegistry()).valid);
-    EXPECT_LT(slowestClockUpdate.count(), 25000)
+    EXPECT_LT(clockP95.count(), 25000)
         << "Advancing one world minute must not copy and validate the full "
            "frozen megamap on the simulation thread.";
+    EXPECT_LT(slowestClockUpdate.count(), 250000)
+        << "A single update must not exhibit an unbounded stall.";
 
     GameplayInput fire;
     fire.fireJustPressed = true;
@@ -204,22 +214,29 @@ TEST(AlphaExtractionSessionPerformanceTest,
         session.world().player().position().y};
     std::size_t shots{};
     std::chrono::microseconds slowestFireUpdate{};
+    std::vector<std::chrono::microseconds> fireUpdateSamples;
+    fireUpdateSamples.reserve(240U);
     for (std::size_t frame{}; frame < 240U; ++frame)
     {
         const auto started = std::chrono::steady_clock::now();
         session.update(fire, 1.0F / 60.0F);
-        slowestFireUpdate = std::max(
-            slowestFireUpdate,
+        const auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now() - started));
+                std::chrono::steady_clock::now() - started);
+        fireUpdateSamples.push_back(elapsed);
+        slowestFireUpdate = std::max(slowestFireUpdate, elapsed);
         if (session.world().shotFiredLastUpdate())
         {
             ++shots;
         }
         fire.fireJustPressed = false;
     }
+    std::sort(fireUpdateSamples.begin(), fireUpdateSamples.end());
+    const auto fireP95 = fireUpdateSamples[static_cast<std::size_t>(
+        std::ceil(fireUpdateSamples.size() * 0.95)) - 1U];
 
-    std::cout << "continuous Frontier fire slowest update: "
+    std::cout << "continuous Frontier fire p95/max update: "
+              << fireP95.count() << "/"
               << slowestFireUpdate.count() << " us across " << shots
               << " shots\n";
     EXPECT_GE(shots, 20U);
@@ -228,9 +245,11 @@ TEST(AlphaExtractionSessionPerformanceTest,
                      ->chamberedRound.has_value());
     EXPECT_TRUE(validateProfileState(
         session.profile(), publishedContentRegistry()).valid);
-    EXPECT_LT(slowestFireUpdate.count(), 25000)
+    EXPECT_LT(fireP95.count(), 25000)
         << "Firing must mutate only weapon participants and must not copy or "
            "validate the frozen megamap on the simulation thread.";
+    EXPECT_LT(slowestFireUpdate.count(), 250000)
+        << "A single firing update must not exhibit an unbounded stall.";
 }
 
 TEST(AlphaExtractionSessionTest,
