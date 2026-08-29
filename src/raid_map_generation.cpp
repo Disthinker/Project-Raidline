@@ -1128,15 +1128,15 @@ std::vector<RaidLandmarkPlacementSnapshot> placeLandmarks(
         placement.districtInstanceId = selectedDistrict;
         const ContentRect bounds = *selected;
         placement.structures = {
-            {{bounds.position.x + bounds.size.x * 0.08F,
-              bounds.position.y + bounds.size.y * 0.10F},
-             {bounds.size.x * 0.38F, bounds.size.y * 0.34F}},
-            {{bounds.position.x + bounds.size.x * 0.54F,
-              bounds.position.y + bounds.size.y * 0.10F},
-             {bounds.size.x * 0.36F, bounds.size.y * 0.34F}},
-            {{bounds.position.x + bounds.size.x * 0.20F,
-              bounds.position.y + bounds.size.y * 0.62F},
-             {bounds.size.x * 0.60F, bounds.size.y * 0.22F}}};
+            {{bounds.position.x + bounds.size.x * 0.06F,
+              bounds.position.y + bounds.size.y * 0.08F},
+             {bounds.size.x * 0.58F, bounds.size.y * 0.40F}},
+            {{bounds.position.x + bounds.size.x * 0.68F,
+              bounds.position.y + bounds.size.y * 0.08F},
+             {bounds.size.x * 0.26F, bounds.size.y * 0.40F}},
+            {{bounds.position.x + bounds.size.x * 0.16F,
+              bounds.position.y + bounds.size.y * 0.60F},
+             {bounds.size.x * 0.68F, bounds.size.y * 0.30F}}};
         placement.roadSockets = {
             {bounds.position.x + bounds.size.x * 0.25F,
              bounds.position.y + bounds.size.y + cellHeight * 0.5F},
@@ -1501,6 +1501,72 @@ void populateProps(
                  column <= last.column; ++column)
                 occupied[cellIndex(definition, column, row)] = 1U;
     };
+    const auto rectIsAvailable = [&](
+                                     ContentRect rect,
+                                     bool mustAvoidRoads,
+                                     std::optional<std::uint16_t>
+                                         requiredDistrict)
+    {
+        const float mapRight = map.walkableBounds.position.x +
+            map.walkableBounds.size.x;
+        const float mapBottom = map.walkableBounds.position.y +
+            map.walkableBounds.size.y;
+        if (rect.size.x <= 0.0F || rect.size.y <= 0.0F ||
+            rect.position.x < map.walkableBounds.position.x ||
+            rect.position.y < map.walkableBounds.position.y ||
+            rect.position.x + rect.size.x > mapRight ||
+            rect.position.y + rect.size.y > mapBottom)
+        {
+            return false;
+        }
+        const Cell first = fineCellForPoint(map, rect.position);
+        const Cell last = fineCellForPoint(
+            map, {rect.position.x + rect.size.x - 0.001F,
+                  rect.position.y + rect.size.y - 0.001F});
+        for (std::uint32_t row = first.row; row <= last.row; ++row)
+        {
+            for (std::uint32_t column = first.column;
+                 column <= last.column; ++column)
+            {
+                const std::size_t index = cellIndex(
+                    definition, column, row);
+                if (occupied[index] != 0U ||
+                    (mustAvoidRoads && roads.ranks[index] != 0U) ||
+                    (requiredDistrict.has_value() &&
+                     districtAtFineCell(
+                         definition, districtField, column, row) !=
+                         *requiredDistrict))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    const auto orientedSize = [](Vec2 longitudinal,
+                                 std::uint8_t quarterTurns) noexcept
+    {
+        return quarterTurns % 2U == 0U
+            ? longitudinal
+            : Vec2{longitudinal.y, longitudinal.x};
+    };
+    const auto centeredBounds = [](Vec2 center, Vec2 size) noexcept
+    {
+        return ContentRect{
+            {center.x - size.x * 0.5F, center.y - size.y * 0.5F},
+            size};
+    };
+    const auto appendReservedProp = [&](
+                                        RaidOutdoorPropKind kind,
+                                        RaidOutdoorPropState state,
+                                        ContentRect bounds,
+                                        std::uint8_t quarterTurns,
+                                        bool collidable)
+    {
+        appendProp(
+            layout, kind, state, bounds, quarterTurns, collidable);
+        markRect(bounds);
+    };
     for (const RaidAnchorPlacementSnapshot &anchor : layout.anchorPlacements)
         markRect(inflated(anchor.bounds, 80.0F));
     for (const RaidLandmarkPlacementSnapshot &landmark : layout.landmarks)
@@ -1521,45 +1587,82 @@ void populateProps(
         {
             if (occupied[cellIndex(definition, column, row)] != 0U)
                 continue;
-            if (roads.ranks[cellIndex(definition, column, row)] != 0U)
+            if (roads.ranks[cellIndex(definition, column, row)] >=
+                roadRank(RaidOutdoorRoadKind::Secondary))
                 roadCells.push_back({column, row});
-            else
+            else if (roads.ranks[cellIndex(
+                         definition, column, row)] == 0U)
                 openCells.push_back({column, row});
         }
+    }
+    for (std::size_t remaining = roadCells.size(); remaining > 1U;
+         --remaining)
+    {
+        const std::size_t selected = random.bounded(
+            static_cast<std::uint32_t>(remaining));
+        std::swap(roadCells[selected], roadCells[remaining - 1U]);
     }
     const std::uint32_t roadObstacleTarget = randomBetween(
         random, definition.minimumRoadObstacles,
         definition.maximumRoadObstacles);
-    for (std::uint32_t index{};
-         index < roadObstacleTarget && !roadCells.empty(); ++index)
+    std::uint32_t roadObstaclesPlaced{};
+    for (const Cell cell : roadCells)
     {
-        const std::size_t selected = random.bounded(
-            static_cast<std::uint32_t>(roadCells.size()));
-        const Cell cell = roadCells[selected];
-        roadCells[selected] = roadCells.back();
-        roadCells.pop_back();
-        if (occupied[cellIndex(definition, cell.column, cell.row)] != 0U)
-            continue;
-        occupied[cellIndex(definition, cell.column, cell.row)] = 1U;
-        const bool barrier = index % 7U == 0U;
-        const bool truck = !barrier && index % 4U == 0U;
-        const Vec2 size = barrier
-            ? Vec2{64.0F, 18.0F}
-            : (truck ? Vec2{68.0F, 42.0F} : Vec2{48.0F, 30.0F});
+        if (roadObstaclesPlaced >= roadObstacleTarget)
+            break;
+        const bool barrier = roadObstaclesPlaced % 7U == 0U;
+        const bool truck = !barrier && roadObstaclesPlaced % 4U == 0U;
+        const Vec2 baseSize = barrier
+            ? Vec2{176.0F, 34.0F}
+            : (truck ? Vec2{432.0F, 152.0F}
+                     : Vec2{272.0F, 108.0F});
+        const auto roadAt = [&](int column, int row) noexcept
+        {
+            return column >= 0 && row >= 0 &&
+                column < static_cast<int>(definition.columns) &&
+                row < static_cast<int>(definition.rows) &&
+                roads.ranks[cellIndex(
+                    definition,
+                    static_cast<std::uint32_t>(column),
+                    static_cast<std::uint32_t>(row))] != 0U;
+        };
+        const int horizontalNeighbors =
+            static_cast<int>(roadAt(
+                static_cast<int>(cell.column) - 1,
+                static_cast<int>(cell.row))) +
+            static_cast<int>(roadAt(
+                static_cast<int>(cell.column) + 1,
+                static_cast<int>(cell.row)));
+        const int verticalNeighbors =
+            static_cast<int>(roadAt(
+                static_cast<int>(cell.column),
+                static_cast<int>(cell.row) - 1)) +
+            static_cast<int>(roadAt(
+                static_cast<int>(cell.column),
+                static_cast<int>(cell.row) + 1));
+        const bool vertical = verticalNeighbors > horizontalNeighbors ||
+            (verticalNeighbors == horizontalNeighbors &&
+             random.bounded(2U) == 1U);
+        const std::uint8_t quarterTurns = static_cast<std::uint8_t>(
+            (vertical ? 1U : 0U) + random.bounded(2U) * 2U);
+        const Vec2 size = orientedSize(baseSize, quarterTurns);
         const Vec2 center{
             map.walkableBounds.position.x +
                 (static_cast<float>(cell.column) + 0.5F) * cellWidth,
             map.walkableBounds.position.y +
                 (static_cast<float>(cell.row) + 0.5F) * cellHeight};
-        appendProp(
-            layout,
+        const ContentRect bounds = centeredBounds(center, size);
+        if (!rectIsAvailable(bounds, false, std::nullopt))
+            continue;
+        appendReservedProp(
             barrier ? RaidOutdoorPropKind::RoadBarrier
                     : (truck ? RaidOutdoorPropKind::Truck
                              : RaidOutdoorPropKind::Car),
-            index % 3U == 0U ? RaidOutdoorPropState::Damaged
-                             : RaidOutdoorPropState::Abandoned,
-            {{center.x - size.x * 0.5F, center.y - size.y * 0.5F}, size},
-            static_cast<std::uint8_t>(random.bounded(4U)), true);
+            roadObstaclesPlaced % 3U == 0U
+                ? RaidOutdoorPropState::Damaged
+                : RaidOutdoorPropState::Abandoned,
+            bounds, quarterTurns, true);
+        ++roadObstaclesPlaced;
     }
 
     const std::uint32_t blockerTarget = randomBetween(
@@ -1578,12 +1681,12 @@ void populateProps(
     // filling small blockers. They remain seed-varied, but read as planned
     // factory/warehouse blocks instead of isolated random rectangles.
     std::vector<Cell> compoundCandidates;
-    const std::uint32_t compoundColumnPhase = 2U + random.bounded(4U);
-    const std::uint32_t compoundRowPhase = 2U + random.bounded(3U);
+    const std::uint32_t compoundColumnPhase = 2U + random.bounded(8U);
+    const std::uint32_t compoundRowPhase = 2U + random.bounded(6U);
     for (std::uint32_t row = compoundRowPhase;
-         row + 4U < definition.rows; row += 7U)
+         row + 12U < definition.rows; row += 14U)
         for (std::uint32_t column = compoundColumnPhase;
-             column + 6U < definition.columns; column += 9U)
+             column + 18U < definition.columns; column += 18U)
         {
             const std::uint16_t district = districtAtFineCell(
                 definition, districtField, column, row);
@@ -1608,39 +1711,30 @@ void populateProps(
             definition, districtField, origin.column, origin.row);
         const RaidDistrictKind districtKind =
             districtDefinitions[district].kind;
-        const std::uint32_t widthCells = 4U + random.bounded(3U);
-        const std::uint32_t heightCells = 3U + random.bounded(2U);
-        bool legal = origin.column + widthCells < definition.columns &&
-            origin.row + heightCells < definition.rows;
-        for (std::uint32_t row = origin.row;
-             legal && row < origin.row + heightCells; ++row)
-            for (std::uint32_t column = origin.column;
-                 legal && column < origin.column + widthCells; ++column)
-                legal =
-                    districtAtFineCell(
-                        definition, districtField, column, row) == district &&
-                    occupied[cellIndex(definition, column, row)] == 0U &&
-                    roads.ranks[cellIndex(definition, column, row)] == 0U;
-        if (!legal)
-            continue;
-        for (std::uint32_t row = origin.row;
-             row < origin.row + heightCells; ++row)
-            for (std::uint32_t column = origin.column;
-                 column < origin.column + widthCells; ++column)
-                occupied[cellIndex(definition, column, row)] = 1U;
+        std::uint32_t widthCells = districtKind == RaidDistrictKind::Industrial
+            ? 12U + random.bounded(7U)
+            : 10U + random.bounded(7U);
+        std::uint32_t heightCells = districtKind == RaidDistrictKind::Industrial
+            ? 7U + random.bounded(5U)
+            : 6U + random.bounded(5U);
+        const std::uint8_t quarterTurns = static_cast<std::uint8_t>(
+            random.bounded(2U));
+        if (quarterTurns % 2U != 0U)
+            std::swap(widthCells, heightCells);
         const ContentRect bounds{
-            {map.walkableBounds.position.x + origin.column * cellWidth + 7.0F,
-             map.walkableBounds.position.y + origin.row * cellHeight + 7.0F},
-            {widthCells * cellWidth - 14.0F,
-             heightCells * cellHeight - 14.0F}};
-        appendProp(
-            layout,
+            {map.walkableBounds.position.x + origin.column * cellWidth + 16.0F,
+             map.walkableBounds.position.y + origin.row * cellHeight + 16.0F},
+            {widthCells * cellWidth - 32.0F,
+             heightCells * cellHeight - 32.0F}};
+        if (!rectIsAvailable(bounds, true, district))
+            continue;
+        appendReservedProp(
             districtKind == RaidDistrictKind::Industrial
                 ? RaidOutdoorPropKind::Factory
                 : RaidOutdoorPropKind::Warehouse,
             RaidOutdoorPropState::Weathered,
             bounds,
-            bounds.size.x >= bounds.size.y ? 0U : 1U,
+            quarterTurns,
             true);
         ++largeBuildingCount;
     }
@@ -1652,8 +1746,6 @@ void populateProps(
     {
         const Cell origin = openCells[random.bounded(
             static_cast<std::uint32_t>(openCells.size()))];
-        if (occupied[cellIndex(definition, origin.column, origin.row)] != 0U)
-            continue;
         const std::uint16_t district = districtAtFineCell(
             definition, districtField, origin.column, origin.row);
         const RaidDistrictKind districtKind =
@@ -1662,31 +1754,6 @@ void populateProps(
              districtKind == RaidDistrictKind::OpenGround) &&
             random.bounded(4U) != 0U)
             continue;
-        constexpr std::uint32_t widthCells{1U};
-        constexpr std::uint32_t heightCells{1U};
-        if (origin.column + widthCells >= definition.columns ||
-            origin.row + heightCells >= definition.rows)
-            continue;
-        bool legal = true;
-        for (std::uint32_t row = origin.row;
-             row < origin.row + heightCells; ++row)
-            for (std::uint32_t column = origin.column;
-                 column < origin.column + widthCells; ++column)
-                legal = legal &&
-                    occupied[cellIndex(definition, column, row)] == 0U &&
-                    roads.ranks[cellIndex(definition, column, row)] == 0U;
-        if (!legal)
-            continue;
-        for (std::uint32_t row = origin.row;
-             row < origin.row + heightCells; ++row)
-            for (std::uint32_t column = origin.column;
-                 column < origin.column + widthCells; ++column)
-                occupied[cellIndex(definition, column, row)] = 1U;
-        const ContentRect bounds{
-            {map.walkableBounds.position.x + origin.column * cellWidth + 7.0F,
-             map.walkableBounds.position.y + origin.row * cellHeight + 7.0F},
-            {widthCells * cellWidth - 14.0F,
-             heightCells * cellHeight - 14.0F}};
         RaidOutdoorPropKind kind = RaidOutdoorPropKind::Container;
         if (districtKind == RaidDistrictKind::Industrial)
             kind = layout.ballisticBlockers.size() % 3U == 0U
@@ -1700,8 +1767,24 @@ void populateProps(
             kind = layout.ballisticBlockers.size() % 2U == 0U
                 ? RaidOutdoorPropKind::EngineeringEquipment
                 : RaidOutdoorPropKind::Container;
-        appendProp(layout, kind, RaidOutdoorPropState::Weathered,
-                   bounds, static_cast<std::uint8_t>(random.bounded(4U)), true);
+        const std::uint8_t quarterTurns = static_cast<std::uint8_t>(
+            random.bounded(4U));
+        const Vec2 size = orientedSize(
+            kind == RaidOutdoorPropKind::Container
+                ? Vec2{288.0F, 112.0F}
+                : Vec2{256.0F, 160.0F},
+            quarterTurns);
+        const Vec2 center{
+            map.walkableBounds.position.x +
+                (static_cast<float>(origin.column) + 0.5F) * cellWidth,
+            map.walkableBounds.position.y +
+                (static_cast<float>(origin.row) + 0.5F) * cellHeight};
+        const ContentRect bounds = centeredBounds(center, size);
+        if (!rectIsAvailable(bounds, true, district))
+            continue;
+        appendReservedProp(
+            kind, RaidOutdoorPropState::Weathered,
+            bounds, quarterTurns, true);
     }
 
     const std::uint32_t decorativeTarget = randomBetween(
@@ -1721,14 +1804,36 @@ void populateProps(
                 (static_cast<float>(cell.row) + 0.2F +
                  static_cast<float>(random.bounded(60U)) / 100.0F) *
                     cellHeight};
-        const float size = 10.0F + static_cast<float>(random.bounded(20U));
+        if (index % 8U == 0U)
+        {
+            const std::uint16_t district = districtAtFineCell(
+                definition, districtField, cell.column, cell.row);
+            const RaidDistrictKind kind = districtDefinitions[district].kind;
+            if (kind == RaidDistrictKind::Industrial ||
+                kind == RaidDistrictKind::Logistics ||
+                kind == RaidDistrictKind::RoadsideService)
+            {
+                const std::uint8_t quarterTurns =
+                    static_cast<std::uint8_t>(random.bounded(4U));
+                const ContentRect equipmentBounds = centeredBounds(
+                    center,
+                    orientedSize({224.0F, 144.0F}, quarterTurns));
+                if (rectIsAvailable(equipmentBounds, true, district))
+                {
+                    appendReservedProp(
+                        RaidOutdoorPropKind::EngineeringEquipment,
+                        RaidOutdoorPropState::Weathered,
+                        equipmentBounds, quarterTurns, false);
+                    continue;
+                }
+            }
+        }
+        const float debrisSize =
+            10.0F + static_cast<float>(random.bounded(20U));
         appendProp(
-            layout,
-            index % 5U == 0U ? RaidOutdoorPropKind::EngineeringEquipment
-                             : RaidOutdoorPropKind::Debris,
+            layout, RaidOutdoorPropKind::Debris,
             RaidOutdoorPropState::Weathered,
-            {{center.x - size * 0.5F, center.y - size * 0.5F},
-             {size, size}},
+            centeredBounds(center, {debrisSize, debrisSize}),
             static_cast<std::uint8_t>(random.bounded(4U)), false);
     }
 }

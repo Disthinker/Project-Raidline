@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <limits>
 #include <queue>
@@ -89,6 +90,14 @@ RaidMapGenerationAnchors publishedAnchors(const MapDefinition &map)
                 map.interiors[index].exteriorEntrance.size});
     }
     return anchors;
+}
+
+bool overlapsStrict(ContentRect first, ContentRect second)
+{
+    return first.position.x < second.position.x + second.size.x &&
+        first.position.x + first.size.x > second.position.x &&
+        first.position.y < second.position.y + second.size.y &&
+        first.position.y + first.size.y > second.position.y;
 }
 
 bool districtIsContinuous(
@@ -330,6 +339,86 @@ TEST(RaidMapGenerationTest, DifferentSeedsVaryAcceptedOutdoorCover)
     EXPECT_NE(first.ballisticBlockers, second.ballisticBlockers);
 }
 
+TEST(RaidMapGenerationTest,
+     V3PropsUseReadablePhysicalScaleAndDoNotOverlap)
+{
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    const RaidMapGenerationAnchors anchors = publishedAnchors(map);
+    const RaidGeneratedMapLayout layout = generateRaidMapLayout(
+        map, 910223U, anchors);
+
+    std::vector<const RaidOutdoorPropSnapshot *> reservedProps;
+    std::array<std::size_t, 8U> kindCounts{};
+    for (const RaidOutdoorPropSnapshot &prop : layout.props)
+    {
+        ++kindCounts[static_cast<std::size_t>(prop.kind)];
+        if (prop.kind == RaidOutdoorPropKind::Debris)
+            continue;
+
+        reservedProps.push_back(&prop);
+        const float longitudinal = std::max(
+            prop.bounds.size.x, prop.bounds.size.y);
+        const float lateral = std::min(
+            prop.bounds.size.x, prop.bounds.size.y);
+        switch (prop.kind)
+        {
+        case RaidOutdoorPropKind::Factory:
+        case RaidOutdoorPropKind::Warehouse:
+            EXPECT_GE(longitudinal, 320.0F);
+            EXPECT_GE(lateral, 240.0F);
+            break;
+        case RaidOutdoorPropKind::Container:
+            EXPECT_FLOAT_EQ(longitudinal, 288.0F);
+            EXPECT_FLOAT_EQ(lateral, 112.0F);
+            break;
+        case RaidOutdoorPropKind::EngineeringEquipment:
+            EXPECT_GE(longitudinal, 224.0F);
+            EXPECT_GE(lateral, 144.0F);
+            break;
+        case RaidOutdoorPropKind::Car:
+            EXPECT_FLOAT_EQ(longitudinal, 272.0F);
+            EXPECT_FLOAT_EQ(lateral, 108.0F);
+            break;
+        case RaidOutdoorPropKind::Truck:
+            EXPECT_FLOAT_EQ(longitudinal, 432.0F);
+            EXPECT_FLOAT_EQ(lateral, 152.0F);
+            break;
+        case RaidOutdoorPropKind::RoadBarrier:
+            EXPECT_FLOAT_EQ(longitudinal, 176.0F);
+            EXPECT_FLOAT_EQ(lateral, 34.0F);
+            break;
+        case RaidOutdoorPropKind::Debris:
+            FAIL() << "debris is handled before physical scale checks";
+            break;
+        }
+
+        for (const RaidAnchorPlacementSnapshot &anchor :
+             layout.anchorPlacements)
+        {
+            EXPECT_FALSE(overlapsStrict(prop.bounds, anchor.bounds))
+                << "prop " << prop.instanceId << " overlaps anchor "
+                << anchor.id;
+        }
+    }
+
+    for (std::size_t first{}; first < reservedProps.size(); ++first)
+    {
+        for (std::size_t second = first + 1U;
+             second < reservedProps.size(); ++second)
+        {
+            EXPECT_FALSE(overlapsStrict(
+                reservedProps[first]->bounds,
+                reservedProps[second]->bounds))
+                << "props " << reservedProps[first]->instanceId << " and "
+                << reservedProps[second]->instanceId << " overlap";
+        }
+    }
+
+    for (std::size_t count : kindCounts)
+        EXPECT_GT(count, 0U);
+}
+
 TEST(RaidMapGenerationTest, PublishedOutdoorLayoutRemainsLegalAcrossSeeds)
 {
     const MapDefinition &map = publishedContentRegistry().map(
@@ -372,6 +461,47 @@ TEST(RaidMapGenerationTest, PublishedOutdoorLayoutRemainsLegalAcrossSeeds)
         EXPECT_LE(layout.ballisticBlockers.size(),
                   map.proceduralOutdoor.maximumBlockers)
             << "seed " << seed;
+        const auto roadObstacleCount = std::count_if(
+            layout.props.begin(), layout.props.end(),
+            [](const RaidOutdoorPropSnapshot &prop)
+            {
+                return prop.kind == RaidOutdoorPropKind::Car ||
+                    prop.kind == RaidOutdoorPropKind::Truck ||
+                    prop.kind == RaidOutdoorPropKind::RoadBarrier;
+            });
+        EXPECT_GE(roadObstacleCount,
+                  map.proceduralOutdoor.minimumRoadObstacles)
+            << "seed " << seed;
+        EXPECT_LE(roadObstacleCount,
+                  map.proceduralOutdoor.maximumRoadObstacles)
+            << "seed " << seed;
+        bool forbiddenOverlap{};
+        std::uint32_t firstOverlapId{};
+        std::uint32_t secondOverlapId{};
+        for (std::size_t first{};
+             first < layout.props.size() && !forbiddenOverlap; ++first)
+        {
+            if (layout.props[first].kind == RaidOutdoorPropKind::Debris)
+                continue;
+            for (std::size_t second = first + 1U;
+                 second < layout.props.size(); ++second)
+            {
+                if (layout.props[second].kind == RaidOutdoorPropKind::Debris)
+                    continue;
+                if (overlapsStrict(
+                        layout.props[first].bounds,
+                        layout.props[second].bounds))
+                {
+                    forbiddenOverlap = true;
+                    firstOverlapId = layout.props[first].instanceId;
+                    secondOverlapId = layout.props[second].instanceId;
+                    break;
+                }
+            }
+        }
+        EXPECT_FALSE(forbiddenOverlap)
+            << "seed " << seed << " props " << firstOverlapId << " and "
+            << secondOverlapId << " overlap";
     }
 }
 

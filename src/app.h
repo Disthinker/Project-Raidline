@@ -278,6 +278,7 @@ private:
     void syncRaidPointerCapture() noexcept;
     void renderMainMenu();
     void renderPauseMenu();
+    void renderRaidLoadingScreen(const MapDefinition &map);
     void renderBase();
     void renderBaseWorld();
     void renderBaseStorage();

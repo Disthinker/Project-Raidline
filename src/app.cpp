@@ -1488,6 +1488,11 @@ bool App::tryDeployFromBase(
                       *basePerimeterSweepId)
                           .perimeterSweepMapDefinitionId)
                 : selectedRaidMap();
+    if (targetMap.proceduralOutdoor.enabled &&
+        targetMap.proceduralOutdoor.layoutVersion >= 3U)
+    {
+        renderRaidLoadingScreen(targetMap);
+    }
     if (!gameFlow_.deploy(
             targetMap.id,
             regionalMission
@@ -1515,6 +1520,55 @@ bool App::tryDeployFromBase(
     developerInfiniteAmmoEnabled_ = false;
     uiMessage_.clear();
     return true;
+}
+
+void App::renderRaidLoadingScreen(const MapDefinition &map)
+{
+    static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer_, 10, 13, 11, 255);
+    SDL_RenderClear(renderer_);
+
+    const SDL_FRect panel{170.0F, 188.0F, 940.0F, 344.0F};
+    SDL_SetRenderDrawColor(renderer_, 27, 32, 27, 255);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 147, 132, 76, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 34.0F,
+        "PREPARING RAID");
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 82.0F,
+        map.displayName.c_str());
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 132.0F,
+        "GENERATING LARGE OUTDOOR MAP");
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 168.0F,
+        "PLACING DISTRICTS, ROADS AND LANDMARKS");
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 204.0F,
+        "VALIDATING ROUTES AND EXTRACTION POINTS");
+
+    constexpr std::array<SDL_FRect, 5U> activitySegments{
+        SDL_FRect{204.0F, 454.0F, 154.0F, 14.0F},
+        SDL_FRect{374.0F, 454.0F, 154.0F, 14.0F},
+        SDL_FRect{544.0F, 454.0F, 154.0F, 14.0F},
+        SDL_FRect{714.0F, 454.0F, 154.0F, 14.0F},
+        SDL_FRect{884.0F, 454.0F, 154.0F, 14.0F}};
+    for (std::size_t index{}; index < activitySegments.size(); ++index)
+    {
+        const Uint8 intensity = static_cast<Uint8>(112U + index * 18U);
+        SDL_SetRenderDrawColor(
+            renderer_, intensity, static_cast<Uint8>(intensity - 16U),
+            53, 255);
+        SDL_RenderFillRect(renderer_, &activitySegments[index]);
+    }
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 286.0F,
+        "PLEASE WAIT - BUILDING FROZEN RAID SNAPSHOT");
+    SDL_RenderPresent(renderer_);
 }
 
 const MapDefinition &App::selectedRaidMap() const

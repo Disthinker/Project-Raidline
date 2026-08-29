@@ -545,6 +545,22 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
             "出击前必须先处理基地攻城预警");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
+{
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PREPARING RAID"),
+            "正在准备突袭");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "GENERATING LARGE OUTDOOR MAP"),
+            "正在生成大型室外地图");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "VALIDATING ROUTES AND EXTRACTION POINTS"),
+            "正在验证路线和撤离点");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesRuntimeMapFogControls) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
