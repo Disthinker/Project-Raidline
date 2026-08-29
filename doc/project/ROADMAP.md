@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～2 均已进入主线。当前唯一工作为 Macro 3 遭遇与部署生态，范围合同见 `doc/exec-plans/active/procedural-raid-encounter-ecology-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～3 均已进入主线。当前唯一工作为 Macro 4 既有消费者整合，范围合同见 `doc/exec-plans/active/procedural-raid-consumer-integration-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -165,8 +165,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 | --- | --- | --- | --- |
 | Macro 1：超大主题分区室外布局 v3 | `Frontier Exchange` 成为 25600×14400 的完整无缝 Raid 空间；不同 seed 形成八个连续主题区、三个固定地标、道路和环境差异，关键目标始终可达 | layout v3、4/3/2 格道路、地表/环境/玩法 Socket 冻结、确定性回退、schema v35/content v44、区块投影、门户导航和 80×45 战术地图 | PR #111 已通过 CI 与用户验收，以 `636a40b` 进入 main |
 | Macro 2：资源点生态 v1 | 普通、高价值和地点专属资源点形成路线风险、背包容量与撤离距离取舍；超大地图具备可游玩的基础敌人密度和清晰加载/调试入口 | layout v4、资源点定义、容量/Loot 池/风险/空间、命名随机流、36～48 名冻结初始敌人、真实阶段加载进度、鼠标 F10、schema v36/content v46 | PR #112 已通过 CI 与用户验收，以 `85f90ff` 进入 main |
-| Macro 3：遭遇与部署生态 v1 | 不同路线出现巡逻、地标守点、近距伏击和同组声响响应压力；初始出生保护区避免加载后立即接敌，拾取不再造成超大地图单帧卡顿 | 内容驱动群组原型、合法分区/地标外围锚点、1200 世界单位出生排除区、冻结成员与巡逻点、局部资产事务、schema v37/content v48/rules v26、现有有预算 AI 运行时适配 | 当前分支实现；旧 content v47/rules v25 保持可读；不增加新敌人类型，不开启行为树、派系、AI 队友或普通阶段无限增援 |
-| Macro 4：既有消费者整合 v1 | 高危、普通/条件/信号撤离、情报、救援、寻回和外围清剿都能在随机布局正常运行与结算 | 共享合法区、稳定 Map/Space/Socket 身份、冻结快照、唯一 Settlement | 等待 Macro 3；固定独立室内继续复用，不做程序化室内 |
+| Macro 3：遭遇与部署生态 v1 | 不同路线出现巡逻、地标守点、近距伏击和同组声响响应压力；初始出生保护区避免加载后立即接敌，拾取不再造成超大地图单帧卡顿 | 内容驱动群组原型、合法分区/地标外围锚点、1200 世界单位出生排除区、冻结成员与巡逻点、局部资产事务、schema v37/content v48/rules v26、现有有预算 AI 运行时适配 | PR #113 已通过 CI 与用户验收，以 `f095022` 进入 main |
+| Macro 4：既有消费者整合 v1 | 救援和主动寻回在战术地图可定位；高危控制随探索显现；Ashworks 外围清剿进入随机大图并显示 ACTIVE/SECURED，既有撤离与唯一结算合同保持不变 | 类型化 `RaidTacticalObjective`、冻结锚点投影、Briefed/Explored 可见性、BasePerimeterSweepSnapshot、content v49/schema v37、v48/v47 兼容 | 当前分支实现；固定独立室内继续复用，不做程序化室内、新任务系统或新 AI |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -13037,19 +13037,59 @@ void App::renderRaidTacticalMap()
             "SPECIAL SITE");
     }
 
-    if (presentationMode ==
-            RaidTacticalMapPresentationMode::FullStaticMap &&
-        gameSession_.world().highRiskControlPoint().has_value())
+    for (const RaidTacticalObjective &objective : map.objectives())
     {
-        const SDL_FRect marker = screenRect(
-            *gameSession_.world().highRiskControlPoint());
-        SDL_SetRenderDrawColor(renderer_, 224, 110, 72, 100);
+        if (objective.kind == RaidTacticalObjectiveKind::Rescue &&
+            (!gameSession_.profile().pendingRaid.has_value() ||
+             !gameSession_.profile().pendingRaid->rescue.has_value() ||
+             gameSession_.profile().pendingRaid->rescue->secured))
+        {
+            continue;
+        }
+        if (objective.kind == RaidTacticalObjectiveKind::SelfRecovery)
+        {
+            const auto recovery =
+                gameSession_.raidSelfRecoveryProjection();
+            if (!recovery.has_value() || recovery->opened)
+                continue;
+        }
+        if (!tacticalMapObjectiveVisible(map, objective, presentationMode))
+            continue;
+        SDL_FRect marker = screenRect(objective.bounds);
+        marker.w = std::max(marker.w, 8.0F);
+        marker.h = std::max(marker.h, 8.0F);
+        const char *label{};
+        switch (objective.kind)
+        {
+        case RaidTacticalObjectiveKind::HighRiskControl:
+            SDL_SetRenderDrawColor(renderer_, 224, 110, 72, 100);
+            label = "HIGH-RISK CONTROL";
+            break;
+        case RaidTacticalObjectiveKind::Rescue:
+            SDL_SetRenderDrawColor(renderer_, 86, 194, 178, 110);
+            label = "RESCUE TARGET";
+            break;
+        case RaidTacticalObjectiveKind::SelfRecovery:
+            SDL_SetRenderDrawColor(renderer_, 226, 188, 76, 115);
+            label = "LOST CACHE";
+            break;
+        }
         SDL_RenderFillRect(renderer_, &marker);
-        SDL_SetRenderDrawColor(renderer_, 242, 148, 96, 245);
+        switch (objective.kind)
+        {
+        case RaidTacticalObjectiveKind::HighRiskControl:
+            SDL_SetRenderDrawColor(renderer_, 242, 148, 96, 245);
+            break;
+        case RaidTacticalObjectiveKind::Rescue:
+            SDL_SetRenderDrawColor(renderer_, 126, 234, 210, 245);
+            break;
+        case RaidTacticalObjectiveKind::SelfRecovery:
+            SDL_SetRenderDrawColor(renderer_, 242, 214, 112, 245);
+            break;
+        }
         SDL_RenderRect(renderer_, &marker);
         uiTextRenderer_.render(
-            renderer_, marker.x + 5.0F, marker.y + 4.0F,
-            "HIGH-RISK CONTROL");
+            renderer_, marker.x + 5.0F, marker.y + 4.0F, label);
     }
 
     const Player &player = gameSession_.world().player();
@@ -13095,6 +13135,16 @@ void App::renderRaidTacticalMap()
                 ? "OPEN" : "LOCKED");
         uiTextRenderer_.render(
             renderer_, 430.0F, 638.0F, exitStatus.c_str());
+    }
+    const RaidOperationProjection operation =
+        gameSession_.raidOperationProjection();
+    if (operation.basePerimeterSweepActive)
+    {
+        uiTextRenderer_.render(
+            renderer_, 144.0F, 638.0F,
+            operation.objectiveSecured
+                ? "OPERATION | PERIMETER SWEEP | SECURED"
+                : "OPERATION | PERIMETER SWEEP | ACTIVE");
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }

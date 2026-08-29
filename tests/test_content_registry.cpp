@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-encounter-ecology-hardening-content-48");
+        "procedural-frontier-consumer-integration-content-49");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -90,7 +90,12 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(ashworks.dailyBaseThreatUnits, 3U);
     EXPECT_EQ(
         ashworks.perimeterSweepMapDefinitionId,
-        MapDefinitionId{"map.raid.industrial"});
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    EXPECT_TRUE(registry.map(ashworks.perimeterSweepMapDefinitionId)
+                    .proceduralOutdoor.enabled);
+    EXPECT_EQ(registry.map(ashworks.perimeterSweepMapDefinitionId)
+                  .proceduralOutdoor.layoutVersion,
+              4U);
     EXPECT_EQ(ashworks.perimeterSweepThreatReductionUnits, 40U);
     EXPECT_FALSE(ashworks.initiallyUnlocked);
     EXPECT_EQ(ashworks.migrationMinutes, 720U);

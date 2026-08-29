@@ -495,6 +495,44 @@ bool GameSession::deployAlpha(
                          map.highRisk.conditionalExtractionPoint),
             map.highRisk.conditionalExtractionDurationSeconds,
             map.highRisk.conditionalExtractionMaximumWeightGrams};
+        if (map.highRisk.enabled)
+        {
+            worldConfig.tacticalObjectives.push_back(
+                RaidTacticalObjective{
+                    RaidTacticalObjectiveKind::HighRiskControl,
+                    frozenRegion(
+                        kRaidAnchorHighRiskControl,
+                        map.highRisk.activationControlPoint),
+                    RaidTacticalObjectiveVisibility::Explored});
+        }
+        if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
+        {
+            worldConfig.tacticalObjectives.push_back(
+                RaidTacticalObjective{
+                    RaidTacticalObjectiveKind::Rescue,
+                    snapshot.rescue->transferPoint,
+                    RaidTacticalObjectiveVisibility::Briefed});
+        }
+        if (snapshot.selfRecovery.has_value())
+        {
+            constexpr Vec2 markerSize{96.0F, 96.0F};
+            const Vec2 cache = snapshot.selfRecovery->cachePosition;
+            const ContentRect marker{
+                {std::clamp(
+                     cache.x - markerSize.x * 0.5F,
+                     0.0F,
+                     map.worldSize.x - markerSize.x),
+                 std::clamp(
+                     cache.y - markerSize.y * 0.5F,
+                     0.0F,
+                     map.worldSize.y - markerSize.y)},
+                markerSize};
+            worldConfig.tacticalObjectives.push_back(
+                RaidTacticalObjective{
+                    RaidTacticalObjectiveKind::SelfRecovery,
+                    marker,
+                    RaidTacticalObjectiveVisibility::Briefed});
+        }
         candidateWorld =
             std::make_unique<GameplayWorld>(std::move(worldConfig));
     }
@@ -568,6 +606,15 @@ bool GameSession::baseSiteClearanceObjectiveSecured() const noexcept
 bool GameSession::basePerimeterSweepObjectiveSecured() const noexcept
 {
     return basePerimeterSweepObjectiveSecured_;
+}
+
+RaidOperationProjection GameSession::raidOperationProjection() const noexcept
+{
+    const bool active = alphaRaidActive_ && profile_.pendingRaid.has_value() &&
+        profile_.pendingRaid->basePerimeterSweep.has_value();
+    return RaidOperationProjection{
+        active,
+        active && basePerimeterSweepObjectiveSecured_};
 }
 
 bool GameSession::activeQuitAlphaRaid()

@@ -11,6 +11,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
+#include "base_migration_domain.h"
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
 #include "base_siege_domain.h"
@@ -213,6 +214,79 @@ TEST(RaidLifecycleTest,
         profile,
         content,
         "perimeter-success-settlement",
+        RaidResultOutcome::Extracted);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+}
+
+TEST(RaidLifecycleTest,
+     AshworksPerimeterSweepUsesFrozenFrontierLayoutAndSettlesOnce)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const RegionalBaseSiteDefinitionId siteId{
+        "regional_base_site.ashworks_logistics_yard"};
+    const RegionalOutpostDefinitionId outpostId{
+        "regional_outpost.ashworks_logistics_yard"};
+    const BaseFacilityDefinitionId kitchenWater{
+        "base_facility.kitchen_water"};
+    ProfileState profile = makeNewAlphaProfile(
+        "ashworks-frontier-perimeter", content);
+    profile.regionalOperations.baseSites.at(siteId).unlocked = true;
+    RegionalOutpostState &outpost =
+        profile.regionalOperations.outposts.at(outpostId);
+    outpost.unlocked = true;
+    outpost.established = true;
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseConstruction.facilities[kitchenWater] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    const BaseMigrationReceipt migrated = executeBaseMigration(
+        profile,
+        content,
+        BaseMigrationCommand{siteId},
+        CommandContext{profile.revision, "migrate:ashworks-perimeter"});
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    profile.baseSiege.raidThreatUnits = 70U;
+
+    const DeployReceipt deployed = executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "ashworks-frontier-perimeter-raid",
+            "ashworks-frontier-perimeter-settlement",
+            44014U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {},
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            siteId},
+        CommandContext{profile.revision,
+                       "deploy:ashworks-frontier-perimeter"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->basePerimeterSweep.has_value());
+    EXPECT_EQ(profile.pendingRaid->mapDefinitionId,
+              MapDefinitionId{"map.raid.frontier_exchange"});
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 4U);
+    EXPECT_FALSE(profile.pendingRaid->spatialLayout.anchorPlacements.empty());
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+
+    profile.pendingRaid->basePerimeterSweep->objectiveSecured = true;
+    const RaidSettlementReceipt settled = settlePendingRaid(
+        profile,
+        content,
+        "ashworks-frontier-perimeter-settlement",
+        RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    ASSERT_TRUE(profile.lastRaidResult.has_value());
+    EXPECT_EQ(profile.lastRaidResult->baseThreatReducedUnits, 40U);
+    EXPECT_EQ(totalBaseThreat(profile.baseSiege), 50U);
+    const std::uint64_t committed = profileStateFingerprint(profile);
+    const RaidSettlementReceipt replay = settlePendingRaid(
+        profile,
+        content,
+        "ashworks-frontier-perimeter-settlement",
         RaidResultOutcome::Extracted);
     EXPECT_TRUE(replay.succeeded);
     EXPECT_TRUE(replay.alreadyCommitted);

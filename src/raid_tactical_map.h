@@ -46,6 +46,31 @@ struct RaidTacticalResourcePoint
     std::uint32_t riskTier{1};
 };
 
+enum class RaidTacticalObjectiveKind
+{
+    HighRiskControl,
+    Rescue,
+    SelfRecovery
+};
+
+enum class RaidTacticalObjectiveVisibility
+{
+    Explored,
+    Briefed
+};
+
+struct RaidTacticalObjective
+{
+    RaidTacticalObjectiveKind kind{RaidTacticalObjectiveKind::Rescue};
+    ContentRect bounds;
+    RaidTacticalObjectiveVisibility visibility{
+        RaidTacticalObjectiveVisibility::Explored};
+
+    friend bool operator==(
+        const RaidTacticalObjective &,
+        const RaidTacticalObjective &) = default;
+};
+
 class RaidTacticalMapState
 {
 public:
@@ -59,7 +84,8 @@ public:
         std::optional<ContentRect> conditionalExtraction,
         std::optional<ContentRect> advancedResourceArea,
         std::vector<Vec2> initialEnemyCenters,
-        std::vector<RaidSpecialLocationMapState> specialLocations = {});
+        std::vector<RaidSpecialLocationMapState> specialLocations = {},
+        std::vector<RaidTacticalObjective> objectives = {});
     void revealAround(Vec2 worldPosition) noexcept;
     void configureOutdoorLayout(
         const RaidGeneratedMapLayout &layout,
@@ -99,6 +125,8 @@ public:
     outdoorLabels() const noexcept;
     [[nodiscard]] const std::vector<RaidTacticalResourcePoint> &
     outdoorResourcePoints() const noexcept;
+    [[nodiscard]] const std::vector<RaidTacticalObjective> &
+    objectives() const noexcept;
 
 private:
     Vec2 worldSize_{};
@@ -114,6 +142,7 @@ private:
     std::vector<std::optional<RaidTerrainKind>> outdoorTerrainKinds_;
     std::vector<RaidTacticalWorldLabel> outdoorLabels_;
     std::vector<RaidTacticalResourcePoint> outdoorResourcePoints_;
+    std::vector<RaidTacticalObjective> objectives_;
     int columns_{32};
     int rows_{18};
     std::vector<bool> revealed_;

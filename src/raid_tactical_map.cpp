@@ -30,7 +30,8 @@ void RaidTacticalMapState::configure(
     std::optional<ContentRect> conditionalExtraction,
     std::optional<ContentRect> advancedResourceArea,
     std::vector<Vec2> initialEnemyCenters,
-    std::vector<RaidSpecialLocationMapState> specialLocations)
+    std::vector<RaidSpecialLocationMapState> specialLocations,
+    std::vector<RaidTacticalObjective> objectives)
 {
     if (!std::isfinite(worldSize.x) || !std::isfinite(worldSize.y) ||
         worldSize.x <= 0.0F || worldSize.y <= 0.0F)
@@ -59,6 +60,24 @@ void RaidTacticalMapState::configure(
         }
         location.discovered = false;
     }
+    std::set<RaidTacticalObjectiveKind> objectiveKinds;
+    for (const RaidTacticalObjective &objective : objectives)
+    {
+        const ContentRect bounds = objective.bounds;
+        if (!objectiveKinds.insert(objective.kind).second ||
+            !std::isfinite(bounds.position.x) ||
+            !std::isfinite(bounds.position.y) ||
+            !std::isfinite(bounds.size.x) ||
+            !std::isfinite(bounds.size.y) ||
+            bounds.position.x < 0.0F || bounds.position.y < 0.0F ||
+            bounds.size.x <= 0.0F || bounds.size.y <= 0.0F ||
+            bounds.position.x + bounds.size.x > worldSize.x ||
+            bounds.position.y + bounds.size.y > worldSize.y)
+        {
+            throw std::invalid_argument{
+                "tactical map objective is invalid"};
+        }
+    }
     worldSize_ = worldSize;
     if (worldSize.x >= 10000.0F || worldSize.y >= 6000.0F)
     {
@@ -77,6 +96,7 @@ void RaidTacticalMapState::configure(
     advancedResourceArea_ = advancedResourceArea;
     initialEnemyCenters_ = std::move(initialEnemyCenters);
     specialLocations_ = std::move(specialLocations);
+    objectives_ = std::move(objectives);
     revealed_.assign(static_cast<std::size_t>(columns_ * rows_), false);
     normalExtractionDiscovered_ = false;
     emergencyExtractionDiscovered_ = false;
@@ -431,4 +451,10 @@ const std::vector<RaidTacticalResourcePoint> &
 RaidTacticalMapState::outdoorResourcePoints() const noexcept
 {
     return outdoorResourcePoints_;
+}
+
+const std::vector<RaidTacticalObjective> &
+RaidTacticalMapState::objectives() const noexcept
+{
+    return objectives_;
 }
