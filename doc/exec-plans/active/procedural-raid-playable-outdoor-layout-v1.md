@@ -108,5 +108,5 @@ F10 已扩展为通用运行时开发面板：保留上下/左右调整当前武
 - [x] 用真实 Frontier 冻结地图锁定并消除 Active Raid 每秒复制/校验完整 Profile 造成的约 70ms Update 长帧；保持 Render/Present 与 Pacing 诊断分栏。
 - [x] 按角色尺度放大车辆、设备、集装箱与建筑，以完整占地消除非碎屑物件重叠，并在超大地图同步生成前提交双语加载画面。
 - [x] Windows Debug 全目标和当前完整 CTest 1255/1255。
-- [ ] Draft PR #111 exact-head Windows/Ubuntu CI。
-- [ ] 用户至少三个 seed 的正常游玩验收。
+- [x] Draft PR #111 exact-head Windows/Ubuntu CI。
+- [x] 用户至少三个 seed 的正常游玩验收，并以 merge commit `636a40b` 进入 main。

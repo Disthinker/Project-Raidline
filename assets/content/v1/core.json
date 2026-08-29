@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-district-layout-content-44",
+  "content_version": "procedural-frontier-resource-ecology-hardening-content-46",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1208,7 +1208,7 @@
       "display_name": "Frontier Exchange",
       "route_profile": "DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS",
       "procedural_outdoor": {
-        "layout_version": 3,
+        "layout_version": 4,
         "columns": 320,
         "rows": 180,
         "district_columns": 40,
@@ -1224,6 +1224,8 @@
         "maximum_road_obstacles": 220,
         "minimum_puddle_patches": 60,
         "maximum_puddle_patches": 100,
+        "minimum_initial_enemies": 36,
+        "maximum_initial_enemies": 48,
         "maximum_attempts": 12,
         "anchor_clearance_cells": 2,
         "district_archetypes": [
@@ -1238,6 +1240,14 @@
           {"id": "landmark.frontier.freight_exchange", "display_name": "FREIGHT EXCHANGE COMPLEX", "district_kind": "logistics", "footprint_cells": {"x": 18, "y": 12}},
           {"id": "landmark.frontier.fabrication_plant", "display_name": "FABRICATION PLANT", "district_kind": "industrial", "footprint_cells": {"x": 16, "y": 12}},
           {"id": "landmark.frontier.highway_service", "display_name": "HIGHWAY SERVICE PLAZA", "district_kind": "roadside_service", "footprint_cells": {"x": 14, "y": 10}}
+        ],
+        "resource_point_archetypes": [
+          {"id": "resource_point.frontier.maintenance_cache", "display_name": "MAINTENANCE CACHE", "kind": "ordinary", "loot_table": "loot.raid.alpha", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 5, "maximum_instances": 6, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
+          {"id": "resource_point.frontier.roadside_salvage", "display_name": "ROADSIDE SALVAGE", "kind": "ordinary", "loot_table": "loot.raid.alpha", "allowed_district_kinds": ["highway", "open_ground", "greenbelt", "roadside_service"], "minimum_instances": 4, "maximum_instances": 5, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
+          {"id": "resource_point.frontier.secured_cargo", "display_name": "SECURED CARGO", "kind": "high_value", "loot_table": "loot.raid.high_risk_v1", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 3, "maximum_instances": 4, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 4}},
+          {"id": "resource_point.frontier.freight_manifest", "display_name": "FREIGHT MANIFEST CACHE", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.freight_exchange", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}},
+          {"id": "resource_point.frontier.fabrication_stock", "display_name": "FABRICATION STOCK", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.fabrication_plant", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 3}},
+          {"id": "resource_point.frontier.service_supplies", "display_name": "SERVICE PLAZA SUPPLIES", "kind": "landmark_specific", "loot_table": "loot.raid.alpha", "landmark_definition_id": "landmark.frontier.highway_service", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}}
         ]
       },
       "interiors": [
@@ -1341,7 +1351,7 @@
         "initial_wave_delay_seconds": 3,
         "wave_interval_seconds": 15,
         "wave_size": 2,
-        "active_enemy_cap": 8,
+        "active_enemy_cap": 48,
         "activation_control_point": {"position": {"x": 2160, "y": 620}, "size": {"x": 150, "y": 84}},
         "activation_duration_seconds": 4,
         "advanced_resource_area": {"position": {"x": 1080, "y": 980}, "size": {"x": 360, "y": 230}},

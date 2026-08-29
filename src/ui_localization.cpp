@@ -33,6 +33,13 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"DRAINAGE GREENBELT", "排水绿地"},
      {"FABRICATION PLANT", "制造厂区"},
      {"INDUSTRIAL PLANT", "工业厂区"},
+     {"MAINTENANCE CACHE", "维修物资点"},
+     {"ROADSIDE SALVAGE", "路旁回收点"},
+     {"SECURED CARGO", "加固货物点"},
+     {"FREIGHT MANIFEST CACHE", "货运清单物资点"},
+     {"FABRICATION STOCK", "制造厂库存点"},
+     {"SERVICE PLAZA SUPPLIES", "服务区补给点"},
+     {"RISK TIER", "风险等级"},
      {"LOGISTICS YARD", "物流堆场"},
      {"ROADSIDE SERVICE", "公路服务区"},
      {"PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT",
@@ -895,6 +902,15 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"DEVELOPER INFINITE AMMO DISABLED", "开发者无限弹药已关闭"},
      {"INFINITE AMMO: ENABLED", "无限弹药：已启用"},
      {"INFINITE AMMO: DISABLED", "无限弹药：已关闭"},
+     {"MAP FOG: ON", "地图迷雾：开启"},
+     {"MAP FOG: OFF", "地图迷雾：关闭"},
+     {"INFINITE AMMO: ON", "无限弹药：开启"},
+     {"INFINITE AMMO: OFF", "无限弹药：关闭"},
+     {"RESET WEAPON PARAMETERS", "重置枪械参数"},
+     {"CLICK OPTIONS | F10 / ESC CLOSE",
+      "点击选项 | F10 / ESC 关闭"},
+     {"CLICK ROW OR - / + | F10 / ESC CLOSE",
+      "点击参数行或 - / + | F10 / ESC 关闭"},
      {"F TOGGLE MAP FOG | F10 / ESC CLOSE",
       "F 切换地图迷雾 | F10 / ESC 关闭"},
      {"F MAP FOG | I INFINITE AMMO | F10 / ESC CLOSE",
@@ -946,6 +962,15 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"SWITCHING WEAPON", "切换武器中"},
      {"EXTRACTING", "撤离中"},
      {"PREPARING RAID", "正在准备突袭"},
+     {"VALIDATING RAID REQUEST", "正在验证出击请求"},
+     {"PREPARING FROZEN RAID SNAPSHOT", "正在准备本局冻结快照"},
+     {"GENERATING DISTRICTS, ROADS AND LANDMARKS",
+      "正在生成区域、道路和地标"},
+     {"FREEZING RESOURCE POINTS, LOOT AND ENEMIES",
+      "正在冻结资源点、战利品和敌人"},
+     {"BUILDING RAID WORLD", "正在建立对局世界"},
+     {"SAVING DEPLOYMENT STATE", "正在保存出击状态"},
+     {"RAID READY", "对局已准备完成"},
      {"GENERATING LARGE OUTDOOR MAP", "正在生成大型室外地图"},
      {"PLACING DISTRICTS, ROADS AND LANDMARKS",
       "正在布置区域、道路和地标"},
@@ -953,6 +978,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
       "正在验证路线和撤离点"},
      {"PLEASE WAIT - BUILDING FROZEN RAID SNAPSHOT",
       "请稍候 - 正在建立本局冻结快照"},
+     {"PLEASE WAIT - PROGRESS FOLLOWS ACTUAL DEPLOYMENT STAGES",
+      "请稍候 - 进度对应实际出击阶段"},
      {"HEAVY BLEEDING", "重度流血"},
      {"LIGHT BLEEDING", "轻度流血"},
      {"NO BLEEDING", "未流血"},
@@ -1382,6 +1409,11 @@ std::string localizeUiText(UiLanguage language, std::string_view englishText) {
   std::string localized{englishText};
   if (language == UiLanguage::English || localized.empty()) {
     return localized;
+  }
+  for (const auto &[english, chinese] : kSimplifiedChineseTranslations) {
+    if (englishText == english) {
+      return std::string{chinese};
+    }
   }
   for (const auto &[english, chinese] : kSimplifiedChineseTranslations) {
     replaceAll(localized, english, chinese);

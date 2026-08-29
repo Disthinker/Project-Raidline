@@ -559,6 +559,14 @@ TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
                 UiLanguage::SimplifiedChinese,
                 "VALIDATING ROUTES AND EXTRACTION POINTS"),
             "正在验证路线和撤离点");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "FREEZING RESOURCE POINTS, LOOT AND ENEMIES"),
+            "正在冻结资源点、战利品和敌人");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BUILDING RAID WORLD"),
+            "正在建立对局世界");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesRuntimeMapFogControls) {
@@ -620,6 +628,14 @@ TEST(UiLocalizationTest, ChineseTranslatesRuntimeDeveloperCheats) {
                 UiLanguage::SimplifiedChinese,
                 "F MAP FOG | I INFINITE AMMO | F10/ESC CLOSE"),
             "F 地图迷雾 | I 无限弹药 | F10/ESC 关闭");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESET WEAPON PARAMETERS"),
+            "重置枪械参数");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CLICK ROW OR - / + | F10 / ESC CLOSE"),
+            "点击参数行或 - / + | F10 / ESC 关闭");
 }
 
 TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {

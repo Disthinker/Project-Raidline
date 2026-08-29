@@ -215,7 +215,8 @@ public:
         std::optional<RegionalBaseSiteDefinitionId>
             baseSiteClearanceId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            basePerimeterSweepId = std::nullopt);
+            basePerimeterSweepId = std::nullopt,
+        const RaidDeploymentProgressCallback &progress = {});
     [[nodiscard]] bool outpostRestorationObjectiveSecured() const noexcept;
     [[nodiscard]] bool baseSiteClearanceObjectiveSecured() const noexcept;
     [[nodiscard]] bool basePerimeterSweepObjectiveSecured() const noexcept;

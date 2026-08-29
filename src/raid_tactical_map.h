@@ -37,6 +37,15 @@ struct RaidTacticalWorldLabel
     bool landmark{};
 };
 
+struct RaidTacticalResourcePoint
+{
+    std::string instanceId;
+    std::string displayName;
+    RaidResourcePointKind kind{RaidResourcePointKind::Ordinary};
+    ContentRect bounds;
+    std::uint32_t riskTier{1};
+};
+
 class RaidTacticalMapState
 {
 public:
@@ -88,6 +97,8 @@ public:
     outdoorTerrainKind(int column, int row) const noexcept;
     [[nodiscard]] const std::vector<RaidTacticalWorldLabel> &
     outdoorLabels() const noexcept;
+    [[nodiscard]] const std::vector<RaidTacticalResourcePoint> &
+    outdoorResourcePoints() const noexcept;
 
 private:
     Vec2 worldSize_{};
@@ -102,6 +113,7 @@ private:
     std::vector<std::optional<RaidDistrictKind>> outdoorDistrictKinds_;
     std::vector<std::optional<RaidTerrainKind>> outdoorTerrainKinds_;
     std::vector<RaidTacticalWorldLabel> outdoorLabels_;
+    std::vector<RaidTacticalResourcePoint> outdoorResourcePoints_;
     int columns_{32};
     int rows_{18};
     std::vector<bool> revealed_;

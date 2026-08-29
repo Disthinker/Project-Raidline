@@ -174,3 +174,33 @@ TEST(RaidTacticalMapTest, OutdoorLayoutProjectsTerrainWithoutChangingReveal)
         RaidTerrainKind::Grass);
     EXPECT_FALSE(map.cellRevealed(0, 0));
 }
+
+TEST(RaidTacticalMapTest, OutdoorLayoutProjectsFrozenResourcePoints)
+{
+    RaidTacticalMapState map;
+    map.configure(
+        {25600.0F, 14400.0F}, {},
+        {{25000.0F, 13800.0F}, {100.0F, 100.0F}},
+        std::nullopt, std::nullopt, std::nullopt, {});
+    RaidGeneratedMapLayout layout;
+    layout.layoutVersion = 4U;
+    layout.resourcePoints = {{
+        "resource.maintenance.0",
+        "resource.frontier.maintenance_cache",
+        "MAINTENANCE CACHE",
+        RaidResourcePointKind::Ordinary,
+        LootTableDefinitionId{"loot.raid.alpha"},
+        1U,
+        2U,
+        {{3200.0F, 2400.0F}, {240.0F, 160.0F}},
+        1U,
+        {}}};
+
+    map.configureOutdoorLayout(layout, 320U, 180U);
+
+    ASSERT_EQ(map.outdoorResourcePoints().size(), 1U);
+    EXPECT_EQ(map.outdoorResourcePoints().front().instanceId,
+              "resource.maintenance.0");
+    EXPECT_EQ(map.outdoorResourcePoints().front().riskTier, 1U);
+    EXPECT_FALSE(map.pointRevealed({3320.0F, 2480.0F}));
+}

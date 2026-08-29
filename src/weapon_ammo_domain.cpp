@@ -270,12 +270,18 @@ WeaponAmmoReceipt applyUninstall(
     }
     magazine->location = command.destination;
     magazine->orientation = command.destinationOrientation;
-    const ProfileValidationResult validation =
-        validateProfileState(candidate, content);
-    if (!validation.valid)
+    if (!profilePlacementFits(
+            candidate,
+            content,
+            command.destination.container,
+            command.destination.origin,
+            definition,
+            command.destinationOrientation,
+            magazine->instanceId))
     {
         return failure(DomainErrorCode::Capacity,
-                       validation.message, candidate.revision);
+                       "magazine does not fit at destination",
+                       candidate.revision);
     }
     return {true, false, DomainErrorCode::None, {}, candidate.revision,
             WeaponAmmoResult::Uninstalled, std::nullopt};
@@ -448,6 +454,155 @@ WeaponAmmoReceipt applyFire(
             fired};
 }
 
+WeaponAmmoReceipt inspectFire(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const FireWeaponCommand &command)
+{
+    const AssetRecord *weapon = profile.assets.find(command.weaponAssetId);
+    if (weapon == nullptr)
+    {
+        return failure(DomainErrorCode::MissingAsset,
+                       "weapon does not exist", profile.revision);
+    }
+    const ItemDefinition &definition = content.item(weapon->definitionId);
+    if (definition.category != ItemCategory::Weapon ||
+        !definition.compatibleMagazineDefinitionId.has_value())
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+                       "asset is not a magazine-fed weapon", profile.revision);
+    }
+    if (definition.weaponCondition.has_value())
+    {
+        if (weapon->weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            return {true, false, DomainErrorCode::None,
+                    "weapon malfunction must be cleared", profile.revision,
+                    WeaponAmmoResult::BlockedByMalfunction, std::nullopt};
+        }
+        if (weapon->currentDurability == 0)
+        {
+            return {true, false, DomainErrorCode::None,
+                    "weapon is broken", profile.revision,
+                    WeaponAmmoResult::Broken, std::nullopt};
+        }
+    }
+    if (weapon->chamberedRound.has_value())
+    {
+        return {true, false, DomainErrorCode::None, {}, profile.revision,
+                WeaponAmmoResult::Fired,
+                weapon->chamberedRound->definitionId};
+    }
+    const auto installed = installedMagazine(profile, command.weaponAssetId);
+    const AssetRecord *magazine = installed.has_value()
+        ? profile.assets.find(*installed)
+        : nullptr;
+    if (magazine != nullptr && !magazine->magazineRounds.empty())
+    {
+        return {true, false, DomainErrorCode::None,
+                "round can be chambered", profile.revision,
+                WeaponAmmoResult::Chambered, std::nullopt};
+    }
+    return {true, false, DomainErrorCode::None,
+            "weapon is dry", profile.revision,
+            WeaponAmmoResult::Dry, std::nullopt};
+}
+
+bool validFireParticipants(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId weaponAssetId,
+    std::optional<AssetInstanceId> magazineAssetId) noexcept
+{
+    try
+    {
+        const AssetRecord *weapon = profile.assets.find(weaponAssetId);
+        if (weapon == nullptr)
+        {
+            return false;
+        }
+        const ItemDefinition &weaponDefinition =
+            content.item(weapon->definitionId);
+        if (weaponDefinition.category != ItemCategory::Weapon ||
+            !weaponDefinition.compatibleMagazineDefinitionId.has_value())
+        {
+            return false;
+        }
+        if (weaponDefinition.weaponCondition.has_value())
+        {
+            const WeaponConditionDefinition &condition =
+                *weaponDefinition.weaponCondition;
+            if (weapon->currentMaximumDurability == 0 ||
+                weapon->currentMaximumDurability >
+                    condition.maximumDurabilityCenti ||
+                weapon->currentDurability > weapon->currentMaximumDurability ||
+                (weapon->weaponMalfunction != WeaponMalfunctionType::None &&
+                 weapon->weaponMalfunction != WeaponMalfunctionType::Stovepipe))
+            {
+                return false;
+            }
+        }
+        else if (weapon->currentMaximumDurability != 0 ||
+                 weapon->currentDurability != 0 ||
+                 weapon->weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            return false;
+        }
+        if (weapon->chamberedRound.has_value() &&
+            (!weaponDefinition.compatibleAmmunitionDefinitionId.has_value() ||
+             weapon->chamberedRound->definitionId !=
+                 *weaponDefinition.compatibleAmmunitionDefinitionId ||
+             (weapon->chamberedRound->reliefBatchId.has_value() &&
+              weapon->chamberedRound->reliefBatchId->empty())))
+        {
+            return false;
+        }
+
+        const auto installed = installedMagazine(profile, weaponAssetId);
+        if (installed != magazineAssetId)
+        {
+            return false;
+        }
+        if (!magazineAssetId.has_value())
+        {
+            return true;
+        }
+        const AssetRecord *magazine = profile.assets.find(*magazineAssetId);
+        if (magazine == nullptr)
+        {
+            return false;
+        }
+        const auto *location =
+            std::get_if<InstalledMagazineLocation>(&magazine->location);
+        const ItemDefinition &magazineDefinition =
+            content.item(magazine->definitionId);
+        if (location == nullptr || location->weaponAssetId != weaponAssetId ||
+            magazineDefinition.category != ItemCategory::Magazine ||
+            magazine->definitionId !=
+                *weaponDefinition.compatibleMagazineDefinitionId ||
+            !magazineDefinition.compatibleAmmunitionDefinitionId.has_value() ||
+            magazine->magazineRounds.size() >
+                magazineDefinition.magazineCapacity)
+        {
+            return false;
+        }
+        return std::all_of(
+            magazine->magazineRounds.begin(),
+            magazine->magazineRounds.end(),
+            [&magazineDefinition](const MagazineRoundRecord &round)
+            {
+                return round.definitionId ==
+                           *magazineDefinition.compatibleAmmunitionDefinitionId &&
+                    (!round.reliefBatchId.has_value() ||
+                     !round.reliefBatchId->empty());
+            });
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 WeaponAmmoReceipt applyClearMalfunction(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -511,7 +666,9 @@ WeaponAmmoPlan queryWeaponAmmo(
     const ContentRegistry &content,
     const WeaponAmmoCommand &command)
 {
-    ProfileState candidate = profile;
+    ProfileState candidate;
+    candidate.revision = profile.revision;
+    candidate.assets = profile.assets;
     const WeaponAmmoReceipt receipt = apply(candidate, content, command);
     return WeaponAmmoPlan{
         receipt.succeeded,
@@ -571,6 +728,95 @@ WeaponAmmoReceipt executeWeaponAmmo(
                        validation.message, profile.revision);
     }
     profile = std::move(candidate);
+    receipt.revision = profile.revision;
+    return receipt;
+}
+
+WeaponAmmoPlan queryFireWeapon(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const FireWeaponCommand &command)
+{
+    const WeaponAmmoReceipt receipt = inspectFire(profile, content, command);
+    return WeaponAmmoPlan{
+        receipt.succeeded,
+        receipt.error,
+        receipt.message,
+        profile.revision,
+        receipt.result};
+}
+
+WeaponAmmoReceipt executeFireWeapon(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const FireWeaponCommand &command,
+    const CommandContext &context)
+{
+    if (context.transactionId.empty())
+    {
+        return failure(DomainErrorCode::InvalidTransaction,
+                       "transaction ID must not be empty", profile.revision);
+    }
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        return {true, true, DomainErrorCode::None, {}, profile.revision,
+                WeaponAmmoResult::Dry, std::nullopt};
+    }
+    if (context.expectedRevision != profile.revision)
+    {
+        return failure(DomainErrorCode::StaleRevision,
+                       "profile revision is stale", profile.revision);
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return failure(DomainErrorCode::RevisionOverflow,
+                       "profile revision cannot advance", profile.revision);
+    }
+
+    const AssetRecord *weapon = profile.assets.find(command.weaponAssetId);
+    if (weapon == nullptr)
+    {
+        return failure(DomainErrorCode::MissingAsset,
+                       "weapon does not exist", profile.revision);
+    }
+    const std::optional<AssetInstanceId> magazineId =
+        installedMagazine(profile, command.weaponAssetId);
+    const AssetRecord weaponBefore = *weapon;
+    const AssetRecord *magazine = magazineId.has_value()
+        ? profile.assets.find(*magazineId)
+        : nullptr;
+    if (magazineId.has_value() && magazine == nullptr)
+    {
+        return failure(DomainErrorCode::InvalidProfile,
+                       "installed magazine does not exist", profile.revision);
+    }
+    const std::optional<AssetRecord> magazineBefore = magazine != nullptr
+        ? std::optional<AssetRecord>{*magazine}
+        : std::nullopt;
+
+    WeaponAmmoReceipt receipt = applyFire(profile, content, command);
+    if (!receipt.succeeded || receipt.result == WeaponAmmoResult::Dry ||
+        receipt.result == WeaponAmmoResult::BlockedByMalfunction ||
+        receipt.result == WeaponAmmoResult::Broken)
+    {
+        receipt.revision = profile.revision;
+        return receipt;
+    }
+    if (!validFireParticipants(
+            profile, content, command.weaponAssetId, magazineId))
+    {
+        *profile.assets.findMutable(command.weaponAssetId) = weaponBefore;
+        if (magazineId.has_value() && magazineBefore.has_value())
+        {
+            *profile.assets.findMutable(*magazineId) = *magazineBefore;
+        }
+        return failure(DomainErrorCode::InvalidProfile,
+                       "weapon fire produced invalid participant state",
+                       profile.revision);
+    }
+
+    profile.committedTransactions.insert(context.transactionId);
+    ++profile.revision;
     receipt.revision = profile.revision;
     return receipt;
 }

@@ -22,7 +22,8 @@ enum class RaidMapAnchorKind : std::uint8_t
     Loot,
     Enemy,
     PressureSpawn,
-    InteriorEntrance
+    InteriorEntrance,
+    ResourcePoint
 };
 
 struct RaidMapAnchorRequest
@@ -30,6 +31,8 @@ struct RaidMapAnchorRequest
     std::string id;
     RaidMapAnchorKind kind{RaidMapAnchorKind::Loot};
     Vec2 size{32.0F, 32.0F};
+    std::vector<RaidDistrictKind> allowedDistrictKinds;
+    std::string landmarkDefinitionId;
 };
 
 struct RaidMapGenerationAnchors
@@ -194,6 +197,24 @@ struct RaidLandmarkPlacementSnapshot
     }
 };
 
+struct RaidResourcePointSnapshot
+{
+    std::string instanceId;
+    std::string definitionId;
+    std::string displayName;
+    RaidResourcePointKind kind{RaidResourcePointKind::Ordinary};
+    LootTableDefinitionId lootTableId;
+    std::uint32_t riskTier{1};
+    std::uint32_t capacity{1};
+    ContentRect bounds;
+    std::uint16_t districtInstanceId{};
+    std::string landmarkDefinitionId;
+
+    friend bool operator==(
+        const RaidResourcePointSnapshot &,
+        const RaidResourcePointSnapshot &) = default;
+};
+
 enum class RaidMapFallbackReason : std::uint8_t
 {
     None,
@@ -209,6 +230,7 @@ struct RaidGeneratedMapLayout
     std::vector<RaidOutdoorPropSnapshot> props;
     std::vector<RaidAnchorPlacementSnapshot> anchorPlacements;
     std::vector<RaidLandmarkPlacementSnapshot> landmarks;
+    std::vector<RaidResourcePointSnapshot> resourcePoints;
     std::vector<ContentRect> ballisticBlockers;
     std::uint32_t generationAttempt{};
     std::uint64_t layoutHash{};
@@ -241,6 +263,10 @@ inline constexpr std::string_view kRaidAnchorSelfRecovery{"self_recovery"};
 [[nodiscard]] const RaidAnchorPlacementSnapshot *findRaidAnchorPlacement(
     const RaidGeneratedMapLayout &layout,
     std::string_view id) noexcept;
+
+[[nodiscard]] Vec2 raidResourcePointLootPosition(
+    const RaidResourcePointSnapshot &resourcePoint,
+    std::uint32_t slotIndex) noexcept;
 
 [[nodiscard]] bool raidExteriorPlacementIsLegal(
     const RaidExteriorPlacementDefinition &placement,

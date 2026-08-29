@@ -7,6 +7,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <tuple>
+#include <vector>
 
 #include "alpha_content_ids.h"
 #include "game_session.h"
@@ -151,32 +152,174 @@ TEST(AlphaExtractionSessionPerformanceTest,
 {
     GameSession session;
     ASSERT_TRUE(session.startNewProfile("alpha-frontier-clock-performance"));
+    const auto rifles = assets(session.profile(), alpha_content::rifle);
+    const auto magazines = assets(session.profile(), alpha_content::magazine);
+    const auto ammunition = assets(
+        session.profile(), alpha_content::ammunition);
+    const auto backpacks = assets(
+        session.profile(), alpha_content::backpack);
+    ASSERT_EQ(rifles.size(), 1U);
+    ASSERT_GE(magazines.size(), 1U);
+    ASSERT_GE(ammunition.size(), 2U);
+    ASSERT_EQ(backpacks.size(), 1U);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        LoadMagazineCommand{magazines[0], ammunition[0], 30},
+        "frontier-performance-load").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifles[0], EquipmentSlotKind::PrimaryWeapon},
+        "frontier-performance-equip").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            backpacks[0], EquipmentSlotKind::Backpack},
+        "frontier-performance-equip-backpack").succeeded);
+    const ProfileContainerId backpackGrid =
+        ProfileContainerId::compartment(backpacks[0], 0);
+    const auto ammunitionFit = findFirstProfileFit(
+        session.profile(),
+        publishedContentRegistry(),
+        backpackGrid,
+        publishedContentRegistry().item(alpha_content::ammunition),
+        ItemOrientation::Degrees0,
+        ammunition[1]);
+    ASSERT_TRUE(ammunitionFit.has_value());
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            ammunition[1],
+            0,
+            StoredAssetLocation{backpackGrid, *ammunitionFit},
+            ItemOrientation::Degrees0},
+        "frontier-performance-store-ammunition").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        InstallMagazineAndChamberCommand{rifles[0], magazines[0]},
+        "frontier-performance-install").succeeded);
     ASSERT_TRUE(session.deployAlpha(
-        7723401U, MapDefinitionId{"map.raid.frontier_exchange"}));
+        7723401U, MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
     const std::uint64_t startingWorldMinute =
         session.profile().worldClock.elapsedWorldMinutes;
 
-    std::chrono::microseconds slowestUpdate{};
+    std::chrono::microseconds slowestClockUpdate{};
+    std::vector<std::chrono::microseconds> clockUpdateSamples;
+    clockUpdateSamples.reserve(180U);
     for (std::size_t frame{}; frame < 180U; ++frame)
     {
         const auto started = std::chrono::steady_clock::now();
         session.update(GameplayInput{}, 1.0F / 60.0F);
-        slowestUpdate = std::max(
-            slowestUpdate,
+        const auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now() - started));
+                std::chrono::steady_clock::now() - started);
+        clockUpdateSamples.push_back(elapsed);
+        slowestClockUpdate = std::max(slowestClockUpdate, elapsed);
     }
+    std::sort(clockUpdateSamples.begin(), clockUpdateSamples.end());
+    const auto clockP95 = clockUpdateSamples[static_cast<std::size_t>(
+        std::ceil(clockUpdateSamples.size() * 0.95)) - 1U];
 
-    std::cout << "active Frontier clock slowest update: "
-              << slowestUpdate.count() << " us\n";
+    std::cout << "active Frontier clock p95/max update: "
+              << clockP95.count() << "/"
+              << slowestClockUpdate.count() << " us\n";
     EXPECT_EQ(
         session.profile().worldClock.elapsedWorldMinutes,
         startingWorldMinute + 3U);
     EXPECT_TRUE(validateProfileState(
         session.profile(), publishedContentRegistry()).valid);
-    EXPECT_LT(slowestUpdate.count(), 25000)
+    EXPECT_LT(clockP95.count(), 25000)
         << "Advancing one world minute must not copy and validate the full "
            "frozen megamap on the simulation thread.";
+    EXPECT_LT(slowestClockUpdate.count(), 250000)
+        << "A single update must not exhibit an unbounded stall.";
+
+    const std::uint64_t inventoryFingerprint =
+        profileStateFingerprint(session.profile());
+    std::chrono::microseconds slowestInventoryQuery{};
+    std::vector<std::chrono::microseconds> inventoryQuerySamples;
+    inventoryQuerySamples.reserve(240U);
+    for (std::size_t frame{}; frame < 240U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        const InventoryPlan movePlan = queryInventory(
+            session.profile(),
+            publishedContentRegistry(),
+            InventoryMoveCommand{
+                ammunition[1],
+                0,
+                StoredAssetLocation{backpackGrid, *ammunitionFit},
+                ItemOrientation::Degrees0});
+        const WeaponAmmoPlan loadPlan = queryWeaponAmmo(
+            session.profile(),
+            publishedContentRegistry(),
+            LoadMagazineCommand{magazines[0], ammunition[1], 1});
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started);
+        ASSERT_TRUE(movePlan.canCommit) << movePlan.message;
+        ASSERT_TRUE(loadPlan.canCommit) << loadPlan.message;
+        inventoryQuerySamples.push_back(elapsed);
+        slowestInventoryQuery = std::max(
+            slowestInventoryQuery, elapsed);
+    }
+    std::sort(
+        inventoryQuerySamples.begin(), inventoryQuerySamples.end());
+    const auto inventoryQueryP95 =
+        inventoryQuerySamples[static_cast<std::size_t>(
+            std::ceil(inventoryQuerySamples.size() * 0.95)) - 1U];
+
+    std::cout << "Frontier inventory preview p95/max query: "
+              << inventoryQueryP95.count() << "/"
+              << slowestInventoryQuery.count() << " us\n";
+    EXPECT_EQ(
+        profileStateFingerprint(session.profile()), inventoryFingerprint);
+    EXPECT_LT(inventoryQueryP95.count(), 25000)
+        << "Drag previews must inspect only inventory participants and must "
+           "not copy or validate the frozen megamap each render frame.";
+    EXPECT_LT(slowestInventoryQuery.count(), 250000)
+        << "A single drag preview must not exhibit an unbounded stall.";
+
+    GameplayInput fire;
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    fire.aimWorldPosition = Vec2{
+        session.world().player().position().x + 900.0F,
+        session.world().player().position().y};
+    std::size_t shots{};
+    std::chrono::microseconds slowestFireUpdate{};
+    std::vector<std::chrono::microseconds> fireUpdateSamples;
+    fireUpdateSamples.reserve(240U);
+    for (std::size_t frame{}; frame < 240U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        session.update(fire, 1.0F / 60.0F);
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started);
+        fireUpdateSamples.push_back(elapsed);
+        slowestFireUpdate = std::max(slowestFireUpdate, elapsed);
+        if (session.world().shotFiredLastUpdate())
+        {
+            ++shots;
+        }
+        fire.fireJustPressed = false;
+    }
+    std::sort(fireUpdateSamples.begin(), fireUpdateSamples.end());
+    const auto fireP95 = fireUpdateSamples[static_cast<std::size_t>(
+        std::ceil(fireUpdateSamples.size() * 0.95)) - 1U];
+
+    std::cout << "continuous Frontier fire p95/max update: "
+              << fireP95.count() << "/"
+              << slowestFireUpdate.count() << " us across " << shots
+              << " shots\n";
+    EXPECT_GE(shots, 20U);
+    EXPECT_EQ(magazineRoundCount(session.profile(), magazines[0]), 0U);
+    EXPECT_FALSE(session.profile().assets.find(rifles[0])
+                     ->chamberedRound.has_value());
+    EXPECT_TRUE(validateProfileState(
+        session.profile(), publishedContentRegistry()).valid);
+    EXPECT_LT(fireP95.count(), 25000)
+        << "Firing must mutate only weapon participants and must not copy or "
+           "validate the frozen megamap on the simulation thread.";
+    EXPECT_LT(slowestFireUpdate.count(), 250000)
+        << "A single firing update must not exhibit an unbounded stall.";
 }
 
 TEST(AlphaExtractionSessionTest,
@@ -264,7 +407,8 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
     ASSERT_TRUE(session.startNewProfile("alpha-session-special-location"));
     ASSERT_TRUE(session.deployAlpha(
         88123U,
-        MapDefinitionId{"map.raid.frontier_exchange"}));
+        MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
     ASSERT_EQ(session.profile().pendingRaid->interiors.size(), 2U);
     ASSERT_EQ(session.world().tacticalMap().specialLocations().size(), 2U);

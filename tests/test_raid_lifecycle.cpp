@@ -54,6 +54,35 @@ TEST(RaidLifecycleTest, SiegeWarningBlocksDeployWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
+TEST(RaidLifecycleTest, DeployReportsMonotonicRealLoadingStages)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "deployment-progress", publishedContentRegistry());
+    std::vector<RaidDeploymentProgress> observed;
+    const DeployReceipt receipt = executeDeploy(
+        profile,
+        publishedContentRegistry(),
+        DeployCommand{
+            "progress-raid",
+            "progress-settlement",
+            7712100U,
+            MapDefinitionId{"map.raid.frontier_exchange"}},
+        CommandContext{profile.revision, "deploy:progress"},
+        [&](const RaidDeploymentProgress &progress)
+        { observed.push_back(progress); });
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_GE(observed.size(), 4U);
+    EXPECT_EQ(
+        observed.front().stage,
+        RaidDeploymentProgressStage::PreparingSnapshot);
+    EXPECT_EQ(
+        observed.back().stage,
+        RaidDeploymentProgressStage::ValidatingSnapshot);
+    for (std::size_t index = 1U; index < observed.size(); ++index)
+        EXPECT_GT(observed[index].completion, observed[index - 1U].completion);
+}
+
 TEST(RaidLifecycleTest, QueuedSiegeDuringSafetyStillAllowsDeploy)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -891,6 +920,175 @@ TEST(RaidLifecycleTest, FrontierDeployFreezesIndependentInteriorActorsAndLoot)
                     blocker.position.y + blocker.size.y > entrance.position.y;
             }));
     }
+}
+
+TEST(RaidLifecycleTest,
+     FrontierDeployFreezesResourcePointCapacityLootAndNamedRandomStream)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    ProfileState first = makeNewAlphaProfile("resource-ecology", content);
+    ProfileState repeated = makeNewAlphaProfile("resource-ecology", content);
+    ASSERT_TRUE(deploy(first, 7712201U, mapId).succeeded);
+    ASSERT_TRUE(deploy(repeated, 7712201U, mapId).succeeded);
+    ASSERT_TRUE(first.pendingRaid.has_value());
+    ASSERT_TRUE(repeated.pendingRaid.has_value());
+    const PendingRaidSnapshot &raid = *first.pendingRaid;
+    EXPECT_EQ(raid.rulesVersion,
+              "procedural-frontier-resource-ecology-24");
+    EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
+    EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
+    EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
+    EXPECT_GE(
+        std::count_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            [](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); }),
+        static_cast<std::ptrdiff_t>(
+            content.map(mapId).proceduralOutdoor.minimumInitialEnemies));
+    EXPECT_LE(
+        std::count_if(
+            raid.enemies.begin(), raid.enemies.end(),
+            [](const RaidEnemySnapshot &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); }),
+        static_cast<std::ptrdiff_t>(
+            content.map(mapId).proceduralOutdoor.maximumInitialEnemies));
+
+    const auto ordinaryCount = std::count_if(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        [](const RaidResourcePointSnapshot &point)
+        { return point.kind == RaidResourcePointKind::Ordinary; });
+    const auto highValueCount = std::count_if(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        [](const RaidResourcePointSnapshot &point)
+        { return point.kind == RaidResourcePointKind::HighValue; });
+    const auto landmarkCount = std::count_if(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        [](const RaidResourcePointSnapshot &point)
+        { return point.kind == RaidResourcePointKind::LandmarkSpecific; });
+    EXPECT_GE(ordinaryCount, 9);
+    EXPECT_LE(ordinaryCount, 11);
+    EXPECT_GE(highValueCount, 3);
+    EXPECT_LE(highValueCount, 4);
+    EXPECT_EQ(landmarkCount, 3);
+
+    std::size_t expectedRegularLoot{};
+    std::set<std::string> pointIds;
+    for (const RaidResourcePointSnapshot &point :
+         raid.spatialLayout.resourcePoints)
+    {
+        EXPECT_TRUE(pointIds.insert(point.instanceId).second);
+        expectedRegularLoot += point.capacity;
+        const RaidAnchorPlacementSnapshot *anchor =
+            findRaidAnchorPlacement(raid.spatialLayout, point.instanceId);
+        ASSERT_NE(anchor, nullptr);
+        EXPECT_EQ(anchor->kind, RaidMapAnchorKind::ResourcePoint);
+        EXPECT_EQ(anchor->bounds, point.bounds);
+    }
+    std::size_t actualRegularLoot{};
+    std::set<std::uint32_t> slots;
+    for (const RaidLootSnapshot &loot : raid.loot)
+    {
+        if (loot.spaceId != outdoorRaidSpaceId() || loot.requiresHighRisk)
+            continue;
+        ++actualRegularLoot;
+        EXPECT_FALSE(loot.resourcePointInstanceId.empty());
+        EXPECT_TRUE(pointIds.contains(loot.resourcePointInstanceId));
+        EXPECT_TRUE(slots.insert(loot.slotIndex).second);
+    }
+    EXPECT_EQ(actualRegularLoot, expectedRegularLoot);
+    EXPECT_EQ(slots.size(), expectedRegularLoot);
+    EXPECT_TRUE(validateProfileState(first, content).valid);
+
+    ProfileState unknownDefinition = first;
+    unknownDefinition.pendingRaid->spatialLayout.resourcePoints.front()
+        .definitionId = "resource_point.frontier.unknown";
+    unknownDefinition.pendingRaid->spatialLayout.layoutHash =
+        raidMapLayoutHash(unknownDefinition.pendingRaid->spatialLayout);
+    EXPECT_FALSE(validateProfileState(unknownDefinition, content).valid);
+
+    ProfileState missingPoint = first;
+    missingPoint.pendingRaid->spatialLayout.resourcePoints.pop_back();
+    missingPoint.pendingRaid->spatialLayout.layoutHash =
+        raidMapLayoutHash(missingPoint.pendingRaid->spatialLayout);
+    EXPECT_FALSE(validateProfileState(missingPoint, content).valid);
+
+    ProfileState invalidBinding = first;
+    auto landmarkPoint = std::find_if(
+        invalidBinding.pendingRaid->spatialLayout.resourcePoints.begin(),
+        invalidBinding.pendingRaid->spatialLayout.resourcePoints.end(),
+        [](const RaidResourcePointSnapshot &point)
+        {
+            return point.kind ==
+                RaidResourcePointKind::LandmarkSpecific;
+        });
+    ASSERT_NE(landmarkPoint,
+              invalidBinding.pendingRaid->spatialLayout.resourcePoints.end());
+    landmarkPoint->districtInstanceId =
+        landmarkPoint->districtInstanceId == 1U ? 2U : 1U;
+    const std::string landmarkPointId = landmarkPoint->instanceId;
+    auto landmarkAnchor = std::find_if(
+        invalidBinding.pendingRaid->spatialLayout.anchorPlacements.begin(),
+        invalidBinding.pendingRaid->spatialLayout.anchorPlacements.end(),
+        [&](const RaidAnchorPlacementSnapshot &anchor)
+        { return anchor.id == landmarkPointId; });
+    ASSERT_NE(landmarkAnchor,
+              invalidBinding.pendingRaid->spatialLayout.anchorPlacements.end());
+    landmarkAnchor->districtInstanceId = landmarkPoint->districtInstanceId;
+    invalidBinding.pendingRaid->spatialLayout.layoutHash =
+        raidMapLayoutHash(invalidBinding.pendingRaid->spatialLayout);
+    EXPECT_FALSE(validateProfileState(invalidBinding, content).valid);
+}
+
+TEST(RaidLifecycleTest,
+     FrontierResourceEcologyRemainsValidAcrossOneHundredTwentyEightSeeds)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    std::set<std::uint64_t> layoutHashes;
+    for (std::uint64_t seed = 1U; seed <= 128U; ++seed)
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            "resource-seed-" + std::to_string(seed), content);
+        const DeployReceipt receipt = deploy(profile, seed, mapId);
+        ASSERT_TRUE(receipt.succeeded)
+            << "seed " << seed << ": " << receipt.message;
+        ASSERT_TRUE(profile.pendingRaid.has_value());
+        const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        const ProfileValidationResult validation =
+            validateProfileState(profile, content);
+        ASSERT_TRUE(validation.valid)
+            << "seed " << seed << ": " << validation.message;
+        EXPECT_GE(raid.spatialLayout.resourcePoints.size(), 15U);
+        EXPECT_LE(raid.spatialLayout.resourcePoints.size(), 18U);
+        layoutHashes.insert(raid.spatialLayout.layoutHash);
+
+        std::set<std::string> pointIds;
+        std::set<std::uint32_t> regularSlots;
+        std::size_t capacity{};
+        for (const RaidResourcePointSnapshot &point :
+             raid.spatialLayout.resourcePoints)
+        {
+            EXPECT_TRUE(pointIds.insert(point.instanceId).second)
+                << "seed " << seed;
+            capacity += point.capacity;
+        }
+        for (const RaidLootSnapshot &loot : raid.loot)
+        {
+            if (loot.spaceId != outdoorRaidSpaceId() ||
+                loot.requiresHighRisk)
+                continue;
+            EXPECT_TRUE(pointIds.contains(loot.resourcePointInstanceId))
+                << "seed " << seed;
+            EXPECT_TRUE(regularSlots.insert(loot.slotIndex).second)
+                << "seed " << seed;
+        }
+        EXPECT_EQ(regularSlots.size(), capacity) << "seed " << seed;
+    }
+    EXPECT_GT(layoutHashes.size(), 96U);
 }
 
 TEST(RaidLifecycleTest,

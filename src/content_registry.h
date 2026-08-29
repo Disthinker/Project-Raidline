@@ -527,6 +527,32 @@ struct RaidLandmarkTemplateDefinition
     }
 };
 
+enum class RaidResourcePointKind : std::uint8_t
+{
+    Ordinary,
+    HighValue,
+    LandmarkSpecific
+};
+
+struct RaidResourcePointArchetypeDefinition
+{
+    std::string id;
+    std::string displayName;
+    RaidResourcePointKind kind{RaidResourcePointKind::Ordinary};
+    LootTableDefinitionId lootTableId;
+    std::vector<RaidDistrictKind> allowedDistrictKinds;
+    std::string landmarkDefinitionId;
+    std::uint32_t minimumInstances{1};
+    std::uint32_t maximumInstances{1};
+    std::uint32_t capacity{1};
+    std::uint32_t riskTier{1};
+    Vec2 footprintCells{3.0F, 3.0F};
+
+    friend bool operator==(
+        const RaidResourcePointArchetypeDefinition &,
+        const RaidResourcePointArchetypeDefinition &) = default;
+};
+
 // Content owns the theme grammar while every accepted per-Raid result is
 // frozen in PendingRaidSnapshot. Layout v3 uses a fine outdoor grid plus a
 // coarser district grid and presentation chunks; fixed maps remain unchanged.
@@ -549,10 +575,13 @@ struct ProceduralOutdoorDefinition
     std::uint32_t maximumRoadObstacles{};
     std::uint32_t minimumPuddlePatches{};
     std::uint32_t maximumPuddlePatches{};
+    std::uint32_t minimumInitialEnemies{};
+    std::uint32_t maximumInitialEnemies{};
     std::uint32_t maximumAttempts{8};
     std::uint32_t anchorClearanceCells{1};
     std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;
     std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
+    std::vector<RaidResourcePointArchetypeDefinition> resourcePointArchetypes;
 
     friend bool operator==(
         const ProceduralOutdoorDefinition &,

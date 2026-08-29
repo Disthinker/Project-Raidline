@@ -156,6 +156,7 @@ void RaidTacticalMapState::configureOutdoorLayout(
     outdoorDistrictKinds_.clear();
     outdoorTerrainKinds_.clear();
     outdoorLabels_.clear();
+    outdoorResourcePoints_.clear();
     if (!configured() || layout.layoutVersion < 3U || sourceColumns == 0U ||
         sourceRows == 0U)
     {
@@ -281,6 +282,16 @@ void RaidTacticalMapState::configureOutdoorLayout(
             {landmark.bounds.position.x + landmark.bounds.size.x * 0.5F,
              landmark.bounds.position.y + landmark.bounds.size.y * 0.5F},
             true});
+    for (const RaidResourcePointSnapshot &resourcePoint :
+         layout.resourcePoints)
+    {
+        outdoorResourcePoints_.push_back({
+            resourcePoint.instanceId,
+            resourcePoint.displayName,
+            resourcePoint.kind,
+            resourcePoint.bounds,
+            resourcePoint.riskTier});
+    }
 }
 
 bool RaidTacticalMapState::configured() const noexcept
@@ -414,4 +425,10 @@ const std::vector<RaidTacticalWorldLabel> &
 RaidTacticalMapState::outdoorLabels() const noexcept
 {
     return outdoorLabels_;
+}
+
+const std::vector<RaidTacticalResourcePoint> &
+RaidTacticalMapState::outdoorResourcePoints() const noexcept
+{
+    return outdoorResourcePoints_;
 }

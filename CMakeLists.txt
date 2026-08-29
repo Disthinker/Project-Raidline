@@ -382,6 +382,7 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/developer_runtime_panel.h
     src/frame_pacing.cpp
     src/frame_pacing.h
     src/frame_performance.cpp
@@ -495,6 +496,10 @@ raidline_add_test(
 raidline_add_test(
     FramePacingTest
     tests/test_frame_pacing.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    DeveloperRuntimePanelTest
+    tests/test_developer_runtime_panel.cpp
     raidline::sdl_client)
 raidline_add_test(
     GameAudioTest

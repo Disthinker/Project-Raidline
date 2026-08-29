@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <iterator>
+#include <numeric>
 #include <stdexcept>
 #include <type_traits>
 
@@ -1879,8 +1880,16 @@ ProfileValidationResult validateProfileState(
         }
         const bool legacyPlayableOutdoorRules =
             raid.rulesVersion == "procedural-playable-outdoor-layout-21";
-        const bool districtLayoutRules =
+        const bool legacyDistrictLayoutRules =
             raid.rulesVersion == "procedural-frontier-district-layout-22";
+        const bool legacyResourceEcologyRules =
+            raid.rulesVersion == "procedural-frontier-resource-ecology-23";
+        const bool expandedResourceEcologyRules =
+            raid.rulesVersion == "procedural-frontier-resource-ecology-24";
+        const bool resourceEcologyRules =
+            legacyResourceEcologyRules || expandedResourceEcologyRules;
+        const bool districtLayoutRules =
+            legacyDistrictLayoutRules || resourceEcologyRules;
         const bool playableOutdoorRules =
             legacyPlayableOutdoorRules || districtLayoutRules;
         const bool advancedLootRules =
@@ -2027,6 +2036,15 @@ ProfileValidationResult validateProfileState(
                 raid.loot.begin(), raid.loot.end(),
                 [](const RaidLootSnapshot &loot)
                 { return loot.spaceId != outdoorRaidSpaceId(); }));
+        const std::size_t expectedResourceLootCount = resourceEcologyRules
+            ? std::accumulate(
+                  raid.spatialLayout.resourcePoints.begin(),
+                  raid.spatialLayout.resourcePoints.end(),
+                  std::size_t{},
+                  [](std::size_t total,
+                     const RaidResourcePointSnapshot &resourcePoint)
+                  { return total + resourcePoint.capacity; })
+            : 0U;
         std::size_t expectedInteriorEnemyCount{};
         std::size_t expectedInteriorLootCount{};
         const std::size_t expectedInteriorCount = multipleInteriorRules
@@ -2044,8 +2062,16 @@ ProfileValidationResult validateProfileState(
             raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
             !validMedicalStatus(raid.startingMedicalStatus) ||
-            outdoorEnemyCount < 4 || outdoorEnemyCount > 6 ||
-            outdoorRegularLootCount < 6 || outdoorRegularLootCount > 9 ||
+            (expandedResourceEcologyRules
+                 ? outdoorEnemyCount <
+                           raidMap->proceduralOutdoor.minimumInitialEnemies ||
+                       outdoorEnemyCount >
+                           raidMap->proceduralOutdoor.maximumInitialEnemies
+                 : outdoorEnemyCount < 4 || outdoorEnemyCount > 6) ||
+            (resourceEcologyRules
+                 ? outdoorRegularLootCount != expectedResourceLootCount
+                 : outdoorRegularLootCount < 6 ||
+                       outdoorRegularLootCount > 9) ||
             (interiorRules &&
              (raid.interiors.size() != expectedInteriorCount ||
               interiorEnemyCount != expectedInteriorEnemyCount ||
@@ -2317,7 +2343,9 @@ ProfileValidationResult validateProfileState(
                          ? raid.spatialLayout.layoutVersion == 2U &&
                                !raid.spatialLayout.roadCells.empty()
                          : raid.spatialLayout.layoutVersion ==
-                                   procedural.layoutVersion &&
+                                   (legacyDistrictLayoutRules
+                                        ? 3U
+                                        : procedural.layoutVersion) &&
                                !raid.spatialLayout.roadCells.empty());
             const bool fallbackStateValid =
                 raid.spatialLayout.usedFallback
@@ -2492,7 +2520,10 @@ ProfileValidationResult validateProfileState(
                     return point.x == expected.x && point.y == expected.y;
                 };
                 districtSnapshotValid = districtSnapshotValid &&
-                    raid.spatialLayout.layoutVersion == 3U &&
+                    raid.spatialLayout.layoutVersion ==
+                        (legacyDistrictLayoutRules
+                             ? 3U
+                             : raidMap->proceduralOutdoor.layoutVersion) &&
                     raid.spatialLayout.districts.size() == 8U &&
                     raid.spatialLayout.landmarks.size() == 3U &&
                     !raid.spatialLayout.terrainSpans.empty() &&
@@ -2515,6 +2546,104 @@ ProfileValidationResult validateProfileState(
                     findRaidAnchorPlacement(
                         raid.spatialLayout,
                         kRaidAnchorAdvancedResource) != nullptr;
+                std::set<std::string> resourcePointIds;
+                std::size_t resourceCapacity{};
+                if (resourceEcologyRules)
+                {
+                    districtSnapshotValid = districtSnapshotValid &&
+                        !raid.spatialLayout.resourcePoints.empty();
+                    for (const RaidResourcePointSnapshot &resourcePoint :
+                         raid.spatialLayout.resourcePoints)
+                    {
+                        const auto definition = std::find_if(
+                            raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.begin(),
+                            raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.end(),
+                            [&](const RaidResourcePointArchetypeDefinition &value)
+                            { return value.id == resourcePoint.definitionId; });
+                        const auto *anchor = findRaidAnchorPlacement(
+                            raid.spatialLayout, resourcePoint.instanceId);
+                        const auto district = std::find_if(
+                            raid.spatialLayout.districts.begin(),
+                            raid.spatialLayout.districts.end(),
+                            [&](const RaidDistrictSnapshot &value)
+                            {
+                                return value.instanceId ==
+                                    resourcePoint.districtInstanceId;
+                            });
+                        const auto landmark = std::find_if(
+                            raid.spatialLayout.landmarks.begin(),
+                            raid.spatialLayout.landmarks.end(),
+                            [&](const RaidLandmarkPlacementSnapshot &value)
+                            {
+                                return value.definitionId ==
+                                    resourcePoint.landmarkDefinitionId;
+                            });
+                        const bool districtAllowed =
+                            definition != raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.end() &&
+                            district != raid.spatialLayout.districts.end() &&
+                            (definition->allowedDistrictKinds.empty() ||
+                             std::find(
+                                 definition->allowedDistrictKinds.begin(),
+                                 definition->allowedDistrictKinds.end(),
+                                 district->kind) !=
+                                 definition->allowedDistrictKinds.end());
+                        const bool landmarkBindingValid =
+                            definition != raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.end() &&
+                            (definition->landmarkDefinitionId.empty()
+                                 ? landmark ==
+                                       raid.spatialLayout.landmarks.end()
+                                 : landmark !=
+                                           raid.spatialLayout.landmarks.end() &&
+                                       landmark->districtInstanceId ==
+                                           resourcePoint.districtInstanceId);
+                        districtSnapshotValid = districtSnapshotValid &&
+                            !resourcePoint.instanceId.empty() &&
+                            resourcePointIds.insert(
+                                resourcePoint.instanceId).second &&
+                            definition != raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.end() &&
+                            resourcePoint.displayName == definition->displayName &&
+                            resourcePoint.kind == definition->kind &&
+                            resourcePoint.lootTableId == definition->lootTableId &&
+                            resourcePoint.riskTier == definition->riskTier &&
+                            resourcePoint.capacity == definition->capacity &&
+                            resourcePoint.capacity > 0U &&
+                            anchor != nullptr &&
+                            anchor->kind == RaidMapAnchorKind::ResourcePoint &&
+                            resourcePoint.bounds == anchor->bounds &&
+                            resourcePoint.districtInstanceId ==
+                                anchor->districtInstanceId &&
+                            districtAllowed &&
+                            resourcePoint.landmarkDefinitionId ==
+                                definition->landmarkDefinitionId &&
+                            landmarkBindingValid &&
+                            insideWalkable(resourcePoint.bounds);
+                        resourceCapacity += resourcePoint.capacity;
+                    }
+                    for (const RaidResourcePointArchetypeDefinition &definition :
+                         raidMap->proceduralOutdoor.resourcePointArchetypes)
+                    {
+                        const std::size_t count = std::count_if(
+                            raid.spatialLayout.resourcePoints.begin(),
+                            raid.spatialLayout.resourcePoints.end(),
+                            [&](const RaidResourcePointSnapshot &value)
+                            { return value.definitionId == definition.id; });
+                        districtSnapshotValid = districtSnapshotValid &&
+                            count >= definition.minimumInstances &&
+                            count <= definition.maximumInstances;
+                    }
+                    districtSnapshotValid = districtSnapshotValid &&
+                        resourceCapacity == outdoorRegularLootCount;
+                }
+                else
+                {
+                    districtSnapshotValid = districtSnapshotValid &&
+                        raid.spatialLayout.resourcePoints.empty();
+                }
                 if (raid.rescue.has_value())
                     districtSnapshotValid = districtSnapshotValid &&
                         matchesRect(kRaidAnchorRescue,
@@ -2541,7 +2670,9 @@ ProfileValidationResult validateProfileState(
                                 raid.spatialLayout,
                                 kRaidAnchorAdvancedResource);
                             const std::size_t ordinal = loot.slotIndex -
-                                raidMap->raidLootSlots.size();
+                                (resourceEcologyRules
+                                     ? expectedResourceLootCount
+                                     : raidMap->raidLootSlots.size());
                             const std::size_t count = raidMap->highRisk
                                 .advancedLootSlots.size();
                             districtSnapshotValid = districtSnapshotValid &&
@@ -2555,12 +2686,34 @@ ProfileValidationResult validateProfileState(
                                     resource->bounds.position.y +
                                         resource->bounds.size.y * 0.5F;
                         }
-                        else
+                        else if (!resourceEcologyRules)
                             districtSnapshotValid = districtSnapshotValid &&
                                 matchesPoint(
                                     raidIndexedAnchorId("loot", index),
                                     RaidMapAnchorKind::Loot,
                                     loot.position, true);
+                        else
+                        {
+                            const auto point = std::find_if(
+                                raid.spatialLayout.resourcePoints.begin(),
+                                raid.spatialLayout.resourcePoints.end(),
+                                [&](const RaidResourcePointSnapshot &value)
+                                {
+                                    return value.instanceId ==
+                                        loot.resourcePointInstanceId;
+                                });
+                            const Vec2 expected = point ==
+                                    raid.spatialLayout.resourcePoints.end()
+                                ? Vec2{}
+                                : raidResourcePointLootPosition(
+                                      *point,
+                                      loot.resourcePointSlotIndex);
+                            districtSnapshotValid = districtSnapshotValid &&
+                                point != raid.spatialLayout.resourcePoints.end() &&
+                                loot.resourcePointSlotIndex < point->capacity &&
+                                loot.position.x == expected.x &&
+                                loot.position.y == expected.y;
+                        }
                     }
                 }
                 for (std::size_t index{}; index < raid.interiors.size(); ++index)
@@ -2571,7 +2724,10 @@ ProfileValidationResult validateProfileState(
                 const std::size_t expectedAnchorCount = 6U +
                     static_cast<std::size_t>(raid.rescue.has_value()) +
                     static_cast<std::size_t>(raid.selfRecovery.has_value()) +
-                    outdoorEnemyCount + outdoorRegularLootCount +
+                    outdoorEnemyCount +
+                    (resourceEcologyRules
+                         ? raid.spatialLayout.resourcePoints.size()
+                         : outdoorRegularLootCount) +
                     raidMap->highRisk.pressureSpawns.size() +
                     raid.interiors.size();
                 districtSnapshotValid = districtSnapshotValid &&
@@ -3001,7 +3157,9 @@ ProfileValidationResult validateProfileState(
         {
             const RaidLootSnapshot &loot = raid.loot[lootIndex];
             const AssetRecord *asset = profile.assets.find(loot.assetId);
-            const std::size_t regularSlotCount = raidMap->raidLootSlots.size();
+            const std::size_t regularSlotCount = resourceEcologyRules
+                ? expectedResourceLootCount
+                : raidMap->raidLootSlots.size();
             const std::size_t advancedSlotCount =
                 raidMap->highRisk.advancedLootSlots.size();
             bool validSlot{};
@@ -3036,7 +3194,7 @@ ProfileValidationResult validateProfileState(
                 if (validSlot)
                 {
                     const RaidAnchorPlacementSnapshot *anchor =
-                        districtLayoutRules
+                        districtLayoutRules && !resourceEcologyRules
                             ? findRaidAnchorPlacement(
                                   raid.spatialLayout,
                                   raidIndexedAnchorId("loot", lootIndex))
@@ -3061,7 +3219,7 @@ ProfileValidationResult validateProfileState(
                                     resource->bounds.position.y +
                                         resource->bounds.size.y * 0.5F;
                         }
-                        else
+                        else if (!resourceEcologyRules)
                             validPosition = anchor != nullptr &&
                                 anchor->kind == RaidMapAnchorKind::Loot &&
                                 loot.position.x ==
@@ -3070,6 +3228,37 @@ ProfileValidationResult validateProfileState(
                                 loot.position.y ==
                                     anchor->bounds.position.y +
                                         anchor->bounds.size.y * 0.5F;
+                        else
+                        {
+                            const auto point = std::find_if(
+                                raid.spatialLayout.resourcePoints.begin(),
+                                raid.spatialLayout.resourcePoints.end(),
+                                [&](const RaidResourcePointSnapshot &value)
+                                {
+                                    return value.instanceId ==
+                                        loot.resourcePointInstanceId;
+                                });
+                            if (point != raid.spatialLayout.resourcePoints.end() &&
+                                loot.resourcePointSlotIndex < point->capacity)
+                            {
+                                const Vec2 expected =
+                                    raidResourcePointLootPosition(
+                                        *point,
+                                        loot.resourcePointSlotIndex);
+                                std::size_t pointBase{};
+                                for (const RaidResourcePointSnapshot &value :
+                                     raid.spatialLayout.resourcePoints)
+                                {
+                                    if (value.instanceId == point->instanceId)
+                                        break;
+                                    pointBase += value.capacity;
+                                }
+                                validSlot = loot.slotIndex == pointBase +
+                                    loot.resourcePointSlotIndex;
+                                validPosition = loot.position.x == expected.x &&
+                                    loot.position.y == expected.y;
+                            }
+                        }
                     }
                     else
                     {
@@ -3125,6 +3314,36 @@ ProfileValidationResult validateProfileState(
                  asset->definitionId != loot.definitionId))
             {
                 return {false, "pending Raid Loot ownership is invalid"};
+            }
+            if (resourceEcologyRules &&
+                loot.spaceId == outdoorRaidSpaceId() &&
+                !loot.requiresHighRisk && recoveryRoot == nullptr)
+            {
+                const auto point = std::find_if(
+                    raid.spatialLayout.resourcePoints.begin(),
+                    raid.spatialLayout.resourcePoints.end(),
+                    [&](const RaidResourcePointSnapshot &value)
+                    {
+                        return value.instanceId ==
+                            loot.resourcePointInstanceId;
+                    });
+                if (point == raid.spatialLayout.resourcePoints.end())
+                    return {false, "pending Raid Loot resource point is invalid"};
+                const LootTableDefinition &table = content.lootTable(
+                    point->lootTableId);
+                const auto entry = std::find_if(
+                    table.entries.begin(), table.entries.end(),
+                    [&](const LootContentEntry &value)
+                    { return value.itemDefinitionId == loot.definitionId; });
+                if (entry == table.entries.end() ||
+                    loot.quantity < entry->minimumQuantity ||
+                    loot.quantity > entry->maximumQuantity)
+                    return {false, "pending Raid Loot table result is invalid"};
+            }
+            else if (!loot.resourcePointInstanceId.empty() ||
+                     loot.resourcePointSlotIndex != 0U)
+            {
+                return {false, "legacy Raid Loot has resource point metadata"};
             }
         }
         for (AssetInstanceId groundAssetId : groundAssetIds)
@@ -3190,20 +3409,45 @@ ProfileValidationResult validateProfileState(
             std::back_inserter(outdoorEnemies),
             [](const RaidEnemySnapshot &enemy)
             { return enemy.spaceId == outdoorRaidSpaceId(); });
-        if (outdoorEnemies.size() != deployment.enemies.size() ||
-            !std::equal(
-                outdoorEnemies.begin(), outdoorEnemies.end(),
-                deployment.enemies.begin(), deployment.enemies.end(),
-                [&](const RaidEnemySnapshot &snapshot,
-                    const EnemySpawnDefinition &definition)
+        const auto districtEnemyMatches = [](
+            const RaidEnemySnapshot &snapshot,
+            const EnemySpawnDefinition &definition)
+        {
+            return snapshot.size.x == definition.size.x &&
+                snapshot.size.y == definition.size.y &&
+                snapshot.maximumHealth == definition.maximumHealth;
+        };
+        bool outdoorEnemiesMatch{};
+        if (expandedResourceEcologyRules && !deployment.enemies.empty())
+        {
+            outdoorEnemiesMatch = true;
+            for (std::size_t index{}; index < outdoorEnemies.size(); ++index)
+            {
+                if (!districtEnemyMatches(
+                        outdoorEnemies[index],
+                        deployment.enemies[index % deployment.enemies.size()]))
                 {
-                    return districtLayoutRules
-                        ? snapshot.size.x == definition.size.x &&
-                              snapshot.size.y == definition.size.y &&
-                              snapshot.maximumHealth ==
-                                  definition.maximumHealth
-                        : enemyMatches(snapshot, definition);
-                }))
+                    outdoorEnemiesMatch = false;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            outdoorEnemiesMatch =
+                outdoorEnemies.size() == deployment.enemies.size() &&
+                std::equal(
+                    outdoorEnemies.begin(), outdoorEnemies.end(),
+                    deployment.enemies.begin(), deployment.enemies.end(),
+                    [&](const RaidEnemySnapshot &snapshot,
+                        const EnemySpawnDefinition &definition)
+                    {
+                        return districtLayoutRules
+                            ? districtEnemyMatches(snapshot, definition)
+                            : enemyMatches(snapshot, definition);
+                    });
+        }
+        if (!outdoorEnemiesMatch)
         {
             return {false, "pending Raid outdoor enemies do not match deployment"};
         }
@@ -3734,6 +3978,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, loot.requiresHighRisk ? 1U : 0U);
             hashInteger(hash, loot.collected ? 1U : 0U);
             hashBytes(hash, loot.spaceId.value());
+            hashBytes(hash, loot.resourcePointInstanceId);
+            hashInteger(hash, loot.resourcePointSlotIndex);
         }
         for (const RaidInteriorSnapshot &interior : raid.interiors)
         {

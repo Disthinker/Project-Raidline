@@ -1381,6 +1381,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {
                 lootEntry["space_id"] = entry.spaceId.value();
             }
+            if (schemaVersion >= 36)
+            {
+                lootEntry["resource_point_instance_id"] =
+                    entry.resourcePointInstanceId;
+                lootEntry["resource_point_slot_index"] =
+                    entry.resourcePointSlotIndex;
+            }
             loot.push_back(std::move(lootEntry));
         }
         payload["pending_raid"] = {
@@ -1549,6 +1556,34 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 layout["props"] = std::move(props);
                 layout["anchor_placements"] = std::move(anchors);
                 layout["landmarks"] = std::move(landmarks);
+                if (schemaVersion >= 36)
+                {
+                    Json resourcePoints = Json::array();
+                    for (const RaidResourcePointSnapshot &resourcePoint :
+                         raid.spatialLayout.resourcePoints)
+                    {
+                        resourcePoints.push_back({
+                            {"instance_id", resourcePoint.instanceId},
+                            {"definition_id", resourcePoint.definitionId},
+                            {"display_name", resourcePoint.displayName},
+                            {"kind", static_cast<std::uint32_t>(
+                                resourcePoint.kind)},
+                            {"loot_table_id",
+                             resourcePoint.lootTableId.value()},
+                            {"risk_tier", resourcePoint.riskTier},
+                            {"capacity", resourcePoint.capacity},
+                            {"bounds", {
+                                {"position", vectorValue(
+                                    resourcePoint.bounds.position)},
+                                {"size", vectorValue(
+                                    resourcePoint.bounds.size)}}},
+                            {"district_instance_id",
+                             resourcePoint.districtInstanceId},
+                            {"landmark_definition_id",
+                             resourcePoint.landmarkDefinitionId}});
+                    }
+                    layout["resource_points"] = std::move(resourcePoints);
+                }
             }
         }
         if (schemaVersion >= 22)
@@ -1797,7 +1832,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             if (schemaVersion >= 27 ||
                 raid.rulesVersion == "regional-base-perimeter-sweep-20" ||
                 raid.rulesVersion == "procedural-playable-outdoor-layout-21" ||
-                raid.rulesVersion == "procedural-frontier-district-layout-22")
+                raid.rulesVersion == "procedural-frontier-district-layout-22" ||
+                raid.rulesVersion ==
+                    "procedural-frontier-resource-ecology-23" ||
+                raid.rulesVersion ==
+                    "procedural-frontier-resource-ecology-24")
             {
                 Json routes = Json::array();
                 for (const RegionRouteDefinitionId &routeId :
@@ -2039,7 +2078,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
-        schemaVersion != 35)
+        schemaVersion != 35 && schemaVersion != 36)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2155,7 +2194,13 @@ SaveLoadResult deserializeProfileEnvelope(
              contentVersion == "regional-base-perimeter-sweep-content-42") ||
             (schemaVersion == 34 &&
              contentVersion ==
-                 "procedural-playable-outdoor-layout-content-43");
+                 "procedural-playable-outdoor-layout-content-43") ||
+            (schemaVersion == 35 &&
+             contentVersion ==
+                 "procedural-frontier-district-layout-content-44") ||
+            (schemaVersion == 36 &&
+             contentVersion ==
+                 "procedural-frontier-resource-ecology-content-45");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2173,7 +2218,7 @@ SaveLoadResult deserializeProfileEnvelope(
              schemaVersion != 29 && schemaVersion != 30 &&
               schemaVersion != 31 && schemaVersion != 32 &&
               schemaVersion != 33 && schemaVersion != 34 &&
-              schemaVersion != 35) ||
+              schemaVersion != 35 && schemaVersion != 36) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2977,7 +3022,15 @@ SaveLoadResult deserializeProfileEnvelope(
                     schemaVersion >= 22
                         ? RaidSpaceDefinitionId{
                               entry.at("space_id").get<std::string>()}
-                        : outdoorRaidSpaceId()});
+                        : outdoorRaidSpaceId(),
+                    schemaVersion >= 36
+                        ? entry.at("resource_point_instance_id")
+                              .get<std::string>()
+                        : std::string{},
+                    schemaVersion >= 36
+                        ? entry.at("resource_point_slot_index")
+                              .get<std::uint32_t>()
+                        : 0U});
             }
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")
@@ -3144,7 +3197,9 @@ SaveLoadResult deserializeProfileEnvelope(
                         const std::uint32_t kind =
                             anchor.at("kind").get<std::uint32_t>();
                         if (kind > static_cast<std::uint32_t>(
-                                RaidMapAnchorKind::InteriorEntrance))
+                                schemaVersion >= 36
+                                    ? RaidMapAnchorKind::ResourcePoint
+                                    : RaidMapAnchorKind::InteriorEntrance))
                         {
                             return {SaveLoadStatus::Failed, std::nullopt,
                                     "Raid anchor kind is invalid"};
@@ -3183,6 +3238,42 @@ SaveLoadResult deserializeProfileEnvelope(
                             snapshot.roadSockets.push_back(parseVector(socket));
                         raid.spatialLayout.landmarks.push_back(
                             std::move(snapshot));
+                    }
+                    if (schemaVersion >= 36)
+                    {
+                        for (const Json &resourcePoint :
+                             layout.at("resource_points"))
+                        {
+                            const std::uint32_t kind = resourcePoint.at("kind")
+                                .get<std::uint32_t>();
+                            if (kind > static_cast<std::uint32_t>(
+                                    RaidResourcePointKind::LandmarkSpecific))
+                            {
+                                return {SaveLoadStatus::Failed, std::nullopt,
+                                        "Raid resource point kind is invalid"};
+                            }
+                            const Json &bounds = resourcePoint.at("bounds");
+                            raid.spatialLayout.resourcePoints.push_back({
+                                resourcePoint.at("instance_id")
+                                    .get<std::string>(),
+                                resourcePoint.at("definition_id")
+                                    .get<std::string>(),
+                                resourcePoint.at("display_name")
+                                    .get<std::string>(),
+                                static_cast<RaidResourcePointKind>(kind),
+                                LootTableDefinitionId{resourcePoint.at(
+                                    "loot_table_id").get<std::string>()},
+                                resourcePoint.at("risk_tier")
+                                    .get<std::uint32_t>(),
+                                resourcePoint.at("capacity")
+                                    .get<std::uint32_t>(),
+                                {parseVector(bounds.at("position")),
+                                 parseVector(bounds.at("size"))},
+                                resourcePoint.at("district_instance_id")
+                                    .get<std::uint16_t>(),
+                                resourcePoint.at("landmark_definition_id")
+                                    .get<std::string>()});
+                        }
                     }
                 }
             }

@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-28。
+最后核对：2026-08-29。
 
 ## Git 与交付基线
 
-- `origin/main@7bd3b02` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、区域地图情报、Raid World Vertical Slice、可扩展性能基础，以及 Regional Operations 的失物/两条寻回、区域路线/轻量哨所、哨所中断/恢复、基地候选点清剿、唯一主基地迁徙、地点独特设施、基地威胁/自动防守和外围清剿闭环。
-- 当前开发分支：`codex/procedural-raid-layout-v1`，从 `origin/main@7bd3b02` 创建。
-- 当前活动计划：`doc/exec-plans/active/procedural-raid-playable-outdoor-layout-v1.md`。
+- `origin/main@636a40b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1 的超大主题分区室外布局。
+- 当前开发分支：`codex/procedural-raid-resource-ecology-v1`，从 `origin/main@636a40b` 创建。
+- 当前活动计划：`doc/exec-plans/active/procedural-raid-resource-point-ecology-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。当前唯一主阶段为 **程序化 Raid 内容扩展——首张可玩随机大地图**；Macro 1 正把 `Frontier Exchange` 扩展为 25600×14400 的单一无缝室外空间，先生成八个连续主题分区，再放置三个固定内部地标、程序道路、环境填充和全部玩法 Socket。不提前实现完整资源点生态、遭遇生态、程序化室内、多主题、实时尸潮或 AI 小队。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1 均已进入主线。当前唯一工作是 Macro 2：让 `Frontier Exchange` 在既有 25600×14400 布局中冻结普通、高价值和地点专属资源点，形成路线风险、容量与撤离距离取舍。不提前启动遭遇生态、程序化室内、多主题、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -65,7 +65,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。�
 50. **区域基地独特设施 v1**：PR #108 已通过用户正常游玩验收，以普通 merge commit `bf0d383` 进入 main。content v40/schema v31 为 Greyline 与 Ashworks 发布类型化地点能力；Ashworks 重型物流工坊只在该地点为当前主基地且普通工坊已安装时缩短新制造订单。
 51. **基地威胁预警与自动防守 v1**：content v41/schema v32 保存 Raid、人口和地点三类威胁、三分钟 Base 预警、首次手动确认及后续预设。公共 Security 决定成功或软失败；成功增加建材并进入 7 日安全期，软失败只损失有限公共储备和至多一名未被占用的普通居民，进入 12 日安全期，不损坏个人资产。满威胁但仍受安全期保护时持续显示 `QUEUED`、剩余保护时间和“仍可出击”。PR #109 已通过用户正常游玩验收，并以普通 merge commit `fab9f32` 进入 main。
 52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
-53. **Frontier Exchange 超大主题分区随机地图 v3（当前开发）**：Draft PR #111 的原 2560×1440 验收范围已作废。当前分支使用 content v44/layout v3/schema v35，把 `Frontier Exchange` 扩展为 25600×14400、320×180 基础格、20×12 运行时区块；每局冻结八个连续主题分区、三个固定地标、主/次/接入道路、五类地表、约 700～1100 个可碰撞物、1200～1800 个非碰撞环境物以及全部既有玩法锚点。schema v34/layout v2 只读取原快照，不在迁移时重生成。验收返工把随机 Voronoi 分区改为带有限边界偏移和镜像变化的 4×2 宏观规划，工业与物流区保持相邻，路网沿分区边界形成稳定骨架，厂房/仓库按区内 compound 网格成组放置；战术地图为已探索分区着色，全部可见环境占位显示中英文身份。SDL client 复用相机区块投影缓存，不再一帧三次分配/重建同一投影；导航继续使用静态索引、局部环形搜索与远距离区块门户。第三轮验收返工不再信任驱动报告的 VSync 或高刷新/RDP 值：显示提交最高 60 Hz，VSync 成功时仍由同一绝对截止时间补足剩余预算；玩家 Sprite/六帧动画与 60 Hz 像素节拍对齐，文本缓存改为单项 LRU 淘汰，避免动态文字触发整库纹理重建。F10 现在统一承载武器参数、地图迷雾和不提交 Profile 的无限弹药。迷雾切换已由用户正常游玩确认可用。权威准星和控制目标现可越出当前屏幕约 48px（约一个当前准星直径），到达外扩边界后清除外向速度，显示、朝向和击发仍共用同一状态。用户 F9 证据把规律性顿挫收窄到 simulation Update 偶发约 69.24ms 峰值；真实 Frontier 回归稳定复现 `69.97～71.58 ms`，并确认根因是 Active Raid 每秒复制和校验包含完整冻结大地图的 Profile，而非导航或显示提交。当前分支改为在已验证的活动 Profile 上原位推进世界时间和幂等时间消费者，Settlement 继续完整校验并原子保存；相同回归连续十次的最慢 Update 降至 `0.59～0.76 ms`。最新返工把车辆、卡车、集装箱、工程设备和厂房/仓库按角色尺度放大并保持真实长宽方向，非碎屑物件以完整矩形唯一占位；128-seed 回归验证道路物件密度、锚点可达和两两无重叠。进入 layout v3 地图前会先提交双语加载画面，再执行冻结生成。当前 Windows Debug 全目标与完整 CTest 1255/1255 通过，其余返工待 exact-head CI 和新一轮正常游玩收束。
+53. **Frontier Exchange 超大主题分区随机地图 v3**：PR #111 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `636a40b` 进入 main。content v44/layout v3/schema v35 将地图扩展为 25600×14400，并冻结八个连续主题分区、三个固定地标、程序道路、五类地表、真实比例环境物件和全部既有玩法锚点；同时交付区块投影、分层导航、双语加载画面、F10 开发面板、准星边界和大地图帧顿挫修复。
+54. **Frontier Exchange 资源点生态 v1（当前开发）**：当前分支以 content v46/layout v4/schema v36 建立普通、高价值和地点专属资源点定义，按独立命名随机流在 Deploy 时冻结数量、容量、Loot 表、风险、分区/地标约束和点内槽位；旧 schema v35/layout v3 与 schema v36/content v45 继续读取。首轮验收加固让碎屑避让全部大型环境物件，将超大地图初始敌人提高为每局冻结 36～48 名，并增加实际部署阶段加载进度及鼠标可点击的 F10 迷雾、无限弹药、重置和枪械参数控件。连续射击热路径已从整份 Profile 候选复制/全量地图校验迁移为武器与已装弹匣的窄原子事务；背包拖拽预览也只复制资产子域并局部验证格位、容器、装备和弹药规则，正式提交仍保留完整 Profile 原子校验。世界与战术地图继续只消费只读投影。完整自动化通过，exact-head CI 和用户复验待最终收束。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -92,7 +93,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。�
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。当前程序化大地图分支已通过 Windows Debug 全目标、准星外扩边界、Active Raid 世界时间帧预算、128-seed 真实尺度/无重叠地图生成、加载画面双语、帧节奏/性能统计、迷雾表现、战术地图和完整 CTest 1255/1255；exact-head CI 待最终提交后记录。开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。PR #111 的超大主题分区随机地图已通过完整自动化、CI 与用户验收并进入 main。当前 Macro 2 验收加固已完成 Windows Debug 全目标、128-seed 布局/资源生态、旧冻结快照迁移、真实加载阶段、鼠标 F10 和 1268/1268 完整 CTest。世界时钟、背包预览与连续射击共用一个真实 Frontier 性能场景：本机 Debug 中两类拖拽查询合计 P95/最慢约 0.6/0.8 ms，连续 240 帧、30 次实弹击发约 4.4/6.4 ms；两条高频路径均不再复制或全量校验冻结超大地图。exact-head CI 待本次修复收束，开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

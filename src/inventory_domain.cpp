@@ -55,15 +55,173 @@ std::set<AssetInstanceId> overlappingAssets(
 bool validateCandidate(
     const ProfileState &candidate,
     const ContentRegistry &content,
-    InventoryReceipt &receipt)
+    InventoryReceipt &receipt,
+    bool validateWholeProfile)
 {
-    const ProfileValidationResult validation =
-        validateProfileState(candidate, content);
-    if (!validation.valid)
+    if (validateWholeProfile)
+    {
+        const ProfileValidationResult validation =
+            validateProfileState(candidate, content);
+        if (!validation.valid)
+        {
+            receipt = failure(
+                DomainErrorCode::IllegalDestination,
+                validation.message,
+                candidate.revision);
+            return false;
+        }
+        return true;
+    }
+
+    AssetInstanceId maximumId{};
+    std::set<EquipmentSlotKind> occupiedSlots;
+    std::set<AssetInstanceId> installedWeaponIds;
+    for (const auto &[id, asset] : candidate.assets.records())
+    {
+        if (id == 0 || id != asset.instanceId)
+        {
+            receipt = failure(
+                DomainErrorCode::IllegalDestination,
+                "asset ID is invalid",
+                candidate.revision);
+            return false;
+        }
+        maximumId = std::max(maximumId, id);
+
+        const ItemDefinition *definition{};
+        try
+        {
+            definition = &content.item(asset.definitionId);
+        }
+        catch (...)
+        {
+            receipt = failure(
+                DomainErrorCode::IllegalDestination,
+                "asset definition is unknown",
+                candidate.revision);
+            return false;
+        }
+        if (asset.quantity == 0 ||
+            asset.quantity > definition->maxStackSize ||
+            !canUseItemOrientation(*definition, asset.orientation))
+        {
+            receipt = failure(
+                DomainErrorCode::IllegalDestination,
+                "asset value is outside definition limits",
+                candidate.revision);
+            return false;
+        }
+
+        if (const auto *equipped =
+                std::get_if<EquippedAssetLocation>(&asset.location))
+        {
+            if (!itemCanEquipInSlot(*definition, equipped->slot) ||
+                !occupiedSlots.insert(equipped->slot).second)
+            {
+                receipt = failure(
+                    DomainErrorCode::IllegalDestination,
+                    "equipment slot ownership is invalid",
+                    candidate.revision);
+                return false;
+            }
+            continue;
+        }
+
+        if (const auto *installed =
+                std::get_if<InstalledMagazineLocation>(&asset.location))
+        {
+            const AssetRecord *weapon =
+                candidate.assets.find(installed->weaponAssetId);
+            const ItemDefinition *weaponDefinition{};
+            try
+            {
+                if (weapon != nullptr)
+                {
+                    weaponDefinition = &content.item(weapon->definitionId);
+                }
+            }
+            catch (...)
+            {
+            }
+            if (definition->category != ItemCategory::Magazine ||
+                weaponDefinition == nullptr ||
+                !installedWeaponIds.insert(
+                    installed->weaponAssetId).second ||
+                !weaponDefinition->compatibleMagazineDefinitionId.has_value() ||
+                *weaponDefinition->compatibleMagazineDefinitionId !=
+                    definition->definitionId)
+            {
+                receipt = failure(
+                    DomainErrorCode::IllegalDestination,
+                    "installed magazine ownership is invalid",
+                    candidate.revision);
+                return false;
+            }
+            continue;
+        }
+
+        const auto *stored =
+            std::get_if<StoredAssetLocation>(&asset.location);
+        if (stored == nullptr)
+        {
+            continue;
+        }
+        if (!profilePlacementFits(
+                candidate,
+                content,
+                stored->container,
+                stored->origin,
+                *definition,
+                asset.orientation,
+                id))
+        {
+            receipt = failure(
+                DomainErrorCode::IllegalDestination,
+                "asset placement is invalid",
+                candidate.revision);
+            return false;
+        }
+        if (stored->container.kind == ProfileContainerKind::AssetCompartment)
+        {
+            if (stored->container.ownerAssetId == id)
+            {
+                receipt = failure(
+                    DomainErrorCode::IllegalDestination,
+                    "container owns itself",
+                    candidate.revision);
+                return false;
+            }
+            if (!definition->containerCompartments.empty())
+            {
+                const bool hasContents = std::any_of(
+                    candidate.assets.records().begin(),
+                    candidate.assets.records().end(),
+                    [id](const auto &entry)
+                    {
+                        const auto *childStored =
+                            std::get_if<StoredAssetLocation>(
+                                &entry.second.location);
+                        return childStored != nullptr &&
+                            childStored->container.kind ==
+                                ProfileContainerKind::AssetCompartment &&
+                            childStored->container.ownerAssetId == id;
+                    });
+                if (hasContents)
+                {
+                    receipt = failure(
+                        DomainErrorCode::IllegalDestination,
+                        "non-empty container is nested",
+                        candidate.revision);
+                    return false;
+                }
+            }
+        }
+    }
+    if (candidate.assets.nextAssetId() <= maximumId)
     {
         receipt = failure(
             DomainErrorCode::IllegalDestination,
-            validation.message,
+            "asset high-water mark moved backward",
             candidate.revision);
         return false;
     }
@@ -73,7 +231,8 @@ bool validateCandidate(
 InventoryReceipt applyMove(
     ProfileState &candidate,
     const ContentRegistry &content,
-    const InventoryMoveCommand &command)
+    const InventoryMoveCommand &command,
+    bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
     if (source == nullptr)
@@ -280,7 +439,8 @@ InventoryReceipt applyMove(
     }
 
     InventoryReceipt receipt{true, false, DomainErrorCode::None, {}, candidate.revision};
-    if (!validateCandidate(candidate, content, receipt))
+    if (!validateCandidate(
+            candidate, content, receipt, validateWholeProfile))
     {
         return receipt;
     }
@@ -290,7 +450,8 @@ InventoryReceipt applyMove(
 InventoryReceipt applyEquip(
     ProfileState &candidate,
     const ContentRegistry &content,
-    const InventoryEquipCommand &command)
+    const InventoryEquipCommand &command,
+    bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
     if (source == nullptr)
@@ -352,7 +513,8 @@ InventoryReceipt applyEquip(
     }
 
     InventoryReceipt receipt{true, false, DomainErrorCode::None, {}, candidate.revision};
-    if (!validateCandidate(candidate, content, receipt))
+    if (!validateCandidate(
+            candidate, content, receipt, validateWholeProfile))
     {
         return receipt;
     }
@@ -362,19 +524,29 @@ InventoryReceipt applyEquip(
 InventoryReceipt apply(
     ProfileState &candidate,
     const ContentRegistry &content,
-    const InventoryCommand &command)
+    const InventoryCommand &command,
+    bool validateWholeProfile)
 {
     return std::visit(
-        [&candidate, &content](const auto &typedCommand)
+        [&candidate, &content, validateWholeProfile](
+            const auto &typedCommand)
         {
             using Command = std::decay_t<decltype(typedCommand)>;
             if constexpr (std::is_same_v<Command, InventoryMoveCommand>)
             {
-                return applyMove(candidate, content, typedCommand);
+                return applyMove(
+                    candidate,
+                    content,
+                    typedCommand,
+                    validateWholeProfile);
             }
             else
             {
-                return applyEquip(candidate, content, typedCommand);
+                return applyEquip(
+                    candidate,
+                    content,
+                    typedCommand,
+                    validateWholeProfile);
             }
         },
         command);
@@ -386,8 +558,11 @@ InventoryPlan queryInventory(
     const ContentRegistry &content,
     const InventoryCommand &command)
 {
-    ProfileState candidate = profile;
-    const InventoryReceipt receipt = apply(candidate, content, command);
+    ProfileState candidate;
+    candidate.revision = profile.revision;
+    candidate.assets = profile.assets;
+    const InventoryReceipt receipt = apply(
+        candidate, content, command, false);
     return InventoryPlan{
         receipt.succeeded,
         receipt.error,
@@ -429,7 +604,7 @@ InventoryReceipt executeInventory(
     }
 
     ProfileState candidate = profile;
-    InventoryReceipt receipt = apply(candidate, content, command);
+    InventoryReceipt receipt = apply(candidate, content, command, true);
     if (!receipt.succeeded)
     {
         receipt.revision = profile.revision;

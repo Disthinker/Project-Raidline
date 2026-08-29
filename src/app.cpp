@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 
 #include "content_registry.h"
+#include "developer_runtime_panel.h"
 #include "frame_timing.h"
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
@@ -1491,7 +1492,9 @@ bool App::tryDeployFromBase(
     if (targetMap.proceduralOutdoor.enabled &&
         targetMap.proceduralOutdoor.layoutVersion >= 3U)
     {
-        renderRaidLoadingScreen(targetMap);
+        renderRaidLoadingScreen(
+            targetMap,
+            {0.02F, RaidDeploymentProgressStage::Validating});
     }
     if (!gameFlow_.deploy(
             targetMap.id,
@@ -1503,7 +1506,15 @@ bool App::tryDeployFromBase(
                 : selectedRaidSelfRecoveryRecordId_,
             outpostRestorationId,
             baseSiteClearanceId,
-            basePerimeterSweepId))
+            basePerimeterSweepId,
+            targetMap.proceduralOutdoor.enabled
+                ? RaidDeploymentProgressCallback{
+                      [this, &targetMap](
+                          const RaidDeploymentProgress &progress)
+                      {
+                          renderRaidLoadingScreen(targetMap, progress);
+                      }}
+                : RaidDeploymentProgressCallback{}))
     {
         uiMessage_ = gameSession_.persistenceMessage().empty()
             ? "DEPLOYMENT IS NOT AVAILABLE"
@@ -1522,7 +1533,9 @@ bool App::tryDeployFromBase(
     return true;
 }
 
-void App::renderRaidLoadingScreen(const MapDefinition &map)
+void App::renderRaidLoadingScreen(
+    const MapDefinition &map,
+    const RaidDeploymentProgress &progress)
 {
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -1541,34 +1554,74 @@ void App::renderRaidLoadingScreen(const MapDefinition &map)
     uiTextRenderer_.render(
         renderer_, panel.x + 34.0F, panel.y + 82.0F,
         map.displayName.c_str());
-    uiTextRenderer_.render(
-        renderer_, panel.x + 34.0F, panel.y + 132.0F,
-        "GENERATING LARGE OUTDOOR MAP");
-    uiTextRenderer_.render(
-        renderer_, panel.x + 34.0F, panel.y + 168.0F,
-        "PLACING DISTRICTS, ROADS AND LANDMARKS");
-    uiTextRenderer_.render(
-        renderer_, panel.x + 34.0F, panel.y + 204.0F,
-        "VALIDATING ROUTES AND EXTRACTION POINTS");
-
-    constexpr std::array<SDL_FRect, 5U> activitySegments{
-        SDL_FRect{204.0F, 454.0F, 154.0F, 14.0F},
-        SDL_FRect{374.0F, 454.0F, 154.0F, 14.0F},
-        SDL_FRect{544.0F, 454.0F, 154.0F, 14.0F},
-        SDL_FRect{714.0F, 454.0F, 154.0F, 14.0F},
-        SDL_FRect{884.0F, 454.0F, 154.0F, 14.0F}};
-    for (std::size_t index{}; index < activitySegments.size(); ++index)
+    const char *stage = "VALIDATING RAID REQUEST";
+    switch (progress.stage)
     {
-        const Uint8 intensity = static_cast<Uint8>(112U + index * 18U);
-        SDL_SetRenderDrawColor(
-            renderer_, intensity, static_cast<Uint8>(intensity - 16U),
-            53, 255);
-        SDL_RenderFillRect(renderer_, &activitySegments[index]);
+    case RaidDeploymentProgressStage::Validating:
+        stage = "VALIDATING RAID REQUEST";
+        break;
+    case RaidDeploymentProgressStage::PreparingSnapshot:
+        stage = "PREPARING FROZEN RAID SNAPSHOT";
+        break;
+    case RaidDeploymentProgressStage::GeneratingLayout:
+        stage = "GENERATING DISTRICTS, ROADS AND LANDMARKS";
+        break;
+    case RaidDeploymentProgressStage::FreezingLoot:
+        stage = "FREEZING RESOURCE POINTS, LOOT AND ENEMIES";
+        break;
+    case RaidDeploymentProgressStage::ValidatingSnapshot:
+        stage = "VALIDATING ROUTES AND EXTRACTION POINTS";
+        break;
+    case RaidDeploymentProgressStage::BuildingWorld:
+        stage = "BUILDING RAID WORLD";
+        break;
+    case RaidDeploymentProgressStage::SavingProfile:
+        stage = "SAVING DEPLOYMENT STATE";
+        break;
+    case RaidDeploymentProgressStage::Complete:
+        stage = "RAID READY";
+        break;
     }
     uiTextRenderer_.render(
-        renderer_, panel.x + 34.0F, panel.y + 286.0F,
-        "PLEASE WAIT - BUILDING FROZEN RAID SNAPSHOT");
+        renderer_, panel.x + 34.0F, panel.y + 146.0F, stage);
+
+    const float completion = std::clamp(progress.completion, 0.0F, 1.0F);
+    const SDL_FRect track{
+        panel.x + 34.0F, panel.y + 218.0F, panel.w - 68.0F, 28.0F};
+    SDL_SetRenderDrawColor(renderer_, 8, 12, 11, 255);
+    SDL_RenderFillRect(renderer_, &track);
+    SDL_SetRenderDrawColor(renderer_, 76, 82, 67, 255);
+    SDL_RenderRect(renderer_, &track);
+    const SDL_FRect fill{
+        track.x + 3.0F,
+        track.y + 3.0F,
+        std::max(0.0F, (track.w - 6.0F) * completion),
+        track.h - 6.0F};
+    SDL_SetRenderDrawColor(renderer_, 177, 154, 68, 255);
+    SDL_RenderFillRect(renderer_, &fill);
+    if (fill.w > 18.0F)
+    {
+        const float pulseOffset = std::fmod(
+            static_cast<float>(SDL_GetTicks()) * 0.18F,
+            std::max(1.0F, fill.w));
+        const SDL_FRect pulse{
+            fill.x + std::min(pulseOffset, fill.w - 12.0F),
+            fill.y,
+            std::min(12.0F, fill.w),
+            fill.h};
+        SDL_SetRenderDrawColor(renderer_, 238, 220, 132, 210);
+        SDL_RenderFillRect(renderer_, &pulse);
+    }
+    const std::string percentage = fmt::format(
+        "{}%", static_cast<int>(std::round(completion * 100.0F)));
+    uiTextRenderer_.render(
+        renderer_, track.x + track.w - 52.0F, track.y + 5.0F,
+        percentage.c_str());
+    uiTextRenderer_.render(
+        renderer_, panel.x + 34.0F, panel.y + 278.0F,
+        "PLEASE WAIT - PROGRESS FOLLOWS ACTUAL DEPLOYMENT STAGES");
     SDL_RenderPresent(renderer_);
+    SDL_PumpEvents();
 }
 
 const MapDefinition &App::selectedRaidMap() const
@@ -4669,6 +4722,15 @@ void App::processEvents()
 
             if (developerWeaponPanelOpen_)
             {
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    handleDeveloperPanelClick(
+                        MousePosition{event.button.x, event.button.y});
+                    developerWeaponPanelBlocksGameplayThisFrame_ = true;
+                    continue;
+                }
                 if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
                 {
                     constexpr std::size_t parameterCount{
@@ -4706,20 +4768,6 @@ void App::processEvents()
                         uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
                             ? "RUNTIME WEAPON TUNING RESET"
                             : "WEAPON ALREADY USES CONTENT DEFAULTS";
-                        break;
-                    case SDL_SCANCODE_F:
-                        developerMapFogEnabled_ =
-                            !developerMapFogEnabled_;
-                        uiMessage_ = developerMapFogEnabled_
-                            ? "MAP FOG OF WAR ENABLED"
-                            : "MAP FOG OF WAR DISABLED - FULL STATIC MAP";
-                        break;
-                    case SDL_SCANCODE_I:
-                        developerInfiniteAmmoEnabled_ =
-                            !developerInfiniteAmmoEnabled_;
-                        uiMessage_ = developerInfiniteAmmoEnabled_
-                            ? "DEVELOPER INFINITE AMMO ENABLED"
-                            : "DEVELOPER INFINITE AMMO DISABLED";
                         break;
                     case SDL_SCANCODE_ESCAPE:
                         developerWeaponPanelOpen_ = false;
@@ -4881,6 +4929,59 @@ void App::processEvents()
                     *uiEvent);
             }
         }
+    }
+}
+
+void App::handleDeveloperPanelClick(MousePosition position)
+{
+    constexpr std::size_t parameterCount{
+        static_cast<std::size_t>(DeveloperWeaponParameter::Count)};
+    const std::optional<DeveloperPanelAction> action =
+        developerPanelActionAt(
+            DeveloperPanelPoint{position.x, position.y},
+            parameterCount);
+    if (!action.has_value())
+    {
+        return;
+    }
+
+    switch (action->kind)
+    {
+    case DeveloperPanelActionKind::ToggleMapFog:
+        developerMapFogEnabled_ = !developerMapFogEnabled_;
+        uiMessage_ = developerMapFogEnabled_
+            ? "MAP FOG OF WAR ENABLED"
+            : "MAP FOG OF WAR DISABLED - FULL STATIC MAP";
+        break;
+    case DeveloperPanelActionKind::ToggleInfiniteAmmo:
+        developerInfiniteAmmoEnabled_ = !developerInfiniteAmmoEnabled_;
+        uiMessage_ = developerInfiniteAmmoEnabled_
+            ? "DEVELOPER INFINITE AMMO ENABLED"
+            : "DEVELOPER INFINITE AMMO DISABLED";
+        break;
+    case DeveloperPanelActionKind::ResetWeaponTuning:
+        uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
+            ? "RUNTIME WEAPON TUNING RESET"
+            : "WEAPON ALREADY USES CONTENT DEFAULTS";
+        break;
+    case DeveloperPanelActionKind::SelectWeaponParameter:
+        developerWeaponParameterIndex_ = action->parameterIndex;
+        break;
+    case DeveloperPanelActionKind::DecreaseWeaponParameter:
+    case DeveloperPanelActionKind::IncreaseWeaponParameter:
+        developerWeaponParameterIndex_ = action->parameterIndex;
+        if (gameSession_.adjustDeveloperWeaponTuning(
+                static_cast<DeveloperWeaponParameter>(
+                    action->parameterIndex),
+                action->kind ==
+                        DeveloperPanelActionKind::IncreaseWeaponParameter
+                    ? 1
+                    : -1,
+                false))
+        {
+            uiMessage_ = "RUNTIME WEAPON TUNING UPDATED";
+        }
+        break;
     }
 }
 
@@ -7991,6 +8092,38 @@ void App::renderBallisticBlockers()
                 bounds.position.y + bounds.size.y >
                     visibleWorldBounds.position.y;
         };
+        for (const RaidResourcePointSnapshot &resourcePoint :
+             projection.resourcePoints)
+        {
+            if (!visible(resourcePoint.bounds))
+                continue;
+            const SDL_FRect bounds{
+                resourcePoint.bounds.position.x,
+                resourcePoint.bounds.position.y,
+                resourcePoint.bounds.size.x,
+                resourcePoint.bounds.size.y};
+            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                SDL_SetRenderDrawColor(renderer_, 218, 178, 58, 52);
+            else if (resourcePoint.kind ==
+                     RaidResourcePointKind::LandmarkSpecific)
+                SDL_SetRenderDrawColor(renderer_, 86, 176, 190, 48);
+            else
+                SDL_SetRenderDrawColor(renderer_, 92, 158, 102, 42);
+            SDL_RenderFillRect(renderer_, &bounds);
+            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 220);
+            else if (resourcePoint.kind ==
+                     RaidResourcePointKind::LandmarkSpecific)
+                SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 210);
+            else
+                SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 190);
+            SDL_RenderRect(renderer_, &bounds);
+            const std::string label = resourcePoint.displayName +
+                " | RISK TIER " + std::to_string(resourcePoint.riskTier);
+            uiTextRenderer_.render(
+                renderer_, bounds.x + 4.0F, bounds.y + 4.0F,
+                label.c_str());
+        }
         for (const RaidOutdoorPropSnapshot &prop : projection.props)
         {
             if (!visible(prop.bounds))
@@ -9673,11 +9806,15 @@ void App::renderDeveloperWeaponPanel()
 
     const std::optional<DeveloperWeaponTuningSnapshot> tuning =
         gameSession_.developerWeaponTuning();
+    const auto sdlRect = [](DeveloperPanelRect rect) noexcept
+    {
+        return SDL_FRect{rect.x, rect.y, rect.width, rect.height};
+    };
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
     SDL_SetRenderDrawColor(renderer_, 4, 7, 8, 175);
     SDL_RenderFillRect(renderer_, &shade);
-    const SDL_FRect panel{230.0F, 35.0F, 820.0F, 650.0F};
+    const SDL_FRect panel = sdlRect(developerPanelBounds());
     SDL_SetRenderDrawColor(renderer_, 14, 24, 27, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 92, 178, 173, 255);
@@ -9687,26 +9824,42 @@ void App::renderDeveloperWeaponPanel()
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 18.0F,
         "DEVELOPER RUNTIME PANEL - RUNTIME ONLY");
-    const char *fogStatus = developerMapFogEnabled_
-        ? "MAP FOG OF WAR: ENABLED"
-        : "MAP FOG OF WAR: DISABLED - FULL STATIC MAP";
-    const char *infiniteAmmoStatus = developerInfiniteAmmoEnabled_
-        ? "INFINITE AMMO: ENABLED"
-        : "INFINITE AMMO: DISABLED";
+    const auto renderButton = [&](DeveloperPanelRect definition,
+                                  bool active,
+                                  const char *label)
+    {
+        const SDL_FRect bounds = sdlRect(definition);
+        SDL_SetRenderDrawColor(
+            renderer_, active ? 34 : 50, active ? 108 : 58,
+            active ? 94 : 62, 245);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(
+            renderer_, active ? 126 : 112, active ? 224 : 128,
+            active ? 193 : 132, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(
+            renderer_, bounds.x + 10.0F, bounds.y + 9.0F, label);
+    };
+    renderButton(
+        developerFogButton(),
+        developerMapFogEnabled_,
+        developerMapFogEnabled_ ? "MAP FOG: ON" : "MAP FOG: OFF");
+    renderButton(
+        developerInfiniteAmmoButton(),
+        developerInfiniteAmmoEnabled_,
+        developerInfiniteAmmoEnabled_
+            ? "INFINITE AMMO: ON"
+            : "INFINITE AMMO: OFF");
+    renderButton(
+        developerResetWeaponButton(), false, "RESET WEAPON PARAMETERS");
     if (!tuning.has_value())
     {
         uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 38.0F,
-            fogStatus);
-        uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 56.0F,
-            infiniteAmmoStatus);
-        uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 74.0F,
+            renderer_, panel.x + 22.0F, panel.y + 102.0F,
             "NO ACTIVE WEAPON");
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
-            "F MAP FOG | I INFINITE AMMO | F10 / ESC CLOSE");
+            "CLICK OPTIONS | F10 / ESC CLOSE");
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -9717,14 +9870,8 @@ void App::renderDeveloperWeaponPanel()
         tuning->weaponAssetId,
         tuning->overridden ? "OVERRIDDEN" : "CONTENT DEFAULT");
     uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + 38.0F,
+        renderer_, panel.x + 22.0F, panel.y + 94.0F,
         weaponLine.c_str());
-    uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + 54.0F,
-        fogStatus);
-    uiTextRenderer_.render(
-        renderer_, panel.x + 440.0F, panel.y + 54.0F,
-        infiniteAmmoStatus);
 
     constexpr std::array<const char *,
         static_cast<std::size_t>(DeveloperWeaponParameter::Count)> labels{
@@ -9853,15 +10000,12 @@ void App::renderDeveloperWeaponPanel()
             break;
         }
 
-        const float rowY = panel.y + 68.0F +
-            static_cast<float>(index) * 21.0F;
+        const DeveloperPanelRect rowDefinition =
+            developerParameterRow(index);
+        const float rowY = rowDefinition.y + 4.0F;
         if (index == developerWeaponParameterIndex_)
         {
-            const SDL_FRect selected{
-                panel.x + 14.0F,
-                rowY - 6.0F,
-                panel.w - 28.0F,
-                20.0F};
+            const SDL_FRect selected = sdlRect(rowDefinition);
             SDL_SetRenderDrawColor(renderer_, 42, 94, 91, 235);
             SDL_RenderFillRect(renderer_, &selected);
             SDL_SetRenderDrawColor(renderer_, 136, 226, 207, 255);
@@ -9869,12 +10013,27 @@ void App::renderDeveloperWeaponPanel()
         }
         SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
         const std::string row = fmt::format(
-            "{} {:<27} {}",
+            "{} {:<30} {}",
             index == developerWeaponParameterIndex_ ? ">" : " ",
             labels[index],
             value);
         uiTextRenderer_.render(
-            renderer_, panel.x + 24.0F, rowY, row.c_str());
+            renderer_, rowDefinition.x + 8.0F, rowY, row.c_str());
+
+        const SDL_FRect decrease = sdlRect(
+            developerParameterDecreaseButton(index));
+        const SDL_FRect increase = sdlRect(
+            developerParameterIncreaseButton(index));
+        SDL_SetRenderDrawColor(renderer_, 46, 65, 67, 245);
+        SDL_RenderFillRect(renderer_, &decrease);
+        SDL_RenderFillRect(renderer_, &increase);
+        SDL_SetRenderDrawColor(renderer_, 112, 174, 169, 255);
+        SDL_RenderRect(renderer_, &decrease);
+        SDL_RenderRect(renderer_, &increase);
+        uiTextRenderer_.render(
+            renderer_, decrease.x + 18.0F, decrease.y + 4.0F, "-");
+        uiTextRenderer_.render(
+            renderer_, increase.x + 17.0F, increase.y + 4.0F, "+");
     }
 
     const std::string derived = fmt::format(
@@ -9883,14 +10042,11 @@ void App::renderDeveloperWeaponPanel()
         handling.aimDownSightsDurationSeconds,
         handling.aimDownSightsMovementMultiplier);
     uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + panel.h - 58.0F,
+        renderer_, panel.x + 22.0F, panel.y + panel.h - 61.0F,
         derived.c_str());
     uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + panel.h - 34.0F,
-        "UP/DOWN SELECT | LEFT/RIGHT ADJUST | SHIFT COARSE | R RESET");
-    uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + panel.h - 18.0F,
-        "F MAP FOG | I INFINITE AMMO | F10/ESC CLOSE");
+        renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
+        "CLICK ROW OR - / + | F10 / ESC CLOSE");
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
@@ -12820,6 +12976,27 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &resource);
         SDL_SetRenderDrawColor(renderer_, 232, 206, 106, 235);
         SDL_RenderRect(renderer_, &resource);
+    }
+
+    for (const RaidTacticalResourcePoint &resourcePoint :
+         map.outdoorResourcePoints())
+    {
+        if (!tacticalMapResourcePointVisible(
+                map, resourcePoint, presentationMode))
+            continue;
+        SDL_FRect marker = screenRect(resourcePoint.bounds);
+        marker.w = std::max(marker.w, 5.0F);
+        marker.h = std::max(marker.h, 5.0F);
+        if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+            SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 210);
+        else if (resourcePoint.kind ==
+                 RaidResourcePointKind::LandmarkSpecific)
+            SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 205);
+        else
+            SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 185);
+        SDL_RenderFillRect(renderer_, &marker);
+        SDL_SetRenderDrawColor(renderer_, 234, 228, 188, 235);
+        SDL_RenderRect(renderer_, &marker);
     }
 
     if (tacticalMapEnemyDeploymentVisible(map))

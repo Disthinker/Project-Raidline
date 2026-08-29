@@ -178,6 +178,7 @@ private:
     void openMedicalWheel();
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
+    void handleDeveloperPanelClick(MousePosition position);
     [[nodiscard]] bool tryDeployFromBase(
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
@@ -278,7 +279,9 @@ private:
     void syncRaidPointerCapture() noexcept;
     void renderMainMenu();
     void renderPauseMenu();
-    void renderRaidLoadingScreen(const MapDefinition &map);
+    void renderRaidLoadingScreen(
+        const MapDefinition &map,
+        const RaidDeploymentProgress &progress);
     void renderBase();
     void renderBaseWorld();
     void renderBaseStorage();

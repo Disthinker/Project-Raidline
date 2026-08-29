@@ -65,7 +65,15 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-district-layout-content-44");
+        "procedural-frontier-resource-ecology-hardening-content-46");
+    const MapDefinition &frontierEnemyPopulation = registry.map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    EXPECT_EQ(
+        frontierEnemyPopulation.proceduralOutdoor.minimumInitialEnemies,
+        36U);
+    EXPECT_EQ(
+        frontierEnemyPopulation.proceduralOutdoor.maximumInitialEnemies,
+        48U);
     ASSERT_EQ(registry.regionalOperations().baseSites.size(), 2U);
     EXPECT_EQ(registry.regionalOperations().maximumEstablishedOutposts, 2U);
     const RegionalBaseSiteDefinition &ashworks = registry.regionalBaseSite(
@@ -266,7 +274,12 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
             publishedMap.highRisk.conditionalExtractionMaximumWeightGrams,
             22000U);
         EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
-        EXPECT_EQ(publishedMap.highRisk.activeEnemyCap, 8U);
+        EXPECT_EQ(
+            publishedMap.highRisk.activeEnemyCap,
+            publishedMap.id ==
+                    MapDefinitionId{"map.raid.frontier_exchange"}
+                ? 48U
+                : 8U);
         EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
         EXPECT_FLOAT_EQ(publishedMap.highRisk.activationDurationSeconds, 4.0F);
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
@@ -295,7 +308,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     const MapDefinition &frontier = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_TRUE(frontier.proceduralOutdoor.enabled);
-    EXPECT_EQ(frontier.proceduralOutdoor.layoutVersion, 3U);
+    EXPECT_EQ(frontier.proceduralOutdoor.layoutVersion, 4U);
     EXPECT_EQ(frontier.proceduralOutdoor.columns, 320U);
     EXPECT_EQ(frontier.proceduralOutdoor.rows, 180U);
     EXPECT_EQ(frontier.proceduralOutdoor.districtColumns, 40U);
@@ -313,6 +326,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(frontier.proceduralOutdoor.maximumPuddlePatches, 100U);
     EXPECT_EQ(frontier.proceduralOutdoor.districtArchetypes.size(), 6U);
     EXPECT_EQ(frontier.proceduralOutdoor.landmarkTemplates.size(), 3U);
+    ASSERT_EQ(frontier.proceduralOutdoor.resourcePointArchetypes.size(), 6U);
+    const auto &securedCargo =
+        frontier.proceduralOutdoor.resourcePointArchetypes[2];
+    EXPECT_EQ(securedCargo.kind, RaidResourcePointKind::HighValue);
+    EXPECT_EQ(securedCargo.minimumInstances, 3U);
+    EXPECT_EQ(securedCargo.maximumInstances, 4U);
+    EXPECT_EQ(securedCargo.capacity, 3U);
+    EXPECT_EQ(securedCargo.riskTier, 3U);
+    EXPECT_EQ(
+        securedCargo.lootTableId,
+        LootTableDefinitionId{"loot.raid.high_risk_v1"});
     EXPECT_EQ(frontier.worldSize.x, 25600.0F);
     EXPECT_EQ(frontier.worldSize.y, 14400.0F);
     EXPECT_EQ(
@@ -984,6 +1008,40 @@ TEST(ContentRegistryTest, RejectsUnknownBasePerimeterSweepMap)
             publishedJsonCopy(),
             "\"perimeter_sweep_map_definition_id\": \"map.v0.test\"",
             "\"perimeter_sweep_map_definition_id\": \"map.raid.missing\"")),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidProceduralResourcePointContracts)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "resource_point.frontier.secured_cargo",
+            "resource_point.frontier.maintenance_cache"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"landmark_definition_id\": \"landmark.frontier.freight_exchange\"",
+            "\"landmark_definition_id\": \"landmark.frontier.unknown\""))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"minimum_instances\": 5, \"maximum_instances\": 6",
+            "\"minimum_instances\": 7, \"maximum_instances\": 6"))),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidProceduralInitialEnemyRange)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"minimum_initial_enemies\": 36",
+        "\"minimum_initial_enemies\": 64");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
 }
 
