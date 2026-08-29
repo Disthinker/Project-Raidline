@@ -7991,6 +7991,38 @@ void App::renderBallisticBlockers()
                 bounds.position.y + bounds.size.y >
                     visibleWorldBounds.position.y;
         };
+        for (const RaidResourcePointSnapshot &resourcePoint :
+             projection.resourcePoints)
+        {
+            if (!visible(resourcePoint.bounds))
+                continue;
+            const SDL_FRect bounds{
+                resourcePoint.bounds.position.x,
+                resourcePoint.bounds.position.y,
+                resourcePoint.bounds.size.x,
+                resourcePoint.bounds.size.y};
+            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                SDL_SetRenderDrawColor(renderer_, 218, 178, 58, 52);
+            else if (resourcePoint.kind ==
+                     RaidResourcePointKind::LandmarkSpecific)
+                SDL_SetRenderDrawColor(renderer_, 86, 176, 190, 48);
+            else
+                SDL_SetRenderDrawColor(renderer_, 92, 158, 102, 42);
+            SDL_RenderFillRect(renderer_, &bounds);
+            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 220);
+            else if (resourcePoint.kind ==
+                     RaidResourcePointKind::LandmarkSpecific)
+                SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 210);
+            else
+                SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 190);
+            SDL_RenderRect(renderer_, &bounds);
+            const std::string label = resourcePoint.displayName +
+                " | RISK TIER " + std::to_string(resourcePoint.riskTier);
+            uiTextRenderer_.render(
+                renderer_, bounds.x + 4.0F, bounds.y + 4.0F,
+                label.c_str());
+        }
         for (const RaidOutdoorPropSnapshot &prop : projection.props)
         {
             if (!visible(prop.bounds))
@@ -12820,6 +12852,27 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &resource);
         SDL_SetRenderDrawColor(renderer_, 232, 206, 106, 235);
         SDL_RenderRect(renderer_, &resource);
+    }
+
+    for (const RaidTacticalResourcePoint &resourcePoint :
+         map.outdoorResourcePoints())
+    {
+        if (!tacticalMapResourcePointVisible(
+                map, resourcePoint, presentationMode))
+            continue;
+        SDL_FRect marker = screenRect(resourcePoint.bounds);
+        marker.w = std::max(marker.w, 5.0F);
+        marker.h = std::max(marker.h, 5.0F);
+        if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+            SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 210);
+        else if (resourcePoint.kind ==
+                 RaidResourcePointKind::LandmarkSpecific)
+            SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 205);
+        else
+            SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 185);
+        SDL_RenderFillRect(renderer_, &marker);
+        SDL_SetRenderDrawColor(renderer_, 234, 228, 188, 235);
+        SDL_RenderRect(renderer_, &marker);
     }
 
     if (tacticalMapEnemyDeploymentVisible(map))

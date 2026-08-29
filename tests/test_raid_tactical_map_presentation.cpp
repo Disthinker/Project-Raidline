@@ -80,3 +80,52 @@ TEST(RaidTacticalMapPresentationTest, EnemyIntelRemainsIndependent)
     const RaidTacticalMapState map = configuredMap(loadout);
     EXPECT_TRUE(tacticalMapEnemyDeploymentVisible(map));
 }
+
+TEST(RaidTacticalMapPresentationTest,
+     ResourcePointsRespectDiscoveryResourceIntelAndDebugMap)
+{
+    const auto configureResourceMap = [](RaidIntelligenceLoadout loadout)
+    {
+        RaidTacticalMapState map = configuredMap(loadout);
+        RaidGeneratedMapLayout layout;
+        layout.layoutVersion = 4U;
+        layout.resourcePoints = {{
+            "resource.secured.0",
+            "resource.frontier.secured_cargo",
+            "SECURED CARGO",
+            RaidResourcePointKind::HighValue,
+            LootTableDefinitionId{"loot.raid.high_risk"},
+            3U,
+            3U,
+            {{250.0F, 150.0F}, {80.0F, 60.0F}},
+            1U,
+            {}}};
+        map.configureOutdoorLayout(layout, 32U, 18U);
+        return map;
+    };
+
+    RaidTacticalMapState unexplored = configureResourceMap({});
+    ASSERT_EQ(unexplored.outdoorResourcePoints().size(), 1U);
+    const RaidTacticalResourcePoint &resourcePoint =
+        unexplored.outdoorResourcePoints().front();
+    EXPECT_FALSE(tacticalMapResourcePointVisible(
+        unexplored, resourcePoint,
+        RaidTacticalMapPresentationMode::FogOfWar));
+    EXPECT_TRUE(tacticalMapResourcePointVisible(
+        unexplored, resourcePoint,
+        RaidTacticalMapPresentationMode::FullStaticMap));
+
+    unexplored.revealAround({290.0F, 180.0F});
+    EXPECT_TRUE(tacticalMapResourcePointVisible(
+        unexplored, resourcePoint,
+        RaidTacticalMapPresentationMode::FogOfWar));
+
+    RaidIntelligenceLoadout resourceIntel;
+    resourceIntel.set(RaidIntelligenceCategory::Resource, true);
+    const RaidTacticalMapState informed =
+        configureResourceMap(resourceIntel);
+    EXPECT_TRUE(tacticalMapResourcePointVisible(
+        informed, informed.outdoorResourcePoints().front(),
+        RaidTacticalMapPresentationMode::FogOfWar));
+    EXPECT_FALSE(tacticalMapEnemyDeploymentVisible(informed));
+}

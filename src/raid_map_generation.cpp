@@ -1231,6 +1231,7 @@ bool districtKindMatchesAnchor(
             district == RaidDistrictKind::Highway;
     case RaidMapAnchorKind::SelfRecovery:
     case RaidMapAnchorKind::Loot:
+    case RaidMapAnchorKind::ResourcePoint:
         return true;
     }
     return true;
@@ -1286,6 +1287,20 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
     std::size_t interiorOrdinal{};
     for (const RaidMapAnchorRequest &request : effectiveAnchorRequests(anchors))
     {
+        const RaidLandmarkPlacementSnapshot *requiredLandmark{};
+        if (!request.landmarkDefinitionId.empty())
+        {
+            const auto found = std::find_if(
+                landmarks.begin(), landmarks.end(),
+                [&](const RaidLandmarkPlacementSnapshot &landmark)
+                {
+                    return landmark.definitionId ==
+                        request.landmarkDefinitionId;
+                });
+            if (found == landmarks.end())
+                return {};
+            requiredLandmark = &*found;
+        }
         std::optional<Cell> selected;
         float selectedScore = request.kind == RaidMapAnchorKind::NormalExtraction
             ? -1.0F : std::numeric_limits<float>::infinity();
@@ -1308,9 +1323,16 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                 (probe + candidateOffset) % roadCandidates.size()];
             const std::uint16_t district = districtAtFineCell(
                 definition, districtField, candidate.column, candidate.row);
-            if (district >= districtDefinitions.size() ||
-                !districtKindMatchesAnchor(
-                    districtDefinitions[district].kind, request.kind))
+            if (district >= districtDefinitions.size())
+                continue;
+            const RaidDistrictKind districtKind =
+                districtDefinitions[district].kind;
+            if ((!request.allowedDistrictKinds.empty() &&
+                 std::find(request.allowedDistrictKinds.begin(),
+                           request.allowedDistrictKinds.end(),
+                           districtKind) == request.allowedDistrictKinds.end()) ||
+                (request.allowedDistrictKinds.empty() &&
+                 !districtKindMatchesAnchor(districtKind, request.kind)))
             {
                 continue;
             }
@@ -1323,6 +1345,21 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                 {center.x - request.size.x * 0.5F,
                  center.y - request.size.y * 0.5F},
                 request.size};
+            if (requiredLandmark != nullptr)
+            {
+                const ContentRect vicinity = inflated(
+                    requiredLandmark->bounds,
+                    std::max(cellWidth, cellHeight) * 3.0F);
+                const bool nearLandmark = center.x >= vicinity.position.x &&
+                    center.y >= vicinity.position.y &&
+                    center.x <= vicinity.position.x + vicinity.size.x &&
+                    center.y <= vicinity.position.y + vicinity.size.y;
+                if (!nearLandmark ||
+                    district + 1U != requiredLandmark->districtInstanceId)
+                {
+                    continue;
+                }
+            }
             if (std::any_of(result.begin(), result.end(),
                 [&](const RaidAnchorPlacementSnapshot &existing)
                 { return overlaps(inflated(existing.bounds, 100.0F), bounds); }))
@@ -1936,6 +1973,24 @@ const RaidAnchorPlacementSnapshot *findRaidAnchorPlacement(
     return found == layout.anchorPlacements.end() ? nullptr : &*found;
 }
 
+Vec2 raidResourcePointLootPosition(
+    const RaidResourcePointSnapshot &resourcePoint,
+    std::uint32_t slotIndex) noexcept
+{
+    const std::uint32_t capacity = std::max(1U, resourcePoint.capacity);
+    const std::uint32_t columns = std::min(3U, capacity);
+    const std::uint32_t rows = (capacity + columns - 1U) / columns;
+    const std::uint32_t column = slotIndex % columns;
+    const std::uint32_t row = slotIndex / columns;
+    return {
+        resourcePoint.bounds.position.x + resourcePoint.bounds.size.x *
+            static_cast<float>(column + 1U) /
+            static_cast<float>(columns + 1U),
+        resourcePoint.bounds.position.y + resourcePoint.bounds.size.y *
+            static_cast<float>(row + 1U) /
+            static_cast<float>(rows + 1U)};
+}
+
 bool raidExteriorPlacementIsLegal(
     const RaidExteriorPlacementDefinition &placement,
     const RaidMapGenerationAnchors &anchors) noexcept
@@ -2251,6 +2306,25 @@ std::uint64_t raidMapLayoutHash(
         {
             hashFloat(hash, socket.x);
             hashFloat(hash, socket.y);
+        }
+    }
+    if (layout.layoutVersion >= 4U)
+    {
+        hashValue(hash, static_cast<std::uint32_t>(
+            layout.resourcePoints.size()));
+        for (const RaidResourcePointSnapshot &resourcePoint :
+             layout.resourcePoints)
+        {
+            hashString(hash, resourcePoint.instanceId);
+            hashString(hash, resourcePoint.definitionId);
+            hashString(hash, resourcePoint.displayName);
+            hashValue(hash, static_cast<std::uint32_t>(resourcePoint.kind));
+            hashString(hash, resourcePoint.lootTableId.value());
+            hashValue(hash, resourcePoint.riskTier);
+            hashValue(hash, resourcePoint.capacity);
+            hashRect(hash, resourcePoint.bounds);
+            hashValue(hash, resourcePoint.districtInstanceId);
+            hashString(hash, resourcePoint.landmarkDefinitionId);
         }
     }
     hashValue(hash, static_cast<std::uint32_t>(layout.ballisticBlockers.size()));

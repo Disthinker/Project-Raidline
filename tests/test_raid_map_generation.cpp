@@ -258,7 +258,7 @@ TEST(RaidMapGenerationTest, ProceduralMapIsDeterministicAndConnected)
     EXPECT_TRUE(map.proceduralOutdoor.enabled);
     EXPECT_EQ(first, repeated);
     EXPECT_FALSE(first.usedFallback);
-    EXPECT_EQ(first.layoutVersion, 3U);
+    EXPECT_EQ(first.layoutVersion, 4U);
     EXPECT_EQ(first.districts.size(), 8U);
     EXPECT_EQ(std::count_if(
                   first.districts.begin(), first.districts.end(),

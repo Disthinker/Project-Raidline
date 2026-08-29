@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/procedural-raid-playable-outdoor-layout-v1.md`。PR #110 已由用户正常游玩验收并以 `7bd3b02` 进入 main，Regional Operations 基础阶段结束；新阶段先把 `Frontier Exchange` 升级为第一张具备可读道路、街区和可滚动视口的完整程序化室外 Raid，不并行启动实时守城、AI 小队或第二地图主题。
+当前实现计划：`active/procedural-raid-resource-point-ecology-v1.md`。PR #111 已由用户正常游玩验收并以 `636a40b` 进入 main；当前只推进 `Frontier Exchange` 的普通、高价值和地标专属资源点生态，不并行启动遭遇生态、实时守城、AI 小队或第二地图主题。

@@ -28,6 +28,11 @@ enum class RaidTacticalMapPresentationMode
     const RaidTacticalMapState &map,
     RaidTacticalMapPresentationMode mode) noexcept;
 
+[[nodiscard]] bool tacticalMapResourcePointVisible(
+    const RaidTacticalMapState &map,
+    const RaidTacticalResourcePoint &resourcePoint,
+    RaidTacticalMapPresentationMode mode) noexcept;
+
 [[nodiscard]] bool tacticalMapSpecialLocationVisible(
     const RaidSpecialLocationMapState &location,
     RaidTacticalMapPresentationMode mode) noexcept;

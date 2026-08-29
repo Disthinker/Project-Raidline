@@ -472,6 +472,10 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             appendRect(outdoorLayout_.landmarks[index].bounds, index,
                        &OutdoorPresentationChunk::landmarkIndices);
         for (std::size_t index{};
+             index < outdoorLayout_.resourcePoints.size(); ++index)
+            appendRect(outdoorLayout_.resourcePoints[index].bounds, index,
+                       &OutdoorPresentationChunk::resourcePointIndices);
+        for (std::size_t index{};
              index < outdoorLayout_.districts.size(); ++index)
         {
             const Vec2 point = outdoorLayout_.districts[index].labelPosition;
@@ -489,6 +493,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         outdoorPropVisitStamps_.resize(outdoorLayout_.props.size());
         outdoorLandmarkVisitStamps_.resize(
             outdoorLayout_.landmarks.size());
+        outdoorResourcePointVisitStamps_.resize(
+            outdoorLayout_.resourcePoints.size());
         outdoorDistrictVisitStamps_.resize(
             outdoorLayout_.districts.size());
     }
@@ -2034,6 +2040,8 @@ const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
                   outdoorPropVisitStamps_.end(), 0U);
         std::fill(outdoorLandmarkVisitStamps_.begin(),
                   outdoorLandmarkVisitStamps_.end(), 0U);
+        std::fill(outdoorResourcePointVisitStamps_.begin(),
+                  outdoorResourcePointVisitStamps_.end(), 0U);
         std::fill(outdoorDistrictVisitStamps_.begin(),
                   outdoorDistrictVisitStamps_.end(), 0U);
         outdoorPresentationVisitSequence_ = 1U;
@@ -2043,6 +2051,7 @@ const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
     result.terrainSpans.clear();
     result.roadCells.clear();
     result.props.clear();
+    result.resourcePoints.clear();
     result.labels.clear();
     result.queriedChunkCount = 0U;
     result.cacheRevision = ++outdoorPresentationCacheRevision_;
@@ -2087,6 +2096,13 @@ const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
                              landmark.bounds.size.x * 0.5F,
                          landmark.bounds.position.y + 20.0F},
                         true});
+                }
+            for (const std::size_t index : chunk.resourcePointIndices)
+                if (outdoorResourcePointVisitStamps_[index] != visitSequence)
+                {
+                    outdoorResourcePointVisitStamps_[index] = visitSequence;
+                    result.resourcePoints.push_back(
+                        outdoorLayout_.resourcePoints[index]);
                 }
             for (const std::size_t index : chunk.districtLabelIndices)
                 if (outdoorDistrictVisitStamps_[index] != visitSequence)

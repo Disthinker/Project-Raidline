@@ -184,6 +184,20 @@ namespace
         fail(std::string{field} + " is not a supported Raid district kind");
     }
 
+    RaidResourcePointKind parseRaidResourcePointKind(
+        const Json &parent,
+        std::string_view field)
+    {
+        const std::string value = requiredString(parent, field);
+        if (value == "ordinary")
+            return RaidResourcePointKind::Ordinary;
+        if (value == "high_value")
+            return RaidResourcePointKind::HighValue;
+        if (value == "landmark_specific")
+            return RaidResourcePointKind::LandmarkSpecific;
+        fail(std::string{field} + " is not a supported Raid resource point kind");
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -2020,9 +2034,89 @@ ContentRegistry ContentRegistry::fromJson(
                     value.landmarkTemplates.push_back(
                         std::move(landmarkDefinition));
                 }
+                std::set<std::string> resourcePointIds;
+                if (procedural.contains("resource_point_archetypes"))
+                {
+                    for (const Json &resourcePoint : requiredArray(
+                             procedural, "resource_point_archetypes"))
+                    {
+                        RaidResourcePointArchetypeDefinition archetype;
+                        archetype.id = requiredString(resourcePoint, "id");
+                        archetype.displayName =
+                            requiredString(resourcePoint, "display_name");
+                        archetype.kind = parseRaidResourcePointKind(
+                            resourcePoint, "kind");
+                        archetype.lootTableId = LootTableDefinitionId{
+                            requiredString(resourcePoint, "loot_table")};
+                        archetype.minimumInstances = requiredPositiveUint(
+                            resourcePoint, "minimum_instances");
+                        archetype.maximumInstances = requiredPositiveUint(
+                            resourcePoint, "maximum_instances");
+                        archetype.capacity = requiredPositiveUint(
+                            resourcePoint, "capacity");
+                        archetype.riskTier = requiredPositiveUint(
+                            resourcePoint, "risk_tier");
+                        archetype.footprintCells = parseVec2(
+                            resourcePoint, "footprint_cells");
+                        if (resourcePoint.contains("allowed_district_kinds"))
+                        {
+                            for (const Json &kind : requiredArray(
+                                     resourcePoint,
+                                     "allowed_district_kinds"))
+                            {
+                                const RaidDistrictKind parsed =
+                                    parseRaidDistrictKind(
+                                        Json{{"kind", kind}}, "kind");
+                                if (std::find(
+                                        archetype.allowedDistrictKinds.begin(),
+                                        archetype.allowedDistrictKinds.end(),
+                                        parsed) !=
+                                    archetype.allowedDistrictKinds.end())
+                                {
+                                    fail("resource point district kind is duplicated");
+                                }
+                                archetype.allowedDistrictKinds.push_back(parsed);
+                            }
+                        }
+                        archetype.landmarkDefinitionId = optionalString(
+                            resourcePoint, "landmark_definition_id")
+                            .value_or("");
+                        const bool landmarkSpecific = archetype.kind ==
+                            RaidResourcePointKind::LandmarkSpecific;
+                        const bool knownLandmark =
+                            archetype.landmarkDefinitionId.empty() ||
+                            landmarkIds.contains(archetype.landmarkDefinitionId);
+                        if (!resourcePointIds.insert(archetype.id).second ||
+                            archetype.displayName.empty() ||
+                            !registry.lootTableIndex_.contains(
+                                archetype.lootTableId) ||
+                            archetype.minimumInstances >
+                                archetype.maximumInstances ||
+                            archetype.maximumInstances > 12U ||
+                            archetype.capacity > 4U ||
+                            archetype.riskTier > 3U ||
+                            archetype.footprintCells.x < 2.0F ||
+                            archetype.footprintCells.y < 2.0F ||
+                            archetype.footprintCells.x > 8.0F ||
+                            archetype.footprintCells.y > 8.0F ||
+                            !knownLandmark ||
+                            (landmarkSpecific !=
+                             !archetype.landmarkDefinitionId.empty()) ||
+                            (landmarkSpecific &&
+                             !archetype.allowedDistrictKinds.empty()) ||
+                            (!landmarkSpecific &&
+                             archetype.allowedDistrictKinds.empty()))
+                        {
+                            fail("procedural resource point archetype is invalid");
+                        }
+                        value.resourcePointArchetypes.push_back(
+                            std::move(archetype));
+                    }
+                }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
-                if (value.layoutVersion != 3U ||
+                if ((value.layoutVersion != 3U &&
+                     value.layoutVersion != 4U) ||
                     value.columns < 8U || value.columns > 512U ||
                     value.rows < 6U || value.rows > 288U ||
                     value.districtColumns < 4U ||
@@ -2048,7 +2142,11 @@ ContentRegistry ContentRegistry::fromJson(
                     value.maximumAttempts > 32U ||
                     value.anchorClearanceCells > 4U ||
                     districtInstances != 8U ||
-                    value.landmarkTemplates.size() != 3U)
+                    value.landmarkTemplates.size() != 3U ||
+                    (value.layoutVersion >= 4U &&
+                     value.resourcePointArchetypes.empty()) ||
+                    (value.layoutVersion < 4U &&
+                     !value.resourcePointArchetypes.empty()))
                 {
                     fail("procedural outdoor map settings are invalid");
                 }

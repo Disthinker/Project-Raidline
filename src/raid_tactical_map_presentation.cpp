@@ -44,6 +44,21 @@ bool tacticalMapAdvancedResourceVisible(
          map.hasIntelligence(RaidIntelligenceCategory::Resource));
 }
 
+bool tacticalMapResourcePointVisible(
+    const RaidTacticalMapState &map,
+    const RaidTacticalResourcePoint &resourcePoint,
+    RaidTacticalMapPresentationMode mode) noexcept
+{
+    const Vec2 center{
+        resourcePoint.bounds.position.x +
+            resourcePoint.bounds.size.x * 0.5F,
+        resourcePoint.bounds.position.y +
+            resourcePoint.bounds.size.y * 0.5F};
+    return mode == RaidTacticalMapPresentationMode::FullStaticMap ||
+        map.hasIntelligence(RaidIntelligenceCategory::Resource) ||
+        map.pointRevealed(center);
+}
+
 bool tacticalMapSpecialLocationVisible(
     const RaidSpecialLocationMapState &location,
     RaidTacticalMapPresentationMode mode) noexcept

@@ -265,6 +265,27 @@ struct RaidLootSnapshot
     bool requiresHighRisk{};
     bool collected{};
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
+    std::string resourcePointInstanceId;
+    std::uint32_t resourcePointSlotIndex{};
+
+    friend bool operator==(
+        const RaidLootSnapshot &left,
+        const RaidLootSnapshot &right)
+    {
+        return left.assetId == right.assetId &&
+            left.definitionId == right.definitionId &&
+            left.quantity == right.quantity &&
+            left.slotIndex == right.slotIndex &&
+            left.position.x == right.position.x &&
+            left.position.y == right.position.y &&
+            left.requiresHighRisk == right.requiresHighRisk &&
+            left.collected == right.collected &&
+            left.spaceId == right.spaceId &&
+            left.resourcePointInstanceId ==
+                right.resourcePointInstanceId &&
+            left.resourcePointSlotIndex ==
+                right.resourcePointSlotIndex;
+    }
 };
 
 // A pending self-recovery snapshot is a non-owning reference until the cache

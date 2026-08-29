@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-28。
+最后核对：2026-08-29。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。当前唯一主阶段为 **程序化 Raid 内容扩展——首张可玩随机大地图**；当前 Macro 1 交付完整室外布局生成 v1，范围合同见 `doc/exec-plans/active/procedural-raid-playable-outdoor-layout-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1 均已进入主线。当前唯一工作为 Macro 2 资源点生态，范围合同见 `doc/exec-plans/active/procedural-raid-resource-point-ecology-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -163,8 +163,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段均已进入主线。�
 
 | 宏切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| Macro 1：超大主题分区室外布局 v3 | `Frontier Exchange` 成为 25600×14400 的完整无缝 Raid 空间；不同 seed 形成八个连续主题区、三个固定地标、道路和环境差异，关键目标始终可达 | layout v3、4/3/2 格道路、地表/环境/玩法 Socket 冻结、确定性回退、schema v35/content v44、区块投影、门户导航和 80×45 战术地图 | 当前 Draft PR #111 实现；只使用代码图形/文字及既有批准物品图，不接入旧整图背景或新美术；完整自动化/CI/用户三 seed 验收待收束 |
-| Macro 2：资源点生态 v1 | 普通、高价值和地点专属资源点形成路线风险、背包容量与撤离距离取舍 | 资源点定义、容量/Loot 池/风险/空间、命名随机流与开局冻结 | 等待 Macro 1 验收并进入 main 后开始；不重做完整经济 |
+| Macro 1：超大主题分区室外布局 v3 | `Frontier Exchange` 成为 25600×14400 的完整无缝 Raid 空间；不同 seed 形成八个连续主题区、三个固定地标、道路和环境差异，关键目标始终可达 | layout v3、4/3/2 格道路、地表/环境/玩法 Socket 冻结、确定性回退、schema v35/content v44、区块投影、门户导航和 80×45 战术地图 | PR #111 已通过 CI 与用户验收，以 `636a40b` 进入 main |
+| Macro 2：资源点生态 v1 | 普通、高价值和地点专属资源点形成路线风险、背包容量与撤离距离取舍 | layout v4、资源点定义、容量/Loot 池/风险/空间、命名随机流、开局冻结和 schema v36/content v45 | 当前分支实现；不重做完整经济，不提前启动遭遇生态 |
 | Macro 3：遭遇与部署生态 v1 | 不同路线出现巡逻、守点、伏击和声响响应压力 | 群组模板、部署合法区、道路/资源点/特殊地点关系、有限敌人 | 等待 Macro 2；复用现有 AI 与性能预算，不开启新 AI 大阶段 |
 | Macro 4：既有消费者整合 v1 | 高危、普通/条件/信号撤离、情报、救援、寻回和外围清剿都能在随机布局正常运行与结算 | 共享合法区、稳定 Map/Space/Socket 身份、冻结快照、唯一 Settlement | 等待 Macro 3；固定独立室内继续复用，不做程序化室内 |
 

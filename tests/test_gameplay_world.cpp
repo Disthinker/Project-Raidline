@@ -4025,6 +4025,15 @@ TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
             map.proceduralOutdoor.chunkSizeCells + 4U),
         RaidTerrainKind::Grass};
     layout.terrainSpans.push_back(crossingSpan);
+    layout.resourcePoints = {
+        {"resource.near", "resource.test.near", "NEAR CACHE",
+         RaidResourcePointKind::Ordinary,
+         LootTableDefinitionId{"loot.raid.alpha"}, 1U, 2U,
+         {{12320.0F, 6960.0F}, {240.0F, 160.0F}}, 1U, {}},
+        {"resource.far", "resource.test.far", "FAR CACHE",
+         RaidResourcePointKind::HighValue,
+         LootTableDefinitionId{"loot.raid.high_risk"}, 3U, 3U,
+         {{22000.0F, 12000.0F}, {240.0F, 160.0F}}, 2U, {}}};
     const RaidAnchorPlacementSnapshot *player = findRaidAnchorPlacement(
         layout, kRaidAnchorPlayerSpawn);
     const RaidAnchorPlacementSnapshot *extraction = findRaidAnchorPlacement(
@@ -4057,6 +4066,9 @@ TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
     EXPECT_FALSE(projection.terrainSpans.empty());
     EXPECT_FALSE(projection.roadCells.empty());
     EXPECT_LT(projection.props.size(), layout.props.size());
+    ASSERT_EQ(projection.resourcePoints.size(), 1U);
+    EXPECT_EQ(projection.resourcePoints.front().instanceId,
+              "resource.near");
 
     const std::uint64_t cachedRevision = projection.cacheRevision;
     const RaidOutdoorPresentationProjection &cached =
@@ -4065,6 +4077,7 @@ TEST(GameplayWorldTest, LargeOutdoorProjectionQueriesOnlyNearbyChunks)
     EXPECT_EQ(cached.terrainSpans, projection.terrainSpans);
     EXPECT_EQ(cached.roadCells, projection.roadCells);
     EXPECT_EQ(cached.props, projection.props);
+    EXPECT_EQ(cached.resourcePoints, projection.resourcePoints);
 
     const RaidOutdoorPresentationProjection &shifted =
         world.outdoorPresentation(

@@ -150,6 +150,7 @@ struct RaidOutdoorPresentationProjection
     std::vector<RaidTerrainSpan> terrainSpans;
     std::vector<RaidOutdoorRoadCell> roadCells;
     std::vector<RaidOutdoorPropSnapshot> props;
+    std::vector<RaidResourcePointSnapshot> resourcePoints;
     std::vector<RaidOutdoorLabelProjection> labels;
     std::size_t queriedChunkCount{};
     std::uint64_t cacheRevision{};
@@ -484,6 +485,7 @@ private:
         std::vector<std::size_t> roadCellIndices;
         std::vector<std::size_t> propIndices;
         std::vector<std::size_t> landmarkIndices;
+        std::vector<std::size_t> resourcePointIndices;
         std::vector<std::size_t> districtLabelIndices;
     };
 
@@ -529,6 +531,7 @@ private:
     mutable std::vector<std::uint32_t> outdoorRoadVisitStamps_;
     mutable std::vector<std::uint32_t> outdoorPropVisitStamps_;
     mutable std::vector<std::uint32_t> outdoorLandmarkVisitStamps_;
+    mutable std::vector<std::uint32_t> outdoorResourcePointVisitStamps_;
     mutable std::vector<std::uint32_t> outdoorDistrictVisitStamps_;
     std::optional<RaidSpaceBlockerIndex> outdoorBlockerIndex_;
     std::size_t outdoorNavigationScheduleCursor_{};

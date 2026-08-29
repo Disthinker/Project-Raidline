@@ -58,6 +58,12 @@ const LootContentEntry &rollLoot(
     return table.entries.back();
 }
 
+struct FrozenResourcePointRequest
+{
+    std::string instanceId;
+    const RaidResourcePointArchetypeDefinition *definition{};
+};
+
 std::vector<std::size_t> selectLootSlots(
     const MapDefinition &map,
     Pcg32 &random)
@@ -592,6 +598,8 @@ DeployReceipt executeDeploy(
 
     Pcg32 configurationRandom{command.seed, 0x6d61702d636f6e66ULL};
     Pcg32 lootRandom{command.seed, 0x6c6f6f742d726169ULL};
+    Pcg32 resourcePointRandom{command.seed, 0x7265736f75726365ULL};
+    Pcg32 resourceLootRandom{command.seed, 0x7265732d6c6f6f74ULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
     Pcg32 interiorLootRandom{command.seed, 0x696e746572696f72ULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
@@ -599,12 +607,40 @@ DeployReceipt executeDeploy(
     const auto &pair = map->spawnExtractionPairs[pairIndex];
     const auto &deployment = content.enemyDeployment(
         map->raidEnemyDeploymentIds[deploymentIndex]);
+    const bool resourceEcologyRules = map->proceduralOutdoor.enabled &&
+        map->proceduralOutdoor.layoutVersion >= 4U;
+    std::vector<FrozenResourcePointRequest> resourcePointRequests;
+    std::size_t regularLootSlotCount{};
+    if (resourceEcologyRules)
+    {
+        for (const RaidResourcePointArchetypeDefinition &archetype :
+             map->proceduralOutdoor.resourcePointArchetypes)
+        {
+            const std::uint32_t count = archetype.minimumInstances +
+                resourcePointRandom.bounded(
+                    archetype.maximumInstances -
+                        archetype.minimumInstances + 1U);
+            for (std::uint32_t ordinal{}; ordinal < count; ++ordinal)
+            {
+                resourcePointRequests.push_back({
+                    archetype.id + ":" + std::to_string(ordinal),
+                    &archetype});
+                regularLootSlotCount += archetype.capacity;
+            }
+        }
+    }
+    else
+    {
+        regularLootSlotCount = map->raidLootSlots.size();
+    }
 
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = map->proceduralOutdoor.enabled &&
-            map->proceduralOutdoor.layoutVersion >= 3U
+    snapshot.rulesVersion = resourceEcologyRules
+        ? "procedural-frontier-resource-ecology-23"
+        : map->proceduralOutdoor.enabled &&
+              map->proceduralOutdoor.layoutVersion >= 3U
         ? "procedural-frontier-district-layout-22"
         : "procedural-playable-outdoor-layout-21";
     snapshot.mapDefinitionId = command.mapDefinitionId;
@@ -723,27 +759,30 @@ DeployReceipt executeDeploy(
 
     const LootTableDefinition &lootTable =
         content.lootTable(map->raidLootTableId);
-    for (const std::size_t slotIndex : selectLootSlots(*map, lootRandom))
+    if (!resourceEcologyRules)
     {
-        const LootContentEntry &entry = rollLoot(lootTable, lootRandom);
-        const std::uint32_t range =
-            entry.maximumQuantity - entry.minimumQuantity + 1U;
-        const std::uint32_t quantity = entry.minimumQuantity +
-            lootRandom.bounded(range);
-        const AssetInstanceId assetId = candidate.assets.create(
-            content.item(entry.itemDefinitionId),
-            RaidGroundAssetLocation{
-                command.raidId,
-                static_cast<std::uint32_t>(slotIndex)},
-            quantity);
-        snapshot.loot.push_back(RaidLootSnapshot{
-            assetId,
-            entry.itemDefinitionId,
-            quantity,
-            static_cast<std::uint32_t>(slotIndex),
-            map->raidLootSlots[slotIndex].position,
-            false,
-            false});
+        for (const std::size_t slotIndex : selectLootSlots(*map, lootRandom))
+        {
+            const LootContentEntry &entry = rollLoot(lootTable, lootRandom);
+            const std::uint32_t range =
+                entry.maximumQuantity - entry.minimumQuantity + 1U;
+            const std::uint32_t quantity = entry.minimumQuantity +
+                lootRandom.bounded(range);
+            const AssetInstanceId assetId = candidate.assets.create(
+                content.item(entry.itemDefinitionId),
+                RaidGroundAssetLocation{
+                    command.raidId,
+                    static_cast<std::uint32_t>(slotIndex)},
+                quantity);
+            snapshot.loot.push_back(RaidLootSnapshot{
+                assetId,
+                entry.itemDefinitionId,
+                quantity,
+                static_cast<std::uint32_t>(slotIndex),
+                map->raidLootSlots[slotIndex].position,
+                false,
+                false});
+        }
     }
 
     const LootTableDefinition &advancedLootTable =
@@ -758,7 +797,7 @@ DeployReceipt executeDeploy(
             entry.maximumQuantity - entry.minimumQuantity + 1U;
         const std::uint32_t quantity =
             entry.minimumQuantity + advancedLootRandom.bounded(range);
-        const std::size_t slotIndex = map->raidLootSlots.size() + advancedIndex;
+        const std::size_t slotIndex = regularLootSlotCount + advancedIndex;
         const AssetInstanceId assetId = candidate.assets.create(
             content.item(entry.itemDefinitionId),
             RaidGroundAssetLocation{command.raidId,
@@ -774,7 +813,7 @@ DeployReceipt executeDeploy(
             false});
     }
 
-    std::size_t interiorSlotIndex = map->raidLootSlots.size() +
+    std::size_t interiorSlotIndex = regularLootSlotCount +
         map->highRisk.advancedLootSlots.size();
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
@@ -869,7 +908,7 @@ DeployReceipt executeDeploy(
         recovery.sourceRecord = *selfRecoveryRecord;
         recovery.cachePosition = cachePosition;
         const std::uint32_t firstSyntheticSlot = static_cast<std::uint32_t>(
-            map->raidLootSlots.size() +
+            regularLootSlotCount +
             map->highRisk.advancedLootSlots.size() +
             std::accumulate(
                 map->interiors.begin(), map->interiors.end(), std::size_t{},
@@ -954,6 +993,21 @@ DeployReceipt executeDeploy(
                            RaidMapAnchorKind::Loot,
                            {32.0F, 32.0F});
             }
+        }
+        const float resourceCellWidth = map->walkableBounds.size.x /
+            static_cast<float>(map->proceduralOutdoor.columns);
+        const float resourceCellHeight = map->walkableBounds.size.y /
+            static_cast<float>(map->proceduralOutdoor.rows);
+        for (const FrozenResourcePointRequest &request :
+             resourcePointRequests)
+        {
+            generationAnchors.requests.push_back(RaidMapAnchorRequest{
+                request.instanceId,
+                RaidMapAnchorKind::ResourcePoint,
+                {request.definition->footprintCells.x * resourceCellWidth,
+                 request.definition->footprintCells.y * resourceCellHeight},
+                request.definition->allowedDistrictKinds,
+                request.definition->landmarkDefinitionId});
         }
         for (std::size_t index{};
              index < map->highRisk.pressureSpawns.size(); ++index)
@@ -1101,7 +1155,7 @@ DeployReceipt executeDeploy(
                         "generated Raid omitted advanced resource anchor",
                         profile.revision);
                 const std::size_t ordinal = loot.slotIndex -
-                    map->raidLootSlots.size();
+                    regularLootSlotCount;
                 const std::size_t count =
                     map->highRisk.advancedLootSlots.size();
                 loot.position = {
@@ -1161,6 +1215,73 @@ DeployReceipt executeDeploy(
                              map->walkableBounds.size.y - 50.0F,
                          anchor->bounds.position.y +
                              anchor->bounds.size.y + 70.0F)};
+        }
+        if (resourceEcologyRules)
+        {
+            std::uint32_t globalSlot{};
+            for (const FrozenResourcePointRequest &request :
+                 resourcePointRequests)
+            {
+                const auto *anchor = placement(request.instanceId);
+                if (anchor == nullptr)
+                {
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted resource point anchor",
+                        profile.revision);
+                }
+                RaidResourcePointSnapshot resourcePoint{
+                    request.instanceId,
+                    request.definition->id,
+                    request.definition->displayName,
+                    request.definition->kind,
+                    request.definition->lootTableId,
+                    request.definition->riskTier,
+                    request.definition->capacity,
+                    anchor->bounds,
+                    anchor->districtInstanceId,
+                    request.definition->landmarkDefinitionId};
+                const LootTableDefinition &resourceTable =
+                    content.lootTable(resourcePoint.lootTableId);
+                for (std::uint32_t localSlot{};
+                     localSlot < resourcePoint.capacity;
+                     ++localSlot, ++globalSlot)
+                {
+                    const LootContentEntry &entry = rollLoot(
+                        resourceTable, resourceLootRandom);
+                    const std::uint32_t range = entry.maximumQuantity -
+                        entry.minimumQuantity + 1U;
+                    const std::uint32_t quantity = entry.minimumQuantity +
+                        resourceLootRandom.bounded(range);
+                    const AssetInstanceId assetId = candidate.assets.create(
+                        content.item(entry.itemDefinitionId),
+                        RaidGroundAssetLocation{command.raidId, globalSlot},
+                        quantity);
+                    snapshot.loot.push_back(RaidLootSnapshot{
+                        assetId,
+                        entry.itemDefinitionId,
+                        quantity,
+                        globalSlot,
+                        raidResourcePointLootPosition(
+                            resourcePoint, localSlot),
+                        false,
+                        false,
+                        outdoorRaidSpaceId(),
+                        resourcePoint.instanceId,
+                        localSlot});
+                }
+                snapshot.spatialLayout.resourcePoints.push_back(
+                    std::move(resourcePoint));
+            }
+            if (globalSlot != regularLootSlotCount)
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid resource capacity drifted",
+                    profile.revision);
+            }
+            snapshot.spatialLayout.layoutHash = raidMapLayoutHash(
+                snapshot.spatialLayout);
         }
     }
 

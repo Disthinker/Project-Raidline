@@ -70,6 +70,142 @@ std::string testSaveChecksum(std::string_view text)
     }
     return result;
 }
+
+void downgradeFrontierLootToLegacySlots(
+    ProfileState &profile,
+    const MapDefinition &map)
+{
+    PendingRaidSnapshot &raid = *profile.pendingRaid;
+    std::size_t keptRegular{};
+    std::vector<AssetInstanceId> removed;
+    std::erase_if(
+        raid.loot,
+        [&](const RaidLootSnapshot &loot)
+        {
+            if (loot.spaceId != outdoorRaidSpaceId() ||
+                loot.requiresHighRisk)
+                return false;
+            if (keptRegular++ < 6U)
+                return false;
+            removed.push_back(loot.assetId);
+            return true;
+        });
+    for (AssetInstanceId id : removed)
+        ASSERT_TRUE(profile.assets.erase(id));
+
+    std::uint32_t regularSlot{};
+    std::uint32_t advancedSlot{};
+    std::uint32_t interiorSlot = static_cast<std::uint32_t>(
+        map.raidLootSlots.size() + map.highRisk.advancedLootSlots.size());
+    for (RaidLootSnapshot &loot : raid.loot)
+    {
+        loot.resourcePointInstanceId.clear();
+        loot.resourcePointSlotIndex = 0U;
+        if (loot.spaceId == outdoorRaidSpaceId() && !loot.requiresHighRisk)
+        {
+            loot.slotIndex = regularSlot;
+            loot.position = map.raidLootSlots[regularSlot].position;
+            ++regularSlot;
+        }
+        else if (loot.spaceId == outdoorRaidSpaceId())
+        {
+            loot.slotIndex = static_cast<std::uint32_t>(
+                map.raidLootSlots.size()) + advancedSlot;
+            loot.position = map.highRisk.advancedLootSlots[advancedSlot].position;
+            ++advancedSlot;
+        }
+        else
+        {
+            loot.slotIndex = interiorSlot++;
+        }
+        if (AssetRecord *asset = profile.assets.findMutable(loot.assetId))
+            asset->location = RaidGroundAssetLocation{
+                raid.raidId, loot.slotIndex};
+    }
+    raid.spatialLayout.resourcePoints.clear();
+    std::erase_if(
+        raid.spatialLayout.anchorPlacements,
+        [](const RaidAnchorPlacementSnapshot &anchor)
+        { return anchor.kind == RaidMapAnchorKind::ResourcePoint; });
+}
+
+void downgradeFrontierResourceEcologyToLayoutV3(
+    ProfileState &profile,
+    const MapDefinition &map)
+{
+    PendingRaidSnapshot &raid = *profile.pendingRaid;
+    std::size_t keptRegular{};
+    std::vector<AssetInstanceId> removed;
+    std::erase_if(
+        raid.loot,
+        [&](const RaidLootSnapshot &loot)
+        {
+            if (loot.spaceId != outdoorRaidSpaceId() ||
+                loot.requiresHighRisk)
+                return false;
+            if (keptRegular++ < 6U)
+                return false;
+            removed.push_back(loot.assetId);
+            return true;
+        });
+    for (AssetInstanceId id : removed)
+        ASSERT_TRUE(profile.assets.erase(id));
+
+    raid.rulesVersion = "procedural-frontier-district-layout-22";
+    raid.spatialLayout.layoutVersion = 3U;
+    std::erase_if(
+        raid.spatialLayout.anchorPlacements,
+        [](const RaidAnchorPlacementSnapshot &anchor)
+        { return anchor.kind == RaidMapAnchorKind::ResourcePoint; });
+    std::uint32_t regularSlot{};
+    std::uint32_t advancedSlot{};
+    std::uint32_t interiorSlot = static_cast<std::uint32_t>(
+        map.raidLootSlots.size() + map.highRisk.advancedLootSlots.size());
+    for (std::size_t index{}; index < raid.loot.size(); ++index)
+    {
+        RaidLootSnapshot &loot = raid.loot[index];
+        std::uint16_t districtInstanceId{1U};
+        if (!loot.resourcePointInstanceId.empty())
+        {
+            const auto point = std::find_if(
+                raid.spatialLayout.resourcePoints.begin(),
+                raid.spatialLayout.resourcePoints.end(),
+                [&](const RaidResourcePointSnapshot &candidate)
+                {
+                    return candidate.instanceId ==
+                        loot.resourcePointInstanceId;
+                });
+            ASSERT_NE(point, raid.spatialLayout.resourcePoints.end());
+            districtInstanceId = point->districtInstanceId;
+        }
+        loot.resourcePointInstanceId.clear();
+        loot.resourcePointSlotIndex = 0U;
+        if (loot.spaceId == outdoorRaidSpaceId() && !loot.requiresHighRisk)
+        {
+            loot.slotIndex = regularSlot++;
+            raid.spatialLayout.anchorPlacements.push_back({
+                raidIndexedAnchorId("loot", index),
+                RaidMapAnchorKind::Loot,
+                {{loot.position.x - 25.0F, loot.position.y - 25.0F},
+                 {50.0F, 50.0F}},
+                districtInstanceId});
+        }
+        else if (loot.spaceId == outdoorRaidSpaceId())
+        {
+            loot.slotIndex = static_cast<std::uint32_t>(
+                map.raidLootSlots.size()) + advancedSlot++;
+        }
+        else
+        {
+            loot.slotIndex = interiorSlot++;
+        }
+        if (AssetRecord *asset = profile.assets.findMutable(loot.assetId))
+            asset->location = RaidGroundAssetLocation{
+                raid.raidId, loot.slotIndex};
+    }
+    raid.spatialLayout.resourcePoints.clear();
+    raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);
+}
 }
 
 TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndIntake)
@@ -1451,13 +1587,14 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
     ASSERT_FALSE(
         profile.pendingRaid->spatialLayout.ballisticBlockers.empty());
     ASSERT_FALSE(profile.pendingRaid->spatialLayout.roadCells.empty());
-    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 3U);
+    EXPECT_EQ(profile.pendingRaid->spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(profile.pendingRaid->spatialLayout.districts.size(), 8U);
     EXPECT_EQ(profile.pendingRaid->spatialLayout.landmarks.size(), 3U);
     EXPECT_FALSE(profile.pendingRaid->spatialLayout.terrainSpans.empty());
     EXPECT_FALSE(profile.pendingRaid->spatialLayout.props.empty());
     EXPECT_FALSE(
         profile.pendingRaid->spatialLayout.anchorPlacements.empty());
+    EXPECT_FALSE(profile.pendingRaid->spatialLayout.resourcePoints.empty());
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1485,6 +1622,51 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
     EXPECT_EQ(corrupt.status, SaveLoadStatus::Failed);
 }
 
+TEST(SaveRepositoryTest,
+     SchemaV35KeepsFrozenLayoutV3WithoutInventingResourcePoints)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-procedural-layout-v35", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-layout-v3-raid",
+            "save-layout-v3-settle",
+            783318U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-layout-v3-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    downgradeFrontierResourceEcologyToLayoutV3(
+        profile, content.map(profile.pendingRaid->mapDefinitionId));
+    const ProfileValidationResult downgradedValidation =
+        validateProfileState(profile, content);
+    ASSERT_TRUE(downgradedValidation.valid)
+        << downgradedValidation.message;
+    const RaidGeneratedMapLayout expected =
+        profile.pendingRaid->spatialLayout;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-district-layout-content-44",
+            35U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(loaded.profile->pendingRaid->spatialLayout, expected);
+    EXPECT_TRUE(
+        loaded.profile->pendingRaid->spatialLayout.resourcePoints.empty());
+    for (const RaidLootSnapshot &loot : loaded.profile->pendingRaid->loot)
+    {
+        EXPECT_TRUE(loot.resourcePointInstanceId.empty());
+        EXPECT_EQ(loot.resourcePointSlotIndex, 0U);
+    }
+}
+
 TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
 {
     const ContentRegistry &content = publishedContentRegistry();
@@ -1503,6 +1685,7 @@ TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
     ASSERT_TRUE(profile.pendingRaid.has_value());
     PendingRaidSnapshot &raid = *profile.pendingRaid;
     const MapDefinition &publishedMap = content.map(raid.mapDefinitionId);
+    downgradeFrontierLootToLegacySlots(profile, publishedMap);
     raid.rulesVersion = "procedural-playable-outdoor-layout-21";
     const auto pair = std::find_if(
         publishedMap.spawnExtractionPairs.begin(),
@@ -2347,6 +2530,7 @@ TEST(SaveRepositoryTest,
         "raid-second-representative-location-15";
     const MapDefinition &legacyMap = content.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
+    downgradeFrontierLootToLegacySlots(profile, legacyMap);
     const auto pair = std::find_if(
         legacyMap.spawnExtractionPairs.begin(),
         legacyMap.spawnExtractionPairs.end(),
@@ -2525,6 +2709,7 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
                     .succeeded);
     ASSERT_TRUE(legacyProfile.pendingRaid.has_value());
     PendingRaidSnapshot &raid = *legacyProfile.pendingRaid;
+    downgradeFrontierLootToLegacySlots(legacyProfile, map);
     const RaidSpaceDefinitionId secondInteriorId = map.interiors[1].id;
     std::vector<AssetInstanceId> removedLootAssets;
     for (const RaidLootSnapshot &loot : raid.loot)
