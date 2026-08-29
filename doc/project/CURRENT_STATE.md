@@ -93,7 +93,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 
 ## 当前自动化证据
 
-- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。PR #111 的超大主题分区随机地图已通过完整自动化、CI 与用户验收并进入 main。当前 Macro 2 验收加固已完成 Windows Debug 全目标、128-seed 布局/资源生态、旧冻结快照迁移、真实加载阶段、鼠标 F10 和完整 CTest 1269/1269；连续 240 帧、30 次实弹击发的 Debug 最慢更新约 7 ms，开火热路径不再复制或全量校验冻结超大地图。exact-head CI 待追加提交后记录，开发代理未启动游戏。
+- PR #109 的基地威胁预警与自动防守已完成 Windows Debug 全目标、1211/1211 CTest、exact-head 双平台 CI 和用户正常游玩验收。PR #110 已完成 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 `7bd3b02` 进入 main。PR #111 的超大主题分区随机地图已通过完整自动化、CI 与用户验收并进入 main。当前 Macro 2 验收加固已完成 Windows Debug 全目标、128-seed 布局/资源生态、旧冻结快照迁移、真实加载阶段、鼠标 F10 和完整 CTest 1268/1268；世界时钟与连续射击共用一个真实 Frontier 性能场景，连续 240 帧、30 次实弹击发的 Debug 最慢更新约 6.2 ms，开火热路径不再复制或全量校验冻结超大地图。exact-head CI 待追加提交后记录，开发代理未启动游戏。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。
