@@ -114,6 +114,20 @@ struct WeaponAmmoPlan
     const WeaponAmmoCommand &command,
     const CommandContext &context);
 
+// Fire is a simulation hot path. These narrow operations inspect and mutate
+// only the weapon and its installed magazine, so firing cost is independent
+// of the size of the frozen Raid snapshot stored in ProfileState.
+[[nodiscard]] WeaponAmmoPlan queryFireWeapon(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const FireWeaponCommand &command);
+
+[[nodiscard]] WeaponAmmoReceipt executeFireWeapon(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const FireWeaponCommand &command,
+    const CommandContext &context);
+
 [[nodiscard]] std::size_t magazineRoundCount(
     const ProfileState &profile,
     AssetInstanceId magazineAssetId) noexcept;

@@ -285,7 +285,7 @@ TEST(WeaponAmmoDomainTest, SuccessfulShotWearsWeaponWithoutReliableTierFault)
         InstallMagazineAndChamberCommand{rifle, magazine},
         CommandContext{profile.revision, "wear-install"}).succeeded);
 
-    const WeaponAmmoReceipt fired = executeWeaponAmmo(
+    const WeaponAmmoReceipt fired = executeFireWeapon(
         profile, publishedContentRegistry(),
         FireWeaponCommand{rifle, 0, 0},
         CommandContext{profile.revision, "wear-fire"});
@@ -295,6 +295,52 @@ TEST(WeaponAmmoDomainTest, SuccessfulShotWearsWeaponWithoutReliableTierFault)
     EXPECT_EQ(profile.assets.find(rifle)->currentDurability, 9990U);
     EXPECT_EQ(profile.assets.find(rifle)->weaponMalfunction,
               WeaponMalfunctionType::None);
+}
+
+TEST(WeaponAmmoDomainTest,
+     NarrowFireTransactionPreservesAtomicAmmoAndRevisionRules)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-hot-fire", publishedContentRegistry());
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(profile, alpha_content::ammunition);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        LoadMagazineCommand{magazine, ammunition, 3},
+        CommandContext{profile.revision, "hot-fire-load"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, publishedContentRegistry(),
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        CommandContext{profile.revision, "hot-fire-install"}).succeeded);
+
+    const std::uint64_t beforeQuery = profileStateFingerprint(profile);
+    const WeaponAmmoPlan plan = queryFireWeapon(
+        profile, publishedContentRegistry(), FireWeaponCommand{rifle});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.result, WeaponAmmoResult::Fired);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeQuery);
+
+    const ProfileRevision beforeFireRevision = profile.revision;
+    const WeaponAmmoReceipt fired = executeFireWeapon(
+        profile, publishedContentRegistry(), FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "hot-fire-shot"});
+    ASSERT_TRUE(fired.succeeded) << fired.message;
+    EXPECT_EQ(fired.result, WeaponAmmoResult::Fired);
+    EXPECT_EQ(profile.revision, beforeFireRevision + 1U);
+    EXPECT_TRUE(profile.committedTransactions.contains("hot-fire-shot"));
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 1U);
+    EXPECT_TRUE(profile.assets.find(rifle)->chamberedRound.has_value());
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
+
+    const std::uint64_t beforeStale = profileStateFingerprint(profile);
+    const WeaponAmmoReceipt stale = executeFireWeapon(
+        profile, publishedContentRegistry(), FireWeaponCommand{rifle},
+        CommandContext{beforeFireRevision, "hot-fire-stale"});
+    EXPECT_FALSE(stale.succeeded);
+    EXPECT_EQ(stale.error, DomainErrorCode::StaleRevision);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeStale);
 }
 
 TEST(WeaponAmmoDomainTest, StovepipeConsumesShotBlocksFireAndClearsByCommand)
@@ -314,7 +360,7 @@ TEST(WeaponAmmoDomainTest, StovepipeConsumesShotBlocksFireAndClearsByCommand)
         CommandContext{profile.revision, "fault-install"}).succeeded);
     profile.assets.findMutable(rifle)->currentDurability = 3000;
 
-    const WeaponAmmoReceipt fired = executeWeaponAmmo(
+    const WeaponAmmoReceipt fired = executeFireWeapon(
         profile, publishedContentRegistry(),
         FireWeaponCommand{rifle, 0, 0},
         CommandContext{profile.revision, "fault-fire"});
@@ -328,7 +374,7 @@ TEST(WeaponAmmoDomainTest, StovepipeConsumesShotBlocksFireAndClearsByCommand)
 
     const std::uint64_t blockedFingerprint = profileStateFingerprint(profile);
     const ProfileRevision blockedRevision = profile.revision;
-    const WeaponAmmoReceipt blocked = executeWeaponAmmo(
+    const WeaponAmmoReceipt blocked = executeFireWeapon(
         profile, publishedContentRegistry(), FireWeaponCommand{rifle},
         CommandContext{profile.revision, "blocked-fire"});
     ASSERT_TRUE(blocked.succeeded);
@@ -356,7 +402,7 @@ TEST(WeaponAmmoDomainTest, BrokenWeaponCannotConsumeChamberedRound)
     profile.assets.findMutable(rifle)->currentDurability = 0;
     const std::uint64_t before = profileStateFingerprint(profile);
 
-    const WeaponAmmoReceipt result = executeWeaponAmmo(
+    const WeaponAmmoReceipt result = executeFireWeapon(
         profile, publishedContentRegistry(), FireWeaponCommand{rifle},
         CommandContext{profile.revision, "broken-fire"});
 

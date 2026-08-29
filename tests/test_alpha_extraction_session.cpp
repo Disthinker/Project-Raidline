@@ -180,6 +180,69 @@ TEST(AlphaExtractionSessionPerformanceTest,
            "frozen megamap on the simulation thread.";
 }
 
+TEST(AlphaExtractionSessionPerformanceTest,
+     ContinuousFrontierFireStaysInsideOneFrameBudget)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-frontier-fire-performance"));
+    const auto rifles = assets(session.profile(), alpha_content::rifle);
+    const auto magazines = assets(session.profile(), alpha_content::magazine);
+    const auto ammunition = assets(
+        session.profile(), alpha_content::ammunition);
+    ASSERT_EQ(rifles.size(), 1U);
+    ASSERT_GE(magazines.size(), 1U);
+    ASSERT_GE(ammunition.size(), 1U);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        LoadMagazineCommand{magazines[0], ammunition[0], 30},
+        "frontier-fire-load").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifles[0], EquipmentSlotKind::PrimaryWeapon},
+        "frontier-fire-equip").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        InstallMagazineAndChamberCommand{rifles[0], magazines[0]},
+        "frontier-fire-install").succeeded);
+    ASSERT_TRUE(session.deployAlpha(
+        7723402U, MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
+
+    GameplayInput fire;
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    fire.aimWorldPosition = Vec2{
+        session.world().player().position().x + 900.0F,
+        session.world().player().position().y};
+    std::size_t shots{};
+    std::chrono::microseconds slowestUpdate{};
+    for (std::size_t frame{}; frame < 240U; ++frame)
+    {
+        const auto started = std::chrono::steady_clock::now();
+        session.update(fire, 1.0F / 60.0F);
+        slowestUpdate = std::max(
+            slowestUpdate,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started));
+        if (session.world().shotFiredLastUpdate())
+        {
+            ++shots;
+        }
+        fire.fireJustPressed = false;
+    }
+
+    std::cout << "continuous Frontier fire slowest update: "
+              << slowestUpdate.count() << " us across " << shots
+              << " shots\n";
+    EXPECT_GE(shots, 20U);
+    EXPECT_EQ(magazineRoundCount(session.profile(), magazines[0]), 0U);
+    EXPECT_FALSE(session.profile().assets.find(rifles[0])
+                     ->chamberedRound.has_value());
+    EXPECT_TRUE(validateProfileState(
+        session.profile(), publishedContentRegistry()).valid);
+    EXPECT_LT(slowestUpdate.count(), 25000)
+        << "Firing must mutate only weapon participants and must not copy or "
+           "validate the frozen megamap on the simulation thread.";
+}
+
 TEST(AlphaExtractionSessionTest,
      BasePerimeterSweepObjectiveFollowsInitialEnemies)
 {

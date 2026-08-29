@@ -2843,63 +2843,55 @@ void GameSession::updateAlphaRaid(
         }
     }
 
-    std::optional<ProfileState> firedCandidate;
+    std::optional<FireWeaponCommand> pendingFireCommand;
     if (weapon.has_value() &&
         !raidActionState_.active().has_value() &&
         !input.inventoryOpen &&
         (simulationInput.fireJustPressed ||
          (automaticFire && simulationInput.firePressed)))
     {
-        ProfileState candidate = profile_;
         Pcg32 faultRandom{
             profile_.pendingRaid->seed ^ 0x776561706f6e2d66ULL,
             weaponFaultSequence_ + 0x6661756c742d726fULL};
-        WeaponAmmoReceipt fire = executeWeaponAmmo(
-            candidate,
+        const FireWeaponCommand fireCommand{
+            *weapon,
+            faultRandom.bounded(10000U),
+            faultRandom.next()};
+        const WeaponAmmoPlan fire = queryFireWeapon(
+            profile_,
             publishedContentRegistry(),
-            FireWeaponCommand{
-                *weapon,
-                faultRandom.bounded(10000U),
-                faultRandom.next()},
-            CommandContext{
-                profile_.revision,
-                nextRaidTransaction("fire")});
-        if (input.developerInfiniteAmmo && fire.succeeded &&
+            fireCommand);
+        if (!input.developerInfiniteAmmo && fire.canCommit &&
             fire.result == WeaponAmmoResult::Chambered)
         {
-            // The ordinary command deliberately separates chambering and
-            // firing. In infinite-ammo developer mode, run both against the
-            // disposable candidate so an initially empty chamber can still
-            // fire when the installed magazine contains a compatible round.
-            // Neither candidate transaction is committed to ProfileState.
-            fire = executeWeaponAmmo(
-                candidate,
+            const WeaponAmmoReceipt chambered = executeFireWeapon(
+                profile_,
                 publishedContentRegistry(),
-                FireWeaponCommand{
-                    *weapon,
-                    faultRandom.bounded(10000U),
-                    faultRandom.next()},
+                fireCommand,
                 CommandContext{
-                    candidate.revision,
-                    nextRaidTransaction("developer-infinite-fire")});
-        }
-        if (fire.succeeded && fire.result == WeaponAmmoResult::Chambered)
-        {
-            static_cast<void>(commitProfileCandidate(
-                std::move(candidate),
-                false));
+                    profile_.revision,
+                    nextRaidTransaction("fire-chamber")});
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
-            presentationEvents_.push_back(
-                GameSessionPresentationEvent::WeaponChambered);
+            if (chambered.succeeded &&
+                chambered.result == WeaponAmmoResult::Chambered)
+            {
+                presentationEvents_.push_back(
+                    GameSessionPresentationEvent::WeaponChambered);
+            }
+            else
+            {
+                persistenceMessage_ = chambered.message;
+            }
         }
-        else if (fire.succeeded &&
+        else if (fire.canCommit &&
                  (fire.result == WeaponAmmoResult::Fired ||
-                  fire.result == WeaponAmmoResult::FiredAndMalfunctioned))
+                  (input.developerInfiniteAmmo &&
+                   fire.result == WeaponAmmoResult::Chambered)))
         {
             if (!input.developerInfiniteAmmo)
             {
-                firedCandidate = std::move(candidate);
+                pendingFireCommand = fireCommand;
             }
         }
         else
@@ -2943,15 +2935,26 @@ void GameSession::updateAlphaRaid(
     }
     if (world_->shotFiredLastUpdate())
     {
-        if (!input.developerInfiniteAmmo && !firedCandidate.has_value())
+        if (!input.developerInfiniteAmmo && !pendingFireCommand.has_value())
         {
             std::terminate();
         }
-        if (firedCandidate.has_value())
+        if (pendingFireCommand.has_value())
         {
-            static_cast<void>(commitProfileCandidate(
-                std::move(*firedCandidate),
-                false));
+            const WeaponAmmoReceipt committed = executeFireWeapon(
+                profile_,
+                publishedContentRegistry(),
+                *pendingFireCommand,
+                CommandContext{
+                    profile_.revision,
+                    nextRaidTransaction("fire")});
+            if (!committed.succeeded ||
+                (committed.result != WeaponAmmoResult::Fired &&
+                 committed.result !=
+                     WeaponAmmoResult::FiredAndMalfunctioned))
+            {
+                std::terminate();
+            }
         }
         world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius);
         if (!input.developerInfiniteAmmo)
