@@ -95,7 +95,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 
 ## 当前自动化证据
 
-- PR #113 的遭遇生态、出生保护和热路径加固已通过完整自动化、exact-head CI 和用户正常游玩验收并进入 main。当前 Macro 4 的类型化目标投影、Ashworks 随机外围清剿、content v48 兼容和 Frontier 自力寻回冻结锚点已完成 Windows Debug 全目标构建、292/292 定向回归和 1283/1283 完整 CTest；exact-head CI 待当前分支提交后执行。开发代理未启动游戏。
+- PR #113 的遭遇生态、出生保护和热路径加固已通过完整自动化、exact-head CI 和用户正常游玩验收并进入 main。当前 Draft PR #114 的类型化目标投影、Ashworks 随机外围清剿、content v48 兼容和 Frontier 自力寻回冻结锚点已完成 Windows Debug 全目标构建、292/292 定向回归、1283/1283 完整 CTest及 exact-head Windows/Ubuntu CI。开发代理未启动游戏；用户正常游玩验收仍待执行。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

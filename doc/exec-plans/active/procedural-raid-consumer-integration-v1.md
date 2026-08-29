@@ -34,5 +34,5 @@
 - [x] 审计既有消费者、冻结锚点、运行时和结算边界。
 - [x] 实现统一战术目标投影和外围清剿随机地图消费者。
 - [x] 完成 focused tests、Windows Debug 全目标与完整 CTest（292/292 定向、1283/1283 完整）。
-- [ ] 提交、推送 Draft PR 并完成 exact-head 双平台 CI。
+- [x] 提交、推送 Draft PR #114 并完成 exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。
