@@ -198,6 +198,20 @@ namespace
         fail(std::string{field} + " is not a supported Raid resource point kind");
     }
 
+    RaidEncounterKind parseRaidEncounterKind(
+        const Json &parent,
+        std::string_view field)
+    {
+        const std::string value = requiredString(parent, field);
+        if (value == "patrol")
+            return RaidEncounterKind::Patrol;
+        if (value == "guard")
+            return RaidEncounterKind::Guard;
+        if (value == "ambush")
+            return RaidEncounterKind::Ambush;
+        fail(std::string{field} + " is not a supported Raid encounter kind");
+    }
+
     int requiredPositiveInt(
         const Json &parent,
         std::string_view field)
@@ -2117,6 +2131,64 @@ ContentRegistry ContentRegistry::fromJson(
                             std::move(archetype));
                     }
                 }
+                std::set<std::string> encounterIds;
+                if (procedural.contains("encounter_archetypes"))
+                {
+                    for (const Json &encounter : requiredArray(
+                             procedural, "encounter_archetypes"))
+                    {
+                        RaidEncounterArchetypeDefinition archetype;
+                        archetype.id = requiredString(encounter, "id");
+                        archetype.kind = parseRaidEncounterKind(
+                            encounter, "kind");
+                        archetype.minimumGroups = requiredPositiveUint(
+                            encounter, "minimum_groups");
+                        archetype.maximumGroups = requiredPositiveUint(
+                            encounter, "maximum_groups");
+                        archetype.minimumMembers = requiredPositiveUint(
+                            encounter, "minimum_members");
+                        archetype.maximumMembers = requiredPositiveUint(
+                            encounter, "maximum_members");
+                        archetype.activationDistance = requiredFiniteFloat(
+                            encounter, "activation_distance", true);
+                        archetype.patrolRadius = requiredFiniteFloat(
+                            encounter, "patrol_radius", true);
+                        for (const Json &kind : requiredArray(
+                                 encounter, "allowed_district_kinds"))
+                        {
+                            const RaidDistrictKind parsed =
+                                parseRaidDistrictKind(
+                                    Json{{"kind", kind}}, "kind");
+                            if (std::find(
+                                    archetype.allowedDistrictKinds.begin(),
+                                    archetype.allowedDistrictKinds.end(),
+                                    parsed) !=
+                                archetype.allowedDistrictKinds.end())
+                            {
+                                fail("encounter district kind is duplicated");
+                            }
+                            archetype.allowedDistrictKinds.push_back(parsed);
+                        }
+                        if (!encounterIds.insert(archetype.id).second ||
+                            archetype.allowedDistrictKinds.empty() ||
+                            archetype.minimumGroups > archetype.maximumGroups ||
+                            archetype.maximumGroups > 8U ||
+                            archetype.minimumMembers > archetype.maximumMembers ||
+                            archetype.minimumMembers < 2U ||
+                            archetype.maximumMembers > 8U ||
+                            !std::isfinite(archetype.activationDistance) ||
+                            archetype.activationDistance < 100.0F ||
+                            archetype.activationDistance > 800.0F ||
+                            !std::isfinite(archetype.patrolRadius) ||
+                            archetype.patrolRadius < 80.0F ||
+                            archetype.patrolRadius > 800.0F)
+                        {
+                            fail("procedural encounter archetype is invalid");
+                        }
+                        value.encounterArchetypes.push_back(
+                            std::move(archetype));
+                    }
+                }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
                 if ((value.layoutVersion != 3U &&
@@ -2155,8 +2227,11 @@ ContentRegistry ContentRegistry::fromJson(
                     (value.layoutVersion >= 4U &&
                      (value.resourcePointArchetypes.empty() ||
                       value.minimumInitialEnemies == 0U)) ||
+                    (value.layoutVersion >= 4U &&
+                     value.encounterArchetypes.empty()) ||
                     (value.layoutVersion < 4U &&
-                     !value.resourcePointArchetypes.empty()))
+                     (!value.resourcePointArchetypes.empty() ||
+                      !value.encounterArchetypes.empty())))
                 {
                     fail("procedural outdoor map settings are invalid");
                 }

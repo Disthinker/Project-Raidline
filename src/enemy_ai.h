@@ -64,6 +64,7 @@ struct EnemyAiInput
     float deltaTime{};
     bool targetVisible{true};
     std::optional<Vec2> navigationTarget;
+    bool allowUnawareNavigation{};
 };
 
 struct EnemyAiDecision

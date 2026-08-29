@@ -174,10 +174,24 @@ EnemyAiDecision EnemyAiState::update(
         input.targetVisible,
         input.deltaTime);
 
-    if (awarenessState_ == EnemyAwarenessState::Unaware ||
-        !lastKnownTargetPosition_.has_value())
+    if (awarenessState_ == EnemyAwarenessState::Unaware)
     {
         specialChargeHoldTime_ = 0.0F;
+        if (input.allowUnawareNavigation &&
+            input.navigationTarget.has_value())
+        {
+            const Vec2 desiredDirection = normalizedOrZero(Vec2{
+                input.navigationTarget->x - input.selfPosition.x,
+                input.navigationTarget->y - input.selfPosition.y});
+            return EnemyAiDecision{
+                updateMoveDirection(desiredDirection, input.deltaTime),
+                std::nullopt};
+        }
+        currentMoveDirection_ = Vec2{};
+        return EnemyAiDecision{};
+    }
+    if (!lastKnownTargetPosition_.has_value())
+    {
         currentMoveDirection_ = Vec2{};
         return EnemyAiDecision{};
     }

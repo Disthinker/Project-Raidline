@@ -354,10 +354,27 @@ bool GameSession::deployAlpha(
             {
                 continue;
             }
-            enemies.push_back(EnemySpawn{
+            const auto group = std::find_if(
+                snapshot.encounterGroups.begin(),
+                snapshot.encounterGroups.end(),
+                [&](const RaidEncounterGroupSnapshot &candidate)
+                {
+                    return candidate.instanceId ==
+                        enemy.encounterGroupInstanceId;
+                });
+            EnemySpawn spawn{
                 enemy.position,
                 enemy.size,
-                enemy.maximumHealth});
+                enemy.maximumHealth};
+            if (group != snapshot.encounterGroups.end())
+            {
+                spawn.encounterGroupInstanceId = group->instanceId;
+                spawn.encounterKind = group->kind;
+                spawn.encounterHome = group->homePosition;
+                spawn.patrolPoints = group->patrolPoints;
+                spawn.ambushActivationDistance = group->activationDistance;
+            }
+            enemies.push_back(std::move(spawn));
         }
         const MapDefinition &map =
             publishedContentRegistry().map(snapshot.mapDefinitionId);

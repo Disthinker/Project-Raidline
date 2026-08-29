@@ -534,6 +534,30 @@ enum class RaidResourcePointKind : std::uint8_t
     LandmarkSpecific
 };
 
+enum class RaidEncounterKind : std::uint8_t
+{
+    Patrol,
+    Guard,
+    Ambush
+};
+
+struct RaidEncounterArchetypeDefinition
+{
+    std::string id;
+    RaidEncounterKind kind{RaidEncounterKind::Guard};
+    std::vector<RaidDistrictKind> allowedDistrictKinds;
+    std::uint32_t minimumGroups{1};
+    std::uint32_t maximumGroups{1};
+    std::uint32_t minimumMembers{3};
+    std::uint32_t maximumMembers{5};
+    float activationDistance{240.0F};
+    float patrolRadius{320.0F};
+
+    friend bool operator==(
+        const RaidEncounterArchetypeDefinition &,
+        const RaidEncounterArchetypeDefinition &) = default;
+};
+
 struct RaidResourcePointArchetypeDefinition
 {
     std::string id;
@@ -582,6 +606,7 @@ struct ProceduralOutdoorDefinition
     std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;
     std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
     std::vector<RaidResourcePointArchetypeDefinition> resourcePointArchetypes;
+    std::vector<RaidEncounterArchetypeDefinition> encounterArchetypes;
 
     friend bool operator==(
         const ProceduralOutdoorDefinition &,

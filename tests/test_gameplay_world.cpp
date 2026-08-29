@@ -3966,6 +3966,71 @@ TEST(GameplayWorldTest, PlayerNoiseAlertsOnlyEnemiesInsideRadius)
     EXPECT_EQ(world.enemies()[1].awarenessState(), EnemyAwarenessState::Unaware);
 }
 
+TEST(GameplayWorldTest, PlayerNoiseAlertsEveryLivingMemberOfEncounterGroup)
+{
+    EnemySpawn near{Vec2{650.0F, 370.0F}, Vec2{50.0F, 50.0F}, 3};
+    near.encounterGroupInstanceId = "encounter:test:0";
+    EnemySpawn far{Vec2{1100.0F, 650.0F}, Vec2{50.0F, 50.0F}, 3};
+    far.encounterGroupInstanceId = near.encounterGroupInstanceId;
+    EnemySpawn unrelated{Vec2{1050.0F, 100.0F}, Vec2{50.0F, 50.0F}, 3};
+    unrelated.encounterGroupInstanceId = "encounter:test:1";
+    GameplayWorld world{
+        std::vector<EnemySpawn>{near, far, unrelated},
+        100};
+
+    world.emitPlayerNoise(300.0F);
+
+    ASSERT_EQ(world.enemies().size(), 3U);
+    EXPECT_EQ(world.enemies()[0].awarenessState(), EnemyAwarenessState::Alerted);
+    EXPECT_EQ(world.enemies()[1].awarenessState(), EnemyAwarenessState::Alerted);
+    EXPECT_EQ(world.enemies()[2].awarenessState(), EnemyAwarenessState::Unaware);
+}
+
+TEST(GameplayWorldTest, UnawarePatrolMovesAlongFrozenRoute)
+{
+    RaidWorldConfig config;
+    config.worldSize = {1280.0F, 720.0F};
+    config.playerSpawn = {1050.0F, 600.0F};
+    config.extractionPoint = {{1120.0F, 600.0F}, {100.0F, 100.0F}};
+    EnemySpawn patrol{{100.0F, 100.0F}, {50.0F, 50.0F}, 3};
+    patrol.encounterGroupInstanceId = "encounter:patrol:0";
+    patrol.encounterKind = RaidEncounterKind::Patrol;
+    patrol.encounterHome = {125.0F, 125.0F};
+    patrol.patrolPoints = {{125.0F, 125.0F}, {325.0F, 125.0F}};
+    config.initialEnemies = {patrol};
+    GameplayWorld world{std::move(config)};
+
+    const float initialX = world.enemies().front().position().x;
+    for (int frame{}; frame < 120; ++frame)
+        world.update(GameplayInput{}, 1.0F / 60.0F);
+
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies().front().awarenessState(),
+              EnemyAwarenessState::Unaware);
+    EXPECT_GT(world.enemies().front().position().x, initialX + 40.0F);
+}
+
+TEST(GameplayWorldTest, AmbushIgnoresDistantLineOfSightUntilActivated)
+{
+    RaidWorldConfig config;
+    config.worldSize = {1280.0F, 720.0F};
+    config.playerSpawn = {500.0F, 300.0F};
+    config.extractionPoint = {{1120.0F, 600.0F}, {100.0F, 100.0F}};
+    EnemySpawn ambush{{200.0F, 300.0F}, {50.0F, 50.0F}, 3};
+    ambush.encounterGroupInstanceId = "encounter:ambush:0";
+    ambush.encounterKind = RaidEncounterKind::Ambush;
+    ambush.encounterHome = {225.0F, 325.0F};
+    ambush.ambushActivationDistance = 120.0F;
+    config.initialEnemies = {ambush};
+    GameplayWorld world{std::move(config)};
+
+    world.update(GameplayInput{}, 0.0F);
+
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies().front().awarenessState(),
+              EnemyAwarenessState::Unaware);
+}
+
 TEST(GameplayWorldTest, ReportsAnAlertTransitionOnlyOnTheTransitionFrame)
 {
     GameplayWorld world{

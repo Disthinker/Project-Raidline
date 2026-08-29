@@ -1345,6 +1345,17 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                 {center.x - request.size.x * 0.5F,
                  center.y - request.size.y * 0.5F},
                 request.size};
+            if (bounds.position.x < map.walkableBounds.position.x ||
+                bounds.position.y < map.walkableBounds.position.y ||
+                bounds.position.x + bounds.size.x >
+                    map.walkableBounds.position.x +
+                        map.walkableBounds.size.x ||
+                bounds.position.y + bounds.size.y >
+                    map.walkableBounds.position.y +
+                        map.walkableBounds.size.y)
+            {
+                continue;
+            }
             if (requiredLandmark != nullptr)
             {
                 const ContentRect vicinity = inflated(
@@ -1356,6 +1367,12 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                     center.y <= vicinity.position.y + vicinity.size.y;
                 if (!nearLandmark ||
                     district + 1U != requiredLandmark->districtInstanceId)
+                {
+                    continue;
+                }
+                if (request.kind == RaidMapAnchorKind::Enemy &&
+                    overlaps(inflated(requiredLandmark->bounds, 20.0F),
+                             bounds))
                 {
                     continue;
                 }

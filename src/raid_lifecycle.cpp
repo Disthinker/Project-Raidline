@@ -604,6 +604,7 @@ DeployReceipt executeDeploy(
     Pcg32 resourcePointRandom{command.seed, 0x7265736f75726365ULL};
     Pcg32 resourceLootRandom{command.seed, 0x7265732d6c6f6f74ULL};
     Pcg32 enemyPopulationRandom{command.seed, 0x656e656d792d706fULL};
+    Pcg32 encounterRandom{command.seed, 0x656e636f756e7465ULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
     Pcg32 interiorLootRandom{command.seed, 0x696e746572696f72ULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
@@ -613,6 +614,8 @@ DeployReceipt executeDeploy(
         map->raidEnemyDeploymentIds[deploymentIndex]);
     const bool resourceEcologyRules = map->proceduralOutdoor.enabled &&
         map->proceduralOutdoor.layoutVersion >= 4U;
+    const bool encounterEcologyRules = resourceEcologyRules &&
+        !map->proceduralOutdoor.encounterArchetypes.empty();
     std::vector<FrozenResourcePointRequest> resourcePointRequests;
     std::size_t regularLootSlotCount{};
     if (resourceEcologyRules)
@@ -641,7 +644,9 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = resourceEcologyRules
+    snapshot.rulesVersion = encounterEcologyRules
+        ? "procedural-frontier-encounter-ecology-25"
+        : resourceEcologyRules
         ? "procedural-frontier-resource-ecology-24"
         : map->proceduralOutdoor.enabled &&
               map->proceduralOutdoor.layoutVersion >= 3U
@@ -716,12 +721,120 @@ DeployReceipt executeDeploy(
                   map->proceduralOutdoor.maximumInitialEnemies -
                       map->proceduralOutdoor.minimumInitialEnemies + 1U))
         : deployment.enemies.size();
-    for (std::size_t index{}; index < outdoorEnemyTarget; ++index)
+    if (encounterEcologyRules)
     {
-        const EnemySpawnDefinition &enemy =
-            deployment.enemies[index % deployment.enemies.size()];
-        snapshot.enemies.push_back(
-            RaidEnemySnapshot{enemy.position, enemy.size, enemy.maximumHealth});
+        std::vector<const RaidEncounterArchetypeDefinition *> groups;
+        for (const RaidEncounterArchetypeDefinition &archetype :
+             map->proceduralOutdoor.encounterArchetypes)
+        {
+            const std::uint32_t count = archetype.minimumGroups +
+                encounterRandom.bounded(
+                    archetype.maximumGroups - archetype.minimumGroups + 1U);
+            for (std::uint32_t ordinal{}; ordinal < count; ++ordinal)
+                groups.push_back(&archetype);
+        }
+        const auto maximumCapacity = [&groups]()
+        {
+            return std::accumulate(
+                groups.begin(), groups.end(), std::size_t{},
+                [](std::size_t total,
+                   const RaidEncounterArchetypeDefinition *archetype)
+                { return total + archetype->maximumMembers; });
+        };
+        while (maximumCapacity() < outdoorEnemyTarget)
+        {
+            std::vector<const RaidEncounterArchetypeDefinition *> candidates;
+            for (const RaidEncounterArchetypeDefinition &archetype :
+                 map->proceduralOutdoor.encounterArchetypes)
+            {
+                const std::size_t count = static_cast<std::size_t>(
+                    std::count(groups.begin(), groups.end(), &archetype));
+                if (count < archetype.maximumGroups)
+                    candidates.push_back(&archetype);
+            }
+            if (candidates.empty())
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "encounter content cannot hold the enemy population",
+                    profile.revision);
+            }
+            groups.push_back(candidates[encounterRandom.bounded(
+                static_cast<std::uint32_t>(candidates.size()))]);
+        }
+        std::vector<std::uint32_t> memberCounts;
+        memberCounts.reserve(groups.size());
+        std::size_t assigned{};
+        for (const RaidEncounterArchetypeDefinition *archetype : groups)
+        {
+            memberCounts.push_back(archetype->minimumMembers);
+            assigned += archetype->minimumMembers;
+        }
+        if (assigned > outdoorEnemyTarget)
+        {
+            return deployFailure(
+                RaidLifecycleError::InvalidCommand,
+                "encounter content exceeds the enemy population",
+                profile.revision);
+        }
+        while (assigned < outdoorEnemyTarget)
+        {
+            std::vector<std::size_t> candidates;
+            for (std::size_t index{}; index < groups.size(); ++index)
+            {
+                if (memberCounts[index] < groups[index]->maximumMembers)
+                    candidates.push_back(index);
+            }
+            if (candidates.empty())
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "encounter content cannot distribute the enemy population",
+                    profile.revision);
+            }
+            const std::size_t selected = candidates[encounterRandom.bounded(
+                static_cast<std::uint32_t>(candidates.size()))];
+            ++memberCounts[selected];
+            ++assigned;
+        }
+        snapshot.encounterGroups.reserve(groups.size());
+        for (std::size_t groupIndex{}; groupIndex < groups.size(); ++groupIndex)
+        {
+            const RaidEncounterArchetypeDefinition &archetype =
+                *groups[groupIndex];
+            RaidEncounterGroupSnapshot group;
+            group.instanceId = archetype.id + ":" +
+                std::to_string(groupIndex);
+            group.definitionId = archetype.id;
+            group.kind = archetype.kind;
+            group.activationDistance = archetype.activationDistance;
+            for (std::uint32_t member{}; member < memberCounts[groupIndex];
+                 ++member)
+            {
+                const std::size_t enemyIndex = snapshot.enemies.size();
+                const EnemySpawnDefinition &enemy = deployment.enemies[
+                    enemyIndex % deployment.enemies.size()];
+                snapshot.enemies.push_back(RaidEnemySnapshot{
+                    enemy.position,
+                    enemy.size,
+                    enemy.maximumHealth,
+                    outdoorRaidSpaceId(),
+                    group.instanceId});
+                group.memberEnemyIndices.push_back(
+                    static_cast<std::uint32_t>(enemyIndex));
+            }
+            snapshot.encounterGroups.push_back(std::move(group));
+        }
+    }
+    else
+    {
+        for (std::size_t index{}; index < outdoorEnemyTarget; ++index)
+        {
+            const EnemySpawnDefinition &enemy =
+                deployment.enemies[index % deployment.enemies.size()];
+            snapshot.enemies.push_back(RaidEnemySnapshot{
+                enemy.position, enemy.size, enemy.maximumHealth});
+        }
     }
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
@@ -986,14 +1099,60 @@ DeployReceipt executeDeploy(
                        RaidMapAnchorKind::SelfRecovery,
                        {96.0F, 96.0F});
         }
-        for (std::size_t index{}; index < snapshot.enemies.size(); ++index)
+        if (encounterEcologyRules)
         {
-            const RaidEnemySnapshot &enemy = snapshot.enemies[index];
-            if (enemy.spaceId == outdoorRaidSpaceId())
+            std::size_t guardOrdinal{};
+            for (std::size_t index{}; index < snapshot.encounterGroups.size();
+                 ++index)
             {
-                addRequest(raidIndexedAnchorId("enemy", index),
-                           RaidMapAnchorKind::Enemy,
-                           enemy.size);
+                const RaidEncounterGroupSnapshot &group =
+                    snapshot.encounterGroups[index];
+                const auto archetype = std::find_if(
+                    map->proceduralOutdoor.encounterArchetypes.begin(),
+                    map->proceduralOutdoor.encounterArchetypes.end(),
+                    [&](const RaidEncounterArchetypeDefinition &candidate)
+                    { return candidate.id == group.definitionId; });
+                if (archetype ==
+                    map->proceduralOutdoor.encounterArchetypes.end())
+                {
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "encounter snapshot references unknown content",
+                        profile.revision);
+                }
+                const Vec2 footprint = group.kind == RaidEncounterKind::Patrol
+                    ? Vec2{640.0F, 480.0F}
+                    : group.kind == RaidEncounterKind::Guard
+                    ? Vec2{320.0F, 240.0F}
+                    : Vec2{400.0F, 320.0F};
+                RaidMapAnchorRequest request{
+                    raidIndexedAnchorId("encounter", index),
+                    RaidMapAnchorKind::Enemy,
+                    footprint,
+                    archetype->allowedDistrictKinds};
+                if (group.kind == RaidEncounterKind::Guard)
+                {
+                    request.landmarkDefinitionId =
+                        map->proceduralOutdoor.landmarkTemplates[
+                            guardOrdinal % map->proceduralOutdoor
+                                .landmarkTemplates.size()].id;
+                    ++guardOrdinal;
+                }
+                generationAnchors.requests.push_back(std::move(request));
+            }
+        }
+        else
+        {
+            for (std::size_t index{};
+                 index < snapshot.enemies.size(); ++index)
+            {
+                const RaidEnemySnapshot &enemy = snapshot.enemies[index];
+                if (enemy.spaceId == outdoorRaidSpaceId())
+                {
+                    addRequest(raidIndexedAnchorId("enemy", index),
+                               RaidMapAnchorKind::Enemy,
+                               enemy.size);
+                }
             }
         }
         for (std::size_t index{}; index < snapshot.loot.size(); ++index)
@@ -1145,18 +1304,95 @@ DeployReceipt executeDeploy(
                     profile.revision);
             snapshot.rescue->transferPoint = anchor->bounds;
         }
-        for (std::size_t index{}; index < snapshot.enemies.size(); ++index)
+        if (encounterEcologyRules)
         {
-            RaidEnemySnapshot &enemy = snapshot.enemies[index];
-            if (enemy.spaceId != outdoorRaidSpaceId())
-                continue;
-            const auto *anchor = placement(raidIndexedAnchorId("enemy", index));
-            if (anchor == nullptr)
-                return deployFailure(
-                    RaidLifecycleError::InvalidCommand,
-                    "generated Raid omitted enemy anchor",
-                    profile.revision);
-            enemy.position = anchor->bounds.position;
+            for (std::size_t groupIndex{};
+                 groupIndex < snapshot.encounterGroups.size(); ++groupIndex)
+            {
+                RaidEncounterGroupSnapshot &group =
+                    snapshot.encounterGroups[groupIndex];
+                const auto *anchor = placement(
+                    raidIndexedAnchorId("encounter", groupIndex));
+                const auto archetype = std::find_if(
+                    map->proceduralOutdoor.encounterArchetypes.begin(),
+                    map->proceduralOutdoor.encounterArchetypes.end(),
+                    [&](const RaidEncounterArchetypeDefinition &candidate)
+                    { return candidate.id == group.definitionId; });
+                if (anchor == nullptr || archetype ==
+                    map->proceduralOutdoor.encounterArchetypes.end())
+                {
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted encounter group anchor",
+                        profile.revision);
+                }
+                group.homePosition = center(anchor->bounds);
+                group.patrolPoints = {group.homePosition};
+                if (group.kind == RaidEncounterKind::Patrol)
+                {
+                    const float horizontal = std::min(
+                        archetype->patrolRadius,
+                        anchor->bounds.size.x * 0.35F);
+                    const float vertical = std::min(
+                        archetype->patrolRadius * 0.6F,
+                        anchor->bounds.size.y * 0.30F);
+                    group.patrolPoints = {
+                        {group.homePosition.x - horizontal,
+                         group.homePosition.y - vertical},
+                        {group.homePosition.x + horizontal,
+                         group.homePosition.y - vertical},
+                        {group.homePosition.x + horizontal,
+                         group.homePosition.y + vertical},
+                        {group.homePosition.x - horizontal,
+                         group.homePosition.y + vertical}};
+                }
+                constexpr std::uint32_t columns{3U};
+                constexpr float horizontalSpacing{90.0F};
+                constexpr float verticalSpacing{90.0F};
+                const std::uint32_t rows = static_cast<std::uint32_t>(
+                    (group.memberEnemyIndices.size() + columns - 1U) /
+                    columns);
+                for (std::size_t member{};
+                     member < group.memberEnemyIndices.size(); ++member)
+                {
+                    RaidEnemySnapshot &enemy = snapshot.enemies[
+                        group.memberEnemyIndices[member]];
+                    const std::uint32_t column =
+                        static_cast<std::uint32_t>(member) % columns;
+                    const std::uint32_t row =
+                        static_cast<std::uint32_t>(member) / columns;
+                    enemy.position = {
+                        group.homePosition.x - enemy.size.x * 0.5F +
+                            (static_cast<float>(column) - 1.0F) *
+                                horizontalSpacing,
+                        group.homePosition.y - enemy.size.y * 0.5F +
+                            (static_cast<float>(row) -
+                             (static_cast<float>(rows) - 1.0F) * 0.5F) *
+                                verticalSpacing};
+                }
+            }
+        }
+        else
+        {
+            for (std::size_t index{};
+                 index < snapshot.enemies.size(); ++index)
+            {
+                RaidEnemySnapshot &enemy = snapshot.enemies[index];
+                if (enemy.spaceId != outdoorRaidSpaceId())
+                {
+                    continue;
+                }
+                const auto *anchor = placement(
+                    raidIndexedAnchorId("enemy", index));
+                if (anchor == nullptr)
+                {
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted enemy anchor",
+                        profile.revision);
+                }
+                enemy.position = anchor->bounds.position;
+            }
         }
         for (std::size_t index{}; index < snapshot.loot.size(); ++index)
         {

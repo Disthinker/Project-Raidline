@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-resource-ecology-hardening-content-46");
+        "procedural-frontier-encounter-ecology-content-47");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -1042,6 +1042,28 @@ TEST(ContentRegistryTest, RejectsInvalidProceduralInitialEnemyRange)
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsInvalidProceduralEncounterContracts)
+{
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"minimum_groups\": 3, \"maximum_groups\": 4",
+            "\"minimum_groups\": 5, \"maximum_groups\": 4"))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"kind\": \"ambush\"",
+            "\"kind\": \"roaming_horde\""))),
+        ContentRegistryError);
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "\"activation_distance\": 220",
+            "\"activation_distance\": 0"))),
         ContentRegistryError);
 }
 

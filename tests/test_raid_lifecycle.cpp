@@ -935,10 +935,41 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-resource-ecology-24");
+              "procedural-frontier-encounter-ecology-25");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
+    EXPECT_EQ(raid.encounterGroups,
+              repeated.pendingRaid->encounterGroups);
+    ASSERT_FALSE(raid.encounterGroups.empty());
+    std::set<RaidEncounterKind> encounterKinds;
+    std::set<std::uint32_t> encounterMembers;
+    for (std::size_t groupIndex{};
+         groupIndex < raid.encounterGroups.size(); ++groupIndex)
+    {
+        const RaidEncounterGroupSnapshot &group =
+            raid.encounterGroups[groupIndex];
+        encounterKinds.insert(group.kind);
+        EXPECT_FALSE(group.instanceId.empty());
+        EXPECT_FALSE(group.patrolPoints.empty());
+        const RaidAnchorPlacementSnapshot *anchor = findRaidAnchorPlacement(
+            raid.spatialLayout,
+            raidIndexedAnchorId("encounter", groupIndex));
+        ASSERT_NE(anchor, nullptr);
+        EXPECT_EQ(anchor->kind, RaidMapAnchorKind::Enemy);
+        for (std::uint32_t member : group.memberEnemyIndices)
+        {
+            EXPECT_TRUE(encounterMembers.insert(member).second);
+            ASSERT_LT(member, raid.enemies.size());
+            EXPECT_EQ(raid.enemies[member].encounterGroupInstanceId,
+                      group.instanceId);
+        }
+    }
+    EXPECT_EQ(encounterKinds,
+              (std::set<RaidEncounterKind>{
+                  RaidEncounterKind::Patrol,
+                  RaidEncounterKind::Guard,
+                  RaidEncounterKind::Ambush}));
     EXPECT_GE(
         std::count_if(
             raid.enemies.begin(), raid.enemies.end(),

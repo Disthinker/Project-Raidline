@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-resource-ecology-hardening-content-46",
+  "content_version": "procedural-frontier-encounter-ecology-content-47",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1248,6 +1248,11 @@
           {"id": "resource_point.frontier.freight_manifest", "display_name": "FREIGHT MANIFEST CACHE", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.freight_exchange", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}},
           {"id": "resource_point.frontier.fabrication_stock", "display_name": "FABRICATION STOCK", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.fabrication_plant", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 3}},
           {"id": "resource_point.frontier.service_supplies", "display_name": "SERVICE PLAZA SUPPLIES", "kind": "landmark_specific", "loot_table": "loot.raid.alpha", "landmark_definition_id": "landmark.frontier.highway_service", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}}
+        ],
+        "encounter_archetypes": [
+          {"id": "encounter.frontier.road_patrol", "kind": "patrol", "allowed_district_kinds": ["highway", "open_ground", "greenbelt"], "minimum_groups": 3, "maximum_groups": 4, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 400},
+          {"id": "encounter.frontier.resource_guard", "kind": "guard", "allowed_district_kinds": ["industrial", "logistics", "roadside_service"], "minimum_groups": 3, "maximum_groups": 3, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 160},
+          {"id": "encounter.frontier.route_ambush", "kind": "ambush", "allowed_district_kinds": ["highway", "logistics", "roadside_service"], "minimum_groups": 2, "maximum_groups": 3, "minimum_members": 3, "maximum_members": 5, "activation_distance": 220, "patrol_radius": 120}
         ]
       },
       "interiors": [
