@@ -384,6 +384,8 @@ TEST(AlphaExtractionSessionTest,
         siteId));
     ASSERT_TRUE(session.profile().pendingRaid->basePerimeterSweep.has_value());
     EXPECT_FALSE(session.basePerimeterSweepObjectiveSecured());
+    EXPECT_TRUE(session.raidOperationProjection().basePerimeterSweepActive);
+    EXPECT_FALSE(session.raidOperationProjection().objectiveSecured);
 
     for (const Enemy &enemy : session.world().enemies())
     {
@@ -393,7 +395,10 @@ TEST(AlphaExtractionSessionTest,
     session.update(GameplayInput{}, 0.0F);
 
     EXPECT_TRUE(session.basePerimeterSweepObjectiveSecured());
+    EXPECT_TRUE(session.raidOperationProjection().basePerimeterSweepActive);
+    EXPECT_TRUE(session.raidOperationProjection().objectiveSecured);
     ASSERT_TRUE(session.activeQuitAlphaRaid());
+    EXPECT_FALSE(session.raidOperationProjection().basePerimeterSweepActive);
     EXPECT_EQ(session.profile().lastRaidResult->baseThreatReducedUnits, 0U);
 }
 
@@ -467,6 +472,46 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
         EXPECT_EQ(projection.displayName, snapshot.displayName);
         EXPECT_EQ(projection.entrance, snapshot.exteriorEntrance);
     }
+}
+
+TEST(AlphaExtractionSessionTest,
+     FrontierProjectsFrozenHighRiskAndRescueObjectivesToTacticalMap)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-frontier-objectives"));
+    ASSERT_TRUE(session.deployAlpha(
+        88124U,
+        MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
+
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
+    const auto &objectives = session.world().tacticalMap().objectives();
+    ASSERT_EQ(objectives.size(), 2U);
+    const auto highRisk = std::find_if(
+        objectives.begin(), objectives.end(),
+        [](const RaidTacticalObjective &objective)
+        {
+            return objective.kind ==
+                RaidTacticalObjectiveKind::HighRiskControl;
+        });
+    const auto rescue = std::find_if(
+        objectives.begin(), objectives.end(),
+        [](const RaidTacticalObjective &objective)
+        { return objective.kind == RaidTacticalObjectiveKind::Rescue; });
+    ASSERT_NE(highRisk, objectives.end());
+    ASSERT_NE(rescue, objectives.end());
+    EXPECT_EQ(highRisk->visibility,
+              RaidTacticalObjectiveVisibility::Explored);
+    EXPECT_EQ(rescue->visibility,
+              RaidTacticalObjectiveVisibility::Briefed);
+    EXPECT_EQ(rescue->bounds,
+              session.profile().pendingRaid->rescue->transferPoint);
+    const Vec2 highRiskCenter{
+        highRisk->bounds.position.x + highRisk->bounds.size.x * 0.5F,
+        highRisk->bounds.position.y + highRisk->bounds.size.y * 0.5F};
+    EXPECT_FALSE(session.world().tacticalMap().pointRevealed(
+        highRiskCenter));
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

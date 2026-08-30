@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@85f90ff` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1～2。
-- 当前开发分支：`codex/procedural-raid-encounter-ecology-v1`，从 `origin/main@85f90ff` 创建。
-- 当前活动计划：`doc/exec-plans/active/procedural-raid-encounter-ecology-v1.md`。
+- `origin/main@f095022` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1～3。
+- 当前开发分支：`codex/procedural-raid-consumer-integration-v1`，从 `origin/main@f095022` 创建。
+- 当前活动计划：`doc/exec-plans/active/procedural-raid-consumer-integration-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～2 均已进入主线。当前唯一工作是 Macro 3：把 `Frontier Exchange` 的 36～48 名初始敌人组织为巡逻、地标守点和路线伏击群组，并让枪声按群组传播警觉。不增加新敌人类型，不启动程序化室内、多主题、实时尸潮或 AI 小队。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～3 均已进入主线。当前唯一工作是 Macro 4：让救援、自力寻回、高危控制和基地外围清剿在 `Frontier Exchange` 的冻结随机布局中具有可定位、可完成且可幂等结算的完整玩家闭环。不增加新任务系统、新 AI、程序化室内、多主题、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -67,7 +67,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 52. **基地外围清剿 v1**：content v42 为每个主基地地点显式声明外围清剿地图和 40 点减值；威胁达到 40 后可从区域页发起，清空初始敌人并撤离才原子减值，提前撤离仍合法但不减值。schema v33 保存任务快照和结果实际减值，并把旧档隐藏的来源总量溢出确定性归一到共享 100 点容量。PR #110 已通过 Windows Debug 全目标、完整 CTest 1223/1223、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `7bd3b02` 进入 main。
 53. **Frontier Exchange 超大主题分区随机地图 v3**：PR #111 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `636a40b` 进入 main。content v44/layout v3/schema v35 将地图扩展为 25600×14400，并冻结八个连续主题分区、三个固定地标、程序道路、五类地表、真实比例环境物件和全部既有玩法锚点；同时交付区块投影、分层导航、双语加载画面、F10 开发面板、准星边界和大地图帧顿挫修复。
 54. **Frontier Exchange 资源点生态 v1**：PR #112 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `85f90ff` 进入 main。content v46/layout v4/schema v36 冻结普通、高价值和地点专属资源点、36～48 名初始敌人、真实加载阶段和鼠标 F10；连续射击和背包拖拽热路径不再复制整份超大地图 Profile。
-55. **Frontier Exchange 遭遇与部署生态 v1（当前开发）**：当前分支建立 content v48/schema v37/rules v26 的巡逻、守点和伏击群组原型；Deploy 通过独立随机流冻结群组身份、成员、合法分区、地标外围守点、巡逻点和伏击激活距离，并强制全部初始群组避开玩家出生点周围 1200 世界单位。运行时复用现有视线、搜索记忆、声响和有预算寻路：巡逻组未警觉时沿冻结路线移动，守点组搜索结束后回岗，伏击组只在近距视线或声响触发后追击，同组成员共享声响警觉。layout 保持 v4；旧 schema v37/content v47/rules v25 与 schema v36/content v45～v46 继续读取且不重生成既有 Raid。Raid 拾取和局内库存事务已改为仅复制、校验可修改的资产参与者，不再逐次扫描冻结超大地图。
+55. **Frontier Exchange 遭遇与部署生态 v1**：PR #113 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `f095022` 进入 main。content v48/schema v37/rules v26 冻结巡逻、守点和伏击群组、同组声响响应及 1200 世界单位出生保护区；Raid 拾取和局内库存只复制、校验可修改的资产参与者，不再逐次扫描冻结超大地图。
+56. **Frontier Exchange 既有消费者整合 v1（当前开发）**：content v49 保持 schema v37/layout v4，把 Ashworks 外围清剿指向 `Frontier Exchange`；`GameSession` 从冻结锚点建立救援、失物缓存和高危控制的类型化战术地图目标。救援和玩家主动选择的失物缓存属于开局 Briefed，高危控制需要探索；外围清剿状态投影为 ACTIVE/SECURED，最终减值仍由唯一 Settlement 提交。v48/v47 存档继续读取且不重生成既有 Raid。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -94,7 +95,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 
 ## 当前自动化证据
 
-- PR #112 的资源点生态与性能加固已通过完整自动化、exact-head CI 和用户正常游玩验收并进入 main。当前 Macro 3 已完成 Windows Debug 全目标构建和 1276/1276 完整 CTest；内容解析、群组冻结、schema v37 往返与旧 content v47 读取、损坏成员索引拒绝、死亡同步、巡逻、伏击、同组声响、128-seed 合法性与出生保护、100 敌人大世界性能均通过。拾取热路径从约 69.6 ms 降至约 2.8 ms，并新增拒绝拾取零修改回归；exact-head CI 尚待本轮推送后执行。开发代理未启动游戏。
+- PR #113 的遭遇生态、出生保护和热路径加固已通过完整自动化、exact-head CI 和用户正常游玩验收并进入 main。当前 Draft PR #114 的类型化目标投影、Ashworks 随机外围清剿、content v48 兼容和 Frontier 自力寻回冻结锚点已完成 Windows Debug 全目标构建、292/292 定向回归、1283/1283 完整 CTest及 exact-head Windows/Ubuntu CI。开发代理未启动游戏；用户正常游玩验收仍待执行。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
 - PR #89 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `194f910` 进入 main。

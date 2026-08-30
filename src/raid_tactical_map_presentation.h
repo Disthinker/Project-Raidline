@@ -37,6 +37,11 @@ enum class RaidTacticalMapPresentationMode
     const RaidSpecialLocationMapState &location,
     RaidTacticalMapPresentationMode mode) noexcept;
 
+[[nodiscard]] bool tacticalMapObjectiveVisible(
+    const RaidTacticalMapState &map,
+    const RaidTacticalObjective &objective,
+    RaidTacticalMapPresentationMode mode) noexcept;
+
 // The full-static-map debug mode never grants or emulates enemy intelligence.
 [[nodiscard]] bool tacticalMapEnemyDeploymentVisible(
     const RaidTacticalMapState &map) noexcept;

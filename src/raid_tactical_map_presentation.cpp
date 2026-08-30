@@ -67,6 +67,19 @@ bool tacticalMapSpecialLocationVisible(
         location.discovered;
 }
 
+bool tacticalMapObjectiveVisible(
+    const RaidTacticalMapState &map,
+    const RaidTacticalObjective &objective,
+    RaidTacticalMapPresentationMode mode) noexcept
+{
+    const Vec2 center{
+        objective.bounds.position.x + objective.bounds.size.x * 0.5F,
+        objective.bounds.position.y + objective.bounds.size.y * 0.5F};
+    return mode == RaidTacticalMapPresentationMode::FullStaticMap ||
+        objective.visibility == RaidTacticalObjectiveVisibility::Briefed ||
+        map.pointRevealed(center);
+}
+
 bool tacticalMapEnemyDeploymentVisible(
     const RaidTacticalMapState &map) noexcept
 {

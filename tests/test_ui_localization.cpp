@@ -602,6 +602,23 @@ TEST(UiLocalizationTest, ChineseTranslatesBasePerimeterSweepFlow) {
                 UiLanguage::SimplifiedChinese,
                 "PERIMETER SECURED | EXTRACT TO REDUCE BASE THREAT"),
             "基地外围已清剿 | 撤离后降低基地威胁");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "OPERATION | PERIMETER SWEEP | ACTIVE"),
+            "行动 | 基地外围清剿 | 进行中");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "OPERATION | PERIMETER SWEEP | SECURED"),
+            "行动 | 基地外围清剿 | 目标完成");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesRaidObjectiveMarkers) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "RESCUE TARGET"),
+            "救援目标");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "LOST CACHE"),
+            "失物缓存");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesOutdoorPlaceholderIdentities) {

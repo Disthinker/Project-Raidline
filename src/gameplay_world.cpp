@@ -756,7 +756,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             ? std::optional<ContentRect>{config.highRisk.advancedResourceArea}
             : std::nullopt,
         std::move(initialEnemyCenters),
-        std::move(specialLocations));
+        std::move(specialLocations),
+        std::move(config.tacticalObjectives));
     tacticalMap_.configureOutdoorLayout(
         outdoorLayout_, outdoorColumns_, outdoorRows_);
     tacticalMap_.revealAround(playerCenter(player_));

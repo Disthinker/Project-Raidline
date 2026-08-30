@@ -1758,6 +1758,24 @@ TEST(SaveRepositoryTest, SchemaV37LoadsPreviousEncounterEcologyContent)
               profileStateFingerprint(profile));
 }
 
+TEST(SaveRepositoryTest, SchemaV37LoadsEncounterEcologyHardeningContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewAlphaProfile(
+        "save-encounter-hardening-content-v48", content);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-encounter-ecology-hardening-content-48",
+            37U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile),
+              profileStateFingerprint(profile));
+}
+
 TEST(SaveRepositoryTest,
      SchemaV35KeepsFrozenLayoutV3WithoutInventingResourcePoints)
 {

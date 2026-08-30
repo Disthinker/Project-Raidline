@@ -82,6 +82,60 @@ TEST(RaidTacticalMapPresentationTest, EnemyIntelRemainsIndependent)
 }
 
 TEST(RaidTacticalMapPresentationTest,
+     ObjectivesSeparateBriefingExplorationAndDebugVisibility)
+{
+    RaidTacticalMapState map;
+    map.configure(
+        {960.0F, 540.0F}, {},
+        {{820.0F, 430.0F}, {80.0F, 60.0F}},
+        std::nullopt, std::nullopt, std::nullopt, {}, {},
+        {
+            {RaidTacticalObjectiveKind::HighRiskControl,
+             {{420.0F, 210.0F}, {80.0F, 80.0F}},
+             RaidTacticalObjectiveVisibility::Explored},
+            {RaidTacticalObjectiveKind::Rescue,
+             {{700.0F, 360.0F}, {80.0F, 80.0F}},
+             RaidTacticalObjectiveVisibility::Briefed},
+            {RaidTacticalObjectiveKind::SelfRecovery,
+             {{100.0F, 360.0F}, {80.0F, 80.0F}},
+             RaidTacticalObjectiveVisibility::Briefed},
+        });
+
+    ASSERT_EQ(map.objectives().size(), 3U);
+    EXPECT_FALSE(tacticalMapObjectiveVisible(
+        map, map.objectives()[0],
+        RaidTacticalMapPresentationMode::FogOfWar));
+    EXPECT_TRUE(tacticalMapObjectiveVisible(
+        map, map.objectives()[1],
+        RaidTacticalMapPresentationMode::FogOfWar));
+    EXPECT_TRUE(tacticalMapObjectiveVisible(
+        map, map.objectives()[2],
+        RaidTacticalMapPresentationMode::FogOfWar));
+
+    map.revealAround({460.0F, 250.0F});
+    EXPECT_TRUE(tacticalMapObjectiveVisible(
+        map, map.objectives()[0],
+        RaidTacticalMapPresentationMode::FogOfWar));
+
+    const RaidTacticalMapState hidden = []
+    {
+        RaidTacticalMapState result;
+        result.configure(
+            {960.0F, 540.0F}, {},
+            {{820.0F, 430.0F}, {80.0F, 60.0F}},
+            std::nullopt, std::nullopt, std::nullopt, {}, {},
+            {{RaidTacticalObjectiveKind::HighRiskControl,
+              {{420.0F, 210.0F}, {80.0F, 80.0F}},
+              RaidTacticalObjectiveVisibility::Explored}});
+        return result;
+    }();
+    EXPECT_TRUE(tacticalMapObjectiveVisible(
+        hidden, hidden.objectives().front(),
+        RaidTacticalMapPresentationMode::FullStaticMap));
+    EXPECT_FALSE(tacticalMapEnemyDeploymentVisible(hidden));
+}
+
+TEST(RaidTacticalMapPresentationTest,
      ResourcePointsRespectDiscoveryResourceIntelAndDebugMap)
 {
     const auto configureResourceMap = [](RaidIntelligenceLoadout loadout)

@@ -22,7 +22,10 @@ AssetInstanceId firstAsset(
     return found == profile.assets.records().end() ? 0U : found->first;
 }
 
-std::string createLoss(ProfileState &profile, std::string_view suffix)
+std::string createLoss(
+    ProfileState &profile,
+    std::string_view suffix,
+    MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"})
 {
     for (const auto &[definitionId, slot] :
          std::vector<std::pair<ItemDefinitionId, EquipmentSlotKind>>{
@@ -43,7 +46,7 @@ std::string createLoss(ProfileState &profile, std::string_view suffix)
         profile, publishedContentRegistry(),
         DeployCommand{
             "self-loss-raid-" + std::string{suffix}, settlement, 7301U,
-            MapDefinitionId{"map.v0.test"}, {}, std::nullopt},
+            mapDefinitionId, {}, std::nullopt},
         CommandContext{profile.revision,
             "self-loss-deploy-" + std::string{suffix}});
     EXPECT_TRUE(deployed.succeeded) << deployed.message;
@@ -54,13 +57,16 @@ std::string createLoss(ProfileState &profile, std::string_view suffix)
     return settlement;
 }
 
-DeployReceipt deployRecovery(ProfileState &profile, const std::string &record)
+DeployReceipt deployRecovery(
+    ProfileState &profile,
+    const std::string &record,
+    MapDefinitionId mapDefinitionId = MapDefinitionId{"map.v0.test"})
 {
     return executeDeploy(
         profile, publishedContentRegistry(),
         DeployCommand{
             "self-recovery-raid", "self-recovery-settlement", 9403U,
-            MapDefinitionId{"map.v0.test"}, {}, record},
+            mapDefinitionId, {}, record},
         CommandContext{profile.revision, "self-recovery-deploy"});
 }
 }
@@ -95,6 +101,38 @@ TEST(SelfRecoveryDomainTest,
             { return loot.assetId == root.assetId; }));
     }
     EXPECT_TRUE(validateProfileState(profile, publishedContentRegistry()).valid);
+}
+
+TEST(SelfRecoveryDomainTest,
+     FrontierRecoveryCacheUsesItsFrozenGeneratedAnchor)
+{
+    const MapDefinitionId frontier{"map.raid.frontier_exchange"};
+    ProfileState profile = makeNewAlphaProfile(
+        "self-recovery-frontier-anchor", publishedContentRegistry());
+    const std::string recordId = createLoss(
+        profile, "frontier-anchor", frontier);
+
+    const DeployReceipt deployed = deployRecovery(
+        profile, recordId, frontier);
+
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->selfRecovery.has_value());
+    const RaidAnchorPlacementSnapshot *anchor = findRaidAnchorPlacement(
+        profile.pendingRaid->spatialLayout,
+        kRaidAnchorSelfRecovery);
+    ASSERT_NE(anchor, nullptr);
+    const Vec2 expected{
+        anchor->bounds.position.x + anchor->bounds.size.x * 0.5F,
+        anchor->bounds.position.y + anchor->bounds.size.y * 0.5F};
+    EXPECT_FLOAT_EQ(
+        profile.pendingRaid->selfRecovery->cachePosition.x,
+        expected.x);
+    EXPECT_FLOAT_EQ(
+        profile.pendingRaid->selfRecovery->cachePosition.y,
+        expected.y);
+    EXPECT_TRUE(validateProfileState(
+        profile, publishedContentRegistry()).valid);
 }
 
 TEST(SelfRecoveryDomainTest,

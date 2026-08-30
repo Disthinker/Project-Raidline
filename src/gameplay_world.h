@@ -141,6 +141,7 @@ struct RaidWorldConfig
     };
     std::optional<OrdinarySurvivorRescue> rescue;
     RaidIntelligenceLoadout intelligence;
+    std::vector<RaidTacticalObjective> tacticalObjectives;
 };
 
 struct RaidOutdoorLabelProjection

@@ -127,6 +127,28 @@ TEST(RaidTacticalMapTest, RejectsInvalidOrDuplicateSpecialLocations)
         std::invalid_argument);
 }
 
+TEST(RaidTacticalMapTest, RejectsDuplicateOrOutOfBoundsObjectives)
+{
+    const RaidTacticalObjective rescue{
+        RaidTacticalObjectiveKind::Rescue,
+        {{730.0F, 80.0F}, {120.0F, 100.0F}},
+        RaidTacticalObjectiveVisibility::Briefed};
+    const auto configure = [](std::vector<RaidTacticalObjective> objectives)
+    {
+        RaidTacticalMapState map;
+        map.configure(
+            {960.0F, 540.0F}, {},
+            {{820.0F, 430.0F}, {80.0F, 60.0F}},
+            std::nullopt, std::nullopt, std::nullopt, {}, {},
+            std::move(objectives));
+    };
+
+    EXPECT_THROW(configure({rescue, rescue}), std::invalid_argument);
+    RaidTacticalObjective outside = rescue;
+    outside.bounds.position.x = 900.0F;
+    EXPECT_THROW(configure({outside}), std::invalid_argument);
+}
+
 TEST(RaidTacticalMapTest, OutdoorLayoutProjectsReadableDistrictKinds)
 {
     RaidTacticalMapState map;
