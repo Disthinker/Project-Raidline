@@ -391,22 +391,36 @@ bool GameSession::deployAlpha(
                 Rect{definition.position, definition.size}});
         }
         std::vector<EnemySpawn> pressureSpawns;
-        pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
-        for (std::size_t index{};
-             index < map.highRisk.pressureSpawns.size(); ++index)
+        if (snapshot.highRiskCrisis.has_value())
         {
-            const EnemySpawnDefinition &spawn =
-                map.highRisk.pressureSpawns[index];
-            const RaidAnchorPlacementSnapshot *placement =
-                findRaidAnchorPlacement(
-                    snapshot.spatialLayout,
-                    raidIndexedAnchorId("pressure", index));
-            pressureSpawns.push_back(EnemySpawn{
-                placement != nullptr
-                    ? placement->bounds.position
-                    : spawn.position,
-                spawn.size,
-                spawn.maximumHealth});
+            pressureSpawns.reserve(
+                snapshot.highRiskCrisis->pressureSpawns.size());
+            for (const RaidHighRiskPressureSpawnSnapshot &spawn :
+                 snapshot.highRiskCrisis->pressureSpawns)
+            {
+                pressureSpawns.push_back(EnemySpawn{
+                    spawn.position, spawn.size, spawn.maximumHealth});
+            }
+        }
+        else
+        {
+            pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
+            for (std::size_t index{};
+                 index < map.highRisk.pressureSpawns.size(); ++index)
+            {
+                const EnemySpawnDefinition &spawn =
+                    map.highRisk.pressureSpawns[index];
+                const RaidAnchorPlacementSnapshot *placement =
+                    findRaidAnchorPlacement(
+                        snapshot.spatialLayout,
+                        raidIndexedAnchorId("pressure", index));
+                pressureSpawns.push_back(EnemySpawn{
+                    placement != nullptr
+                        ? placement->bounds.position
+                        : spawn.position,
+                    spawn.size,
+                    spawn.maximumHealth});
+            }
         }
 
         const auto frozenRegion = [&](std::string_view id,
@@ -474,22 +488,34 @@ bool GameSession::deployAlpha(
                 snapshot.rescue->transferPoint,
                 snapshot.rescue->interactionDurationSeconds};
         }
+        const RaidHighRiskCrisisSnapshot *crisis =
+            snapshot.highRiskCrisis.has_value()
+            ? &*snapshot.highRiskCrisis
+            : nullptr;
         worldConfig.highRisk = HighRiskWorldConfig{
             map.highRisk.enabled,
             map.highRisk.regularPhaseDurationSeconds,
             frozenRegion(kRaidAnchorEmergencyExtraction,
                          map.highRisk.emergencyExtractionPoint),
             map.highRisk.emergencyExtractionDurationSeconds,
-            map.highRisk.initialWaveDelaySeconds,
-            map.highRisk.waveIntervalSeconds,
-            map.highRisk.waveSize,
-            map.highRisk.activeEnemyCap,
+            crisis != nullptr
+                ? crisis->initialWaveDelaySeconds
+                : map.highRisk.initialWaveDelaySeconds,
+            crisis != nullptr
+                ? crisis->waveIntervalSeconds
+                : map.highRisk.waveIntervalSeconds,
+            crisis != nullptr ? crisis->waveSize : map.highRisk.waveSize,
+            crisis != nullptr
+                ? crisis->activeEnemyCap
+                : map.highRisk.activeEnemyCap,
             std::move(pressureSpawns),
             frozenRegion(kRaidAnchorHighRiskControl,
                          map.highRisk.activationControlPoint),
             map.highRisk.activationDurationSeconds,
-            frozenRegion(kRaidAnchorAdvancedResource,
-                         map.highRisk.advancedResourceArea),
+            crisis != nullptr
+                ? crisis->focusArea
+                : frozenRegion(kRaidAnchorAdvancedResource,
+                               map.highRisk.advancedResourceArea),
             snapshot.seed,
             frozenRegion(kRaidAnchorConditionalExtraction,
                          map.highRisk.conditionalExtractionPoint),
@@ -615,6 +641,26 @@ RaidOperationProjection GameSession::raidOperationProjection() const noexcept
     return RaidOperationProjection{
         active,
         active && basePerimeterSweepObjectiveSecured_};
+}
+
+std::optional<RaidHighRiskCrisisProjection>
+GameSession::raidHighRiskCrisisProjection() const noexcept
+{
+    if (!alphaRaidActive_ || !profile_.pendingRaid.has_value() ||
+        !profile_.pendingRaid->highRiskCrisis.has_value())
+    {
+        return std::nullopt;
+    }
+    const PendingRaidSnapshot &raid = *profile_.pendingRaid;
+    const RaidHighRiskCrisisSnapshot &crisis = *raid.highRiskCrisis;
+    const bool active = world_ != nullptr &&
+        world_->raidSession().phase() == RaidPhase::HighRisk;
+    return RaidHighRiskCrisisProjection{
+        crisis.displayName,
+        crisis.warning,
+        crisis.focusArea,
+        active || raid.intelligence.has(RaidIntelligenceCategory::Enemy),
+        active};
 }
 
 bool GameSession::activeQuitAlphaRaid()

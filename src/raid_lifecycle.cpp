@@ -605,6 +605,7 @@ DeployReceipt executeDeploy(
     Pcg32 resourceLootRandom{command.seed, 0x7265732d6c6f6f74ULL};
     Pcg32 enemyPopulationRandom{command.seed, 0x656e656d792d706fULL};
     Pcg32 encounterRandom{command.seed, 0x656e636f756e7465ULL};
+    Pcg32 crisisRandom{command.seed, 0x6372697369732d76ULL};
     Pcg32 advancedLootRandom{command.seed, 0x686967682d6c6f6fULL};
     Pcg32 interiorLootRandom{command.seed, 0x696e746572696f72ULL};
     const std::size_t pairIndex = configurationRandom.bounded(3U);
@@ -616,6 +617,12 @@ DeployReceipt executeDeploy(
         map->proceduralOutdoor.layoutVersion >= 4U;
     const bool encounterEcologyRules = resourceEcologyRules &&
         !map->proceduralOutdoor.encounterArchetypes.empty();
+    const bool highRiskCrisisRules = encounterEcologyRules &&
+        !map->highRisk.crises.empty();
+    const HighRiskCrisisDefinition *highRiskCrisis = highRiskCrisisRules
+        ? &map->highRisk.crises[crisisRandom.bounded(
+              static_cast<std::uint32_t>(map->highRisk.crises.size()))]
+        : nullptr;
     std::vector<FrozenResourcePointRequest> resourcePointRequests;
     std::size_t regularLootSlotCount{};
     if (resourceEcologyRules)
@@ -644,7 +651,9 @@ DeployReceipt executeDeploy(
     PendingRaidSnapshot snapshot;
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
-    snapshot.rulesVersion = encounterEcologyRules
+    snapshot.rulesVersion = highRiskCrisisRules
+        ? "procedural-frontier-high-risk-crisis-28"
+        : encounterEcologyRules
         ? "procedural-frontier-loot-identity-27"
         : resourceEcologyRules
         ? "procedural-frontier-resource-ecology-24"
@@ -911,8 +920,10 @@ DeployReceipt executeDeploy(
         }
     }
 
-    const LootTableDefinition &advancedLootTable =
-        content.lootTable(map->highRisk.advancedLootTableId);
+    const LootTableDefinition &advancedLootTable = content.lootTable(
+        highRiskCrisis != nullptr
+            ? highRiskCrisis->advancedLootTableId
+            : map->highRisk.advancedLootTableId);
     for (std::size_t advancedIndex = 0U;
          advancedIndex < map->highRisk.advancedLootSlots.size();
          ++advancedIndex)
@@ -1403,6 +1414,8 @@ DeployReceipt executeDeploy(
                 continue;
             if (loot.requiresHighRisk)
             {
+                if (highRiskCrisisRules)
+                    continue;
                 const auto *resource = placement(kRaidAnchorAdvancedResource);
                 if (resource == nullptr)
                     return deployFailure(
@@ -1537,6 +1550,142 @@ DeployReceipt executeDeploy(
             }
             snapshot.spatialLayout.layoutHash = raidMapLayoutHash(
                 snapshot.spatialLayout);
+        }
+        if (highRiskCrisis != nullptr)
+        {
+            std::vector<const RaidResourcePointSnapshot *> candidates;
+            for (const RaidResourcePointSnapshot &resourcePoint :
+                 snapshot.spatialLayout.resourcePoints)
+            {
+                const auto district = std::find_if(
+                    snapshot.spatialLayout.districts.begin(),
+                    snapshot.spatialLayout.districts.end(),
+                    [&](const RaidDistrictSnapshot &candidate)
+                    {
+                        return candidate.instanceId ==
+                            resourcePoint.districtInstanceId;
+                    });
+                if (district == snapshot.spatialLayout.districts.end() ||
+                    std::find(
+                        highRiskCrisis->allowedDistrictKinds.begin(),
+                        highRiskCrisis->allowedDistrictKinds.end(),
+                        district->kind) ==
+                        highRiskCrisis->allowedDistrictKinds.end())
+                {
+                    continue;
+                }
+                candidates.push_back(&resourcePoint);
+            }
+            const bool hasHighValue = std::any_of(
+                candidates.begin(), candidates.end(),
+                [](const RaidResourcePointSnapshot *candidate)
+                { return candidate->riskTier >= 2U; });
+            if (hasHighValue)
+            {
+                std::erase_if(
+                    candidates,
+                    [](const RaidResourcePointSnapshot *candidate)
+                    { return candidate->riskTier < 2U; });
+            }
+            std::sort(
+                candidates.begin(), candidates.end(),
+                [](const RaidResourcePointSnapshot *left,
+                   const RaidResourcePointSnapshot *right)
+                { return left->instanceId < right->instanceId; });
+            if (candidates.empty())
+            {
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "high-risk crisis has no compatible resource point",
+                    profile.revision);
+            }
+            const RaidResourcePointSnapshot &target = *candidates[
+                crisisRandom.bounded(
+                    static_cast<std::uint32_t>(candidates.size()))];
+            RaidHighRiskCrisisSnapshot crisis;
+            crisis.definitionId = highRiskCrisis->id;
+            crisis.displayName = highRiskCrisis->displayName;
+            crisis.warning = highRiskCrisis->warning;
+            crisis.districtInstanceId = target.districtInstanceId;
+            crisis.resourcePointInstanceId = target.instanceId;
+            crisis.focusArea = target.bounds;
+            crisis.initialWaveDelaySeconds =
+                highRiskCrisis->initialWaveDelaySeconds;
+            crisis.waveIntervalSeconds = highRiskCrisis->waveIntervalSeconds;
+            crisis.waveSize = highRiskCrisis->waveSize;
+            crisis.activeEnemyCap = highRiskCrisis->activeEnemyCap;
+            crisis.advancedLootTableId =
+                highRiskCrisis->advancedLootTableId;
+
+            struct PressureCandidate
+            {
+                const RaidAnchorPlacementSnapshot *anchor{};
+                std::size_t sourceIndex{};
+                float squaredDistance{};
+            };
+            std::vector<PressureCandidate> pressureCandidates;
+            const Vec2 focusCenter = center(target.bounds);
+            for (std::size_t index{};
+                 index < map->highRisk.pressureSpawns.size(); ++index)
+            {
+                const auto *anchor = placement(
+                    raidIndexedAnchorId("pressure", index));
+                if (anchor == nullptr)
+                {
+                    return deployFailure(
+                        RaidLifecycleError::InvalidCommand,
+                        "generated Raid omitted crisis pressure anchor",
+                        profile.revision);
+                }
+                const Vec2 anchorCenter = center(anchor->bounds);
+                const float dx = anchorCenter.x - focusCenter.x;
+                const float dy = anchorCenter.y - focusCenter.y;
+                pressureCandidates.push_back(
+                    {anchor, index, dx * dx + dy * dy});
+            }
+            std::sort(
+                pressureCandidates.begin(), pressureCandidates.end(),
+                [](const PressureCandidate &left,
+                   const PressureCandidate &right)
+                {
+                    if (left.squaredDistance != right.squaredDistance)
+                        return left.squaredDistance < right.squaredDistance;
+                    return left.anchor->id < right.anchor->id;
+                });
+            for (std::size_t index{};
+                 index < highRiskCrisis->pressureSpawnCount; ++index)
+            {
+                const PressureCandidate &candidate =
+                    pressureCandidates[index];
+                crisis.pressureSpawns.push_back({
+                    candidate.anchor->id,
+                    candidate.anchor->bounds.position,
+                    candidate.anchor->bounds.size,
+                    map->highRisk.pressureSpawns[
+                        candidate.sourceIndex].maximumHealth});
+            }
+
+            std::size_t advancedOrdinal{};
+            for (RaidLootSnapshot &loot : snapshot.loot)
+            {
+                if (loot.spaceId != outdoorRaidSpaceId() ||
+                    !loot.requiresHighRisk)
+                {
+                    continue;
+                }
+                loot.position = {
+                    target.bounds.position.x + target.bounds.size.x *
+                        static_cast<float>(advancedOrdinal + 1U) /
+                        static_cast<float>(
+                            map->highRisk.advancedLootSlots.size() + 1U),
+                    target.bounds.position.y + target.bounds.size.y * 0.5F};
+                loot.resourcePointInstanceId = target.instanceId;
+                loot.resourcePointSlotIndex =
+                    target.capacity +
+                    static_cast<std::uint32_t>(advancedOrdinal);
+                ++advancedOrdinal;
+            }
+            snapshot.highRiskCrisis = std::move(crisis);
         }
     }
 

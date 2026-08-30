@@ -1350,6 +1350,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             throw std::invalid_argument{
                 "legacy schema cannot represent Base perimeter sweep"};
         }
+        if (schemaVersion < 38 && raid.highRiskCrisis.has_value())
+        {
+            throw std::invalid_argument{
+                "legacy schema cannot represent a frozen high-risk crisis"};
+        }
         Json enemies = Json::array();
         if (schemaVersion < 37 && !raid.encounterGroups.empty())
         {
@@ -1615,6 +1620,46 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                     }
                     layout["resource_points"] = std::move(resourcePoints);
                 }
+            }
+        }
+        if (schemaVersion >= 38)
+        {
+            if (raid.highRiskCrisis.has_value())
+            {
+                const RaidHighRiskCrisisSnapshot &crisis =
+                    *raid.highRiskCrisis;
+                Json pressureSpawns = Json::array();
+                for (const RaidHighRiskPressureSpawnSnapshot &spawn :
+                     crisis.pressureSpawns)
+                {
+                    pressureSpawns.push_back({
+                        {"anchor_id", spawn.anchorId},
+                        {"position", vectorValue(spawn.position)},
+                        {"size", vectorValue(spawn.size)},
+                        {"maximum_health", spawn.maximumHealth}});
+                }
+                payload["pending_raid"]["high_risk_crisis"] = {
+                    {"definition_id", crisis.definitionId},
+                    {"display_name", crisis.displayName},
+                    {"warning", crisis.warning},
+                    {"district_instance_id", crisis.districtInstanceId},
+                    {"resource_point_instance_id",
+                     crisis.resourcePointInstanceId},
+                    {"focus_area", {
+                        {"position", vectorValue(crisis.focusArea.position)},
+                        {"size", vectorValue(crisis.focusArea.size)}}},
+                    {"initial_wave_delay_seconds",
+                     crisis.initialWaveDelaySeconds},
+                    {"wave_interval_seconds", crisis.waveIntervalSeconds},
+                    {"wave_size", crisis.waveSize},
+                    {"active_enemy_cap", crisis.activeEnemyCap},
+                    {"advanced_loot_table_id",
+                     crisis.advancedLootTableId.value()},
+                    {"pressure_spawns", std::move(pressureSpawns)}};
+            }
+            else
+            {
+                payload["pending_raid"]["high_risk_crisis"] = nullptr;
             }
         }
         if (schemaVersion >= 22)
@@ -2109,7 +2154,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 27 && schemaVersion != 28 &&
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
-        schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37)
+        schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
+        schemaVersion != 38)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2243,7 +2289,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-encounter-ecology-hardening-content-48") ||
             (schemaVersion == 37 &&
              contentVersion ==
-                 "procedural-frontier-consumer-integration-content-49");
+                 "procedural-frontier-consumer-integration-content-49") ||
+            (schemaVersion == 37 &&
+             contentVersion ==
+                 "procedural-frontier-loot-identity-content-50");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2262,7 +2311,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 31 && schemaVersion != 32 &&
               schemaVersion != 33 && schemaVersion != 34 &&
               schemaVersion != 35 && schemaVersion != 36 &&
-              schemaVersion != 37) ||
+              schemaVersion != 37 && schemaVersion != 38) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3150,6 +3199,48 @@ SaveLoadResult deserializeProfileEnvelope(
                 raid.intelligence.set(
                     RaidIntelligenceCategory::Enemy,
                     intelligence.at("enemy").get<bool>());
+            }
+            if (schemaVersion >= 38 &&
+                !value.at("high_risk_crisis").is_null())
+            {
+                const Json &crisisValue = value.at("high_risk_crisis");
+                RaidHighRiskCrisisSnapshot crisis;
+                crisis.definitionId =
+                    crisisValue.at("definition_id").get<std::string>();
+                crisis.displayName =
+                    crisisValue.at("display_name").get<std::string>();
+                crisis.warning =
+                    crisisValue.at("warning").get<std::string>();
+                crisis.districtInstanceId =
+                    crisisValue.at("district_instance_id")
+                        .get<std::uint16_t>();
+                crisis.resourcePointInstanceId =
+                    crisisValue.at("resource_point_instance_id")
+                        .get<std::string>();
+                crisis.focusArea = ContentRect{
+                    parseVector(crisisValue.at("focus_area").at("position")),
+                    parseVector(crisisValue.at("focus_area").at("size"))};
+                crisis.initialWaveDelaySeconds =
+                    crisisValue.at("initial_wave_delay_seconds").get<float>();
+                crisis.waveIntervalSeconds =
+                    crisisValue.at("wave_interval_seconds").get<float>();
+                crisis.waveSize =
+                    crisisValue.at("wave_size").get<std::uint32_t>();
+                crisis.activeEnemyCap =
+                    crisisValue.at("active_enemy_cap").get<std::uint32_t>();
+                crisis.advancedLootTableId = LootTableDefinitionId{
+                    crisisValue.at("advanced_loot_table_id")
+                        .get<std::string>()};
+                for (const Json &spawn :
+                     crisisValue.at("pressure_spawns"))
+                {
+                    crisis.pressureSpawns.push_back({
+                        spawn.at("anchor_id").get<std::string>(),
+                        parseVector(spawn.at("position")),
+                        parseVector(spawn.at("size")),
+                        spawn.at("maximum_health").get<int>()});
+                }
+                raid.highRiskCrisis = std::move(crisis);
             }
             if (schemaVersion >= 21)
             {

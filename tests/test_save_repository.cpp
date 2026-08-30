@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <numeric>
 #include <string_view>
 #include <tuple>
 #include <vector>
@@ -136,11 +137,48 @@ void downgradeFrontierEnemiesToLegacyDeployment(
         });
 }
 
+void downgradeFrontierHighRiskCrisisToRulesV27(
+    ProfileState &profile,
+    const MapDefinition &map)
+{
+    PendingRaidSnapshot &raid = *profile.pendingRaid;
+    if (!raid.highRiskCrisis.has_value())
+        return;
+    const RaidAnchorPlacementSnapshot *advancedResource =
+        findRaidAnchorPlacement(
+            raid.spatialLayout, kRaidAnchorAdvancedResource);
+    ASSERT_NE(advancedResource, nullptr);
+    const std::size_t regularSlotCount = std::accumulate(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        std::size_t{},
+        [](std::size_t total, const RaidResourcePointSnapshot &point)
+        { return total + point.capacity; });
+    for (RaidLootSnapshot &loot : raid.loot)
+    {
+        if (!loot.requiresHighRisk)
+            continue;
+        const std::size_t ordinal = loot.slotIndex - regularSlotCount;
+        loot.position = {
+            advancedResource->bounds.position.x +
+                advancedResource->bounds.size.x *
+                    static_cast<float>(ordinal + 1U) /
+                    static_cast<float>(
+                        map.highRisk.advancedLootSlots.size() + 1U),
+            advancedResource->bounds.position.y +
+                advancedResource->bounds.size.y * 0.5F};
+        loot.resourcePointInstanceId.clear();
+        loot.resourcePointSlotIndex = 0U;
+    }
+    raid.highRiskCrisis.reset();
+}
+
 void downgradeFrontierLootToLegacySlots(
     ProfileState &profile,
     const MapDefinition &map)
 {
     PendingRaidSnapshot &raid = *profile.pendingRaid;
+    downgradeFrontierHighRiskCrisisToRulesV27(profile, map);
     downgradeFrontierEnemiesToLegacyDeployment(
         raid, publishedContentRegistry());
     std::size_t keptRegular{};
@@ -201,6 +239,7 @@ void downgradeFrontierResourceEcologyToLayoutV3(
     const MapDefinition &map)
 {
     PendingRaidSnapshot &raid = *profile.pendingRaid;
+    downgradeFrontierHighRiskCrisisToRulesV27(profile, map);
     downgradeFrontierEnemiesToLegacyDeployment(
         raid, publishedContentRegistry());
     std::size_t keptRegular{};
@@ -279,6 +318,9 @@ void downgradeFrontierResourceEcologyToLayoutV3(
 void downgradeFrontierLootIdentityToRulesV26(ProfileState &profile)
 {
     PendingRaidSnapshot &raid = *profile.pendingRaid;
+    const MapDefinition &map = publishedContentRegistry().map(
+        raid.mapDefinitionId);
+    downgradeFrontierHighRiskCrisisToRulesV27(profile, map);
     raid.rulesVersion = "procedural-frontier-encounter-ecology-26";
     for (RaidResourcePointSnapshot &point :
          raid.spatialLayout.resourcePoints)
@@ -298,6 +340,8 @@ void downgradeFrontierLootIdentityToRulesV26(ProfileState &profile)
             : ItemDefinitionId{"item.loot.electronics"};
         for (RaidLootSnapshot &loot : raid.loot)
         {
+            if (loot.requiresHighRisk)
+                continue;
             if (loot.resourcePointInstanceId != point.instanceId)
                 continue;
             loot.definitionId = replacementId;
@@ -1707,6 +1751,7 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
         profile.pendingRaid->spatialLayout.anchorPlacements.empty());
     EXPECT_FALSE(profile.pendingRaid->spatialLayout.resourcePoints.empty());
     EXPECT_FALSE(profile.pendingRaid->encounterGroups.empty());
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1722,6 +1767,8 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
               profile.pendingRaid->interiors);
     EXPECT_EQ(loaded.profile->pendingRaid->encounterGroups,
               profile.pendingRaid->encounterGroups);
+    EXPECT_EQ(loaded.profile->pendingRaid->highRiskCrisis,
+              profile.pendingRaid->highRiskCrisis);
     ASSERT_FALSE(loaded.profile->pendingRaid->interiors.empty());
     EXPECT_EQ(
         loaded.profile->pendingRaid->interiors.front().id,
@@ -1850,6 +1897,70 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
     ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
     EXPECT_EQ(loaded.profile->pendingRaid->rulesVersion,
               "procedural-frontier-encounter-ecology-26");
+}
+
+TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-loot-identity-content-v50", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v50-pending-raid",
+            "save-v50-pending-settlement",
+            884212U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-v50-pending-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    downgradeFrontierHighRiskCrisisToRulesV27(
+        profile, content.map(profile.pendingRaid->mapDefinitionId));
+    profile.pendingRaid->rulesVersion =
+        "procedural-frontier-loot-identity-27";
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-loot-identity-content-50",
+            37U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_FALSE(loaded.profile->pendingRaid->highRiskCrisis.has_value());
+}
+
+TEST(SaveRepositoryTest, CurrentSchemaRejectsTamperedHighRiskCrisis)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-invalid-high-risk-crisis", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-invalid-crisis-raid",
+            "save-invalid-crisis-settlement",
+            884213U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-invalid-crisis-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
+    ++profile.pendingRaid->highRiskCrisis->waveSize;
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion()),
+        content);
+
+    EXPECT_FALSE(loaded.profile.has_value());
+    EXPECT_EQ(loaded.status, SaveLoadStatus::Failed);
 }
 
 TEST(SaveRepositoryTest,

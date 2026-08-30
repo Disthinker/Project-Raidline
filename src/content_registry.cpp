@@ -2503,6 +2503,59 @@ ContentRegistry ContentRegistry::fromJson(
                             "high_risk",
                             parseVec2(slotValue, "position")});
                 }
+                if (highRisk.contains("crises"))
+                {
+                    std::set<std::string> crisisIds;
+                    for (const Json &crisisValue :
+                         requiredArray(highRisk, "crises"))
+                    {
+                        HighRiskCrisisDefinition crisis;
+                        crisis.id = requiredString(crisisValue, "id");
+                        crisis.displayName =
+                            requiredString(crisisValue, "display_name");
+                        crisis.warning =
+                            requiredString(crisisValue, "warning");
+                        std::set<RaidDistrictKind> districtKinds;
+                        for (const Json &kindValue : requiredArray(
+                                 crisisValue, "allowed_district_kinds"))
+                        {
+                            if (!kindValue.is_string())
+                                fail("high-risk crisis district kind must be a string");
+                            const Json kindObject{{"kind", kindValue}};
+                            const RaidDistrictKind kind =
+                                parseRaidDistrictKind(kindObject, "kind");
+                            if (!districtKinds.insert(kind).second)
+                                fail("high-risk crisis district kind is duplicated");
+                            crisis.allowedDistrictKinds.push_back(kind);
+                        }
+                        crisis.initialWaveDelaySeconds = requiredFiniteFloat(
+                            crisisValue, "initial_wave_delay_seconds", true);
+                        crisis.waveIntervalSeconds = requiredFiniteFloat(
+                            crisisValue, "wave_interval_seconds", true);
+                        crisis.waveSize =
+                            requiredPositiveUint(crisisValue, "wave_size");
+                        crisis.activeEnemyCap = requiredPositiveUint(
+                            crisisValue, "active_enemy_cap");
+                        crisis.pressureSpawnCount = requiredPositiveUint(
+                            crisisValue, "pressure_spawn_count");
+                        crisis.advancedLootTableId = LootTableDefinitionId{
+                            requiredString(crisisValue, "advanced_loot_table")};
+                        if (!crisisIds.insert(crisis.id).second ||
+                            !hasPrefix(crisis.id, "crisis.") ||
+                            crisis.displayName.empty() || crisis.warning.empty() ||
+                            crisis.allowedDistrictKinds.empty() ||
+                            crisis.waveSize > crisis.activeEnemyCap ||
+                            crisis.pressureSpawnCount >
+                                definition.highRisk.pressureSpawns.size() ||
+                            !registry.lootTableIndex_.contains(
+                                crisis.advancedLootTableId))
+                        {
+                            fail("high-risk crisis definition is invalid");
+                        }
+                        definition.highRisk.crises.push_back(
+                            std::move(crisis));
+                    }
+                }
             }
 
             definition.storageLootTableId = LootTableDefinitionId{
@@ -2890,6 +2943,31 @@ ContentRegistry ContentRegistry::fromJson(
                         250000U)
                 {
                     fail("Raid high-risk configuration is invalid");
+                }
+                if (definition.proceduralOutdoor.enabled &&
+                    !definition.highRisk.crises.empty())
+                {
+                    std::set<RaidDistrictKind> publishedDistrictKinds;
+                    for (const RaidDistrictArchetypeDefinition &district :
+                         definition.proceduralOutdoor.districtArchetypes)
+                    {
+                        publishedDistrictKinds.insert(district.kind);
+                    }
+                    for (const HighRiskCrisisDefinition &crisis :
+                         definition.highRisk.crises)
+                    {
+                        if (crisis.activeEnemyCap <
+                                definition.proceduralOutdoor
+                                    .maximumInitialEnemies ||
+                            std::none_of(
+                                crisis.allowedDistrictKinds.begin(),
+                                crisis.allowedDistrictKinds.end(),
+                                [&](RaidDistrictKind kind)
+                                { return publishedDistrictKinds.contains(kind); }))
+                        {
+                            fail("high-risk crisis cannot be used by this map");
+                        }
+                    }
                 }
                 for (const BallisticBlockerDefinition &blocker :
                      definition.ballisticBlockers)

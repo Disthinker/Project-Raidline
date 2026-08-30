@@ -545,6 +545,18 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
             "出击前必须先处理基地攻城预警");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesHighRiskCrisisBriefing) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION"),
+            "危机：未知 | 携带敌情档案可在激活前获知详情");
+  const std::string known = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "CRISIS: Industrial Breach | Dense pressure breaks through industrial service lanes.");
+  EXPECT_NE(known.find("危机：工业缺口"), std::string::npos);
+  EXPECT_NE(known.find("工业维修通道突破"), std::string::npos);
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
 {
   EXPECT_EQ(localizeUiText(

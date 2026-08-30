@@ -6,6 +6,7 @@
 #include <array>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <set>
 #include <tuple>
 
@@ -1009,12 +1010,28 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-loot-identity-27");
+              "procedural-frontier-high-risk-crisis-28");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
     EXPECT_EQ(raid.encounterGroups,
               repeated.pendingRaid->encounterGroups);
+    ASSERT_TRUE(raid.highRiskCrisis.has_value());
+    EXPECT_EQ(raid.highRiskCrisis,
+              repeated.pendingRaid->highRiskCrisis);
+    const RaidHighRiskCrisisSnapshot &crisis = *raid.highRiskCrisis;
+    EXPECT_FALSE(crisis.definitionId.empty());
+    EXPECT_FALSE(crisis.displayName.empty());
+    EXPECT_FALSE(crisis.warning.empty());
+    EXPECT_FALSE(crisis.pressureSpawns.empty());
+    const auto crisisPoint = std::find_if(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        [&](const RaidResourcePointSnapshot &point)
+        { return point.instanceId == crisis.resourcePointInstanceId; });
+    ASSERT_NE(crisisPoint, raid.spatialLayout.resourcePoints.end());
+    EXPECT_EQ(crisisPoint->districtInstanceId, crisis.districtInstanceId);
+    EXPECT_EQ(crisisPoint->bounds, crisis.focusArea);
     ASSERT_FALSE(raid.encounterGroups.empty());
     std::set<RaidEncounterKind> encounterKinds;
     std::set<std::uint32_t> encounterMembers;
@@ -1172,6 +1189,36 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(legacy.pendingRaid.has_value());
     PendingRaidSnapshot &raid = *legacy.pendingRaid;
     raid.rulesVersion = "procedural-frontier-encounter-ecology-26";
+    raid.highRiskCrisis.reset();
+
+    const RaidAnchorPlacementSnapshot *legacyAdvancedResource =
+        findRaidAnchorPlacement(
+            raid.spatialLayout, kRaidAnchorAdvancedResource);
+    ASSERT_NE(legacyAdvancedResource, nullptr);
+    const std::size_t regularSlotCount = std::accumulate(
+        raid.spatialLayout.resourcePoints.begin(),
+        raid.spatialLayout.resourcePoints.end(),
+        std::size_t{},
+        [](std::size_t total, const RaidResourcePointSnapshot &point)
+        { return total + point.capacity; });
+    for (RaidLootSnapshot &loot : raid.loot)
+    {
+        if (!loot.requiresHighRisk)
+            continue;
+        const std::size_t ordinal = loot.slotIndex - regularSlotCount;
+        loot.position = {
+            legacyAdvancedResource->bounds.position.x +
+                legacyAdvancedResource->bounds.size.x *
+                    static_cast<float>(ordinal + 1U) /
+                    static_cast<float>(
+                        content.map(MapDefinitionId{
+                            "map.raid.frontier_exchange"})
+                                .highRisk.advancedLootSlots.size() + 1U),
+            legacyAdvancedResource->bounds.position.y +
+                legacyAdvancedResource->bounds.size.y * 0.5F};
+        loot.resourcePointInstanceId.clear();
+        loot.resourcePointSlotIndex = 0U;
+    }
 
     for (RaidResourcePointSnapshot &point :
          raid.spatialLayout.resourcePoints)
@@ -1191,6 +1238,8 @@ TEST(RaidLifecycleTest,
             : ItemDefinitionId{"item.loot.electronics"};
         for (RaidLootSnapshot &loot : raid.loot)
         {
+            if (loot.requiresHighRisk)
+                continue;
             if (loot.resourcePointInstanceId != point.instanceId)
                 continue;
             loot.definitionId = replacementId;
@@ -1213,6 +1262,30 @@ TEST(RaidLifecycleTest,
     const ProfileValidationResult validation =
         validateProfileState(legacy, content);
     EXPECT_TRUE(validation.valid) << validation.message;
+}
+
+TEST(RaidLifecycleTest, FrontierCrisisVariesBySeedAndRejectsTampering)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    std::set<std::string> crisisIds;
+    for (std::uint64_t seed = 7712301U; seed < 7712313U; ++seed)
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            "crisis-seed-" + std::to_string(seed), content);
+        ASSERT_TRUE(deploy(profile, seed, mapId).succeeded);
+        ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
+        crisisIds.insert(
+            profile.pendingRaid->highRiskCrisis->definitionId);
+        EXPECT_TRUE(validateProfileState(profile, content).valid);
+    }
+    EXPECT_GE(crisisIds.size(), 2U);
+
+    ProfileState tampered = makeNewAlphaProfile("crisis-tamper", content);
+    ASSERT_TRUE(deploy(tampered, 7712399U, mapId).succeeded);
+    ASSERT_TRUE(tampered.pendingRaid->highRiskCrisis.has_value());
+    tampered.pendingRaid->highRiskCrisis->focusArea.position.x += 1.0F;
+    EXPECT_FALSE(validateProfileState(tampered, content).valid);
 }
 
 TEST(RaidLifecycleTest,

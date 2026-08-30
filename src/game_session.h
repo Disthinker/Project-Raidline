@@ -122,6 +122,15 @@ struct RaidOperationProjection
     bool objectiveSecured{};
 };
 
+struct RaidHighRiskCrisisProjection
+{
+    std::string displayName;
+    std::string warning;
+    ContentRect focusArea;
+    bool detailsKnown{};
+    bool active{};
+};
+
 // 当前会话组合根。ProfileState 是新版 Base 的跨进程权威状态；旧 Stash、
 // GameplayWorld 与 RaidSettlement 仅作为隔离的 V0 Raid 适配器保留。
 // 本类型不负责 SDL 输入或渲染。
@@ -228,6 +237,8 @@ public:
     [[nodiscard]] bool basePerimeterSweepObjectiveSecured() const noexcept;
     [[nodiscard]] RaidOperationProjection
     raidOperationProjection() const noexcept;
+    [[nodiscard]] std::optional<RaidHighRiskCrisisProjection>
+    raidHighRiskCrisisProjection() const noexcept;
     [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
     raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt

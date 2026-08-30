@@ -486,6 +486,15 @@ TEST(AlphaExtractionSessionTest,
 
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
     ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
+    ASSERT_TRUE(session.profile().pendingRaid->highRiskCrisis.has_value());
+    const auto hiddenCrisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(hiddenCrisis.has_value());
+    EXPECT_FALSE(hiddenCrisis->detailsKnown);
+    EXPECT_FALSE(hiddenCrisis->active);
+    EXPECT_EQ(hiddenCrisis->focusArea,
+              session.profile().pendingRaid->highRiskCrisis->focusArea);
+    EXPECT_EQ(session.world().highRiskAdvancedResourceArea(),
+              std::optional<ContentRect>{hiddenCrisis->focusArea});
     const auto &objectives = session.world().tacticalMap().objectives();
     ASSERT_EQ(objectives.size(), 2U);
     const auto highRisk = std::find_if(
@@ -512,6 +521,37 @@ TEST(AlphaExtractionSessionTest,
         highRisk->bounds.position.y + highRisk->bounds.size.y * 0.5F};
     EXPECT_FALSE(session.world().tacticalMap().pointRevealed(
         highRiskCenter));
+
+    session.world().update(GameplayInput{}, 1200.5F);
+    const auto activeCrisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(activeCrisis.has_value());
+    EXPECT_TRUE(activeCrisis->detailsKnown);
+    EXPECT_TRUE(activeCrisis->active);
+    EXPECT_FALSE(activeCrisis->displayName.empty());
+    EXPECT_FALSE(activeCrisis->warning.empty());
+}
+
+TEST(AlphaExtractionSessionTest,
+     EnemyIntelligenceRevealsFrozenCrisisBeforeHighRisk)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-crisis-intel"));
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    ASSERT_TRUE(session.purchaseRaidIntelligence(
+        RaidIntelligencePurchaseCommand{
+            mapId, RaidIntelligenceCategory::Enemy},
+        "buy-frontier-crisis-intel").succeeded);
+    RaidIntelligenceLoadout intelligence;
+    intelligence.set(RaidIntelligenceCategory::Enemy, true);
+    ASSERT_TRUE(session.deployAlpha(88125U, mapId, intelligence))
+        << session.persistenceMessage();
+
+    const auto crisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(crisis.has_value());
+    EXPECT_TRUE(crisis->detailsKnown);
+    EXPECT_FALSE(crisis->active);
+    EXPECT_FALSE(crisis->displayName.empty());
+    EXPECT_FALSE(crisis->warning.empty());
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

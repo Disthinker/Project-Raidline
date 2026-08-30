@@ -13,7 +13,19 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"PACING SOFTWARE DEADLINE | TARGET ",
+    {{"CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION",
+      "危机：未知 | 携带敌情档案可在激活前获知详情"},
+     {"Industrial Breach", "工业缺口"},
+     {"Road Convergence", "公路汇流"},
+     {"Freight Lockdown", "货运封锁"},
+     {"Pressure converges on exposed road approaches.",
+      "敌群正在向暴露的公路入口汇聚。"},
+     {"Dense pressure breaks through industrial service lanes.",
+      "密集敌群正从工业维修通道突破。"},
+     {"Freight routes are closing around secured cargo.",
+      "货运通道正围绕加固货物区收紧。"},
+     {"CRISIS: ", "危机："},
+     {"PACING SOFTWARE DEADLINE | TARGET ",
       "帧节奏 软件截止时间 | 目标 "},
      {"PACING VSYNC + DEADLINE | TARGET ",
       "帧节奏 垂直同步加截止时间 | 目标 "},

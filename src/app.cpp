@@ -5688,6 +5688,7 @@ void App::renderDebugText()
         164.0F,
         raidTimeText.c_str());
 
+    float leftHudLineY = 180.0F;
     if (raidSession.phase() == RaidPhase::HighRisk &&
         gameSession_.world().highRiskActiveEnemyCap() > 0U)
     {
@@ -5699,8 +5700,23 @@ void App::renderDebugText()
         uiTextRenderer_.render(
             renderer_,
             20.0F,
-            180.0F,
+            leftHudLineY,
             pressureText.c_str());
+        leftHudLineY += 16.0F;
+    }
+
+    if (const auto crisis = gameSession_.raidHighRiskCrisisProjection();
+        crisis.has_value())
+    {
+        const std::string crisisText = crisis->detailsKnown
+            ? fmt::format(
+                  "CRISIS: {} | {}",
+                  crisis->displayName,
+                  crisis->warning)
+            : "CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION";
+        uiTextRenderer_.render(
+            renderer_, 20.0F, leftHudLineY, crisisText.c_str());
+        leftHudLineY += 16.0F;
     }
 
     const WorldClockProjection clock = gameSession_.worldClockProjection();
@@ -5713,8 +5729,9 @@ void App::renderDebugText()
     uiTextRenderer_.render(
         renderer_,
         20.0F,
-        196.0F,
+        leftHudLineY,
         worldTimeText.c_str());
+    leftHudLineY += 16.0F;
 
     if (gameSession_.profile().pendingRaid.has_value() &&
         gameSession_.profile().pendingRaid->outpostRestoration.has_value())
@@ -5726,7 +5743,7 @@ void App::renderDebugText()
                   "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
     else if (gameSession_.profile().pendingRaid.has_value() &&
              gameSession_.profile().pendingRaid->baseSiteClearance.has_value())
@@ -5738,7 +5755,7 @@ void App::renderDebugText()
                   "BASE SITE CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
     else if (gameSession_.profile().pendingRaid.has_value() &&
              gameSession_.profile().pendingRaid->basePerimeterSweep.has_value())
@@ -5750,7 +5767,7 @@ void App::renderDebugText()
                   "PERIMETER SWEEP | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()

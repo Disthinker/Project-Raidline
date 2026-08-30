@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-loot-identity-content-50");
+        "procedural-frontier-high-risk-crisis-content-51");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -363,6 +363,18 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(frontier.proceduralOutdoor.districtArchetypes.size(), 6U);
     EXPECT_EQ(frontier.proceduralOutdoor.landmarkTemplates.size(), 3U);
     ASSERT_EQ(frontier.proceduralOutdoor.resourcePointArchetypes.size(), 6U);
+    ASSERT_EQ(frontier.highRisk.crises.size(), 3U);
+    EXPECT_EQ(frontier.highRisk.crises[0].id,
+              "crisis.frontier.road_convergence");
+    EXPECT_EQ(frontier.highRisk.crises[0].pressureSpawnCount, 3U);
+    EXPECT_EQ(frontier.highRisk.crises[1].id,
+              "crisis.frontier.industrial_breach");
+    EXPECT_EQ(frontier.highRisk.crises[1].waveSize, 4U);
+    EXPECT_EQ(frontier.highRisk.crises[2].id,
+              "crisis.frontier.freight_lockdown");
+    EXPECT_EQ(
+        frontier.highRisk.crises[2].advancedLootTableId,
+        LootTableDefinitionId{"loot.frontier.freight_manifest_v1"});
     const auto &securedCargo =
         frontier.proceduralOutdoor.resourcePointArchetypes[2];
     EXPECT_EQ(securedCargo.kind, RaidResourcePointKind::HighValue);
@@ -1352,6 +1364,18 @@ TEST(
         publishedJsonCopy(),
         "{\"id\": \"depot_cache_1\", \"position\": {\"x\": 860, \"y\": 480}}",
         "{\"id\": \"depot_cache_1\", \"position\": {\"x\": 200, \"y\": 200}}");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, RejectsDuplicateHighRiskCrisisIdentity)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "crisis.frontier.industrial_breach",
+        "crisis.frontier.road_convergence");
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),

@@ -69,7 +69,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 54. **Frontier Exchange 资源点生态 v1**：PR #112 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `85f90ff` 进入 main。content v46/layout v4/schema v36 冻结普通、高价值和地点专属资源点、36～48 名初始敌人、真实加载阶段和鼠标 F10；连续射击和背包拖拽热路径不再复制整份超大地图 Profile。
 55. **Frontier Exchange 遭遇与部署生态 v1**：PR #113 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `f095022` 进入 main。content v48/schema v37/rules v26 冻结巡逻、守点和伏击群组、同组声响响应及 1200 世界单位出生保护区；Raid 拾取和局内库存只复制、校验可修改的资产参与者，不再逐次扫描冻结超大地图。
 56. **Frontier Exchange 既有消费者整合 v1**：content v49 保持 schema v37/layout v4，把 Ashworks 外围清剿指向 `Frontier Exchange`；`GameSession` 从冻结锚点建立救援、失物缓存和高危控制的类型化战术地图目标。救援和玩家主动选择的失物缓存属于开局 Briefed，高危控制需要探索；外围清剿状态投影为 ACTIVE/SECURED，最终减值仍由唯一 Settlement 提交。v48/v47 存档继续读取且不重生成既有 Raid。PR #114 已通过自动化、exact-head CI 和用户正常游玩验收，以 merge commit `7be91e8` 进入 main。
-57. **Frontier Exchange 物资身份与 Loot 内容包 v1（当前开发）**：content v50 保持 schema v37/layout v4，为六类资源点提供独立 Loot 表，新增九种稳定生活、工业和高价值物品定义及双语占位。新 rules 27 冻结资源点—Loot 表绑定；rules 23～26 pending Raid 继续按旧映射读取，不重抽既有 Loot。新物资复用现有 AssetRegistry、Base 自动供给、建设加工和回收事务。
+57. **Frontier Exchange 物资身份与 Loot 内容包 v1**：content v50 保持 schema v37/layout v4，为六类资源点提供独立 Loot 表，新增九种稳定生活、工业和高价值物品定义及双语占位。新 rules 27 冻结资源点—Loot 表绑定；rules 23～26 pending Raid 继续按旧映射读取，不重抽既有 Loot。新物资复用现有 AssetRegistry、Base 自动供给、建设加工和回收事务。PR #115 已通过用户正常游玩验收，并以 merge commit `6ab1724` 进入 main。
+58. **Frontier Exchange 高危危机生态 v1（当前开发）**：content v51/schema v38/rules v28 每局从道路汇流、工业缺口和货运封锁中确定性冻结一个危机、合法目标资源点、精确压力来源、波次参数与主题高级 Loot。敌情资料可在常规阶段提前揭示危机；未携带敌情时高危开始后才显示。schema v37/content v50/rules v27 继续读取且不重抽既有 Raid。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
