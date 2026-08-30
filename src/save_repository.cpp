@@ -2240,7 +2240,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-encounter-ecology-content-47") ||
             (schemaVersion == 37 &&
              contentVersion ==
-                 "procedural-frontier-encounter-ecology-hardening-content-48");
+                 "procedural-frontier-encounter-ecology-hardening-content-48") ||
+            (schemaVersion == 37 &&
+             contentVersion ==
+                 "procedural-frontier-consumer-integration-content-49");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

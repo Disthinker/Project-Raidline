@@ -250,6 +250,41 @@ TEST(BaseResourceDomainTest, IntakeContributionIsAtomicAndIdempotent)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(BaseResourceDomainTest, FrontierLootUsesExistingBaseContributionPipeline)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "frontier-loot-base-contribution",
+        publishedContentRegistry());
+    const ItemDefinitionId waterId{"item.loot.sealed_water"};
+    const AssetInstanceId water = createStashAsset(profile, waterId, 2U);
+
+    const BaseSupplyAssignmentReceipt assignment =
+        executeBaseSupplyAssignment(
+            profile,
+            publishedContentRegistry(),
+            SetBaseSupplyAssignmentCommand{
+                waterId, BaseSupplyCategory::Food},
+            CommandContext{
+                profile.revision,
+                "assign-frontier-water"});
+    ASSERT_TRUE(assignment.succeeded) << assignment.message;
+    EXPECT_EQ(profile.baseSupplyPolicy.assignments.at(waterId),
+              BaseSupplyCategory::Food);
+    ASSERT_NE(profile.assets.find(water), nullptr);
+
+    const BaseResourceReceipt receipt = executeBaseResourceContribution(
+        profile,
+        publishedContentRegistry(),
+        ContributeBaseAssetCommand{water},
+        CommandContext{
+            profile.revision,
+            "contribute-frontier-water"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.contribution, (BaseResourceBundle{20, 4, 0, 0}));
+    EXPECT_EQ(profile.assets.find(water), nullptr);
+}
+
 TEST(BaseResourceDomainTest, ExplicitStashContributionConsumesOnlySelectedAsset)
 {
     ProfileState profile = makeNewAlphaProfile(

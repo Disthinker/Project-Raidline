@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-consumer-integration-content-49",
+  "content_version": "procedural-frontier-loot-identity-content-50",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -764,6 +764,163 @@
       "base_contribution": {"hygiene": 4, "security": 8},
       "base_construction_material": 4,
       "market_recycle_price": 45
+    },
+    {
+      "id": "item.loot.sealed_water",
+      "display_name": "Sealed Water Bottles",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 1000,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_sealed_water.png",
+      "world_texture": "items/world/unpublished_sealed_water.png",
+      "base_contribution": {"food": 10, "hygiene": 2},
+      "market_recycle_price": 10
+    },
+    {
+      "id": "item.loot.canned_meal",
+      "display_name": "Canned Meal",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 500,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_canned_meal.png",
+      "world_texture": "items/world/unpublished_canned_meal.png",
+      "base_contribution": {"food": 16},
+      "market_recycle_price": 14
+    },
+    {
+      "id": "item.loot.cleaning_supplies",
+      "display_name": "Cleaning Supplies",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 1200,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 64},
+        "pickup_size": {"x": 48, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_cleaning_supplies.png",
+      "world_texture": "items/world/unpublished_cleaning_supplies.png",
+      "base_contribution": {"hygiene": 18},
+      "market_recycle_price": 22
+    },
+    {
+      "id": "item.loot.compact_game_set",
+      "display_name": "Compact Game Set",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 900,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_compact_game.png",
+      "world_texture": "items/world/unpublished_compact_game.png",
+      "base_contribution": {"morale": 18},
+      "market_recycle_price": 28
+    },
+    {
+      "id": "item.loot.first_aid_stock",
+      "display_name": "First Aid Stock",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 1100,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_first_aid_stock.png",
+      "world_texture": "items/world/unpublished_first_aid_stock.png",
+      "base_contribution": {"hygiene": 20},
+      "market_recycle_price": 35
+    },
+    {
+      "id": "item.loot.industrial_fasteners",
+      "display_name": "Industrial Fasteners",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 3,
+      "unit_weight_grams": 600,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 32},
+        "pickup_size": {"x": 48, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_fasteners.png",
+      "world_texture": "items/world/unpublished_fasteners.png",
+      "base_contribution": {"security": 6},
+      "base_construction_material": 2,
+      "market_recycle_price": 18
+    },
+    {
+      "id": "item.loot.copper_wire_spool",
+      "display_name": "Copper Wire Spool",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 1400,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 32, "y": 64},
+        "pickup_size": {"x": 48, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_copper_wire.png",
+      "world_texture": "items/world/unpublished_copper_wire.png",
+      "base_contribution": {"security": 10},
+      "base_construction_material": 3,
+      "market_recycle_price": 32
+    },
+    {
+      "id": "item.loot.machine_tool_set",
+      "display_name": "Machine Tool Set",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 3200,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_machine_tools.png",
+      "world_texture": "items/world/unpublished_machine_tools.png",
+      "base_contribution": {"security": 16},
+      "base_construction_material": 5,
+      "market_recycle_price": 55
+    },
+    {
+      "id": "item.loot.precision_components",
+      "display_name": "Precision Components",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 1200,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 32},
+        "pickup_size": {"x": 72, "y": 48}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png",
+      "base_contribution": {"security": 20},
+      "base_construction_material": 6,
+      "market_recycle_price": 80
     }
   ],
   "loot_tables": [
@@ -801,6 +958,81 @@
         {"item": "item.protective_gear.helmet_basic", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.body_armor_basic", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.maintenance_cache_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.industrial_fasteners", "weight": 30, "minimum_quantity": 1, "maximum_quantity": 3},
+        {"item": "item.loot.scrap_parts", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.copper_wire_spool", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.electronics", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.machine_tool_set", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.maintenance.weapon_kit_basic", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.roadside_salvage_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.sealed_water", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.canned_meal", "weight": 22, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.cola_basic", "weight": 15, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.toilet_paper", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.cleaning_supplies", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.scrap_parts", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.secured_cargo_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.precision_components", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.machine_tool_set", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.electronics", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.maintenance.armor_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.maintenance.weapon_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_basic", "weight": 9, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.freight_manifest_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.copper_wire_spool", "weight": 22, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.precision_components", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.electronics", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.compact_game_set", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.sealed_water", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.canned_meal", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.book_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.fabrication_stock_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.industrial_fasteners", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 3},
+        {"item": "item.loot.copper_wire_spool", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.machine_tool_set", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.precision_components", "weight": 15, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.scrap_parts", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.electronics", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.service_supplies_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.sealed_water", "weight": 24, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.canned_meal", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.cleaning_supplies", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.compact_game_set", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.cola_basic", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.first_aid_stock", "weight": 11, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.toilet_paper", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 2}
       ]
     }
   ],
@@ -1243,12 +1475,12 @@
           {"id": "landmark.frontier.highway_service", "display_name": "HIGHWAY SERVICE PLAZA", "district_kind": "roadside_service", "footprint_cells": {"x": 14, "y": 10}}
         ],
         "resource_point_archetypes": [
-          {"id": "resource_point.frontier.maintenance_cache", "display_name": "MAINTENANCE CACHE", "kind": "ordinary", "loot_table": "loot.raid.alpha", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 5, "maximum_instances": 6, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
-          {"id": "resource_point.frontier.roadside_salvage", "display_name": "ROADSIDE SALVAGE", "kind": "ordinary", "loot_table": "loot.raid.alpha", "allowed_district_kinds": ["highway", "open_ground", "greenbelt", "roadside_service"], "minimum_instances": 4, "maximum_instances": 5, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
-          {"id": "resource_point.frontier.secured_cargo", "display_name": "SECURED CARGO", "kind": "high_value", "loot_table": "loot.raid.high_risk_v1", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 3, "maximum_instances": 4, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 4}},
-          {"id": "resource_point.frontier.freight_manifest", "display_name": "FREIGHT MANIFEST CACHE", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.freight_exchange", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}},
-          {"id": "resource_point.frontier.fabrication_stock", "display_name": "FABRICATION STOCK", "kind": "landmark_specific", "loot_table": "loot.raid.high_risk_v1", "landmark_definition_id": "landmark.frontier.fabrication_plant", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 3}},
-          {"id": "resource_point.frontier.service_supplies", "display_name": "SERVICE PLAZA SUPPLIES", "kind": "landmark_specific", "loot_table": "loot.raid.alpha", "landmark_definition_id": "landmark.frontier.highway_service", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}}
+          {"id": "resource_point.frontier.maintenance_cache", "display_name": "MAINTENANCE CACHE", "kind": "ordinary", "loot_table": "loot.frontier.maintenance_cache_v1", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 5, "maximum_instances": 6, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
+          {"id": "resource_point.frontier.roadside_salvage", "display_name": "ROADSIDE SALVAGE", "kind": "ordinary", "loot_table": "loot.frontier.roadside_salvage_v1", "allowed_district_kinds": ["highway", "open_ground", "greenbelt", "roadside_service"], "minimum_instances": 4, "maximum_instances": 5, "capacity": 2, "risk_tier": 1, "footprint_cells": {"x": 3, "y": 3}},
+          {"id": "resource_point.frontier.secured_cargo", "display_name": "SECURED CARGO", "kind": "high_value", "loot_table": "loot.frontier.secured_cargo_v1", "allowed_district_kinds": ["industrial", "logistics"], "minimum_instances": 3, "maximum_instances": 4, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 4}},
+          {"id": "resource_point.frontier.freight_manifest", "display_name": "FREIGHT MANIFEST CACHE", "kind": "landmark_specific", "loot_table": "loot.frontier.freight_manifest_v1", "landmark_definition_id": "landmark.frontier.freight_exchange", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}},
+          {"id": "resource_point.frontier.fabrication_stock", "display_name": "FABRICATION STOCK", "kind": "landmark_specific", "loot_table": "loot.frontier.fabrication_stock_v1", "landmark_definition_id": "landmark.frontier.fabrication_plant", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 3, "footprint_cells": {"x": 4, "y": 3}},
+          {"id": "resource_point.frontier.service_supplies", "display_name": "SERVICE PLAZA SUPPLIES", "kind": "landmark_specific", "loot_table": "loot.frontier.service_supplies_v1", "landmark_definition_id": "landmark.frontier.highway_service", "minimum_instances": 1, "maximum_instances": 1, "capacity": 3, "risk_tier": 2, "footprint_cells": {"x": 4, "y": 3}}
         ],
         "encounter_archetypes": [
           {"id": "encounter.frontier.road_patrol", "kind": "patrol", "allowed_district_kinds": ["highway", "open_ground", "greenbelt"], "minimum_groups": 3, "maximum_groups": 4, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 400},

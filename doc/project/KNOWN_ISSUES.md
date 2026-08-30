@@ -50,7 +50,8 @@
 | RL-MAP-009 | `Frontier Exchange` 缺少可支撑完整 Raid 的超大主题分区、内容密度和可扩展投影/导航 | PR #111 已通过 CI 与用户验收，以 `636a40b` 进入 main；25600×14400 layout v3、八区、三地标、道路/环境/玩法 Socket、区块投影和分层导航成为接受基线 |
 | RL-MAP-010 | layout v3 大型环境物件比例、重叠和同步加载反馈不满足正常游玩 | PR #111 已按角色尺度修正大型物件并保证非碎屑唯一占位，PR #112 又让碎屑避让大型物件并交付真实加载进度；两项均已验收进入 main |
 | RL-AI-002 | 超大地图 36～48 名初始敌人仍是独立随机散点，路线、资源与地标没有形成可理解的遭遇压力，且初始出生点附近可能立即生成敌人 | PR #113 以 content v48/schema v37/rules v26 冻结巡逻、地标守点、路线伏击和同组声响响应，并强制 1200 世界单位出生保护区；128-seed、性能、CI 与用户正常游玩验收通过，以 `f095022` 进入 main |
-| RL-MAP-011 | 超大随机图中的救援和自力寻回只有近屏世界提示，外围清剿也没有随机地图消费者 | Draft PR #114 建立 Briefed/Explored 类型化战术目标；救援与失物缓存开局可定位，高危控制随探索显现，Ashworks 外围清剿改为 Frontier layout v4 并保持唯一 Settlement。Windows Debug 全目标、292/292 定向回归、1283/1283 完整 CTest 和 exact-head Windows/Ubuntu CI 通过，待用户正常游玩验收 |
+| RL-MAP-011 | 超大随机图中的救援和自力寻回只有近屏世界提示，外围清剿也没有随机地图消费者 | PR #114 建立 Briefed/Explored 类型化战术目标；救援与失物缓存开局可定位，高危控制随探索显现，Ashworks 外围清剿改为 Frontier layout v4 并保持唯一 Settlement。自动化、exact-head CI 与用户正常游玩验收通过，以 `7be91e8` 进入 main |
+| RL-CONTENT-001 | `Frontier Exchange` 六类资源点共用两张全局 Loot 表，地点身份和搜刮决策不足 | 当前分支以 content v50/rules v27 建立六张专属 Loot 表和九种双语主题物资；复用既有 Base 供给、建设与回收闭环，并保持 rules 23～26 pending Raid 兼容 |
 | RL-AI-001 | 一名敌人进入攻击阶段后，其余警觉敌人被降为 Support 并在等待距离带内停住；旧单槽方案又会让围攻显得不自然 | PR #102 已拆分 Pressure 与攻击槽，允许最多 10 名并发攻击、超额成员稳定轮转，并加入 0.25 秒敌人伤害保护；双平台 CI 与用户正常游玩验收通过，以普通 merge commit `1c62064` 进入 main |
 
 ## 需要未来产品决策
@@ -130,7 +131,8 @@
 | Regional Campaign：基地威胁预警与自动防守 v1 | PR #109 已通过用户正常游玩验收并以普通 merge commit `fab9f32` 进入 main。实时尸潮、防御设施、战斗小组、多档投资、个人装备损失及正式表现延期 |
 | Regional Campaign：基地外围清剿 v1 | PR #110 已通过 CI 和用户正常游玩验收，以普通 merge commit `7bd3b02` 进入 main。动态外围事件、正式场景、防御设施和 AI 小队延期 |
 | 程序化 Raid 内容扩展：完整室外布局生成 v3 | PR #111 已通过 CI 与用户验收，以 `636a40b` 进入 main；资源点生态由 PR #112 接受，遭遇生态由 PR #113 接受 |
-| 程序化 Raid 内容扩展：既有消费者整合 v1 | Draft PR #114 把救援、失物寻回、高危控制和 Ashworks 外围清剿接入冻结随机布局；Windows Debug 全目标、292/292 定向回归、1283/1283 完整 CTest 和 exact-head Windows/Ubuntu CI 通过，待用户正常游玩验收 |
+| 程序化 Raid 内容扩展：既有消费者整合 v1 | PR #114 把救援、失物寻回、高危控制和 Ashworks 外围清剿接入冻结随机布局；自动化、exact-head CI 和用户正常游玩验收通过，以 `7be91e8` 进入 main |
+| Content Beta：Frontier 物资身份与 Loot 内容包 v1 | 当前分支建立六类资源点的独立 Loot 身份和九种生活/工业/高价值物资；Windows Debug 全目标、focused tests 与 1287/1287 完整 CTest 已通过，待 Draft PR exact-head CI 和用户正常游玩验收 |
 
 外部 GDD 的枪匠章节仍保留“全面维护需要等待”的旧描述，与 PR #83 已接受的即时维护决策冲突；其“公共医疗储备”描述也已被用户的新合同取代。GDD 保持只读，待策划线程同步修订。玩家付费医疗继续是货币即时服务；居民/NPC 设施治疗是独立命令，消耗世界时间和玩家明确授权的基地可访问自有医疗物资，不建立第二套库存。
 

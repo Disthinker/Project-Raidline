@@ -1009,7 +1009,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-encounter-ecology-26");
+              "procedural-frontier-loot-identity-27");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
@@ -1146,6 +1146,73 @@ TEST(RaidLifecycleTest,
     invalidBinding.pendingRaid->spatialLayout.layoutHash =
         raidMapLayoutHash(invalidBinding.pendingRaid->spatialLayout);
     EXPECT_FALSE(validateProfileState(invalidBinding, content).valid);
+
+    ProfileState legacyTableTamper = first;
+    RaidResourcePointSnapshot &tamperedPoint =
+        legacyTableTamper.pendingRaid->spatialLayout.resourcePoints.front();
+    tamperedPoint.lootTableId = tamperedPoint.kind ==
+            RaidResourcePointKind::Ordinary
+        ? LootTableDefinitionId{"loot.raid.alpha"}
+        : LootTableDefinitionId{"loot.raid.high_risk_v1"};
+    legacyTableTamper.pendingRaid->spatialLayout.layoutHash =
+        raidMapLayoutHash(legacyTableTamper.pendingRaid->spatialLayout);
+    EXPECT_FALSE(validateProfileState(legacyTableTamper, content).valid);
+}
+
+TEST(RaidLifecycleTest,
+     FrontierRulesTwentySixPendingRaidKeepsLegacyResourceLootTables)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState legacy = makeNewAlphaProfile(
+        "legacy-frontier-resource-tables", content);
+    ASSERT_TRUE(deploy(
+        legacy,
+        7712202U,
+        MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
+    ASSERT_TRUE(legacy.pendingRaid.has_value());
+    PendingRaidSnapshot &raid = *legacy.pendingRaid;
+    raid.rulesVersion = "procedural-frontier-encounter-ecology-26";
+
+    for (RaidResourcePointSnapshot &point :
+         raid.spatialLayout.resourcePoints)
+    {
+        const bool ordinaryTable =
+            point.definitionId ==
+                "resource_point.frontier.maintenance_cache" ||
+            point.definitionId ==
+                "resource_point.frontier.roadside_salvage" ||
+            point.definitionId ==
+                "resource_point.frontier.service_supplies";
+        point.lootTableId = ordinaryTable
+            ? LootTableDefinitionId{"loot.raid.alpha"}
+            : LootTableDefinitionId{"loot.raid.high_risk_v1"};
+        const ItemDefinitionId replacementId = ordinaryTable
+            ? ItemDefinitionId{"item.loot.cola_basic"}
+            : ItemDefinitionId{"item.loot.electronics"};
+        for (RaidLootSnapshot &loot : raid.loot)
+        {
+            if (loot.resourcePointInstanceId != point.instanceId)
+                continue;
+            loot.definitionId = replacementId;
+            loot.quantity = 1U;
+            AssetRecord *asset = legacy.assets.findMutable(loot.assetId);
+            ASSERT_NE(asset, nullptr);
+            asset->definitionId = replacementId;
+            asset->quantity = 1U;
+            asset->orientation = ItemOrientation::Degrees0;
+            asset->remainingCharges = 0U;
+            asset->currentMaximumDurability = 0U;
+            asset->currentDurability = 0U;
+            asset->magazineRounds.clear();
+            asset->chamberedRound.reset();
+            asset->weaponMalfunction = WeaponMalfunctionType::None;
+        }
+    }
+    raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);
+
+    const ProfileValidationResult validation =
+        validateProfileState(legacy, content);
+    EXPECT_TRUE(validation.valid) << validation.message;
 }
 
 TEST(RaidLifecycleTest,

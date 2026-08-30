@@ -1892,15 +1892,20 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-frontier-district-layout-22";
         const bool legacyResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
+        const bool frontierLootIdentityRules =
+            raid.rulesVersion == "procedural-frontier-loot-identity-27";
         const bool expandedResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-24" ||
             raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
-            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26" ||
+            frontierLootIdentityRules;
         const bool encounterEcologyRules =
             raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
-            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26" ||
+            frontierLootIdentityRules;
         const bool protectedEncounterSpawnRules =
-            raid.rulesVersion == "procedural-frontier-encounter-ecology-26";
+            raid.rulesVersion == "procedural-frontier-encounter-ecology-26" ||
+            frontierLootIdentityRules;
         const bool resourceEcologyRules =
             legacyResourceEcologyRules || expandedResourceEcologyRules;
         const bool districtLayoutRules =
@@ -2615,6 +2620,32 @@ ProfileValidationResult validateProfileState(
                                            raid.spatialLayout.landmarks.end() &&
                                        landmark->districtInstanceId ==
                                            resourcePoint.districtInstanceId);
+                        const bool legacyOrdinaryLootTable =
+                            (resourcePoint.definitionId ==
+                                 "resource_point.frontier.maintenance_cache" ||
+                             resourcePoint.definitionId ==
+                                 "resource_point.frontier.roadside_salvage" ||
+                             resourcePoint.definitionId ==
+                                 "resource_point.frontier.service_supplies") &&
+                            resourcePoint.lootTableId ==
+                                LootTableDefinitionId{"loot.raid.alpha"};
+                        const bool legacyHighValueLootTable =
+                            (resourcePoint.definitionId ==
+                                 "resource_point.frontier.secured_cargo" ||
+                             resourcePoint.definitionId ==
+                                 "resource_point.frontier.freight_manifest" ||
+                             resourcePoint.definitionId ==
+                                 "resource_point.frontier.fabrication_stock") &&
+                            resourcePoint.lootTableId == LootTableDefinitionId{
+                                "loot.raid.high_risk_v1"};
+                        const bool lootTableValid =
+                            definition != raidMap->proceduralOutdoor
+                                .resourcePointArchetypes.end() &&
+                            (resourcePoint.lootTableId ==
+                                 definition->lootTableId ||
+                             (!frontierLootIdentityRules &&
+                              (legacyOrdinaryLootTable ||
+                               legacyHighValueLootTable)));
                         districtSnapshotValid = districtSnapshotValid &&
                             !resourcePoint.instanceId.empty() &&
                             resourcePointIds.insert(
@@ -2623,7 +2654,7 @@ ProfileValidationResult validateProfileState(
                                 .resourcePointArchetypes.end() &&
                             resourcePoint.displayName == definition->displayName &&
                             resourcePoint.kind == definition->kind &&
-                            resourcePoint.lootTableId == definition->lootTableId &&
+                            lootTableValid &&
                             resourcePoint.riskTier == definition->riskTier &&
                             resourcePoint.capacity == definition->capacity &&
                             resourcePoint.capacity > 0U &&
