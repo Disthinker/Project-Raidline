@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-consumer-integration-content-49");
+        "procedural-frontier-loot-identity-content-50");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -186,7 +186,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 21U);
+    ASSERT_EQ(registry.items().size(), 30U);
     const MapDefinition &frontierWithInterior = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     ASSERT_EQ(frontierWithInterior.interiors.size(), 2U);
@@ -234,7 +234,35 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_NE(
         freightBay.worldSize.x,
         frontierWithInterior.interiors.front().worldSize.x);
-    ASSERT_EQ(registry.lootTables().size(), 3U);
+    ASSERT_EQ(registry.lootTables().size(), 9U);
+    const auto lootItemIds = [&](std::string_view tableId)
+    {
+        std::set<ItemDefinitionId> ids;
+        for (const LootContentEntry &entry : registry.lootTable(
+                 LootTableDefinitionId{std::string{tableId}}).entries)
+        {
+            ids.insert(entry.itemDefinitionId);
+        }
+        return ids;
+    };
+    const std::set<ItemDefinitionId> maintenanceLoot =
+        lootItemIds("loot.frontier.maintenance_cache_v1");
+    const std::set<ItemDefinitionId> roadsideLoot =
+        lootItemIds("loot.frontier.roadside_salvage_v1");
+    const std::set<ItemDefinitionId> securedLoot =
+        lootItemIds("loot.frontier.secured_cargo_v1");
+    const std::set<ItemDefinitionId> serviceLoot =
+        lootItemIds("loot.frontier.service_supplies_v1");
+    EXPECT_NE(maintenanceLoot, roadsideLoot);
+    EXPECT_NE(securedLoot, serviceLoot);
+    EXPECT_TRUE(maintenanceLoot.contains(
+        ItemDefinitionId{"item.loot.industrial_fasteners"}));
+    EXPECT_TRUE(roadsideLoot.contains(
+        ItemDefinitionId{"item.loot.sealed_water"}));
+    EXPECT_TRUE(securedLoot.contains(
+        ItemDefinitionId{"item.loot.precision_components"}));
+    EXPECT_TRUE(serviceLoot.contains(
+        ItemDefinitionId{"item.loot.first_aid_stock"}));
     ASSERT_EQ(registry.enemyDeployments().size(), 13U);
     ASSERT_EQ(registry.maps().size(), 4U);
 
@@ -344,7 +372,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(securedCargo.riskTier, 3U);
     EXPECT_EQ(
         securedCargo.lootTableId,
-        LootTableDefinitionId{"loot.raid.high_risk_v1"});
+        LootTableDefinitionId{"loot.frontier.secured_cargo_v1"});
     EXPECT_EQ(frontier.worldSize.x, 25600.0F);
     EXPECT_EQ(frontier.worldSize.y, 14400.0F);
     EXPECT_EQ(
@@ -389,6 +417,22 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         registry.item(ItemDefinitionId{"item.loot.electronics"})
             .baseConstructionMaterialValue,
         4U);
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.sealed_water"})
+             .baseContribution,
+        (BaseResourceBundle{10, 2, 0, 0}));
+    EXPECT_EQ(
+        *registry.item(ItemDefinitionId{"item.loot.compact_game_set"})
+             .baseContribution,
+        (BaseResourceBundle{0, 0, 18, 0}));
+    EXPECT_EQ(
+        registry.item(ItemDefinitionId{"item.loot.machine_tool_set"})
+            .baseConstructionMaterialValue,
+        5U);
+    EXPECT_EQ(
+        registry.item(ItemDefinitionId{"item.loot.precision_components"})
+            .marketRecyclePrice,
+        80U);
     EXPECT_EQ(ammunition.maxStackSize, 60U);
     EXPECT_EQ(ammunition.unitWeightGrams, 12U);
     EXPECT_EQ(ammunition.marketBuyPrice, 1U);

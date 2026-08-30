@@ -645,7 +645,7 @@ DeployReceipt executeDeploy(
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
     snapshot.rulesVersion = encounterEcologyRules
-        ? "procedural-frontier-encounter-ecology-26"
+        ? "procedural-frontier-loot-identity-27"
         : resourceEcologyRules
         ? "procedural-frontier-resource-ecology-24"
         : map->proceduralOutdoor.enabled &&

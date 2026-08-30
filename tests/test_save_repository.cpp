@@ -275,6 +275,48 @@ void downgradeFrontierResourceEcologyToLayoutV3(
     raid.spatialLayout.resourcePoints.clear();
     raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);
 }
+
+void downgradeFrontierLootIdentityToRulesV26(ProfileState &profile)
+{
+    PendingRaidSnapshot &raid = *profile.pendingRaid;
+    raid.rulesVersion = "procedural-frontier-encounter-ecology-26";
+    for (RaidResourcePointSnapshot &point :
+         raid.spatialLayout.resourcePoints)
+    {
+        const bool ordinaryTable =
+            point.definitionId ==
+                "resource_point.frontier.maintenance_cache" ||
+            point.definitionId ==
+                "resource_point.frontier.roadside_salvage" ||
+            point.definitionId ==
+                "resource_point.frontier.service_supplies";
+        point.lootTableId = ordinaryTable
+            ? LootTableDefinitionId{"loot.raid.alpha"}
+            : LootTableDefinitionId{"loot.raid.high_risk_v1"};
+        const ItemDefinitionId replacementId = ordinaryTable
+            ? ItemDefinitionId{"item.loot.cola_basic"}
+            : ItemDefinitionId{"item.loot.electronics"};
+        for (RaidLootSnapshot &loot : raid.loot)
+        {
+            if (loot.resourcePointInstanceId != point.instanceId)
+                continue;
+            loot.definitionId = replacementId;
+            loot.quantity = 1U;
+            AssetRecord *asset = profile.assets.findMutable(loot.assetId);
+            ASSERT_NE(asset, nullptr);
+            asset->definitionId = replacementId;
+            asset->quantity = 1U;
+            asset->orientation = ItemOrientation::Degrees0;
+            asset->remainingCharges = 0U;
+            asset->currentMaximumDurability = 0U;
+            asset->currentDurability = 0U;
+            asset->magazineRounds.clear();
+            asset->chamberedRound.reset();
+            asset->weaponMalfunction = WeaponMalfunctionType::None;
+        }
+    }
+    raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);
+}
 }
 
 TEST(SaveRepositoryTest, SchemaV11RoundTripPreservesClockResourcesPriorityAndIntake)
@@ -1774,6 +1816,40 @@ TEST(SaveRepositoryTest, SchemaV37LoadsEncounterEcologyHardeningContent)
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),
               profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-consumer-integration-content-v49", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v49-pending-raid",
+            "save-v49-pending-settlement",
+            884211U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-v49-pending-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    downgradeFrontierLootIdentityToRulesV26(profile);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-consumer-integration-content-49",
+            37U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(loaded.profile->pendingRaid->rulesVersion,
+              "procedural-frontier-encounter-ecology-26");
 }
 
 TEST(SaveRepositoryTest,

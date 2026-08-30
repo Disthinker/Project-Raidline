@@ -621,6 +621,18 @@ TEST(UiLocalizationTest, ChineseTranslatesRaidObjectiveMarkers) {
             "失物缓存");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesFrontierLootIdentities) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "Sealed Water Bottles"),
+            "密封饮用水");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "Machine Tool Set"),
+            "机修工具组");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                           "Precision Components"),
+            "精密组件");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesOutdoorPlaceholderIdentities) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
                            "PROP: ENGINEERING EQUIPMENT"),
