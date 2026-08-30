@@ -323,6 +323,7 @@ public:
 
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
+    [[nodiscard]] bool triggerHighRiskForDeveloper() noexcept;
     [[nodiscard]] const RaidTacticalMapState &
     tacticalMap() const noexcept;
 

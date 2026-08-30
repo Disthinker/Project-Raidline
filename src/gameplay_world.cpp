@@ -2274,6 +2274,11 @@ GameplayWorld::raidSession() const noexcept
     return raidSession_;
 }
 
+bool GameplayWorld::triggerHighRiskForDeveloper() noexcept
+{
+    return raidSession_.triggerHighRisk();
+}
+
 const RaidTacticalMapState &
 GameplayWorld::tacticalMap() const noexcept
 {

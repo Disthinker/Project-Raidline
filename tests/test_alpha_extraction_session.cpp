@@ -554,6 +554,42 @@ TEST(AlphaExtractionSessionTest,
     EXPECT_FALSE(crisis->warning.empty());
 }
 
+TEST(AlphaExtractionSessionTest,
+     DeveloperHighRiskTriggerUsesFrozenCrisisWithoutMutatingProfile)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-crisis-developer"));
+    ASSERT_TRUE(session.deployAlpha(
+        88126U, MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
+
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    const RaidHighRiskCrisisSnapshot &snapshot =
+        *session.profile().pendingRaid->highRiskCrisis;
+    const std::uint64_t fingerprint = profileStateFingerprint(session.profile());
+    const auto before = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(before.has_value());
+    EXPECT_EQ(before->definitionId, snapshot.definitionId);
+    EXPECT_EQ(before->districtInstanceId, snapshot.districtInstanceId);
+    EXPECT_EQ(before->resourcePointInstanceId,
+              snapshot.resourcePointInstanceId);
+    EXPECT_EQ(before->initialWaveDelaySeconds,
+              snapshot.initialWaveDelaySeconds);
+    EXPECT_EQ(before->waveIntervalSeconds, snapshot.waveIntervalSeconds);
+    EXPECT_EQ(before->waveSize, snapshot.waveSize);
+    EXPECT_EQ(before->activeEnemyCap, snapshot.activeEnemyCap);
+    EXPECT_EQ(before->pressureSpawnCount, snapshot.pressureSpawns.size());
+    EXPECT_FALSE(before->active);
+
+    EXPECT_TRUE(session.triggerDeveloperHighRisk());
+    EXPECT_FALSE(session.triggerDeveloperHighRisk());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    const auto after = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(after.has_value());
+    EXPECT_TRUE(after->active);
+    EXPECT_TRUE(after->detailsKnown);
+}
+
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)
 {
     GameSession session;

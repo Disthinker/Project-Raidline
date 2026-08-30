@@ -20,6 +20,7 @@
 
 - 自动化覆盖内容校验、同 seed 同危机、跨 seed 多样性、合法分区/资源点、压力来源唯一且来自冻结锚点、主题高级 Loot、旧 rules 27 读取、新 rules 28 篡改拒绝和 schema v38 往返。
 - Gameplay 集成覆盖敌情预告、无情报隐藏、高危后揭示、实际波次参数与高级 Loot 开放。
+- F10 运行时开发面板显示本局冻结危机、目标资源点和压力参数，并提供只作用于本次运行的强制 HUD 揭示与立即进入高危按钮；调试操作不修改 Profile、情报或存档。
 - 完成 Windows Debug 全目标、完整 CTest 和 exact-head Windows/Ubuntu CI 后，由用户正常游玩验收；开发代理不启动游戏。
 - 回滚使用普通 revert；旧 rules 27 兼容路径保留，不重写存档或共享历史。
 
@@ -30,6 +31,7 @@
 - [x] 实现危机内容、冻结快照和 rules 28。
 - [x] 接入定向压力、主题高级资源与双语投影。
 - [x] 完成 schema v38、旧存档兼容及自动化。
-- [x] 完成 Windows Debug 全目标与完整 CTest（1293/1293）。
-- [ ] 创建 Draft PR 并通过 exact-head Windows/Ubuntu CI。
+- [x] 完成 Windows Debug 全目标与完整 CTest（F10 补充后 1295/1295）。
+- [x] 创建 Draft PR #116，并使首个 exact-head `7de89a9` 通过 Windows/Ubuntu CI。
+- [ ] 补充 F10 危机验收面板并复验新的 exact-head CI。
 - [ ] 用户正常游玩验收。

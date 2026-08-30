@@ -124,9 +124,17 @@ struct RaidOperationProjection
 
 struct RaidHighRiskCrisisProjection
 {
+    std::string definitionId;
     std::string displayName;
     std::string warning;
+    std::uint16_t districtInstanceId{};
+    std::string resourcePointInstanceId;
     ContentRect focusArea;
+    float initialWaveDelaySeconds{};
+    float waveIntervalSeconds{};
+    std::uint32_t waveSize{};
+    std::uint32_t activeEnemyCap{};
+    std::size_t pressureSpawnCount{};
     bool detailsKnown{};
     bool active{};
 };
@@ -239,6 +247,7 @@ public:
     raidOperationProjection() const noexcept;
     [[nodiscard]] std::optional<RaidHighRiskCrisisProjection>
     raidHighRiskCrisisProjection() const noexcept;
+    [[nodiscard]] bool triggerDeveloperHighRisk() noexcept;
     [[nodiscard]] std::optional<RaidSelfRecoveryProjection>
     raidSelfRecoveryProjection() const noexcept;
     [[nodiscard]] RaidIntelligencePurchaseReceipt

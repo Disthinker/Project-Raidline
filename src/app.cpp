@@ -1529,6 +1529,7 @@ bool App::tryDeployFromBase(
     selectedRaidIntelligence_ = {};
     developerMapFogEnabled_ = true;
     developerInfiniteAmmoEnabled_ = false;
+    developerCrisisRevealEnabled_ = false;
     uiMessage_.clear();
     return true;
 }
@@ -4959,6 +4960,22 @@ void App::handleDeveloperPanelClick(MousePosition position)
             ? "DEVELOPER INFINITE AMMO ENABLED"
             : "DEVELOPER INFINITE AMMO DISABLED";
         break;
+    case DeveloperPanelActionKind::ToggleCrisisReveal:
+        if (!gameSession_.raidHighRiskCrisisProjection().has_value())
+        {
+            uiMessage_ = "NO FROZEN CRISIS ON THIS MAP";
+            break;
+        }
+        developerCrisisRevealEnabled_ = !developerCrisisRevealEnabled_;
+        uiMessage_ = developerCrisisRevealEnabled_
+            ? "DEVELOPER CRISIS HUD REVEAL ENABLED"
+            : "DEVELOPER CRISIS HUD REVEAL DISABLED";
+        break;
+    case DeveloperPanelActionKind::TriggerHighRisk:
+        uiMessage_ = gameSession_.triggerDeveloperHighRisk()
+            ? "DEVELOPER HIGH RISK ACTIVATED"
+            : "HIGH RISK ALREADY ACTIVE OR UNAVAILABLE";
+        break;
     case DeveloperPanelActionKind::ResetWeaponTuning:
         uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
             ? "RUNTIME WEAPON TUNING RESET"
@@ -4994,6 +5011,7 @@ void App::update(float deltaTime)
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
         tacticalMapOpen_ = false;
+        developerCrisisRevealEnabled_ = false;
     }
     const bool escapePressed = input_.wasActionJustPressed(
         GameAction::InventoryCancel);
@@ -5708,7 +5726,8 @@ void App::renderDebugText()
     if (const auto crisis = gameSession_.raidHighRiskCrisisProjection();
         crisis.has_value())
     {
-        const std::string crisisText = crisis->detailsKnown
+        const std::string crisisText =
+            (crisis->detailsKnown || developerCrisisRevealEnabled_)
             ? fmt::format(
                   "CRISIS: {} | {}",
                   crisis->displayName,
@@ -9867,12 +9886,48 @@ void App::renderDeveloperWeaponPanel()
         developerInfiniteAmmoEnabled_
             ? "INFINITE AMMO: ON"
             : "INFINITE AMMO: OFF");
+    const std::optional<RaidHighRiskCrisisProjection> crisis =
+        gameSession_.raidHighRiskCrisisProjection();
+    renderButton(
+        developerCrisisRevealButton(),
+        developerCrisisRevealEnabled_,
+        developerCrisisRevealEnabled_
+            ? "CRISIS HUD: REVEALED"
+            : "CRISIS HUD: NORMAL");
+    renderButton(
+        developerTriggerHighRiskButton(),
+        crisis.has_value() && crisis->active,
+        crisis.has_value() && crisis->active
+            ? "HIGH RISK: ACTIVE"
+            : "ACTIVATE HIGH RISK NOW");
     renderButton(
         developerResetWeaponButton(), false, "RESET WEAPON PARAMETERS");
+    const std::string crisisIdentityLine = crisis.has_value()
+        ? fmt::format(
+              "CRISIS DEBUG: {} | DISTRICT {} | RESOURCE POINT {}",
+              crisis->displayName,
+              crisis->districtInstanceId,
+              crisis->resourcePointInstanceId)
+        : "NO FROZEN CRISIS ON THIS MAP";
+    const std::string crisisPressureLine = crisis.has_value()
+        ? fmt::format(
+              "PRESSURE DEBUG: DELAY {:.0f}s | INTERVAL {:.0f}s | WAVE {} | CAP {} | SOURCES {}",
+              crisis->initialWaveDelaySeconds,
+              crisis->waveIntervalSeconds,
+              crisis->waveSize,
+              crisis->activeEnemyCap,
+              crisis->pressureSpawnCount)
+        : "PRESSURE DEBUG: UNAVAILABLE";
+    uiTextRenderer_.render(
+        renderer_, panel.x + 22.0F, panel.y + 94.0F,
+        crisisIdentityLine.c_str());
+    uiTextRenderer_.render(
+        renderer_, panel.x + 22.0F, panel.y + 110.0F,
+        crisisPressureLine.c_str());
     if (!tuning.has_value())
     {
         uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 102.0F,
+            renderer_, panel.x + 22.0F, panel.y + 138.0F,
             "NO ACTIVE WEAPON");
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
@@ -9887,7 +9942,7 @@ void App::renderDeveloperWeaponPanel()
         tuning->weaponAssetId,
         tuning->overridden ? "OVERRIDDEN" : "CONTENT DEFAULT");
     uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + 94.0F,
+        renderer_, panel.x + 22.0F, panel.y + 138.0F,
         weaponLine.c_str());
 
     constexpr std::array<const char *,

@@ -557,6 +557,31 @@ TEST(UiLocalizationTest, ChineseTranslatesHighRiskCrisisBriefing) {
   EXPECT_NE(known.find("工业维修通道突破"), std::string::npos);
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesDeveloperCrisisControls) {
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "CRISIS HUD: REVEALED"),
+        "危机显示：强制揭示");
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "ACTIVATE HIGH RISK NOW"),
+        "立即进入高危");
+    EXPECT_EQ(
+        localizeUiText(
+            UiLanguage::SimplifiedChinese,
+            "CRISIS DEBUG: Road Convergence | DISTRICT 2 | RESOURCE POINT resource-4"),
+        "危机调试：公路汇流 | 分区 2 | 资源点 resource-4");
+    EXPECT_EQ(
+        localizeUiText(
+            UiLanguage::SimplifiedChinese,
+            "PRESSURE DEBUG: DELAY 4s | INTERVAL 11s | WAVE 2 | CAP 52 | SOURCES 3"),
+        "压力调试：延迟 4s | 间隔 11s | 波次数量 2 | 活动上限 52 | 压力源 3");
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "PRESSURE DEBUG: UNAVAILABLE"),
+        "压力调试：不可用");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
 {
   EXPECT_EQ(localizeUiText(

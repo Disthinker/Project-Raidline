@@ -656,11 +656,29 @@ GameSession::raidHighRiskCrisisProjection() const noexcept
     const bool active = world_ != nullptr &&
         world_->raidSession().phase() == RaidPhase::HighRisk;
     return RaidHighRiskCrisisProjection{
+        crisis.definitionId,
         crisis.displayName,
         crisis.warning,
+        crisis.districtInstanceId,
+        crisis.resourcePointInstanceId,
         crisis.focusArea,
+        crisis.initialWaveDelaySeconds,
+        crisis.waveIntervalSeconds,
+        crisis.waveSize,
+        crisis.activeEnemyCap,
+        crisis.pressureSpawns.size(),
         active || raid.intelligence.has(RaidIntelligenceCategory::Enemy),
         active};
+}
+
+bool GameSession::triggerDeveloperHighRisk() noexcept
+{
+    if (!alphaRaidActive_ || world_ == nullptr ||
+        !world_->raidSession().isActive())
+    {
+        return false;
+    }
+    return world_->triggerHighRiskForDeveloper();
 }
 
 bool GameSession::activeQuitAlphaRaid()

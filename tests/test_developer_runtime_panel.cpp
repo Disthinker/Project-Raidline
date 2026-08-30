@@ -4,14 +4,25 @@
 
 TEST(DeveloperRuntimePanelTest, MouseButtonsExposeRuntimeToggles)
 {
+    const auto inside = [](DeveloperPanelRect rect)
+    {
+        return DeveloperPanelPoint{rect.x + 4.0F, rect.y + 4.0F};
+    };
     EXPECT_EQ(
-        developerPanelActionAt({130.0F, 70.0F}, 25U),
+        developerPanelActionAt(inside(developerFogButton()), 25U),
         DeveloperPanelAction{DeveloperPanelActionKind::ToggleMapFog});
     EXPECT_EQ(
-        developerPanelActionAt({460.0F, 70.0F}, 25U),
+        developerPanelActionAt(inside(developerInfiniteAmmoButton()), 25U),
         DeveloperPanelAction{DeveloperPanelActionKind::ToggleInfiniteAmmo});
     EXPECT_EQ(
-        developerPanelActionAt({920.0F, 70.0F}, 25U),
+        developerPanelActionAt(inside(developerCrisisRevealButton()), 25U),
+        DeveloperPanelAction{DeveloperPanelActionKind::ToggleCrisisReveal});
+    EXPECT_EQ(
+        developerPanelActionAt(
+            inside(developerTriggerHighRiskButton()), 25U),
+        DeveloperPanelAction{DeveloperPanelActionKind::TriggerHighRisk});
+    EXPECT_EQ(
+        developerPanelActionAt(inside(developerResetWeaponButton()), 25U),
         DeveloperPanelAction{DeveloperPanelActionKind::ResetWeaponTuning});
 }
 
