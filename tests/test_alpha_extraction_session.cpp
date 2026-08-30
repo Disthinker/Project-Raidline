@@ -579,6 +579,18 @@ TEST(AlphaExtractionSessionTest,
     EXPECT_EQ(before->waveSize, snapshot.waveSize);
     EXPECT_EQ(before->activeEnemyCap, snapshot.activeEnemyCap);
     EXPECT_EQ(before->pressureSpawnCount, snapshot.pressureSpawns.size());
+    ASSERT_GT(before->pressureSpawnCount, 0U);
+    for (std::size_t index{}; index < before->pressureSpawnCount; ++index)
+    {
+        const RaidHighRiskPressureSpawnSnapshot &spawn =
+            snapshot.pressureSpawns[index];
+        EXPECT_FLOAT_EQ(before->pressureSpawnCenters[index].x,
+                        spawn.position.x + spawn.size.x * 0.5F);
+        EXPECT_FLOAT_EQ(before->pressureSpawnCenters[index].y,
+                        spawn.position.y + spawn.size.y * 0.5F);
+    }
+    EXPECT_FLOAT_EQ(before->nextWaveSeconds,
+                    snapshot.initialWaveDelaySeconds);
     EXPECT_FALSE(before->active);
 
     EXPECT_TRUE(session.triggerDeveloperHighRisk());
@@ -588,6 +600,13 @@ TEST(AlphaExtractionSessionTest,
     ASSERT_TRUE(after.has_value());
     EXPECT_TRUE(after->active);
     EXPECT_TRUE(after->detailsKnown);
+    EXPECT_FLOAT_EQ(after->nextWaveSeconds,
+                    snapshot.initialWaveDelaySeconds);
+
+    session.world().update(GameplayInput{}, 0.25F);
+    const auto advancing = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(advancing.has_value());
+    EXPECT_LT(advancing->nextWaveSeconds, after->nextWaveSeconds);
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

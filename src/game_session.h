@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -135,6 +136,8 @@ struct RaidHighRiskCrisisProjection
     std::uint32_t waveSize{};
     std::uint32_t activeEnemyCap{};
     std::size_t pressureSpawnCount{};
+    std::array<Vec2, 8> pressureSpawnCenters{};
+    float nextWaveSeconds{};
     bool detailsKnown{};
     bool active{};
 };

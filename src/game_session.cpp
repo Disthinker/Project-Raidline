@@ -655,6 +655,17 @@ GameSession::raidHighRiskCrisisProjection() const noexcept
     const RaidHighRiskCrisisSnapshot &crisis = *raid.highRiskCrisis;
     const bool active = world_ != nullptr &&
         world_->raidSession().phase() == RaidPhase::HighRisk;
+    std::array<Vec2, 8> pressureSpawnCenters{};
+    const std::size_t pressureSpawnCount = std::min(
+        pressureSpawnCenters.size(), crisis.pressureSpawns.size());
+    for (std::size_t index{}; index < pressureSpawnCount; ++index)
+    {
+        const RaidHighRiskPressureSpawnSnapshot &spawn =
+            crisis.pressureSpawns[index];
+        pressureSpawnCenters[index] = {
+            spawn.position.x + spawn.size.x * 0.5F,
+            spawn.position.y + spawn.size.y * 0.5F};
+    }
     return RaidHighRiskCrisisProjection{
         crisis.definitionId,
         crisis.displayName,
@@ -666,7 +677,11 @@ GameSession::raidHighRiskCrisisProjection() const noexcept
         crisis.waveIntervalSeconds,
         crisis.waveSize,
         crisis.activeEnemyCap,
-        crisis.pressureSpawns.size(),
+        pressureSpawnCount,
+        pressureSpawnCenters,
+        active && world_ != nullptr
+            ? world_->highRiskNextWaveSeconds()
+            : crisis.initialWaveDelaySeconds,
         active || raid.intelligence.has(RaidIntelligenceCategory::Enemy),
         active};
 }

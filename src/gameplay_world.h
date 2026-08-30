@@ -331,6 +331,7 @@ public:
     [[nodiscard]] std::size_t aliveInitialEnemyCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskPressureWaveCount() const noexcept;
     [[nodiscard]] std::uint32_t highRiskActiveEnemyCap() const noexcept;
+    [[nodiscard]] float highRiskNextWaveSeconds() const noexcept;
 
     [[nodiscard]] const std::optional<ContentRect> &
     highRiskControlPoint() const noexcept;

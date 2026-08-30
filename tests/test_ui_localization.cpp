@@ -552,9 +552,21 @@ TEST(UiLocalizationTest, ChineseTranslatesHighRiskCrisisBriefing) {
             "危机：未知 | 携带敌情档案可在激活前获知详情");
   const std::string known = localizeUiText(
       UiLanguage::SimplifiedChinese,
-      "CRISIS: Industrial Breach | Dense pressure breaks through industrial service lanes.");
+      "CRISIS: Industrial Breach | LARGER WAVES CONVERGE ON A FACTORY CACHE");
   EXPECT_NE(known.find("危机：工业缺口"), std::string::npos);
-  EXPECT_NE(known.find("工业维修通道突破"), std::string::npos);
+  EXPECT_NE(known.find("更大规模敌群"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "HIGH-RISK CRISIS ACTIVE"),
+            "高危危机已激活");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CRISIS TARGET"),
+            "危机目标");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Pressure wave 2 | Next 8s | Active 41/52 | Converging on crisis target"),
+            "压力波次 2 | 下一波 8s | 活动敌人 41/52 | 正向危机目标汇聚");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesDeveloperCrisisControls) {
@@ -574,8 +586,8 @@ TEST(UiLocalizationTest, ChineseTranslatesDeveloperCrisisControls) {
     EXPECT_EQ(
         localizeUiText(
             UiLanguage::SimplifiedChinese,
-            "PRESSURE DEBUG: DELAY 4s | INTERVAL 11s | WAVE 2 | CAP 52 | SOURCES 3"),
-        "压力调试：延迟 4s | 间隔 11s | 波次数量 2 | 活动上限 52 | 压力源 3");
+            "PRESSURE DEBUG: NEXT 3.2s | INTERVAL 11s | WAVE 2 | CAP 52 | SOURCES 3"),
+        "压力调试：下一波 3.2s | 间隔 11s | 波次数量 2 | 活动上限 52 | 压力源 3");
     EXPECT_EQ(
         localizeUiText(UiLanguage::SimplifiedChinese,
                        "PRESSURE DEBUG: UNAVAILABLE"),

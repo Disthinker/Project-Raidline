@@ -4236,6 +4236,38 @@ TEST(GameplayWorldRaidTest, HighRiskPressureIsDeterministicAndCapped)
     EXPECT_EQ(first.highRiskActiveEnemyCap(), 3U);
 }
 
+TEST(GameplayWorldRaidTest, HighRiskPressureConvergesOnFrozenResourceArea)
+{
+    RaidWorldConfig config = makeHighRiskWorldConfig(0U);
+    config.highRisk.regularPhaseDurationSeconds = 10.0F;
+    config.highRisk.initialWaveDelaySeconds = 0.05F;
+    config.highRisk.waveIntervalSeconds = 100.0F;
+    config.highRisk.waveSize = 1U;
+    config.highRisk.activeEnemyCap = 1U;
+    config.playerSpawn = Vec2{600.0F, 100.0F};
+    GameplayWorld world{std::move(config)};
+
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    world.update(GameplayInput{}, 0.06F);
+    ASSERT_EQ(world.enemies().size(), 1U);
+    ASSERT_EQ(world.highRiskPressureWaveCount(), 1U);
+
+    const Vec2 target{975.0F, 540.0F};
+    const auto distanceToTarget = [target](const Enemy &enemy)
+    {
+        const Vec2 center{
+            enemy.position().x + enemy.size().x * 0.5F,
+            enemy.position().y + enemy.size().y * 0.5F};
+        return std::hypot(center.x - target.x, center.y - target.y);
+    };
+    const float before = distanceToTarget(world.enemies().front());
+
+    world.update(GameplayInput{}, 0.50F);
+
+    EXPECT_LT(distanceToTarget(world.enemies().front()), before);
+    EXPECT_GT(world.highRiskNextWaveSeconds(), 99.0F);
+}
+
 TEST(GameplayWorldRaidTest,
     HighRiskControlRequiresHeldInterruptibleInteraction)
 {

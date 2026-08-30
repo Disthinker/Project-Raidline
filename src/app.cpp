@@ -5711,8 +5711,9 @@ void App::renderDebugText()
         gameSession_.world().highRiskActiveEnemyCap() > 0U)
     {
         const std::string pressureText = fmt::format(
-            "Pressure wave {} | Active {}/{}",
+            "Pressure wave {} | Next {:.0f}s | Active {}/{} | Converging on crisis target",
             gameSession_.world().highRiskPressureWaveCount(),
+            gameSession_.world().highRiskNextWaveSeconds(),
             gameSession_.world().aliveEnemyCount(),
             gameSession_.world().highRiskActiveEnemyCap());
         uiTextRenderer_.render(
@@ -5736,6 +5737,32 @@ void App::renderDebugText()
         uiTextRenderer_.render(
             renderer_, 20.0F, leftHudLineY, crisisText.c_str());
         leftHudLineY += 16.0F;
+
+        if (crisis->active && raidSession.highRiskTimeElapsed() < 5.0F)
+        {
+            const SDL_FRect warningPanel{360.0F, 238.0F, 560.0F, 78.0F};
+            SDL_SetRenderDrawColor(renderer_, 76, 18, 12, 218);
+            SDL_RenderFillRect(renderer_, &warningPanel);
+            SDL_SetRenderDrawColor(renderer_, 248, 150, 58, 248);
+            SDL_RenderRect(renderer_, &warningPanel);
+            const SDL_FRect warningInset{
+                warningPanel.x + 4.0F,
+                warningPanel.y + 4.0F,
+                warningPanel.w - 8.0F,
+                warningPanel.h - 8.0F};
+            SDL_RenderRect(renderer_, &warningInset);
+            uiTextRenderer_.render(
+                renderer_, warningPanel.x + 176.0F,
+                warningPanel.y + 14.0F,
+                "HIGH-RISK CRISIS ACTIVE");
+            const std::string warning = fmt::format(
+                "{} | PRESSURE CONVERGING ON MARKED TARGET",
+                crisis->displayName);
+            uiTextRenderer_.render(
+                renderer_, warningPanel.x + 78.0F,
+                warningPanel.y + 42.0F,
+                warning.c_str());
+        }
     }
 
     const WorldClockProjection clock = gameSession_.worldClockProjection();
@@ -9911,8 +9938,8 @@ void App::renderDeveloperWeaponPanel()
         : "NO FROZEN CRISIS ON THIS MAP";
     const std::string crisisPressureLine = crisis.has_value()
         ? fmt::format(
-              "PRESSURE DEBUG: DELAY {:.0f}s | INTERVAL {:.0f}s | WAVE {} | CAP {} | SOURCES {}",
-              crisis->initialWaveDelaySeconds,
+              "PRESSURE DEBUG: NEXT {:.1f}s | INTERVAL {:.0f}s | WAVE {} | CAP {} | SOURCES {}",
+              crisis->nextWaveSeconds,
               crisis->waveIntervalSeconds,
               crisis->waveSize,
               crisis->activeEnemyCap,
@@ -13048,6 +13075,49 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &resource);
         SDL_SetRenderDrawColor(renderer_, 232, 206, 106, 235);
         SDL_RenderRect(renderer_, &resource);
+    }
+
+    const std::optional<RaidHighRiskCrisisProjection> crisis =
+        gameSession_.raidHighRiskCrisisProjection();
+    if (crisis.has_value() &&
+        (crisis->active || developerCrisisRevealEnabled_))
+    {
+        const Vec2 targetCenterWorld{
+            crisis->focusArea.position.x + crisis->focusArea.size.x * 0.5F,
+            crisis->focusArea.position.y + crisis->focusArea.size.y * 0.5F};
+        const Vec2 targetCenter = screenPoint(targetCenterWorld);
+        SDL_SetRenderDrawColor(renderer_, 246, 92, 52, 205);
+        for (std::size_t index{}; index < crisis->pressureSpawnCount; ++index)
+        {
+            const Vec2 source = screenPoint(crisis->pressureSpawnCenters[index]);
+            SDL_RenderLine(
+                renderer_, source.x, source.y,
+                targetCenter.x, targetCenter.y);
+            SDL_RenderLine(
+                renderer_, source.x + 1.0F, source.y,
+                targetCenter.x + 1.0F, targetCenter.y);
+            const SDL_FRect sourceMarker{
+                source.x - 4.0F, source.y - 4.0F, 8.0F, 8.0F};
+            SDL_RenderRect(renderer_, &sourceMarker);
+        }
+
+        SDL_FRect crisisTarget = screenRect(crisis->focusArea);
+        crisisTarget.w = std::max(crisisTarget.w, 18.0F);
+        crisisTarget.h = std::max(crisisTarget.h, 18.0F);
+        SDL_SetRenderDrawColor(renderer_, 126, 24, 16, 150);
+        SDL_RenderFillRect(renderer_, &crisisTarget);
+        SDL_SetRenderDrawColor(renderer_, 255, 164, 68, 250);
+        SDL_RenderRect(renderer_, &crisisTarget);
+        const SDL_FRect targetInset{
+            crisisTarget.x + 3.0F,
+            crisisTarget.y + 3.0F,
+            std::max(0.0F, crisisTarget.w - 6.0F),
+            std::max(0.0F, crisisTarget.h - 6.0F)};
+        SDL_RenderRect(renderer_, &targetInset);
+        uiTextRenderer_.render(
+            renderer_, crisisTarget.x + 5.0F,
+            crisisTarget.y + 4.0F,
+            "CRISIS TARGET");
     }
 
     for (const RaidTacticalResourcePoint &resourcePoint :
