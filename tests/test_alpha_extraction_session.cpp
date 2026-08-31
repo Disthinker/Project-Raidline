@@ -486,6 +486,15 @@ TEST(AlphaExtractionSessionTest,
 
     ASSERT_TRUE(session.profile().pendingRaid.has_value());
     ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
+    ASSERT_TRUE(session.profile().pendingRaid->highRiskCrisis.has_value());
+    const auto hiddenCrisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(hiddenCrisis.has_value());
+    EXPECT_FALSE(hiddenCrisis->detailsKnown);
+    EXPECT_FALSE(hiddenCrisis->active);
+    EXPECT_EQ(hiddenCrisis->focusArea,
+              session.profile().pendingRaid->highRiskCrisis->focusArea);
+    EXPECT_EQ(session.world().highRiskAdvancedResourceArea(),
+              std::optional<ContentRect>{hiddenCrisis->focusArea});
     const auto &objectives = session.world().tacticalMap().objectives();
     ASSERT_EQ(objectives.size(), 2U);
     const auto highRisk = std::find_if(
@@ -512,6 +521,92 @@ TEST(AlphaExtractionSessionTest,
         highRisk->bounds.position.y + highRisk->bounds.size.y * 0.5F};
     EXPECT_FALSE(session.world().tacticalMap().pointRevealed(
         highRiskCenter));
+
+    session.world().update(GameplayInput{}, 1200.5F);
+    const auto activeCrisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(activeCrisis.has_value());
+    EXPECT_TRUE(activeCrisis->detailsKnown);
+    EXPECT_TRUE(activeCrisis->active);
+    EXPECT_FALSE(activeCrisis->displayName.empty());
+    EXPECT_FALSE(activeCrisis->warning.empty());
+}
+
+TEST(AlphaExtractionSessionTest,
+     EnemyIntelligenceRevealsFrozenCrisisBeforeHighRisk)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-crisis-intel"));
+    const MapDefinitionId mapId{"map.raid.frontier_exchange"};
+    ASSERT_TRUE(session.purchaseRaidIntelligence(
+        RaidIntelligencePurchaseCommand{
+            mapId, RaidIntelligenceCategory::Enemy},
+        "buy-frontier-crisis-intel").succeeded);
+    RaidIntelligenceLoadout intelligence;
+    intelligence.set(RaidIntelligenceCategory::Enemy, true);
+    ASSERT_TRUE(session.deployAlpha(88125U, mapId, intelligence))
+        << session.persistenceMessage();
+
+    const auto crisis = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(crisis.has_value());
+    EXPECT_TRUE(crisis->detailsKnown);
+    EXPECT_FALSE(crisis->active);
+    EXPECT_FALSE(crisis->displayName.empty());
+    EXPECT_FALSE(crisis->warning.empty());
+}
+
+TEST(AlphaExtractionSessionTest,
+     DeveloperHighRiskTriggerUsesFrozenCrisisWithoutMutatingProfile)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-session-crisis-developer"));
+    ASSERT_TRUE(session.deployAlpha(
+        88126U, MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session.persistenceMessage();
+
+    ASSERT_TRUE(session.profile().pendingRaid.has_value());
+    const RaidHighRiskCrisisSnapshot &snapshot =
+        *session.profile().pendingRaid->highRiskCrisis;
+    const std::uint64_t fingerprint = profileStateFingerprint(session.profile());
+    const auto before = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(before.has_value());
+    EXPECT_EQ(before->definitionId, snapshot.definitionId);
+    EXPECT_EQ(before->districtInstanceId, snapshot.districtInstanceId);
+    EXPECT_EQ(before->resourcePointInstanceId,
+              snapshot.resourcePointInstanceId);
+    EXPECT_EQ(before->initialWaveDelaySeconds,
+              snapshot.initialWaveDelaySeconds);
+    EXPECT_EQ(before->waveIntervalSeconds, snapshot.waveIntervalSeconds);
+    EXPECT_EQ(before->waveSize, snapshot.waveSize);
+    EXPECT_EQ(before->activeEnemyCap, snapshot.activeEnemyCap);
+    EXPECT_EQ(before->pressureSpawnCount, snapshot.pressureSpawns.size());
+    ASSERT_GT(before->pressureSpawnCount, 0U);
+    for (std::size_t index{}; index < before->pressureSpawnCount; ++index)
+    {
+        const RaidHighRiskPressureSpawnSnapshot &spawn =
+            snapshot.pressureSpawns[index];
+        EXPECT_FLOAT_EQ(before->pressureSpawnCenters[index].x,
+                        spawn.position.x + spawn.size.x * 0.5F);
+        EXPECT_FLOAT_EQ(before->pressureSpawnCenters[index].y,
+                        spawn.position.y + spawn.size.y * 0.5F);
+    }
+    EXPECT_FLOAT_EQ(before->nextWaveSeconds,
+                    snapshot.initialWaveDelaySeconds);
+    EXPECT_FALSE(before->active);
+
+    EXPECT_TRUE(session.triggerDeveloperHighRisk());
+    EXPECT_FALSE(session.triggerDeveloperHighRisk());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    const auto after = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(after.has_value());
+    EXPECT_TRUE(after->active);
+    EXPECT_TRUE(after->detailsKnown);
+    EXPECT_FLOAT_EQ(after->nextWaveSeconds,
+                    snapshot.initialWaveDelaySeconds);
+
+    session.world().update(GameplayInput{}, 0.25F);
+    const auto advancing = session.raidHighRiskCrisisProjection();
+    ASSERT_TRUE(advancing.has_value());
+    EXPECT_LT(advancing->nextWaveSeconds, after->nextWaveSeconds);
 }
 
 TEST(AlphaExtractionSessionTest, RegularPhaseExpiresIntoActiveHighRiskRaid)

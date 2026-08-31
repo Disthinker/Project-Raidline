@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-loot-identity-content-50",
+  "content_version": "procedural-frontier-high-risk-crisis-content-51",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1597,6 +1597,44 @@
         "advanced_loot_slots": [
           {"id": "frontier_cache_1", "position": {"x": 1160, "y": 1040}},
           {"id": "frontier_cache_2", "position": {"x": 1370, "y": 1150}}
+        ],
+        "crises": [
+          {
+            "id": "crisis.frontier.road_convergence",
+            "display_name": "Road Convergence",
+            "warning": "FAST PRESSURE ALONG THE ROAD NETWORK",
+            "allowed_district_kinds": ["highway", "roadside_service"],
+            "initial_wave_delay_seconds": 4,
+            "wave_interval_seconds": 11,
+            "wave_size": 2,
+            "active_enemy_cap": 52,
+            "pressure_spawn_count": 3,
+            "advanced_loot_table": "loot.frontier.service_supplies_v1"
+          },
+          {
+            "id": "crisis.frontier.industrial_breach",
+            "display_name": "Industrial Breach",
+            "warning": "LARGER WAVES CONVERGE ON A FACTORY CACHE",
+            "allowed_district_kinds": ["industrial"],
+            "initial_wave_delay_seconds": 6,
+            "wave_interval_seconds": 16,
+            "wave_size": 4,
+            "active_enemy_cap": 56,
+            "pressure_spawn_count": 4,
+            "advanced_loot_table": "loot.frontier.fabrication_stock_v1"
+          },
+          {
+            "id": "crisis.frontier.freight_lockdown",
+            "display_name": "Freight Lockdown",
+            "warning": "VALUABLE CARGO DRAWS STEADY PRESSURE",
+            "allowed_district_kinds": ["logistics"],
+            "initial_wave_delay_seconds": 5,
+            "wave_interval_seconds": 14,
+            "wave_size": 3,
+            "active_enemy_cap": 54,
+            "pressure_spawn_count": 3,
+            "advanced_loot_table": "loot.frontier.freight_manifest_v1"
+          }
         ],
         "pressure_spawns": [
           {"position": {"x": 30, "y": 40}, "size": {"x": 50, "y": 50}, "maximum_health": 12},

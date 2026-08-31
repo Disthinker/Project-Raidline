@@ -791,6 +791,62 @@ struct BasePerimeterSweepSnapshot
         const BasePerimeterSweepSnapshot &) = default;
 };
 
+struct RaidHighRiskPressureSpawnSnapshot
+{
+    std::string anchorId;
+    Vec2 position{};
+    Vec2 size{};
+    int maximumHealth{};
+
+    friend bool operator==(
+        const RaidHighRiskPressureSpawnSnapshot &left,
+        const RaidHighRiskPressureSpawnSnapshot &right)
+    {
+        return left.anchorId == right.anchorId &&
+            left.position.x == right.position.x &&
+            left.position.y == right.position.y &&
+            left.size.x == right.size.x &&
+            left.size.y == right.size.y &&
+            left.maximumHealth == right.maximumHealth;
+    }
+};
+
+struct RaidHighRiskCrisisSnapshot
+{
+    std::string definitionId;
+    std::string displayName;
+    std::string warning;
+    std::uint16_t districtInstanceId{};
+    std::string resourcePointInstanceId;
+    ContentRect focusArea;
+    float initialWaveDelaySeconds{};
+    float waveIntervalSeconds{};
+    std::uint32_t waveSize{};
+    std::uint32_t activeEnemyCap{};
+    LootTableDefinitionId advancedLootTableId;
+    std::vector<RaidHighRiskPressureSpawnSnapshot> pressureSpawns;
+
+    friend bool operator==(
+        const RaidHighRiskCrisisSnapshot &left,
+        const RaidHighRiskCrisisSnapshot &right)
+    {
+        return left.definitionId == right.definitionId &&
+            left.displayName == right.displayName &&
+            left.warning == right.warning &&
+            left.districtInstanceId == right.districtInstanceId &&
+            left.resourcePointInstanceId ==
+                right.resourcePointInstanceId &&
+            left.focusArea == right.focusArea &&
+            left.initialWaveDelaySeconds ==
+                right.initialWaveDelaySeconds &&
+            left.waveIntervalSeconds == right.waveIntervalSeconds &&
+            left.waveSize == right.waveSize &&
+            left.activeEnemyCap == right.activeEnemyCap &&
+            left.advancedLootTableId == right.advancedLootTableId &&
+            left.pressureSpawns == right.pressureSpawns;
+    }
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -810,6 +866,7 @@ struct PendingRaidSnapshot
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
     std::optional<BasePerimeterSweepSnapshot> basePerimeterSweep;
+    std::optional<RaidHighRiskCrisisSnapshot> highRiskCrisis;
     RaidGeneratedMapLayout spatialLayout;
     std::vector<RaidInteriorSnapshot> interiors;
     std::vector<AssetInstanceId> carriedRootAssetIds;

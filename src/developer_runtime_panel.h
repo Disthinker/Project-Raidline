@@ -21,6 +21,8 @@ enum class DeveloperPanelActionKind
 {
     ToggleMapFog,
     ToggleInfiniteAmmo,
+    ToggleCrisisReveal,
+    TriggerHighRisk,
     ResetWeaponTuning,
     SelectWeaponParameter,
     DecreaseWeaponParameter,
@@ -45,21 +47,31 @@ inline constexpr DeveloperPanelRect developerPanelBounds() noexcept
 
 inline constexpr DeveloperPanelRect developerFogButton() noexcept
 {
-    return {124.0F, 66.0F, 310.0F, 34.0F};
+    return {124.0F, 66.0F, 190.0F, 34.0F};
 }
 
 inline constexpr DeveloperPanelRect developerInfiniteAmmoButton() noexcept
 {
-    return {454.0F, 66.0F, 310.0F, 34.0F};
+    return {324.0F, 66.0F, 190.0F, 34.0F};
+}
+
+inline constexpr DeveloperPanelRect developerCrisisRevealButton() noexcept
+{
+    return {524.0F, 66.0F, 190.0F, 34.0F};
+}
+
+inline constexpr DeveloperPanelRect developerTriggerHighRiskButton() noexcept
+{
+    return {724.0F, 66.0F, 220.0F, 34.0F};
 }
 
 inline constexpr DeveloperPanelRect developerResetWeaponButton() noexcept
 {
-    return {914.0F, 66.0F, 240.0F, 34.0F};
+    return {954.0F, 66.0F, 200.0F, 34.0F};
 }
 
-inline constexpr float kDeveloperParameterFirstRowY{124.0F};
-inline constexpr float kDeveloperParameterRowHeight{20.0F};
+inline constexpr float kDeveloperParameterFirstRowY{174.0F};
+inline constexpr float kDeveloperParameterRowHeight{18.0F};
 
 inline constexpr DeveloperPanelRect developerParameterRow(
     std::size_t index) noexcept
@@ -104,6 +116,12 @@ inline std::optional<DeveloperPanelAction> developerPanelActionAt(
     if (developerPanelContains(developerInfiniteAmmoButton(), point))
         return DeveloperPanelAction{
             DeveloperPanelActionKind::ToggleInfiniteAmmo};
+    if (developerPanelContains(developerCrisisRevealButton(), point))
+        return DeveloperPanelAction{
+            DeveloperPanelActionKind::ToggleCrisisReveal};
+    if (developerPanelContains(developerTriggerHighRiskButton(), point))
+        return DeveloperPanelAction{
+            DeveloperPanelActionKind::TriggerHighRisk};
     if (developerPanelContains(developerResetWeaponButton(), point))
         return DeveloperPanelAction{
             DeveloperPanelActionKind::ResetWeaponTuning};

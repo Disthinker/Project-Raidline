@@ -1892,8 +1892,11 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-frontier-district-layout-22";
         const bool legacyResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
+        const bool highRiskCrisisRules =
+            raid.rulesVersion == "procedural-frontier-high-risk-crisis-28";
         const bool frontierLootIdentityRules =
-            raid.rulesVersion == "procedural-frontier-loot-identity-27";
+            raid.rulesVersion == "procedural-frontier-loot-identity-27" ||
+            highRiskCrisisRules;
         const bool expandedResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-24" ||
             raid.rulesVersion == "procedural-frontier-encounter-ecology-25" ||
@@ -2814,25 +2817,61 @@ ProfileValidationResult validateProfileState(
                     {
                         if (loot.requiresHighRisk)
                         {
-                            const auto *resource = findRaidAnchorPlacement(
-                                raid.spatialLayout,
-                                kRaidAnchorAdvancedResource);
                             const std::size_t ordinal = loot.slotIndex -
                                 (resourceEcologyRules
                                      ? expectedResourceLootCount
                                      : raidMap->raidLootSlots.size());
                             const std::size_t count = raidMap->highRisk
                                 .advancedLootSlots.size();
-                            districtSnapshotValid = districtSnapshotValid &&
-                                resource != nullptr &&
-                                loot.position.x ==
-                                    resource->bounds.position.x +
-                                        resource->bounds.size.x *
+                            if (highRiskCrisisRules &&
+                                raid.highRiskCrisis.has_value())
+                            {
+                                const ContentRect focus =
+                                    raid.highRiskCrisis->focusArea;
+                                const auto targetPoint = std::find_if(
+                                    raid.spatialLayout.resourcePoints.begin(),
+                                    raid.spatialLayout.resourcePoints.end(),
+                                    [&](const RaidResourcePointSnapshot &value)
+                                    {
+                                        return value.instanceId ==
+                                            raid.highRiskCrisis
+                                                ->resourcePointInstanceId;
+                                    });
+                                districtSnapshotValid = districtSnapshotValid &&
+                                    targetPoint !=
+                                        raid.spatialLayout.resourcePoints.end() &&
+                                    loot.resourcePointInstanceId ==
+                                        raid.highRiskCrisis
+                                            ->resourcePointInstanceId &&
+                                    loot.resourcePointSlotIndex ==
+                                        targetPoint->capacity + ordinal;
+                                districtSnapshotValid = districtSnapshotValid &&
+                                    loot.position.x ==
+                                        focus.position.x + focus.size.x *
                                             static_cast<float>(ordinal + 1U) /
                                             static_cast<float>(count + 1U) &&
-                                loot.position.y ==
-                                    resource->bounds.position.y +
-                                        resource->bounds.size.y * 0.5F;
+                                    loot.position.y ==
+                                        focus.position.y +
+                                            focus.size.y * 0.5F;
+                            }
+                            else
+                            {
+                                const auto *resource =
+                                    findRaidAnchorPlacement(
+                                        raid.spatialLayout,
+                                        kRaidAnchorAdvancedResource);
+                                districtSnapshotValid = districtSnapshotValid &&
+                                    resource != nullptr &&
+                                    loot.position.x ==
+                                        resource->bounds.position.x +
+                                            resource->bounds.size.x *
+                                                static_cast<float>(
+                                                    ordinal + 1U) /
+                                                static_cast<float>(count + 1U) &&
+                                    loot.position.y ==
+                                        resource->bounds.position.y +
+                                            resource->bounds.size.y * 0.5F;
+                            }
                         }
                         else if (!resourceEcologyRules)
                             districtSnapshotValid = districtSnapshotValid &&
@@ -2913,6 +2952,91 @@ ProfileValidationResult validateProfileState(
                 !raidMapLayoutConnectsAnchors(
                     *raidMap, raid.spatialLayout, anchors))
                 return {false, "pending Raid spatial connectivity is invalid"};
+        }
+        if (highRiskCrisisRules != raid.highRiskCrisis.has_value())
+        {
+            return {false, "pending Raid high-risk crisis rules are invalid"};
+        }
+        if (raid.highRiskCrisis.has_value())
+        {
+            const RaidHighRiskCrisisSnapshot &crisis = *raid.highRiskCrisis;
+            const auto definition = std::find_if(
+                raidMap->highRisk.crises.begin(),
+                raidMap->highRisk.crises.end(),
+                [&](const HighRiskCrisisDefinition &candidate)
+                { return candidate.id == crisis.definitionId; });
+            const auto resourcePoint = std::find_if(
+                raid.spatialLayout.resourcePoints.begin(),
+                raid.spatialLayout.resourcePoints.end(),
+                [&](const RaidResourcePointSnapshot &candidate)
+                {
+                    return candidate.instanceId ==
+                        crisis.resourcePointInstanceId;
+                });
+            const auto district = std::find_if(
+                raid.spatialLayout.districts.begin(),
+                raid.spatialLayout.districts.end(),
+                [&](const RaidDistrictSnapshot &candidate)
+                { return candidate.instanceId == crisis.districtInstanceId; });
+            if (definition == raidMap->highRisk.crises.end() ||
+                resourcePoint == raid.spatialLayout.resourcePoints.end() ||
+                district == raid.spatialLayout.districts.end() ||
+                crisis.displayName != definition->displayName ||
+                crisis.warning != definition->warning ||
+                crisis.districtInstanceId !=
+                    resourcePoint->districtInstanceId ||
+                !(crisis.focusArea == resourcePoint->bounds) ||
+                std::find(
+                    definition->allowedDistrictKinds.begin(),
+                    definition->allowedDistrictKinds.end(),
+                    district->kind) ==
+                    definition->allowedDistrictKinds.end() ||
+                crisis.initialWaveDelaySeconds !=
+                    definition->initialWaveDelaySeconds ||
+                crisis.waveIntervalSeconds !=
+                    definition->waveIntervalSeconds ||
+                crisis.waveSize != definition->waveSize ||
+                crisis.activeEnemyCap != definition->activeEnemyCap ||
+                crisis.activeEnemyCap < outdoorEnemyCount ||
+                crisis.advancedLootTableId !=
+                    definition->advancedLootTableId ||
+                crisis.pressureSpawns.size() !=
+                    definition->pressureSpawnCount)
+            {
+                return {false, "pending Raid high-risk crisis is invalid"};
+            }
+            std::set<std::string> pressureAnchorIds;
+            for (const RaidHighRiskPressureSpawnSnapshot &spawn :
+                 crisis.pressureSpawns)
+            {
+                const auto *anchor = findRaidAnchorPlacement(
+                    raid.spatialLayout, spawn.anchorId);
+                const auto source = std::find_if(
+                    raidMap->highRisk.pressureSpawns.begin(),
+                    raidMap->highRisk.pressureSpawns.end(),
+                    [&](const EnemySpawnDefinition &candidate)
+                    {
+                        const std::size_t index = static_cast<std::size_t>(
+                            &candidate -
+                            raidMap->highRisk.pressureSpawns.data());
+                        return spawn.anchorId ==
+                            raidIndexedAnchorId("pressure", index);
+                    });
+                if (spawn.anchorId.empty() ||
+                    !pressureAnchorIds.insert(spawn.anchorId).second ||
+                    anchor == nullptr ||
+                    anchor->kind != RaidMapAnchorKind::PressureSpawn ||
+                    source == raidMap->highRisk.pressureSpawns.end() ||
+                    spawn.position.x != anchor->bounds.position.x ||
+                    spawn.position.y != anchor->bounds.position.y ||
+                    spawn.size.x != anchor->bounds.size.x ||
+                    spawn.size.y != anchor->bounds.size.y ||
+                    spawn.maximumHealth != source->maximumHealth)
+                {
+                    return {false,
+                            "pending Raid high-risk pressure source is invalid"};
+                }
+            }
         }
         if (interiorRules)
         {
@@ -3353,21 +3477,59 @@ ProfileValidationResult validateProfileState(
                     {
                         if (loot.requiresHighRisk)
                         {
-                            const auto *resource = findRaidAnchorPlacement(
-                                raid.spatialLayout,
-                                kRaidAnchorAdvancedResource);
                             const std::size_t ordinal = loot.slotIndex -
                                 regularSlotCount;
-                            validPosition = resource != nullptr &&
-                                loot.position.x ==
-                                    resource->bounds.position.x +
-                                        resource->bounds.size.x *
-                                            static_cast<float>(ordinal + 1U) /
-                                            static_cast<float>(
-                                                advancedSlotCount + 1U) &&
-                                loot.position.y ==
-                                    resource->bounds.position.y +
-                                        resource->bounds.size.y * 0.5F;
+                            if (highRiskCrisisRules &&
+                                raid.highRiskCrisis.has_value())
+                            {
+                                const auto point = std::find_if(
+                                    raid.spatialLayout.resourcePoints.begin(),
+                                    raid.spatialLayout.resourcePoints.end(),
+                                    [&](const RaidResourcePointSnapshot &value)
+                                    {
+                                        return value.instanceId ==
+                                            raid.highRiskCrisis
+                                                ->resourcePointInstanceId;
+                                    });
+                                if (point !=
+                                    raid.spatialLayout.resourcePoints.end())
+                                {
+                                    validPosition =
+                                        loot.resourcePointInstanceId ==
+                                            point->instanceId &&
+                                        loot.resourcePointSlotIndex ==
+                                            point->capacity + ordinal &&
+                                        loot.position.x ==
+                                            point->bounds.position.x +
+                                                point->bounds.size.x *
+                                                    static_cast<float>(
+                                                        ordinal + 1U) /
+                                                    static_cast<float>(
+                                                        advancedSlotCount +
+                                                        1U) &&
+                                        loot.position.y ==
+                                            point->bounds.position.y +
+                                                point->bounds.size.y * 0.5F;
+                                }
+                            }
+                            else
+                            {
+                                const auto *resource =
+                                    findRaidAnchorPlacement(
+                                        raid.spatialLayout,
+                                        kRaidAnchorAdvancedResource);
+                                validPosition = resource != nullptr &&
+                                    loot.position.x ==
+                                        resource->bounds.position.x +
+                                            resource->bounds.size.x *
+                                                static_cast<float>(
+                                                    ordinal + 1U) /
+                                                static_cast<float>(
+                                                    advancedSlotCount + 1U) &&
+                                    loot.position.y ==
+                                        resource->bounds.position.y +
+                                            resource->bounds.size.y * 0.5F;
+                            }
                         }
                         else if (!resourceEcologyRules)
                             validPosition = anchor != nullptr &&
@@ -3465,7 +3627,24 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "pending Raid Loot ownership is invalid"};
             }
-            if (resourceEcologyRules &&
+            if (highRiskCrisisRules && loot.requiresHighRisk &&
+                raid.highRiskCrisis.has_value())
+            {
+                const LootTableDefinition &table = content.lootTable(
+                    raid.highRiskCrisis->advancedLootTableId);
+                const auto entry = std::find_if(
+                    table.entries.begin(), table.entries.end(),
+                    [&](const LootContentEntry &value)
+                    { return value.itemDefinitionId == loot.definitionId; });
+                if (entry == table.entries.end() ||
+                    loot.quantity < entry->minimumQuantity ||
+                    loot.quantity > entry->maximumQuantity)
+                {
+                    return {false,
+                            "pending Raid high-risk Loot table result is invalid"};
+                }
+            }
+            else if (resourceEcologyRules &&
                 loot.spaceId == outdoorRaidSpaceId() &&
                 !loot.requiresHighRisk && recoveryRoot == nullptr)
             {
@@ -4216,6 +4395,35 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             for (std::uint32_t memberIndex : group.memberEnemyIndices)
                 hashInteger(hash, memberIndex);
             hashFloat(hash, group.activationDistance);
+        }
+        if (raid.highRiskCrisis.has_value())
+        {
+            const RaidHighRiskCrisisSnapshot &crisis =
+                *raid.highRiskCrisis;
+            hashBytes(hash, crisis.definitionId);
+            hashBytes(hash, crisis.displayName);
+            hashBytes(hash, crisis.warning);
+            hashInteger(hash, crisis.districtInstanceId);
+            hashBytes(hash, crisis.resourcePointInstanceId);
+            hashFloat(hash, crisis.focusArea.position.x);
+            hashFloat(hash, crisis.focusArea.position.y);
+            hashFloat(hash, crisis.focusArea.size.x);
+            hashFloat(hash, crisis.focusArea.size.y);
+            hashFloat(hash, crisis.initialWaveDelaySeconds);
+            hashFloat(hash, crisis.waveIntervalSeconds);
+            hashInteger(hash, crisis.waveSize);
+            hashInteger(hash, crisis.activeEnemyCap);
+            hashBytes(hash, crisis.advancedLootTableId.value());
+            for (const RaidHighRiskPressureSpawnSnapshot &spawn :
+                 crisis.pressureSpawns)
+            {
+                hashBytes(hash, spawn.anchorId);
+                hashFloat(hash, spawn.position.x);
+                hashFloat(hash, spawn.position.y);
+                hashFloat(hash, spawn.size.x);
+                hashFloat(hash, spawn.size.y);
+                hashInteger(hash, spawn.maximumHealth);
+            }
         }
         for (const RaidLootSnapshot &loot : raid.loot)
         {

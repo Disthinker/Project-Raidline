@@ -545,6 +545,55 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseSiegeWarningFlow) {
             "出击前必须先处理基地攻城预警");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesHighRiskCrisisBriefing) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION"),
+            "危机：未知 | 携带敌情档案可在激活前获知详情");
+  const std::string known = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "CRISIS: Industrial Breach | LARGER WAVES CONVERGE ON A FACTORY CACHE");
+  EXPECT_NE(known.find("危机：工业缺口"), std::string::npos);
+  EXPECT_NE(known.find("更大规模敌群"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "HIGH-RISK CRISIS ACTIVE"),
+            "高危危机已激活");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CRISIS TARGET"),
+            "危机目标");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Pressure wave 2 | Next 8s | Active 41/52 | Converging on crisis target"),
+            "压力波次 2 | 下一波 8s | 活动敌人 41/52 | 正向危机目标汇聚");
+}
+
+TEST(UiLocalizationTest, ChineseTranslatesDeveloperCrisisControls) {
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "CRISIS HUD: REVEALED"),
+        "危机显示：强制揭示");
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "ACTIVATE HIGH RISK NOW"),
+        "立即进入高危");
+    EXPECT_EQ(
+        localizeUiText(
+            UiLanguage::SimplifiedChinese,
+            "CRISIS DEBUG: Road Convergence | DISTRICT 2 | RESOURCE POINT resource-4"),
+        "危机调试：公路汇流 | 分区 2 | 资源点 resource-4");
+    EXPECT_EQ(
+        localizeUiText(
+            UiLanguage::SimplifiedChinese,
+            "PRESSURE DEBUG: NEXT 3.2s | INTERVAL 11s | WAVE 2 | CAP 52 | SOURCES 3"),
+        "压力调试：下一波 3.2s | 间隔 11s | 波次数量 2 | 活动上限 52 | 压力源 3");
+    EXPECT_EQ(
+        localizeUiText(UiLanguage::SimplifiedChinese,
+                       "PRESSURE DEBUG: UNAVAILABLE"),
+        "压力调试：不可用");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesLargeRaidLoadingScreen)
 {
   EXPECT_EQ(localizeUiText(

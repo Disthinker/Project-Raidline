@@ -2274,6 +2274,11 @@ GameplayWorld::raidSession() const noexcept
     return raidSession_;
 }
 
+bool GameplayWorld::triggerHighRiskForDeveloper() noexcept
+{
+    return raidSession_.triggerHighRisk();
+}
+
 const RaidTacticalMapState &
 GameplayWorld::tacticalMap() const noexcept
 {
@@ -2323,6 +2328,11 @@ std::uint32_t GameplayWorld::highRiskPressureWaveCount() const noexcept
 std::uint32_t GameplayWorld::highRiskActiveEnemyCap() const noexcept
 {
     return highRiskActiveEnemyCap_;
+}
+
+float GameplayWorld::highRiskNextWaveSeconds() const noexcept
+{
+    return std::max(0.0F, highRiskNextWaveSeconds_);
 }
 
 const std::optional<ContentRect> &
@@ -3505,11 +3515,16 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
                 candidate.maxHealth,
                 nextCombatTargetId_++);
             enemyNavigation_.emplace_back();
+            const ContentRect pressureArea =
+                highRiskAdvancedResourceArea_.value_or(ContentRect{
+                    candidate.position, candidate.size});
+            const Vec2 pressureTarget{
+                pressureArea.position.x + pressureArea.size.x * 0.5F,
+                pressureArea.position.y + pressureArea.size.y * 0.5F};
             enemyEncounters_.push_back(EnemyEncounterRuntime{
                 {},
                 RaidEncounterKind::Guard,
-                Vec2{candidate.position.x + candidate.size.x * 0.5F,
-                     candidate.position.y + candidate.size.y * 0.5F}});
+                pressureTarget});
             ++spawned;
             found = true;
             break;

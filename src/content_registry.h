@@ -101,6 +101,26 @@ struct RaidLootSlotDefinition
     Vec2 position{};
 };
 
+enum class RaidDistrictKind : std::uint8_t;
+
+struct HighRiskCrisisDefinition
+{
+    std::string id;
+    std::string displayName;
+    std::string warning;
+    std::vector<RaidDistrictKind> allowedDistrictKinds;
+    float initialWaveDelaySeconds{};
+    float waveIntervalSeconds{};
+    std::uint32_t waveSize{};
+    std::uint32_t activeEnemyCap{};
+    std::uint32_t pressureSpawnCount{};
+    LootTableDefinitionId advancedLootTableId;
+
+    friend bool operator==(
+        const HighRiskCrisisDefinition &,
+        const HighRiskCrisisDefinition &) = default;
+};
+
 struct HighRiskRaidDefinition
 {
     bool enabled{};
@@ -120,6 +140,7 @@ struct HighRiskRaidDefinition
     ContentRect advancedResourceArea;
     LootTableDefinitionId advancedLootTableId;
     std::vector<RaidLootSlotDefinition> advancedLootSlots;
+    std::vector<HighRiskCrisisDefinition> crises;
 };
 
 struct SpawnExtractionPairDefinition

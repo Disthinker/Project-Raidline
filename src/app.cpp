@@ -1529,6 +1529,7 @@ bool App::tryDeployFromBase(
     selectedRaidIntelligence_ = {};
     developerMapFogEnabled_ = true;
     developerInfiniteAmmoEnabled_ = false;
+    developerCrisisRevealEnabled_ = false;
     uiMessage_.clear();
     return true;
 }
@@ -4959,6 +4960,22 @@ void App::handleDeveloperPanelClick(MousePosition position)
             ? "DEVELOPER INFINITE AMMO ENABLED"
             : "DEVELOPER INFINITE AMMO DISABLED";
         break;
+    case DeveloperPanelActionKind::ToggleCrisisReveal:
+        if (!gameSession_.raidHighRiskCrisisProjection().has_value())
+        {
+            uiMessage_ = "NO FROZEN CRISIS ON THIS MAP";
+            break;
+        }
+        developerCrisisRevealEnabled_ = !developerCrisisRevealEnabled_;
+        uiMessage_ = developerCrisisRevealEnabled_
+            ? "DEVELOPER CRISIS HUD REVEAL ENABLED"
+            : "DEVELOPER CRISIS HUD REVEAL DISABLED";
+        break;
+    case DeveloperPanelActionKind::TriggerHighRisk:
+        uiMessage_ = gameSession_.triggerDeveloperHighRisk()
+            ? "DEVELOPER HIGH RISK ACTIVATED"
+            : "HIGH RISK ALREADY ACTIVE OR UNAVAILABLE";
+        break;
     case DeveloperPanelActionKind::ResetWeaponTuning:
         uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
             ? "RUNTIME WEAPON TUNING RESET"
@@ -4994,6 +5011,7 @@ void App::update(float deltaTime)
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
         tacticalMapOpen_ = false;
+        developerCrisisRevealEnabled_ = false;
     }
     const bool escapePressed = input_.wasActionJustPressed(
         GameAction::InventoryCancel);
@@ -5688,19 +5706,63 @@ void App::renderDebugText()
         164.0F,
         raidTimeText.c_str());
 
+    float leftHudLineY = 180.0F;
     if (raidSession.phase() == RaidPhase::HighRisk &&
         gameSession_.world().highRiskActiveEnemyCap() > 0U)
     {
         const std::string pressureText = fmt::format(
-            "Pressure wave {} | Active {}/{}",
+            "Pressure wave {} | Next {:.0f}s | Active {}/{} | Converging on crisis target",
             gameSession_.world().highRiskPressureWaveCount(),
+            gameSession_.world().highRiskNextWaveSeconds(),
             gameSession_.world().aliveEnemyCount(),
             gameSession_.world().highRiskActiveEnemyCap());
         uiTextRenderer_.render(
             renderer_,
             20.0F,
-            180.0F,
+            leftHudLineY,
             pressureText.c_str());
+        leftHudLineY += 16.0F;
+    }
+
+    if (const auto crisis = gameSession_.raidHighRiskCrisisProjection();
+        crisis.has_value())
+    {
+        const std::string crisisText =
+            (crisis->detailsKnown || developerCrisisRevealEnabled_)
+            ? fmt::format(
+                  "CRISIS: {} | {}",
+                  crisis->displayName,
+                  crisis->warning)
+            : "CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION";
+        uiTextRenderer_.render(
+            renderer_, 20.0F, leftHudLineY, crisisText.c_str());
+        leftHudLineY += 16.0F;
+
+        if (crisis->active && raidSession.highRiskTimeElapsed() < 5.0F)
+        {
+            const SDL_FRect warningPanel{360.0F, 238.0F, 560.0F, 78.0F};
+            SDL_SetRenderDrawColor(renderer_, 76, 18, 12, 218);
+            SDL_RenderFillRect(renderer_, &warningPanel);
+            SDL_SetRenderDrawColor(renderer_, 248, 150, 58, 248);
+            SDL_RenderRect(renderer_, &warningPanel);
+            const SDL_FRect warningInset{
+                warningPanel.x + 4.0F,
+                warningPanel.y + 4.0F,
+                warningPanel.w - 8.0F,
+                warningPanel.h - 8.0F};
+            SDL_RenderRect(renderer_, &warningInset);
+            uiTextRenderer_.render(
+                renderer_, warningPanel.x + 176.0F,
+                warningPanel.y + 14.0F,
+                "HIGH-RISK CRISIS ACTIVE");
+            const std::string warning = fmt::format(
+                "{} | PRESSURE CONVERGING ON MARKED TARGET",
+                crisis->displayName);
+            uiTextRenderer_.render(
+                renderer_, warningPanel.x + 78.0F,
+                warningPanel.y + 42.0F,
+                warning.c_str());
+        }
     }
 
     const WorldClockProjection clock = gameSession_.worldClockProjection();
@@ -5713,8 +5775,9 @@ void App::renderDebugText()
     uiTextRenderer_.render(
         renderer_,
         20.0F,
-        196.0F,
+        leftHudLineY,
         worldTimeText.c_str());
+    leftHudLineY += 16.0F;
 
     if (gameSession_.profile().pendingRaid.has_value() &&
         gameSession_.profile().pendingRaid->outpostRestoration.has_value())
@@ -5726,7 +5789,7 @@ void App::renderDebugText()
                   "OUTPOST CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
     else if (gameSession_.profile().pendingRaid.has_value() &&
              gameSession_.profile().pendingRaid->baseSiteClearance.has_value())
@@ -5738,7 +5801,7 @@ void App::renderDebugText()
                   "BASE SITE CLEARING | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
     else if (gameSession_.profile().pendingRaid.has_value() &&
              gameSession_.profile().pendingRaid->basePerimeterSweep.has_value())
@@ -5750,7 +5813,7 @@ void App::renderDebugText()
                   "PERIMETER SWEEP | INITIAL HOSTILES REMAINING {} | NORMAL EXITS AVAILABLE",
                   gameSession_.world().aliveInitialEnemyCount());
         uiTextRenderer_.render(
-            renderer_, 20.0F, 212.0F, objective.c_str());
+            renderer_, 20.0F, leftHudLineY, objective.c_str());
     }
 
     const std::string stashText = gameSession_.world().isAlphaRaidWorld()
@@ -9850,12 +9913,48 @@ void App::renderDeveloperWeaponPanel()
         developerInfiniteAmmoEnabled_
             ? "INFINITE AMMO: ON"
             : "INFINITE AMMO: OFF");
+    const std::optional<RaidHighRiskCrisisProjection> crisis =
+        gameSession_.raidHighRiskCrisisProjection();
+    renderButton(
+        developerCrisisRevealButton(),
+        developerCrisisRevealEnabled_,
+        developerCrisisRevealEnabled_
+            ? "CRISIS HUD: REVEALED"
+            : "CRISIS HUD: NORMAL");
+    renderButton(
+        developerTriggerHighRiskButton(),
+        crisis.has_value() && crisis->active,
+        crisis.has_value() && crisis->active
+            ? "HIGH RISK: ACTIVE"
+            : "ACTIVATE HIGH RISK NOW");
     renderButton(
         developerResetWeaponButton(), false, "RESET WEAPON PARAMETERS");
+    const std::string crisisIdentityLine = crisis.has_value()
+        ? fmt::format(
+              "CRISIS DEBUG: {} | DISTRICT {} | RESOURCE POINT {}",
+              crisis->displayName,
+              crisis->districtInstanceId,
+              crisis->resourcePointInstanceId)
+        : "NO FROZEN CRISIS ON THIS MAP";
+    const std::string crisisPressureLine = crisis.has_value()
+        ? fmt::format(
+              "PRESSURE DEBUG: NEXT {:.1f}s | INTERVAL {:.0f}s | WAVE {} | CAP {} | SOURCES {}",
+              crisis->nextWaveSeconds,
+              crisis->waveIntervalSeconds,
+              crisis->waveSize,
+              crisis->activeEnemyCap,
+              crisis->pressureSpawnCount)
+        : "PRESSURE DEBUG: UNAVAILABLE";
+    uiTextRenderer_.render(
+        renderer_, panel.x + 22.0F, panel.y + 94.0F,
+        crisisIdentityLine.c_str());
+    uiTextRenderer_.render(
+        renderer_, panel.x + 22.0F, panel.y + 110.0F,
+        crisisPressureLine.c_str());
     if (!tuning.has_value())
     {
         uiTextRenderer_.render(
-            renderer_, panel.x + 22.0F, panel.y + 102.0F,
+            renderer_, panel.x + 22.0F, panel.y + 138.0F,
             "NO ACTIVE WEAPON");
         uiTextRenderer_.render(
             renderer_, panel.x + 22.0F, panel.y + panel.h - 28.0F,
@@ -9870,7 +9969,7 @@ void App::renderDeveloperWeaponPanel()
         tuning->weaponAssetId,
         tuning->overridden ? "OVERRIDDEN" : "CONTENT DEFAULT");
     uiTextRenderer_.render(
-        renderer_, panel.x + 22.0F, panel.y + 94.0F,
+        renderer_, panel.x + 22.0F, panel.y + 138.0F,
         weaponLine.c_str());
 
     constexpr std::array<const char *,
@@ -12976,6 +13075,49 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &resource);
         SDL_SetRenderDrawColor(renderer_, 232, 206, 106, 235);
         SDL_RenderRect(renderer_, &resource);
+    }
+
+    const std::optional<RaidHighRiskCrisisProjection> crisis =
+        gameSession_.raidHighRiskCrisisProjection();
+    if (crisis.has_value() &&
+        (crisis->active || developerCrisisRevealEnabled_))
+    {
+        const Vec2 targetCenterWorld{
+            crisis->focusArea.position.x + crisis->focusArea.size.x * 0.5F,
+            crisis->focusArea.position.y + crisis->focusArea.size.y * 0.5F};
+        const Vec2 targetCenter = screenPoint(targetCenterWorld);
+        SDL_SetRenderDrawColor(renderer_, 246, 92, 52, 205);
+        for (std::size_t index{}; index < crisis->pressureSpawnCount; ++index)
+        {
+            const Vec2 source = screenPoint(crisis->pressureSpawnCenters[index]);
+            SDL_RenderLine(
+                renderer_, source.x, source.y,
+                targetCenter.x, targetCenter.y);
+            SDL_RenderLine(
+                renderer_, source.x + 1.0F, source.y,
+                targetCenter.x + 1.0F, targetCenter.y);
+            const SDL_FRect sourceMarker{
+                source.x - 4.0F, source.y - 4.0F, 8.0F, 8.0F};
+            SDL_RenderRect(renderer_, &sourceMarker);
+        }
+
+        SDL_FRect crisisTarget = screenRect(crisis->focusArea);
+        crisisTarget.w = std::max(crisisTarget.w, 18.0F);
+        crisisTarget.h = std::max(crisisTarget.h, 18.0F);
+        SDL_SetRenderDrawColor(renderer_, 126, 24, 16, 150);
+        SDL_RenderFillRect(renderer_, &crisisTarget);
+        SDL_SetRenderDrawColor(renderer_, 255, 164, 68, 250);
+        SDL_RenderRect(renderer_, &crisisTarget);
+        const SDL_FRect targetInset{
+            crisisTarget.x + 3.0F,
+            crisisTarget.y + 3.0F,
+            std::max(0.0F, crisisTarget.w - 6.0F),
+            std::max(0.0F, crisisTarget.h - 6.0F)};
+        SDL_RenderRect(renderer_, &targetInset);
+        uiTextRenderer_.render(
+            renderer_, crisisTarget.x + 5.0F,
+            crisisTarget.y + 4.0F,
+            "CRISIS TARGET");
     }
 
     for (const RaidTacticalResourcePoint &resourcePoint :
