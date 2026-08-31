@@ -31,6 +31,7 @@ struct ShotCommand
     int damage{};
     float maximumDistance{2048.0F};
     std::optional<ShotAimIntent> aimIntent;
+    int penetration{};
 };
 
 enum class ShotResolutionStatus
@@ -42,6 +43,7 @@ enum class ShotResolutionStatus
     RejectedInvalidSpeed,
     RejectedInvalidCollisionExtent,
     RejectedInvalidDamage,
+    RejectedInvalidPenetration,
     RejectedInvalidMaximumDistance,
     RejectedInvalidAimIntent,
 };
@@ -58,6 +60,7 @@ struct ShotResolution
     Vec2 velocity{};
     float collisionExtent{};
     int damage{};
+    int penetration{};
     float maximumDistance{};
     Vec2 impactPosition{};
     std::optional<ShotAimIntent> aimIntent;

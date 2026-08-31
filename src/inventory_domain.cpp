@@ -147,9 +147,9 @@ bool validateCandidate(
                 weaponDefinition == nullptr ||
                 !installedWeaponIds.insert(
                     installed->weaponAssetId).second ||
-                !weaponDefinition->compatibleMagazineDefinitionId.has_value() ||
-                *weaponDefinition->compatibleMagazineDefinitionId !=
-                    definition->definitionId)
+                !content.magazineFitsWeapon(
+                    definition->definitionId,
+                    weaponDefinition->definitionId))
             {
                 receipt = failure(
                     DomainErrorCode::IllegalDestination,

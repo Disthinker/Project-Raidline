@@ -59,11 +59,13 @@ RaidCapabilityInventory raidCapabilityInventory(
 
         const ItemDefinition &definition = content.item(asset.definitionId);
         if (definition.category == ItemCategory::Weapon &&
-            definition.compatibleMagazineDefinitionId.has_value())
+            !definition.compatibleMagazineDefinitionIds.empty())
         {
             result.weapon = true;
-            compatibleMagazineDefinitions.push_back(
-                *definition.compatibleMagazineDefinitionId);
+            compatibleMagazineDefinitions.insert(
+                compatibleMagazineDefinitions.end(),
+                definition.compatibleMagazineDefinitionIds.begin(),
+                definition.compatibleMagazineDefinitionIds.end());
         }
         if (definition.category == ItemCategory::Magazine)
         {
@@ -75,13 +77,15 @@ RaidCapabilityInventory raidCapabilityInventory(
         }
         for (const MagazineRoundRecord &round : asset.magazineRounds)
         {
-            if (round.definitionId == alpha_content::ammunition)
+            if (content.item(round.definitionId).category ==
+                ItemCategory::Ammunition)
             {
                 ++result.ammunition;
             }
         }
         if (asset.chamberedRound.has_value() &&
-            asset.chamberedRound->definitionId == alpha_content::ammunition)
+            content.item(asset.chamberedRound->definitionId).category ==
+                ItemCategory::Ammunition)
         {
             ++result.ammunition;
         }

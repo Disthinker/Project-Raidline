@@ -212,7 +212,7 @@ bool GameSession::startNewProfile(std::string profileId)
     std::string saveMessage;
     try
     {
-        candidate = makeNewAlphaProfile(
+        candidate = makeNewPublishedProfile(
             std::move(profileId),
             publishedContentRegistry());
     }
@@ -263,6 +263,8 @@ bool GameSession::continueProfile()
     }
     ProfileState candidate = std::move(*result.profile);
     recoveredAbandonedRaid_ = false;
+    bool profileRequiresSave{};
+    bool recoveredPendingRaid{};
     if (candidate.pendingRaid.has_value())
     {
         const RaidRollbackReceipt rolledBack = rollbackPendingRaidToBase(
@@ -273,6 +275,27 @@ bool GameSession::continueProfile()
             persistenceMessage_ = rolledBack.message;
             return false;
         }
+        profileRequiresSave = true;
+        recoveredPendingRaid = true;
+    }
+    const WarehouseCatalogGrantReceipt catalog =
+        grantPublishedWarehouseCatalog(
+            candidate,
+            publishedContentRegistry());
+    if (!catalog.succeeded)
+    {
+        if (!catalog.capacityBlocked)
+        {
+            persistenceMessage_ = catalog.message;
+            return false;
+        }
+        persistenceMessage_ = catalog.message +
+            "; clear Stash space and restart to retry";
+    }
+    profileRequiresSave = profileRequiresSave ||
+        (catalog.succeeded && !catalog.alreadyGranted);
+    if (profileRequiresSave)
+    {
         const SaveWriteResult saved = saveRepository_->save(
             candidate,
             publishedContentRegistry().contentVersion());
@@ -281,13 +304,14 @@ bool GameSession::continueProfile()
             persistenceMessage_ = saved.message;
             return false;
         }
-        recoveredAbandonedRaid_ = true;
+        persistenceMessage_ = saved.message;
     }
     profile_ = std::move(candidate);
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
+    recoveredAbandonedRaid_ = recoveredPendingRaid;
     state_ = GameSessionState::BetweenRaids;
     raidNumber_ = profile_.committedSettlements.size() + 1U;
     return true;
@@ -2840,6 +2864,7 @@ void GameSession::updateAlphaRaid(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
     bool automaticFire{};
+    int ammunitionPenetration{};
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
@@ -2857,6 +2882,27 @@ void GameSession::updateAlphaRaid(
                     weaponHandling = deriveWeaponHandling(
                         *definition.weaponUse);
                 }
+                std::optional<ItemDefinitionId> ammunitionId;
+                if (weaponAsset->chamberedRound.has_value())
+                {
+                    ammunitionId =
+                        weaponAsset->chamberedRound->definitionId;
+                }
+                else
+                {
+                    ammunitionId =
+                        definition.compatibleAmmunitionDefinitionId;
+                }
+                if (ammunitionId.has_value())
+                {
+                    const ItemDefinition &ammunition =
+                        publishedContentRegistry().item(*ammunitionId);
+                    if (ammunition.ammunitionUse.has_value())
+                    {
+                        ammunitionPenetration =
+                            ammunition.ammunitionUse->penetration;
+                    }
+                }
             }
             catch (...)
             {
@@ -2864,6 +2910,7 @@ void GameSession::updateAlphaRaid(
             }
         }
     }
+    world_->configureWeaponAmmunition(ammunitionPenetration);
     if (!automaticFire)
     {
         simulationInput.firePressed = false;

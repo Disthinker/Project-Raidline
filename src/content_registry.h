@@ -101,6 +101,16 @@ struct RaidLootSlotDefinition
     Vec2 position{};
 };
 
+struct CaliberDefinition
+{
+    CaliberDefinitionId id;
+    std::string displayName;
+
+    friend bool operator==(
+        const CaliberDefinition &,
+        const CaliberDefinition &) = default;
+};
+
 enum class RaidDistrictKind : std::uint8_t;
 
 struct HighRiskCrisisDefinition
@@ -683,6 +693,9 @@ public:
     [[nodiscard]]
     const std::vector<ItemDefinition> &items() const noexcept;
 
+    [[nodiscard]] const std::vector<CaliberDefinition> &
+    calibers() const noexcept;
+
     [[nodiscard]]
     const std::vector<LootTableDefinition> &
     lootTables() const noexcept;
@@ -768,6 +781,21 @@ public:
     const ItemDefinition &item(
         const ItemDefinitionId &id) const;
 
+    [[nodiscard]] const CaliberDefinition &caliber(
+        const CaliberDefinitionId &id) const;
+
+    [[nodiscard]] bool ammunitionFitsMagazine(
+        const ItemDefinitionId &ammunitionId,
+        const ItemDefinitionId &magazineId) const noexcept;
+
+    [[nodiscard]] bool magazineFitsWeapon(
+        const ItemDefinitionId &magazineId,
+        const ItemDefinitionId &weaponId) const noexcept;
+
+    [[nodiscard]] bool ammunitionFitsWeapon(
+        const ItemDefinitionId &ammunitionId,
+        const ItemDefinitionId &weaponId) const noexcept;
+
     [[nodiscard]]
     const LootTableDefinition &lootTable(
         const LootTableDefinitionId &id) const;
@@ -786,6 +814,7 @@ public:
 private:
     std::string contentVersion_;
     std::vector<std::string> publishedResources_;
+    std::vector<CaliberDefinition> calibers_;
     std::vector<ItemDefinition> items_;
     std::vector<LootTableDefinition> lootTables_;
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
@@ -808,6 +837,7 @@ private:
         baseManufacturingRecipes_;
 
     std::map<ItemDefinitionId, std::size_t> itemIndex_;
+    std::map<CaliberDefinitionId, std::size_t> caliberIndex_;
     std::map<LootTableDefinitionId, std::size_t> lootTableIndex_;
     std::map<EnemyDeploymentDefinitionId, std::size_t>
         enemyDeploymentIndex_;

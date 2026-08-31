@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "procedural-frontier-high-risk-crisis-content-51");
+        "content-beta-warehouse-catalog-content-53");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -186,7 +186,27 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 30U);
+    ASSERT_EQ(registry.items().size(), 42U);
+    ASSERT_EQ(registry.calibers().size(), 3U);
+    EXPECT_EQ(
+        registry.caliber(CaliberDefinitionId{"caliber.5_45x39"})
+            .displayName,
+        "5.45x39mm");
+    EXPECT_TRUE(registry.ammunitionFitsMagazine(
+        ItemDefinitionId{"item.ammunition.5_45x39_standard"},
+        ItemDefinitionId{"item.magazine.5_45x39_30"}));
+    EXPECT_TRUE(registry.ammunitionFitsMagazine(
+        ItemDefinitionId{"item.ammunition.5_45x39_enhanced"},
+        ItemDefinitionId{"item.magazine.5_45x39_30"}));
+    EXPECT_FALSE(registry.ammunitionFitsMagazine(
+        ItemDefinitionId{"item.ammunition.7_62x51_standard"},
+        ItemDefinitionId{"item.magazine.5_45x39_30"}));
+    EXPECT_TRUE(registry.magazineFitsWeapon(
+        ItemDefinitionId{"item.magazine.7_62x51_20"},
+        ItemDefinitionId{"item.weapon.dmr_7_62x51_service"}));
+    EXPECT_FALSE(registry.magazineFitsWeapon(
+        ItemDefinitionId{"item.magazine.7_62x51_100_box"},
+        ItemDefinitionId{"item.weapon.dmr_7_62x51_service"}));
     const MapDefinition &frontierWithInterior = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     ASSERT_EQ(frontierWithInterior.interiors.size(), 2U);
@@ -1448,4 +1468,113 @@ TEST(ContentRegistryTest, UnknownStrongIdLookupFailsExplicitly)
         publishedContentRegistry().item(
             ItemDefinitionId{"item.unknown.placeholder"}),
         std::out_of_range);
+}
+
+TEST(ContentRegistryTest, ContentBetaWeaponsExposeStableCaliberAndTierContracts)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    const std::array<ItemDefinitionId, 4> newWeapons{
+        ItemDefinitionId{"item.weapon.carbine_5_45_compact"},
+        ItemDefinitionId{"item.weapon.rifle_5_45_service"},
+        ItemDefinitionId{"item.weapon.dmr_7_62x51_service"},
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}};
+    for (const ItemDefinitionId &weaponId : newWeapons)
+    {
+        const ItemDefinition &weapon = registry.item(weaponId);
+        EXPECT_EQ(weapon.category, ItemCategory::Weapon);
+        EXPECT_TRUE(weapon.weaponUse.has_value());
+        EXPECT_TRUE(weapon.weaponCondition.has_value());
+        EXPECT_FALSE(weapon.compatibleMagazineDefinitionIds.empty());
+        EXPECT_FALSE(weapon.visualAssetsPublished);
+    }
+
+    const ItemDefinition &standard = registry.item(
+        ItemDefinitionId{"item.ammunition.7_62x51_standard"});
+    const ItemDefinition &enhanced = registry.item(
+        ItemDefinitionId{"item.ammunition.7_62x51_enhanced"});
+    ASSERT_TRUE(standard.ammunitionUse.has_value());
+    ASSERT_TRUE(enhanced.ammunitionUse.has_value());
+    EXPECT_EQ(standard.ammunitionUse->tier, AmmunitionTier::Standard);
+    EXPECT_EQ(enhanced.ammunitionUse->tier, AmmunitionTier::Enhanced);
+    EXPECT_EQ(
+        standard.ammunitionUse->caliberDefinitionId,
+        enhanced.ammunitionUse->caliberDefinitionId);
+    EXPECT_GT(
+        enhanced.ammunitionUse->penetration,
+        standard.ammunitionUse->penetration);
+}
+
+TEST(ContentRegistryTest, PublishedContentRejectsUnknownAmmunitionCaliber)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "\"caliber\": \"caliber.5_45x39\", \"tier\": \"standard\"",
+        "\"caliber\": \"caliber.unknown\", \"tier\": \"standard\"");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    const std::array<ItemDefinitionId, 12> released{
+        ItemDefinitionId{"item.ammunition.9mm_enhanced"},
+        ItemDefinitionId{"item.ammunition.5_45x39_standard"},
+        ItemDefinitionId{"item.ammunition.5_45x39_enhanced"},
+        ItemDefinitionId{"item.ammunition.7_62x51_standard"},
+        ItemDefinitionId{"item.ammunition.7_62x51_enhanced"},
+        ItemDefinitionId{"item.magazine.5_45x39_30"},
+        ItemDefinitionId{"item.magazine.7_62x51_20"},
+        ItemDefinitionId{"item.magazine.7_62x51_100_box"},
+        ItemDefinitionId{"item.weapon.carbine_5_45_compact"},
+        ItemDefinitionId{"item.weapon.rifle_5_45_service"},
+        ItemDefinitionId{"item.weapon.dmr_7_62x51_service"},
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}};
+
+    for (const ItemDefinitionId &itemId : released)
+    {
+        const ItemDefinition &item = registry.item(itemId);
+        const bool hasLootSource = std::any_of(
+            registry.lootTables().begin(),
+            registry.lootTables().end(),
+            [&itemId](const LootTableDefinition &table)
+            {
+                return std::any_of(
+                    table.entries.begin(),
+                    table.entries.end(),
+                    [&itemId](const LootContentEntry &entry)
+                    {
+                        return entry.itemDefinitionId == itemId;
+                    });
+            });
+        EXPECT_TRUE(item.marketBuyPrice > 0U || hasLootSource)
+            << itemId.value();
+        EXPECT_GT(item.marketRecyclePrice, 0U) << itemId.value();
+        if (item.category == ItemCategory::Ammunition)
+        {
+            EXPECT_TRUE(std::any_of(
+                registry.items().begin(),
+                registry.items().end(),
+                [&registry, &itemId](const ItemDefinition &candidate)
+                {
+                    return candidate.category == ItemCategory::Magazine &&
+                        registry.ammunitionFitsMagazine(
+                            itemId, candidate.definitionId);
+                })) << itemId.value();
+        }
+        else if (item.category == ItemCategory::Magazine)
+        {
+            EXPECT_TRUE(std::any_of(
+                registry.items().begin(),
+                registry.items().end(),
+                [&registry, &itemId](const ItemDefinition &candidate)
+                {
+                    return candidate.category == ItemCategory::Weapon &&
+                        registry.magazineFitsWeapon(
+                            itemId, candidate.definitionId);
+                })) << itemId.value();
+        }
+    }
 }

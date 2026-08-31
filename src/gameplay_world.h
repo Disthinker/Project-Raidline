@@ -371,6 +371,7 @@ public:
         const WeaponUseDefinition &definition,
         const WeaponHandlingParameters &handling,
         bool preserveWeaponFireTransientState);
+    void configureWeaponAmmunition(int penetration) noexcept;
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 
@@ -595,6 +596,7 @@ private:
     WeaponFireState weaponFire_;
     WeaponAimState weaponAim_;
     int weaponBaseDamage_{kDefaultWeaponDamage};
+    int weaponPenetration_{};
     float weaponMaximumRange_{2048.0F};
     float weaponLogicalBallisticSpeed_{6000.0F};
     TracerStyle weaponTracerStyle_{TracerStyle::Weak};

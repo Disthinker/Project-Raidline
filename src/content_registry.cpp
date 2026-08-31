@@ -374,6 +374,19 @@ namespace
              std::string{value});
     }
 
+    AmmunitionTier parseAmmunitionTier(std::string_view value)
+    {
+        if (value == "standard")
+        {
+            return AmmunitionTier::Standard;
+        }
+        if (value == "enhanced")
+        {
+            return AmmunitionTier::Enhanced;
+        }
+        fail("ammunition tier is not supported: " + std::string{value});
+    }
+
     EquipmentSlotKind parseEquipmentSlotName(std::string_view value)
     {
         if (value == "primary_weapon")
@@ -1359,6 +1372,32 @@ ContentRegistry ContentRegistry::fromJson(
                 std::move(resource));
         }
 
+        for (const Json &caliberValue : requiredArray(root, "calibers"))
+        {
+            if (!caliberValue.is_object())
+            {
+                fail("caliber definition must be an object");
+            }
+            CaliberDefinition definition{
+                CaliberDefinitionId{requiredString(caliberValue, "id")},
+                requiredString(caliberValue, "display_name")};
+            if (!hasPrefix(definition.id.value(), "caliber.") ||
+                definition.displayName.empty())
+            {
+                fail("caliber definition is invalid");
+            }
+            const std::size_t index = registry.calibers_.size();
+            if (!registry.caliberIndex_.emplace(definition.id, index).second)
+            {
+                fail("duplicate caliber definition ID");
+            }
+            registry.calibers_.push_back(std::move(definition));
+        }
+        if (registry.calibers_.empty())
+        {
+            fail("at least one caliber definition is required");
+        }
+
         std::array<bool, itemCount()> legacyIdsSeen{};
         for (const Json &itemValue :
              requiredArray(root, "items"))
@@ -1488,6 +1527,54 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 definition.compatibleMagazineDefinitionId =
                     ItemDefinitionId{*magazine};
+                definition.compatibleMagazineDefinitionIds.push_back(
+                    *definition.compatibleMagazineDefinitionId);
+            }
+            if (const auto compatible = itemValue.find("compatible_magazines");
+                compatible != itemValue.end())
+            {
+                if (!compatible->is_array())
+                {
+                    fail("compatible_magazines must be an array");
+                }
+                for (const Json &magazineValue : *compatible)
+                {
+                    if (!magazineValue.is_string())
+                    {
+                        fail("compatible magazine ID must be a string");
+                    }
+                    const ItemDefinitionId magazineId{
+                        magazineValue.get<std::string>()};
+                    if (std::find(
+                            definition.compatibleMagazineDefinitionIds.begin(),
+                            definition.compatibleMagazineDefinitionIds.end(),
+                            magazineId) !=
+                        definition.compatibleMagazineDefinitionIds.end())
+                    {
+                        fail("compatible magazine ID is duplicated");
+                    }
+                    definition.compatibleMagazineDefinitionIds.push_back(
+                        magazineId);
+                }
+            }
+            if (const auto ammunition = itemValue.find("ammunition_use");
+                ammunition != itemValue.end())
+            {
+                if (!ammunition->is_object())
+                {
+                    fail("ammunition_use must be an object");
+                }
+                definition.ammunitionUse = AmmunitionUseDefinition{
+                    CaliberDefinitionId{
+                        requiredString(*ammunition, "caliber")},
+                    parseAmmunitionTier(
+                        requiredString(*ammunition, "tier")),
+                    requiredPositiveInt(*ammunition, "penetration")};
+            }
+            if (const auto caliber = optionalString(itemValue, "caliber"))
+            {
+                definition.magazineUse = MagazineUseDefinition{
+                    CaliberDefinitionId{*caliber}};
             }
 
             if (definition.marketBuyPrice != 0)
@@ -1565,7 +1652,7 @@ ContentRegistry ContentRegistry::fromJson(
                     totalWeight += malfunction.weight;
                 }
                 if (definition.category != ItemCategory::Weapon ||
-                    !definition.compatibleMagazineDefinitionId.has_value() ||
+                    definition.compatibleMagazineDefinitionIds.empty() ||
                     condition.maximumDurabilityCenti != 10000 ||
                     condition.wearPerSuccessfulShotCenti >
                         condition.maximumDurabilityCenti ||
@@ -1583,7 +1670,7 @@ ContentRegistry ContentRegistry::fromJson(
                 if (definition.category != ItemCategory::Weapon ||
                     definition.compatibleEquipmentSlots.empty() ||
                     definition.equipmentSlot.has_value() ||
-                    !definition.compatibleMagazineDefinitionId.has_value() ||
+                    definition.compatibleMagazineDefinitionIds.empty() ||
                     use.recoilControl > 100U || use.stability > 100U ||
                     use.handlingSpeed > 100U || use.ergonomics > 100U ||
                     use.accuracy > 100U ||
@@ -1644,6 +1731,32 @@ ContentRegistry ContentRegistry::fromJson(
                 fail("maintenance item requires a maintenance capability");
             }
 
+            if (definition.category == ItemCategory::Ammunition)
+            {
+                if (!definition.ammunitionUse.has_value() ||
+                    definition.maxStackSize <= 1U ||
+                    definition.ammunitionUse->penetration > 100)
+                {
+                    fail("ammunition requires caliber and tier capability");
+                }
+            }
+            else if (definition.ammunitionUse.has_value())
+            {
+                fail("only ammunition may declare ammunition_use");
+            }
+            if (definition.category == ItemCategory::Magazine)
+            {
+                if (!definition.magazineUse.has_value() ||
+                    definition.magazineCapacity == 0U)
+                {
+                    fail("magazine requires caliber and capacity");
+                }
+            }
+            else if (definition.magazineUse.has_value())
+            {
+                fail("only magazines may declare caliber");
+            }
+
             const std::size_t index = registry.items_.size();
             if (!registry.itemIndex_
                      .emplace(definitionId, index)
@@ -1669,6 +1782,58 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.compatibleAmmunitionDefinitionId);
             requireItemReference(
                 definition.compatibleMagazineDefinitionId);
+            for (const ItemDefinitionId &magazineId :
+                 definition.compatibleMagazineDefinitionIds)
+            {
+                if (!registry.itemIndex_.contains(magazineId))
+                {
+                    fail("weapon references an unknown compatible magazine");
+                }
+                if (registry.item(magazineId).category !=
+                    ItemCategory::Magazine)
+                {
+                    fail("weapon compatible magazine is not a magazine");
+                }
+            }
+            if (definition.ammunitionUse.has_value() &&
+                !registry.caliberIndex_.contains(
+                    definition.ammunitionUse->caliberDefinitionId))
+            {
+                fail("ammunition references an unknown caliber");
+            }
+            if (definition.magazineUse.has_value() &&
+                !registry.caliberIndex_.contains(
+                    definition.magazineUse->caliberDefinitionId))
+            {
+                fail("magazine references an unknown caliber");
+            }
+            if (definition.category == ItemCategory::Magazine &&
+                definition.compatibleAmmunitionDefinitionId.has_value() &&
+                !registry.ammunitionFitsMagazine(
+                    *definition.compatibleAmmunitionDefinitionId,
+                    definition.definitionId))
+            {
+                fail("magazine legacy ammunition disagrees with caliber");
+            }
+            if (definition.category == ItemCategory::Weapon)
+            {
+                for (const ItemDefinitionId &magazineId :
+                     definition.compatibleMagazineDefinitionIds)
+                {
+                    const ItemDefinition &magazine = registry.item(magazineId);
+                    if (definition.compatibleAmmunitionDefinitionId.has_value() &&
+                        !registry.ammunitionFitsMagazine(
+                            *definition.compatibleAmmunitionDefinitionId,
+                            magazineId))
+                    {
+                        fail("weapon legacy ammunition is incompatible with magazine");
+                    }
+                    if (!magazine.magazineUse.has_value())
+                    {
+                        fail("weapon magazine has no caliber capability");
+                    }
+                }
+            }
         }
 
         const Json &basePriorities = requiredObject(
@@ -3324,6 +3489,12 @@ ContentRegistry::items() const noexcept
     return items_;
 }
 
+const std::vector<CaliberDefinition> &
+ContentRegistry::calibers() const noexcept
+{
+    return calibers_;
+}
+
 const std::vector<LootTableDefinition> &
 ContentRegistry::lootTables() const noexcept
 {
@@ -3504,6 +3675,84 @@ ContentRegistry::item(
     const ItemDefinitionId &id) const
 {
     return lookup(itemIndex_, items_, id, "item");
+}
+
+const CaliberDefinition &ContentRegistry::caliber(
+    const CaliberDefinitionId &id) const
+{
+    return lookup(caliberIndex_, calibers_, id, "caliber");
+}
+
+bool ContentRegistry::ammunitionFitsMagazine(
+    const ItemDefinitionId &ammunitionId,
+    const ItemDefinitionId &magazineId) const noexcept
+{
+    try
+    {
+        const ItemDefinition &ammunition = item(ammunitionId);
+        const ItemDefinition &magazine = item(magazineId);
+        if (ammunition.category != ItemCategory::Ammunition ||
+            magazine.category != ItemCategory::Magazine)
+        {
+            return false;
+        }
+        if (ammunition.ammunitionUse.has_value() &&
+            magazine.magazineUse.has_value())
+        {
+            return ammunition.ammunitionUse->caliberDefinitionId ==
+                magazine.magazineUse->caliberDefinitionId;
+        }
+        return magazine.compatibleAmmunitionDefinitionId == ammunitionId;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+bool ContentRegistry::magazineFitsWeapon(
+    const ItemDefinitionId &magazineId,
+    const ItemDefinitionId &weaponId) const noexcept
+{
+    try
+    {
+        const ItemDefinition &weapon = item(weaponId);
+        const ItemDefinition &magazine = item(magazineId);
+        if (weapon.category != ItemCategory::Weapon ||
+            magazine.category != ItemCategory::Magazine)
+        {
+            return false;
+        }
+        return std::find(
+                   weapon.compatibleMagazineDefinitionIds.begin(),
+                   weapon.compatibleMagazineDefinitionIds.end(),
+                   magazineId) != weapon.compatibleMagazineDefinitionIds.end();
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+bool ContentRegistry::ammunitionFitsWeapon(
+    const ItemDefinitionId &ammunitionId,
+    const ItemDefinitionId &weaponId) const noexcept
+{
+    try
+    {
+        const ItemDefinition &weapon = item(weaponId);
+        return std::any_of(
+            weapon.compatibleMagazineDefinitionIds.begin(),
+            weapon.compatibleMagazineDefinitionIds.end(),
+            [this, &ammunitionId](const ItemDefinitionId &magazineId)
+            {
+                return ammunitionFitsMagazine(ammunitionId, magazineId);
+            });
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 const LootTableDefinition &

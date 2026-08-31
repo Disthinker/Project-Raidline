@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "procedural-frontier-high-risk-crisis-content-51",
+  "content_version": "content-beta-warehouse-catalog-content-53",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -275,6 +275,11 @@
     "items/inventory/item_ammo_9mm_basic_v1_64x64.png",
     "items/world/item_ammo_9mm_basic_v1_32x32.png"
   ],
+  "calibers": [
+    {"id": "caliber.9x19", "display_name": "9x19mm"},
+    {"id": "caliber.5_45x39", "display_name": "5.45x39mm"},
+    {"id": "caliber.7_62x51", "display_name": "7.62x51mm"}
+  ],
   "items": [
     {
       "id": "item.loot.cola_basic",
@@ -444,7 +449,84 @@
       "inventory_texture": "items/inventory/item_ammo_9mm_basic_v1_64x64.png",
       "world_texture": "items/world/item_ammo_9mm_basic_v1_32x32.png",
       "market_buy_price": 1,
-      "market_recycle_price": 1
+      "market_recycle_price": 1,
+      "ammunition_use": {
+        "caliber": "caliber.9x19",
+        "tier": "standard",
+        "penetration": 2
+      }
+    },
+    {
+      "id": "item.ammunition.9mm_enhanced",
+      "display_name": "9x19 Enhanced Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 12,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_9mm_enhanced.png",
+      "world_texture": "items/world/unpublished_ammo_9mm_enhanced.png",
+      "market_recycle_price": 2,
+      "ammunition_use": {"caliber": "caliber.9x19", "tier": "enhanced", "penetration": 4}
+    },
+    {
+      "id": "item.ammunition.5_45x39_standard",
+      "display_name": "5.45x39 Standard Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 11,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_5_45_standard.png",
+      "world_texture": "items/world/unpublished_ammo_5_45_standard.png",
+      "market_buy_price": 2,
+      "market_recycle_price": 1,
+      "ammunition_use": {"caliber": "caliber.5_45x39", "tier": "standard", "penetration": 4}
+    },
+    {
+      "id": "item.ammunition.5_45x39_enhanced",
+      "display_name": "5.45x39 Enhanced Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 11,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_5_45_enhanced.png",
+      "world_texture": "items/world/unpublished_ammo_5_45_enhanced.png",
+      "market_recycle_price": 3,
+      "ammunition_use": {"caliber": "caliber.5_45x39", "tier": "enhanced", "penetration": 7}
+    },
+    {
+      "id": "item.ammunition.7_62x51_standard",
+      "display_name": "7.62x51 Standard Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 24,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_7_62_standard.png",
+      "world_texture": "items/world/unpublished_ammo_7_62_standard.png",
+      "market_buy_price": 3,
+      "market_recycle_price": 1,
+      "ammunition_use": {"caliber": "caliber.7_62x51", "tier": "standard", "penetration": 7}
+    },
+    {
+      "id": "item.ammunition.7_62x51_enhanced",
+      "display_name": "7.62x51 Enhanced Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 24,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_7_62_enhanced.png",
+      "world_texture": "items/world/unpublished_ammo_7_62_enhanced.png",
+      "market_recycle_price": 5,
+      "ammunition_use": {"caliber": "caliber.7_62x51", "tier": "enhanced", "penetration": 10}
     },
     {
       "id": "item.magazine.9mm_30",
@@ -463,6 +545,7 @@
       "market_buy_price": 30,
       "market_recycle_price": 7,
       "magazine_capacity": 30,
+      "caliber": "caliber.9x19",
       "compatible_ammunition": "item.ammunition.9mm_basic"
     },
     {
@@ -482,7 +565,131 @@
       "market_buy_price": 20,
       "market_recycle_price": 5,
       "magazine_capacity": 15,
+      "caliber": "caliber.9x19",
       "compatible_ammunition": "item.ammunition.9mm_basic"
+    },
+    {
+      "id": "item.magazine.5_45x39_30",
+      "display_name": "5.45x39 30-round Magazine",
+      "category": "magazine",
+      "inventory": {"width": 1, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 260,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 64}, "pickup_size": {"x": 40, "y": 72}},
+      "inventory_texture": "items/inventory/unpublished_magazine_5_45.png",
+      "world_texture": "items/world/unpublished_magazine_5_45.png",
+      "market_buy_price": 38,
+      "market_recycle_price": 9,
+      "magazine_capacity": 30,
+      "caliber": "caliber.5_45x39",
+      "compatible_ammunition": "item.ammunition.5_45x39_standard"
+    },
+    {
+      "id": "item.magazine.7_62x51_20",
+      "display_name": "7.62x51 20-round Magazine",
+      "category": "magazine",
+      "inventory": {"width": 1, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 340,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 64}, "pickup_size": {"x": 40, "y": 72}},
+      "inventory_texture": "items/inventory/unpublished_magazine_7_62.png",
+      "world_texture": "items/world/unpublished_magazine_7_62.png",
+      "market_buy_price": 55,
+      "market_recycle_price": 13,
+      "magazine_capacity": 20,
+      "caliber": "caliber.7_62x51",
+      "compatible_ammunition": "item.ammunition.7_62x51_standard"
+    },
+    {
+      "id": "item.magazine.7_62x51_100_box",
+      "display_name": "7.62x51 100-round Box",
+      "category": "magazine",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 1300,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 64, "y": 64}, "pickup_size": {"x": 72, "y": 72}},
+      "inventory_texture": "items/inventory/unpublished_box_magazine_7_62.png",
+      "world_texture": "items/world/unpublished_box_magazine_7_62.png",
+      "market_buy_price": 120,
+      "market_recycle_price": 30,
+      "magazine_capacity": 100,
+      "caliber": "caliber.7_62x51",
+      "compatible_ammunition": "item.ammunition.7_62x51_standard"
+    },
+    {
+      "id": "item.weapon.carbine_5_45_compact",
+      "display_name": "Compact 5.45 Carbine",
+      "category": "weapon",
+      "inventory": {"width": 3, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 2750,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 112, "y": 56}, "pickup_size": {"x": 120, "y": 64}},
+      "inventory_texture": "items/inventory/unpublished_carbine_5_45.png",
+      "world_texture": "items/world/unpublished_carbine_5_45.png",
+      "equipment_slots": ["primary_weapon", "secondary_weapon"],
+      "market_recycle_price": 105,
+      "compatible_ammunition": "item.ammunition.5_45x39_standard",
+      "compatible_magazine": "item.magazine.5_45x39_30",
+      "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 9, "reliability_multiplier_basis_points": 9300, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
+      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.10, "recoil_control": 60, "stability": 53, "handling_speed": 78, "ergonomics": 82, "accuracy": 62, "base_damage": 4, "effective_range": 620.0, "maximum_range": 880.0, "logical_ballistic_speed": 7600.0}
+    },
+    {
+      "id": "item.weapon.rifle_5_45_service",
+      "display_name": "Service 5.45 Rifle",
+      "category": "weapon",
+      "inventory": {"width": 4, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 3400,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 128, "y": 64}, "pickup_size": {"x": 136, "y": 72}},
+      "inventory_texture": "items/inventory/unpublished_rifle_5_45.png",
+      "world_texture": "items/world/unpublished_rifle_5_45.png",
+      "equipment_slots": ["primary_weapon", "secondary_weapon"],
+      "market_recycle_price": 145,
+      "compatible_ammunition": "item.ammunition.5_45x39_standard",
+      "compatible_magazine": "item.magazine.5_45x39_30",
+      "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 8, "reliability_multiplier_basis_points": 8800, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
+      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.11, "recoil_control": 68, "stability": 72, "handling_speed": 56, "ergonomics": 70, "accuracy": 78, "base_damage": 5, "effective_range": 820.0, "maximum_range": 1120.0, "logical_ballistic_speed": 8400.0}
+    },
+    {
+      "id": "item.weapon.dmr_7_62x51_service",
+      "display_name": "7.62 Precision Rifle",
+      "category": "weapon",
+      "inventory": {"width": 5, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 4700,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 144, "y": 64}, "pickup_size": {"x": 152, "y": 72}},
+      "inventory_texture": "items/inventory/unpublished_dmr_7_62.png",
+      "world_texture": "items/world/unpublished_dmr_7_62.png",
+      "equipment_slots": ["primary_weapon", "secondary_weapon"],
+      "market_recycle_price": 230,
+      "compatible_ammunition": "item.ammunition.7_62x51_standard",
+      "compatible_magazine": "item.magazine.7_62x51_20",
+      "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 12, "reliability_multiplier_basis_points": 10000, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
+      "weapon_use": {"automatic_fire": false, "shot_interval_seconds": 0.28, "recoil_control": 43, "stability": 80, "handling_speed": 38, "ergonomics": 58, "accuracy": 91, "base_damage": 8, "effective_range": 1080.0, "maximum_range": 1400.0, "logical_ballistic_speed": 9200.0}
+    },
+    {
+      "id": "item.weapon.lmg_7_62x51_service",
+      "display_name": "7.62 Support Machine Gun",
+      "category": "weapon",
+      "inventory": {"width": 6, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 8600,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 160, "y": 72}, "pickup_size": {"x": 168, "y": 80}},
+      "inventory_texture": "items/inventory/unpublished_lmg_7_62.png",
+      "world_texture": "items/world/unpublished_lmg_7_62.png",
+      "equipment_slots": ["primary_weapon"],
+      "market_recycle_price": 310,
+      "compatible_ammunition": "item.ammunition.7_62x51_standard",
+      "compatible_magazine": "item.magazine.7_62x51_100_box",
+      "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 14, "reliability_multiplier_basis_points": 11000, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
+      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.085, "recoil_control": 48, "stability": 76, "handling_speed": 20, "ergonomics": 36, "accuracy": 68, "base_damage": 7, "effective_range": 920.0, "maximum_range": 1260.0, "logical_ballistic_speed": 9000.0}
     },
     {
       "id": "item.container.chest_rig_small",
@@ -953,11 +1160,18 @@
       "roll_count": 1,
       "entries": [
         {"item": "item.loot.electronics", "weight": 26, "minimum_quantity": 1, "maximum_quantity": 1},
-        {"item": "item.ammunition.9mm_basic", "weight": 22, "minimum_quantity": 20, "maximum_quantity": 40},
+        {"item": "item.ammunition.9mm_basic", "weight": 18, "minimum_quantity": 20, "maximum_quantity": 40},
+        {"item": "item.ammunition.9mm_enhanced", "weight": 8, "minimum_quantity": 12, "maximum_quantity": 24},
+        {"item": "item.ammunition.5_45x39_enhanced", "weight": 7, "minimum_quantity": 12, "maximum_quantity": 24},
+        {"item": "item.ammunition.7_62x51_enhanced", "weight": 5, "minimum_quantity": 8, "maximum_quantity": 16},
         {"item": "item.medical.medkit_alpha", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.helmet_basic", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.body_armor_basic", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
-        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1}
+        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.dmr_7_62x51_service", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.lmg_7_62x51_service", "weight": 2, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.7_62x51_20", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.7_62x51_100_box", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
     },
     {
@@ -969,7 +1183,10 @@
         {"item": "item.loot.copper_wire_spool", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.electronics", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.machine_tool_set", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
-        {"item": "item.maintenance.weapon_kit_basic", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
+        {"item": "item.maintenance.weapon_kit_basic", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.5_45x39_standard", "weight": 12, "minimum_quantity": 12, "maximum_quantity": 30},
+        {"item": "item.weapon.carbine_5_45_compact", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.5_45x39_30", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
     },
     {
@@ -994,7 +1211,16 @@
         {"item": "item.maintenance.armor_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.maintenance.weapon_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.helmet_basic", "weight": 9, "minimum_quantity": 1, "maximum_quantity": 1},
-        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1}
+        {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.rifle_5_45_service", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.dmr_7_62x51_service", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.lmg_7_62x51_service", "weight": 2, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.5_45x39_enhanced", "weight": 9, "minimum_quantity": 12, "maximum_quantity": 24},
+        {"item": "item.ammunition.7_62x51_standard", "weight": 8, "minimum_quantity": 10, "maximum_quantity": 20},
+        {"item": "item.ammunition.7_62x51_enhanced", "weight": 5, "minimum_quantity": 8, "maximum_quantity": 16},
+        {"item": "item.magazine.5_45x39_30", "weight": 7, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.7_62x51_20", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.7_62x51_100_box", "weight": 2, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
     },
     {
@@ -1019,7 +1245,11 @@
         {"item": "item.loot.machine_tool_set", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.precision_components", "weight": 15, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.scrap_parts", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
-        {"item": "item.loot.electronics", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1}
+        {"item": "item.loot.electronics", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.5_45x39_standard", "weight": 12, "minimum_quantity": 12, "maximum_quantity": 30},
+        {"item": "item.ammunition.5_45x39_enhanced", "weight": 5, "minimum_quantity": 8, "maximum_quantity": 18},
+        {"item": "item.weapon.rifle_5_45_service", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.5_45x39_30", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
     },
     {

@@ -1670,7 +1670,8 @@ void GameplayWorld::update(
                 aimIntentAt(
                     weaponAim_.actualWorldPosition(),
                     shotOrigin,
-                    activeEnemySet)});
+                    activeEnemySet),
+                weaponPenetration_});
 
         if (!resolution.accepted())
         {
@@ -1747,7 +1748,8 @@ void GameplayWorld::update(
                 advance.end,
                 flight.collisionExtent(),
                 flight.damage(),
-                flight.aimIntent()});
+                flight.aimIntent(),
+                flight.penetration()});
     }
 
     HitResolutionResult hitResult = resolveShotHits(
@@ -2594,6 +2596,11 @@ void GameplayWorld::configureWeaponFire(
     weaponTracerLength_ = handling.weakTracerLength;
     weaponTracerOpacity_ = handling.weakTracerOpacity;
     weaponTracerLifetimeSeconds_ = handling.weakTracerLifetimeSeconds;
+}
+
+void GameplayWorld::configureWeaponAmmunition(int penetration) noexcept
+{
+    weaponPenetration_ = std::max(0, penetration);
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept

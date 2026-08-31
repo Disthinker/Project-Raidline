@@ -85,6 +85,7 @@ private:
 };
 
 struct ItemDefinitionTag;
+struct CaliberDefinitionTag;
 struct LootTableDefinitionTag;
 struct EnemyDeploymentDefinitionTag;
 struct MapDefinitionTag;
@@ -101,6 +102,7 @@ struct RegionalBaseSiteDefinitionTag;
 struct BaseFacilityDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
+using CaliberDefinitionId = DefinitionId<CaliberDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
 using EnemyDeploymentDefinitionId =
     DefinitionId<EnemyDeploymentDefinitionTag>;

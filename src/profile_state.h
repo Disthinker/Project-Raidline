@@ -931,8 +931,27 @@ struct ProfileValidationResult
     std::string message;
 };
 
+struct WarehouseCatalogGrantReceipt
+{
+    bool succeeded{};
+    bool alreadyGranted{};
+    bool capacityBlocked{};
+    std::size_t addedDefinitionCount{};
+    ProfileRevision revision{};
+    std::string message;
+};
+
 [[nodiscard]] ProfileState makeNewAlphaProfile(
     std::string profileId,
+    const ContentRegistry &content);
+
+[[nodiscard]] ProfileState makeNewPublishedProfile(
+    std::string profileId,
+    const ContentRegistry &content);
+
+[[nodiscard]] WarehouseCatalogGrantReceipt
+grantPublishedWarehouseCatalog(
+    ProfileState &profile,
     const ContentRegistry &content);
 
 [[nodiscard]] ProfileValidationResult validateProfileState(

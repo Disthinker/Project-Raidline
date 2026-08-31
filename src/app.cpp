@@ -319,11 +319,10 @@ namespace
                 asset->chamberedRound.has_value();
             const ItemDefinition &definition =
                 publishedContentRegistry().item(asset->definitionId);
-            if (definition.compatibleMagazineDefinitionId.has_value())
-            {
-                compatibleMagazines.push_back(
-                    *definition.compatibleMagazineDefinitionId);
-            }
+            compatibleMagazines.insert(
+                compatibleMagazines.end(),
+                definition.compatibleMagazineDefinitionIds.begin(),
+                definition.compatibleMagazineDefinitionIds.end());
         }
         for (const auto &[id, asset] : profile.assets.records())
         {
@@ -800,14 +799,19 @@ namespace
         return std::nullopt;
     }
 
-    const std::array<ItemDefinitionId, 15> &fixedSupplyIds()
+    const std::array<ItemDefinitionId, 20> &fixedSupplyIds()
     {
-        static const std::array<ItemDefinitionId, 15> ids{
+        static const std::array<ItemDefinitionId, 20> ids{
             alpha_content::rifle,
             alpha_content::pistol,
             alpha_content::magazine,
             alpha_content::pistolMagazine,
             alpha_content::ammunition,
+            ItemDefinitionId{"item.ammunition.5_45x39_standard"},
+            ItemDefinitionId{"item.ammunition.7_62x51_standard"},
+            ItemDefinitionId{"item.magazine.5_45x39_30"},
+            ItemDefinitionId{"item.magazine.7_62x51_20"},
+            ItemDefinitionId{"item.magazine.7_62x51_100_box"},
             alpha_content::helmet,
             alpha_content::bodyArmor,
             alpha_content::chestRig,
@@ -3095,16 +3099,18 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         for (std::size_t index = 0; index < supply.size(); ++index)
         {
             const SDL_FRect row{
-                76.0F + static_cast<float>(index / 5U) * 184.0F,
+                76.0F + static_cast<float>(index / 5U) * 140.0F,
                 164.0F + static_cast<float>(index % 5U) * 46.0F,
-                176.0F,
+                132.0F,
                 40.0F};
             if (!contains(row, click.position))
             {
                 continue;
             }
+            const ItemDefinition &definition =
+                publishedContentRegistry().item(supply[index]);
             const std::uint32_t quantity =
-                supply[index] == alpha_content::ammunition ? 30U : 1U;
+                definition.category == ItemCategory::Ammunition ? 30U : 1U;
             const EconomyReceipt receipt =
                 gameSession_.executeProfileEconomy(
                     PurchaseCommand{supply[index], quantity},
@@ -3311,7 +3317,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             const ItemDefinition &definition =
                 publishedContentRegistry().item(selected->definitionId);
             if (definition.category != ItemCategory::Magazine ||
-                !definition.compatibleAmmunitionDefinitionId.has_value())
+                !definition.magazineUse.has_value())
             {
                 uiMessage_ = "SELECT A MAGAZINE TO FILL";
                 return;
@@ -3321,8 +3327,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                      profile,
                      ProfileContainerId::stash()))
             {
-                if (candidate->definitionId ==
-                    *definition.compatibleAmmunitionDefinitionId)
+                if (publishedContentRegistry().ammunitionFitsMagazine(
+                        candidate->definitionId, selected->definitionId))
                 {
                     ammunition = candidate;
                     break;
@@ -10433,16 +10439,16 @@ void App::renderBaseSupply()
         const ItemDefinition &definition =
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
-            76.0F + static_cast<float>(index / 5U) * 184.0F,
+            76.0F + static_cast<float>(index / 5U) * 140.0F,
             164.0F + static_cast<float>(index % 5U) * 46.0F,
-            176.0F,
+            132.0F,
             40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
         SDL_RenderFillRect(renderer_, &row);
         SDL_SetRenderDrawColor(renderer_, 174, 158, 92, 255);
         SDL_RenderRect(renderer_, &row);
         const std::uint32_t quantity =
-            supply[index] == alpha_content::ammunition ? 30U : 1U;
+            definition.category == ItemCategory::Ammunition ? 30U : 1U;
         const std::string supplyName = definition.displayName.substr(
             0, std::min<std::size_t>(definition.displayName.size(), 10U));
         const std::string label = fmt::format(
