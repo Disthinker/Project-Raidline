@@ -121,6 +121,7 @@ private:
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
         BaseSupplyCategory::Food};
+    std::size_t selectedBaseManufacturingRecipeIndex_{};
     std::string uiMessage_;
     float specialHitFeedbackRemaining_{};
     HitSemantic specialHitSemantic_{HitSemantic::Normal};

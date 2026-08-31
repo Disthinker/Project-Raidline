@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "content-beta-loadout-gear-content-54",
+  "content_version": "content-beta-loot-economy-content-55",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -198,6 +198,38 @@
         "output": {"item": "item.maintenance.weapon_kit_basic", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 360
+      },
+      {
+        "id": "base_manufacturing.ammunition_9x19_standard",
+        "display_name": "9x19 Standard Ammunition Batch",
+        "inputs": [
+          {"item": "item.loot.scrap_parts", "quantity": 1},
+          {"item": "item.loot.electronics", "quantity": 1}
+        ],
+        "output": {"item": "item.ammunition.9mm_basic", "quantity": 60},
+        "worker_count": 1,
+        "duration_minutes": 120
+      },
+      {
+        "id": "base_manufacturing.ammunition_5_45x39_standard",
+        "display_name": "5.45x39 Standard Ammunition Batch",
+        "inputs": [
+          {"item": "item.loot.copper_wire_spool", "quantity": 1},
+          {"item": "item.loot.electronics", "quantity": 1}
+        ],
+        "output": {"item": "item.ammunition.5_45x39_standard", "quantity": 60},
+        "worker_count": 1,
+        "duration_minutes": 180
+      },
+      {
+        "id": "base_manufacturing.ammunition_7_62x51_standard",
+        "display_name": "7.62x51 Standard Ammunition Batch",
+        "inputs": [
+          {"item": "item.loot.precision_components", "quantity": 1}
+        ],
+        "output": {"item": "item.ammunition.7_62x51_standard", "quantity": 40},
+        "worker_count": 1,
+        "duration_minutes": 240
       }
     ]
   },
@@ -1369,6 +1401,52 @@
       ]
     },
     {
+      "id": "loot.raid.greyline_supply_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.cola_basic", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.sealed_water", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.canned_meal", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.toilet_paper", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.loot.scrap_parts", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.9mm_basic", "weight": 20, "minimum_quantity": 10, "maximum_quantity": 30},
+        {"item": "item.medical.medkit_alpha", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.pistol_basic", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_scout", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.raid.riverside_supply_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.sealed_water", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 2},
+        {"item": "item.medical.medkit_alpha", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.9mm_basic", "weight": 18, "minimum_quantity": 10, "maximum_quantity": 30},
+        {"item": "item.ammunition.5_45x39_standard", "weight": 12, "minimum_quantity": 10, "maximum_quantity": 24},
+        {"item": "item.magazine.9mm_30", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.5_45x39_30", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.carbine_5_45_compact", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_light", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_patrol", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.raid.ashworks_industrial_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.scrap_parts", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.electronics", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.copper_wire_spool", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.industrial_fasteners", "weight": 16, "minimum_quantity": 1, "maximum_quantity": 3},
+        {"item": "item.ammunition.5_45x39_standard", "weight": 18, "minimum_quantity": 12, "maximum_quantity": 30},
+        {"item": "item.maintenance.weapon_kit_basic", "weight": 7, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.5_45x39_30", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.rifle_5_45_service", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_basic", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_field", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
       "id": "loot.frontier.maintenance_cache_v1",
       "roll_count": 1,
       "entries": [
@@ -1469,6 +1547,48 @@
         {"item": "item.protective_gear.helmet_scout", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.body_armor_light", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.toilet_paper", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 2}
+      ]
+    },
+    {
+      "id": "loot.frontier.crisis.service_convoy_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.medical.medkit_alpha", "weight": 24, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.first_aid_stock", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.9mm_enhanced", "weight": 18, "minimum_quantity": 16, "maximum_quantity": 30},
+        {"item": "item.weapon.rifle_basic", "weight": 7, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_scout", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_light", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_patrol", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.crisis.industrial_breach_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.precision_components", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.maintenance.armor_kit_basic", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.5_45x39_enhanced", "weight": 22, "minimum_quantity": 16, "maximum_quantity": 30},
+        {"item": "item.ammunition.7_62x51_standard", "weight": 12, "minimum_quantity": 12, "maximum_quantity": 24},
+        {"item": "item.weapon.rifle_5_45_service", "weight": 9, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_heavy", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_assault", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
+    {
+      "id": "loot.frontier.crisis.freight_lockdown_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.precision_components", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.ammunition.7_62x51_standard", "weight": 20, "minimum_quantity": 14, "maximum_quantity": 30},
+        {"item": "item.ammunition.7_62x51_enhanced", "weight": 14, "minimum_quantity": 10, "maximum_quantity": 20},
+        {"item": "item.magazine.7_62x51_20", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.magazine.7_62x51_100_box", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.dmr_7_62x51_service", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.weapon.lmg_7_62x51_service", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_heavy", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_expedition", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
     }
   ],
@@ -1692,7 +1812,7 @@
         "enemy_deployment.alpha.route_blockade",
         "enemy_deployment.alpha.resource_pressure"
       ],
-      "raid_loot_table": "loot.raid.alpha",
+      "raid_loot_table": "loot.raid.greyline_supply_v1",
       "raid_loot_slots": [
         {"id": "central_1", "route": "central", "position": {"x": 470, "y": 350}},
         {"id": "central_2", "route": "central", "position": {"x": 650, "y": 290}},
@@ -1774,7 +1894,7 @@
         "enemy_deployment.riverside.warehouse_patrol",
         "enemy_deployment.riverside.outer_sweep"
       ],
-      "raid_loot_table": "loot.raid.alpha",
+      "raid_loot_table": "loot.raid.riverside_supply_v1",
       "raid_loot_slots": [
         {"id": "central_1", "route": "central", "position": {"x": 430, "y": 330}},
         {"id": "central_2", "route": "central", "position": {"x": 650, "y": 350}},
@@ -1857,7 +1977,7 @@
         "enemy_deployment.industrial.tank_patrol",
         "enemy_deployment.industrial.western_push"
       ],
-      "raid_loot_table": "loot.raid.alpha",
+      "raid_loot_table": "loot.raid.ashworks_industrial_v1",
       "raid_loot_slots": [
         {"id": "central_1", "route": "central", "position": {"x": 450, "y": 360}},
         {"id": "central_2", "route": "central", "position": {"x": 660, "y": 270}},
@@ -2045,7 +2165,7 @@
             "wave_size": 2,
             "active_enemy_cap": 52,
             "pressure_spawn_count": 3,
-            "advanced_loot_table": "loot.frontier.service_supplies_v1"
+            "advanced_loot_table": "loot.frontier.crisis.service_convoy_v1"
           },
           {
             "id": "crisis.frontier.industrial_breach",
@@ -2057,7 +2177,7 @@
             "wave_size": 4,
             "active_enemy_cap": 56,
             "pressure_spawn_count": 4,
-            "advanced_loot_table": "loot.frontier.fabrication_stock_v1"
+            "advanced_loot_table": "loot.frontier.crisis.industrial_breach_v1"
           },
           {
             "id": "crisis.frontier.freight_lockdown",
@@ -2069,7 +2189,7 @@
             "wave_size": 3,
             "active_enemy_cap": 54,
             "pressure_spawn_count": 3,
-            "advanced_loot_table": "loot.frontier.freight_manifest_v1"
+            "advanced_loot_table": "loot.frontier.crisis.freight_lockdown_v1"
           }
         ],
         "pressure_spawns": [

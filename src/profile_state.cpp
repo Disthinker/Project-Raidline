@@ -2069,7 +2069,8 @@ ProfileValidationResult validateProfileState(
         const bool legacyResourceEcologyRules =
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
         const bool highRiskCrisisRules =
-            raid.rulesVersion == "procedural-frontier-high-risk-crisis-28";
+            raid.rulesVersion == "procedural-frontier-high-risk-crisis-28" ||
+            raid.rulesVersion == "content-beta-loot-economy-29";
         const bool frontierLootIdentityRules =
             raid.rulesVersion == "procedural-frontier-loot-identity-27" ||
             highRiskCrisisRules;
@@ -3136,6 +3137,21 @@ ProfileValidationResult validateProfileState(
         if (raid.highRiskCrisis.has_value())
         {
             const RaidHighRiskCrisisSnapshot &crisis = *raid.highRiskCrisis;
+            const bool legacyCrisisLootTable =
+                raid.rulesVersion ==
+                    "procedural-frontier-high-risk-crisis-28" &&
+                ((crisis.definitionId ==
+                      "crisis.frontier.road_convergence" &&
+                  crisis.advancedLootTableId == LootTableDefinitionId{
+                      "loot.frontier.service_supplies_v1"}) ||
+                 (crisis.definitionId ==
+                      "crisis.frontier.industrial_breach" &&
+                  crisis.advancedLootTableId == LootTableDefinitionId{
+                      "loot.frontier.fabrication_stock_v1"}) ||
+                 (crisis.definitionId ==
+                      "crisis.frontier.freight_lockdown" &&
+                  crisis.advancedLootTableId == LootTableDefinitionId{
+                      "loot.frontier.freight_manifest_v1"}));
             const auto definition = std::find_if(
                 raidMap->highRisk.crises.begin(),
                 raidMap->highRisk.crises.end(),
@@ -3174,8 +3190,9 @@ ProfileValidationResult validateProfileState(
                 crisis.waveSize != definition->waveSize ||
                 crisis.activeEnemyCap != definition->activeEnemyCap ||
                 crisis.activeEnemyCap < outdoorEnemyCount ||
-                crisis.advancedLootTableId !=
-                    definition->advancedLootTableId ||
+                (crisis.advancedLootTableId !=
+                     definition->advancedLootTableId &&
+                 !legacyCrisisLootTable) ||
                 crisis.pressureSpawns.size() !=
                     definition->pressureSpawnCount)
             {

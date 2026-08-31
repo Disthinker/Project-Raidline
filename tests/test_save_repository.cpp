@@ -1952,6 +1952,51 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
         {profile.revision, "save-v51-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
+    profile.pendingRaid->rulesVersion =
+        "procedural-frontier-high-risk-crisis-28";
+    RaidHighRiskCrisisSnapshot &crisis =
+        *profile.pendingRaid->highRiskCrisis;
+    if (crisis.definitionId == "crisis.frontier.road_convergence")
+    {
+        crisis.advancedLootTableId = LootTableDefinitionId{
+            "loot.frontier.service_supplies_v1"};
+    }
+    else if (crisis.definitionId == "crisis.frontier.industrial_breach")
+    {
+        crisis.advancedLootTableId = LootTableDefinitionId{
+            "loot.frontier.fabrication_stock_v1"};
+    }
+    else
+    {
+        crisis.advancedLootTableId = LootTableDefinitionId{
+            "loot.frontier.freight_manifest_v1"};
+    }
+    const LootTableDefinition &legacyCrisisTable =
+        content.lootTable(crisis.advancedLootTableId);
+    std::size_t legacyLootIndex{};
+    for (RaidLootSnapshot &loot : profile.pendingRaid->loot)
+    {
+        if (!loot.requiresHighRisk)
+        {
+            continue;
+        }
+        const LootContentEntry &entry = legacyCrisisTable.entries[
+            legacyLootIndex++ % legacyCrisisTable.entries.size()];
+        loot.definitionId = entry.itemDefinitionId;
+        loot.quantity = entry.minimumQuantity;
+        AssetRecord *asset = profile.assets.findMutable(loot.assetId);
+        ASSERT_NE(asset, nullptr);
+        asset->definitionId = loot.definitionId;
+        asset->quantity = loot.quantity;
+        asset->orientation = ItemOrientation::Degrees0;
+        asset->remainingCharges = 0U;
+        asset->currentMaximumDurability = 0U;
+        asset->currentDurability = 0U;
+        asset->magazineRounds.clear();
+        asset->chamberedRound.reset();
+        asset->weaponMalfunction = WeaponMalfunctionType::None;
+    }
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
@@ -1970,6 +2015,24 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
     EXPECT_EQ(
         loaded.profile->pendingRaid->highRiskCrisis,
         profile.pendingRaid->highRiskCrisis);
+}
+
+TEST(SaveRepositoryTest, SchemaV38LoadsPreviousLoadoutGearContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-loadout-gear-content-v54", content);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "content-beta-loadout-gear-content-54",
+            38U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
 TEST(SaveRepositoryTest, CurrentSchemaRejectsTamperedHighRiskCrisis)

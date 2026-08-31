@@ -218,6 +218,16 @@ namespace
         return SDL_FRect{700.0F, 520.0F, 340.0F, 56.0F};
     }
 
+    SDL_FRect baseManufacturingRecipeButton(
+        std::size_t index) noexcept
+    {
+        return SDL_FRect{
+            170.0F,
+            210.0F + static_cast<float>(index) * 48.0F,
+            380.0F,
+            40.0F};
+    }
+
     SDL_FRect baseFacilityStaffingButton() noexcept
     {
         return SDL_FRect{170.0F, 530.0F, 240.0F, 42.0F};
@@ -822,32 +832,6 @@ namespace
             return "CHAMBER ROUND";
         }
         return std::nullopt;
-    }
-
-    const std::array<ItemDefinitionId, 20> &fixedSupplyIds()
-    {
-        static const std::array<ItemDefinitionId, 20> ids{
-            alpha_content::rifle,
-            alpha_content::pistol,
-            alpha_content::magazine,
-            alpha_content::pistolMagazine,
-            alpha_content::ammunition,
-            ItemDefinitionId{"item.ammunition.5_45x39_standard"},
-            ItemDefinitionId{"item.ammunition.7_62x51_standard"},
-            ItemDefinitionId{"item.magazine.5_45x39_30"},
-            ItemDefinitionId{"item.magazine.7_62x51_20"},
-            ItemDefinitionId{"item.magazine.7_62x51_100_box"},
-            alpha_content::helmet,
-            alpha_content::bodyArmor,
-            alpha_content::chestRig,
-            alpha_content::backpack,
-            alpha_content::medkit,
-            alpha_content::bandage,
-            alpha_content::tourniquet,
-            alpha_content::painkiller,
-            alpha_content::weaponMaintenanceKit,
-            alpha_content::armorMaintenanceKit};
-        return ids;
     }
 
     double orientationAngle(
@@ -2886,10 +2870,6 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 : SoundEventId::UiDeny);
             return;
         }
-        if (!contains(baseManufacturingButton(), click.position))
-        {
-            return;
-        }
         const ProfileState &profile = gameSession_.profile();
         const auto &recipes =
             publishedContentRegistry().baseManufacturingRecipes();
@@ -2899,11 +2879,34 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             gameAudio_.play(SoundEventId::UiDeny);
             return;
         }
+        if (!profile.baseManufacturing.activeOrder.has_value())
+        {
+            for (std::size_t index{}; index < recipes.size(); ++index)
+            {
+                if (!contains(
+                        baseManufacturingRecipeButton(index),
+                        click.position))
+                {
+                    continue;
+                }
+                selectedBaseManufacturingRecipeIndex_ = index;
+                uiMessage_ = "MANUFACTURING RECIPE SELECTED";
+                gameAudio_.play(SoundEventId::UiConfirm);
+                return;
+            }
+        }
+        if (!contains(baseManufacturingButton(), click.position))
+        {
+            return;
+        }
         BaseManufacturingReceipt receipt;
         if (!profile.baseManufacturing.activeOrder.has_value())
         {
+            const std::size_t selectedIndex = std::min(
+                selectedBaseManufacturingRecipeIndex_,
+                recipes.size() - 1U);
             receipt = gameSession_.executeStartBaseManufacturing(
-                recipes.front().id,
+                recipes[selectedIndex].id,
                 nextProfileTransactionId("start-base-manufacturing"));
             uiMessage_ = receipt.succeeded
                 ? "MANUFACTURING STARTED"
@@ -3120,12 +3123,13 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Supply)
     {
-        const auto &supply = fixedSupplyIds();
+        const auto &supply =
+            publishedContentRegistry().fixedSupplyItemIds();
         for (std::size_t index = 0; index < supply.size(); ++index)
         {
             const SDL_FRect row{
-                76.0F + static_cast<float>(index / 5U) * 140.0F,
-                164.0F + static_cast<float>(index % 5U) * 46.0F,
+                76.0F + static_cast<float>(index / 6U) * 140.0F,
+                164.0F + static_cast<float>(index % 6U) * 46.0F,
                 132.0F,
                 40.0F};
             if (!contains(row, click.position))
@@ -10557,14 +10561,15 @@ void App::renderBaseSupply()
     uiTextRenderer_.render(
         renderer_, 96.0F, 122.0F, operationsStatus.c_str());
 
-    const auto &supply = fixedSupplyIds();
+    const auto &supply =
+        publishedContentRegistry().fixedSupplyItemIds();
     for (std::size_t index = 0; index < supply.size(); ++index)
     {
         const ItemDefinition &definition =
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
-            76.0F + static_cast<float>(index / 5U) * 140.0F,
-            164.0F + static_cast<float>(index % 5U) * 46.0F,
+            76.0F + static_cast<float>(index / 6U) * 140.0F,
+            164.0F + static_cast<float>(index % 6U) * 46.0F,
             132.0F,
             40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
@@ -11673,16 +11678,41 @@ void App::renderBaseWorkshop()
         uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
         return;
     }
-    const BaseManufacturingRecipeDefinition &recipe =
-        publishedContentRegistry().baseManufacturingRecipes().front();
+    const auto &recipes =
+        publishedContentRegistry().baseManufacturingRecipes();
+    if (recipes.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, 170.0F, 200.0F,
+            "NO PUBLISHED MANUFACTURING RECIPE");
+        return;
+    }
+    const std::size_t selectedIndex = std::min(
+        selectedBaseManufacturingRecipeIndex_,
+        recipes.size() - 1U);
+    const BaseManufacturingRecipeDefinition *recipe =
+        &recipes[selectedIndex];
+    if (profile.baseManufacturing.activeOrder.has_value())
+    {
+        const auto activeRecipe = std::find_if(
+            recipes.begin(), recipes.end(),
+            [&profile](const BaseManufacturingRecipeDefinition &candidate)
+            {
+                return candidate.id ==
+                    profile.baseManufacturing.activeOrder
+                        ->recipeDefinitionId;
+            });
+        if (activeRecipe != recipes.end())
+        {
+            recipe = &*activeRecipe;
+        }
+    }
     const BaseManufacturingProjection projection =
         projectBaseManufacturing(profile);
     SDL_SetRenderDrawColor(renderer_, 232, 222, 196, 255);
     uiTextRenderer_.render(
         renderer_, 170.0F, 128.0F,
         "WORKSHOP & PRODUCTION | TEXT/GEOMETRY PLACEHOLDER");
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 178.0F, recipe.displayName.c_str());
 
     const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
     const std::string worker = fmt::format(
@@ -11691,23 +11721,42 @@ void App::renderBaseWorkshop()
         workforce.workshopWorker.has_value()
             ? baseResidentProfessionName(*workforce.workshopWorker)
             : "EMPTY");
-    uiTextRenderer_.render(renderer_, 170.0F, 204.0F, worker.c_str());
+    uiTextRenderer_.render(renderer_, 170.0F, 164.0F, worker.c_str());
 
-    float y = 234.0F;
-    uiTextRenderer_.render(renderer_, 170.0F, y, "REQUIRED INPUTS");
-    for (const BaseManufacturingInputDefinition &input : recipe.inputs)
+    uiTextRenderer_.render(renderer_, 170.0F, 192.0F, "SELECT RECIPE");
+    for (std::size_t index{}; index < recipes.size(); ++index)
+    {
+        const SDL_FRect recipeButton =
+            baseManufacturingRecipeButton(index);
+        const bool selected = recipes[index].id == recipe->id;
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 82 : 48,
+            selected ? 92 : 54,
+            selected ? 68 : 50, 255);
+        SDL_RenderFillRect(renderer_, &recipeButton);
+        SDL_SetRenderDrawColor(renderer_, 176, 142, 92, 255);
+        SDL_RenderRect(renderer_, &recipeButton);
+        uiTextRenderer_.render(
+            renderer_, recipeButton.x + 14.0F,
+            recipeButton.y + 12.0F,
+            recipes[index].displayName.c_str());
+    }
+
+    float y = 210.0F;
+    uiTextRenderer_.render(renderer_, 590.0F, y, "REQUIRED INPUTS");
+    for (const BaseManufacturingInputDefinition &input : recipe->inputs)
     {
         const ItemDefinition &definition =
             publishedContentRegistry().item(input.itemDefinitionId);
         const std::string row = fmt::format(
             "{} x{}", definition.displayName, input.quantity);
         y += 30.0F;
-        uiTextRenderer_.render(renderer_, 190.0F, y, row.c_str());
+        uiTextRenderer_.render(renderer_, 610.0F, y, row.c_str());
     }
     const ItemDefinition &outputDefinition =
-        publishedContentRegistry().item(recipe.outputItemDefinitionId);
+        publishedContentRegistry().item(recipe->outputItemDefinitionId);
     const std::uint32_t moraleDuration = applyBaseMoraleDurationPercent(
-        recipe.durationMinutes,
+        recipe->durationMinutes,
         profile.baseMorale.tier,
         publishedContentRegistry().baseMorale());
     const std::uint32_t staffedDuration = workforce.workshopWorker.has_value()
@@ -11726,15 +11775,18 @@ void App::renderBaseWorkshop()
         activeBaseSiteManufacturingDurationPercent(
             profile, publishedContentRegistry());
     const std::string output = fmt::format(
-        "OUTPUT {} x{} | {} WORKER | BASE {}H | SITE {}% | CURRENT {}H {:02}M",
+        "OUTPUT {} x{}",
         outputDefinition.displayName,
-        recipe.outputQuantity,
-        recipe.workerCount,
-        recipe.durationMinutes / kWorldMinutesPerHour,
+        recipe->outputQuantity);
+    const std::string timing = fmt::format(
+        "{} WORKER | BASE {}H | SITE {}% | CURRENT {}H {:02}M",
+        recipe->workerCount,
+        recipe->durationMinutes / kWorldMinutesPerHour,
         sitePercent,
         adjustedDuration / kWorldMinutesPerHour,
         adjustedDuration % kWorldMinutesPerHour);
-    uiTextRenderer_.render(renderer_, 170.0F, 338.0F, output.c_str());
+    uiTextRenderer_.render(renderer_, 590.0F, 338.0F, output.c_str());
+    uiTextRenderer_.render(renderer_, 590.0F, 368.0F, timing.c_str());
 
     std::string status;
     const char *buttonLabel{};
@@ -11745,7 +11797,7 @@ void App::renderBaseWorkshop()
             queryStartBaseManufacturing(
                 profile,
                 publishedContentRegistry(),
-                StartBaseManufacturingCommand{recipe.id});
+                StartBaseManufacturingCommand{recipe->id});
         status = plan.canCommit
             ? "WORKSHOP READY | INPUTS REMAIN IN OWNED INVENTORY UNTIL START"
             : plan.message;
@@ -11780,7 +11832,7 @@ void App::renderBaseWorkshop()
             : "CANCEL BLOCKED | STASH SPACE REQUIRED";
         available = plan.canCommit;
     }
-    uiTextRenderer_.render(renderer_, 170.0F, 400.0F, status.c_str());
+    uiTextRenderer_.render(renderer_, 170.0F, 440.0F, status.c_str());
 
     const SDL_FRect button = baseManufacturingButton();
     SDL_SetRenderDrawColor(

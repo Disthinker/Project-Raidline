@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <string>
 #include <utility>
 
 #include "alpha_content_ids.h"
@@ -110,6 +111,77 @@ TEST(BaseManufacturingDomainTest,
     }
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
+}
+
+TEST(BaseManufacturingDomainTest,
+     PublishedAmmunitionRecipesReserveSelectedCaliberAndQuantity)
+{
+    struct RecipeCase
+    {
+        BaseManufacturingRecipeDefinitionId recipeId;
+        ItemDefinitionId outputId;
+        std::uint32_t outputQuantity;
+        std::uint32_t durationMinutes;
+    };
+    const std::array cases{
+        RecipeCase{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.ammunition_9x19_standard"},
+            ItemDefinitionId{"item.ammunition.9mm_basic"},
+            60U,
+            120U},
+        RecipeCase{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.ammunition_5_45x39_standard"},
+            ItemDefinitionId{"item.ammunition.5_45x39_standard"},
+            60U,
+            180U},
+        RecipeCase{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.ammunition_7_62x51_standard"},
+            ItemDefinitionId{"item.ammunition.7_62x51_standard"},
+            40U,
+            240U}};
+
+    for (const RecipeCase &testCase : cases)
+    {
+        ProfileState profile = makeProfile();
+        const BaseManufacturingRecipeDefinition &recipe =
+            publishedContentRegistry().baseManufacturingRecipe(
+                testCase.recipeId);
+        for (const BaseManufacturingInputDefinition &input : recipe.inputs)
+        {
+            addToStash(profile, input.itemDefinitionId);
+        }
+
+        const BaseManufacturingStartPlan plan =
+            queryStartBaseManufacturing(
+                profile,
+                publishedContentRegistry(),
+                StartBaseManufacturingCommand{testCase.recipeId});
+        ASSERT_TRUE(plan.canCommit) << plan.message;
+        EXPECT_EQ(plan.durationMinutes, testCase.durationMinutes);
+        const BaseManufacturingReceipt started =
+            executeStartBaseManufacturing(
+                profile,
+                publishedContentRegistry(),
+                StartBaseManufacturingCommand{testCase.recipeId},
+                CommandContext{
+                    profile.revision,
+                    std::string{"start-ammunition-manufacturing-"} +
+                        std::string{testCase.outputId.value()}});
+        ASSERT_TRUE(started.succeeded) << started.message;
+        ASSERT_TRUE(started.outputAssetId.has_value());
+        const AssetRecord *output =
+            profile.assets.find(*started.outputAssetId);
+        ASSERT_NE(output, nullptr);
+        EXPECT_EQ(output->definitionId, testCase.outputId);
+        EXPECT_EQ(output->quantity, testCase.outputQuantity);
+        ASSERT_TRUE(profile.baseManufacturing.activeOrder.has_value());
+        EXPECT_EQ(
+            profile.baseManufacturing.activeOrder->recipeDefinitionId,
+            testCase.recipeId);
+    }
 }
 
 TEST(BaseManufacturingDomainTest,

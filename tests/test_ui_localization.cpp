@@ -62,6 +62,21 @@ TEST(UiLocalizationTest, ChineseTranslatesFormattedCountersAndContentNames) {
             "5.45×39增强普通弹");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesManufacturingRecipeSelection) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "9x19 Standard Ammunition Batch"),
+            "9×19标准弹药批次");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "5.45x39 Standard Ammunition Batch"),
+            "5.45×39标准弹药批次");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MANUFACTURING RECIPE SELECTED"),
+            "已选择生产配方");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesControlsAndDomainReceipts) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "Action: MoveLeft"),
             "操作：向左移动");
