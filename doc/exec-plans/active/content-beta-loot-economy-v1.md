@@ -83,5 +83,5 @@
 - [x] 实现内容驱动固定供应与来源/防套利校验。
 - [x] 实现地图/资源点/高危危机产出梯度。
 - [x] 实现三种基础弹药制造和工坊配方选择。
-- [ ] 完成 Windows Debug、完整 CTest 与 exact-head Windows/Ubuntu CI（本地 Windows Debug 全目标及 1324/1324 已通过）。
+- [x] 完成 Windows Debug、1324/1324 完整 CTest 与 exact-head Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。

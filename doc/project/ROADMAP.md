@@ -176,7 +176,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Frontier 高危危机生态 v1 | 每局高危围绕道路、工业或货运目标形成不同增援节奏、方向和主题高级资源机会；敌情可提前预告 | 三类内容危机、合法目标资源点、冻结压力来源、rules v28/content v51/schema v38、rules v27/content v50 兼容 | PR #116 已通过 1296/1296 CTest、exact-head CI 和用户验收，以 `e285a2b` 进入 main |
 | 代表性枪械与口径梯度 v1 | 轻型、通用和远距/重型配装在操控、射程、供弹与穿甲上形成可感知差异；开发阶段可直接检查全部当前发布物品 | 六职责武器、三口径、两档普通弹、领域兼容图、旧 ID/旧 pending Raid 兼容、content v53 一次性全目录 Stash 发放 | PR #117 已通过 CI 和用户验收，以 `8164e66` 进入 main；完整目录覆盖会削弱成长节奏，Macro 3 前必须复核其发行形态 |
 | 防具、胸挂与背包梯度 v1 | 轻装、均衡和重装在防护、维修、重量、胸挂组织与背包容量上形成真实取舍 | 两档新头盔/护甲、两种新胸挂/背包、定义驱动容器 UI、24×16 Stash、content v54 与 v53 兼容 | PR #118 已通过 CI 和用户验收，以 `e24da4c` 进入 main |
-| 战利品来源、经济与补给可持续性 v1 | 固定图、Frontier 资源点和危机提供可预期的基础/工业/高危来源；固定供应与三口径基础弹制造防止连续失败死档 | 定义驱动固定供应、固定图/危机独立 Loot 表、三种弹药批次、制造回收防套利、content v55/rules v29 与 v54/rules v28 兼容 | 当前开发分支；Windows Debug 全目标与 1324/1324 CTest 已通过，尚待 exact-head CI 和用户正常游玩验收 |
+| 战利品来源、经济与补给可持续性 v1 | 固定图、Frontier 资源点和危机提供可预期的基础/工业/高危来源；固定供应与三口径基础弹制造防止连续失败死档 | 定义驱动固定供应、固定图/危机独立 Loot 表、三种弹药批次、制造回收防套利、content v55/rules v29 与 v54/rules v28 兼容 | Draft PR #119；Windows Debug 全目标、1324/1324 CTest 与 exact-head CI 已通过，尚待用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 
