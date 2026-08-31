@@ -177,7 +177,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | 代表性枪械与口径梯度 v1 | 轻型、通用和远距/重型配装在操控、射程、供弹与穿甲上形成可感知差异；开发阶段可直接检查全部当前发布物品 | 六职责武器、三口径、两档普通弹、领域兼容图、旧 ID/旧 pending Raid 兼容、content v53 一次性全目录 Stash 发放 | PR #117 已通过 CI 和用户验收，以 `8164e66` 进入 main；完整目录覆盖会削弱成长节奏，Macro 3 前必须复核其发行形态 |
 | 防具、胸挂与背包梯度 v1 | 轻装、均衡和重装在防护、维修、重量、胸挂组织与背包容量上形成真实取舍 | 两档新头盔/护甲、两种新胸挂/背包、定义驱动容器 UI、24×16 Stash、content v54 与 v53 兼容 | PR #118 已通过 CI 和用户验收，以 `e24da4c` 进入 main |
 | 战利品来源、经济与补给可持续性 v1 | 固定图、Frontier 资源点和危机提供可预期的基础/工业/高危来源；固定供应与三口径基础弹制造防止连续失败死档 | 定义驱动固定供应、固定图/危机独立 Loot 表、三种弹药批次、制造回收防套利、content v55/rules v29 与 v54/rules v28 兼容 | PR #119 已通过 CI 和用户验收，以 `ecd8288` 进入 main |
-| 成长闭环与配装准备度 v1 | Raid Gate 可选择轻型、均衡或重型职责，并直接看到真实配装缺口、随身兼容弹药和建议目标地图 | 稳定职责 DefinitionId、纯 `LoadoutReadinessProjection`、content v56 与 v55 兼容；选择零写入、无自动配装 | 当前开发分支；Windows Debug 全目标与 1331/1331 CTest 已通过，待 exact-head CI 与用户正常游玩验收 |
+| 成长闭环与配装准备度 v1 | Raid Gate 可选择轻型、均衡或重型职责，并直接看到真实配装缺口、随身兼容弹药和建议目标地图 | 稳定职责 DefinitionId、纯 `LoadoutReadinessProjection`、content v56 与 v55 兼容；选择零写入、无自动配装 | Draft PR #120；实现提交 `b24cec5` 已通过 Windows Debug 全目标、1331/1331 CTest 与 exact-head Windows/Ubuntu CI，待用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

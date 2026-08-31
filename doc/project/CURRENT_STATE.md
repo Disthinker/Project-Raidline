@@ -5,7 +5,7 @@
 ## Git 与交付基线
 
 - `origin/main@ecd8288` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图，以及 Content Beta 的枪械/口径、防具/容器和战利品经济梯度。
-- 当前开发分支：`codex/content-beta-growth-loop-gate-v1`，从 `origin/main@ecd8288` 创建。
+- 当前开发分支：`codex/content-beta-growth-loop-gate-v1`，从 `origin/main@ecd8288` 创建；Draft PR #120 的实现提交 `b24cec5` 已通过本地与双平台自动化，等待用户正常游玩验收。
 - 当前活动计划：`doc/exec-plans/active/content-beta-growth-loop-gate-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 

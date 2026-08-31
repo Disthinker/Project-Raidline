@@ -55,5 +55,5 @@
 - [x] 从最新 `origin/main@ecd8288` 创建独立 Macro 4 分支。
 - [x] 冻结本 ExecPlan、职责、版本和迁移合同。
 - [x] 实现内容定义、领域投影和客户端 Raid Gate。
-- [ ] 完成长序列门禁、全量验证和双平台 exact-head CI；本地 Windows Debug 全目标与 1331/1331 CTest 已通过，等待 exact-head CI。
+- [x] 完成长序列门禁、全量验证和双平台 exact-head CI；实现提交 `b24cec5` 已通过 Windows Debug 全目标、1331/1331 CTest 与 Windows/Ubuntu CI。
 - [ ] 用户正常游玩验收。
