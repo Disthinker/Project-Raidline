@@ -126,14 +126,15 @@ bool GameFlow::deploy(
 
 void GameFlow::updateBase(
     const BaseInput &input,
-    float deltaTime) noexcept
+    float deltaTime)
 {
     if (state_ != GameFlowState::Base || activeBaseFacility_.has_value())
     {
         return;
     }
     syncBaseWorldSite();
-    activeBaseFacility_ = baseWorld_.update(input, deltaTime);
+    activeBaseFacility_ = gameSession_.updateBaseWorld(
+        baseWorld_, input, deltaTime);
     if (activeBaseFacility_.has_value())
     {
         gameSession_.noteBaseFacility(*activeBaseFacility_);

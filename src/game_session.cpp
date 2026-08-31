@@ -91,6 +91,214 @@ void GameSession::update(
         : GameSessionState::InRaid;
 }
 
+std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
+    BaseWorld &baseWorld,
+    const GameplayInput &input,
+    float deltaTime)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
+        state_ != GameSessionState::BetweenRaids)
+    {
+        return std::nullopt;
+    }
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        baseCombatElapsedSeconds_ += deltaTime;
+    }
+
+    if (input.weaponSlotJustPressed.has_value() &&
+        isWeaponEquipmentSlot(*input.weaponSlotJustPressed) &&
+        *input.weaponSlotJustPressed != activeWeaponSlot_ &&
+        equippedAsset(profile_, *input.weaponSlotJustPressed).has_value())
+    {
+        activeWeaponSlot_ = *input.weaponSlotJustPressed;
+        configuredBaseWeaponAssetId_.reset();
+        weaponClearGesture_.reset();
+        presentationEvents_.push_back(
+            GameSessionPresentationEvent::WeaponEquipped);
+    }
+
+    synchronizeActiveBaseWeapon(baseWorld);
+    const std::optional<AssetInstanceId> weapon = activeAlphaWeapon();
+    GameplayInput simulationInput = input;
+    simulationInput.reloadJustPressed = false;
+    simulationInput.healJustPressed = false;
+    simulationInput.quitRaidJustPressed = false;
+
+    bool automaticFire{};
+    int ammunitionPenetration{};
+    std::optional<WeaponHandlingParameters> weaponHandling;
+    if (weapon.has_value())
+    {
+        const AssetRecord *weaponAsset = profile_.assets.find(*weapon);
+        if (weaponAsset != nullptr)
+        {
+            try
+            {
+                const ItemDefinition &definition =
+                    publishedContentRegistry().item(
+                        weaponAsset->definitionId);
+                automaticFire = definition.weaponUse.has_value() &&
+                    definition.weaponUse->automaticFire;
+                if (definition.weaponUse.has_value())
+                {
+                    if (const auto index =
+                            developerWeaponOverrideIndex(*weapon))
+                    {
+                        weaponHandling = effectiveDeveloperHandling(
+                            developerWeaponOverrides_[*index]);
+                    }
+                    else
+                    {
+                        weaponHandling = deriveWeaponHandling(
+                            *definition.weaponUse);
+                    }
+                }
+                const std::optional<ItemDefinitionId> ammunitionId =
+                    weaponAsset->chamberedRound.has_value()
+                    ? std::optional<ItemDefinitionId>{
+                          weaponAsset->chamberedRound->definitionId}
+                    : definition.compatibleAmmunitionDefinitionId;
+                if (ammunitionId.has_value())
+                {
+                    const ItemDefinition &ammunition =
+                        publishedContentRegistry().item(*ammunitionId);
+                    if (ammunition.ammunitionUse.has_value())
+                    {
+                        ammunitionPenetration =
+                            ammunition.ammunitionUse->penetration;
+                    }
+                }
+            }
+            catch (...)
+            {
+                automaticFire = false;
+            }
+        }
+    }
+    baseWorld.configureWeaponAmmunition(ammunitionPenetration);
+    if (simulationInput.sprint)
+    {
+        simulationInput.aimDownSights = false;
+    }
+    else if (simulationInput.aimDownSights && weaponHandling.has_value())
+    {
+        simulationInput.movementSpeedMultiplier *=
+            weaponHandling->aimDownSightsMovementMultiplier;
+    }
+    if (!automaticFire)
+    {
+        simulationInput.firePressed = false;
+    }
+
+    std::optional<FireWeaponCommand> pendingFireCommand;
+    if (weapon.has_value() && !input.inventoryOpen &&
+        (simulationInput.fireJustPressed ||
+         (automaticFire && simulationInput.firePressed)))
+    {
+        Pcg32 faultRandom{
+            profile_.revision ^ 0x776561706f6e2d66ULL,
+            weaponFaultSequence_ + 0x626173652d666972ULL};
+        const FireWeaponCommand command{
+            *weapon,
+            faultRandom.bounded(10000U),
+            faultRandom.next()};
+        const WeaponAmmoPlan fire = queryFireWeapon(
+            profile_, publishedContentRegistry(), command);
+        if (!input.developerInfiniteAmmo && fire.canCommit &&
+            fire.result == WeaponAmmoResult::Chambered)
+        {
+            ProfileState candidate = profile_;
+            const WeaponAmmoReceipt chambered = executeFireWeapon(
+                candidate,
+                publishedContentRegistry(),
+                command,
+                CommandContext{
+                    profile_.revision,
+                    nextRaidTransaction("base-fire-chamber")});
+            simulationInput.fireJustPressed = false;
+            simulationInput.firePressed = false;
+            if (chambered.succeeded &&
+                chambered.result == WeaponAmmoResult::Chambered &&
+                commitProfileCandidate(std::move(candidate), false))
+            {
+                worldClockDirty_ = true;
+                presentationEvents_.push_back(
+                    GameSessionPresentationEvent::WeaponChambered);
+            }
+            else
+            {
+                persistenceMessage_ = chambered.message;
+            }
+        }
+        else if (fire.canCommit &&
+                 (fire.result == WeaponAmmoResult::Fired ||
+                  (input.developerInfiniteAmmo &&
+                   fire.result == WeaponAmmoResult::Chambered)))
+        {
+            if (!input.developerInfiniteAmmo)
+            {
+                pendingFireCommand = command;
+            }
+        }
+        else
+        {
+            simulationInput.fireJustPressed = false;
+            simulationInput.firePressed = false;
+            if (fire.result == WeaponAmmoResult::Dry)
+            {
+                presentationEvents_.push_back(
+                    GameSessionPresentationEvent::WeaponDryFire);
+            }
+        }
+    }
+    else if (!weapon.has_value() || input.inventoryOpen)
+    {
+        simulationInput.fireJustPressed = false;
+        simulationInput.firePressed = false;
+    }
+
+    const std::optional<BaseFacilityKind> facility =
+        baseWorld.update(simulationInput, deltaTime);
+    if (!baseWorld.shotFiredLastUpdate())
+    {
+        return facility;
+    }
+    if (!input.developerInfiniteAmmo && pendingFireCommand.has_value())
+    {
+        ProfileState candidate = profile_;
+        const WeaponAmmoReceipt committed = executeFireWeapon(
+            candidate,
+            publishedContentRegistry(),
+            *pendingFireCommand,
+            CommandContext{
+                profile_.revision,
+                nextRaidTransaction("base-fire")});
+        if (!committed.succeeded ||
+            (committed.result != WeaponAmmoResult::Fired &&
+             committed.result != WeaponAmmoResult::FiredAndMalfunctioned) ||
+            !commitProfileCandidate(std::move(candidate), false))
+        {
+            persistenceMessage_ = committed.message.empty()
+                ? "base shot could not be saved"
+                : committed.message;
+            return facility;
+        }
+        worldClockDirty_ = true;
+        ++weaponFaultSequence_;
+    }
+    const AssetRecord *currentWeapon = weapon.has_value()
+        ? profile_.assets.find(*weapon)
+        : nullptr;
+    if (currentWeapon != nullptr &&
+        currentWeapon->weaponMalfunction != WeaponMalfunctionType::None)
+    {
+        weaponClearGesture_.reset();
+        persistenceMessage_ = "weapon malfunction";
+    }
+    return facility;
+}
+
 bool GameSession::startNextRaid() noexcept
 {
     if (!canStartNextRaid() ||
@@ -981,7 +1189,11 @@ bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
 
 bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 {
-    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    const bool inBase = !alphaRaidActive_ &&
+        !profile_.pendingRaid.has_value() &&
+        state_ == GameSessionState::BetweenRaids;
+    if ((!alphaRaidActive_ && !inBase) ||
+        (alphaRaidActive_ && raidActionState_.active().has_value()))
     {
         weaponClearGesture_.reset();
         return false;
@@ -996,7 +1208,9 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
         weaponClearGesture_.reset();
         return false;
     }
-    if (!weaponClearGesture_.observe(delta, raidElapsedSeconds_))
+    const float elapsedSeconds = alphaRaidActive_
+        ? raidElapsedSeconds_ : baseCombatElapsedSeconds_;
+    if (!weaponClearGesture_.observe(delta, elapsedSeconds))
     {
         return false;
     }
@@ -1013,6 +1227,10 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
         commitProfileCandidate(std::move(candidate), false);
     if (cleared)
     {
+        if (inBase)
+        {
+            worldClockDirty_ = true;
+        }
         presentationEvents_.push_back(
             GameSessionPresentationEvent::MalfunctionCleared);
     }
@@ -1073,7 +1291,9 @@ std::optional<AssetInstanceId> GameSession::activeAlphaWeapon() const noexcept
 std::optional<DeveloperWeaponTuningSnapshot>
 GameSession::developerWeaponTuning() const
 {
-    if (!alphaRaidActive_)
+    if (!alphaRaidActive_ &&
+        (profile_.pendingRaid.has_value() ||
+         state_ != GameSessionState::BetweenRaids))
     {
         return std::nullopt;
     }
@@ -1125,8 +1345,12 @@ bool GameSession::adjustDeveloperWeaponTuning(
     int direction,
     bool coarseStep)
 {
-    if (!alphaRaidActive_ || world_ == nullptr ||
-        !world_->raidSession().isActive() ||
+    const bool activeRaid = alphaRaidActive_ && world_ != nullptr &&
+        world_->raidSession().isActive();
+    const bool activeBase = !alphaRaidActive_ &&
+        !profile_.pendingRaid.has_value() &&
+        state_ == GameSessionState::BetweenRaids;
+    if ((!activeRaid && !activeBase) ||
         (direction != -1 && direction != 1) ||
         parameter == DeveloperWeaponParameter::Count)
     {
@@ -1408,17 +1632,30 @@ bool GameSession::adjustDeveloperWeaponTuning(
         return false;
     }
 
-    world_->configureWeaponFire(
-        entry.weaponUse,
-        effectiveDeveloperHandling(entry),
-        true);
-    configuredWeaponAssetId_ = *weapon;
+    if (activeRaid)
+    {
+        world_->configureWeaponFire(
+            entry.weaponUse,
+            effectiveDeveloperHandling(entry),
+            true);
+        configuredWeaponAssetId_ = *weapon;
+        configuredBaseWeaponAssetId_.reset();
+    }
+    else
+    {
+        configuredBaseWeaponAssetId_.reset();
+    }
     return true;
 }
 
 bool GameSession::resetDeveloperWeaponTuning()
 {
-    if (!alphaRaidActive_ || world_ == nullptr)
+    const bool activeRaid = alphaRaidActive_ && world_ != nullptr &&
+        world_->raidSession().isActive();
+    const bool activeBase = !alphaRaidActive_ &&
+        !profile_.pendingRaid.has_value() &&
+        state_ == GameSessionState::BetweenRaids;
+    if (!activeRaid && !activeBase)
     {
         return false;
     }
@@ -1449,11 +1686,19 @@ bool GameSession::resetDeveloperWeaponTuning()
         developerWeaponOverrides_.erase(
             developerWeaponOverrides_.begin() +
             static_cast<std::ptrdiff_t>(*index));
-        world_->configureWeaponFire(
-            *definition.weaponUse,
-            deriveWeaponHandling(*definition.weaponUse),
-            true);
-        configuredWeaponAssetId_ = *weapon;
+        if (activeRaid)
+        {
+            world_->configureWeaponFire(
+                *definition.weaponUse,
+                deriveWeaponHandling(*definition.weaponUse),
+                true);
+            configuredWeaponAssetId_ = *weapon;
+            configuredBaseWeaponAssetId_.reset();
+        }
+        else
+        {
+            configuredBaseWeaponAssetId_.reset();
+        }
         return true;
     }
     catch (...)
@@ -4083,6 +4328,69 @@ void GameSession::synchronizeActiveAlphaWeapon()
     catch (...)
     {
         configuredWeaponAssetId_.reset();
+    }
+}
+
+void GameSession::synchronizeActiveBaseWeapon(BaseWorld &baseWorld)
+{
+    std::optional<AssetInstanceId> active = activeAlphaWeapon();
+    if (!active.has_value())
+    {
+        for (EquipmentSlotKind slot : {
+                 EquipmentSlotKind::PrimaryWeapon,
+                 EquipmentSlotKind::SecondaryWeapon,
+                 EquipmentSlotKind::Sidearm})
+        {
+            if (const auto candidate = equippedAsset(profile_, slot))
+            {
+                activeWeaponSlot_ = slot;
+                active = candidate;
+                break;
+            }
+        }
+    }
+    if (configuredBaseWeaponAssetId_ == active)
+    {
+        return;
+    }
+    configuredBaseWeaponAssetId_ = active;
+    weaponClearGesture_.reset();
+    if (!active.has_value())
+    {
+        return;
+    }
+    const AssetRecord *asset = profile_.assets.find(*active);
+    if (asset == nullptr)
+    {
+        configuredBaseWeaponAssetId_.reset();
+        return;
+    }
+    try
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.weaponUse.has_value())
+        {
+            configuredBaseWeaponAssetId_.reset();
+            return;
+        }
+        if (const auto index = developerWeaponOverrideIndex(*active))
+        {
+            const DeveloperWeaponOverride &entry =
+                developerWeaponOverrides_[*index];
+            baseWorld.configureWeaponFire(
+                entry.weaponUse,
+                effectiveDeveloperHandling(entry),
+                false);
+        }
+        else
+        {
+            baseWorld.configureWeaponFire(*definition.weaponUse);
+        }
+    }
+    catch (...)
+    {
+        configuredBaseWeaponAssetId_.reset();
     }
 }
 

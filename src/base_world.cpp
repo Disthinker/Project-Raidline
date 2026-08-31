@@ -125,6 +125,12 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
     presentationCache_ = {};
     presentationCacheValid_ = false;
     resetAtMedicalPoint();
+    shooting_.clearSpatialTransientPresentation();
+    shooting_.reanchor(
+        {playerPosition_.x + playerSize_.x * 0.5F,
+         playerPosition_.y + playerSize_.y * 0.5F},
+        playerFacingDirection_,
+        layout_.worldSize);
 }
 
 void BaseWorld::rebuildCollisionIndex()
@@ -146,8 +152,9 @@ void BaseWorld::rebuildCollisionIndex()
 
 std::optional<BaseFacilityKind> BaseWorld::update(
     const BaseInput &input,
-    float deltaTime) noexcept
+    float deltaTime)
 {
+    shooting_.beginFrame(deltaTime);
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         Vec2 direction{
@@ -178,7 +185,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 playerMovementAnimator_.reset();
             }
             playerMovementAnimator_.update(deltaTime);
-            const float speed = input.sprint ? 280.0F : 180.0F;
+            const float speed = (input.sprint ? 280.0F : 180.0F) *
+                std::clamp(input.movementSpeedMultiplier, 0.0F, 1.0F);
             const float maximumY = walkableBounds_.position.y +
                 walkableBounds_.size.y - playerSize_.y;
             const float maximumPlayerX = walkableBounds_.position.x +
@@ -225,6 +233,41 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         }
     }
 
+    const Vec2 playerCenter{
+        playerPosition_.x + playerSize_.x * 0.5F,
+        playerPosition_.y + playerSize_.y * 0.5F};
+    const bool pointerAiming = input.aimWorldPosition.has_value() ||
+        input.aimMotionDelta.has_value();
+    if (pointerAiming)
+    {
+        shooting_.updateAim(
+            input,
+            playerCenter,
+            playerFacingDirection_,
+            layout_.worldSize,
+            deltaTime);
+        playerFacingDirection_ = shooting_.aimDirection();
+        if (playerFacingDirection_.x != 0.0F)
+        {
+            playerHorizontalFacing_ = playerFacingDirection_.x;
+        }
+    }
+    else
+    {
+        shooting_.reanchor(
+            playerCenter, playerFacingDirection_, layout_.worldSize);
+    }
+    static_cast<void>(shooting_.advanceShots(
+        input,
+        deltaTime,
+        playerCenter,
+        std::max(playerSize_.x, playerSize_.y),
+        playerIsMoving_,
+        false,
+        layout_.worldSize,
+        noCombatTargets_,
+        movementBlockers_));
+
     if (input.interactJustPressed)
     {
         return interactableFacility();
@@ -260,6 +303,73 @@ std::size_t BaseWorld::playerAnimationFrame() const noexcept
 const std::array<BaseFacility, 7> &BaseWorld::facilities() const noexcept
 {
     return facilities_;
+}
+
+void BaseWorld::configureWeaponFire(const WeaponUseDefinition &definition)
+{
+    shooting_.configureWeapon(definition);
+}
+
+void BaseWorld::configureWeaponFire(
+    const WeaponUseDefinition &definition,
+    const WeaponHandlingParameters &handling,
+    bool preserveWeaponFireTransientState)
+{
+    shooting_.configureWeapon(
+        definition, handling, preserveWeaponFireTransientState);
+}
+
+void BaseWorld::configureWeaponAmmunition(int penetration) noexcept
+{
+    shooting_.configureAmmunition(penetration);
+}
+
+std::vector<ShotPresentationSnapshot>
+BaseWorld::shotPresentationSnapshots() const
+{
+    return shooting_.shotPresentationSnapshots();
+}
+
+std::vector<ShotFeedbackPresentationSnapshot>
+BaseWorld::shotFeedbackPresentationSnapshots() const
+{
+    return shooting_.shotFeedbackPresentationSnapshots();
+}
+
+const std::vector<Particle> &BaseWorld::particles() const noexcept
+{
+    return shooting_.particles();
+}
+
+const std::vector<HitResult> &
+BaseWorld::hitResultsLastUpdate() const noexcept
+{
+    return shooting_.hitResultsLastUpdate();
+}
+
+bool BaseWorld::shotFiredLastUpdate() const noexcept
+{
+    return shooting_.shotFiredLastUpdate();
+}
+
+WeaponAccuracyProjection BaseWorld::weaponAccuracyProjection() const noexcept
+{
+    return shooting_.accuracyProjection();
+}
+
+Vec2 BaseWorld::weaponAimWorldPosition() const noexcept
+{
+    return shooting_.aimWorldPosition();
+}
+
+Vec2 BaseWorld::weaponAimDirection() const noexcept
+{
+    return shooting_.aimDirection();
+}
+
+Vec2 BaseWorld::normalizedShotScreenShakeOffset() const noexcept
+{
+    return shooting_.normalizedScreenShakeOffset();
 }
 
 Vec2 BaseWorld::worldSize() const noexcept
@@ -388,6 +498,11 @@ void BaseWorld::resetAtRaidGate() noexcept
         gate.bounds.position.y + gate.bounds.size.y + 28.0F};
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
+    shooting_.reanchor(
+        {playerPosition_.x + playerSize_.x * 0.5F,
+         playerPosition_.y + playerSize_.y * 0.5F},
+        playerFacingDirection_,
+        layout_.worldSize);
 }
 
 void BaseWorld::resetAtMedicalPoint() noexcept
@@ -396,6 +511,11 @@ void BaseWorld::resetAtMedicalPoint() noexcept
     playerPosition_ = Vec2{origin.x + 780.0F, origin.y + 900.0F};
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
+    shooting_.reanchor(
+        {playerPosition_.x + playerSize_.x * 0.5F,
+         playerPosition_.y + playerSize_.y * 0.5F},
+        playerFacingDirection_,
+        layout_.worldSize);
 }
 
 const char *baseFacilityName(BaseFacilityKind kind) noexcept

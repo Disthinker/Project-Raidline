@@ -8,10 +8,12 @@
 #include <vector>
 
 #include "animation.h"
+#include "gameplay_input.h"
 #include "home_region_layout.h"
 #include "raid_space_spatial_index.h"
 #include "rect.h"
 #include "vec2.h"
+#include "world_shooting_runtime.h"
 
 enum class BaseFacilityKind
 {
@@ -31,15 +33,7 @@ struct BaseFacility
     float interactionRange{56.0F};
 };
 
-struct BaseInput
-{
-    bool moveUp{};
-    bool moveDown{};
-    bool moveLeft{};
-    bool moveRight{};
-    bool sprint{};
-    bool interactJustPressed{};
-};
+using BaseInput = GameplayInput;
 
 struct HomeRegionPresentationProjection
 {
@@ -60,7 +54,7 @@ public:
 
     [[nodiscard]] std::optional<BaseFacilityKind> update(
         const BaseInput &input,
-        float deltaTime) noexcept;
+        float deltaTime);
 
     [[nodiscard]] Vec2 playerPosition() const noexcept;
     [[nodiscard]] Vec2 playerSize() const noexcept;
@@ -75,6 +69,26 @@ public:
     outdoorPresentation(ContentRect visibleWorldBounds) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
     interactableFacility() const noexcept;
+
+    void configureWeaponFire(const WeaponUseDefinition &definition);
+    void configureWeaponFire(
+        const WeaponUseDefinition &definition,
+        const WeaponHandlingParameters &handling,
+        bool preserveWeaponFireTransientState);
+    void configureWeaponAmmunition(int penetration) noexcept;
+    [[nodiscard]] std::vector<ShotPresentationSnapshot>
+    shotPresentationSnapshots() const;
+    [[nodiscard]] std::vector<ShotFeedbackPresentationSnapshot>
+    shotFeedbackPresentationSnapshots() const;
+    [[nodiscard]] const std::vector<Particle> &particles() const noexcept;
+    [[nodiscard]] const std::vector<HitResult> &
+    hitResultsLastUpdate() const noexcept;
+    [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] WeaponAccuracyProjection
+    weaponAccuracyProjection() const noexcept;
+    [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
+    [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
+    [[nodiscard]] Vec2 normalizedShotScreenShakeOffset() const noexcept;
 
     void resetAtRaidGate() noexcept;
     void resetAtMedicalPoint() noexcept;
@@ -96,6 +110,8 @@ private:
     std::vector<BallisticBlocker> movementBlockers_;
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
+    WorldShootingRuntime shooting_;
+    std::vector<Enemy> noCombatTargets_;
     mutable HomeRegionPresentationProjection presentationCache_;
     mutable bool presentationCacheValid_{};
     mutable std::uint32_t cachedFirstChunkColumn_{};

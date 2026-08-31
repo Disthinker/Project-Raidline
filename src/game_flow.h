@@ -48,7 +48,7 @@ public:
 
     void updateBase(
         const BaseInput &input,
-        float deltaTime) noexcept;
+        float deltaTime);
 
     void closeBaseFacility() noexcept;
 

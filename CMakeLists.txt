@@ -360,6 +360,8 @@ add_library(raidline_simulation STATIC
     src/weapon_aim.h
     src/weapon_clear_gesture.cpp
     src/weapon_clear_gesture.h
+    src/world_shooting_runtime.cpp
+    src/world_shooting_runtime.h
 )
 raidline_configure_library(raidline_simulation)
 target_link_libraries(raidline_simulation PUBLIC raidline::domain)

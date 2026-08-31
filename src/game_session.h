@@ -40,6 +40,7 @@
 #include "weapon_clear_gesture.h"
 
 enum class BaseFacilityKind;
+class BaseWorld;
 
 enum class GameSessionState
 {
@@ -159,6 +160,11 @@ public:
         std::vector<EnemySpawn> firstRaidEnemies);
 
     void update(
+        const GameplayInput &input,
+        float deltaTime);
+
+    [[nodiscard]] std::optional<BaseFacilityKind> updateBaseWorld(
+        BaseWorld &baseWorld,
         const GameplayInput &input,
         float deltaTime);
 
@@ -459,6 +465,8 @@ private:
     float sprintFireReadyRemaining_{};
     EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};
     std::optional<AssetInstanceId> configuredWeaponAssetId_;
+    std::optional<AssetInstanceId> configuredBaseWeaponAssetId_;
+    float baseCombatElapsedSeconds_{};
 
     struct DeveloperWeaponHiddenOverrides
     {
@@ -509,6 +517,7 @@ private:
     void applyAlphaIncomingDamage();
     void advanceAlphaMedicalStatus(float deltaTime);
     void synchronizeActiveAlphaWeapon();
+    void synchronizeActiveBaseWeapon(BaseWorld &baseWorld);
     [[nodiscard]] std::optional<std::size_t>
     developerWeaponOverrideIndex(AssetInstanceId weaponAssetId) const noexcept;
     [[nodiscard]] WeaponHandlingParameters effectiveDeveloperHandling(

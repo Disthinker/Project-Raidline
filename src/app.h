@@ -163,6 +163,7 @@ private:
     void consumePresentationAudioEvents();
 
     GameplayInput makeGameplayInput() const;
+    GameplayInput makeBaseGameplayInput() const;
 
     [[nodiscard]]
     bool handleScreenConfirm();

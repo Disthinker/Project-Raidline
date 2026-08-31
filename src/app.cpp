@@ -1421,6 +1421,51 @@ GameplayInput App::makeGameplayInput() const
     return input;
 }
 
+GameplayInput App::makeBaseGameplayInput() const
+{
+    GameplayInput input{};
+    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
+    input.sprint = input_.isShiftPressed();
+    input.fireJustPressed =
+        input_.wasActionJustPressed(GameAction::Fire) ||
+        input_.wasPrimaryPointerJustPressed();
+    input.firePressed =
+        input_.isActionPressed(GameAction::Fire) ||
+        input_.isPrimaryPointerPressed();
+    input.aimDownSights = input_.isSecondaryPointerPressed();
+    input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
+
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 aimCamera = baseWorldCameraOffset();
+    if (pointerWorldPosition_.has_value())
+    {
+        input.aimWorldPosition = raidScreenToWorld(
+            *pointerWorldPosition_, aimCamera);
+    }
+    input.aimWorldBounds = raidReticleWorldBounds(
+        aimCamera,
+        world.worldSize(),
+        {static_cast<float>(kWindowWidth),
+         static_cast<float>(kWindowHeight)},
+        kReticleViewportOutsideMargin);
+    input.aimMotionDelta = relativeMouseModeActive_
+        ? std::optional<Vec2>{pendingRelativeAimMotion_}
+        : std::nullopt;
+    input.interactJustPressed =
+        input_.wasActionJustPressed(GameAction::Interact);
+    input.interactPressed = input_.isActionPressed(GameAction::Interact);
+    if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
+        input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon2))
+        input.weaponSlotJustPressed = EquipmentSlotKind::SecondaryWeapon;
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon3))
+        input.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    return input;
+}
+
 bool App::handleScreenConfirm()
 {
     bool transitioned{false};
@@ -2204,15 +2249,26 @@ void App::updateBase(float deltaTime)
         return;
     }
 
-    BaseInput input;
-    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
-    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
-    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
-    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
-    input.sprint = input_.isShiftPressed();
-    input.interactJustPressed =
-        input_.wasActionJustPressed(GameAction::Interact);
+    BaseInput input = makeBaseGameplayInput();
     gameFlow_.updateBase(input, deltaTime);
+    consumePresentationAudioEvents();
+    const BaseWorld &baseWorld = gameFlow_.baseWorld();
+    if (baseWorld.shotFiredLastUpdate())
+    {
+        const auto tuning = gameSession_.developerWeaponTuning();
+        gameAudio_.play(
+            tuning.has_value() && tuning->weaponUse.automaticFire
+                ? SoundEventId::WeaponRifleFire
+                : SoundEventId::WeaponPistolFire);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
+    }
+    for (const HitResult &hit : baseWorld.hitResultsLastUpdate())
+    {
+        gameAudio_.play(
+            hit.targetKind == HitTargetKind::Obstacle
+                ? SoundEventId::ImpactObstacle
+                : SoundEventId::ImpactGround);
+    }
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage)
     {
         gameFlow_.closeBaseFacility();
@@ -4714,7 +4770,8 @@ void App::processEvents()
                         pointerWorldPosition_->y - previousPointer->y};
                 }
             }
-            if (gameFlow_.state() == GameFlowState::Raid &&
+            if ((gameFlow_.state() == GameFlowState::Raid ||
+                 gameFlow_.state() == GameFlowState::Base) &&
                 !inventoryOverlayState_.isOpen() &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
@@ -7984,9 +8041,13 @@ void App::renderShotPresentations()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
+    const std::vector<ShotPresentationSnapshot> shots =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().shotPresentationSnapshots()
+        : gameSession_.world().shotPresentationSnapshots();
     for (
         const ShotPresentationSnapshot &shot :
-        gameSession_.world().shotPresentationSnapshots())
+        shots)
     {
         if (shot.tracerStyle == TracerStyle::None)
         {
@@ -8094,8 +8155,9 @@ Vec2 App::baseWorldCameraOffset() const noexcept
 
 Vec2 App::raidWorldScreenShakePixels() const noexcept
 {
-    const Vec2 normalized =
-        gameSession_.world().normalizedShotScreenShakeOffset();
+    const Vec2 normalized = gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().normalizedShotScreenShakeOffset()
+        : gameSession_.world().normalizedShotScreenShakeOffset();
     // Deliberately below the threshold that would displace the crosshair or
     // interfere with ordinary visual reading. Only the world viewport moves.
     return Vec2{normalized.x * 1.8F, normalized.y * 1.3F};
@@ -8107,8 +8169,11 @@ void App::renderShotFeedbackPresentations()
     constexpr float kTau{6.28318530718F};
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const ShotFeedbackPresentationSnapshot &shot :
-         gameSession_.world().shotFeedbackPresentationSnapshots())
+    const std::vector<ShotFeedbackPresentationSnapshot> shots =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().shotFeedbackPresentationSnapshots()
+        : gameSession_.world().shotFeedbackPresentationSnapshots();
+    for (const ShotFeedbackPresentationSnapshot &shot : shots)
     {
         const Vec2 normal{-shot.direction.y, shot.direction.x};
 
@@ -8381,10 +8446,15 @@ void App::renderBallisticBlockers()
 
 void App::syncRaidPointerCapture() noexcept
 {
+    const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
+        !gameFlow_.activeBaseFacility().has_value() &&
+        !gameSession_.baseThreatProjection().warningActive;
+    const bool raidWorldActive = gameFlow_.isRaidScreen() &&
+        gameSession_.world().raidSession().isActive();
     const bool shouldCapture = shouldCaptureRaidPointer(
         RaidPointerCaptureContext{
-            gameFlow_.isRaidScreen(),
-            gameSession_.world().raidSession().isActive(),
+            raidWorldActive || baseWorldActive,
+            raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen(),
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
@@ -8418,24 +8488,31 @@ void App::syncRaidPointerCapture() noexcept
 
 void App::renderAimCrosshair()
 {
+    const bool inBaseWorld = gameFlow_.state() == GameFlowState::Base &&
+        !gameFlow_.activeBaseFacility().has_value() &&
+        !gameSession_.baseThreatProjection().warningActive;
+    const bool inRaidWorld = gameFlow_.isRaidScreen() &&
+        gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         pauseMenu_.isOpen() ||
-        !gameSession_.world().raidSession().isActive())
+        (!inBaseWorld && !inRaidWorld))
     {
         return;
     }
 
-    const WeaponAccuracyProjection accuracy =
-        gameSession_.world().weaponAccuracyProjection();
+    const WeaponAccuracyProjection accuracy = inBaseWorld
+        ? gameFlow_.baseWorld().weaponAccuracyProjection()
+        : gameSession_.world().weaponAccuracyProjection();
     const float feedbackRadius = std::round(std::max(
         10.0F,
         accuracy.reticleRadius));
     constexpr float kArmLength{15.0F};
-    const Vec2 screenCenter = raidWorldToScreen(
-        accuracy.center, raidWorldCameraOffset());
+    const Vec2 camera = inBaseWorld
+        ? baseWorldCameraOffset() : raidWorldCameraOffset();
+    const Vec2 screenCenter = raidWorldToScreen(accuracy.center, camera);
     const Vec2 center{
         std::round(screenCenter.x),
         std::round(screenCenter.y)};
@@ -9071,7 +9148,11 @@ void App::renderParticles()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const Particle &particle : gameSession_.world().particles())
+    const std::vector<Particle> &particles =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().particles()
+        : gameSession_.world().particles();
+    for (const Particle &particle : particles)
     {
         const float life = particle.normalizedLifetime();
         const Vec2 center = particle.position();
@@ -9356,10 +9437,11 @@ void App::renderBaseWorld()
 {
     const BaseWorld &world = gameFlow_.baseWorld();
     const Vec2 camera = baseWorldCameraOffset();
+    const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 worldSize = world.worldSize();
     const SDL_Rect worldViewport{
-        -static_cast<int>(std::lround(camera.x)),
-        -static_cast<int>(std::lround(camera.y)),
+        static_cast<int>(std::lround(shakePixels.x - camera.x)),
+        static_cast<int>(std::lround(shakePixels.y - camera.y)),
         static_cast<int>(std::ceil(worldSize.x)),
         static_cast<int>(std::ceil(worldSize.y))};
     static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
@@ -9509,6 +9591,9 @@ void App::renderBaseWorld()
         world.playerFacingDirection(),
         world.playerIsMoving(),
         world.playerAnimationFrame());
+    renderShotPresentations();
+    renderShotFeedbackPresentations();
+    renderParticles();
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
 
@@ -12959,6 +13044,7 @@ void App::renderLostRaidRecords()
 void App::renderBase()
 {
     renderBaseWorld();
+    renderAimCrosshair();
 
     SDL_SetRenderDrawColor(
         renderer_,
