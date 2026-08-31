@@ -24,10 +24,10 @@
 
 namespace
 {
-constexpr InventoryGridSize kStashSize{20, 12};
+constexpr InventoryGridSize kStashSize{24, 16};
 constexpr InventoryGridSize kBaseIntakeSize{20, 12};
 const std::string kWarehouseCatalogGrantTransaction{
-    "bootstrap.warehouse_catalog.content_53"};
+    "bootstrap.warehouse_catalog.content_54"};
 
 class WarehouseCatalogCapacityError final : public std::runtime_error
 {

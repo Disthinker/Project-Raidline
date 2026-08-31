@@ -74,9 +74,11 @@ TEST(PersistentSessionTest, PreviousContentReceivesWarehouseCatalogOnce)
     ProfileState legacy = makeNewPublishedProfile(
         "persistent-warehouse-catalog", content);
     legacy.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_54");
+    legacy.committedTransactions.insert(
         "bootstrap.warehouse_catalog.content_53");
     const ItemDefinitionId restoredDefinition{
-        "item.weapon.lmg_7_62x51_service"};
+        "item.protective_gear.body_armor_heavy"};
     std::vector<AssetInstanceId> removed;
     for (const auto &[assetId, asset] : legacy.assets.records())
     {
@@ -90,13 +92,13 @@ TEST(PersistentSessionTest, PreviousContentReceivesWarehouseCatalogOnce)
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         legacy,
-        "content-beta-weapon-caliber-content-52").succeeded);
+        "content-beta-warehouse-catalog-content-53").succeeded);
 
     GameSession migrated;
     migrated.configurePersistence(temporary.path());
     ASSERT_TRUE(migrated.continueProfile()) << migrated.persistenceMessage();
     EXPECT_TRUE(migrated.profile().committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
     EXPECT_EQ(countStashDefinition(
                   migrated.profile(), restoredDefinition),
               1U);
@@ -121,6 +123,8 @@ TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
     ProfileState legacy = makeNewAlphaProfile(
         "persistent-full-warehouse", content);
     legacy.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_54");
+    legacy.committedTransactions.insert(
         "bootstrap.warehouse_catalog.content_53");
     std::vector<AssetInstanceId> existing;
     for (const auto &[assetId, asset] : legacy.assets.records())
@@ -134,9 +138,9 @@ TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
     }
     const ItemDefinition &ammunition =
         content.item(alpha_content::ammunition);
-    for (int y = 0; y < 12; ++y)
+    for (int y = 0; y < 16; ++y)
     {
-        for (int x = 0; x < 20; ++x)
+        for (int x = 0; x < 24; ++x)
         {
             static_cast<void>(legacy.assets.create(
                 ammunition,
@@ -149,7 +153,7 @@ TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         legacy,
-        "content-beta-weapon-caliber-content-52").succeeded);
+        "content-beta-warehouse-catalog-content-53").succeeded);
 
     GameSession session;
     session.configurePersistence(temporary.path());
@@ -158,7 +162,7 @@ TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
               std::string::npos);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
     EXPECT_FALSE(session.profile().committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
 }
 
 TEST(PersistentSessionTest, SiegeWarningCountdownPersistsAndFirstTimeoutWaits)

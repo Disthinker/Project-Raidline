@@ -86,5 +86,5 @@
 - [x] 为新档及首次读取 content v53 的旧档一次性补齐全部 42 种当前已发布定义；满仓拒绝零修改且不锁档。
 - [x] 完成首轮 246 项目录、持久化、库存和弹药 focused tests 与 Windows Debug 构建。
 - [x] 完成 Windows Debug 全目标构建与 1308/1308 完整 CTest。
-- [ ] 推送 Draft PR 并通过 exact-head Windows/Ubuntu CI。
-- [ ] 用户正常游玩验收。
+- [x] 推送 Draft PR 并通过 exact-head Windows/Ubuntu CI。
+- [x] 用户正常游玩验收；PR #117 以普通 merge commit `8164e66` 进入 main。

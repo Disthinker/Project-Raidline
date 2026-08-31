@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@e285a2b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及首张可玩随机大地图与高危危机生态。
-- 当前开发分支：`codex/content-beta-weapon-caliber-v1`，从 `origin/main@e285a2b` 创建。
-- 当前活动计划：`doc/exec-plans/active/content-beta-weapon-caliber-v1.md`。
+- `origin/main@8164e66` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图与 Content Beta 代表性枪械/口径梯度。
+- 当前开发分支：`codex/content-beta-loadout-gear-v1`，从 `origin/main@8164e66` 创建。
+- 当前活动计划：`doc/exec-plans/active/content-beta-loadout-gear-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及“首张可玩随机大地图”阶段均已进入主线。当前进入 Content Beta 的“战利品—配装—再出击成长闭环”，首个宏切片建立六种职责武器、三种口径和两档普通弹药，不增加新地图主题、改枪附件、特殊弹、正式美术、实时尸潮或 AI 小队。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段以及 Content Beta Macro 1 均已进入主线。当前推进 Macro 2 防具、胸挂与背包梯度，以防护、耐久、维修、重量、分区和容量形成轻装、均衡与重装取舍；不增加新装备部位、负重移动惩罚、随机词条、正式美术、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -71,7 +71,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及“首张可�
 56. **Frontier Exchange 既有消费者整合 v1**：content v49 保持 schema v37/layout v4，把 Ashworks 外围清剿指向 `Frontier Exchange`；`GameSession` 从冻结锚点建立救援、失物缓存和高危控制的类型化战术地图目标。救援和玩家主动选择的失物缓存属于开局 Briefed，高危控制需要探索；外围清剿状态投影为 ACTIVE/SECURED，最终减值仍由唯一 Settlement 提交。v48/v47 存档继续读取且不重生成既有 Raid。PR #114 已通过自动化、exact-head CI 和用户正常游玩验收，以 merge commit `7be91e8` 进入 main。
 57. **Frontier Exchange 物资身份与 Loot 内容包 v1**：content v50 保持 schema v37/layout v4，为六类资源点提供独立 Loot 表，新增九种稳定生活、工业和高价值物品定义及双语占位。新 rules 27 冻结资源点—Loot 表绑定；rules 23～26 pending Raid 继续按旧映射读取，不重抽既有 Loot。新物资复用现有 AssetRegistry、Base 自动供给、建设加工和回收事务。PR #115 已通过用户正常游玩验收，并以 merge commit `6ab1724` 进入 main。
 58. **Frontier Exchange 高危危机生态 v1**：content v51/schema v38/rules v28 每局从道路汇流、工业缺口和货运封锁中确定性冻结一个危机、合法目标资源点、精确压力来源、波次参数与主题高级 Loot。压力敌人会向危机目标汇聚，HUD/F10/战术地图提供可感知反馈。PR #116 已通过 Windows Debug、1296/1296 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `e285a2b` 进入 main。
-59. **Content Beta 代表性枪械与口径梯度 v1（Draft PR #117）**：从 `e285a2b` 建立六种职责武器、9×19/5.45×39/7.62×51 三个口径及每口径两档普通弹；保留现有 Pistol/Rifle/Ammo9mm 与旧 pending Raid，兼容性由领域定义而非 UI 名称判断。用户追加的 content v53 开发目录覆盖会把当前全部 42 种已发布定义一次性放入新档 Stash，并为旧档执行同一幂等补齐；满仓时零修改但不阻止读取存档。该覆盖尚未进入 main，也不是可重复领取的供应来源。
+59. **Content Beta 代表性枪械与口径梯度 v1**：建立六种职责武器、9×19/5.45×39/7.62×51 三个口径及每口径两档普通弹；保留现有 Pistol/Rifle/Ammo9mm 与旧 pending Raid，兼容性由领域定义而非 UI 名称判断。content v53 开发目录覆盖会把全部 42 种已发布定义一次性放入新档 Stash，并为旧档执行同一幂等补齐；满仓时零修改但不阻止读取存档。PR #117 已通过 exact-head CI 和用户正常游玩验收，并以普通 merge commit `8164e66` 进入 main。
+60. **Content Beta 防具、胸挂与背包梯度 v1（当前开发分支）**：content v54 新增两档头盔、两档躯干护甲、两种胸挂和两种背包；客户端按内容定义绘制任意胸挂分区和连续背包格，并显示双语重量、防护、材料、耐久与容量。Stash 单向扩为 24×16，content v53 继续读取，v54 首次补齐扩展为当前全部 50 种定义。当前仅完成本地实现和自动化，尚未进入 main，也未经过用户正常游玩验收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -98,7 +99,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及“首张可�
 
 ## 当前自动化证据
 
-- Draft PR #117 当前工作树已完成 Windows Debug 全目标构建、目录/持久化/库存/弹药 246 项 focused tests 和 1308/1308 完整 CTest；开发代理未启动游戏。新增 content v53 及完整目录覆盖尚待提交、推送、exact-head Windows/Ubuntu CI 和用户正常游玩验收。
+- 当前 Macro 2 工作树已完成 Windows Debug 全目标构建、相关目录/持久化/库存/维修/本地化/投影 191 项 focused tests 和 1317/1317 完整 CTest；开发代理未启动游戏。content v54、防具/容器梯度、动态分区 UI 与 Stash 扩容尚待提交、推送、exact-head Windows/Ubuntu CI 和用户正常游玩验收。
 - PR #114 的类型化目标投影、Ashworks 随机外围清剿和 Frontier 自力寻回冻结锚点已通过用户正常游玩验收并进入 main。当前物资身份切片已完成 Windows Debug 全目标构建、focused tests 和 1287/1287 完整 CTest；开发代理未启动游戏，Draft PR、exact-head CI 与用户正常游玩验收仍待完成。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。

@@ -395,6 +395,8 @@ add_library(raidline_sdl_client STATIC
     src/inventory_interaction.cpp
     src/inventory_interaction.h
     src/pause_menu.h
+    src/profile_container_presentation.cpp
+    src/profile_container_presentation.h
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
     src/raid_camera.cpp
@@ -508,6 +510,10 @@ raidline_add_test(
 raidline_add_test(
     UiLocalizationTest
     tests/test_ui_localization.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    ProfileContainerPresentationTest
+    tests/test_profile_container_presentation.cpp
     raidline::sdl_client)
 target_compile_definitions(
     GameAudioTest

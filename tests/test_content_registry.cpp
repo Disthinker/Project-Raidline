@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "content-beta-warehouse-catalog-content-53");
+        "content-beta-loadout-gear-content-54");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -186,7 +186,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 42U);
+    ASSERT_EQ(registry.items().size(), 50U);
     ASSERT_EQ(registry.calibers().size(), 3U);
     EXPECT_EQ(
         registry.caliber(CaliberDefinitionId{"caliber.5_45x39"})
@@ -1504,6 +1504,93 @@ TEST(ContentRegistryTest, ContentBetaWeaponsExposeStableCaliberAndTierContracts)
         standard.ammunitionUse->penetration);
 }
 
+TEST(ContentRegistryTest, ContentBetaLoadoutGearDefinesThreeTradeoffTiers)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    const ItemDefinition &scoutHelmet = registry.item(
+        ItemDefinitionId{"item.protective_gear.helmet_scout"});
+    const ItemDefinition &basicHelmet = registry.item(alpha_content::helmet);
+    const ItemDefinition &heavyHelmet = registry.item(
+        ItemDefinitionId{"item.protective_gear.helmet_heavy"});
+    ASSERT_TRUE(scoutHelmet.armorProtection.has_value());
+    ASSERT_TRUE(basicHelmet.armorProtection.has_value());
+    ASSERT_TRUE(heavyHelmet.armorProtection.has_value());
+    EXPECT_LT(
+        scoutHelmet.armorProtection->protectionRequirement,
+        basicHelmet.armorProtection->protectionRequirement);
+    EXPECT_LT(
+        basicHelmet.armorProtection->protectionRequirement,
+        heavyHelmet.armorProtection->protectionRequirement);
+    EXPECT_LT(scoutHelmet.unitWeightGrams, basicHelmet.unitWeightGrams);
+    EXPECT_LT(basicHelmet.unitWeightGrams, heavyHelmet.unitWeightGrams);
+    EXPECT_EQ(heavyHelmet.marketBuyPrice, 0U);
+    EXPECT_EQ(
+        heavyHelmet.armorProtection->material,
+        ArmorMaterial::Metal);
+
+    const ItemDefinition &smallRig = registry.item(alpha_content::chestRig);
+    const ItemDefinition &patrolRig = registry.item(
+        ItemDefinitionId{"item.container.chest_rig_patrol"});
+    const ItemDefinition &assaultRig = registry.item(
+        ItemDefinitionId{"item.container.chest_rig_assault"});
+    const auto capacity = [](const ItemDefinition &definition)
+    {
+        std::uint32_t total{};
+        for (const ContainerCompartmentDefinition &compartment :
+             definition.containerCompartments)
+        {
+            total += static_cast<std::uint32_t>(
+                compartment.width * compartment.height);
+        }
+        return total;
+    };
+    EXPECT_LT(capacity(smallRig), capacity(patrolRig));
+    EXPECT_LT(capacity(patrolRig), capacity(assaultRig));
+    EXPECT_LT(smallRig.unitWeightGrams, patrolRig.unitWeightGrams);
+    EXPECT_LT(patrolRig.unitWeightGrams, assaultRig.unitWeightGrams);
+
+    const ItemDefinition &smallBackpack = registry.item(alpha_content::backpack);
+    const ItemDefinition &fieldBackpack = registry.item(
+        ItemDefinitionId{"item.container.backpack_field"});
+    const ItemDefinition &expeditionBackpack = registry.item(
+        ItemDefinitionId{"item.container.backpack_expedition"});
+    EXPECT_EQ(smallBackpack.containerCompartments.size(), 1U);
+    EXPECT_EQ(fieldBackpack.containerCompartments.size(), 1U);
+    EXPECT_EQ(expeditionBackpack.containerCompartments.size(), 1U);
+    EXPECT_LT(capacity(smallBackpack), capacity(fieldBackpack));
+    EXPECT_LT(capacity(fieldBackpack), capacity(expeditionBackpack));
+
+    const std::uint64_t lightGearWeight =
+        scoutHelmet.unitWeightGrams +
+        registry.item(ItemDefinitionId{
+            "item.protective_gear.body_armor_light"}).unitWeightGrams +
+        smallRig.unitWeightGrams + smallBackpack.unitWeightGrams;
+    const std::uint64_t balancedGearWeight =
+        basicHelmet.unitWeightGrams +
+        registry.item(alpha_content::bodyArmor).unitWeightGrams +
+        patrolRig.unitWeightGrams + fieldBackpack.unitWeightGrams;
+    const std::uint64_t heavyGearWeight =
+        heavyHelmet.unitWeightGrams +
+        registry.item(ItemDefinitionId{
+            "item.protective_gear.body_armor_heavy"}).unitWeightGrams +
+        assaultRig.unitWeightGrams + expeditionBackpack.unitWeightGrams;
+    EXPECT_LT(lightGearWeight, balancedGearWeight);
+    EXPECT_LT(balancedGearWeight, 22000U);
+    EXPECT_GT(heavyGearWeight, 22000U);
+}
+
+TEST(ContentRegistryTest, ContentBetaRejectsOversizedContainerCompartment)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"width\": 7, \"height\": 5, \"pocket\": \"general\"}",
+        "{\"width\": 13, \"height\": 5, \"pocket\": \"general\"}");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, PublishedContentRejectsUnknownAmmunitionCaliber)
 {
     const std::string invalid = replaceFirst(
@@ -1519,7 +1606,7 @@ TEST(ContentRegistryTest, PublishedContentRejectsUnknownAmmunitionCaliber)
 TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
 {
     const ContentRegistry &registry = publishedContentRegistry();
-    const std::array<ItemDefinitionId, 12> released{
+    const std::array<ItemDefinitionId, 20> released{
         ItemDefinitionId{"item.ammunition.9mm_enhanced"},
         ItemDefinitionId{"item.ammunition.5_45x39_standard"},
         ItemDefinitionId{"item.ammunition.5_45x39_enhanced"},
@@ -1531,7 +1618,15 @@ TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
         ItemDefinitionId{"item.weapon.carbine_5_45_compact"},
         ItemDefinitionId{"item.weapon.rifle_5_45_service"},
         ItemDefinitionId{"item.weapon.dmr_7_62x51_service"},
-        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}};
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"},
+        ItemDefinitionId{"item.protective_gear.helmet_scout"},
+        ItemDefinitionId{"item.protective_gear.helmet_heavy"},
+        ItemDefinitionId{"item.protective_gear.body_armor_light"},
+        ItemDefinitionId{"item.protective_gear.body_armor_heavy"},
+        ItemDefinitionId{"item.container.chest_rig_patrol"},
+        ItemDefinitionId{"item.container.chest_rig_assault"},
+        ItemDefinitionId{"item.container.backpack_field"},
+        ItemDefinitionId{"item.container.backpack_expedition"}};
 
     for (const ItemDefinitionId &itemId : released)
     {
@@ -1575,6 +1670,13 @@ TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
                         registry.magazineFitsWeapon(
                             itemId, candidate.definitionId);
                 })) << itemId.value();
+        }
+        else if (item.category == ItemCategory::ProtectiveGear ||
+                 item.category == ItemCategory::Container)
+        {
+            ASSERT_TRUE(item.equipmentSlot.has_value()) << itemId.value();
+            EXPECT_TRUE(itemCanEquipInSlot(item, *item.equipmentSlot))
+                << itemId.value();
         }
     }
 }

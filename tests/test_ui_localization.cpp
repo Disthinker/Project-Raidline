@@ -736,6 +736,24 @@ TEST(UiLocalizationTest, LanguageSettingDefaultsToChineseAndRoundTrips) {
   std::filesystem::remove_all(settingsPath.parent_path());
 }
 
+TEST(UiLocalizationTest, ContentBetaLoadoutGearInspectionIsBilingual) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "Heavy Assault Helmet"),
+            "重型突击头盔");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "Expedition Backpack"),
+            "远征背包");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "CARRIED WEIGHT 22.70 KG"),
+            "随身总重 22.70 KG");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "PROTECTION 6 | METAL"),
+            "防护 6 | 金属");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "POCKETS 4 MAG / 4 UTIL"),
+            "分区 4 弹匣 / 4 工具");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

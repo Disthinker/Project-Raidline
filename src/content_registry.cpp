@@ -1515,6 +1515,39 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("only weapons may declare equipment_slots");
             }
+            if (definition.category == ItemCategory::Container)
+            {
+                if (!definition.equipmentSlot.has_value() ||
+                    (*definition.equipmentSlot != EquipmentSlotKind::ChestRig &&
+                     *definition.equipmentSlot != EquipmentSlotKind::Backpack) ||
+                    definition.containerCompartments.empty())
+                {
+                    fail("container requires a supported equipment slot and compartment");
+                }
+                std::uint32_t totalCells{};
+                for (const ContainerCompartmentDefinition &compartment :
+                     definition.containerCompartments)
+                {
+                    if (compartment.width > 12 || compartment.height > 12)
+                    {
+                        fail("container compartment exceeds supported dimensions");
+                    }
+                    totalCells += static_cast<std::uint32_t>(
+                        compartment.width * compartment.height);
+                }
+                if (totalCells > 80U ||
+                    (*definition.equipmentSlot == EquipmentSlotKind::Backpack &&
+                     (definition.containerCompartments.size() != 1U ||
+                      definition.containerCompartments.front().pocketKind !=
+                          ContainerPocketKind::General)))
+                {
+                    fail("container compartment structure is invalid");
+                }
+            }
+            else if (!definition.containerCompartments.empty())
+            {
+                fail("only containers may declare compartments");
+            }
 
             if (const auto ammunition =
                     optionalString(itemValue, "compatible_ammunition"))
@@ -1602,7 +1635,11 @@ ContentRegistry ContentRegistry::fromJson(
                         ? EquipmentSlotKind::Helmet
                         : EquipmentSlotKind::BodyArmor;
                 if (definition.category != ItemCategory::ProtectiveGear ||
-                    definition.equipmentSlot != expectedSlot)
+                    definition.equipmentSlot != expectedSlot ||
+                    definition.armorProtection->protectionRequirement > 10 ||
+                    definition.armorProtection->maximumDurability > 1000U ||
+                    definition.armorProtection->durabilityLossBasisPoints >
+                        30000U)
                 {
                     fail("armor capability and equipment slot disagree");
                 }

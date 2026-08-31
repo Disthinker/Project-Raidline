@@ -194,6 +194,115 @@ TEST(InventoryDomainTest, ProtectiveGearUsesDedicatedAtomicEquipmentSlots)
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
+TEST(InventoryDomainTest, ContentBetaChestRigsAndBackpacksUseDefinedStructure)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "inventory-content-beta-gear",
+        content);
+    const AssetInstanceId rig = firstAsset(
+        profile,
+        ItemDefinitionId{"item.container.chest_rig_assault"});
+    const AssetInstanceId expedition = firstAsset(
+        profile,
+        ItemDefinitionId{"item.container.backpack_expedition"});
+    const AssetInstanceId field = firstAsset(
+        profile,
+        ItemDefinitionId{"item.container.backpack_field"});
+    const AssetInstanceId magazine = firstAsset(
+        profile,
+        alpha_content::magazine);
+    const AssetInstanceId medkit = firstAsset(
+        profile,
+        alpha_content::medkit);
+    const AssetInstanceId heavyArmor = firstAsset(
+        profile,
+        ItemDefinitionId{"item.protective_gear.body_armor_heavy"});
+    ASSERT_NE(rig, 0U);
+    ASSERT_NE(expedition, 0U);
+    ASSERT_NE(field, 0U);
+
+    ASSERT_TRUE(executeInventory(
+        profile,
+        content,
+        InventoryEquipCommand{rig, EquipmentSlotKind::ChestRig},
+        CommandContext{profile.revision, "equip-assault-rig"}).succeeded);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        content,
+        InventoryEquipCommand{expedition, EquipmentSlotKind::Backpack},
+        CommandContext{profile.revision, "equip-expedition-pack"}).succeeded);
+
+    for (std::uint32_t index = 0; index < 4U; ++index)
+    {
+        const StoredAssetLocation target{
+            ProfileContainerId::compartment(rig, index),
+            GridPosition{0, 0}};
+        EXPECT_TRUE(queryInventory(
+            profile,
+            content,
+            InventoryMoveCommand{
+                magazine, 0U, target, ItemOrientation::Degrees0}).canCommit)
+            << index;
+        EXPECT_FALSE(queryInventory(
+            profile,
+            content,
+            InventoryMoveCommand{
+                medkit, 0U, target, ItemOrientation::Degrees0}).canCommit)
+            << index;
+    }
+    for (std::uint32_t index = 4; index < 8U; ++index)
+    {
+        EXPECT_TRUE(queryInventory(
+            profile,
+            content,
+            InventoryMoveCommand{
+                medkit,
+                0U,
+                StoredAssetLocation{
+                    ProfileContainerId::compartment(rig, index),
+                    GridPosition{0, 0}},
+                ItemOrientation::Degrees0}).canCommit)
+            << index;
+    }
+    EXPECT_TRUE(queryInventory(
+        profile,
+        content,
+        InventoryMoveCommand{
+            heavyArmor,
+            0U,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(expedition, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0}).canCommit);
+
+    ASSERT_TRUE(executeInventory(
+        profile,
+        content,
+        InventoryMoveCommand{
+            medkit,
+            0U,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(field, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "fill-field-pack"}).succeeded);
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const InventoryReceipt rejected = executeInventory(
+        profile,
+        content,
+        InventoryMoveCommand{
+            field,
+            0U,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(expedition, 0),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        CommandContext{profile.revision, "reject-nested-field-pack"});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
 TEST(InventoryDomainTest, EqualFootprintAssetsSwapAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(
