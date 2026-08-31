@@ -99,7 +99,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 ## 当前自动化证据
 
-- 当前 Macro 2 工作树已完成 Windows Debug 全目标构建、相关目录/持久化/库存/维修/本地化/投影 191 项 focused tests 和 1317/1317 完整 CTest；开发代理未启动游戏。content v54、防具/容器梯度、动态分区 UI 与 Stash 扩容尚待提交、推送、exact-head Windows/Ubuntu CI 和用户正常游玩验收。
+- Draft PR #118 已完成 Windows Debug 全目标构建、相关目录/持久化/库存/维修/本地化/投影 191 项 focused tests、1317/1317 完整 CTest及 exact-head Windows/Ubuntu CI；开发代理未启动游戏。content v54、防具/容器梯度、动态分区 UI 与 Stash 扩容尚待用户正常游玩验收。
 - PR #114 的类型化目标投影、Ashworks 随机外围清剿和 Frontier 自力寻回冻结锚点已通过用户正常游玩验收并进入 main。当前物资身份切片已完成 Windows Debug 全目标构建、focused tests 和 1287/1287 完整 CTest；开发代理未启动游戏，Draft PR、exact-head CI 与用户正常游玩验收仍待完成。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。

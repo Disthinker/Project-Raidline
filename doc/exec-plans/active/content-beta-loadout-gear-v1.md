@@ -79,5 +79,5 @@
 - [x] 发布防具、胸挂与背包梯度及合法来源。
 - [x] 实现定义驱动分区 UI、检视信息和 Stash 扩容。
 - [x] 完成 v53→v54 全目录补齐与存档兼容。
-- [ ] Windows Debug 全目标与 1317/1317 CTest 已通过；exact-head CI 待 Draft PR 推送后执行。
+- [x] Windows Debug 全目标、1317/1317 CTest 与 exact-head Windows/Ubuntu CI 通过。
 - [ ] 用户正常游玩验收。
