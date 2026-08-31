@@ -105,7 +105,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 当前自动化证据
 
 - PR #119 已经用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。
-- PR #122 已通过 Windows Debug、1344/1344 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 `62e464e` 进入 main。当前共享战斗切片已完成 SDL-free `WorldShootingRuntime`、Base 真实武器事务、空间化 Stash 访问、Home Region 地图与客户端输入/表现接入；Windows Debug 全目标和 1348/1348 完整 CTest 通过，exact-head CI 与用户正常游玩验收待完成。开发代理未启动游戏。
+- PR #122 已通过 Windows Debug、1344/1344 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 `62e464e` 进入 main。当前共享战斗切片已完成 SDL-free `WorldShootingRuntime`、Base 真实武器事务、空间化 Stash 访问、Home Region 地图与客户端输入/表现接入；代码提交 `ba21284` 的 Windows Debug 全目标、1348/1348 完整 CTest 和 exact-head Windows/Ubuntu CI 通过，用户正常游玩验收待完成。开发代理未启动游戏。
 - PR #114 的类型化目标投影、Ashworks 随机外围清剿和 Frontier 自力寻回冻结锚点已通过用户正常游玩验收并进入 main。当前物资身份切片已完成 Windows Debug 全目标构建、focused tests 和 1287/1287 完整 CTest；开发代理未启动游戏，Draft PR、exact-head CI 与用户正常游玩验收仍待完成。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。
