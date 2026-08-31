@@ -84,9 +84,8 @@ WeaponAmmoReceipt applyLoad(
     const ItemDefinition &ammunitionDefinition = content.item(ammunition->definitionId);
     if (magazineDefinition.category != ItemCategory::Magazine ||
         ammunitionDefinition.category != ItemCategory::Ammunition ||
-        !magazineDefinition.compatibleAmmunitionDefinitionId.has_value() ||
-        *magazineDefinition.compatibleAmmunitionDefinitionId !=
-            ammunition->definitionId)
+        !content.ammunitionFitsMagazine(
+            ammunition->definitionId, magazine->definitionId))
     {
         return failure(DomainErrorCode::IllegalDestination,
                        "ammunition is incompatible with magazine",
@@ -138,21 +137,22 @@ WeaponAmmoReceipt applyUnload(
         return failure(DomainErrorCode::InvalidQuantity,
                        "magazine has no rounds to unload", candidate.revision);
     }
-    std::map<std::optional<std::string>, std::uint32_t> quantities;
+    using UnloadedRoundKey = std::pair<
+        ItemDefinitionId,
+        std::optional<std::string>>;
+    std::map<UnloadedRoundKey, std::uint32_t> quantities;
     for (const MagazineRoundRecord &round : magazine->magazineRounds)
     {
-        ++quantities[round.reliefBatchId];
+        ++quantities[{round.definitionId, round.reliefBatchId}];
     }
-    const ItemDefinitionId ammunitionId =
-        magazine->magazineRounds.front().definitionId;
-    for (const auto &[reliefBatchId, quantity] : quantities)
+    for (const auto &[key, quantity] : quantities)
     {
         if (!mergeOrCreateAmmunition(
                 candidate,
                 content,
                 command.destination,
-                ammunitionId,
-                reliefBatchId,
+                key.first,
+                key.second,
                 quantity))
         {
             return failure(DomainErrorCode::Capacity,
@@ -179,8 +179,8 @@ WeaponAmmoReceipt applyInstall(
                        "weapon or magazine does not exist", candidate.revision);
     }
     const ItemDefinition &weaponDefinition = content.item(weapon->definitionId);
-    if (!weaponDefinition.compatibleMagazineDefinitionId.has_value() ||
-        *weaponDefinition.compatibleMagazineDefinitionId != magazine->definitionId)
+    if (!content.magazineFitsWeapon(
+            magazine->definitionId, weapon->definitionId))
     {
         return failure(DomainErrorCode::IllegalDestination,
                        "magazine is incompatible with weapon", candidate.revision);
@@ -300,7 +300,7 @@ WeaponAmmoReceipt applyChamber(
     }
     const ItemDefinition &definition = content.item(weapon->definitionId);
     if (definition.category != ItemCategory::Weapon ||
-        !definition.compatibleMagazineDefinitionId.has_value())
+        definition.compatibleMagazineDefinitionIds.empty())
     {
         return failure(DomainErrorCode::IllegalDestination,
                        "asset is not a magazine-fed weapon",
@@ -337,7 +337,7 @@ WeaponAmmoReceipt applyFire(
     }
     const ItemDefinition &definition = content.item(weapon->definitionId);
     if (definition.category != ItemCategory::Weapon ||
-        !definition.compatibleMagazineDefinitionId.has_value())
+        definition.compatibleMagazineDefinitionIds.empty())
     {
         return failure(DomainErrorCode::IllegalDestination,
                        "asset is not a magazine-fed weapon", candidate.revision);
@@ -467,7 +467,7 @@ WeaponAmmoReceipt inspectFire(
     }
     const ItemDefinition &definition = content.item(weapon->definitionId);
     if (definition.category != ItemCategory::Weapon ||
-        !definition.compatibleMagazineDefinitionId.has_value())
+        definition.compatibleMagazineDefinitionIds.empty())
     {
         return failure(DomainErrorCode::IllegalDestination,
                        "asset is not a magazine-fed weapon", profile.revision);
@@ -524,7 +524,7 @@ bool validFireParticipants(
         const ItemDefinition &weaponDefinition =
             content.item(weapon->definitionId);
         if (weaponDefinition.category != ItemCategory::Weapon ||
-            !weaponDefinition.compatibleMagazineDefinitionId.has_value())
+            weaponDefinition.compatibleMagazineDefinitionIds.empty())
         {
             return false;
         }
@@ -549,9 +549,9 @@ bool validFireParticipants(
             return false;
         }
         if (weapon->chamberedRound.has_value() &&
-            (!weaponDefinition.compatibleAmmunitionDefinitionId.has_value() ||
-             weapon->chamberedRound->definitionId !=
-                 *weaponDefinition.compatibleAmmunitionDefinitionId ||
+            (!content.ammunitionFitsWeapon(
+                 weapon->chamberedRound->definitionId,
+                 weapon->definitionId) ||
              (weapon->chamberedRound->reliefBatchId.has_value() &&
               weapon->chamberedRound->reliefBatchId->empty())))
         {
@@ -578,9 +578,8 @@ bool validFireParticipants(
             content.item(magazine->definitionId);
         if (location == nullptr || location->weaponAssetId != weaponAssetId ||
             magazineDefinition.category != ItemCategory::Magazine ||
-            magazine->definitionId !=
-                *weaponDefinition.compatibleMagazineDefinitionId ||
-            !magazineDefinition.compatibleAmmunitionDefinitionId.has_value() ||
+            !content.magazineFitsWeapon(
+                magazine->definitionId, weapon->definitionId) ||
             magazine->magazineRounds.size() >
                 magazineDefinition.magazineCapacity)
         {
@@ -589,10 +588,10 @@ bool validFireParticipants(
         return std::all_of(
             magazine->magazineRounds.begin(),
             magazine->magazineRounds.end(),
-            [&magazineDefinition](const MagazineRoundRecord &round)
+            [&content, &magazine](const MagazineRoundRecord &round)
             {
-                return round.definitionId ==
-                           *magazineDefinition.compatibleAmmunitionDefinitionId &&
+                return content.ammunitionFitsMagazine(
+                           round.definitionId, magazine->definitionId) &&
                     (!round.reliefBatchId.has_value() ||
                      !round.reliefBatchId->empty());
             });

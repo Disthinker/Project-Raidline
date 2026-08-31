@@ -21,6 +21,7 @@ LogicalBallisticFlight::LogicalBallisticFlight(
       collisionExtent_{resolution.collisionExtent},
       maximumDistance_{resolution.maximumDistance},
       damage_{resolution.damage},
+      penetration_{resolution.penetration},
       aimIntent_{resolution.aimIntent},
       tracerStyle_{tracerStyle},
       tracerLength_{tracerLength},
@@ -126,6 +127,11 @@ float LogicalBallisticFlight::maximumDistance() const noexcept
 int LogicalBallisticFlight::damage() const noexcept
 {
     return damage_;
+}
+
+int LogicalBallisticFlight::penetration() const noexcept
+{
+    return penetration_;
 }
 
 std::optional<ShotAimIntent> LogicalBallisticFlight::aimIntent() const noexcept

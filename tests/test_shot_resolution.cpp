@@ -15,7 +15,8 @@ TEST(ShotResolutionTest, ValidCommandProducesNormalizedAcceptedResult)
             8.0F,
             30,
             2048.0F,
-            ShotAimIntent{91, HitRegion::Head, false}});
+            ShotAimIntent{91, HitRegion::Head, false},
+            7});
 
     ASSERT_TRUE(result.accepted());
     EXPECT_EQ(result.status, ShotResolutionStatus::Accepted);
@@ -28,6 +29,7 @@ TEST(ShotResolutionTest, ValidCommandProducesNormalizedAcceptedResult)
     EXPECT_FLOAT_EQ(result.velocity.y, 960.0F);
     EXPECT_FLOAT_EQ(result.collisionExtent, 8.0F);
     EXPECT_EQ(result.damage, 30);
+    EXPECT_EQ(result.penetration, 7);
     EXPECT_FLOAT_EQ(result.maximumDistance, 2048.0F);
     EXPECT_FLOAT_EQ(result.impactPosition.x, 1238.8F);
     EXPECT_FLOAT_EQ(result.impactPosition.y, 1658.4F);
@@ -115,6 +117,12 @@ TEST(ShotResolutionTest, InvalidPhysicalInputsAreRejectedIndependently)
         resolveShotCommand(invalidDamage).status,
         ShotResolutionStatus::RejectedInvalidDamage);
 
+    ShotCommand invalidPenetration = valid;
+    invalidPenetration.penetration = -1;
+    EXPECT_EQ(
+        resolveShotCommand(invalidPenetration).status,
+        ShotResolutionStatus::RejectedInvalidPenetration);
+
     ShotCommand invalidDistance = valid;
     invalidDistance.maximumDistance = 0.0F;
     EXPECT_EQ(
@@ -146,6 +154,10 @@ TEST(ShotResolutionTest, StatusNamesCoverPublishedStates)
         shotResolutionStatusName(
             ShotResolutionStatus::RejectedInvalidDamage),
         "RejectedInvalidDamage");
+    EXPECT_STREQ(
+        shotResolutionStatusName(
+            ShotResolutionStatus::RejectedInvalidPenetration),
+        "RejectedInvalidPenetration");
     EXPECT_STREQ(
         shotResolutionStatusName(
             ShotResolutionStatus::RejectedInvalidMaximumDistance),

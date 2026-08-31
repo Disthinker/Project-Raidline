@@ -2292,7 +2292,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-consumer-integration-content-49") ||
             (schemaVersion == 37 &&
              contentVersion ==
-                 "procedural-frontier-loot-identity-content-50");
+                 "procedural-frontier-loot-identity-content-50") ||
+            (schemaVersion == 38 &&
+             contentVersion ==
+                 "procedural-frontier-high-risk-crisis-content-51");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

@@ -2840,6 +2840,7 @@ void GameSession::updateAlphaRaid(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
     bool automaticFire{};
+    int ammunitionPenetration{};
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
@@ -2857,6 +2858,27 @@ void GameSession::updateAlphaRaid(
                     weaponHandling = deriveWeaponHandling(
                         *definition.weaponUse);
                 }
+                std::optional<ItemDefinitionId> ammunitionId;
+                if (weaponAsset->chamberedRound.has_value())
+                {
+                    ammunitionId =
+                        weaponAsset->chamberedRound->definitionId;
+                }
+                else
+                {
+                    ammunitionId =
+                        definition.compatibleAmmunitionDefinitionId;
+                }
+                if (ammunitionId.has_value())
+                {
+                    const ItemDefinition &ammunition =
+                        publishedContentRegistry().item(*ammunitionId);
+                    if (ammunition.ammunitionUse.has_value())
+                    {
+                        ammunitionPenetration =
+                            ammunition.ammunitionUse->penetration;
+                    }
+                }
             }
             catch (...)
             {
@@ -2864,6 +2886,7 @@ void GameSession::updateAlphaRaid(
             }
         }
     }
+    world_->configureWeaponAmmunition(ammunitionPenetration);
     if (!automaticFire)
     {
         simulationInput.firePressed = false;

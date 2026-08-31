@@ -89,6 +89,13 @@ ShotResolution resolveShotCommand(
         return result;
     }
 
+    if (command.penetration < 0)
+    {
+        result.status =
+            ShotResolutionStatus::RejectedInvalidPenetration;
+        return result;
+    }
+
     if (command.aimIntent.has_value() &&
         (command.aimIntent->targetId == kInvalidCombatTargetId ||
          !validHitRegion(command.aimIntent->region)))
@@ -118,6 +125,7 @@ ShotResolution resolveShotCommand(
         result.direction.y * command.speed};
     result.collisionExtent = command.collisionExtent;
     result.damage = command.damage;
+    result.penetration = command.penetration;
     result.maximumDistance = command.maximumDistance;
     result.aimIntent = command.aimIntent;
     result.impactPosition = Vec2{
@@ -153,6 +161,8 @@ const char *shotResolutionStatusName(
         return "RejectedInvalidCollisionExtent";
     case ShotResolutionStatus::RejectedInvalidDamage:
         return "RejectedInvalidDamage";
+    case ShotResolutionStatus::RejectedInvalidPenetration:
+        return "RejectedInvalidPenetration";
     case ShotResolutionStatus::RejectedInvalidMaximumDistance:
         return "RejectedInvalidMaximumDistance";
     case ShotResolutionStatus::RejectedInvalidAimIntent:

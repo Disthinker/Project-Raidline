@@ -1935,6 +1935,43 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
     EXPECT_FALSE(loaded.profile->pendingRaid->highRiskCrisis.has_value());
 }
 
+TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-high-risk-crisis-content-v51", content);
+    ASSERT_TRUE(executeDeploy(
+        profile,
+        content,
+        DeployCommand{
+            "save-v51-pending-raid",
+            "save-v51-pending-settlement",
+            884213U,
+            MapDefinitionId{"map.raid.frontier_exchange"},
+            {}},
+        {profile.revision, "save-v51-pending-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid.has_value());
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "procedural-frontier-high-risk-crisis-content-51",
+            38U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+    ASSERT_TRUE(loaded.profile->pendingRaid.has_value());
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->rulesVersion,
+        "procedural-frontier-high-risk-crisis-28");
+    EXPECT_EQ(
+        loaded.profile->pendingRaid->highRiskCrisis,
+        profile.pendingRaid->highRiskCrisis);
+}
+
 TEST(SaveRepositoryTest, CurrentSchemaRejectsTamperedHighRiskCrisis)
 {
     const ContentRegistry &content = publishedContentRegistry();

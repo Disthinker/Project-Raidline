@@ -410,3 +410,163 @@ TEST(WeaponAmmoDomainTest, BrokenWeaponCannotConsumeChamberedRound)
     EXPECT_EQ(result.result, WeaponAmmoResult::Broken);
     EXPECT_EQ(profileStateFingerprint(profile), before);
 }
+
+TEST(WeaponAmmoDomainTest, MixedCaliberFamilyRoundsPreserveOrderAndUnloadIdentity)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-mixed-tier", content);
+    const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const AssetInstanceId standard = firstAsset(
+        profile, alpha_content::ammunition);
+    const ItemDefinitionId enhancedId{"item.ammunition.9mm_enhanced"};
+    const ItemDefinition &enhancedDefinition = content.item(enhancedId);
+    const auto enhancedOrigin = findFirstProfileFit(
+        profile,
+        content,
+        ProfileContainerId::stash(),
+        enhancedDefinition,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(enhancedOrigin.has_value());
+    const AssetInstanceId enhanced = profile.assets.create(
+        enhancedDefinition,
+        StoredAssetLocation{
+            ProfileContainerId::stash(), *enhancedOrigin},
+        7);
+
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, content,
+        LoadMagazineCommand{magazine, standard, 1},
+        CommandContext{profile.revision, "mixed-load-standard"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, content,
+        LoadMagazineCommand{magazine, enhanced, 7},
+        CommandContext{profile.revision, "mixed-load-enhanced"}).succeeded);
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, content,
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        CommandContext{profile.revision, "mixed-install"}).succeeded);
+
+    const WeaponAmmoReceipt standardShot = executeFireWeapon(
+        profile, content, FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "mixed-fire-standard"});
+    ASSERT_TRUE(standardShot.succeeded);
+    EXPECT_EQ(
+        standardShot.firedAmmunitionDefinitionId,
+        alpha_content::ammunition);
+    const WeaponAmmoReceipt enhancedShot = executeFireWeapon(
+        profile, content, FireWeaponCommand{rifle},
+        CommandContext{profile.revision, "mixed-fire-enhanced"});
+    ASSERT_TRUE(enhancedShot.succeeded);
+    EXPECT_EQ(enhancedShot.firedAmmunitionDefinitionId, enhancedId);
+
+    ASSERT_TRUE(executeWeaponAmmo(
+        profile, content,
+        UnloadMagazineCommand{magazine, ProfileContainerId::stash()},
+        CommandContext{profile.revision, "mixed-unload"}).succeeded);
+    std::uint32_t unloadedEnhanced{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (asset.definitionId == enhancedId)
+        {
+            unloadedEnhanced += asset.quantity;
+        }
+    }
+    EXPECT_EQ(unloadedEnhanced, 5U);
+    EXPECT_EQ(magazineRoundCount(profile, magazine), 0U);
+}
+
+TEST(WeaponAmmoDomainTest, WrongCaliberLoadRejectsWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "weapon-ammo-wrong-caliber", content);
+    const AssetInstanceId magazine = firstAsset(profile, alpha_content::magazine);
+    const ItemDefinition &ammunition = content.item(
+        ItemDefinitionId{"item.ammunition.5_45x39_standard"});
+    const auto origin = findFirstProfileFit(
+        profile, content, ProfileContainerId::stash(), ammunition,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin.has_value());
+    const AssetInstanceId ammunitionId = profile.assets.create(
+        ammunition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin},
+        10);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
+        profile, content,
+        LoadMagazineCommand{magazine, ammunitionId, 1},
+        CommandContext{profile.revision, "wrong-caliber"});
+
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(WeaponAmmoDomainTest, EveryNewWeaponCompletesMagazineFedFireChain)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const std::array<ItemDefinitionId, 4> weapons{
+        ItemDefinitionId{"item.weapon.carbine_5_45_compact"},
+        ItemDefinitionId{"item.weapon.rifle_5_45_service"},
+        ItemDefinitionId{"item.weapon.dmr_7_62x51_service"},
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}};
+
+    for (const ItemDefinitionId &weaponId : weapons)
+    {
+        ProfileState profile = makeNewAlphaProfile(
+            std::string{"weapon-chain-"} + std::string{weaponId.value()},
+            content);
+        const ItemDefinition &weaponDefinition = content.item(weaponId);
+        ASSERT_TRUE(weaponDefinition.compatibleAmmunitionDefinitionId.has_value());
+        ASSERT_FALSE(weaponDefinition.compatibleMagazineDefinitionIds.empty());
+        const ItemDefinition &magazineDefinition = content.item(
+            weaponDefinition.compatibleMagazineDefinitionIds.front());
+        const ItemDefinition &ammunitionDefinition = content.item(
+            *weaponDefinition.compatibleAmmunitionDefinitionId);
+        const auto createStored =
+            [&profile, &content](
+                const ItemDefinition &definition,
+                std::uint32_t quantity)
+            {
+                const auto origin = findFirstProfileFit(
+                    profile, content, ProfileContainerId::stash(),
+                    definition, ItemOrientation::Degrees0);
+                EXPECT_TRUE(origin.has_value());
+                return profile.assets.create(
+                    definition,
+                    StoredAssetLocation{
+                        ProfileContainerId::stash(), *origin},
+                    quantity);
+            };
+        const AssetInstanceId weapon = createStored(weaponDefinition, 1);
+        const AssetInstanceId magazine = createStored(magazineDefinition, 1);
+        const AssetInstanceId ammunition = createStored(ammunitionDefinition, 3);
+
+        ASSERT_TRUE(executeWeaponAmmo(
+            profile, content,
+            LoadMagazineCommand{magazine, ammunition, 3},
+            CommandContext{profile.revision, "chain-load"}).succeeded)
+            << weaponId.value();
+        ASSERT_TRUE(executeWeaponAmmo(
+            profile, content,
+            InstallMagazineAndChamberCommand{weapon, magazine},
+            CommandContext{profile.revision, "chain-install"}).succeeded)
+            << weaponId.value();
+        const WeaponAmmoReceipt fired = executeFireWeapon(
+            profile, content, FireWeaponCommand{weapon},
+            CommandContext{profile.revision, "chain-fire"});
+        ASSERT_TRUE(fired.succeeded) << weaponId.value();
+        EXPECT_TRUE(
+            fired.result == WeaponAmmoResult::Fired ||
+            fired.result == WeaponAmmoResult::FiredAndMalfunctioned)
+            << weaponId.value();
+        EXPECT_EQ(
+            fired.firedAmmunitionDefinitionId,
+            weaponDefinition.compatibleAmmunitionDefinitionId)
+            << weaponId.value();
+    }
+}

@@ -18,7 +18,8 @@ namespace
                 8.0F,
                 2,
                 250.0F,
-                ShotAimIntent{44, HitRegion::Head, false}});
+                ShotAimIntent{44, HitRegion::Head, false},
+                6});
     }
 }
 
@@ -38,6 +39,7 @@ TEST(LogicalBallisticsTest, StoresFrozenAcceptedShot)
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0F);
     EXPECT_FLOAT_EQ(flight.maximumDistance(), 250.0F);
     EXPECT_EQ(flight.damage(), 2);
+    EXPECT_EQ(flight.penetration(), 6);
     ASSERT_TRUE(flight.aimIntent().has_value());
     EXPECT_EQ(flight.aimIntent()->targetId, 44U);
     EXPECT_EQ(flight.aimIntent()->region, HitRegion::Head);

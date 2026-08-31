@@ -168,6 +168,32 @@ struct WeaponUseDefinition
         const WeaponUseDefinition &) = default;
 };
 
+enum class AmmunitionTier
+{
+    Standard,
+    Enhanced
+};
+
+struct AmmunitionUseDefinition
+{
+    CaliberDefinitionId caliberDefinitionId;
+    AmmunitionTier tier{AmmunitionTier::Standard};
+    int penetration{};
+
+    friend bool operator==(
+        const AmmunitionUseDefinition &,
+        const AmmunitionUseDefinition &) = default;
+};
+
+struct MagazineUseDefinition
+{
+    CaliberDefinitionId caliberDefinitionId;
+
+    friend bool operator==(
+        const MagazineUseDefinition &,
+        const MagazineUseDefinition &) = default;
+};
+
 // One deterministic interpretation of the five player-facing weapon
 // attributes. Content stores the stable semantic values above; simulation and
 // services consume these derived units instead of reinterpreting attributes.
@@ -298,6 +324,9 @@ struct ItemDefinition
         compatibleAmmunitionDefinitionId;
     std::optional<ItemDefinitionId>
         compatibleMagazineDefinitionId;
+    std::vector<ItemDefinitionId> compatibleMagazineDefinitionIds;
+    std::optional<AmmunitionUseDefinition> ammunitionUse;
+    std::optional<MagazineUseDefinition> magazineUse;
     std::optional<ArmorProtectionDefinition> armorProtection;
     std::optional<MedicalUseDefinition> medicalUse;
     std::optional<WeaponConditionDefinition> weaponCondition;

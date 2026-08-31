@@ -52,6 +52,14 @@ TEST(UiLocalizationTest, ChineseTranslatesFormattedCountersAndContentNames) {
   EXPECT_NE(translated.find("步枪"), std::string::npos);
   EXPECT_NE(translated.find("弹药 18/30"), std::string::npos);
   EXPECT_NE(translated.find("耐久 76%"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "7.62 Precision Rifle"),
+            "7.62精确射手步枪");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "5.45x39 Enhanced Ball"),
+            "5.45×39增强普通弹");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesControlsAndDomainReceipts) {

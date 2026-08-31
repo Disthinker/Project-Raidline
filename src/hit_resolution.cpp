@@ -106,7 +106,8 @@ HitResolutionResult resolveShotHits(
     for (const ShotCollisionCandidate &shot : shots)
     {
         if (shot.shotId == kInvalidShotId ||
-            shot.damage <= 0)
+            shot.damage <= 0 ||
+            shot.penetration < 0)
         {
             continue;
         }
@@ -226,7 +227,7 @@ HitResolutionResult resolveShotHits(
                 shot.damage,
                 region,
                 0,
-                0,
+                shot.penetration,
                 weakPoint,
                 std::nullopt});
         if (!damage.resolved())

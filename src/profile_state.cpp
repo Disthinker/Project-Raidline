@@ -1513,14 +1513,14 @@ ProfileValidationResult validateProfileState(
         {
             if (definition->magazineCapacity == 0 ||
                 asset.magazineRounds.size() > definition->magazineCapacity ||
-                !definition->compatibleAmmunitionDefinitionId.has_value())
+                !definition->magazineUse.has_value())
             {
                 return {false, "magazine state is invalid"};
             }
             for (const MagazineRoundRecord &round : asset.magazineRounds)
             {
-                if (round.definitionId !=
-                        *definition->compatibleAmmunitionDefinitionId ||
+                if (!content.ammunitionFitsMagazine(
+                        round.definitionId, definition->definitionId) ||
                     (round.reliefBatchId.has_value() &&
                      round.reliefBatchId->empty()))
                 {
@@ -1536,9 +1536,9 @@ ProfileValidationResult validateProfileState(
         if (asset.chamberedRound.has_value())
         {
             if (definition->category != ItemCategory::Weapon ||
-                !definition->compatibleAmmunitionDefinitionId.has_value() ||
-                asset.chamberedRound->definitionId !=
-                    *definition->compatibleAmmunitionDefinitionId ||
+                !content.ammunitionFitsWeapon(
+                    asset.chamberedRound->definitionId,
+                    definition->definitionId) ||
                 (asset.chamberedRound->reliefBatchId.has_value() &&
                  asset.chamberedRound->reliefBatchId->empty()))
             {
@@ -1577,9 +1577,9 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "installed magazine weapon is unknown"};
             }
-            if (!weaponDefinition->compatibleMagazineDefinitionId.has_value() ||
-                *weaponDefinition->compatibleMagazineDefinitionId !=
-                    definition->definitionId)
+            if (!content.magazineFitsWeapon(
+                    definition->definitionId,
+                    weaponDefinition->definitionId))
             {
                 return {false, "installed magazine is incompatible"};
             }

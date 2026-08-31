@@ -123,7 +123,7 @@ std::optional<AssetInstanceId> selectRaidReloadMagazine(
             return std::nullopt;
         }
         const ItemDefinition &weaponDefinition = content.item(weapon->definitionId);
-        if (!weaponDefinition.compatibleMagazineDefinitionId.has_value())
+        if (weaponDefinition.compatibleMagazineDefinitionIds.empty())
         {
             return std::nullopt;
         }
@@ -150,8 +150,8 @@ std::optional<AssetInstanceId> selectRaidReloadMagazine(
                          *chest,
                          static_cast<std::uint32_t>(index))))
             {
-                if (asset->definitionId ==
-                        *weaponDefinition.compatibleMagazineDefinitionId)
+                if (content.magazineFitsWeapon(
+                        asset->definitionId, weapon->definitionId))
                 {
                     candidates.push_back(asset);
                 }

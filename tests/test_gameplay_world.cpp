@@ -618,6 +618,7 @@ TEST(GameplayWorldTest, MoveRightUpdatesPlayerPosition)
 TEST(GameplayWorldTest, FireCreatesLogicalBallistic)
 {
     GameplayWorld world;
+    world.configureWeaponAmmunition(7);
     GameplayInput input = makeFireInput();
 
     world.update(input, 0.0f);
@@ -641,6 +642,7 @@ TEST(GameplayWorldTest, FireCreatesLogicalBallistic)
     EXPECT_FLOAT_EQ(flight.collisionExtent(), 8.0f);
     EXPECT_FLOAT_EQ(flight.speed(), 6000.0F);
     EXPECT_EQ(flight.damage(), 1);
+    EXPECT_EQ(flight.penetration(), 7);
 }
 
 TEST(GameplayWorldTest,
