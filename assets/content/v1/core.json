@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "content-beta-loot-economy-content-55",
+  "content_version": "content-beta-growth-loop-content-56",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -311,6 +311,44 @@
     {"id": "caliber.9x19", "display_name": "9x19mm"},
     {"id": "caliber.5_45x39", "display_name": "5.45x39mm"},
     {"id": "caliber.7_62x51", "display_name": "7.62x51mm"}
+  ],
+  "loadout_archetypes": [
+    {
+      "id": "loadout_archetype.light_scavenger",
+      "display_name": "Light Scavenger",
+      "description": "Fast 9mm recovery loadout with light protection and compact storage.",
+      "weapons": ["item.weapon.pistol_basic", "item.weapon.rifle_basic"],
+      "body_armor": ["item.protective_gear.body_armor_light"],
+      "chest_rigs": ["item.container.chest_rig_small", "item.container.chest_rig_patrol"],
+      "backpacks": ["item.container.backpack_small", "item.container.backpack_field"],
+      "minimum_compatible_rounds": 30,
+      "recommended_map": "map.raid.riverside",
+      "recommends_high_risk": false
+    },
+    {
+      "id": "loadout_archetype.balanced_operator",
+      "display_name": "Balanced Operator",
+      "description": "General 5.45 fighting loadout with balanced protection and supply capacity.",
+      "weapons": ["item.weapon.carbine_5_45_compact", "item.weapon.rifle_5_45_service"],
+      "body_armor": ["item.protective_gear.body_armor_basic", "item.protective_gear.body_armor_light"],
+      "chest_rigs": ["item.container.chest_rig_patrol", "item.container.chest_rig_assault"],
+      "backpacks": ["item.container.backpack_field", "item.container.backpack_expedition"],
+      "minimum_compatible_rounds": 60,
+      "recommended_map": "map.raid.industrial",
+      "recommends_high_risk": false
+    },
+    {
+      "id": "loadout_archetype.heavy_specialist",
+      "display_name": "Heavy Specialist",
+      "description": "7.62 precision or support-fire loadout for high-risk objectives.",
+      "weapons": ["item.weapon.dmr_7_62x51_service", "item.weapon.lmg_7_62x51_service"],
+      "body_armor": ["item.protective_gear.body_armor_heavy"],
+      "chest_rigs": ["item.container.chest_rig_assault"],
+      "backpacks": ["item.container.backpack_expedition"],
+      "minimum_compatible_rounds": 40,
+      "recommended_map": "map.raid.frontier_exchange",
+      "recommends_high_risk": true
+    }
   ],
   "items": [
     {

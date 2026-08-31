@@ -3416,10 +3416,120 @@ ContentRegistry ContentRegistry::fromJson(
             registry.maps_.push_back(std::move(definition));
         }
 
+        const auto parseItemIdArray = [](
+            const Json &parent,
+            std::string_view field)
+        {
+            std::vector<ItemDefinitionId> result;
+            const Json &values = requiredArray(parent, field);
+            for (const Json &value : values)
+            {
+                if (!value.is_string())
+                {
+                    fail(std::string{field} + " must contain item IDs");
+                }
+                const ItemDefinitionId id{value.get<std::string>()};
+                if (std::find(result.begin(), result.end(), id) != result.end())
+                {
+                    fail(std::string{field} + " contains a duplicate item ID");
+                }
+                result.push_back(id);
+            }
+            return result;
+        };
+        const auto validateArchetypeItems = [&registry](
+            const std::vector<ItemDefinitionId> &ids,
+            ItemCategory category,
+            std::optional<EquipmentSlotKind> slot,
+            std::string_view field)
+        {
+            if (ids.empty())
+            {
+                fail(std::string{field} + " must not be empty");
+            }
+            for (const ItemDefinitionId &id : ids)
+            {
+                if (!registry.itemIndex_.contains(id))
+                {
+                    fail(std::string{field} + " references an unknown item");
+                }
+                const ItemDefinition &item = registry.item(id);
+                if (item.category != category ||
+                    (slot.has_value() && item.equipmentSlot != slot))
+                {
+                    fail(std::string{field} + " references an invalid item");
+                }
+            }
+        };
+        for (const Json &value : requiredArray(root, "loadout_archetypes"))
+        {
+            if (!value.is_object())
+            {
+                fail("loadout archetype must be an object");
+            }
+            LoadoutArchetypeDefinition definition{
+                LoadoutArchetypeDefinitionId{requiredString(value, "id")},
+                requiredString(value, "display_name"),
+                requiredString(value, "description"),
+                parseItemIdArray(value, "weapons"),
+                parseItemIdArray(value, "body_armor"),
+                parseItemIdArray(value, "chest_rigs"),
+                parseItemIdArray(value, "backpacks"),
+                requiredPositiveUint(value, "minimum_compatible_rounds"),
+                MapDefinitionId{requiredString(value, "recommended_map")},
+                requiredBool(value, "recommends_high_risk")};
+            if (!hasPrefix(definition.id.value(), "loadout_archetype.") ||
+                definition.displayName.empty() ||
+                definition.description.empty() ||
+                definition.minimumCompatibleRounds > 600U ||
+                !registry.mapIndex_.contains(
+                    definition.recommendedMapDefinitionId))
+            {
+                fail("loadout archetype metadata is invalid");
+            }
+            validateArchetypeItems(
+                definition.weaponDefinitionIds,
+                ItemCategory::Weapon,
+                std::nullopt,
+                "loadout weapons");
+            for (const ItemDefinitionId &weaponId :
+                 definition.weaponDefinitionIds)
+            {
+                if (!registry.item(weaponId).weaponUse.has_value())
+                {
+                    fail("loadout weapon has no weapon capability");
+                }
+            }
+            validateArchetypeItems(
+                definition.bodyArmorDefinitionIds,
+                ItemCategory::ProtectiveGear,
+                EquipmentSlotKind::BodyArmor,
+                "loadout body armor");
+            validateArchetypeItems(
+                definition.chestRigDefinitionIds,
+                ItemCategory::Container,
+                EquipmentSlotKind::ChestRig,
+                "loadout chest rigs");
+            validateArchetypeItems(
+                definition.backpackDefinitionIds,
+                ItemCategory::Container,
+                EquipmentSlotKind::Backpack,
+                "loadout backpacks");
+            const std::size_t index = registry.loadoutArchetypes_.size();
+            if (!registry.loadoutArchetypeIndex_
+                     .emplace(definition.id, index)
+                     .second)
+            {
+                fail("duplicate loadout archetype definition ID");
+            }
+            registry.loadoutArchetypes_.push_back(std::move(definition));
+        }
+
         if (registry.items_.empty() ||
             registry.lootTables_.empty() ||
             registry.enemyDeployments_.empty() ||
-            registry.maps_.empty())
+            registry.maps_.empty() ||
+            registry.loadoutArchetypes_.size() < 3U)
         {
             fail("content schema v1 requires every current definition domain");
         }
@@ -3582,6 +3692,22 @@ const std::vector<MapDefinition> &
 ContentRegistry::maps() const noexcept
 {
     return maps_;
+}
+
+const std::vector<LoadoutArchetypeDefinition> &
+ContentRegistry::loadoutArchetypes() const noexcept
+{
+    return loadoutArchetypes_;
+}
+
+const LoadoutArchetypeDefinition &ContentRegistry::loadoutArchetype(
+    const LoadoutArchetypeDefinitionId &id) const
+{
+    return lookup(
+        loadoutArchetypeIndex_,
+        loadoutArchetypes_,
+        id,
+        "loadout archetype");
 }
 
 const GunsmithFullMaintenanceDefinition &

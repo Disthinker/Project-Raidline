@@ -23,6 +23,7 @@
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
+#include "loadout_progression.h"
 #include "profile_container_presentation.h"
 #include "raid_camera.h"
 #include "raid_tactical_map_presentation.h"
@@ -2036,6 +2037,15 @@ SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
         34.0F};
 }
 
+SDL_FRect App::loadoutArchetypeButton(std::size_t index) const noexcept
+{
+    return SDL_FRect{
+        666.0F,
+        326.0F + static_cast<float>(index) * 40.0F,
+        454.0F,
+        34.0F};
+}
+
 void App::closeInventory() noexcept
 {
     // Tab / browsing Esc closes the inventory and clears all pointer state,
@@ -2632,6 +2642,18 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             {
                 handleRaidInteriorIntelligencePurchase(
                     selectedRaidMap().interiors[index].id);
+                return;
+            }
+        }
+        const auto &archetypes =
+            publishedContentRegistry().loadoutArchetypes();
+        for (std::size_t index{}; index < archetypes.size(); ++index)
+        {
+            if (contains(loadoutArchetypeButton(index), click.position))
+            {
+                selectedLoadoutArchetypeIndex_ = index;
+                uiMessage_ =
+                    "LOADOUT ROLE SELECTED | REVIEW REAL GAPS BELOW";
                 return;
             }
         }
@@ -12059,46 +12081,93 @@ void App::renderBaseDeployment()
             label.c_str());
     }
 
-    float y = 318.0F;
-    for (EquipmentSlotKind slot : kProfileEquipmentSlots)
+    const ContentRegistry &content = publishedContentRegistry();
+    const auto loadouts = projectAllLoadoutReadiness(profile, content);
+    selectedLoadoutArchetypeIndex_ = loadouts.empty()
+        ? 0U
+        : selectedLoadoutArchetypeIndex_ % loadouts.size();
+    for (std::size_t index{}; index < loadouts.size(); ++index)
     {
-        const auto id = equippedAsset(profile, slot);
-        const std::string name = id.has_value()
-            ? publishedContentRegistry().item(
-                  profile.assets.find(*id)->definitionId).displayName
-            : "EMPTY";
-        const std::string row = fmt::format(
-            "{}: {}",
-            equipmentSlotLabel(slot),
-            name);
-        uiTextRenderer_.render(renderer_, 666.0F, y, row.c_str());
-        y += 18.0F;
+        const LoadoutReadinessProjection &loadout = loadouts[index];
+        const SDL_FRect button = loadoutArchetypeButton(index);
+        const bool selected = index == selectedLoadoutArchetypeIndex_;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            selected ? 48 : loadout.ready() ? 42 : 68,
+            selected ? 88 : loadout.ready() ? 82 : 54,
+            selected ? 112 : loadout.ready() ? 62 : 52,
+            255);
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            selected ? 108 : loadout.ready() ? 102 : 170,
+            selected ? 188 : loadout.ready() ? 184 : 112,
+            selected ? 220 : loadout.ready() ? 132 : 96,
+            255);
+        SDL_RenderRect(renderer_, &button);
+        const std::string label = fmt::format(
+            "{} | {} | AMMO {}/{}",
+            loadout.displayName,
+            loadout.ready() ? "READY" : "GAPS",
+            loadout.compatibleRoundCount,
+            loadout.minimumCompatibleRounds);
+        uiTextRenderer_.render(
+            renderer_, button.x + 10.0F, button.y + 11.0F, label.c_str());
+    }
+
+    if (!loadouts.empty())
+    {
+        const LoadoutReadinessProjection &selected =
+            loadouts[selectedLoadoutArchetypeIndex_];
+        std::string gaps;
+        const auto appendGap = [&](const char *label)
+        {
+            if (!gaps.empty())
+            {
+                gaps += ", ";
+            }
+            gaps += label;
+        };
+        for (const LoadoutReadinessIssue issue : selected.issues)
+        {
+            switch (issue)
+            {
+            case LoadoutReadinessIssue::Weapon:
+                appendGap("WEAPON");
+                break;
+            case LoadoutReadinessIssue::CompatibleAmmunition:
+                appendGap("CARRIED AMMO");
+                break;
+            case LoadoutReadinessIssue::BodyArmor:
+                appendGap("BODY ARMOR");
+                break;
+            case LoadoutReadinessIssue::ChestRig:
+                appendGap("CHEST RIG");
+                break;
+            case LoadoutReadinessIssue::Backpack:
+                appendGap("BACKPACK");
+                break;
+            }
+        }
+        const std::string target = fmt::format(
+            "ROLE TARGET | {}{}",
+            selected.recommendedMapDisplayName,
+            selected.recommendsHighRisk ? " | HIGH-RISK" : "");
+        const std::string gapLine = selected.ready()
+            ? "ROLE READY | EQUIPMENT AND CARRIED AMMO MATCH"
+            : "MISSING | " + gaps;
+        uiTextRenderer_.render(renderer_, 800.0F, 458.0F, target.c_str());
+        uiTextRenderer_.render(renderer_, 800.0F, 478.0F, gapLine.c_str());
     }
 
     const WeaponReadiness readiness = weaponReadiness(profile);
     const bool capable = readiness.hasWeapon &&
         (readiness.hasChamberedRound ||
          readiness.compatibleMagazineRounds > 0);
-    const std::string fireStatus = !readiness.hasWeapon
-        ? "NO WEAPON EQUIPPED"
-        : readiness.hasChamberedRound
-            ? fmt::format(
-                  "CAN FIRE NOW | {} COMPATIBLE MAGAZINE ROUNDS",
-                  readiness.compatibleMagazineRounds)
-            : readiness.compatibleMagazineRounds > 0
-                ? fmt::format(
-                      "NEEDS CHAMBER/RELOAD | {} COMPATIBLE ROUNDS",
-                      readiness.compatibleMagazineRounds)
-                : "NO USABLE AMMUNITION";
-    uiTextRenderer_.render(
-        renderer_,
-        666.0F,
-        458.0F,
-        fireStatus.c_str());
     if (!capable)
     {
         uiTextRenderer_.render(
-            renderer_, 666.0F, 478.0F,
+            renderer_, 800.0F, 540.0F,
             "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
     }
     if (selectedRaidSelfRecoveryRecordId_.has_value())

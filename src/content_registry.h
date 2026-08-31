@@ -676,6 +676,27 @@ struct MapDefinition
     std::vector<RaidInteriorDefinition> interiors;
 };
 
+// A player-facing role target. It describes acceptable published content and
+// never owns or moves Profile assets; readiness is projected separately from
+// the actual equipped/carry tree.
+struct LoadoutArchetypeDefinition
+{
+    LoadoutArchetypeDefinitionId id;
+    std::string displayName;
+    std::string description;
+    std::vector<ItemDefinitionId> weaponDefinitionIds;
+    std::vector<ItemDefinitionId> bodyArmorDefinitionIds;
+    std::vector<ItemDefinitionId> chestRigDefinitionIds;
+    std::vector<ItemDefinitionId> backpackDefinitionIds;
+    std::uint32_t minimumCompatibleRounds{};
+    MapDefinitionId recommendedMapDefinitionId;
+    bool recommendsHighRisk{};
+
+    friend bool operator==(
+        const LoadoutArchetypeDefinition &,
+        const LoadoutArchetypeDefinition &) = default;
+};
+
 class ContentRegistry
 {
 public:
@@ -709,6 +730,12 @@ public:
 
     [[nodiscard]]
     const std::vector<MapDefinition> &maps() const noexcept;
+
+    [[nodiscard]] const std::vector<LoadoutArchetypeDefinition> &
+    loadoutArchetypes() const noexcept;
+
+    [[nodiscard]] const LoadoutArchetypeDefinition &loadoutArchetype(
+        const LoadoutArchetypeDefinitionId &id) const;
 
     [[nodiscard]]
     const GunsmithFullMaintenanceDefinition &
@@ -823,6 +850,7 @@ private:
     std::vector<LootTableDefinition> lootTables_;
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;
+    std::vector<LoadoutArchetypeDefinition> loadoutArchetypes_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;
     PlayerBaseMedicalDefinition playerBaseMedical_;
     ResidentMedicalDefinition residentMedical_;
@@ -846,6 +874,8 @@ private:
     std::map<EnemyDeploymentDefinitionId, std::size_t>
         enemyDeploymentIndex_;
     std::map<MapDefinitionId, std::size_t> mapIndex_;
+    std::map<LoadoutArchetypeDefinitionId, std::size_t>
+        loadoutArchetypeIndex_;
     std::map<BasePriorityDefinitionId, std::size_t> basePriorityIndex_;
     std::map<BaseCommunityEventDefinitionId, std::size_t>
         baseCommunityEventIndex_;

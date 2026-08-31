@@ -13,7 +13,17 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION",
+    {{"ROLE READY | EQUIPMENT AND CARRIED AMMO MATCH",
+       "职责准备完成 | 装备和随身弹药符合要求"},
+     {"LOADOUT ROLE SELECTED | REVIEW REAL GAPS BELOW",
+      "已选择配装职责 | 请查看下方真实缺口"},
+     {"Light Scavenger", "轻型搜刮"},
+     {"Balanced Operator", "均衡作战"},
+     {"Heavy Specialist", "重型专精"},
+     {"ROLE TARGET | ", "职责目标 | "},
+     {"CARRIED AMMO", "随身兼容弹药"},
+     {"GAPS", "有缺口"},
+     {"CRISIS: UNKNOWN | ENEMY DOSSIER REVEALS BEFORE ACTIVATION",
        "危机：未知 | 携带敌情档案可在激活前获知详情"},
      {"LARGER WAVES CONVERGE ON A FACTORY CACHE",
       "更大规模敌群正向厂区物资点汇聚"},
