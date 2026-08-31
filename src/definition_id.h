@@ -100,6 +100,7 @@ struct RegionRouteDefinitionTag;
 struct RegionalOutpostDefinitionTag;
 struct RegionalBaseSiteDefinitionTag;
 struct BaseFacilityDefinitionTag;
+struct LoadoutArchetypeDefinitionTag;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using CaliberDefinitionId = DefinitionId<CaliberDefinitionTag>;
@@ -123,3 +124,5 @@ using RegionalOutpostDefinitionId =
 using RegionalBaseSiteDefinitionId =
     DefinitionId<RegionalBaseSiteDefinitionTag>;
 using BaseFacilityDefinitionId = DefinitionId<BaseFacilityDefinitionTag>;
+using LoadoutArchetypeDefinitionId =
+    DefinitionId<LoadoutArchetypeDefinitionTag>;

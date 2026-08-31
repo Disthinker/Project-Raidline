@@ -769,6 +769,19 @@ TEST(UiLocalizationTest, ContentBetaLoadoutGearInspectionIsBilingual) {
             "分区 4 弹匣 / 4 工具");
 }
 
+TEST(UiLocalizationTest, ContentBetaLoadoutRolesAreBilingual) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "Light Scavenger | GAPS | AMMO 12/30"),
+            "轻型搜刮 | 有缺口 | 弹药 12/30");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ROLE READY | EQUIPMENT AND CARRIED AMMO MATCH"),
+            "职责准备完成 | 装备和随身弹药符合要求");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "MISSING | BODY ARMOR, CHEST RIG"),
+            "缺失 | 防弹衣, 胸挂");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

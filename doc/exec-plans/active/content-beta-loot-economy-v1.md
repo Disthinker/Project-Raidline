@@ -84,4 +84,4 @@
 - [x] 实现地图/资源点/高危危机产出梯度。
 - [x] 实现三种基础弹药制造和工坊配方选择。
 - [x] 完成 Windows Debug、1324/1324 完整 CTest 与 exact-head Windows/Ubuntu CI。
-- [ ] 用户正常游玩验收。
+- [x] 用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。

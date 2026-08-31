@@ -2304,7 +2304,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "content-beta-warehouse-catalog-content-53") ||
             (schemaVersion == 38 &&
              contentVersion ==
-                 "content-beta-loadout-gear-content-54");
+                 "content-beta-loadout-gear-content-54") ||
+            (schemaVersion == 38 &&
+             contentVersion ==
+                 "content-beta-loot-economy-content-55");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

@@ -256,6 +256,8 @@ add_library(raidline_domain STATIC
     src/loot_table.h
     src/lost_raid_domain.cpp
     src/lost_raid_domain.h
+    src/loadout_progression.cpp
+    src/loadout_progression.h
     src/maintenance_domain.cpp
     src/maintenance_domain.h
     src/medical_domain.cpp
@@ -729,6 +731,10 @@ raidline_add_test(
 raidline_add_test(
     LostRaidDomainTest
     tests/test_lost_raid_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    LoadoutProgressionTest
+    tests/test_loadout_progression.cpp
     raidline::domain)
 raidline_add_test(
     RecoveryTaskDomainTest

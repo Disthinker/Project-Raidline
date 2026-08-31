@@ -2035,6 +2035,24 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousLoadoutGearContent)
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 }
 
+TEST(SaveRepositoryTest, SchemaV38LoadsPreviousLootEconomyContent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "save-loot-economy-content-v55", content);
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "content-beta-loot-economy-content-55",
+            38U),
+        content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+}
+
 TEST(SaveRepositoryTest, CurrentSchemaRejectsTamperedHighRiskCrisis)
 {
     const ContentRegistry &content = publishedContentRegistry();

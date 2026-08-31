@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "content-beta-loot-economy-content-55");
+        "content-beta-growth-loop-content-56");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -1618,6 +1618,33 @@ TEST(ContentRegistryTest, ContentBetaRejectsOversizedContainerCompartment)
 
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, ContentBetaLoadoutArchetypesRejectBadReferences)
+{
+    const std::string unknownWeapon = replaceFirst(
+        publishedJsonCopy(),
+        "\"item.weapon.pistol_basic\", \"item.weapon.rifle_basic\"",
+        "\"item.weapon.missing\", \"item.weapon.rifle_basic\"");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(unknownWeapon)),
+        ContentRegistryError);
+
+    const std::string wrongSlot = replaceFirst(
+        publishedJsonCopy(),
+        "\"body_armor\": [\"item.protective_gear.body_armor_light\"]",
+        "\"body_armor\": [\"item.protective_gear.helmet_scout\"]");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(wrongSlot)),
+        ContentRegistryError);
+
+    const std::string missingMap = replaceFirst(
+        publishedJsonCopy(),
+        "\"recommended_map\": \"map.raid.riverside\"",
+        "\"recommended_map\": \"map.raid.missing\"");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(missingMap)),
         ContentRegistryError);
 }
 

@@ -118,6 +118,7 @@ private:
     std::optional<std::string> selectedLostRaidRecordId_;
     std::optional<std::string> selectedRaidSelfRecoveryRecordId_;
     std::size_t selectedRaidMapIndex_{};
+    std::size_t selectedLoadoutArchetypeIndex_{};
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
         BaseSupplyCategory::Food};
@@ -217,6 +218,8 @@ private:
 
     [[nodiscard]] SDL_FRect raidMapPreviousButton() const noexcept;
     [[nodiscard]] SDL_FRect raidIntelligenceButton(
+        std::size_t index) const noexcept;
+    [[nodiscard]] SDL_FRect loadoutArchetypeButton(
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
