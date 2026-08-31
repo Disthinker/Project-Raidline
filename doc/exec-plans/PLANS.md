@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/procedural-raid-resource-point-ecology-v1.md`。PR #111 已由用户正常游玩验收并以 `636a40b` 进入 main；当前只推进 `Frontier Exchange` 的普通、高价值和地标专属资源点生态，不并行启动遭遇生态、实时守城、AI 小队或第二地图主题。
+当前实现计划：`active/content-beta-weapon-caliber-v1.md`。PR #116 已由用户正常游玩验收并以 `e285a2b` 进入 main；当前只推进六种职责枪械、三种口径和两档普通弹的完整玩家闭环，不并行启动防具/容器梯度、Loot 经济重排、改枪附件、特殊弹、正式美术、实时守城或 AI 小队。

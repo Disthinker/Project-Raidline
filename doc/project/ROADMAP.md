@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-30。
+最后核对：2026-08-31。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～4 均已进入主线。当前开始 Content Beta 的第一个窄切片：`Frontier Exchange` 物资身份与 Loot 内容包 v1，范围合同见 `doc/exec-plans/active/frontier-loot-identity-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及“首张可玩随机大地图”阶段均已进入主线。当前进入 Content Beta 的“战利品—配装—再出击成长闭环”，先推进代表性枪械与口径梯度 v1，范围合同见 `doc/exec-plans/active/content-beta-weapon-caliber-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -173,7 +173,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
 | Frontier 物资身份与 Loot 内容包 v1 | 六类资源点不再产出同质化物资；玩家可按食物、卫生、娱乐、安全和建设需求选择搜刮路线 | 九种稳定物品定义、六张专属 Loot 表、rules v27/content v50、rules 23～26 pending Raid 兼容、现有 Base 消费者复用 | PR #115 已通过用户正常游玩验收，以 `6ab1724` 进入 main |
-| Frontier 高危危机生态 v1 | 每局高危围绕道路、工业或货运目标形成不同增援节奏、方向和主题高级资源机会；敌情可提前预告 | 三类内容危机、合法目标资源点、冻结压力来源、rules v28/content v51/schema v38、rules v27/content v50 兼容 | 当前分支实现与自动化收束中；待完整 CTest、Draft PR exact-head CI 和用户正常游玩验收 |
+| Frontier 高危危机生态 v1 | 每局高危围绕道路、工业或货运目标形成不同增援节奏、方向和主题高级资源机会；敌情可提前预告 | 三类内容危机、合法目标资源点、冻结压力来源、rules v28/content v51/schema v38、rules v27/content v50 兼容 | PR #116 已通过 1296/1296 CTest、exact-head CI 和用户验收，以 `e285a2b` 进入 main |
+| 代表性枪械与口径梯度 v1 | 轻型、通用和远距/重型配装在操控、射程、供弹与穿甲上形成可感知差异 | 六职责武器、三口径、两档普通弹、领域兼容图、旧 ID/旧 pending Raid 兼容 | 当前分支 `codex/content-beta-weapon-caliber-v1`；从 `origin/main@e285a2b` 开始 |
 
 ## 当前 Combat Reliability 缺陷
 

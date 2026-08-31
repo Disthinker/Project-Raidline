@@ -37,5 +37,5 @@
 - [x] 补充 F10 危机验收面板并通过 exact-head Windows/Ubuntu CI。
 - [x] 根据首次正常游玩反馈修复“状态已激活但危机不可感知”：压力敌人向目标汇流，HUD/战术地图显示即时反馈与下一波倒计时。
 - [x] 完成验收返工后的 Windows Debug 全目标与完整 CTest（1296/1296）。
-- [ ] 完成验收返工提交的 exact-head Windows/Ubuntu CI。
-- [ ] 用户正常游玩验收。
+- [x] 完成验收返工提交 `1e7b78c` 的 exact-head Windows/Ubuntu CI。
+- [x] 用户正常游玩验收；PR #116 以普通 merge commit `e285a2b` 进入 main。

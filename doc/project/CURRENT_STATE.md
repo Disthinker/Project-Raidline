@@ -1,17 +1,17 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-30。
+最后核对：2026-08-31。
 
 ## Git 与交付基线
 
-- `origin/main@7be91e8` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及程序化 Raid 内容扩展 Macro 1～4。
-- 当前开发分支：`codex/frontier-loot-identity-v1`，从 `origin/main@7be91e8` 创建。
-- 当前活动计划：`doc/exec-plans/active/frontier-loot-identity-v1.md`。
+- `origin/main@e285a2b` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础，以及首张可玩随机大地图与高危危机生态。
+- 当前开发分支：`codex/content-beta-weapon-caliber-v1`，从 `origin/main@e285a2b` 创建。
+- 当前活动计划：`doc/exec-plans/active/content-beta-weapon-caliber-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Raid 内容扩展 Macro 1～4 均已进入主线。当前开始 Content Beta 的第一个窄切片：让 `Frontier Exchange` 六类资源点具有各自可辨认的生活、工业与高价值物资产出，并直接消费现有 Base 供给、建设和回收闭环。不增加新地图主题、新 AI、程序化室内、动态经济、实时尸潮或 AI 小队。
+Core Extraction Alpha 到 Regional Operations 基础阶段，以及“首张可玩随机大地图”阶段均已进入主线。当前进入 Content Beta 的“战利品—配装—再出击成长闭环”，首个宏切片建立六种职责武器、三种口径和两档普通弹药，不增加新地图主题、改枪附件、特殊弹、正式美术、实时尸潮或 AI 小队。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -70,7 +70,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段，以及程序化 Rai
 55. **Frontier Exchange 遭遇与部署生态 v1**：PR #113 已通过完整自动化、exact-head CI 和用户正常游玩验收，以 merge commit `f095022` 进入 main。content v48/schema v37/rules v26 冻结巡逻、守点和伏击群组、同组声响响应及 1200 世界单位出生保护区；Raid 拾取和局内库存只复制、校验可修改的资产参与者，不再逐次扫描冻结超大地图。
 56. **Frontier Exchange 既有消费者整合 v1**：content v49 保持 schema v37/layout v4，把 Ashworks 外围清剿指向 `Frontier Exchange`；`GameSession` 从冻结锚点建立救援、失物缓存和高危控制的类型化战术地图目标。救援和玩家主动选择的失物缓存属于开局 Briefed，高危控制需要探索；外围清剿状态投影为 ACTIVE/SECURED，最终减值仍由唯一 Settlement 提交。v48/v47 存档继续读取且不重生成既有 Raid。PR #114 已通过自动化、exact-head CI 和用户正常游玩验收，以 merge commit `7be91e8` 进入 main。
 57. **Frontier Exchange 物资身份与 Loot 内容包 v1**：content v50 保持 schema v37/layout v4，为六类资源点提供独立 Loot 表，新增九种稳定生活、工业和高价值物品定义及双语占位。新 rules 27 冻结资源点—Loot 表绑定；rules 23～26 pending Raid 继续按旧映射读取，不重抽既有 Loot。新物资复用现有 AssetRegistry、Base 自动供给、建设加工和回收事务。PR #115 已通过用户正常游玩验收，并以 merge commit `6ab1724` 进入 main。
-58. **Frontier Exchange 高危危机生态 v1（当前开发）**：content v51/schema v38/rules v28 每局从道路汇流、工业缺口和货运封锁中确定性冻结一个危机、合法目标资源点、精确压力来源、波次参数与主题高级 Loot。敌情资料可在常规阶段提前揭示危机；未携带敌情时高危开始后才显示。schema v37/content v50/rules v27 继续读取且不重抽既有 Raid。
+58. **Frontier Exchange 高危危机生态 v1**：content v51/schema v38/rules v28 每局从道路汇流、工业缺口和货运封锁中确定性冻结一个危机、合法目标资源点、精确压力来源、波次参数与主题高级 Loot。压力敌人会向危机目标汇聚，HUD/F10/战术地图提供可感知反馈。PR #116 已通过 Windows Debug、1296/1296 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以普通 merge commit `e285a2b` 进入 main。
+59. **Content Beta 代表性枪械与口径梯度 v1（当前开发）**：从 `e285a2b` 建立六种职责武器、9×19/5.45×39/7.62×51 三个口径及每口径两档普通弹；保留现有 Pistol/Rifle/Ammo9mm 与旧 pending Raid，兼容性由领域定义而非 UI 名称判断。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
