@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "content-beta-weapon-caliber-content-52",
+  "content_version": "content-beta-warehouse-catalog-content-53",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,

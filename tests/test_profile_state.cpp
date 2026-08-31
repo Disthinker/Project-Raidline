@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "base_workforce_domain.h"
 
 #include "alpha_content_ids.h"
@@ -10,20 +13,23 @@
 
 TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
 {
+    const ContentRegistry &content = publishedContentRegistry();
     const ProfileState profile = makeNewAlphaProfile(
         "profile-test",
-        publishedContentRegistry());
+        content);
 
     EXPECT_EQ(profile.currency, 200U);
     EXPECT_EQ(profile.revision, 1U);
     EXPECT_EQ(profile.assets.records().size(), 20U);
     EXPECT_EQ(profile.assets.nextAssetId(), 21U);
+    EXPECT_TRUE(profile.committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
     EXPECT_TRUE(validateProfileState(
         profile,
-        publishedContentRegistry()).valid);
+        content).valid);
     EXPECT_EQ(profile.regionalOperations.technologyCore.instanceId,
               "technology_core.primary");
     EXPECT_EQ(profile.regionalOperations.technologyCore.baseSiteDefinitionId,
@@ -107,6 +113,138 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     EXPECT_EQ(maintenanceKits, 2U);
     EXPECT_EQ(pistols, 1U);
     EXPECT_EQ(pistolMagazines, 2U);
+}
+
+TEST(ProfileStateTest, NewPublishedProfileCreatesCompleteWarehouseCatalog)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ProfileState profile = makeNewPublishedProfile(
+        "published-profile-test", content);
+
+    EXPECT_EQ(profile.revision, 1U);
+    EXPECT_EQ(profile.assets.records().size(), content.items().size() + 5U);
+    EXPECT_EQ(profile.assets.nextAssetId(), content.items().size() + 6U);
+    EXPECT_TRUE(profile.committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+    for (const ItemDefinition &definition : content.items())
+    {
+        const auto stored = std::find_if(
+            profile.assets.records().begin(),
+            profile.assets.records().end(),
+            [&definition](const auto &entry)
+            {
+                const auto *location =
+                    std::get_if<StoredAssetLocation>(&entry.second.location);
+                return entry.second.definitionId == definition.definitionId &&
+                    location != nullptr &&
+                    location->container == ProfileContainerId::stash() &&
+                    (!entry.second.reliefBatchId.has_value() ||
+                     definition.maxStackSize == 1U);
+            });
+        ASSERT_NE(stored, profile.assets.records().end())
+            << definition.definitionId.value();
+        if (definition.maxStackSize > 1U)
+        {
+            EXPECT_EQ(stored->second.quantity, definition.maxStackSize)
+                << definition.definitionId.value();
+        }
+    }
+}
+
+TEST(ProfileStateTest, WarehouseCatalogGrantIsAtomicAndIdempotent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile("catalog-grant", content);
+    profile.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_53");
+    const ItemDefinitionId missingDefinition{
+        "item.weapon.lmg_7_62x51_service"};
+    std::vector<AssetInstanceId> removed;
+    for (const auto &[assetId, asset] : profile.assets.records())
+    {
+        if (asset.definitionId == missingDefinition)
+        {
+            removed.push_back(assetId);
+        }
+    }
+    ASSERT_EQ(removed.size(), 1U);
+    ASSERT_TRUE(profile.assets.erase(removed.front()));
+    const ProfileRevision beforeRevision = profile.revision;
+
+    const WarehouseCatalogGrantReceipt granted =
+        grantPublishedWarehouseCatalog(profile, content);
+    ASSERT_TRUE(granted.succeeded) << granted.message;
+    EXPECT_FALSE(granted.alreadyGranted);
+    EXPECT_EQ(granted.addedDefinitionCount, 1U);
+    EXPECT_EQ(profile.revision, beforeRevision + 1U);
+    EXPECT_TRUE(profile.committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
+    EXPECT_TRUE(std::any_of(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [&missingDefinition](const auto &entry)
+        {
+            const auto *location =
+                std::get_if<StoredAssetLocation>(&entry.second.location);
+            return entry.second.definitionId == missingDefinition &&
+                location != nullptr &&
+                location->container == ProfileContainerId::stash();
+        }));
+
+    const std::uint64_t grantedFingerprint =
+        profileStateFingerprint(profile);
+    const WarehouseCatalogGrantReceipt replay =
+        grantPublishedWarehouseCatalog(profile, content);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyGranted);
+    EXPECT_EQ(replay.addedDefinitionCount, 0U);
+    EXPECT_EQ(profileStateFingerprint(profile), grantedFingerprint);
+}
+
+TEST(ProfileStateTest, FullWarehouseRejectsCatalogGrantWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("catalog-capacity", content);
+    profile.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_53");
+    std::vector<AssetInstanceId> existing;
+    for (const auto &[assetId, asset] : profile.assets.records())
+    {
+        static_cast<void>(asset);
+        existing.push_back(assetId);
+    }
+    for (AssetInstanceId assetId : existing)
+    {
+        ASSERT_TRUE(profile.assets.erase(assetId));
+    }
+    const ItemDefinition &ammunition =
+        content.item(alpha_content::ammunition);
+    for (int y = 0; y < 12; ++y)
+    {
+        for (int x = 0; x < 20; ++x)
+        {
+            static_cast<void>(profile.assets.create(
+                ammunition,
+                StoredAssetLocation{
+                    ProfileContainerId::stash(), GridPosition{x, y}},
+                1U));
+        }
+    }
+    const std::uint64_t beforeFingerprint =
+        profileStateFingerprint(profile);
+    const AssetInstanceId beforeHighWater = profile.assets.nextAssetId();
+
+    const WarehouseCatalogGrantReceipt rejected =
+        grantPublishedWarehouseCatalog(profile, content);
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_FALSE(rejected.alreadyGranted);
+    EXPECT_TRUE(rejected.capacityBlocked);
+    EXPECT_EQ(rejected.revision, profile.revision);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeFingerprint);
+    EXPECT_EQ(profile.assets.nextAssetId(), beforeHighWater);
+    EXPECT_FALSE(profile.committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
 }
 
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)

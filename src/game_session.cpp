@@ -212,7 +212,7 @@ bool GameSession::startNewProfile(std::string profileId)
     std::string saveMessage;
     try
     {
-        candidate = makeNewAlphaProfile(
+        candidate = makeNewPublishedProfile(
             std::move(profileId),
             publishedContentRegistry());
     }
@@ -263,6 +263,8 @@ bool GameSession::continueProfile()
     }
     ProfileState candidate = std::move(*result.profile);
     recoveredAbandonedRaid_ = false;
+    bool profileRequiresSave{};
+    bool recoveredPendingRaid{};
     if (candidate.pendingRaid.has_value())
     {
         const RaidRollbackReceipt rolledBack = rollbackPendingRaidToBase(
@@ -273,6 +275,27 @@ bool GameSession::continueProfile()
             persistenceMessage_ = rolledBack.message;
             return false;
         }
+        profileRequiresSave = true;
+        recoveredPendingRaid = true;
+    }
+    const WarehouseCatalogGrantReceipt catalog =
+        grantPublishedWarehouseCatalog(
+            candidate,
+            publishedContentRegistry());
+    if (!catalog.succeeded)
+    {
+        if (!catalog.capacityBlocked)
+        {
+            persistenceMessage_ = catalog.message;
+            return false;
+        }
+        persistenceMessage_ = catalog.message +
+            "; clear Stash space and restart to retry";
+    }
+    profileRequiresSave = profileRequiresSave ||
+        (catalog.succeeded && !catalog.alreadyGranted);
+    if (profileRequiresSave)
+    {
         const SaveWriteResult saved = saveRepository_->save(
             candidate,
             publishedContentRegistry().contentVersion());
@@ -281,13 +304,14 @@ bool GameSession::continueProfile()
             persistenceMessage_ = saved.message;
             return false;
         }
-        recoveredAbandonedRaid_ = true;
+        persistenceMessage_ = saved.message;
     }
     profile_ = std::move(candidate);
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
     alphaRaidActive_ = false;
+    recoveredAbandonedRaid_ = recoveredPendingRaid;
     state_ = GameSessionState::BetweenRaids;
     raidNumber_ = profile_.committedSettlements.size() + 1U;
     return true;

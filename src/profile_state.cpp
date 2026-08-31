@@ -6,6 +6,7 @@
 #include "base_workforce_domain.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <bit>
 #include <cmath>
@@ -25,6 +26,14 @@ namespace
 {
 constexpr InventoryGridSize kStashSize{20, 12};
 constexpr InventoryGridSize kBaseIntakeSize{20, 12};
+const std::string kWarehouseCatalogGrantTransaction{
+    "bootstrap.warehouse_catalog.content_53"};
+
+class WarehouseCatalogCapacityError final : public std::runtime_error
+{
+public:
+    using std::runtime_error::runtime_error;
+};
 
 bool validMedicalStatus(const MedicalStatusState &status) noexcept
 {
@@ -252,6 +261,106 @@ void placeNewAsset(
         StoredAssetLocation{ProfileContainerId::stash(), *origin},
         quantity));
 }
+
+std::size_t populatePublishedWarehouseCatalog(
+    ProfileState &profile,
+    const ContentRegistry &content)
+{
+    std::vector<const ItemDefinition *> definitions;
+    definitions.reserve(content.items().size());
+    for (const ItemDefinition &definition : content.items())
+    {
+        definitions.push_back(&definition);
+    }
+    std::stable_sort(
+        definitions.begin(),
+        definitions.end(),
+        [](const ItemDefinition *left, const ItemDefinition *right)
+        {
+            const int leftArea =
+                left->inventoryWidthCells * left->inventoryHeightCells;
+            const int rightArea =
+                right->inventoryWidthCells * right->inventoryHeightCells;
+            return leftArea != rightArea
+                ? leftArea > rightArea
+                : left->definitionId < right->definitionId;
+        });
+
+    std::size_t addedDefinitionCount{};
+    for (const ItemDefinition *definition : definitions)
+    {
+        AssetRecord *ordinaryStack{};
+        bool alreadyStored{};
+        for (const auto &[assetId, asset] : profile.assets.records())
+        {
+            const auto *stored =
+                std::get_if<StoredAssetLocation>(&asset.location);
+            if (asset.definitionId != definition->definitionId ||
+                stored == nullptr ||
+                stored->container != ProfileContainerId::stash())
+            {
+                continue;
+            }
+            if (definition->maxStackSize == 1U)
+            {
+                alreadyStored = true;
+                break;
+            }
+            if (!asset.reliefBatchId.has_value())
+            {
+                ordinaryStack = profile.assets.findMutable(assetId);
+                alreadyStored = true;
+                break;
+            }
+        }
+        if (alreadyStored)
+        {
+            if (ordinaryStack != nullptr)
+            {
+                ordinaryStack->quantity = definition->maxStackSize;
+            }
+            continue;
+        }
+
+        const std::array<ItemOrientation, 2> orientations{
+            ItemOrientation::Degrees0,
+            ItemOrientation::Degrees90};
+        std::optional<GridPosition> origin;
+        ItemOrientation orientation{ItemOrientation::Degrees0};
+        const std::size_t orientationCount = definition->canRotate ? 2U : 1U;
+        for (std::size_t index = 0; index < orientationCount; ++index)
+        {
+            origin = findFirstProfileFit(
+                profile,
+                content,
+                ProfileContainerId::stash(),
+                *definition,
+                orientations[index]);
+            if (origin.has_value())
+            {
+                orientation = orientations[index];
+                break;
+            }
+        }
+        if (!origin.has_value())
+        {
+            throw WarehouseCatalogCapacityError{
+                "warehouse has insufficient space for the published catalog"};
+        }
+        const AssetInstanceId assetId = profile.assets.create(
+            *definition,
+            StoredAssetLocation{ProfileContainerId::stash(), *origin},
+            definition->maxStackSize);
+        AssetRecord *created = profile.assets.findMutable(assetId);
+        if (created == nullptr)
+        {
+            throw std::logic_error{"warehouse catalog asset was not created"};
+        }
+        created->orientation = orientation;
+        ++addedDefinitionCount;
+    }
+    return addedDefinitionCount;
+}
 }
 
 ProfileContainerId ProfileContainerId::stash() noexcept
@@ -362,6 +471,55 @@ AssetRegistry::records() const noexcept
     return records_;
 }
 
+WarehouseCatalogGrantReceipt grantPublishedWarehouseCatalog(
+    ProfileState &profile,
+    const ContentRegistry &content)
+{
+    if (profile.committedTransactions.contains(
+            kWarehouseCatalogGrantTransaction))
+    {
+        return {true, true, false, 0U, profile.revision, {}};
+    }
+    if (profile.pendingRaid.has_value())
+    {
+        return {false, false, false, 0U, profile.revision,
+                "warehouse catalog cannot be granted during a Raid"};
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return {false, false, false, 0U, profile.revision,
+                "profile revision cannot advance"};
+    }
+
+    ProfileState candidate = profile;
+    std::size_t addedDefinitionCount{};
+    try
+    {
+        addedDefinitionCount =
+            populatePublishedWarehouseCatalog(candidate, content);
+    }
+    catch (const WarehouseCatalogCapacityError &error)
+    {
+        return {false, false, true, 0U, profile.revision, error.what()};
+    }
+    catch (const std::exception &error)
+    {
+        return {false, false, false, 0U, profile.revision, error.what()};
+    }
+    candidate.committedTransactions.emplace(
+        kWarehouseCatalogGrantTransaction);
+    ++candidate.revision;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return {false, false, false, 0U, profile.revision,
+                validation.message};
+    }
+    profile = std::move(candidate);
+    return {true, false, false, addedDefinitionCount, profile.revision, {}};
+}
+
 ProfileState makeNewAlphaProfile(
     std::string profileId,
     const ContentRegistry &content)
@@ -447,6 +605,8 @@ ProfileState makeNewAlphaProfile(
     placeNewAsset(profile, content, alpha_content::bodyArmor);
     placeNewAsset(profile, content, alpha_content::weaponMaintenanceKit);
     placeNewAsset(profile, content, alpha_content::armorMaintenanceKit);
+    profile.committedTransactions.emplace(
+        kWarehouseCatalogGrantTransaction);
 
     static_cast<void>(synchronizeBasePriorityThrough(profile, content));
     static_cast<void>(synchronizeBaseCommunityEventThrough(profile, content));
@@ -456,6 +616,22 @@ ProfileState makeNewAlphaProfile(
     if (!validation.valid)
     {
         throw std::logic_error{validation.message};
+    }
+    return profile;
+}
+
+ProfileState makeNewPublishedProfile(
+    std::string profileId,
+    const ContentRegistry &content)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        std::move(profileId), content);
+    static_cast<void>(populatePublishedWarehouseCatalog(profile, content));
+    const ProfileValidationResult validation =
+        validateProfileState(profile, content);
+    if (!validation.valid)
+    {
+        throw std::runtime_error{validation.message};
     }
     return profile;
 }

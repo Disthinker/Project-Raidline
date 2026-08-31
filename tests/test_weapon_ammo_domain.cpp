@@ -422,6 +422,15 @@ TEST(WeaponAmmoDomainTest, MixedCaliberFamilyRoundsPreserveOrderAndUnloadIdentit
         profile, alpha_content::ammunition);
     const ItemDefinitionId enhancedId{"item.ammunition.9mm_enhanced"};
     const ItemDefinition &enhancedDefinition = content.item(enhancedId);
+    std::uint32_t publishedCatalogEnhanced{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (asset.definitionId == enhancedId)
+        {
+            publishedCatalogEnhanced += asset.quantity;
+        }
+    }
     const auto enhancedOrigin = findFirstProfileFit(
         profile,
         content,
@@ -474,7 +483,7 @@ TEST(WeaponAmmoDomainTest, MixedCaliberFamilyRoundsPreserveOrderAndUnloadIdentit
             unloadedEnhanced += asset.quantity;
         }
     }
-    EXPECT_EQ(unloadedEnhanced, 5U);
+    EXPECT_EQ(unloadedEnhanced, publishedCatalogEnhanced + 5U);
     EXPECT_EQ(magazineRoundCount(profile, magazine), 0U);
 }
 

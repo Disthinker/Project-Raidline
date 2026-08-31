@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 #include "alpha_content_ids.h"
 #include "base_resource_domain.h"
@@ -46,6 +48,117 @@ AssetInstanceId findDefinition(
         }
     }
     return 0;
+}
+
+std::size_t countStashDefinition(
+    const ProfileState &profile,
+    const ItemDefinitionId &definitionId)
+{
+    return static_cast<std::size_t>(std::count_if(
+        profile.assets.records().begin(),
+        profile.assets.records().end(),
+        [&definitionId](const auto &entry)
+        {
+            const auto *stored =
+                std::get_if<StoredAssetLocation>(&entry.second.location);
+            return entry.second.definitionId == definitionId &&
+                stored != nullptr &&
+                stored->container == ProfileContainerId::stash();
+        }));
+}
+
+TEST(PersistentSessionTest, PreviousContentReceivesWarehouseCatalogOnce)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState legacy = makeNewPublishedProfile(
+        "persistent-warehouse-catalog", content);
+    legacy.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_53");
+    const ItemDefinitionId restoredDefinition{
+        "item.weapon.lmg_7_62x51_service"};
+    std::vector<AssetInstanceId> removed;
+    for (const auto &[assetId, asset] : legacy.assets.records())
+    {
+        if (asset.definitionId == restoredDefinition)
+        {
+            removed.push_back(assetId);
+        }
+    }
+    ASSERT_EQ(removed.size(), 1U);
+    ASSERT_TRUE(legacy.assets.erase(removed.front()));
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        legacy,
+        "content-beta-weapon-caliber-content-52").succeeded);
+
+    GameSession migrated;
+    migrated.configurePersistence(temporary.path());
+    ASSERT_TRUE(migrated.continueProfile()) << migrated.persistenceMessage();
+    EXPECT_TRUE(migrated.profile().committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
+    EXPECT_EQ(countStashDefinition(
+                  migrated.profile(), restoredDefinition),
+              1U);
+    const std::size_t migratedAssetCount =
+        migrated.profile().assets.records().size();
+    const ProfileRevision migratedRevision = migrated.profile().revision;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().assets.records().size(), migratedAssetCount);
+    EXPECT_EQ(reopened.profile().revision, migratedRevision);
+    EXPECT_EQ(countStashDefinition(
+                  reopened.profile(), restoredDefinition),
+              1U);
+}
+
+TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState legacy = makeNewAlphaProfile(
+        "persistent-full-warehouse", content);
+    legacy.committedTransactions.erase(
+        "bootstrap.warehouse_catalog.content_53");
+    std::vector<AssetInstanceId> existing;
+    for (const auto &[assetId, asset] : legacy.assets.records())
+    {
+        static_cast<void>(asset);
+        existing.push_back(assetId);
+    }
+    for (AssetInstanceId assetId : existing)
+    {
+        ASSERT_TRUE(legacy.assets.erase(assetId));
+    }
+    const ItemDefinition &ammunition =
+        content.item(alpha_content::ammunition);
+    for (int y = 0; y < 12; ++y)
+    {
+        for (int x = 0; x < 20; ++x)
+        {
+            static_cast<void>(legacy.assets.create(
+                ammunition,
+                StoredAssetLocation{
+                    ProfileContainerId::stash(), GridPosition{x, y}},
+                1U));
+        }
+    }
+    const std::uint64_t before = profileStateFingerprint(legacy);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        legacy,
+        "content-beta-weapon-caliber-content-52").succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    EXPECT_NE(session.persistenceMessage().find("clear Stash space"),
+              std::string::npos);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_53"));
 }
 
 TEST(PersistentSessionTest, SiegeWarningCountdownPersistsAndFirstTimeoutWaits)

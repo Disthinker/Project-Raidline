@@ -2295,7 +2295,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-loot-identity-content-50") ||
             (schemaVersion == 38 &&
              contentVersion ==
-                 "procedural-frontier-high-risk-crisis-content-51");
+                 "procedural-frontier-high-risk-crisis-content-51") ||
+            (schemaVersion == 38 &&
+             contentVersion ==
+                 "content-beta-weapon-caliber-content-52");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
