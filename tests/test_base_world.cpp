@@ -24,7 +24,8 @@ TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
     {
         static_cast<void>(world.update(input, 1.0F));
     }
-    EXPECT_LE(world.playerPosition().x + world.playerSize().x, 1248.0F);
+    EXPECT_LE(world.playerPosition().x + world.playerSize().x,
+              world.worldSize().x - 24.0F);
     EXPECT_GE(world.playerPosition().y, 24.0F);
 }
 
@@ -99,34 +100,53 @@ TEST(BaseWorldTest, FacilityCollisionBlocksBothAxesAndAllowsSliding)
 TEST(BaseWorldTest, PureVerticalMovementCannotTunnelThroughFacilities)
 {
     BaseWorld world;
-
-    BaseInput moveUp;
-    moveUp.moveUp = true;
-    for (int index{}; index < 23; ++index)
-    {
-        static_cast<void>(world.update(moveUp, 0.05F));
-    }
-
-    BaseInput moveLeft;
-    moveLeft.moveLeft = true;
-    for (int index{}; index < 60; ++index)
-    {
-        static_cast<void>(world.update(moveLeft, 0.05F));
-    }
-    ASSERT_LT(world.playerPosition().x, 304.0F);
-    ASSERT_LT(world.playerPosition().y + world.playerSize().y, 470.0F);
-
-    BaseInput moveDownFast;
-    moveDownFast.moveDown = true;
-    moveDownFast.sprint = true;
-    static_cast<void>(world.update(moveDownFast, 1.0F));
-    EXPECT_FLOAT_EQ(world.playerPosition().y, 470.0F - world.playerSize().y);
-
+    world.resetAtRaidGate();
+    const BaseFacility &gate = *std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::RaidGate; });
     BaseInput moveUpFast;
     moveUpFast.moveUp = true;
     moveUpFast.sprint = true;
     static_cast<void>(world.update(moveUpFast, 2.0F));
-    EXPECT_FLOAT_EQ(world.playerPosition().y, 364.0F);
+    EXPECT_FLOAT_EQ(
+        world.playerPosition().y,
+        gate.bounds.position.y + gate.bounds.size.y);
+}
+
+TEST(BaseWorldTest, ExposesLargeHomeRegionAndChunkedPresentation)
+{
+    BaseWorld world;
+    EXPECT_FLOAT_EQ(world.worldSize().x, 12800.0F);
+    EXPECT_FLOAT_EQ(world.worldSize().y, 7200.0F);
+    EXPECT_LT(world.baseParcel().size.x * world.baseParcel().size.y,
+              world.worldSize().x * world.worldSize().y * 0.03F);
+
+    const Vec2 player = world.playerPosition();
+    const HomeRegionPresentationProjection &first =
+        world.outdoorPresentation({player, {1280.0F, 720.0F}});
+    EXPECT_GT(first.queriedChunkCount, 0U);
+    EXPECT_LT(first.props.size(), world.layout().props.size());
+    const std::uint64_t revision = first.cacheRevision;
+    const HomeRegionPresentationProjection &cached =
+        world.outdoorPresentation({player, {1280.0F, 720.0F}});
+    EXPECT_EQ(cached.cacheRevision, revision);
+}
+
+TEST(BaseWorldTest, ChangingMainBaseSiteChangesStableLayout)
+{
+    BaseWorld world;
+    const std::uint64_t greyline = world.layout().layoutHash;
+    world.configureSite("regional_base_site.ashworks_logistics_yard");
+    const std::uint64_t ashworks = world.layout().layoutHash;
+    EXPECT_NE(greyline, ashworks);
+    EXPECT_EQ(world.layout().siteDefinitionId,
+              "regional_base_site.ashworks_logistics_yard");
+    const Vec2 firstSpawn = world.playerPosition();
+    world.configureSite("regional_base_site.ashworks_logistics_yard");
+    EXPECT_EQ(world.layout().layoutHash, ashworks);
+    EXPECT_FLOAT_EQ(world.playerPosition().x, firstSpawn.x);
+    EXPECT_FLOAT_EQ(world.playerPosition().y, firstSpawn.y);
 }
 
 TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)

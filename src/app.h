@@ -327,6 +327,7 @@ private:
         std::size_t animationFrame);
     void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
+    [[nodiscard]] Vec2 baseWorldCameraOffset() const noexcept;
     void renderRaidTacticalMap();
     void renderScreenPrimaryButton(
         const char *label);

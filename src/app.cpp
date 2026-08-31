@@ -8078,6 +8078,20 @@ Vec2 App::raidWorldCameraOffset() const noexcept
          static_cast<float>(kWindowHeight)});
 }
 
+Vec2 App::baseWorldCameraOffset() const noexcept
+{
+    if (gameFlow_.state() != GameFlowState::Base)
+        return {};
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 position = world.playerPosition();
+    const Vec2 size = world.playerSize();
+    return ::raidCameraOffset(
+        {position.x + size.x * 0.5F, position.y + size.y * 0.5F},
+        world.worldSize(),
+        {static_cast<float>(kWindowWidth),
+         static_cast<float>(kWindowHeight)});
+}
+
 Vec2 App::raidWorldScreenShakePixels() const noexcept
 {
     const Vec2 normalized =
@@ -9340,13 +9354,113 @@ void App::renderPauseMenu()
 
 void App::renderBaseWorld()
 {
-    SDL_SetRenderDrawColor(renderer_, 20, 32, 34, 255);
-    const SDL_FRect courtyard{32.0F, 24.0F, 1216.0F, 664.0F};
-    SDL_RenderFillRect(renderer_, &courtyard);
-    SDL_SetRenderDrawColor(renderer_, 76, 98, 96, 255);
-    SDL_RenderRect(renderer_, &courtyard);
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 camera = baseWorldCameraOffset();
+    const Vec2 worldSize = world.worldSize();
+    const SDL_Rect worldViewport{
+        -static_cast<int>(std::lround(camera.x)),
+        -static_cast<int>(std::lround(camera.y)),
+        static_cast<int>(std::ceil(worldSize.x)),
+        static_cast<int>(std::ceil(worldSize.y))};
+    static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
 
-    for (const BaseFacility &facility : gameFlow_.baseWorld().facilities())
+    SDL_SetRenderDrawColor(renderer_, 45, 49, 36, 255);
+    const SDL_FRect worldGround{0.0F, 0.0F, worldSize.x, worldSize.y};
+    SDL_RenderFillRect(renderer_, &worldGround);
+
+    const HomeRegionLayout &layout = world.layout();
+    const HomeRegionPresentationProjection &projection =
+        world.outdoorPresentation(ContentRect{
+            camera,
+            {static_cast<float>(kWindowWidth),
+             static_cast<float>(kWindowHeight)}});
+    const float cellWidth = worldSize.x / static_cast<float>(layout.columns);
+    const float cellHeight = worldSize.y / static_cast<float>(layout.rows);
+    for (const RaidTerrainSpan &span : projection.terrainSpans)
+    {
+        switch (span.kind)
+        {
+        case RaidTerrainKind::Grass:
+            SDL_SetRenderDrawColor(renderer_, 54, 66, 42, 255); break;
+        case RaidTerrainKind::Concrete:
+            SDL_SetRenderDrawColor(renderer_, 76, 75, 68, 255); break;
+        case RaidTerrainKind::Dirt:
+            SDL_SetRenderDrawColor(renderer_, 84, 69, 49, 255); break;
+        case RaidTerrainKind::Asphalt:
+            SDL_SetRenderDrawColor(renderer_, 50, 52, 50, 255); break;
+        case RaidTerrainKind::Puddle:
+            SDL_SetRenderDrawColor(renderer_, 48, 70, 76, 255); break;
+        }
+        const SDL_FRect bounds{
+            span.firstColumn * cellWidth, span.row * cellHeight,
+            span.length * cellWidth + 0.5F, cellHeight + 0.5F};
+        SDL_RenderFillRect(renderer_, &bounds);
+    }
+    for (const RaidOutdoorRoadCell &road : projection.roadCells)
+    {
+        if (road.kind == RaidOutdoorRoadKind::Primary)
+            SDL_SetRenderDrawColor(renderer_, 91, 91, 83, 255);
+        else if (road.kind == RaidOutdoorRoadKind::Secondary)
+            SDL_SetRenderDrawColor(renderer_, 76, 78, 72, 255);
+        else
+            SDL_SetRenderDrawColor(renderer_, 66, 69, 62, 255);
+        const SDL_FRect bounds{road.column * cellWidth,
+                               road.row * cellHeight,
+                               cellWidth + 0.5F, cellHeight + 0.5F};
+        SDL_RenderFillRect(renderer_, &bounds);
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const ContentRect &baseParcel = world.baseParcel();
+    const SDL_FRect parcel{baseParcel.position.x, baseParcel.position.y,
+                           baseParcel.size.x, baseParcel.size.y};
+    SDL_SetRenderDrawColor(renderer_, 30, 56, 50, 120);
+    SDL_RenderFillRect(renderer_, &parcel);
+    SDL_SetRenderDrawColor(renderer_, 126, 196, 166, 240);
+    SDL_RenderRect(renderer_, &parcel);
+
+    for (const RaidOutdoorPropSnapshot &prop : projection.props)
+    {
+        const SDL_FRect bounds{prop.bounds.position.x, prop.bounds.position.y,
+                               prop.bounds.size.x, prop.bounds.size.y};
+        switch (prop.kind)
+        {
+        case RaidOutdoorPropKind::Factory:
+            SDL_SetRenderDrawColor(renderer_, 62, 66, 62, 242); break;
+        case RaidOutdoorPropKind::Warehouse:
+            SDL_SetRenderDrawColor(renderer_, 69, 67, 57, 242); break;
+        case RaidOutdoorPropKind::Container:
+            SDL_SetRenderDrawColor(renderer_, 91, 72, 48, 235); break;
+        case RaidOutdoorPropKind::EngineeringEquipment:
+            SDL_SetRenderDrawColor(renderer_, 112, 89, 43, 235); break;
+        case RaidOutdoorPropKind::Car:
+            SDL_SetRenderDrawColor(renderer_, 69, 78, 73, 235); break;
+        case RaidOutdoorPropKind::Truck:
+            SDL_SetRenderDrawColor(renderer_, 79, 76, 61, 235); break;
+        case RaidOutdoorPropKind::RoadBarrier:
+            SDL_SetRenderDrawColor(renderer_, 119, 103, 70, 235); break;
+        case RaidOutdoorPropKind::Debris:
+            SDL_SetRenderDrawColor(renderer_, 97, 91, 75, 160); break;
+        }
+        SDL_RenderFillRect(renderer_, &bounds);
+        if (prop.collidable)
+        {
+            SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
+            SDL_RenderRect(renderer_, &bounds);
+        }
+        uiTextRenderer_.render(renderer_, bounds.x + 3.0F,
+                               bounds.y + 3.0F,
+                               raidOutdoorPropLabel(prop.kind));
+    }
+    for (const HomeRegionDistrictSnapshot &district : projection.districts)
+    {
+        uiTextRenderer_.render(renderer_, district.labelPosition.x,
+                               district.labelPosition.y,
+                               homeRegionDistrictName(district.kind));
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+
+    for (const BaseFacility &facility : world.facilities())
     {
         const SDL_FRect bounds{
             facility.bounds.position.x,
@@ -9387,16 +9501,18 @@ void App::renderBaseWorld()
             baseFacilityName(facility.kind));
     }
 
-    const Vec2 playerPosition = gameFlow_.baseWorld().playerPosition();
-    const Vec2 playerSize = gameFlow_.baseWorld().playerSize();
+    const Vec2 playerPosition = world.playerPosition();
+    const Vec2 playerSize = world.playerSize();
     renderPlayerAvatar(
         playerPosition,
         playerSize,
-        gameFlow_.baseWorld().playerFacingDirection(),
-        gameFlow_.baseWorld().playerIsMoving(),
-        gameFlow_.baseWorld().playerAnimationFrame());
+        world.playerFacingDirection(),
+        world.playerIsMoving(),
+        world.playerAnimationFrame());
 
-    if (const auto facility = gameFlow_.baseWorld().interactableFacility())
+    static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
+
+    if (const auto facility = world.interactableFacility())
     {
         const std::string prompt = fmt::format(
             "E - {}",
