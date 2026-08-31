@@ -64,6 +64,7 @@ public:
     [[nodiscard]] const std::array<BaseFacility, 7> &facilities() const noexcept;
     [[nodiscard]] Vec2 worldSize() const noexcept;
     [[nodiscard]] const ContentRect &baseParcel() const noexcept;
+    [[nodiscard]] bool canAccessStash() const noexcept;
     [[nodiscard]] const HomeRegionLayout &layout() const noexcept;
     [[nodiscard]] const HomeRegionPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;

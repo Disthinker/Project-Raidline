@@ -170,6 +170,21 @@ TEST(BaseWorldTest, ExposesLargeHomeRegionAndChunkedPresentation)
     EXPECT_EQ(cached.cacheRevision, revision);
 }
 
+TEST(BaseWorldTest, StashConnectionExistsOnlyInsideBaseParcel)
+{
+    BaseWorld world;
+    ASSERT_TRUE(world.canAccessStash());
+
+    BaseInput leaveBase;
+    leaveBase.moveDown = true;
+    for (int step{}; step < 30 && world.canAccessStash(); ++step)
+    {
+        static_cast<void>(world.update(leaveBase, 0.1F));
+    }
+
+    EXPECT_FALSE(world.canAccessStash());
+}
+
 TEST(BaseWorldTest, ChangingMainBaseSiteChangesStableLayout)
 {
     BaseWorld world;

@@ -382,6 +382,16 @@ const ContentRect &BaseWorld::baseParcel() const noexcept
     return layout_.baseParcel;
 }
 
+bool BaseWorld::canAccessStash() const noexcept
+{
+    return playerPosition_.x >= layout_.baseParcel.position.x &&
+        playerPosition_.y >= layout_.baseParcel.position.y &&
+        playerPosition_.x + playerSize_.x <=
+            layout_.baseParcel.position.x + layout_.baseParcel.size.x &&
+        playerPosition_.y + playerSize_.y <=
+            layout_.baseParcel.position.y + layout_.baseParcel.size.y;
+}
+
 const HomeRegionLayout &BaseWorld::layout() const noexcept
 {
     return layout_;

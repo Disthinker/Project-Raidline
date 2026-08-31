@@ -166,6 +166,14 @@ TEST(UiLocalizationTest, ChineseTranslatesRaidIntelligenceAndTacticalMap) {
             "战术地图已关闭");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "HOME REGION MAP | M/ESC CLOSE | WORLD CONTINUES"),
+            "基地所在区域地图 | M/ESC 关闭 | 世界继续运行");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WAREHOUSE DISCONNECTED - RETURN TO BASE PARCEL"),
+            "仓库连接已断开 - 请返回基地板块");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "selected Raid intelligence is unavailable"),
             "所选情报没有可用份数");
 }
