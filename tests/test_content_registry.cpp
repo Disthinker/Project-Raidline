@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "content-beta-growth-loop-content-56");
+        "home-region-onboarding-content-57");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -1633,7 +1633,7 @@ TEST(ContentRegistryTest, ContentBetaLoadoutArchetypesRejectBadReferences)
 
     const std::string wrongSlot = replaceFirst(
         publishedJsonCopy(),
-        "\"body_armor\": [\"item.protective_gear.body_armor_light\"]",
+        "\"body_armor\": [\"item.protective_gear.body_armor_basic\", \"item.protective_gear.body_armor_light\"]",
         "\"body_armor\": [\"item.protective_gear.helmet_scout\"]");
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(wrongSlot)),

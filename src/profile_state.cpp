@@ -28,6 +28,8 @@ constexpr InventoryGridSize kStashSize{24, 16};
 constexpr InventoryGridSize kBaseIntakeSize{20, 12};
 const std::string kWarehouseCatalogGrantTransaction{
     "bootstrap.warehouse_catalog.content_54"};
+const std::string kDeveloperWarehouseCatalogGrantTransaction{
+    "developer.warehouse_catalog.content_56"};
 
 class WarehouseCatalogCapacityError final : public std::runtime_error
 {
@@ -361,6 +363,55 @@ std::size_t populatePublishedWarehouseCatalog(
     }
     return addedDefinitionCount;
 }
+
+WarehouseCatalogGrantReceipt grantWarehouseCatalog(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const std::string &transactionId,
+    std::string_view pendingRaidMessage)
+{
+    if (profile.committedTransactions.contains(transactionId))
+    {
+        return {true, true, false, 0U, profile.revision, {}};
+    }
+    if (profile.pendingRaid.has_value())
+    {
+        return {false, false, false, 0U, profile.revision,
+                std::string{pendingRaidMessage}};
+    }
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return {false, false, false, 0U, profile.revision,
+                "profile revision cannot advance"};
+    }
+
+    ProfileState candidate = profile;
+    std::size_t addedDefinitionCount{};
+    try
+    {
+        addedDefinitionCount =
+            populatePublishedWarehouseCatalog(candidate, content);
+    }
+    catch (const WarehouseCatalogCapacityError &error)
+    {
+        return {false, false, true, 0U, profile.revision, error.what()};
+    }
+    catch (const std::exception &error)
+    {
+        return {false, false, false, 0U, profile.revision, error.what()};
+    }
+    candidate.committedTransactions.emplace(transactionId);
+    ++candidate.revision;
+    const ProfileValidationResult validation =
+        validateProfileState(candidate, content);
+    if (!validation.valid)
+    {
+        return {false, false, false, 0U, profile.revision,
+                validation.message};
+    }
+    profile = std::move(candidate);
+    return {true, false, false, addedDefinitionCount, profile.revision, {}};
+}
 }
 
 ProfileContainerId ProfileContainerId::stash() noexcept
@@ -475,49 +526,22 @@ WarehouseCatalogGrantReceipt grantPublishedWarehouseCatalog(
     ProfileState &profile,
     const ContentRegistry &content)
 {
-    if (profile.committedTransactions.contains(
-            kWarehouseCatalogGrantTransaction))
-    {
-        return {true, true, false, 0U, profile.revision, {}};
-    }
-    if (profile.pendingRaid.has_value())
-    {
-        return {false, false, false, 0U, profile.revision,
-                "warehouse catalog cannot be granted during a Raid"};
-    }
-    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
-    {
-        return {false, false, false, 0U, profile.revision,
-                "profile revision cannot advance"};
-    }
+    return grantWarehouseCatalog(
+        profile,
+        content,
+        kWarehouseCatalogGrantTransaction,
+        "warehouse catalog cannot be granted during a Raid");
+}
 
-    ProfileState candidate = profile;
-    std::size_t addedDefinitionCount{};
-    try
-    {
-        addedDefinitionCount =
-            populatePublishedWarehouseCatalog(candidate, content);
-    }
-    catch (const WarehouseCatalogCapacityError &error)
-    {
-        return {false, false, true, 0U, profile.revision, error.what()};
-    }
-    catch (const std::exception &error)
-    {
-        return {false, false, false, 0U, profile.revision, error.what()};
-    }
-    candidate.committedTransactions.emplace(
-        kWarehouseCatalogGrantTransaction);
-    ++candidate.revision;
-    const ProfileValidationResult validation =
-        validateProfileState(candidate, content);
-    if (!validation.valid)
-    {
-        return {false, false, false, 0U, profile.revision,
-                validation.message};
-    }
-    profile = std::move(candidate);
-    return {true, false, false, addedDefinitionCount, profile.revision, {}};
+WarehouseCatalogGrantReceipt grantDeveloperWarehouseCatalog(
+    ProfileState &profile,
+    const ContentRegistry &content)
+{
+    return grantWarehouseCatalog(
+        profile,
+        content,
+        kDeveloperWarehouseCatalogGrantTransaction,
+        "developer warehouse catalog cannot be granted during a Raid");
 }
 
 ProfileState makeNewAlphaProfile(

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "content-beta-growth-loop-content-56",
+  "content_version": "home-region-onboarding-content-57",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -318,7 +318,7 @@
       "display_name": "Light Scavenger",
       "description": "Fast 9mm recovery loadout with light protection and compact storage.",
       "weapons": ["item.weapon.pistol_basic", "item.weapon.rifle_basic"],
-      "body_armor": ["item.protective_gear.body_armor_light"],
+      "body_armor": ["item.protective_gear.body_armor_basic", "item.protective_gear.body_armor_light"],
       "chest_rigs": ["item.container.chest_rig_small", "item.container.chest_rig_patrol"],
       "backpacks": ["item.container.backpack_small", "item.container.backpack_field"],
       "minimum_compatible_rounds": 30,

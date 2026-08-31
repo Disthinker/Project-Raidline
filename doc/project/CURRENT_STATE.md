@@ -75,7 +75,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 60. **Content Beta 防具、胸挂与背包梯度 v1**：content v54 新增两档头盔、两档躯干护甲、两种胸挂和两种背包；客户端按内容定义绘制任意胸挂分区和连续背包格，并显示双语重量、防护、材料、耐久与容量。Stash 单向扩为 24×16，content v53 继续读取，v54 首次补齐扩展为当前全部 50 种定义。PR #118 已通过 exact-head CI 和用户正常游玩验收，并以普通 merge commit `e24da4c` 进入 main。
 61. **Content Beta 战利品来源、经济与补给可持续性 v1**：content v55/rules v29 为三张固定地图和三类 Frontier 高危危机建立不同产出表；固定供应改为从 `market_buy_price` 定义派生，工坊增加三口径标准弹药批次和鼠标配方选择，内容加载同时拒绝制造—回收正收益循环。PR #119 已通过 Windows Debug、1324/1324 CTest、exact-head CI 与用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。
 62. **Content Beta 成长闭环与配装准备度 v1**：content v56 发布轻型搜刮、均衡作战和重型专精三种稳定职责；SDL 无关 Projection 只读取真实装备、随身兼容弹药和内容定义，并在 Raid Gate 显示 READY、具体缺口、建议地图和高危提示。PR #120 已通过用户正常游玩验收，并以普通 merge commit `f48b954` 进入 main。
-63. **Home Region 新档起步与首次整备 v1（当前开发分支）**：普通新档使用有限 starter 资产，完整发布目录改由 Base/Raid F10 显式开发命令提供；环境目标消费轻型职责准备度，不建立独立教学关或强制门禁。
+63. **Home Region 新档起步与首次整备 v1（当前开发分支）**：普通新档使用有限 starter 资产，完整发布目录改由 Base/Raid F10 显式开发命令提供；content v57 让基础护甲与轻甲都成为轻型职责的合法选择，环境目标消费同一职责准备度，不建立独立教学关或强制门禁。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -103,7 +103,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 当前自动化证据
 
 - PR #119 已经用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。
-- 当前 Macro 4 分支已完成领域/内容/旧档/本地化聚焦测试和 Windows Debug 主程序构建；完整 CTest 与 exact-head Windows/Ubuntu CI 尚待执行。开发代理未启动游戏。
+- 当前 Home Region 新档起步切片已完成领域、旧档、开发工具、首次整备和本地化聚焦测试，Windows Debug 全目标构建与 1338/1338 完整 CTest 通过；exact-head Windows/Ubuntu CI 尚待执行。开发代理未启动游戏。
 - PR #114 的类型化目标投影、Ashworks 随机外围清剿和 Frontier 自力寻回冻结锚点已通过用户正常游玩验收并进入 main。当前物资身份切片已完成 Windows Debug 全目标构建、focused tests 和 1287/1287 完整 CTest；开发代理未启动游戏，Draft PR、exact-head CI 与用户正常游玩验收仍待完成。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。

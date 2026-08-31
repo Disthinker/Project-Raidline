@@ -2117,6 +2117,15 @@ void App::updateBase(float deltaTime)
         return;
     }
 
+    if (developerWeaponPanelBlocksGameplayThisFrame_)
+    {
+        pendingBaseClicks_.clear();
+        pendingInventoryUiEvents_.clear();
+        pendingProfileRightClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
+
     const InventoryFrameInputDecision inventoryDecision =
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
@@ -4753,8 +4762,11 @@ void App::processEvents()
             continue;
         }
 
-        if (gameFlow_.state() == GameFlowState::Raid &&
-            gameSession_.alphaRaidActive() && !pauseMenu_.isOpen())
+        const bool developerPanelAvailable =
+            gameFlow_.state() == GameFlowState::Base ||
+            (gameFlow_.state() == GameFlowState::Raid &&
+             gameSession_.alphaRaidActive());
+        if (developerPanelAvailable && !pauseMenu_.isOpen())
         {
             if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
                 event.key.scancode == SDL_SCANCODE_F10)
@@ -5033,6 +5045,22 @@ void App::handleDeveloperPanelClick(MousePosition position)
             ? "DEVELOPER HIGH RISK ACTIVATED"
             : "HIGH RISK ALREADY ACTIVE OR UNAVAILABLE";
         break;
+    case DeveloperPanelActionKind::GrantPublishedCatalog:
+    {
+        const WarehouseCatalogGrantReceipt receipt =
+            gameSession_.grantDeveloperWarehouseCatalog();
+        uiMessage_ = !receipt.succeeded
+            ? receipt.message
+            : receipt.alreadyGranted
+                ? "DEVELOPER CATALOG ALREADY GRANTED"
+                : fmt::format(
+                      "DEVELOPER CATALOG GRANTED | {} DEFINITION(S) ADDED",
+                      receipt.addedDefinitionCount);
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::UiConfirm
+            : SoundEventId::UiDeny);
+        break;
+    }
     case DeveloperPanelActionKind::ResetWeaponTuning:
         uiMessage_ = gameSession_.resetDeveloperWeaponTuning()
             ? "RUNTIME WEAPON TUNING RESET"
@@ -5063,10 +5091,14 @@ void App::update(float deltaTime)
 {
     syncAmbience();
     consumePresentationAudioEvents();
-    if (gameFlow_.state() != GameFlowState::Raid)
+    if (gameFlow_.state() != GameFlowState::Base &&
+        gameFlow_.state() != GameFlowState::Raid)
     {
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
+    }
+    if (gameFlow_.state() != GameFlowState::Raid)
+    {
         tacticalMapOpen_ = false;
         developerCrisisRevealEnabled_ = false;
     }
@@ -9943,7 +9975,7 @@ void App::renderDeveloperWeaponPanel()
     SDL_SetRenderDrawColor(renderer_, 220, 235, 226, 255);
     uiTextRenderer_.render(
         renderer_, panel.x + 22.0F, panel.y + 18.0F,
-        "DEVELOPER RUNTIME PANEL - RUNTIME ONLY");
+        "DEVELOPER RUNTIME PANEL");
     const auto renderButton = [&](DeveloperPanelRect definition,
                                   bool active,
                                   const char *label)
@@ -9986,6 +10018,12 @@ void App::renderDeveloperWeaponPanel()
             : "ACTIVATE HIGH RISK NOW");
     renderButton(
         developerResetWeaponButton(), false, "RESET WEAPON PARAMETERS");
+    renderButton(
+        developerPublishedCatalogButton(),
+        gameSession_.developerWarehouseCatalogGranted(),
+        gameSession_.developerWarehouseCatalogGranted()
+            ? "PUBLISHED CATALOG: GRANTED"
+            : "GRANT PUBLISHED CATALOG");
     const std::string crisisIdentityLine = crisis.has_value()
         ? fmt::format(
               "CRISIS DEBUG: {} | DISTRICT {} | RESOURCE POINT {}",
@@ -12849,22 +12887,63 @@ void App::renderBase()
     uiTextRenderer_.render(renderer_, 1010.0F, 108.0F, threatText.c_str());
     renderBaseSiegeQueuedNotice();
 
-    const char *goal = "OBJECTIVE COMPLETE";
+    std::string goal{"OBJECTIVE COMPLETE"};
     switch (gameSession_.profile().tutorial)
     {
     case TutorialProgress::FindStorage:
         goal = "OBJECTIVE: FIND STORAGE";
         break;
     case TutorialProgress::PrepareLoadout:
-        goal = "OBJECTIVE: EQUIP PRIMARY WEAPON";
+    {
+        const LoadoutReadinessProjection readiness = projectLoadoutReadiness(
+            gameSession_.profile(),
+            publishedContentRegistry(),
+            LoadoutArchetypeDefinitionId{
+                "loadout_archetype.light_scavenger"});
+        std::string gaps;
+        const auto appendGap = [&](const char *label)
+        {
+            if (!gaps.empty())
+            {
+                gaps += '/';
+            }
+            gaps += label;
+        };
+        for (const LoadoutReadinessIssue issue : readiness.issues)
+        {
+            switch (issue)
+            {
+            case LoadoutReadinessIssue::Weapon:
+                appendGap("[WEAPON]");
+                break;
+            case LoadoutReadinessIssue::CompatibleAmmunition:
+                appendGap("[AMMO]");
+                break;
+            case LoadoutReadinessIssue::BodyArmor:
+                appendGap("[ARMOR]");
+                break;
+            case LoadoutReadinessIssue::ChestRig:
+                appendGap("[RIG]");
+                break;
+            case LoadoutReadinessIssue::Backpack:
+                appendGap("[PACK]");
+                break;
+            }
+        }
+        goal = fmt::format(
+            "OBJECTIVE: PREPARE LIGHT LOADOUT | NEED {} | AMMO {}/{}",
+            gaps,
+            readiness.compatibleRoundCount,
+            readiness.minimumCompatibleRounds);
         break;
+    }
     case TutorialProgress::FindRaidGate:
         goal = "OBJECTIVE: FIND RAID GATE";
         break;
     case TutorialProgress::Complete:
         break;
     }
-    uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal);
+    uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal.c_str());
 
     if (const auto facility = gameFlow_.activeBaseFacility())
     {
@@ -13611,9 +13690,8 @@ void App::renderRaidScreen()
         renderStashOverlay();
     }
 
-    // 常驻调试信息位于世界 UI 上方；模态调参面板最后绘制。
+    // 常驻调试信息位于世界 UI 上方；模态面板由 render() 统一绘制。
     renderDebugText();
-    renderDeveloperWeaponPanel();
 }
 
 void App::render()
@@ -13650,6 +13728,7 @@ void App::render()
 
     renderPauseMenu();
     renderDeveloperPerformanceOverlay();
+    renderDeveloperWeaponPanel();
 
     SDL_RenderPresent(
         renderer_);

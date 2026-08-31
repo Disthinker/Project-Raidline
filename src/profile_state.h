@@ -954,6 +954,11 @@ grantPublishedWarehouseCatalog(
     ProfileState &profile,
     const ContentRegistry &content);
 
+[[nodiscard]] WarehouseCatalogGrantReceipt
+grantDeveloperWarehouseCatalog(
+    ProfileState &profile,
+    const ContentRegistry &content);
+
 [[nodiscard]] ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content);

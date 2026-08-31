@@ -116,6 +116,116 @@ TEST(PersistentSessionTest, PreviousContentReceivesWarehouseCatalogOnce)
               1U);
 }
 
+TEST(PersistentSessionTest, NewPlayableProfileStartsWithFiniteStarterAssets)
+{
+    SessionSaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("finite-starter"));
+
+    const ProfileState &profile = session.profile();
+    EXPECT_NE(findDefinition(profile, alpha_content::rifle), 0U);
+    EXPECT_NE(findDefinition(profile, alpha_content::pistol), 0U);
+    EXPECT_NE(findDefinition(profile, alpha_content::chestRig), 0U);
+    EXPECT_NE(findDefinition(profile, alpha_content::backpack), 0U);
+    EXPECT_EQ(findDefinition(
+                  profile,
+                  ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}),
+              0U);
+    EXPECT_EQ(findDefinition(
+                  profile,
+                  ItemDefinitionId{"item.protective_gear.body_armor_heavy"}),
+              0U);
+    EXPECT_EQ(findDefinition(
+                  profile,
+                  ItemDefinitionId{"item.container.backpack_expedition"}),
+              0U);
+    EXPECT_LT(
+        profile.assets.records().size(),
+        publishedContentRegistry().items().size());
+    EXPECT_TRUE(profile.committedTransactions.contains(
+        "bootstrap.warehouse_catalog.content_54"));
+    EXPECT_FALSE(profile.committedTransactions.contains(
+        "developer.warehouse_catalog.content_56"));
+}
+
+TEST(PersistentSessionTest, DeveloperCatalogGrantPersistsAndIsIdempotent)
+{
+    SessionSaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("developer-catalog"));
+
+    const WarehouseCatalogGrantReceipt granted =
+        session.grantDeveloperWarehouseCatalog();
+    ASSERT_TRUE(granted.succeeded) << granted.message;
+    EXPECT_FALSE(granted.alreadyGranted);
+    EXPECT_GT(granted.addedDefinitionCount, 0U);
+    EXPECT_TRUE(session.developerWarehouseCatalogGranted());
+    EXPECT_NE(findDefinition(
+                  session.profile(),
+                  ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}),
+              0U);
+    const std::uint64_t grantedFingerprint =
+        profileStateFingerprint(session.profile());
+
+    const WarehouseCatalogGrantReceipt replay =
+        session.grantDeveloperWarehouseCatalog();
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyGranted);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), grantedFingerprint);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(reopened.developerWarehouseCatalogGranted());
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), grantedFingerprint);
+}
+
+TEST(PersistentSessionTest, CurrentStarterProfileReopensWithoutCatalogMutation)
+{
+    SessionSaveDirectory temporary;
+    ProfileState starter = makeNewAlphaProfile(
+        "current-starter-reopen", publishedContentRegistry());
+    const std::uint64_t before = profileStateFingerprint(starter);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        starter, publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), before);
+    EXPECT_FALSE(reopened.developerWarehouseCatalogGranted());
+    EXPECT_EQ(findDefinition(
+                  reopened.profile(),
+                  ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}),
+              0U);
+}
+
+TEST(PersistentSessionTest, DeveloperCatalogSaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.startNewProfile("developer-catalog-save-failure"));
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "developer-catalog-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+
+    const WarehouseCatalogGrantReceipt rejected =
+        session.grantDeveloperWarehouseCatalog();
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.developerWarehouseCatalogGranted());
+}
+
 TEST(PersistentSessionTest, FullLegacyWarehouseLoadsWithoutPartialCatalogGrant)
 {
     SessionSaveDirectory temporary;
@@ -385,9 +495,41 @@ TEST(PersistentSessionTest, EnvironmentObjectiveAdvancesWithoutBlockingPlay)
     const AssetInstanceId rifle = findDefinition(
         session.profile(),
         alpha_content::rifle);
+    const AssetInstanceId bodyArmor = findDefinition(
+        session.profile(),
+        alpha_content::bodyArmor);
+    const AssetInstanceId rig = findDefinition(
+        session.profile(),
+        alpha_content::chestRig);
+    const AssetInstanceId backpack = findDefinition(
+        session.profile(),
+        alpha_content::backpack);
+    const AssetInstanceId ammunition = findDefinition(
+        session.profile(),
+        alpha_content::ammunition);
     ASSERT_TRUE(session.executeProfileInventory(
         InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon},
         "tutorial-equip").succeeded);
+    EXPECT_EQ(session.profile().tutorial, TutorialProgress::PrepareLoadout);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{bodyArmor, EquipmentSlotKind::BodyArmor},
+        "tutorial-equip-armor").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{rig, EquipmentSlotKind::ChestRig},
+        "tutorial-equip-rig").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        "tutorial-equip-pack").succeeded);
+    EXPECT_EQ(session.profile().tutorial, TutorialProgress::PrepareLoadout);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{
+            ammunition,
+            0U,
+            StoredAssetLocation{
+                ProfileContainerId::compartment(backpack, 0U),
+                GridPosition{0, 0}},
+            ItemOrientation::Degrees0},
+        "tutorial-carry-ammo").succeeded);
     EXPECT_EQ(session.profile().tutorial, TutorialProgress::FindRaidGate);
 
     session.noteBaseFacility(BaseFacilityKind::RaidGate);

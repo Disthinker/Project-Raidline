@@ -14,7 +14,7 @@
 - 不从任何已存在档案移除全目录资产。已完成 `bootstrap.warehouse_catalog.content_54` 的开发档案保持原样；旧 content v53 开发目录档案仍可通过原有幂等迁移补齐 v54 内容。
 - 完整发布目录不再是普通新档副作用。新增显式开发者目录命令，只在 Base 且无 pending Raid 时运行，以独立事务 ID 原子填满每个已发布定义；重放不重复，空间不足和保存失败均零修改。
 - F10 运行时开发面板扩展到 Base/Raid。Base 中可点击 `GRANT PUBLISHED CATALOG`；Raid 中继续保留武器调参、迷雾、无限弹药和高危工具。开发目录会写入当前开发档案，因此按钮和结果明确标注开发用途。
-- schema 保持 v38，content 保持 v56，rules 保持 v29；新增事务事实使用已有 `committedTransactions`，不新增保存字段。
+- schema 保持 v38，content 升至 v57，rules 保持 v29；轻型职责显式接受普通新档已有的基础护甲与轻甲，新增事务事实使用已有 `committedTransactions`，不新增保存字段。
 
 ## 首次整备合同
 
@@ -26,7 +26,7 @@
 ## 自动化、人工验收与回滚
 
 - 新档测试：只含 starter 定义和有限数量，不含高级 DMR/LMG、重型防具或远征背包；目录事务标记存在但不造成隐式全目录发放。
-- 旧档测试：content v53 目录档案仍幂等补齐；content v54/v55/v56 档案资产、revision 和高水位不因加载而变化。
+- 旧档测试：content v53 目录档案仍幂等补齐；content v54/v55/v56 档案资产、revision 和高水位不因加载而变化；v57 不重抽旧 Raid 或改写已有资产。
 - 开发目录测试：Base 成功、重复、容量不足、pending Raid、保存失败全部覆盖资产唯一所有权和零修改边界。
 - 教学测试：只有 Stash 弹药、缺胸挂/背包/防具、错口径均保持 `PrepareLoadout`；完整轻型职责才前进。
 - 完成聚焦测试、Windows Debug 全目标、完整 CTest 和 exact-head Windows/Ubuntu CI 后，由用户以正常新档完成一次“仓储—整备—出击”，并在另一个开发档案验证 F10 目录按钮。
@@ -37,6 +37,6 @@
 
 - [x] PR #120 经用户验收并以 `f48b954` 合入 main。
 - [x] 从最新 `origin/main@f48b954` 创建独立分支并冻结范围。
-- [ ] 实现有限普通新档、显式开发目录和首次整备目标。
-- [ ] 完成本地与双平台自动化。
+- [x] 实现有限普通新档、显式开发目录和首次整备目标。
+- [x] 完成本地自动化：Windows Debug 全目标构建成功，完整 CTest 1338/1338 通过；双平台 exact-head CI 待推送后执行。
 - [ ] 用户正常游玩验收。

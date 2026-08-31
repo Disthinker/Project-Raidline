@@ -782,6 +782,24 @@ TEST(UiLocalizationTest, ContentBetaLoadoutRolesAreBilingual) {
             "缺失 | 防弹衣, 胸挂");
 }
 
+TEST(UiLocalizationTest, StarterLoadoutAndDeveloperCatalogAreBilingual) {
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "OBJECTIVE: PREPARE LIGHT LOADOUT | NEED [WEAPON]/[AMMO]/[ARMOR]/[RIG]/[PACK] | AMMO 0/30"),
+      "目标：准备轻型配装 | 缺少 [武器]/[弹药]/[护甲]/[胸挂]/[背包] | 弹药 0/30");
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "DEVELOPER CATALOG GRANTED | 34 DEFINITION(S) ADDED"),
+      "开发者目录已发放 | 已新增 34 种定义");
+  EXPECT_EQ(
+      localizeUiText(
+          UiLanguage::SimplifiedChinese,
+          "GRANT PUBLISHED CATALOG"),
+      "发放发布内容目录");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

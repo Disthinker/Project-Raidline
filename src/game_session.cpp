@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base_world.h"
+#include "loadout_progression.h"
 #include "stable_random.h"
 
 namespace
@@ -20,6 +21,8 @@ namespace
     // stimulus separate from audio playback; a later weapon-content slice can
     // data-drive per-shot acoustic profiles without changing AI ownership.
     constexpr float kUnsuppressedGunshotNoiseRadius{900.0F};
+    const LoadoutArchetypeDefinitionId kStarterLoadoutArchetype{
+        "loadout_archetype.light_scavenger"};
 }
 
 GameSession::GameSession()
@@ -212,7 +215,7 @@ bool GameSession::startNewProfile(std::string profileId)
     std::string saveMessage;
     try
     {
-        candidate = makeNewPublishedProfile(
+        candidate = makeNewAlphaProfile(
             std::move(profileId),
             publishedContentRegistry());
     }
@@ -278,22 +281,30 @@ bool GameSession::continueProfile()
         profileRequiresSave = true;
         recoveredPendingRaid = true;
     }
-    const WarehouseCatalogGrantReceipt catalog =
-        grantPublishedWarehouseCatalog(
-            candidate,
-            publishedContentRegistry());
-    if (!catalog.succeeded)
+    const bool previousDevelopmentCatalog =
+        candidate.committedTransactions.contains(
+            "bootstrap.warehouse_catalog.content_53") &&
+        !candidate.committedTransactions.contains(
+            "bootstrap.warehouse_catalog.content_54");
+    if (previousDevelopmentCatalog)
     {
-        if (!catalog.capacityBlocked)
+        const WarehouseCatalogGrantReceipt catalog =
+            grantPublishedWarehouseCatalog(
+                candidate,
+                publishedContentRegistry());
+        if (!catalog.succeeded)
         {
-            persistenceMessage_ = catalog.message;
-            return false;
+            if (!catalog.capacityBlocked)
+            {
+                persistenceMessage_ = catalog.message;
+                return false;
+            }
+            persistenceMessage_ = catalog.message +
+                "; clear Stash space and restart to retry";
         }
-        persistenceMessage_ = catalog.message +
-            "; clear Stash space and restart to retry";
+        profileRequiresSave = profileRequiresSave ||
+            (catalog.succeeded && !catalog.alreadyGranted);
     }
-    profileRequiresSave = profileRequiresSave ||
-        (catalog.succeeded && !catalog.alreadyGranted);
     if (profileRequiresSave)
     {
         const SaveWriteResult saved = saveRepository_->save(
@@ -2319,6 +2330,32 @@ void GameSession::advanceBaseWorldClock(float deltaTime)
     advanceWorldClockFromSimulation(deltaTime, true);
 }
 
+WarehouseCatalogGrantReceipt GameSession::grantDeveloperWarehouseCatalog()
+{
+    ProfileState candidate = profile_;
+    WarehouseCatalogGrantReceipt receipt =
+        ::grantDeveloperWarehouseCatalog(
+            candidate,
+            publishedContentRegistry());
+    if (!receipt.succeeded || receipt.alreadyGranted)
+    {
+        return receipt;
+    }
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+bool GameSession::developerWarehouseCatalogGranted() const noexcept
+{
+    return profile_.committedTransactions.contains(
+        "developer.warehouse_catalog.content_56");
+}
+
 BaseThreatProjection GameSession::baseThreatProjection() const noexcept
 {
     return projectBaseThreat(profile_);
@@ -4261,13 +4298,16 @@ bool GameSession::commitProfileCandidate(
 
 void GameSession::refreshLoadoutTutorial()
 {
-    const bool hasWeapon =
-        equippedAsset(profile_, EquipmentSlotKind::PrimaryWeapon).has_value() ||
-        equippedAsset(profile_, EquipmentSlotKind::SecondaryWeapon).has_value() ||
-        equippedAsset(profile_, EquipmentSlotKind::Sidearm).has_value();
     if (profile_.tutorial != TutorialProgress::PrepareLoadout ||
-        !hasWeapon ||
         profile_.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return;
+    }
+    const LoadoutReadinessProjection readiness = projectLoadoutReadiness(
+        profile_,
+        publishedContentRegistry(),
+        kStarterLoadoutArchetype);
+    if (!readiness.ready())
     {
         return;
     }

@@ -24,6 +24,10 @@ TEST(DeveloperRuntimePanelTest, MouseButtonsExposeRuntimeToggles)
     EXPECT_EQ(
         developerPanelActionAt(inside(developerResetWeaponButton()), 25U),
         DeveloperPanelAction{DeveloperPanelActionKind::ResetWeaponTuning});
+    EXPECT_EQ(
+        developerPanelActionAt(
+            inside(developerPublishedCatalogButton()), 25U),
+        DeveloperPanelAction{DeveloperPanelActionKind::GrantPublishedCatalog});
 }
 
 TEST(DeveloperRuntimePanelTest, ParameterRowsAndButtonsPreserveStableIndex)
