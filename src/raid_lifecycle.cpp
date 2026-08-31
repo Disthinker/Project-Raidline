@@ -652,7 +652,7 @@ DeployReceipt executeDeploy(
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
     snapshot.rulesVersion = highRiskCrisisRules
-        ? "procedural-frontier-high-risk-crisis-28"
+        ? "content-beta-loot-economy-29"
         : encounterEcologyRules
         ? "procedural-frontier-loot-identity-27"
         : resourceEcologyRules

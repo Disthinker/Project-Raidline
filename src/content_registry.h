@@ -693,6 +693,9 @@ public:
     [[nodiscard]]
     const std::vector<ItemDefinition> &items() const noexcept;
 
+    [[nodiscard]] const std::vector<ItemDefinitionId> &
+    fixedSupplyItemIds() const noexcept;
+
     [[nodiscard]] const std::vector<CaliberDefinition> &
     calibers() const noexcept;
 
@@ -816,6 +819,7 @@ private:
     std::vector<std::string> publishedResources_;
     std::vector<CaliberDefinition> calibers_;
     std::vector<ItemDefinition> items_;
+    std::vector<ItemDefinitionId> fixedSupplyItemIds_;
     std::vector<LootTableDefinition> lootTables_;
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
     std::vector<MapDefinition> maps_;

@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "content-beta-loadout-gear-content-54");
+        "content-beta-loot-economy-content-55");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -169,7 +169,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 1U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 4U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -180,6 +180,15 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
     EXPECT_EQ(manufacturing.workerCount, 1U);
     EXPECT_EQ(manufacturing.durationMinutes, 360U);
+    const BaseManufacturingRecipeDefinition &rifleAmmunition =
+        registry.baseManufacturingRecipe(
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.ammunition_5_45x39_standard"});
+    EXPECT_EQ(
+        rifleAmmunition.outputItemDefinitionId,
+        ItemDefinitionId{"item.ammunition.5_45x39_standard"});
+    EXPECT_EQ(rifleAmmunition.outputQuantity, 60U);
+    EXPECT_EQ(rifleAmmunition.durationMinutes, 180U);
     ASSERT_EQ(registry.basePriorities().size(), 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
         BasePriorityDefinitionId{"base_priority.comfort_cola"});
@@ -254,7 +263,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_NE(
         freightBay.worldSize.x,
         frontierWithInterior.interiors.front().worldSize.x);
-    ASSERT_EQ(registry.lootTables().size(), 9U);
+    ASSERT_EQ(registry.lootTables().size(), 15U);
     const auto lootItemIds = [&](std::string_view tableId)
     {
         std::set<ItemDefinitionId> ids;
@@ -283,6 +292,24 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.loot.precision_components"}));
     EXPECT_TRUE(serviceLoot.contains(
         ItemDefinitionId{"item.loot.first_aid_stock"}));
+    const std::set<ItemDefinitionId> serviceCrisisLoot =
+        lootItemIds("loot.frontier.crisis.service_convoy_v1");
+    const std::set<ItemDefinitionId> industrialCrisisLoot =
+        lootItemIds("loot.frontier.crisis.industrial_breach_v1");
+    const std::set<ItemDefinitionId> freightCrisisLoot =
+        lootItemIds("loot.frontier.crisis.freight_lockdown_v1");
+    EXPECT_TRUE(serviceCrisisLoot.contains(
+        ItemDefinitionId{"item.ammunition.9mm_enhanced"}));
+    EXPECT_TRUE(industrialCrisisLoot.contains(
+        ItemDefinitionId{"item.ammunition.5_45x39_enhanced"}));
+    EXPECT_TRUE(freightCrisisLoot.contains(
+        ItemDefinitionId{"item.ammunition.7_62x51_enhanced"}));
+    EXPECT_FALSE(serviceCrisisLoot.contains(
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}));
+    EXPECT_FALSE(industrialCrisisLoot.contains(
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}));
+    EXPECT_TRUE(freightCrisisLoot.contains(
+        ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}));
     ASSERT_EQ(registry.enemyDeployments().size(), 13U);
     ASSERT_EQ(registry.maps().size(), 4U);
 
@@ -394,7 +421,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
               "crisis.frontier.freight_lockdown");
     EXPECT_EQ(
         frontier.highRisk.crises[2].advancedLootTableId,
-        LootTableDefinitionId{"loot.frontier.freight_manifest_v1"});
+        LootTableDefinitionId{
+            "loot.frontier.crisis.freight_lockdown_v1"});
     const auto &securedCargo =
         frontier.proceduralOutdoor.resourcePointArchetypes[2];
     EXPECT_EQ(securedCargo.kind, RaidResourcePointKind::HighValue);
@@ -585,7 +613,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(map.spawnExtractionPairs.size(), 3U);
     EXPECT_EQ(map.raidEnemyDeploymentIds.size(), 3U);
     EXPECT_EQ(map.raidLootSlots.size(), 10U);
-    EXPECT_EQ(map.raidLootTableId.value(), "loot.raid.alpha");
+    EXPECT_EQ(
+        map.raidLootTableId.value(),
+        "loot.raid.greyline_supply_v1");
     EXPECT_EQ(map.defaultInventorySize.width, 10);
     EXPECT_EQ(map.defaultInventorySize.height, 6);
     EXPECT_EQ(map.groundItems.size(), 6U);
@@ -1679,4 +1709,115 @@ TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
                 << itemId.value();
         }
     }
+}
+
+TEST(ContentRegistryTest,
+     FixedSupplyIsDerivedFromPurchasableDefinitionsAndExcludesHighTierItems)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    const std::set<ItemDefinitionId> fixedSupply{
+        registry.fixedSupplyItemIds().begin(),
+        registry.fixedSupplyItemIds().end()};
+
+    for (const ItemDefinition &item : registry.items())
+    {
+        EXPECT_EQ(
+            fixedSupply.contains(item.definitionId),
+            item.marketBuyPrice > 0U)
+            << item.definitionId.value();
+    }
+    for (const ItemDefinitionId &excluded : {
+             ItemDefinitionId{"item.ammunition.9mm_enhanced"},
+             ItemDefinitionId{"item.ammunition.5_45x39_enhanced"},
+             ItemDefinitionId{"item.ammunition.7_62x51_enhanced"},
+             ItemDefinitionId{"item.weapon.dmr_7_62x51_service"},
+             ItemDefinitionId{"item.weapon.lmg_7_62x51_service"},
+             ItemDefinitionId{"item.protective_gear.body_armor_heavy"},
+             ItemDefinitionId{"item.container.backpack_expedition"}})
+    {
+        EXPECT_FALSE(fixedSupply.contains(excluded)) << excluded.value();
+    }
+}
+
+TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    for (const ItemDefinition &item : registry.items())
+    {
+        const bool lootSource = std::any_of(
+            registry.lootTables().begin(),
+            registry.lootTables().end(),
+            [&item](const LootTableDefinition &table)
+            {
+                return std::any_of(
+                    table.entries.begin(), table.entries.end(),
+                    [&item](const LootContentEntry &entry)
+                    {
+                        return entry.itemDefinitionId ==
+                            item.definitionId;
+                    });
+            });
+        const bool manufacturingSource = std::any_of(
+            registry.baseManufacturingRecipes().begin(),
+            registry.baseManufacturingRecipes().end(),
+            [&item](const BaseManufacturingRecipeDefinition &recipe)
+            {
+                return recipe.outputItemDefinitionId ==
+                    item.definitionId;
+            });
+        EXPECT_TRUE(
+            item.marketBuyPrice > 0U || lootSource ||
+            manufacturingSource)
+            << item.definitionId.value();
+
+        const bool manufacturingConsumer = std::any_of(
+            registry.baseManufacturingRecipes().begin(),
+            registry.baseManufacturingRecipes().end(),
+            [&item](const BaseManufacturingRecipeDefinition &recipe)
+            {
+                return std::any_of(
+                    recipe.inputs.begin(), recipe.inputs.end(),
+                    [&item](const BaseManufacturingInputDefinition &input)
+                    {
+                        return input.itemDefinitionId ==
+                            item.definitionId;
+                    });
+            });
+        const bool typedGameplayConsumer =
+            item.category != ItemCategory::Loot ||
+            item.baseContribution.has_value() ||
+            item.baseConstructionMaterialValue > 0U;
+        EXPECT_TRUE(
+            typedGameplayConsumer || manufacturingConsumer ||
+            item.marketRecyclePrice > 0U)
+            << item.definitionId.value();
+    }
+}
+
+TEST(ContentRegistryTest, BaseManufacturingRejectsRecycleValueCreation)
+{
+    const std::string invalid = replaceFirst(
+        publishedJsonCopy(),
+        "{\"item\": \"item.loot.precision_components\", \"quantity\": 1}",
+        "{\"item\": \"item.loot.scrap_parts\", \"quantity\": 1}");
+
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(invalid)),
+        ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, FixedMapsPublishDistinctLootRoles)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    EXPECT_EQ(
+        registry.map(MapDefinitionId{"map.v0.test"}).raidLootTableId,
+        LootTableDefinitionId{"loot.raid.greyline_supply_v1"});
+    EXPECT_EQ(
+        registry.map(MapDefinitionId{"map.raid.riverside"})
+            .raidLootTableId,
+        LootTableDefinitionId{"loot.raid.riverside_supply_v1"});
+    EXPECT_EQ(
+        registry.map(MapDefinitionId{"map.raid.industrial"})
+            .raidLootTableId,
+        LootTableDefinitionId{"loot.raid.ashworks_industrial_v1"});
 }

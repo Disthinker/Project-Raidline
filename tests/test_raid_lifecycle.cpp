@@ -1010,7 +1010,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              "procedural-frontier-high-risk-crisis-28");
+              "content-beta-loot-economy-29");
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);

@@ -1806,6 +1806,15 @@ ContentRegistry ContentRegistry::fromJson(
 
         for (const ItemDefinition &definition : registry.items_)
         {
+            if (definition.marketBuyPrice > 0U)
+            {
+                registry.fixedSupplyItemIds_.push_back(
+                    definition.definitionId);
+            }
+        }
+
+        for (const ItemDefinition &definition : registry.items_)
+        {
             const auto requireItemReference =
                 [&registry](const std::optional<ItemDefinitionId> &id)
                 {
@@ -2001,6 +2010,25 @@ ContentRegistry ContentRegistry::fromJson(
             if (definition.outputQuantity > outputItem.maxStackSize)
             {
                 fail("Base manufacturing output quantity is invalid");
+            }
+
+            std::uint64_t inputRecycleValue{};
+            for (const BaseManufacturingInputDefinition &input :
+                 definition.inputs)
+            {
+                inputRecycleValue +=
+                    static_cast<std::uint64_t>(
+                        registry.item(input.itemDefinitionId)
+                            .marketRecyclePrice) *
+                    input.quantity;
+            }
+            const std::uint64_t outputRecycleValue =
+                static_cast<std::uint64_t>(
+                    outputItem.marketRecyclePrice) *
+                definition.outputQuantity;
+            if (outputRecycleValue > inputRecycleValue)
+            {
+                fail("Base manufacturing recipe creates recycle value");
             }
 
             const std::size_t index =
@@ -3524,6 +3552,12 @@ const std::vector<ItemDefinition> &
 ContentRegistry::items() const noexcept
 {
     return items_;
+}
+
+const std::vector<ItemDefinitionId> &
+ContentRegistry::fixedSupplyItemIds() const noexcept
+{
+    return fixedSupplyItemIds_;
 }
 
 const std::vector<CaliberDefinition> &
