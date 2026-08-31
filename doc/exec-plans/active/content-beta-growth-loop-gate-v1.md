@@ -56,4 +56,4 @@
 - [x] 冻结本 ExecPlan、职责、版本和迁移合同。
 - [x] 实现内容定义、领域投影和客户端 Raid Gate。
 - [x] 完成长序列门禁、全量验证和双平台 exact-head CI；实现提交 `b24cec5` 已通过 Windows Debug 全目标、1331/1331 CTest 与 Windows/Ubuntu CI。
-- [ ] 用户正常游玩验收。
+- [x] 用户正常游玩验收；PR #120 以 `f48b954` 合入 main。

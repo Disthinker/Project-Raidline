@@ -299,6 +299,9 @@ public:
         int direction,
         bool coarseStep);
     [[nodiscard]] bool resetDeveloperWeaponTuning();
+    [[nodiscard]] WarehouseCatalogGrantReceipt
+    grantDeveloperWarehouseCatalog();
+    [[nodiscard]] bool developerWarehouseCatalogGranted() const noexcept;
 
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,

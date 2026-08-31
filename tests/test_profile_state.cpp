@@ -317,6 +317,66 @@ TEST(ProfileStateTest, FullWarehouseRejectsCatalogGrantWithoutMutation)
         "bootstrap.warehouse_catalog.content_54"));
 }
 
+TEST(ProfileStateTest, DeveloperCatalogRejectsPendingRaidWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("catalog-pending", content);
+    profile.pendingRaid.emplace();
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const AssetInstanceId highWater = profile.assets.nextAssetId();
+
+    const WarehouseCatalogGrantReceipt rejected =
+        grantDeveloperWarehouseCatalog(profile, content);
+
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_FALSE(rejected.alreadyGranted);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_EQ(profile.assets.nextAssetId(), highWater);
+    EXPECT_FALSE(profile.committedTransactions.contains(
+        "developer.warehouse_catalog.content_56"));
+}
+
+TEST(ProfileStateTest, FullWarehouseRejectsDeveloperCatalogWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "developer-catalog-capacity", content);
+    std::vector<AssetInstanceId> existing;
+    for (const auto &[assetId, asset] : profile.assets.records())
+    {
+        static_cast<void>(asset);
+        existing.push_back(assetId);
+    }
+    for (AssetInstanceId assetId : existing)
+    {
+        ASSERT_TRUE(profile.assets.erase(assetId));
+    }
+    const ItemDefinition &ammunition = content.item(alpha_content::ammunition);
+    for (int y = 0; y < 16; ++y)
+    {
+        for (int x = 0; x < 24; ++x)
+        {
+            static_cast<void>(profile.assets.create(
+                ammunition,
+                StoredAssetLocation{
+                    ProfileContainerId::stash(), GridPosition{x, y}},
+                1U));
+        }
+    }
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const AssetInstanceId highWater = profile.assets.nextAssetId();
+
+    const WarehouseCatalogGrantReceipt rejected =
+        grantDeveloperWarehouseCatalog(profile, content);
+
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_TRUE(rejected.capacityBlocked);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_EQ(profile.assets.nextAssetId(), highWater);
+    EXPECT_FALSE(profile.committedTransactions.contains(
+        "developer.warehouse_catalog.content_56"));
+}
+
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)
 {
     ProfileState profile = makeNewAlphaProfile(
