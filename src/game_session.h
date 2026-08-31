@@ -12,6 +12,7 @@
 
 #include "economy_domain.h"
 #include "base_construction_domain.h"
+#include "base_ground_domain.h"
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
 #include "base_siege_domain.h"
@@ -311,6 +312,10 @@ public:
 
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] BaseGroundReceipt executeBaseGroundAsset(
+        const BaseGroundCommand &command,
         std::string transactionId);
 
     [[nodiscard]] EconomyReceipt executeProfileEconomy(

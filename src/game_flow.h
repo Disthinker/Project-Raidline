@@ -58,6 +58,22 @@ public:
     [[nodiscard]] BaseWorld &baseWorld() noexcept;
     [[nodiscard]] const BaseWorld &baseWorld() const noexcept;
 
+    [[nodiscard]] BaseGroundPlan queryBaseGroundDrop(
+        AssetInstanceId assetId,
+        std::uint32_t quantity,
+        ItemOrientation orientation) const;
+    [[nodiscard]] BaseGroundReceipt dropBaseGroundAsset(
+        AssetInstanceId assetId,
+        std::uint32_t quantity,
+        ItemOrientation orientation,
+        std::string transactionId);
+    [[nodiscard]] std::optional<BaseGroundAssetProjection>
+    nearestBaseGroundAsset() const noexcept;
+    [[nodiscard]] BaseGroundReceipt pickupNearestBaseGroundAsset(
+        std::string transactionId);
+    [[nodiscard]] std::vector<BaseGroundAssetProjection>
+    baseGroundAssets() const;
+
     void update(
         const GameplayInput &input,
         float deltaTime);
@@ -82,6 +98,7 @@ public:
 
 private:
     void syncBaseWorldSite();
+    [[nodiscard]] BaseGroundAccess baseGroundAccess() const noexcept;
 
     GameSession gameSession_;
     BaseWorld baseWorld_;

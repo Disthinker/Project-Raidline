@@ -5,8 +5,10 @@
 ## Git 与交付基线
 
 - `origin/main@62e464e` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图、Content Beta 成长闭环、有限新档整备引导和 Home Region 大地图。
-- 当前开发分支：`codex/home-region-shared-combat-v1`，从 `origin/main@62e464e` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-shared-combat-v1.md`。
+- 已验收主线：`origin/main@9106126`，PR #123 已合入并完成 Home Region 仓库范围门禁与地图访问。
+- 当前开发分支：`codex/home-region-ground-assets-v1`，从 `origin/main@9106126` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-ground-assets-v1.md`。
+- 代码审计确认 Base 已具备即时压弹、卸弹、装匣并上膛、医疗、武器/护甲维修和统一库存拖拽；这些不再作为待实现项。当前切片建立按基地站点持久化的地面资产放置与拾取。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑

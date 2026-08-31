@@ -1,5 +1,8 @@
 #include "game_flow.h"
 
+#include <algorithm>
+#include <utility>
+
 GameFlow::GameFlow() = default;
 
 GameFlow::GameFlow(
@@ -159,6 +162,99 @@ BaseWorld &GameFlow::baseWorld() noexcept
 const BaseWorld &GameFlow::baseWorld() const noexcept
 {
     return baseWorld_;
+}
+
+BaseGroundAccess GameFlow::baseGroundAccess() const noexcept
+{
+    const Vec2 playerCenter{
+        baseWorld_.playerPosition().x + baseWorld_.playerSize().x * 0.5F,
+        baseWorld_.playerPosition().y + baseWorld_.playerSize().y * 0.5F};
+    const Vec2 facing = baseWorld_.playerFacingDirection();
+    const Vec2 world = baseWorld_.worldSize();
+    const Vec2 drop{
+        std::clamp(playerCenter.x + facing.x * 58.0F, 12.0F, world.x - 12.0F),
+        std::clamp(playerCenter.y + facing.y * 58.0F, 12.0F, world.y - 12.0F)};
+    return BaseGroundAccess{
+        RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()},
+        playerCenter,
+        drop,
+        baseWorld_.canAccessStash(),
+        84.0F};
+}
+
+BaseGroundPlan GameFlow::queryBaseGroundDrop(
+    AssetInstanceId assetId,
+    std::uint32_t quantity,
+    ItemOrientation orientation) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    return queryBaseGround(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        DropBaseGroundAssetCommand{
+            assetId, quantity, orientation, baseGroundAccess()});
+}
+
+BaseGroundReceipt GameFlow::dropBaseGroundAsset(
+    AssetInstanceId assetId,
+    std::uint32_t quantity,
+    ItemOrientation orientation,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    return gameSession_.executeBaseGroundAsset(
+        DropBaseGroundAssetCommand{
+            assetId, quantity, orientation, baseGroundAccess()},
+        std::move(transactionId));
+}
+
+std::optional<BaseGroundAssetProjection>
+GameFlow::nearestBaseGroundAsset() const noexcept
+{
+    if (state_ != GameFlowState::Base)
+        return std::nullopt;
+    const BaseGroundAccess access = baseGroundAccess();
+    return ::nearestBaseGroundAsset(
+        gameSession_.profile(),
+        access.baseSiteDefinitionId,
+        access.playerCenter,
+        access.interactionRange);
+}
+
+BaseGroundReceipt GameFlow::pickupNearestBaseGroundAsset(
+    std::string transactionId)
+{
+    const auto nearest = nearestBaseGroundAsset();
+    if (!nearest.has_value())
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::MissingAsset,
+            "no Base ground asset is in range",
+            gameSession_.profile().revision, 0};
+    }
+    return gameSession_.executeBaseGroundAsset(
+        PickupBaseGroundAssetCommand{
+            nearest->assetId, baseGroundAccess()},
+        std::move(transactionId));
+}
+
+std::vector<BaseGroundAssetProjection> GameFlow::baseGroundAssets() const
+{
+    if (state_ != GameFlowState::Base)
+        return {};
+    return projectBaseGroundAssets(
+        gameSession_.profile(),
+        RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()});
 }
 
 void GameFlow::update(

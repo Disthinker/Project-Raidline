@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备和 Home Region 大地图均已进入主线。当前推进 Home Region 共享战斗能力 v1，范围合同见 `doc/exec-plans/active/home-region-shared-combat-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图与共享战斗能力均已进入主线。当前推进 Home Region 地面资产 v1，范围合同见 `doc/exec-plans/active/home-region-ground-assets-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
