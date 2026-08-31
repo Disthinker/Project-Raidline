@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base_workforce_domain.h"
@@ -23,7 +25,7 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     EXPECT_EQ(profile.assets.records().size(), 20U);
     EXPECT_EQ(profile.assets.nextAssetId(), 21U);
     EXPECT_TRUE(profile.committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
     EXPECT_FALSE(equippedAsset(
         profile,
         EquipmentSlotKind::PrimaryWeapon).has_value());
@@ -125,7 +127,7 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesCompleteWarehouseCatalog)
     EXPECT_EQ(profile.assets.records().size(), content.items().size() + 5U);
     EXPECT_EQ(profile.assets.nextAssetId(), content.items().size() + 6U);
     EXPECT_TRUE(profile.committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
     EXPECT_TRUE(validateProfileState(profile, content).valid);
     for (const ItemDefinition &definition : content.items())
     {
@@ -152,12 +154,80 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesCompleteWarehouseCatalog)
     }
 }
 
+TEST(ProfileStateTest, ContentBetaLoadoutWeightSeparatesLightAndHeavyExtraction)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "content-beta-loadout-weight",
+        content);
+    const auto find = [&profile](const ItemDefinitionId &definitionId)
+    {
+        const auto found = std::find_if(
+            profile.assets.records().begin(),
+            profile.assets.records().end(),
+            [&definitionId](const auto &entry)
+            {
+                return entry.second.definitionId == definitionId;
+            });
+        return found == profile.assets.records().end() ? 0U : found->first;
+    };
+    const auto equip = [&profile, &content](
+        AssetInstanceId assetId,
+        EquipmentSlotKind slot,
+        std::string transaction)
+    {
+        return executeInventory(
+            profile,
+            content,
+            InventoryEquipCommand{assetId, slot},
+            CommandContext{profile.revision, std::move(transaction)});
+    };
+
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.protective_gear.helmet_scout"}),
+        EquipmentSlotKind::Helmet,
+        "equip-light-helmet").succeeded);
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.protective_gear.body_armor_light"}),
+        EquipmentSlotKind::BodyArmor,
+        "equip-light-armor").succeeded);
+    ASSERT_TRUE(equip(
+        find(alpha_content::chestRig),
+        EquipmentSlotKind::ChestRig,
+        "equip-light-rig").succeeded);
+    ASSERT_TRUE(equip(
+        find(alpha_content::backpack),
+        EquipmentSlotKind::Backpack,
+        "equip-light-pack").succeeded);
+    EXPECT_EQ(carriedWeightGrams(profile, content), 7050U);
+    EXPECT_LT(carriedWeightGrams(profile, content), 22000U);
+
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.protective_gear.helmet_heavy"}),
+        EquipmentSlotKind::Helmet,
+        "equip-heavy-helmet").succeeded);
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.protective_gear.body_armor_heavy"}),
+        EquipmentSlotKind::BodyArmor,
+        "equip-heavy-armor").succeeded);
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.container.chest_rig_assault"}),
+        EquipmentSlotKind::ChestRig,
+        "equip-heavy-rig").succeeded);
+    ASSERT_TRUE(equip(
+        find(ItemDefinitionId{"item.container.backpack_expedition"}),
+        EquipmentSlotKind::Backpack,
+        "equip-heavy-pack").succeeded);
+    EXPECT_EQ(carriedWeightGrams(profile, content), 22700U);
+    EXPECT_GT(carriedWeightGrams(profile, content), 22000U);
+}
+
 TEST(ProfileStateTest, WarehouseCatalogGrantIsAtomicAndIdempotent)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewPublishedProfile("catalog-grant", content);
     profile.committedTransactions.erase(
-        "bootstrap.warehouse_catalog.content_53");
+        "bootstrap.warehouse_catalog.content_54");
     const ItemDefinitionId missingDefinition{
         "item.weapon.lmg_7_62x51_service"};
     std::vector<AssetInstanceId> removed;
@@ -179,7 +249,7 @@ TEST(ProfileStateTest, WarehouseCatalogGrantIsAtomicAndIdempotent)
     EXPECT_EQ(granted.addedDefinitionCount, 1U);
     EXPECT_EQ(profile.revision, beforeRevision + 1U);
     EXPECT_TRUE(profile.committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
     EXPECT_TRUE(std::any_of(
         profile.assets.records().begin(),
         profile.assets.records().end(),
@@ -207,7 +277,7 @@ TEST(ProfileStateTest, FullWarehouseRejectsCatalogGrantWithoutMutation)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile("catalog-capacity", content);
     profile.committedTransactions.erase(
-        "bootstrap.warehouse_catalog.content_53");
+        "bootstrap.warehouse_catalog.content_54");
     std::vector<AssetInstanceId> existing;
     for (const auto &[assetId, asset] : profile.assets.records())
     {
@@ -220,9 +290,9 @@ TEST(ProfileStateTest, FullWarehouseRejectsCatalogGrantWithoutMutation)
     }
     const ItemDefinition &ammunition =
         content.item(alpha_content::ammunition);
-    for (int y = 0; y < 12; ++y)
+    for (int y = 0; y < 16; ++y)
     {
-        for (int x = 0; x < 20; ++x)
+        for (int x = 0; x < 24; ++x)
         {
             static_cast<void>(profile.assets.create(
                 ammunition,
@@ -244,7 +314,7 @@ TEST(ProfileStateTest, FullWarehouseRejectsCatalogGrantWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), beforeFingerprint);
     EXPECT_EQ(profile.assets.nextAssetId(), beforeHighWater);
     EXPECT_FALSE(profile.committedTransactions.contains(
-        "bootstrap.warehouse_catalog.content_53"));
+        "bootstrap.warehouse_catalog.content_54"));
 }
 
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)

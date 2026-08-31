@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "content-beta-warehouse-catalog-content-53",
+  "content_version": "content-beta-loadout-gear-content-54",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -716,6 +716,58 @@
       "market_recycle_price": 25
     },
     {
+      "id": "item.container.chest_rig_patrol",
+      "display_name": "Patrol Chest Rig",
+      "category": "container",
+      "inventory": {"width": 3, "height": 3, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 2200,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 104, "y": 96},
+        "pickup_size": {"x": 112, "y": 104}
+      },
+      "inventory_texture": "items/inventory/unpublished_chest_rig_patrol.png",
+      "world_texture": "items/world/unpublished_chest_rig_patrol.png",
+      "equipment_slot": "chest_rig",
+      "container_compartments": [
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 2, "height": 1, "pocket": "general"},
+        {"width": 2, "height": 1, "pocket": "general"}
+      ],
+      "market_recycle_price": 45
+    },
+    {
+      "id": "item.container.chest_rig_assault",
+      "display_name": "Assault Chest Rig",
+      "category": "container",
+      "inventory": {"width": 4, "height": 3, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 3400,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 112, "y": 96},
+        "pickup_size": {"x": 120, "y": 104}
+      },
+      "inventory_texture": "items/inventory/unpublished_chest_rig_assault.png",
+      "world_texture": "items/world/unpublished_chest_rig_assault.png",
+      "equipment_slot": "chest_rig",
+      "container_compartments": [
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 1, "height": 2, "pocket": "magazine_only"},
+        {"width": 2, "height": 2, "pocket": "general"},
+        {"width": 2, "height": 2, "pocket": "general"},
+        {"width": 1, "height": 2, "pocket": "general"},
+        {"width": 1, "height": 2, "pocket": "general"}
+      ],
+      "market_recycle_price": 90
+    },
+    {
       "id": "item.container.backpack_small",
       "display_name": "Small Backpack",
       "category": "container",
@@ -735,6 +787,46 @@
       ],
       "market_buy_price": 120,
       "market_recycle_price": 30
+    },
+    {
+      "id": "item.container.backpack_field",
+      "display_name": "Field Backpack",
+      "category": "container",
+      "inventory": {"width": 4, "height": 5, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 2600,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 104, "y": 120},
+        "pickup_size": {"x": 112, "y": 128}
+      },
+      "inventory_texture": "items/inventory/unpublished_backpack_field.png",
+      "world_texture": "items/world/unpublished_backpack_field.png",
+      "equipment_slot": "backpack",
+      "container_compartments": [
+        {"width": 7, "height": 5, "pocket": "general"}
+      ],
+      "market_recycle_price": 55
+    },
+    {
+      "id": "item.container.backpack_expedition",
+      "display_name": "Expedition Backpack",
+      "category": "container",
+      "inventory": {"width": 5, "height": 6, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 5000,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 112, "y": 136},
+        "pickup_size": {"x": 120, "y": 144}
+      },
+      "inventory_texture": "items/inventory/unpublished_backpack_expedition.png",
+      "world_texture": "items/world/unpublished_backpack_expedition.png",
+      "equipment_slot": "backpack",
+      "container_compartments": [
+        {"width": 9, "height": 6, "pocket": "general"}
+      ],
+      "market_recycle_price": 100
     },
     {
       "id": "item.medical.medkit_alpha",
@@ -912,6 +1004,55 @@
       "market_recycle_price": 30
     },
     {
+      "id": "item.protective_gear.helmet_scout",
+      "display_name": "Scout Helmet",
+      "category": "protective_gear",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 850,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 48},
+        "pickup_size": {"x": 72, "y": 56}
+      },
+      "inventory_texture": "items/inventory/unpublished_helmet_scout.png",
+      "world_texture": "items/world/unpublished_helmet_scout.png",
+      "equipment_slot": "helmet",
+      "armor": {
+        "coverage": "head",
+        "material": "composite",
+        "protection_requirement": 2,
+        "maximum_durability": 65,
+        "durability_loss_basis_points": 8000
+      },
+      "market_buy_price": 80,
+      "market_recycle_price": 20
+    },
+    {
+      "id": "item.protective_gear.helmet_heavy",
+      "display_name": "Heavy Assault Helmet",
+      "category": "protective_gear",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 2800,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 72, "y": 64},
+        "pickup_size": {"x": 80, "y": 72}
+      },
+      "inventory_texture": "items/inventory/unpublished_helmet_heavy.png",
+      "world_texture": "items/world/unpublished_helmet_heavy.png",
+      "equipment_slot": "helmet",
+      "armor": {
+        "coverage": "head",
+        "material": "metal",
+        "protection_requirement": 5,
+        "maximum_durability": 150,
+        "durability_loss_basis_points": 14000
+      },
+      "market_recycle_price": 80
+    },
+    {
       "id": "item.protective_gear.body_armor_basic",
       "display_name": "Basic Body Armor",
       "category": "protective_gear",
@@ -935,6 +1076,55 @@
       },
       "market_buy_price": 160,
       "market_recycle_price": 40
+    },
+    {
+      "id": "item.protective_gear.body_armor_light",
+      "display_name": "Light Protective Vest",
+      "category": "protective_gear",
+      "inventory": {"width": 2, "height": 2, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 3500,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 64, "y": 80},
+        "pickup_size": {"x": 72, "y": 88}
+      },
+      "inventory_texture": "items/inventory/unpublished_body_armor_light.png",
+      "world_texture": "items/world/unpublished_body_armor_light.png",
+      "equipment_slot": "body_armor",
+      "armor": {
+        "coverage": "torso",
+        "material": "soft",
+        "protection_requirement": 2,
+        "maximum_durability": 80,
+        "durability_loss_basis_points": 9000
+      },
+      "market_buy_price": 120,
+      "market_recycle_price": 30
+    },
+    {
+      "id": "item.protective_gear.body_armor_heavy",
+      "display_name": "Heavy Plate Armor",
+      "category": "protective_gear",
+      "inventory": {"width": 3, "height": 3, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 11500,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 80, "y": 104},
+        "pickup_size": {"x": 88, "y": 112}
+      },
+      "inventory_texture": "items/inventory/unpublished_body_armor_heavy.png",
+      "world_texture": "items/world/unpublished_body_armor_heavy.png",
+      "equipment_slot": "body_armor",
+      "armor": {
+        "coverage": "torso",
+        "material": "metal",
+        "protection_requirement": 6,
+        "maximum_durability": 180,
+        "durability_loss_basis_points": 17500
+      },
+      "market_recycle_price": 100
     },
     {
       "id": "item.loot.scrap_parts",
@@ -1167,6 +1357,10 @@
         {"item": "item.medical.medkit_alpha", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.helmet_basic", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.body_armor_basic", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_heavy", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_heavy", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_assault", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_expedition", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.dmr_7_62x51_service", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.lmg_7_62x51_service", "weight": 2, "minimum_quantity": 1, "maximum_quantity": 1},
@@ -1185,6 +1379,9 @@
         {"item": "item.loot.machine_tool_set", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.maintenance.weapon_kit_basic", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.ammunition.5_45x39_standard", "weight": 12, "minimum_quantity": 12, "maximum_quantity": 30},
+        {"item": "item.protective_gear.body_armor_light", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_patrol", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_field", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.carbine_5_45_compact", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.magazine.5_45x39_30", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
@@ -1211,6 +1408,10 @@
         {"item": "item.maintenance.armor_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.maintenance.weapon_kit_basic", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.protective_gear.helmet_basic", "weight": 9, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_heavy", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_heavy", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_assault", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_expedition", "weight": 3, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.rifle_basic", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.rifle_5_45_service", "weight": 8, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.dmr_7_62x51_service", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
@@ -1248,6 +1449,9 @@
         {"item": "item.loot.electronics", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.ammunition.5_45x39_standard", "weight": 12, "minimum_quantity": 12, "maximum_quantity": 30},
         {"item": "item.ammunition.5_45x39_enhanced", "weight": 5, "minimum_quantity": 8, "maximum_quantity": 18},
+        {"item": "item.protective_gear.helmet_basic", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.chest_rig_patrol", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.container.backpack_field", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.weapon.rifle_5_45_service", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.magazine.5_45x39_30", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1}
       ]
@@ -1262,6 +1466,8 @@
         {"item": "item.loot.compact_game_set", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.cola_basic", "weight": 12, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.first_aid_stock", "weight": 11, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.helmet_scout", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.protective_gear.body_armor_light", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.toilet_paper", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 2}
       ]
     }

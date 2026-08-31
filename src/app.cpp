@@ -23,6 +23,7 @@
 #include "alpha_content_ids.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
+#include "profile_container_presentation.h"
 #include "raid_camera.h"
 #include "raid_tactical_map_presentation.h"
 
@@ -78,9 +79,9 @@ namespace
     constexpr float kFlowButtonHeight{60.0F};
     constexpr float kBaseStashX{668.0F};
     constexpr float kBaseStashY{132.0F};
-    constexpr float kBaseStashCellSize{28.0F};
+    constexpr float kBaseStashCellSize{24.0F};
     constexpr float kBaseStashWithRecoveryY{118.0F};
-    constexpr float kBaseStashWithRecoveryCellSize{20.0F};
+    constexpr float kBaseStashWithRecoveryCellSize{16.0F};
     constexpr float kBaseIntakeX{668.0F};
     constexpr float kBaseIntakeY{398.0F};
     constexpr float kBaseIntakeCellSize{20.0F};
@@ -350,7 +351,7 @@ namespace
         float x{};
         float y{};
         float cellSize{};
-        const char *label{};
+        std::string label;
     };
 
     std::vector<ProfileGridView> profileGridViews(
@@ -381,31 +382,55 @@ namespace
             }
         }
 
-        if (const auto chest = equippedAsset(
-                profile,
-                EquipmentSlotKind::ChestRig))
+        const auto appendCompartments = [&](
+            EquipmentSlotKind slot,
+            float startY,
+            float cellSize,
+            bool distinguishPockets)
         {
-            result.push_back({
-                ProfileContainerId::compartment(*chest, 0),
-                214.0F, 442.0F, kBasePocketCellSize, "MAG 1"});
-            result.push_back({
-                ProfileContainerId::compartment(*chest, 1),
-                258.0F, 442.0F, kBasePocketCellSize, "MAG 2"});
-            result.push_back({
-                ProfileContainerId::compartment(*chest, 2),
-                310.0F, 442.0F, kBasePocketCellSize, "UTIL 1"});
-            result.push_back({
-                ProfileContainerId::compartment(*chest, 3),
-                354.0F, 442.0F, kBasePocketCellSize, "UTIL 2"});
-        }
-        if (const auto backpack = equippedAsset(
-                profile,
-                EquipmentSlotKind::Backpack))
-        {
-            result.push_back({
-                ProfileContainerId::compartment(*backpack, 0),
-                214.0F, 520.0F, kBasePocketCellSize, "BACKPACK"});
-        }
+            const auto container = equippedAsset(profile, slot);
+            if (!container.has_value())
+            {
+                return startY;
+            }
+            const AssetRecord *asset = profile.assets.find(*container);
+            if (asset == nullptr)
+            {
+                return startY;
+            }
+            const ItemDefinition &definition =
+                publishedContentRegistry().item(asset->definitionId);
+            const ProfileCompartmentLayout layout =
+                layoutProfileCompartments(
+                    definition,
+                    214.0F,
+                    startY,
+                    580.0F,
+                    cellSize,
+                    !distinguishPockets);
+            for (const ProfileCompartmentPlacement &placement :
+                 layout.placements)
+            {
+                result.push_back({
+                    ProfileContainerId::compartment(
+                        *container,
+                        static_cast<std::uint32_t>(
+                            placement.compartmentIndex)),
+                    placement.x,
+                    placement.y,
+                    placement.cellSize,
+                    placement.label});
+            }
+            return layout.bottom;
+        };
+
+        const float chestBottom = appendCompartments(
+            EquipmentSlotKind::ChestRig, 442.0F, 20.0F, true);
+        static_cast<void>(appendCompartments(
+            EquipmentSlotKind::Backpack,
+            std::max(520.0F, chestBottom + 28.0F),
+            20.0F,
+            false));
         return result;
     }
 
@@ -10268,11 +10293,110 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     for (const ProfileGridView &view : profileGridViews(profile, includeStash))
     {
         renderProfileGrid(
-            view.container, view.x, view.y, view.cellSize, view.label);
+            view.container, view.x, view.y, view.cellSize, view.label.c_str());
+    }
+
+    float pointerX{};
+    float pointerY{};
+    static_cast<void>(SDL_GetMouseState(&pointerX, &pointerY));
+    if (const auto hovered = profileAssetHitAt(
+            profile,
+            MousePosition{pointerX, pointerY},
+            includeStash);
+        hovered.has_value() && hovered->asset != nullptr)
+    {
+        const AssetRecord &asset = *hovered->asset;
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset.definitionId);
+        const SDL_FRect inspection{42.0F, 424.0F, 150.0F, 198.0F};
+        SDL_SetRenderDrawColor(renderer_, 20, 29, 33, 248);
+        SDL_RenderFillRect(renderer_, &inspection);
+        SDL_SetRenderDrawColor(renderer_, 78, 118, 124, 255);
+        SDL_RenderRect(renderer_, &inspection);
+        float lineY = inspection.y + 8.0F;
+        const std::string displayName = definition.displayName.substr(
+            0,
+            std::min<std::size_t>(definition.displayName.size(), 20U));
+        uiTextRenderer_.render(
+            renderer_, inspection.x + 6.0F, lineY, displayName.c_str());
+        lineY += 22.0F;
+        const std::string weight = fmt::format(
+            "WEIGHT {:.2f} KG",
+            static_cast<double>(definition.unitWeightGrams) / 1000.0);
+        uiTextRenderer_.render(
+            renderer_, inspection.x + 6.0F, lineY, weight.c_str());
+        lineY += 20.0F;
+        if (definition.armorProtection.has_value())
+        {
+            const ArmorProtectionDefinition &armor =
+                *definition.armorProtection;
+            const char *material = armor.material == ArmorMaterial::Soft
+                ? "SOFT"
+                : armor.material == ArmorMaterial::Composite
+                    ? "COMPOSITE"
+                    : "METAL";
+            const std::string protection = fmt::format(
+                "PROTECTION {} | {}",
+                armor.protectionRequirement,
+                material);
+            uiTextRenderer_.render(
+                renderer_, inspection.x + 6.0F, lineY,
+                protection.c_str());
+            lineY += 20.0F;
+            const std::string durability = fmt::format(
+                "DURABILITY {}/{}",
+                asset.currentDurability,
+                asset.currentMaximumDurability);
+            uiTextRenderer_.render(
+                renderer_, inspection.x + 6.0F, lineY,
+                durability.c_str());
+        }
+        else if (!definition.containerCompartments.empty())
+        {
+            std::uint32_t totalCells{};
+            std::size_t magazinePockets{};
+            std::size_t generalPockets{};
+            for (const ContainerCompartmentDefinition &compartment :
+                 definition.containerCompartments)
+            {
+                totalCells += static_cast<std::uint32_t>(
+                    compartment.width * compartment.height);
+                if (compartment.pocketKind ==
+                    ContainerPocketKind::MagazineOnly)
+                {
+                    ++magazinePockets;
+                }
+                else
+                {
+                    ++generalPockets;
+                }
+            }
+            const std::string capacity = fmt::format(
+                "CAPACITY {} CELLS",
+                totalCells);
+            uiTextRenderer_.render(
+                renderer_, inspection.x + 6.0F, lineY,
+                capacity.c_str());
+            lineY += 20.0F;
+            const std::string pockets = fmt::format(
+                "POCKETS {} MAG / {} UTIL",
+                magazinePockets,
+                generalPockets);
+            uiTextRenderer_.render(
+                renderer_, inspection.x + 6.0F, lineY,
+                pockets.c_str());
+        }
     }
 
     const std::string health = fmt::format("HP {}/100", profile.currentHealth);
     uiTextRenderer_.render(renderer_, 42.0F, 366.0F, health.c_str());
+    const std::string carriedWeight = fmt::format(
+        "CARRIED WEIGHT {:.2f} KG",
+        static_cast<double>(carriedWeightGrams(
+            profile,
+            publishedContentRegistry())) / 1000.0);
+    uiTextRenderer_.render(
+        renderer_, 42.0F, 402.0F, carriedWeight.c_str());
     const char *bleeding = profile.medicalStatus.bleeding == BleedingSeverity::Heavy
         ? "HEAVY BLEEDING"
         : profile.medicalStatus.bleeding == BleedingSeverity::Light

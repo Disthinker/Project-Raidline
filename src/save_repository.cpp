@@ -2298,7 +2298,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "procedural-frontier-high-risk-crisis-content-51") ||
             (schemaVersion == 38 &&
              contentVersion ==
-                 "content-beta-weapon-caliber-content-52");
+                 "content-beta-weapon-caliber-content-52") ||
+            (schemaVersion == 38 &&
+             contentVersion ==
+                 "content-beta-warehouse-catalog-content-53");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

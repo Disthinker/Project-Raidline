@@ -208,6 +208,35 @@ TEST(MaintenanceDomainTest, RaidArmorRepairUsesCompositeCostAndSixSecondPlan)
     EXPECT_EQ(plan.currentMaximumAfter, 93U);
 }
 
+TEST(MaintenanceDomainTest, HeavyMetalArmorUsesHighestRepairPointCost)
+{
+    ProfileState profile = makeNewPublishedProfile(
+        "heavy-armor-maintenance",
+        publishedContentRegistry());
+    const AssetInstanceId armor = firstAsset(
+        profile,
+        ItemDefinitionId{"item.protective_gear.body_armor_heavy"});
+    const AssetInstanceId kit = firstAsset(
+        profile,
+        alpha_content::armorMaintenanceKit);
+    ASSERT_NE(armor, 0U);
+    ASSERT_NE(kit, 0U);
+    profile.assets.findMutable(armor)->currentDurability = 150U;
+
+    const ArmorMaintenancePlan plan = queryArmorMaintenance(
+        profile,
+        publishedContentRegistry(),
+        ArmorMaintenanceCommand{
+            kit, armor, MaintenanceAccess::AnyOwned,
+            MaintenanceLocation::Base});
+
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.restoredDurability, 25U);
+    EXPECT_EQ(plan.consumedCapacityCenti, 5000U);
+    EXPECT_EQ(plan.currentMaximumBefore, 180U);
+    EXPECT_EQ(plan.currentMaximumAfter, 177U);
+}
+
 TEST(MaintenanceDomainTest, ArmorRepairAtMaximumFloorRestoresWithoutFurtherLoss)
 {
     ProfileState profile = makeNewAlphaProfile(

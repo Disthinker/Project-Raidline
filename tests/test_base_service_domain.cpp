@@ -358,9 +358,9 @@ TEST(BaseServiceDomainTest, FullStashPreservesLegacyHeldWeapon)
         ASSERT_TRUE(profile.assets.erase(id));
     }
     const ItemDefinition &ammo = content.item(alpha_content::ammunition);
-    for (int y = 0; y < 12; ++y)
+    for (int y = 0; y < 16; ++y)
     {
-        for (int x = 0; x < 20; ++x)
+        for (int x = 0; x < 24; ++x)
         {
             static_cast<void>(profile.assets.create(
                 ammo,
