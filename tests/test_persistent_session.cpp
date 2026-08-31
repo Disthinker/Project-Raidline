@@ -67,6 +67,79 @@ std::size_t countStashDefinition(
         }));
 }
 
+std::size_t countAllAmmunition(
+    const ProfileState &profile,
+    const ItemDefinitionId &definitionId)
+{
+    std::size_t total{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (asset.definitionId == definitionId)
+            total += asset.quantity;
+        total += static_cast<std::size_t>(std::count_if(
+            asset.magazineRounds.begin(), asset.magazineRounds.end(),
+            [&](const MagazineRoundRecord &round)
+            { return round.definitionId == definitionId; }));
+        if (asset.chamberedRound.has_value() &&
+            asset.chamberedRound->definitionId == definitionId)
+            ++total;
+    }
+    return total;
+}
+
+TEST(PersistentSessionTest, BaseShootingCheckpointPersistsAmmoAndDurability)
+{
+    SessionSaveDirectory temporary;
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.startNewProfile("persistent-base-shooting"));
+    const AssetInstanceId rifle = findDefinition(
+        first.profile(), alpha_content::rifle);
+    const AssetInstanceId magazine = findDefinition(
+        first.profile(), alpha_content::magazine);
+    const AssetInstanceId ammunition = findDefinition(
+        first.profile(), alpha_content::ammunition);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(magazine, 0U);
+    ASSERT_NE(ammunition, 0U);
+    ASSERT_TRUE(first.executeProfileWeaponAmmo(
+        LoadMagazineCommand{magazine, ammunition, 10U},
+        "persistent-base-load").succeeded);
+    ASSERT_TRUE(first.executeProfileInventory(
+        InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon},
+        "persistent-base-equip").succeeded);
+    ASSERT_TRUE(first.executeProfileWeaponAmmo(
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        "persistent-base-install").succeeded);
+
+    BaseWorld world;
+    GameplayInput fire{};
+    fire.aimWorldPosition = Vec2{
+        world.playerPosition().x + 700.0F,
+        world.playerPosition().y};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    static_cast<void>(first.updateBaseWorld(world, fire, 1.0F / 60.0F));
+    ASSERT_TRUE(world.shotFiredLastUpdate());
+    const std::size_t roundsAfter = countAllAmmunition(
+        first.profile(), alpha_content::ammunition);
+    const std::uint32_t durabilityAfter =
+        first.profile().assets.find(rifle)->currentDurability;
+    ASSERT_TRUE(first.checkpointWorldClock()) << first.persistenceMessage();
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(
+        countAllAmmunition(reopened.profile(), alpha_content::ammunition),
+        roundsAfter);
+    ASSERT_NE(reopened.profile().assets.find(rifle), nullptr);
+    EXPECT_EQ(
+        reopened.profile().assets.find(rifle)->currentDurability,
+        durabilityAfter);
+}
+
 TEST(PersistentSessionTest, PreviousContentReceivesWarehouseCatalogOnce)
 {
     SessionSaveDirectory temporary;

@@ -28,6 +28,7 @@
 #include "storage_cabinet.h"
 #include "weapon_fire.h"
 #include "weapon_aim.h"
+#include "world_shooting_runtime.h"
 
 struct RaidSimulationWorkload
 {
@@ -170,18 +171,6 @@ struct PlayerDamageObservation
     int armorDamage{};
     bool weakPoint{};
     WoundSource woundSource{WoundSource::None};
-};
-
-struct WeaponAccuracyProjection
-{
-    Vec2 center{};
-    float aimDistance{};
-    float currentSpreadDegrees{};
-    float minimumSpreadDegrees{};
-    float maximumSpreadDegrees{};
-    float worldRadius{};
-    float reticleRadius{};
-    bool beyondEffectiveRange{};
 };
 
 class GameplayWorld
@@ -479,19 +468,6 @@ private:
         std::size_t initialEnemyCount{};
     };
 
-    struct TracerPresentationSegment
-    {
-        ShotId shotId{kInvalidShotId};
-        Vec2 start{};
-        Vec2 end{};
-        Vec2 direction{};
-        TracerStyle style{TracerStyle::Weak};
-        float opacity{};
-        float lifetimeSeconds{};
-        float remainingSeconds{};
-        float ageSeconds{};
-    };
-
     struct NavigationFieldCache
     {
         RaidSpaceDefinitionId spaceId;
@@ -523,10 +499,7 @@ private:
 
     Player player_;
 
-    std::vector<LogicalBallisticFlight> logicalBallistics_;
-    std::vector<TracerPresentationSegment> tracerPresentations_;
-    ShotFeedbackPresentationState shotFeedbackPresentation_;
-    ShotId nextShotId_{1};
+    WorldShootingRuntime shooting_;
     CombatTargetId nextCombatTargetId_{1};
     std::vector<Enemy> enemies_;
     std::size_t initialOutdoorEnemyCount_{};
@@ -592,23 +565,8 @@ private:
     ItemInstanceId nextItemInstanceId_{1};
     SeededLootRandomSource lootRandom_;
 
-    static constexpr int kDefaultWeaponDamage{1};
-    WeaponFireState weaponFire_;
-    WeaponAimState weaponAim_;
-    int weaponBaseDamage_{kDefaultWeaponDamage};
-    int weaponPenetration_{};
-    float weaponMaximumRange_{2048.0F};
-    float weaponLogicalBallisticSpeed_{6000.0F};
-    TracerStyle weaponTracerStyle_{TracerStyle::Weak};
-    float weaponTracerLength_{30.0F};
-    float weaponTracerOpacity_{0.42F};
-    float weaponTracerLifetimeSeconds_{0.055F};
-
-    ParticleSystem particleSystem_;
-    std::vector<HitResult> hitResultsLastUpdate_;
     int score_{0};
     Vec2 worldSize_{1280.0F, 720.0F};
-    bool shotFiredLastUpdate_{};
     std::size_t enemiesAlertedLastUpdate_{};
     std::size_t navigationQueriesLastUpdate_{};
     RaidSimulationWorkload simulationWorkloadLastUpdate_{};

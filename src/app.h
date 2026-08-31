@@ -163,6 +163,7 @@ private:
     void consumePresentationAudioEvents();
 
     GameplayInput makeGameplayInput() const;
+    GameplayInput makeBaseGameplayInput() const;
 
     [[nodiscard]]
     bool handleScreenConfirm();
@@ -289,6 +290,7 @@ private:
         const RaidDeploymentProgress &progress);
     void renderBase();
     void renderBaseWorld();
+    void renderHomeRegionMap();
     void renderBaseStorage();
     void renderBaseSupply();
     void renderBaseAllocation();

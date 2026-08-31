@@ -4,14 +4,14 @@
 
 ## Git 与交付基线
 
-- `origin/main@71a3c08` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图、Content Beta 成长闭环和有限新档整备引导。
-- 当前开发分支：`codex/home-region-large-map-v1`，从 `origin/main@71a3c08` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-large-map-v1.md`。
+- `origin/main@62e464e` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图、Content Beta 成长闭环、有限新档整备引导和 Home Region 大地图。
+- 当前开发分支：`codex/home-region-shared-combat-v1`，从 `origin/main@62e464e` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-shared-combat-v1.md`。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环以及 Home Region 有限新档整备均已进入主线。当前切片把 Base 从单屏院落迁移为 Home Region 大地图中的安全基地板块；外围复用程序化室外的地表、道路、分区与环境表达，但不生成 Raid 玩法状态。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备和 Home Region 大地图均已进入主线。当前切片为 Base/Raid 提取窄范围共享射击运行时，让基地支持真实武器切换、弹药与耐久消耗、故障和完整射击反馈，同时保持无敌人、无撤离、无高危和无 Raid Settlement。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -76,7 +76,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 61. **Content Beta 战利品来源、经济与补给可持续性 v1**：content v55/rules v29 为三张固定地图和三类 Frontier 高危危机建立不同产出表；固定供应改为从 `market_buy_price` 定义派生，工坊增加三口径标准弹药批次和鼠标配方选择，内容加载同时拒绝制造—回收正收益循环。PR #119 已通过 Windows Debug、1324/1324 CTest、exact-head CI 与用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。
 62. **Content Beta 成长闭环与配装准备度 v1**：content v56 发布轻型搜刮、均衡作战和重型专精三种稳定职责；SDL 无关 Projection 只读取真实装备、随身兼容弹药和内容定义，并在 Raid Gate 显示 READY、具体缺口、建议地图和高危提示。PR #120 已通过用户正常游玩验收，并以普通 merge commit `f48b954` 进入 main。
 63. **Home Region 新档起步与首次整备 v1**：普通新档使用有限 starter 资产，完整发布目录改由 Base/Raid F10 显式开发命令提供；content v57 让基础护甲与轻甲都成为轻型职责的合法选择，环境目标消费同一职责准备度，不建立独立教学关或强制门禁。PR #121 已通过 CI 与用户正常游玩验收，并以 merge commit `71a3c08` 进入 main。
-64. **Home Region 大地图与基地板块 v1（当前开发分支）**：BaseWorld 扩展为 12800×7200 安全室外空间；当前主基地作为一个固定内部结构的 1600×1120 板块放入确定性分区、道路、地表和环境物布局。设施与 Profile 权威状态保持原边界，外围不生成敌人、Loot、撤离、高危或 Raid Settlement。
+64. **Home Region 大地图与基地板块 v1**：PR #122 已通过 CI 与用户正常游玩验收，以 `62e464e` 进入 main。BaseWorld 扩展为 12800×7200 安全室外空间；当前主基地作为固定内部结构板块放入确定性分区、道路、地表和环境物布局。
+65. **Home Region 共享战斗能力 v1（当前开发分支）**：提取 Base/Raid 共用的 SDL-free 瞄准、散布、后坐力、逻辑弹道与表现投影；基地支持真实武器切换、弹药/耐久消耗和故障，但保持无敌人、无撤离、无 Settlement。Tab 仅在玩家完整位于基地板块内时连接 Stash，离开后退化为个人随身页；`M` 可打开只读 Home Region 全静态地图。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -104,7 +105,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 当前自动化证据
 
 - PR #119 已经用户正常游玩验收，并以普通 merge commit `ecd8288` 进入 main。
-- PR #121 已通过 Windows Debug、1338/1338 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收并进入 main。当前 Home Region 大地图切片已完成布局、BaseWorld、摄像机、碰撞和 SDL 占位实现；Windows Debug 全目标、16/16 聚焦回归和 1344/1344 完整 CTest 通过，exact-head CI 与用户正常游玩验收待完成。开发代理未启动游戏。
+- PR #122 已通过 Windows Debug、1344/1344 CTest、exact-head Windows/Ubuntu CI 和用户正常游玩验收，以 `62e464e` 进入 main。当前共享战斗切片已完成 SDL-free `WorldShootingRuntime`、Base 真实武器事务、空间化 Stash 访问、Home Region 地图与客户端输入/表现接入；代码提交 `ba21284` 的 Windows Debug 全目标、1348/1348 完整 CTest 和 exact-head Windows/Ubuntu CI 通过，用户正常游玩验收待完成。开发代理未启动游戏。
 - PR #114 的类型化目标投影、Ashworks 随机外围清剿和 Frontier 自力寻回冻结锚点已通过用户正常游玩验收并进入 main。当前物资身份切片已完成 Windows Debug 全目标构建、focused tests 和 1287/1287 完整 CTest；开发代理未启动游戏，Draft PR、exact-head CI 与用户正常游玩验收仍待完成。
 - 当前多敌人攻击意图修复已完成 Windows Debug 全目标、233/233 定向回归和 1108/1108 完整 CTest；32 敌人压力约 119 ms、最慢约 1.45 ms，100 敌人压力约 172 ms、最慢约 1.96 ms。开发代理未启动游戏。
 - Windows Debug 当前树全目标构建成功，`Project_Raidline.exe` 已生成但未由开发代理启动。

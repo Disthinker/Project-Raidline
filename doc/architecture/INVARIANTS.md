@@ -35,7 +35,7 @@
 ## 流程与场景
 
 - `GameFlow` 只拥有屏幕级状态；`GameSession` 是长期组合根。
-- `BaseWorld` 与 `GameplayWorld` 互斥运行。Base 不推进敌人、Loot、战斗或 Raid 生命周期。
+- `BaseWorld` 与 `GameplayWorld` 互斥运行。两者可以组合同一 SDL-free 射击能力，但 Base 不生成敌人、不伤害居民/设施，也不推进 Loot、撤离、高危、RaidSession 或 Settlement 生命周期。
 - Home Region 的大地图、基地板块、道路和环境物只属于 `BaseWorld` 瞬态空间；相同 active Base 地点必须确定性生成相同布局。扩大 Base 空间不得创建 pending Raid、Raid 锚点、敌人、Loot、撤离、高危或 Settlement，也不得把环境生成结果写成新的 Profile 权威资产。
 - Base 场景、设施对象与 UI 不拥有 Stash、装备、货币或唯一资产。
 - `ProfileState::WorldClockState` 是 Base 与 Raid 共享的唯一权威时间；领域只保存整数世界分钟，日、时分和昼夜均为投影。现实时间戳、离线时长、SDL 帧或 UI 文本不得进入时间真值。

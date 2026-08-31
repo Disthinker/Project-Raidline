@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "game_session.h"
+#include "alpha_content_ids.h"
+#include "base_world.h"
 
 namespace
 {
@@ -58,6 +60,46 @@ namespace
         GameplayInput input{};
         input.moveDown = true;
         return input;
+    }
+
+    AssetInstanceId firstAsset(
+        const ProfileState &profile,
+        const ItemDefinitionId &definitionId)
+    {
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            if (asset.definitionId == definitionId)
+            {
+                return id;
+            }
+        }
+        return 0U;
+    }
+
+    std::size_t totalAmmunition(
+        const ProfileState &profile,
+        const ItemDefinitionId &definitionId)
+    {
+        std::size_t total{};
+        for (const auto &[id, asset] : profile.assets.records())
+        {
+            static_cast<void>(id);
+            if (asset.definitionId == definitionId)
+            {
+                total += asset.quantity;
+            }
+            total += static_cast<std::size_t>(std::count_if(
+                asset.magazineRounds.begin(),
+                asset.magazineRounds.end(),
+                [&](const MagazineRoundRecord &round)
+                { return round.definitionId == definitionId; }));
+            if (asset.chamberedRound.has_value() &&
+                asset.chamberedRound->definitionId == definitionId)
+            {
+                ++total;
+            }
+        }
+        return total;
     }
 
     void pickUpDefaultMedkit(
@@ -149,6 +191,53 @@ TEST(GameSessionTest, BaseClockUsesScaledSimulationTimeAndDailyDemand)
     EXPECT_EQ(session.profile().baseMorale.resolvedDayCount, 1U);
     EXPECT_EQ(session.profile().baseMorale.tier, BaseMoraleTier::Stable);
     EXPECT_EQ(session.profile().baseMorale.trend, BaseMoraleTrend::Steady);
+}
+
+TEST(GameSessionTest, BaseWorldFireConsumesRealAmmoAndWeaponCondition)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("base-shared-shooting"));
+    const AssetInstanceId rifle = firstAsset(
+        session.profile(), alpha_content::rifle);
+    const AssetInstanceId magazine = firstAsset(
+        session.profile(), alpha_content::magazine);
+    const AssetInstanceId ammunition = firstAsset(
+        session.profile(), alpha_content::ammunition);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(magazine, 0U);
+    ASSERT_NE(ammunition, 0U);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        LoadMagazineCommand{magazine, ammunition, 10U},
+        "base-load-magazine").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{
+            rifle, EquipmentSlotKind::PrimaryWeapon},
+        "base-equip-rifle").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(
+        InstallMagazineAndChamberCommand{rifle, magazine},
+        "base-install-magazine").succeeded);
+
+    const std::size_t roundsBefore = totalAmmunition(
+        session.profile(), alpha_content::ammunition);
+    const std::uint32_t durabilityBefore =
+        session.profile().assets.find(rifle)->currentDurability;
+    BaseWorld world;
+    const Vec2 player = world.playerPosition();
+    GameplayInput fire{};
+    fire.aimWorldPosition = Vec2{player.x + 900.0F, player.y};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    static_cast<void>(session.updateBaseWorld(world, fire, 1.0F / 60.0F));
+
+    EXPECT_TRUE(world.shotFiredLastUpdate());
+    EXPECT_EQ(
+        totalAmmunition(session.profile(), alpha_content::ammunition),
+        roundsBefore - 1U);
+    EXPECT_LT(
+        session.profile().assets.find(rifle)->currentDurability,
+        durabilityBefore);
+    EXPECT_FALSE(session.profile().pendingRaid.has_value());
+    EXPECT_FALSE(session.profile().lastRaidResult.has_value());
 }
 
 TEST(GameSessionTest, RaidTravelPreviewProjectsSelectedMapWithoutMutation)

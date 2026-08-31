@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "base_world.h"
+#include "item_definition.h"
 
 TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
 {
@@ -114,6 +115,42 @@ TEST(BaseWorldTest, PureVerticalMovementCannotTunnelThroughFacilities)
         gate.bounds.position.y + gate.bounds.size.y);
 }
 
+TEST(BaseWorldTest, SharedShootingProducesAimTracerFeedbackAndWorldImpact)
+{
+    BaseWorld world;
+    const ItemDefinition &rifle = itemDefinition(ItemId::Rifle);
+    ASSERT_TRUE(rifle.weaponUse.has_value());
+    world.configureWeaponFire(*rifle.weaponUse);
+
+    const Vec2 player = world.playerPosition();
+    const float horizontalDirection = player.x < world.worldSize().x * 0.5F
+        ? 1.0F : -1.0F;
+    GameplayInput fire{};
+    fire.aimWorldPosition = Vec2{
+        player.x + horizontalDirection * 900.0F, player.y};
+    fire.fireJustPressed = true;
+    fire.firePressed = true;
+    static_cast<void>(world.update(fire, 1.0F / 60.0F));
+
+    EXPECT_TRUE(world.shotFiredLastUpdate());
+    EXPECT_GT(
+        world.weaponAimDirection().x * horizontalDirection,
+        0.0F);
+    EXPECT_FALSE(world.shotFeedbackPresentationSnapshots().empty());
+
+    bool resolved{};
+    for (int step{}; step < 20 && !resolved; ++step)
+    {
+        static_cast<void>(world.update(GameplayInput{}, 0.05F));
+        resolved = !world.hitResultsLastUpdate().empty();
+    }
+    ASSERT_TRUE(resolved);
+    EXPECT_NE(
+        world.hitResultsLastUpdate().front().targetKind,
+        HitTargetKind::Enemy);
+    EXPECT_FALSE(world.particles().empty());
+}
+
 TEST(BaseWorldTest, ExposesLargeHomeRegionAndChunkedPresentation)
 {
     BaseWorld world;
@@ -131,6 +168,21 @@ TEST(BaseWorldTest, ExposesLargeHomeRegionAndChunkedPresentation)
     const HomeRegionPresentationProjection &cached =
         world.outdoorPresentation({player, {1280.0F, 720.0F}});
     EXPECT_EQ(cached.cacheRevision, revision);
+}
+
+TEST(BaseWorldTest, StashConnectionExistsOnlyInsideBaseParcel)
+{
+    BaseWorld world;
+    ASSERT_TRUE(world.canAccessStash());
+
+    BaseInput leaveBase;
+    leaveBase.moveDown = true;
+    for (int step{}; step < 30 && world.canAccessStash(); ++step)
+    {
+        static_cast<void>(world.update(leaveBase, 0.1F));
+    }
+
+    EXPECT_FALSE(world.canAccessStash());
 }
 
 TEST(BaseWorldTest, ChangingMainBaseSiteChangesStableLayout)

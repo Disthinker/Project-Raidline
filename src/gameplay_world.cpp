@@ -15,7 +15,6 @@
 
 namespace
 {
-    constexpr float kLegacyShotExtent{8.0f};
     constexpr float kMaximumEnemyStepTime{1.0F / 120.0F};
     constexpr float kMaximumEnemySubsteps{2048.0F};
     constexpr float kEnemyNavigationRefreshSeconds{0.10F};
@@ -32,40 +31,6 @@ namespace
         return point.x >= rect.position.x && point.y >= rect.position.y &&
                point.x <= rect.position.x + rect.size.x &&
                point.y <= rect.position.y + rect.size.y;
-    }
-
-    float distanceToWorldBoundary(
-        Vec2 origin,
-        Vec2 direction,
-        Vec2 worldSize) noexcept
-    {
-        float distance = std::numeric_limits<float>::infinity();
-        const auto consider = [&](float candidate)
-        {
-            if (std::isfinite(candidate) && candidate > 0.0F)
-            {
-                distance = std::min(distance, candidate);
-            }
-        };
-
-        if (direction.x > 0.0F)
-        {
-            consider((worldSize.x - origin.x) / direction.x);
-        }
-        else if (direction.x < 0.0F)
-        {
-            consider((0.0F - origin.x) / direction.x);
-        }
-        if (direction.y > 0.0F)
-        {
-            consider((worldSize.y - origin.y) / direction.y);
-        }
-        else if (direction.y < 0.0F)
-        {
-            consider((0.0F - origin.y) / direction.y);
-        }
-
-        return distance;
     }
 
     const MapDefinition &defaultMap()
@@ -231,50 +196,6 @@ namespace
                deltaY * deltaY;
     }
 
-    std::optional<ShotAimIntent> aimIntentAt(
-        Vec2 aimPoint,
-        Vec2 shotOrigin,
-        const std::vector<Enemy> &enemies) noexcept
-    {
-        const Enemy *selected{};
-        std::optional<HitRegion> selectedRegion;
-        float selectedDistanceSquared =
-            std::numeric_limits<float>::infinity();
-
-        for (const Enemy &enemy : enemies)
-        {
-            if (enemy.isDead() ||
-                enemy.combatTargetId() == kInvalidCombatTargetId)
-            {
-                continue;
-            }
-            const std::optional<HitRegion> region =
-                hitRegionAtPoint(enemy.bounds(), aimPoint);
-            if (!region.has_value())
-            {
-                continue;
-            }
-            const float candidateDistance = distanceSquared(
-                shotOrigin,
-                enemyCenter(enemy));
-            if (candidateDistance >= selectedDistanceSquared)
-            {
-                continue;
-            }
-            selected = &enemy;
-            selectedRegion = region;
-            selectedDistanceSquared = candidateDistance;
-        }
-
-        if (selected == nullptr || !selectedRegion.has_value())
-        {
-            return std::nullopt;
-        }
-        return ShotAimIntent{
-            selected->combatTargetId(),
-            *selectedRegion,
-            false};
-    }
 }
 
 GameplayWorld::GameplayWorld()
@@ -851,10 +772,7 @@ GameplayWorld::GameplayWorld(
           RaidSessionConfig{
               defaultMap().raidRules.durationSeconds,
               defaultMap().raidRules.extractionDurationSeconds}},
-      nextItemInstanceId_{firstItemInstanceId},
-      particleSystem_{
-          0xC0FFEEu,
-          ParticleBurstConfig{}}
+      nextItemInstanceId_{firstItemInstanceId}
 {
     if (firstItemInstanceId == 0)
     {
@@ -1081,36 +999,14 @@ void GameplayWorld::update(
     float deltaTime)
 {
     spaceTransitionedLastUpdate_ = false;
-    hitResultsLastUpdate_.clear();
-    shotFiredLastUpdate_ = false;
+    shooting_.beginFrame(deltaTime);
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
     simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
-    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
-    {
-        shotFeedbackPresentation_.update(deltaTime);
-        for (TracerPresentationSegment &tracer : tracerPresentations_)
-        {
-            tracer.ageSeconds += deltaTime;
-            tracer.remainingSeconds = std::max(
-                0.0F,
-                tracer.remainingSeconds - deltaTime);
-        }
-        std::erase_if(
-            tracerPresentations_,
-            [](const TracerPresentationSegment &tracer)
-            {
-                return tracer.remainingSeconds <= 0.0F;
-            });
-    }
     if (!raidSession_.isActive())
     {
         return;
     }
-
-    // 先更新上一帧已经存在的粒子。
-    particleSystem_.update(
-        deltaTime);
 
     const bool controlsSuppressedAtFrameStart =
         player_.isControlled();
@@ -1141,26 +1037,14 @@ void GameplayWorld::update(
     spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input);
 
     const Vec2 centerAfterMovement = playerCenter(player_);
-    Vec2 desiredAimPosition{
-        centerAfterMovement.x + player_.facingDirection().x * 400.0F,
-        centerAfterMovement.y + player_.facingDirection().y * 400.0F};
-    if (!spaceTransitionedLastUpdate_ && input.aimWorldPosition.has_value())
-    {
-        desiredAimPosition = *input.aimWorldPosition;
-    }
-    weaponAim_.update(
-        desiredAimPosition,
+    shooting_.updateAim(
+        input,
         centerAfterMovement,
+        player_.facingDirection(),
         activeWorldSize(),
-        input.aimDownSights,
         deltaTime,
-        input.aimMotionDelta,
-        AimControlMode::Direct);
-    if (!spaceTransitionedLastUpdate_ && input.aimWorldBounds.has_value())
-    {
-        weaponAim_.constrainToBounds(*input.aimWorldBounds);
-    }
-    static_cast<void>(player_.faceDirection(weaponAim_.actualDirection()));
+        !spaceTransitionedLastUpdate_);
+    static_cast<void>(player_.faceDirection(shooting_.aimDirection()));
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     const float highRiskTimeBeforeUpdate =
@@ -1612,156 +1496,21 @@ void GameplayWorld::update(
         tryPickupOne();
     }
 
-    const std::optional<ShotSpec> shot =
-        weaponFire_.update(
-            !controlsSuppressed &&
-                !input.sprint &&
-                (input.firePressed || input.fireJustPressed),
-            weaponAim_.actualDirection(),
-            deltaTime,
-            WeaponFireContext{
-                .moving = player_.isMoving(),
-                .sprinting = input.sprint && player_.isMoving(),
-                .aimDownSightsProgress =
-                    weaponAim_.aimDownSightsProgress(),
-                .aimDistance = weaponAim_.aimDistance(),
-                .distanceSpreadFactor =
-                    weaponAim_.distanceSpreadFactor(),
-                .overEffectiveRangeFactor =
-                    weaponAim_.overEffectiveRangeFactor(),
-                .reticleControlSpeed =
-                    weaponAim_.reticleControlSpeed(),
-                .forceMaximumSpread =
-                    input.forceMaximumWeaponSpread});
-
-    if (shot.has_value())
-    {
-        shotFiredLastUpdate_ = true;
-        const Vec2 center = playerCenter(player_);
-        const float muzzleDistance =
-            player_.size() / 2.0F +
-            kLegacyShotExtent / 2.0F;
-
-        const Vec2 shotOrigin{
-            center.x + shot->direction.x * muzzleDistance,
-            center.y + shot->direction.y * muzzleDistance};
-
-        const float boundaryDistance = distanceToWorldBoundary(
-            shotOrigin,
-            shot->direction,
-            activeWorldSize());
-        const float maximumDistance = std::max(
-            0.001F,
-            std::min(boundaryDistance, weaponMaximumRange_));
-
-        const ShotResolution resolution = resolveShotCommand(
-            ShotCommand{
-                nextShotId_,
-                shotOrigin,
-                shot->direction,
-                weaponLogicalBallisticSpeed_,
-                kLegacyShotExtent,
-                std::max(
-                    1,
-                    static_cast<int>(std::lround(
-                        static_cast<float>(weaponBaseDamage_) *
-                        weaponAim_.damageMultiplier()))),
-                maximumDistance,
-                aimIntentAt(
-                    weaponAim_.actualWorldPosition(),
-                    shotOrigin,
-                    activeEnemySet),
-                weaponPenetration_});
-
-        if (!resolution.accepted())
-        {
-            std::terminate();
-        }
-
-        logicalBallistics_.emplace_back(
-            resolution,
-            weaponTracerStyle_,
-            weaponTracerLength_,
-            weaponTracerOpacity_,
-            weaponTracerLifetimeSeconds_);
-        if (!shotFeedbackPresentation_.recordAcceptedShot(
-                resolution.shotId,
-                resolution.origin,
-                resolution.direction))
-        {
-            std::terminate();
-        }
-        weaponAim_.applyShotRecoil(shotOrigin);
-        ++nextShotId_;
-    }
-
-    std::vector<ShotCollisionCandidate> collisionCandidates;
-    collisionCandidates.reserve(logicalBallistics_.size());
-    for (LogicalBallisticFlight &flight : logicalBallistics_)
-    {
-        const LogicalBallisticAdvance advance = flight.advance(deltaTime);
-        const float travelled = std::hypot(
-            advance.end.x - advance.start.x,
-            advance.end.y - advance.start.y);
-        if (flight.tracerStyle() != TracerStyle::None &&
-            travelled > 0.0001F)
-        {
-            // A tracer may span several completed simulation steps, but it
-            // never extends ahead of the distance already travelled.
-            const float visibleLength = std::min(
-                flight.tracerLength(),
-                flight.distanceTravelled());
-            const Vec2 visibleStart{
-                advance.end.x - flight.direction().x * visibleLength,
-                advance.end.y - flight.direction().y * visibleLength};
-            TracerPresentationSegment segment{
-                flight.shotId(),
-                visibleStart,
-                advance.end,
-                flight.direction(),
-                flight.tracerStyle(),
-                flight.tracerOpacity(),
-                flight.tracerLifetimeSeconds(),
-                flight.tracerLifetimeSeconds(),
-                0.0F};
-            const auto existing = std::find_if(
-                tracerPresentations_.begin(),
-                tracerPresentations_.end(),
-                [&](const TracerPresentationSegment &candidate)
-                {
-                    return candidate.shotId == flight.shotId();
-                });
-            if (existing == tracerPresentations_.end())
-            {
-                tracerPresentations_.push_back(segment);
-            }
-            else
-            {
-                segment.ageSeconds = existing->ageSeconds;
-                *existing = segment;
-            }
-        }
-        collisionCandidates.push_back(
-            ShotCollisionCandidate{
-                flight.shotId(),
-                advance.start,
-                advance.end,
-                flight.collisionExtent(),
-                flight.damage(),
-                flight.aimIntent(),
-                flight.penetration()});
-    }
-
-    HitResolutionResult hitResult = resolveShotHits(
-        collisionCandidates,
+    const WorldShootingAdvance shootingAdvance = shooting_.advanceShots(
+        input,
+        deltaTime,
+        playerCenter(player_),
+        player_.size(),
+        player_.isMoving(),
+        controlsSuppressed,
+        activeWorldSize(),
         activeEnemySet,
         activeBlockerSet);
 
-    // Hit resolution removes dead Enemy objects. Keep the one-to-one
-    // navigation runtime in the same transaction so the next simulation frame
-    // cannot observe mismatched parallel arrays and terminate.
-    for (auto removed = hitResult.removedEnemyIndices.rbegin();
-         removed != hitResult.removedEnemyIndices.rend();
+    // The shared runtime owns hit resolution. GameplayWorld keeps its Raid-only
+    // parallel navigation and encounter arrays shaped to the remaining targets.
+    for (auto removed = shootingAdvance.removedTargetIndices.rbegin();
+         removed != shootingAdvance.removedTargetIndices.rend();
          ++removed)
     {
         if (*removed >= activeNavigationSet.size() ||
@@ -1784,97 +1533,7 @@ void GameplayWorld::update(
         std::terminate();
     }
 
-    // A large simulation step can resolve a collision before the requested
-    // advance endpoint. Clamp presentation to that authoritative hit so the
-    // longer streak never appears past an obstacle or enemy.
-    for (const HitResult &hit : hitResult.hits)
-    {
-        const auto flight = std::find_if(
-            logicalBallistics_.begin(),
-            logicalBallistics_.end(),
-            [&](const LogicalBallisticFlight &candidate)
-            {
-                return candidate.shotId() == hit.shotId;
-            });
-        const auto tracer = std::find_if(
-            tracerPresentations_.begin(),
-            tracerPresentations_.end(),
-            [&](const TracerPresentationSegment &candidate)
-            {
-                return candidate.shotId == hit.shotId;
-            });
-        if (flight == logicalBallistics_.end() ||
-            tracer == tracerPresentations_.end())
-        {
-            continue;
-        }
-
-        const float hitDistance = std::hypot(
-            hit.position.x - flight->origin().x,
-            hit.position.y - flight->origin().y);
-        const float visibleLength = std::min(
-            flight->tracerLength(),
-            hitDistance);
-        tracer->end = hit.position;
-        tracer->start = Vec2{
-            hit.position.x - flight->direction().x * visibleLength,
-            hit.position.y - flight->direction().y * visibleLength};
-    }
-
-    std::erase_if(
-        logicalBallistics_,
-        [&](const LogicalBallisticFlight &flight)
-        {
-            return std::find(
-                       hitResult.consumedShotIds.begin(),
-                       hitResult.consumedShotIds.end(),
-                       flight.shotId()) !=
-                   hitResult.consumedShotIds.end();
-        });
-
-    for (const LogicalBallisticFlight &flight : logicalBallistics_)
-    {
-        if (!flight.reachedImpact())
-        {
-            continue;
-        }
-        hitResult.hits.push_back(
-            HitResult{
-                flight.shotId(),
-                HitTargetKind::Ground,
-                flight.impactPosition(),
-                0,
-                false,
-                HitRegion::Torso,
-                HitSemantic::Normal});
-    }
-
-    std::erase_if(
-        logicalBallistics_,
-        [](const LogicalBallisticFlight &flight)
-        {
-            return flight.reachedImpact();
-        });
-
-    // 每次有效命中都生成粒子，
-    // 与本次命中是否致命无关。
-    for (
-        const HitResult &hit :
-        hitResult.hits)
-    {
-        particleSystem_.emitImpact(
-            hit.position);
-    }
-    hitResultsLastUpdate_ = hitResult.hits;
-
-    // enemiesKilled 是 std::size_t。
-    // Score 使用 int，因此在职责边界上显式转换。
-    const int killedEnemyCount =
-        static_cast<int>(
-            hitResult.enemiesKilled);
-
-    score_ +=
-        killedEnemyCount *
+    score_ += static_cast<int>(shootingAdvance.targetsKilled) *
         kScorePerEnemy;
 
 }
@@ -1888,51 +1547,24 @@ GameplayWorld::player() const
 const std::vector<LogicalBallisticFlight> &
 GameplayWorld::logicalBallistics() const
 {
-    return logicalBallistics_;
+    return shooting_.logicalBallistics();
 }
 
 std::vector<ShotPresentationSnapshot>
 GameplayWorld::shotPresentationSnapshots() const
 {
-    std::vector<ShotPresentationSnapshot> snapshots;
-    snapshots.reserve(tracerPresentations_.size());
-
-    for (const TracerPresentationSegment &tracer : tracerPresentations_)
-    {
-        const float lifetimeRatio = tracer.lifetimeSeconds > 0.0F
-            ? std::clamp(
-                  tracer.remainingSeconds / tracer.lifetimeSeconds,
-                  0.0F,
-                  1.0F)
-            : 0.0F;
-        constexpr float kTau{6.28318530718F};
-        constexpr float kFlickerFrequencyHz{24.0F};
-        const float flicker = 0.55F + 0.45F *
-            (0.5F + 0.5F * std::sin(
-                tracer.ageSeconds * kTau * kFlickerFrequencyHz +
-                static_cast<float>(tracer.shotId % 17U) * 1.618F));
-        snapshots.push_back(
-            ShotPresentationSnapshot{
-                tracer.shotId,
-                tracer.start,
-                tracer.end,
-                tracer.direction,
-                tracer.style,
-                tracer.opacity * std::sqrt(lifetimeRatio) * flicker});
-    }
-
-    return snapshots;
+    return shooting_.shotPresentationSnapshots();
 }
 
 std::vector<ShotFeedbackPresentationSnapshot>
 GameplayWorld::shotFeedbackPresentationSnapshots() const
 {
-    return shotFeedbackPresentation_.snapshots();
+    return shooting_.shotFeedbackPresentationSnapshots();
 }
 
 Vec2 GameplayWorld::normalizedShotScreenShakeOffset() const noexcept
 {
-    return shotFeedbackPresentation_.normalizedScreenShakeOffset();
+    return shooting_.normalizedScreenShakeOffset();
 }
 
 const std::vector<Enemy> &
@@ -2207,7 +1839,7 @@ const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
 const std::vector<Particle> &
 GameplayWorld::particles() const
 {
-    return particleSystem_.particles();
+    return shooting_.particles();
 }
 
 const std::vector<GroundItem> &
@@ -2438,73 +2070,54 @@ void GameplayWorld::cancelOrdinarySurvivorRescueInteraction() noexcept
 
 float GameplayWorld::weaponSpreadDegrees() const noexcept
 {
-    return weaponFire_.spreadDegrees();
+    return shooting_.spreadDegrees();
 }
 
 float GameplayWorld::weaponVisualRecoilPixels() const noexcept
 {
-    const Vec2 velocity = weaponAim_.recoilPresentationVelocity();
-    return std::min(
-        18.0F,
-        std::sqrt(
-            velocity.x * velocity.x + velocity.y * velocity.y) *
-            0.02F);
+    return shooting_.visualRecoilPixels();
 }
 
 WeaponAccuracyProjection
 GameplayWorld::weaponAccuracyProjection() const noexcept
 {
-    const float distance = weaponAim_.aimDistance();
-    const float spread = weaponFire_.spreadDegreesAtDistance(distance);
-    // worldRadius is the authoritative maximum lateral displacement where
-    // the shot ray crosses the current aim distance. The reticle reads this
-    // same radius; the fixed ten-pixel difference is only center clearance.
-    const float worldRadius = weaponFire_.spreadRadiusAtDistance(distance);
-    return WeaponAccuracyProjection{
-        weaponAim_.actualWorldPosition(),
-        distance,
-        spread,
-        weaponFire_.contextualMinimumSpreadDegrees(),
-        weaponFire_.contextualMaximumSpreadDegrees(),
-        worldRadius,
-        10.0F + worldRadius,
-        weaponAim_.beyondEffectiveRange()};
+    return shooting_.accuracyProjection();
 }
 
 Vec2 GameplayWorld::weaponAimWorldPosition() const noexcept
 {
-    return weaponAim_.actualWorldPosition();
+    return shooting_.aimWorldPosition();
 }
 
 Vec2 GameplayWorld::weaponAimDirection() const noexcept
 {
-    return weaponAim_.actualDirection();
+    return shooting_.aimDirection();
 }
 
 float GameplayWorld::weaponAimDownSightsProgress() const noexcept
 {
-    return weaponAim_.aimDownSightsProgress();
+    return shooting_.aimDownSightsProgress();
 }
 
 bool GameplayWorld::weaponAimBeyondEffectiveRange() const noexcept
 {
-    return weaponAim_.beyondEffectiveRange();
+    return shooting_.aimBeyondEffectiveRange();
 }
 
 bool GameplayWorld::weaponAimBeyondMaximumRange() const noexcept
 {
-    return weaponAim_.beyondMaximumRange();
+    return shooting_.aimBeyondMaximumRange();
 }
 
 const std::vector<HitResult> &
 GameplayWorld::hitResultsLastUpdate() const noexcept
 {
-    return hitResultsLastUpdate_;
+    return shooting_.hitResultsLastUpdate();
 }
 
 bool GameplayWorld::shotFiredLastUpdate() const noexcept
 {
-    return shotFiredLastUpdate_;
+    return shooting_.shotFiredLastUpdate();
 }
 
 std::size_t GameplayWorld::enemiesAlertedLastUpdate() const noexcept
@@ -2549,58 +2162,13 @@ void GameplayWorld::configureWeaponFire(
     const WeaponHandlingParameters &handling,
     bool preserveWeaponFireTransientState)
 {
-    const WeaponFireConfig fireConfig{
-        definition.shotIntervalSeconds,
-        handling.minimumSpreadDegrees,
-        handling.maximumSpreadDegrees,
-        handling.spreadPerShotDegrees,
-        handling.recoveryDelaySeconds,
-        handling.spreadRecoveryDegreesPerSecond,
-        handling.aimDownSightsAccuracyMultiplier,
-        handling.aimDownSightsStabilityMultiplier,
-        handling.movingSpreadFraction,
-        handling.sprintingSpreadFraction,
-        handling.reticleMotionSpreadDegreesPerSecond,
-        120.0F,
-        1800.0F,
-        handling.nearDistanceSpreadScale,
-        handling.distanceBloomAtEffectiveRange,
-        1.50F};
-    const WeaponAimConfig aimConfig{
-        handling.maximumReticleSpeed,
-        handling.reticleControlAcceleration,
-        handling.recoilInitialSpeed,
-        handling.recoilDeceleration,
-        handling.recoilLateralRatio,
-        handling.recoilBendDurationSeconds,
-        handling.aimDownSightsDurationSeconds,
-        definition.effectiveRange,
-        definition.maximumRange};
-    if (preserveWeaponFireTransientState)
-    {
-        weaponFire_.reconfigure(fireConfig);
-    }
-    else
-    {
-        weaponFire_ = WeaponFireState{fireConfig};
-    }
-    // A weapon change owns fire cadence and spread state, but it does not own
-    // the player's world-space aiming point. Reconfiguring the existing aim
-    // state keeps the relative-input anchor, displaced reticle position and
-    // any bounded recoil motion continuous across a completed switch.
-    weaponAim_.reconfigure(aimConfig);
-    weaponBaseDamage_ = definition.baseDamage;
-    weaponMaximumRange_ = definition.maximumRange;
-    weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;
-    weaponTracerStyle_ = TracerStyle::Weak;
-    weaponTracerLength_ = handling.weakTracerLength;
-    weaponTracerOpacity_ = handling.weakTracerOpacity;
-    weaponTracerLifetimeSeconds_ = handling.weakTracerLifetimeSeconds;
+    shooting_.configureWeapon(
+        definition, handling, preserveWeaponFireTransientState);
 }
 
 void GameplayWorld::configureWeaponAmmunition(int penetration) noexcept
 {
-    weaponPenetration_ = std::max(0, penetration);
+    shooting_.configureAmmunition(penetration);
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept
@@ -3377,7 +2945,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
         static_cast<void>(player_.setPosition(interior->interiorSpawn));
     }
     clearSpatialTransientPresentation();
-    weaponAim_.reanchor(
+    shooting_.reanchor(
         playerCenter(player_),
         player_.facingDirection(),
         activeWorldSize());
@@ -3386,11 +2954,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
 
 void GameplayWorld::clearSpatialTransientPresentation() noexcept
 {
-    logicalBallistics_.clear();
-    tracerPresentations_.clear();
-    particleSystem_.clear();
-    shotFeedbackPresentation_.reset();
-    hitResultsLastUpdate_.clear();
+    shooting_.clearSpatialTransientPresentation();
     pendingPlayerDamageObservations_.clear();
 }
 

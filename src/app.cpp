@@ -1421,6 +1421,51 @@ GameplayInput App::makeGameplayInput() const
     return input;
 }
 
+GameplayInput App::makeBaseGameplayInput() const
+{
+    GameplayInput input{};
+    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
+    input.sprint = input_.isShiftPressed();
+    input.fireJustPressed =
+        input_.wasActionJustPressed(GameAction::Fire) ||
+        input_.wasPrimaryPointerJustPressed();
+    input.firePressed =
+        input_.isActionPressed(GameAction::Fire) ||
+        input_.isPrimaryPointerPressed();
+    input.aimDownSights = input_.isSecondaryPointerPressed();
+    input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
+
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 aimCamera = baseWorldCameraOffset();
+    if (pointerWorldPosition_.has_value())
+    {
+        input.aimWorldPosition = raidScreenToWorld(
+            *pointerWorldPosition_, aimCamera);
+    }
+    input.aimWorldBounds = raidReticleWorldBounds(
+        aimCamera,
+        world.worldSize(),
+        {static_cast<float>(kWindowWidth),
+         static_cast<float>(kWindowHeight)},
+        kReticleViewportOutsideMargin);
+    input.aimMotionDelta = relativeMouseModeActive_
+        ? std::optional<Vec2>{pendingRelativeAimMotion_}
+        : std::nullopt;
+    input.interactJustPressed =
+        input_.wasActionJustPressed(GameAction::Interact);
+    input.interactPressed = input_.isActionPressed(GameAction::Interact);
+    if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
+        input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon2))
+        input.weaponSlotJustPressed = EquipmentSlotKind::SecondaryWeapon;
+    else if (input_.wasActionJustPressed(GameAction::SelectWeapon3))
+        input.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
+    return input;
+}
+
 bool App::handleScreenConfirm()
 {
     bool transitioned{false};
@@ -2086,6 +2131,7 @@ void App::updateBase(float deltaTime)
     gameSession_.advanceBaseWorldClock(deltaTime);
     if (gameSession_.baseThreatProjection().warningActive)
     {
+        tacticalMapOpen_ = false;
         closeInventory();
         gameFlow_.closeBaseFacility();
         lostRaidRecordsOpen_ = false;
@@ -2126,11 +2172,31 @@ void App::updateBase(float deltaTime)
         return;
     }
 
+    const bool tacticalToggle = input_.wasActionJustPressed(
+        GameAction::ToggleTacticalMap);
+    const bool escapePressed = input_.wasActionJustPressed(
+        GameAction::InventoryCancel);
+    if (tacticalMapOpen_ && (tacticalToggle || escapePressed))
+    {
+        tacticalMapOpen_ = false;
+        uiMessage_ = "HOME REGION MAP CLOSED";
+    }
+    else if (tacticalToggle &&
+             !inventoryOverlayState_.isOpen() &&
+             !gameFlow_.activeBaseFacility().has_value() &&
+             !developerWeaponPanelOpen_)
+    {
+        tacticalMapOpen_ = true;
+        uiMessage_ = "HOME REGION MAP OPEN - WORLD CONTINUES";
+        input_.suppressPrimaryPointerUntilRelease();
+    }
+
     const InventoryFrameInputDecision inventoryDecision =
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
-            input_.wasActionJustPressed(GameAction::ToggleInventory),
-            input_.wasActionJustPressed(GameAction::InventoryCancel));
+            !tacticalMapOpen_ &&
+                input_.wasActionJustPressed(GameAction::ToggleInventory),
+            escapePressed);
 
     if (inventoryDecision.controlAction == InventoryFrameControlAction::OpenInventory)
     {
@@ -2138,8 +2204,16 @@ void App::updateBase(float deltaTime)
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
-        inventoryOverlayState_.openContainerInventory();
-        uiMessage_.clear();
+        if (gameFlow_.baseWorld().canAccessStash())
+        {
+            inventoryOverlayState_.openContainerInventory();
+            uiMessage_.clear();
+        }
+        else
+        {
+            inventoryOverlayState_.openPlayerInventory();
+            uiMessage_ = "WAREHOUSE DISCONNECTED - RETURN TO BASE PARCEL";
+        }
     }
     else if (inventoryDecision.controlAction == InventoryFrameControlAction::CloseInventory)
     {
@@ -2204,15 +2278,37 @@ void App::updateBase(float deltaTime)
         return;
     }
 
-    BaseInput input;
-    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
-    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
-    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
-    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
-    input.sprint = input_.isShiftPressed();
-    input.interactJustPressed =
-        input_.wasActionJustPressed(GameAction::Interact);
+    BaseInput input = makeBaseGameplayInput();
+    if (tacticalMapOpen_)
+    {
+        input.movementSpeedMultiplier = 0.45F;
+        input.sprint = false;
+        input.fireJustPressed = false;
+        input.firePressed = false;
+        input.aimDownSights = false;
+        input.weaponSlotJustPressed.reset();
+        input.interactJustPressed = false;
+        input.interactPressed = false;
+    }
     gameFlow_.updateBase(input, deltaTime);
+    consumePresentationAudioEvents();
+    const BaseWorld &baseWorld = gameFlow_.baseWorld();
+    if (baseWorld.shotFiredLastUpdate())
+    {
+        const auto tuning = gameSession_.developerWeaponTuning();
+        gameAudio_.play(
+            tuning.has_value() && tuning->weaponUse.automaticFire
+                ? SoundEventId::WeaponRifleFire
+                : SoundEventId::WeaponPistolFire);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
+    }
+    for (const HitResult &hit : baseWorld.hitResultsLastUpdate())
+    {
+        gameAudio_.play(
+            hit.targetKind == HitTargetKind::Obstacle
+                ? SoundEventId::ImpactObstacle
+                : SoundEventId::ImpactGround);
+    }
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage)
     {
         gameFlow_.closeBaseFacility();
@@ -3646,7 +3742,8 @@ void App::handleProfileInventoryUiEvent(
     const InventoryUiEvent &event,
     bool inRaid)
 {
-    const bool includeStash = !inRaid;
+    const bool includeStash = !inRaid &&
+        inventoryOverlayState_.showsExternalContainer();
     const ProfileState &profile = gameSession_.profile();
 
     if (std::holds_alternative<InventoryRotateEvent>(event))
@@ -3669,7 +3766,7 @@ void App::handleProfileInventoryUiEvent(
             return;
         }
         const auto hit = profileAssetHitAt(
-            profile, *quick.pointerPosition, true);
+            profile, *quick.pointerPosition, includeStash);
         if (!hit.has_value() || hit->asset == nullptr)
         {
             return;
@@ -3692,6 +3789,12 @@ void App::handleProfileInventoryUiEvent(
                         asset.orientation},
                     *equipmentTarget},
                 false);
+            return;
+        }
+        if (!includeStash)
+        {
+            uiMessage_ = "NO QUICK-TRANSFER DESTINATION";
+            gameAudio_.play(SoundEventId::UiDeny);
             return;
         }
         std::vector<ProfileContainerId> destinations;
@@ -3884,8 +3987,10 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     {
         return;
     }
+    const bool includeStash = !inRaid &&
+        inventoryOverlayState_.showsExternalContainer();
     const auto hit = profileAssetHitAt(
-        gameSession_.profile(), position, !inRaid);
+        gameSession_.profile(), position, includeStash);
     if (!hit.has_value() || hit->asset == nullptr)
     {
         profileContextMenu_.reset();
@@ -4714,7 +4819,8 @@ void App::processEvents()
                         pointerWorldPosition_->y - previousPointer->y};
                 }
             }
-            if (gameFlow_.state() == GameFlowState::Raid &&
+            if ((gameFlow_.state() == GameFlowState::Raid ||
+                 gameFlow_.state() == GameFlowState::Base) &&
                 !inventoryOverlayState_.isOpen() &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
@@ -5097,9 +5203,13 @@ void App::update(float deltaTime)
         developerWeaponPanelOpen_ = false;
         developerWeaponPanelBlocksGameplayThisFrame_ = false;
     }
-    if (gameFlow_.state() != GameFlowState::Raid)
+    if (gameFlow_.state() != GameFlowState::Base &&
+        gameFlow_.state() != GameFlowState::Raid)
     {
         tacticalMapOpen_ = false;
+    }
+    if (gameFlow_.state() != GameFlowState::Raid)
+    {
         developerCrisisRevealEnabled_ = false;
     }
     const bool escapePressed = input_.wasActionJustPressed(
@@ -7984,9 +8094,13 @@ void App::renderShotPresentations()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
+    const std::vector<ShotPresentationSnapshot> shots =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().shotPresentationSnapshots()
+        : gameSession_.world().shotPresentationSnapshots();
     for (
         const ShotPresentationSnapshot &shot :
-        gameSession_.world().shotPresentationSnapshots())
+        shots)
     {
         if (shot.tracerStyle == TracerStyle::None)
         {
@@ -8094,8 +8208,9 @@ Vec2 App::baseWorldCameraOffset() const noexcept
 
 Vec2 App::raidWorldScreenShakePixels() const noexcept
 {
-    const Vec2 normalized =
-        gameSession_.world().normalizedShotScreenShakeOffset();
+    const Vec2 normalized = gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().normalizedShotScreenShakeOffset()
+        : gameSession_.world().normalizedShotScreenShakeOffset();
     // Deliberately below the threshold that would displace the crosshair or
     // interfere with ordinary visual reading. Only the world viewport moves.
     return Vec2{normalized.x * 1.8F, normalized.y * 1.3F};
@@ -8107,8 +8222,11 @@ void App::renderShotFeedbackPresentations()
     constexpr float kTau{6.28318530718F};
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const ShotFeedbackPresentationSnapshot &shot :
-         gameSession_.world().shotFeedbackPresentationSnapshots())
+    const std::vector<ShotFeedbackPresentationSnapshot> shots =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().shotFeedbackPresentationSnapshots()
+        : gameSession_.world().shotFeedbackPresentationSnapshots();
+    for (const ShotFeedbackPresentationSnapshot &shot : shots)
     {
         const Vec2 normal{-shot.direction.y, shot.direction.x};
 
@@ -8381,10 +8499,15 @@ void App::renderBallisticBlockers()
 
 void App::syncRaidPointerCapture() noexcept
 {
+    const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
+        !gameFlow_.activeBaseFacility().has_value() &&
+        !gameSession_.baseThreatProjection().warningActive;
+    const bool raidWorldActive = gameFlow_.isRaidScreen() &&
+        gameSession_.world().raidSession().isActive();
     const bool shouldCapture = shouldCaptureRaidPointer(
         RaidPointerCaptureContext{
-            gameFlow_.isRaidScreen(),
-            gameSession_.world().raidSession().isActive(),
+            raidWorldActive || baseWorldActive,
+            raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen(),
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
@@ -8418,24 +8541,31 @@ void App::syncRaidPointerCapture() noexcept
 
 void App::renderAimCrosshair()
 {
+    const bool inBaseWorld = gameFlow_.state() == GameFlowState::Base &&
+        !gameFlow_.activeBaseFacility().has_value() &&
+        !gameSession_.baseThreatProjection().warningActive;
+    const bool inRaidWorld = gameFlow_.isRaidScreen() &&
+        gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         pauseMenu_.isOpen() ||
-        !gameSession_.world().raidSession().isActive())
+        (!inBaseWorld && !inRaidWorld))
     {
         return;
     }
 
-    const WeaponAccuracyProjection accuracy =
-        gameSession_.world().weaponAccuracyProjection();
+    const WeaponAccuracyProjection accuracy = inBaseWorld
+        ? gameFlow_.baseWorld().weaponAccuracyProjection()
+        : gameSession_.world().weaponAccuracyProjection();
     const float feedbackRadius = std::round(std::max(
         10.0F,
         accuracy.reticleRadius));
     constexpr float kArmLength{15.0F};
-    const Vec2 screenCenter = raidWorldToScreen(
-        accuracy.center, raidWorldCameraOffset());
+    const Vec2 camera = inBaseWorld
+        ? baseWorldCameraOffset() : raidWorldCameraOffset();
+    const Vec2 screenCenter = raidWorldToScreen(accuracy.center, camera);
     const Vec2 center{
         std::round(screenCenter.x),
         std::round(screenCenter.y)};
@@ -9071,7 +9201,11 @@ void App::renderParticles()
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    for (const Particle &particle : gameSession_.world().particles())
+    const std::vector<Particle> &particles =
+        gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().particles()
+        : gameSession_.world().particles();
+    for (const Particle &particle : particles)
     {
         const float life = particle.normalizedLifetime();
         const Vec2 center = particle.position();
@@ -9356,10 +9490,11 @@ void App::renderBaseWorld()
 {
     const BaseWorld &world = gameFlow_.baseWorld();
     const Vec2 camera = baseWorldCameraOffset();
+    const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 worldSize = world.worldSize();
     const SDL_Rect worldViewport{
-        -static_cast<int>(std::lround(camera.x)),
-        -static_cast<int>(std::lround(camera.y)),
+        static_cast<int>(std::lround(shakePixels.x - camera.x)),
+        static_cast<int>(std::lround(shakePixels.y - camera.y)),
         static_cast<int>(std::ceil(worldSize.x)),
         static_cast<int>(std::ceil(worldSize.y))};
     static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
@@ -9509,6 +9644,9 @@ void App::renderBaseWorld()
         world.playerFacingDirection(),
         world.playerIsMoving(),
         world.playerAnimationFrame());
+    renderShotPresentations();
+    renderShotFeedbackPresentations();
+    renderParticles();
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
 
@@ -9519,6 +9657,143 @@ void App::renderBaseWorld()
             baseFacilityName(*facility));
         uiTextRenderer_.render(renderer_, 520.0F, 650.0F, prompt.c_str());
     }
+}
+
+void App::renderHomeRegionMap()
+{
+    if (!tacticalMapOpen_ || gameFlow_.state() != GameFlowState::Base)
+    {
+        return;
+    }
+
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const HomeRegionLayout &layout = world.layout();
+    const Vec2 worldSize = world.worldSize();
+    const SDL_FRect shade{0.0F, 0.0F,
+                          static_cast<float>(kWindowWidth),
+                          static_cast<float>(kWindowHeight)};
+    const SDL_FRect panel{104.0F, 54.0F, 1072.0F, 612.0F};
+    const SDL_FRect chart{192.0F, 114.0F, 896.0F, 504.0F};
+    const float cellWidth = chart.w / static_cast<float>(layout.columns);
+    const float cellHeight = chart.h / static_cast<float>(layout.rows);
+    const auto screenPoint = [chart, worldSize](Vec2 point)
+    {
+        return Vec2{
+            chart.x + point.x / worldSize.x * chart.w,
+            chart.y + point.y / worldSize.y * chart.h};
+    };
+    const auto screenRect = [chart, worldSize](ContentRect rect)
+    {
+        return SDL_FRect{
+            chart.x + rect.position.x / worldSize.x * chart.w,
+            chart.y + rect.position.y / worldSize.y * chart.h,
+            rect.size.x / worldSize.x * chart.w,
+            rect.size.y / worldSize.y * chart.h};
+    };
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 220);
+    SDL_RenderFillRect(renderer_, &shade);
+    SDL_SetRenderDrawColor(renderer_, 12, 22, 25, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    SDL_SetRenderDrawColor(renderer_, 42, 50, 38, 255);
+    SDL_RenderFillRect(renderer_, &chart);
+    for (const RaidTerrainSpan &span : layout.terrainSpans)
+    {
+        switch (span.kind)
+        {
+        case RaidTerrainKind::Grass:
+            SDL_SetRenderDrawColor(renderer_, 68, 91, 56, 235); break;
+        case RaidTerrainKind::Concrete:
+            SDL_SetRenderDrawColor(renderer_, 104, 106, 98, 235); break;
+        case RaidTerrainKind::Dirt:
+            SDL_SetRenderDrawColor(renderer_, 104, 79, 50, 235); break;
+        case RaidTerrainKind::Asphalt:
+            SDL_SetRenderDrawColor(renderer_, 62, 66, 64, 235); break;
+        case RaidTerrainKind::Puddle:
+            SDL_SetRenderDrawColor(renderer_, 48, 86, 98, 235); break;
+        }
+        const SDL_FRect terrain{
+            chart.x + static_cast<float>(span.firstColumn) * cellWidth,
+            chart.y + static_cast<float>(span.row) * cellHeight,
+            static_cast<float>(span.length) * cellWidth + 0.25F,
+            cellHeight + 0.25F};
+        SDL_RenderFillRect(renderer_, &terrain);
+    }
+
+    for (const RaidOutdoorRoadCell &road : layout.roadCells)
+    {
+        if (road.kind == RaidOutdoorRoadKind::Primary)
+            SDL_SetRenderDrawColor(renderer_, 146, 142, 116, 235);
+        else if (road.kind == RaidOutdoorRoadKind::Secondary)
+            SDL_SetRenderDrawColor(renderer_, 112, 116, 98, 225);
+        else
+            SDL_SetRenderDrawColor(renderer_, 82, 98, 86, 215);
+        const SDL_FRect roadCell{
+            chart.x + static_cast<float>(road.column) * cellWidth,
+            chart.y + static_cast<float>(road.row) * cellHeight,
+            cellWidth + 0.25F,
+            cellHeight + 0.25F};
+        SDL_RenderFillRect(renderer_, &roadCell);
+    }
+
+    for (const RaidOutdoorPropSnapshot &prop : layout.props)
+    {
+        SDL_FRect bounds = screenRect(prop.bounds);
+        bounds.w = std::max(bounds.w, prop.collidable ? 2.0F : 1.0F);
+        bounds.h = std::max(bounds.h, prop.collidable ? 2.0F : 1.0F);
+        SDL_SetRenderDrawColor(
+            renderer_, prop.collidable ? 82 : 104,
+            prop.collidable ? 76 : 92,
+            prop.collidable ? 62 : 72,
+            prop.collidable ? 235 : 155);
+        SDL_RenderFillRect(renderer_, &bounds);
+    }
+
+    const SDL_FRect baseBounds = screenRect(world.baseParcel());
+    SDL_SetRenderDrawColor(renderer_, 30, 92, 72, 185);
+    SDL_RenderFillRect(renderer_, &baseBounds);
+    SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
+    SDL_RenderRect(renderer_, &baseBounds);
+    for (const BaseFacility &facility : world.facilities())
+    {
+        SDL_FRect bounds = screenRect(ContentRect{
+            facility.bounds.position, facility.bounds.size});
+        bounds.w = std::max(bounds.w, 4.0F);
+        bounds.h = std::max(bounds.h, 4.0F);
+        SDL_SetRenderDrawColor(renderer_, 174, 198, 184, 235);
+        SDL_RenderFillRect(renderer_, &bounds);
+    }
+
+    for (const HomeRegionDistrictSnapshot &district : layout.districts)
+    {
+        const Vec2 label = screenPoint(district.labelPosition);
+        uiTextRenderer_.render(
+            renderer_, label.x, label.y,
+            homeRegionDistrictName(district.kind));
+    }
+
+    const Vec2 player = screenPoint(Vec2{
+        world.playerPosition().x + world.playerSize().x * 0.5F,
+        world.playerPosition().y + world.playerSize().y * 0.5F});
+    SDL_SetRenderDrawColor(renderer_, 238, 242, 224, 255);
+    SDL_RenderLine(renderer_, player.x - 7.0F, player.y,
+                   player.x + 7.0F, player.y);
+    SDL_RenderLine(renderer_, player.x, player.y - 7.0F,
+                   player.x, player.y + 7.0F);
+
+    uiTextRenderer_.render(
+        renderer_, 144.0F, 76.0F,
+        "HOME REGION MAP | M/ESC CLOSE | WORLD CONTINUES");
+    uiTextRenderer_.render(
+        renderer_, 144.0F, 638.0F,
+        world.canAccessStash()
+            ? "WAREHOUSE LINK: CONNECTED INSIDE BASE PARCEL"
+            : "WAREHOUSE LINK: DISCONNECTED OUTSIDE BASE PARCEL");
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderProfileAsset(
@@ -12959,6 +13234,7 @@ void App::renderLostRaidRecords()
 void App::renderBase()
 {
     renderBaseWorld();
+    renderAimCrosshair();
 
     SDL_SetRenderDrawColor(
         renderer_,
@@ -13090,8 +13366,10 @@ void App::renderBase()
     }
     if (inventoryOverlayState_.isOpen())
     {
-        renderProfileInventory(true, false);
+        renderProfileInventory(
+            inventoryOverlayState_.showsExternalContainer(), false);
     }
+    renderHomeRegionMap();
     renderBaseSiegeWarning();
 }
 
