@@ -45,7 +45,7 @@ Project_Raidline.exe
 - `GameRuntime` 负责进程级依赖构造，不保存具体 Raid 或 Base 玩法状态。
 - `GameSession` 是已加载档案的组合根，持有一个 `ProfileState` 和当前活动运行时。Persistent Base 已把 Profile 与 BaseRuntime 接入；Extraction Loop 已让 Alpha `GameplayWorld` 从 pending Raid 快照构造，并只通过 GameSession 命令读写 Profile 资产。
 - `GameFlow` 负责 MainMenu、Base、Raid、RaidResult 等顶层转换；库存、商店和设置是 UI 上下文，不扩张顶层领域状态机。
-- `BaseRuntime` 只保存玩家位置、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。权威 WorldClock、普通居民聚合人数和床位容量因每日口粮、宿舍投影、主动休息和普通幸存者接纳进入 ProfileState；建设、具名 NPC、岗位与其他日程仍须等待真正消费者。
+- `BaseRuntime` 只保存玩家位置、Home Region 确定性室外布局、可见区投影、碰撞、设施交互范围、稳定 FacilityId 和短期交互上下文。安全基地是 Home Region 中的固定内部结构板块；外围环境不会因此获得 Raid 的敌人、Loot、撤离或 Settlement 权威。权威 WorldClock、居民、设施、资产和区域地点继续保存在 ProfileState。
 - `RaidRuntime` 是 `GameplayWorld` 的目标名称和边界，拥有单局玩家运行值、敌人、AI、动作、射击和空间模拟；它不拥有长期 Stash、货币或唯一资产真值。
 - Travel、Siege 等后续活动只在对应产品切片启动时加入 `ActiveActivity`，不能以空占位提前进入保存格式。
 

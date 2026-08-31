@@ -35,6 +35,7 @@ bool GameFlow::startNewGame(std::string profileId)
     state_ = GameFlowState::Base;
     persistentAlphaMode_ = true;
     activeBaseFacility_.reset();
+    syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
     return true;
 }
@@ -51,6 +52,7 @@ bool GameFlow::continueGame()
         ? GameFlowState::RaidResult
         : GameFlowState::Base;
     activeBaseFacility_.reset();
+    syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
     return true;
 }
@@ -130,6 +132,7 @@ void GameFlow::updateBase(
     {
         return;
     }
+    syncBaseWorldSite();
     activeBaseFacility_ = baseWorld_.update(input, deltaTime);
     if (activeBaseFacility_.has_value())
     {
@@ -189,6 +192,7 @@ bool GameFlow::returnToBase() noexcept
           gameSession_.profile().lastRaidResult->outcome ==
               RaidResultOutcome::Extracted
         : gameSession_.settlement().state() == RaidSettlementState::Extracted;
+    syncBaseWorldSite();
     if (extracted)
     {
         baseWorld_.resetAtRaidGate();
@@ -200,6 +204,15 @@ bool GameFlow::returnToBase() noexcept
     activeBaseFacility_.reset();
     state_ = GameFlowState::Base;
     return true;
+}
+
+void GameFlow::syncBaseWorldSite()
+{
+    if (!persistentAlphaMode_)
+        return;
+    baseWorld_.configureSite(
+        gameSession_.profile().regionalOperations.technologyCore
+            .baseSiteDefinitionId.value());
 }
 
 bool GameFlow::returnToMainMenu() noexcept

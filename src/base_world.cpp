@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 #include "collision.h"
@@ -33,15 +34,16 @@ float resolveHorizontalMovement(
     Vec2 position,
     Vec2 size,
     float desiredX,
-    const std::array<BaseFacility, 7> &facilities) noexcept
+    const RaidSpaceBlockerIndex &index,
+    const std::vector<std::size_t> &candidates) noexcept
 {
     float resolvedX = desiredX;
-    for (const BaseFacility &facility : facilities)
+    for (const std::size_t candidate : candidates)
     {
         resolvedX = resolveHorizontalCollision(
             Rect{position, size},
             resolvedX,
-            facility.bounds);
+            index.blockerBounds(candidate));
     }
     return resolvedX;
 }
@@ -50,54 +52,96 @@ float resolveVerticalMovement(
     Vec2 position,
     Vec2 size,
     float desiredY,
-    const std::array<BaseFacility, 7> &facilities) noexcept
+    const RaidSpaceBlockerIndex &index,
+    const std::vector<std::size_t> &candidates) noexcept
 {
     float resolvedY = desiredY;
-    for (const BaseFacility &facility : facilities)
+    for (const std::size_t candidate : candidates)
     {
         resolvedY = resolveVerticalCollision(
             Rect{position, size},
             resolvedY,
-            facility.bounds);
+            index.blockerBounds(candidate));
     }
     return resolvedY;
+}
+
+bool finiteRect(ContentRect bounds) noexcept
+{
+    return std::isfinite(bounds.position.x) &&
+        std::isfinite(bounds.position.y) &&
+        std::isfinite(bounds.size.x) && std::isfinite(bounds.size.y) &&
+        bounds.size.x > 0.0F && bounds.size.y > 0.0F;
 }
 }
 
 BaseWorld::BaseWorld()
     : playerMovementAnimator_{
           makeBasePlayerMoveClip(),
-          AnimationPlayMode::Loop},
-      facilities_{
-          BaseFacility{
-              BaseFacilityKind::Storage,
-              Rect{{76.0F, 176.0F}, {228.0F, 188.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::Supply,
-              Rect{{976.0F, 176.0F}, {228.0F, 188.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::Allocation,
-              Rect{{76.0F, 470.0F}, {228.0F, 140.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::Medical,
-              Rect{{976.0F, 470.0F}, {228.0F, 140.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::Dormitory,
-              Rect{{350.0F, 500.0F}, {220.0F, 110.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::Workshop,
-              Rect{{700.0F, 340.0F}, {220.0F, 110.0F}},
-              64.0F},
-          BaseFacility{
-              BaseFacilityKind::RaidGate,
-              Rect{{520.0F, 28.0F}, {240.0F, 104.0F}},
-              72.0F}}
+          AnimationPlayMode::Loop}
 {
+    rebuildSite("regional_base_site.greyline_yard");
+}
+
+void BaseWorld::configureSite(std::string_view siteDefinitionId)
+{
+    const std::string normalized = siteDefinitionId.empty()
+        ? "regional_base_site.greyline_yard" : std::string{siteDefinitionId};
+    if (normalized != siteDefinitionId_)
+        rebuildSite(normalized);
+}
+
+void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
+{
+    siteDefinitionId_ = siteDefinitionId;
+    layout_ = generateHomeRegionLayout(siteDefinitionId_);
+    walkableBounds_ = Rect{{24.0F, 24.0F},
+                           {layout_.worldSize.x - 48.0F,
+                            layout_.worldSize.y - 48.0F}};
+    const Vec2 origin = layout_.baseParcel.position;
+    facilities_ = {
+        BaseFacility{BaseFacilityKind::Storage,
+                     {{origin.x + 80.0F, origin.y + 220.0F},
+                      {300.0F, 220.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::Supply,
+                     {{origin.x + 1220.0F, origin.y + 220.0F},
+                      {300.0F, 220.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::Allocation,
+                     {{origin.x + 80.0F, origin.y + 760.0F},
+                      {300.0F, 180.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::Medical,
+                     {{origin.x + 1220.0F, origin.y + 760.0F},
+                      {300.0F, 180.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::Dormitory,
+                     {{origin.x + 460.0F, origin.y + 790.0F},
+                      {270.0F, 150.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::Workshop,
+                     {{origin.x + 870.0F, origin.y + 520.0F},
+                      {270.0F, 170.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::RaidGate,
+                     {{origin.x + 650.0F, origin.y + 40.0F},
+                      {300.0F, 130.0F}}, 82.0F}};
+    rebuildCollisionIndex();
+    presentationCache_ = {};
+    presentationCacheValid_ = false;
+    resetAtMedicalPoint();
+}
+
+void BaseWorld::rebuildCollisionIndex()
+{
+    movementBlockers_.clear();
+    BallisticBlockerId id{1U};
+    movementBlockers_.reserve(layout_.movementBlockers.size() +
+                              facilities_.size());
+    for (const ContentRect &bounds : layout_.movementBlockers)
+        movementBlockers_.push_back(BallisticBlocker{
+            id++, Rect{bounds.position, bounds.size}});
+    for (const BaseFacility &facility : facilities_)
+        movementBlockers_.push_back(BallisticBlocker{id++, facility.bounds});
+    movementBlockerIndex_ = RaidSpaceBlockerIndex::build(
+        layout_.worldSize, movementBlockers_, 320.0F);
+    if (!movementBlockerIndex_.has_value())
+        throw std::logic_error{"Home Region blocker index is invalid"};
 }
 
 std::optional<BaseFacilityKind> BaseWorld::update(
@@ -144,11 +188,24 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 playerPosition_.x + direction.x * speed * deltaTime,
                 walkableBounds_.position.x,
                 maximumPlayerX);
+            const float desiredYForQuery = std::clamp(
+                playerPosition_.y + direction.y * speed * deltaTime,
+                walkableBounds_.position.y,
+                maximumY);
+            const Rect queryBounds{
+                {std::min(playerPosition_.x, desiredX),
+                 std::min(playerPosition_.y, desiredYForQuery)},
+                {std::abs(desiredX - playerPosition_.x) + playerSize_.x,
+                 std::abs(desiredYForQuery - playerPosition_.y) +
+                     playerSize_.y}};
+            movementBlockerIndex_->queryCandidateIndices(
+                queryBounds, movementCandidates_);
             playerPosition_.x = resolveHorizontalMovement(
                 playerPosition_,
                 playerSize_,
                 desiredX,
-                facilities_);
+                *movementBlockerIndex_,
+                movementCandidates_);
 
             const float desiredY = std::clamp(
                 playerPosition_.y + direction.y * speed * deltaTime,
@@ -158,7 +215,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 playerPosition_,
                 playerSize_,
                 desiredY,
-                facilities_);
+                *movementBlockerIndex_,
+                movementCandidates_);
         }
         else
         {
@@ -204,6 +262,107 @@ const std::array<BaseFacility, 7> &BaseWorld::facilities() const noexcept
     return facilities_;
 }
 
+Vec2 BaseWorld::worldSize() const noexcept
+{
+    return layout_.worldSize;
+}
+
+const ContentRect &BaseWorld::baseParcel() const noexcept
+{
+    return layout_.baseParcel;
+}
+
+const HomeRegionLayout &BaseWorld::layout() const noexcept
+{
+    return layout_;
+}
+
+const HomeRegionPresentationProjection &BaseWorld::outdoorPresentation(
+    ContentRect visibleWorldBounds) const
+{
+    if (!finiteRect(visibleWorldBounds))
+    {
+        presentationCache_ = {};
+        presentationCacheValid_ = false;
+        return presentationCache_;
+    }
+    const float chunkWorldSize = static_cast<float>(layout_.chunkSizeCells) *
+        (layout_.worldSize.x / static_cast<float>(layout_.columns));
+    const std::uint32_t chunkColumns =
+        (layout_.columns + layout_.chunkSizeCells - 1U) /
+        layout_.chunkSizeCells;
+    const std::uint32_t chunkRows =
+        (layout_.rows + layout_.chunkSizeCells - 1U) /
+        layout_.chunkSizeCells;
+    const std::uint32_t firstColumn = std::min(
+        static_cast<std::uint32_t>(std::max(0.0F,
+            visibleWorldBounds.position.x - 160.0F) / chunkWorldSize),
+        chunkColumns - 1U);
+    const std::uint32_t lastColumn = std::min(
+        static_cast<std::uint32_t>((visibleWorldBounds.position.x +
+            visibleWorldBounds.size.x + 160.0F) / chunkWorldSize),
+        chunkColumns - 1U);
+    const std::uint32_t firstRow = std::min(
+        static_cast<std::uint32_t>(std::max(0.0F,
+            visibleWorldBounds.position.y - 160.0F) / chunkWorldSize),
+        chunkRows - 1U);
+    const std::uint32_t lastRow = std::min(
+        static_cast<std::uint32_t>((visibleWorldBounds.position.y +
+            visibleWorldBounds.size.y + 160.0F) / chunkWorldSize),
+        chunkRows - 1U);
+    if (presentationCacheValid_ &&
+        firstColumn == cachedFirstChunkColumn_ &&
+        lastColumn == cachedLastChunkColumn_ &&
+        firstRow == cachedFirstChunkRow_ && lastRow == cachedLastChunkRow_)
+        return presentationCache_;
+
+    cachedFirstChunkColumn_ = firstColumn;
+    cachedLastChunkColumn_ = lastColumn;
+    cachedFirstChunkRow_ = firstRow;
+    cachedLastChunkRow_ = lastRow;
+    presentationCacheValid_ = true;
+    HomeRegionPresentationProjection next;
+    next.cacheRevision = presentationCache_.cacheRevision + 1U;
+    next.queriedChunkCount = static_cast<std::size_t>(
+        lastColumn - firstColumn + 1U) * (lastRow - firstRow + 1U);
+    const ContentRect query{
+        {firstColumn * chunkWorldSize, firstRow * chunkWorldSize},
+        {(lastColumn - firstColumn + 1U) * chunkWorldSize,
+         (lastRow - firstRow + 1U) * chunkWorldSize}};
+    const float cellWidth = layout_.worldSize.x /
+        static_cast<float>(layout_.columns);
+    const float cellHeight = layout_.worldSize.y /
+        static_cast<float>(layout_.rows);
+    for (const RaidTerrainSpan &span : layout_.terrainSpans)
+    {
+        const ContentRect bounds{{span.firstColumn * cellWidth,
+                                  span.row * cellHeight},
+                                 {span.length * cellWidth, cellHeight}};
+        if (isCollision(Rect{bounds.position, bounds.size},
+                        Rect{query.position, query.size}))
+            next.terrainSpans.push_back(span);
+    }
+    for (const RaidOutdoorRoadCell &road : layout_.roadCells)
+    {
+        const ContentRect bounds{{road.column * cellWidth,
+                                  road.row * cellHeight},
+                                 {cellWidth, cellHeight}};
+        if (isCollision(Rect{bounds.position, bounds.size},
+                        Rect{query.position, query.size}))
+            next.roadCells.push_back(road);
+    }
+    for (const RaidOutdoorPropSnapshot &prop : layout_.props)
+        if (isCollision(Rect{prop.bounds.position, prop.bounds.size},
+                        Rect{query.position, query.size}))
+            next.props.push_back(prop);
+    for (const HomeRegionDistrictSnapshot &district : layout_.districts)
+        if (isCollision(Rect{district.bounds.position, district.bounds.size},
+                        Rect{query.position, query.size}))
+            next.districts.push_back(district);
+    presentationCache_ = std::move(next);
+    return presentationCache_;
+}
+
 std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
 {
     const Vec2 center{
@@ -222,14 +381,19 @@ std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
 
 void BaseWorld::resetAtRaidGate() noexcept
 {
-    playerPosition_ = Vec2{620.0F, 152.0F};
+    const BaseFacility &gate = facilities_.back();
+    playerPosition_ = Vec2{
+        gate.bounds.position.x + gate.bounds.size.x * 0.5F -
+            playerSize_.x * 0.5F,
+        gate.bounds.position.y + gate.bounds.size.y + 28.0F};
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
 }
 
 void BaseWorld::resetAtMedicalPoint() noexcept
 {
-    playerPosition_ = Vec2{620.0F, 600.0F};
+    const Vec2 origin = layout_.baseParcel.position;
+    playerPosition_ = Vec2{origin.x + 780.0F, origin.y + 900.0F};
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
 }

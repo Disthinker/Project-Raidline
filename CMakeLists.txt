@@ -315,6 +315,8 @@ add_library(raidline_simulation STATIC
     src/animation.h
     src/base_world.cpp
     src/base_world.h
+    src/home_region_layout.cpp
+    src/home_region_layout.h
     src/collision.cpp
     src/collision.h
     src/enemy.cpp
@@ -759,6 +761,10 @@ raidline_add_test(
 raidline_add_test(
     BaseWorldTest
     tests/test_base_world.cpp
+    raidline::simulation)
+raidline_add_test(
+    HomeRegionLayoutTest
+    tests/test_home_region_layout.cpp
     raidline::simulation)
 raidline_add_test(
     WeaponClearGestureTest

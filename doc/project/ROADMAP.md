@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段和 Content Beta 成长闭环均已进入主线。当前推进 Home Region 新档起步与首次整备 v1，范围合同见 `doc/exec-plans/active/home-region-onboarding-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环和有限新档整备均已进入主线。当前推进 Home Region 大地图与基地板块 v1，范围合同见 `doc/exec-plans/active/home-region-large-map-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -183,7 +183,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 | 切片 | 玩家可见结果 | 关键领域结果 | 当前状态 |
 | --- | --- | --- | --- |
-| 新档起步与首次整备 v1 | 普通新档从有限基础物资起步；在安全 Base 依次找到仓储、完成轻型职责整备并前往出击口；F10 可显式补齐开发目录 | content v57、普通 starter 与开发目录分离、旧档资产保持、幂等目录命令、轻型职责驱动的非强制目标链 | 当前开发分支，本地 1338/1338 通过；待 exact-head CI 与用户正常游玩验收 |
+| 新档起步与首次整备 v1 | 普通新档从有限基础物资起步；在安全 Base 依次找到仓储、完成轻型职责整备并前往出击口；F10 可显式补齐开发目录 | content v57、普通 starter 与开发目录分离、旧档资产保持、幂等目录命令、轻型职责驱动的非强制目标链 | PR #121 已通过 CI 与用户验收，以 `71a3c08` 进入 main |
+| Home Region 大地图与基地板块 v1 | 安全基地成为 12800×7200 Home Region 中的一块固定结构区域，玩家可沿道路探索周边工业、物流、公路、空地、绿地和服务区 | 地点稳定 seed、HomeRegionLayout、基地板块、分块投影、静态空间索引、无 schema 迁移 | 当前开发分支；Windows Debug 与 1344/1344 CTest 通过，不引入敌人、Loot、撤离或 Raid 生命周期 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -81,6 +81,8 @@ public:
     const GameSession &gameSession() const noexcept;
 
 private:
+    void syncBaseWorldSite();
+
     GameSession gameSession_;
     BaseWorld baseWorld_;
     GameFlowState state_{GameFlowState::MainMenu};
