@@ -4,11 +4,11 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@50879bc`，PR #126 已合入并完成 Home Region 建设面板、持久储物箱和紧凑鼠标操作。
-- 当前开发分支：`codex/home-region-build-camera-v1`，从 `origin/main@50879bc` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-build-camera-v1.md`。
-- 当前切片为建设模式加入独立客户端镜头：WASD 平移、按住右键拖动画面、右键短按设施菜单仲裁，并在滚轮缩放后继续约束于 Home Region 世界边界。首轮验收发现非 100% 缩放命中偏移与固定设施入口缺失，现已改为统一世界—屏幕投影，并让七类固定设施从建设界面进入原有功能页。
-- 首轮 Windows Debug 全目标构建、1377/1377 CTest 与 exact-head 双平台 CI 已通过；验收返工新增两项自动化，更新后的 Windows Debug 全目标构建、60/60 定向测试与 1379/1379 完整 CTest 通过，等待更新后的 exact-head CI 和用户复验。
+- 已验收主线：`origin/main@b990db3`，PR #127 已合入并完成 Home Region 建设镜头、全缩放命中和七类固定设施功能入口。
+- 当前开发分支：`codex/home-region-facility-management-v1`，从 `origin/main@b990db3` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-facility-management-v1.md`。
+- 当前切片把既有设施安装、等级、岗位、制造、治疗和升级事实汇总为建设面板中的统一管理卡片，并提供鼠标快速进入现有功能页；不新增设施模拟或存档字段。
+- 当前实现已通过 Windows Debug 全目标、65/65 定向测试与 1384/1384 完整 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑

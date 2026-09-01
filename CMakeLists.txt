@@ -370,6 +370,8 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/base_facility_management.cpp
+    src/base_facility_management.h
     src/game_flow.cpp
     src/game_flow.h
     src/game_session.cpp
@@ -618,6 +620,10 @@ raidline_add_test(
 raidline_add_test(
     GameSessionTest
     tests/test_game_session.cpp
+    raidline::services)
+raidline_add_test(
+    BaseFacilityManagementTest
+    tests/test_base_facility_management.cpp
     raidline::services)
 raidline_add_test(
     AlphaExtractionSessionTest

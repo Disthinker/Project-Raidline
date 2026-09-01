@@ -21,6 +21,7 @@
 #include "developer_runtime_panel.h"
 #include "frame_timing.h"
 #include "alpha_content_ids.h"
+#include "base_facility_management.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
 #include "loadout_progression.h"
@@ -242,6 +243,60 @@ namespace
     SDL_FRect baseBuildZoomResetButton() noexcept
     {
         return SDL_FRect{1050.0F, 608.0F, 136.0F, 34.0F};
+    }
+
+    SDL_FRect baseFacilityInspectorBounds() noexcept
+    {
+        return SDL_FRect{70.0F, 366.0F, 390.0F, 184.0F};
+    }
+
+    SDL_FRect baseFacilityInspectorButton(
+        std::size_t index,
+        std::size_t count) noexcept
+    {
+        const SDL_FRect panel = baseFacilityInspectorBounds();
+        constexpr float gap{8.0F};
+        const float width =
+            (panel.w - 32.0F - gap * static_cast<float>(count - 1U)) /
+            static_cast<float>(count);
+        return SDL_FRect{
+            panel.x + 16.0F + static_cast<float>(index) * (width + gap),
+            panel.y + panel.h - 48.0F,
+            width,
+            34.0F};
+    }
+
+    const char *baseFacilityStatusName(
+        BaseFacilityOperationalStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseFacilityOperationalStatus::Operational:
+            return "OPERATIONAL";
+        case BaseFacilityOperationalStatus::Reserve:
+            return "IN RESERVE";
+        case BaseFacilityOperationalStatus::Unavailable:
+            return "UNAVAILABLE";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseFacilityTaskName(BaseFacilityTaskKind task) noexcept
+    {
+        switch (task)
+        {
+        case BaseFacilityTaskKind::Idle:
+            return "IDLE";
+        case BaseFacilityTaskKind::Construction:
+            return "FACILITY UPGRADE";
+        case BaseFacilityTaskKind::Manufacturing:
+            return "MANUFACTURING";
+        case BaseFacilityTaskKind::OutputReady:
+            return "OUTPUT READY";
+        case BaseFacilityTaskKind::ResidentTreatment:
+            return "RESIDENT TREATMENT";
+        }
+        return "UNKNOWN";
     }
 
     SDL_FRect baseFacilityContextMenuBounds(
@@ -5541,7 +5596,8 @@ void App::processEvents()
                 {
                     const MousePosition position{
                         event.button.x, event.button.y};
-                    if (!contains(baseBuildBarBounds(), position))
+                    if (!contains(baseBuildBarBounds(), position) &&
+                        !contains(baseFacilityInspectorBounds(), position))
                         baseBuildCamera_.beginPointer(
                             {position.x, position.y});
                 }
@@ -10430,6 +10486,8 @@ void App::startBasePlacement(
 
 void App::handleBaseConstructionPanelClick(MousePosition position)
 {
+    if (handleBaseFacilityInspectorClick(position))
+        return;
     if (contains(baseBuildPurchaseTab(), position))
     {
         baseConstructionPage_ = BaseConstructionPage::Purchase;
@@ -10525,9 +10583,59 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
         : "BASE FACILITY SELECTION CLEARED";
 }
 
+bool App::handleBaseFacilityInspectorClick(MousePosition position)
+{
+    if (!contains(baseFacilityInspectorBounds(), position) ||
+        (!selectedBasePlacedAssetId_.has_value() &&
+         !selectedBaseFixedFacility_.has_value()))
+    {
+        return false;
+    }
+
+    if (selectedBaseFixedFacility_.has_value())
+    {
+        if (contains(baseFacilityInspectorButton(0U, 1U), position))
+            openBaseFixedFacility(*selectedBaseFixedFacility_);
+        return true;
+    }
+
+    const AssetInstanceId assetId = *selectedBasePlacedAssetId_;
+    if (contains(baseFacilityInspectorButton(0U, 3U), position))
+    {
+        openBasePlacedFacility(assetId);
+        return true;
+    }
+    if (contains(baseFacilityInspectorButton(1U, 3U), position))
+    {
+        startBasePlacement(
+            assetId,
+            BasePlacementState::Mode::Reposition,
+            true);
+        return true;
+    }
+    if (contains(baseFacilityInspectorButton(2U, 3U), position))
+    {
+        const BaseGroundReceipt receipt =
+            gameFlow_.pickupBaseGroundAssetForManagement(
+                assetId,
+                nextProfileTransactionId("base-build-inspector-pickup"));
+        uiMessage_ = receipt.succeeded
+            ? "BASE FACILITY RETURNED TO STASH"
+            : receipt.message;
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::InventoryPickup
+            : SoundEventId::UiDeny);
+        if (receipt.succeeded)
+            selectedBasePlacedAssetId_.reset();
+        return true;
+    }
+    return true;
+}
+
 void App::handleBaseConstructionRightClick(MousePosition position)
 {
-    if (contains(baseBuildBarBounds(), position))
+    if (contains(baseBuildBarBounds(), position) ||
+        contains(baseFacilityInspectorBounds(), position))
     {
         baseFacilityContextMenu_.reset();
         return;
@@ -10894,7 +11002,127 @@ void App::renderBaseConstructionPanel()
         uiTextRenderer_.render(renderer_, 88.0F, 664.0F, uiMessage_.c_str());
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
+    renderBaseFacilityInspector();
     renderBaseFacilityContextMenu();
+}
+
+void App::renderBaseFacilityInspector()
+{
+    if (!selectedBasePlacedAssetId_.has_value() &&
+        !selectedBaseFixedFacility_.has_value())
+    {
+        return;
+    }
+
+    const SDL_FRect panel = baseFacilityInspectorBounds();
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 246);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 126, 214, 174, 255);
+    SDL_RenderRect(renderer_, &panel);
+
+    const auto drawButton = [this](const SDL_FRect &bounds,
+                                   const char *label)
+    {
+        SDL_SetRenderDrawColor(renderer_, 34, 70, 66, 248);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 104, 184, 154, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(
+            renderer_, bounds.x + 9.0F, bounds.y + 9.0F, label);
+    };
+
+    if (selectedBaseFixedFacility_.has_value())
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                *selectedBaseFixedFacility_);
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 14.0F,
+            baseFacilityName(projection.kind));
+        const std::string state = fmt::format(
+            "STATUS: {} | LEVEL: {}",
+            baseFacilityStatusName(projection.status),
+            projection.level.has_value()
+                ? std::to_string(*projection.level)
+                : std::string{"FIXED SERVICE"});
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 42.0F,
+            state.c_str());
+
+        const std::string staffing = projection.staffingApplicable
+            ? fmt::format(
+                  "STAFF: {}",
+                  projection.assignedWorker.has_value()
+                      ? baseResidentProfessionName(
+                            *projection.assignedWorker)
+                      : "UNASSIGNED")
+            : "STAFF: NOT REQUIRED";
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 70.0F,
+            staffing.c_str());
+
+        std::string task = fmt::format(
+            "CURRENT TASK: {}",
+            baseFacilityTaskName(projection.task));
+        if (projection.remainingMinutes > 0U)
+            task += fmt::format(
+                " | REMAINING {} MIN",
+                projection.remainingMinutes);
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 98.0F,
+            task.c_str());
+        drawButton(baseFacilityInspectorButton(0U, 1U), "OPEN FUNCTION");
+    }
+    else
+    {
+        const AssetRecord *asset = gameSession_.profile().assets.find(
+            *selectedBasePlacedAssetId_);
+        if (asset == nullptr)
+        {
+            selectedBasePlacedAssetId_.reset();
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+            return;
+        }
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        std::size_t storedStacks{};
+        for (const auto &[candidateId, candidate] :
+             gameSession_.profile().assets.records())
+        {
+            static_cast<void>(candidateId);
+            const auto *stored = std::get_if<StoredAssetLocation>(
+                &candidate.location);
+            if (stored != nullptr &&
+                stored->container.kind ==
+                    ProfileContainerKind::AssetCompartment &&
+                stored->container.ownerAssetId == asset->instanceId)
+            {
+                ++storedStacks;
+            }
+        }
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 14.0F,
+            definition.displayName.c_str());
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 42.0F,
+            "STATUS: PLACED | LEVEL: FIXED SERVICE");
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 70.0F,
+            "STAFF: NOT REQUIRED");
+        const std::string contents = fmt::format(
+            "CURRENT TASK: IDLE | CONTENT STACKS: {}",
+            storedStacks);
+        uiTextRenderer_.render(
+            renderer_, panel.x + 16.0F, panel.y + 98.0F,
+            contents.c_str());
+        drawButton(baseFacilityInspectorButton(0U, 3U), "OPEN FUNCTION");
+        drawButton(baseFacilityInspectorButton(1U, 3U), "MOVE FACILITY");
+        drawButton(baseFacilityInspectorButton(2U, 3U), "RECOVER EMPTY");
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderBaseFacilityContextMenu()
