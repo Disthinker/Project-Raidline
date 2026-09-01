@@ -890,6 +890,22 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"raid_id", ground->raidId},
                 {"loot_slot_index", ground->lootSlotIndex}};
         }
+        else if (const auto *ground =
+                     std::get_if<BaseGroundAssetLocation>(&asset.location))
+        {
+            if (schemaVersion < 39)
+            {
+                throw std::invalid_argument{
+                    "legacy schema cannot represent Base ground assets"};
+            }
+            location = {
+                {"type", "base_ground"},
+                {"base_site_definition_id",
+                 ground->baseSiteDefinitionId.value()},
+                {"position", {
+                    {"x", ground->position.x},
+                    {"y", ground->position.y}}}};
+        }
         else if (const auto *service =
                      std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
@@ -2155,7 +2171,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
-        schemaVersion != 38)
+        schemaVersion != 38 && schemaVersion != 39)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2293,19 +2309,19 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion == 37 &&
              contentVersion ==
                  "procedural-frontier-loot-identity-content-50") ||
-            (schemaVersion == 38 &&
+            (schemaVersion >= 38 &&
              contentVersion ==
                  "procedural-frontier-high-risk-crisis-content-51") ||
-            (schemaVersion == 38 &&
+            (schemaVersion >= 38 &&
              contentVersion ==
                  "content-beta-weapon-caliber-content-52") ||
-            (schemaVersion == 38 &&
+            (schemaVersion >= 38 &&
              contentVersion ==
                  "content-beta-warehouse-catalog-content-53") ||
-            (schemaVersion == 38 &&
+            (schemaVersion >= 38 &&
              contentVersion ==
                  "content-beta-loadout-gear-content-54") ||
-            (schemaVersion == 38 &&
+            (schemaVersion >= 38 &&
              contentVersion ==
                  "content-beta-loot-economy-content-55");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
@@ -2326,7 +2342,8 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 31 && schemaVersion != 32 &&
               schemaVersion != 33 && schemaVersion != 34 &&
               schemaVersion != 35 && schemaVersion != 36 &&
-              schemaVersion != 37 && schemaVersion != 38) ||
+              schemaVersion != 37 && schemaVersion != 38 &&
+              schemaVersion != 39) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3013,6 +3030,17 @@ SaveLoadResult deserializeProfileEnvelope(
                 asset.location = RaidGroundAssetLocation{
                     location.at("raid_id").get<std::string>(),
                     location.at("loot_slot_index").get<std::uint32_t>()};
+            }
+            else if (schemaVersion >= 39 && locationType == "base_ground")
+            {
+                const Json &position = location.at("position");
+                asset.location = BaseGroundAssetLocation{
+                    RegionalBaseSiteDefinitionId{
+                        location.at("base_site_definition_id")
+                            .get<std::string>()},
+                    Vec2{
+                        position.at("x").get<float>(),
+                        position.at("y").get<float>()}};
             }
             else if (schemaVersion >= 10 && locationType == "base_service")
             {

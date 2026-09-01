@@ -672,10 +672,13 @@ namespace
         return std::nullopt;
     }
 
+    SDL_FRect profileBaseGroundDropRect() noexcept;
+
     std::optional<ProfileDropTarget> profileDropTargetAt(
         const ProfileState &profile,
         MousePosition position,
         bool includeStash,
+        bool allowBaseGround,
         GridPosition grabOffset,
         std::optional<AssetInstanceId> draggedAssetId)
     {
@@ -688,6 +691,10 @@ namespace
         const ItemCategory draggedCategory = draggedDefinition != nullptr
             ? draggedDefinition->category
             : ItemCategory::Loot;
+        if (allowBaseGround && contains(profileBaseGroundDropRect(), position))
+        {
+            return BaseGroundTarget{};
+        }
         for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
         {
             if (!contains(equipmentSlotRect(slot), position))
@@ -787,6 +794,11 @@ namespace
             std::clamp(anchor.y, 16.0F, 654.0F),
             264.0F,
             46.0F};
+    }
+
+    SDL_FRect profileBaseGroundDropRect() noexcept
+    {
+        return SDL_FRect{800.0F, 612.0F, 348.0F, 42.0F};
     }
 
     std::optional<const char *> profileContextActionLabel(
@@ -2287,6 +2299,20 @@ void App::updateBase(float deltaTime)
         input.firePressed = false;
         input.aimDownSights = false;
         input.weaponSlotJustPressed.reset();
+        input.interactJustPressed = false;
+        input.interactPressed = false;
+    }
+    if (input.interactJustPressed && gameFlow_.nearestBaseGroundAsset().has_value())
+    {
+        const BaseGroundReceipt receipt =
+            gameFlow_.pickupNearestBaseGroundAsset(
+                nextProfileTransactionId("base-ground-pickup"));
+        uiMessage_ = receipt.succeeded
+            ? "BASE GROUND ITEM PICKED UP"
+            : receipt.message;
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::InventoryPickup
+            : SoundEventId::UiDeny);
         input.interactJustPressed = false;
         input.interactPressed = false;
     }
@@ -3942,6 +3968,7 @@ void App::handleProfileInventoryUiEvent(
         profile,
         pointer.position,
         includeStash,
+        !inRaid,
         grabOffset,
         profileInventoryInteraction_.source().has_value()
             ? std::optional<AssetInstanceId>{
@@ -4168,7 +4195,8 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                               receipt.restoredDurabilityCenti) / 100.0F)
                     : receipt.message;
             }
-            else
+            else if constexpr (
+                std::is_same_v<Target, ArmorMaintenanceTarget>)
             {
                 if (inRaid)
                 {
@@ -4196,6 +4224,27 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                           receipt.restoredDurability,
                           receipt.currentMaximumAfter)
                     : receipt.message;
+            }
+            else
+            {
+                if (inRaid)
+                {
+                    uiMessage_ = "BASE GROUND IS NOT AVAILABLE IN RAID";
+                    gameAudio_.play(SoundEventId::UiDeny);
+                    return;
+                }
+                const BaseGroundReceipt receipt =
+                    gameFlow_.dropBaseGroundAsset(
+                        request.source.instanceId,
+                        request.source.quantity,
+                        request.source.orientation,
+                        nextProfileTransactionId("base-ground-drop"));
+                uiMessage_ = receipt.succeeded
+                    ? "ITEM PLACED ON BASE GROUND"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::InventoryMoveOrPlace
+                    : SoundEventId::UiDeny);
             }
         },
         request.target);
@@ -9636,6 +9685,38 @@ void App::renderBaseWorld()
             baseFacilityName(facility.kind));
     }
 
+    for (const BaseGroundAssetProjection &ground :
+         gameFlow_.baseGroundAssets())
+    {
+        if (ground.position.x < camera.x - 96.0F ||
+            ground.position.y < camera.y - 96.0F ||
+            ground.position.x > camera.x + kWindowWidth + 96.0F ||
+            ground.position.y > camera.y + kWindowHeight + 96.0F)
+        {
+            continue;
+        }
+        const AssetRecord *asset = gameSession_.profile().assets.find(
+            ground.assetId);
+        if (asset == nullptr)
+            continue;
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        const InventoryFootprint footprint = inventoryFootprint(
+            definition, asset->orientation);
+        constexpr float cellSize{22.0F};
+        const SDL_FRect bounds{
+            ground.position.x - footprint.width * cellSize * 0.5F,
+            ground.position.y - footprint.height * cellSize * 0.5F,
+            footprint.width * cellSize,
+            footprint.height * cellSize};
+        SDL_SetRenderDrawColor(renderer_, 86, 166, 190, 80);
+        const SDL_FRect halo{
+            bounds.x - 5.0F, bounds.y - 5.0F,
+            bounds.w + 10.0F, bounds.h + 10.0F};
+        SDL_RenderFillRect(renderer_, &halo);
+        renderProfileAsset(*asset, bounds, cellSize, 255, false);
+    }
+
     const Vec2 playerPosition = world.playerPosition();
     const Vec2 playerSize = world.playerSize();
     renderPlayerAvatar(
@@ -9650,7 +9731,17 @@ void App::renderBaseWorld()
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
 
-    if (const auto facility = world.interactableFacility())
+    if (const auto ground = gameFlow_.nearestBaseGroundAsset())
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(ground->definitionId);
+        const std::string prompt = fmt::format(
+            "E - PICK UP {} x{}",
+            definition.displayName,
+            ground->quantity);
+        uiTextRenderer_.render(renderer_, 450.0F, 650.0F, prompt.c_str());
+    }
+    else if (const auto facility = world.interactableFacility())
     {
         const std::string prompt = fmt::format(
             "E - {}",
@@ -9774,6 +9865,15 @@ void App::renderHomeRegionMap()
         uiTextRenderer_.render(
             renderer_, label.x, label.y,
             homeRegionDistrictName(district.kind));
+    }
+
+    for (const BaseGroundAssetProjection &ground :
+         gameFlow_.baseGroundAssets())
+    {
+        const Vec2 marker = screenPoint(ground.position);
+        const SDL_FRect bounds{marker.x - 2.5F, marker.y - 2.5F, 5.0F, 5.0F};
+        SDL_SetRenderDrawColor(renderer_, 92, 206, 230, 245);
+        SDL_RenderFillRect(renderer_, &bounds);
     }
 
     const Vec2 player = screenPoint(Vec2{
@@ -10126,7 +10226,8 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                         : ProfileDropFeedbackKind::Invalid;
                     feedback.label = plan.canCommit ? "REPAIR" : "BLOCKED";
                 }
-                else
+                else if constexpr (
+                    std::is_same_v<Target, ArmorMaintenanceTarget>)
                 {
                     const ArmorMaintenancePlan plan = queryArmorMaintenance(
                         profile,
@@ -10144,6 +10245,24 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                         ? ProfileDropFeedbackKind::Special
                         : ProfileDropFeedbackKind::Invalid;
                     feedback.label = plan.canCommit ? "REPAIR" : "BLOCKED";
+                }
+                else
+                {
+                    const BaseGroundPlan plan = inRaid
+                        ? BaseGroundPlan{
+                              false,
+                              DomainErrorCode::IllegalDestination,
+                              "Base ground is unavailable in Raid",
+                              profile.revision,
+                              0}
+                        : gameFlow_.queryBaseGroundDrop(
+                              source->instanceId,
+                              source->quantity,
+                              visual->orientation);
+                    feedback.kind = plan.canCommit
+                        ? ProfileDropFeedbackKind::Special
+                        : ProfileDropFeedbackKind::Invalid;
+                    feedback.label = plan.canCommit ? "DROP" : "BLOCKED";
                 }
             },
             *target);
@@ -10184,6 +10303,11 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                 else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
                 {
                     targetBounds = equipmentSlotRect(typedTarget.slot);
+                }
+                else if constexpr (
+                    std::is_same_v<Target, BaseGroundTarget>)
+                {
+                    targetBounds = profileBaseGroundDropRect();
                 }
                 else
                 {
@@ -10868,6 +10992,17 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     uiTextRenderer_.render(
         renderer_, 42.0F, 642.0F,
         "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
+    if (!inRaid)
+    {
+        const SDL_FRect groundDrop = profileBaseGroundDropRect();
+        SDL_SetRenderDrawColor(renderer_, 26, 58, 68, 235);
+        SDL_RenderFillRect(renderer_, &groundDrop);
+        SDL_SetRenderDrawColor(renderer_, 76, 174, 208, 255);
+        SDL_RenderRect(renderer_, &groundDrop);
+        uiTextRenderer_.render(
+            renderer_, groundDrop.x + 18.0F, groundDrop.y + 14.0F,
+            "DROP TO BASE GROUND");
+    }
     uiTextRenderer_.render(
         renderer_, 42.0F, 664.0F,
         inRaid ? "RMB MEDICAL ITEM | TAB/ESC CLOSE"

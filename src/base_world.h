@@ -63,6 +63,7 @@ public:
     [[nodiscard]] std::size_t playerAnimationFrame() const noexcept;
     [[nodiscard]] const std::array<BaseFacility, 7> &facilities() const noexcept;
     [[nodiscard]] Vec2 worldSize() const noexcept;
+    [[nodiscard]] const std::string &siteDefinitionId() const noexcept;
     [[nodiscard]] const ContentRect &baseParcel() const noexcept;
     [[nodiscard]] bool canAccessStash() const noexcept;
     [[nodiscard]] const HomeRegionLayout &layout() const noexcept;

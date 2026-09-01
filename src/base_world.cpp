@@ -377,6 +377,11 @@ Vec2 BaseWorld::worldSize() const noexcept
     return layout_.worldSize;
 }
 
+const std::string &BaseWorld::siteDefinitionId() const noexcept
+{
+    return siteDefinitionId_;
+}
+
 const ContentRect &BaseWorld::baseParcel() const noexcept
 {
     return layout_.baseParcel;

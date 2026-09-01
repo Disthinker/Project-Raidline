@@ -73,6 +73,46 @@ std::string testSaveChecksum(std::string_view text)
     return result;
 }
 
+TEST(SaveRepositoryTest, Schema39RoundTripsBaseGroundAndSchema38StillLoads)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-ground-save", content);
+    const ItemDefinition &definition = content.item(alpha_content::ammunition);
+    const AssetInstanceId ground = profile.assets.create(
+        definition,
+        BaseGroundAssetLocation{
+            RegionalBaseSiteDefinitionId{
+                "regional_base_site.greyline_yard"},
+            Vec2{812.5F, 1440.25F}},
+        2);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    const std::string envelope = serializeProfileEnvelope(
+        profile, content.contentVersion());
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        envelope, content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    const AssetRecord *restored = loaded.profile->assets.find(ground);
+    ASSERT_NE(restored, nullptr);
+    const auto *location = std::get_if<BaseGroundAssetLocation>(
+        &restored->location);
+    ASSERT_NE(location, nullptr);
+    EXPECT_EQ(location->baseSiteDefinitionId,
+              RegionalBaseSiteDefinitionId{
+                  "regional_base_site.greyline_yard"});
+    EXPECT_FLOAT_EQ(location->position.x, 812.5F);
+    EXPECT_FLOAT_EQ(location->position.y, 1440.25F);
+
+    ProfileState legacy = makeNewAlphaProfile(
+        "base-ground-v38", content);
+    const std::string legacyEnvelope = serializeProfileEnvelope(
+        legacy, content.contentVersion(), 38);
+    const SaveLoadResult legacyLoaded = deserializeProfileEnvelope(
+        legacyEnvelope, content);
+    EXPECT_TRUE(legacyLoaded.profile.has_value()) << legacyLoaded.message;
+}
+
 void downgradeFrontierEnemiesToLegacyDeployment(
     PendingRaidSnapshot &raid,
     const ContentRegistry &content)

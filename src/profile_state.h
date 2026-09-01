@@ -85,6 +85,24 @@ struct RaidGroundAssetLocation
         const RaidGroundAssetLocation &) = default;
 };
 
+// A persistent ownership root placed in one Home Region Base site. Children
+// stored in the root's compartments continue to follow the root without
+// acquiring independent world positions.
+struct BaseGroundAssetLocation
+{
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    Vec2 position;
+
+    friend bool operator==(
+        const BaseGroundAssetLocation &left,
+        const BaseGroundAssetLocation &right) noexcept
+    {
+        return left.baseSiteDefinitionId == right.baseSiteDefinitionId &&
+            left.position.x == right.position.x &&
+            left.position.y == right.position.y;
+    }
+};
+
 struct BaseServiceAssetLocation
 {
     BaseServiceJobId jobId{};
@@ -125,6 +143,7 @@ using AssetLocation = std::variant<
     EquippedAssetLocation,
     InstalledMagazineLocation,
     RaidGroundAssetLocation,
+    BaseGroundAssetLocation,
     BaseServiceAssetLocation,
     LostRaidAssetLocation,
     RecoveryTaskAssetLocation>;

@@ -1756,6 +1756,34 @@ InventoryReceipt GameSession::executeProfileInventory(
     return receipt;
 }
 
+BaseGroundReceipt GameSession::executeBaseGroundAsset(
+    const BaseGroundCommand &command,
+    std::string transactionId)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value())
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground assets cannot be changed during a Raid",
+            profile_.revision, 0};
+    }
+    ProfileState candidate = profile_;
+    BaseGroundReceipt receipt = ::executeBaseGround(
+        candidate,
+        publishedContentRegistry(),
+        command,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+        return receipt;
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::InvalidProfile,
+            persistenceMessage_, profile_.revision, 0};
+    }
+    return receipt;
+}
+
 EconomyReceipt GameSession::executeProfileEconomy(
     const EconomyCommand &command,
     std::string transactionId)

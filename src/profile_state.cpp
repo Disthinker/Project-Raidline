@@ -1798,6 +1798,35 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (const auto *ground =
+                std::get_if<BaseGroundAssetLocation>(&asset.location))
+        {
+            if (ground->baseSiteDefinitionId.value().empty() ||
+                !std::isfinite(ground->position.x) ||
+                !std::isfinite(ground->position.y) ||
+                ground->position.x < 0.0F || ground->position.y < 0.0F)
+            {
+                return {false, "Base ground ownership is invalid"};
+            }
+            try
+            {
+                static_cast<void>(content.regionalBaseSite(
+                    ground->baseSiteDefinitionId));
+            }
+            catch (...)
+            {
+                return {false, "Base ground site is unknown"};
+            }
+            const auto site = profile.regionalOperations.baseSites.find(
+                ground->baseSiteDefinitionId);
+            if (site == profile.regionalOperations.baseSites.end() ||
+                !site->second.unlocked)
+            {
+                return {false, "Base ground site is not unlocked"};
+            }
+            continue;
+        }
+
         if (const auto *service =
                 std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
@@ -4450,13 +4479,21 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         else if (const auto *service =
                      std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
-            hashInteger(hash, 4U);
+            hashInteger(hash, 5U);
             hashInteger(hash, service->jobId);
+        }
+        else if (const auto *baseGround =
+                     std::get_if<BaseGroundAssetLocation>(&asset.location))
+        {
+            hashInteger(hash, 4U);
+            hashBytes(hash, baseGround->baseSiteDefinitionId.value());
+            hashFloat(hash, baseGround->position.x);
+            hashFloat(hash, baseGround->position.y);
         }
         else if (const auto *lost =
                      std::get_if<LostRaidAssetLocation>(&asset.location))
         {
-            hashInteger(hash, 5U);
+            hashInteger(hash, 6U);
             hashBytes(hash, lost->recordId);
             hashInteger(hash, static_cast<std::uint32_t>(lost->sourceSlot));
         }
@@ -4464,7 +4501,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             const auto &task =
                 std::get<RecoveryTaskAssetLocation>(asset.location);
-            hashInteger(hash, 6U);
+            hashInteger(hash, 7U);
             hashInteger(hash, task.taskId);
             hashInteger(hash, static_cast<std::uint32_t>(task.sourceSlot));
         }
