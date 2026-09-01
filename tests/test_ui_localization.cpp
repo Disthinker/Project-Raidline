@@ -51,6 +51,22 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseFacilityManagementCard) {
                 UiLanguage::SimplifiedChinese,
                 "facility must be installed before use"),
             "设施必须安装后才能使用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE OPERATIONS | CLICK TO LOCATE"),
+            "基地运营 | 点击定位设施");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKSHOP | PRODUCTION | 120 MIN"),
+            "工坊 | 生产 | 120 分钟");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DORMITORY | UPGRADE | 45 MIN | PAUSED"),
+            "宿舍 | 升级 | 45 分钟 | 已暂停");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "NO ACTIVE OPERATIONS"),
+            "当前没有进行中的运营事项");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {

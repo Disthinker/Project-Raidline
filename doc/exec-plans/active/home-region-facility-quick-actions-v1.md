@@ -1,6 +1,6 @@
 # Home Region 设施统一快速操作 v1 ExecPlan
 
-状态：实现完成；Windows Debug 全目标、96/96 定向测试与 1385/1385 完整 CTest 已通过，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+状态：已完成；Windows Debug 全目标、96/96 定向测试、1385/1385 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收均通过，PR #129 已以 merge commit `722a20c` 进入 main。
 
 ## 玩家结果与依赖
 
