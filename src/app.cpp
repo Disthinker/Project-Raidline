@@ -670,6 +670,27 @@ namespace
             facility == BaseFacilityKind::Workshop;
     }
 
+    std::optional<BaseFacilityDefinitionId> spatialFacilityDefinitionId(
+        BaseFacilityKind facility)
+    {
+        switch (facility)
+        {
+        case BaseFacilityKind::Storage:
+            return BaseFacilityDefinitionId{"base_facility.warehouse"};
+        case BaseFacilityKind::Medical:
+            return BaseFacilityDefinitionId{"base_facility.medical"};
+        case BaseFacilityKind::Dormitory:
+            return BaseFacilityDefinitionId{"base_facility.dormitory"};
+        case BaseFacilityKind::Workshop:
+            return BaseFacilityDefinitionId{"base_facility.workshop"};
+        case BaseFacilityKind::Supply:
+        case BaseFacilityKind::Allocation:
+        case BaseFacilityKind::RaidGate:
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
+
     const char *baseOperationOverviewKindName(
         BaseOperationOverviewKind kind) noexcept
     {
@@ -2529,13 +2550,24 @@ void App::updateBase(float deltaTime)
                 {click.position.x, click.position.y});
             const BaseFacilityKind facility =
                 baseFixedFacilityPlacementState_->facility;
-            const BaseFacilityLayoutReceipt receipt =
-                gameFlow_.repositionBaseFacilityAt(
-                    facility,
-                    worldPosition,
-                    nextProfileTransactionId("base-core-facility-move"));
+            const bool installing =
+                baseFixedFacilityPlacementState_->mode ==
+                BaseFixedFacilityPlacementState::Mode::Install;
+            const BaseFacilityLayoutReceipt receipt = installing
+                ? gameFlow_.installBaseFacilityAt(
+                      facility,
+                      worldPosition,
+                      nextProfileTransactionId(
+                          "base-core-facility-install"))
+                : gameFlow_.repositionBaseFacilityAt(
+                      facility,
+                      worldPosition,
+                      nextProfileTransactionId(
+                          "base-core-facility-move"));
             uiMessage_ = receipt.succeeded
-                ? "BASE FACILITY REPOSITIONED"
+                ? installing
+                    ? "BASE FACILITY INSTALLED"
+                    : "BASE FACILITY REPOSITIONED"
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::InventoryMoveOrPlace
@@ -2950,17 +2982,13 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 baseFacilityOwned(gameSession_.profile(), workshop) &&
                 !baseFacilityInstalled(gameSession_.profile(), workshop))
             {
-                const InstallBaseFacilityReceipt receipt =
-                    gameSession_.executeInstallBaseFacility(
-                        workshop,
-                        nextProfileTransactionId(
-                            "install-reserve-facility"));
-                uiMessage_ = receipt.succeeded
-                    ? "WORKSHOP INSTALLED FROM FACILITY RESERVE"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
+                gameFlow_.closeBaseFacility();
+                baseConstructionPage_ = BaseConstructionPage::Owned;
+                baseConstructionPanelOpen_ = true;
+                activateBaseBuildCamera();
+                uiMessage_ =
+                    "SELECT RESERVE FACILITY IN BASE BUILD OWNED PAGE";
+                gameAudio_.play(SoundEventId::UiConfirm);
                 return;
             }
             const auto activeSite = std::find_if(
@@ -3445,7 +3473,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         if (!baseFacilityInstalled(gameSession_.profile(), workshop))
         {
             uiMessage_ =
-                "WORKSHOP IS IN FACILITY RESERVE | INSTALL IT ON REGIONAL PAGE";
+                "WORKSHOP IS IN FACILITY RESERVE | PLACE IT FROM BASE BUILD OWNED PAGE";
             gameAudio_.play(SoundEventId::UiDeny);
             return;
         }
@@ -10583,6 +10611,8 @@ void App::renderBaseWorld()
 
     for (const BaseFacility &facility : world.facilities())
     {
+        if (!facility.active)
+            continue;
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -10806,6 +10836,37 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
     if (contains(baseBuildBarBounds(), position))
     {
         std::size_t cardIndex{};
+        if (baseConstructionPage_ == BaseConstructionPage::Owned)
+        {
+            constexpr std::array<BaseFacilityKind, 4U> coreFacilities{
+                BaseFacilityKind::Storage,
+                BaseFacilityKind::Medical,
+                BaseFacilityKind::Dormitory,
+                BaseFacilityKind::Workshop};
+            for (BaseFacilityKind facility : coreFacilities)
+            {
+                const auto definitionId =
+                    spatialFacilityDefinitionId(facility);
+                if (!definitionId.has_value() ||
+                    !baseFacilityOwned(
+                        gameSession_.profile(), *definitionId) ||
+                    baseFacilityInstalled(
+                        gameSession_.profile(), *definitionId))
+                {
+                    continue;
+                }
+                if (cardIndex >= 4U)
+                    break;
+                if (contains(baseBuildCard(cardIndex), position))
+                {
+                    startBaseFixedFacilityPlacement(
+                        facility,
+                        BaseFixedFacilityPlacementState::Mode::Install);
+                    return;
+                }
+                ++cardIndex;
+            }
+        }
         const auto stashAssets = assetsInContainer(
             gameSession_.profile(), ProfileContainerId::stash());
         for (const ItemDefinition &definition :
@@ -11052,7 +11113,11 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                     projection.quickActions.size()),
                 position))
         {
-            startBaseFixedFacilityPlacement(projection.kind);
+            startBaseFixedFacilityPlacement(
+                projection.kind,
+                projection.status == BaseFacilityOperationalStatus::Reserve
+                    ? BaseFixedFacilityPlacementState::Mode::Install
+                    : BaseFixedFacilityPlacementState::Mode::Move);
             return true;
         }
         return true;
@@ -11238,6 +11303,8 @@ App::baseFixedFacilityAt(MousePosition position) const
     const auto &facilities = gameFlow_.baseWorld().facilities();
     for (auto it = facilities.rbegin(); it != facilities.rend(); ++it)
     {
+        if (!it->active)
+            continue;
         if (worldPosition.x >= it->bounds.position.x &&
             worldPosition.y >= it->bounds.position.y &&
             worldPosition.x <= it->bounds.position.x + it->bounds.size.x &&
@@ -11289,7 +11356,9 @@ void App::openBasePlacedFacility(AssetInstanceId assetId)
     input_.suppressPrimaryPointerUntilRelease();
 }
 
-void App::startBaseFixedFacilityPlacement(BaseFacilityKind facility)
+void App::startBaseFixedFacilityPlacement(
+    BaseFacilityKind facility,
+    BaseFixedFacilityPlacementState::Mode mode)
 {
     if (!movableCoreFacility(facility))
     {
@@ -11302,7 +11371,11 @@ void App::startBaseFixedFacilityPlacement(BaseFacilityKind facility)
             gameSession_.profile(),
             publishedContentRegistry(),
             facility);
-    if (projection.status != BaseFacilityOperationalStatus::Operational)
+    const bool validStatus = mode ==
+        BaseFixedFacilityPlacementState::Mode::Install
+        ? projection.status == BaseFacilityOperationalStatus::Reserve
+        : projection.status == BaseFacilityOperationalStatus::Operational;
+    if (!validStatus)
     {
         uiMessage_ = "BASE FACILITY IS NOT AVAILABLE";
         gameAudio_.play(SoundEventId::UiDeny);
@@ -11317,10 +11390,12 @@ void App::startBaseFixedFacilityPlacement(BaseFacilityKind facility)
     selectedBaseFixedFacility_ = facility;
     basePlacementState_.reset();
     baseFixedFacilityPlacementState_ =
-        BaseFixedFacilityPlacementState{facility, true};
+        BaseFixedFacilityPlacementState{facility, mode, true};
     if (!baseBuildCamera_.active())
         activateBaseBuildCamera();
-    uiMessage_ = "MOVE BASE FACILITY | LMB PLACE | ESC CANCEL";
+    uiMessage_ = mode == BaseFixedFacilityPlacementState::Mode::Install
+        ? "INSTALL BASE FACILITY | LMB PLACE | ESC CANCEL"
+        : "MOVE BASE FACILITY | LMB PLACE | ESC CANCEL";
     input_.suppressPrimaryPointerUntilRelease();
 }
 
@@ -11368,9 +11443,14 @@ void App::renderBasePlacementPreview()
         if (facility == gameFlow_.baseWorld().facilities().end())
             return;
         const Vec2 worldPosition = baseScreenToWorld(*pointerWorldPosition_);
-        const BaseFacilityLayoutPlan plan =
-            gameFlow_.queryBaseFacilityRepositionAt(
-                facilityKind, worldPosition);
+        const bool installing =
+            baseFixedFacilityPlacementState_->mode ==
+            BaseFixedFacilityPlacementState::Mode::Install;
+        const BaseFacilityLayoutPlan plan = installing
+            ? gameFlow_.queryInstallBaseFacilityAt(
+                  facilityKind, worldPosition)
+            : gameFlow_.queryBaseFacilityRepositionAt(
+                  facilityKind, worldPosition);
         const SDL_FRect bounds{
             worldPosition.x - facility->bounds.size.x * 0.5F,
             worldPosition.y - facility->bounds.size.y * 0.5F,
@@ -11389,7 +11469,9 @@ void App::renderBasePlacementPreview()
         SDL_RenderRect(renderer_, &bounds);
         uiTextRenderer_.render(
             renderer_, bounds.x + 8.0F, bounds.y + 8.0F,
-            plan.canCommit ? "MOVE FACILITY" : "BLOCKED");
+            plan.canCommit
+                ? installing ? "INSTALL FACILITY" : "MOVE FACILITY"
+                : "BLOCKED");
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -11489,6 +11571,44 @@ void App::renderBaseConstructionPanel()
     const auto stashAssets = assetsInContainer(
         gameSession_.profile(), ProfileContainerId::stash());
     std::size_t cardIndex{};
+    if (baseConstructionPage_ == BaseConstructionPage::Owned)
+    {
+        constexpr std::array<BaseFacilityKind, 4U> coreFacilities{
+            BaseFacilityKind::Storage,
+            BaseFacilityKind::Medical,
+            BaseFacilityKind::Dormitory,
+            BaseFacilityKind::Workshop};
+        for (BaseFacilityKind facility : coreFacilities)
+        {
+            const auto definitionId = spatialFacilityDefinitionId(facility);
+            if (!definitionId.has_value() ||
+                !baseFacilityOwned(gameSession_.profile(), *definitionId) ||
+                baseFacilityInstalled(gameSession_.profile(), *definitionId))
+            {
+                continue;
+            }
+            if (cardIndex >= 4U)
+                break;
+            const SDL_FRect card = baseBuildCard(cardIndex);
+            SDL_SetRenderDrawColor(renderer_, 53, 72, 65, 245);
+            SDL_RenderFillRect(renderer_, &card);
+            SDL_SetRenderDrawColor(renderer_, 172, 204, 132, 255);
+            SDL_RenderRect(renderer_, &card);
+            const SDL_FRect icon{
+                card.x + 8.0F, card.y + 8.0F, 46.0F, 34.0F};
+            SDL_SetRenderDrawColor(renderer_, 92, 104, 70, 255);
+            SDL_RenderFillRect(renderer_, &icon);
+            SDL_SetRenderDrawColor(renderer_, 206, 222, 154, 255);
+            SDL_RenderRect(renderer_, &icon);
+            uiTextRenderer_.render(
+                renderer_, card.x + 8.0F, card.y + 50.0F,
+                baseFacilityName(facility));
+            uiTextRenderer_.render(
+                renderer_, card.x + 62.0F, card.y + 16.0F,
+                "RESERVE | PLACE");
+            ++cardIndex;
+        }
+    }
     for (const ItemDefinition &definition :
          publishedContentRegistry().items())
     {
@@ -11694,9 +11814,11 @@ void App::renderBaseFacilityInspector()
             drawButton(
                 baseFacilityQuickActionButton(
                     projection.quickActions.size()),
-                "MOVE FACILITY",
-                projection.status ==
-                    BaseFacilityOperationalStatus::Operational);
+                projection.status == BaseFacilityOperationalStatus::Reserve
+                    ? "INSTALL FACILITY"
+                    : "MOVE FACILITY",
+                projection.status !=
+                    BaseFacilityOperationalStatus::Unavailable);
         }
     }
     else
@@ -11890,6 +12012,8 @@ void App::renderHomeRegionMap()
     SDL_RenderRect(renderer_, &baseBounds);
     for (const BaseFacility &facility : world.facilities())
     {
+        if (!facility.active)
+            continue;
         SDL_FRect bounds = screenRect(ContentRect{
             facility.bounds.position, facility.bounds.size});
         bounds.w = std::max(bounds.w, 4.0F);
@@ -15042,7 +15166,7 @@ void App::renderRegionalOperations()
     uiTextRenderer_.render(
         renderer_, reserveButton.x + 16.0F, reserveButton.y + 8.0F,
         workshopInReserve
-            ? "FACILITY RESERVE | WORKSHOP | INSTALL FREE"
+            ? "FACILITY RESERVE | OPEN BASE BUILD OWNED PAGE"
             : "FACILITY RESERVE | EMPTY");
 
     const RegionalBaseSiteDefinition *featureSite =

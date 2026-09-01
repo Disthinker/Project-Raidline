@@ -97,8 +97,18 @@ void BaseWorld::configureSite(
         ? "regional_base_site.greyline_yard" : std::string{siteDefinitionId};
     if (normalized != siteDefinitionId_ || overrides != facilityOverrides_)
     {
+        const bool sameSite = normalized == siteDefinitionId_;
+        const Vec2 previousPlayerPosition = playerPosition_;
         facilityOverrides_ = std::move(overrides);
         rebuildSite(normalized);
+        if (sameSite)
+        {
+            playerPosition_ = previousPlayerPosition;
+            shooting_.reanchor(
+                {playerPosition_.x + playerSize_.x * 0.5F,
+                 playerPosition_.y + playerSize_.y * 0.5F},
+                playerFacingDirection_, layout_.worldSize);
+        }
     }
 }
 
@@ -143,6 +153,7 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
             !std::isfinite(override.worldCenter.x) ||
             !std::isfinite(override.worldCenter.y))
             continue;
+        facility->active = override.active;
         facility->bounds.position = {
             override.worldCenter.x - facility->bounds.size.x * 0.5F,
             override.worldCenter.y - facility->bounds.size.y * 0.5F};
@@ -169,7 +180,9 @@ void BaseWorld::rebuildCollisionIndex()
         movementBlockers_.push_back(BallisticBlocker{
             id++, Rect{bounds.position, bounds.size}});
     for (const BaseFacility &facility : facilities_)
-        movementBlockers_.push_back(BallisticBlocker{id++, facility.bounds});
+        if (facility.active)
+            movementBlockers_.push_back(
+                BallisticBlocker{id++, facility.bounds});
     for (const ContentRect &bounds : groundBlockers_)
         movementBlockers_.push_back(BallisticBlocker{
             id++, Rect{bounds.position, bounds.size}});
@@ -432,6 +445,8 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockers() const
     result.reserve(result.size() + facilities_.size() + 1U);
     for (const BaseFacility &facility : facilities_)
     {
+        if (!facility.active)
+            continue;
         result.push_back(ContentRect{
             facility.bounds.position, facility.bounds.size});
     }
@@ -446,7 +461,7 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockersExcluding(
     result.reserve(result.size() + facilities_.size());
     for (const BaseFacility &facility : facilities_)
     {
-        if (facility.kind == excluded)
+        if (!facility.active || facility.kind == excluded)
             continue;
         result.push_back(ContentRect{
             facility.bounds.position, facility.bounds.size});
@@ -564,6 +579,8 @@ std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
         playerPosition_.y + playerSize_.y / 2.0F};
     for (const BaseFacility &facility : facilities_)
     {
+        if (!facility.active)
+            continue;
         if (distanceSquaredToRect(center, facility.bounds) <=
             facility.interactionRange * facility.interactionRange)
         {

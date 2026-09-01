@@ -562,6 +562,10 @@ TEST(UiLocalizationTest, ChineseTranslatesMainBaseMigrationFlow) {
             "设施储备 | 工坊 | 免费安装");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "FACILITY RESERVE | OPEN BASE BUILD OWNED PAGE"),
+            "设施储备 | 打开基地建设已有设施页面");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST"),
             "主基地迁徙完成 | 旧基地已转为前哨");
   const std::string migration = localizeUiText(

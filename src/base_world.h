@@ -31,12 +31,14 @@ struct BaseFacility
     BaseFacilityKind kind{BaseFacilityKind::Storage};
     Rect bounds;
     float interactionRange{56.0F};
+    bool active{true};
 };
 
 struct BaseFacilitySpatialOverride
 {
     BaseFacilityKind kind{BaseFacilityKind::Storage};
     Vec2 worldCenter{};
+    bool active{true};
 
     friend bool operator==(
         const BaseFacilitySpatialOverride &left,
@@ -44,7 +46,8 @@ struct BaseFacilitySpatialOverride
     {
         return left.kind == right.kind &&
             left.worldCenter.x == right.worldCenter.x &&
-            left.worldCenter.y == right.worldCenter.y;
+            left.worldCenter.y == right.worldCenter.y &&
+            left.active == right.active;
     }
 };
 

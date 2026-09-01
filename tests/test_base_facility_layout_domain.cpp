@@ -10,6 +10,7 @@ namespace
 const RegionalBaseSiteDefinitionId kGreyline{
     "regional_base_site.greyline_yard"};
 const BaseFacilityDefinitionId kWarehouse{"base_facility.warehouse"};
+const BaseFacilityDefinitionId kWorkshop{"base_facility.workshop"};
 
 BaseFacilityLayoutAccess access(std::vector<ContentRect> blockers = {})
 {
@@ -118,4 +119,74 @@ TEST(BaseFacilityLayoutDomainTest,
         EXPECT_TRUE(placements.contains(
             BaseFacilityDefinitionId{"base_facility.workshop"}));
     }
+}
+
+TEST(BaseFacilityLayoutDomainTest,
+     ReserveInstallationCommitsPlacementAndOperationalStateAtomically)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "facility-install-at", content);
+    profile.worldClock.elapsedWorldMinutes += 180U;
+    profile.baseConstruction.facilities[kWorkshop] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[kWorkshop] =
+        profile.worldClock.elapsedWorldMinutes - 120U;
+    const InstallBaseFacilityAtCommand command{
+        kWorkshop, {2200.0F, 2600.0F}, {270.0F, 170.0F}, access()};
+
+    const std::uint64_t before = profileStateFingerprint(profile);
+    const BaseFacilityLayoutPlan plan = queryInstallBaseFacilityAt(
+        profile, content, command);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const BaseFacilityLayoutReceipt receipt = executeInstallBaseFacilityAt(
+        profile, content, command,
+        CommandContext{profile.revision, "install-workshop-at"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(
+        profile.baseConstruction.facilities.at(kWorkshop),
+        BaseConstructionState::FacilityPlacement::Installed);
+    EXPECT_FALSE(profile.baseConstruction.facilityReserveStartedWorldMinutes
+                     .contains(kWorkshop));
+    EXPECT_FLOAT_EQ(
+        profile.baseFacilityLayout.placements.at(kGreyline).at(kWorkshop).x,
+        0.75F);
+    EXPECT_FLOAT_EQ(
+        profile.baseFacilityLayout.placements.at(kGreyline).at(kWorkshop).y,
+        600.0F / 1120.0F);
+
+    const std::uint64_t committed = profileStateFingerprint(profile);
+    const BaseFacilityLayoutReceipt repeated = executeInstallBaseFacilityAt(
+        profile, content, command,
+        CommandContext{profile.revision, "install-workshop-at"});
+    EXPECT_TRUE(repeated.succeeded);
+    EXPECT_TRUE(repeated.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+}
+
+TEST(BaseFacilityLayoutDomainTest,
+     BlockedReserveInstallationRejectsWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "facility-install-blocked", content);
+    profile.baseConstruction.facilities[kWorkshop] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[kWorkshop] =
+        profile.worldClock.elapsedWorldMinutes;
+    const InstallBaseFacilityAtCommand command{
+        kWorkshop,
+        {2200.0F, 2600.0F},
+        {270.0F, 170.0F},
+        access({ContentRect{{2100.0F, 2520.0F}, {200.0F, 160.0F}}})};
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    EXPECT_FALSE(queryInstallBaseFacilityAt(
+        profile, content, command).canCommit);
+    EXPECT_FALSE(executeInstallBaseFacilityAt(
+        profile, content, command,
+        CommandContext{profile.revision, "blocked-install"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
 }
