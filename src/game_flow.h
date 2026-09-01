@@ -78,6 +78,15 @@ public:
         ItemOrientation orientation,
         Vec2 worldPosition,
         std::string transactionId);
+    [[nodiscard]] BaseGroundPlan queryBaseGroundRepositionAt(
+        AssetInstanceId assetId,
+        ItemOrientation orientation,
+        Vec2 worldPosition) const;
+    [[nodiscard]] BaseGroundReceipt repositionBaseGroundAssetAt(
+        AssetInstanceId assetId,
+        ItemOrientation orientation,
+        Vec2 worldPosition,
+        std::string transactionId);
     [[nodiscard]] BaseGroundPlan queryBaseGroundContainerAccess(
         AssetInstanceId containerAssetId) const;
     [[nodiscard]] InventoryPlan queryBaseGroundContainerInventory(
@@ -90,6 +99,9 @@ public:
     [[nodiscard]] std::optional<BaseGroundAssetProjection>
     nearestBaseGroundAsset() const noexcept;
     [[nodiscard]] BaseGroundReceipt pickupBaseGroundAsset(
+        AssetInstanceId assetId,
+        std::string transactionId);
+    [[nodiscard]] BaseGroundReceipt pickupBaseGroundAssetForManagement(
         AssetInstanceId assetId,
         std::string transactionId);
     [[nodiscard]] BaseGroundReceipt pickupNearestBaseGroundAsset(

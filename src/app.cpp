@@ -1921,6 +1921,9 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         medicalWheelOpen_ = false;
         medicalWheelOptions_.clear();
         developerWeaponPanelOpen_ = false;
+        baseConstructionPanelOpen_ = false;
+        basePlacementState_.reset();
+        selectedBasePlacedAssetId_.reset();
         profileContextMenu_.reset();
         if (gameFlow_.returnToMainMenu())
         {
@@ -2191,6 +2194,7 @@ void App::updateBase(float deltaTime)
     if (gameSession_.baseThreatProjection().warningActive)
     {
         basePlacementState_.reset();
+        baseConstructionPanelOpen_ = false;
         tacticalMapOpen_ = false;
         closeInventory();
         gameFlow_.closeBaseFacility();
@@ -2232,14 +2236,37 @@ void App::updateBase(float deltaTime)
         return;
     }
 
+    if (baseConstructionPanelOpen_)
+    {
+        if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+        {
+            baseConstructionPanelOpen_ = false;
+            selectedBasePlacedAssetId_.reset();
+            pendingBaseClicks_.clear();
+            uiMessage_ = "BASE BUILD PANEL CLOSED";
+            input_.suppressPrimaryPointerUntilRelease();
+            return;
+        }
+        for (const BasePointerClick &click : pendingBaseClicks_)
+            handleBaseConstructionPanelClick(click.position);
+        pendingBaseClicks_.clear();
+        pendingInventoryUiEvents_.clear();
+        pendingProfileRightClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
+
     if (basePlacementState_.has_value())
     {
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
+            const bool reopenPanel =
+                basePlacementState_->returnToBuildPanel;
             basePlacementState_.reset();
+            baseConstructionPanelOpen_ = reopenPanel;
             pendingBaseClicks_.clear();
             pendingBaseRotate_ = false;
-            uiMessage_ = "BASE STORAGE PLACEMENT CANCELLED";
+            uiMessage_ = "BASE FACILITY PLACEMENT CANCELLED";
             input_.suppressPrimaryPointerUntilRelease();
             return;
         }
@@ -2263,24 +2290,37 @@ void App::updateBase(float deltaTime)
         pendingBaseRotate_ = false;
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
-            const Vec2 worldPosition = raidScreenToWorld(
-                {click.position.x, click.position.y},
-                baseWorldCameraOffset());
-            const BaseGroundReceipt receipt =
-                gameFlow_.dropBaseGroundAssetAt(
-                    basePlacementState_->assetId,
-                    basePlacementState_->quantity,
-                    basePlacementState_->orientation,
-                    worldPosition,
-                    nextProfileTransactionId("base-storage-place"));
+            const Vec2 worldPosition = baseScreenToWorld(
+                {click.position.x, click.position.y});
+            const bool reposition = basePlacementState_->mode ==
+                BasePlacementState::Mode::Reposition;
+            const BaseGroundReceipt receipt = reposition
+                ? gameFlow_.repositionBaseGroundAssetAt(
+                      basePlacementState_->assetId,
+                      basePlacementState_->orientation,
+                      worldPosition,
+                      nextProfileTransactionId("base-facility-reposition"))
+                : gameFlow_.dropBaseGroundAssetAt(
+                      basePlacementState_->assetId,
+                      basePlacementState_->quantity,
+                      basePlacementState_->orientation,
+                      worldPosition,
+                      nextProfileTransactionId("base-facility-place"));
             uiMessage_ = receipt.succeeded
-                ? "BASE STORAGE CONTAINER PLACED"
+                ? reposition
+                    ? "BASE FACILITY REPOSITIONED"
+                    : "BASE FACILITY PLACED"
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::InventoryMoveOrPlace
                 : SoundEventId::UiDeny);
             if (receipt.succeeded)
+            {
+                const bool reopenPanel =
+                    basePlacementState_->returnToBuildPanel;
                 basePlacementState_.reset();
+                baseConstructionPanelOpen_ = reopenPanel;
+            }
             break;
         }
         pendingBaseClicks_.clear();
@@ -4481,13 +4521,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                         sourceAsset->definitionId);
                 if (definition.basePlacement.has_value())
                 {
-                    basePlacementState_ = BasePlacementState{
+                    startBasePlacement(
                         request.source.instanceId,
-                        request.source.quantity,
-                        request.source.orientation};
-                    closeInventory();
-                    uiMessage_ =
-                        "BASE STORAGE PLACEMENT | LMB PLACE | R ROTATE | ESC CANCEL";
+                        BasePlacementState::Mode::PlaceOwned,
+                        false);
                     return;
                 }
                 const BaseGroundReceipt receipt =
@@ -5095,6 +5132,7 @@ void App::processEvents()
             medicalWheelOptions_.clear();
             developerWeaponPanelOpen_ = false;
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
+            baseConstructionPanelOpen_ = false;
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
                 (gameFlow_.state() == GameFlowState::Base ||
                  gameFlow_.state() == GameFlowState::Raid))
@@ -5189,6 +5227,8 @@ void App::processEvents()
                 if (developerWeaponPanelOpen_)
                 {
                     closeInventory();
+                    baseConstructionPanelOpen_ = false;
+                    basePlacementState_.reset();
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
                     tacticalMapOpen_ = false;
@@ -5285,6 +5325,38 @@ void App::processEvents()
             continue;
         }
 
+        if (gameFlow_.state() == GameFlowState::Base &&
+            !pauseMenu_.isOpen() &&
+            event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+            event.key.scancode == SDL_SCANCODE_B)
+        {
+            if (basePlacementState_.has_value())
+                basePlacementState_.reset();
+            if (baseConstructionPanelOpen_)
+            {
+                baseConstructionPanelOpen_ = false;
+                selectedBasePlacedAssetId_.reset();
+                uiMessage_ = "BASE BUILD PANEL CLOSED";
+            }
+            else if (!gameFlow_.baseWorld().canAccessStash())
+            {
+                uiMessage_ =
+                    "BASE BUILD PANEL REQUIRES BASE PARCEL ACCESS";
+                gameAudio_.play(SoundEventId::UiDeny);
+            }
+            else
+            {
+                closeInventory();
+                gameFlow_.closeBaseFacility();
+                tacticalMapOpen_ = false;
+                medicalWheelOpen_ = false;
+                baseConstructionPanelOpen_ = true;
+                uiMessage_ = "BASE BUILD PANEL OPEN";
+            }
+            input_.suppressPrimaryPointerUntilRelease();
+            continue;
+        }
+
         if (gameFlow_.state() == GameFlowState::MainMenu)
         {
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -5324,7 +5396,19 @@ void App::processEvents()
 
         else if (gameFlow_.state() == GameFlowState::Base)
         {
-            if (basePlacementState_.has_value())
+            if (baseConstructionPanelOpen_)
+            {
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingBaseClicks_.push_back(BasePointerClick{
+                        MousePosition{event.button.x, event.button.y},
+                        input_.isControlPressed(),
+                        input_.isShiftPressed()});
+                }
+            }
+            else if (basePlacementState_.has_value())
             {
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                     event.button.button == SDL_BUTTON_LEFT)
@@ -8528,11 +8612,31 @@ Vec2 App::baseWorldCameraOffset() const noexcept
     const BaseWorld &world = gameFlow_.baseWorld();
     const Vec2 position = world.playerPosition();
     const Vec2 size = world.playerSize();
+    const float zoom = baseConstructionZoom();
     return ::raidCameraOffset(
         {position.x + size.x * 0.5F, position.y + size.y * 0.5F},
         world.worldSize(),
-        {static_cast<float>(kWindowWidth),
-         static_cast<float>(kWindowHeight)});
+        {static_cast<float>(kWindowWidth) / zoom,
+         static_cast<float>(kWindowHeight) / zoom});
+}
+
+float App::baseConstructionZoom() const noexcept
+{
+    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value())
+        return 1.0F;
+    constexpr std::array<float, 5U> zoomLevels{
+        0.60F, 0.75F, 1.00F, 1.25F, 1.50F};
+    return zoomLevels[std::min(
+        baseConstructionZoomIndex_, zoomLevels.size() - 1U)];
+}
+
+Vec2 App::baseScreenToWorld(Vec2 screenPosition) const noexcept
+{
+    const float zoom = baseConstructionZoom();
+    const Vec2 camera = baseWorldCameraOffset();
+    return Vec2{
+        camera.x + screenPosition.x / zoom,
+        camera.y + screenPosition.y / zoom};
 }
 
 Vec2 App::raidWorldScreenShakePixels() const noexcept
@@ -8838,7 +8942,8 @@ void App::syncRaidPointerCapture() noexcept
             raidWorldActive || baseWorldActive,
             raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen() ||
-                basePlacementState_.has_value(),
+                basePlacementState_.has_value() ||
+                baseConstructionPanelOpen_,
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
             pauseMenu_.isOpen(),
@@ -8878,6 +8983,7 @@ void App::renderAimCrosshair()
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
+        baseConstructionPanelOpen_ ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
@@ -9823,11 +9929,13 @@ void App::renderBaseWorld()
     const Vec2 camera = baseWorldCameraOffset();
     const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 worldSize = world.worldSize();
+    const float zoom = baseConstructionZoom();
+    static_cast<void>(SDL_SetRenderScale(renderer_, zoom, zoom));
     const SDL_Rect worldViewport{
-        static_cast<int>(std::lround(shakePixels.x - camera.x)),
-        static_cast<int>(std::lround(shakePixels.y - camera.y)),
-        static_cast<int>(std::ceil(worldSize.x)),
-        static_cast<int>(std::ceil(worldSize.y))};
+        static_cast<int>(std::lround((shakePixels.x - camera.x) * zoom)),
+        static_cast<int>(std::lround((shakePixels.y - camera.y) * zoom)),
+        static_cast<int>(std::ceil(worldSize.x * zoom)),
+        static_cast<int>(std::ceil(worldSize.y * zoom))};
     static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
 
     SDL_SetRenderDrawColor(renderer_, 45, 49, 36, 255);
@@ -9838,8 +9946,8 @@ void App::renderBaseWorld()
     const HomeRegionPresentationProjection &projection =
         world.outdoorPresentation(ContentRect{
             camera,
-            {static_cast<float>(kWindowWidth),
-             static_cast<float>(kWindowHeight)}});
+            {static_cast<float>(kWindowWidth) / zoom,
+             static_cast<float>(kWindowHeight) / zoom}});
     const float cellWidth = worldSize.x / static_cast<float>(layout.columns);
     const float cellHeight = worldSize.y / static_cast<float>(layout.rows);
     for (const RaidTerrainSpan &span : projection.terrainSpans)
@@ -9972,8 +10080,8 @@ void App::renderBaseWorld()
     {
         if (ground.position.x < camera.x - 96.0F ||
             ground.position.y < camera.y - 96.0F ||
-            ground.position.x > camera.x + kWindowWidth + 96.0F ||
-            ground.position.y > camera.y + kWindowHeight + 96.0F)
+            ground.position.x > camera.x + kWindowWidth / zoom + 96.0F ||
+            ground.position.y > camera.y + kWindowHeight / zoom + 96.0F)
         {
             continue;
         }
@@ -10019,6 +10127,7 @@ void App::renderBaseWorld()
     renderParticles();
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
+    static_cast<void>(SDL_SetRenderScale(renderer_, 1.0F, 1.0F));
 
     if (const auto ground = gameFlow_.nearestBaseGroundAsset())
     {
@@ -10043,6 +10152,164 @@ void App::renderBaseWorld()
     }
 }
 
+void App::startBasePlacement(
+    AssetInstanceId assetId,
+    BasePlacementState::Mode mode,
+    bool returnToBuildPanel)
+{
+    const AssetRecord *asset = gameSession_.profile().assets.find(assetId);
+    if (asset == nullptr)
+    {
+        uiMessage_ = "ASSET NO LONGER EXISTS";
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(asset->definitionId);
+    if (!definition.basePlacement.has_value())
+    {
+        uiMessage_ = "ASSET IS NOT A PLACEABLE BASE FACILITY";
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    closeInventory();
+    gameFlow_.closeBaseFacility();
+    tacticalMapOpen_ = false;
+    baseConstructionPanelOpen_ = false;
+    basePlacementState_ = BasePlacementState{
+        assetId,
+        0U,
+        asset->orientation,
+        mode,
+        returnToBuildPanel};
+    uiMessage_ = mode == BasePlacementState::Mode::Reposition
+        ? "MOVE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL"
+        : "PLACE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL";
+    input_.suppressPrimaryPointerUntilRelease();
+}
+
+void App::handleBaseConstructionPanelClick(MousePosition position)
+{
+    const SDL_FRect zoomOut{54.0F, 102.0F, 92.0F, 34.0F};
+    const SDL_FRect zoomReset{156.0F, 102.0F, 150.0F, 34.0F};
+    const SDL_FRect zoomIn{316.0F, 102.0F, 92.0F, 34.0F};
+    if (contains(zoomOut, position))
+    {
+        if (baseConstructionZoomIndex_ > 0U)
+            --baseConstructionZoomIndex_;
+        uiMessage_ = "BUILD VIEW ZOOM UPDATED";
+        return;
+    }
+    if (contains(zoomReset, position))
+    {
+        baseConstructionZoomIndex_ = 2U;
+        uiMessage_ = "BUILD VIEW ZOOM RESET";
+        return;
+    }
+    if (contains(zoomIn, position))
+    {
+        if (baseConstructionZoomIndex_ < 4U)
+            ++baseConstructionZoomIndex_;
+        uiMessage_ = "BUILD VIEW ZOOM UPDATED";
+        return;
+    }
+
+    std::size_t catalogIndex{};
+    for (const ItemDefinition &definition : publishedContentRegistry().items())
+    {
+        if (!definition.basePlacement.has_value() ||
+            definition.marketBuyPrice == 0U || catalogIndex >= 3U)
+            continue;
+        const SDL_FRect row{
+            46.0F, 174.0F + static_cast<float>(catalogIndex) * 44.0F,
+            390.0F, 36.0F};
+        if (contains(row, position))
+        {
+            const auto receipt = gameSession_.purchaseBasePlaceable(
+                definition.definitionId,
+                nextProfileTransactionId("base-build-purchase"));
+            if (!receipt.succeeded)
+            {
+                uiMessage_ = receipt.message;
+                gameAudio_.play(SoundEventId::UiDeny);
+                return;
+            }
+            gameAudio_.play(SoundEventId::UiConfirm);
+            startBasePlacement(
+                receipt.assetId,
+                BasePlacementState::Mode::PlaceOwned,
+                true);
+            return;
+        }
+        ++catalogIndex;
+    }
+
+    std::size_t ownedIndex{};
+    for (const AssetRecord *asset : assetsInContainer(
+             gameSession_.profile(), ProfileContainerId::stash()))
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.basePlacement.has_value() || ownedIndex >= 3U)
+            continue;
+        const SDL_FRect row{
+            46.0F, 338.0F + static_cast<float>(ownedIndex) * 38.0F,
+            390.0F, 32.0F};
+        if (contains(row, position))
+        {
+            startBasePlacement(
+                asset->instanceId,
+                BasePlacementState::Mode::PlaceOwned,
+                true);
+            return;
+        }
+        ++ownedIndex;
+    }
+
+    const std::vector<BaseGroundAssetProjection> placed =
+        gameFlow_.baseGroundAssets();
+    for (std::size_t index{}; index < placed.size() && index < 3U; ++index)
+    {
+        const SDL_FRect row{
+            46.0F, 482.0F + static_cast<float>(index) * 34.0F,
+            390.0F, 28.0F};
+        if (contains(row, position))
+        {
+            selectedBasePlacedAssetId_ = placed[index].assetId;
+            uiMessage_ = "BASE FACILITY SELECTED";
+            return;
+        }
+    }
+
+    if (!selectedBasePlacedAssetId_.has_value())
+        return;
+    const SDL_FRect moveButton{46.0F, 596.0F, 180.0F, 34.0F};
+    const SDL_FRect pickupButton{236.0F, 596.0F, 200.0F, 34.0F};
+    if (contains(moveButton, position))
+    {
+        startBasePlacement(
+            *selectedBasePlacedAssetId_,
+            BasePlacementState::Mode::Reposition,
+            true);
+        return;
+    }
+    if (contains(pickupButton, position))
+    {
+        const BaseGroundReceipt receipt =
+            gameFlow_.pickupBaseGroundAssetForManagement(
+            *selectedBasePlacedAssetId_,
+            nextProfileTransactionId("base-build-pickup"));
+        uiMessage_ = receipt.succeeded
+            ? "BASE FACILITY RETURNED TO STASH"
+            : receipt.message;
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::InventoryPickup
+            : SoundEventId::UiDeny);
+        if (receipt.succeeded)
+            selectedBasePlacedAssetId_.reset();
+    }
+}
+
 void App::renderBasePlacementPreview()
 {
     if (!basePlacementState_.has_value() ||
@@ -10058,16 +10325,21 @@ void App::renderBasePlacementPreview()
         asset->definitionId);
     if (!definition.basePlacement.has_value())
         return;
-    const Vec2 worldPosition = raidScreenToWorld(
-        *pointerWorldPosition_, baseWorldCameraOffset());
+    const Vec2 worldPosition = baseScreenToWorld(*pointerWorldPosition_);
     const Vec2 size = orientedSize(
         definition.basePlacement->footprint,
         basePlacementState_->orientation);
-    const BaseGroundPlan plan = gameFlow_.queryBaseGroundDropAt(
-        basePlacementState_->assetId,
-        basePlacementState_->quantity,
-        basePlacementState_->orientation,
-        worldPosition);
+    const BaseGroundPlan plan = basePlacementState_->mode ==
+        BasePlacementState::Mode::Reposition
+        ? gameFlow_.queryBaseGroundRepositionAt(
+              basePlacementState_->assetId,
+              basePlacementState_->orientation,
+              worldPosition)
+        : gameFlow_.queryBaseGroundDropAt(
+              basePlacementState_->assetId,
+              basePlacementState_->quantity,
+              basePlacementState_->orientation,
+              worldPosition);
     const SDL_FRect bounds{
         worldPosition.x - size.x * 0.5F,
         worldPosition.y - size.y * 0.5F,
@@ -10088,7 +10360,124 @@ void App::renderBasePlacementPreview()
         renderer_,
         bounds.x + 8.0F,
         bounds.y + 8.0F,
-        plan.canCommit ? "PLACE STORAGE" : "BLOCKED");
+        plan.canCommit ? "PLACE FACILITY" : "BLOCKED");
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+
+void App::renderBaseConstructionPanel()
+{
+    if (!baseConstructionPanelOpen_ ||
+        gameFlow_.state() != GameFlowState::Base)
+        return;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    const SDL_FRect shade{0.0F, 0.0F, 470.0F, 720.0F};
+    const SDL_FRect panel{20.0F, 40.0F, 440.0F, 620.0F};
+    SDL_SetRenderDrawColor(renderer_, 4, 8, 9, 170);
+    SDL_RenderFillRect(renderer_, &shade);
+    SDL_SetRenderDrawColor(renderer_, 18, 30, 31, 248);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 112, 190, 164, 255);
+    SDL_RenderRect(renderer_, &panel);
+    uiTextRenderer_.render(renderer_, 44.0F, 56.0F, "BASE BUILD PANEL");
+    uiTextRenderer_.render(
+        renderer_, 44.0F, 78.0F,
+        "B / ESC CLOSE | CLICK TO BUY, PLACE OR MANAGE");
+
+    const SDL_FRect zoomOut{54.0F, 102.0F, 92.0F, 34.0F};
+    const SDL_FRect zoomReset{156.0F, 102.0F, 150.0F, 34.0F};
+    const SDL_FRect zoomIn{316.0F, 102.0F, 92.0F, 34.0F};
+    const auto drawButton = [this](const SDL_FRect &bounds,
+                                   const std::string &label,
+                                   bool selected = false)
+    {
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 48 : 34, selected ? 102 : 70,
+            selected ? 84 : 66, 245);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 116, 204, 170, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(
+            renderer_, bounds.x + 10.0F, bounds.y + 9.0F, label.c_str());
+    };
+    drawButton(zoomOut, "ZOOM OUT");
+    drawButton(
+        zoomReset,
+        fmt::format("VIEW {}%", static_cast<int>(
+            std::lround(baseConstructionZoom() * 100.0F))));
+    drawButton(zoomIn, "ZOOM IN");
+
+    uiTextRenderer_.render(renderer_, 44.0F, 150.0F,
+                           "CATALOG | BUY AND PLACE");
+    std::size_t catalogIndex{};
+    for (const ItemDefinition &definition : publishedContentRegistry().items())
+    {
+        if (!definition.basePlacement.has_value() ||
+            definition.marketBuyPrice == 0U || catalogIndex >= 3U)
+            continue;
+        const SDL_FRect row{
+            46.0F, 174.0F + static_cast<float>(catalogIndex) * 44.0F,
+            390.0F, 36.0F};
+        drawButton(
+            row,
+            fmt::format("{} | BUY {}", definition.displayName,
+                        definition.marketBuyPrice));
+        ++catalogIndex;
+    }
+    if (catalogIndex == 0U)
+        uiTextRenderer_.render(renderer_, 54.0F, 180.0F,
+                               "NO PLACEABLE FACILITIES AVAILABLE");
+
+    uiTextRenderer_.render(renderer_, 44.0F, 314.0F,
+                           "OWNED IN STASH | CLICK TO PLACE");
+    std::size_t ownedIndex{};
+    for (const AssetRecord *asset : assetsInContainer(
+             gameSession_.profile(), ProfileContainerId::stash()))
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(asset->definitionId);
+        if (!definition.basePlacement.has_value() || ownedIndex >= 3U)
+            continue;
+        const SDL_FRect row{
+            46.0F, 338.0F + static_cast<float>(ownedIndex) * 38.0F,
+            390.0F, 32.0F};
+        drawButton(row, fmt::format("{} #{} | PLACE",
+            definition.displayName, asset->instanceId));
+        ++ownedIndex;
+    }
+    if (ownedIndex == 0U)
+        uiTextRenderer_.render(renderer_, 54.0F, 344.0F,
+                               "NO UNPLACED FACILITIES");
+
+    uiTextRenderer_.render(renderer_, 44.0F, 458.0F,
+                           "PLACED FACILITIES | CLICK TO SELECT");
+    const std::vector<BaseGroundAssetProjection> placed =
+        gameFlow_.baseGroundAssets();
+    for (std::size_t index{}; index < placed.size() && index < 3U; ++index)
+    {
+        const BaseGroundAssetProjection &entry = placed[index];
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(entry.definitionId);
+        const SDL_FRect row{
+            46.0F, 482.0F + static_cast<float>(index) * 34.0F,
+            390.0F, 28.0F};
+        drawButton(
+            row,
+            fmt::format("{} #{} | ({:.0f}, {:.0f})",
+                definition.displayName, entry.assetId,
+                entry.position.x, entry.position.y),
+            selectedBasePlacedAssetId_ == entry.assetId);
+    }
+    if (placed.empty())
+        uiTextRenderer_.render(renderer_, 54.0F, 488.0F,
+                               "NO PLACED FACILITIES");
+
+    const SDL_FRect moveButton{46.0F, 596.0F, 180.0F, 34.0F};
+    const SDL_FRect pickupButton{236.0F, 596.0F, 200.0F, 34.0F};
+    drawButton(moveButton, "MOVE SELECTED");
+    drawButton(pickupButton, "RETURN EMPTY TO STASH");
+    if (!uiMessage_.empty())
+        uiTextRenderer_.render(renderer_, 44.0F, 638.0F, uiMessage_.c_str());
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
@@ -13755,7 +14144,8 @@ void App::renderLostRaidRecords()
 void App::renderBase()
 {
     renderBaseWorld();
-    renderAimCrosshair();
+    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value())
+        renderAimCrosshair();
 
     SDL_SetRenderDrawColor(
         renderer_,
@@ -13857,6 +14247,14 @@ void App::renderBase()
         break;
     }
     uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal.c_str());
+    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
+        !inventoryOverlayState_.isOpen() &&
+        !gameFlow_.activeBaseFacility().has_value() && !tacticalMapOpen_)
+    {
+        uiTextRenderer_.render(
+            renderer_, 48.0F, 676.0F,
+            "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU");
+    }
 
     if (const auto facility = gameFlow_.activeBaseFacility())
     {
@@ -13894,6 +14292,7 @@ void App::renderBase()
             openedBaseGroundContainerId_);
     }
     renderHomeRegionMap();
+    renderBaseConstructionPanel();
     renderBaseSiegeWarning();
 }
 

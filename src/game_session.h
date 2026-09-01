@@ -328,6 +328,20 @@ public:
         const EconomyCommand &command,
         std::string transactionId);
 
+    struct BasePlaceablePurchaseReceipt
+    {
+        bool succeeded{};
+        DomainErrorCode error{DomainErrorCode::None};
+        std::string message;
+        ProfileRevision revision{};
+        AssetInstanceId assetId{};
+        std::int64_t currencyDelta{};
+    };
+
+    [[nodiscard]] BasePlaceablePurchaseReceipt purchaseBasePlaceable(
+        ItemDefinitionId definitionId,
+        std::string transactionId);
+
     [[nodiscard]] BaseResourceReceipt executeBaseResourceContribution(
         AssetInstanceId assetId,
         std::string transactionId);

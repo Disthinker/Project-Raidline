@@ -272,6 +272,46 @@ BaseGroundReceipt GameFlow::dropBaseGroundAssetAt(
         std::move(transactionId));
 }
 
+BaseGroundPlan GameFlow::queryBaseGroundRepositionAt(
+    AssetInstanceId assetId,
+    ItemOrientation orientation,
+    Vec2 worldPosition) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundPlacementAccess(worldPosition);
+    access.managementAccess = access.stashAccessible;
+    return queryBaseGround(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        RepositionBaseGroundAssetCommand{
+            assetId, orientation, std::move(access)});
+}
+
+BaseGroundReceipt GameFlow::repositionBaseGroundAssetAt(
+    AssetInstanceId assetId,
+    ItemOrientation orientation,
+    Vec2 worldPosition,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundPlacementAccess(worldPosition);
+    access.managementAccess = access.stashAccessible;
+    return gameSession_.executeBaseGroundAsset(
+        RepositionBaseGroundAssetCommand{
+            assetId, orientation, std::move(access)},
+        std::move(transactionId));
+}
+
 BaseGroundPlan GameFlow::queryBaseGroundContainerAccess(
     AssetInstanceId containerAssetId) const
 {
@@ -350,6 +390,24 @@ BaseGroundReceipt GameFlow::pickupBaseGroundAsset(
     }
     return gameSession_.executeBaseGroundAsset(
         PickupBaseGroundAssetCommand{assetId, baseGroundAccess()},
+        std::move(transactionId));
+}
+
+BaseGroundReceipt GameFlow::pickupBaseGroundAssetForManagement(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base || !baseWorld_.canAccessStash())
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base facility management requires warehouse access",
+            gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundAccess();
+    access.managementAccess = true;
+    return gameSession_.executeBaseGroundAsset(
+        PickupBaseGroundAssetCommand{assetId, std::move(access)},
         std::move(transactionId));
 }
 

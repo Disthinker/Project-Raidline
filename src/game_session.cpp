@@ -1859,6 +1859,61 @@ EconomyReceipt GameSession::executeProfileEconomy(
     return receipt;
 }
 
+GameSession::BasePlaceablePurchaseReceipt
+GameSession::purchaseBasePlaceable(
+    ItemDefinitionId definitionId,
+    std::string transactionId)
+{
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(definitionId);
+    if (!definition.basePlacement.has_value() ||
+        definition.marketBuyPrice == 0U || definition.maxStackSize != 1U)
+    {
+        return BasePlaceablePurchaseReceipt{
+            false,
+            DomainErrorCode::IllegalDestination,
+            "definition is not available in the Base build catalog",
+            profile_.revision,
+            0,
+            0};
+    }
+
+    const AssetInstanceId createdId = profile_.assets.nextAssetId();
+    const EconomyReceipt economy = executeProfileEconomy(
+        PurchaseCommand{definitionId, 1U}, std::move(transactionId));
+    if (!economy.succeeded)
+    {
+        return BasePlaceablePurchaseReceipt{
+            false,
+            economy.error,
+            economy.message,
+            economy.revision,
+            0,
+            economy.currencyDelta};
+    }
+    const AssetRecord *created = profile_.assets.find(createdId);
+    if (created == nullptr || created->definitionId != definitionId)
+    {
+        // executeProfileEconomy is synchronous and a quantity-one placeable
+        // must create exactly this stable ID. Treat any contract violation as
+        // a hard service error instead of making the App infer another asset.
+        return BasePlaceablePurchaseReceipt{
+            false,
+            DomainErrorCode::InvalidProfile,
+            "Base placeable purchase did not create the expected asset",
+            profile_.revision,
+            0,
+            economy.currencyDelta};
+    }
+    return BasePlaceablePurchaseReceipt{
+        true,
+        DomainErrorCode::None,
+        {},
+        profile_.revision,
+        createdId,
+        economy.currencyDelta};
+}
+
 BaseResourceReceipt GameSession::executeBaseResourceContribution(
     AssetInstanceId assetId,
     std::string transactionId)

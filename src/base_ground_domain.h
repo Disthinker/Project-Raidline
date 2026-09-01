@@ -21,6 +21,7 @@ struct BaseGroundAccess
     bool stashAccessible{};
     float interactionRange{72.0F};
     std::optional<BaseGroundPlacementContext> placementContext;
+    bool managementAccess{};
 };
 
 struct DropBaseGroundAssetCommand
@@ -37,9 +38,17 @@ struct PickupBaseGroundAssetCommand
     BaseGroundAccess access;
 };
 
+struct RepositionBaseGroundAssetCommand
+{
+    AssetInstanceId assetId{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+    BaseGroundAccess access;
+};
+
 using BaseGroundCommand = std::variant<
     DropBaseGroundAssetCommand,
-    PickupBaseGroundAssetCommand>;
+    PickupBaseGroundAssetCommand,
+    RepositionBaseGroundAssetCommand>;
 
 struct BaseGroundPlan
 {

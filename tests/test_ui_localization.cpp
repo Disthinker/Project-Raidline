@@ -846,6 +846,29 @@ TEST(UiLocalizationTest, HomeRegionPlaceableStorageIsBilingual) {
             "请先清空基地储物箱再收回");
 }
 
+TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU"),
+            "B 基地建设 | TAB 物品栏 | M 地图 | ESC 菜单");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CATALOG | BUY AND PLACE"),
+            "设施目录 | 购买并放置");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base Storage Crate | BUY 160"),
+            "基地储物箱 | 购买 160");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MOVE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL"),
+            "移动基地设施 | 左键放置 | R旋转 | ESC取消");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RETURN EMPTY TO STASH"),
+            "空设施收回仓库");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

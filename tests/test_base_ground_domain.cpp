@@ -45,6 +45,7 @@ BaseGroundAccess placementAccess(
     result.dropPosition = dropPosition;
     result.placementContext = BaseGroundPlacementContext{
         parcel, std::move(blockers)};
+    result.managementAccess = true;
     return result;
 }
 }
@@ -554,4 +555,86 @@ TEST(BaseGroundDomainTest, PlaceableStorageProjectsOrientedMovementBlocker)
     EXPECT_FLOAT_EQ(blockers.front().position.y, 420.0F);
     EXPECT_FLOAT_EQ(blockers.front().size.x, 112.0F);
     EXPECT_FLOAT_EQ(blockers.front().size.y, 160.0F);
+}
+
+TEST(BaseGroundDomainTest,
+     PlaceableRepositionExcludesSelfAndRejectsOtherBlockersAtomically)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-placeable-reposition", content);
+    const ItemDefinition &definition = content.item(kBaseStorageCrate);
+    const AssetInstanceId first = profile.assets.create(
+        definition,
+        BaseGroundAssetLocation{kGreyline, Vec2{300.0F, 300.0F}});
+    const AssetInstanceId second = profile.assets.create(
+        definition,
+        BaseGroundAssetLocation{kGreyline, Vec2{560.0F, 300.0F}});
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    BaseGroundAccess unauthorized = placementAccess(Vec2{390.0F, 430.0F});
+    unauthorized.managementAccess = false;
+    EXPECT_FALSE(queryBaseGround(
+        profile,
+        content,
+        RepositionBaseGroundAssetCommand{
+            first, ItemOrientation::Degrees0, unauthorized}).canCommit);
+
+    const BaseGroundCommand legal = RepositionBaseGroundAssetCommand{
+        first,
+        ItemOrientation::Degrees90,
+        placementAccess(Vec2{390.0F, 430.0F})};
+    const std::uint64_t beforeQuery = profileStateFingerprint(profile);
+    EXPECT_TRUE(queryBaseGround(profile, content, legal).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeQuery);
+
+    const BaseGroundReceipt moved = executeBaseGround(
+        profile,
+        content,
+        legal,
+        CommandContext{profile.revision, "move-placeable"});
+    ASSERT_TRUE(moved.succeeded) << moved.message;
+    const auto *location = std::get_if<BaseGroundAssetLocation>(
+        &profile.assets.find(first)->location);
+    ASSERT_NE(location, nullptr);
+    EXPECT_FLOAT_EQ(location->position.x, 390.0F);
+    EXPECT_FLOAT_EQ(location->position.y, 430.0F);
+    EXPECT_EQ(profile.assets.find(first)->orientation,
+              ItemOrientation::Degrees90);
+
+    const std::uint64_t beforeRejected = profileStateFingerprint(profile);
+    const BaseGroundReceipt rejected = executeBaseGround(
+        profile,
+        content,
+        RepositionBaseGroundAssetCommand{
+            first,
+            ItemOrientation::Degrees0,
+            placementAccess(Vec2{560.0F, 300.0F})},
+        CommandContext{profile.revision, "overlap-placeable"});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeRejected);
+    EXPECT_NE(profile.assets.find(second), nullptr);
+}
+
+TEST(BaseGroundDomainTest,
+     ManagementPickupCanReachSameSiteButStillRequiresEmptyStorage)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-placeable-management", content);
+    const AssetInstanceId crate = profile.assets.create(
+        content.item(kBaseStorageCrate),
+        BaseGroundAssetLocation{kGreyline, Vec2{700.0F, 600.0F}});
+    BaseGroundAccess management = access(true);
+    management.managementAccess = true;
+    const BaseGroundReceipt receipt = executeBaseGround(
+        profile,
+        content,
+        PickupBaseGroundAssetCommand{crate, management},
+        CommandContext{profile.revision, "manage-placeable"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    const auto *stored = std::get_if<StoredAssetLocation>(
+        &profile.assets.find(crate)->location);
+    ASSERT_NE(stored, nullptr);
+    EXPECT_EQ(stored->container, ProfileContainerId::stash());
 }

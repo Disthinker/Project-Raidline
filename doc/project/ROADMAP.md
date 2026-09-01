@@ -188,7 +188,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 共享战斗能力 v1 | 基地大地图可使用与 Raid 一致的准星、武器切换、射击和反馈；真实消耗弹药/耐久并可能故障；基地板块内连接仓库、外围只显示随身页，`M` 可查看 Home Region 地图 | SDL-free WorldShootingRuntime、Base/Raid 窄能力复用、Profile FireWeapon 事务、空间化 Stash 访问、只读 Home Region 地图、周期原子检查点、无 Raid 生命周期 | PR #123 已通过本地全量自动化、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `9106126` 进入 main；不引入敌人、设施伤害、撤离、高危或 Settlement |
 | Home Region 地面资产 v1 | 随身或仓库根资产可放到当前基地地面，在世界与地图中显示并近距拾回；重启和迁徙后保持原站点 | BaseGroundAssetLocation、唯一资产树、查询/命令、schema v39、站点与距离投影 | PR #124 已通过 1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `17a3514` 进入 main |
 | Home Region 世界容器交互 v1 | 靠近地面背包或胸挂按 `E` 打开，在右侧真实分区与随身容器间拖拽、交换、堆叠和快速装备，并可整体拾取容器 | 当前站点/距离访问查询、受限 InventoryCommand 参与者、保存失败零提交、复用 schema v39 | PR #125 已通过用户正常游玩验收，以 merge commit `03028bb` 进入 main |
-| Home Region 可放置储物箱 v1 | 从固定供应购买储物箱，在基地板块内鼠标预览、旋转并放置；落地后可打开整理并参与真实空间阻挡 | `base_placement` 内容能力、设施/环境/玩家/空间资产重叠校验、BaseGround 原子事务、content v58/schema v39 | 当前分支已通过 Windows Debug 全目标构建与 1368/1368 CTest；等待 exact-head CI 和用户正常游玩验收 |
+| Home Region 基地建设面板与可放置储物箱 v1 | `B` 打开建设面板，缩放视野并直接购买/放置、移动或收回设施；储物箱落地后可打开整理并参与真实空间阻挡 | 内容驱动建设目录、`base_placement` 能力、稳定购买资产回执、Reposition/BaseGround 原子事务、content v58/schema v39 | 建设面板返工已通过 Windows Debug 全目标构建与 1372/1372 CTest；等待 exact-head CI 和用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

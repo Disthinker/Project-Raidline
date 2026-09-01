@@ -54,9 +54,17 @@ struct ProfileContextMenu
 
 struct BasePlacementState
 {
+    enum class Mode
+    {
+        PlaceOwned,
+        Reposition
+    };
+
     AssetInstanceId assetId{};
     std::uint32_t quantity{};
     ItemOrientation orientation{ItemOrientation::Degrees0};
+    Mode mode{Mode::PlaceOwned};
+    bool returnToBuildPanel{};
 };
 
 class App
@@ -117,6 +125,9 @@ private:
     std::optional<ProfileContextMenu> profileContextMenu_;
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
     std::optional<BasePlacementState> basePlacementState_;
+    bool baseConstructionPanelOpen_{};
+    std::size_t baseConstructionZoomIndex_{2U};
+    std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
@@ -192,6 +203,11 @@ private:
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
     void handleDeveloperPanelClick(MousePosition position);
+    void handleBaseConstructionPanelClick(MousePosition position);
+    void startBasePlacement(
+        AssetInstanceId assetId,
+        BasePlacementState::Mode mode,
+        bool returnToBuildPanel);
     [[nodiscard]] bool tryDeployFromBase(
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
@@ -300,6 +316,7 @@ private:
     void renderBase();
     void renderBaseWorld();
     void renderBasePlacementPreview();
+    void renderBaseConstructionPanel();
     void renderHomeRegionMap();
     void renderBaseStorage();
     void renderBaseSupply();
@@ -346,6 +363,8 @@ private:
     void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
     [[nodiscard]] Vec2 baseWorldCameraOffset() const noexcept;
+    [[nodiscard]] float baseConstructionZoom() const noexcept;
+    [[nodiscard]] Vec2 baseScreenToWorld(Vec2 screenPosition) const noexcept;
     void renderRaidTacticalMap();
     void renderScreenPrimaryButton(
         const char *label);

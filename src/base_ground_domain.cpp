@@ -422,8 +422,9 @@ BaseGroundReceipt applyPickup(
         &asset->location);
     if (ground == nullptr ||
         ground->baseSiteDefinitionId != command.access.baseSiteDefinitionId ||
-        distanceSquared(ground->position, command.access.playerCenter) >
-            command.access.interactionRange * command.access.interactionRange)
+        (!command.access.managementAccess &&
+         distanceSquared(ground->position, command.access.playerCenter) >
+             command.access.interactionRange * command.access.interactionRange))
     {
         return failure(
             DomainErrorCode::IllegalDestination,
@@ -537,6 +538,69 @@ BaseGroundReceipt applyPickup(
         candidate.revision);
 }
 
+BaseGroundReceipt applyReposition(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const RepositionBaseGroundAssetCommand &command)
+{
+    if (candidate.pendingRaid.has_value() ||
+        !accessMatchesActiveBase(candidate, content, command.access) ||
+        !command.access.managementAccess)
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "Base ground access is not valid",
+            candidate.revision);
+    }
+    AssetRecord *asset = candidate.assets.findMutable(command.assetId);
+    if (asset == nullptr)
+    {
+        return failure(
+            DomainErrorCode::MissingAsset,
+            "ground asset does not exist",
+            candidate.revision);
+    }
+    const auto *ground = std::get_if<BaseGroundAssetLocation>(
+        &asset->location);
+    if (ground == nullptr ||
+        ground->baseSiteDefinitionId != command.access.baseSiteDefinitionId)
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "asset is not placed at the active Base site",
+            candidate.revision);
+    }
+    const ItemDefinition &definition = content.item(asset->definitionId);
+    if (!definition.basePlacement.has_value() ||
+        !canUseItemOrientation(definition, command.orientation))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "asset cannot be repositioned",
+            candidate.revision);
+    }
+    if (!placeableAssetFits(
+            candidate,
+            content,
+            command.assetId,
+            definition,
+            command.orientation,
+            command.access))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "Base placement is outside the parcel or overlaps an obstacle",
+            candidate.revision);
+    }
+    asset->location = BaseGroundAssetLocation{
+        command.access.baseSiteDefinitionId,
+        command.access.dropPosition};
+    asset->orientation = command.orientation;
+    return BaseGroundReceipt{
+        true, false, DomainErrorCode::None, {}, candidate.revision,
+        asset->instanceId};
+}
+
 BaseGroundReceipt apply(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -548,8 +612,11 @@ BaseGroundReceipt apply(
             using Command = std::decay_t<decltype(typed)>;
             if constexpr (std::is_same_v<Command, DropBaseGroundAssetCommand>)
                 return applyDrop(candidate, content, typed);
-            else
+            else if constexpr (
+                std::is_same_v<Command, PickupBaseGroundAssetCommand>)
                 return applyPickup(candidate, content, typed);
+            else
+                return applyReposition(candidate, content, typed);
         },
         command);
     if (!receipt.succeeded)
