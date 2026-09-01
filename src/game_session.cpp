@@ -454,6 +454,7 @@ bool GameSession::startNewProfile(std::string profileId)
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
+    deferredRaidBasePresentationEvents_.clear();
     alphaRaidActive_ = false;
     recoveredAbandonedRaid_ = false;
     state_ = GameSessionState::BetweenRaids;
@@ -534,6 +535,7 @@ bool GameSession::continueProfile()
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     developerWeaponOverrides_.clear();
+    deferredRaidBasePresentationEvents_.clear();
     alphaRaidActive_ = false;
     recoveredAbandonedRaid_ = recoveredPendingRaid;
     state_ = GameSessionState::BetweenRaids;
@@ -839,6 +841,7 @@ bool GameSession::deployAlpha(
     persistenceMessage_ = std::move(saveMessage);
     world_.swap(candidateWorld);
     activeRaidRecoveryProfile_ = std::move(recoveryProfile);
+    deferredRaidBasePresentationEvents_.clear();
     settlement_ = RaidSettlement{};
     state_ = GameSessionState::InRaid;
     raidNumber_ = number;
@@ -2410,6 +2413,11 @@ BaseRestReceipt GameSession::executeBaseRest(
             persistenceMessage_,
             profile_.revision};
     }
+    recordBaseCompletionEvents(
+        receipt.construction,
+        receipt.manufacturing,
+        receipt.residentTreatment,
+        false);
     worldClockDirty_ = false;
     worldClockCheckpointElapsedSeconds_ = 0.0F;
     return receipt;
@@ -2977,6 +2985,11 @@ void GameSession::advanceWorldClockFromSimulation(
                 }
                 ++profile_.revision;
             }
+            recordBaseCompletionEvents(
+                construction,
+                manufacturing,
+                residentTreatment,
+                true);
             static_cast<void>(daily);
             worldClockDirty_ = true;
             pendingWorldSeconds_ = remainingWorldSeconds;
@@ -3033,6 +3046,11 @@ void GameSession::advanceWorldClockFromSimulation(
                     pendingWorldSeconds_ = scaledSeconds;
                     return;
                 }
+                recordBaseCompletionEvents(
+                    construction,
+                    manufacturing,
+                    residentTreatment,
+                    false);
             }
             else
             {
@@ -3146,6 +3164,58 @@ void GameSession::resetWorldClockRuntime() noexcept
     worldClockCheckpointElapsedSeconds_ = 0.0F;
     worldClockDirty_ = false;
     baseSiegeWarningSecondAccumulator_ = 0.0F;
+}
+
+void GameSession::recordBaseCompletionEvents(
+    const BaseConstructionAdvanceResult &construction,
+    const BaseManufacturingAdvanceResult &manufacturing,
+    const ResidentTreatmentAdvanceResult &residentTreatment,
+    bool deferUntilRaidSettlement)
+{
+    auto &events = deferUntilRaidSettlement
+        ? deferredRaidBasePresentationEvents_
+        : presentationEvents_;
+    if (construction.completed)
+    {
+        switch (construction.target)
+        {
+        case BaseFacilityUpgradeTarget::Dormitory:
+            events.push_back(
+                GameSessionPresentationEvent::BaseDormitoryUpgradeCompleted);
+            break;
+        case BaseFacilityUpgradeTarget::KitchenWater:
+            events.push_back(
+                GameSessionPresentationEvent::BaseKitchenWaterUpgradeCompleted);
+            break;
+        case BaseFacilityUpgradeTarget::Workshop:
+            events.push_back(
+                GameSessionPresentationEvent::BaseWorkshopUpgradeCompleted);
+            break;
+        case BaseFacilityUpgradeTarget::Medical:
+            events.push_back(
+                GameSessionPresentationEvent::BaseMedicalUpgradeCompleted);
+            break;
+        }
+    }
+    if (manufacturing.completed)
+    {
+        events.push_back(
+            GameSessionPresentationEvent::BaseManufacturingCompleted);
+    }
+    if (residentTreatment.completed)
+    {
+        events.push_back(
+            GameSessionPresentationEvent::BaseResidentTreatmentCompleted);
+    }
+}
+
+void GameSession::publishDeferredRaidBasePresentationEvents()
+{
+    presentationEvents_.insert(
+        presentationEvents_.end(),
+        deferredRaidBasePresentationEvents_.begin(),
+        deferredRaidBasePresentationEvents_.end());
+    deferredRaidBasePresentationEvents_.clear();
 }
 
 void GameSession::updateAlphaRaid(
@@ -4237,6 +4307,7 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
     configuredWeaponAssetId_.reset();
     activeRaidRecoveryProfile_.reset();
     alphaRaidActive_ = false;
+    publishDeferredRaidBasePresentationEvents();
     state_ = GameSessionState::BetweenRaids;
     return true;
 }

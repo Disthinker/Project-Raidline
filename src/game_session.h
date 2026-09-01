@@ -97,6 +97,12 @@ enum class GameSessionPresentationEvent
     MalfunctionCleared,
     LootPickedUp,
     RescueSecured,
+    BaseDormitoryUpgradeCompleted,
+    BaseKitchenWaterUpgradeCompleted,
+    BaseWorkshopUpgradeCompleted,
+    BaseMedicalUpgradeCompleted,
+    BaseManufacturingCompleted,
+    BaseResidentTreatmentCompleted,
 };
 
 struct DeveloperWeaponTuningSnapshot
@@ -469,6 +475,8 @@ private:
     RaidActionState raidActionState_;
     std::optional<CombatDamageResolution> lastIncomingDamage_;
     std::vector<GameSessionPresentationEvent> presentationEvents_;
+    std::vector<GameSessionPresentationEvent>
+        deferredRaidBasePresentationEvents_;
     std::uint64_t raidCommandSequence_{};
     std::uint64_t medicalRandomSequence_{};
     std::uint64_t woundRandomSequence_{};
@@ -538,6 +546,12 @@ private:
         bool allowPeriodicCheckpoint);
     void advanceBaseSiegeFromSimulation(float deltaTime);
     void resetWorldClockRuntime() noexcept;
+    void recordBaseCompletionEvents(
+        const BaseConstructionAdvanceResult &construction,
+        const BaseManufacturingAdvanceResult &manufacturing,
+        const ResidentTreatmentAdvanceResult &residentTreatment,
+        bool deferUntilRaidSettlement);
+    void publishDeferredRaidBasePresentationEvents();
     void updateAlphaRaid(const GameplayInput &input, float deltaTime);
     void applyAlphaIncomingDamage();
     void advanceAlphaMedicalStatus(float deltaTime);

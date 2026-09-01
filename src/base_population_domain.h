@@ -1,5 +1,8 @@
 #pragma once
 
+#include "base_construction_domain.h"
+#include "base_manufacturing_domain.h"
+#include "base_resident_medical_domain.h"
 #include "base_resource_domain.h"
 
 inline constexpr std::uint32_t kMaximumOrdinaryResidents = 10000;
@@ -52,6 +55,9 @@ struct BaseRestReceipt
     std::uint64_t worldMinutesApplied{};
     std::uint64_t dailyCyclesResolved{};
     BaseResourceBundle latestShortfall;
+    BaseConstructionAdvanceResult construction;
+    BaseManufacturingAdvanceResult manufacturing;
+    ResidentTreatmentAdvanceResult residentTreatment;
 };
 
 [[nodiscard]] BaseRestPlan queryBaseRest(
