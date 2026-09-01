@@ -37,6 +37,7 @@ namespace
     // the reticle center this far beyond the viewport, but never farther.
     constexpr float kReticleViewportOutsideMargin{48.0F};
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
+    constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
@@ -2403,6 +2404,7 @@ void App::handleInventoryCancel()
 
 void App::updateBase(float deltaTime)
 {
+    updateBaseOperationNotices(deltaTime);
     gameSession_.advanceBaseWorldClock(deltaTime);
     if (gameSession_.baseThreatProjection().warningActive)
     {
@@ -6387,8 +6389,91 @@ void App::consumePresentationAudioEvents()
         case GameSessionPresentationEvent::RescueSecured:
             gameAudio_.play(SoundEventId::UiConfirm);
             break;
+        case GameSessionPresentationEvent::BaseDormitoryUpgradeCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::FacilityUpgrade,
+                BaseFacilityKind::Dormitory);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
+        case GameSessionPresentationEvent::BaseKitchenWaterUpgradeCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::FacilityUpgrade,
+                BaseFacilityKind::Allocation);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
+        case GameSessionPresentationEvent::BaseWorkshopUpgradeCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::FacilityUpgrade,
+                BaseFacilityKind::Workshop);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
+        case GameSessionPresentationEvent::BaseMedicalUpgradeCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::FacilityUpgrade,
+                BaseFacilityKind::Medical);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
+        case GameSessionPresentationEvent::BaseManufacturingCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::Manufacturing,
+                BaseFacilityKind::Workshop);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
+        case GameSessionPresentationEvent::BaseResidentTreatmentCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::ResidentTreatment,
+                BaseFacilityKind::Medical);
+            gameAudio_.play(SoundEventId::MedicalComplete);
+            break;
         }
     }
+}
+
+void App::updateBaseOperationNotices(float deltaTime)
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+        return;
+    baseOperationNoticePulseSeconds_ += deltaTime;
+    for (BaseOperationNotice &notice : baseOperationNotices_)
+        notice.remainingSeconds = std::max(
+            0.0F, notice.remainingSeconds - deltaTime);
+    std::erase_if(
+        baseOperationNotices_,
+        [](const BaseOperationNotice &notice)
+        {
+            return notice.remainingSeconds <= 0.0F;
+        });
+}
+
+void App::pushBaseOperationNotice(
+    BaseOperationNoticeKind kind,
+    BaseFacilityKind facility)
+{
+    const auto matching = std::find_if(
+        baseOperationNotices_.begin(), baseOperationNotices_.end(),
+        [&](const BaseOperationNotice &notice)
+        {
+            return notice.kind == kind && notice.facility == facility;
+        });
+    if (matching != baseOperationNotices_.end())
+    {
+        matching->remainingSeconds = kBaseOperationNoticeLifetimeSeconds;
+        return;
+    }
+    if (baseOperationNotices_.size() >= 4U)
+        baseOperationNotices_.erase(baseOperationNotices_.begin());
+    baseOperationNotices_.push_back(BaseOperationNotice{
+        kind, facility, kBaseOperationNoticeLifetimeSeconds});
+}
+
+bool App::hasBaseOperationNotice(BaseFacilityKind facility) const noexcept
+{
+    return std::any_of(
+        baseOperationNotices_.begin(), baseOperationNotices_.end(),
+        [&](const BaseOperationNotice &notice)
+        {
+            return notice.facility == facility;
+        });
 }
 
 void App::renderDebugText()
@@ -10468,6 +10553,19 @@ void App::renderBaseWorld()
                 halo.x - 3.0F, halo.y - 3.0F,
                 halo.w + 6.0F, halo.h + 6.0F};
             SDL_RenderRect(renderer_, &outer);
+        }
+        if (baseConstructionPanelOpen_ &&
+            hasBaseOperationNotice(facility.kind))
+        {
+            const float pulse = 0.5F + 0.5F * std::sin(
+                baseOperationNoticePulseSeconds_ * 5.0F);
+            SDL_SetRenderDrawColor(
+                renderer_, 246, 190, 72,
+                static_cast<Uint8>(150.0F + 105.0F * pulse));
+            const SDL_FRect noticeHalo{
+                bounds.x - 10.0F, bounds.y - 10.0F,
+                bounds.w + 20.0F, bounds.h + 20.0F};
+            SDL_RenderRect(renderer_, &noticeHalo);
         }
         uiTextRenderer_.render(
             renderer_,
@@ -15320,7 +15418,49 @@ void App::renderBase()
     }
     renderHomeRegionMap();
     renderBaseConstructionPanel();
+    renderBaseOperationNotices();
     renderBaseSiegeWarning();
+}
+
+void App::renderBaseOperationNotices()
+{
+    if (baseOperationNotices_.empty())
+        return;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    constexpr float x{820.0F};
+    constexpr float y{142.0F};
+    constexpr float width{420.0F};
+    constexpr float rowHeight{42.0F};
+    for (std::size_t index{}; index < baseOperationNotices_.size(); ++index)
+    {
+        const BaseOperationNotice &notice = baseOperationNotices_[index];
+        const SDL_FRect row{
+            x, y + static_cast<float>(index) * (rowHeight + 6.0F),
+            width, rowHeight};
+        SDL_SetRenderDrawColor(renderer_, 34, 31, 22, 232);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(renderer_, 236, 184, 68, 255);
+        SDL_RenderRect(renderer_, &row);
+
+        const char *label = "FACILITY UPGRADE COMPLETE";
+        switch (notice.kind)
+        {
+        case BaseOperationNoticeKind::FacilityUpgrade:
+            break;
+        case BaseOperationNoticeKind::Manufacturing:
+            label = "MANUFACTURING COMPLETE | OUTPUT READY";
+            break;
+        case BaseOperationNoticeKind::ResidentTreatment:
+            label = "RESIDENT TREATMENT COMPLETE";
+            break;
+        }
+        const std::string text = fmt::format(
+            "{} | {}", label, baseFacilityName(notice.facility));
+        uiTextRenderer_.render(renderer_, row.x + 14.0F, row.y + 13.0F,
+                               text.c_str());
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderBaseSiegeQueuedNotice()

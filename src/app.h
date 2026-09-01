@@ -81,6 +81,20 @@ struct BaseFacilityContextMenu
     MousePosition position{};
 };
 
+enum class BaseOperationNoticeKind
+{
+    FacilityUpgrade,
+    Manufacturing,
+    ResidentTreatment,
+};
+
+struct BaseOperationNotice
+{
+    BaseOperationNoticeKind kind{BaseOperationNoticeKind::FacilityUpgrade};
+    BaseFacilityKind facility{BaseFacilityKind::Storage};
+    float remainingSeconds{};
+};
+
 class App
 {
 public:
@@ -146,6 +160,8 @@ private:
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
     std::optional<BaseFacilityKind> selectedBaseFixedFacility_;
     std::optional<BaseFacilityContextMenu> baseFacilityContextMenu_;
+    std::vector<BaseOperationNotice> baseOperationNotices_;
+    float baseOperationNoticePulseSeconds_{};
     std::vector<MousePosition> pendingBaseRightClicks_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
@@ -200,6 +216,12 @@ private:
     bool initialize();
     void syncAmbience();
     void consumePresentationAudioEvents();
+    void updateBaseOperationNotices(float deltaTime);
+    void pushBaseOperationNotice(
+        BaseOperationNoticeKind kind,
+        BaseFacilityKind facility);
+    [[nodiscard]] bool hasBaseOperationNotice(
+        BaseFacilityKind facility) const noexcept;
 
     GameplayInput makeGameplayInput() const;
     GameplayInput makeBaseGameplayInput() const;
@@ -357,6 +379,7 @@ private:
     void renderBaseOperationsOverview();
     void renderBaseFacilityInspector();
     void renderBaseFacilityContextMenu();
+    void renderBaseOperationNotices();
     void renderHomeRegionMap();
     void renderBaseStorage();
     void renderBaseSupply();

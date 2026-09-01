@@ -944,6 +944,21 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "基地储物箱 | 已有 x2");
 }
 
+TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "FACILITY UPGRADE COMPLETE | DORMITORY"),
+            "设施升级完成 | 宿舍");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MANUFACTURING COMPLETE | OUTPUT READY | WORKSHOP"),
+            "生产完成 | 产物待领取 | 工坊");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESIDENT TREATMENT COMPLETE | MEDICAL"),
+            "居民治疗完成 | 医疗");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

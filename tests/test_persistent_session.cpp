@@ -555,6 +555,76 @@ TEST(PersistentSessionTest, SettledRaidCommitsElapsedWorldTime)
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
 }
 
+TEST(PersistentSessionTest,
+     RaidBaseCompletionNoticeWaitsForSuccessfulSettlement)
+{
+    SessionSaveDirectory temporary;
+    ProfileState prepared = makeNewAlphaProfile(
+        "deferred-raid-base-completion",
+        publishedContentRegistry());
+    const std::uint32_t outboundMinutes = publishedContentRegistry().map(
+        MapDefinitionId{"map.v0.test"}).travel.outboundMinutes;
+    prepared.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        4U,
+        3U,
+        prepared.worldClock.elapsedWorldMinutes + outboundMinutes + 1U - 360U,
+        prepared.worldClock.elapsedWorldMinutes + outboundMinutes + 1U};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        prepared,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    ASSERT_TRUE(active.deployAlpha(99103));
+    active.update(GameplayInput{}, 1.0F);
+    EXPECT_EQ(active.profile().baseConstruction.dormitoryLevel, 2U);
+    EXPECT_TRUE(active.takePresentationEvents().empty());
+
+    ASSERT_TRUE(active.activeQuitAlphaRaid());
+    EXPECT_EQ(
+        active.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::BaseDormitoryUpgradeCompleted});
+}
+
+TEST(PersistentSessionTest,
+     RaidRollbackDiscardsDeferredBaseCompletionNotice)
+{
+    SessionSaveDirectory temporary;
+    ProfileState prepared = makeNewAlphaProfile(
+        "discarded-raid-base-completion",
+        publishedContentRegistry());
+    const std::uint32_t outboundMinutes = publishedContentRegistry().map(
+        MapDefinitionId{"map.v0.test"}).travel.outboundMinutes;
+    prepared.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        4U,
+        3U,
+        prepared.worldClock.elapsedWorldMinutes + outboundMinutes + 1U - 360U,
+        prepared.worldClock.elapsedWorldMinutes + outboundMinutes + 1U};
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        prepared,
+        publishedContentRegistry().contentVersion()).succeeded);
+
+    GameSession active;
+    active.configurePersistence(temporary.path());
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    ASSERT_TRUE(active.deployAlpha(99104));
+    active.update(GameplayInput{}, 1.0F);
+    EXPECT_EQ(active.profile().baseConstruction.dormitoryLevel, 2U);
+    EXPECT_TRUE(active.takePresentationEvents().empty());
+
+    ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
+    EXPECT_EQ(active.profile().baseConstruction.dormitoryLevel, 1U);
+    EXPECT_TRUE(active.takePresentationEvents().empty());
+}
+
 TEST(PersistentSessionTest, EnvironmentObjectiveAdvancesWithoutBlockingPlay)
 {
     SessionSaveDirectory temporary;
@@ -1045,11 +1115,16 @@ TEST(PersistentSessionTest, BaseClockCompletesAndPersistsDormitoryExpansion)
     const ProfileRevision startedRevision = session.profile().revision;
     session.advanceBaseWorldClock(359.0F);
     EXPECT_TRUE(session.profile().baseConstruction.activeProject.has_value());
+    EXPECT_TRUE(session.takePresentationEvents().empty());
     session.advanceBaseWorldClock(1.0F);
     EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
     EXPECT_EQ(session.profile().baseConstruction.dormitoryLevel, 2U);
     EXPECT_EQ(session.profile().basePopulation.bedCapacity, 14U);
     EXPECT_EQ(session.profile().revision, startedRevision + 1U);
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::BaseDormitoryUpgradeCompleted});
     ASSERT_TRUE(session.checkpointWorldClock()) << session.persistenceMessage();
 
     GameSession reopened;
@@ -1085,6 +1160,10 @@ TEST(PersistentSessionTest, BaseClockCompletesAndPersistsWorkshopUpgrade)
     session.advanceBaseWorldClock(1.0F);
     EXPECT_EQ(session.profile().baseConstruction.workshopLevel, 2U);
     EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
+    EXPECT_EQ(
+        session.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::BaseWorkshopUpgradeCompleted});
     ASSERT_TRUE(session.checkpointWorldClock()) << session.persistenceMessage();
 
     GameSession reopened;
@@ -1170,6 +1249,7 @@ TEST(PersistentSessionTest,
         session.profile().worldClock.elapsedWorldMinutes,
         initial.worldClock.elapsedWorldMinutes);
     EXPECT_FALSE(session.persistenceMessage().empty());
+    EXPECT_TRUE(session.takePresentationEvents().empty());
 }
 
 TEST(PersistentSessionTest, GunsmithSaveFailurePreservesInMemoryProfile)
@@ -1385,6 +1465,10 @@ TEST(PersistentSessionTest,
         6U, "rest-completes-resident-treatment").succeeded);
     EXPECT_EQ(reopened.profile().basePopulation.injuredResidents, 0U);
     EXPECT_FALSE(reopened.profile().residentMedical.activeTreatment.has_value());
+    EXPECT_EQ(
+        reopened.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::BaseResidentTreatmentCompleted});
 
     GameSession completed;
     completed.configurePersistence(temporary.path());
@@ -1523,6 +1607,10 @@ TEST(PersistentSessionTest,
     ASSERT_TRUE(processing.profile().baseManufacturing.activeOrder.has_value());
     processing.advanceBaseWorldClock(360.0F);
     EXPECT_FALSE(processing.profile().baseManufacturing.activeOrder.has_value());
+    EXPECT_EQ(
+        processing.takePresentationEvents(),
+        std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::BaseManufacturingCompleted});
 
     GameSession completed;
     completed.configurePersistence(temporary.path());

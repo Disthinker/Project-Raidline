@@ -136,9 +136,12 @@ BaseRestReceipt executeBaseRest(
         candidate.worldClock, plan.worldMinutes);
     const BaseDailySystemsResult daily =
         synchronizeBaseDailySystemsThrough(candidate, content);
-    static_cast<void>(applyBaseConstructionThrough(candidate, content));
-    static_cast<void>(applyBaseManufacturingThrough(candidate, content));
-    static_cast<void>(applyResidentTreatmentThrough(candidate));
+    const BaseConstructionAdvanceResult construction =
+        applyBaseConstructionThrough(candidate, content);
+    const BaseManufacturingAdvanceResult manufacturing =
+        applyBaseManufacturingThrough(candidate, content);
+    const ResidentTreatmentAdvanceResult residentTreatment =
+        applyResidentTreatmentThrough(candidate);
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -158,5 +161,8 @@ BaseRestReceipt executeBaseRest(
         profile.revision,
         advanced.minutesApplied,
         daily.demand.cyclesResolved,
-        daily.demand.latestShortfall};
+        daily.demand.latestShortfall,
+        construction,
+        manufacturing,
+        residentTreatment};
 }

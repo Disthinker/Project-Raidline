@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图、共享战斗能力、地面资产、世界容器、首个建设闭环、建设镜头、设施状态卡片和快速操作均已进入主线。当前推进 Home Region 基地运营总览与设施定位 v1，范围合同见 `doc/exec-plans/active/home-region-operations-overview-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 从有限新档整备到基地运营总览均已进入主线。当前推进 Home Region 基地运营完成通知与设施标记 v1，范围合同见 `doc/exec-plans/active/home-region-operation-notifications-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -192,7 +192,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 建设镜头控制 v1 | 建设模式中可用 WASD 或按住右键拖动画面；五档缩放均可准确选择设施；七类固定设施可从建设界面进入原有功能页 | 客户端瞬态镜头、统一世界—屏幕投影、4px 点击/拖拽仲裁、固定设施管理入口、世界边界约束、退出恢复玩家跟随 | PR #127 已通过 CI 与用户正常游玩验收，以 `b990db3` 进入 main |
 | Home Region 设施统一管理与状态展示 v1 | 选择设施即可查看等级、运行状态、人员和当前任务，并从紧凑卡片进入已有功能页 | SDL-free 汇总投影、现有建设/岗位/制造/治疗事实复用、双语只读管理卡片 | PR #128 已通过 CI 与用户正常游玩验收，以 `cb73ce0` 进入 main |
 | Home Region 设施统一快速操作 v1 | 从管理卡片直接安排人员、升级、处理现有制造订单和启动居民治疗；需要选择的操作仍进入完整页面 | 类型化快速操作投影、既有 query/command 复用、禁用原因与双语鼠标按钮 | PR #129 已通过 CI 与用户正常游玩验收，以 `722a20c` 进入 main |
-| Home Region 基地运营总览与设施定位 v1 | 建设面板集中显示待领取、升级、制造、治疗和缺员事项；点击后镜头定位并选中设施 | SDL-free 运营投影、稳定优先级、储备暂停标记、瞬态镜头定位和双语输入仲裁 | Windows Debug 全目标、52/52 定向测试与 1387/1387 CTest 通过，等待 exact-head CI 与用户验收 |
+| Home Region 基地运营总览与设施定位 v1 | 建设面板集中显示待领取、升级、制造、治疗和缺员事项；点击后镜头定位并选中设施 | SDL-free 运营投影、稳定优先级、储备暂停标记、瞬态镜头定位和双语输入仲裁 | PR #130 已通过 CI 与用户正常游玩验收，以 `ee44d52` 进入 main |
+| Home Region 基地运营完成通知与设施标记 v1 | 升级、制造和居民治疗完成后出现短时提示；建设模式突出对应设施 | 已提交领域结果、Raid 结算延迟发布、非持久 App 通知、双语表现 | Windows Debug 全目标、91/91 定向测试与 1390/1390 CTest 通过，等待 exact-head CI 与用户验收 |
 
 ## 当前 Combat Reliability 缺陷
 
