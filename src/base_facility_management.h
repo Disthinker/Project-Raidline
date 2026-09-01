@@ -61,8 +61,35 @@ struct BaseFacilityManagementProjection
     std::vector<BaseFacilityQuickActionProjection> quickActions;
 };
 
+enum class BaseOperationOverviewKind
+{
+    OutputReady,
+    Construction,
+    ResidentTreatment,
+    Manufacturing,
+    StaffingGap
+};
+
+struct BaseOperationOverviewEntry
+{
+    BaseFacilityKind facility{BaseFacilityKind::Storage};
+    BaseOperationOverviewKind kind{BaseOperationOverviewKind::Construction};
+    std::uint64_t remainingMinutes{};
+    bool paused{};
+};
+
+struct BaseOperationsOverviewProjection
+{
+    std::vector<BaseOperationOverviewEntry> entries;
+};
+
 [[nodiscard]] BaseFacilityManagementProjection
 projectBaseFacilityManagement(
     const ProfileState &profile,
     const ContentRegistry &content,
     BaseFacilityKind kind);
+
+[[nodiscard]] BaseOperationsOverviewProjection
+projectBaseOperationsOverview(
+    const ProfileState &profile,
+    const ContentRegistry &content);

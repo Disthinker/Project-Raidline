@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@cb73ce0`，PR #128 已合入并完成 Home Region 设施统一状态卡片和七类固定设施功能入口。
-- 当前开发分支：`codex/home-region-facility-quick-actions-v1`，从 `origin/main@cb73ce0` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-facility-quick-actions-v1.md`。
-- 当前切片把人员、升级、制造现有订单和居民治疗等无需额外选择的高频事务接入统一管理卡片；配方、休息时长等需要玩家判断的操作继续保留在完整功能页。
-- 当前实现已通过 Windows Debug 全目标、96/96 定向测试与 1385/1385 完整 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 已验收主线：`origin/main@722a20c`，PR #129 已合入并完成 Home Region 设施统一快速操作。
+- 当前开发分支：`codex/home-region-operations-overview-v1`，从 `origin/main@722a20c` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-operations-overview-v1.md`。
+- 当前切片集中显示待领取产物、进行中的升级/生产/居民治疗和缺员状态；点击条目只定位并选中对应设施，不创建第二套任务或状态。
+- 当前实现已通过 Windows Debug 全目标、52/52 定向测试和 1387/1387 完整 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产、世界容器、首个建设闭环和设施状态管理均已进入主线。当前切片只集中既有设施高频事务，不改变 Raid、Settlement、资产所有权或存档 schema。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产、世界容器、首个建设闭环、设施状态管理和快速操作均已进入主线。当前切片只聚合既有运营事实并提供设施定位，不改变 Raid、Settlement、资产所有权或存档 schema。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -83,7 +83,10 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 66. **Home Region 地面资产 v1**：基地个人页可把随身或仓库根资产放到当前基地地面；世界与地图显示真实根资产，近距离可拾回，容器子树保持唯一所有权。schema v39 保存基地站点和世界坐标，旧档不生成地面资产。PR #124 已通过 Windows Debug、1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `17a3514` 进入 main。
 67. **Home Region 世界容器交互 v1**：地面容器可在正确站点和近距离内打开；右侧显示真实分区，并通过受限库存事务与随身容器双向拖拽或快速装备。地面容器页不连接 Stash，也不为特殊物品动作绕过访问边界。PR #125 已通过用户正常游玩验收，并以 merge commit `03028bb` 进入 main。
 68. **Home Region 基地建设面板与可放置储物箱 v1**：`B` 打开底部紧凑建设栏，“购买 / 已有”页复用同一内容驱动设施卡片，滚轮切换建设视野；点击卡片进入绿/红虚像放置，已放置设施在世界中左键选择、右键打开功能页/移动/回收。PR #126 已通过用户正常游玩验收，并以 merge commit `50879bc` 进入 main。
-69. **Home Region 建设镜头控制 v1（当前开发分支）**：建设模式和设施放置状态共用不写入存档的客户端镜头；WASD 平移、按住右键拖动画面，短按右键仍打开设施菜单，退出后恢复玩家跟随。五档缩放共用同一投影命中合同；七类固定设施可从建设界面打开原有功能页，但不可移动或回收。
+69. **Home Region 建设镜头控制 v1**：建设模式和设施放置状态共用不写入存档的客户端镜头；WASD 平移、按住右键拖动画面，短按右键仍打开设施菜单，退出后恢复玩家跟随。五档缩放共用同一投影命中合同；七类固定设施可从建设界面打开原有功能页。PR #127 已通过 CI 和用户验收，以 `b990db3` 进入 main。
+70. **Home Region 设施统一管理与状态展示 v1**：选择固定设施显示等级、运行/储备状态、人员与当前任务，并可打开已有功能页。PR #128 已通过 CI 和用户验收，以 `cb73ce0` 进入 main。
+71. **Home Region 设施统一快速操作 v1**：无需额外选择的安排人员、设施升级、现有制造订单处理、居民治疗和自动补员可从管理卡片执行；需要配方或时长选择的操作仍在完整功能页。PR #129 已通过 CI 和用户验收，以 `722a20c` 进入 main。
+72. **Home Region 基地运营总览与设施定位 v1（当前开发分支）**：建设面板集中显示待领取产物、活动升级/制造/治疗和缺员；点击条目把瞬态建设镜头定位到对应设施并选中管理卡片，无 schema/content 变更。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

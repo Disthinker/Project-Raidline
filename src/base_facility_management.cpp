@@ -188,6 +188,29 @@ bool activeConstructionTargets(
         });
     return project != projects.end() && project->target == *target;
 }
+
+std::optional<BaseFacilityKind> facilityKind(
+    BaseFacilityUpgradeTarget target) noexcept
+{
+    switch (target)
+    {
+    case BaseFacilityUpgradeTarget::Dormitory:
+        return BaseFacilityKind::Dormitory;
+    case BaseFacilityUpgradeTarget::Workshop:
+        return BaseFacilityKind::Workshop;
+    case BaseFacilityUpgradeTarget::Medical:
+        return BaseFacilityKind::Medical;
+    }
+    return std::nullopt;
+}
+
+bool facilityOperational(
+    const ProfileState &profile,
+    BaseFacilityKind kind) noexcept
+{
+    const auto id = definitionId(kind);
+    return !id.has_value() || baseFacilityInstalled(profile, *id);
+}
 }
 
 BaseFacilityManagementProjection projectBaseFacilityManagement(
@@ -312,4 +335,84 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
                 std::nullopt});
     }
     return projection;
+}
+
+BaseOperationsOverviewProjection projectBaseOperationsOverview(
+    const ProfileState &profile,
+    const ContentRegistry &content)
+{
+    BaseOperationsOverviewProjection result;
+
+    const BaseManufacturingProjection manufacturing =
+        projectBaseManufacturing(profile);
+    if (manufacturing.orderPresent && manufacturing.outputReady)
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Workshop,
+            BaseOperationOverviewKind::OutputReady,
+            0U,
+            !facilityOperational(profile, BaseFacilityKind::Workshop)});
+    }
+
+    const BaseConstructionProjection construction =
+        projectBaseConstruction(profile, content);
+    if (construction.activeProjectId.has_value())
+    {
+        const auto &projects = content.baseConstructionProjects();
+        const auto project = std::find_if(
+            projects.begin(), projects.end(),
+            [&](const BaseConstructionProjectDefinition &candidate)
+            {
+                return candidate.id == *construction.activeProjectId;
+            });
+        if (project != projects.end())
+        {
+            if (const auto facility = facilityKind(project->target);
+                facility.has_value())
+            {
+                result.entries.push_back(BaseOperationOverviewEntry{
+                    *facility,
+                    BaseOperationOverviewKind::Construction,
+                    construction.remainingMinutes,
+                    !facilityOperational(profile, *facility)});
+            }
+        }
+    }
+
+    const BaseResidentMedicalProjection medical =
+        projectBaseResidentMedical(profile);
+    if (medical.treatmentActive)
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Medical,
+            BaseOperationOverviewKind::ResidentTreatment,
+            medical.remainingMinutes,
+            !facilityOperational(profile, BaseFacilityKind::Medical)});
+    }
+
+    if (manufacturing.orderPresent && !manufacturing.outputReady)
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Workshop,
+            BaseOperationOverviewKind::Manufacturing,
+            manufacturing.remainingMinutes,
+            !facilityOperational(profile, BaseFacilityKind::Workshop)});
+    }
+
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    if (facilityOperational(profile, BaseFacilityKind::Workshop) &&
+        !workforce.workshopWorker.has_value())
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Workshop,
+            BaseOperationOverviewKind::StaffingGap});
+    }
+    if (facilityOperational(profile, BaseFacilityKind::Medical) &&
+        !workforce.medicalWorker.has_value())
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Medical,
+            BaseOperationOverviewKind::StaffingGap});
+    }
+    return result;
 }

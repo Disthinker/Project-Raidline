@@ -223,12 +223,15 @@ private:
     void commitMedicalWheelSelection();
     void handleDeveloperPanelClick(MousePosition position);
     void handleBaseConstructionPanelClick(MousePosition position);
+    [[nodiscard]] bool handleBaseOperationsOverviewClick(
+        MousePosition position);
     [[nodiscard]] bool handleBaseFacilityInspectorClick(
         MousePosition position);
     void handleBaseConstructionRightClick(MousePosition position);
     void handleBaseFacilityContextMenuClick(MousePosition position);
     void adjustBaseConstructionZoom(int direction);
     void activateBaseBuildCamera() noexcept;
+    void focusBaseFixedFacility(BaseFacilityKind facility) noexcept;
     void deactivateBaseBuildCamera() noexcept;
     [[nodiscard]] bool updateBaseBuildCameraKeyboard(float deltaTime) noexcept;
     [[nodiscard]] Vec2 baseBuildViewportWorldSize() const noexcept;
@@ -351,6 +354,7 @@ private:
     void renderBaseWorld();
     void renderBasePlacementPreview();
     void renderBaseConstructionPanel();
+    void renderBaseOperationsOverview();
     void renderBaseFacilityInspector();
     void renderBaseFacilityContextMenu();
     void renderHomeRegionMap();

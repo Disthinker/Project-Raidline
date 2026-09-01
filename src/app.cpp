@@ -250,6 +250,21 @@ namespace
         return SDL_FRect{70.0F, 324.0F, 520.0F, 226.0F};
     }
 
+    SDL_FRect baseOperationsOverviewBounds() noexcept
+    {
+        return SDL_FRect{812.0F, 64.0F, 398.0F, 244.0F};
+    }
+
+    SDL_FRect baseOperationsOverviewRow(std::size_t index) noexcept
+    {
+        const SDL_FRect panel = baseOperationsOverviewBounds();
+        return SDL_FRect{
+            panel.x + 12.0F,
+            panel.y + 54.0F + static_cast<float>(index) * 36.0F,
+            panel.w - 24.0F,
+            30.0F};
+    }
+
     SDL_FRect basePlacedFacilityInspectorButton(
         std::size_t index,
         std::size_t count) noexcept
@@ -642,6 +657,47 @@ namespace
             return "RECREATION";
         case BaseSupplyCategory::Security:
             return "SECURITY";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseOperationOverviewKindName(
+        BaseOperationOverviewKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case BaseOperationOverviewKind::OutputReady:
+            return "OUTPUT READY";
+        case BaseOperationOverviewKind::Construction:
+            return "UPGRADE";
+        case BaseOperationOverviewKind::ResidentTreatment:
+            return "RESIDENT TREATMENT";
+        case BaseOperationOverviewKind::Manufacturing:
+            return "PRODUCTION";
+        case BaseOperationOverviewKind::StaffingGap:
+            return "NO WORKER";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseOperationsFacilityName(BaseFacilityKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case BaseFacilityKind::Dormitory:
+            return "DORMITORY";
+        case BaseFacilityKind::Medical:
+            return "MEDICAL";
+        case BaseFacilityKind::Workshop:
+            return "WORKSHOP";
+        case BaseFacilityKind::Storage:
+            return "STORAGE";
+        case BaseFacilityKind::Supply:
+            return "SUPPLY";
+        case BaseFacilityKind::Allocation:
+            return "ALLOCATION";
+        case BaseFacilityKind::RaidGate:
+            return "RAID GATE";
         }
         return "UNKNOWN";
     }
@@ -5639,7 +5695,8 @@ void App::processEvents()
                     const MousePosition position{
                         event.button.x, event.button.y};
                     if (!contains(baseBuildBarBounds(), position) &&
-                        !contains(baseFacilityInspectorBounds(), position))
+                        !contains(baseFacilityInspectorBounds(), position) &&
+                        !contains(baseOperationsOverviewBounds(), position))
                         baseBuildCamera_.beginPointer(
                             {position.x, position.y});
                 }
@@ -8927,6 +8984,26 @@ void App::activateBaseBuildCamera() noexcept
         baseBuildViewportWorldSize());
 }
 
+void App::focusBaseFixedFacility(BaseFacilityKind facility) noexcept
+{
+    if (gameFlow_.state() != GameFlowState::Base)
+        return;
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const auto found = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [facility](const BaseFacility &candidate)
+        {
+            return candidate.kind == facility;
+        });
+    if (found == world.facilities().end())
+        return;
+    baseBuildCamera_.activate(
+        {found->bounds.position.x + found->bounds.size.x * 0.5F,
+         found->bounds.position.y + found->bounds.size.y * 0.5F},
+        world.worldSize(),
+        baseBuildViewportWorldSize());
+}
+
 void App::deactivateBaseBuildCamera() noexcept
 {
     baseBuildCamera_.deactivate();
@@ -10528,6 +10605,8 @@ void App::startBasePlacement(
 
 void App::handleBaseConstructionPanelClick(MousePosition position)
 {
+    if (handleBaseOperationsOverviewClick(position))
+        return;
     if (handleBaseFacilityInspectorClick(position))
         return;
     if (contains(baseBuildPurchaseTab(), position))
@@ -10623,6 +10702,30 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
             selectedBaseFixedFacility_.has_value()
         ? "BASE FACILITY SELECTED | RMB FOR ACTIONS"
         : "BASE FACILITY SELECTION CLEARED";
+}
+
+bool App::handleBaseOperationsOverviewClick(MousePosition position)
+{
+    if (!contains(baseOperationsOverviewBounds(), position))
+        return false;
+
+    const BaseOperationsOverviewProjection projection =
+        projectBaseOperationsOverview(
+            gameSession_.profile(), publishedContentRegistry());
+    for (std::size_t index{}; index < projection.entries.size(); ++index)
+    {
+        if (!contains(baseOperationsOverviewRow(index), position))
+            continue;
+        const BaseFacilityKind facility = projection.entries[index].facility;
+        selectedBasePlacedAssetId_.reset();
+        selectedBaseFixedFacility_ = facility;
+        baseFacilityContextMenu_.reset();
+        focusBaseFixedFacility(facility);
+        uiMessage_ = "BASE OPERATION LOCATED";
+        gameAudio_.play(SoundEventId::UiConfirm);
+        return true;
+    }
+    return true;
 }
 
 bool App::handleBaseFacilityInspectorClick(MousePosition position)
@@ -10809,7 +10912,8 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
 void App::handleBaseConstructionRightClick(MousePosition position)
 {
     if (contains(baseBuildBarBounds(), position) ||
-        contains(baseFacilityInspectorBounds(), position))
+        contains(baseFacilityInspectorBounds(), position) ||
+        contains(baseOperationsOverviewBounds(), position))
     {
         baseFacilityContextMenu_.reset();
         return;
@@ -11176,8 +11280,63 @@ void App::renderBaseConstructionPanel()
         uiTextRenderer_.render(renderer_, 88.0F, 664.0F, uiMessage_.c_str());
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
+    renderBaseOperationsOverview();
     renderBaseFacilityInspector();
     renderBaseFacilityContextMenu();
+}
+
+void App::renderBaseOperationsOverview()
+{
+    const BaseOperationsOverviewProjection projection =
+        projectBaseOperationsOverview(
+            gameSession_.profile(), publishedContentRegistry());
+    const SDL_FRect panel = baseOperationsOverviewBounds();
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 242);
+    SDL_RenderFillRect(renderer_, &panel);
+    SDL_SetRenderDrawColor(renderer_, 104, 184, 154, 255);
+    SDL_RenderRect(renderer_, &panel);
+    uiTextRenderer_.render(
+        renderer_, panel.x + 12.0F, panel.y + 10.0F,
+        "BASE OPERATIONS | CLICK TO LOCATE");
+
+    if (projection.entries.empty())
+    {
+        uiTextRenderer_.render(
+            renderer_, panel.x + 12.0F, panel.y + 58.0F,
+            "NO ACTIVE OPERATIONS");
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+
+    for (std::size_t index{}; index < projection.entries.size(); ++index)
+    {
+        const BaseOperationOverviewEntry &entry = projection.entries[index];
+        const SDL_FRect row = baseOperationsOverviewRow(index);
+        const bool selected = selectedBaseFixedFacility_ == entry.facility;
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 48 : 30, selected ? 100 : 62,
+            selected ? 82 : 58, 246);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(
+            renderer_,
+            entry.kind == BaseOperationOverviewKind::OutputReady ? 232 : 102,
+            entry.kind == BaseOperationOverviewKind::OutputReady ? 196 : 184,
+            entry.kind == BaseOperationOverviewKind::OutputReady ? 88 : 154,
+            255);
+        SDL_RenderRect(renderer_, &row);
+        std::string label = fmt::format(
+            "{} | {}",
+            baseOperationsFacilityName(entry.facility),
+            baseOperationOverviewKindName(entry.kind));
+        if (entry.remainingMinutes > 0U)
+            label += fmt::format(" | {} MIN", entry.remainingMinutes);
+        if (entry.paused)
+            label += " | PAUSED";
+        uiTextRenderer_.render(
+            renderer_, row.x + 9.0F, row.y + 7.0F, label.c_str());
+    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderBaseFacilityInspector()

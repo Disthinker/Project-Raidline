@@ -211,3 +211,106 @@ TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
         BaseFacilityQuickActionKind::OpenFunction);
     EXPECT_FALSE(projection.quickActions.front().canCommit);
 }
+
+TEST(BaseFacilityManagementTest,
+     OperationsOverviewPrioritizesReadyAndActiveWorkWithoutMutation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-operations-overview", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 1000U;
+    profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        3U,
+        1U,
+        900U,
+        1300U};
+    profile.baseManufacturing.activeOrder = BaseManufacturingOrder{
+        BaseServiceJobId{41U},
+        BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.weapon_maintenance_kit"},
+        1U,
+        BaseResidentProfession::Engineering,
+        800U,
+        900U,
+        {},
+        AssetInstanceId{991U},
+        true};
+    profile.residentMedical.activeTreatment = ActiveResidentTreatment{
+        BaseServiceJobId{42U},
+        940U,
+        1120U,
+        2U,
+        BaseResidentProfession::General,
+        BaseResidentProfession::Medical};
+    profile.baseWorkforce.workshopWorker.reset();
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const BaseOperationsOverviewProjection projection =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+
+    ASSERT_EQ(projection.entries.size(), 4U);
+    EXPECT_EQ(
+        projection.entries[0].kind,
+        BaseOperationOverviewKind::OutputReady);
+    EXPECT_EQ(
+        projection.entries[0].facility,
+        BaseFacilityKind::Workshop);
+    EXPECT_EQ(
+        projection.entries[1].kind,
+        BaseOperationOverviewKind::Construction);
+    EXPECT_EQ(
+        projection.entries[1].facility,
+        BaseFacilityKind::Dormitory);
+    EXPECT_EQ(projection.entries[1].remainingMinutes, 300U);
+    EXPECT_EQ(
+        projection.entries[2].kind,
+        BaseOperationOverviewKind::ResidentTreatment);
+    EXPECT_EQ(projection.entries[2].remainingMinutes, 120U);
+    EXPECT_EQ(
+        projection.entries[3].kind,
+        BaseOperationOverviewKind::StaffingGap);
+    EXPECT_EQ(
+        projection.entries[3].facility,
+        BaseFacilityKind::Workshop);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseFacilityManagementTest,
+     OperationsOverviewReportsPausedReserveWorkAndHealthyEmptyState)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-operations-paused", publishedContentRegistry());
+    profile.baseConstruction.facilities.at(
+        BaseFacilityDefinitionId{"base_facility.workshop"}) =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseManufacturing.activeOrder = BaseManufacturingOrder{
+        BaseServiceJobId{51U},
+        BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.weapon_maintenance_kit"},
+        1U,
+        BaseResidentProfession::Engineering,
+        0U,
+        100U,
+        {},
+        AssetInstanceId{992U},
+        false};
+
+    BaseOperationsOverviewProjection projection =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+    ASSERT_EQ(projection.entries.size(), 1U);
+    EXPECT_EQ(
+        projection.entries.front().kind,
+        BaseOperationOverviewKind::Manufacturing);
+    EXPECT_TRUE(projection.entries.front().paused);
+
+    profile.baseManufacturing.activeOrder.reset();
+    profile.baseConstruction.facilities.at(
+        BaseFacilityDefinitionId{"base_facility.workshop"}) =
+        BaseConstructionState::FacilityPlacement::Installed;
+    projection = projectBaseOperationsOverview(
+        profile, publishedContentRegistry());
+    EXPECT_TRUE(projection.entries.empty());
+}
