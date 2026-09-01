@@ -35,6 +35,7 @@ namespace
     // Roughly one current reticle diameter. Relative aiming may briefly move
     // the reticle center this far beyond the viewport, but never farther.
     constexpr float kReticleViewportOutsideMargin{48.0F};
+    constexpr float kBaseBuildCameraPanSpeed{720.0F};
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
@@ -1977,6 +1978,7 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         developerWeaponPanelOpen_ = false;
         baseConstructionPanelOpen_ = false;
         basePlacementState_.reset();
+        deactivateBaseBuildCamera();
         selectedBasePlacedAssetId_.reset();
         profileContextMenu_.reset();
         if (gameFlow_.returnToMainMenu())
@@ -2249,6 +2251,7 @@ void App::updateBase(float deltaTime)
     {
         basePlacementState_.reset();
         baseConstructionPanelOpen_ = false;
+        deactivateBaseBuildCamera();
         baseFacilityContextMenu_.reset();
         tacticalMapOpen_ = false;
         closeInventory();
@@ -2307,6 +2310,7 @@ void App::updateBase(float deltaTime)
                 return;
             }
             baseConstructionPanelOpen_ = false;
+            deactivateBaseBuildCamera();
             selectedBasePlacedAssetId_.reset();
             pendingBaseClicks_.clear();
             pendingBaseRightClicks_.clear();
@@ -2314,6 +2318,8 @@ void App::updateBase(float deltaTime)
             input_.suppressPrimaryPointerUntilRelease();
             return;
         }
+        if (updateBaseBuildCameraKeyboard(deltaTime))
+            baseFacilityContextMenu_.reset();
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
             if (baseFacilityContextMenu_.has_value())
@@ -2339,6 +2345,8 @@ void App::updateBase(float deltaTime)
                 basePlacementState_->returnToBuildPanel;
             basePlacementState_.reset();
             baseConstructionPanelOpen_ = reopenPanel;
+            if (!reopenPanel)
+                deactivateBaseBuildCamera();
             pendingBaseClicks_.clear();
             pendingBaseRotate_ = false;
             uiMessage_ = "BASE FACILITY PLACEMENT CANCELLED";
@@ -2350,11 +2358,13 @@ void App::updateBase(float deltaTime)
         if (asset == nullptr)
         {
             basePlacementState_.reset();
+            deactivateBaseBuildCamera();
             pendingBaseClicks_.clear();
             pendingBaseRotate_ = false;
             uiMessage_ = "ASSET NO LONGER EXISTS";
             return;
         }
+        static_cast<void>(updateBaseBuildCameraKeyboard(deltaTime));
         const ItemDefinition &definition = publishedContentRegistry().item(
             asset->definitionId);
         if (pendingBaseRotate_ && definition.canRotate)
@@ -2395,6 +2405,8 @@ void App::updateBase(float deltaTime)
                     basePlacementState_->returnToBuildPanel;
                 basePlacementState_.reset();
                 baseConstructionPanelOpen_ = reopenPanel;
+                if (!reopenPanel)
+                    deactivateBaseBuildCamera();
             }
             break;
         }
@@ -5210,6 +5222,8 @@ void App::processEvents()
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
             baseConstructionPanelOpen_ = false;
             baseFacilityContextMenu_.reset();
+            basePlacementState_.reset();
+            deactivateBaseBuildCamera();
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
                 (gameFlow_.state() == GameFlowState::Base ||
                  gameFlow_.state() == GameFlowState::Raid))
@@ -5240,11 +5254,24 @@ void App::processEvents()
                         pointerWorldPosition_->y - previousPointer->y};
                 }
             }
+            if (gameFlow_.state() == GameFlowState::Base &&
+                (baseConstructionPanelOpen_ ||
+                 basePlacementState_.has_value()) &&
+                baseBuildCamera_.updatePointer(
+                    {event.motion.x, event.motion.y},
+                    baseConstructionZoom(),
+                    gameFlow_.baseWorld().worldSize(),
+                    baseBuildViewportWorldSize()))
+            {
+                baseFacilityContextMenu_.reset();
+            }
             if ((gameFlow_.state() == GameFlowState::Raid ||
                  gameFlow_.state() == GameFlowState::Base) &&
                 !inventoryOverlayState_.isOpen() &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
+                !baseConstructionPanelOpen_ &&
+                !basePlacementState_.has_value() &&
                 gameSession_.observeAlphaWeaponClearMotion(motion))
             {
                 uiMessage_ = "WEAPON MALFUNCTION CLEARED";
@@ -5306,6 +5333,7 @@ void App::processEvents()
                     closeInventory();
                     baseConstructionPanelOpen_ = false;
                     basePlacementState_.reset();
+                    deactivateBaseBuildCamera();
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
                     tacticalMapOpen_ = false;
@@ -5412,6 +5440,7 @@ void App::processEvents()
             if (baseConstructionPanelOpen_)
             {
                 baseConstructionPanelOpen_ = false;
+                deactivateBaseBuildCamera();
                 selectedBasePlacedAssetId_.reset();
                 baseFacilityContextMenu_.reset();
                 uiMessage_ = "BASE BUILD PANEL CLOSED";
@@ -5430,6 +5459,7 @@ void App::processEvents()
                 medicalWheelOpen_ = false;
                 baseConstructionPanelOpen_ = true;
                 baseFacilityContextMenu_.reset();
+                activateBaseBuildCamera();
                 uiMessage_ = "BASE BUILD PANEL OPEN";
             }
             input_.suppressPrimaryPointerUntilRelease();
@@ -5501,8 +5531,23 @@ void App::processEvents()
                 else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                          event.button.button == SDL_BUTTON_RIGHT)
                 {
-                    pendingBaseRightClicks_.push_back(
-                        MousePosition{event.button.x, event.button.y});
+                    const MousePosition position{
+                        event.button.x, event.button.y};
+                    if (!contains(baseBuildBarBounds(), position))
+                        baseBuildCamera_.beginPointer(
+                            {position.x, position.y});
+                }
+                else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                         event.button.button == SDL_BUTTON_RIGHT)
+                {
+                    const BaseBuildPointerRelease release =
+                        baseBuildCamera_.endPointer();
+                    if (release == BaseBuildPointerRelease::Click)
+                    {
+                        pendingBaseRightClicks_.push_back(
+                            MousePosition{
+                                event.button.x, event.button.y});
+                    }
                 }
             }
             else if (basePlacementState_.has_value())
@@ -5521,6 +5566,17 @@ void App::processEvents()
                          !event.key.repeat)
                 {
                     pendingBaseRotate_ = true;
+                }
+                else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                         event.button.button == SDL_BUTTON_RIGHT)
+                {
+                    baseBuildCamera_.beginPointer(
+                        {event.button.x, event.button.y});
+                }
+                else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                         event.button.button == SDL_BUTTON_RIGHT)
+                {
+                    static_cast<void>(baseBuildCamera_.endPointer());
                 }
             }
             else if (inventoryOverlayState_.isOpen())
@@ -5716,6 +5772,7 @@ void App::update(float deltaTime)
     if (gameFlow_.state() != GameFlowState::Base)
     {
         basePlacementState_.reset();
+        deactivateBaseBuildCamera();
     }
     if (gameFlow_.state() != GameFlowState::Raid)
     {
@@ -8709,12 +8766,13 @@ Vec2 App::baseWorldCameraOffset() const noexcept
     const BaseWorld &world = gameFlow_.baseWorld();
     const Vec2 position = world.playerPosition();
     const Vec2 size = world.playerSize();
-    const float zoom = baseConstructionZoom();
+    const Vec2 viewport = baseBuildViewportWorldSize();
+    if (baseBuildCamera_.active())
+        return baseBuildCamera_.offset(world.worldSize(), viewport);
     return ::raidCameraOffset(
         {position.x + size.x * 0.5F, position.y + size.y * 0.5F},
         world.worldSize(),
-        {static_cast<float>(kWindowWidth) / zoom,
-         static_cast<float>(kWindowHeight) / zoom});
+        viewport);
 }
 
 float App::baseConstructionZoom() const noexcept
@@ -8734,6 +8792,52 @@ Vec2 App::baseScreenToWorld(Vec2 screenPosition) const noexcept
     return Vec2{
         camera.x + screenPosition.x / zoom,
         camera.y + screenPosition.y / zoom};
+}
+
+Vec2 App::baseBuildViewportWorldSize() const noexcept
+{
+    const float zoom = baseConstructionZoom();
+    return {
+        static_cast<float>(kWindowWidth) / zoom,
+        static_cast<float>(kWindowHeight) / zoom};
+}
+
+void App::activateBaseBuildCamera() noexcept
+{
+    if (gameFlow_.state() != GameFlowState::Base ||
+        baseBuildCamera_.active())
+    {
+        return;
+    }
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 position = world.playerPosition();
+    const Vec2 size = world.playerSize();
+    baseBuildCamera_.activate(
+        {position.x + size.x * 0.5F,
+         position.y + size.y * 0.5F},
+        world.worldSize(),
+        baseBuildViewportWorldSize());
+}
+
+void App::deactivateBaseBuildCamera() noexcept
+{
+    baseBuildCamera_.deactivate();
+}
+
+bool App::updateBaseBuildCameraKeyboard(float deltaTime) noexcept
+{
+    Vec2 direction{};
+    direction.x += input_.isActionPressed(GameAction::MoveRight) ? 1.0F : 0.0F;
+    direction.x -= input_.isActionPressed(GameAction::MoveLeft) ? 1.0F : 0.0F;
+    direction.y += input_.isActionPressed(GameAction::MoveDown) ? 1.0F : 0.0F;
+    direction.y -= input_.isActionPressed(GameAction::MoveUp) ? 1.0F : 0.0F;
+    return baseBuildCamera_.panKeyboard(
+        direction,
+        deltaTime,
+        kBaseBuildCameraPanSpeed,
+        baseConstructionZoom(),
+        gameFlow_.baseWorld().worldSize(),
+        baseBuildViewportWorldSize());
 }
 
 Vec2 App::raidWorldScreenShakePixels() const noexcept
@@ -10290,6 +10394,7 @@ void App::startBasePlacement(
         asset->orientation,
         mode,
         returnToBuildPanel};
+    activateBaseBuildCamera();
     uiMessage_ = mode == BasePlacementState::Mode::Reposition
         ? "MOVE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL"
         : "PLACE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL";
@@ -10453,6 +10558,12 @@ void App::adjustBaseConstructionZoom(int direction)
         ++baseConstructionZoomIndex_;
     else if (direction < 0 && baseConstructionZoomIndex_ > 0U)
         --baseConstructionZoomIndex_;
+    if (baseBuildCamera_.active())
+    {
+        baseBuildCamera_.constrain(
+            gameFlow_.baseWorld().worldSize(),
+            baseBuildViewportWorldSize());
+    }
     uiMessage_ = "BUILD VIEW ZOOM UPDATED";
 }
 
@@ -10516,6 +10627,7 @@ void App::openBasePlacedFacility(AssetInstanceId assetId)
     openedBaseGroundContainerId_ = assetId;
     inventoryOverlayState_.openContainerInventory();
     baseConstructionPanelOpen_ = false;
+    deactivateBaseBuildCamera();
     baseFacilityContextMenu_.reset();
     selectedBasePlacedAssetId_.reset();
     uiMessage_ = "BASE GROUND CONTAINER OPENED";
@@ -10592,7 +10704,7 @@ void App::renderBaseConstructionPanel()
     uiTextRenderer_.render(renderer_, 88.0F, 578.0F, "BASE BUILD");
     uiTextRenderer_.render(
         renderer_, 184.0F, 578.0F,
-        "B/ESC CLOSE | WHEEL ZOOM | LMB SELECT | RMB FACILITY ACTIONS");
+        "B/ESC CLOSE | WASD/RMB DRAG PAN | WHEEL ZOOM | LMB SELECT | RMB CLICK ACTIONS");
 
     const auto drawButton = [this](const SDL_FRect &bounds,
                                    const std::string &label,

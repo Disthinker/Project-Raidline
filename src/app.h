@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "base_build_camera.h"
 #include "game_flow.h"
 #include "game_audio.h"
 #include "gameplay_input.h"
@@ -140,6 +141,7 @@ private:
     bool baseConstructionPanelOpen_{};
     BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
     std::size_t baseConstructionZoomIndex_{2U};
+    BaseBuildCameraController baseBuildCamera_;
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
     std::optional<BaseFacilityContextMenu> baseFacilityContextMenu_;
     std::vector<MousePosition> pendingBaseRightClicks_;
@@ -222,6 +224,10 @@ private:
     void handleBaseConstructionRightClick(MousePosition position);
     void handleBaseFacilityContextMenuClick(MousePosition position);
     void adjustBaseConstructionZoom(int direction);
+    void activateBaseBuildCamera() noexcept;
+    void deactivateBaseBuildCamera() noexcept;
+    [[nodiscard]] bool updateBaseBuildCameraKeyboard(float deltaTime) noexcept;
+    [[nodiscard]] Vec2 baseBuildViewportWorldSize() const noexcept;
     [[nodiscard]] std::optional<AssetInstanceId>
     basePlacedFacilityAt(MousePosition position) const;
     void openBasePlacedFacility(AssetInstanceId assetId);
