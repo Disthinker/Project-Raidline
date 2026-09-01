@@ -394,6 +394,7 @@ add_library(raidline::services ALIAS raidline_services)
 add_library(raidline_sdl_client STATIC
     src/app.cpp
     src/app.h
+    src/base_build_catalog_presentation.h
     src/base_build_camera.cpp
     src/base_build_camera.h
     src/developer_runtime_panel.h
@@ -610,6 +611,10 @@ raidline_add_test(
 raidline_add_test(
     BaseBuildCameraTest
     tests/test_base_build_camera.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    BaseBuildCatalogPresentationTest
+    tests/test_base_build_catalog_presentation.cpp
     raidline::sdl_client)
 raidline_add_test(
     RaidTacticalMapPresentationTest

@@ -1,19 +1,19 @@
 # Project Raidline 当前状态
 
-最后核对：2026-09-01。
+最后核对：2026-09-02。
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@411aaed`，PR #133 已合入并完成 Home Region 储备设施空间部署。
-- 当前开发分支：`codex/home-region-kitchen-water-spatial-v1`，从 `origin/main@411aaed` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-kitchen-water-spatial-v1.md`。
-- 当前切片把厨房/净水首次建设接入“工程完成 → 储备 → 选址部署 → 世界交互”的真实设施生命周期。
-- 当前实现已通过 Windows Debug 全目标构建及 1405/1405 完整 CTest，exact-head Windows/Ubuntu CI 在推送后核验；开发代理不启动游戏。
+- 已验收主线：`origin/main@2ec99c2`，PR #134 已合入并完成 Home Region 厨房/净水设施空间化建设。
+- 当前开发分支：`codex/home-region-construction-catalog-v1`，从 `origin/main@2ec99c2` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-construction-catalog-v1.md`。
+- 当前切片把全部已发布建设工程、可购买设施与储备设施统一到 `B` 建设目录，并补齐明确分页、状态、开始和取消入口。
+- 当前实现已通过 Windows Debug 全目标构建、68/68 建设目录定向回归及 1410/1410 完整 CTest；exact-head Windows/Ubuntu CI 在推送后核验。开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 储备设施空间部署均已进入主线。当前切片让厨房/净水建设结果成为可部署、可持久化并能打开现有基地需求功能的世界设施，不改变资产所有权或 Raid 生命周期。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 厨房/净水设施空间化建设均已进入主线。当前切片统一基地建设工程与设施目录，移除区域迁徙页的厨房工程特例，不改变建设事务、资产所有权或 Raid 生命周期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -90,7 +90,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 73. **Home Region 基地运营完成通知与设施标记 v1**：升级、制造和居民治疗完成后提供短时非阻塞通知；Raid 内完成事实延迟到 Settlement 成功后发布，建设面板突出对应固定设施。PR #131 已通过 CI 和用户正常游玩验收，并以 `e7590d9` 合入 main。
 74. **Home Region 核心设施空间化与持久布局 v1**：仓库、医疗所、宿舍和工坊使用稳定设施 ID 与站点归一化位置；建设模式可移动已安装设施，非法重叠、越界或保存失败均零提交。schema v40 保存每个已发布基地地点的独立布局，schema v39 及更早版本确定性迁移到原位置。PR #132 已通过 CI 与用户正常游玩验收，并以 merge commit `0b5be88` 进入 main。
 75. **Home Region 储备设施空间部署 v1**：储备设施不再绘制、碰撞或参与近距交互；建设面板“已有”页以绿/红虚像选择新址，并用单一事务同时提交 Installed 状态、任务恢复时间和站点布局。PR #133 已通过 CI 与用户正常游玩验收，并以 merge commit `411aaed` 进入 main。
-76. **Home Region 厨房/净水设施空间化建设 v1（当前开发分支）**：首次建设完成后进入 Reserve 并补齐站点布局；玩家从建设面板选址部署后，设施进入世界并复用现有物资分配与需求页面。schema v41 显式兼容旧 v40 已建设施。
+76. **Home Region 厨房/净水设施空间化建设 v1**：首次建设完成后进入 Reserve 并补齐站点布局；玩家从建设面板选址部署后，设施进入世界并复用现有物资分配与需求页面。schema v41 显式兼容旧 v40 已建设施。PR #134 已通过 CI 与用户正常游玩验收，以 merge commit `2ec99c2` 进入 main。
+77. **Home Region 基地建设项目目录 v1（当前开发分支）**：`B` 购买/建设页统一显示已发布工程和可购买设施，工程卡片展示等级、建材、劳动力、工期与领域状态并支持开始/取消；购买与已有页均使用稳定分页，区域迁徙页只负责跳转目录，不再直接提交厨房工程。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

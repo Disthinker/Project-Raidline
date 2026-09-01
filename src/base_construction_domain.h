@@ -52,6 +52,36 @@ struct BaseConstructionProjection {
 projectBaseConstruction(const ProfileState &profile,
                         const ContentRegistry &content) noexcept;
 
+enum class BaseConstructionCatalogAction
+{
+  Start,
+  Cancel,
+  Complete,
+  Blocked
+};
+
+struct BaseConstructionCatalogEntry
+{
+  BaseConstructionProjectDefinitionId definitionId;
+  std::string displayName;
+  BaseFacilityUpgradeTarget target{BaseFacilityUpgradeTarget::Dormitory};
+  std::uint32_t currentLevel{};
+  std::uint32_t targetLevel{};
+  std::uint32_t materialCost{};
+  std::uint32_t workerCount{};
+  std::uint32_t durationMinutes{};
+  std::uint64_t remainingMinutes{};
+  BaseConstructionCatalogAction action{
+      BaseConstructionCatalogAction::Blocked};
+  bool canCommit{};
+  std::string message;
+};
+
+[[nodiscard]] std::vector<BaseConstructionCatalogEntry>
+projectBaseConstructionCatalog(
+    const ProfileState &profile,
+    const ContentRegistry &content);
+
 struct ContributeConstructionMaterialCommand {
   AssetInstanceId assetId{};
 };

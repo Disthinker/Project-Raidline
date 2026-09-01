@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -21,6 +22,7 @@
 #include "developer_runtime_panel.h"
 #include "frame_timing.h"
 #include "alpha_content_ids.h"
+#include "base_build_catalog_presentation.h"
 #include "base_facility_management.h"
 #include "base_morale_domain.h"
 #include "inventory_transfer.h"
@@ -38,6 +40,7 @@ namespace
     constexpr float kReticleViewportOutsideMargin{48.0F};
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
     constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
+    constexpr std::size_t kBaseBuildCardsPerPage{4U};
 
     constexpr int kPlayerSpriteWidth{64};
     constexpr int kPlayerSpriteHeight{80};
@@ -244,6 +247,16 @@ namespace
     SDL_FRect baseBuildZoomResetButton() noexcept
     {
         return SDL_FRect{1050.0F, 608.0F, 136.0F, 34.0F};
+    }
+
+    SDL_FRect baseBuildPreviousPageButton() noexcept
+    {
+        return SDL_FRect{928.0F, 568.0F, 40.0F, 18.0F};
+    }
+
+    SDL_FRect baseBuildNextPageButton() noexcept
+    {
+        return SDL_FRect{978.0F, 568.0F, 40.0F, 18.0F};
     }
 
     SDL_FRect baseFacilityInspectorBounds() noexcept
@@ -733,6 +746,23 @@ namespace
             return "ALLOCATION";
         case BaseFacilityKind::RaidGate:
             return "RAID GATE";
+        }
+        return "UNKNOWN";
+    }
+
+    const char *baseConstructionTargetName(
+        BaseFacilityUpgradeTarget target) noexcept
+    {
+        switch (target)
+        {
+        case BaseFacilityUpgradeTarget::Dormitory:
+            return "DORMITORY";
+        case BaseFacilityUpgradeTarget::KitchenWater:
+            return "KITCHEN / WATER";
+        case BaseFacilityUpgradeTarget::Workshop:
+            return "WORKSHOP";
+        case BaseFacilityUpgradeTarget::Medical:
+            return "MEDICAL";
         }
         return "UNKNOWN";
     }
@@ -2940,33 +2970,18 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                             return entry.target ==
                                 BaseFacilityUpgradeTarget::KitchenWater;
                         });
-                    if (project == projects.end())
-                    {
-                        uiMessage_ = "KITCHEN & WATER PROJECT IS NOT PUBLISHED";
-                        gameAudio_.play(SoundEventId::UiDeny);
-                        return;
-                    }
-                    const auto &active = gameSession_.profile()
-                        .baseConstruction.activeProject;
-                    const bool cancelling = active.has_value() &&
-                        active->definitionId == project->id;
-                    const BaseConstructionReceipt receipt = cancelling
-                        ? gameSession_.executeCancelBaseConstruction(
-                            project->id,
-                            nextProfileTransactionId(
-                                "cancel-kitchen-water"))
-                        : gameSession_.executeStartBaseConstruction(
-                            project->id,
-                            nextProfileTransactionId(
-                                "start-kitchen-water"));
-                    uiMessage_ = receipt.succeeded
-                        ? cancelling
-                            ? "KITCHEN & WATER CONSTRUCTION CANCELLED"
-                            : "KITCHEN & WATER CONSTRUCTION STARTED"
-                        : receipt.message;
-                    gameAudio_.play(receipt.succeeded
-                        ? SoundEventId::UiConfirm
-                        : SoundEventId::UiDeny);
+                    baseConstructionPage_ = BaseConstructionPage::Purchase;
+                    baseConstructionCatalogPage_ = project == projects.end()
+                        ? 0U
+                        : static_cast<std::size_t>(
+                            std::distance(projects.begin(), project)) /
+                            kBaseBuildCardsPerPage;
+                    regionalOperationsOpen_ = false;
+                    gameFlow_.closeBaseFacility();
+                    baseConstructionPanelOpen_ = true;
+                    activateBaseBuildCamera();
+                    uiMessage_ = "OPENED BASE BUILD | KITCHEN & WATER REQUIRED";
+                    gameAudio_.play(SoundEventId::UiConfirm);
                     return;
                 }
                 const BaseMigrationReceipt receipt =
@@ -2989,6 +3004,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             {
                 gameFlow_.closeBaseFacility();
                 baseConstructionPage_ = BaseConstructionPage::Owned;
+                baseConstructionCatalogPage_ = 0U;
                 baseConstructionPanelOpen_ = true;
                 activateBaseBuildCamera();
                 uiMessage_ =
@@ -5718,6 +5734,7 @@ void App::processEvents()
                 tacticalMapOpen_ = false;
                 medicalWheelOpen_ = false;
                 baseConstructionPanelOpen_ = true;
+                baseConstructionCatalogPage_ = 0U;
                 selectedBasePlacedAssetId_.reset();
                 selectedBaseFixedFacility_.reset();
                 baseFacilityContextMenu_.reset();
@@ -10814,6 +10831,60 @@ void App::startBasePlacement(
     input_.suppressPrimaryPointerUntilRelease();
 }
 
+std::size_t App::baseBuildCatalogEntryCount() const
+{
+    const ProfileState &profile = gameSession_.profile();
+    if (baseConstructionPage_ == BaseConstructionPage::Purchase)
+    {
+        std::size_t count = publishedContentRegistry()
+            .baseConstructionProjects().size();
+        for (const ItemDefinition &definition :
+             publishedContentRegistry().items())
+        {
+            if (definition.basePlacement.has_value() &&
+                definition.marketBuyPrice > 0U)
+            {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    std::size_t count{};
+    constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
+        BaseFacilityKind::Storage,
+        BaseFacilityKind::Medical,
+        BaseFacilityKind::Dormitory,
+        BaseFacilityKind::KitchenWater,
+        BaseFacilityKind::Workshop};
+    for (BaseFacilityKind facility : coreFacilities)
+    {
+        const auto definitionId = spatialFacilityDefinitionId(facility);
+        if (definitionId.has_value() &&
+            baseFacilityOwned(profile, *definitionId) &&
+            !baseFacilityInstalled(profile, *definitionId))
+        {
+            ++count;
+        }
+    }
+    const auto stashAssets = assetsInContainer(
+        profile, ProfileContainerId::stash());
+    for (const ItemDefinition &definition :
+         publishedContentRegistry().items())
+    {
+        if (!definition.basePlacement.has_value())
+            continue;
+        if (std::any_of(
+                stashAssets.begin(), stashAssets.end(),
+                [&](const AssetRecord *asset)
+                { return asset->definitionId == definition.definitionId; }))
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void App::handleBaseConstructionPanelClick(MousePosition position)
 {
     if (handleBaseOperationsOverviewClick(position))
@@ -10823,6 +10894,7 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
     if (contains(baseBuildPurchaseTab(), position))
     {
         baseConstructionPage_ = BaseConstructionPage::Purchase;
+        baseConstructionCatalogPage_ = 0U;
         baseFacilityContextMenu_.reset();
         uiMessage_ = "BASE BUILD PURCHASE PAGE";
         return;
@@ -10830,6 +10902,7 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
     if (contains(baseBuildOwnedTab(), position))
     {
         baseConstructionPage_ = BaseConstructionPage::Owned;
+        baseConstructionCatalogPage_ = 0U;
         baseFacilityContextMenu_.reset();
         uiMessage_ = "BASE BUILD OWNED PAGE";
         return;
@@ -10840,10 +10913,77 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
         uiMessage_ = "BUILD VIEW ZOOM RESET";
         return;
     }
+    const std::size_t entryCount = baseBuildCatalogEntryCount();
+    const BaseBuildCatalogPage catalogPage = projectBaseBuildCatalogPage(
+        entryCount,
+        baseConstructionCatalogPage_,
+        kBaseBuildCardsPerPage);
+    baseConstructionCatalogPage_ = catalogPage.pageIndex;
+    if (contains(baseBuildPreviousPageButton(), position))
+    {
+        if (baseConstructionCatalogPage_ > 0U)
+            --baseConstructionCatalogPage_;
+        uiMessage_ = "BASE BUILD PREVIOUS PAGE";
+        return;
+    }
+    if (contains(baseBuildNextPageButton(), position))
+    {
+        if (baseConstructionCatalogPage_ + 1U < catalogPage.pageCount)
+            ++baseConstructionCatalogPage_;
+        uiMessage_ = "BASE BUILD NEXT PAGE";
+        return;
+    }
 
     if (contains(baseBuildBarBounds(), position))
     {
-        std::size_t cardIndex{};
+        const std::size_t firstEntry = catalogPage.firstEntry;
+        std::size_t entryIndex{};
+        const auto clickedCard = [&]()
+        {
+            const std::size_t current = entryIndex++;
+            return current >= firstEntry &&
+                current < firstEntry + kBaseBuildCardsPerPage &&
+                contains(baseBuildCard(current - firstEntry), position);
+        };
+        if (baseConstructionPage_ == BaseConstructionPage::Purchase)
+        {
+            const auto projects = projectBaseConstructionCatalog(
+                gameSession_.profile(), publishedContentRegistry());
+            for (const BaseConstructionCatalogEntry &project : projects)
+            {
+                if (!clickedCard())
+                    continue;
+                if (!project.canCommit)
+                {
+                    uiMessage_ = project.action ==
+                        BaseConstructionCatalogAction::Complete
+                        ? "CONSTRUCTION PROJECT COMPLETE"
+                        : project.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                    return;
+                }
+                const bool cancelling = project.action ==
+                    BaseConstructionCatalogAction::Cancel;
+                const BaseConstructionReceipt receipt = cancelling
+                    ? gameSession_.executeCancelBaseConstruction(
+                        project.definitionId,
+                        nextProfileTransactionId(
+                            "base-build-cancel-project"))
+                    : gameSession_.executeStartBaseConstruction(
+                        project.definitionId,
+                        nextProfileTransactionId(
+                            "base-build-start-project"));
+                uiMessage_ = receipt.succeeded
+                    ? cancelling
+                        ? "CONSTRUCTION PROJECT CANCELLED | MATERIAL REFUNDED"
+                        : "CONSTRUCTION PROJECT STARTED"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::UiConfirm
+                    : SoundEventId::UiDeny);
+                return;
+            }
+        }
         if (baseConstructionPage_ == BaseConstructionPage::Owned)
         {
             constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
@@ -10864,16 +11004,13 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
                 {
                     continue;
                 }
-                if (cardIndex >= 4U)
-                    break;
-                if (contains(baseBuildCard(cardIndex), position))
+                if (clickedCard())
                 {
                     startBaseFixedFacilityPlacement(
                         facility,
                         BaseFixedFacilityPlacementState::Mode::Install);
                     return;
                 }
-                ++cardIndex;
             }
         }
         const auto stashAssets = assetsInContainer(
@@ -10900,9 +11037,7 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
                 : ownedCount > 0U;
             if (!visible)
                 continue;
-            if (cardIndex >= 4U)
-                break;
-            if (contains(baseBuildCard(cardIndex), position))
+            if (clickedCard())
             {
                 if (baseConstructionPage_ ==
                     BaseConstructionPage::Purchase)
@@ -10931,7 +11066,6 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
                     true);
                 return;
             }
-            ++cardIndex;
         }
         return;
     }
@@ -11577,9 +11711,107 @@ void App::renderBaseConstructionPanel()
         fmt::format("VIEW {}%", static_cast<int>(
             std::lround(baseConstructionZoom() * 100.0F))));
 
+    const BaseConstructionProjection construction = projectBaseConstruction(
+        gameSession_.profile(), publishedContentRegistry());
+    const std::string resources = fmt::format(
+        "MATERIAL {}/{} | WORKERS {}/{} AVAILABLE",
+        construction.materialUnits,
+        construction.maximumMaterialUnits,
+        construction.availableWorkers,
+        construction.totalWorkers);
+    uiTextRenderer_.render(renderer_, 350.0F, 574.0F, resources.c_str());
+
+    const std::size_t entryCount = baseBuildCatalogEntryCount();
+    const BaseBuildCatalogPage catalogPage = projectBaseBuildCatalogPage(
+        entryCount,
+        baseConstructionCatalogPage_,
+        kBaseBuildCardsPerPage);
+    baseConstructionCatalogPage_ = catalogPage.pageIndex;
+    const std::string pageLabel = fmt::format(
+        "PAGE {}/{}", baseConstructionCatalogPage_ + 1U,
+        catalogPage.pageCount);
+    uiTextRenderer_.render(renderer_, 830.0F, 574.0F, pageLabel.c_str());
+    drawButton(baseBuildPreviousPageButton(), "<");
+    drawButton(baseBuildNextPageButton(), ">");
+
     const auto stashAssets = assetsInContainer(
         gameSession_.profile(), ProfileContainerId::stash());
-    std::size_t cardIndex{};
+    const std::size_t firstEntry = catalogPage.firstEntry;
+    std::size_t entryIndex{};
+    const auto visibleCard = [&]() -> std::optional<std::size_t>
+    {
+        const std::size_t current = entryIndex++;
+        if (current < firstEntry ||
+            current >= firstEntry + kBaseBuildCardsPerPage)
+        {
+            return std::nullopt;
+        }
+        return current - firstEntry;
+    };
+    if (baseConstructionPage_ == BaseConstructionPage::Purchase)
+    {
+        const auto projects = projectBaseConstructionCatalog(
+            gameSession_.profile(), publishedContentRegistry());
+        for (const BaseConstructionCatalogEntry &project : projects)
+        {
+            const auto cardIndex = visibleCard();
+            if (!cardIndex.has_value())
+                continue;
+            const SDL_FRect card = baseBuildCard(*cardIndex);
+            const bool active = project.action ==
+                BaseConstructionCatalogAction::Cancel;
+            const bool complete = project.action ==
+                BaseConstructionCatalogAction::Complete;
+            SDL_SetRenderDrawColor(
+                renderer_, active ? 78 : complete ? 48 : 42,
+                active ? 82 : complete ? 74 : 68,
+                active ? 46 : complete ? 58 : 70, 245);
+            SDL_RenderFillRect(renderer_, &card);
+            SDL_SetRenderDrawColor(
+                renderer_, project.canCommit ? 212 : 126,
+                project.canCommit ? 190 : 142,
+                project.canCommit ? 102 : 136, 255);
+            SDL_RenderRect(renderer_, &card);
+            uiTextRenderer_.render(
+                renderer_, card.x + 8.0F, card.y + 8.0F,
+                baseConstructionTargetName(project.target));
+            const std::string levelAndMaterial = fmt::format(
+                "LV {}>{} | MAT {}",
+                project.currentLevel,
+                project.targetLevel,
+                project.materialCost);
+            uiTextRenderer_.render(
+                renderer_, card.x + 8.0F, card.y + 24.0F,
+                levelAndMaterial.c_str());
+            const std::string workersAndTime = fmt::format(
+                "WORKERS {} | HOURS {}",
+                project.workerCount,
+                project.durationMinutes / kWorldMinutesPerHour);
+            uiTextRenderer_.render(
+                renderer_, card.x + 8.0F, card.y + 40.0F,
+                workersAndTime.c_str());
+            std::string status;
+            switch (project.action)
+            {
+            case BaseConstructionCatalogAction::Start:
+                status = "START PROJECT";
+                break;
+            case BaseConstructionCatalogAction::Cancel:
+                status = fmt::format(
+                    "CANCEL | {} MIN", project.remainingMinutes);
+                break;
+            case BaseConstructionCatalogAction::Complete:
+                status = "PROJECT COMPLETE";
+                break;
+            case BaseConstructionCatalogAction::Blocked:
+                status = "PROJECT BLOCKED";
+                break;
+            }
+            uiTextRenderer_.render(
+                renderer_, card.x + 8.0F, card.y + 58.0F,
+                status.c_str());
+        }
+    }
     if (baseConstructionPage_ == BaseConstructionPage::Owned)
     {
         constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
@@ -11597,9 +11829,10 @@ void App::renderBaseConstructionPanel()
             {
                 continue;
             }
-            if (cardIndex >= 4U)
-                break;
-            const SDL_FRect card = baseBuildCard(cardIndex);
+            const auto cardIndex = visibleCard();
+            if (!cardIndex.has_value())
+                continue;
+            const SDL_FRect card = baseBuildCard(*cardIndex);
             SDL_SetRenderDrawColor(renderer_, 53, 72, 65, 245);
             SDL_RenderFillRect(renderer_, &card);
             SDL_SetRenderDrawColor(renderer_, 172, 204, 132, 255);
@@ -11616,7 +11849,6 @@ void App::renderBaseConstructionPanel()
             uiTextRenderer_.render(
                 renderer_, card.x + 62.0F, card.y + 16.0F,
                 "RESERVE | PLACE");
-            ++cardIndex;
         }
     }
     for (const ItemDefinition &definition :
@@ -11636,9 +11868,10 @@ void App::renderBaseConstructionPanel()
             : ownedCount > 0U;
         if (!visible)
             continue;
-        if (cardIndex >= 4U)
-            break;
-        const SDL_FRect card = baseBuildCard(cardIndex);
+        const auto cardIndex = visibleCard();
+        if (!cardIndex.has_value())
+            continue;
+        const SDL_FRect card = baseBuildCard(*cardIndex);
         SDL_SetRenderDrawColor(renderer_, 31, 59, 56, 245);
         SDL_RenderFillRect(renderer_, &card);
         SDL_SetRenderDrawColor(renderer_, 116, 204, 170, 255);
@@ -11663,9 +11896,8 @@ void App::renderBaseConstructionPanel()
         uiTextRenderer_.render(
             renderer_, card.x + 62.0F, card.y + 16.0F,
             action.c_str());
-        ++cardIndex;
     }
-    if (cardIndex == 0U)
+    if (entryCount == 0U)
     {
         uiTextRenderer_.render(
             renderer_, 390.0F, 624.0F,
@@ -15098,45 +15330,8 @@ void App::renderRegionalOperations()
         }
         else if (!baseFacilityOwned(profile, kitchenWater))
         {
-            const auto &projects = content.baseConstructionProjects();
-            const auto project = std::find_if(
-                projects.begin(), projects.end(),
-                [](const BaseConstructionProjectDefinition &entry)
-                {
-                    return entry.target ==
-                        BaseFacilityUpgradeTarget::KitchenWater;
-                });
-            if (project == projects.end())
-            {
-                actionLabel = "KITCHEN & WATER PROJECT NOT PUBLISHED";
-            }
-            else
-            {
-                const auto &active = profile.baseConstruction.activeProject;
-                const bool cancelling = active.has_value() &&
-                    active->definitionId == project->id;
-                const BaseConstructionPlan plan = cancelling
-                    ? queryCancelBaseConstruction(
-                        profile, content,
-                        CancelBaseConstructionCommand{project->id})
-                    : queryStartBaseConstruction(
-                        profile, content,
-                        StartBaseConstructionCommand{project->id});
-                actionAvailable = plan.canCommit;
-                actionLabel = cancelling
-                    ? fmt::format(
-                        "CANCEL KITCHEN & WATER | {} MIN REMAINING",
-                        profile.baseConstruction.activeProject
-                            ->completionWorldMinute -
-                            profile.worldClock.elapsedWorldMinutes)
-                    : plan.canCommit
-                        ? fmt::format(
-                            "BUILD KITCHEN & WATER | MATERIAL {} | WORKERS {} | {}H",
-                            plan.materialCost,
-                            plan.workerCount,
-                            plan.durationMinutes / kWorldMinutesPerHour)
-                        : "KITCHEN & WATER REQUIREMENTS NOT MET";
-            }
+            actionAvailable = true;
+            actionLabel = "OPEN BASE BUILD | KITCHEN & WATER REQUIRED";
         }
         else
         {

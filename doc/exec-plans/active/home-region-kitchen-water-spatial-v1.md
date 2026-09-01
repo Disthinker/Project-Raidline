@@ -1,6 +1,6 @@
 # Home Region 厨房/净水设施空间化建设 v1 ExecPlan
 
-状态：开发完成，等待用户正常游玩验收。分支 `codex/home-region-kitchen-water-spatial-v1` 从用户已验收并合入的 PR #133 / `origin/main@411aaed` 创建。Windows Debug 全目标构建及 1405/1405 完整 CTest 已通过；exact-head Windows/Ubuntu CI 在推送后核验。
+状态：已完成。PR #134 已通过 Windows Debug 全目标构建、1405/1405 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `2ec99c2` 进入 main。
 
 ## 玩家结果与依赖
 
