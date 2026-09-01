@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 从有限新档整备到核心设施持久布局均已进入主线。当前推进 Home Region 储备设施空间部署 v1，范围合同见 `doc/exec-plans/active/home-region-facility-deployment-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 储备设施空间部署均已进入主线。当前推进厨房/净水设施空间化建设 v1，范围合同见 `doc/exec-plans/active/home-region-kitchen-water-spatial-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -195,7 +195,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 基地运营总览与设施定位 v1 | 建设面板集中显示待领取、升级、制造、治疗和缺员事项；点击后镜头定位并选中设施 | SDL-free 运营投影、稳定优先级、储备暂停标记、瞬态镜头定位和双语输入仲裁 | PR #130 已通过 CI 与用户正常游玩验收，以 `ee44d52` 进入 main |
 | Home Region 基地运营完成通知与设施标记 v1 | 升级、制造和居民治疗完成后出现短时提示；建设模式突出对应设施 | 已提交领域结果、Raid 结算延迟发布、非持久 App 通知、双语表现 | PR #131 已通过 CI 和用户验收，以 `e7590d9` 进入 main |
 | Home Region 核心设施空间化与持久布局 v1 | 仓库、医疗所、宿舍和工坊可在基地板块内移动，并在重启和基地迁徙往返后保持各站点独立位置 | 稳定设施 ID、Profile 权威归一化位置、纯查询与原子命令、schema v40、绿/红虚像 | PR #132 已通过 CI 与用户正常游玩验收，以 merge commit `0b5be88` 进入 main |
-| Home Region 储备设施空间部署 v1 | 迁徙后打包的核心设施从世界移除，并从建设面板“已有”页以绿/红虚像部署到合法新址 | Reserve/Installed 与位置单事务、暂停任务恢复、active 世界投影、双语建设入口 | Windows Debug 全目标与 1400/1400 CTest 通过；等待 exact-head CI 和用户正常游玩验收 |
+| Home Region 储备设施空间部署 v1 | 迁徙后打包的核心设施从世界移除，并从建设面板“已有”页以绿/红虚像部署到合法新址 | Reserve/Installed 与位置单事务、暂停任务恢复、active 世界投影、双语建设入口 | PR #133 已通过 CI 与用户正常游玩验收，以 merge commit `411aaed` 进入 main |
+| Home Region 厨房/净水设施空间化建设 v1 | 首次建设完成后从“已有”页选址部署，成为可碰撞、可定位并可打开基地需求页面的世界设施 | level-1 完成进入 Reserve、第五类空间核心设施、schema v41/v40 确定性迁移 | 当前分支开发与自动化验证中 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -969,6 +969,14 @@ TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
                 UiLanguage::SimplifiedChinese,
                 "RESIDENT TREATMENT COMPLETE | MEDICAL"),
             "居民治疗完成 | 医疗");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "FACILITY UPGRADE COMPLETE | KITCHEN / WATER"),
+            "设施升级完成 | 厨房 / 净水");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "KITCHEN & WATER"),
+            "厨房与净水");
 }
 
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {

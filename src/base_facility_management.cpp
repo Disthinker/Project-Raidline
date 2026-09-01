@@ -20,6 +20,8 @@ std::optional<BaseFacilityDefinitionId> definitionId(
         return BaseFacilityDefinitionId{"base_facility.medical"};
     case BaseFacilityKind::Dormitory:
         return BaseFacilityDefinitionId{"base_facility.dormitory"};
+    case BaseFacilityKind::KitchenWater:
+        return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
     case BaseFacilityKind::Workshop:
         return BaseFacilityDefinitionId{"base_facility.workshop"};
     case BaseFacilityKind::Supply:
@@ -37,6 +39,8 @@ std::optional<BaseFacilityUpgradeTarget> upgradeTarget(
     {
     case BaseFacilityKind::Dormitory:
         return BaseFacilityUpgradeTarget::Dormitory;
+    case BaseFacilityKind::KitchenWater:
+        return BaseFacilityUpgradeTarget::KitchenWater;
     case BaseFacilityKind::Medical:
         return BaseFacilityUpgradeTarget::Medical;
     case BaseFacilityKind::Workshop:
@@ -63,6 +67,7 @@ std::optional<BaseFacilityStaffingKind> staffingKind(
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
     case BaseFacilityKind::Dormitory:
+    case BaseFacilityKind::KitchenWater:
     case BaseFacilityKind::RaidGate:
         return std::nullopt;
     }
@@ -196,6 +201,8 @@ std::optional<BaseFacilityKind> facilityKind(
     {
     case BaseFacilityUpgradeTarget::Dormitory:
         return BaseFacilityKind::Dormitory;
+    case BaseFacilityUpgradeTarget::KitchenWater:
+        return BaseFacilityKind::KitchenWater;
     case BaseFacilityUpgradeTarget::Workshop:
         return BaseFacilityKind::Workshop;
     case BaseFacilityUpgradeTarget::Medical:
@@ -210,6 +217,15 @@ bool facilityOperational(
 {
     const auto id = definitionId(kind);
     return !id.has_value() || baseFacilityInstalled(profile, *id);
+}
+
+bool facilityWorkPaused(
+    const ProfileState &profile,
+    BaseFacilityKind kind) noexcept
+{
+    const auto id = definitionId(kind);
+    return id.has_value() && baseFacilityOwned(profile, *id) &&
+        !baseFacilityInstalled(profile, *id);
 }
 }
 
@@ -374,7 +390,7 @@ BaseOperationsOverviewProjection projectBaseOperationsOverview(
                     *facility,
                     BaseOperationOverviewKind::Construction,
                     construction.remainingMinutes,
-                    !facilityOperational(profile, *facility)});
+                    facilityWorkPaused(profile, *facility)});
             }
         }
     }

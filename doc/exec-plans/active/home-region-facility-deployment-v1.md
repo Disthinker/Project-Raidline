@@ -1,6 +1,6 @@
 # Home Region 储备设施空间部署 v1 ExecPlan
 
-状态：实现完成；Windows Debug 全目标与 1400/1400 完整 CTest 已通过，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。开发分支 `codex/home-region-facility-deployment-v1` 从用户已验收并合入的 PR #132 / `origin/main@0b5be88` 创建。
+状态：已完成。PR #133 通过 Windows Debug 全目标、1400/1400 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `411aaed` 进入 main。
 
 ## 玩家结果与依赖
 

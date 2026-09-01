@@ -1,5 +1,7 @@
 #include "base_construction_domain.h"
 
+#include "base_facility_layout_domain.h"
+
 #include "base_workforce_domain.h"
 
 #include <algorithm>
@@ -608,9 +610,13 @@ applyBaseConstructionThrough(ProfileState &profile,
   setFacilityLevel(
       profile.baseConstruction, definition.target, definition.targetLevel);
   if (beforeLevel == 0U && definition.targetLevel > 0U) {
-    profile.baseConstruction.facilities[
-        baseFacilityDefinitionId(definition.target)] =
-        BaseConstructionState::FacilityPlacement::Installed;
+    const BaseFacilityDefinitionId facilityId =
+        baseFacilityDefinitionId(definition.target);
+    profile.baseConstruction.facilities[facilityId] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[facilityId] =
+        profile.worldClock.elapsedWorldMinutes;
+    initializeBaseFacilityLayouts(profile, content);
   }
   if (definition.target == BaseFacilityUpgradeTarget::Dormitory) {
     profile.basePopulation.bedCapacity = definition.bedCapacityAfter;

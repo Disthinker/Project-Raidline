@@ -109,6 +109,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
        "部署基地设施 | 左键放置 | ESC取消"},
      {"INSTALL FACILITY", "部署设施"},
      {"RESERVE | PLACE", "储备 | 放置"},
+     {"KITCHEN & WATER", "厨房与净水"},
+     {"KITCHEN / WATER", "厨房 / 净水"},
      {"SELECT RESERVE FACILITY IN BASE BUILD OWNED PAGE",
        "请在基地建设已有设施页面选择储备设施"},
      {"BASE FACILITY SELECTED", "已选择基地设施"},

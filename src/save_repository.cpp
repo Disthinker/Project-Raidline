@@ -2194,7 +2194,8 @@ std::string serializeProfileEnvelope(
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
-        schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40)
+        schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
+        schemaVersion != 41)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2372,7 +2373,8 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 33 && schemaVersion != 34 &&
               schemaVersion != 35 && schemaVersion != 36 &&
               schemaVersion != 37 && schemaVersion != 38 &&
-              schemaVersion != 39 && schemaVersion != 40) ||
+              schemaVersion != 39 && schemaVersion != 40 &&
+              schemaVersion != 41) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2587,6 +2589,10 @@ SaveLoadResult deserializeProfileEnvelope(
                                 "Base facility spatial layout is duplicated"};
                     }
                 }
+            }
+            if (schemaVersion == 40)
+            {
+                initializeBaseFacilityLayouts(profile, content);
             }
         }
         else

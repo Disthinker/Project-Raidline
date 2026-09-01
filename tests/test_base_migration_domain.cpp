@@ -3,6 +3,7 @@
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
 #include "base_migration_domain.h"
+#include "base_facility_layout_domain.h"
 #include "base_siege_domain.h"
 #include "regional_operations_domain.h"
 
@@ -35,6 +36,7 @@ void completeKitchenWater(ProfileState &profile)
     profile.baseConstruction.kitchenWaterLevel = 1U;
     profile.baseConstruction.facilities[kKitchenWater] =
         BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(profile, publishedContentRegistry());
 }
 
 AssetInstanceId addToStash(

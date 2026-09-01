@@ -8,6 +8,7 @@
 #include "base_workforce_domain.h"
 
 #include "alpha_content_ids.h"
+#include "base_facility_layout_domain.h"
 #include "base_morale_domain.h"
 #include "base_population_domain.h"
 #include "profile_state.h"
@@ -613,6 +614,7 @@ TEST(ProfileStateTest, TechnologyCoreAndFacilityOwnershipMustStayConsistent)
     profile.baseConstruction.facilities[
         BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
         BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(profile, content);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 
     const BaseFacilityDefinitionId workshop{"base_facility.workshop"};

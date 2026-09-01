@@ -11,6 +11,7 @@
 #include <tuple>
 
 #include "alpha_content_ids.h"
+#include "base_facility_layout_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_migration_domain.h"
 #include "base_morale_domain.h"
@@ -241,6 +242,7 @@ TEST(RaidLifecycleTest,
     profile.baseConstruction.kitchenWaterLevel = 1U;
     profile.baseConstruction.facilities[kitchenWater] =
         BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(profile, content);
     const BaseMigrationReceipt migrated = executeBaseMigration(
         profile,
         content,
