@@ -112,6 +112,14 @@ public:
     [[nodiscard]] std::vector<BaseGroundAssetProjection>
     baseGroundAssets() const;
 
+    [[nodiscard]] BaseFacilityLayoutPlan queryBaseFacilityRepositionAt(
+        BaseFacilityKind facility,
+        Vec2 worldPosition) const;
+    [[nodiscard]] BaseFacilityLayoutReceipt repositionBaseFacilityAt(
+        BaseFacilityKind facility,
+        Vec2 worldPosition,
+        std::string transactionId);
+
     void update(
         const GameplayInput &input,
         float deltaTime);
@@ -138,6 +146,10 @@ private:
     void syncBaseWorldSite();
     [[nodiscard]] BaseGroundAccess baseGroundAccess() const noexcept;
     [[nodiscard]] BaseGroundAccess baseGroundPlacementAccess(
+        Vec2 worldPosition) const;
+    [[nodiscard]] RepositionBaseFacilityCommand
+    baseFacilityRepositionCommand(
+        BaseFacilityKind facility,
         Vec2 worldPosition) const;
 
     GameSession gameSession_;

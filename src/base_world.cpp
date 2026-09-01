@@ -86,10 +86,20 @@ BaseWorld::BaseWorld()
 
 void BaseWorld::configureSite(std::string_view siteDefinitionId)
 {
+    configureSite(siteDefinitionId, {});
+}
+
+void BaseWorld::configureSite(
+    std::string_view siteDefinitionId,
+    std::vector<BaseFacilitySpatialOverride> overrides)
+{
     const std::string normalized = siteDefinitionId.empty()
         ? "regional_base_site.greyline_yard" : std::string{siteDefinitionId};
-    if (normalized != siteDefinitionId_)
+    if (normalized != siteDefinitionId_ || overrides != facilityOverrides_)
+    {
+        facilityOverrides_ = std::move(overrides);
         rebuildSite(normalized);
+    }
 }
 
 void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
@@ -123,6 +133,20 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
         BaseFacility{BaseFacilityKind::RaidGate,
                      {{origin.x + 650.0F, origin.y + 40.0F},
                       {300.0F, 130.0F}}, 82.0F}};
+    for (const BaseFacilitySpatialOverride &override : facilityOverrides_)
+    {
+        const auto facility = std::find_if(
+            facilities_.begin(), facilities_.end(),
+            [&](const BaseFacility &candidate)
+            { return candidate.kind == override.kind; });
+        if (facility == facilities_.end() ||
+            !std::isfinite(override.worldCenter.x) ||
+            !std::isfinite(override.worldCenter.y))
+            continue;
+        facility->bounds.position = {
+            override.worldCenter.x - facility->bounds.size.x * 0.5F,
+            override.worldCenter.y - facility->bounds.size.y * 0.5F};
+    }
     rebuildCollisionIndex();
     presentationCache_ = {};
     presentationCacheValid_ = false;
@@ -411,6 +435,24 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockers() const
         result.push_back(ContentRect{
             facility.bounds.position, facility.bounds.size});
     }
+    result.push_back(ContentRect{playerPosition_, playerSize_});
+    return result;
+}
+
+std::vector<ContentRect> BaseWorld::basePlacementBlockersExcluding(
+    BaseFacilityKind excluded) const
+{
+    std::vector<ContentRect> result = layout_.movementBlockers;
+    result.reserve(result.size() + facilities_.size());
+    for (const BaseFacility &facility : facilities_)
+    {
+        if (facility.kind == excluded)
+            continue;
+        result.push_back(ContentRect{
+            facility.bounds.position, facility.bounds.size});
+    }
+    for (const ContentRect &bounds : groundBlockers_)
+        result.push_back(bounds);
     result.push_back(ContentRect{playerPosition_, playerSize_});
     return result;
 }

@@ -726,6 +726,42 @@ struct BaseConstructionState
         const BaseConstructionState &) = default;
 };
 
+struct BaseFacilityLayoutState
+{
+    // Centers are normalized within each site's Base parcel so the layout
+    // remains stable while site-specific world placement stays data-driven.
+    std::map<
+        RegionalBaseSiteDefinitionId,
+        std::map<BaseFacilityDefinitionId, Vec2>> placements;
+
+    friend bool operator==(
+        const BaseFacilityLayoutState &left,
+        const BaseFacilityLayoutState &right)
+    {
+        if (left.placements.size() != right.placements.size())
+            return false;
+        for (const auto &[siteDefinitionId, leftFacilities] :
+             left.placements)
+        {
+            const auto rightSite = right.placements.find(siteDefinitionId);
+            if (rightSite == right.placements.end() ||
+                leftFacilities.size() != rightSite->second.size())
+                return false;
+            for (const auto &[facilityDefinitionId, leftCenter] :
+                 leftFacilities)
+            {
+                const auto rightFacility = rightSite->second.find(
+                    facilityDefinitionId);
+                if (rightFacility == rightSite->second.end() ||
+                    leftCenter.x != rightFacility->second.x ||
+                    leftCenter.y != rightFacility->second.y)
+                    return false;
+            }
+        }
+        return true;
+    }
+};
+
 struct BasePriorityState
 {
     BasePriorityDefinitionId definitionId;
@@ -928,6 +964,7 @@ struct ProfileState
     BaseResidentMedicalState residentMedical;
     BaseManufacturingState baseManufacturing;
     BaseConstructionState baseConstruction;
+    BaseFacilityLayoutState baseFacilityLayout;
     BasePriorityState basePriority;
     RaidIntelligenceArchiveState raidIntelligence;
     RaidInteriorIntelligenceArchiveState raidInteriorIntelligence;

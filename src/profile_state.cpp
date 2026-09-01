@@ -18,6 +18,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_construction_domain.h"
+#include "base_facility_layout_domain.h"
 #include "base_resource_domain.h"
 #include "recovery_task_domain.h"
 #include "regional_operations_domain.h"
@@ -603,6 +604,7 @@ ProfileState makeNewAlphaProfile(
             }
         }
     }
+    initializeBaseFacilityLayouts(profile, content);
 
     placeNewAsset(profile, content, alpha_content::rifle);
     placeNewAsset(profile, content, alpha_content::pistol);
@@ -1417,6 +1419,53 @@ ProfileValidationResult validateProfileState(
         if (!profile.baseConstruction.facilities.contains(definitionId))
         {
             return {false, "Base facility reserve owner is missing"};
+        }
+    }
+    if (profile.baseFacilityLayout.placements.size() !=
+        content.regionalOperations().baseSites.size())
+    {
+        return {false, "Base facility site layout is incomplete"};
+    }
+    for (const auto &[siteDefinitionId, placements] :
+         profile.baseFacilityLayout.placements)
+    {
+        try
+        {
+            static_cast<void>(content.regionalBaseSite(siteDefinitionId));
+        }
+        catch (...)
+        {
+            return {false, "Base facility site layout is invalid"};
+        }
+        std::size_t expectedSpatialFacilities{};
+        for (const auto &[definitionId, placement] :
+             profile.baseConstruction.facilities)
+        {
+            static_cast<void>(placement);
+            if (isSpatialBaseFacility(definitionId))
+            {
+                ++expectedSpatialFacilities;
+                if (!placements.contains(definitionId))
+                {
+                    return {false,
+                            "Base facility spatial layout is incomplete"};
+                }
+            }
+        }
+        if (placements.size() != expectedSpatialFacilities)
+        {
+            return {false, "Base facility spatial layout is invalid"};
+        }
+        for (const auto &[definitionId, normalizedCenter] : placements)
+        {
+            if (!isSpatialBaseFacility(definitionId) ||
+                !std::isfinite(normalizedCenter.x) ||
+                !std::isfinite(normalizedCenter.y) ||
+                normalizedCenter.x <= 0.0F || normalizedCenter.x >= 1.0F ||
+                normalizedCenter.y <= 0.0F || normalizedCenter.y >= 1.0F)
+            {
+                return {false, "Base facility spatial position is invalid"};
+            }
         }
     }
     const auto ownsFacility = [&](std::string_view value)
@@ -4329,6 +4378,17 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     {
         hashBytes(hash, definitionId.value());
         hashInteger(hash, reserveStarted);
+    }
+    for (const auto &[siteDefinitionId, placements] :
+         profile.baseFacilityLayout.placements)
+    {
+        hashBytes(hash, siteDefinitionId.value());
+        for (const auto &[definitionId, normalizedCenter] : placements)
+        {
+            hashBytes(hash, definitionId.value());
+            hashFloat(hash, normalizedCenter.x);
+            hashFloat(hash, normalizedCenter.y);
+        }
     }
     if (profile.baseConstruction.activeProject.has_value())
     {

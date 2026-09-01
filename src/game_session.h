@@ -13,6 +13,7 @@
 #include "economy_domain.h"
 #include "base_construction_domain.h"
 #include "base_ground_domain.h"
+#include "base_facility_layout_domain.h"
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
 #include "base_siege_domain.h"
@@ -322,6 +323,10 @@ public:
 
     [[nodiscard]] BaseGroundReceipt executeBaseGroundAsset(
         const BaseGroundCommand &command,
+        std::string transactionId);
+
+    [[nodiscard]] BaseFacilityLayoutReceipt executeBaseFacilityLayout(
+        const RepositionBaseFacilityCommand &command,
         std::string transactionId);
 
     [[nodiscard]] InventoryReceipt executeBaseGroundContainerInventory(

@@ -662,6 +662,14 @@ namespace
         return "UNKNOWN";
     }
 
+    bool movableCoreFacility(BaseFacilityKind facility) noexcept
+    {
+        return facility == BaseFacilityKind::Storage ||
+            facility == BaseFacilityKind::Medical ||
+            facility == BaseFacilityKind::Dormitory ||
+            facility == BaseFacilityKind::Workshop;
+    }
+
     const char *baseOperationOverviewKindName(
         BaseOperationOverviewKind kind) noexcept
     {
@@ -2135,6 +2143,7 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         developerWeaponPanelOpen_ = false;
         baseConstructionPanelOpen_ = false;
         basePlacementState_.reset();
+        baseFixedFacilityPlacementState_.reset();
         deactivateBaseBuildCamera();
         selectedBasePlacedAssetId_.reset();
         selectedBaseFixedFacility_.reset();
@@ -2409,6 +2418,7 @@ void App::updateBase(float deltaTime)
     if (gameSession_.baseThreatProjection().warningActive)
     {
         basePlacementState_.reset();
+        baseFixedFacilityPlacementState_.reset();
         baseConstructionPanelOpen_ = false;
         deactivateBaseBuildCamera();
         baseFacilityContextMenu_.reset();
@@ -2497,6 +2507,55 @@ void App::updateBase(float deltaTime)
         return;
     }
 
+    if (baseFixedFacilityPlacementState_.has_value())
+    {
+        if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+        {
+            const bool reopenPanel =
+                baseFixedFacilityPlacementState_->returnToBuildPanel;
+            baseFixedFacilityPlacementState_.reset();
+            baseConstructionPanelOpen_ = reopenPanel;
+            if (!reopenPanel)
+                deactivateBaseBuildCamera();
+            pendingBaseClicks_.clear();
+            uiMessage_ = "BASE FACILITY PLACEMENT CANCELLED";
+            input_.suppressPrimaryPointerUntilRelease();
+            return;
+        }
+        static_cast<void>(updateBaseBuildCameraKeyboard(deltaTime));
+        for (const BasePointerClick &click : pendingBaseClicks_)
+        {
+            const Vec2 worldPosition = baseScreenToWorld(
+                {click.position.x, click.position.y});
+            const BaseFacilityKind facility =
+                baseFixedFacilityPlacementState_->facility;
+            const BaseFacilityLayoutReceipt receipt =
+                gameFlow_.repositionBaseFacilityAt(
+                    facility,
+                    worldPosition,
+                    nextProfileTransactionId("base-core-facility-move"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE FACILITY REPOSITIONED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::InventoryMoveOrPlace
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                const bool reopenPanel =
+                    baseFixedFacilityPlacementState_->returnToBuildPanel;
+                baseFixedFacilityPlacementState_.reset();
+                baseConstructionPanelOpen_ = reopenPanel;
+                if (!reopenPanel)
+                    deactivateBaseBuildCamera();
+            }
+            break;
+        }
+        pendingBaseClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
+
     if (basePlacementState_.has_value())
     {
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
@@ -2504,6 +2563,7 @@ void App::updateBase(float deltaTime)
             const bool reopenPanel =
                 basePlacementState_->returnToBuildPanel;
             basePlacementState_.reset();
+            baseFixedFacilityPlacementState_.reset();
             baseConstructionPanelOpen_ = reopenPanel;
             if (!reopenPanel)
                 deactivateBaseBuildCamera();
@@ -5383,6 +5443,7 @@ void App::processEvents()
             baseConstructionPanelOpen_ = false;
             baseFacilityContextMenu_.reset();
             basePlacementState_.reset();
+            baseFixedFacilityPlacementState_.reset();
             deactivateBaseBuildCamera();
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
                 (gameFlow_.state() == GameFlowState::Base ||
@@ -5416,7 +5477,8 @@ void App::processEvents()
             }
             if (gameFlow_.state() == GameFlowState::Base &&
                 (baseConstructionPanelOpen_ ||
-                 basePlacementState_.has_value()) &&
+                 basePlacementState_.has_value() ||
+                 baseFixedFacilityPlacementState_.has_value()) &&
                 baseBuildCamera_.updatePointer(
                     {event.motion.x, event.motion.y},
                     baseConstructionZoom(),
@@ -5432,6 +5494,7 @@ void App::processEvents()
                 !developerWeaponPanelOpen_ &&
                 !baseConstructionPanelOpen_ &&
                 !basePlacementState_.has_value() &&
+                !baseFixedFacilityPlacementState_.has_value() &&
                 gameSession_.observeAlphaWeaponClearMotion(motion))
             {
                 uiMessage_ = "WEAPON MALFUNCTION CLEARED";
@@ -5493,6 +5556,7 @@ void App::processEvents()
                     closeInventory();
                     baseConstructionPanelOpen_ = false;
                     basePlacementState_.reset();
+                    baseFixedFacilityPlacementState_.reset();
                     deactivateBaseBuildCamera();
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
@@ -5597,6 +5661,8 @@ void App::processEvents()
         {
             if (basePlacementState_.has_value())
                 basePlacementState_.reset();
+            if (baseFixedFacilityPlacementState_.has_value())
+                baseFixedFacilityPlacementState_.reset();
             if (baseConstructionPanelOpen_)
             {
                 baseConstructionPanelOpen_ = false;
@@ -5632,7 +5698,8 @@ void App::processEvents()
         if (gameFlow_.state() == GameFlowState::Base &&
             !pauseMenu_.isOpen() &&
             event.type == SDL_EVENT_MOUSE_WHEEL &&
-            (baseConstructionPanelOpen_ || basePlacementState_.has_value()))
+            (baseConstructionPanelOpen_ || basePlacementState_.has_value() ||
+             baseFixedFacilityPlacementState_.has_value()))
         {
             if (event.wheel.y != 0.0F)
             {
@@ -5715,7 +5782,8 @@ void App::processEvents()
                     }
                 }
             }
-            else if (basePlacementState_.has_value())
+            else if (basePlacementState_.has_value() ||
+                     baseFixedFacilityPlacementState_.has_value())
             {
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                     event.button.button == SDL_BUTTON_LEFT)
@@ -5726,7 +5794,8 @@ void App::processEvents()
                         input_.isControlPressed(),
                         input_.isShiftPressed()});
                 }
-                else if (event.type == SDL_EVENT_KEY_DOWN &&
+                else if (basePlacementState_.has_value() &&
+                         event.type == SDL_EVENT_KEY_DOWN &&
                          event.key.scancode == SDL_SCANCODE_R &&
                          !event.key.repeat)
                 {
@@ -5937,6 +6006,7 @@ void App::update(float deltaTime)
     if (gameFlow_.state() != GameFlowState::Base)
     {
         basePlacementState_.reset();
+        baseFixedFacilityPlacementState_.reset();
         deactivateBaseBuildCamera();
     }
     if (gameFlow_.state() != GameFlowState::Raid)
@@ -5965,6 +6035,7 @@ void App::update(float deltaTime)
     const bool existingModalHandlesEscape =
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
+        baseFixedFacilityPlacementState_.has_value() ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
@@ -9025,7 +9096,8 @@ Vec2 App::baseWorldCameraOffset() const noexcept
 
 float App::baseConstructionZoom() const noexcept
 {
-    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value())
+    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
+        !baseFixedFacilityPlacementState_.has_value())
         return 1.0F;
     constexpr std::array<float, 5U> zoomLevels{
         0.60F, 0.75F, 1.00F, 1.25F, 1.50F};
@@ -9414,6 +9486,7 @@ void App::syncRaidPointerCapture() noexcept
             raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen() ||
                 basePlacementState_.has_value() ||
+                baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_,
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
@@ -9454,6 +9527,7 @@ void App::renderAimCrosshair()
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
+        baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
@@ -10688,6 +10762,7 @@ void App::startBasePlacement(
     baseFacilityContextMenu_.reset();
     selectedBasePlacedAssetId_.reset();
     selectedBaseFixedFacility_.reset();
+    baseFixedFacilityPlacementState_.reset();
     basePlacementState_ = BasePlacementState{
         assetId,
         0U,
@@ -10971,6 +11046,15 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                 : SoundEventId::UiDeny);
             return true;
         }
+        if (movableCoreFacility(projection.kind) &&
+            contains(
+                baseFacilityQuickActionButton(
+                    projection.quickActions.size()),
+                position))
+        {
+            startBaseFixedFacilityPlacement(projection.kind);
+            return true;
+        }
         return true;
     }
 
@@ -11039,7 +11123,12 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     if (!baseFacilityContextMenu_.has_value())
         return;
     const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
-    const std::size_t rowCount = menu.assetId.has_value() ? 3U : 1U;
+    const std::size_t rowCount = menu.assetId.has_value()
+        ? 3U
+        : menu.fixedFacility.has_value() &&
+                movableCoreFacility(*menu.fixedFacility)
+            ? 2U
+            : 1U;
     if (contains(
             baseFacilityContextMenuRow(menu.position, 0U, rowCount),
             position))
@@ -11052,6 +11141,13 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     }
     if (!menu.assetId.has_value())
     {
+        if (menu.fixedFacility.has_value() && rowCount > 1U &&
+            contains(
+                baseFacilityContextMenuRow(menu.position, 1U, rowCount),
+                position))
+        {
+            startBaseFixedFacilityPlacement(*menu.fixedFacility);
+        }
         baseFacilityContextMenu_.reset();
         return;
     }
@@ -11193,6 +11289,41 @@ void App::openBasePlacedFacility(AssetInstanceId assetId)
     input_.suppressPrimaryPointerUntilRelease();
 }
 
+void App::startBaseFixedFacilityPlacement(BaseFacilityKind facility)
+{
+    if (!movableCoreFacility(facility))
+    {
+        uiMessage_ = "BASE FACILITY CANNOT BE MOVED";
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    const BaseFacilityManagementProjection projection =
+        projectBaseFacilityManagement(
+            gameSession_.profile(),
+            publishedContentRegistry(),
+            facility);
+    if (projection.status != BaseFacilityOperationalStatus::Operational)
+    {
+        uiMessage_ = "BASE FACILITY IS NOT AVAILABLE";
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    closeInventory();
+    gameFlow_.closeBaseFacility();
+    tacticalMapOpen_ = false;
+    baseConstructionPanelOpen_ = false;
+    baseFacilityContextMenu_.reset();
+    selectedBasePlacedAssetId_.reset();
+    selectedBaseFixedFacility_ = facility;
+    basePlacementState_.reset();
+    baseFixedFacilityPlacementState_ =
+        BaseFixedFacilityPlacementState{facility, true};
+    if (!baseBuildCamera_.active())
+        activateBaseBuildCamera();
+    uiMessage_ = "MOVE BASE FACILITY | LMB PLACE | ESC CANCEL";
+    input_.suppressPrimaryPointerUntilRelease();
+}
+
 void App::openBaseFixedFacility(BaseFacilityKind facility)
 {
     if (!gameFlow_.openBaseFacilityForManagement(facility))
@@ -11221,11 +11352,49 @@ void App::openBaseFixedFacility(BaseFacilityKind facility)
 
 void App::renderBasePlacementPreview()
 {
-    if (!basePlacementState_.has_value() ||
-        !pointerWorldPosition_.has_value())
+    if (!pointerWorldPosition_.has_value())
     {
         return;
     }
+    if (baseFixedFacilityPlacementState_.has_value())
+    {
+        const BaseFacilityKind facilityKind =
+            baseFixedFacilityPlacementState_->facility;
+        const auto facility = std::find_if(
+            gameFlow_.baseWorld().facilities().begin(),
+            gameFlow_.baseWorld().facilities().end(),
+            [facilityKind](const BaseFacility &candidate)
+            { return candidate.kind == facilityKind; });
+        if (facility == gameFlow_.baseWorld().facilities().end())
+            return;
+        const Vec2 worldPosition = baseScreenToWorld(*pointerWorldPosition_);
+        const BaseFacilityLayoutPlan plan =
+            gameFlow_.queryBaseFacilityRepositionAt(
+                facilityKind, worldPosition);
+        const SDL_FRect bounds{
+            worldPosition.x - facility->bounds.size.x * 0.5F,
+            worldPosition.y - facility->bounds.size.y * 0.5F,
+            facility->bounds.size.x,
+            facility->bounds.size.y};
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(
+            renderer_, plan.canCommit ? 72 : 220,
+            plan.canCommit ? 206 : 72,
+            plan.canCommit ? 132 : 66, 105);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(
+            renderer_, plan.canCommit ? 112 : 255,
+            plan.canCommit ? 244 : 104,
+            plan.canCommit ? 170 : 94, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(
+            renderer_, bounds.x + 8.0F, bounds.y + 8.0F,
+            plan.canCommit ? "MOVE FACILITY" : "BLOCKED");
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+    if (!basePlacementState_.has_value())
+        return;
     const AssetRecord *asset = gameSession_.profile().assets.find(
         basePlacementState_->assetId);
     if (asset == nullptr)
@@ -11520,6 +11689,15 @@ void App::renderBaseFacilityInspector()
                 baseFacilityQuickActionName(action.kind),
                 action.canCommit);
         }
+        if (movableCoreFacility(projection.kind))
+        {
+            drawButton(
+                baseFacilityQuickActionButton(
+                    projection.quickActions.size()),
+                "MOVE FACILITY",
+                projection.status ==
+                    BaseFacilityOperationalStatus::Operational);
+        }
     }
     else
     {
@@ -11581,7 +11759,12 @@ void App::renderBaseFacilityContextMenu()
         return;
     }
     const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
-    const std::size_t rowCount = menu.assetId.has_value() ? 3U : 1U;
+    const std::size_t rowCount = menu.assetId.has_value()
+        ? 3U
+        : menu.fixedFacility.has_value() &&
+                movableCoreFacility(*menu.fixedFacility)
+            ? 2U
+            : 1U;
     const SDL_FRect bounds = baseFacilityContextMenuBounds(
         menu.position, rowCount);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -15269,7 +15452,8 @@ void App::renderLostRaidRecords()
 void App::renderBase()
 {
     renderBaseWorld();
-    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value())
+    if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
+        !baseFixedFacilityPlacementState_.has_value())
         renderAimCrosshair();
 
     SDL_SetRenderDrawColor(
@@ -15373,6 +15557,7 @@ void App::renderBase()
     }
     uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal.c_str());
     if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
+        !baseFixedFacilityPlacementState_.has_value() &&
         !inventoryOverlayState_.isOpen() &&
         !gameFlow_.activeBaseFacility().has_value() && !tacticalMapOpen_)
     {

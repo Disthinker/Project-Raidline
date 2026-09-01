@@ -3,6 +3,44 @@
 #include <algorithm>
 #include <utility>
 
+namespace
+{
+std::optional<BaseFacilityDefinitionId> facilityDefinitionId(
+    BaseFacilityKind facility)
+{
+    switch (facility)
+    {
+    case BaseFacilityKind::Storage:
+        return BaseFacilityDefinitionId{"base_facility.warehouse"};
+    case BaseFacilityKind::Medical:
+        return BaseFacilityDefinitionId{"base_facility.medical"};
+    case BaseFacilityKind::Dormitory:
+        return BaseFacilityDefinitionId{"base_facility.dormitory"};
+    case BaseFacilityKind::Workshop:
+        return BaseFacilityDefinitionId{"base_facility.workshop"};
+    case BaseFacilityKind::Supply:
+    case BaseFacilityKind::Allocation:
+    case BaseFacilityKind::RaidGate:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+std::optional<BaseFacilityKind> facilityKind(
+    const BaseFacilityDefinitionId &definitionId)
+{
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.warehouse"})
+        return BaseFacilityKind::Storage;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.medical"})
+        return BaseFacilityKind::Medical;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.dormitory"})
+        return BaseFacilityKind::Dormitory;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.workshop"})
+        return BaseFacilityKind::Workshop;
+    return std::nullopt;
+}
+}
+
 GameFlow::GameFlow() = default;
 
 GameFlow::GameFlow(
@@ -451,6 +489,59 @@ std::vector<BaseGroundAssetProjection> GameFlow::baseGroundAssets() const
         RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()});
 }
 
+RepositionBaseFacilityCommand GameFlow::baseFacilityRepositionCommand(
+    BaseFacilityKind facility,
+    Vec2 worldPosition) const
+{
+    const auto definitionId = facilityDefinitionId(facility);
+    const auto found = std::find_if(
+        baseWorld_.facilities().begin(), baseWorld_.facilities().end(),
+        [facility](const BaseFacility &candidate)
+        { return candidate.kind == facility; });
+    return RepositionBaseFacilityCommand{
+        definitionId.value_or(BaseFacilityDefinitionId{}),
+        worldPosition,
+        found == baseWorld_.facilities().end()
+            ? Vec2{}
+            : found->bounds.size,
+        BaseFacilityLayoutAccess{
+            RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()},
+            baseWorld_.baseParcel(),
+            baseWorld_.basePlacementBlockersExcluding(facility)}};
+}
+
+BaseFacilityLayoutPlan GameFlow::queryBaseFacilityRepositionAt(
+    BaseFacilityKind facility,
+    Vec2 worldPosition) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseFacilityLayoutPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base world is not active", gameSession_.profile().revision};
+    }
+    return queryBaseFacilityLayout(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        baseFacilityRepositionCommand(facility, worldPosition));
+}
+
+BaseFacilityLayoutReceipt GameFlow::repositionBaseFacilityAt(
+    BaseFacilityKind facility,
+    Vec2 worldPosition,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseFacilityLayoutReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base world is not active", gameSession_.profile().revision};
+    }
+    return gameSession_.executeBaseFacilityLayout(
+        baseFacilityRepositionCommand(facility, worldPosition),
+        std::move(transactionId));
+}
+
 void GameFlow::update(
     const GameplayInput &input,
     float deltaTime)
@@ -501,9 +592,25 @@ void GameFlow::syncBaseWorldSite()
 {
     if (!persistentAlphaMode_)
         return;
-    baseWorld_.configureSite(
+    const RegionalBaseSiteDefinitionId siteDefinitionId =
         gameSession_.profile().regionalOperations.technologyCore
-            .baseSiteDefinitionId.value());
+            .baseSiteDefinitionId;
+    const ContentRect baseParcel =
+        baseWorld_.siteDefinitionId() == siteDefinitionId.value()
+        ? baseWorld_.baseParcel()
+        : generateHomeRegionLayout(siteDefinitionId.value()).baseParcel;
+    std::vector<BaseFacilitySpatialOverride> overrides;
+    for (const BaseFacilitySpatialProjection &projection :
+         projectBaseFacilityLayout(
+             gameSession_.profile(), siteDefinitionId,
+             baseParcel))
+    {
+        const auto kind = facilityKind(projection.facilityDefinitionId);
+        if (kind.has_value())
+            overrides.push_back(
+                BaseFacilitySpatialOverride{*kind, projection.worldCenter});
+    }
+    baseWorld_.configureSite(siteDefinitionId.value(), std::move(overrides));
 }
 
 bool GameFlow::returnToMainMenu() noexcept
