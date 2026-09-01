@@ -108,6 +108,7 @@ private:
 
     std::optional<ProfileAssetSelection> profileAssetSelection_;
     std::optional<ProfileContextMenu> profileContextMenu_;
+    std::optional<AssetInstanceId> openedBaseGroundContainerId_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
@@ -314,8 +315,14 @@ private:
         float cellSize,
         Uint8 alpha = 255,
         bool showWeaponCondition = true);
-    void renderProfileInventory(bool includeStash, bool inRaid);
-    void renderProfileDragFeedback(bool includeStash, bool inRaid);
+    void renderProfileInventory(
+        bool includeStash,
+        bool inRaid,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt);
+    void renderProfileDragFeedback(
+        bool includeStash,
+        bool inRaid,
+        std::optional<AssetInstanceId> externalContainerId);
     void renderProfileContextMenu(bool inRaid);
     void renderMedicalWheel();
     void renderDeveloperWeaponPanel();

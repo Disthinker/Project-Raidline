@@ -1,5 +1,7 @@
 # Home Region 地面资产 v1 ExecPlan
 
+状态：已通过自动化、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并由 PR #124 以 merge commit `17a3514` 进入 main。后续近距容器打开与内容整理由 `home-region-world-containers-v1.md` 承接。
+
 ## 目标与基线
 
 依赖基线为用户已验收并合入的 PR #123，`origin/main@9106126`。开发分支为 `codex/home-region-ground-assets-v1`。

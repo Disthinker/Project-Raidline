@@ -208,3 +208,181 @@ TEST(BaseGroundDomainTest, GroundContainerWithContentsQuickEquipsAsOneTree)
         profile.assets.find(child)->location);
     EXPECT_EQ(childLocation.container.ownerAssetId, backpack);
 }
+
+TEST(BaseGroundDomainTest, OpenContainerScopeMovesItemsBothWaysAndIsIdempotent)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-ground-container-transfer", content);
+    const AssetInstanceId carriedBackpack = firstAsset(
+        profile, alpha_content::backpack);
+    ASSERT_NE(carriedBackpack, 0U);
+    ASSERT_TRUE(executeInventory(
+        profile,
+        content,
+        InventoryEquipCommand{
+            carriedBackpack, EquipmentSlotKind::Backpack},
+        CommandContext{profile.revision, "equip-carried-pack"}).succeeded);
+
+    const ItemDefinition &groundPackDefinition = content.item(
+        alpha_content::backpack);
+    const AssetInstanceId groundPack = profile.assets.create(
+        groundPackDefinition,
+        BaseGroundAssetLocation{kGreyline, Vec2{160.0F, 100.0F}});
+    const AssetInstanceId medkit = profile.assets.create(
+        content.item(alpha_content::medkit),
+        StoredAssetLocation{
+            ProfileContainerId::compartment(groundPack, 0),
+            GridPosition{0, 0}});
+    const ProfileContainerId carried = ProfileContainerId::compartment(
+        carriedBackpack, 0);
+    const InventoryCommand take = InventoryMoveCommand{
+        medkit,
+        0,
+        StoredAssetLocation{carried, GridPosition{0, 0}},
+        ItemOrientation::Degrees0};
+    const std::uint64_t beforeQuery = profileStateFingerprint(profile);
+    const InventoryPlan plan = queryBaseGroundContainerInventory(
+        profile, content, groundPack, access(), take);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(profileStateFingerprint(profile), beforeQuery);
+
+    const ProfileRevision revision = profile.revision;
+    const InventoryReceipt stale = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        groundPack,
+        access(),
+        take,
+        CommandContext{revision + 1U, "stale-ground-container"});
+    EXPECT_FALSE(stale.succeeded);
+    EXPECT_EQ(stale.error, DomainErrorCode::StaleRevision);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeQuery);
+
+    InventoryReceipt receipt = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        groundPack,
+        access(),
+        take,
+        CommandContext{revision, "take-ground-medkit"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(
+            profile.assets.find(medkit)->location).container,
+        carried);
+    const std::uint64_t committed = profileStateFingerprint(profile);
+    receipt = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        groundPack,
+        access(),
+        take,
+        CommandContext{revision, "take-ground-medkit"});
+    EXPECT_TRUE(receipt.succeeded);
+    EXPECT_TRUE(receipt.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+
+    const InventoryCommand putBack = InventoryMoveCommand{
+        medkit,
+        0,
+        StoredAssetLocation{
+            ProfileContainerId::compartment(groundPack, 0),
+            GridPosition{0, 0}},
+        ItemOrientation::Degrees0};
+    receipt = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        groundPack,
+        access(),
+        putBack,
+        CommandContext{profile.revision, "return-ground-medkit"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(
+            profile.assets.find(medkit)->location).container.ownerAssetId,
+        groundPack);
+}
+
+TEST(BaseGroundDomainTest, ContainerScopeRejectsRemoteStashAndOtherGroundRoots)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-ground-container-scope", content);
+    const ItemDefinition &packDefinition = content.item(
+        alpha_content::backpack);
+    const AssetInstanceId firstGround = profile.assets.create(
+        packDefinition,
+        BaseGroundAssetLocation{kGreyline, Vec2{160.0F, 100.0F}});
+    const AssetInstanceId secondGround = profile.assets.create(
+        packDefinition,
+        BaseGroundAssetLocation{kGreyline, Vec2{170.0F, 100.0F}});
+    const AssetInstanceId foreignChild = profile.assets.create(
+        content.item(alpha_content::medkit),
+        StoredAssetLocation{
+            ProfileContainerId::compartment(secondGround, 0),
+            GridPosition{0, 0}});
+    const AssetInstanceId stashAsset = firstAsset(
+        profile, alpha_content::rifle);
+    ASSERT_NE(stashAsset, 0U);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    BaseGroundAccess far = access();
+    far.playerCenter = Vec2{600.0F, 600.0F};
+    EXPECT_FALSE(queryBaseGroundContainerAccess(
+        profile, content, firstGround, far).canCommit);
+
+    const InventoryCommand foreignMove = InventoryMoveCommand{
+        foreignChild,
+        0,
+        StoredAssetLocation{
+            ProfileContainerId::compartment(firstGround, 0),
+            GridPosition{1, 0}},
+        ItemOrientation::Degrees0};
+    EXPECT_FALSE(queryBaseGroundContainerInventory(
+        profile, content, firstGround, access(), foreignMove).canCommit);
+
+    const InventoryCommand stashMove = InventoryMoveCommand{
+        stashAsset,
+        0,
+        StoredAssetLocation{
+            ProfileContainerId::compartment(firstGround, 0),
+            GridPosition{1, 0}},
+        ItemOrientation::Degrees0};
+    const InventoryReceipt receipt = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        firstGround,
+        access(),
+        stashMove,
+        CommandContext{profile.revision, "illegal-stash-access"});
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(BaseGroundDomainTest, ContainerScopeCanQuickEquipVisibleChild)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-ground-container-equip", content);
+    const AssetInstanceId groundPack = profile.assets.create(
+        content.item(alpha_content::backpack),
+        BaseGroundAssetLocation{kGreyline, Vec2{160.0F, 100.0F}});
+    const AssetInstanceId helmet = profile.assets.create(
+        content.item(alpha_content::helmet),
+        StoredAssetLocation{
+            ProfileContainerId::compartment(groundPack, 0),
+            GridPosition{0, 0}});
+    const InventoryReceipt receipt = executeBaseGroundContainerInventory(
+        profile,
+        content,
+        groundPack,
+        access(),
+        InventoryEquipCommand{helmet, EquipmentSlotKind::Helmet},
+        CommandContext{profile.revision, "equip-ground-helmet"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(
+        std::get<EquippedAssetLocation>(
+            profile.assets.find(helmet)->location).slot,
+        EquipmentSlotKind::Helmet);
+}

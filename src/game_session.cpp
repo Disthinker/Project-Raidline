@@ -1784,6 +1784,39 @@ BaseGroundReceipt GameSession::executeBaseGroundAsset(
     return receipt;
 }
 
+InventoryReceipt GameSession::executeBaseGroundContainerInventory(
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access,
+    const InventoryCommand &command,
+    std::string transactionId)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value())
+    {
+        return InventoryReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground containers cannot be changed during a Raid",
+            profile_.revision};
+    }
+    ProfileState candidate = profile_;
+    InventoryReceipt receipt = ::executeBaseGroundContainerInventory(
+        candidate,
+        publishedContentRegistry(),
+        containerAssetId,
+        access,
+        command,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+        return receipt;
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return InventoryReceipt{
+            false, false, DomainErrorCode::InvalidProfile,
+            persistenceMessage_, profile_.revision};
+    }
+    refreshLoadoutTutorial();
+    return receipt;
+}
+
 EconomyReceipt GameSession::executeProfileEconomy(
     const EconomyCommand &command,
     std::string transactionId)

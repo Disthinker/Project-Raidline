@@ -1,19 +1,18 @@
 # Project Raidline 当前状态
 
-最后核对：2026-08-31。
+最后核对：2026-09-01。
 
 ## Git 与交付基线
 
-- `origin/main@62e464e` 已包含完整 Core Extraction Alpha、Survival Loadout、Combat、Raid Pressure、Base Growth、Regional Operations 基础、首张可玩随机大地图、Content Beta 成长闭环、有限新档整备引导和 Home Region 大地图。
-- 已验收主线：`origin/main@9106126`，PR #123 已合入并完成 Home Region 仓库范围门禁与地图访问。
-- 当前开发分支：`codex/home-region-ground-assets-v1`，从 `origin/main@9106126` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-ground-assets-v1.md`。
-- 代码审计确认 Base 已具备即时压弹、卸弹、装匣并上膛、医疗、武器/护甲维修和统一库存拖拽；这些不再作为待实现项。当前切片建立按基地站点持久化的地面资产放置与拾取。
+- 已验收主线：`origin/main@17a3514`，PR #124 已合入并完成按基地站点持久化的地面资产放置、显示、地图标记与拾取。
+- 当前开发分支：`codex/home-region-world-containers-v1`，从 `origin/main@17a3514` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-world-containers-v1.md`。
+- 当前切片让地面背包、胸挂等容器可在近距离打开，并在同一拖拽界面中与随身容器交换物品；Stash、其他基地和其他地面根继续受访问作用域隔离。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备和 Home Region 大地图均已进入主线。当前切片为 Base/Raid 提取窄范围共享射击运行时，让基地支持真实武器切换、弹药与耐久消耗、故障和完整射击反馈，同时保持无敌人、无撤离、无高危和无 Raid Settlement。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗与地面资产均已进入主线。当前切片建立 Home Region 世界容器的近距访问作用域与统一拖拽界面，不改变 Raid、Settlement 或存档 schema。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -80,6 +79,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 63. **Home Region 新档起步与首次整备 v1**：普通新档使用有限 starter 资产，完整发布目录改由 Base/Raid F10 显式开发命令提供；content v57 让基础护甲与轻甲都成为轻型职责的合法选择，环境目标消费同一职责准备度，不建立独立教学关或强制门禁。PR #121 已通过 CI 与用户正常游玩验收，并以 merge commit `71a3c08` 进入 main。
 64. **Home Region 大地图与基地板块 v1**：PR #122 已通过 CI 与用户正常游玩验收，以 `62e464e` 进入 main。BaseWorld 扩展为 12800×7200 安全室外空间；当前主基地作为固定内部结构板块放入确定性分区、道路、地表和环境物布局。
 65. **Home Region 共享战斗能力 v1**：提取 Base/Raid 共用的 SDL-free 瞄准、散布、后坐力、逻辑弹道与表现投影；基地支持真实武器切换、弹药/耐久消耗和故障，但保持无敌人、无撤离、无 Settlement。Tab 仅在玩家完整位于基地板块内时连接 Stash，离开后退化为个人随身页；`M` 可打开只读 Home Region 全静态地图。PR #123 已通过用户正常游玩验收并以 merge commit `9106126` 进入 main。
+66. **Home Region 地面资产 v1**：基地个人页可把随身或仓库根资产放到当前基地地面；世界与地图显示真实根资产，近距离可拾回，容器子树保持唯一所有权。schema v39 保存基地站点和世界坐标，旧档不生成地面资产。PR #124 已通过 Windows Debug、1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `17a3514` 进入 main。
+67. **Home Region 世界容器交互 v1（当前开发分支）**：地面容器可在正确站点和近距离内打开；右侧显示真实分区，并通过受限库存事务与随身容器双向拖拽或快速装备。地面容器页不连接 Stash，也不为特殊物品动作绕过访问边界。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

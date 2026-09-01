@@ -634,6 +634,69 @@ TEST(PersistentSessionTest, SaveFailureDoesNotSwapCandidateIntoMemory)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest, GroundContainerSaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-ground-container-save", content);
+    const AssetInstanceId carriedBackpack = findDefinition(
+        initial, alpha_content::backpack);
+    ASSERT_NE(carriedBackpack, 0U);
+    ASSERT_TRUE(executeInventory(
+        initial,
+        content,
+        InventoryEquipCommand{
+            carriedBackpack, EquipmentSlotKind::Backpack},
+        CommandContext{initial.revision, "equip-save-failure-pack"})
+                    .succeeded);
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const AssetInstanceId groundPack = initial.assets.create(
+        content.item(alpha_content::backpack),
+        BaseGroundAssetLocation{greyline, Vec2{160.0F, 100.0F}});
+    const AssetInstanceId medkit = initial.assets.create(
+        content.item(alpha_content::medkit),
+        StoredAssetLocation{
+            ProfileContainerId::compartment(groundPack, 0),
+            GridPosition{0, 0}});
+    ASSERT_TRUE(validateProfileState(initial, content).valid);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial, content.contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "ground-container-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+    const InventoryReceipt receipt =
+        session.executeBaseGroundContainerInventory(
+            groundPack,
+            BaseGroundAccess{
+                greyline,
+                Vec2{120.0F, 100.0F},
+                Vec2{160.0F, 100.0F},
+                false,
+                84.0F},
+            InventoryMoveCommand{
+                medkit,
+                0,
+                StoredAssetLocation{
+                    ProfileContainerId::compartment(carriedBackpack, 0),
+                    GridPosition{0, 0}},
+                ItemOrientation::Degrees0},
+            "ground-container-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
 TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
 {
     SessionSaveDirectory temporary;

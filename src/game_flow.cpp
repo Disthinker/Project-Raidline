@@ -218,6 +218,59 @@ BaseGroundReceipt GameFlow::dropBaseGroundAsset(
         std::move(transactionId));
 }
 
+BaseGroundPlan GameFlow::queryBaseGroundContainerAccess(
+    AssetInstanceId containerAssetId) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision,
+            containerAssetId};
+    }
+    return ::queryBaseGroundContainerAccess(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        containerAssetId,
+        baseGroundAccess());
+}
+
+InventoryPlan GameFlow::queryBaseGroundContainerInventory(
+    AssetInstanceId containerAssetId,
+    const InventoryCommand &command) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return InventoryPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision};
+    }
+    return ::queryBaseGroundContainerInventory(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        containerAssetId,
+        baseGroundAccess(),
+        command);
+}
+
+InventoryReceipt GameFlow::executeBaseGroundContainerInventory(
+    AssetInstanceId containerAssetId,
+    const InventoryCommand &command,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return InventoryReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision};
+    }
+    return gameSession_.executeBaseGroundContainerInventory(
+        containerAssetId,
+        baseGroundAccess(),
+        command,
+        std::move(transactionId));
+}
+
 std::optional<BaseGroundAssetProjection>
 GameFlow::nearestBaseGroundAsset() const noexcept
 {
@@ -231,6 +284,21 @@ GameFlow::nearestBaseGroundAsset() const noexcept
         access.interactionRange);
 }
 
+BaseGroundReceipt GameFlow::pickupBaseGroundAsset(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    return gameSession_.executeBaseGroundAsset(
+        PickupBaseGroundAssetCommand{assetId, baseGroundAccess()},
+        std::move(transactionId));
+}
+
 BaseGroundReceipt GameFlow::pickupNearestBaseGroundAsset(
     std::string transactionId)
 {
@@ -242,10 +310,8 @@ BaseGroundReceipt GameFlow::pickupNearestBaseGroundAsset(
             "no Base ground asset is in range",
             gameSession_.profile().revision, 0};
     }
-    return gameSession_.executeBaseGroundAsset(
-        PickupBaseGroundAssetCommand{
-            nearest->assetId, baseGroundAccess()},
-        std::move(transactionId));
+    return pickupBaseGroundAsset(
+        nearest->assetId, std::move(transactionId));
 }
 
 std::vector<BaseGroundAssetProjection> GameFlow::baseGroundAssets() const

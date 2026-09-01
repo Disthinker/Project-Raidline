@@ -808,6 +808,25 @@ TEST(UiLocalizationTest, StarterLoadoutAndDeveloperCatalogAreBilingual) {
       "发放发布内容目录");
 }
 
+TEST(UiLocalizationTest, HomeRegionGroundContainersAreBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "E - OPEN CONTAINER Expedition Backpack"),
+            "E - 打开容器 远征背包");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PICK UP CONTAINER"),
+            "拾取容器");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE GROUND CONTAINER OPENED"),
+            "已打开基地地面容器");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MOVE ITEM TO CARRIED INVENTORY FIRST"),
+            "请先把物品移入随身容器");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

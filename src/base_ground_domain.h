@@ -73,6 +73,27 @@ struct BaseGroundAssetProjection
     const BaseGroundCommand &command,
     const CommandContext &context);
 
+[[nodiscard]] BaseGroundPlan queryBaseGroundContainerAccess(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access);
+
+[[nodiscard]] InventoryPlan queryBaseGroundContainerInventory(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access,
+    const InventoryCommand &command);
+
+[[nodiscard]] InventoryReceipt executeBaseGroundContainerInventory(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access,
+    const InventoryCommand &command,
+    const CommandContext &context);
+
 [[nodiscard]] std::vector<BaseGroundAssetProjection>
 projectBaseGroundAssets(
     const ProfileState &profile,

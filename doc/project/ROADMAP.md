@@ -1,10 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-08-31。
+最后核对：2026-09-01。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图与共享战斗能力均已进入主线。当前推进 Home Region 地面资产 v1，范围合同见 `doc/exec-plans/active/home-region-ground-assets-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图、共享战斗能力与地面资产均已进入主线。当前推进 Home Region 世界容器交互 v1，范围合同见 `doc/exec-plans/active/home-region-world-containers-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -186,6 +186,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | 新档起步与首次整备 v1 | 普通新档从有限基础物资起步；在安全 Base 依次找到仓储、完成轻型职责整备并前往出击口；F10 可显式补齐开发目录 | content v57、普通 starter 与开发目录分离、旧档资产保持、幂等目录命令、轻型职责驱动的非强制目标链 | PR #121 已通过 CI 与用户验收，以 `71a3c08` 进入 main |
 | Home Region 大地图与基地板块 v1 | 安全基地成为 12800×7200 Home Region 中的一块固定结构区域，玩家可沿道路探索周边工业、物流、公路、空地、绿地和服务区 | 地点稳定 seed、HomeRegionLayout、基地板块、分块投影、静态空间索引、无 schema 迁移 | PR #122 已通过 CI 与用户正常游玩验收，以 `62e464e` 进入 main |
 | Home Region 共享战斗能力 v1 | 基地大地图可使用与 Raid 一致的准星、武器切换、射击和反馈；真实消耗弹药/耐久并可能故障；基地板块内连接仓库、外围只显示随身页，`M` 可查看 Home Region 地图 | SDL-free WorldShootingRuntime、Base/Raid 窄能力复用、Profile FireWeapon 事务、空间化 Stash 访问、只读 Home Region 地图、周期原子检查点、无 Raid 生命周期 | PR #123 已通过本地全量自动化、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `9106126` 进入 main；不引入敌人、设施伤害、撤离、高危或 Settlement |
+| Home Region 地面资产 v1 | 随身或仓库根资产可放到当前基地地面，在世界与地图中显示并近距拾回；重启和迁徙后保持原站点 | BaseGroundAssetLocation、唯一资产树、查询/命令、schema v39、站点与距离投影 | PR #124 已通过 1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `17a3514` 进入 main |
+| Home Region 世界容器交互 v1 | 靠近地面背包或胸挂按 `E` 打开，在右侧真实分区与随身容器间拖拽、交换、堆叠和快速装备，并可整体拾取容器 | 当前站点/距离访问查询、受限 InventoryCommand 参与者、保存失败零提交、复用 schema v39 | 当前分支 `codex/home-region-world-containers-v1`；本地实现与最终证据进行中 |
 
 ## 当前 Combat Reliability 缺陷
 

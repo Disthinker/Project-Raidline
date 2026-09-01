@@ -67,8 +67,20 @@ public:
         std::uint32_t quantity,
         ItemOrientation orientation,
         std::string transactionId);
+    [[nodiscard]] BaseGroundPlan queryBaseGroundContainerAccess(
+        AssetInstanceId containerAssetId) const;
+    [[nodiscard]] InventoryPlan queryBaseGroundContainerInventory(
+        AssetInstanceId containerAssetId,
+        const InventoryCommand &command) const;
+    [[nodiscard]] InventoryReceipt executeBaseGroundContainerInventory(
+        AssetInstanceId containerAssetId,
+        const InventoryCommand &command,
+        std::string transactionId);
     [[nodiscard]] std::optional<BaseGroundAssetProjection>
     nearestBaseGroundAsset() const noexcept;
+    [[nodiscard]] BaseGroundReceipt pickupBaseGroundAsset(
+        AssetInstanceId assetId,
+        std::string transactionId);
     [[nodiscard]] BaseGroundReceipt pickupNearestBaseGroundAsset(
         std::string transactionId);
     [[nodiscard]] std::vector<BaseGroundAssetProjection>
