@@ -1,6 +1,6 @@
 # Home Region 建设镜头控制 v1 ExecPlan
 
-状态：首轮 exact-head Windows/Ubuntu CI 已通过；用户验收发现非 100% 缩放命中偏移和固定设施无法从建设界面进入功能页，修正已完成 Windows Debug 全目标与完整自动化，等待更新后的 exact-head CI 与复验。
+状态：已通过更新后的 exact-head Windows/Ubuntu CI 与用户正常游玩复验，并以 merge commit `b990db3` 进入 main。
 
 ## 玩家结果与依赖
 

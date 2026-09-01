@@ -223,6 +223,8 @@ private:
     void commitMedicalWheelSelection();
     void handleDeveloperPanelClick(MousePosition position);
     void handleBaseConstructionPanelClick(MousePosition position);
+    [[nodiscard]] bool handleBaseFacilityInspectorClick(
+        MousePosition position);
     void handleBaseConstructionRightClick(MousePosition position);
     void handleBaseFacilityContextMenuClick(MousePosition position);
     void adjustBaseConstructionZoom(int direction);
@@ -349,6 +351,7 @@ private:
     void renderBaseWorld();
     void renderBasePlacementPreview();
     void renderBaseConstructionPanel();
+    void renderBaseFacilityInspector();
     void renderBaseFacilityContextMenu();
     void renderHomeRegionMap();
     void renderBaseStorage();

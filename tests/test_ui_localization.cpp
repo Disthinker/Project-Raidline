@@ -22,6 +22,25 @@ TEST(UiLocalizationTest, EnglishIsUnchangedAndChineseTranslatesStaticText) {
             "继续游戏");
 }
 
+TEST(UiLocalizationTest, ChineseTranslatesBaseFacilityManagementCard) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "STATUS: OPERATIONAL | LEVEL: 2"),
+            "状态：运行中 | 等级：2");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "STAFF: NOT REQUIRED"),
+            "人员：不需要");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CURRENT TASK: RESIDENT TREATMENT | REMAINING 120 MIN"),
+            "当前任务：居民治疗 | 剩余 120 分钟");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CURRENT TASK: IDLE | CONTENT STACKS: 3"),
+            "当前任务：空闲 | 内容物堆数：3");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
