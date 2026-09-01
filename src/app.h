@@ -67,6 +67,18 @@ struct BasePlacementState
     bool returnToBuildPanel{};
 };
 
+enum class BaseConstructionPage
+{
+    Purchase,
+    Owned
+};
+
+struct BaseFacilityContextMenu
+{
+    AssetInstanceId assetId{};
+    MousePosition position{};
+};
+
 class App
 {
 public:
@@ -126,8 +138,11 @@ private:
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
     std::optional<BasePlacementState> basePlacementState_;
     bool baseConstructionPanelOpen_{};
+    BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
     std::size_t baseConstructionZoomIndex_{2U};
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
+    std::optional<BaseFacilityContextMenu> baseFacilityContextMenu_;
+    std::vector<MousePosition> pendingBaseRightClicks_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
@@ -204,6 +219,12 @@ private:
     void commitMedicalWheelSelection();
     void handleDeveloperPanelClick(MousePosition position);
     void handleBaseConstructionPanelClick(MousePosition position);
+    void handleBaseConstructionRightClick(MousePosition position);
+    void handleBaseFacilityContextMenuClick(MousePosition position);
+    void adjustBaseConstructionZoom(int direction);
+    [[nodiscard]] std::optional<AssetInstanceId>
+    basePlacedFacilityAt(MousePosition position) const;
+    void openBasePlacedFacility(AssetInstanceId assetId);
     void startBasePlacement(
         AssetInstanceId assetId,
         BasePlacementState::Mode mode,
@@ -317,6 +338,7 @@ private:
     void renderBaseWorld();
     void renderBasePlacementPreview();
     void renderBaseConstructionPanel();
+    void renderBaseFacilityContextMenu();
     void renderHomeRegionMap();
     void renderBaseStorage();
     void renderBaseSupply();

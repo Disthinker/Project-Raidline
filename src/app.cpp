@@ -214,6 +214,60 @@ namespace
         return SDL_FRect{710.0F, 400.0F, 340.0F, 48.0F};
     }
 
+    SDL_FRect baseBuildBarBounds() noexcept
+    {
+        return SDL_FRect{70.0F, 566.0F, 1140.0F, 134.0F};
+    }
+
+    SDL_FRect baseBuildPurchaseTab() noexcept
+    {
+        return SDL_FRect{88.0F, 608.0F, 126.0F, 34.0F};
+    }
+
+    SDL_FRect baseBuildOwnedTab() noexcept
+    {
+        return SDL_FRect{224.0F, 608.0F, 126.0F, 34.0F};
+    }
+
+    SDL_FRect baseBuildCard(std::size_t index) noexcept
+    {
+        return SDL_FRect{
+            370.0F + static_cast<float>(index) * 168.0F,
+            588.0F,
+            158.0F,
+            82.0F};
+    }
+
+    SDL_FRect baseBuildZoomResetButton() noexcept
+    {
+        return SDL_FRect{1050.0F, 608.0F, 136.0F, 34.0F};
+    }
+
+    SDL_FRect baseFacilityContextMenuBounds(MousePosition origin) noexcept
+    {
+        constexpr float width{220.0F};
+        constexpr float height{126.0F};
+        return SDL_FRect{
+            std::clamp(origin.x, 8.0F,
+                       static_cast<float>(kWindowWidth) - width - 8.0F),
+            std::clamp(origin.y, 8.0F,
+                       static_cast<float>(kWindowHeight) - height - 8.0F),
+            width,
+            height};
+    }
+
+    SDL_FRect baseFacilityContextMenuRow(
+        MousePosition origin,
+        std::size_t index) noexcept
+    {
+        const SDL_FRect menu = baseFacilityContextMenuBounds(origin);
+        return SDL_FRect{
+            menu.x + 8.0F,
+            menu.y + 8.0F + static_cast<float>(index) * 37.0F,
+            menu.w - 16.0F,
+            32.0F};
+    }
+
     SDL_FRect baseManufacturingButton() noexcept
     {
         return SDL_FRect{700.0F, 520.0F, 340.0F, 56.0F};
@@ -2195,6 +2249,7 @@ void App::updateBase(float deltaTime)
     {
         basePlacementState_.reset();
         baseConstructionPanelOpen_ = false;
+        baseFacilityContextMenu_.reset();
         tacticalMapOpen_ = false;
         closeInventory();
         gameFlow_.closeBaseFacility();
@@ -2222,6 +2277,7 @@ void App::updateBase(float deltaTime)
             break;
         }
         pendingBaseClicks_.clear();
+        pendingBaseRightClicks_.clear();
         pendingInventoryUiEvents_.clear();
         pendingProfileRightClicks_.clear();
         return;
@@ -2230,6 +2286,7 @@ void App::updateBase(float deltaTime)
     if (developerWeaponPanelBlocksGameplayThisFrame_)
     {
         pendingBaseClicks_.clear();
+        pendingBaseRightClicks_.clear();
         pendingInventoryUiEvents_.clear();
         pendingProfileRightClicks_.clear();
         input_.suppressPrimaryPointerUntilRelease();
@@ -2240,16 +2297,34 @@ void App::updateBase(float deltaTime)
     {
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
+            if (baseFacilityContextMenu_.has_value())
+            {
+                baseFacilityContextMenu_.reset();
+                pendingBaseClicks_.clear();
+                pendingBaseRightClicks_.clear();
+                uiMessage_.clear();
+                input_.suppressPrimaryPointerUntilRelease();
+                return;
+            }
             baseConstructionPanelOpen_ = false;
             selectedBasePlacedAssetId_.reset();
             pendingBaseClicks_.clear();
+            pendingBaseRightClicks_.clear();
             uiMessage_ = "BASE BUILD PANEL CLOSED";
             input_.suppressPrimaryPointerUntilRelease();
             return;
         }
         for (const BasePointerClick &click : pendingBaseClicks_)
-            handleBaseConstructionPanelClick(click.position);
+        {
+            if (baseFacilityContextMenu_.has_value())
+                handleBaseFacilityContextMenuClick(click.position);
+            else
+                handleBaseConstructionPanelClick(click.position);
+        }
+        for (MousePosition position : pendingBaseRightClicks_)
+            handleBaseConstructionRightClick(position);
         pendingBaseClicks_.clear();
+        pendingBaseRightClicks_.clear();
         pendingInventoryUiEvents_.clear();
         pendingProfileRightClicks_.clear();
         input_.suppressPrimaryPointerUntilRelease();
@@ -5096,6 +5171,7 @@ void App::processEvents()
     pendingInventoryUiEvents_.clear();
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
+    pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
     pendingPauseMenuCommand_.reset();
@@ -5133,6 +5209,7 @@ void App::processEvents()
             developerWeaponPanelOpen_ = false;
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
             baseConstructionPanelOpen_ = false;
+            baseFacilityContextMenu_.reset();
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
                 (gameFlow_.state() == GameFlowState::Base ||
                  gameFlow_.state() == GameFlowState::Raid))
@@ -5336,6 +5413,7 @@ void App::processEvents()
             {
                 baseConstructionPanelOpen_ = false;
                 selectedBasePlacedAssetId_.reset();
+                baseFacilityContextMenu_.reset();
                 uiMessage_ = "BASE BUILD PANEL CLOSED";
             }
             else if (!gameFlow_.baseWorld().canAccessStash())
@@ -5351,9 +5429,22 @@ void App::processEvents()
                 tacticalMapOpen_ = false;
                 medicalWheelOpen_ = false;
                 baseConstructionPanelOpen_ = true;
+                baseFacilityContextMenu_.reset();
                 uiMessage_ = "BASE BUILD PANEL OPEN";
             }
             input_.suppressPrimaryPointerUntilRelease();
+            continue;
+        }
+
+        if (gameFlow_.state() == GameFlowState::Base &&
+            !pauseMenu_.isOpen() &&
+            event.type == SDL_EVENT_MOUSE_WHEEL &&
+            (baseConstructionPanelOpen_ || basePlacementState_.has_value()))
+        {
+            if (event.wheel.y != 0.0F)
+            {
+                adjustBaseConstructionZoom(event.wheel.y > 0.0F ? 1 : -1);
+            }
             continue;
         }
 
@@ -5406,6 +5497,12 @@ void App::processEvents()
                         MousePosition{event.button.x, event.button.y},
                         input_.isControlPressed(),
                         input_.isShiftPressed()});
+                }
+                else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                         event.button.button == SDL_BUTTON_RIGHT)
+                {
+                    pendingBaseRightClicks_.push_back(
+                        MousePosition{event.button.x, event.button.y});
                 }
             }
             else if (basePlacementState_.has_value())
@@ -10109,6 +10206,16 @@ void App::renderBaseWorld()
             bounds.x - 5.0F, bounds.y - 5.0F,
             bounds.w + 10.0F, bounds.h + 10.0F};
         SDL_RenderFillRect(renderer_, &halo);
+        if (baseConstructionPanelOpen_ &&
+            selectedBasePlacedAssetId_ == ground.assetId)
+        {
+            SDL_SetRenderDrawColor(renderer_, 126, 244, 178, 255);
+            SDL_RenderRect(renderer_, &halo);
+            const SDL_FRect outer{
+                halo.x - 3.0F, halo.y - 3.0F,
+                halo.w + 6.0F, halo.h + 6.0F};
+            SDL_RenderRect(renderer_, &outer);
+        }
         renderProfileAsset(*asset, bounds, cellSize, 255, false);
     }
 
@@ -10176,6 +10283,7 @@ void App::startBasePlacement(
     gameFlow_.closeBaseFacility();
     tacticalMapOpen_ = false;
     baseConstructionPanelOpen_ = false;
+    baseFacilityContextMenu_.reset();
     basePlacementState_ = BasePlacementState{
         assetId,
         0U,
@@ -10190,115 +10298,141 @@ void App::startBasePlacement(
 
 void App::handleBaseConstructionPanelClick(MousePosition position)
 {
-    const SDL_FRect zoomOut{54.0F, 102.0F, 92.0F, 34.0F};
-    const SDL_FRect zoomReset{156.0F, 102.0F, 150.0F, 34.0F};
-    const SDL_FRect zoomIn{316.0F, 102.0F, 92.0F, 34.0F};
-    if (contains(zoomOut, position))
+    if (contains(baseBuildPurchaseTab(), position))
     {
-        if (baseConstructionZoomIndex_ > 0U)
-            --baseConstructionZoomIndex_;
-        uiMessage_ = "BUILD VIEW ZOOM UPDATED";
+        baseConstructionPage_ = BaseConstructionPage::Purchase;
+        baseFacilityContextMenu_.reset();
+        uiMessage_ = "BASE BUILD PURCHASE PAGE";
         return;
     }
-    if (contains(zoomReset, position))
+    if (contains(baseBuildOwnedTab(), position))
+    {
+        baseConstructionPage_ = BaseConstructionPage::Owned;
+        baseFacilityContextMenu_.reset();
+        uiMessage_ = "BASE BUILD OWNED PAGE";
+        return;
+    }
+    if (contains(baseBuildZoomResetButton(), position))
     {
         baseConstructionZoomIndex_ = 2U;
         uiMessage_ = "BUILD VIEW ZOOM RESET";
         return;
     }
-    if (contains(zoomIn, position))
-    {
-        if (baseConstructionZoomIndex_ < 4U)
-            ++baseConstructionZoomIndex_;
-        uiMessage_ = "BUILD VIEW ZOOM UPDATED";
-        return;
-    }
 
-    std::size_t catalogIndex{};
-    for (const ItemDefinition &definition : publishedContentRegistry().items())
+    if (contains(baseBuildBarBounds(), position))
     {
-        if (!definition.basePlacement.has_value() ||
-            definition.marketBuyPrice == 0U || catalogIndex >= 3U)
-            continue;
-        const SDL_FRect row{
-            46.0F, 174.0F + static_cast<float>(catalogIndex) * 44.0F,
-            390.0F, 36.0F};
-        if (contains(row, position))
+        std::size_t cardIndex{};
+        const auto stashAssets = assetsInContainer(
+            gameSession_.profile(), ProfileContainerId::stash());
+        for (const ItemDefinition &definition :
+             publishedContentRegistry().items())
         {
-            const auto receipt = gameSession_.purchaseBasePlaceable(
-                definition.definitionId,
-                nextProfileTransactionId("base-build-purchase"));
-            if (!receipt.succeeded)
+            if (!definition.basePlacement.has_value())
+                continue;
+            AssetInstanceId ownedAssetId{};
+            std::size_t ownedCount{};
+            for (const AssetRecord *asset : stashAssets)
             {
-                uiMessage_ = receipt.message;
-                gameAudio_.play(SoundEventId::UiDeny);
+                if (asset->definitionId == definition.definitionId)
+                {
+                    if (ownedCount == 0U)
+                        ownedAssetId = asset->instanceId;
+                    ++ownedCount;
+                }
+            }
+            const bool visible = baseConstructionPage_ ==
+                BaseConstructionPage::Purchase
+                ? definition.marketBuyPrice > 0U
+                : ownedCount > 0U;
+            if (!visible)
+                continue;
+            if (cardIndex >= 4U)
+                break;
+            if (contains(baseBuildCard(cardIndex), position))
+            {
+                if (baseConstructionPage_ ==
+                    BaseConstructionPage::Purchase)
+                {
+                    const auto receipt =
+                        gameSession_.purchaseBasePlaceable(
+                            definition.definitionId,
+                            nextProfileTransactionId(
+                                "base-build-purchase"));
+                    if (!receipt.succeeded)
+                    {
+                        uiMessage_ = receipt.message;
+                        gameAudio_.play(SoundEventId::UiDeny);
+                        return;
+                    }
+                    gameAudio_.play(SoundEventId::UiConfirm);
+                    startBasePlacement(
+                        receipt.assetId,
+                        BasePlacementState::Mode::PlaceOwned,
+                        true);
+                    return;
+                }
+                startBasePlacement(
+                    ownedAssetId,
+                    BasePlacementState::Mode::PlaceOwned,
+                    true);
                 return;
             }
-            gameAudio_.play(SoundEventId::UiConfirm);
-            startBasePlacement(
-                receipt.assetId,
-                BasePlacementState::Mode::PlaceOwned,
-                true);
-            return;
+            ++cardIndex;
         }
-        ++catalogIndex;
-    }
-
-    std::size_t ownedIndex{};
-    for (const AssetRecord *asset : assetsInContainer(
-             gameSession_.profile(), ProfileContainerId::stash()))
-    {
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset->definitionId);
-        if (!definition.basePlacement.has_value() || ownedIndex >= 3U)
-            continue;
-        const SDL_FRect row{
-            46.0F, 338.0F + static_cast<float>(ownedIndex) * 38.0F,
-            390.0F, 32.0F};
-        if (contains(row, position))
-        {
-            startBasePlacement(
-                asset->instanceId,
-                BasePlacementState::Mode::PlaceOwned,
-                true);
-            return;
-        }
-        ++ownedIndex;
-    }
-
-    const std::vector<BaseGroundAssetProjection> placed =
-        gameFlow_.baseGroundAssets();
-    for (std::size_t index{}; index < placed.size() && index < 3U; ++index)
-    {
-        const SDL_FRect row{
-            46.0F, 482.0F + static_cast<float>(index) * 34.0F,
-            390.0F, 28.0F};
-        if (contains(row, position))
-        {
-            selectedBasePlacedAssetId_ = placed[index].assetId;
-            uiMessage_ = "BASE FACILITY SELECTED";
-            return;
-        }
-    }
-
-    if (!selectedBasePlacedAssetId_.has_value())
         return;
-    const SDL_FRect moveButton{46.0F, 596.0F, 180.0F, 34.0F};
-    const SDL_FRect pickupButton{236.0F, 596.0F, 200.0F, 34.0F};
-    if (contains(moveButton, position))
+    }
+
+    baseFacilityContextMenu_.reset();
+    selectedBasePlacedAssetId_ = basePlacedFacilityAt(position);
+    uiMessage_ = selectedBasePlacedAssetId_.has_value()
+        ? "BASE FACILITY SELECTED | RMB FOR ACTIONS"
+        : "BASE FACILITY SELECTION CLEARED";
+}
+
+void App::handleBaseConstructionRightClick(MousePosition position)
+{
+    if (contains(baseBuildBarBounds(), position))
+    {
+        baseFacilityContextMenu_.reset();
+        return;
+    }
+    const auto assetId = basePlacedFacilityAt(position);
+    if (!assetId.has_value())
+    {
+        selectedBasePlacedAssetId_.reset();
+        baseFacilityContextMenu_.reset();
+        return;
+    }
+    selectedBasePlacedAssetId_ = *assetId;
+    baseFacilityContextMenu_ = BaseFacilityContextMenu{*assetId, position};
+    uiMessage_ = "BASE FACILITY ACTIONS";
+}
+
+void App::handleBaseFacilityContextMenuClick(MousePosition position)
+{
+    if (!baseFacilityContextMenu_.has_value())
+        return;
+    const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
+    if (contains(baseFacilityContextMenuRow(menu.position, 0U), position))
+    {
+        openBasePlacedFacility(menu.assetId);
+        return;
+    }
+    if (contains(baseFacilityContextMenuRow(menu.position, 1U), position))
     {
         startBasePlacement(
-            *selectedBasePlacedAssetId_,
+            menu.assetId,
             BasePlacementState::Mode::Reposition,
             true);
+        baseFacilityContextMenu_.reset();
         return;
     }
-    if (contains(pickupButton, position))
+    if (contains(baseFacilityContextMenuRow(menu.position, 2U), position))
     {
         const BaseGroundReceipt receipt =
             gameFlow_.pickupBaseGroundAssetForManagement(
-            *selectedBasePlacedAssetId_,
-            nextProfileTransactionId("base-build-pickup"));
+                menu.assetId,
+                nextProfileTransactionId("base-build-pickup"));
         uiMessage_ = receipt.succeeded
             ? "BASE FACILITY RETURNED TO STASH"
             : receipt.message;
@@ -10307,7 +10441,86 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
             : SoundEventId::UiDeny);
         if (receipt.succeeded)
             selectedBasePlacedAssetId_.reset();
+        baseFacilityContextMenu_.reset();
+        return;
     }
+    baseFacilityContextMenu_.reset();
+}
+
+void App::adjustBaseConstructionZoom(int direction)
+{
+    if (direction > 0 && baseConstructionZoomIndex_ < 4U)
+        ++baseConstructionZoomIndex_;
+    else if (direction < 0 && baseConstructionZoomIndex_ > 0U)
+        --baseConstructionZoomIndex_;
+    uiMessage_ = "BUILD VIEW ZOOM UPDATED";
+}
+
+std::optional<AssetInstanceId>
+App::basePlacedFacilityAt(MousePosition position) const
+{
+    const Vec2 worldPosition = baseScreenToWorld({position.x, position.y});
+    const std::vector<BaseGroundAssetProjection> placed =
+        gameFlow_.baseGroundAssets();
+    for (auto it = placed.rbegin(); it != placed.rend(); ++it)
+    {
+        const ItemDefinition &definition =
+            publishedContentRegistry().item(it->definitionId);
+        if (!definition.basePlacement.has_value())
+            continue;
+        const Vec2 size = orientedSize(
+            definition.basePlacement->footprint, it->orientation);
+        const ContentRect bounds{
+            {it->position.x - size.x * 0.5F,
+             it->position.y - size.y * 0.5F},
+            size};
+        if (worldPosition.x >= bounds.position.x &&
+            worldPosition.y >= bounds.position.y &&
+            worldPosition.x <= bounds.position.x + bounds.size.x &&
+            worldPosition.y <= bounds.position.y + bounds.size.y)
+        {
+            return it->assetId;
+        }
+    }
+    return std::nullopt;
+}
+
+void App::openBasePlacedFacility(AssetInstanceId assetId)
+{
+    const AssetRecord *asset = gameSession_.profile().assets.find(assetId);
+    if (asset == nullptr)
+    {
+        uiMessage_ = "ASSET NO LONGER EXISTS";
+        baseFacilityContextMenu_.reset();
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    const ItemDefinition &definition =
+        publishedContentRegistry().item(asset->definitionId);
+    if (definition.containerCompartments.empty())
+    {
+        uiMessage_ = "FACILITY HAS NO FUNCTION PAGE";
+        baseFacilityContextMenu_.reset();
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    const BaseGroundPlan plan =
+        gameFlow_.queryBaseGroundContainerAccess(assetId);
+    if (!plan.canCommit)
+    {
+        uiMessage_ = plan.message;
+        baseFacilityContextMenu_.reset();
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    openedBaseGroundContainerId_ = assetId;
+    inventoryOverlayState_.openContainerInventory();
+    baseConstructionPanelOpen_ = false;
+    baseFacilityContextMenu_.reset();
+    selectedBasePlacedAssetId_.reset();
+    uiMessage_ = "BASE GROUND CONTAINER OPENED";
+    gameAudio_.play(SoundEventId::UiConfirm);
+    input_.suppressPrimaryPointerUntilRelease();
 }
 
 void App::renderBasePlacementPreview()
@@ -10371,22 +10584,16 @@ void App::renderBaseConstructionPanel()
         return;
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    const SDL_FRect shade{0.0F, 0.0F, 470.0F, 720.0F};
-    const SDL_FRect panel{20.0F, 40.0F, 440.0F, 620.0F};
-    SDL_SetRenderDrawColor(renderer_, 4, 8, 9, 170);
-    SDL_RenderFillRect(renderer_, &shade);
+    const SDL_FRect panel = baseBuildBarBounds();
     SDL_SetRenderDrawColor(renderer_, 18, 30, 31, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 112, 190, 164, 255);
     SDL_RenderRect(renderer_, &panel);
-    uiTextRenderer_.render(renderer_, 44.0F, 56.0F, "BASE BUILD PANEL");
+    uiTextRenderer_.render(renderer_, 88.0F, 578.0F, "BASE BUILD");
     uiTextRenderer_.render(
-        renderer_, 44.0F, 78.0F,
-        "B / ESC CLOSE | CLICK TO BUY, PLACE OR MANAGE");
+        renderer_, 184.0F, 578.0F,
+        "B/ESC CLOSE | WHEEL ZOOM | LMB SELECT | RMB FACILITY ACTIONS");
 
-    const SDL_FRect zoomOut{54.0F, 102.0F, 92.0F, 34.0F};
-    const SDL_FRect zoomReset{156.0F, 102.0F, 150.0F, 34.0F};
-    const SDL_FRect zoomIn{316.0F, 102.0F, 92.0F, 34.0F};
     const auto drawButton = [this](const SDL_FRect &bounds,
                                    const std::string &label,
                                    bool selected = false)
@@ -10400,84 +10607,111 @@ void App::renderBaseConstructionPanel()
         uiTextRenderer_.render(
             renderer_, bounds.x + 10.0F, bounds.y + 9.0F, label.c_str());
     };
-    drawButton(zoomOut, "ZOOM OUT");
+
     drawButton(
-        zoomReset,
+        baseBuildPurchaseTab(),
+        "PURCHASE",
+        baseConstructionPage_ == BaseConstructionPage::Purchase);
+    drawButton(
+        baseBuildOwnedTab(),
+        "OWNED",
+        baseConstructionPage_ == BaseConstructionPage::Owned);
+    drawButton(
+        baseBuildZoomResetButton(),
         fmt::format("VIEW {}%", static_cast<int>(
             std::lround(baseConstructionZoom() * 100.0F))));
-    drawButton(zoomIn, "ZOOM IN");
 
-    uiTextRenderer_.render(renderer_, 44.0F, 150.0F,
-                           "CATALOG | BUY AND PLACE");
-    std::size_t catalogIndex{};
-    for (const ItemDefinition &definition : publishedContentRegistry().items())
+    const auto stashAssets = assetsInContainer(
+        gameSession_.profile(), ProfileContainerId::stash());
+    std::size_t cardIndex{};
+    for (const ItemDefinition &definition :
+         publishedContentRegistry().items())
     {
-        if (!definition.basePlacement.has_value() ||
-            definition.marketBuyPrice == 0U || catalogIndex >= 3U)
+        if (!definition.basePlacement.has_value())
             continue;
-        const SDL_FRect row{
-            46.0F, 174.0F + static_cast<float>(catalogIndex) * 44.0F,
-            390.0F, 36.0F};
-        drawButton(
-            row,
-            fmt::format("{} | BUY {}", definition.displayName,
-                        definition.marketBuyPrice));
-        ++catalogIndex;
-    }
-    if (catalogIndex == 0U)
-        uiTextRenderer_.render(renderer_, 54.0F, 180.0F,
-                               "NO PLACEABLE FACILITIES AVAILABLE");
-
-    uiTextRenderer_.render(renderer_, 44.0F, 314.0F,
-                           "OWNED IN STASH | CLICK TO PLACE");
-    std::size_t ownedIndex{};
-    for (const AssetRecord *asset : assetsInContainer(
-             gameSession_.profile(), ProfileContainerId::stash()))
-    {
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset->definitionId);
-        if (!definition.basePlacement.has_value() || ownedIndex >= 3U)
+        std::size_t ownedCount{};
+        for (const AssetRecord *asset : stashAssets)
+        {
+            if (asset->definitionId == definition.definitionId)
+                ++ownedCount;
+        }
+        const bool visible = baseConstructionPage_ ==
+            BaseConstructionPage::Purchase
+            ? definition.marketBuyPrice > 0U
+            : ownedCount > 0U;
+        if (!visible)
             continue;
-        const SDL_FRect row{
-            46.0F, 338.0F + static_cast<float>(ownedIndex) * 38.0F,
-            390.0F, 32.0F};
-        drawButton(row, fmt::format("{} #{} | PLACE",
-            definition.displayName, asset->instanceId));
-        ++ownedIndex;
+        if (cardIndex >= 4U)
+            break;
+        const SDL_FRect card = baseBuildCard(cardIndex);
+        SDL_SetRenderDrawColor(renderer_, 31, 59, 56, 245);
+        SDL_RenderFillRect(renderer_, &card);
+        SDL_SetRenderDrawColor(renderer_, 116, 204, 170, 255);
+        SDL_RenderRect(renderer_, &card);
+        const SDL_FRect icon{
+            card.x + 8.0F, card.y + 8.0F, 46.0F, 34.0F};
+        SDL_SetRenderDrawColor(renderer_, 82, 124, 116, 255);
+        SDL_RenderFillRect(renderer_, &icon);
+        SDL_SetRenderDrawColor(renderer_, 158, 220, 190, 255);
+        SDL_RenderRect(renderer_, &icon);
+        const SDL_FRect iconInset{
+            icon.x + 7.0F, icon.y + 7.0F,
+            icon.w - 14.0F, icon.h - 14.0F};
+        SDL_RenderRect(renderer_, &iconInset);
+        uiTextRenderer_.render(
+            renderer_, card.x + 8.0F, card.y + 50.0F,
+            definition.displayName.c_str());
+        const std::string action = baseConstructionPage_ ==
+            BaseConstructionPage::Purchase
+            ? fmt::format("BUY {}", definition.marketBuyPrice)
+            : fmt::format("OWNED x{}", ownedCount);
+        uiTextRenderer_.render(
+            renderer_, card.x + 62.0F, card.y + 16.0F,
+            action.c_str());
+        ++cardIndex;
     }
-    if (ownedIndex == 0U)
-        uiTextRenderer_.render(renderer_, 54.0F, 344.0F,
-                               "NO UNPLACED FACILITIES");
-
-    uiTextRenderer_.render(renderer_, 44.0F, 458.0F,
-                           "PLACED FACILITIES | CLICK TO SELECT");
-    const std::vector<BaseGroundAssetProjection> placed =
-        gameFlow_.baseGroundAssets();
-    for (std::size_t index{}; index < placed.size() && index < 3U; ++index)
+    if (cardIndex == 0U)
     {
-        const BaseGroundAssetProjection &entry = placed[index];
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(entry.definitionId);
-        const SDL_FRect row{
-            46.0F, 482.0F + static_cast<float>(index) * 34.0F,
-            390.0F, 28.0F};
-        drawButton(
-            row,
-            fmt::format("{} #{} | ({:.0f}, {:.0f})",
-                definition.displayName, entry.assetId,
-                entry.position.x, entry.position.y),
-            selectedBasePlacedAssetId_ == entry.assetId);
+        uiTextRenderer_.render(
+            renderer_, 390.0F, 624.0F,
+            baseConstructionPage_ == BaseConstructionPage::Purchase
+                ? "NO PLACEABLE FACILITIES AVAILABLE"
+                : "NO UNPLACED FACILITIES");
     }
-    if (placed.empty())
-        uiTextRenderer_.render(renderer_, 54.0F, 488.0F,
-                               "NO PLACED FACILITIES");
-
-    const SDL_FRect moveButton{46.0F, 596.0F, 180.0F, 34.0F};
-    const SDL_FRect pickupButton{236.0F, 596.0F, 200.0F, 34.0F};
-    drawButton(moveButton, "MOVE SELECTED");
-    drawButton(pickupButton, "RETURN EMPTY TO STASH");
     if (!uiMessage_.empty())
-        uiTextRenderer_.render(renderer_, 44.0F, 638.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 88.0F, 664.0F, uiMessage_.c_str());
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+
+    renderBaseFacilityContextMenu();
+}
+
+void App::renderBaseFacilityContextMenu()
+{
+    if (!baseConstructionPanelOpen_ ||
+        !baseFacilityContextMenu_.has_value())
+    {
+        return;
+    }
+    const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
+    const SDL_FRect bounds = baseFacilityContextMenuBounds(menu.position);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 250);
+    SDL_RenderFillRect(renderer_, &bounds);
+    SDL_SetRenderDrawColor(renderer_, 126, 214, 174, 255);
+    SDL_RenderRect(renderer_, &bounds);
+    constexpr std::array<const char *, 3U> labels{
+        "OPEN FUNCTION", "MOVE FACILITY", "RECOVER EMPTY"};
+    for (std::size_t index{}; index < labels.size(); ++index)
+    {
+        const SDL_FRect row = baseFacilityContextMenuRow(
+            menu.position, index);
+        SDL_SetRenderDrawColor(renderer_, 34, 70, 66, 248);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(renderer_, 104, 184, 154, 255);
+        SDL_RenderRect(renderer_, &row);
+        uiTextRenderer_.render(
+            renderer_, row.x + 12.0F, row.y + 9.0F, labels[index]);
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 

@@ -7,8 +7,8 @@
 - 已验收主线：`origin/main@03028bb`，PR #125 已合入并完成 Home Region 世界容器近距打开、统一拖拽整理和整体拾取。
 - 当前开发分支：`codex/home-region-placeable-storage-v1`，从 `origin/main@03028bb` 创建。
 - 当前活动计划：`doc/exec-plans/active/home-region-placeable-storage-v1.md`。
-- 当前切片增加 `B` 基地建设面板：可调整建设视野、直接购买并放置内容目录中的设施、放置仓库已有设施，以及选择、移动或收回已放置设施；当前首个真实消费者仍为持久储物箱，继续复用唯一 AssetRegistry 与 BaseGround 容器访问事务。
-- 当前分支的建设面板返工已通过 Windows Debug 全目标构建与 1372/1372 CTest；exact-head Windows/Ubuntu CI 和用户正常游玩验收待完成。
+- 当前切片增加 `B` 基地建设模式：底部紧凑栏以“购买 / 已有”页签复用同一设施卡片，滚轮调整建设视野；设施放置继续使用绿/红虚像，已放置设施可在世界中左键选择并通过右键菜单打开、移动或回收。当前首个真实消费者仍为持久储物箱，继续复用唯一 AssetRegistry 与 BaseGround 容器访问事务。
+- 首版侧栏已通过用户正常游玩验收；本轮紧凑建设栏返工已通过 Windows Debug 全目标构建与 1372/1372 CTest，等待新 exact-head Windows/Ubuntu CI 和用户正常游玩复验。
 - 当前自动化证据：Windows Debug 全目标构建与 1368/1368 CTest 已通过；等待 exact-head Windows/Ubuntu CI 和用户正常游玩验收。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
@@ -83,7 +83,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 65. **Home Region 共享战斗能力 v1**：提取 Base/Raid 共用的 SDL-free 瞄准、散布、后坐力、逻辑弹道与表现投影；基地支持真实武器切换、弹药/耐久消耗和故障，但保持无敌人、无撤离、无 Settlement。Tab 仅在玩家完整位于基地板块内时连接 Stash，离开后退化为个人随身页；`M` 可打开只读 Home Region 全静态地图。PR #123 已通过用户正常游玩验收并以 merge commit `9106126` 进入 main。
 66. **Home Region 地面资产 v1**：基地个人页可把随身或仓库根资产放到当前基地地面；世界与地图显示真实根资产，近距离可拾回，容器子树保持唯一所有权。schema v39 保存基地站点和世界坐标，旧档不生成地面资产。PR #124 已通过 Windows Debug、1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `17a3514` 进入 main。
 67. **Home Region 世界容器交互 v1**：地面容器可在正确站点和近距离内打开；右侧显示真实分区，并通过受限库存事务与随身容器双向拖拽或快速装备。地面容器页不连接 Stash，也不为特殊物品动作绕过访问边界。PR #125 已通过用户正常游玩验收，并以 merge commit `03028bb` 进入 main。
-68. **Home Region 基地建设面板与可放置储物箱 v1（当前开发分支）**：`B` 打开建设面板，通过内容驱动目录直接购买并放置或放置仓库已有设施，可缩放建设视野、选择并原子移动/收回已放置设施；储物箱具有类型化世界占地，非法边界和重叠位置拒绝，放置后参与移动/弹道阻挡并复用世界容器界面。
+68. **Home Region 基地建设面板与可放置储物箱 v1（当前开发分支）**：`B` 打开底部紧凑建设栏，“购买 / 已有”页复用同一内容驱动设施卡片，滚轮切换建设视野；点击卡片进入绿/红虚像放置，已放置设施在世界中左键选择、右键打开功能页/移动/回收。储物箱具有类型化世界占地，非法边界和重叠位置拒绝，放置后参与移动/弹道阻挡并复用近距世界容器界面。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
