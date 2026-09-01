@@ -1,9 +1,26 @@
 #include <array>
+#include <algorithm>
 
 #include <gtest/gtest.h>
 
 #include "base_facility_management.h"
 #include "inventory_domain.h"
+
+namespace
+{
+const BaseFacilityQuickActionProjection *findAction(
+    const BaseFacilityManagementProjection &projection,
+    BaseFacilityQuickActionKind kind)
+{
+    const auto found = std::find_if(
+        projection.quickActions.begin(), projection.quickActions.end(),
+        [kind](const BaseFacilityQuickActionProjection &action)
+        {
+            return action.kind == kind;
+        });
+    return found == projection.quickActions.end() ? nullptr : &*found;
+}
+}
 
 TEST(BaseFacilityManagementTest,
      ProjectsAllFixedFacilitiesWithoutMutatingProfile)
@@ -44,6 +61,41 @@ TEST(BaseFacilityManagementTest,
 }
 
 TEST(BaseFacilityManagementTest,
+     PublishesContextActionsWithoutChoosingManufacturingRecipe)
+{
+    const ProfileState profile = makeNewAlphaProfile(
+        "facility-management-actions", publishedContentRegistry());
+
+    const BaseFacilityManagementProjection workshop =
+        projectBaseFacilityManagement(
+            profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_NE(findAction(
+        workshop, BaseFacilityQuickActionKind::OpenFunction), nullptr);
+    EXPECT_NE(findAction(
+        workshop, BaseFacilityQuickActionKind::ClearWorker), nullptr);
+    EXPECT_NE(findAction(
+        workshop, BaseFacilityQuickActionKind::StartUpgrade), nullptr);
+    EXPECT_EQ(findAction(
+        workshop, BaseFacilityQuickActionKind::CollectManufacturing), nullptr);
+    EXPECT_EQ(findAction(
+        workshop, BaseFacilityQuickActionKind::CancelManufacturing), nullptr);
+
+    const BaseFacilityManagementProjection medical =
+        projectBaseFacilityManagement(
+            profile, publishedContentRegistry(), BaseFacilityKind::Medical);
+    const BaseFacilityQuickActionProjection *treatment = findAction(
+        medical, BaseFacilityQuickActionKind::StartResidentTreatment);
+    ASSERT_NE(treatment, nullptr);
+    EXPECT_FALSE(treatment->canCommit);
+
+    const BaseFacilityManagementProjection dormitory =
+        projectBaseFacilityManagement(
+            profile, publishedContentRegistry(), BaseFacilityKind::Dormitory);
+    EXPECT_NE(findAction(
+        dormitory, BaseFacilityQuickActionKind::AutoFillWorkers), nullptr);
+}
+
+TEST(BaseFacilityManagementTest,
      ReportsConstructionBeforePausedFacilityWork)
 {
     ProfileState profile = makeNewAlphaProfile(
@@ -80,6 +132,15 @@ TEST(BaseFacilityManagementTest,
     EXPECT_EQ(
         *projection.assignedWorker,
         BaseResidentProfession::Engineering);
+    const BaseFacilityQuickActionProjection *cancelUpgrade = findAction(
+        projection, BaseFacilityQuickActionKind::CancelUpgrade);
+    ASSERT_NE(cancelUpgrade, nullptr);
+    ASSERT_TRUE(cancelUpgrade->constructionProjectId.has_value());
+    EXPECT_EQ(
+        cancelUpgrade->constructionProjectId->value(),
+        "base_construction.workshop.level_2");
+    EXPECT_NE(findAction(
+        projection, BaseFacilityQuickActionKind::CancelManufacturing), nullptr);
 }
 
 TEST(BaseFacilityManagementTest,
@@ -124,6 +185,10 @@ TEST(BaseFacilityManagementTest,
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.task, BaseFacilityTaskKind::OutputReady);
     EXPECT_EQ(workshop.remainingMinutes, 0U);
+    EXPECT_NE(findAction(
+        workshop, BaseFacilityQuickActionKind::CollectManufacturing), nullptr);
+    EXPECT_EQ(findAction(
+        workshop, BaseFacilityQuickActionKind::CancelManufacturing), nullptr);
 }
 
 TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
@@ -140,5 +205,9 @@ TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
     EXPECT_EQ(
         projection.status,
         BaseFacilityOperationalStatus::Reserve);
+    ASSERT_EQ(projection.quickActions.size(), 1U);
+    EXPECT_EQ(
+        projection.quickActions.front().kind,
+        BaseFacilityQuickActionKind::OpenFunction);
+    EXPECT_FALSE(projection.quickActions.front().canCommit);
 }
-

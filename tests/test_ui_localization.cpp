@@ -39,6 +39,18 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseFacilityManagementCard) {
                 UiLanguage::SimplifiedChinese,
                 "CURRENT TASK: IDLE | CONTENT STACKS: 3"),
             "当前任务：空闲 | 内容物堆数：3");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ASSIGN WORKER"),
+            "安排人员");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "COLLECT OUTPUT"),
+            "领取产物");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "facility must be installed before use"),
+            "设施必须安装后才能使用");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesPerformanceTelemetry) {
