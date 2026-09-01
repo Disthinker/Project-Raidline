@@ -244,10 +244,12 @@ namespace
         return SDL_FRect{1050.0F, 608.0F, 136.0F, 34.0F};
     }
 
-    SDL_FRect baseFacilityContextMenuBounds(MousePosition origin) noexcept
+    SDL_FRect baseFacilityContextMenuBounds(
+        MousePosition origin,
+        std::size_t rowCount) noexcept
     {
         constexpr float width{220.0F};
-        constexpr float height{126.0F};
+        const float height = 16.0F + static_cast<float>(rowCount) * 37.0F;
         return SDL_FRect{
             std::clamp(origin.x, 8.0F,
                        static_cast<float>(kWindowWidth) - width - 8.0F),
@@ -259,9 +261,10 @@ namespace
 
     SDL_FRect baseFacilityContextMenuRow(
         MousePosition origin,
-        std::size_t index) noexcept
+        std::size_t index,
+        std::size_t rowCount) noexcept
     {
-        const SDL_FRect menu = baseFacilityContextMenuBounds(origin);
+        const SDL_FRect menu = baseFacilityContextMenuBounds(origin, rowCount);
         return SDL_FRect{
             menu.x + 8.0F,
             menu.y + 8.0F + static_cast<float>(index) * 37.0F,
@@ -1980,6 +1983,7 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         basePlacementState_.reset();
         deactivateBaseBuildCamera();
         selectedBasePlacedAssetId_.reset();
+        selectedBaseFixedFacility_.reset();
         profileContextMenu_.reset();
         if (gameFlow_.returnToMainMenu())
         {
@@ -2312,6 +2316,7 @@ void App::updateBase(float deltaTime)
             baseConstructionPanelOpen_ = false;
             deactivateBaseBuildCamera();
             selectedBasePlacedAssetId_.reset();
+            selectedBaseFixedFacility_.reset();
             pendingBaseClicks_.clear();
             pendingBaseRightClicks_.clear();
             uiMessage_ = "BASE BUILD PANEL CLOSED";
@@ -5442,6 +5447,7 @@ void App::processEvents()
                 baseConstructionPanelOpen_ = false;
                 deactivateBaseBuildCamera();
                 selectedBasePlacedAssetId_.reset();
+                selectedBaseFixedFacility_.reset();
                 baseFacilityContextMenu_.reset();
                 uiMessage_ = "BASE BUILD PANEL CLOSED";
             }
@@ -5458,6 +5464,8 @@ void App::processEvents()
                 tacticalMapOpen_ = false;
                 medicalWheelOpen_ = false;
                 baseConstructionPanelOpen_ = true;
+                selectedBasePlacedAssetId_.reset();
+                selectedBaseFixedFacility_.reset();
                 baseFacilityContextMenu_.reset();
                 activateBaseBuildCamera();
                 uiMessage_ = "BASE BUILD PANEL OPEN";
@@ -8789,9 +8797,11 @@ Vec2 App::baseScreenToWorld(Vec2 screenPosition) const noexcept
 {
     const float zoom = baseConstructionZoom();
     const Vec2 camera = baseWorldCameraOffset();
-    return Vec2{
-        camera.x + screenPosition.x / zoom,
-        camera.y + screenPosition.y / zoom};
+    return baseBuildScreenToWorld(
+        screenPosition,
+        camera,
+        zoom,
+        raidWorldScreenShakePixels());
 }
 
 Vec2 App::baseBuildViewportWorldSize() const noexcept
@@ -10132,11 +10142,13 @@ void App::renderBaseWorld()
     const Vec2 worldSize = world.worldSize();
     const float zoom = baseConstructionZoom();
     static_cast<void>(SDL_SetRenderScale(renderer_, zoom, zoom));
+    const Vec2 viewportOrigin = baseBuildViewportOrigin(
+        camera, zoom, shakePixels);
     const SDL_Rect worldViewport{
-        static_cast<int>(std::lround((shakePixels.x - camera.x) * zoom)),
-        static_cast<int>(std::lround((shakePixels.y - camera.y) * zoom)),
-        static_cast<int>(std::ceil(worldSize.x * zoom)),
-        static_cast<int>(std::ceil(worldSize.y * zoom))};
+        static_cast<int>(std::lround(viewportOrigin.x)),
+        static_cast<int>(std::lround(viewportOrigin.y)),
+        static_cast<int>(std::ceil(worldSize.x)),
+        static_cast<int>(std::ceil(worldSize.y))};
     static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
 
     SDL_SetRenderDrawColor(renderer_, 45, 49, 36, 255);
@@ -10269,6 +10281,19 @@ void App::renderBaseWorld()
         SDL_RenderFillRect(renderer_, &bounds);
         SDL_SetRenderDrawColor(renderer_, 174, 188, 180, 255);
         SDL_RenderRect(renderer_, &bounds);
+        if (baseConstructionPanelOpen_ &&
+            selectedBaseFixedFacility_ == facility.kind)
+        {
+            SDL_SetRenderDrawColor(renderer_, 126, 244, 178, 255);
+            const SDL_FRect halo{
+                bounds.x - 5.0F, bounds.y - 5.0F,
+                bounds.w + 10.0F, bounds.h + 10.0F};
+            SDL_RenderRect(renderer_, &halo);
+            const SDL_FRect outer{
+                halo.x - 3.0F, halo.y - 3.0F,
+                halo.w + 6.0F, halo.h + 6.0F};
+            SDL_RenderRect(renderer_, &outer);
+        }
         uiTextRenderer_.render(
             renderer_,
             bounds.x + 18.0F,
@@ -10388,6 +10413,8 @@ void App::startBasePlacement(
     tacticalMapOpen_ = false;
     baseConstructionPanelOpen_ = false;
     baseFacilityContextMenu_.reset();
+    selectedBasePlacedAssetId_.reset();
+    selectedBaseFixedFacility_.reset();
     basePlacementState_ = BasePlacementState{
         assetId,
         0U,
@@ -10489,7 +10516,11 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
 
     baseFacilityContextMenu_.reset();
     selectedBasePlacedAssetId_ = basePlacedFacilityAt(position);
-    uiMessage_ = selectedBasePlacedAssetId_.has_value()
+    selectedBaseFixedFacility_ = selectedBasePlacedAssetId_.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseFixedFacilityAt(position);
+    uiMessage_ = selectedBasePlacedAssetId_.has_value() ||
+            selectedBaseFixedFacility_.has_value()
         ? "BASE FACILITY SELECTED | RMB FOR ACTIONS"
         : "BASE FACILITY SELECTION CLEARED";
 }
@@ -10502,14 +10533,20 @@ void App::handleBaseConstructionRightClick(MousePosition position)
         return;
     }
     const auto assetId = basePlacedFacilityAt(position);
-    if (!assetId.has_value())
+    const auto fixedFacility = assetId.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseFixedFacilityAt(position);
+    if (!assetId.has_value() && !fixedFacility.has_value())
     {
         selectedBasePlacedAssetId_.reset();
+        selectedBaseFixedFacility_.reset();
         baseFacilityContextMenu_.reset();
         return;
     }
-    selectedBasePlacedAssetId_ = *assetId;
-    baseFacilityContextMenu_ = BaseFacilityContextMenu{*assetId, position};
+    selectedBasePlacedAssetId_ = assetId;
+    selectedBaseFixedFacility_ = fixedFacility;
+    baseFacilityContextMenu_ = BaseFacilityContextMenu{
+        assetId, fixedFacility, position};
     uiMessage_ = "BASE FACILITY ACTIONS";
 }
 
@@ -10518,25 +10555,40 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     if (!baseFacilityContextMenu_.has_value())
         return;
     const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
-    if (contains(baseFacilityContextMenuRow(menu.position, 0U), position))
+    const std::size_t rowCount = menu.assetId.has_value() ? 3U : 1U;
+    if (contains(
+            baseFacilityContextMenuRow(menu.position, 0U, rowCount),
+            position))
     {
-        openBasePlacedFacility(menu.assetId);
+        if (menu.assetId.has_value())
+            openBasePlacedFacility(*menu.assetId);
+        else if (menu.fixedFacility.has_value())
+            openBaseFixedFacility(*menu.fixedFacility);
         return;
     }
-    if (contains(baseFacilityContextMenuRow(menu.position, 1U), position))
+    if (!menu.assetId.has_value())
+    {
+        baseFacilityContextMenu_.reset();
+        return;
+    }
+    if (contains(
+            baseFacilityContextMenuRow(menu.position, 1U, rowCount),
+            position))
     {
         startBasePlacement(
-            menu.assetId,
+            *menu.assetId,
             BasePlacementState::Mode::Reposition,
             true);
         baseFacilityContextMenu_.reset();
         return;
     }
-    if (contains(baseFacilityContextMenuRow(menu.position, 2U), position))
+    if (contains(
+            baseFacilityContextMenuRow(menu.position, 2U, rowCount),
+            position))
     {
         const BaseGroundReceipt receipt =
             gameFlow_.pickupBaseGroundAssetForManagement(
-                menu.assetId,
+                *menu.assetId,
                 nextProfileTransactionId("base-build-pickup"));
         uiMessage_ = receipt.succeeded
             ? "BASE FACILITY RETURNED TO STASH"
@@ -10545,7 +10597,10 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
             ? SoundEventId::InventoryPickup
             : SoundEventId::UiDeny);
         if (receipt.succeeded)
+        {
             selectedBasePlacedAssetId_.reset();
+            selectedBaseFixedFacility_.reset();
+        }
         baseFacilityContextMenu_.reset();
         return;
     }
@@ -10596,6 +10651,24 @@ App::basePlacedFacilityAt(MousePosition position) const
     return std::nullopt;
 }
 
+std::optional<BaseFacilityKind>
+App::baseFixedFacilityAt(MousePosition position) const
+{
+    const Vec2 worldPosition = baseScreenToWorld({position.x, position.y});
+    const auto &facilities = gameFlow_.baseWorld().facilities();
+    for (auto it = facilities.rbegin(); it != facilities.rend(); ++it)
+    {
+        if (worldPosition.x >= it->bounds.position.x &&
+            worldPosition.y >= it->bounds.position.y &&
+            worldPosition.x <= it->bounds.position.x + it->bounds.size.x &&
+            worldPosition.y <= it->bounds.position.y + it->bounds.size.y)
+        {
+            return it->kind;
+        }
+    }
+    return std::nullopt;
+}
+
 void App::openBasePlacedFacility(AssetInstanceId assetId)
 {
     const AssetRecord *asset = gameSession_.profile().assets.find(assetId);
@@ -10630,7 +10703,34 @@ void App::openBasePlacedFacility(AssetInstanceId assetId)
     deactivateBaseBuildCamera();
     baseFacilityContextMenu_.reset();
     selectedBasePlacedAssetId_.reset();
+    selectedBaseFixedFacility_.reset();
     uiMessage_ = "BASE GROUND CONTAINER OPENED";
+    gameAudio_.play(SoundEventId::UiConfirm);
+    input_.suppressPrimaryPointerUntilRelease();
+}
+
+void App::openBaseFixedFacility(BaseFacilityKind facility)
+{
+    if (!gameFlow_.openBaseFacilityForManagement(facility))
+    {
+        uiMessage_ = "BASE FACILITY IS NOT AVAILABLE";
+        baseFacilityContextMenu_.reset();
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+
+    baseConstructionPanelOpen_ = false;
+    deactivateBaseBuildCamera();
+    baseFacilityContextMenu_.reset();
+    selectedBasePlacedAssetId_.reset();
+    selectedBaseFixedFacility_.reset();
+    if (facility == BaseFacilityKind::Storage)
+    {
+        gameFlow_.closeBaseFacility();
+        openedBaseGroundContainerId_.reset();
+        inventoryOverlayState_.openContainerInventory();
+    }
+    uiMessage_ = "BASE FACILITY FUNCTION OPENED";
     gameAudio_.play(SoundEventId::UiConfirm);
     input_.suppressPrimaryPointerUntilRelease();
 }
@@ -10805,24 +10905,27 @@ void App::renderBaseFacilityContextMenu()
         return;
     }
     const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
-    const SDL_FRect bounds = baseFacilityContextMenuBounds(menu.position);
+    const std::size_t rowCount = menu.assetId.has_value() ? 3U : 1U;
+    const SDL_FRect bounds = baseFacilityContextMenuBounds(
+        menu.position, rowCount);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 250);
     SDL_RenderFillRect(renderer_, &bounds);
     SDL_SetRenderDrawColor(renderer_, 126, 214, 174, 255);
     SDL_RenderRect(renderer_, &bounds);
-    constexpr std::array<const char *, 3U> labels{
+    constexpr std::array<const char *, 3U> placedLabels{
         "OPEN FUNCTION", "MOVE FACILITY", "RECOVER EMPTY"};
-    for (std::size_t index{}; index < labels.size(); ++index)
+    for (std::size_t index{}; index < rowCount; ++index)
     {
         const SDL_FRect row = baseFacilityContextMenuRow(
-            menu.position, index);
+            menu.position, index, rowCount);
         SDL_SetRenderDrawColor(renderer_, 34, 70, 66, 248);
         SDL_RenderFillRect(renderer_, &row);
         SDL_SetRenderDrawColor(renderer_, 104, 184, 154, 255);
         SDL_RenderRect(renderer_, &row);
         uiTextRenderer_.render(
-            renderer_, row.x + 12.0F, row.y + 9.0F, labels[index]);
+            renderer_, row.x + 12.0F, row.y + 9.0F,
+            placedLabels[index]);
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }

@@ -189,7 +189,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 地面资产 v1 | 随身或仓库根资产可放到当前基地地面，在世界与地图中显示并近距拾回；重启和迁徙后保持原站点 | BaseGroundAssetLocation、唯一资产树、查询/命令、schema v39、站点与距离投影 | PR #124 已通过 1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `17a3514` 进入 main |
 | Home Region 世界容器交互 v1 | 靠近地面背包或胸挂按 `E` 打开，在右侧真实分区与随身容器间拖拽、交换、堆叠和快速装备，并可整体拾取容器 | 当前站点/距离访问查询、受限 InventoryCommand 参与者、保存失败零提交、复用 schema v39 | PR #125 已通过用户正常游玩验收，以 merge commit `03028bb` 进入 main |
 | Home Region 基地建设面板与可放置储物箱 v1 | `B` 打开底部紧凑建设栏，购买/已有页复用设施卡片，滚轮缩放；设施用虚像放置并可在世界中左键选择、右键打开/移动/回收 | 内容驱动建设目录、`base_placement` 能力、稳定购买资产回执、Reposition/BaseGround 原子事务、近距功能访问、content v58/schema v39 | PR #126 已通过用户正常游玩验收，以 merge commit `50879bc` 进入 main |
-| Home Region 建设镜头控制 v1 | 建设模式中可用 WASD 或按住右键拖动画面，在不同缩放下浏览基地并继续放置设施；短按右键保留设施菜单 | 客户端瞬态镜头、恒定屏幕速度、4px 点击/拖拽仲裁、世界边界约束、退出恢复玩家跟随 | 当前开发分支；Windows Debug 全目标与 1377/1377 CTest 已通过，等待 exact-head CI 和用户验收 |
+| Home Region 建设镜头控制 v1 | 建设模式中可用 WASD 或按住右键拖动画面；五档缩放均可准确选择设施；七类固定设施可从建设界面进入原有功能页 | 客户端瞬态镜头、统一世界—屏幕投影、4px 点击/拖拽仲裁、固定设施管理入口、世界边界约束、退出恢复玩家跟随 | 当前开发分支；验收返工后 Windows Debug 全目标、1379/1379 CTest 通过，等待更新后的 exact-head CI 和用户复验 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -301,6 +301,23 @@ TEST(GameFlowTest, StateNamesAreStableForDebugOutput)
         "RaidResult");
 }
 
+TEST(GameFlowTest, BaseManagementCanOpenEveryFixedFacilityWithoutProximity)
+{
+    GameFlow flow;
+    ASSERT_TRUE(flow.startGame());
+    for (const BaseFacility &facility : flow.baseWorld().facilities())
+    {
+        ASSERT_TRUE(flow.openBaseFacilityForManagement(facility.kind));
+        EXPECT_EQ(flow.activeBaseFacility(), facility.kind);
+        EXPECT_FALSE(flow.openBaseFacilityForManagement(facility.kind));
+        flow.closeBaseFacility();
+    }
+
+    ASSERT_TRUE(flow.deploy());
+    EXPECT_FALSE(flow.openBaseFacilityForManagement(
+        BaseFacilityKind::Workshop));
+}
+
 TEST(GameFlowTest, BaseAndRaidCanReturnToMainMenuWithoutSettlement)
 {
     GameFlow base;

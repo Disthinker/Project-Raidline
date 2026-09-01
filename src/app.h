@@ -76,7 +76,8 @@ enum class BaseConstructionPage
 
 struct BaseFacilityContextMenu
 {
-    AssetInstanceId assetId{};
+    std::optional<AssetInstanceId> assetId;
+    std::optional<BaseFacilityKind> fixedFacility;
     MousePosition position{};
 };
 
@@ -143,6 +144,7 @@ private:
     std::size_t baseConstructionZoomIndex_{2U};
     BaseBuildCameraController baseBuildCamera_;
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
+    std::optional<BaseFacilityKind> selectedBaseFixedFacility_;
     std::optional<BaseFacilityContextMenu> baseFacilityContextMenu_;
     std::vector<MousePosition> pendingBaseRightClicks_;
     std::uint64_t profileTransactionSequence_{};
@@ -230,7 +232,10 @@ private:
     [[nodiscard]] Vec2 baseBuildViewportWorldSize() const noexcept;
     [[nodiscard]] std::optional<AssetInstanceId>
     basePlacedFacilityAt(MousePosition position) const;
+    [[nodiscard]] std::optional<BaseFacilityKind>
+    baseFixedFacilityAt(MousePosition position) const;
     void openBasePlacedFacility(AssetInstanceId assetId);
+    void openBaseFixedFacility(BaseFacilityKind facility);
     void startBasePlacement(
         AssetInstanceId assetId,
         BasePlacementState::Mode mode,

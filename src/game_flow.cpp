@@ -149,6 +149,22 @@ void GameFlow::closeBaseFacility() noexcept
     activeBaseFacility_.reset();
 }
 
+bool GameFlow::openBaseFacilityForManagement(BaseFacilityKind facility)
+{
+    if (state_ != GameFlowState::Base || activeBaseFacility_.has_value())
+        return false;
+    const auto found = std::find_if(
+        baseWorld_.facilities().begin(),
+        baseWorld_.facilities().end(),
+        [facility](const BaseFacility &candidate)
+        { return candidate.kind == facility; });
+    if (found == baseWorld_.facilities().end())
+        return false;
+    activeBaseFacility_ = facility;
+    gameSession_.noteBaseFacility(facility);
+    return true;
+}
+
 std::optional<BaseFacilityKind> GameFlow::activeBaseFacility() const noexcept
 {
     return activeBaseFacility_;

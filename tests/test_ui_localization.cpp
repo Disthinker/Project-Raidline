@@ -881,6 +881,10 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "打开功能页面");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "BASE FACILITY FUNCTION OPENED"),
+            "基地设施功能页面已打开");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "MOVE FACILITY"),
             "移动设施");
   EXPECT_EQ(localizeUiText(

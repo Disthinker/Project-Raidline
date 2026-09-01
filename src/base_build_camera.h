@@ -11,6 +11,24 @@ enum class BaseBuildPointerRelease
     Dragged
 };
 
+// SDL applies RenderScale to both the viewport origin and draw coordinates.
+// Keep the camera projection explicit so rendering and pointer hit testing use
+// the same contract at every construction zoom level.
+[[nodiscard]] Vec2 baseBuildViewportOrigin(
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset = {}) noexcept;
+[[nodiscard]] Vec2 baseBuildWorldToScreen(
+    Vec2 worldPosition,
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset = {}) noexcept;
+[[nodiscard]] Vec2 baseBuildScreenToWorld(
+    Vec2 screenPosition,
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset = {}) noexcept;
+
 class BaseBuildCameraController
 {
 public:

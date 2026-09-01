@@ -24,6 +24,53 @@ Vec2 normalizedOrZero(Vec2 value) noexcept
 }
 }
 
+Vec2 baseBuildViewportOrigin(
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset) noexcept
+{
+    if (!finite(cameraOffset) || !finite(screenOffset) ||
+        !std::isfinite(zoom) || zoom <= 0.0F)
+    {
+        return {};
+    }
+    return {
+        screenOffset.x / zoom - cameraOffset.x,
+        screenOffset.y / zoom - cameraOffset.y};
+}
+
+Vec2 baseBuildWorldToScreen(
+    Vec2 worldPosition,
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset) noexcept
+{
+    if (!finite(worldPosition) || !finite(cameraOffset) ||
+        !finite(screenOffset) || !std::isfinite(zoom) || zoom <= 0.0F)
+    {
+        return {};
+    }
+    return {
+        screenOffset.x + (worldPosition.x - cameraOffset.x) * zoom,
+        screenOffset.y + (worldPosition.y - cameraOffset.y) * zoom};
+}
+
+Vec2 baseBuildScreenToWorld(
+    Vec2 screenPosition,
+    Vec2 cameraOffset,
+    float zoom,
+    Vec2 screenOffset) noexcept
+{
+    if (!finite(screenPosition) || !finite(cameraOffset) ||
+        !finite(screenOffset) || !std::isfinite(zoom) || zoom <= 0.0F)
+    {
+        return {};
+    }
+    return {
+        cameraOffset.x + (screenPosition.x - screenOffset.x) / zoom,
+        cameraOffset.y + (screenPosition.y - screenOffset.y) / zoom};
+}
+
 void BaseBuildCameraController::activate(
     Vec2 focusWorldPosition,
     Vec2 worldSize,

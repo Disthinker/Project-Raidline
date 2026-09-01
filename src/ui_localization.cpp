@@ -26,6 +26,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"BASE BUILD OWNED PAGE", "基地建设已有设施页面"},
      {"FACILITY HAS NO FUNCTION PAGE", "该设施暂无功能页面"},
      {"BASE FACILITY ACTIONS", "基地设施操作"},
+     {"BASE FACILITY FUNCTION OPENED", "基地设施功能页面已打开"},
+     {"BASE FACILITY IS NOT AVAILABLE", "基地设施当前不可用"},
      {"OPEN FUNCTION", "打开功能页面"},
      {"MOVE FACILITY", "移动设施"},
      {"RECOVER EMPTY", "回收空设施"},

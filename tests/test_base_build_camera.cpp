@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "base_build_camera.h"
 
 namespace
@@ -84,4 +86,32 @@ TEST(BaseBuildCameraTest, KeyboardAndPointerPanClampToWorldEdges)
     const Vec2 farEdge = camera.offset(kWorld, kViewport);
     EXPECT_FLOAT_EQ(farEdge.x, 11520.0F);
     EXPECT_FLOAT_EQ(farEdge.y, 6480.0F);
+}
+
+TEST(BaseBuildCameraTest, WorldAndPointerProjectionRoundTripAtEveryBuildZoom)
+{
+    constexpr Vec2 camera{5723.5F, 3187.25F};
+    constexpr Vec2 worldPoint{6184.0F, 3522.0F};
+    constexpr Vec2 shake{3.0F, -2.0F};
+    for (const float zoom :
+         std::array{0.60F, 0.75F, 1.00F, 1.25F, 1.50F})
+    {
+        const Vec2 screen = baseBuildWorldToScreen(
+            worldPoint, camera, zoom, shake);
+        const Vec2 roundTrip = baseBuildScreenToWorld(
+            screen, camera, zoom, shake);
+        EXPECT_NEAR(roundTrip.x, worldPoint.x, 0.001F);
+        EXPECT_NEAR(roundTrip.y, worldPoint.y, 0.001F);
+
+        const Vec2 viewport = baseBuildViewportOrigin(
+            camera, zoom, shake);
+        EXPECT_NEAR(
+            (viewport.x + worldPoint.x) * zoom,
+            screen.x,
+            0.001F);
+        EXPECT_NEAR(
+            (viewport.y + worldPoint.y) * zoom,
+            screen.y,
+            0.001F);
+    }
 }

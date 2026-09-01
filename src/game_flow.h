@@ -52,6 +52,9 @@ public:
 
     void closeBaseFacility() noexcept;
 
+    [[nodiscard]] bool openBaseFacilityForManagement(
+        BaseFacilityKind facility);
+
     [[nodiscard]] std::optional<BaseFacilityKind>
     activeBaseFacility() const noexcept;
 
