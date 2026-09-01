@@ -869,8 +869,8 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "空设施收回仓库");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
-                "B/ESC CLOSE | WHEEL ZOOM | LMB SELECT | RMB FACILITY ACTIONS"),
-            "B/ESC 关闭 | 滚轮缩放 | 左键选择 | 右键设施操作");
+                "B/ESC CLOSE | WASD/RMB DRAG PAN | WHEEL ZOOM | LMB SELECT | RMB CLICK ACTIONS"),
+            "B/ESC 关闭 | WASD/按住右键拖动画面 | 滚轮缩放 | 左键选择 | 右键点击操作");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
                 "BASE FACILITY SELECTED | RMB FOR ACTIONS"),
@@ -879,6 +879,10 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
                 UiLanguage::SimplifiedChinese,
                 "OPEN FUNCTION"),
             "打开功能页面");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE FACILITY FUNCTION OPENED"),
+            "基地设施功能页面已打开");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
                 "MOVE FACILITY"),

@@ -13,7 +13,9 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // damage a more useful translation. This also covers formatted counters and
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
-    {{"B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU",
+    {{"B/ESC CLOSE | WASD/RMB DRAG PAN | WHEEL ZOOM | LMB SELECT | RMB CLICK ACTIONS",
+       "B/ESC 关闭 | WASD/按住右键拖动画面 | 滚轮缩放 | 左键选择 | 右键点击操作"},
+     {"B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU",
        "B 基地建设 | TAB 物品栏 | M 地图 | ESC 菜单"},
      {"B/ESC CLOSE | WHEEL ZOOM | LMB SELECT | RMB FACILITY ACTIONS",
        "B/ESC 关闭 | 滚轮缩放 | 左键选择 | 右键设施操作"},
@@ -24,6 +26,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"BASE BUILD OWNED PAGE", "基地建设已有设施页面"},
      {"FACILITY HAS NO FUNCTION PAGE", "该设施暂无功能页面"},
      {"BASE FACILITY ACTIONS", "基地设施操作"},
+     {"BASE FACILITY FUNCTION OPENED", "基地设施功能页面已打开"},
+     {"BASE FACILITY IS NOT AVAILABLE", "基地设施当前不可用"},
      {"OPEN FUNCTION", "打开功能页面"},
      {"MOVE FACILITY", "移动设施"},
      {"RECOVER EMPTY", "回收空设施"},

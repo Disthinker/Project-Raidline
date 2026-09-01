@@ -4,17 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@03028bb`，PR #125 已合入并完成 Home Region 世界容器近距打开、统一拖拽整理和整体拾取。
-- 当前开发分支：`codex/home-region-placeable-storage-v1`，从 `origin/main@03028bb` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-placeable-storage-v1.md`。
-- 当前切片增加 `B` 基地建设模式：底部紧凑栏以“购买 / 已有”页签复用同一设施卡片，滚轮调整建设视野；设施放置继续使用绿/红虚像，已放置设施可在世界中左键选择并通过右键菜单打开、移动或回收。当前首个真实消费者仍为持久储物箱，继续复用唯一 AssetRegistry 与 BaseGround 容器访问事务。
-- 首版侧栏已通过用户正常游玩验收；本轮紧凑建设栏返工已通过 Windows Debug 全目标构建与 1372/1372 CTest，等待新 exact-head Windows/Ubuntu CI 和用户正常游玩复验。
-- 当前自动化证据：Windows Debug 全目标构建与 1368/1368 CTest 已通过；等待 exact-head Windows/Ubuntu CI 和用户正常游玩验收。
+- 已验收主线：`origin/main@50879bc`，PR #126 已合入并完成 Home Region 建设面板、持久储物箱和紧凑鼠标操作。
+- 当前开发分支：`codex/home-region-build-camera-v1`，从 `origin/main@50879bc` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-build-camera-v1.md`。
+- 当前切片为建设模式加入独立客户端镜头：WASD 平移、按住右键拖动画面、右键短按设施菜单仲裁，并在滚轮缩放后继续约束于 Home Region 世界边界。首轮验收发现非 100% 缩放命中偏移与固定设施入口缺失，现已改为统一世界—屏幕投影，并让七类固定设施从建设界面进入原有功能页。
+- 首轮 Windows Debug 全目标构建、1377/1377 CTest 与 exact-head 双平台 CI 已通过；验收返工新增两项自动化，更新后的 Windows Debug 全目标构建、60/60 定向测试与 1379/1379 完整 CTest 通过，等待更新后的 exact-head CI 和用户复验。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产与世界容器访问均已进入主线。当前切片以建设面板收束“购买—放置—管理”路径，并加入可在基地板块内选择位置放置、移动、收回且参与空间碰撞的持久储物箱；继续复用唯一 AssetRegistry、BaseGround 与世界容器事务，不改变 Raid、Settlement 或存档 schema。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产、世界容器和首个建设闭环均已进入主线。当前切片只改善建设镜头操作，不改变 Raid、Settlement、资产所有权或存档 schema。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -83,7 +82,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 65. **Home Region 共享战斗能力 v1**：提取 Base/Raid 共用的 SDL-free 瞄准、散布、后坐力、逻辑弹道与表现投影；基地支持真实武器切换、弹药/耐久消耗和故障，但保持无敌人、无撤离、无 Settlement。Tab 仅在玩家完整位于基地板块内时连接 Stash，离开后退化为个人随身页；`M` 可打开只读 Home Region 全静态地图。PR #123 已通过用户正常游玩验收并以 merge commit `9106126` 进入 main。
 66. **Home Region 地面资产 v1**：基地个人页可把随身或仓库根资产放到当前基地地面；世界与地图显示真实根资产，近距离可拾回，容器子树保持唯一所有权。schema v39 保存基地站点和世界坐标，旧档不生成地面资产。PR #124 已通过 Windows Debug、1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `17a3514` 进入 main。
 67. **Home Region 世界容器交互 v1**：地面容器可在正确站点和近距离内打开；右侧显示真实分区，并通过受限库存事务与随身容器双向拖拽或快速装备。地面容器页不连接 Stash，也不为特殊物品动作绕过访问边界。PR #125 已通过用户正常游玩验收，并以 merge commit `03028bb` 进入 main。
-68. **Home Region 基地建设面板与可放置储物箱 v1（当前开发分支）**：`B` 打开底部紧凑建设栏，“购买 / 已有”页复用同一内容驱动设施卡片，滚轮切换建设视野；点击卡片进入绿/红虚像放置，已放置设施在世界中左键选择、右键打开功能页/移动/回收。储物箱具有类型化世界占地，非法边界和重叠位置拒绝，放置后参与移动/弹道阻挡并复用近距世界容器界面。
+68. **Home Region 基地建设面板与可放置储物箱 v1**：`B` 打开底部紧凑建设栏，“购买 / 已有”页复用同一内容驱动设施卡片，滚轮切换建设视野；点击卡片进入绿/红虚像放置，已放置设施在世界中左键选择、右键打开功能页/移动/回收。PR #126 已通过用户正常游玩验收，并以 merge commit `50879bc` 进入 main。
+69. **Home Region 建设镜头控制 v1（当前开发分支）**：建设模式和设施放置状态共用不写入存档的客户端镜头；WASD 平移、按住右键拖动画面，短按右键仍打开设施菜单，退出后恢复玩家跟随。五档缩放共用同一投影命中合同；七类固定设施可从建设界面打开原有功能页，但不可移动或回收。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
