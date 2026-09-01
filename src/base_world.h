@@ -22,6 +22,7 @@ enum class BaseFacilityKind
     Allocation,
     Medical,
     Dormitory,
+    KitchenWater,
     Workshop,
     RaidGate
 };
@@ -82,7 +83,7 @@ public:
     [[nodiscard]] Vec2 playerFacingDirection() const noexcept;
     [[nodiscard]] bool playerIsMoving() const noexcept;
     [[nodiscard]] std::size_t playerAnimationFrame() const noexcept;
-    [[nodiscard]] const std::array<BaseFacility, 7> &facilities() const noexcept;
+    [[nodiscard]] const std::array<BaseFacility, 8> &facilities() const noexcept;
     [[nodiscard]] Vec2 worldSize() const noexcept;
     [[nodiscard]] const std::string &siteDefinitionId() const noexcept;
     [[nodiscard]] const ContentRect &baseParcel() const noexcept;
@@ -134,7 +135,7 @@ private:
     bool playerIsMoving_{};
     Animator playerMovementAnimator_;
     Rect walkableBounds_{};
-    std::array<BaseFacility, 7> facilities_;
+    std::array<BaseFacility, 8> facilities_;
     std::vector<BaseFacilitySpatialOverride> facilityOverrides_;
     std::vector<BallisticBlocker> movementBlockers_;
     std::vector<ContentRect> groundBlockers_;

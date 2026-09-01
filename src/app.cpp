@@ -667,6 +667,7 @@ namespace
         return facility == BaseFacilityKind::Storage ||
             facility == BaseFacilityKind::Medical ||
             facility == BaseFacilityKind::Dormitory ||
+            facility == BaseFacilityKind::KitchenWater ||
             facility == BaseFacilityKind::Workshop;
     }
 
@@ -681,6 +682,8 @@ namespace
             return BaseFacilityDefinitionId{"base_facility.medical"};
         case BaseFacilityKind::Dormitory:
             return BaseFacilityDefinitionId{"base_facility.dormitory"};
+        case BaseFacilityKind::KitchenWater:
+            return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
         case BaseFacilityKind::Workshop:
             return BaseFacilityDefinitionId{"base_facility.workshop"};
         case BaseFacilityKind::Supply:
@@ -716,6 +719,8 @@ namespace
         {
         case BaseFacilityKind::Dormitory:
             return "DORMITORY";
+        case BaseFacilityKind::KitchenWater:
+            return "KITCHEN / WATER";
         case BaseFacilityKind::Medical:
             return "MEDICAL";
         case BaseFacilityKind::Workshop:
@@ -6497,7 +6502,7 @@ void App::consumePresentationAudioEvents()
         case GameSessionPresentationEvent::BaseKitchenWaterUpgradeCompleted:
             pushBaseOperationNotice(
                 BaseOperationNoticeKind::FacilityUpgrade,
-                BaseFacilityKind::Allocation);
+                BaseFacilityKind::KitchenWater);
             gameAudio_.play(SoundEventId::UiConfirm);
             break;
         case GameSessionPresentationEvent::BaseWorkshopUpgradeCompleted:
@@ -10635,6 +10640,9 @@ void App::renderBaseWorld()
         case BaseFacilityKind::Dormitory:
             SDL_SetRenderDrawColor(renderer_, 66, 64, 78, 255);
             break;
+        case BaseFacilityKind::KitchenWater:
+            SDL_SetRenderDrawColor(renderer_, 50, 82, 88, 255);
+            break;
         case BaseFacilityKind::Workshop:
             SDL_SetRenderDrawColor(renderer_, 80, 66, 44, 255);
             break;
@@ -10838,10 +10846,11 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
         std::size_t cardIndex{};
         if (baseConstructionPage_ == BaseConstructionPage::Owned)
         {
-            constexpr std::array<BaseFacilityKind, 4U> coreFacilities{
+            constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
                 BaseFacilityKind::Storage,
                 BaseFacilityKind::Medical,
                 BaseFacilityKind::Dormitory,
+                BaseFacilityKind::KitchenWater,
                 BaseFacilityKind::Workshop};
             for (BaseFacilityKind facility : coreFacilities)
             {
@@ -11573,10 +11582,11 @@ void App::renderBaseConstructionPanel()
     std::size_t cardIndex{};
     if (baseConstructionPage_ == BaseConstructionPage::Owned)
     {
-        constexpr std::array<BaseFacilityKind, 4U> coreFacilities{
+        constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
             BaseFacilityKind::Storage,
             BaseFacilityKind::Medical,
             BaseFacilityKind::Dormitory,
+            BaseFacilityKind::KitchenWater,
             BaseFacilityKind::Workshop};
         for (BaseFacilityKind facility : coreFacilities)
         {
@@ -15708,6 +15718,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Dormitory:
             renderBaseDormitory();
+            break;
+        case BaseFacilityKind::KitchenWater:
+            renderBaseAllocation();
             break;
         case BaseFacilityKind::Workshop:
             renderBaseWorkshop();

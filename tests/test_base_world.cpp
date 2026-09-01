@@ -244,7 +244,7 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
 {
     const BaseWorld world;
-    ASSERT_EQ(world.facilities().size(), 7U);
+    ASSERT_EQ(world.facilities().size(), 8U);
     EXPECT_NE(
         std::find_if(
             world.facilities().begin(),
@@ -335,6 +335,38 @@ TEST(BaseWorldTest, ExposesWorkshopProductionFacility)
     EXPECT_STREQ(
         baseFacilityName(BaseFacilityKind::Workshop),
         "WORKSHOP & PRODUCTION");
+}
+
+TEST(BaseWorldTest, KitchenWaterRequiresOwnedSpatialActivation)
+{
+    BaseWorld world;
+    const auto initial = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::KitchenWater; });
+    ASSERT_NE(initial, world.facilities().end());
+    EXPECT_FALSE(initial->active);
+    EXPECT_STREQ(
+        baseFacilityName(BaseFacilityKind::KitchenWater),
+        "KITCHEN & WATER");
+
+    const Vec2 center{5100.0F, 3200.0F};
+    world.configureSite(
+        "regional_base_site.greyline_yard",
+        {BaseFacilitySpatialOverride{
+            BaseFacilityKind::KitchenWater, center, true}});
+    const auto installed = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::KitchenWater; });
+    ASSERT_NE(installed, world.facilities().end());
+    EXPECT_TRUE(installed->active);
+    EXPECT_FLOAT_EQ(
+        installed->bounds.position.x + installed->bounds.size.x * 0.5F,
+        center.x);
+    EXPECT_FLOAT_EQ(
+        installed->bounds.position.y + installed->bounds.size.y * 0.5F,
+        center.y);
 }
 
 TEST(BaseWorldTest, SpatialOverridesMoveCoreFacilityAndCollisionTogether)

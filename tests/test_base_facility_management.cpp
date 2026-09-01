@@ -28,12 +28,13 @@ TEST(BaseFacilityManagementTest,
     ProfileState profile = makeNewAlphaProfile(
         "facility-management-default", publishedContentRegistry());
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
-    constexpr std::array<BaseFacilityKind, 7U> kinds{
+    constexpr std::array<BaseFacilityKind, 8U> kinds{
         BaseFacilityKind::Storage,
         BaseFacilityKind::Supply,
         BaseFacilityKind::Allocation,
         BaseFacilityKind::Medical,
         BaseFacilityKind::Dormitory,
+        BaseFacilityKind::KitchenWater,
         BaseFacilityKind::Workshop,
         BaseFacilityKind::RaidGate};
 
@@ -45,12 +46,19 @@ TEST(BaseFacilityManagementTest,
         EXPECT_EQ(projection.kind, kind);
         EXPECT_EQ(
             projection.status,
-            BaseFacilityOperationalStatus::Operational);
+            kind == BaseFacilityKind::KitchenWater
+                ? BaseFacilityOperationalStatus::Unavailable
+                : BaseFacilityOperationalStatus::Operational);
         EXPECT_EQ(projection.task, BaseFacilityTaskKind::Idle);
     }
     EXPECT_TRUE(projectBaseFacilityManagement(
         profile, publishedContentRegistry(), BaseFacilityKind::Dormitory)
                     .level.has_value());
+    EXPECT_EQ(
+        projectBaseFacilityManagement(
+            profile, publishedContentRegistry(),
+            BaseFacilityKind::KitchenWater).level,
+        std::optional<std::uint32_t>{0U});
     EXPECT_TRUE(projectBaseFacilityManagement(
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop)
                     .staffingApplicable);
@@ -141,6 +149,35 @@ TEST(BaseFacilityManagementTest,
         "base_construction.workshop.level_2");
     EXPECT_NE(findAction(
         projection, BaseFacilityQuickActionKind::CancelManufacturing), nullptr);
+}
+
+TEST(BaseFacilityManagementTest,
+     FirstKitchenConstructionIsActiveBeforeFacilityOwnership)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-management-kitchen-build", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 1000U;
+    profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.kitchen_water.level_1"},
+        5U,
+        2U,
+        1000U,
+        1480U};
+
+    const BaseOperationsOverviewProjection overview =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+    const auto found = std::find_if(
+        overview.entries.begin(), overview.entries.end(),
+        [](const BaseOperationOverviewEntry &entry)
+        {
+            return entry.facility == BaseFacilityKind::KitchenWater &&
+                entry.kind == BaseOperationOverviewKind::Construction;
+        });
+    ASSERT_NE(found, overview.entries.end());
+    EXPECT_FALSE(found->paused);
+    EXPECT_EQ(found->remainingMinutes, 480U);
 }
 
 TEST(BaseFacilityManagementTest,

@@ -11,6 +11,8 @@ const RegionalBaseSiteDefinitionId kGreyline{
     "regional_base_site.greyline_yard"};
 const BaseFacilityDefinitionId kWarehouse{"base_facility.warehouse"};
 const BaseFacilityDefinitionId kWorkshop{"base_facility.workshop"};
+const BaseFacilityDefinitionId kKitchenWater{
+    "base_facility.kitchen_water"};
 
 BaseFacilityLayoutAccess access(std::vector<ContentRect> blockers = {})
 {
@@ -118,6 +120,20 @@ TEST(BaseFacilityLayoutDomainTest,
             BaseFacilityDefinitionId{"base_facility.dormitory"}));
         EXPECT_TRUE(placements.contains(
             BaseFacilityDefinitionId{"base_facility.workshop"}));
+        EXPECT_FALSE(placements.contains(kKitchenWater));
+    }
+
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseConstruction.facilities[kKitchenWater] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[
+        kKitchenWater] = profile.worldClock.elapsedWorldMinutes;
+    initializeBaseFacilityLayouts(profile, content);
+    for (const auto &[site, placements] :
+         profile.baseFacilityLayout.placements)
+    {
+        static_cast<void>(site);
+        EXPECT_TRUE(placements.contains(kKitchenWater));
     }
 }
 

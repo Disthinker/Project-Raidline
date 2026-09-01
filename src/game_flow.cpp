@@ -16,6 +16,8 @@ std::optional<BaseFacilityDefinitionId> facilityDefinitionId(
         return BaseFacilityDefinitionId{"base_facility.medical"};
     case BaseFacilityKind::Dormitory:
         return BaseFacilityDefinitionId{"base_facility.dormitory"};
+    case BaseFacilityKind::KitchenWater:
+        return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
     case BaseFacilityKind::Workshop:
         return BaseFacilityDefinitionId{"base_facility.workshop"};
     case BaseFacilityKind::Supply:
@@ -35,6 +37,9 @@ std::optional<BaseFacilityKind> facilityKind(
         return BaseFacilityKind::Medical;
     if (definitionId == BaseFacilityDefinitionId{"base_facility.dormitory"})
         return BaseFacilityKind::Dormitory;
+    if (definitionId ==
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"})
+        return BaseFacilityKind::KitchenWater;
     if (definitionId == BaseFacilityDefinitionId{"base_facility.workshop"})
         return BaseFacilityKind::Workshop;
     return std::nullopt;

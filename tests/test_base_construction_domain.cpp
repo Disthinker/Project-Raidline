@@ -10,6 +10,8 @@
 namespace {
 const BaseConstructionProjectDefinitionId kDormitoryExpansion{
     "base_construction.dormitory.level_2"};
+const BaseConstructionProjectDefinitionId kKitchenWaterBuild{
+    "base_construction.kitchen_water.level_1"};
 
 AssetInstanceId addPendingSalvage(ProfileState &profile,
                                   const ItemDefinitionId &definitionId,
@@ -103,6 +105,41 @@ TEST(BaseConstructionDomainTest, StartLocksMaterialAndCompletionAddsBedsOnce) {
   EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, started + 360U);
   EXPECT_FALSE(applyBaseConstructionThrough(profile, publishedContentRegistry())
                    .completed);
+}
+
+TEST(BaseConstructionDomainTest,
+     FirstFacilityConstructionCompletesIntoSpatialReserve) {
+  const ContentRegistry &content = publishedContentRegistry();
+  ProfileState profile = makeNewAlphaProfile(
+      "construction-kitchen-reserve", content);
+  profile.baseConstruction.materialUnits = 5U;
+
+  const BaseConstructionReceipt started = executeStartBaseConstruction(
+      profile, content, StartBaseConstructionCommand{kKitchenWaterBuild},
+      CommandContext{profile.revision, "start-kitchen-water"});
+  ASSERT_TRUE(started.succeeded) << started.message;
+  static_cast<void>(advanceWorldClock(profile.worldClock, 480U));
+  const BaseConstructionAdvanceResult completed =
+      applyBaseConstructionThrough(profile, content);
+
+  ASSERT_TRUE(completed.completed);
+  EXPECT_EQ(completed.target, BaseFacilityUpgradeTarget::KitchenWater);
+  EXPECT_EQ(profile.baseConstruction.kitchenWaterLevel, 1U);
+  const BaseFacilityDefinitionId kitchenWater{
+      "base_facility.kitchen_water"};
+  EXPECT_EQ(
+      profile.baseConstruction.facilities.at(kitchenWater),
+      BaseConstructionState::FacilityPlacement::Reserve);
+  EXPECT_EQ(
+      profile.baseConstruction.facilityReserveStartedWorldMinutes.at(
+          kitchenWater),
+      profile.worldClock.elapsedWorldMinutes);
+  for (const auto &[site, placements] :
+       profile.baseFacilityLayout.placements) {
+    static_cast<void>(site);
+    EXPECT_TRUE(placements.contains(kitchenWater));
+  }
+  EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
 TEST(BaseConstructionDomainTest, CancelRefundsMaterialWithoutRewindingTime) {

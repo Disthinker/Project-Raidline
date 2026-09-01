@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "alpha_content_ids.h"
+#include "base_facility_layout_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
@@ -2660,6 +2661,7 @@ TEST(SaveRepositoryTest,
     profile.baseConstruction.facilityReserveStartedWorldMinutes[
         BaseFacilityDefinitionId{"base_facility.workshop"}] =
         profile.worldClock.elapsedWorldMinutes;
+    initializeBaseFacilityLayouts(profile, content);
     const std::uint64_t reserveStartedWorldMinute =
         profile.worldClock.elapsedWorldMinutes;
     ASSERT_TRUE(validateProfileState(profile, content).valid);
@@ -3615,4 +3617,41 @@ TEST(SaveRepositoryTest,
         .placements.at(greyline).at(warehouse);
     EXPECT_FLOAT_EQ(migrated.x, 0.14375F);
     EXPECT_FLOAT_EQ(migrated.y, 0.29464287F);
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV40AddsOwnedKitchenWaterSpatialLayoutWithoutChangingPlacement)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "facility-layout-v40-kitchen", content);
+    const BaseFacilityDefinitionId kitchenWater{
+        "base_facility.kitchen_water"};
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseConstruction.facilities[kitchenWater] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(profile, content);
+    for (auto &[site, placements] : profile.baseFacilityLayout.placements)
+    {
+        static_cast<void>(site);
+        placements.erase(kitchenWater);
+    }
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile, content.contentVersion(), 40U),
+        content);
+    ASSERT_EQ(migrated.status, SaveLoadStatus::LoadedPrimary)
+        << migrated.message;
+    ASSERT_TRUE(migrated.profile.has_value());
+    EXPECT_TRUE(baseFacilityInstalled(*migrated.profile, kitchenWater));
+    for (const auto &[site, placements] :
+         migrated.profile->baseFacilityLayout.placements)
+    {
+        static_cast<void>(site);
+        ASSERT_TRUE(placements.contains(kitchenWater));
+        EXPECT_FLOAT_EQ(placements.at(kitchenWater).x, 0.375F);
+        EXPECT_FLOAT_EQ(placements.at(kitchenWater).y, 0.35714287F);
+    }
+    EXPECT_TRUE(validateProfileState(*migrated.profile, content).valid);
 }

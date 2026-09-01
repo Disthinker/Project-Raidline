@@ -16,10 +16,11 @@ struct SpatialFacilityDefault
     Vec2 normalizedCenter;
 };
 
-constexpr std::array<SpatialFacilityDefault, 4U> kSpatialFacilities{{
+constexpr std::array<SpatialFacilityDefault, 5U> kSpatialFacilities{{
     {"base_facility.warehouse", {0.14375F, 0.29464287F}},
     {"base_facility.medical", {0.85625F, 0.7589286F}},
     {"base_facility.dormitory", {0.371875F, 0.7723214F}},
+    {"base_facility.kitchen_water", {0.375F, 0.35714287F}},
     {"base_facility.workshop", {0.628125F, 0.5401786F}},
 }};
 

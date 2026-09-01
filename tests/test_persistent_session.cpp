@@ -923,6 +923,65 @@ TEST(PersistentSessionTest,
     EXPECT_FLOAT_EQ(persisted.y, 600.0F / 1120.0F);
 }
 
+TEST(PersistentSessionTest,
+     KitchenWaterConstructionCompletesToReserveThenPlacementPersists)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewPublishedProfile(
+        "persistent-kitchen-spatial", content);
+    initial.baseConstruction.materialUnits = 5U;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial, content.contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    ASSERT_TRUE(session.executeStartBaseConstruction(
+        BaseConstructionProjectDefinitionId{
+            "base_construction.kitchen_water.level_1"},
+        "persistent-start-kitchen").succeeded);
+    session.advanceBaseWorldClock(480.0F);
+
+    const BaseFacilityDefinitionId kitchenWater{
+        "base_facility.kitchen_water"};
+    ASSERT_EQ(
+        session.profile().baseConstruction.facilities.at(kitchenWater),
+        BaseConstructionState::FacilityPlacement::Reserve);
+    ASSERT_TRUE(session.profile().baseConstruction
+                    .facilityReserveStartedWorldMinutes.contains(
+                        kitchenWater));
+
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const BaseFacilityLayoutReceipt installed =
+        session.executeInstallBaseFacilityAt(
+            InstallBaseFacilityAtCommand{
+                kitchenWater,
+                Vec2{600.0F, 400.0F},
+                Vec2{300.0F, 180.0F},
+                BaseFacilityLayoutAccess{
+                    greyline,
+                    ContentRect{{0.0F, 0.0F}, {1600.0F, 1120.0F}},
+                    {}}},
+            "persistent-place-kitchen");
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().baseConstruction.kitchenWaterLevel, 1U);
+    EXPECT_TRUE(baseFacilityInstalled(reopened.profile(), kitchenWater));
+    EXPECT_FALSE(reopened.profile().baseConstruction
+                     .facilityReserveStartedWorldMinutes.contains(
+                         kitchenWater));
+    const Vec2 persisted = reopened.profile().baseFacilityLayout
+        .placements.at(greyline).at(kitchenWater);
+    EXPECT_FLOAT_EQ(persisted.x, 0.375F);
+    EXPECT_FLOAT_EQ(persisted.y, 400.0F / 1120.0F);
+}
+
 TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
 {
     SessionSaveDirectory temporary;
@@ -1784,6 +1843,7 @@ TEST(PersistentSessionTest,
     initial.baseConstruction.kitchenWaterLevel = 1U;
     initial.baseConstruction.facilities[kitchenWater] =
         BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(initial, content);
     ASSERT_TRUE(validateProfileState(initial, content).valid);
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);
@@ -1834,6 +1894,7 @@ TEST(PersistentSessionTest, MainBaseMigrationSaveFailureIsZeroCommit)
     initial.baseConstruction.facilities[
         BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
         BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(initial, content);
     ASSERT_TRUE(validateProfileState(initial, content).valid);
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);

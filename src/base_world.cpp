@@ -137,6 +137,9 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
         BaseFacility{BaseFacilityKind::Dormitory,
                      {{origin.x + 460.0F, origin.y + 790.0F},
                       {270.0F, 150.0F}}, 72.0F},
+        BaseFacility{BaseFacilityKind::KitchenWater,
+                     {{origin.x + 450.0F, origin.y + 310.0F},
+                      {300.0F, 180.0F}}, 72.0F, false},
         BaseFacility{BaseFacilityKind::Workshop,
                      {{origin.x + 870.0F, origin.y + 520.0F},
                       {270.0F, 170.0F}}, 72.0F},
@@ -342,7 +345,7 @@ std::size_t BaseWorld::playerAnimationFrame() const noexcept
     return playerMovementAnimator_.currentFrameIndex();
 }
 
-const std::array<BaseFacility, 7> &BaseWorld::facilities() const noexcept
+const std::array<BaseFacility, 8> &BaseWorld::facilities() const noexcept
 {
     return facilities_;
 }
@@ -633,6 +636,8 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
         return "MEDICAL SERVICE";
     case BaseFacilityKind::Dormitory:
         return "DORMITORY & REST";
+    case BaseFacilityKind::KitchenWater:
+        return "KITCHEN & WATER";
     case BaseFacilityKind::Workshop:
         return "WORKSHOP & PRODUCTION";
     case BaseFacilityKind::RaidGate:

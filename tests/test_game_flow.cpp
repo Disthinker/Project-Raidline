@@ -307,6 +307,11 @@ TEST(GameFlowTest, BaseManagementCanOpenEveryFixedFacilityWithoutProximity)
     ASSERT_TRUE(flow.startGame());
     for (const BaseFacility &facility : flow.baseWorld().facilities())
     {
+        if (!facility.active)
+        {
+            EXPECT_FALSE(flow.openBaseFacilityForManagement(facility.kind));
+            continue;
+        }
         ASSERT_TRUE(flow.openBaseFacilityForManagement(facility.kind));
         EXPECT_EQ(flow.activeBaseFacility(), facility.kind);
         EXPECT_FALSE(flow.openBaseFacilityForManagement(facility.kind));
