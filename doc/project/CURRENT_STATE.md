@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@b990db3`，PR #127 已合入并完成 Home Region 建设镜头、全缩放命中和七类固定设施功能入口。
-- 当前开发分支：`codex/home-region-facility-management-v1`，从 `origin/main@b990db3` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-facility-management-v1.md`。
-- 当前切片把既有设施安装、等级、岗位、制造、治疗和升级事实汇总为建设面板中的统一管理卡片，并提供鼠标快速进入现有功能页；不新增设施模拟或存档字段。
-- 当前实现已通过 Windows Debug 全目标、65/65 定向测试与 1384/1384 完整 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 已验收主线：`origin/main@cb73ce0`，PR #128 已合入并完成 Home Region 设施统一状态卡片和七类固定设施功能入口。
+- 当前开发分支：`codex/home-region-facility-quick-actions-v1`，从 `origin/main@cb73ce0` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-facility-quick-actions-v1.md`。
+- 当前切片把人员、升级、制造现有订单和居民治疗等无需额外选择的高频事务接入统一管理卡片；配方、休息时长等需要玩家判断的操作继续保留在完整功能页。
+- 当前实现已通过 Windows Debug 全目标、96/96 定向测试与 1385/1385 完整 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产、世界容器和首个建设闭环均已进入主线。当前切片只改善建设镜头操作，不改变 Raid、Settlement、资产所有权或存档 schema。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 有限新档整备、大地图、共享战斗、地面资产、世界容器、首个建设闭环和设施状态管理均已进入主线。当前切片只集中既有设施高频事务，不改变 Raid、Settlement、资产所有权或存档 schema。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。

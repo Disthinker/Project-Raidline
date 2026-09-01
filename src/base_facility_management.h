@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "base_world.h"
 #include "content_registry.h"
@@ -23,6 +25,29 @@ enum class BaseFacilityTaskKind
     ResidentTreatment
 };
 
+enum class BaseFacilityQuickActionKind
+{
+    OpenFunction,
+    AssignBestWorker,
+    ClearWorker,
+    StartUpgrade,
+    CancelUpgrade,
+    CollectManufacturing,
+    CancelManufacturing,
+    StartResidentTreatment,
+    AutoFillWorkers
+};
+
+struct BaseFacilityQuickActionProjection
+{
+    BaseFacilityQuickActionKind kind{
+        BaseFacilityQuickActionKind::OpenFunction};
+    bool canCommit{};
+    std::string message;
+    std::optional<BaseConstructionProjectDefinitionId>
+        constructionProjectId;
+};
+
 struct BaseFacilityManagementProjection
 {
     BaseFacilityKind kind{BaseFacilityKind::Storage};
@@ -33,11 +58,11 @@ struct BaseFacilityManagementProjection
     std::optional<BaseResidentProfession> assignedWorker;
     BaseFacilityTaskKind task{BaseFacilityTaskKind::Idle};
     std::uint64_t remainingMinutes{};
+    std::vector<BaseFacilityQuickActionProjection> quickActions;
 };
 
 [[nodiscard]] BaseFacilityManagementProjection
 projectBaseFacilityManagement(
     const ProfileState &profile,
     const ContentRegistry &content,
-    BaseFacilityKind kind) noexcept;
-
+    BaseFacilityKind kind);

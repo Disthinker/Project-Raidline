@@ -247,10 +247,10 @@ namespace
 
     SDL_FRect baseFacilityInspectorBounds() noexcept
     {
-        return SDL_FRect{70.0F, 366.0F, 390.0F, 184.0F};
+        return SDL_FRect{70.0F, 324.0F, 520.0F, 226.0F};
     }
 
-    SDL_FRect baseFacilityInspectorButton(
+    SDL_FRect basePlacedFacilityInspectorButton(
         std::size_t index,
         std::size_t count) noexcept
     {
@@ -264,6 +264,21 @@ namespace
             panel.y + panel.h - 48.0F,
             width,
             34.0F};
+    }
+
+    SDL_FRect baseFacilityQuickActionButton(std::size_t index) noexcept
+    {
+        const SDL_FRect panel = baseFacilityInspectorBounds();
+        constexpr float gap{8.0F};
+        constexpr float width{240.0F};
+        constexpr float height{34.0F};
+        return SDL_FRect{
+            panel.x + 16.0F + static_cast<float>(index % 2U) *
+                (width + gap),
+            panel.y + 138.0F + static_cast<float>(index / 2U) *
+                (height + gap),
+            width,
+            height};
     }
 
     const char *baseFacilityStatusName(
@@ -297,6 +312,33 @@ namespace
             return "RESIDENT TREATMENT";
         }
         return "UNKNOWN";
+    }
+
+    const char *baseFacilityQuickActionName(
+        BaseFacilityQuickActionKind action) noexcept
+    {
+        switch (action)
+        {
+        case BaseFacilityQuickActionKind::OpenFunction:
+            return "OPEN DETAILS";
+        case BaseFacilityQuickActionKind::AssignBestWorker:
+            return "ASSIGN WORKER";
+        case BaseFacilityQuickActionKind::ClearWorker:
+            return "CLEAR WORKER";
+        case BaseFacilityQuickActionKind::StartUpgrade:
+            return "START UPGRADE";
+        case BaseFacilityQuickActionKind::CancelUpgrade:
+            return "CANCEL UPGRADE";
+        case BaseFacilityQuickActionKind::CollectManufacturing:
+            return "COLLECT OUTPUT";
+        case BaseFacilityQuickActionKind::CancelManufacturing:
+            return "CANCEL PRODUCTION";
+        case BaseFacilityQuickActionKind::StartResidentTreatment:
+            return "START TREATMENT";
+        case BaseFacilityQuickActionKind::AutoFillWorkers:
+            return "AUTO-FILL STAFF";
+        }
+        return "UNKNOWN ACTION";
     }
 
     SDL_FRect baseFacilityContextMenuBounds(
@@ -10594,18 +10636,150 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
 
     if (selectedBaseFixedFacility_.has_value())
     {
-        if (contains(baseFacilityInspectorButton(0U, 1U), position))
-            openBaseFixedFacility(*selectedBaseFixedFacility_);
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                *selectedBaseFixedFacility_);
+        for (std::size_t index{};
+             index < projection.quickActions.size(); ++index)
+        {
+            if (!contains(baseFacilityQuickActionButton(index), position))
+                continue;
+            const BaseFacilityQuickActionProjection &action =
+                projection.quickActions[index];
+            if (!action.canCommit)
+            {
+                uiMessage_ = action.message;
+                gameAudio_.play(SoundEventId::UiDeny);
+                return true;
+            }
+
+            bool succeeded{};
+            std::string message;
+            switch (action.kind)
+            {
+            case BaseFacilityQuickActionKind::OpenFunction:
+                openBaseFixedFacility(projection.kind);
+                return true;
+            case BaseFacilityQuickActionKind::AssignBestWorker:
+            case BaseFacilityQuickActionKind::ClearWorker:
+            {
+                const BaseFacilityStaffingKind facility =
+                    projection.kind == BaseFacilityKind::Workshop
+                    ? BaseFacilityStaffingKind::Workshop
+                    : BaseFacilityStaffingKind::Medical;
+                const BaseWorkforceReceipt receipt =
+                    action.kind ==
+                        BaseFacilityQuickActionKind::AssignBestWorker
+                    ? gameSession_.executeAssignBestBaseWorker(
+                        facility,
+                        nextProfileTransactionId(
+                            "base-inspector-assign-worker"))
+                    : gameSession_.executeClearBaseWorker(
+                        facility,
+                        nextProfileTransactionId(
+                            "base-inspector-clear-worker"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? action.kind ==
+                            BaseFacilityQuickActionKind::AssignBestWorker
+                        ? "BASE FACILITY WORKER ASSIGNED"
+                        : "BASE FACILITY WORKER CLEARED"
+                    : receipt.message;
+                break;
+            }
+            case BaseFacilityQuickActionKind::StartUpgrade:
+            case BaseFacilityQuickActionKind::CancelUpgrade:
+            {
+                if (!action.constructionProjectId.has_value())
+                {
+                    message = "BASE FACILITY UPGRADE IS NOT AVAILABLE";
+                    break;
+                }
+                const BaseConstructionReceipt receipt =
+                    action.kind == BaseFacilityQuickActionKind::StartUpgrade
+                    ? gameSession_.executeStartBaseConstruction(
+                        *action.constructionProjectId,
+                        nextProfileTransactionId(
+                            "base-inspector-start-upgrade"))
+                    : gameSession_.executeCancelBaseConstruction(
+                        *action.constructionProjectId,
+                        nextProfileTransactionId(
+                            "base-inspector-cancel-upgrade"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? action.kind == BaseFacilityQuickActionKind::StartUpgrade
+                        ? "BASE FACILITY UPGRADE STARTED"
+                        : "BASE FACILITY UPGRADE CANCELLED"
+                    : receipt.message;
+                break;
+            }
+            case BaseFacilityQuickActionKind::CollectManufacturing:
+            {
+                const BaseManufacturingReceipt receipt =
+                    gameSession_.executeCollectBaseManufacturing(
+                        nextProfileTransactionId(
+                            "base-inspector-collect-output"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? "MANUFACTURED ITEM COLLECTED"
+                    : receipt.message;
+                break;
+            }
+            case BaseFacilityQuickActionKind::CancelManufacturing:
+            {
+                const BaseManufacturingReceipt receipt =
+                    gameSession_.executeCancelBaseManufacturing(
+                        nextProfileTransactionId(
+                            "base-inspector-cancel-production"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? "MANUFACTURING CANCELLED | INPUTS RETURNED"
+                    : receipt.message;
+                break;
+            }
+            case BaseFacilityQuickActionKind::StartResidentTreatment:
+            {
+                const ResidentTreatmentReceipt receipt =
+                    gameSession_.executeStartResidentTreatment(
+                        nextProfileTransactionId(
+                            "base-inspector-resident-treatment"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? "RESIDENT TREATMENT STARTED"
+                    : receipt.message;
+                break;
+            }
+            case BaseFacilityQuickActionKind::AutoFillWorkers:
+            {
+                const BaseWorkforceReceipt receipt =
+                    gameSession_.executeAutoFillBaseWorkers(
+                        nextProfileTransactionId(
+                            "base-inspector-auto-fill-workers"));
+                succeeded = receipt.succeeded;
+                message = receipt.succeeded
+                    ? "BASE FACILITY WORKERS AUTO-FILLED"
+                    : receipt.message;
+                break;
+            }
+            }
+            uiMessage_ = std::move(message);
+            gameAudio_.play(succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            return true;
+        }
         return true;
     }
 
     const AssetInstanceId assetId = *selectedBasePlacedAssetId_;
-    if (contains(baseFacilityInspectorButton(0U, 3U), position))
+    if (contains(basePlacedFacilityInspectorButton(0U, 3U), position))
     {
         openBasePlacedFacility(assetId);
         return true;
     }
-    if (contains(baseFacilityInspectorButton(1U, 3U), position))
+    if (contains(basePlacedFacilityInspectorButton(1U, 3U), position))
     {
         startBasePlacement(
             assetId,
@@ -10613,7 +10787,7 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
             true);
         return true;
     }
-    if (contains(baseFacilityInspectorButton(2U, 3U), position))
+    if (contains(basePlacedFacilityInspectorButton(2U, 3U), position))
     {
         const BaseGroundReceipt receipt =
             gameFlow_.pickupBaseGroundAssetForManagement(
@@ -11022,11 +11196,16 @@ void App::renderBaseFacilityInspector()
     SDL_RenderRect(renderer_, &panel);
 
     const auto drawButton = [this](const SDL_FRect &bounds,
-                                   const char *label)
+                                   const char *label,
+                                   bool enabled = true)
     {
-        SDL_SetRenderDrawColor(renderer_, 34, 70, 66, 248);
+        SDL_SetRenderDrawColor(
+            renderer_, 34, enabled ? 70 : 42,
+            enabled ? 66 : 42, 248);
         SDL_RenderFillRect(renderer_, &bounds);
-        SDL_SetRenderDrawColor(renderer_, 104, 184, 154, 255);
+        SDL_SetRenderDrawColor(
+            renderer_, enabled ? 104 : 76, enabled ? 184 : 82,
+            enabled ? 154 : 82, 255);
         SDL_RenderRect(renderer_, &bounds);
         uiTextRenderer_.render(
             renderer_, bounds.x + 9.0F, bounds.y + 9.0F, label);
@@ -11074,7 +11253,16 @@ void App::renderBaseFacilityInspector()
         uiTextRenderer_.render(
             renderer_, panel.x + 16.0F, panel.y + 98.0F,
             task.c_str());
-        drawButton(baseFacilityInspectorButton(0U, 1U), "OPEN FUNCTION");
+        for (std::size_t index{};
+             index < projection.quickActions.size(); ++index)
+        {
+            const BaseFacilityQuickActionProjection &action =
+                projection.quickActions[index];
+            drawButton(
+                baseFacilityQuickActionButton(index),
+                baseFacilityQuickActionName(action.kind),
+                action.canCommit);
+        }
     }
     else
     {
@@ -11118,9 +11306,12 @@ void App::renderBaseFacilityInspector()
         uiTextRenderer_.render(
             renderer_, panel.x + 16.0F, panel.y + 98.0F,
             contents.c_str());
-        drawButton(baseFacilityInspectorButton(0U, 3U), "OPEN FUNCTION");
-        drawButton(baseFacilityInspectorButton(1U, 3U), "MOVE FACILITY");
-        drawButton(baseFacilityInspectorButton(2U, 3U), "RECOVER EMPTY");
+        drawButton(
+            basePlacedFacilityInspectorButton(0U, 3U), "OPEN FUNCTION");
+        drawButton(
+            basePlacedFacilityInspectorButton(1U, 3U), "MOVE FACILITY");
+        drawButton(
+            basePlacedFacilityInspectorButton(2U, 3U), "RECOVER EMPTY");
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }

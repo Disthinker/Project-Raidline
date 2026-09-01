@@ -1,6 +1,6 @@
 # Home Region 设施统一管理与状态展示 v1 ExecPlan
 
-状态：实现完成；Windows Debug 全目标、65/65 定向测试与 1384/1384 完整 CTest 已通过，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+状态：已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `cb73ce0` 进入 main。
 
 ## 玩家结果与依赖
 
