@@ -182,6 +182,17 @@ BaseGroundAccess GameFlow::baseGroundAccess() const noexcept
         84.0F};
 }
 
+BaseGroundAccess GameFlow::baseGroundPlacementAccess(
+    Vec2 worldPosition) const
+{
+    BaseGroundAccess access = baseGroundAccess();
+    access.dropPosition = worldPosition;
+    access.placementContext = BaseGroundPlacementContext{
+        baseWorld_.baseParcel(),
+        baseWorld_.basePlacementBlockers()};
+    return access;
+}
+
 BaseGroundPlan GameFlow::queryBaseGroundDrop(
     AssetInstanceId assetId,
     std::uint32_t quantity,
@@ -193,11 +204,29 @@ BaseGroundPlan GameFlow::queryBaseGroundDrop(
             false, DomainErrorCode::IllegalDestination,
             "Base ground is not active", gameSession_.profile().revision, 0};
     }
+    const BaseGroundAccess access = baseGroundAccess();
+    return queryBaseGroundDropAt(
+        assetId, quantity, orientation, access.dropPosition);
+}
+
+BaseGroundPlan GameFlow::queryBaseGroundDropAt(
+    AssetInstanceId assetId,
+    std::uint32_t quantity,
+    ItemOrientation orientation,
+    Vec2 worldPosition) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
     return queryBaseGround(
         gameSession_.profile(),
         publishedContentRegistry(),
         DropBaseGroundAssetCommand{
-            assetId, quantity, orientation, baseGroundAccess()});
+            assetId, quantity, orientation,
+            baseGroundPlacementAccess(worldPosition)});
 }
 
 BaseGroundReceipt GameFlow::dropBaseGroundAsset(
@@ -212,9 +241,74 @@ BaseGroundReceipt GameFlow::dropBaseGroundAsset(
             false, false, DomainErrorCode::IllegalDestination,
             "Base ground is not active", gameSession_.profile().revision, 0};
     }
+    const BaseGroundAccess access = baseGroundAccess();
+    return dropBaseGroundAssetAt(
+        assetId,
+        quantity,
+        orientation,
+        access.dropPosition,
+        std::move(transactionId));
+}
+
+BaseGroundReceipt GameFlow::dropBaseGroundAssetAt(
+    AssetInstanceId assetId,
+    std::uint32_t quantity,
+    ItemOrientation orientation,
+    Vec2 worldPosition,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
     return gameSession_.executeBaseGroundAsset(
         DropBaseGroundAssetCommand{
-            assetId, quantity, orientation, baseGroundAccess()},
+            assetId,
+            quantity,
+            orientation,
+            baseGroundPlacementAccess(worldPosition)},
+        std::move(transactionId));
+}
+
+BaseGroundPlan GameFlow::queryBaseGroundRepositionAt(
+    AssetInstanceId assetId,
+    ItemOrientation orientation,
+    Vec2 worldPosition) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundPlacementAccess(worldPosition);
+    access.managementAccess = access.stashAccessible;
+    return queryBaseGround(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        RepositionBaseGroundAssetCommand{
+            assetId, orientation, std::move(access)});
+}
+
+BaseGroundReceipt GameFlow::repositionBaseGroundAssetAt(
+    AssetInstanceId assetId,
+    ItemOrientation orientation,
+    Vec2 worldPosition,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundPlacementAccess(worldPosition);
+    access.managementAccess = access.stashAccessible;
+    return gameSession_.executeBaseGroundAsset(
+        RepositionBaseGroundAssetCommand{
+            assetId, orientation, std::move(access)},
         std::move(transactionId));
 }
 
@@ -296,6 +390,24 @@ BaseGroundReceipt GameFlow::pickupBaseGroundAsset(
     }
     return gameSession_.executeBaseGroundAsset(
         PickupBaseGroundAssetCommand{assetId, baseGroundAccess()},
+        std::move(transactionId));
+}
+
+BaseGroundReceipt GameFlow::pickupBaseGroundAssetForManagement(
+    AssetInstanceId assetId,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base || !baseWorld_.canAccessStash())
+    {
+        return BaseGroundReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base facility management requires warehouse access",
+            gameSession_.profile().revision, 0};
+    }
+    BaseGroundAccess access = baseGroundAccess();
+    access.managementAccess = true;
+    return gameSession_.executeBaseGroundAsset(
+        PickupBaseGroundAssetCommand{assetId, std::move(access)},
         std::move(transactionId));
 }
 

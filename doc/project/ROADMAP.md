@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图、共享战斗能力与地面资产均已进入主线。当前推进 Home Region 世界容器交互 v1，范围合同见 `doc/exec-plans/active/home-region-world-containers-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、有限新档整备、Home Region 大地图、共享战斗能力、地面资产与世界容器交互均已进入主线。当前推进 Home Region 可放置储物箱 v1，范围合同见 `doc/exec-plans/active/home-region-placeable-storage-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -187,7 +187,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 大地图与基地板块 v1 | 安全基地成为 12800×7200 Home Region 中的一块固定结构区域，玩家可沿道路探索周边工业、物流、公路、空地、绿地和服务区 | 地点稳定 seed、HomeRegionLayout、基地板块、分块投影、静态空间索引、无 schema 迁移 | PR #122 已通过 CI 与用户正常游玩验收，以 `62e464e` 进入 main |
 | Home Region 共享战斗能力 v1 | 基地大地图可使用与 Raid 一致的准星、武器切换、射击和反馈；真实消耗弹药/耐久并可能故障；基地板块内连接仓库、外围只显示随身页，`M` 可查看 Home Region 地图 | SDL-free WorldShootingRuntime、Base/Raid 窄能力复用、Profile FireWeapon 事务、空间化 Stash 访问、只读 Home Region 地图、周期原子检查点、无 Raid 生命周期 | PR #123 已通过本地全量自动化、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `9106126` 进入 main；不引入敌人、设施伤害、撤离、高危或 Settlement |
 | Home Region 地面资产 v1 | 随身或仓库根资产可放到当前基地地面，在世界与地图中显示并近距拾回；重启和迁徙后保持原站点 | BaseGroundAssetLocation、唯一资产树、查询/命令、schema v39、站点与距离投影 | PR #124 已通过 1354/1354 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `17a3514` 进入 main |
-| Home Region 世界容器交互 v1 | 靠近地面背包或胸挂按 `E` 打开，在右侧真实分区与随身容器间拖拽、交换、堆叠和快速装备，并可整体拾取容器 | 当前站点/距离访问查询、受限 InventoryCommand 参与者、保存失败零提交、复用 schema v39 | 当前分支 `codex/home-region-world-containers-v1`；本地实现与最终证据进行中 |
+| Home Region 世界容器交互 v1 | 靠近地面背包或胸挂按 `E` 打开，在右侧真实分区与随身容器间拖拽、交换、堆叠和快速装备，并可整体拾取容器 | 当前站点/距离访问查询、受限 InventoryCommand 参与者、保存失败零提交、复用 schema v39 | PR #125 已通过用户正常游玩验收，以 merge commit `03028bb` 进入 main |
+| Home Region 基地建设面板与可放置储物箱 v1 | `B` 打开底部紧凑建设栏，购买/已有页复用设施卡片，滚轮缩放；设施用虚像放置并可在世界中左键选择、右键打开/移动/回收 | 内容驱动建设目录、`base_placement` 能力、稳定购买资产回执、Reposition/BaseGround 原子事务、近距功能访问、content v58/schema v39 | 首版侧栏已获用户验收；紧凑栏返工已通过 Windows Debug 全目标构建与 1372/1372 CTest，等待新 exact-head CI 和用户正常游玩复验 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -2323,7 +2323,13 @@ SaveLoadResult deserializeProfileEnvelope(
                  "content-beta-loadout-gear-content-54") ||
             (schemaVersion >= 38 &&
              contentVersion ==
-                 "content-beta-loot-economy-content-55");
+                 "content-beta-loot-economy-content-55") ||
+            (schemaVersion >= 38 &&
+             contentVersion ==
+                 "content-beta-loadout-readiness-content-56") ||
+            (schemaVersion >= 38 &&
+             contentVersion ==
+                 "home-region-onboarding-content-57");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

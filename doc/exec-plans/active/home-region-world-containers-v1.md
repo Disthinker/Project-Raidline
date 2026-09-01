@@ -1,5 +1,7 @@
 # Home Region 世界容器交互 v1 ExecPlan
 
+状态：已通过自动化、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并由 PR #125 以 merge commit `03028bb` 进入 main。后续专用基地储物箱由 `home-region-placeable-storage-v1.md` 承接。
+
 ## 目标与基线
 
 依赖基线为用户已验收并合入的 PR #124，`origin/main@17a3514`。开发分支为 `codex/home-region-world-containers-v1`。

@@ -113,6 +113,41 @@ TEST(SaveRepositoryTest, Schema39RoundTripsBaseGroundAndSchema38StillLoads)
     EXPECT_TRUE(legacyLoaded.profile.has_value()) << legacyLoaded.message;
 }
 
+TEST(SaveRepositoryTest, CurrentStorageCrateRoundTripsAndContent57Migrates)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile(
+        "base-storage-save", content);
+    const ItemDefinitionId crateId{"item.container.base_storage_crate"};
+    const AssetInstanceId crate = profile.assets.create(
+        content.item(crateId),
+        BaseGroundAssetLocation{
+            RegionalBaseSiteDefinitionId{
+                "regional_base_site.greyline_yard"},
+            Vec2{950.0F, 640.0F}});
+    profile.assets.findMutable(crate)->orientation =
+        ItemOrientation::Degrees90;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    const SaveLoadResult current = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(current.profile.has_value()) << current.message;
+    const AssetRecord *restored = current.profile->assets.find(crate);
+    ASSERT_NE(restored, nullptr);
+    EXPECT_EQ(restored->definitionId, crateId);
+    EXPECT_EQ(restored->orientation, ItemOrientation::Degrees90);
+    EXPECT_TRUE(std::holds_alternative<BaseGroundAssetLocation>(
+        restored->location));
+
+    ProfileState legacy = makeNewAlphaProfile(
+        "base-storage-v57", content);
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            legacy, "home-region-onboarding-content-57"),
+        content);
+    EXPECT_TRUE(migrated.profile.has_value()) << migrated.message;
+}
+
 void downgradeFrontierEnemiesToLegacyDeployment(
     PendingRaidSnapshot &raid,
     const ContentRegistry &content)

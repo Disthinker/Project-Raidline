@@ -827,6 +827,72 @@ TEST(UiLocalizationTest, HomeRegionGroundContainersAreBilingual) {
             "请先把物品移入随身容器");
 }
 
+TEST(UiLocalizationTest, HomeRegionPlaceableStorageIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base Storage Crate"),
+            "基地储物箱");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE STORAGE PLACEMENT | LMB PLACE | R ROTATE | ESC CANCEL"),
+            "基地储物箱放置 | 左键确认 | R旋转 | ESC取消");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PLACE STORAGE"),
+            "放置储物箱");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "empty the Base storage container before picking it up"),
+            "请先清空基地储物箱再收回");
+}
+
+TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU"),
+            "B 基地建设 | TAB 物品栏 | M 地图 | ESC 菜单");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CATALOG | BUY AND PLACE"),
+            "设施目录 | 购买并放置");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base Storage Crate | BUY 160"),
+            "基地储物箱 | 购买 160");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MOVE BASE FACILITY | LMB PLACE | R ROTATE | ESC CANCEL"),
+            "移动基地设施 | 左键放置 | R旋转 | ESC取消");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RETURN EMPTY TO STASH"),
+            "空设施收回仓库");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "B/ESC CLOSE | WHEEL ZOOM | LMB SELECT | RMB FACILITY ACTIONS"),
+            "B/ESC 关闭 | 滚轮缩放 | 左键选择 | 右键设施操作");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE FACILITY SELECTED | RMB FOR ACTIONS"),
+            "已选择基地设施 | 右键打开操作菜单");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "OPEN FUNCTION"),
+            "打开功能页面");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "MOVE FACILITY"),
+            "移动设施");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RECOVER EMPTY"),
+            "回收空设施");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base Storage Crate | OWNED x2"),
+            "基地储物箱 | 已有 x2");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

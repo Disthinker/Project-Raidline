@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "home-region-onboarding-content-57",
+  "content_version": "home-region-placeable-storage-content-58",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -897,6 +897,31 @@
         {"width": 9, "height": 6, "pocket": "general"}
       ],
       "market_recycle_price": 100
+    },
+    {
+      "id": "item.container.base_storage_crate",
+      "display_name": "Base Storage Crate",
+      "category": "container",
+      "inventory": {"width": 5, "height": 4, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 8000,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 160, "y": 112},
+        "pickup_size": {"x": 168, "y": 120}
+      },
+      "inventory_texture": "items/inventory/unpublished_base_storage_crate.png",
+      "world_texture": "items/world/unpublished_base_storage_crate.png",
+      "container_compartments": [
+        {"width": 10, "height": 8, "pocket": "general"}
+      ],
+      "base_placement": {
+        "footprint": {"x": 160, "y": 112},
+        "parcel_only": true,
+        "blocks_movement": true
+      },
+      "market_buy_price": 160,
+      "market_recycle_price": 40
     },
     {
       "id": "item.medical.medkit_alpha",

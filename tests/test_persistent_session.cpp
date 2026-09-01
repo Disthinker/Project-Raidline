@@ -697,6 +697,59 @@ TEST(PersistentSessionTest, GroundContainerSaveFailurePreservesMemory)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest, PlaceableStorageSaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile(
+        "failed-placeable-storage-save", content);
+    const ItemDefinition &definition = content.item(
+        ItemDefinitionId{"item.container.base_storage_crate"});
+    const auto origin = findFirstProfileFit(
+        initial,
+        content,
+        ProfileContainerId::stash(),
+        definition,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin.has_value());
+    const AssetInstanceId crate = initial.assets.create(
+        definition,
+        StoredAssetLocation{ProfileContainerId::stash(), *origin});
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(initial, content.contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const std::uint64_t before = profileStateFingerprint(session.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "placeable-storage-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    session.configurePersistence(invalidDirectory);
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const BaseGroundReceipt receipt = session.executeBaseGroundAsset(
+        DropBaseGroundAssetCommand{
+            crate,
+            0,
+            ItemOrientation::Degrees0,
+            BaseGroundAccess{
+                greyline,
+                Vec2{400.0F, 400.0F},
+                Vec2{700.0F, 600.0F},
+                true,
+                84.0F,
+                BaseGroundPlacementContext{
+                    ContentRect{{200.0F, 200.0F}, {1200.0F, 900.0F}},
+                    {}}}},
+        "placeable-storage-must-not-commit");
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+}
+
 TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
 {
     SessionSaveDirectory temporary;

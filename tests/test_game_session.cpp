@@ -12,6 +12,8 @@
 
 namespace
 {
+    const ItemDefinitionId kBaseStorageCrate{
+        "item.container.base_storage_crate"};
     class SequenceLootRandomSource final
         : public LootRandomSource
     {
@@ -144,6 +146,28 @@ namespace
             session.world().raidSession().state(),
             RaidSessionState::Extracted);
     }
+}
+
+TEST(GameSessionTest, BasePlaceablePurchaseReturnsCreatedStableAsset)
+{
+    GameSession session;
+    const AssetInstanceId expectedId = session.profile().assets.nextAssetId();
+    const std::uint32_t currencyBefore = session.profile().currency;
+
+    const auto receipt = session.purchaseBasePlaceable(
+        kBaseStorageCrate, "purchase-placeable-from-build-panel");
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.assetId, expectedId);
+    const AssetRecord *created = session.profile().assets.find(expectedId);
+    ASSERT_NE(created, nullptr);
+    EXPECT_EQ(created->definitionId, kBaseStorageCrate);
+    ASSERT_TRUE(std::holds_alternative<StoredAssetLocation>(
+        created->location));
+    EXPECT_EQ(
+        std::get<StoredAssetLocation>(created->location).container,
+        ProfileContainerId::stash());
+    EXPECT_LT(session.profile().currency, currencyBefore);
 }
 
 TEST(GameSessionTest, DefaultSessionStartsRaidOneWithEmptyStash)

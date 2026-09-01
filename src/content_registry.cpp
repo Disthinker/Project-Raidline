@@ -720,6 +720,20 @@ namespace
         return result;
     }
 
+    std::optional<BasePlacementDefinition> parseBasePlacement(
+        const Json &item)
+    {
+        const auto found = item.find("base_placement");
+        if (found == item.end())
+            return std::nullopt;
+        if (!found->is_object())
+            fail("base_placement must be an object");
+        return BasePlacementDefinition{
+            parseVec2(*found, "footprint"),
+            requiredBool(*found, "parcel_only"),
+            requiredBool(*found, "blocks_movement")};
+    }
+
     bool pointInside(
         Vec2 point,
         const ContentRect &bounds) noexcept
@@ -1478,6 +1492,7 @@ ContentRegistry ContentRegistry::fromJson(
                 parseEquipmentSlots(itemValue);
             definition.containerCompartments =
                 parseContainerCompartments(itemValue);
+            definition.basePlacement = parseBasePlacement(itemValue);
             definition.marketBuyPrice =
                 optionalUint(itemValue, "market_buy_price");
             definition.marketRecyclePrice =
@@ -1517,12 +1532,14 @@ ContentRegistry ContentRegistry::fromJson(
             }
             if (definition.category == ItemCategory::Container)
             {
-                if (!definition.equipmentSlot.has_value() ||
-                    (*definition.equipmentSlot != EquipmentSlotKind::ChestRig &&
-                     *definition.equipmentSlot != EquipmentSlotKind::Backpack) ||
+                const bool wearable = definition.equipmentSlot.has_value() &&
+                    (*definition.equipmentSlot == EquipmentSlotKind::ChestRig ||
+                     *definition.equipmentSlot == EquipmentSlotKind::Backpack);
+                const bool placeable = definition.basePlacement.has_value();
+                if (wearable == placeable ||
                     definition.containerCompartments.empty())
                 {
-                    fail("container requires a supported equipment slot and compartment");
+                    fail("container requires one supported ownership capability and compartments");
                 }
                 std::uint32_t totalCells{};
                 for (const ContainerCompartmentDefinition &compartment :
@@ -1536,7 +1553,8 @@ ContentRegistry ContentRegistry::fromJson(
                         compartment.width * compartment.height);
                 }
                 if (totalCells > 80U ||
-                    (*definition.equipmentSlot == EquipmentSlotKind::Backpack &&
+                    (wearable &&
+                     *definition.equipmentSlot == EquipmentSlotKind::Backpack &&
                      (definition.containerCompartments.size() != 1U ||
                       definition.containerCompartments.front().pocketKind !=
                           ContainerPocketKind::General)))
@@ -1547,6 +1565,19 @@ ContentRegistry ContentRegistry::fromJson(
             else if (!definition.containerCompartments.empty())
             {
                 fail("only containers may declare compartments");
+            }
+            if (definition.basePlacement.has_value())
+            {
+                const Vec2 footprint = definition.basePlacement->footprint;
+                if (definition.category != ItemCategory::Container ||
+                    definition.maxStackSize != 1U ||
+                    !std::isfinite(footprint.x) ||
+                    !std::isfinite(footprint.y) ||
+                    footprint.x < 48.0F || footprint.y < 48.0F ||
+                    footprint.x > 512.0F || footprint.y > 512.0F)
+                {
+                    fail("base placement capability is invalid");
+                }
             }
 
             if (const auto ammunition =

@@ -115,6 +115,30 @@ TEST(BaseWorldTest, PureVerticalMovementCannotTunnelThroughFacilities)
         gate.bounds.position.y + gate.bounds.size.y);
 }
 
+TEST(BaseWorldTest, PlacedStorageBlockerStopsMovementAndAllowsSliding)
+{
+    BaseWorld world;
+    const Vec2 start = world.playerPosition();
+    world.configureGroundBlockers({ContentRect{
+        {start.x - 120.0F, start.y - 180.0F},
+        {100.0F, 420.0F}}});
+
+    BaseInput moveLeft;
+    moveLeft.moveLeft = true;
+    for (int index{}; index < 30; ++index)
+        static_cast<void>(world.update(moveLeft, 0.05F));
+    EXPECT_GE(world.playerPosition().x, start.x - 20.0F);
+
+    const float beforeY = world.playerPosition().y;
+    BaseInput slide;
+    slide.moveLeft = true;
+    slide.moveUp = true;
+    for (int index{}; index < 8; ++index)
+        static_cast<void>(world.update(slide, 0.05F));
+    EXPECT_GE(world.playerPosition().x, start.x - 20.0F);
+    EXPECT_LT(world.playerPosition().y, beforeY);
+}
+
 TEST(BaseWorldTest, SharedShootingProducesAimTracerFeedbackAndWorldImpact)
 {
     BaseWorld world;
