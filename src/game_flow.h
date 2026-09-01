@@ -119,6 +119,13 @@ public:
         BaseFacilityKind facility,
         Vec2 worldPosition,
         std::string transactionId);
+    [[nodiscard]] BaseFacilityLayoutPlan queryInstallBaseFacilityAt(
+        BaseFacilityKind facility,
+        Vec2 worldPosition) const;
+    [[nodiscard]] BaseFacilityLayoutReceipt installBaseFacilityAt(
+        BaseFacilityKind facility,
+        Vec2 worldPosition,
+        std::string transactionId);
 
     void update(
         const GameplayInput &input,
@@ -149,6 +156,10 @@ private:
         Vec2 worldPosition) const;
     [[nodiscard]] RepositionBaseFacilityCommand
     baseFacilityRepositionCommand(
+        BaseFacilityKind facility,
+        Vec2 worldPosition) const;
+    [[nodiscard]] InstallBaseFacilityAtCommand
+    baseFacilityInstallCommand(
         BaseFacilityKind facility,
         Vec2 worldPosition) const;
 

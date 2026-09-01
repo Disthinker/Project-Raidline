@@ -196,7 +196,7 @@ bool GameFlow::openBaseFacilityForManagement(BaseFacilityKind facility)
         baseWorld_.facilities().end(),
         [facility](const BaseFacility &candidate)
         { return candidate.kind == facility; });
-    if (found == baseWorld_.facilities().end())
+    if (found == baseWorld_.facilities().end() || !found->active)
         return false;
     activeBaseFacility_ = facility;
     gameSession_.noteBaseFacility(facility);
@@ -537,9 +537,62 @@ BaseFacilityLayoutReceipt GameFlow::repositionBaseFacilityAt(
             false, false, DomainErrorCode::IllegalDestination,
             "Base world is not active", gameSession_.profile().revision};
     }
-    return gameSession_.executeBaseFacilityLayout(
-        baseFacilityRepositionCommand(facility, worldPosition),
-        std::move(transactionId));
+    BaseFacilityLayoutReceipt receipt =
+        gameSession_.executeBaseFacilityLayout(
+            baseFacilityRepositionCommand(facility, worldPosition),
+            std::move(transactionId));
+    if (receipt.succeeded)
+        syncBaseWorldSite();
+    return receipt;
+}
+
+InstallBaseFacilityAtCommand GameFlow::baseFacilityInstallCommand(
+    BaseFacilityKind facility,
+    Vec2 worldPosition) const
+{
+    const RepositionBaseFacilityCommand move =
+        baseFacilityRepositionCommand(facility, worldPosition);
+    return InstallBaseFacilityAtCommand{
+        move.facilityDefinitionId,
+        move.worldCenter,
+        move.footprint,
+        move.access};
+}
+
+BaseFacilityLayoutPlan GameFlow::queryInstallBaseFacilityAt(
+    BaseFacilityKind facility,
+    Vec2 worldPosition) const
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseFacilityLayoutPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base world is not active", gameSession_.profile().revision};
+    }
+    return ::queryInstallBaseFacilityAt(
+        gameSession_.profile(),
+        publishedContentRegistry(),
+        baseFacilityInstallCommand(facility, worldPosition));
+}
+
+BaseFacilityLayoutReceipt GameFlow::installBaseFacilityAt(
+    BaseFacilityKind facility,
+    Vec2 worldPosition,
+    std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+    {
+        return BaseFacilityLayoutReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base world is not active", gameSession_.profile().revision};
+    }
+    BaseFacilityLayoutReceipt receipt =
+        gameSession_.executeInstallBaseFacilityAt(
+            baseFacilityInstallCommand(facility, worldPosition),
+            std::move(transactionId));
+    if (receipt.succeeded)
+        syncBaseWorldSite();
+    return receipt;
 }
 
 void GameFlow::update(
@@ -607,8 +660,12 @@ void GameFlow::syncBaseWorldSite()
     {
         const auto kind = facilityKind(projection.facilityDefinitionId);
         if (kind.has_value())
-            overrides.push_back(
-                BaseFacilitySpatialOverride{*kind, projection.worldCenter});
+            overrides.push_back(BaseFacilitySpatialOverride{
+                *kind,
+                projection.worldCenter,
+                baseFacilityInstalled(
+                    gameSession_.profile(),
+                    projection.facilityDefinitionId)});
     }
     baseWorld_.configureSite(siteDefinitionId.value(), std::move(overrides));
 }

@@ -877,6 +877,52 @@ TEST(PersistentSessionTest,
     EXPECT_EQ(profileStateFingerprint(reopened.profile()), before);
 }
 
+TEST(PersistentSessionTest,
+     ReserveFacilityPlacementRestoresAndPersistsInOneCommand)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewPublishedProfile(
+        "persistent-facility-install", content);
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const BaseFacilityDefinitionId workshop{"base_facility.workshop"};
+    initial.baseConstruction.facilities[workshop] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    initial.baseConstruction.facilityReserveStartedWorldMinutes[workshop] =
+        initial.worldClock.elapsedWorldMinutes;
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial, content.contentVersion()).succeeded);
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const BaseFacilityLayoutReceipt installed =
+        session.executeInstallBaseFacilityAt(
+            InstallBaseFacilityAtCommand{
+                workshop,
+                Vec2{800.0F, 600.0F},
+                Vec2{270.0F, 170.0F},
+                BaseFacilityLayoutAccess{
+                    greyline,
+                    ContentRect{{0.0F, 0.0F}, {1600.0F, 1120.0F}},
+                    {}}},
+            "persist-install-core-facility");
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(baseFacilityInstalled(reopened.profile(), workshop));
+    EXPECT_FALSE(reopened.profile().baseConstruction
+                     .facilityReserveStartedWorldMinutes.contains(workshop));
+    const Vec2 persisted = reopened.profile().baseFacilityLayout
+        .placements.at(greyline).at(workshop);
+    EXPECT_FLOAT_EQ(persisted.x, 0.5F);
+    EXPECT_FLOAT_EQ(persisted.y, 600.0F / 1120.0F);
+}
+
 TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
 {
     SessionSaveDirectory temporary;

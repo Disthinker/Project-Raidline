@@ -21,6 +21,14 @@ struct RepositionBaseFacilityCommand
     BaseFacilityLayoutAccess access;
 };
 
+struct InstallBaseFacilityAtCommand
+{
+    BaseFacilityDefinitionId facilityDefinitionId;
+    Vec2 worldCenter;
+    Vec2 footprint;
+    BaseFacilityLayoutAccess access;
+};
+
 struct BaseFacilityLayoutPlan
 {
     bool canCommit{};
@@ -63,6 +71,17 @@ void initializeBaseFacilityLayouts(
     ProfileState &profile,
     const ContentRegistry &content,
     const RepositionBaseFacilityCommand &command,
+    const CommandContext &context);
+
+[[nodiscard]] BaseFacilityLayoutPlan queryInstallBaseFacilityAt(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const InstallBaseFacilityAtCommand &command);
+
+[[nodiscard]] BaseFacilityLayoutReceipt executeInstallBaseFacilityAt(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const InstallBaseFacilityAtCommand &command,
     const CommandContext &context);
 
 [[nodiscard]] std::vector<BaseFacilitySpatialProjection>

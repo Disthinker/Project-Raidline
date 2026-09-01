@@ -1821,6 +1821,35 @@ BaseFacilityLayoutReceipt GameSession::executeBaseFacilityLayout(
     return receipt;
 }
 
+BaseFacilityLayoutReceipt GameSession::executeInstallBaseFacilityAt(
+    const InstallBaseFacilityAtCommand &command,
+    std::string transactionId)
+{
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value())
+    {
+        return BaseFacilityLayoutReceipt{
+            false, false, DomainErrorCode::IllegalDestination,
+            "Base facilities cannot be installed during a Raid",
+            profile_.revision, command.facilityDefinitionId};
+    }
+    ProfileState candidate = profile_;
+    BaseFacilityLayoutReceipt receipt = ::executeInstallBaseFacilityAt(
+        candidate,
+        publishedContentRegistry(),
+        command,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded)
+        return receipt;
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        return BaseFacilityLayoutReceipt{
+            false, false, DomainErrorCode::InvalidProfile,
+            persistenceMessage_, profile_.revision,
+            command.facilityDefinitionId};
+    }
+    return receipt;
+}
+
 InventoryReceipt GameSession::executeBaseGroundContainerInventory(
     AssetInstanceId containerAssetId,
     const BaseGroundAccess &access,

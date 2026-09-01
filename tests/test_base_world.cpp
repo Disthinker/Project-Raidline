@@ -366,3 +366,30 @@ TEST(BaseWorldTest, SpatialOverridesMoveCoreFacilityAndCollisionTogether)
                  bounds.size.x == storage->bounds.size.x &&
                  bounds.size.y == storage->bounds.size.y; }));
 }
+
+TEST(BaseWorldTest, ReserveFacilityIsNotVisibleOrBlocking)
+{
+    BaseWorld world;
+    const Vec2 playerBefore = world.playerPosition();
+    const Vec2 center{5200.0F, 3300.0F};
+    world.configureSite(
+        "regional_base_site.greyline_yard",
+        {BaseFacilitySpatialOverride{
+            BaseFacilityKind::Workshop, center, false}});
+    const auto workshop = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::Workshop; });
+    ASSERT_NE(workshop, world.facilities().end());
+    EXPECT_FALSE(workshop->active);
+    EXPECT_FLOAT_EQ(world.playerPosition().x, playerBefore.x);
+    EXPECT_FLOAT_EQ(world.playerPosition().y, playerBefore.y);
+    const auto blockers = world.basePlacementBlockers();
+    EXPECT_FALSE(std::any_of(
+        blockers.begin(), blockers.end(),
+        [&](const ContentRect &bounds)
+        { return bounds.position.x == workshop->bounds.position.x &&
+                 bounds.position.y == workshop->bounds.position.y &&
+                 bounds.size.x == workshop->bounds.size.x &&
+                 bounds.size.y == workshop->bounds.size.y; }));
+}

@@ -329,6 +329,10 @@ public:
         const RepositionBaseFacilityCommand &command,
         std::string transactionId);
 
+    [[nodiscard]] BaseFacilityLayoutReceipt executeInstallBaseFacilityAt(
+        const InstallBaseFacilityAtCommand &command,
+        std::string transactionId);
+
     [[nodiscard]] InventoryReceipt executeBaseGroundContainerInventory(
         AssetInstanceId containerAssetId,
         const BaseGroundAccess &access,

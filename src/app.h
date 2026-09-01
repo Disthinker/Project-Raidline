@@ -83,7 +83,14 @@ struct BaseFacilityContextMenu
 
 struct BaseFixedFacilityPlacementState
 {
+    enum class Mode
+    {
+        Move,
+        Install
+    };
+
     BaseFacilityKind facility{BaseFacilityKind::Storage};
+    Mode mode{Mode::Move};
     bool returnToBuildPanel{true};
 };
 
@@ -275,7 +282,10 @@ private:
         AssetInstanceId assetId,
         BasePlacementState::Mode mode,
         bool returnToBuildPanel);
-    void startBaseFixedFacilityPlacement(BaseFacilityKind facility);
+    void startBaseFixedFacilityPlacement(
+        BaseFacilityKind facility,
+        BaseFixedFacilityPlacementState::Mode mode =
+            BaseFixedFacilityPlacementState::Mode::Move);
     [[nodiscard]] bool tryDeployFromBase(
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,
