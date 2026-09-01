@@ -367,10 +367,40 @@ namespace
 
     std::vector<ProfileGridView> profileGridViews(
         const ProfileState &profile,
-        bool includeStash)
+        bool includeStash,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
     {
         std::vector<ProfileGridView> result;
-        if (includeStash)
+        if (externalContainerId.has_value())
+        {
+            const AssetRecord *owner = profile.assets.find(
+                *externalContainerId);
+            if (owner != nullptr)
+            {
+                const ItemDefinition &definition =
+                    publishedContentRegistry().item(owner->definitionId);
+                float y = 132.0F;
+                for (std::uint32_t index{};
+                     index < definition.containerCompartments.size();
+                     ++index)
+                {
+                    const auto &compartment =
+                        definition.containerCompartments[index];
+                    result.push_back(ProfileGridView{
+                        ProfileContainerId::compartment(owner->instanceId, index),
+                        668.0F,
+                        y,
+                        kBaseStashCellSize,
+                        fmt::format(
+                            "{} | COMPARTMENT {}",
+                            definition.displayName,
+                            index + 1U)});
+                    y += static_cast<float>(compartment.height) *
+                        kBaseStashCellSize + 38.0F;
+                }
+            }
+        }
+        else if (includeStash)
         {
             const bool hasLegacyReturns = !assetsInContainer(
                 profile, ProfileContainerId::baseIntake()).empty();
@@ -550,7 +580,8 @@ namespace
     std::optional<ProfileAssetHit> profileAssetHitAt(
         const ProfileState &profile,
         MousePosition position,
-        bool includeStash)
+        bool includeStash,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
     {
         for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
         {
@@ -584,7 +615,8 @@ namespace
             }
         }
 
-        for (const ProfileGridView &view : profileGridViews(profile, includeStash))
+        for (const ProfileGridView &view : profileGridViews(
+                 profile, includeStash, externalContainerId))
         {
             InventoryGridSize size{};
             try
@@ -635,11 +667,13 @@ namespace
     std::optional<SDL_FRect> profileAssetBounds(
         const ProfileState &profile,
         const AssetRecord &asset,
-        bool includeStash)
+        bool includeStash,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
     {
         if (const auto *stored = std::get_if<StoredAssetLocation>(&asset.location))
         {
-            for (const ProfileGridView &view : profileGridViews(profile, includeStash))
+            for (const ProfileGridView &view : profileGridViews(
+                     profile, includeStash, externalContainerId))
             {
                 if (view.container != stored->container)
                 {
@@ -673,6 +707,7 @@ namespace
     }
 
     SDL_FRect profileBaseGroundDropRect() noexcept;
+    SDL_FRect profileGroundContainerPickupRect() noexcept;
 
     std::optional<ProfileDropTarget> profileDropTargetAt(
         const ProfileState &profile,
@@ -680,7 +715,8 @@ namespace
         bool includeStash,
         bool allowBaseGround,
         GridPosition grabOffset,
-        std::optional<AssetInstanceId> draggedAssetId)
+        std::optional<AssetInstanceId> draggedAssetId,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
     {
         const AssetRecord *dragged = draggedAssetId.has_value()
             ? profile.assets.find(*draggedAssetId)
@@ -695,51 +731,55 @@ namespace
         {
             return BaseGroundTarget{};
         }
-        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
+        if (!externalContainerId.has_value())
         {
-            if (!contains(equipmentSlotRect(slot), position))
+            for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
             {
-                continue;
-            }
-            if (const auto weapon = equippedAsset(profile, slot))
-            {
-                if (draggedCategory == ItemCategory::Magazine)
+                if (!contains(equipmentSlotRect(slot), position))
                 {
-                    return WeaponInstallTarget{*weapon};
+                    continue;
+                }
+                if (const auto weapon = equippedAsset(profile, slot))
+                {
+                    if (draggedCategory == ItemCategory::Magazine)
+                    {
+                        return WeaponInstallTarget{*weapon};
+                    }
+                    if (draggedDefinition != nullptr &&
+                        draggedDefinition->weaponMaintenance.has_value())
+                    {
+                        return WeaponMaintenanceTarget{*weapon};
+                    }
+                }
+            }
+            if (const auto hit = profileAssetHitAt(
+                    profile, position, includeStash, externalContainerId);
+                dragged != nullptr && hit.has_value())
+            {
+                const ItemCategory category = publishedContentRegistry()
+                    .item(hit->asset->definitionId).category;
+                if (draggedCategory == ItemCategory::Ammunition &&
+                    category == ItemCategory::Magazine)
+                {
+                    return MagazineLoadTarget{hit->asset->instanceId};
+                }
+                if (draggedCategory == ItemCategory::Magazine &&
+                    category == ItemCategory::Weapon)
+                {
+                    return WeaponInstallTarget{hit->asset->instanceId};
                 }
                 if (draggedDefinition != nullptr &&
-                    draggedDefinition->weaponMaintenance.has_value())
+                    draggedDefinition->weaponMaintenance.has_value() &&
+                    category == ItemCategory::Weapon)
                 {
-                    return WeaponMaintenanceTarget{*weapon};
+                    return WeaponMaintenanceTarget{hit->asset->instanceId};
                 }
-            }
-        }
-        if (const auto hit = profileAssetHitAt(profile, position, includeStash);
-            dragged != nullptr && hit.has_value())
-        {
-            const ItemCategory category = publishedContentRegistry()
-                .item(hit->asset->definitionId).category;
-            if (draggedCategory == ItemCategory::Ammunition &&
-                category == ItemCategory::Magazine)
-            {
-                return MagazineLoadTarget{hit->asset->instanceId};
-            }
-            if (draggedCategory == ItemCategory::Magazine &&
-                category == ItemCategory::Weapon)
-            {
-                return WeaponInstallTarget{hit->asset->instanceId};
-            }
-            if (draggedDefinition != nullptr &&
-                draggedDefinition->weaponMaintenance.has_value() &&
-                category == ItemCategory::Weapon)
-            {
-                return WeaponMaintenanceTarget{hit->asset->instanceId};
-            }
-            if (draggedDefinition != nullptr &&
-                draggedDefinition->armorMaintenance.has_value() &&
-                category == ItemCategory::ProtectiveGear)
-            {
-                return ArmorMaintenanceTarget{hit->asset->instanceId};
+                if (draggedDefinition != nullptr &&
+                    draggedDefinition->armorMaintenance.has_value() &&
+                    category == ItemCategory::ProtectiveGear)
+                {
+                    return ArmorMaintenanceTarget{hit->asset->instanceId};
+                }
             }
         }
 
@@ -751,7 +791,8 @@ namespace
             }
         }
 
-        for (const ProfileGridView &view : profileGridViews(profile, includeStash))
+        for (const ProfileGridView &view : profileGridViews(
+                 profile, includeStash, externalContainerId))
         {
             InventoryGridSize size{};
             try
@@ -799,6 +840,11 @@ namespace
     SDL_FRect profileBaseGroundDropRect() noexcept
     {
         return SDL_FRect{800.0F, 612.0F, 348.0F, 42.0F};
+    }
+
+    SDL_FRect profileGroundContainerPickupRect() noexcept
+    {
+        return SDL_FRect{974.0F, 68.0F, 174.0F, 36.0F};
     }
 
     std::optional<const char *> profileContextActionLabel(
@@ -2111,6 +2157,7 @@ void App::closeInventory() noexcept
     profileInventoryInteraction_.reset();
     profileContextMenu_.reset();
     profileAssetSelection_.reset();
+    openedBaseGroundContainerId_.reset();
 
     inventoryOverlayState_.close();
     input_.suppressPrimaryPointerUntilRelease();
@@ -2212,6 +2259,7 @@ void App::updateBase(float deltaTime)
 
     if (inventoryDecision.controlAction == InventoryFrameControlAction::OpenInventory)
     {
+        openedBaseGroundContainerId_.reset();
         gameFlow_.closeBaseFacility();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
@@ -2302,19 +2350,49 @@ void App::updateBase(float deltaTime)
         input.interactJustPressed = false;
         input.interactPressed = false;
     }
-    if (input.interactJustPressed && gameFlow_.nearestBaseGroundAsset().has_value())
+    if (input.interactJustPressed)
     {
-        const BaseGroundReceipt receipt =
-            gameFlow_.pickupNearestBaseGroundAsset(
-                nextProfileTransactionId("base-ground-pickup"));
-        uiMessage_ = receipt.succeeded
-            ? "BASE GROUND ITEM PICKED UP"
-            : receipt.message;
-        gameAudio_.play(receipt.succeeded
-            ? SoundEventId::InventoryPickup
-            : SoundEventId::UiDeny);
-        input.interactJustPressed = false;
-        input.interactPressed = false;
+        if (const auto nearest = gameFlow_.nearestBaseGroundAsset())
+        {
+            const AssetRecord *asset = gameSession_.profile().assets.find(
+                nearest->assetId);
+            const bool isContainer = asset != nullptr &&
+                !publishedContentRegistry().item(asset->definitionId)
+                    .containerCompartments.empty();
+            if (isContainer)
+            {
+                const BaseGroundPlan plan =
+                    gameFlow_.queryBaseGroundContainerAccess(
+                        nearest->assetId);
+                if (plan.canCommit)
+                {
+                    openedBaseGroundContainerId_ = nearest->assetId;
+                    inventoryOverlayState_.openContainerInventory();
+                    uiMessage_ = "BASE GROUND CONTAINER OPENED";
+                    input_.suppressPrimaryPointerUntilRelease();
+                }
+                else
+                {
+                    uiMessage_ = plan.message;
+                    gameAudio_.play(SoundEventId::UiDeny);
+                }
+            }
+            else
+            {
+                const BaseGroundReceipt receipt =
+                    gameFlow_.pickupBaseGroundAsset(
+                        nearest->assetId,
+                        nextProfileTransactionId("base-ground-pickup"));
+                uiMessage_ = receipt.succeeded
+                    ? "BASE GROUND ITEM PICKED UP"
+                    : receipt.message;
+                gameAudio_.play(receipt.succeeded
+                    ? SoundEventId::InventoryPickup
+                    : SoundEventId::UiDeny);
+            }
+            input.interactJustPressed = false;
+            input.interactPressed = false;
+        }
     }
     gameFlow_.updateBase(input, deltaTime);
     consumePresentationAudioEvents();
@@ -2338,6 +2416,7 @@ void App::updateBase(float deltaTime)
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage)
     {
         gameFlow_.closeBaseFacility();
+        openedBaseGroundContainerId_.reset();
         inventoryOverlayState_.openContainerInventory();
         uiMessage_.clear();
     }
@@ -3768,8 +3847,12 @@ void App::handleProfileInventoryUiEvent(
     const InventoryUiEvent &event,
     bool inRaid)
 {
+    const std::optional<AssetInstanceId> externalContainerId = inRaid
+        ? std::nullopt
+        : openedBaseGroundContainerId_;
     const bool includeStash = !inRaid &&
-        inventoryOverlayState_.showsExternalContainer();
+        inventoryOverlayState_.showsExternalContainer() &&
+        !externalContainerId.has_value();
     const ProfileState &profile = gameSession_.profile();
 
     if (std::holds_alternative<InventoryRotateEvent>(event))
@@ -3792,7 +3875,10 @@ void App::handleProfileInventoryUiEvent(
             return;
         }
         const auto hit = profileAssetHitAt(
-            profile, *quick.pointerPosition, includeStash);
+            profile,
+            *quick.pointerPosition,
+            includeStash,
+            externalContainerId);
         if (!hit.has_value() || hit->asset == nullptr)
         {
             return;
@@ -3817,15 +3903,39 @@ void App::handleProfileInventoryUiEvent(
                 false);
             return;
         }
-        if (!includeStash)
+        if (!includeStash && !externalContainerId.has_value())
         {
             uiMessage_ = "NO QUICK-TRANSFER DESTINATION";
             gameAudio_.play(SoundEventId::UiDeny);
             return;
         }
         std::vector<ProfileContainerId> destinations;
-        if (const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
-            stored != nullptr && stored->container.kind == ProfileContainerKind::Stash)
+        if (externalContainerId.has_value())
+        {
+            const auto *stored = std::get_if<StoredAssetLocation>(
+                &asset.location);
+            const bool sourceIsExternal = stored != nullptr &&
+                stored->container.kind ==
+                    ProfileContainerKind::AssetCompartment &&
+                stored->container.ownerAssetId == *externalContainerId;
+            for (const ProfileGridView &view : profileGridViews(
+                     profile,
+                     false,
+                     sourceIsExternal
+                         ? std::nullopt
+                         : externalContainerId))
+            {
+                const bool viewIsExternal =
+                    view.container.kind ==
+                        ProfileContainerKind::AssetCompartment &&
+                    view.container.ownerAssetId == *externalContainerId;
+                if (viewIsExternal == !sourceIsExternal)
+                    destinations.push_back(view.container);
+            }
+        }
+        else if (const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
+                 stored != nullptr &&
+                 stored->container.kind == ProfileContainerKind::Stash)
         {
             for (const ProfileGridView &view : profileGridViews(profile, false))
             {
@@ -3860,25 +3970,34 @@ void App::handleProfileInventoryUiEvent(
             bool allowed{};
             if (std::holds_alternative<InstalledMagazineLocation>(asset.location))
             {
-                const auto installed = std::get<InstalledMagazineLocation>(asset.location);
-                allowed = queryWeaponAmmo(
-                    profile,
-                    publishedContentRegistry(),
-                    UninstallMagazineCommand{
-                        installed.weaponAssetId,
-                        std::get<StoredCellTarget>(request.target).location,
-                        asset.orientation}).canCommit;
+                if (!externalContainerId.has_value())
+                {
+                    const auto installed =
+                        std::get<InstalledMagazineLocation>(asset.location);
+                    allowed = queryWeaponAmmo(
+                        profile,
+                        publishedContentRegistry(),
+                        UninstallMagazineCommand{
+                            installed.weaponAssetId,
+                            std::get<StoredCellTarget>(request.target).location,
+                            asset.orientation}).canCommit;
+                }
             }
             else
             {
-                allowed = queryInventory(
-                    profile,
-                    publishedContentRegistry(),
-                    InventoryMoveCommand{
-                        asset.instanceId,
-                        0,
-                        std::get<StoredCellTarget>(request.target).location,
-                        asset.orientation}).canCommit;
+                const InventoryCommand command = InventoryMoveCommand{
+                    asset.instanceId,
+                    0,
+                    std::get<StoredCellTarget>(request.target).location,
+                    asset.orientation};
+                allowed = externalContainerId.has_value()
+                    ? gameFlow_.queryBaseGroundContainerInventory(
+                          *externalContainerId,
+                          command).canCommit
+                    : queryInventory(
+                          profile,
+                          publishedContentRegistry(),
+                          command).canCommit;
             }
             if (allowed)
             {
@@ -3898,7 +4017,8 @@ void App::handleProfileInventoryUiEvent(
             return;
         }
         profileContextMenu_.reset();
-        const auto hit = profileAssetHitAt(profile, position, includeStash);
+        const auto hit = profileAssetHitAt(
+            profile, position, includeStash, externalContainerId);
         if (!hit.has_value() || hit->asset == nullptr)
         {
             return;
@@ -3954,6 +4074,23 @@ void App::handleProfileInventoryUiEvent(
     }
 
     const auto &pointer = std::get<InventoryPointerEvent>(event);
+    if (!inRaid && externalContainerId.has_value() &&
+        pointer.type == InventoryPointerEventType::LeftButtonDown &&
+        contains(profileGroundContainerPickupRect(), pointer.position))
+    {
+        const BaseGroundReceipt receipt = gameFlow_.pickupBaseGroundAsset(
+            *externalContainerId,
+            nextProfileTransactionId("base-ground-container-pickup"));
+        uiMessage_ = receipt.succeeded
+            ? "BASE GROUND CONTAINER PICKED UP"
+            : receipt.message;
+        gameAudio_.play(receipt.succeeded
+            ? SoundEventId::InventoryPickup
+            : SoundEventId::UiDeny);
+        if (receipt.succeeded)
+            closeInventory();
+        return;
+    }
     const GridPosition grabOffset =
         profileInventoryInteraction_.activeDragVisual().has_value()
             ? GridPosition{
@@ -3968,12 +4105,13 @@ void App::handleProfileInventoryUiEvent(
         profile,
         pointer.position,
         includeStash,
-        !inRaid,
+        !inRaid && !externalContainerId.has_value(),
         grabOffset,
         profileInventoryInteraction_.source().has_value()
             ? std::optional<AssetInstanceId>{
                   profileInventoryInteraction_.source()->instanceId}
-            : std::nullopt);
+            : std::nullopt,
+        externalContainerId);
 
     switch (pointer.type)
     {
@@ -4014,14 +4152,32 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     {
         return;
     }
+    const std::optional<AssetInstanceId> externalContainerId = inRaid
+        ? std::nullopt
+        : openedBaseGroundContainerId_;
     const bool includeStash = !inRaid &&
-        inventoryOverlayState_.showsExternalContainer();
+        inventoryOverlayState_.showsExternalContainer() &&
+        !externalContainerId.has_value();
     const auto hit = profileAssetHitAt(
-        gameSession_.profile(), position, includeStash);
+        gameSession_.profile(), position, includeStash, externalContainerId);
     if (!hit.has_value() || hit->asset == nullptr)
     {
         profileContextMenu_.reset();
         return;
+    }
+    if (externalContainerId.has_value())
+    {
+        const auto *stored = std::get_if<StoredAssetLocation>(
+            &hit->asset->location);
+        if (stored != nullptr &&
+            stored->container.kind ==
+                ProfileContainerKind::AssetCompartment &&
+            stored->container.ownerAssetId == *externalContainerId)
+        {
+            profileContextMenu_.reset();
+            uiMessage_ = "MOVE ITEM TO CARRIED INVENTORY FIRST";
+            return;
+        }
     }
     if (!profileContextActionLabel(
             gameSession_.profile(), *hit->asset, inRaid).has_value())
@@ -4060,6 +4216,13 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 if (std::holds_alternative<InstalledMagazineLocation>(
                         request.source.location))
                 {
+                    if (!inRaid && openedBaseGroundContainerId_.has_value())
+                    {
+                        uiMessage_ =
+                            "UNINSTALL MAGAZINE TO CARRIED INVENTORY FIRST";
+                        gameAudio_.play(SoundEventId::UiDeny);
+                        return;
+                    }
                     const auto installed = std::get<InstalledMagazineLocation>(
                         request.source.location);
                     const WeaponAmmoReceipt receipt =
@@ -4075,14 +4238,22 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                         : receipt.message;
                     return;
                 }
+                const InventoryCommand command = InventoryMoveCommand{
+                    request.source.instanceId,
+                    request.source.quantity,
+                    target.location,
+                    request.source.orientation};
+                const std::string transactionId = nextProfileTransactionId(
+                    inRaid ? "raid-move" : "base-move");
                 const InventoryReceipt receipt =
-                    gameSession_.executeProfileInventory(
-                        InventoryMoveCommand{
-                            request.source.instanceId,
-                            request.source.quantity,
-                            target.location,
-                            request.source.orientation},
-                        nextProfileTransactionId(inRaid ? "raid-move" : "base-move"));
+                    !inRaid && openedBaseGroundContainerId_.has_value()
+                        ? gameFlow_.executeBaseGroundContainerInventory(
+                              *openedBaseGroundContainerId_,
+                              command,
+                              transactionId)
+                        : gameSession_.executeProfileInventory(
+                              command,
+                              transactionId);
                 uiMessage_ = receipt.succeeded
                     ? "INVENTORY UPDATED"
                     : receipt.message;
@@ -4093,12 +4264,20 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
             }
             else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
             {
+                const InventoryCommand command = InventoryEquipCommand{
+                    request.source.instanceId,
+                    target.slot};
+                const std::string transactionId = nextProfileTransactionId(
+                    inRaid ? "raid-equip" : "base-equip");
                 const InventoryReceipt receipt =
-                    gameSession_.executeProfileInventory(
-                        InventoryEquipCommand{
-                            request.source.instanceId,
-                            target.slot},
-                        nextProfileTransactionId(inRaid ? "raid-equip" : "base-equip"));
+                    !inRaid && openedBaseGroundContainerId_.has_value()
+                        ? gameFlow_.executeBaseGroundContainerInventory(
+                              *openedBaseGroundContainerId_,
+                              command,
+                              transactionId)
+                        : gameSession_.executeProfileInventory(
+                              command,
+                              transactionId);
                 uiMessage_ = receipt.succeeded
                     ? "EQUIPMENT UPDATED"
                     : receipt.message;
@@ -9735,10 +9914,14 @@ void App::renderBaseWorld()
     {
         const ItemDefinition &definition =
             publishedContentRegistry().item(ground->definitionId);
-        const std::string prompt = fmt::format(
-            "E - PICK UP {} x{}",
-            definition.displayName,
-            ground->quantity);
+        const std::string prompt = definition.containerCompartments.empty()
+            ? fmt::format(
+                  "E - PICK UP {} x{}",
+                  definition.displayName,
+                  ground->quantity)
+            : fmt::format(
+                  "E - OPEN CONTAINER {}",
+                  definition.displayName);
         uiTextRenderer_.render(renderer_, 450.0F, 650.0F, prompt.c_str());
     }
     else if (const auto facility = world.interactableFacility())
@@ -10083,7 +10266,10 @@ void App::renderProfileGrid(
     }
 }
 
-void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
+void App::renderProfileDragFeedback(
+    bool includeStash,
+    bool inRaid,
+    std::optional<AssetInstanceId> externalContainerId)
 {
     const auto source = profileInventoryInteraction_.source();
     const auto visual = profileInventoryInteraction_.activeDragVisual();
@@ -10113,26 +10299,35 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                     if (std::holds_alternative<InstalledMagazineLocation>(
                             source->location))
                     {
-                        const auto installed = std::get<InstalledMagazineLocation>(
-                            source->location);
-                        allowed = queryWeaponAmmo(
-                            profile,
-                            publishedContentRegistry(),
-                            UninstallMagazineCommand{
-                                installed.weaponAssetId,
-                                typedTarget.location,
-                                source->orientation}).canCommit;
+                        if (!externalContainerId.has_value())
+                        {
+                            const auto installed =
+                                std::get<InstalledMagazineLocation>(
+                                    source->location);
+                            allowed = queryWeaponAmmo(
+                                profile,
+                                publishedContentRegistry(),
+                                UninstallMagazineCommand{
+                                    installed.weaponAssetId,
+                                    typedTarget.location,
+                                    source->orientation}).canCommit;
+                        }
                     }
                     else
                     {
-                        allowed = queryInventory(
-                            profile,
-                            publishedContentRegistry(),
-                            InventoryMoveCommand{
-                                source->instanceId,
-                                source->quantity,
-                                typedTarget.location,
-                                source->orientation}).canCommit;
+                        const InventoryCommand command = InventoryMoveCommand{
+                            source->instanceId,
+                            source->quantity,
+                            typedTarget.location,
+                            source->orientation};
+                        allowed = externalContainerId.has_value()
+                            ? gameFlow_.queryBaseGroundContainerInventory(
+                                  *externalContainerId,
+                                  command).canCommit
+                            : queryInventory(
+                                  profile,
+                                  publishedContentRegistry(),
+                                  command).canCommit;
                     }
                     if (inRaid &&
                         typedTarget.location.container.kind == ProfileContainerKind::Stash)
@@ -10165,12 +10360,17 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                 }
                 else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
                 {
-                    const bool allowed = queryInventory(
-                        profile,
-                        publishedContentRegistry(),
-                        InventoryEquipCommand{
-                            source->instanceId,
-                            typedTarget.slot}).canCommit;
+                    const InventoryCommand command = InventoryEquipCommand{
+                        source->instanceId,
+                        typedTarget.slot};
+                    const bool allowed = externalContainerId.has_value()
+                        ? gameFlow_.queryBaseGroundContainerInventory(
+                              *externalContainerId,
+                              command).canCommit
+                        : queryInventory(
+                              profile,
+                              publishedContentRegistry(),
+                              command).canCommit;
                     feedback.kind = allowed
                         ? ProfileDropFeedbackKind::Ordinary
                         : ProfileDropFeedbackKind::Invalid;
@@ -10287,7 +10487,10 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                 using Target = std::decay_t<decltype(typedTarget)>;
                 if constexpr (std::is_same_v<Target, StoredCellTarget>)
                 {
-                    for (const ProfileGridView &view : profileGridViews(profile, includeStash))
+                    for (const ProfileGridView &view : profileGridViews(
+                             profile,
+                             includeStash,
+                             externalContainerId))
                     {
                         if (view.container == typedTarget.location.container)
                         {
@@ -10332,7 +10535,10 @@ void App::renderProfileDragFeedback(bool includeStash, bool inRaid)
                     if (const AssetRecord *targetAsset = profile.assets.find(id))
                     {
                         targetBounds = profileAssetBounds(
-                            profile, *targetAsset, includeStash);
+                            profile,
+                            *targetAsset,
+                            includeStash,
+                            externalContainerId);
                     }
                 }
             },
@@ -10759,10 +10965,14 @@ void App::renderDeveloperWeaponPanel()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::renderProfileInventory(bool includeStash, bool inRaid)
+void App::renderProfileInventory(
+    bool includeStash,
+    bool inRaid,
+    std::optional<AssetInstanceId> externalContainerId)
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    const SDL_FRect panel = includeStash
+    const bool showRightPanel = includeStash || externalContainerId.has_value();
+    const SDL_FRect panel = showRightPanel
         ? SDL_FRect{20.0F, 50.0F, 1240.0F, 650.0F}
         : SDL_FRect{20.0F, 50.0F, 590.0F, 650.0F};
     SDL_SetRenderDrawColor(renderer_, 12, 20, 24, 244);
@@ -10774,6 +10984,20 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     {
         uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "WAREHOUSE");
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
+    }
+    else if (externalContainerId.has_value())
+    {
+        uiTextRenderer_.render(
+            renderer_, 668.0F, 70.0F, "BASE GROUND CONTAINER");
+        SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
+        const SDL_FRect pickup = profileGroundContainerPickupRect();
+        SDL_SetRenderDrawColor(renderer_, 38, 70, 64, 255);
+        SDL_RenderFillRect(renderer_, &pickup);
+        SDL_SetRenderDrawColor(renderer_, 104, 190, 156, 255);
+        SDL_RenderRect(renderer_, &pickup);
+        uiTextRenderer_.render(
+            renderer_, pickup.x + 14.0F, pickup.y + 10.0F,
+            "PICK UP CONTAINER");
     }
 
     const SDL_FRect preview{42.0F, 96.0F, 150.0F, 250.0F};
@@ -10869,7 +11093,8 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
         }
     }
 
-    for (const ProfileGridView &view : profileGridViews(profile, includeStash))
+    for (const ProfileGridView &view : profileGridViews(
+             profile, includeStash, externalContainerId))
     {
         renderProfileGrid(
             view.container, view.x, view.y, view.cellSize, view.label.c_str());
@@ -10881,7 +11106,8 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     if (const auto hovered = profileAssetHitAt(
             profile,
             MousePosition{pointerX, pointerY},
-            includeStash);
+            includeStash,
+            externalContainerId);
         hovered.has_value() && hovered->asset != nullptr)
     {
         const AssetRecord &asset = *hovered->asset;
@@ -10992,7 +11218,7 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
     uiTextRenderer_.render(
         renderer_, 42.0F, 642.0F,
         "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
-    if (!inRaid)
+    if (!inRaid && !externalContainerId.has_value())
     {
         const SDL_FRect groundDrop = profileBaseGroundDropRect();
         SDL_SetRenderDrawColor(renderer_, 26, 58, 68, 235);
@@ -11009,10 +11235,11 @@ void App::renderProfileInventory(bool includeStash, bool inRaid)
                : "RMB: ITEM ACTION | TAB/ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        uiTextRenderer_.render(renderer_, includeStash ? 668.0F : 350.0F, 664.0F,
+        uiTextRenderer_.render(renderer_, showRightPanel ? 668.0F : 350.0F, 664.0F,
                             uiMessage_.c_str());
     }
-    renderProfileDragFeedback(includeStash, inRaid);
+    renderProfileDragFeedback(
+        includeStash, inRaid, externalContainerId);
     renderProfileContextMenu(inRaid);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
@@ -13502,7 +13729,10 @@ void App::renderBase()
     if (inventoryOverlayState_.isOpen())
     {
         renderProfileInventory(
-            inventoryOverlayState_.showsExternalContainer(), false);
+            inventoryOverlayState_.showsExternalContainer() &&
+                !openedBaseGroundContainerId_.has_value(),
+            false,
+            openedBaseGroundContainerId_);
     }
     renderHomeRegionMap();
     renderBaseSiegeWarning();

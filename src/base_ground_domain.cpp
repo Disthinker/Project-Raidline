@@ -79,6 +79,106 @@ bool hasDirectChildren(
         });
 }
 
+BaseGroundPlan containerAccessPlan(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access)
+{
+    if (profile.pendingRaid.has_value() ||
+        !accessMatchesActiveBase(profile, content, access))
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "Base ground access is not valid", profile.revision,
+            containerAssetId};
+    }
+    const AssetRecord *container = profile.assets.find(containerAssetId);
+    if (container == nullptr)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::MissingAsset,
+            "ground container does not exist", profile.revision,
+            containerAssetId};
+    }
+    const auto *ground = std::get_if<BaseGroundAssetLocation>(
+        &container->location);
+    if (ground == nullptr ||
+        ground->baseSiteDefinitionId != access.baseSiteDefinitionId ||
+        distanceSquared(ground->position, access.playerCenter) >
+            access.interactionRange * access.interactionRange)
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "ground container is outside interaction range",
+            profile.revision, containerAssetId};
+    }
+    const ItemDefinition &definition = content.item(container->definitionId);
+    if (definition.containerCompartments.empty())
+    {
+        return BaseGroundPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "ground asset is not a container", profile.revision,
+            containerAssetId};
+    }
+    return BaseGroundPlan{
+        true, DomainErrorCode::None, {}, profile.revision,
+        containerAssetId};
+}
+
+bool assetIsInGroundContainer(
+    const ProfileState &profile,
+    AssetInstanceId assetId,
+    AssetInstanceId containerAssetId) noexcept
+{
+    const AssetRecord *asset = profile.assets.find(assetId);
+    const auto *stored = asset != nullptr
+        ? std::get_if<StoredAssetLocation>(&asset->location)
+        : nullptr;
+    return stored != nullptr &&
+        stored->container.kind == ProfileContainerKind::AssetCompartment &&
+        stored->container.ownerAssetId == containerAssetId;
+}
+
+bool containerDestinationIsAccessible(
+    const ProfileState &profile,
+    ProfileContainerId destination,
+    AssetInstanceId containerAssetId) noexcept
+{
+    return destination.kind == ProfileContainerKind::AssetCompartment &&
+        (destination.ownerAssetId == containerAssetId ||
+         assetIsCarried(profile, destination.ownerAssetId));
+}
+
+bool inventoryCommandUsesContainerScope(
+    const ProfileState &profile,
+    AssetInstanceId containerAssetId,
+    const InventoryCommand &command) noexcept
+{
+    return std::visit(
+        [&](const auto &typed)
+        {
+            const bool sourceAccessible = assetIsCarried(
+                profile, typed.instanceId) ||
+                assetIsInGroundContainer(
+                    profile, typed.instanceId, containerAssetId);
+            if (!sourceAccessible)
+                return false;
+            using Command = std::decay_t<decltype(typed)>;
+            if constexpr (std::is_same_v<Command, InventoryMoveCommand>)
+            {
+                return containerDestinationIsAccessible(
+                    profile, typed.destination.container,
+                    containerAssetId);
+            }
+            else
+            {
+                return true;
+            }
+        },
+        command);
+}
+
 std::vector<ProfileContainerId> carriedContainers(
     const ProfileState &profile,
     const ContentRegistry &content)
@@ -371,6 +471,71 @@ BaseGroundReceipt executeBaseGround(
     receipt.revision = candidate.revision;
     profile = std::move(candidate);
     return receipt;
+}
+
+BaseGroundPlan queryBaseGroundContainerAccess(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access)
+{
+    return containerAccessPlan(
+        profile, content, containerAssetId, access);
+}
+
+InventoryPlan queryBaseGroundContainerInventory(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access,
+    const InventoryCommand &command)
+{
+    const BaseGroundPlan accessPlan = containerAccessPlan(
+        profile, content, containerAssetId, access);
+    if (!accessPlan.canCommit)
+    {
+        return InventoryPlan{
+            false, accessPlan.error, accessPlan.message,
+            profile.revision};
+    }
+    if (!inventoryCommandUsesContainerScope(
+            profile, containerAssetId, command))
+    {
+        return InventoryPlan{
+            false, DomainErrorCode::IllegalDestination,
+            "inventory command is outside the open ground container scope",
+            profile.revision};
+    }
+    return queryInventory(profile, content, command);
+}
+
+InventoryReceipt executeBaseGroundContainerInventory(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId containerAssetId,
+    const BaseGroundAccess &access,
+    const InventoryCommand &command,
+    const CommandContext &context)
+{
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        return InventoryReceipt{
+            true, true, DomainErrorCode::None, {}, profile.revision};
+    }
+    if (context.expectedRevision != profile.revision)
+    {
+        return InventoryReceipt{
+            false, false, DomainErrorCode::StaleRevision,
+            "profile revision is stale", profile.revision};
+    }
+    const InventoryPlan plan = queryBaseGroundContainerInventory(
+        profile, content, containerAssetId, access, command);
+    if (!plan.canCommit)
+    {
+        return InventoryReceipt{
+            false, false, plan.error, plan.message, profile.revision};
+    }
+    return executeInventory(profile, content, command, context);
 }
 
 std::vector<BaseGroundAssetProjection> projectBaseGroundAssets(

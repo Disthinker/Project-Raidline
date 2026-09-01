@@ -318,6 +318,12 @@ public:
         const BaseGroundCommand &command,
         std::string transactionId);
 
+    [[nodiscard]] InventoryReceipt executeBaseGroundContainerInventory(
+        AssetInstanceId containerAssetId,
+        const BaseGroundAccess &access,
+        const InventoryCommand &command,
+        std::string transactionId);
+
     [[nodiscard]] EconomyReceipt executeProfileEconomy(
         const EconomyCommand &command,
         std::string transactionId);
