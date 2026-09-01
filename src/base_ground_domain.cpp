@@ -24,6 +24,47 @@ bool finitePoint(Vec2 value) noexcept
         value.x >= 0.0F && value.y >= 0.0F;
 }
 
+bool finiteRect(const ContentRect &value) noexcept
+{
+    return finitePoint(value.position) &&
+        std::isfinite(value.size.x) && std::isfinite(value.size.y) &&
+        value.size.x > 0.0F && value.size.y > 0.0F;
+}
+
+bool rectInside(
+    const ContentRect &inner,
+    const ContentRect &outer) noexcept
+{
+    return finiteRect(inner) && finiteRect(outer) &&
+        inner.position.x >= outer.position.x &&
+        inner.position.y >= outer.position.y &&
+        inner.position.x + inner.size.x <=
+            outer.position.x + outer.size.x &&
+        inner.position.y + inner.size.y <=
+            outer.position.y + outer.size.y;
+}
+
+bool rectsOverlap(
+    const ContentRect &left,
+    const ContentRect &right) noexcept
+{
+    return left.position.x < right.position.x + right.size.x &&
+        left.position.x + left.size.x > right.position.x &&
+        left.position.y < right.position.y + right.size.y &&
+        left.position.y + left.size.y > right.position.y;
+}
+
+ContentRect placementBounds(
+    Vec2 center,
+    const BasePlacementDefinition &placement,
+    ItemOrientation orientation) noexcept
+{
+    const Vec2 size = orientedSize(placement.footprint, orientation);
+    return ContentRect{
+        {center.x - size.x * 0.5F, center.y - size.y * 0.5F},
+        size};
+}
+
 bool accessMatchesActiveBase(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -77,6 +118,58 @@ bool hasDirectChildren(
                     ProfileContainerKind::AssetCompartment &&
                 stored->container.ownerAssetId == ownerAssetId;
         });
+}
+
+bool placeableAssetFits(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId assetId,
+    const ItemDefinition &definition,
+    ItemOrientation orientation,
+    const BaseGroundAccess &access)
+{
+    if (!definition.basePlacement.has_value())
+        return true;
+    if (!access.placementContext.has_value())
+        return false;
+    const BaseGroundPlacementContext &context = *access.placementContext;
+    const ContentRect proposed = placementBounds(
+        access.dropPosition, *definition.basePlacement, orientation);
+    if ((definition.basePlacement->parcelOnly &&
+         !rectInside(proposed, context.baseParcel)) ||
+        std::any_of(
+            context.blockers.begin(), context.blockers.end(),
+            [&proposed](const ContentRect &blocker)
+            { return finiteRect(blocker) && rectsOverlap(proposed, blocker); }))
+    {
+        return false;
+    }
+    for (const auto &[id, other] : profile.assets.records())
+    {
+        if (id == assetId)
+            continue;
+        const auto *ground = std::get_if<BaseGroundAssetLocation>(
+            &other.location);
+        if (ground == nullptr ||
+            ground->baseSiteDefinitionId != access.baseSiteDefinitionId)
+        {
+            continue;
+        }
+        const ItemDefinition &otherDefinition = content.item(
+            other.definitionId);
+        if (!otherDefinition.basePlacement.has_value())
+            continue;
+        if (rectsOverlap(
+                proposed,
+                placementBounds(
+                    ground->position,
+                    *otherDefinition.basePlacement,
+                    other.orientation)))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 BaseGroundPlan containerAccessPlan(
@@ -259,6 +352,19 @@ BaseGroundReceipt applyDrop(
             "requested ground quantity or orientation is invalid",
             candidate.revision);
     }
+    if (!placeableAssetFits(
+            candidate,
+            content,
+            command.assetId,
+            definition,
+            command.orientation,
+            command.access))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "Base placement is outside the parcel or overlaps an obstacle",
+            candidate.revision);
+    }
     if (requested < asset->quantity)
     {
         if (definition.maxStackSize <= 1 ||
@@ -356,6 +462,42 @@ BaseGroundReceipt applyPickup(
     const bool nonEmptyContainer =
         !definition.containerCompartments.empty() &&
         hasDirectChildren(candidate, affectedId);
+    if (definition.basePlacement.has_value())
+    {
+        if (nonEmptyContainer)
+        {
+            return failure(
+                DomainErrorCode::IllegalDestination,
+                "empty the Base storage container before picking it up",
+                candidate.revision);
+        }
+        if (!command.access.stashAccessible)
+        {
+            return failure(
+                DomainErrorCode::IllegalDestination,
+                "Base storage container pickup requires warehouse access",
+                candidate.revision);
+        }
+        const auto origin = findFirstProfileFit(
+            candidate,
+            content,
+            ProfileContainerId::stash(),
+            definition,
+            asset->orientation,
+            asset->instanceId);
+        if (!origin.has_value())
+        {
+            return failure(
+                DomainErrorCode::Capacity,
+                "warehouse has no space for the Base storage container",
+                candidate.revision);
+        }
+        asset->location = StoredAssetLocation{
+            ProfileContainerId::stash(), *origin};
+        return BaseGroundReceipt{
+            true, false, DomainErrorCode::None, {}, candidate.revision,
+            affectedId};
+    }
     if (!nonEmptyContainer)
     {
         for (const ProfileContainerId container :
@@ -553,6 +695,36 @@ std::vector<BaseGroundAssetProjection> projectBaseGroundAssets(
         result.push_back(BaseGroundAssetProjection{
             id, asset.definitionId, asset.quantity, asset.orientation,
             ground->position});
+    }
+    return result;
+}
+
+std::vector<ContentRect> projectBaseGroundMovementBlockers(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const RegionalBaseSiteDefinitionId &siteDefinitionId)
+{
+    std::vector<ContentRect> result;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        const auto *ground =
+            std::get_if<BaseGroundAssetLocation>(&asset.location);
+        if (ground == nullptr ||
+            ground->baseSiteDefinitionId != siteDefinitionId)
+        {
+            continue;
+        }
+        const ItemDefinition &definition = content.item(asset.definitionId);
+        if (!definition.basePlacement.has_value() ||
+            !definition.basePlacement->blocksMovement)
+        {
+            continue;
+        }
+        result.push_back(placementBounds(
+            ground->position,
+            *definition.basePlacement,
+            asset.orientation));
     }
     return result;
 }

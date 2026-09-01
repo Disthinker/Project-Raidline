@@ -827,6 +827,25 @@ TEST(UiLocalizationTest, HomeRegionGroundContainersAreBilingual) {
             "请先把物品移入随身容器");
 }
 
+TEST(UiLocalizationTest, HomeRegionPlaceableStorageIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "Base Storage Crate"),
+            "基地储物箱");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE STORAGE PLACEMENT | LMB PLACE | R ROTATE | ESC CANCEL"),
+            "基地储物箱放置 | 左键确认 | R旋转 | ESC取消");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "PLACE STORAGE"),
+            "放置储物箱");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "empty the Base storage container before picking it up"),
+            "请先清空基地储物箱再收回");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

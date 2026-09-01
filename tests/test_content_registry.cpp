@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "home-region-onboarding-content-57");
+        "home-region-placeable-storage-content-58");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -195,7 +195,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
     EXPECT_EQ(comfort.requiredQuantity, 1U);
     EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
-    ASSERT_EQ(registry.items().size(), 50U);
+    ASSERT_EQ(registry.items().size(), 51U);
     ASSERT_EQ(registry.calibers().size(), 3U);
     EXPECT_EQ(
         registry.caliber(CaliberDefinitionId{"caliber.5_45x39"})
@@ -639,6 +639,51 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_FLOAT_EQ(deployment.enemies[0].position.x, 600.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[1].position.y, 500.0F);
     EXPECT_FLOAT_EQ(deployment.enemies[2].position.x, 930.0F);
+}
+
+TEST(ContentRegistryTest, BaseStorageCratePublishesPlaceableContainerContract)
+{
+    const ContentRegistry &registry = publishedContentRegistry();
+    const ItemDefinitionId id{"item.container.base_storage_crate"};
+    const ItemDefinition &crate = registry.item(id);
+
+    EXPECT_EQ(crate.category, ItemCategory::Container);
+    EXPECT_FALSE(crate.equipmentSlot.has_value());
+    ASSERT_EQ(crate.containerCompartments.size(), 1U);
+    EXPECT_EQ(crate.containerCompartments.front().width, 10U);
+    EXPECT_EQ(crate.containerCompartments.front().height, 8U);
+    ASSERT_TRUE(crate.basePlacement.has_value());
+    EXPECT_FLOAT_EQ(crate.basePlacement->footprint.x, 160.0F);
+    EXPECT_FLOAT_EQ(crate.basePlacement->footprint.y, 112.0F);
+    EXPECT_TRUE(crate.basePlacement->parcelOnly);
+    EXPECT_TRUE(crate.basePlacement->blocksMovement);
+    EXPECT_EQ(crate.marketBuyPrice, 160U);
+    EXPECT_EQ(crate.marketRecyclePrice, 40U);
+    EXPECT_NE(
+        std::find(
+            registry.fixedSupplyItemIds().begin(),
+            registry.fixedSupplyItemIds().end(),
+            id),
+        registry.fixedSupplyItemIds().end());
+}
+
+TEST(ContentRegistryTest, BasePlacementRejectsInvalidCapabilities)
+{
+    const std::string conflictingOwnership = replaceFirst(
+        publishedJsonCopy(),
+        "\"base_placement\": {",
+        "\"equipment_slot\": \"backpack\",\n      \"base_placement\": {");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(conflictingOwnership)),
+        ContentRegistryError);
+
+    const std::string badFootprint = replaceFirst(
+        publishedJsonCopy(),
+        "\"footprint\": {\"x\": 160, \"y\": 112}",
+        "\"footprint\": {\"x\": 16, \"y\": 112}");
+    EXPECT_THROW(
+        static_cast<void>(ContentRegistry::fromJson(badFootprint)),
+        ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, RejectsInvalidRegionalBaseThreatRate)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "collision.h"
@@ -94,6 +95,7 @@ void BaseWorld::configureSite(std::string_view siteDefinitionId)
 void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
 {
     siteDefinitionId_ = siteDefinitionId;
+    groundBlockers_.clear();
     layout_ = generateHomeRegionLayout(siteDefinitionId_);
     walkableBounds_ = Rect{{24.0F, 24.0F},
                            {layout_.worldSize.x - 48.0F,
@@ -138,12 +140,15 @@ void BaseWorld::rebuildCollisionIndex()
     movementBlockers_.clear();
     BallisticBlockerId id{1U};
     movementBlockers_.reserve(layout_.movementBlockers.size() +
-                              facilities_.size());
+                              facilities_.size() + groundBlockers_.size());
     for (const ContentRect &bounds : layout_.movementBlockers)
         movementBlockers_.push_back(BallisticBlocker{
             id++, Rect{bounds.position, bounds.size}});
     for (const BaseFacility &facility : facilities_)
         movementBlockers_.push_back(BallisticBlocker{id++, facility.bounds});
+    for (const ContentRect &bounds : groundBlockers_)
+        movementBlockers_.push_back(BallisticBlocker{
+            id++, Rect{bounds.position, bounds.size}});
     movementBlockerIndex_ = RaidSpaceBlockerIndex::build(
         layout_.worldSize, movementBlockers_, 320.0F);
     if (!movementBlockerIndex_.has_value())
@@ -395,6 +400,28 @@ bool BaseWorld::canAccessStash() const noexcept
             layout_.baseParcel.position.x + layout_.baseParcel.size.x &&
         playerPosition_.y + playerSize_.y <=
             layout_.baseParcel.position.y + layout_.baseParcel.size.y;
+}
+
+std::vector<ContentRect> BaseWorld::basePlacementBlockers() const
+{
+    std::vector<ContentRect> result = layout_.movementBlockers;
+    result.reserve(result.size() + facilities_.size() + 1U);
+    for (const BaseFacility &facility : facilities_)
+    {
+        result.push_back(ContentRect{
+            facility.bounds.position, facility.bounds.size});
+    }
+    result.push_back(ContentRect{playerPosition_, playerSize_});
+    return result;
+}
+
+void BaseWorld::configureGroundBlockers(
+    std::vector<ContentRect> blockers)
+{
+    if (blockers == groundBlockers_)
+        return;
+    groundBlockers_ = std::move(blockers);
+    rebuildCollisionIndex();
 }
 
 const HomeRegionLayout &BaseWorld::layout() const noexcept

@@ -67,6 +67,9 @@ public:
     [[nodiscard]] const ContentRect &baseParcel() const noexcept;
     [[nodiscard]] bool canAccessStash() const noexcept;
     [[nodiscard]] const HomeRegionLayout &layout() const noexcept;
+    [[nodiscard]] std::vector<ContentRect>
+    basePlacementBlockers() const;
+    void configureGroundBlockers(std::vector<ContentRect> blockers);
     [[nodiscard]] const HomeRegionPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
@@ -110,6 +113,7 @@ private:
     Rect walkableBounds_{};
     std::array<BaseFacility, 7> facilities_;
     std::vector<BallisticBlocker> movementBlockers_;
+    std::vector<ContentRect> groundBlockers_;
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
     WorldShootingRuntime shooting_;

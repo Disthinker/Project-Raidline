@@ -246,6 +246,17 @@ struct ContainerCompartmentDefinition
         const ContainerCompartmentDefinition &) = default;
 };
 
+struct BasePlacementDefinition
+{
+    Vec2 footprint;
+    bool parcelOnly{};
+    bool blocksMovement{};
+
+    friend bool operator==(
+        const BasePlacementDefinition &,
+        const BasePlacementDefinition &) = default;
+};
+
 enum class ItemOrientation
 {
     Degrees0,
@@ -316,6 +327,7 @@ struct ItemDefinition
     std::vector<EquipmentSlotKind> compatibleEquipmentSlots;
     std::vector<ContainerCompartmentDefinition>
         containerCompartments;
+    std::optional<BasePlacementDefinition> basePlacement;
     std::uint32_t marketBuyPrice{};
     std::uint32_t marketRecyclePrice{};
     std::uint32_t maximumCharges{};

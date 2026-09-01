@@ -7,6 +7,12 @@
 
 #include "inventory_domain.h"
 
+struct BaseGroundPlacementContext
+{
+    ContentRect baseParcel;
+    std::vector<ContentRect> blockers;
+};
+
 struct BaseGroundAccess
 {
     RegionalBaseSiteDefinitionId baseSiteDefinitionId;
@@ -14,6 +20,7 @@ struct BaseGroundAccess
     Vec2 dropPosition;
     bool stashAccessible{};
     float interactionRange{72.0F};
+    std::optional<BaseGroundPlacementContext> placementContext;
 };
 
 struct DropBaseGroundAssetCommand
@@ -97,6 +104,12 @@ struct BaseGroundAssetProjection
 [[nodiscard]] std::vector<BaseGroundAssetProjection>
 projectBaseGroundAssets(
     const ProfileState &profile,
+    const RegionalBaseSiteDefinitionId &siteDefinitionId);
+
+[[nodiscard]] std::vector<ContentRect>
+projectBaseGroundMovementBlockers(
+    const ProfileState &profile,
+    const ContentRegistry &content,
     const RegionalBaseSiteDefinitionId &siteDefinitionId);
 
 [[nodiscard]] std::optional<BaseGroundAssetProjection>

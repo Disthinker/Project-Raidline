@@ -2190,6 +2190,7 @@ void App::updateBase(float deltaTime)
     gameSession_.advanceBaseWorldClock(deltaTime);
     if (gameSession_.baseThreatProjection().warningActive)
     {
+        basePlacementState_.reset();
         tacticalMapOpen_ = false;
         closeInventory();
         gameFlow_.closeBaseFacility();
@@ -2227,6 +2228,62 @@ void App::updateBase(float deltaTime)
         pendingBaseClicks_.clear();
         pendingInventoryUiEvents_.clear();
         pendingProfileRightClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
+
+    if (basePlacementState_.has_value())
+    {
+        if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+        {
+            basePlacementState_.reset();
+            pendingBaseClicks_.clear();
+            pendingBaseRotate_ = false;
+            uiMessage_ = "BASE STORAGE PLACEMENT CANCELLED";
+            input_.suppressPrimaryPointerUntilRelease();
+            return;
+        }
+        const AssetRecord *asset = gameSession_.profile().assets.find(
+            basePlacementState_->assetId);
+        if (asset == nullptr)
+        {
+            basePlacementState_.reset();
+            pendingBaseClicks_.clear();
+            pendingBaseRotate_ = false;
+            uiMessage_ = "ASSET NO LONGER EXISTS";
+            return;
+        }
+        const ItemDefinition &definition = publishedContentRegistry().item(
+            asset->definitionId);
+        if (pendingBaseRotate_ && definition.canRotate)
+        {
+            basePlacementState_->orientation = rotatedClockwise(
+                basePlacementState_->orientation);
+        }
+        pendingBaseRotate_ = false;
+        for (const BasePointerClick &click : pendingBaseClicks_)
+        {
+            const Vec2 worldPosition = raidScreenToWorld(
+                {click.position.x, click.position.y},
+                baseWorldCameraOffset());
+            const BaseGroundReceipt receipt =
+                gameFlow_.dropBaseGroundAssetAt(
+                    basePlacementState_->assetId,
+                    basePlacementState_->quantity,
+                    basePlacementState_->orientation,
+                    worldPosition,
+                    nextProfileTransactionId("base-storage-place"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE STORAGE CONTAINER PLACED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::InventoryMoveOrPlace
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+                basePlacementState_.reset();
+            break;
+        }
+        pendingBaseClicks_.clear();
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
@@ -4412,6 +4469,27 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     gameAudio_.play(SoundEventId::UiDeny);
                     return;
                 }
+                const AssetRecord *sourceAsset = profile.assets.find(
+                    request.source.instanceId);
+                if (sourceAsset == nullptr)
+                {
+                    uiMessage_ = "ASSET NO LONGER EXISTS";
+                    return;
+                }
+                const ItemDefinition &definition =
+                    publishedContentRegistry().item(
+                        sourceAsset->definitionId);
+                if (definition.basePlacement.has_value())
+                {
+                    basePlacementState_ = BasePlacementState{
+                        request.source.instanceId,
+                        request.source.quantity,
+                        request.source.orientation};
+                    closeInventory();
+                    uiMessage_ =
+                        "BASE STORAGE PLACEMENT | LMB PLACE | R ROTATE | ESC CANCEL";
+                    return;
+                }
                 const BaseGroundReceipt receipt =
                     gameFlow_.dropBaseGroundAsset(
                         request.source.instanceId,
@@ -5246,7 +5324,25 @@ void App::processEvents()
 
         else if (gameFlow_.state() == GameFlowState::Base)
         {
-            if (inventoryOverlayState_.isOpen())
+            if (basePlacementState_.has_value())
+            {
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingBaseClicks_.push_back(BasePointerClick{
+                        MousePosition{event.button.x, event.button.y},
+                        input_.isControlPressed(),
+                        input_.isShiftPressed()});
+                }
+                else if (event.type == SDL_EVENT_KEY_DOWN &&
+                         event.key.scancode == SDL_SCANCODE_R &&
+                         !event.key.repeat)
+                {
+                    pendingBaseRotate_ = true;
+                }
+            }
+            else if (inventoryOverlayState_.isOpen())
             {
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                     event.button.button == SDL_BUTTON_RIGHT &&
@@ -5436,6 +5532,10 @@ void App::update(float deltaTime)
     {
         tacticalMapOpen_ = false;
     }
+    if (gameFlow_.state() != GameFlowState::Base)
+    {
+        basePlacementState_.reset();
+    }
     if (gameFlow_.state() != GameFlowState::Raid)
     {
         developerCrisisRevealEnabled_ = false;
@@ -5461,6 +5561,7 @@ void App::update(float deltaTime)
     }
     const bool existingModalHandlesEscape =
         inventoryOverlayState_.isOpen() ||
+        basePlacementState_.has_value() ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
@@ -8736,7 +8837,8 @@ void App::syncRaidPointerCapture() noexcept
         RaidPointerCaptureContext{
             raidWorldActive || baseWorldActive,
             raidWorldActive || baseWorldActive,
-            inventoryOverlayState_.isOpen(),
+            inventoryOverlayState_.isOpen() ||
+                basePlacementState_.has_value(),
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
             pauseMenu_.isOpen(),
@@ -8775,6 +8877,7 @@ void App::renderAimCrosshair()
     const bool inRaidWorld = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
+        basePlacementState_.has_value() ||
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
@@ -9883,11 +9986,16 @@ void App::renderBaseWorld()
         const InventoryFootprint footprint = inventoryFootprint(
             definition, asset->orientation);
         constexpr float cellSize{22.0F};
+        const Vec2 drawSize = definition.basePlacement.has_value()
+            ? orientedSize(definition.worldRenderSize, asset->orientation)
+            : Vec2{
+                  static_cast<float>(footprint.width) * cellSize,
+                  static_cast<float>(footprint.height) * cellSize};
         const SDL_FRect bounds{
-            ground.position.x - footprint.width * cellSize * 0.5F,
-            ground.position.y - footprint.height * cellSize * 0.5F,
-            footprint.width * cellSize,
-            footprint.height * cellSize};
+            ground.position.x - drawSize.x * 0.5F,
+            ground.position.y - drawSize.y * 0.5F,
+            drawSize.x,
+            drawSize.y};
         SDL_SetRenderDrawColor(renderer_, 86, 166, 190, 80);
         const SDL_FRect halo{
             bounds.x - 5.0F, bounds.y - 5.0F,
@@ -9895,6 +10003,8 @@ void App::renderBaseWorld()
         SDL_RenderFillRect(renderer_, &halo);
         renderProfileAsset(*asset, bounds, cellSize, 255, false);
     }
+
+    renderBasePlacementPreview();
 
     const Vec2 playerPosition = world.playerPosition();
     const Vec2 playerSize = world.playerSize();
@@ -9931,6 +10041,55 @@ void App::renderBaseWorld()
             baseFacilityName(*facility));
         uiTextRenderer_.render(renderer_, 520.0F, 650.0F, prompt.c_str());
     }
+}
+
+void App::renderBasePlacementPreview()
+{
+    if (!basePlacementState_.has_value() ||
+        !pointerWorldPosition_.has_value())
+    {
+        return;
+    }
+    const AssetRecord *asset = gameSession_.profile().assets.find(
+        basePlacementState_->assetId);
+    if (asset == nullptr)
+        return;
+    const ItemDefinition &definition = publishedContentRegistry().item(
+        asset->definitionId);
+    if (!definition.basePlacement.has_value())
+        return;
+    const Vec2 worldPosition = raidScreenToWorld(
+        *pointerWorldPosition_, baseWorldCameraOffset());
+    const Vec2 size = orientedSize(
+        definition.basePlacement->footprint,
+        basePlacementState_->orientation);
+    const BaseGroundPlan plan = gameFlow_.queryBaseGroundDropAt(
+        basePlacementState_->assetId,
+        basePlacementState_->quantity,
+        basePlacementState_->orientation,
+        worldPosition);
+    const SDL_FRect bounds{
+        worldPosition.x - size.x * 0.5F,
+        worldPosition.y - size.y * 0.5F,
+        size.x,
+        size.y};
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    if (plan.canCommit)
+        SDL_SetRenderDrawColor(renderer_, 72, 206, 132, 105);
+    else
+        SDL_SetRenderDrawColor(renderer_, 220, 72, 66, 105);
+    SDL_RenderFillRect(renderer_, &bounds);
+    if (plan.canCommit)
+        SDL_SetRenderDrawColor(renderer_, 112, 244, 170, 255);
+    else
+        SDL_SetRenderDrawColor(renderer_, 255, 104, 94, 255);
+    SDL_RenderRect(renderer_, &bounds);
+    uiTextRenderer_.render(
+        renderer_,
+        bounds.x + 8.0F,
+        bounds.y + 8.0F,
+        plan.canCommit ? "PLACE STORAGE" : "BLOCKED");
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
 void App::renderHomeRegionMap()

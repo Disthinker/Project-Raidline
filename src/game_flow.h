@@ -67,6 +67,17 @@ public:
         std::uint32_t quantity,
         ItemOrientation orientation,
         std::string transactionId);
+    [[nodiscard]] BaseGroundPlan queryBaseGroundDropAt(
+        AssetInstanceId assetId,
+        std::uint32_t quantity,
+        ItemOrientation orientation,
+        Vec2 worldPosition) const;
+    [[nodiscard]] BaseGroundReceipt dropBaseGroundAssetAt(
+        AssetInstanceId assetId,
+        std::uint32_t quantity,
+        ItemOrientation orientation,
+        Vec2 worldPosition,
+        std::string transactionId);
     [[nodiscard]] BaseGroundPlan queryBaseGroundContainerAccess(
         AssetInstanceId containerAssetId) const;
     [[nodiscard]] InventoryPlan queryBaseGroundContainerInventory(
@@ -111,6 +122,8 @@ public:
 private:
     void syncBaseWorldSite();
     [[nodiscard]] BaseGroundAccess baseGroundAccess() const noexcept;
+    [[nodiscard]] BaseGroundAccess baseGroundPlacementAccess(
+        Vec2 worldPosition) const;
 
     GameSession gameSession_;
     BaseWorld baseWorld_;

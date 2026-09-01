@@ -101,6 +101,11 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     {
         return std::nullopt;
     }
+    baseWorld.configureGroundBlockers(
+        projectBaseGroundMovementBlockers(
+            profile_,
+            publishedContentRegistry(),
+            RegionalBaseSiteDefinitionId{baseWorld.siteDefinitionId()}));
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         baseCombatElapsedSeconds_ += deltaTime;

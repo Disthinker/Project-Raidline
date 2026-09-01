@@ -52,6 +52,13 @@ struct ProfileContextMenu
     MousePosition position{};
 };
 
+struct BasePlacementState
+{
+    AssetInstanceId assetId{};
+    std::uint32_t quantity{};
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+};
+
 class App
 {
 public:
@@ -109,6 +116,7 @@ private:
     std::optional<ProfileAssetSelection> profileAssetSelection_;
     std::optional<ProfileContextMenu> profileContextMenu_;
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
+    std::optional<BasePlacementState> basePlacementState_;
     std::uint64_t profileTransactionSequence_{};
     bool newGameOverwriteArmed_{};
     bool settingsOpen_{};
@@ -291,6 +299,7 @@ private:
         const RaidDeploymentProgress &progress);
     void renderBase();
     void renderBaseWorld();
+    void renderBasePlacementPreview();
     void renderHomeRegionMap();
     void renderBaseStorage();
     void renderBaseSupply();
