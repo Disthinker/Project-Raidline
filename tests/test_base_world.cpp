@@ -336,3 +336,33 @@ TEST(BaseWorldTest, ExposesWorkshopProductionFacility)
         baseFacilityName(BaseFacilityKind::Workshop),
         "WORKSHOP & PRODUCTION");
 }
+
+TEST(BaseWorldTest, SpatialOverridesMoveCoreFacilityAndCollisionTogether)
+{
+    BaseWorld world;
+    const Vec2 center{5200.0F, 3300.0F};
+    world.configureSite(
+        "regional_base_site.greyline_yard",
+        {BaseFacilitySpatialOverride{BaseFacilityKind::Storage, center}});
+    const auto storage = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::Storage; });
+    ASSERT_NE(storage, world.facilities().end());
+    EXPECT_FLOAT_EQ(
+        storage->bounds.position.x + storage->bounds.size.x * 0.5F,
+        center.x);
+    EXPECT_FLOAT_EQ(
+        storage->bounds.position.y + storage->bounds.size.y * 0.5F,
+        center.y);
+
+    const auto excluding = world.basePlacementBlockersExcluding(
+        BaseFacilityKind::Storage);
+    EXPECT_FALSE(std::any_of(
+        excluding.begin(), excluding.end(),
+        [&](const ContentRect &bounds)
+        { return bounds.position.x == storage->bounds.position.x &&
+                 bounds.position.y == storage->bounds.position.y &&
+                 bounds.size.x == storage->bounds.size.x &&
+                 bounds.size.y == storage->bounds.size.y; }));
+}

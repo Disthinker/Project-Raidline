@@ -820,6 +820,63 @@ TEST(PersistentSessionTest, PlaceableStorageSaveFailurePreservesMemory)
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
 }
 
+TEST(PersistentSessionTest,
+     CoreFacilityRepositionPersistsAndSaveFailurePreservesMemory)
+{
+    SessionSaveDirectory temporary;
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewPublishedProfile(
+        "persistent-facility-layout", content);
+    SaveRepository repository{temporary.path()};
+    ASSERT_TRUE(repository.save(
+        initial, content.contentVersion()).succeeded);
+
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const BaseFacilityDefinitionId warehouse{
+        "base_facility.warehouse"};
+    const RepositionBaseFacilityCommand command{
+        warehouse,
+        Vec2{400.0F, 400.0F},
+        Vec2{300.0F, 220.0F},
+        BaseFacilityLayoutAccess{
+            greyline,
+            ContentRect{{0.0F, 0.0F}, {1600.0F, 1120.0F}},
+            {}}};
+
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const BaseFacilityLayoutReceipt moved =
+        session.executeBaseFacilityLayout(command, "persist-core-facility");
+    ASSERT_TRUE(moved.succeeded) << moved.message;
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    const Vec2 persisted = reopened.profile().baseFacilityLayout
+        .placements.at(greyline).at(warehouse);
+    EXPECT_FLOAT_EQ(persisted.x, 0.25F);
+    EXPECT_FLOAT_EQ(persisted.y, 400.0F / 1120.0F);
+
+    const std::uint64_t before =
+        profileStateFingerprint(reopened.profile());
+    const std::filesystem::path invalidDirectory =
+        temporary.path() / "facility-layout-not-a-directory";
+    {
+        std::ofstream file(invalidDirectory);
+        file << "occupied";
+    }
+    reopened.configurePersistence(invalidDirectory);
+    RepositionBaseFacilityCommand rejected = command;
+    rejected.worldCenter = Vec2{700.0F, 600.0F};
+    const BaseFacilityLayoutReceipt failed =
+        reopened.executeBaseFacilityLayout(
+            rejected, "failed-core-facility-save");
+    EXPECT_FALSE(failed.succeeded);
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), before);
+}
+
 TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
 {
     SessionSaveDirectory temporary;

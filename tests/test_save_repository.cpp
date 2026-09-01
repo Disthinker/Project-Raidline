@@ -3585,3 +3585,34 @@ TEST(SaveRepositoryTest,
         settledLoaded.profile->lastRaidResult->baseThreatReducedUnits,
         40U);
 }
+
+TEST(SaveRepositoryTest,
+     BaseFacilitySpatialLayoutRoundTripsAndSchema39GetsDefaults)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "facility-layout-save", content);
+    const RegionalBaseSiteDefinitionId greyline{
+        "regional_base_site.greyline_yard"};
+    const BaseFacilityDefinitionId warehouse{"base_facility.warehouse"};
+    profile.baseFacilityLayout.placements.at(greyline).at(warehouse) =
+        Vec2{0.31F, 0.42F};
+
+    const SaveLoadResult current = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_EQ(current.status, SaveLoadStatus::LoadedPrimary)
+        << current.message;
+    ASSERT_TRUE(current.profile.has_value());
+    EXPECT_EQ(current.profile->baseFacilityLayout, profile.baseFacilityLayout);
+
+    const SaveLoadResult legacy = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion(), 39U),
+        content);
+    ASSERT_EQ(legacy.status, SaveLoadStatus::LoadedPrimary)
+        << legacy.message;
+    ASSERT_TRUE(legacy.profile.has_value());
+    const Vec2 migrated = legacy.profile->baseFacilityLayout
+        .placements.at(greyline).at(warehouse);
+    EXPECT_FLOAT_EQ(migrated.x, 0.14375F);
+    EXPECT_FLOAT_EQ(migrated.y, 0.29464287F);
+}

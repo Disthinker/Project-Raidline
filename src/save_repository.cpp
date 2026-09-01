@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "base_resource_domain.h"
+#include "base_facility_layout_domain.h"
 #include "base_morale_domain.h"
 #include "base_siege_domain.h"
 #include "regional_operations_domain.h"
@@ -1108,6 +1109,28 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["base_construction"]["active_project"] = nullptr;
         }
     }
+    if (schemaVersion >= 40)
+    {
+        Json sites = Json::array();
+        for (const auto &[siteDefinitionId, placements] :
+             profile.baseFacilityLayout.placements)
+        {
+            Json facilities = Json::array();
+            for (const auto &[facilityDefinitionId, normalizedCenter] :
+                 placements)
+            {
+                facilities.push_back({
+                    {"definition_id", facilityDefinitionId.value()},
+                    {"normalized_x", normalizedCenter.x},
+                    {"normalized_y", normalizedCenter.y}});
+            }
+            sites.push_back({
+                {"site_definition_id", siteDefinitionId.value()},
+                {"facilities", std::move(facilities)}});
+        }
+        payload["base_facility_layout"] = {
+            {"sites", std::move(sites)}};
+    }
     if (schemaVersion >= 15)
     {
         Json assignments = Json::array();
@@ -2171,7 +2194,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 29 && schemaVersion != 30 && schemaVersion != 31 &&
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
-        schemaVersion != 38 && schemaVersion != 39)
+        schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2349,7 +2372,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 33 && schemaVersion != 34 &&
               schemaVersion != 35 && schemaVersion != 36 &&
               schemaVersion != 37 && schemaVersion != 38 &&
-              schemaVersion != 39) ||
+              schemaVersion != 39 && schemaVersion != 40) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2531,6 +2554,44 @@ SaveLoadResult deserializeProfileEnvelope(
                 profile.baseConstruction,
                 content,
                 profile.worldClock.elapsedWorldMinutes);
+        }
+        profile.baseFacilityLayout.placements.clear();
+        if (schemaVersion >= 40)
+        {
+            const Json &layout = payload.at("base_facility_layout");
+            for (const Json &site : layout.at("sites"))
+            {
+                const RegionalBaseSiteDefinitionId siteDefinitionId{
+                    site.at("site_definition_id").get<std::string>()};
+                auto [siteIt, inserted] =
+                    profile.baseFacilityLayout.placements.emplace(
+                        siteDefinitionId,
+                        std::map<BaseFacilityDefinitionId, Vec2>{});
+                if (!inserted)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Base facility site layout is duplicated"};
+                }
+                for (const Json &facility : site.at("facilities"))
+                {
+                    const BaseFacilityDefinitionId definitionId{
+                        facility.at("definition_id").get<std::string>()};
+                    if (!siteIt->second.emplace(
+                            definitionId,
+                            Vec2{
+                                facility.at("normalized_x").get<float>(),
+                                facility.at("normalized_y").get<float>()})
+                            .second)
+                    {
+                        return {SaveLoadStatus::Failed, std::nullopt,
+                                "Base facility spatial layout is duplicated"};
+                    }
+                }
+            }
+        }
+        else
+        {
+            initializeBaseFacilityLayouts(profile, content);
         }
         if (schemaVersion >= 15)
         {

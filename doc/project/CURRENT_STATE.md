@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@ee44d52`，PR #130 已合入并完成 Home Region 基地运营总览与设施定位。
-- 当前开发分支：`codex/home-region-operation-notifications-v1`，从 `origin/main@ee44d52` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-operation-notifications-v1.md`。
-- 当前切片把设施升级、制造和居民治疗的已提交完成结果投影为短时非阻塞通知，并在建设面板中突出对应固定设施。
-- 当前实现已通过 Windows Debug 全目标、91/91 定向测试和 1390/1390 完整 CTest；等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 已验收主线：`origin/main@e7590d9`，PR #131 已合入并完成 Home Region 基地运营完成通知与设施标记。
+- 当前开发分支：`codex/home-region-facility-layout-v1`，从 `origin/main@e7590d9` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-facility-layout-v1.md`。
+- 当前切片把仓库、医疗所、宿舍和工坊从代码固定坐标迁入 Profile 权威布局，并允许在建设模式中通过绿/红虚像原子移动。
+- 当前实现已通过 Windows Debug 全目标、226/226 定向测试和 1396/1396 完整 CTest；等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 从有限新档整备到基地运营总览均已进入主线。当前切片只表现已提交的设施升级、制造和治疗完成事实，不改变 Raid、Settlement、资产所有权或存档 schema。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 从有限新档整备到基地运营完成反馈均已进入主线。当前切片建立核心设施可持久布局，不改变设施既有功能、资产所有权或 Raid 生命周期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -87,7 +87,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 70. **Home Region 设施统一管理与状态展示 v1**：选择固定设施显示等级、运行/储备状态、人员与当前任务，并可打开已有功能页。PR #128 已通过 CI 和用户验收，以 `cb73ce0` 进入 main。
 71. **Home Region 设施统一快速操作 v1**：无需额外选择的安排人员、设施升级、现有制造订单处理、居民治疗和自动补员可从管理卡片执行；需要配方或时长选择的操作仍在完整功能页。PR #129 已通过 CI 和用户验收，以 `722a20c` 进入 main。
 72. **Home Region 基地运营总览与设施定位 v1**：建设面板集中显示待领取产物、活动升级/制造/治疗和缺员；点击条目把瞬态建设镜头定位到对应设施并选中管理卡片。PR #130 已通过用户验收并以 `ee44d52` 合入 main。
-73. **Home Region 基地运营完成通知与设施标记 v1（当前开发分支）**：升级、制造和居民治疗完成后提供短时非阻塞通知；Raid 内完成事实延迟到 Settlement 成功后发布，建设面板突出对应固定设施，无 schema/content 变更。
+73. **Home Region 基地运营完成通知与设施标记 v1**：升级、制造和居民治疗完成后提供短时非阻塞通知；Raid 内完成事实延迟到 Settlement 成功后发布，建设面板突出对应固定设施。PR #131 已通过 CI 和用户正常游玩验收，并以 `e7590d9` 合入 main。
+74. **Home Region 核心设施空间化与持久布局 v1（当前开发分支）**：仓库、医疗所、宿舍和工坊使用稳定设施 ID 与站点归一化位置；建设模式可移动已安装设施，非法重叠、越界或保存失败均零提交。schema v40 保存每个已发布基地地点的独立布局，schema v39 及更早版本确定性迁移到原位置。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

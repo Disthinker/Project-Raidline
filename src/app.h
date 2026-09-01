@@ -81,6 +81,12 @@ struct BaseFacilityContextMenu
     MousePosition position{};
 };
 
+struct BaseFixedFacilityPlacementState
+{
+    BaseFacilityKind facility{BaseFacilityKind::Storage};
+    bool returnToBuildPanel{true};
+};
+
 enum class BaseOperationNoticeKind
 {
     FacilityUpgrade,
@@ -153,6 +159,8 @@ private:
     std::optional<ProfileContextMenu> profileContextMenu_;
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
     std::optional<BasePlacementState> basePlacementState_;
+    std::optional<BaseFixedFacilityPlacementState>
+        baseFixedFacilityPlacementState_;
     bool baseConstructionPanelOpen_{};
     BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
     std::size_t baseConstructionZoomIndex_{2U};
@@ -267,6 +275,7 @@ private:
         AssetInstanceId assetId,
         BasePlacementState::Mode mode,
         bool returnToBuildPanel);
+    void startBaseFixedFacilityPlacement(BaseFacilityKind facility);
     [[nodiscard]] bool tryDeployFromBase(
         std::optional<RegionalOutpostDefinitionId>
             outpostRestorationId = std::nullopt,

@@ -33,6 +33,21 @@ struct BaseFacility
     float interactionRange{56.0F};
 };
 
+struct BaseFacilitySpatialOverride
+{
+    BaseFacilityKind kind{BaseFacilityKind::Storage};
+    Vec2 worldCenter{};
+
+    friend bool operator==(
+        const BaseFacilitySpatialOverride &left,
+        const BaseFacilitySpatialOverride &right)
+    {
+        return left.kind == right.kind &&
+            left.worldCenter.x == right.worldCenter.x &&
+            left.worldCenter.y == right.worldCenter.y;
+    }
+};
+
 using BaseInput = GameplayInput;
 
 struct HomeRegionPresentationProjection
@@ -51,6 +66,9 @@ public:
     BaseWorld();
 
     void configureSite(std::string_view siteDefinitionId);
+    void configureSite(
+        std::string_view siteDefinitionId,
+        std::vector<BaseFacilitySpatialOverride> overrides);
 
     [[nodiscard]] std::optional<BaseFacilityKind> update(
         const BaseInput &input,
@@ -69,6 +87,8 @@ public:
     [[nodiscard]] const HomeRegionLayout &layout() const noexcept;
     [[nodiscard]] std::vector<ContentRect>
     basePlacementBlockers() const;
+    [[nodiscard]] std::vector<ContentRect>
+    basePlacementBlockersExcluding(BaseFacilityKind facility) const;
     void configureGroundBlockers(std::vector<ContentRect> blockers);
     [[nodiscard]] const HomeRegionPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
@@ -112,6 +132,7 @@ private:
     Animator playerMovementAnimator_;
     Rect walkableBounds_{};
     std::array<BaseFacility, 7> facilities_;
+    std::vector<BaseFacilitySpatialOverride> facilityOverrides_;
     std::vector<BallisticBlocker> movementBlockers_;
     std::vector<ContentRect> groundBlockers_;
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;

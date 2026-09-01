@@ -1,6 +1,6 @@
 # Home Region 基地运营完成通知与设施标记 v1 ExecPlan
 
-状态：实现完成；Windows Debug 全目标、91/91 定向测试与 1390/1390 完整 CTest 已通过，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。基线为用户已验收并合入的 PR #130 / `origin/main@ee44d52`。
+状态：已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `e7590d9` 进入 main。
 
 ## 玩家结果与依赖
 

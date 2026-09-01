@@ -912,6 +912,10 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "移动基地设施 | 左键放置 | R旋转 | ESC取消");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "MOVE BASE FACILITY | LMB PLACE | ESC CANCEL"),
+            "移动核心设施 | 左键放置 | ESC取消");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "RETURN EMPTY TO STASH"),
             "空设施收回仓库");
   EXPECT_EQ(localizeUiText(
@@ -930,6 +934,10 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
                 UiLanguage::SimplifiedChinese,
                 "BASE FACILITY FUNCTION OPENED"),
             "基地设施功能页面已打开");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE FACILITY CANNOT BE MOVED"),
+            "该基地设施不能移动");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
                 "MOVE FACILITY"),
