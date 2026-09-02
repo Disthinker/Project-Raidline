@@ -652,5 +652,29 @@ BaseOperationsOverviewProjection projectBaseOperationsOverview(
             BaseFacilityKind::Medical,
             BaseOperationOverviewKind::StaffingGap});
     }
+
+    const auto resourceFlow = projectBaseResourceFlowWorldStatus(
+        profile, content, BaseFacilityKind::KitchenWater);
+    if (resourceFlow.has_value() &&
+        resourceFlow->status == BaseResourceFlowWorldStatus::Shortage)
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::KitchenWater,
+            BaseOperationOverviewKind::ResourceShortage});
+    }
+
+    const auto residents = facilityOperational(
+                               profile, BaseFacilityKind::Dormitory)
+        ? projectBaseResidentWorldStatus(
+              profile, BaseFacilityKind::Dormitory)
+        : std::nullopt;
+    if (residents.has_value() &&
+        (residents->status == BaseResidentWorldStatus::Injured ||
+         residents->status == BaseResidentWorldStatus::Overcrowded))
+    {
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Dormitory,
+            BaseOperationOverviewKind::ResidentPressure});
+    }
     return result;
 }

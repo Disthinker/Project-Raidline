@@ -149,7 +149,9 @@ enum class BaseOperationOverviewKind
     Construction,
     ResidentTreatment,
     Manufacturing,
-    StaffingGap
+    StaffingGap,
+    ResourceShortage,
+    ResidentPressure
 };
 
 struct BaseOperationOverviewEntry

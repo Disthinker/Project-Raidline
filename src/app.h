@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 
 #include "base_build_camera.h"
+#include "base_operations_presentation.h"
 #include "game_flow.h"
 #include "game_audio.h"
 #include "gameplay_input.h"
@@ -183,6 +184,9 @@ private:
     std::size_t baseConstructionCatalogPage_{};
     std::size_t baseConstructionZoomIndex_{2U};
     BaseBuildCameraController baseBuildCamera_;
+    BaseOperationsOverviewFilter baseOperationsOverviewFilter_{
+        BaseOperationsOverviewFilter::All};
+    std::size_t baseOperationsOverviewPage_{};
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
     std::optional<BaseFacilityKind> selectedBaseFixedFacility_;
     std::optional<BaseFacilityContextMenu> baseFacilityContextMenu_;
