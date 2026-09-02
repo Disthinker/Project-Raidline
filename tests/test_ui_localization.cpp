@@ -940,6 +940,22 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "基地设施功能页面已打开");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "OPEN BASE BUILD | KITCHEN & WATER REQUIRED"),
+            "打开基地建设 | 需要厨房与净水设施");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "CONSTRUCTION PROJECT CANCELLED | MATERIAL REFUNDED"),
+            "建设项目已取消 | 建材已返还");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "LV 0>1 | MAT 5"),
+            "等级 0>1 | 建材 5");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKERS 2 | HOURS 8"),
+            "劳动力 2 | 小时 8");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "BASE FACILITY CANNOT BE MOVED"),
             "该基地设施不能移动");
   EXPECT_EQ(localizeUiText(

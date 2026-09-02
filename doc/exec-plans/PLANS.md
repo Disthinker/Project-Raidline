@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/content-beta-weapon-caliber-v1.md`。PR #116 已由用户正常游玩验收并以 `e285a2b` 进入 main；当前只推进六种职责枪械、三种口径和两档普通弹的完整玩家闭环，不并行启动防具/容器梯度、Loot 经济重排、改枪附件、特殊弹、正式美术、实时守城或 AI 小队。
+当前实现计划：`active/home-region-construction-catalog-v1.md`。PR #134 已由用户正常游玩验收并以 `2ec99c2` 进入 main；当前只统一基地建设工程、设施购买与储备放置目录，不并行增加建设队列、科技树、供电管线、正式建筑美术、实时守城或 AI 小队。

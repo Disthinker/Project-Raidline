@@ -170,6 +170,7 @@ private:
         baseFixedFacilityPlacementState_;
     bool baseConstructionPanelOpen_{};
     BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
+    std::size_t baseConstructionCatalogPage_{};
     std::size_t baseConstructionZoomIndex_{2U};
     BaseBuildCameraController baseBuildCamera_;
     std::optional<AssetInstanceId> selectedBasePlacedAssetId_;
@@ -266,6 +267,7 @@ private:
         MousePosition position);
     void handleBaseConstructionRightClick(MousePosition position);
     void handleBaseFacilityContextMenuClick(MousePosition position);
+    [[nodiscard]] std::size_t baseBuildCatalogEntryCount() const;
     void adjustBaseConstructionZoom(int direction);
     void activateBaseBuildCamera() noexcept;
     void focusBaseFixedFacility(BaseFacilityKind facility) noexcept;

@@ -262,6 +262,51 @@ projectBaseConstruction(const ProfileState &profile,
   return projection;
 }
 
+std::vector<BaseConstructionCatalogEntry>
+projectBaseConstructionCatalog(
+    const ProfileState &profile,
+    const ContentRegistry &content) {
+  const BaseConstructionProjection construction =
+      projectBaseConstruction(profile, content);
+  std::vector<BaseConstructionCatalogEntry> result;
+  result.reserve(content.baseConstructionProjects().size());
+  for (const BaseConstructionProjectDefinition &definition :
+       content.baseConstructionProjects()) {
+    BaseConstructionCatalogEntry entry{
+        definition.id,
+        definition.displayName,
+        definition.target,
+        baseFacilityLevel(profile.baseConstruction, definition.target),
+        definition.targetLevel,
+        definition.materialCost,
+        definition.workerCount,
+        definition.durationMinutes};
+    const bool active = construction.activeProjectId.has_value() &&
+        *construction.activeProjectId == definition.id;
+    if (active) {
+      const BaseConstructionPlan plan = queryCancelBaseConstruction(
+          profile, content, CancelBaseConstructionCommand{definition.id});
+      entry.action = BaseConstructionCatalogAction::Cancel;
+      entry.canCommit = plan.canCommit;
+      entry.message = plan.message;
+      entry.remainingMinutes = construction.remainingMinutes;
+    } else if (entry.currentLevel >= entry.targetLevel) {
+      entry.action = BaseConstructionCatalogAction::Complete;
+      entry.message = "construction project is complete";
+    } else {
+      const BaseConstructionPlan plan = queryStartBaseConstruction(
+          profile, content, StartBaseConstructionCommand{definition.id});
+      entry.action = plan.canCommit
+          ? BaseConstructionCatalogAction::Start
+          : BaseConstructionCatalogAction::Blocked;
+      entry.canCommit = plan.canCommit;
+      entry.message = plan.message;
+    }
+    result.push_back(std::move(entry));
+  }
+  return result;
+}
+
 ConstructionMaterialPlan queryConstructionMaterialContribution(
     const ProfileState &profile, const ContentRegistry &content,
     const ContributeConstructionMaterialCommand &command) {

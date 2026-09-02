@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <limits>
 
 #include <gtest/gtest.h>
@@ -140,6 +141,69 @@ TEST(BaseConstructionDomainTest,
     EXPECT_TRUE(placements.contains(kitchenWater));
   }
   EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseConstructionDomainTest,
+     CatalogProjectsPublishedDefinitionsInStableOrder) {
+  const ContentRegistry &content = publishedContentRegistry();
+  ProfileState profile = makeNewAlphaProfile(
+      "construction-catalog-order", content);
+  profile.baseConstruction.materialUnits = 100U;
+
+  const auto catalog = projectBaseConstructionCatalog(profile, content);
+  ASSERT_EQ(catalog.size(), content.baseConstructionProjects().size());
+  for (std::size_t index{}; index < catalog.size(); ++index) {
+    EXPECT_EQ(catalog[index].definitionId,
+              content.baseConstructionProjects()[index].id);
+    EXPECT_EQ(catalog[index].displayName,
+              content.baseConstructionProjects()[index].displayName);
+    EXPECT_EQ(catalog[index].action, BaseConstructionCatalogAction::Start);
+    EXPECT_TRUE(catalog[index].canCommit);
+  }
+}
+
+TEST(BaseConstructionDomainTest,
+     CatalogUsesQueryResultsForActiveBlockedAndCompleteProjects) {
+  const ContentRegistry &content = publishedContentRegistry();
+  ProfileState profile = makeNewAlphaProfile(
+      "construction-catalog-state", content);
+  profile.baseConstruction.materialUnits = 100U;
+  ASSERT_TRUE(executeStartBaseConstruction(
+      profile, content, StartBaseConstructionCommand{kKitchenWaterBuild},
+      CommandContext{profile.revision, "catalog-start-kitchen"}).succeeded);
+
+  auto catalog = projectBaseConstructionCatalog(profile, content);
+  auto kitchen = std::find_if(
+      catalog.begin(), catalog.end(),
+      [](const BaseConstructionCatalogEntry &entry) {
+        return entry.definitionId == kKitchenWaterBuild;
+      });
+  auto dormitory = std::find_if(
+      catalog.begin(), catalog.end(),
+      [](const BaseConstructionCatalogEntry &entry) {
+        return entry.definitionId == kDormitoryExpansion;
+      });
+  ASSERT_NE(kitchen, catalog.end());
+  ASSERT_NE(dormitory, catalog.end());
+  EXPECT_EQ(kitchen->action, BaseConstructionCatalogAction::Cancel);
+  EXPECT_TRUE(kitchen->canCommit);
+  EXPECT_EQ(kitchen->remainingMinutes, 480U);
+  EXPECT_EQ(dormitory->action, BaseConstructionCatalogAction::Blocked);
+  EXPECT_FALSE(dormitory->canCommit);
+  EXPECT_EQ(dormitory->message,
+            "another Base construction project is active");
+
+  static_cast<void>(advanceWorldClock(profile.worldClock, 480U));
+  ASSERT_TRUE(applyBaseConstructionThrough(profile, content).completed);
+  catalog = projectBaseConstructionCatalog(profile, content);
+  kitchen = std::find_if(
+      catalog.begin(), catalog.end(),
+      [](const BaseConstructionCatalogEntry &entry) {
+        return entry.definitionId == kKitchenWaterBuild;
+      });
+  ASSERT_NE(kitchen, catalog.end());
+  EXPECT_EQ(kitchen->action, BaseConstructionCatalogAction::Complete);
+  EXPECT_FALSE(kitchen->canCommit);
 }
 
 TEST(BaseConstructionDomainTest, CancelRefundsMaterialWithoutRewindingTime) {
