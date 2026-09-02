@@ -1,6 +1,6 @@
 # Home Region 设施入口与作业区 v1 ExecPlan
 
-状态：开发完成，等待用户正常游玩验收。分支 `codex/home-region-facility-access-zones-v1` 从用户已验收并合入的 PR #135 / `origin/main@c37fe32` 创建。
+状态：已完成。PR #136 已通过 Windows Debug 全目标构建、97/97 定向回归、1414/1414 完整 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `d1c9b35` 进入 main。
 
 ## 玩家结果与依赖
 

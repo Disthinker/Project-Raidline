@@ -228,6 +228,95 @@ TEST(BaseFacilityManagementTest,
         workshop, BaseFacilityQuickActionKind::CancelManufacturing), nullptr);
 }
 
+TEST(BaseFacilityManagementTest,
+     WorldServiceProjectionUsesStablePlayerFacingPriority)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-world-service-priority", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 1000U;
+
+    const BaseFacilityWorldServiceProjection storage =
+        projectBaseFacilityWorldService(
+            profile, publishedContentRegistry(), BaseFacilityKind::Storage);
+    EXPECT_EQ(storage.status, BaseFacilityWorldServiceStatus::Ready);
+    EXPECT_EQ(storage.task, BaseFacilityTaskKind::Idle);
+
+    profile.baseWorkforce.workshopWorker.reset();
+    BaseFacilityWorldServiceProjection workshop =
+        projectBaseFacilityWorldService(
+            profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::NeedsStaff);
+
+    profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.workshop.level_2"},
+        3U,
+        1U,
+        1000U,
+        1120U};
+    workshop = projectBaseFacilityWorldService(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Working);
+    EXPECT_EQ(workshop.task, BaseFacilityTaskKind::Construction);
+    EXPECT_EQ(workshop.remainingMinutes, 120U);
+    profile.baseConstruction.activeProject.reset();
+
+    profile.baseManufacturing.activeOrder = BaseManufacturingOrder{
+        BaseServiceJobId{61U},
+        BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.weapon_maintenance_kit"},
+        1U,
+        BaseResidentProfession::Engineering,
+        900U,
+        1180U,
+        {},
+        AssetInstanceId{993U},
+        false};
+    workshop = projectBaseFacilityWorldService(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Working);
+    EXPECT_EQ(workshop.task, BaseFacilityTaskKind::Manufacturing);
+    EXPECT_EQ(workshop.remainingMinutes, 180U);
+
+    profile.baseManufacturing.activeOrder->outputReady = true;
+    workshop = projectBaseFacilityWorldService(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::OutputReady);
+    EXPECT_EQ(workshop.remainingMinutes, 0U);
+
+    profile.baseConstruction.facilities.at(
+        BaseFacilityDefinitionId{"base_facility.workshop"}) =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    workshop = projectBaseFacilityWorldService(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Blocked);
+}
+
+TEST(BaseFacilityManagementTest,
+     WorldServiceProjectionIsPureForEveryFacility)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-world-service-pure", publishedContentRegistry());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    constexpr std::array<BaseFacilityKind, 8U> kinds{
+        BaseFacilityKind::Storage,
+        BaseFacilityKind::Supply,
+        BaseFacilityKind::Allocation,
+        BaseFacilityKind::Medical,
+        BaseFacilityKind::Dormitory,
+        BaseFacilityKind::KitchenWater,
+        BaseFacilityKind::Workshop,
+        BaseFacilityKind::RaidGate};
+    for (const BaseFacilityKind kind : kinds)
+    {
+        const BaseFacilityWorldServiceProjection projection =
+            projectBaseFacilityWorldService(
+                profile, publishedContentRegistry(), kind);
+        EXPECT_EQ(projection.facility, kind);
+    }
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
 TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
 {
     ProfileState profile = makeNewAlphaProfile(

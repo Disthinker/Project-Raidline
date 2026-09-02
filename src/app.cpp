@@ -343,6 +343,57 @@ namespace
         return "UNKNOWN";
     }
 
+    const char *baseFacilityWorldServiceStatusName(
+        BaseFacilityWorldServiceStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseFacilityWorldServiceStatus::Ready:
+            return "READY";
+        case BaseFacilityWorldServiceStatus::Working:
+            return "WORKING";
+        case BaseFacilityWorldServiceStatus::OutputReady:
+            return "OUTPUT READY";
+        case BaseFacilityWorldServiceStatus::NeedsStaff:
+            return "NEEDS STAFF";
+        case BaseFacilityWorldServiceStatus::Blocked:
+            return "BLOCKED";
+        }
+        return "UNKNOWN";
+    }
+
+    SDL_Color baseFacilityWorldServiceColor(
+        BaseFacilityWorldServiceStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseFacilityWorldServiceStatus::Ready:
+            return SDL_Color{126, 224, 174, 255};
+        case BaseFacilityWorldServiceStatus::Working:
+            return SDL_Color{232, 180, 84, 255};
+        case BaseFacilityWorldServiceStatus::OutputReady:
+            return SDL_Color{108, 210, 240, 255};
+        case BaseFacilityWorldServiceStatus::NeedsStaff:
+            return SDL_Color{238, 130, 72, 255};
+        case BaseFacilityWorldServiceStatus::Blocked:
+            return SDL_Color{226, 84, 78, 255};
+        }
+        return SDL_Color{174, 188, 180, 255};
+    }
+
+    std::string baseFacilityWorldServiceLabel(
+        const BaseFacilityWorldServiceProjection &projection)
+    {
+        std::string label = baseFacilityWorldServiceStatusName(
+            projection.status);
+        if (projection.status == BaseFacilityWorldServiceStatus::Working &&
+            projection.remainingMinutes > 0U)
+        {
+            label += fmt::format(" | {} MIN", projection.remainingMinutes);
+        }
+        return label;
+    }
+
     const char *baseFacilityQuickActionName(
         BaseFacilityQuickActionKind action) noexcept
     {
@@ -10638,6 +10689,11 @@ void App::renderBaseWorld()
             continue;
         const BaseFacilityAccessGeometry access =
             baseFacilityAccessGeometry(facility);
+        const BaseFacilityWorldServiceProjection service =
+            projectBaseFacilityWorldService(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -10723,11 +10779,17 @@ void App::renderBaseWorld()
             access.entrancePoint.y - 5.0F,
             40.0F,
             10.0F};
-        SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
+        const SDL_Color serviceColor =
+            baseFacilityWorldServiceColor(service.status);
+        SDL_SetRenderDrawColor(
+            renderer_, serviceColor.r, serviceColor.g,
+            serviceColor.b, serviceColor.a);
         SDL_RenderFillRect(renderer_, &entrance);
+        const std::string serviceLabel = fmt::format(
+            "ENTRY | {}", baseFacilityWorldServiceLabel(service));
         uiTextRenderer_.render(
             renderer_, entrance.x - 2.0F, entrance.y + 12.0F,
-            "ENTRY");
+            serviceLabel.c_str());
     }
 
     for (const BaseGroundAssetProjection &ground :
@@ -10810,9 +10872,15 @@ void App::renderBaseWorld()
     }
     else if (const auto facility = world.interactableFacility())
     {
+        const BaseFacilityWorldServiceProjection service =
+            projectBaseFacilityWorldService(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                *facility);
         const std::string prompt = fmt::format(
-            "E - {}",
-            baseFacilityName(*facility));
+            "E - {} | {}",
+            baseFacilityName(*facility),
+            baseFacilityWorldServiceLabel(service));
         uiTextRenderer_.render(renderer_, 520.0F, 650.0F, prompt.c_str());
     }
 }
@@ -12309,10 +12377,19 @@ void App::renderHomeRegionMap()
         SDL_RenderFillRect(renderer_, &bounds);
         const BaseFacilityAccessGeometry access =
             baseFacilityAccessGeometry(facility);
+        const BaseFacilityWorldServiceProjection service =
+            projectBaseFacilityWorldService(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                facility.kind);
         const Vec2 entrance = screenPoint(access.entrancePoint);
         const SDL_FRect entranceMarker{
             entrance.x - 2.5F, entrance.y - 2.5F, 5.0F, 5.0F};
-        SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
+        const SDL_Color serviceColor =
+            baseFacilityWorldServiceColor(service.status);
+        SDL_SetRenderDrawColor(
+            renderer_, serviceColor.r, serviceColor.g,
+            serviceColor.b, serviceColor.a);
         SDL_RenderFillRect(renderer_, &entranceMarker);
     }
 
