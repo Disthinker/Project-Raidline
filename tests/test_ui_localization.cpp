@@ -1000,6 +1000,21 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "基地储物箱 | 已有 x2");
 }
 
+TEST(UiLocalizationTest, BaseFacilityWorkerWorldStatusIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKER | ENGINEERING | WORKING | 180 MIN"),
+            "工作人员 | 工程 | 工作中 | 180 分钟");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKER | MEDICAL | PAUSED"),
+            "工作人员 | 医疗 | 已暂停");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKER | MISSING"),
+            "工作人员 | 缺员");
+}
+
 TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

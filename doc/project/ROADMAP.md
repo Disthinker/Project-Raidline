@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 设施服务点状态反馈均已进入主线。当前推进设施作业点空间合同 v1，范围合同见 `doc/exec-plans/active/home-region-facility-work-sockets-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 设施作业点空间合同均已进入主线。当前推进聚合岗位世界占位反馈 v1，范围合同见 `doc/exec-plans/active/home-region-workforce-world-status-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -200,7 +200,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 基地建设项目目录 v1 | `B` 购买/建设页统一显示工程和可购买设施；卡片提供状态、成本、工期、开始/取消和明确分页 | SDL-free 工程目录投影、领域查询驱动状态、稳定分页、区域迁徙页只跳转目录 | PR #135 已通过 CI 与用户正常游玩验收，以 merge commit `c37fe32` 进入 main |
 | Home Region 设施入口与作业区 v1 | 玩家从清楚入口接近设施并按 `E` 打开功能；建设模式显示作业区且不能用设施或储物箱堵住入口 | 确定性入口/交互/作业几何、放置净空验证、世界/地图投影、无 schema 迁移 | PR #136 已通过 CI 与用户正常游玩验收，以 merge commit `d1c9b35` 进入 main |
 | Home Region 设施服务点状态反馈 v1 | 不打开管理页即可从设施入口、近距提示和地图看到可用、工作中、待领取、缺员或阻塞 | 现有管理事实的只读状态优先级、统一入口服务点投影、无 schema 迁移 | PR #137 已通过 CI 与用户正常游玩验收，以 merge commit `95f830c` 进入 main |
-| Home Region 设施作业点空间合同 v1 | 五类空间化核心设施显示稳定作业点，活动升级、制造、治疗或产物待取突出对应位置 | DefinitionId 驱动的类型化作业点、既有 workZone 净空保护、状态投影关联、无 schema/content 迁移 | Windows Debug 全目标、94/94 定向回归、187/187 扩展定向回归和 1417/1417 全量 CTest 已通过；等待 exact-head CI 与用户正常游玩验收 |
+| Home Region 设施作业点空间合同 v1 | 五类空间化核心设施显示稳定作业点，活动升级、制造、治疗或产物待取突出对应位置 | DefinitionId 驱动的类型化作业点、既有 workZone 净空保护、状态投影关联、无 schema/content 迁移 | PR #138 已通过 CI 与用户正常游玩验收，以 merge commit `5da9591` 进入 main |
+| Home Region 聚合岗位世界占位反馈 v1 | 工坊与医疗所的岗位在世界中显示缺员、闲置、工作中或暂停 | 既有聚合专业分配和任务事实的只读投影、稳定作业点关联、无 schema/content 迁移 | Windows Debug 全目标、182/182 定向回归和 1420/1420 全量 CTest 已通过；等待 exact-head CI 与用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

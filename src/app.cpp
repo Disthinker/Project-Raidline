@@ -400,6 +400,74 @@ namespace
         return "WORK POINT";
     }
 
+    const char *baseFacilityWorkerWorldStatusName(
+        BaseFacilityWorkerWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseFacilityWorkerWorldStatus::Missing:
+            return "MISSING";
+        case BaseFacilityWorkerWorldStatus::Idle:
+            return "IDLE";
+        case BaseFacilityWorkerWorldStatus::Working:
+            return "WORKING";
+        case BaseFacilityWorkerWorldStatus::Paused:
+            return "PAUSED";
+        }
+        return "MISSING";
+    }
+
+    const char *baseFacilityWorkerProfessionName(
+        BaseResidentProfession profession) noexcept
+    {
+        switch (profession)
+        {
+        case BaseResidentProfession::General:
+            return "GENERAL";
+        case BaseResidentProfession::Medical:
+            return "MEDICAL";
+        case BaseResidentProfession::Engineering:
+            return "ENGINEERING";
+        case BaseResidentProfession::Combat:
+            return "COMBAT";
+        }
+        return "UNKNOWN";
+    }
+
+    SDL_Color baseFacilityWorkerWorldColor(
+        BaseFacilityWorkerWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseFacilityWorkerWorldStatus::Missing:
+            return SDL_Color{230, 102, 78, 255};
+        case BaseFacilityWorkerWorldStatus::Idle:
+            return SDL_Color{154, 190, 170, 255};
+        case BaseFacilityWorkerWorldStatus::Working:
+            return SDL_Color{240, 190, 84, 255};
+        case BaseFacilityWorkerWorldStatus::Paused:
+            return SDL_Color{214, 132, 76, 255};
+        }
+        return SDL_Color{174, 188, 180, 255};
+    }
+
+    std::string baseFacilityWorkerWorldLabel(
+        const BaseFacilityWorkerWorldProjection &projection)
+    {
+        if (!projection.profession.has_value())
+            return "WORKER | MISSING";
+        std::string label = fmt::format(
+            "WORKER | {} | {}",
+            baseFacilityWorkerProfessionName(*projection.profession),
+            baseFacilityWorkerWorldStatusName(projection.status));
+        if (projection.status == BaseFacilityWorkerWorldStatus::Working &&
+            projection.remainingMinutes > 0U)
+        {
+            label += fmt::format(" | {} MIN", projection.remainingMinutes);
+        }
+        return label;
+    }
+
     std::string baseFacilityWorldServiceLabel(
         const BaseFacilityWorldServiceProjection &projection)
     {
@@ -10715,6 +10783,10 @@ void App::renderBaseWorld()
                 facility.kind);
         const std::optional<BaseFacilityWorkSocketProjection> workSocket =
             baseFacilityWorkSocket(facility);
+        const std::optional<BaseFacilityWorkerWorldProjection> worker =
+            projectBaseFacilityWorkerWorldStatus(
+                gameSession_.profile(), publishedContentRegistry(),
+                facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -10846,6 +10918,45 @@ void App::renderBaseWorld()
                 renderer_, socketBounds.x,
                 socketBounds.y + socketBounds.h + 3.0F,
                 baseFacilityWorkSocketName(workSocket->kind));
+
+            if (worker.has_value() &&
+                worker->workSocket == workSocket->kind)
+            {
+                const SDL_Color workerColor =
+                    baseFacilityWorkerWorldColor(worker->status);
+                const float centerX = workSocket->interactionPoint.x;
+                const float centerY = workSocket->interactionPoint.y;
+                const SDL_FRect head{
+                    centerX - 5.0F, centerY - 13.0F, 10.0F, 10.0F};
+                const SDL_FRect body{
+                    centerX - 7.0F, centerY - 1.0F, 14.0F, 16.0F};
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(
+                    renderer_, workerColor.r, workerColor.g,
+                    workerColor.b,
+                    worker->status ==
+                            BaseFacilityWorkerWorldStatus::Missing
+                        ? 110
+                        : 230);
+                if (worker->status ==
+                    BaseFacilityWorkerWorldStatus::Missing)
+                {
+                    SDL_RenderRect(renderer_, &head);
+                    SDL_RenderRect(renderer_, &body);
+                }
+                else
+                {
+                    SDL_RenderFillRect(renderer_, &head);
+                    SDL_RenderFillRect(renderer_, &body);
+                }
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+                const std::string workerLabel =
+                    baseFacilityWorkerWorldLabel(*worker);
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x,
+                    socketBounds.y - 18.0F,
+                    workerLabel.c_str());
+            }
         }
     }
 
