@@ -4,6 +4,7 @@
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
+#include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
 #include "base_workforce_domain.h"
 
@@ -474,6 +475,48 @@ projectBaseFacilityWorkerWorldStatus(
         projection.status = BaseFacilityWorkerWorldStatus::Working;
     }
     return projection;
+}
+
+std::optional<BaseResidentWorldProjection>
+projectBaseResidentWorldStatus(
+    const ProfileState &profile,
+    BaseFacilityKind kind) noexcept
+{
+    if (kind != BaseFacilityKind::Dormitory)
+        return std::nullopt;
+
+    const BasePopulationProjection population = projectBasePopulation(
+        profile.basePopulation);
+    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
+    const std::uint64_t classified =
+        static_cast<std::uint64_t>(workforce.availableResidents) +
+        workforce.assignedResidents;
+    const std::uint32_t constructionResidents =
+        classified < population.healthyResidents
+        ? population.healthyResidents -
+              static_cast<std::uint32_t>(classified)
+        : 0U;
+
+    BaseResidentWorldStatus status{BaseResidentWorldStatus::Stable};
+    if (population.ordinaryResidents == 0U)
+        status = BaseResidentWorldStatus::Empty;
+    else if (population.bedShortfall > 0U)
+        status = BaseResidentWorldStatus::Overcrowded;
+    else if (population.injuredResidents > 0U)
+        status = BaseResidentWorldStatus::Injured;
+
+    return BaseResidentWorldProjection{
+        BaseFacilityKind::Dormitory,
+        BaseFacilityWorkSocketKind::DormitoryBunk,
+        status,
+        population.ordinaryResidents,
+        population.healthyResidents,
+        population.injuredResidents,
+        population.bedCapacity,
+        population.bedShortfall,
+        workforce.availableResidents,
+        workforce.assignedResidents,
+        constructionResidents};
 }
 
 BaseOperationsOverviewProjection projectBaseOperationsOverview(

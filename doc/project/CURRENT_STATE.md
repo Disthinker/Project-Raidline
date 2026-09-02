@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@abe2886`，PR #139 已合入并完成 Home Region 聚合岗位世界占位反馈 v1。
-- 当前开发分支：`codex/home-region-workforce-world-actions-v1`，从 `origin/main@abe2886` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-workforce-world-actions-v1.md`。
-- 当前切片让 Workshop/Medical 岗位作业点直接提供分配、清除和自动补员操作；合法性与失败原因复用既有领域查询，不创建逐人 NPC、寻路或动画。
-- PR #139 已通过 Windows Debug 全目标、182/182 定向回归、1420/1420 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过受影响目标构建、147/147 定向回归和 1421/1421 全量 CTest，等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收；开发代理不启动游戏。
+- 已验收主线：`origin/main@0f74a67`，PR #140 已合入并完成 Home Region 设施岗位现场操作 v1。
+- 当前开发分支：`codex/home-region-resident-world-status-v1`，从 `origin/main@0f74a67` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-resident-world-status-v1.md`。
+- 当前切片把现有聚合人口、床位和劳动力事实投影到宿舍床位，并提供左键选择、右键打开宿舍和自动补员；不创建逐人 NPC、寻路或动画。
+- PR #140 已通过 Windows Debug 全目标、147/147 定向回归、1421/1421 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、158/158 定向回归和 1424/1424 全量 CTest，尚待 exact-head Windows/Ubuntu CI 与用户正常游玩验收；开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 聚合岗位世界占位反馈均已进入主线。当前切片让玩家直接从 Workshop/Medical 作业点选择设施并执行分配、清除和自动补员，不改变聚合人口模型、资产所有权或 Raid 生命周期。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 设施岗位现场操作均已进入主线。当前切片让宿舍床位成为聚合居民空间状态与已有宿舍功能的可读入口，不改变聚合人口模型、资产所有权或 Raid 生命周期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -96,7 +96,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 79. **Home Region 设施服务点状态反馈 v1**：入口服务点从现有设施管理领域投影可用、工作中、产物待取、缺员和阻塞状态；世界标记、近距 `E` 提示及 Home Region 地图使用同一状态，不建立第二套任务事实。PR #137 已通过 CI 与用户正常游玩验收，以 merge commit `95f830c` 进入 main。
 80. **Home Region 设施作业点空间合同 v1**：五类空间化核心设施发布类型化、确定性的仓储装卸点、医疗床位、宿舍床位、厨房加工点和工坊工作台；活动任务突出对应点位。PR #138 已通过 CI 与用户正常游玩验收，以 merge commit `5da9591` 进入 main。
 81. **Home Region 聚合岗位世界占位反馈 v1**：Workshop/Medical 的既有聚合岗位在对应作业点显示缺员、闲置、工作中或暂停；只读投影复用真实专业分配与任务状态。PR #139 已通过 CI 与用户正常游玩验收，以 merge commit `abe2886` 进入 main。
-82. **Home Region 设施岗位现场操作 v1（当前开发分支）**：Workshop/Medical 作业点可直接选中设施并提供分配、清除和自动补员；所有按钮消费既有领域查询与持久化命令。受影响目标、147/147 定向回归与 1421/1421 全量 CTest 已通过，等待 exact-head CI 与用户正常游玩验收。
+82. **Home Region 设施岗位现场操作 v1**：Workshop/Medical 作业点可直接选中设施并提供分配、清除和自动补员；所有按钮消费既有领域查询与持久化命令。PR #140 已通过 CI 与用户正常游玩验收，以 merge commit `0f74a67` 进入 main。
+83. **Home Region 聚合居民空间状态 v1（当前开发分支）**：DormitoryBunk 显示聚合居民、健康/受伤、床位、可用/已分配/建设占用，并提供宿舍打开与自动补员入口。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

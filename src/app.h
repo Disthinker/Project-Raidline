@@ -74,12 +74,20 @@ enum class BaseConstructionPage
     Owned
 };
 
+enum class BaseFacilityContextMenuMode
+{
+    Facility,
+    WorkforceStation,
+    ResidentArea
+};
+
 struct BaseFacilityContextMenu
 {
     std::optional<AssetInstanceId> assetId;
     std::optional<BaseFacilityKind> fixedFacility;
     MousePosition position{};
-    bool workforceStation{};
+    BaseFacilityContextMenuMode mode{
+        BaseFacilityContextMenuMode::Facility};
 };
 
 struct BaseFixedFacilityPlacementState
@@ -281,6 +289,8 @@ private:
     baseFixedFacilityAt(MousePosition position) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
     baseWorkerFacilityAt(MousePosition position) const;
+    [[nodiscard]] std::optional<BaseFacilityKind>
+    baseResidentFacilityAt(MousePosition position) const;
     void openBasePlacedFacility(AssetInstanceId assetId);
     void openBaseFixedFacility(BaseFacilityKind facility);
     void startBasePlacement(
