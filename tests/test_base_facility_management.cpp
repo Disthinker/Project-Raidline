@@ -379,6 +379,60 @@ TEST(BaseFacilityManagementTest,
 }
 
 TEST(BaseFacilityManagementTest,
+     ResourceFlowWorldProjectionCoversStorageAndInstalledKitchenPurely)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-resource-flow-world", publishedContentRegistry());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    auto storage = projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Storage);
+    ASSERT_TRUE(storage.has_value());
+    EXPECT_EQ(
+        storage->workSocket,
+        BaseFacilityWorkSocketKind::StorageHandling);
+    EXPECT_EQ(storage->status, BaseResourceFlowWorldStatus::Available);
+    EXPECT_GT(storage->readiness.baseAccessibleStacks, 0U);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    EXPECT_FALSE(projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::KitchenWater)
+                     .has_value());
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseResources.pool = BaseResourceBundle{};
+    const std::uint64_t installedFingerprint =
+        profileStateFingerprint(profile);
+    auto kitchen = projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::KitchenWater);
+    ASSERT_TRUE(kitchen.has_value());
+    EXPECT_EQ(
+        kitchen->workSocket,
+        BaseFacilityWorkSocketKind::KitchenProcessing);
+    EXPECT_EQ(kitchen->status, BaseResourceFlowWorldStatus::Shortage);
+    EXPECT_FALSE(kitchen->readiness.projectedShortfall.empty());
+    EXPECT_EQ(profileStateFingerprint(profile), installedFingerprint);
+
+    profile.baseResources.pool = BaseResourceBundle{100, 100, 100, 100};
+    kitchen = projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::KitchenWater);
+    ASSERT_TRUE(kitchen.has_value());
+    EXPECT_EQ(kitchen->status, BaseResourceFlowWorldStatus::Prepared);
+    EXPECT_TRUE(kitchen->readiness.projectedShortfall.empty());
+
+    profile.assets = AssetRegistry{};
+    storage = projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Storage);
+    ASSERT_TRUE(storage.has_value());
+    EXPECT_EQ(storage->status, BaseResourceFlowWorldStatus::Empty);
+    EXPECT_FALSE(projectBaseResourceFlowWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop)
+                     .has_value());
+}
+
+TEST(BaseFacilityManagementTest,
      WorkerWorldProjectionUsesExistingAggregateStaffingAndTaskFacts)
 {
     ProfileState profile = makeNewAlphaProfile(

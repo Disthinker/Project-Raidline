@@ -525,6 +525,78 @@ namespace
             projection.constructionResidents);
     }
 
+    SDL_Color baseResourceFlowWorldColor(
+        BaseResourceFlowWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseResourceFlowWorldStatus::Empty:
+            return SDL_Color{126, 138, 134, 255};
+        case BaseResourceFlowWorldStatus::Available:
+            return SDL_Color{126, 174, 218, 255};
+        case BaseResourceFlowWorldStatus::Prepared:
+            return SDL_Color{122, 202, 166, 255};
+        case BaseResourceFlowWorldStatus::Shortage:
+            return SDL_Color{226, 112, 76, 255};
+        }
+        return SDL_Color{174, 188, 180, 255};
+    }
+
+    const char *baseResourceFlowWorldStatusName(
+        BaseResourceFlowWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseResourceFlowWorldStatus::Empty:
+            return "EMPTY";
+        case BaseResourceFlowWorldStatus::Available:
+            return "AVAILABLE";
+        case BaseResourceFlowWorldStatus::Prepared:
+            return "PREPARED";
+        case BaseResourceFlowWorldStatus::Shortage:
+            return "SHORTAGE";
+        }
+        return "EMPTY";
+    }
+
+    std::string baseResourceFlowWorldPrimaryLabel(
+        const BaseResourceFlowWorldProjection &projection)
+    {
+        if (projection.facility == BaseFacilityKind::Storage)
+        {
+            return fmt::format(
+                "STORAGE | STACKS {} | UNITS {} | {}",
+                projection.readiness.baseAccessibleStacks,
+                projection.readiness.baseAccessibleUnits,
+                baseResourceFlowWorldStatusName(projection.status));
+        }
+        const BaseResourceBundle &demand = projection.readiness.dailyDemand;
+        return fmt::format(
+            "DAILY NEED | FOOD {} HYGIENE {} MORALE {} SECURITY {} | {}",
+            demand.food, demand.hygiene, demand.morale, demand.security,
+            baseResourceFlowWorldStatusName(projection.status));
+    }
+
+    std::string baseResourceFlowWorldSecondaryLabel(
+        const BaseResourceFlowWorldProjection &projection)
+    {
+        if (projection.facility == BaseFacilityKind::Storage)
+        {
+            return fmt::format(
+                "SUPPLY RULES {} | OWNED READY {}",
+                projection.readiness.assignedDefinitionCount,
+                projection.readiness.ownedAssignedDefinitionCount);
+        }
+        const BaseResourceBundle &pool = projection.readiness.pool;
+        const BaseResourceBundle &gap =
+            projection.readiness.projectedShortfall;
+        return fmt::format(
+            "POOL | FOOD {} HYGIENE {} MORALE {} SECURITY {} | "
+            "GAP | FOOD {} HYGIENE {} MORALE {} SECURITY {}",
+            pool.food, pool.hygiene, pool.morale, pool.security,
+            gap.food, gap.hygiene, gap.morale, gap.security);
+    }
+
     std::string baseFacilityWorldServiceLabel(
         const BaseFacilityWorldServiceProjection &projection)
     {
@@ -10847,6 +10919,10 @@ void App::renderBaseWorld()
         const std::optional<BaseResidentWorldProjection> residents =
             projectBaseResidentWorldStatus(
                 gameSession_.profile(), facility.kind);
+        const std::optional<BaseResourceFlowWorldProjection> resourceFlow =
+            projectBaseResourceFlowWorldStatus(
+                gameSession_.profile(), publishedContentRegistry(),
+                facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -11069,6 +11145,50 @@ void App::renderBaseWorld()
                     renderer_, socketBounds.x,
                     socketBounds.y - 18.0F,
                     workforceLabel.c_str());
+            }
+            if (resourceFlow.has_value() &&
+                resourceFlow->workSocket == workSocket->kind)
+            {
+                const SDL_Color flowColor = baseResourceFlowWorldColor(
+                    resourceFlow->status);
+                const float centerX = workSocket->interactionPoint.x;
+                const float centerY = workSocket->interactionPoint.y;
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                for (int index{}; index < 3; ++index)
+                {
+                    const SDL_FRect package{
+                        centerX - 23.0F + index * 16.0F,
+                        centerY - 7.0F - (index % 2) * 6.0F,
+                        14.0F,
+                        14.0F};
+                    SDL_SetRenderDrawColor(
+                        renderer_, flowColor.r, flowColor.g,
+                        flowColor.b,
+                        resourceFlow->status ==
+                                BaseResourceFlowWorldStatus::Empty
+                            ? 72
+                            : 218);
+                    if (resourceFlow->status ==
+                        BaseResourceFlowWorldStatus::Empty)
+                    {
+                        SDL_RenderRect(renderer_, &package);
+                    }
+                    else
+                    {
+                        SDL_RenderFillRect(renderer_, &package);
+                    }
+                }
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+                const std::string primary =
+                    baseResourceFlowWorldPrimaryLabel(*resourceFlow);
+                const std::string secondary =
+                    baseResourceFlowWorldSecondaryLabel(*resourceFlow);
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x, socketBounds.y - 36.0F,
+                    primary.c_str());
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x, socketBounds.y - 18.0F,
+                    secondary.c_str());
             }
         }
     }
@@ -11453,8 +11573,14 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
         residentFacility.has_value()
         ? std::optional<BaseFacilityKind>{}
         : baseWorkerFacilityAt(position);
+    const std::optional<BaseFacilityKind> resourceFacility =
+        residentFacility.has_value() || workerFacility.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseResourceFlowFacilityAt(position);
     const std::optional<BaseFacilityKind> worldActionFacility =
-        residentFacility.has_value() ? residentFacility : workerFacility;
+        residentFacility.has_value()
+        ? residentFacility
+        : workerFacility.has_value() ? workerFacility : resourceFacility;
     selectedBasePlacedAssetId_ = worldActionFacility.has_value()
         ? std::optional<AssetInstanceId>{}
         : basePlacedFacilityAt(position);
@@ -11469,6 +11595,8 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
             ? "RESIDENT AREA SELECTED | LMB PANEL / RMB QUICK ACTIONS"
             : workerFacility.has_value()
                 ? "WORKFORCE STATION SELECTED | LMB PANEL / RMB QUICK ACTIONS"
+                : resourceFacility.has_value()
+                    ? "RESOURCE FLOW AREA SELECTED | LMB PANEL / RMB OPEN"
                 : "BASE FACILITY SELECTED | RMB FOR ACTIONS"
         : "BASE FACILITY SELECTION CLEARED";
 }
@@ -11704,9 +11832,13 @@ void App::handleBaseConstructionRightClick(MousePosition position)
     const auto workerFacility = residentFacility.has_value()
         ? std::optional<BaseFacilityKind>{}
         : baseWorkerFacilityAt(position);
+    const auto resourceFacility =
+        residentFacility.has_value() || workerFacility.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseResourceFlowFacilityAt(position);
     const auto worldActionFacility = residentFacility.has_value()
         ? residentFacility
-        : workerFacility;
+        : workerFacility.has_value() ? workerFacility : resourceFacility;
     const auto assetId = worldActionFacility.has_value()
         ? std::optional<AssetInstanceId>{}
         : basePlacedFacilityAt(position);
@@ -11732,11 +11864,15 @@ void App::handleBaseConstructionRightClick(MousePosition position)
             ? BaseFacilityContextMenuMode::ResidentArea
             : workerFacility.has_value()
                 ? BaseFacilityContextMenuMode::WorkforceStation
+                : resourceFacility.has_value()
+                    ? BaseFacilityContextMenuMode::ResourceFlowArea
                 : BaseFacilityContextMenuMode::Facility};
     uiMessage_ = residentFacility.has_value()
         ? "RESIDENT AREA ACTIONS"
         : workerFacility.has_value()
             ? "WORKFORCE ACTIONS"
+            : resourceFacility.has_value()
+                ? "RESOURCE FLOW ACTIONS"
             : "BASE FACILITY ACTIONS";
 }
 
@@ -11745,6 +11881,38 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     if (!baseFacilityContextMenu_.has_value())
         return;
     const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
+    if (menu.mode == BaseFacilityContextMenuMode::ResourceFlowArea &&
+        menu.fixedFacility.has_value())
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                *menu.fixedFacility);
+        const auto action = std::find_if(
+            projection.quickActions.begin(), projection.quickActions.end(),
+            [](const BaseFacilityQuickActionProjection &candidate)
+            {
+                return candidate.kind ==
+                    BaseFacilityQuickActionKind::OpenFunction;
+            });
+        if (action != projection.quickActions.end() &&
+            contains(
+                baseFacilityContextMenuRow(menu.position, 0U, 1U),
+                position))
+        {
+            if (!action->canCommit)
+            {
+                uiMessage_ = action->message;
+                gameAudio_.play(SoundEventId::UiDeny);
+                baseFacilityContextMenu_.reset();
+                return;
+            }
+            openBaseFixedFacility(*menu.fixedFacility);
+            return;
+        }
+        baseFacilityContextMenu_.reset();
+        return;
+    }
     if (menu.mode == BaseFacilityContextMenuMode::WorkforceStation &&
         menu.fixedFacility.has_value())
     {
@@ -12051,6 +12219,35 @@ App::baseResidentFacilityAt(MousePosition position) const
         const auto socket = baseFacilityWorkSocket(*it);
         if (!residents.has_value() || !socket.has_value() ||
             residents->workSocket != socket->kind)
+        {
+            continue;
+        }
+        const ContentRect &bounds = socket->bounds;
+        if (worldPosition.x >= bounds.position.x &&
+            worldPosition.y >= bounds.position.y &&
+            worldPosition.x <= bounds.position.x + bounds.size.x &&
+            worldPosition.y <= bounds.position.y + bounds.size.y)
+        {
+            return it->kind;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<BaseFacilityKind>
+App::baseResourceFlowFacilityAt(MousePosition position) const
+{
+    const Vec2 worldPosition = baseScreenToWorld({position.x, position.y});
+    const auto &facilities = gameFlow_.baseWorld().facilities();
+    for (auto it = facilities.rbegin(); it != facilities.rend(); ++it)
+    {
+        if (!it->active)
+            continue;
+        const auto resourceFlow = projectBaseResourceFlowWorldStatus(
+            gameSession_.profile(), publishedContentRegistry(), it->kind);
+        const auto socket = baseFacilityWorkSocket(*it);
+        if (!resourceFlow.has_value() || !socket.has_value() ||
+            resourceFlow->workSocket != socket->kind)
         {
             continue;
         }
@@ -12662,6 +12859,23 @@ void App::renderBaseFacilityInspector()
                     workforce.c_str());
             }
         }
+        else if (const auto resourceFlow =
+                     projectBaseResourceFlowWorldStatus(
+                         gameSession_.profile(), publishedContentRegistry(),
+                         projection.kind);
+                 resourceFlow.has_value())
+        {
+            const std::string primary =
+                baseResourceFlowWorldPrimaryLabel(*resourceFlow);
+            const std::string secondary =
+                baseResourceFlowWorldSecondaryLabel(*resourceFlow);
+            uiTextRenderer_.render(
+                renderer_, panel.x + 16.0F, panel.y + 70.0F,
+                primary.c_str());
+            uiTextRenderer_.render(
+                renderer_, panel.x + 16.0F, panel.y + 98.0F,
+                secondary.c_str());
+        }
         else
         {
             const std::string staffing = projection.staffingApplicable
@@ -12769,6 +12983,46 @@ void App::renderBaseFacilityContextMenu()
         return;
     }
     const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
+    if (menu.mode == BaseFacilityContextMenuMode::ResourceFlowArea &&
+        menu.fixedFacility.has_value())
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                *menu.fixedFacility);
+        const auto action = std::find_if(
+            projection.quickActions.begin(), projection.quickActions.end(),
+            [](const BaseFacilityQuickActionProjection &candidate)
+            {
+                return candidate.kind ==
+                    BaseFacilityQuickActionKind::OpenFunction;
+            });
+        if (action == projection.quickActions.end())
+            return;
+        const SDL_FRect bounds = baseFacilityContextMenuBounds(
+            menu.position, 1U);
+        const SDL_FRect row = baseFacilityContextMenuRow(
+            menu.position, 0U, 1U);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 250);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 126, 174, 218, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(
+            renderer_, 34, action->canCommit ? 70 : 42,
+            action->canCommit ? 66 : 42, 248);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(
+            renderer_, action->canCommit ? 104 : 76,
+            action->canCommit ? 184 : 82,
+            action->canCommit ? 154 : 82, 255);
+        SDL_RenderRect(renderer_, &row);
+        uiTextRenderer_.render(
+            renderer_, row.x + 12.0F, row.y + 9.0F,
+            baseFacilityQuickActionName(action->kind));
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
     if (menu.mode == BaseFacilityContextMenuMode::WorkforceStation &&
         menu.fixedFacility.has_value())
     {

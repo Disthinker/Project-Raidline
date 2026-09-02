@@ -124,6 +124,53 @@ TEST(BaseResourceDomainTest, OperationalReadinessIsPureAndUsesExactThresholds)
     EXPECT_EQ(state, before);
 }
 
+TEST(BaseResourceDomainTest,
+     SupplyReadinessProjectsUnifiedInventoryAndAuthorizedCoveragePurely)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-supply-readiness", publishedContentRegistry());
+    profile.baseResources.pool = BaseResourceBundle{};
+    const AssetInstanceId cola = createStashAsset(
+        profile, alpha_content::lootCola);
+    ASSERT_NE(profile.assets.find(cola), nullptr);
+    static_cast<void>(createStashAsset(profile, alpha_content::lootCola));
+    static_cast<void>(createStashAsset(profile, alpha_content::lootCola));
+    profile.baseSupplyPolicy.assignments[alpha_content::lootCola] =
+        BaseSupplyCategory::Food;
+    profile.baseSupplyPolicy.assignments[
+        ItemDefinitionId{"item.loot.sealed_water"}] =
+        BaseSupplyCategory::Food;
+
+    std::size_t expectedStacks{};
+    std::uint64_t expectedUnits{};
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (!assetIsBaseAccessible(profile, asset.instanceId))
+            continue;
+        ++expectedStacks;
+        expectedUnits += asset.quantity;
+    }
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    const BaseSupplyReadinessProjection projection =
+        projectBaseSupplyReadiness(
+            profile,
+            publishedContentRegistry(),
+            BaseResourceBundle{40, 6, 5, 4});
+
+    EXPECT_EQ(projection.baseAccessibleStacks, expectedStacks);
+    EXPECT_EQ(projection.baseAccessibleUnits, expectedUnits);
+    EXPECT_EQ(projection.assignedDefinitionCount, 2U);
+    EXPECT_EQ(projection.ownedAssignedDefinitionCount, 1U);
+    EXPECT_EQ(
+        projection.authorizedContribution,
+        (BaseResourceBundle{36, 0, 0, 0}));
+    EXPECT_EQ(
+        projection.projectedShortfall,
+        (BaseResourceBundle{4, 6, 5, 4}));
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
 TEST(BaseResourceDomainTest, MatchingStashItemFulfillsPriorityAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(

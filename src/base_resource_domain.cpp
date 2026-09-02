@@ -2,6 +2,7 @@
 
 #include <array>
 #include <limits>
+#include <set>
 #include <stdexcept>
 
 namespace
@@ -378,6 +379,101 @@ BaseResourceReceipt executeBaseResourceContribution(
     profile = std::move(candidate);
     return {true, false, DomainErrorCode::None, {},
             profile.revision, plan.contribution};
+}
+
+BaseSupplyReadinessProjection projectBaseSupplyReadiness(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseResourceBundle dailyDemand)
+{
+    BaseSupplyReadinessProjection projection;
+    projection.assignedDefinitionCount = static_cast<std::uint32_t>(
+        std::min<std::size_t>(
+            profile.baseSupplyPolicy.assignments.size(),
+            std::numeric_limits<std::uint32_t>::max()));
+    projection.pool = profile.baseResources.pool;
+    projection.dailyDemand = dailyDemand;
+
+    std::set<AssetInstanceId> ownersWithChildren;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        const auto *stored = std::get_if<StoredAssetLocation>(
+            &asset.location);
+        if (stored != nullptr &&
+            stored->container.kind ==
+                ProfileContainerKind::AssetCompartment)
+        {
+            ownersWithChildren.insert(stored->container.ownerAssetId);
+        }
+    }
+
+    std::set<ItemDefinitionId> ownedAssignedDefinitions;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        static_cast<void>(id);
+        if (!assetIsBaseAccessible(profile, asset.instanceId))
+            continue;
+
+        ++projection.baseAccessibleStacks;
+        saturatedAdd(
+            projection.baseAccessibleUnits,
+            static_cast<std::uint64_t>(asset.quantity));
+
+        const auto assignment = profile.baseSupplyPolicy.assignments.find(
+            asset.definitionId);
+        if (assignment == profile.baseSupplyPolicy.assignments.end() ||
+            ownersWithChildren.contains(asset.instanceId))
+        {
+            continue;
+        }
+        const ItemDefinition *definition{};
+        try
+        {
+            definition = &content.item(asset.definitionId);
+        }
+        catch (...)
+        {
+            continue;
+        }
+        const std::uint32_t perUnit = baseSupplyContribution(
+            *definition, assignment->second);
+        if (perUnit == 0U)
+            continue;
+
+        ownedAssignedDefinitions.insert(asset.definitionId);
+        std::uint32_t &available = resourceValue(
+            projection.authorizedContribution, assignment->second);
+        const std::uint64_t contribution = saturatedMultiply(
+            asset.quantity, perUnit);
+        available = contribution >=
+                std::numeric_limits<std::uint32_t>::max() - available
+            ? std::numeric_limits<std::uint32_t>::max()
+            : available + static_cast<std::uint32_t>(contribution);
+    }
+    projection.ownedAssignedDefinitionCount =
+        static_cast<std::uint32_t>(std::min<std::size_t>(
+            ownedAssignedDefinitions.size(),
+            std::numeric_limits<std::uint32_t>::max()));
+
+    for (BaseSupplyCategory category : {
+             BaseSupplyCategory::Food,
+             BaseSupplyCategory::Medical,
+             BaseSupplyCategory::Recreation,
+             BaseSupplyCategory::Security})
+    {
+        const std::uint64_t available =
+            static_cast<std::uint64_t>(resourceValue(
+                projection.pool, category)) +
+            resourceValue(projection.authorizedContribution, category);
+        const std::uint32_t demand = resourceValue(
+            projection.dailyDemand, category);
+        resourceValue(projection.projectedShortfall, category) =
+            available >= demand
+            ? 0U
+            : demand - static_cast<std::uint32_t>(available);
+    }
+    return projection;
 }
 
 std::uint32_t baseSupplyContribution(

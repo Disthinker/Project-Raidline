@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+
 #include "inventory_domain.h"
 
 inline constexpr std::uint32_t kMaximumBaseResource = 100;
@@ -86,6 +89,26 @@ struct BaseSupplyAssignmentReceipt
     ProfileRevision revision{};
     std::optional<BaseSupplyCategory> category;
 };
+
+// Read-only view of the unified owned inventory and the items explicitly
+// authorized to cover the next Base need. This projection never reserves or
+// consumes assets; the daily settlement remains the only authority that does.
+struct BaseSupplyReadinessProjection
+{
+    std::size_t baseAccessibleStacks{};
+    std::uint64_t baseAccessibleUnits{};
+    std::uint32_t assignedDefinitionCount{};
+    std::uint32_t ownedAssignedDefinitionCount{};
+    BaseResourceBundle pool;
+    BaseResourceBundle dailyDemand;
+    BaseResourceBundle authorizedContribution;
+    BaseResourceBundle projectedShortfall;
+};
+
+[[nodiscard]] BaseSupplyReadinessProjection projectBaseSupplyReadiness(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseResourceBundle dailyDemand = kBaseDailyDemand);
 
 [[nodiscard]] std::uint32_t baseSupplyContribution(
     const ItemDefinition &definition,

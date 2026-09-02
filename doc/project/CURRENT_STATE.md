@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@0f74a67`，PR #140 已合入并完成 Home Region 设施岗位现场操作 v1。
-- 当前开发分支：`codex/home-region-resident-world-status-v1`，从 `origin/main@0f74a67` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-resident-world-status-v1.md`。
-- Draft PR #141 把现有聚合人口、床位和劳动力事实投影到宿舍床位，并提供左键选择、右键打开宿舍和自动补员；不创建逐人 NPC、寻路或动画。
-- PR #140 已通过 Windows Debug 全目标、147/147 定向回归、1421/1421 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。Draft PR #141 已通过 Windows Debug 全目标、158/158 定向回归、1424/1424 全量 CTest及代码提交 `223247d` 的 exact-head Windows/Ubuntu CI，尚待用户正常游玩验收；开发代理不启动游戏。
+- 已验收主线：`origin/main@2f05626`，PR #141 已合入并完成 Home Region 聚合居民空间状态 v1。
+- 当前开发分支：`codex/home-region-resource-flow-world-status-v1`，从 `origin/main@2f05626` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-resource-flow-world-status-v1.md`。
+- 当前切片把既有统一库存、资源池、人口需求和自动供给授权投影到仓库装卸点与厨房处理点，并提供左键选择和右键打开现有功能；不创建第二套库存或物流模拟。
+- PR #141 已通过 Windows Debug 全目标、158/158 定向回归、1424/1424 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、83/83 定向回归和 1427/1427 全量 CTest，待 exact-head Windows/Ubuntu CI 与用户正常游玩验收；开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 设施岗位现场操作均已进入主线。当前切片让宿舍床位成为聚合居民空间状态与已有宿舍功能的可读入口，不改变聚合人口模型、资产所有权或 Raid 生命周期。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 聚合居民空间状态均已进入主线。当前切片让仓库装卸点和厨房处理点成为统一库存、资源池、人口需求与自动供给状态的可读入口，不改变资产所有权、每日结算或 Raid 生命周期。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。

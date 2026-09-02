@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "base_resource_domain.h"
 #include "base_world.h"
 #include "content_registry.h"
 #include "profile_state.h"
@@ -124,6 +125,24 @@ struct BaseResidentWorldProjection
     std::uint32_t constructionResidents{};
 };
 
+enum class BaseResourceFlowWorldStatus
+{
+    Empty,
+    Available,
+    Prepared,
+    Shortage
+};
+
+struct BaseResourceFlowWorldProjection
+{
+    BaseFacilityKind facility{BaseFacilityKind::Storage};
+    BaseFacilityWorkSocketKind workSocket{
+        BaseFacilityWorkSocketKind::StorageHandling};
+    BaseResourceFlowWorldStatus status{
+        BaseResourceFlowWorldStatus::Empty};
+    BaseSupplyReadinessProjection readiness;
+};
+
 enum class BaseOperationOverviewKind
 {
     OutputReady,
@@ -167,6 +186,12 @@ projectBaseFacilityWorkerWorldStatus(
 [[nodiscard]] std::optional<BaseResidentWorldProjection>
 projectBaseResidentWorldStatus(
     const ProfileState &profile,
+    BaseFacilityKind kind) noexcept;
+
+[[nodiscard]] std::optional<BaseResourceFlowWorldProjection>
+projectBaseResourceFlowWorldStatus(
+    const ProfileState &profile,
+    const ContentRegistry &content,
     BaseFacilityKind kind) noexcept;
 
 [[nodiscard]] BaseOperationsOverviewProjection

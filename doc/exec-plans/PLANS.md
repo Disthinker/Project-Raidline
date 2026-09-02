@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/home-region-resident-world-status-v1.md`。PR #140 已由用户正常游玩验收并以 `0f74a67` 进入 main；当前只把既有聚合人口、床位和劳动力事实投影到 DormitoryBunk，并提供宿舍打开与自动补员入口，不并行增加逐人 NPC、排班、寻路、动画、独立室内、正式美术、实时守城或 AI 小队。
+当前实现计划：`active/home-region-resource-flow-world-status-v1.md`。PR #141 已由用户正常游玩验收并以 `2f05626` 进入 main；当前只把既有统一库存、资源池、人口需求和自动供给授权投影到 StorageHandling / KitchenProcessing，并提供仓库与供给页面入口，不并行增加逐件搬运 NPC、物流队列、独立公共物品仓、正式美术、实时守城或 AI 小队。

@@ -519,6 +519,62 @@ projectBaseResidentWorldStatus(
         constructionResidents};
 }
 
+std::optional<BaseResourceFlowWorldProjection>
+projectBaseResourceFlowWorldStatus(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind) noexcept
+{
+    if (kind != BaseFacilityKind::Storage &&
+        kind != BaseFacilityKind::KitchenWater)
+    {
+        return std::nullopt;
+    }
+
+    try
+    {
+        const BaseFacilityManagementProjection management =
+            projectManagementFacts(profile, content, kind);
+        const std::optional<BaseFacilityWorkSocketKind> socket =
+            workSocketKind(kind);
+        if (!socket.has_value() ||
+            management.status != BaseFacilityOperationalStatus::Operational)
+        {
+            return std::nullopt;
+        }
+
+        BaseResourceFlowWorldProjection projection{
+            kind,
+            *socket,
+            BaseResourceFlowWorldStatus::Available,
+            projectBaseSupplyReadiness(
+                profile,
+                content,
+                populationAdjustedDailyDemand(profile.basePopulation))};
+        if (kind == BaseFacilityKind::Storage)
+        {
+            if (projection.readiness.baseAccessibleStacks == 0U)
+                projection.status = BaseResourceFlowWorldStatus::Empty;
+            else if (
+                projection.readiness.ownedAssignedDefinitionCount > 0U)
+                projection.status = BaseResourceFlowWorldStatus::Prepared;
+        }
+        else if (!projection.readiness.projectedShortfall.empty())
+        {
+            projection.status = BaseResourceFlowWorldStatus::Shortage;
+        }
+        else
+        {
+            projection.status = BaseResourceFlowWorldStatus::Prepared;
+        }
+        return projection;
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+}
+
 BaseOperationsOverviewProjection projectBaseOperationsOverview(
     const ProfileState &profile,
     const ContentRegistry &content)
