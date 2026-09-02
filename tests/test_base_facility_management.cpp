@@ -478,6 +478,82 @@ TEST(BaseFacilityManagementTest,
     EXPECT_EQ(medical->status, BaseFacilityWorkerWorldStatus::Missing);
 }
 
+TEST(BaseFacilityManagementTest,
+     ResidentWorldProjectionUsesAggregatePopulationAndWorkforceFacts)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-resident-world", publishedContentRegistry());
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    EXPECT_FALSE(projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Storage).has_value());
+
+    auto residents = projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Dormitory);
+    ASSERT_TRUE(residents.has_value());
+    EXPECT_EQ(
+        residents->workSocket,
+        BaseFacilityWorkSocketKind::DormitoryBunk);
+    EXPECT_EQ(residents->status, BaseResidentWorldStatus::Stable);
+    EXPECT_EQ(residents->residents, 8U);
+    EXPECT_EQ(residents->healthyResidents, 8U);
+    EXPECT_EQ(residents->injuredResidents, 0U);
+    EXPECT_EQ(residents->bedCapacity, 10U);
+    EXPECT_EQ(residents->bedShortfall, 0U);
+    EXPECT_EQ(residents->availableResidents, 6U);
+    EXPECT_EQ(residents->assignedResidents, 2U);
+    EXPECT_EQ(residents->constructionResidents, 0U);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    profile.basePopulation.injuredResidents = 2U;
+    profile.basePopulation.injuredByProfession = {2U, 0U, 0U, 0U};
+    residents = projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Dormitory);
+    ASSERT_TRUE(residents.has_value());
+    EXPECT_EQ(residents->status, BaseResidentWorldStatus::Injured);
+    EXPECT_EQ(residents->healthyResidents, 6U);
+    EXPECT_EQ(residents->injuredResidents, 2U);
+
+    profile.basePopulation.bedCapacity = 6U;
+    residents = projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Dormitory);
+    ASSERT_TRUE(residents.has_value());
+    EXPECT_EQ(residents->status, BaseResidentWorldStatus::Overcrowded);
+    EXPECT_EQ(residents->bedShortfall, 2U);
+}
+
+TEST(BaseFacilityManagementTest,
+     ResidentWorldProjectionSeparatesConstructionAndEmptyPopulation)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-resident-construction", publishedContentRegistry());
+    profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
+        BaseConstructionProjectDefinitionId{
+            "base_construction.dormitory.level_2"},
+        3U,
+        2U,
+        0U,
+        480U};
+
+    auto residents = projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Dormitory);
+    ASSERT_TRUE(residents.has_value());
+    EXPECT_EQ(residents->constructionResidents, 2U);
+    EXPECT_EQ(residents->availableResidents, 4U);
+    EXPECT_EQ(residents->assignedResidents, 2U);
+
+    profile.basePopulation = BasePopulationState{0U, 0U};
+    profile.baseWorkforce.workshopWorker.reset();
+    profile.baseWorkforce.medicalWorker.reset();
+    profile.baseConstruction.activeProject.reset();
+    residents = projectBaseResidentWorldStatus(
+        profile, BaseFacilityKind::Dormitory);
+    ASSERT_TRUE(residents.has_value());
+    EXPECT_EQ(residents->status, BaseResidentWorldStatus::Empty);
+    EXPECT_EQ(residents->residents, 0U);
+    EXPECT_EQ(residents->constructionResidents, 0U);
+}
+
 TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
 {
     ProfileState profile = makeNewAlphaProfile(

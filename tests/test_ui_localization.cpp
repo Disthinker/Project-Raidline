@@ -1023,6 +1023,25 @@ TEST(UiLocalizationTest, BaseFacilityWorkerWorldStatusIsBilingual) {
             "岗位操作");
 }
 
+TEST(UiLocalizationTest, BaseResidentWorldStatusIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESIDENTS 8 | HEALTHY 6 | INJURED 2 | OVERCROWDED"),
+            "居民 8 | 健康 6 | 伤员 2 | 拥挤");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BEDS 8/10 | AVAILABLE 4 | ASSIGNED 2 | BUILDING 2"),
+            "床位 8/10 | 可用 4 | 已分配 2 | 建设占用 2");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESIDENT AREA SELECTED | LMB PANEL / RMB QUICK ACTIONS"),
+            "已选择居民区域 | 左键查看面板 / 右键快速操作");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESIDENT AREA ACTIONS"),
+            "居民区域操作");
+}
+
 TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

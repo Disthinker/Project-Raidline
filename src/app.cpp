@@ -468,6 +468,63 @@ namespace
         return label;
     }
 
+    SDL_Color baseResidentWorldColor(
+        BaseResidentWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseResidentWorldStatus::Empty:
+            return SDL_Color{126, 138, 134, 255};
+        case BaseResidentWorldStatus::Stable:
+            return SDL_Color{122, 202, 166, 255};
+        case BaseResidentWorldStatus::Injured:
+            return SDL_Color{232, 176, 82, 255};
+        case BaseResidentWorldStatus::Overcrowded:
+            return SDL_Color{226, 98, 76, 255};
+        }
+        return SDL_Color{174, 188, 180, 255};
+    }
+
+    const char *baseResidentWorldStatusName(
+        BaseResidentWorldStatus status) noexcept
+    {
+        switch (status)
+        {
+        case BaseResidentWorldStatus::Empty:
+            return "EMPTY";
+        case BaseResidentWorldStatus::Stable:
+            return "STABLE";
+        case BaseResidentWorldStatus::Injured:
+            return "INJURED";
+        case BaseResidentWorldStatus::Overcrowded:
+            return "OVERCROWDED";
+        }
+        return "EMPTY";
+    }
+
+    std::string baseResidentWorldPrimaryLabel(
+        const BaseResidentWorldProjection &projection)
+    {
+        return fmt::format(
+            "RESIDENTS {} | HEALTHY {} | INJURED {} | {}",
+            projection.residents,
+            projection.healthyResidents,
+            projection.injuredResidents,
+            baseResidentWorldStatusName(projection.status));
+    }
+
+    std::string baseResidentWorldWorkforceLabel(
+        const BaseResidentWorldProjection &projection)
+    {
+        return fmt::format(
+            "BEDS {}/{} | AVAILABLE {} | ASSIGNED {} | BUILDING {}",
+            projection.residents,
+            projection.bedCapacity,
+            projection.availableResidents,
+            projection.assignedResidents,
+            projection.constructionResidents);
+    }
+
     std::string baseFacilityWorldServiceLabel(
         const BaseFacilityWorldServiceProjection &projection)
     {
@@ -10787,6 +10844,9 @@ void App::renderBaseWorld()
             projectBaseFacilityWorkerWorldStatus(
                 gameSession_.profile(), publishedContentRegistry(),
                 facility.kind);
+        const std::optional<BaseResidentWorldProjection> residents =
+            projectBaseResidentWorldStatus(
+                gameSession_.profile(), facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -10956,6 +11016,59 @@ void App::renderBaseWorld()
                     renderer_, socketBounds.x,
                     socketBounds.y - 18.0F,
                     workerLabel.c_str());
+            }
+            if (residents.has_value() &&
+                residents->workSocket == workSocket->kind)
+            {
+                const SDL_Color residentColor = baseResidentWorldColor(
+                    residents->status);
+                const float centerX = workSocket->interactionPoint.x;
+                const float centerY = workSocket->interactionPoint.y;
+                const std::uint32_t visibleFigures = std::min(
+                    residents->residents, 3U);
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                for (std::uint32_t index{}; index < 3U; ++index)
+                {
+                    const float offset =
+                        (static_cast<float>(index) - 1.0F) * 16.0F;
+                    const SDL_FRect head{
+                        centerX + offset - 4.0F,
+                        centerY - 12.0F,
+                        8.0F,
+                        8.0F};
+                    const SDL_FRect body{
+                        centerX + offset - 6.0F,
+                        centerY - 2.0F,
+                        12.0F,
+                        14.0F};
+                    SDL_SetRenderDrawColor(
+                        renderer_, residentColor.r, residentColor.g,
+                        residentColor.b,
+                        index < visibleFigures ? 225 : 72);
+                    if (index < visibleFigures)
+                    {
+                        SDL_RenderFillRect(renderer_, &head);
+                        SDL_RenderFillRect(renderer_, &body);
+                    }
+                    else
+                    {
+                        SDL_RenderRect(renderer_, &head);
+                        SDL_RenderRect(renderer_, &body);
+                    }
+                }
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+                const std::string populationLabel =
+                    baseResidentWorldPrimaryLabel(*residents);
+                const std::string workforceLabel =
+                    baseResidentWorldWorkforceLabel(*residents);
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x,
+                    socketBounds.y - 36.0F,
+                    populationLabel.c_str());
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x,
+                    socketBounds.y - 18.0F,
+                    workforceLabel.c_str());
             }
         }
     }
@@ -11334,21 +11447,29 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
     }
 
     baseFacilityContextMenu_.reset();
+    const std::optional<BaseFacilityKind> residentFacility =
+        baseResidentFacilityAt(position);
     const std::optional<BaseFacilityKind> workerFacility =
-        baseWorkerFacilityAt(position);
-    selectedBasePlacedAssetId_ = workerFacility.has_value()
+        residentFacility.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseWorkerFacilityAt(position);
+    const std::optional<BaseFacilityKind> worldActionFacility =
+        residentFacility.has_value() ? residentFacility : workerFacility;
+    selectedBasePlacedAssetId_ = worldActionFacility.has_value()
         ? std::optional<AssetInstanceId>{}
         : basePlacedFacilityAt(position);
-    selectedBaseFixedFacility_ = workerFacility.has_value()
-        ? workerFacility
+    selectedBaseFixedFacility_ = worldActionFacility.has_value()
+        ? worldActionFacility
         : selectedBasePlacedAssetId_.has_value()
             ? std::optional<BaseFacilityKind>{}
             : baseFixedFacilityAt(position);
     uiMessage_ = selectedBasePlacedAssetId_.has_value() ||
             selectedBaseFixedFacility_.has_value()
-        ? workerFacility.has_value()
-            ? "WORKFORCE STATION SELECTED | LMB PANEL / RMB QUICK ACTIONS"
-            : "BASE FACILITY SELECTED | RMB FOR ACTIONS"
+        ? residentFacility.has_value()
+            ? "RESIDENT AREA SELECTED | LMB PANEL / RMB QUICK ACTIONS"
+            : workerFacility.has_value()
+                ? "WORKFORCE STATION SELECTED | LMB PANEL / RMB QUICK ACTIONS"
+                : "BASE FACILITY SELECTED | RMB FOR ACTIONS"
         : "BASE FACILITY SELECTION CLEARED";
 }
 
@@ -11579,12 +11700,18 @@ void App::handleBaseConstructionRightClick(MousePosition position)
         baseFacilityContextMenu_.reset();
         return;
     }
-    const auto workerFacility = baseWorkerFacilityAt(position);
-    const auto assetId = workerFacility.has_value()
+    const auto residentFacility = baseResidentFacilityAt(position);
+    const auto workerFacility = residentFacility.has_value()
+        ? std::optional<BaseFacilityKind>{}
+        : baseWorkerFacilityAt(position);
+    const auto worldActionFacility = residentFacility.has_value()
+        ? residentFacility
+        : workerFacility;
+    const auto assetId = worldActionFacility.has_value()
         ? std::optional<AssetInstanceId>{}
         : basePlacedFacilityAt(position);
-    const auto fixedFacility = workerFacility.has_value()
-        ? workerFacility
+    const auto fixedFacility = worldActionFacility.has_value()
+        ? worldActionFacility
         : assetId.has_value()
             ? std::optional<BaseFacilityKind>{}
             : baseFixedFacilityAt(position);
@@ -11598,10 +11725,19 @@ void App::handleBaseConstructionRightClick(MousePosition position)
     selectedBasePlacedAssetId_ = assetId;
     selectedBaseFixedFacility_ = fixedFacility;
     baseFacilityContextMenu_ = BaseFacilityContextMenu{
-        assetId, fixedFacility, position, workerFacility.has_value()};
-    uiMessage_ = workerFacility.has_value()
-        ? "WORKFORCE ACTIONS"
-        : "BASE FACILITY ACTIONS";
+        assetId,
+        fixedFacility,
+        position,
+        residentFacility.has_value()
+            ? BaseFacilityContextMenuMode::ResidentArea
+            : workerFacility.has_value()
+                ? BaseFacilityContextMenuMode::WorkforceStation
+                : BaseFacilityContextMenuMode::Facility};
+    uiMessage_ = residentFacility.has_value()
+        ? "RESIDENT AREA ACTIONS"
+        : workerFacility.has_value()
+            ? "WORKFORCE ACTIONS"
+            : "BASE FACILITY ACTIONS";
 }
 
 void App::handleBaseFacilityContextMenuClick(MousePosition position)
@@ -11609,7 +11745,8 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     if (!baseFacilityContextMenu_.has_value())
         return;
     const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
-    if (menu.workforceStation && menu.fixedFacility.has_value())
+    if (menu.mode == BaseFacilityContextMenuMode::WorkforceStation &&
+        menu.fixedFacility.has_value())
     {
         const BaseFacilityManagementProjection projection =
             projectBaseFacilityManagement(
@@ -11677,6 +11814,62 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
                             BaseFacilityQuickActionKind::AssignBestWorker
                         ? "BASE FACILITY WORKER ASSIGNED"
                         : "BASE FACILITY WORKER CLEARED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            baseFacilityContextMenu_.reset();
+            return;
+        }
+        baseFacilityContextMenu_.reset();
+        return;
+    }
+    if (menu.mode == BaseFacilityContextMenuMode::ResidentArea &&
+        menu.fixedFacility == BaseFacilityKind::Dormitory)
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                BaseFacilityKind::Dormitory);
+        std::vector<const BaseFacilityQuickActionProjection *> actions;
+        for (const BaseFacilityQuickActionProjection &action :
+             projection.quickActions)
+        {
+            if (action.kind == BaseFacilityQuickActionKind::OpenFunction ||
+                action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
+            {
+                actions.push_back(&action);
+            }
+        }
+        for (std::size_t index{}; index < actions.size(); ++index)
+        {
+            if (!contains(
+                    baseFacilityContextMenuRow(
+                        menu.position, index, actions.size()),
+                    position))
+            {
+                continue;
+            }
+            const BaseFacilityQuickActionProjection &action =
+                *actions[index];
+            if (!action.canCommit)
+            {
+                uiMessage_ = action.message;
+                gameAudio_.play(SoundEventId::UiDeny);
+                baseFacilityContextMenu_.reset();
+                return;
+            }
+            if (action.kind == BaseFacilityQuickActionKind::OpenFunction)
+            {
+                openBaseFixedFacility(BaseFacilityKind::Dormitory);
+                return;
+            }
+            const BaseWorkforceReceipt receipt =
+                gameSession_.executeAutoFillBaseWorkers(
+                    nextProfileTransactionId(
+                        "base-resident-area-auto-fill"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE FACILITY WORKERS AUTO-FILLED"
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::UiConfirm
@@ -11829,6 +12022,35 @@ App::baseWorkerFacilityAt(MousePosition position) const
         const auto socket = baseFacilityWorkSocket(*it);
         if (!worker.has_value() || !socket.has_value() ||
             worker->workSocket != socket->kind)
+        {
+            continue;
+        }
+        const ContentRect &bounds = socket->bounds;
+        if (worldPosition.x >= bounds.position.x &&
+            worldPosition.y >= bounds.position.y &&
+            worldPosition.x <= bounds.position.x + bounds.size.x &&
+            worldPosition.y <= bounds.position.y + bounds.size.y)
+        {
+            return it->kind;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<BaseFacilityKind>
+App::baseResidentFacilityAt(MousePosition position) const
+{
+    const Vec2 worldPosition = baseScreenToWorld({position.x, position.y});
+    const auto &facilities = gameFlow_.baseWorld().facilities();
+    for (auto it = facilities.rbegin(); it != facilities.rend(); ++it)
+    {
+        if (!it->active)
+            continue;
+        const auto residents = projectBaseResidentWorldStatus(
+            gameSession_.profile(), it->kind);
+        const auto socket = baseFacilityWorkSocket(*it);
+        if (!residents.has_value() || !socket.has_value() ||
+            residents->workSocket != socket->kind)
         {
             continue;
         }
@@ -12422,28 +12644,49 @@ void App::renderBaseFacilityInspector()
             renderer_, panel.x + 16.0F, panel.y + 42.0F,
             state.c_str());
 
-        const std::string staffing = projection.staffingApplicable
-            ? fmt::format(
-                  "STAFF: {}",
-                  projection.assignedWorker.has_value()
-                      ? baseResidentProfessionName(
-                            *projection.assignedWorker)
-                      : "UNASSIGNED")
-            : "STAFF: NOT REQUIRED";
-        uiTextRenderer_.render(
-            renderer_, panel.x + 16.0F, panel.y + 70.0F,
-            staffing.c_str());
+        if (projection.kind == BaseFacilityKind::Dormitory)
+        {
+            const auto residents = projectBaseResidentWorldStatus(
+                gameSession_.profile(), projection.kind);
+            if (residents.has_value())
+            {
+                const std::string population =
+                    baseResidentWorldPrimaryLabel(*residents);
+                const std::string workforce =
+                    baseResidentWorldWorkforceLabel(*residents);
+                uiTextRenderer_.render(
+                    renderer_, panel.x + 16.0F, panel.y + 70.0F,
+                    population.c_str());
+                uiTextRenderer_.render(
+                    renderer_, panel.x + 16.0F, panel.y + 98.0F,
+                    workforce.c_str());
+            }
+        }
+        else
+        {
+            const std::string staffing = projection.staffingApplicable
+                ? fmt::format(
+                      "STAFF: {}",
+                      projection.assignedWorker.has_value()
+                          ? baseResidentProfessionName(
+                                *projection.assignedWorker)
+                          : "UNASSIGNED")
+                : "STAFF: NOT REQUIRED";
+            uiTextRenderer_.render(
+                renderer_, panel.x + 16.0F, panel.y + 70.0F,
+                staffing.c_str());
 
-        std::string task = fmt::format(
-            "CURRENT TASK: {}",
-            baseFacilityTaskName(projection.task));
-        if (projection.remainingMinutes > 0U)
-            task += fmt::format(
-                " | REMAINING {} MIN",
-                projection.remainingMinutes);
-        uiTextRenderer_.render(
-            renderer_, panel.x + 16.0F, panel.y + 98.0F,
-            task.c_str());
+            std::string task = fmt::format(
+                "CURRENT TASK: {}",
+                baseFacilityTaskName(projection.task));
+            if (projection.remainingMinutes > 0U)
+                task += fmt::format(
+                    " | REMAINING {} MIN",
+                    projection.remainingMinutes);
+            uiTextRenderer_.render(
+                renderer_, panel.x + 16.0F, panel.y + 98.0F,
+                task.c_str());
+        }
         for (std::size_t index{};
              index < projection.quickActions.size(); ++index)
         {
@@ -12526,7 +12769,8 @@ void App::renderBaseFacilityContextMenu()
         return;
     }
     const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
-    if (menu.workforceStation && menu.fixedFacility.has_value())
+    if (menu.mode == BaseFacilityContextMenuMode::WorkforceStation &&
+        menu.fixedFacility.has_value())
     {
         const BaseFacilityManagementProjection projection =
             projectBaseFacilityManagement(
@@ -12567,6 +12811,54 @@ void App::renderBaseFacilityContextMenu()
                 renderer_, action.canCommit ? 104 : 76,
                 action.canCommit ? 184 : 82,
                 action.canCommit ? 154 : 82, 255);
+            SDL_RenderRect(renderer_, &row);
+            uiTextRenderer_.render(
+                renderer_, row.x + 12.0F, row.y + 9.0F,
+                baseFacilityQuickActionName(action.kind));
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
+    if (menu.mode == BaseFacilityContextMenuMode::ResidentArea &&
+        menu.fixedFacility == BaseFacilityKind::Dormitory)
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                BaseFacilityKind::Dormitory);
+        std::vector<const BaseFacilityQuickActionProjection *> actions;
+        for (const BaseFacilityQuickActionProjection &action :
+             projection.quickActions)
+        {
+            if (action.kind == BaseFacilityQuickActionKind::OpenFunction ||
+                action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
+            {
+                actions.push_back(&action);
+            }
+        }
+        if (actions.empty())
+            return;
+        const SDL_FRect bounds = baseFacilityContextMenuBounds(
+            menu.position, actions.size());
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 250);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 132, 170, 214, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        for (std::size_t index{}; index < actions.size(); ++index)
+        {
+            const BaseFacilityQuickActionProjection &action =
+                *actions[index];
+            const SDL_FRect row = baseFacilityContextMenuRow(
+                menu.position, index, actions.size());
+            SDL_SetRenderDrawColor(
+                renderer_, 38, action.canCommit ? 66 : 42,
+                action.canCommit ? 86 : 42, 248);
+            SDL_RenderFillRect(renderer_, &row);
+            SDL_SetRenderDrawColor(
+                renderer_, action.canCommit ? 126 : 76,
+                action.canCommit ? 174 : 82,
+                action.canCommit ? 218 : 82, 255);
             SDL_RenderRect(renderer_, &row);
             uiTextRenderer_.render(
                 renderer_, row.x + 12.0F, row.y + 9.0F,

@@ -100,6 +100,30 @@ struct BaseFacilityWorkerWorldProjection
     std::uint64_t remainingMinutes{};
 };
 
+enum class BaseResidentWorldStatus
+{
+    Empty,
+    Stable,
+    Injured,
+    Overcrowded
+};
+
+struct BaseResidentWorldProjection
+{
+    BaseFacilityKind facility{BaseFacilityKind::Dormitory};
+    BaseFacilityWorkSocketKind workSocket{
+        BaseFacilityWorkSocketKind::DormitoryBunk};
+    BaseResidentWorldStatus status{BaseResidentWorldStatus::Empty};
+    std::uint32_t residents{};
+    std::uint32_t healthyResidents{};
+    std::uint32_t injuredResidents{};
+    std::uint32_t bedCapacity{};
+    std::uint32_t bedShortfall{};
+    std::uint32_t availableResidents{};
+    std::uint32_t assignedResidents{};
+    std::uint32_t constructionResidents{};
+};
+
 enum class BaseOperationOverviewKind
 {
     OutputReady,
@@ -139,6 +163,11 @@ projectBaseFacilityWorkerWorldStatus(
     const ProfileState &profile,
     const ContentRegistry &content,
     BaseFacilityKind kind);
+
+[[nodiscard]] std::optional<BaseResidentWorldProjection>
+projectBaseResidentWorldStatus(
+    const ProfileState &profile,
+    BaseFacilityKind kind) noexcept;
 
 [[nodiscard]] BaseOperationsOverviewProjection
 projectBaseOperationsOverview(
