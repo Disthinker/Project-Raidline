@@ -4,11 +4,11 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@95f830c`，PR #137 已合入并完成 Home Region 设施服务点状态反馈 v1。
-- 当前开发分支：`codex/home-region-facility-work-sockets-v1`，从 `origin/main@95f830c` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-facility-work-sockets-v1.md`。
-- 当前切片为仓库、医疗所、宿舍、厨房/净水和工坊建立确定性作业点；进行中的升级、制造、治疗或待领取产物会突出对应位置，同时继续由既有作业净空区阻止设施和地面资产占用。
-- 当前实现已通过 Windows Debug 全目标构建、94/94 定向回归、187/187 扩展定向回归与 1417/1417 全量 CTest；exact-head Windows/Ubuntu CI 在推送后核验。开发代理不启动游戏。
+- 已验收主线：`origin/main@5da9591`，PR #138 已合入并完成 Home Region 设施作业点空间合同 v1。
+- 当前开发分支：`codex/home-region-workforce-world-status-v1`，从 `origin/main@5da9591` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-workforce-world-status-v1.md`。
+- 当前切片把既有 Workshop/Medical 聚合岗位分配和任务事实投影到稳定作业点，显示缺员、闲置、工作中和暂停占位；不创建逐人 NPC、寻路或动画。
+- PR #138 已通过 Windows Debug 全目标构建、94/94 定向回归、187/187 扩展定向回归、1417/1417 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、182/182 定向回归与 1420/1420 全量 CTest；exact-head Windows/Ubuntu CI 在推送后核验。开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
@@ -94,7 +94,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 77. **Home Region 基地建设项目目录 v1**：`B` 购买/建设页统一显示已发布工程和可购买设施，工程卡片展示等级、建材、劳动力、工期与领域状态并支持开始/取消；购买与已有页均使用稳定分页，区域迁徙页只负责跳转目录，不再直接提交厨房工程。PR #135 已通过 CI 与用户正常游玩验收，以 merge commit `c37fe32` 进入 main。
 78. **Home Region 设施入口与作业区 v1**：活动设施发布确定性南向入口、近距交互区和建设作业净空区；世界 `E` 交互、建设放置阻挡、镜头定位和 Home Region 地图入口标记消费同一 SDL-free 几何。PR #136 已通过 CI 与用户正常游玩验收，以 merge commit `d1c9b35` 进入 main。
 79. **Home Region 设施服务点状态反馈 v1**：入口服务点从现有设施管理领域投影可用、工作中、产物待取、缺员和阻塞状态；世界标记、近距 `E` 提示及 Home Region 地图使用同一状态，不建立第二套任务事实。PR #137 已通过 CI 与用户正常游玩验收，以 merge commit `95f830c` 进入 main。
-80. **Home Region 设施作业点空间合同 v1（当前开发分支）**：五类空间化核心设施发布类型化、确定性的仓储装卸点、医疗床位、宿舍床位、厨房加工点和工坊工作台；活动任务突出对应点位，供应/分配/出击固定服务节点不伪造设施定义。
+80. **Home Region 设施作业点空间合同 v1**：五类空间化核心设施发布类型化、确定性的仓储装卸点、医疗床位、宿舍床位、厨房加工点和工坊工作台；活动任务突出对应点位。PR #138 已通过 CI 与用户正常游玩验收，以 merge commit `5da9591` 进入 main。
+81. **Home Region 聚合岗位世界占位反馈 v1（当前开发分支）**：Workshop/Medical 的既有聚合岗位在对应作业点显示缺员、闲置、工作中或暂停；只读投影复用真实专业分配与任务状态，不建立逐人 NPC 模拟。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

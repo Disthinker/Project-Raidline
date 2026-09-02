@@ -1,6 +1,6 @@
 # Home Region 设施作业点空间合同 v1 ExecPlan
 
-状态：开发完成，等待 exact-head CI 与用户正常游玩验收。分支 `codex/home-region-facility-work-sockets-v1` 从用户已验收并合入的 PR #137 / `origin/main@95f830c` 创建。
+状态：已完成。PR #138 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `5da9591` 进入 main。
 
 ## 玩家结果与依赖
 
@@ -38,4 +38,4 @@
 - Windows Debug 全目标构建通过。
 - 设施布局、设施管理、BaseWorld、GameFlow 与双语定向回归 94/94 通过；包含存档在内的扩展定向回归 187/187 通过。
 - Windows Debug 全量 CTest 1417/1417 通过。
-- exact-head Windows/Ubuntu CI 在推送 Draft PR 后核验；正常游玩验收由用户执行，Codex 未启动游戏。
+- exact-head Windows/Ubuntu CI 通过；用户正常游玩验收通过，Codex 未启动游戏。

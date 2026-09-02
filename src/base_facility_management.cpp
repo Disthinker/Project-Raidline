@@ -424,6 +424,50 @@ BaseFacilityWorldServiceProjection projectBaseFacilityWorldService(
     return projection;
 }
 
+std::optional<BaseFacilityWorkerWorldProjection>
+projectBaseFacilityWorkerWorldStatus(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind)
+{
+    if (kind != BaseFacilityKind::Workshop &&
+        kind != BaseFacilityKind::Medical)
+    {
+        return std::nullopt;
+    }
+
+    const BaseFacilityManagementProjection management =
+        projectManagementFacts(profile, content, kind);
+    const std::optional<BaseFacilityWorkSocketKind> socket =
+        workSocketKind(kind);
+    if (!socket.has_value())
+        return std::nullopt;
+
+    BaseFacilityWorkerWorldProjection projection{
+        kind,
+        *socket,
+        BaseFacilityWorkerWorldStatus::Idle,
+        management.assignedWorker,
+        management.task,
+        management.remainingMinutes};
+
+    if (!management.assignedWorker.has_value())
+    {
+        projection.status = BaseFacilityWorkerWorldStatus::Missing;
+    }
+    else if (management.status != BaseFacilityOperationalStatus::Operational)
+    {
+        projection.status = BaseFacilityWorkerWorldStatus::Paused;
+    }
+    else if (management.task == BaseFacilityTaskKind::Construction ||
+             management.task == BaseFacilityTaskKind::Manufacturing ||
+             management.task == BaseFacilityTaskKind::ResidentTreatment)
+    {
+        projection.status = BaseFacilityWorkerWorldStatus::Working;
+    }
+    return projection;
+}
+
 BaseOperationsOverviewProjection projectBaseOperationsOverview(
     const ProfileState &profile,
     const ContentRegistry &content)

@@ -328,6 +328,106 @@ TEST(BaseFacilityManagementTest,
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(BaseFacilityManagementTest,
+     WorkerWorldProjectionUsesExistingAggregateStaffingAndTaskFacts)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-worker-world", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 1000U;
+
+    EXPECT_FALSE(projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Storage)
+                     .has_value());
+
+    auto workshop = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    ASSERT_TRUE(workshop.has_value());
+    EXPECT_EQ(
+        workshop->workSocket,
+        BaseFacilityWorkSocketKind::WorkshopBench);
+    EXPECT_EQ(workshop->status, BaseFacilityWorkerWorldStatus::Idle);
+    EXPECT_EQ(
+        workshop->profession,
+        BaseResidentProfession::Engineering);
+
+    profile.baseManufacturing.activeOrder = BaseManufacturingOrder{
+        BaseServiceJobId{72U},
+        BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.weapon_maintenance_kit"},
+        1U,
+        BaseResidentProfession::Engineering,
+        900U,
+        1180U,
+        {},
+        AssetInstanceId{994U},
+        false};
+    workshop = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    ASSERT_TRUE(workshop.has_value());
+    EXPECT_EQ(workshop->status, BaseFacilityWorkerWorldStatus::Working);
+    EXPECT_EQ(workshop->task, BaseFacilityTaskKind::Manufacturing);
+    EXPECT_EQ(workshop->remainingMinutes, 180U);
+
+    profile.baseManufacturing.activeOrder->outputReady = true;
+    workshop = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    ASSERT_TRUE(workshop.has_value());
+    EXPECT_EQ(workshop->status, BaseFacilityWorkerWorldStatus::Idle);
+    EXPECT_EQ(workshop->task, BaseFacilityTaskKind::OutputReady);
+
+    profile.baseConstruction.facilities.at(
+        BaseFacilityDefinitionId{"base_facility.workshop"}) =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    workshop = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    ASSERT_TRUE(workshop.has_value());
+    EXPECT_EQ(workshop->status, BaseFacilityWorkerWorldStatus::Paused);
+
+    profile.baseWorkforce.workshopWorker.reset();
+    workshop = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    ASSERT_TRUE(workshop.has_value());
+    EXPECT_EQ(workshop->status, BaseFacilityWorkerWorldStatus::Missing);
+    EXPECT_FALSE(workshop->profession.has_value());
+
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+    static_cast<void>(projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop));
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST(BaseFacilityManagementTest,
+     MedicalWorkerWorldProjectionUsesTreatmentAndMissingStates)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-medical-worker-world", publishedContentRegistry());
+    profile.worldClock.elapsedWorldMinutes = 1000U;
+    profile.residentMedical.activeTreatment = ActiveResidentTreatment{
+        BaseServiceJobId{73U},
+        950U,
+        1120U,
+        2U,
+        BaseResidentProfession::General,
+        BaseResidentProfession::Medical};
+
+    auto medical = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Medical);
+    ASSERT_TRUE(medical.has_value());
+    EXPECT_EQ(
+        medical->workSocket,
+        BaseFacilityWorkSocketKind::MedicalBed);
+    EXPECT_EQ(medical->status, BaseFacilityWorkerWorldStatus::Working);
+    EXPECT_EQ(medical->profession, BaseResidentProfession::Medical);
+    EXPECT_EQ(medical->task, BaseFacilityTaskKind::ResidentTreatment);
+    EXPECT_EQ(medical->remainingMinutes, 120U);
+
+    profile.baseWorkforce.medicalWorker.reset();
+    medical = projectBaseFacilityWorkerWorldStatus(
+        profile, publishedContentRegistry(), BaseFacilityKind::Medical);
+    ASSERT_TRUE(medical.has_value());
+    EXPECT_EQ(medical->status, BaseFacilityWorkerWorldStatus::Missing);
+}
+
 TEST(BaseFacilityManagementTest, ReportsOwnedFacilityInReserve)
 {
     ProfileState profile = makeNewAlphaProfile(

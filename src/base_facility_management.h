@@ -80,6 +80,26 @@ struct BaseFacilityWorldServiceProjection
     std::optional<BaseFacilityWorkSocketKind> activeWorkSocket;
 };
 
+enum class BaseFacilityWorkerWorldStatus
+{
+    Missing,
+    Idle,
+    Working,
+    Paused
+};
+
+struct BaseFacilityWorkerWorldProjection
+{
+    BaseFacilityKind facility{BaseFacilityKind::Workshop};
+    BaseFacilityWorkSocketKind workSocket{
+        BaseFacilityWorkSocketKind::WorkshopBench};
+    BaseFacilityWorkerWorldStatus status{
+        BaseFacilityWorkerWorldStatus::Missing};
+    std::optional<BaseResidentProfession> profession;
+    BaseFacilityTaskKind task{BaseFacilityTaskKind::Idle};
+    std::uint64_t remainingMinutes{};
+};
+
 enum class BaseOperationOverviewKind
 {
     OutputReady,
@@ -110,6 +130,12 @@ projectBaseFacilityManagement(
 
 [[nodiscard]] BaseFacilityWorldServiceProjection
 projectBaseFacilityWorldService(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind);
+
+[[nodiscard]] std::optional<BaseFacilityWorkerWorldProjection>
+projectBaseFacilityWorkerWorldStatus(
     const ProfileState &profile,
     const ContentRegistry &content,
     BaseFacilityKind kind);
