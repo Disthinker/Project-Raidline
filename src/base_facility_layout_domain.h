@@ -62,8 +62,31 @@ struct BaseFacilityAccessGeometry
     ContentRect workZone;
 };
 
+enum class BaseFacilityWorkSocketKind
+{
+    StorageHandling,
+    MedicalBed,
+    DormitoryBunk,
+    KitchenProcessing,
+    WorkshopBench
+};
+
+struct BaseFacilityWorkSocketProjection
+{
+    BaseFacilityWorkSocketKind kind{
+        BaseFacilityWorkSocketKind::StorageHandling};
+    ContentRect bounds;
+    Vec2 interactionPoint{};
+};
+
 [[nodiscard]] BaseFacilityAccessGeometry
 projectBaseFacilityAccessGeometry(
+    Vec2 worldCenter,
+    Vec2 footprint) noexcept;
+
+[[nodiscard]] std::optional<BaseFacilityWorkSocketProjection>
+projectBaseFacilityWorkSocket(
+    const BaseFacilityDefinitionId &definitionId,
     Vec2 worldCenter,
     Vec2 footprint) noexcept;
 

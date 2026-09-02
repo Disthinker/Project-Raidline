@@ -21,6 +21,16 @@ BaseFacilityLayoutAccess access(std::vector<ContentRect> blockers = {})
         ContentRect{{1000.0F, 2000.0F}, {1600.0F, 1120.0F}},
         std::move(blockers)};
 }
+
+bool contains(const ContentRect &outer, const ContentRect &inner)
+{
+    return inner.position.x >= outer.position.x &&
+        inner.position.y >= outer.position.y &&
+        inner.position.x + inner.size.x <=
+            outer.position.x + outer.size.x &&
+        inner.position.y + inner.size.y <=
+            outer.position.y + outer.size.y;
+}
 }
 
 TEST(BaseFacilityLayoutDomainTest,
@@ -108,6 +118,56 @@ TEST(BaseFacilityLayoutDomainTest,
     EXPECT_EQ(
         projectBaseFacilityAccessGeometry({}, {}).workZone.size.x,
         0.0F);
+}
+
+TEST(BaseFacilityLayoutDomainTest,
+     WorkSocketsAreStableTypedAndContainedByTheProtectedWorkZone)
+{
+    struct ExpectedSocket
+    {
+        BaseFacilityDefinitionId definitionId;
+        BaseFacilityWorkSocketKind kind;
+    };
+    const std::array<ExpectedSocket, 5U> expected{{
+        {BaseFacilityDefinitionId{"base_facility.warehouse"},
+         BaseFacilityWorkSocketKind::StorageHandling},
+        {BaseFacilityDefinitionId{"base_facility.medical"},
+         BaseFacilityWorkSocketKind::MedicalBed},
+        {BaseFacilityDefinitionId{"base_facility.dormitory"},
+         BaseFacilityWorkSocketKind::DormitoryBunk},
+        {BaseFacilityDefinitionId{"base_facility.kitchen_water"},
+         BaseFacilityWorkSocketKind::KitchenProcessing},
+        {BaseFacilityDefinitionId{"base_facility.workshop"},
+         BaseFacilityWorkSocketKind::WorkshopBench},
+    }};
+    const Vec2 center{1400.0F, 2400.0F};
+    const Vec2 footprint{300.0F, 220.0F};
+    const BaseFacilityAccessGeometry accessGeometry =
+        projectBaseFacilityAccessGeometry(center, footprint);
+
+    for (const ExpectedSocket &candidate : expected)
+    {
+        const auto socket = projectBaseFacilityWorkSocket(
+            candidate.definitionId, center, footprint);
+        ASSERT_TRUE(socket.has_value());
+        EXPECT_EQ(socket->kind, candidate.kind);
+        EXPECT_TRUE(contains(accessGeometry.workZone, socket->bounds));
+        EXPECT_FLOAT_EQ(
+            socket->interactionPoint.x,
+            socket->bounds.position.x + socket->bounds.size.x * 0.5F);
+        EXPECT_FLOAT_EQ(
+            socket->interactionPoint.y,
+            socket->bounds.position.y + socket->bounds.size.y * 0.5F);
+        const auto repeated = projectBaseFacilityWorkSocket(
+            candidate.definitionId, center, footprint);
+        ASSERT_TRUE(repeated.has_value());
+        EXPECT_EQ(repeated->bounds, socket->bounds);
+    }
+    EXPECT_FALSE(projectBaseFacilityWorkSocket(
+        BaseFacilityDefinitionId{"base_facility.unknown"},
+        center, footprint).has_value());
+    EXPECT_FALSE(projectBaseFacilityWorkSocket(
+        kWorkshop, {}, {}).has_value());
 }
 
 TEST(BaseFacilityLayoutDomainTest,

@@ -1,6 +1,6 @@
 # Home Region 设施服务点状态反馈 v1 ExecPlan
 
-状态：开发完成，等待用户正常游玩验收。分支 `codex/home-region-facility-service-sockets-v1` 从用户已验收并合入的 PR #136 / `origin/main@d1c9b35` 创建。
+状态：已完成。PR #137 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，以 merge commit `95f830c` 进入 main。
 
 ## 玩家结果与依赖
 
@@ -37,4 +37,4 @@
 - Windows Debug 全目标构建通过。
 - 设施服务状态、BaseWorld、GameFlow、持久化与双语定向回归 134/134 通过。
 - Windows Debug 全量 CTest 1416/1416 通过。
-- exact-head Windows/Ubuntu CI 在推送 Draft PR 后核验；正常游玩验收由用户执行，Codex 未启动游戏。
+- exact-head Windows/Ubuntu CI 通过；用户正常游玩验收通过，Codex 未启动游戏。

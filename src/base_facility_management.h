@@ -77,6 +77,7 @@ struct BaseFacilityWorldServiceProjection
         BaseFacilityWorldServiceStatus::Ready};
     BaseFacilityTaskKind task{BaseFacilityTaskKind::Idle};
     std::uint64_t remainingMinutes{};
+    std::optional<BaseFacilityWorkSocketKind> activeWorkSocket;
 };
 
 enum class BaseOperationOverviewKind

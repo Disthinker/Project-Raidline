@@ -103,6 +103,23 @@ std::optional<Vec2> defaultNormalizedCenter(
         : std::optional<Vec2>{found->normalizedCenter};
 }
 
+std::optional<BaseFacilityWorkSocketKind> workSocketKind(
+    const BaseFacilityDefinitionId &definitionId) noexcept
+{
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.warehouse"})
+        return BaseFacilityWorkSocketKind::StorageHandling;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.medical"})
+        return BaseFacilityWorkSocketKind::MedicalBed;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.dormitory"})
+        return BaseFacilityWorkSocketKind::DormitoryBunk;
+    if (definitionId ==
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"})
+        return BaseFacilityWorkSocketKind::KitchenProcessing;
+    if (definitionId == BaseFacilityDefinitionId{"base_facility.workshop"})
+        return BaseFacilityWorkSocketKind::WorkshopBench;
+    return std::nullopt;
+}
+
 BaseFacilityLayoutReceipt failure(
     DomainErrorCode error,
     std::string message,
@@ -179,6 +196,35 @@ BaseFacilityAccessGeometry projectBaseFacilityAccessGeometry(
     Vec2 footprint) noexcept
 {
     return accessGeometry(worldCenter, footprint);
+}
+
+std::optional<BaseFacilityWorkSocketProjection>
+projectBaseFacilityWorkSocket(
+    const BaseFacilityDefinitionId &definitionId,
+    Vec2 worldCenter,
+    Vec2 footprint) noexcept
+{
+    const std::optional<BaseFacilityWorkSocketKind> kind =
+        workSocketKind(definitionId);
+    const BaseFacilityAccessGeometry access = accessGeometry(
+        worldCenter, footprint);
+    if (!kind.has_value() || !finiteRect(access.workZone))
+        return std::nullopt;
+
+    const Vec2 size{
+        std::clamp(footprint.x * 0.34F, 76.0F, 112.0F),
+        std::clamp(footprint.y * 0.24F, 38.0F, 52.0F)};
+    const ContentRect bounds{
+        {access.workZone.position.x +
+             (access.workZone.size.x - size.x) * 0.5F,
+         access.workZone.position.y + access.workZone.size.y -
+             size.y - 14.0F},
+        size};
+    return BaseFacilityWorkSocketProjection{
+        *kind,
+        bounds,
+        {bounds.position.x + bounds.size.x * 0.5F,
+         bounds.position.y + bounds.size.y * 0.5F}};
 }
 
 bool isSpatialBaseFacility(

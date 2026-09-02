@@ -38,6 +38,9 @@ struct BaseFacility
 [[nodiscard]] BaseFacilityAccessGeometry baseFacilityAccessGeometry(
     const BaseFacility &facility) noexcept;
 
+[[nodiscard]] std::optional<BaseFacilityWorkSocketProjection>
+baseFacilityWorkSocket(const BaseFacility &facility) noexcept;
+
 struct BaseFacilitySpatialOverride
 {
     BaseFacilityKind kind{BaseFacilityKind::Storage};

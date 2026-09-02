@@ -90,6 +90,40 @@ BaseFacilityAccessGeometry baseFacilityAccessGeometry(
         facility.bounds.size);
 }
 
+std::optional<BaseFacilityWorkSocketProjection>
+baseFacilityWorkSocket(const BaseFacility &facility) noexcept
+{
+    std::optional<BaseFacilityDefinitionId> definitionId;
+    switch (facility.kind)
+    {
+    case BaseFacilityKind::Storage:
+        definitionId = BaseFacilityDefinitionId{"base_facility.warehouse"};
+        break;
+    case BaseFacilityKind::Medical:
+        definitionId = BaseFacilityDefinitionId{"base_facility.medical"};
+        break;
+    case BaseFacilityKind::Dormitory:
+        definitionId = BaseFacilityDefinitionId{"base_facility.dormitory"};
+        break;
+    case BaseFacilityKind::KitchenWater:
+        definitionId = BaseFacilityDefinitionId{
+            "base_facility.kitchen_water"};
+        break;
+    case BaseFacilityKind::Workshop:
+        definitionId = BaseFacilityDefinitionId{"base_facility.workshop"};
+        break;
+    case BaseFacilityKind::Supply:
+    case BaseFacilityKind::Allocation:
+    case BaseFacilityKind::RaidGate:
+        return std::nullopt;
+    }
+    return projectBaseFacilityWorkSocket(
+        *definitionId,
+        {facility.bounds.position.x + facility.bounds.size.x * 0.5F,
+         facility.bounds.position.y + facility.bounds.size.y * 0.5F},
+        facility.bounds.size);
+}
+
 void BaseWorld::configureSite(
     std::string_view siteDefinitionId,
     std::vector<BaseFacilitySpatialOverride> overrides)
