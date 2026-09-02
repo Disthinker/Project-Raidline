@@ -1013,6 +1013,14 @@ TEST(UiLocalizationTest, BaseFacilityWorkerWorldStatusIsBilingual) {
                 UiLanguage::SimplifiedChinese,
                 "WORKER | MISSING"),
             "工作人员 | 缺员");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKFORCE STATION SELECTED | LMB PANEL / RMB QUICK ACTIONS"),
+            "已选择岗位作业点 | 左键查看面板 / 右键快速操作");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "WORKFORCE ACTIONS"),
+            "岗位操作");
 }
 
 TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {

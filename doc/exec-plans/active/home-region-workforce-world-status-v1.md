@@ -1,6 +1,6 @@
 # Home Region 聚合岗位世界占位反馈 v1 ExecPlan
 
-状态：开发完成，等待 exact-head CI 与用户正常游玩验收。分支 `codex/home-region-workforce-world-status-v1` 从用户已验收并合入的 PR #138 / `origin/main@5da9591` 创建。
+状态：已完成。PR #139 已通过 exact-head Windows/Ubuntu CI 与用户正常游玩验收，并以 merge commit `abe2886` 进入 main。
 
 ## 玩家结果与依赖
 
@@ -37,4 +37,4 @@
 - Windows Debug 受影响目标与全目标构建通过。
 - 设施管理、双语、BaseWorld、GameFlow 与存档定向回归 182/182 通过。
 - Windows Debug 全量 CTest 1420/1420 通过。
-- exact-head Windows/Ubuntu CI 在推送 Draft PR 后核验；正常游玩验收由用户执行，Codex 未启动游戏。
+- exact-head Windows/Ubuntu CI 通过；用户正常游玩验收通过，Codex 未启动游戏。

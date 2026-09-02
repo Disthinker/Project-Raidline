@@ -11334,13 +11334,21 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
     }
 
     baseFacilityContextMenu_.reset();
-    selectedBasePlacedAssetId_ = basePlacedFacilityAt(position);
-    selectedBaseFixedFacility_ = selectedBasePlacedAssetId_.has_value()
-        ? std::optional<BaseFacilityKind>{}
-        : baseFixedFacilityAt(position);
+    const std::optional<BaseFacilityKind> workerFacility =
+        baseWorkerFacilityAt(position);
+    selectedBasePlacedAssetId_ = workerFacility.has_value()
+        ? std::optional<AssetInstanceId>{}
+        : basePlacedFacilityAt(position);
+    selectedBaseFixedFacility_ = workerFacility.has_value()
+        ? workerFacility
+        : selectedBasePlacedAssetId_.has_value()
+            ? std::optional<BaseFacilityKind>{}
+            : baseFixedFacilityAt(position);
     uiMessage_ = selectedBasePlacedAssetId_.has_value() ||
             selectedBaseFixedFacility_.has_value()
-        ? "BASE FACILITY SELECTED | RMB FOR ACTIONS"
+        ? workerFacility.has_value()
+            ? "WORKFORCE STATION SELECTED | LMB PANEL / RMB QUICK ACTIONS"
+            : "BASE FACILITY SELECTED | RMB FOR ACTIONS"
         : "BASE FACILITY SELECTION CLEARED";
 }
 
@@ -11571,10 +11579,15 @@ void App::handleBaseConstructionRightClick(MousePosition position)
         baseFacilityContextMenu_.reset();
         return;
     }
-    const auto assetId = basePlacedFacilityAt(position);
-    const auto fixedFacility = assetId.has_value()
-        ? std::optional<BaseFacilityKind>{}
-        : baseFixedFacilityAt(position);
+    const auto workerFacility = baseWorkerFacilityAt(position);
+    const auto assetId = workerFacility.has_value()
+        ? std::optional<AssetInstanceId>{}
+        : basePlacedFacilityAt(position);
+    const auto fixedFacility = workerFacility.has_value()
+        ? workerFacility
+        : assetId.has_value()
+            ? std::optional<BaseFacilityKind>{}
+            : baseFixedFacilityAt(position);
     if (!assetId.has_value() && !fixedFacility.has_value())
     {
         selectedBasePlacedAssetId_.reset();
@@ -11585,8 +11598,10 @@ void App::handleBaseConstructionRightClick(MousePosition position)
     selectedBasePlacedAssetId_ = assetId;
     selectedBaseFixedFacility_ = fixedFacility;
     baseFacilityContextMenu_ = BaseFacilityContextMenu{
-        assetId, fixedFacility, position};
-    uiMessage_ = "BASE FACILITY ACTIONS";
+        assetId, fixedFacility, position, workerFacility.has_value()};
+    uiMessage_ = workerFacility.has_value()
+        ? "WORKFORCE ACTIONS"
+        : "BASE FACILITY ACTIONS";
 }
 
 void App::handleBaseFacilityContextMenuClick(MousePosition position)
@@ -11594,6 +11609,84 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
     if (!baseFacilityContextMenu_.has_value())
         return;
     const BaseFacilityContextMenu menu = *baseFacilityContextMenu_;
+    if (menu.workforceStation && menu.fixedFacility.has_value())
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                *menu.fixedFacility);
+        std::vector<const BaseFacilityQuickActionProjection *> actions;
+        for (const BaseFacilityQuickActionProjection &action :
+             projection.quickActions)
+        {
+            if (action.kind ==
+                    BaseFacilityQuickActionKind::AssignBestWorker ||
+                action.kind == BaseFacilityQuickActionKind::ClearWorker ||
+                action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
+            {
+                actions.push_back(&action);
+            }
+        }
+        for (std::size_t index{}; index < actions.size(); ++index)
+        {
+            if (!contains(
+                    baseFacilityContextMenuRow(
+                        menu.position, index, actions.size()),
+                    position))
+            {
+                continue;
+            }
+            const BaseFacilityQuickActionProjection &action =
+                *actions[index];
+            if (!action.canCommit)
+            {
+                uiMessage_ = action.message;
+                gameAudio_.play(SoundEventId::UiDeny);
+                baseFacilityContextMenu_.reset();
+                return;
+            }
+
+            BaseWorkforceReceipt receipt;
+            if (action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
+            {
+                receipt = gameSession_.executeAutoFillBaseWorkers(
+                    nextProfileTransactionId(
+                        "base-workforce-station-auto-fill"));
+            }
+            else
+            {
+                const BaseFacilityStaffingKind facility =
+                    *menu.fixedFacility == BaseFacilityKind::Workshop
+                    ? BaseFacilityStaffingKind::Workshop
+                    : BaseFacilityStaffingKind::Medical;
+                receipt = action.kind ==
+                        BaseFacilityQuickActionKind::AssignBestWorker
+                    ? gameSession_.executeAssignBestBaseWorker(
+                          facility,
+                          nextProfileTransactionId(
+                              "base-workforce-station-assign"))
+                    : gameSession_.executeClearBaseWorker(
+                          facility,
+                          nextProfileTransactionId(
+                              "base-workforce-station-clear"));
+            }
+            uiMessage_ = receipt.succeeded
+                ? action.kind == BaseFacilityQuickActionKind::AutoFillWorkers
+                    ? "BASE FACILITY WORKERS AUTO-FILLED"
+                    : action.kind ==
+                            BaseFacilityQuickActionKind::AssignBestWorker
+                        ? "BASE FACILITY WORKER ASSIGNED"
+                        : "BASE FACILITY WORKER CLEARED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            baseFacilityContextMenu_.reset();
+            return;
+        }
+        baseFacilityContextMenu_.reset();
+        return;
+    }
     const std::size_t rowCount = menu.assetId.has_value()
         ? 3U
         : menu.fixedFacility.has_value() &&
@@ -11715,6 +11808,35 @@ App::baseFixedFacilityAt(MousePosition position) const
             worldPosition.y >= it->bounds.position.y &&
             worldPosition.x <= it->bounds.position.x + it->bounds.size.x &&
             worldPosition.y <= it->bounds.position.y + it->bounds.size.y)
+        {
+            return it->kind;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<BaseFacilityKind>
+App::baseWorkerFacilityAt(MousePosition position) const
+{
+    const Vec2 worldPosition = baseScreenToWorld({position.x, position.y});
+    const auto &facilities = gameFlow_.baseWorld().facilities();
+    for (auto it = facilities.rbegin(); it != facilities.rend(); ++it)
+    {
+        if (!it->active)
+            continue;
+        const auto worker = projectBaseFacilityWorkerWorldStatus(
+            gameSession_.profile(), publishedContentRegistry(), it->kind);
+        const auto socket = baseFacilityWorkSocket(*it);
+        if (!worker.has_value() || !socket.has_value() ||
+            worker->workSocket != socket->kind)
+        {
+            continue;
+        }
+        const ContentRect &bounds = socket->bounds;
+        if (worldPosition.x >= bounds.position.x &&
+            worldPosition.y >= bounds.position.y &&
+            worldPosition.x <= bounds.position.x + bounds.size.x &&
+            worldPosition.y <= bounds.position.y + bounds.size.y)
         {
             return it->kind;
         }
@@ -12404,6 +12526,55 @@ void App::renderBaseFacilityContextMenu()
         return;
     }
     const BaseFacilityContextMenu &menu = *baseFacilityContextMenu_;
+    if (menu.workforceStation && menu.fixedFacility.has_value())
+    {
+        const BaseFacilityManagementProjection projection =
+            projectBaseFacilityManagement(
+                gameSession_.profile(), publishedContentRegistry(),
+                *menu.fixedFacility);
+        std::vector<const BaseFacilityQuickActionProjection *> actions;
+        for (const BaseFacilityQuickActionProjection &action :
+             projection.quickActions)
+        {
+            if (action.kind ==
+                    BaseFacilityQuickActionKind::AssignBestWorker ||
+                action.kind == BaseFacilityQuickActionKind::ClearWorker ||
+                action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
+            {
+                actions.push_back(&action);
+            }
+        }
+        if (actions.empty())
+            return;
+        const SDL_FRect bounds = baseFacilityContextMenuBounds(
+            menu.position, actions.size());
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 250);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 126, 214, 174, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        for (std::size_t index{}; index < actions.size(); ++index)
+        {
+            const BaseFacilityQuickActionProjection &action =
+                *actions[index];
+            const SDL_FRect row = baseFacilityContextMenuRow(
+                menu.position, index, actions.size());
+            SDL_SetRenderDrawColor(
+                renderer_, 34, action.canCommit ? 70 : 42,
+                action.canCommit ? 66 : 42, 248);
+            SDL_RenderFillRect(renderer_, &row);
+            SDL_SetRenderDrawColor(
+                renderer_, action.canCommit ? 104 : 76,
+                action.canCommit ? 184 : 82,
+                action.canCommit ? 154 : 82, 255);
+            SDL_RenderRect(renderer_, &row);
+            uiTextRenderer_.render(
+                renderer_, row.x + 12.0F, row.y + 9.0F,
+                baseFacilityQuickActionName(action.kind));
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        return;
+    }
     const std::size_t rowCount = menu.assetId.has_value()
         ? 3U
         : menu.fixedFacility.has_value() &&

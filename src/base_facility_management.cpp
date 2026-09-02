@@ -153,6 +153,18 @@ void appendStaffingAction(
         std::nullopt});
 }
 
+void appendAutoFillStaffingAction(
+    BaseFacilityManagementProjection &projection,
+    const ProfileState &profile)
+{
+    const BaseWorkforcePlan plan = queryAutoFillBaseWorkers(profile);
+    projection.quickActions.push_back(BaseFacilityQuickActionProjection{
+        BaseFacilityQuickActionKind::AutoFillWorkers,
+        plan.canCommit,
+        plan.message,
+        std::nullopt});
+}
+
 void appendUpgradeAction(
     BaseFacilityManagementProjection &projection,
     const ProfileState &profile,
@@ -331,6 +343,8 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
         return projection;
 
     appendStaffingAction(projection, profile);
+    if (projection.staffingApplicable)
+        appendAutoFillStaffingAction(projection, profile);
     appendUpgradeAction(projection, profile, content);
 
     if (kind == BaseFacilityKind::Workshop)
@@ -373,13 +387,7 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
     }
     else if (kind == BaseFacilityKind::Dormitory)
     {
-        const BaseWorkforcePlan plan = queryAutoFillBaseWorkers(profile);
-        projection.quickActions.push_back(
-            BaseFacilityQuickActionProjection{
-                BaseFacilityQuickActionKind::AutoFillWorkers,
-                plan.canCommit,
-                plan.message,
-                std::nullopt});
+        appendAutoFillStaffingAction(projection, profile);
     }
     return projection;
 }
