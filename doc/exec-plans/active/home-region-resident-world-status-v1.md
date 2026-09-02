@@ -1,6 +1,6 @@
 # Home Region 聚合居民空间状态 v1 ExecPlan
 
-状态：Draft PR #141 已建立，本地实现与回归完成，待 exact-head Windows/Ubuntu CI 和用户正常游玩验收。分支 `codex/home-region-resident-world-status-v1` 从用户已验收并合入的 PR #140 / `origin/main@0f74a67` 创建。
+状态：Draft PR #141 已建立，本地实现、回归及代码提交 `223247d` 的 exact-head Windows/Ubuntu CI 均已完成，待用户正常游玩验收。分支 `codex/home-region-resident-world-status-v1` 从用户已验收并合入的 PR #140 / `origin/main@0f74a67` 创建。
 
 ## 玩家结果与依赖
 
@@ -25,7 +25,7 @@
 4. 重建受影响目标，运行设施管理、人口、劳动力、建设镜头、BaseWorld、双语、GameFlow 与持久化定向回归；完成 Windows Debug 全目标、完整 CTest 和 exact-head Windows/Ubuntu CI。
 5. 交由用户正常游玩验收；Codex 不启动游戏。
 
-本地证据（2026-09-02）：Windows Debug 全目标构建通过；设施管理、人口、劳动力、建设镜头、BaseWorld、双语、GameFlow 与持久化定向回归 `158/158` 通过；完整 CTest `1424/1424` 通过。首次脱离 Developer Shell 的全目标链接因当前终端找不到 Windows `rc` 失败，按工具链规则导入 Visual Studio Developer Shell 后原构建目录完整通过，未清理或隐藏失败。
+证据（2026-09-02）：Windows Debug 全目标构建通过；设施管理、人口、劳动力、建设镜头、BaseWorld、双语、GameFlow 与持久化定向回归 `158/158` 通过；完整 CTest `1424/1424` 通过；代码提交 `223247d` 的 exact-head Windows/Ubuntu CI 通过。首次脱离 Developer Shell 的全目标链接因当前终端找不到 Windows `rc` 失败，按工具链规则导入 Visual Studio Developer Shell 后原构建目录完整通过，未清理或隐藏失败。
 
 人工验收：按 `B` 打开建设视图，在不同缩放和平移位置观察宿舍床位的居民、健康/受伤、床位和人员占用信息；左键床位确认宿舍检查器显示一致事实；右键打开宿舍或自动补员，确认岗位数据刷新；宿舍处于 Reserve 时不应显示床位居民占位或响应点击；工坊/医疗岗位和普通建筑右键操作不得回归。
 
