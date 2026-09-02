@@ -134,6 +134,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"BUILD VIEW ZOOM RESET", "建设视野缩放已重置"},
      {"BASE BUILD PANEL", "基地建设面板"},
      {"BASE BUILD", "基地建设"},
+     {"ENTRY", "入口"},
      {"PURCHASE", "购买"},
      {"START PROJECT", "开始项目"},
      {"PROJECT COMPLETE", "项目已完成"},

@@ -900,6 +900,10 @@ TEST(UiLocalizationTest, HomeRegionPlaceableStorageIsBilingual) {
 TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "ENTRY"),
+            "入口");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU"),
             "B 基地建设 | TAB 物品栏 | M 地图 | ESC 菜单");
   EXPECT_EQ(localizeUiText(

@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/home-region-construction-catalog-v1.md`。PR #134 已由用户正常游玩验收并以 `2ec99c2` 进入 main；当前只统一基地建设工程、设施购买与储备放置目录，不并行增加建设队列、科技树、供电管线、正式建筑美术、实时守城或 AI 小队。
+当前实现计划：`active/home-region-facility-access-zones-v1.md`。PR #135 已由用户正常游玩验收并以 `c37fe32` 进入 main；当前只建立设施入口、交互区和作业净空，不并行增加独立室内、NPC 模拟、设施旋转、供电管线、正式建筑美术、实时守城或 AI 小队。

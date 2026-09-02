@@ -67,6 +67,30 @@ ContentRect centeredBounds(Vec2 center, Vec2 footprint) noexcept
         footprint};
 }
 
+BaseFacilityAccessGeometry accessGeometry(
+    Vec2 worldCenter,
+    Vec2 footprint) noexcept
+{
+    if (!finitePoint(worldCenter) || !finitePositive(footprint))
+        return {};
+    const float buildingBottom = worldCenter.y + footprint.y * 0.5F;
+    const float workWidth = std::clamp(
+        footprint.x * 0.70F, 140.0F, 220.0F);
+    const float interactionWidth = std::clamp(
+        footprint.x * 0.45F, 96.0F, 144.0F);
+    constexpr float zoneTopOverlap{18.0F};
+    return BaseFacilityAccessGeometry{
+        {worldCenter.x, buildingBottom + 18.0F},
+        ContentRect{
+            {worldCenter.x - interactionWidth * 0.5F,
+             buildingBottom - zoneTopOverlap},
+            {interactionWidth, 82.0F}},
+        ContentRect{
+            {worldCenter.x - workWidth * 0.5F,
+             buildingBottom - zoneTopOverlap},
+            {workWidth, 132.0F}}};
+}
+
 std::optional<Vec2> defaultNormalizedCenter(
     const BaseFacilityDefinitionId &definitionId) noexcept
 {
@@ -122,11 +146,18 @@ BaseFacilityLayoutPlan queryPlacementGeometry(
         return result;
     }
     const ContentRect proposed = centeredBounds(worldCenter, footprint);
+    const BaseFacilityAccessGeometry facilityAccess = accessGeometry(
+        worldCenter, footprint);
     if (!rectInside(proposed, access.baseParcel) ||
+        !rectInside(facilityAccess.workZone, access.baseParcel) ||
         std::any_of(
             access.blockers.begin(), access.blockers.end(),
             [&](const ContentRect &blocker)
-            { return finiteRect(blocker) && rectsOverlap(proposed, blocker); }))
+            {
+                return finiteRect(blocker) &&
+                    (rectsOverlap(proposed, blocker) ||
+                     rectsOverlap(facilityAccess.workZone, blocker));
+            }))
     {
         result.message = "Base facility placement is blocked";
         return result;
@@ -141,6 +172,13 @@ BaseFacilityLayoutPlan queryPlacementGeometry(
             access.baseParcel.size.y};
     return result;
 }
+}
+
+BaseFacilityAccessGeometry projectBaseFacilityAccessGeometry(
+    Vec2 worldCenter,
+    Vec2 footprint) noexcept
+{
+    return accessGeometry(worldCenter, footprint);
 }
 
 bool isSpatialBaseFacility(

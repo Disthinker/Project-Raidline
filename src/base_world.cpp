@@ -10,19 +10,11 @@
 
 namespace
 {
-float distanceSquaredToRect(Vec2 point, const Rect &rect) noexcept
+bool pointInside(Vec2 point, const ContentRect &rect) noexcept
 {
-    const float nearestX = std::clamp(
-        point.x,
-        rect.position.x,
-        rect.position.x + rect.size.x);
-    const float nearestY = std::clamp(
-        point.y,
-        rect.position.y,
-        rect.position.y + rect.size.y);
-    const float dx = point.x - nearestX;
-    const float dy = point.y - nearestY;
-    return dx * dx + dy * dy;
+    return point.x >= rect.position.x && point.y >= rect.position.y &&
+        point.x <= rect.position.x + rect.size.x &&
+        point.y <= rect.position.y + rect.size.y;
 }
 
 AnimationClip makeBasePlayerMoveClip()
@@ -89,6 +81,15 @@ void BaseWorld::configureSite(std::string_view siteDefinitionId)
     configureSite(siteDefinitionId, {});
 }
 
+BaseFacilityAccessGeometry baseFacilityAccessGeometry(
+    const BaseFacility &facility) noexcept
+{
+    return projectBaseFacilityAccessGeometry(
+        {facility.bounds.position.x + facility.bounds.size.x * 0.5F,
+         facility.bounds.position.y + facility.bounds.size.y * 0.5F},
+        facility.bounds.size);
+}
+
 void BaseWorld::configureSite(
     std::string_view siteDefinitionId,
     std::vector<BaseFacilitySpatialOverride> overrides)
@@ -124,28 +125,28 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
     facilities_ = {
         BaseFacility{BaseFacilityKind::Storage,
                      {{origin.x + 80.0F, origin.y + 220.0F},
-                      {300.0F, 220.0F}}, 72.0F},
+                      {300.0F, 220.0F}}},
         BaseFacility{BaseFacilityKind::Supply,
                      {{origin.x + 1220.0F, origin.y + 220.0F},
-                      {300.0F, 220.0F}}, 72.0F},
+                      {300.0F, 220.0F}}},
         BaseFacility{BaseFacilityKind::Allocation,
                      {{origin.x + 80.0F, origin.y + 760.0F},
-                      {300.0F, 180.0F}}, 72.0F},
+                      {300.0F, 180.0F}}},
         BaseFacility{BaseFacilityKind::Medical,
                      {{origin.x + 1220.0F, origin.y + 760.0F},
-                      {300.0F, 180.0F}}, 72.0F},
+                      {300.0F, 180.0F}}},
         BaseFacility{BaseFacilityKind::Dormitory,
                      {{origin.x + 460.0F, origin.y + 790.0F},
-                      {270.0F, 150.0F}}, 72.0F},
+                      {270.0F, 150.0F}}},
         BaseFacility{BaseFacilityKind::KitchenWater,
                      {{origin.x + 450.0F, origin.y + 310.0F},
-                      {300.0F, 180.0F}}, 72.0F, false},
+                      {300.0F, 180.0F}}, false},
         BaseFacility{BaseFacilityKind::Workshop,
                      {{origin.x + 870.0F, origin.y + 520.0F},
-                      {270.0F, 170.0F}}, 72.0F},
+                      {270.0F, 170.0F}}},
         BaseFacility{BaseFacilityKind::RaidGate,
                      {{origin.x + 650.0F, origin.y + 40.0F},
-                      {300.0F, 130.0F}}, 82.0F}};
+                      {300.0F, 130.0F}}}};
     for (const BaseFacilitySpatialOverride &override : facilityOverrides_)
     {
         const auto facility = std::find_if(
@@ -445,14 +446,19 @@ bool BaseWorld::canAccessStash() const noexcept
 std::vector<ContentRect> BaseWorld::basePlacementBlockers() const
 {
     std::vector<ContentRect> result = layout_.movementBlockers;
-    result.reserve(result.size() + facilities_.size() + 1U);
+    result.reserve(
+        result.size() + facilities_.size() * 2U +
+        groundBlockers_.size() + 1U);
     for (const BaseFacility &facility : facilities_)
     {
         if (!facility.active)
             continue;
         result.push_back(ContentRect{
             facility.bounds.position, facility.bounds.size});
+        result.push_back(baseFacilityAccessGeometry(facility).workZone);
     }
+    for (const ContentRect &bounds : groundBlockers_)
+        result.push_back(bounds);
     result.push_back(ContentRect{playerPosition_, playerSize_});
     return result;
 }
@@ -461,13 +467,16 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockersExcluding(
     BaseFacilityKind excluded) const
 {
     std::vector<ContentRect> result = layout_.movementBlockers;
-    result.reserve(result.size() + facilities_.size());
+    result.reserve(
+        result.size() + facilities_.size() * 2U +
+        groundBlockers_.size() + 1U);
     for (const BaseFacility &facility : facilities_)
     {
         if (!facility.active || facility.kind == excluded)
             continue;
         result.push_back(ContentRect{
             facility.bounds.position, facility.bounds.size});
+        result.push_back(baseFacilityAccessGeometry(facility).workZone);
     }
     for (const ContentRect &bounds : groundBlockers_)
         result.push_back(bounds);
@@ -584,8 +593,9 @@ std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
     {
         if (!facility.active)
             continue;
-        if (distanceSquaredToRect(center, facility.bounds) <=
-            facility.interactionRange * facility.interactionRange)
+        if (pointInside(
+                center,
+                baseFacilityAccessGeometry(facility).interactionZone))
         {
             return facility.kind;
         }

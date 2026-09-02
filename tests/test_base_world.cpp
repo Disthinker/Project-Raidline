@@ -5,6 +5,27 @@
 #include "base_world.h"
 #include "item_definition.h"
 
+namespace
+{
+bool overlaps(const ContentRect &left, const ContentRect &right)
+{
+    return left.position.x < right.position.x + right.size.x &&
+        left.position.x + left.size.x > right.position.x &&
+        left.position.y < right.position.y + right.size.y &&
+        left.position.y + left.size.y > right.position.y;
+}
+
+bool inside(const ContentRect &inner, const ContentRect &outer)
+{
+    return inner.position.x >= outer.position.x &&
+        inner.position.y >= outer.position.y &&
+        inner.position.x + inner.size.x <=
+            outer.position.x + outer.size.x &&
+        inner.position.y + inner.size.y <=
+            outer.position.y + outer.size.y;
+}
+}
+
 TEST(BaseWorldTest, MovementIsNormalizedAndClamped)
 {
     BaseWorld world;
@@ -271,6 +292,12 @@ TEST(BaseWorldTest, ExposesDormitoryWithoutBlockingCentralRoute)
         baseFacilityName(BaseFacilityKind::Dormitory),
         "DORMITORY & REST");
 
+    BaseInput moveDown;
+    moveDown.moveDown = true;
+    for (int index{}; index < 8; ++index)
+    {
+        static_cast<void>(world.update(moveDown, 0.05F));
+    }
     BaseInput moveLeft;
     moveLeft.moveLeft = true;
     for (int index{}; index < 20; ++index)
@@ -308,9 +335,15 @@ TEST(BaseWorldTest, ExposesAndInteractsWithMedicalFacility)
         baseFacilityName(BaseFacilityKind::Medical),
         "MEDICAL SERVICE");
 
+    BaseInput moveDown;
+    moveDown.moveDown = true;
+    for (int index{}; index < 8; ++index)
+    {
+        static_cast<void>(world.update(moveDown, 0.05F));
+    }
     BaseInput moveRight;
     moveRight.moveRight = true;
-    for (int index{}; index < 50; ++index)
+    for (int index{}; index < 58; ++index)
     {
         static_cast<void>(world.update(moveRight, 0.05F));
     }
@@ -335,6 +368,74 @@ TEST(BaseWorldTest, ExposesWorkshopProductionFacility)
     EXPECT_STREQ(
         baseFacilityName(BaseFacilityKind::Workshop),
         "WORKSHOP & PRODUCTION");
+}
+
+TEST(BaseWorldTest, FacilitySideDoesNotReplaceThePublishedEntrance)
+{
+    BaseWorld world;
+    const Vec2 playerCenter{
+        world.playerPosition().x + world.playerSize().x * 0.5F,
+        world.playerPosition().y + world.playerSize().y * 0.5F};
+    world.configureSite(
+        world.siteDefinitionId(),
+        {BaseFacilitySpatialOverride{
+            BaseFacilityKind::Storage,
+            {playerCenter.x + 190.0F, playerCenter.y},
+            true}});
+    EXPECT_FALSE(world.interactableFacility().has_value());
+
+    const auto storage = std::find_if(
+        world.facilities().begin(), world.facilities().end(),
+        [](const BaseFacility &facility)
+        { return facility.kind == BaseFacilityKind::Storage; });
+    ASSERT_NE(storage, world.facilities().end());
+    const BaseFacilityAccessGeometry geometry =
+        baseFacilityAccessGeometry(*storage);
+    EXPECT_GT(
+        geometry.entrancePoint.y,
+        storage->bounds.position.y + storage->bounds.size.y);
+}
+
+TEST(BaseWorldTest, ActiveFacilitiesPublishReservedEntranceWorkZones)
+{
+    const BaseWorld world;
+    const std::vector<ContentRect> blockers = world.basePlacementBlockers();
+    for (const BaseFacility &facility : world.facilities())
+    {
+        if (!facility.active)
+            continue;
+        const BaseFacilityAccessGeometry geometry =
+            baseFacilityAccessGeometry(facility);
+        EXPECT_FLOAT_EQ(
+            geometry.entrancePoint.x,
+            facility.bounds.position.x + facility.bounds.size.x * 0.5F);
+        EXPECT_GT(
+            geometry.entrancePoint.y,
+            facility.bounds.position.y + facility.bounds.size.y);
+        EXPECT_TRUE(std::any_of(
+            blockers.begin(), blockers.end(),
+            [&](const ContentRect &bounds)
+            {
+                return bounds.position.x == geometry.workZone.position.x &&
+                    bounds.position.y == geometry.workZone.position.y &&
+                    bounds.size.x == geometry.workZone.size.x &&
+                    bounds.size.y == geometry.workZone.size.y;
+            }));
+        EXPECT_TRUE(inside(geometry.workZone, world.baseParcel()));
+        for (const ContentRect &environment : world.layout().movementBlockers)
+            EXPECT_FALSE(overlaps(geometry.workZone, environment));
+        for (const BaseFacility &other : world.facilities())
+        {
+            if (!other.active || other.kind == facility.kind)
+                continue;
+            EXPECT_FALSE(overlaps(
+                geometry.workZone,
+                ContentRect{other.bounds.position, other.bounds.size}));
+            EXPECT_FALSE(overlaps(
+                geometry.workZone,
+                baseFacilityAccessGeometry(other).workZone));
+        }
+    }
 }
 
 TEST(BaseWorldTest, KitchenWaterRequiresOwnedSpatialActivation)
@@ -424,4 +525,15 @@ TEST(BaseWorldTest, ReserveFacilityIsNotVisibleOrBlocking)
                  bounds.position.y == workshop->bounds.position.y &&
                  bounds.size.x == workshop->bounds.size.x &&
                  bounds.size.y == workshop->bounds.size.y; }));
+    const BaseFacilityAccessGeometry access =
+        baseFacilityAccessGeometry(*workshop);
+    EXPECT_FALSE(std::any_of(
+        blockers.begin(), blockers.end(),
+        [&](const ContentRect &bounds)
+        {
+            return bounds.position.x == access.workZone.position.x &&
+                bounds.position.y == access.workZone.position.y &&
+                bounds.size.x == access.workZone.size.x &&
+                bounds.size.y == access.workZone.size.y;
+        }));
 }
