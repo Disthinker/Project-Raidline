@@ -9204,9 +9204,10 @@ void App::focusBaseFixedFacility(BaseFacilityKind facility) noexcept
         });
     if (found == world.facilities().end())
         return;
+    const BaseFacilityAccessGeometry access =
+        baseFacilityAccessGeometry(*found);
     baseBuildCamera_.activate(
-        {found->bounds.position.x + found->bounds.size.x * 0.5F,
-         found->bounds.position.y + found->bounds.size.y * 0.5F},
+        access.entrancePoint,
         world.worldSize(),
         baseBuildViewportWorldSize());
 }
@@ -10635,11 +10636,27 @@ void App::renderBaseWorld()
     {
         if (!facility.active)
             continue;
+        const BaseFacilityAccessGeometry access =
+            baseFacilityAccessGeometry(facility);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
             facility.bounds.size.x,
             facility.bounds.size.y};
+        if (baseConstructionPanelOpen_)
+        {
+            const SDL_FRect workZone{
+                access.workZone.position.x,
+                access.workZone.position.y,
+                access.workZone.size.x,
+                access.workZone.size.y};
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer_, 84, 188, 142, 42);
+            SDL_RenderFillRect(renderer_, &workZone);
+            SDL_SetRenderDrawColor(renderer_, 112, 224, 174, 170);
+            SDL_RenderRect(renderer_, &workZone);
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        }
         switch (facility.kind)
         {
         case BaseFacilityKind::Storage:
@@ -10701,6 +10718,16 @@ void App::renderBaseWorld()
             bounds.x + 18.0F,
             bounds.y + bounds.h / 2.0F,
             baseFacilityName(facility.kind));
+        const SDL_FRect entrance{
+            access.entrancePoint.x - 20.0F,
+            access.entrancePoint.y - 5.0F,
+            40.0F,
+            10.0F};
+        SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
+        SDL_RenderFillRect(renderer_, &entrance);
+        uiTextRenderer_.render(
+            renderer_, entrance.x - 2.0F, entrance.y + 12.0F,
+            "ENTRY");
     }
 
     for (const BaseGroundAssetProjection &ground :
@@ -11599,7 +11626,25 @@ void App::renderBasePlacementPreview()
             worldPosition.y - facility->bounds.size.y * 0.5F,
             facility->bounds.size.x,
             facility->bounds.size.y};
+        const BaseFacilityAccessGeometry access =
+            projectBaseFacilityAccessGeometry(
+                worldPosition, facility->bounds.size);
+        const SDL_FRect workZone{
+            access.workZone.position.x,
+            access.workZone.position.y,
+            access.workZone.size.x,
+            access.workZone.size.y};
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(
+            renderer_, plan.canCommit ? 72 : 220,
+            plan.canCommit ? 206 : 72,
+            plan.canCommit ? 132 : 66, 45);
+        SDL_RenderFillRect(renderer_, &workZone);
+        SDL_SetRenderDrawColor(
+            renderer_, plan.canCommit ? 112 : 255,
+            plan.canCommit ? 244 : 104,
+            plan.canCommit ? 170 : 94, 190);
+        SDL_RenderRect(renderer_, &workZone);
         SDL_SetRenderDrawColor(
             renderer_, plan.canCommit ? 72 : 220,
             plan.canCommit ? 206 : 72,
@@ -12262,6 +12307,13 @@ void App::renderHomeRegionMap()
         bounds.h = std::max(bounds.h, 4.0F);
         SDL_SetRenderDrawColor(renderer_, 174, 198, 184, 235);
         SDL_RenderFillRect(renderer_, &bounds);
+        const BaseFacilityAccessGeometry access =
+            baseFacilityAccessGeometry(facility);
+        const Vec2 entrance = screenPoint(access.entrancePoint);
+        const SDL_FRect entranceMarker{
+            entrance.x - 2.5F, entrance.y - 2.5F, 5.0F, 5.0F};
+        SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
+        SDL_RenderFillRect(renderer_, &entranceMarker);
     }
 
     for (const HomeRegionDistrictSnapshot &district : layout.districts)

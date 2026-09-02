@@ -55,6 +55,18 @@ struct BaseFacilitySpatialProjection
     Vec2 worldCenter{};
 };
 
+struct BaseFacilityAccessGeometry
+{
+    Vec2 entrancePoint{};
+    ContentRect interactionZone;
+    ContentRect workZone;
+};
+
+[[nodiscard]] BaseFacilityAccessGeometry
+projectBaseFacilityAccessGeometry(
+    Vec2 worldCenter,
+    Vec2 footprint) noexcept;
+
 [[nodiscard]] bool isSpatialBaseFacility(
     const BaseFacilityDefinitionId &definitionId) noexcept;
 

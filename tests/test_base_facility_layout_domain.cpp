@@ -63,6 +63,87 @@ TEST(BaseFacilityLayoutDomainTest,
 }
 
 TEST(BaseFacilityLayoutDomainTest,
+     AccessGeometryIsDeterministicAndContainsTheSouthEntrance)
+{
+    const BaseFacilityAccessGeometry geometry =
+        projectBaseFacilityAccessGeometry(
+            {1400.0F, 2400.0F}, {300.0F, 220.0F});
+    EXPECT_FLOAT_EQ(geometry.entrancePoint.x, 1400.0F);
+    EXPECT_FLOAT_EQ(geometry.entrancePoint.y, 2528.0F);
+    EXPECT_GT(geometry.interactionZone.size.x, 0.0F);
+    EXPECT_GT(geometry.interactionZone.size.y, 0.0F);
+    EXPECT_GE(
+        geometry.entrancePoint.x,
+        geometry.interactionZone.position.x);
+    EXPECT_LE(
+        geometry.entrancePoint.x,
+        geometry.interactionZone.position.x +
+            geometry.interactionZone.size.x);
+    EXPECT_GE(
+        geometry.entrancePoint.y,
+        geometry.interactionZone.position.y);
+    EXPECT_LE(
+        geometry.entrancePoint.y,
+        geometry.interactionZone.position.y +
+            geometry.interactionZone.size.y);
+    EXPECT_LE(
+        geometry.workZone.position.x,
+        geometry.interactionZone.position.x);
+    EXPECT_LE(
+        geometry.workZone.position.y,
+        geometry.interactionZone.position.y);
+    EXPECT_GE(
+        geometry.workZone.position.x + geometry.workZone.size.x,
+        geometry.interactionZone.position.x +
+            geometry.interactionZone.size.x);
+    EXPECT_GE(
+        geometry.workZone.position.y + geometry.workZone.size.y,
+        geometry.interactionZone.position.y +
+            geometry.interactionZone.size.y);
+
+    EXPECT_EQ(
+        projectBaseFacilityAccessGeometry(
+            {1400.0F, 2400.0F}, {300.0F, 220.0F}).entrancePoint.x,
+        geometry.entrancePoint.x);
+    EXPECT_EQ(
+        projectBaseFacilityAccessGeometry({}, {}).workZone.size.x,
+        0.0F);
+}
+
+TEST(BaseFacilityLayoutDomainTest,
+     RepositionRejectsBlockedOrOutOfParcelWorkZoneWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "facility-access-clearance", content);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const RepositionBaseFacilityCommand blockedAccess{
+        kWarehouse,
+        {1400.0F, 2400.0F},
+        {300.0F, 220.0F},
+        access({ContentRect{{1350.0F, 2550.0F}, {100.0F, 40.0F}}})};
+    EXPECT_FALSE(queryBaseFacilityLayout(
+        profile, content, blockedAccess).canCommit);
+    EXPECT_FALSE(executeBaseFacilityLayout(
+        profile, content, blockedAccess,
+        CommandContext{profile.revision, "blocked-access"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const RepositionBaseFacilityCommand outsideAccess{
+        kWarehouse,
+        {1400.0F, 2920.0F},
+        {300.0F, 220.0F},
+        access()};
+    EXPECT_FALSE(queryBaseFacilityLayout(
+        profile, content, outsideAccess).canCommit);
+    EXPECT_FALSE(executeBaseFacilityLayout(
+        profile, content, outsideAccess,
+        CommandContext{profile.revision, "outside-access"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(BaseFacilityLayoutDomainTest,
      BlockedReserveAndStaleMovesRejectWithoutMutation)
 {
     const ContentRegistry &content = publishedContentRegistry();

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "animation.h"
+#include "base_facility_layout_domain.h"
 #include "gameplay_input.h"
 #include "home_region_layout.h"
 #include "raid_space_spatial_index.h"
@@ -31,9 +32,11 @@ struct BaseFacility
 {
     BaseFacilityKind kind{BaseFacilityKind::Storage};
     Rect bounds;
-    float interactionRange{56.0F};
     bool active{true};
 };
+
+[[nodiscard]] BaseFacilityAccessGeometry baseFacilityAccessGeometry(
+    const BaseFacility &facility) noexcept;
 
 struct BaseFacilitySpatialOverride
 {
