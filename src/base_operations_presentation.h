@@ -50,7 +50,8 @@ struct BaseOperationsOverviewPage
     }
     return kind == BaseOperationOverviewKind::StaffingGap ||
         kind == BaseOperationOverviewKind::ResourceShortage ||
-        kind == BaseOperationOverviewKind::ResidentPressure;
+        kind == BaseOperationOverviewKind::ResidentPressure ||
+        kind == BaseOperationOverviewKind::BaseWish;
 }
 
 [[nodiscard]] inline BaseOperationsOverviewPage

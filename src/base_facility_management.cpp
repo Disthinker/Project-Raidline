@@ -676,5 +676,27 @@ BaseOperationsOverviewProjection projectBaseOperationsOverview(
             BaseFacilityKind::Dormitory,
             BaseOperationOverviewKind::ResidentPressure});
     }
+
+    if (std::any_of(
+            profile.basePriority.wishes.begin(),
+            profile.basePriority.wishes.end(),
+            [](const BasePriorityWishState &wish) {
+                return !wish.fulfilled;
+            }))
+    {
+        const std::uint64_t cycleMinutes =
+            content.basePriorityCycleMinutes();
+        const std::uint64_t elapsedSinceProfileStart =
+            profile.worldClock.elapsedWorldMinutes <= kInitialWorldMinute
+                ? 0U
+                : profile.worldClock.elapsedWorldMinutes -
+                      kInitialWorldMinute;
+        const std::uint64_t remainingMinutes = cycleMinutes -
+            elapsedSinceProfileStart % cycleMinutes;
+        result.entries.push_back(BaseOperationOverviewEntry{
+            BaseFacilityKind::Allocation,
+            BaseOperationOverviewKind::BaseWish,
+            remainingMinutes});
+    }
     return result;
 }

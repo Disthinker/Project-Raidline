@@ -4,11 +4,11 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@60c83fa`，PR #143 已合入并完成 Home Region 作业状态信息层级与快速定位 v1。
-- 当前开发分支：`codex/home-region-perimeter-exploration-v1`，从 `origin/main@60c83fa` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-perimeter-exploration-v1.md`。
-- 当前切片在同一 Home Region 中建立 SafeCore、TransitionBuffer 与 Perimeter，提供有限感染者、低阶地面 Loot、返回与救回闭环；不嵌入 Raid 生命周期，也不提供导航。
-- PR #143 已通过 Windows Debug 全目标、71/71 定向回归、1433/1433 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、42/42 关键领域回归与 1444/1444 全量 CTest；等待 exact-head Windows/Ubuntu CI 和用户正常游玩验收，开发代理不启动游戏。
+- 已验收主线：`origin/main@674f65e`，PR #144 已合入并完成 Home Region 外围探索与安全边界 v1。
+- 当前开发分支：`codex/base-wishes-resource-tradeoff-v2`，从 `origin/main@674f65e` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-wishes-resource-tradeoff-v2.md`。
+- 当前切片把五日基地愿望升级为按周期人口冻结的一至三个目标，允许玩家显式组合同分类物品并在一次原子提交前查看贡献与超额；不建立任务面板、导航或直接奖励。
+- PR #144 已通过 Windows Debug 全目标、42/42 关键领域回归、1444/1444 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已完成 Windows Debug 全目标、195/195 关键领域回归与 1447/1447 全量 CTest，等待提交、exact-head Windows/Ubuntu CI 和用户正常游玩验收；开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
@@ -100,7 +100,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 83. **Home Region 聚合居民空间状态 v1**：DormitoryBunk 显示聚合居民、健康/受伤、床位、可用/已分配/建设占用，并提供宿舍打开与自动补员入口。PR #141 已通过 CI 与用户验收，以 `2f05626` 进入 main。
 84. **Home Region 基地物资流现场状态 v1**：仓库装卸点与厨房处理点显示统一库存、供给授权、资源池和预计短缺。PR #142 已通过 CI 与用户验收，以 `b1194a1` 进入 main。
 85. **Home Region 作业状态信息层级与快速定位 v1**：作业点随缩放显示不同信息密度，运营总览支持状态筛选、分页和设施定位。PR #143 已通过 CI 与用户验收，以 `60c83fa` 进入 main。
-86. **Home Region 外围探索与安全边界 v1（当前开发分支）**：安全核心外加入过渡缓冲与可探索外围；外围使用有限感染者、低阶地面 Loot、持久周期快照和本地返回/救回结果，不创建 Raid、撤离或 Settlement。
+86. **Home Region 外围探索与安全边界 v1**：安全核心外加入过渡缓冲与可探索外围；外围使用有限感染者、低阶地面 Loot、持久周期快照和本地返回/救回结果，不创建 Raid、撤离或 Settlement。PR #144 已通过 CI 与用户正常游玩验收，以 `674f65e` 进入 main。
+87. **Base 愿望与资源取舍 v2（当前开发分支）**：五日周期按冻结人口生成一至三个愿望；玩家显式选择当前愿望与可贡献资产，预览贡献/超额后一次完成，完成与错过只进入既有士气账本。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
@@ -308,13 +309,14 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 - schema v10/v11 继续保存旧任务、高水位、冻结报价/完成点和服务资产位置；PR #83 不删除这些字段，以便旧存档中的武器仍由唯一位置持有并可安全领取。
 - 当前新维护不会再产生这种任务；旧任务在加载后立即可领取，Stash 空间不足时仍零修改保留服务所有权。
 
-## Base 周期愿望与物资提交 v1 当前实现
+## Base 愿望与资源取舍 v2 当前开发实现
 
-- content v16 提供五日周期和三个稳定愿望定义，分别要求可乐、废旧零件或损坏电子元件，并只奖励既有基地资源；显示名和数值仍是开发期内容。
-- `BasePriorityState` 保存当前稳定定义 ID、周期索引、完成状态和累计错过周期。周期从新 Profile 的初始世界分钟起算，任意大跨度时间均常数时间轮换；完成或错过现在写入下一次每日士气账本，不会在同一天被重复提交刷取。
-- 愿望提交只消费玩家明确选中的基地可访问自有资产；正常流程不再要求物品先进入 BaseIntake。Stash、装备与随身容器不会被静默扫描或自动提交，query/execute 共用匹配、数量与容量规则。
-- schema v11 保存愿望状态；schema v10 及更早版本按当前世界时间确定性初始化。Pending Raid 同时冻结出发前愿望，异常退出跨周期也会精确回滚。
-- Allocation 页使用双语文字和几何占位显示当前愿望、剩余时间、指定物资、资源收益、完成/错过状态及手动提交入口；愿望仍是显式提交，不会被日常自动供给策略代替。
+- content v59 保留五日周期并发布食物、卫生/医疗、娱乐/士气和安全四类稳定愿望；人口档位在周期开始时冻结，当前分别生成一、二或三个不重复愿望。
+- `BasePriorityState` 保存周期索引、冻结人口、各愿望定义 ID/完成位和累计错过数量。选择由 Profile、周期和人口的稳定随机流决定；打开界面、进程重启和周期内人口变化不会重抽。
+- 玩家在 Allocation 页先选愿望，再明确选择仓库、装备或随身容器中的基地可访问资产。多个同分类物品可以共同达标；query/execute 共用贡献、门槛和超额规则，任何失败均零修改。
+- 完成愿望只消费明确选择的完整资产并写入既有士气账本，不增加货币、抽象资源或奖励物。错过的每个愿望也只进入下一次士气日结原因。
+- schema v43 保存多愿望和冻结人口；schema v42 及更早单愿望档案保留当前周期、定义、完成状态与累计错过，不补抽当前周期目标，下一周期才切换到完整规则。Pending Raid 的出发前快照使用同一迁移与回滚合同。
+- Allocation 页使用双语文字和几何占位显示愿望列表、剩余时间、来源提示、贡献与超额；基地运营总览把未完成愿望显示为需处理事项并定位到资源分配设施。它不是任务面板，也不提供导航。
 
 ## Base 运营状态与即时枪械维护 v1 当前实现
 

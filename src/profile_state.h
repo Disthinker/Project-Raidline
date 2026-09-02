@@ -425,14 +425,6 @@ struct BaseResourceState
 // A supply assignment authorizes the Base to consume a matching owned item
 // definition for one specific need. The item stays in its real inventory
 // location until a world-time demand boundary actually consumes it.
-enum class BaseSupplyCategory
-{
-    Food,
-    Medical,
-    Recreation,
-    Security
-};
-
 struct BaseSupplyPolicyState
 {
     std::map<ItemDefinitionId, BaseSupplyCategory> assignments;
@@ -824,12 +816,23 @@ struct BaseFacilityLayoutState
     }
 };
 
-struct BasePriorityState
+struct BasePriorityWishState
 {
     BasePriorityDefinitionId definitionId;
-    std::uint64_t cycleIndex{};
     bool fulfilled{};
+
+    friend bool operator==(
+        const BasePriorityWishState &,
+        const BasePriorityWishState &) = default;
+};
+
+struct BasePriorityState
+{
+    std::uint64_t cycleIndex{};
+    std::uint32_t frozenPopulation{};
+    std::vector<BasePriorityWishState> wishes;
     std::uint64_t missedCycleCount{};
+    bool migratedLegacyCycle{};
 
     friend bool operator==(
         const BasePriorityState &,

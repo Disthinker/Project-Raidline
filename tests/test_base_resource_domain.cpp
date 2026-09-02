@@ -60,10 +60,10 @@ TEST(BaseResourceDomainTest, NewProfileStartsWithSafeButFiniteResources)
     EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{40, 40, 40, 40}));
     EXPECT_TRUE(profile.baseResources.lastShortfall.empty());
     EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 0U);
-    EXPECT_EQ(
-        profile.basePriority.definitionId,
-        BasePriorityDefinitionId{"base_priority.comfort_cola"});
-    EXPECT_FALSE(profile.basePriority.fulfilled);
+    ASSERT_EQ(profile.basePriority.wishes.size(), 1U);
+    EXPECT_TRUE(profile.basePriority.wishes.front().definitionId.valid());
+    EXPECT_FALSE(profile.basePriority.wishes.front().fulfilled);
+    EXPECT_EQ(profile.basePriority.frozenPopulation, 8U);
     EXPECT_EQ(profile.basePriority.cycleIndex, 0U);
 }
 
@@ -171,68 +171,138 @@ TEST(BaseResourceDomainTest,
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, MatchingStashItemFulfillsPriorityAtomically)
+TEST(BaseResourceDomainTest, ExplicitContributionsFulfillOneWishAtomically)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-priority-submit",
         publishedContentRegistry());
-    const AssetInstanceId cola = createStashAsset(
-        profile, alpha_content::lootCola);
+    const BasePriorityWishState wish = profile.basePriority.wishes.front();
+    const BasePriorityDefinition &definition =
+        publishedContentRegistry().basePriority(wish.definitionId);
+    ItemDefinitionId itemId;
+    std::uint32_t quantity{1U};
+    switch (definition.category)
+    {
+    case BaseSupplyCategory::Food:
+        itemId = ItemDefinitionId{"item.loot.canned_meal"};
+        quantity = 2U;
+        break;
+    case BaseSupplyCategory::Medical:
+        itemId = ItemDefinitionId{"item.loot.first_aid_stock"};
+        break;
+    case BaseSupplyCategory::Recreation:
+        itemId = ItemDefinitionId{"item.loot.compact_game_set"};
+        break;
+    case BaseSupplyCategory::Security:
+        itemId = ItemDefinitionId{"item.loot.precision_components"};
+        break;
+    }
+    const AssetInstanceId selected = createStashAsset(
+        profile, itemId, quantity);
+    const BaseResourceBundle resourcesBefore = profile.baseResources.pool;
 
     const BasePriorityReceipt receipt = executeBasePrioritySubmission(
         profile,
         publishedContentRegistry(),
-        SubmitBasePriorityCommand{cola},
+        SubmitBasePriorityCommand{wish.definitionId, {selected}},
         CommandContext{profile.revision, "fulfill-comfort"});
 
     ASSERT_TRUE(receipt.succeeded) << receipt.message;
-    EXPECT_EQ(receipt.reward, (BaseResourceBundle{0, 0, 12, 0}));
-    EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{40, 40, 52, 40}));
-    EXPECT_TRUE(profile.basePriority.fulfilled);
-    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    EXPECT_GE(receipt.totalContribution, definition.requiredContribution);
+    EXPECT_EQ(profile.baseResources.pool, resourcesBefore);
+    EXPECT_TRUE(profile.basePriority.wishes.front().fulfilled);
+    EXPECT_EQ(profile.assets.find(selected), nullptr);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
     const BasePriorityReceipt repeated = executeBasePrioritySubmission(
         profile,
         publishedContentRegistry(),
-        SubmitBasePriorityCommand{cola},
+        SubmitBasePriorityCommand{wish.definitionId, {selected}},
         CommandContext{profile.revision, "fulfill-comfort"});
     EXPECT_TRUE(repeated.succeeded);
     EXPECT_TRUE(repeated.alreadyCommitted);
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, PriorityRejectsWrongItemAndAcceptsExplicitStashItem)
+TEST(BaseResourceDomainTest, PriorityRejectsWrongCategoryAndDuplicateSelection)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-priority-reject",
         publishedContentRegistry());
-    const AssetInstanceId scrap = createIntakeAsset(
-        profile, ItemDefinitionId{"item.loot.scrap_parts"});
-    const AssetInstanceId stashCola = createStashAsset(
-        profile, alpha_content::lootCola);
+    const BasePriorityWishState wish = profile.basePriority.wishes.front();
+    const BasePriorityDefinition &definition =
+        publishedContentRegistry().basePriority(wish.definitionId);
+    const ItemDefinitionId wrong = definition.category ==
+            BaseSupplyCategory::Food
+        ? ItemDefinitionId{"item.loot.precision_components"}
+        : ItemDefinitionId{"item.loot.canned_meal"};
+    const AssetInstanceId wrongAsset = createIntakeAsset(profile, wrong);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     EXPECT_FALSE(executeBasePrioritySubmission(
         profile,
         publishedContentRegistry(),
-        SubmitBasePriorityCommand{scrap},
+        SubmitBasePriorityCommand{wish.definitionId, {wrongAsset}},
         CommandContext{profile.revision, "reject-wrong-priority"}).succeeded);
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 
-    const BasePriorityReceipt accepted = executeBasePrioritySubmission(
+    const BasePriorityReceipt duplicate = executeBasePrioritySubmission(
         profile,
         publishedContentRegistry(),
-        SubmitBasePriorityCommand{stashCola},
-        CommandContext{profile.revision, "accept-stash-priority"});
-    EXPECT_TRUE(accepted.succeeded) << accepted.message;
-    EXPECT_EQ(profile.assets.find(stashCola), nullptr);
+        SubmitBasePriorityCommand{
+            wish.definitionId, {wrongAsset, wrongAsset}},
+        CommandContext{profile.revision, "reject-duplicate-priority"});
+    EXPECT_FALSE(duplicate.succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
-TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
+TEST(BaseResourceDomainTest,
+     PriorityCombinesDefinitionsAndConsumesOnlyExplicitAssets)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "base-priority-explicit-assets",
+        publishedContentRegistry());
+    const BasePriorityDefinitionId wishId{"base_priority.shared_meals"};
+    profile.basePriority = BasePriorityState{
+        0U, 8U, {{wishId, false}}, 0U, true};
+    const AssetInstanceId meal = createStashAsset(
+        profile, ItemDefinitionId{"item.loot.canned_meal"});
+    const AssetInstanceId water = createStashAsset(
+        profile, ItemDefinitionId{"item.loot.sealed_water"});
+    const AssetInstanceId untouched = createStashAsset(
+        profile, ItemDefinitionId{"item.loot.canned_meal"});
+    const std::uint32_t currencyBefore = profile.currency;
+    const BaseResourceBundle resourcesBefore = profile.baseResources.pool;
+
+    const BasePriorityPlan plan = queryBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{wishId, {meal, water}});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.totalContribution, 26U);
+    EXPECT_EQ(plan.excessContribution, 8U);
+
+    const BasePriorityReceipt receipt = executeBasePrioritySubmission(
+        profile,
+        publishedContentRegistry(),
+        SubmitBasePriorityCommand{wishId, {meal, water}},
+        CommandContext{profile.revision, "explicit-mixed-priority"});
+
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.assets.find(meal), nullptr);
+    EXPECT_EQ(profile.assets.find(water), nullptr);
+    EXPECT_NE(profile.assets.find(untouched), nullptr);
+    EXPECT_EQ(profile.currency, currencyBefore);
+    EXPECT_EQ(profile.baseResources.pool, resourcesBefore);
+    EXPECT_EQ(profile.baseMorale.pendingFulfilledWishCount, 1U);
+}
+
+TEST(BaseResourceDomainTest, PriorityPopulationCountFreezesAndCatchUpIsBounded)
 {
     ProfileState profile = makeNewAlphaProfile(
         "base-priority-catch-up",
         publishedContentRegistry());
+    profile.basePopulation = BasePopulationState{24U, 24U};
+    EXPECT_EQ(profile.basePriority.wishes.size(), 1U);
     profile.worldClock.elapsedWorldMinutes =
         kInitialWorldMinute + 7200U;
     const BasePrioritySyncResult first = synchronizeBaseDailySystemsThrough(
@@ -241,28 +311,24 @@ TEST(BaseResourceDomainTest, PriorityCatchUpRotatesWithoutPerCycleIteration)
     EXPECT_EQ(first.cyclesAdvanced, 1U);
     EXPECT_EQ(first.newlyMissedCycles, 1U);
     EXPECT_EQ(profile.basePriority.missedCycleCount, 1U);
-    EXPECT_EQ(
-        profile.basePriority.definitionId,
-        BasePriorityDefinitionId{"base_priority.reinforce_perimeter"});
-
-    const AssetInstanceId scrap = createIntakeAsset(
-        profile, ItemDefinitionId{"item.loot.scrap_parts"});
-    ASSERT_TRUE(executeBasePrioritySubmission(
-        profile,
-        publishedContentRegistry(),
-        SubmitBasePriorityCommand{scrap},
-        CommandContext{profile.revision, "fulfill-perimeter"}).succeeded);
+    EXPECT_EQ(profile.basePriority.wishes.size(), 3U);
+    EXPECT_EQ(profile.basePriority.frozenPopulation, 24U);
+    const auto selected = selectBasePriorityDefinitions(
+        1U, 24U, publishedContentRegistry());
+    ASSERT_EQ(selected.size(), 3U);
+    EXPECT_EQ(profile.basePriority.wishes.front().definitionId, selected.front());
     profile.worldClock.elapsedWorldMinutes =
         kInitialWorldMinute + 21600U;
     const BasePrioritySyncResult later = synchronizeBaseDailySystemsThrough(
         profile, publishedContentRegistry()).priority;
     EXPECT_EQ(later.cyclesAdvanced, 2U);
-    EXPECT_EQ(later.newlyMissedCycles, 1U);
-    EXPECT_EQ(profile.basePriority.missedCycleCount, 2U);
-    EXPECT_EQ(
-        profile.basePriority.definitionId,
-        BasePriorityDefinitionId{"base_priority.comfort_cola"});
-    EXPECT_FALSE(profile.basePriority.fulfilled);
+    EXPECT_EQ(later.newlyMissedCycles, 6U);
+    EXPECT_EQ(profile.basePriority.missedCycleCount, 7U);
+    EXPECT_EQ(profile.basePriority.wishes.size(), 3U);
+    EXPECT_TRUE(std::none_of(
+        profile.basePriority.wishes.begin(),
+        profile.basePriority.wishes.end(),
+        [](const BasePriorityWishState &wish) { return wish.fulfilled; }));
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
 }

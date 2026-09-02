@@ -412,7 +412,8 @@ public:
         std::string transactionId);
 
     [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(
-        AssetInstanceId assetId,
+        BasePriorityDefinitionId priorityDefinitionId,
+        std::vector<AssetInstanceId> assetIds,
         std::string transactionId);
 
     [[nodiscard]] BaseRestReceipt executeBaseRest(

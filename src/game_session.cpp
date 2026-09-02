@@ -2483,14 +2483,16 @@ BaseWorkforceReceipt GameSession::executeAutoFillBaseWorkers(
 }
 
 BasePriorityReceipt GameSession::executeBasePrioritySubmission(
-    AssetInstanceId assetId,
+    BasePriorityDefinitionId priorityDefinitionId,
+    std::vector<AssetInstanceId> assetIds,
     std::string transactionId)
 {
     ProfileState candidate = profile_;
     BasePriorityReceipt receipt = ::executeBasePrioritySubmission(
         candidate,
         publishedContentRegistry(),
-        SubmitBasePriorityCommand{assetId},
+        SubmitBasePriorityCommand{
+            std::move(priorityDefinitionId), std::move(assetIds)},
         CommandContext{profile_.revision, std::move(transactionId)});
     if (!receipt.succeeded)
     {
@@ -2498,13 +2500,10 @@ BasePriorityReceipt GameSession::executeBasePrioritySubmission(
     }
     if (!commitProfileCandidate(std::move(candidate)))
     {
-        return BasePriorityReceipt{
-            false,
-            false,
-            DomainErrorCode::InvalidProfile,
-            persistenceMessage_,
-            profile_.revision,
-            {}};
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
     }
     return receipt;
 }

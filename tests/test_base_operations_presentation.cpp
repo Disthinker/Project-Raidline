@@ -22,7 +22,9 @@ BaseOperationsOverviewProjection sampleProjection()
         {BaseFacilityKind::KitchenWater,
          BaseOperationOverviewKind::ResourceShortage},
         {BaseFacilityKind::Dormitory,
-         BaseOperationOverviewKind::ResidentPressure}}};
+         BaseOperationOverviewKind::ResidentPressure},
+        {BaseFacilityKind::Allocation,
+         BaseOperationOverviewKind::BaseWish}}};
 }
 }
 
@@ -33,8 +35,8 @@ TEST(BaseOperationsPresentationTest, FiltersStableOperationCategories)
     const BaseOperationsOverviewPage attention =
         projectBaseOperationsOverviewPage(
             projection, BaseOperationsOverviewFilter::Attention, 0U);
-    EXPECT_EQ(attention.matchingEntryCount, 3U);
-    ASSERT_EQ(attention.visibleEntryCount, 3U);
+    EXPECT_EQ(attention.matchingEntryCount, 4U);
+    ASSERT_EQ(attention.visibleEntryCount, 4U);
     EXPECT_EQ(attention.entryIndices[0], 4U);
     EXPECT_EQ(attention.entryIndices[1], 5U);
     EXPECT_EQ(attention.entryIndices[2], 6U);
@@ -61,7 +63,7 @@ TEST(BaseOperationsPresentationTest, AllFilterPagesAndClampsStalePage)
     const BaseOperationsOverviewPage first =
         projectBaseOperationsOverviewPage(
             projection, BaseOperationsOverviewFilter::All, 0U);
-    EXPECT_EQ(first.matchingEntryCount, 7U);
+    EXPECT_EQ(first.matchingEntryCount, 8U);
     EXPECT_EQ(first.pageCount, 2U);
     EXPECT_EQ(first.visibleEntryCount, 4U);
     EXPECT_EQ(first.entryIndices[0], 0U);
@@ -73,9 +75,9 @@ TEST(BaseOperationsPresentationTest, AllFilterPagesAndClampsStalePage)
             BaseOperationsOverviewFilter::All,
             std::numeric_limits<std::size_t>::max());
     EXPECT_EQ(last.pageIndex, 1U);
-    ASSERT_EQ(last.visibleEntryCount, 3U);
+    ASSERT_EQ(last.visibleEntryCount, 4U);
     EXPECT_EQ(last.entryIndices[0], 4U);
-    EXPECT_EQ(last.entryIndices[2], 6U);
+    EXPECT_EQ(last.entryIndices[3], 7U);
 }
 
 TEST(BaseOperationsPresentationTest, EmptyFilterKeepsOneEmptyPage)

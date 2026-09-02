@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/home-region-perimeter-exploration-v1.md`。PR #143 已由用户正常游玩验收并以 `60c83fa` 进入 main；当前从该准确基线建立 Home Region 外围有限战斗、低阶搜刮、返回与有界救援闭环。它不引入 Raid 生命周期、导航、实时守城、AI 小队或正式美术。
+当前实现计划：`active/base-wishes-resource-tradeoff-v2.md`。PR #144 已由用户正常游玩验收并以 `674f65e` 进入 main；当前从该准确基线建立人口冻结的一至三个基地愿望、显式多物品贡献、超额预览和旧单愿望存档迁移。它不引入任务面板、导航、奖励箱、新内容或正式美术。

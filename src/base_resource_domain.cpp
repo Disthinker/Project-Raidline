@@ -1,9 +1,12 @@
 #include "base_resource_domain.h"
 
 #include <array>
+#include <algorithm>
 #include <limits>
 #include <set>
 #include <stdexcept>
+
+#include "stable_random.h"
 
 namespace
 {
@@ -773,6 +776,45 @@ BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
     return {cycles, latestShortfall, shortageCount};
 }
 
+std::vector<BasePriorityDefinitionId> selectBasePriorityDefinitions(
+    std::uint64_t cycleIndex,
+    std::uint32_t frozenPopulation,
+    const ContentRegistry &content)
+{
+    std::uint32_t wishCount = 1U;
+    for (const BasePriorityPopulationTier &tier :
+         content.basePriorityPopulationTiers())
+    {
+        if (frozenPopulation < tier.minimumPopulation)
+            break;
+        wishCount = tier.wishCount;
+    }
+    const auto &definitions = content.basePriorities();
+    wishCount = static_cast<std::uint32_t>(std::min<std::size_t>(
+        wishCount, definitions.size()));
+
+    std::uint64_t seed = 1469598103934665603ULL;
+    seed ^= cycleIndex;
+    seed *= 1099511628211ULL;
+    seed ^= frozenPopulation;
+    seed *= 1099511628211ULL;
+    Pcg32 random{seed, 0x626173652d776973ULL};
+
+    std::vector<std::size_t> available(definitions.size());
+    for (std::size_t index{}; index < available.size(); ++index)
+        available[index] = index;
+    std::vector<BasePriorityDefinitionId> selected;
+    selected.reserve(wishCount);
+    for (std::uint32_t count{}; count < wishCount; ++count)
+    {
+        const std::uint32_t pick = random.bounded(
+            static_cast<std::uint32_t>(available.size()));
+        selected.push_back(definitions[available[pick]].id);
+        available.erase(available.begin() + pick);
+    }
+    return selected;
+}
+
 BasePrioritySyncResult synchronizeBasePriorityThrough(
     ProfileState &profile,
     const ContentRegistry &content)
@@ -789,12 +831,20 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
             : (profile.worldClock.elapsedWorldMinutes -
                kInitialWorldMinute) / cycleMinutes;
     BasePriorityState &state = profile.basePriority;
-    if (!state.definitionId.valid())
+    if (state.wishes.empty())
     {
         state.cycleIndex = currentCycle;
-        state.definitionId = definitions[
-            currentCycle % definitions.size()].id;
-        state.fulfilled = false;
+        state.frozenPopulation = profile.basePopulation.ordinaryResidents;
+        state.wishes.clear();
+        for (const BasePriorityDefinitionId &id :
+             selectBasePriorityDefinitions(
+                 currentCycle,
+                 state.frozenPopulation,
+                 content))
+        {
+            state.wishes.push_back({id, false});
+        }
+        state.migratedLegacyCycle = false;
         return {true, 0U, 0U};
     }
     if (currentCycle <= state.cycleIndex)
@@ -802,9 +852,25 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
         return {};
     }
     const std::uint64_t advanced = currentCycle - state.cycleIndex;
-    const std::uint64_t missed = state.fulfilled
-        ? advanced - 1U
-        : advanced;
+    const std::uint64_t currentMissed = static_cast<std::uint64_t>(
+        std::count_if(
+            state.wishes.begin(),
+            state.wishes.end(),
+            [](const BasePriorityWishState &wish) {
+                return !wish.fulfilled;
+            }));
+    const std::size_t skippedCycleWishCount =
+        selectBasePriorityDefinitions(
+            state.cycleIndex + 1U,
+            profile.basePopulation.ordinaryResidents,
+            content).size();
+    const std::uint64_t skippedMissed = advanced > 1U
+        ? saturatedMultiply(advanced - 1U, skippedCycleWishCount)
+        : 0U;
+    const std::uint64_t missed = currentMissed >
+            std::numeric_limits<std::uint64_t>::max() - skippedMissed
+        ? std::numeric_limits<std::uint64_t>::max()
+        : currentMissed + skippedMissed;
     const std::uint64_t maximum =
         std::numeric_limits<std::uint64_t>::max();
     state.missedCycleCount = missed > maximum - state.missedCycleCount
@@ -812,10 +878,64 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
         : state.missedCycleCount + missed;
     saturatedAdd(profile.baseMorale.pendingMissedWishCount, missed);
     state.cycleIndex = currentCycle;
-    state.definitionId = definitions[
-        currentCycle % definitions.size()].id;
-    state.fulfilled = false;
+    state.frozenPopulation = profile.basePopulation.ordinaryResidents;
+    state.wishes.clear();
+    for (const BasePriorityDefinitionId &id :
+         selectBasePriorityDefinitions(
+             currentCycle,
+             state.frozenPopulation,
+             content))
+    {
+        state.wishes.push_back({id, false});
+    }
+    state.migratedLegacyCycle = false;
     return {true, advanced, missed};
+}
+
+std::vector<BasePriorityProjection> projectBasePriorities(
+    const ProfileState &profile,
+    const ContentRegistry &content)
+{
+    std::vector<BasePriorityProjection> result;
+    result.reserve(profile.basePriority.wishes.size());
+    for (const BasePriorityWishState &wish : profile.basePriority.wishes)
+    {
+        const BasePriorityDefinition &definition =
+            content.basePriority(wish.definitionId);
+        BasePriorityProjection projection{
+            definition.id,
+            definition.displayName,
+            definition.category,
+            definition.requiredContribution,
+            definition.sourceHint,
+            wish.fulfilled,
+            {}};
+        if (!wish.fulfilled)
+        {
+            for (const auto &[assetId, asset] : profile.assets.records())
+            {
+                if (!assetIsBaseAccessible(profile, assetId) ||
+                    hasChildren(profile, assetId))
+                    continue;
+                const ItemDefinition &item = content.item(asset.definitionId);
+                const std::uint32_t unit = baseSupplyContribution(
+                    item, definition.category);
+                if (unit == 0U)
+                    continue;
+                const std::uint64_t total =
+                    static_cast<std::uint64_t>(unit) * asset.quantity;
+                projection.eligibleAssets.push_back({
+                    assetId,
+                    asset.definitionId,
+                    asset.quantity,
+                    static_cast<std::uint32_t>(std::min<std::uint64_t>(
+                        total,
+                        std::numeric_limits<std::uint32_t>::max()))});
+            }
+        }
+        result.push_back(std::move(projection));
+    }
+    return result;
 }
 
 BasePriorityPlan queryBasePrioritySubmission(
@@ -823,71 +943,112 @@ BasePriorityPlan queryBasePrioritySubmission(
     const ContentRegistry &content,
     const SubmitBasePriorityCommand &command)
 {
+    const auto failure = [&profile](
+        DomainErrorCode error,
+        std::string message)
+    {
+        BasePriorityPlan plan;
+        plan.error = error;
+        plan.message = std::move(message);
+        plan.revision = profile.revision;
+        return plan;
+    };
     if (profile.pendingRaid.has_value())
     {
-        return {false, DomainErrorCode::IllegalDestination,
-                "Base allocation is unavailable during a Raid",
-                profile.revision, 0, {}};
+        return failure(DomainErrorCode::IllegalDestination,
+            "Base allocation is unavailable during a Raid");
     }
     const BasePriorityState &state = profile.basePriority;
-    if (!state.definitionId.valid())
+    if (!command.priorityDefinitionId.valid() || state.wishes.empty())
     {
-        return {false, DomainErrorCode::InvalidProfile,
-                "Base priority is not initialized", profile.revision, 0, {}};
+        return failure(DomainErrorCode::InvalidProfile,
+            "Base priority is not initialized");
     }
-    if (state.fulfilled)
+    const auto wish = std::find_if(
+        state.wishes.begin(), state.wishes.end(),
+        [&command](const BasePriorityWishState &candidate) {
+            return candidate.definitionId == command.priorityDefinitionId;
+        });
+    if (wish == state.wishes.end())
     {
-        return {false, DomainErrorCode::IllegalDestination,
-                "Base priority is already fulfilled", profile.revision, 0, {}};
+        return failure(DomainErrorCode::IllegalDestination,
+            "Base priority is not active in this cycle");
+    }
+    if (wish->fulfilled)
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+            "Base priority is already fulfilled");
     }
     const BasePriorityDefinition *priority{};
     try
     {
-        priority = &content.basePriority(state.definitionId);
+        priority = &content.basePriority(command.priorityDefinitionId);
     }
     catch (...)
     {
-        return {false, DomainErrorCode::InvalidProfile,
-                "Base priority definition is unknown", profile.revision, 0, {}};
+        return failure(DomainErrorCode::InvalidProfile,
+            "Base priority definition is unknown");
     }
-    const AssetRecord *asset = profile.assets.find(command.assetId);
-    if (asset == nullptr)
+    if (command.assetIds.empty())
     {
-        return {false, DomainErrorCode::MissingAsset,
-                "priority item does not exist", profile.revision, 0, {}};
+        return failure(DomainErrorCode::MissingAsset,
+            "select at least one contribution item");
     }
-    if (!assetIsBaseAccessible(profile, asset->instanceId))
+    std::set<AssetInstanceId> uniqueIds;
+    BasePriorityPlan plan;
+    plan.revision = profile.revision;
+    for (AssetInstanceId assetId : command.assetIds)
     {
-        return {false, DomainErrorCode::IllegalDestination,
-                "only Base-accessible personal assets can fulfill a Base priority",
-                profile.revision, 0, {}};
+        if (!uniqueIds.insert(assetId).second)
+            return failure(DomainErrorCode::InvalidTransaction,
+                "priority contribution contains a duplicate asset");
+        const AssetRecord *asset = profile.assets.find(assetId);
+        if (asset == nullptr)
+            return failure(DomainErrorCode::MissingAsset,
+                "priority item does not exist");
+        if (!assetIsBaseAccessible(profile, assetId))
+            return failure(DomainErrorCode::IllegalDestination,
+                "only Base-accessible personal assets can fulfill a Base priority");
+        if (hasChildren(profile, assetId))
+            return failure(DomainErrorCode::IllegalDestination,
+                "a non-empty container cannot fulfill a Base priority");
+        const ItemDefinition *item{};
+        try
+        {
+            item = &content.item(asset->definitionId);
+        }
+        catch (...)
+        {
+            return failure(DomainErrorCode::InvalidProfile,
+                "priority item definition is unknown");
+        }
+        const std::uint32_t unit = baseSupplyContribution(
+            *item, priority->category);
+        if (unit == 0U)
+            return failure(DomainErrorCode::IllegalDestination,
+                "selected item does not match the current Base priority");
+        const std::uint64_t contribution =
+            static_cast<std::uint64_t>(unit) * asset->quantity;
+        const std::uint32_t bounded = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(
+                contribution,
+                std::numeric_limits<std::uint32_t>::max()));
+        const std::uint64_t accumulated =
+            static_cast<std::uint64_t>(plan.totalContribution) + bounded;
+        plan.totalContribution = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(
+                accumulated,
+                std::numeric_limits<std::uint32_t>::max()));
+        plan.consumedAssets.push_back({
+            assetId, asset->definitionId, asset->quantity, bounded});
     }
-    if (hasChildren(profile, asset->instanceId))
-    {
-        return {false, DomainErrorCode::IllegalDestination,
-                "a non-empty container cannot fulfill a Base priority",
-                profile.revision, 0, {}};
-    }
-    if (asset->definitionId != priority->requiredItemDefinitionId ||
-        asset->quantity < priority->requiredQuantity)
-    {
-        return {false, DomainErrorCode::IllegalDestination,
-                "selected item does not match the current Base priority",
-                profile.revision, 0, {}};
-    }
-    const BaseResourceBundle &pool = profile.baseResources.pool;
-    const BaseResourceBundle &reward = priority->resourceReward;
-    if (!fits(pool.food, reward.food) ||
-        !fits(pool.hygiene, reward.hygiene) ||
-        !fits(pool.morale, reward.morale) ||
-        !fits(pool.security, reward.security))
-    {
-        return {false, DomainErrorCode::Capacity,
-                "Base priority reward would exceed resource capacity",
-                profile.revision, 0, {}};
-    }
-    return {true, DomainErrorCode::None, {}, profile.revision,
-            priority->requiredQuantity, reward};
+    if (plan.totalContribution < priority->requiredContribution)
+        return failure(DomainErrorCode::Capacity,
+            "selected items do not provide enough contribution");
+    plan.canCommit = true;
+    plan.excessContribution =
+        plan.totalContribution - priority->requiredContribution;
+    return plan;
 }
 
 BasePriorityReceipt executeBasePrioritySubmission(
@@ -896,45 +1057,59 @@ BasePriorityReceipt executeBasePrioritySubmission(
     const SubmitBasePriorityCommand &command,
     const CommandContext &context)
 {
+    const auto failure = [&profile](
+        DomainErrorCode error,
+        std::string message)
+    {
+        BasePriorityReceipt receipt;
+        receipt.error = error;
+        receipt.message = std::move(message);
+        receipt.revision = profile.revision;
+        return receipt;
+    };
     if (context.transactionId.empty())
     {
-        return {false, false, DomainErrorCode::InvalidTransaction,
-                "transaction ID must not be empty", profile.revision, {}};
+        return failure(DomainErrorCode::InvalidTransaction,
+            "transaction ID must not be empty");
     }
     if (profile.committedTransactions.contains(context.transactionId))
     {
-        return {true, true, DomainErrorCode::None, {}, profile.revision, {}};
+        BasePriorityReceipt receipt;
+        receipt.succeeded = true;
+        receipt.alreadyCommitted = true;
+        receipt.revision = profile.revision;
+        receipt.priorityDefinitionId = command.priorityDefinitionId;
+        return receipt;
     }
     if (context.expectedRevision != profile.revision)
     {
-        return {false, false, DomainErrorCode::StaleRevision,
-                "profile revision is stale", profile.revision, {}};
+        return failure(DomainErrorCode::StaleRevision,
+            "profile revision is stale");
     }
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
     {
-        return {false, false, DomainErrorCode::RevisionOverflow,
-                "profile revision cannot advance", profile.revision, {}};
+        return failure(DomainErrorCode::RevisionOverflow,
+            "profile revision cannot advance");
     }
     const BasePriorityPlan plan = queryBasePrioritySubmission(
         profile, content, command);
     if (!plan.canCommit)
     {
-        return {false, false, plan.error, plan.message,
-                profile.revision, {}};
+        return failure(plan.error, plan.message);
     }
 
     ProfileState candidate = profile;
-    AssetRecord *asset = candidate.assets.findMutable(command.assetId);
-    if (asset->quantity == plan.consumedQuantity)
+    for (const BasePriorityAssetContribution &selected : plan.consumedAssets)
     {
-        static_cast<void>(candidate.assets.erase(command.assetId));
+        static_cast<void>(candidate.assets.erase(selected.assetId));
     }
-    else
-    {
-        asset->quantity -= plan.consumedQuantity;
-    }
-    add(candidate.baseResources.pool, plan.reward);
-    candidate.basePriority.fulfilled = true;
+    auto completed = std::find_if(
+        candidate.basePriority.wishes.begin(),
+        candidate.basePriority.wishes.end(),
+        [&command](const BasePriorityWishState &wish) {
+            return wish.definitionId == command.priorityDefinitionId;
+        });
+    completed->fulfilled = true;
     saturatedAdd(candidate.baseMorale.pendingFulfilledWishCount, 1U);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -942,10 +1117,16 @@ BasePriorityReceipt executeBasePrioritySubmission(
         validateProfileState(candidate, content);
     if (!validation.valid)
     {
-        return {false, false, DomainErrorCode::InvalidProfile,
-                validation.message, profile.revision, {}};
+        return failure(DomainErrorCode::InvalidProfile, validation.message);
     }
     profile = std::move(candidate);
-    return {true, false, DomainErrorCode::None, {},
-            profile.revision, plan.reward};
+    BasePriorityReceipt receipt;
+    receipt.succeeded = true;
+    receipt.revision = profile.revision;
+    receipt.priorityDefinitionId = command.priorityDefinitionId;
+    receipt.totalContribution = plan.totalContribution;
+    receipt.excessContribution = plan.excessContribution;
+    for (const BasePriorityAssetContribution &selected : plan.consumedAssets)
+        receipt.consumedAssetIds.push_back(selected.assetId);
+    return receipt;
 }

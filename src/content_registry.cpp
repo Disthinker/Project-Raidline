@@ -164,6 +164,22 @@ namespace
         fail(std::string{field} + " is not a supported resident profession");
     }
 
+    BaseSupplyCategory parseBaseSupplyCategory(
+        const Json &parent,
+        std::string_view field)
+    {
+        const std::string value = requiredString(parent, field);
+        if (value == "food")
+            return BaseSupplyCategory::Food;
+        if (value == "hygiene" || value == "medical")
+            return BaseSupplyCategory::Medical;
+        if (value == "morale" || value == "recreation")
+            return BaseSupplyCategory::Recreation;
+        if (value == "security")
+            return BaseSupplyCategory::Security;
+        fail(std::string{field} + " is not a supported Base supply category");
+    }
+
     RaidDistrictKind parseRaidDistrictKind(
         const Json &parent,
         std::string_view field)
@@ -1926,6 +1942,32 @@ ContentRegistry ContentRegistry::fromJson(
         {
             fail("Base priority cycle is outside its valid range");
         }
+        for (const Json &tierValue :
+             requiredArray(basePriorities, "population_tiers"))
+        {
+            if (!tierValue.is_object())
+            {
+                fail("Base priority population tier must be an object");
+            }
+            BasePriorityPopulationTier tier{
+                optionalUint(tierValue, "minimum_population"),
+                requiredPositiveUint(tierValue, "wish_count")};
+            if (tier.wishCount > 3U ||
+                (!registry.basePriorityPopulationTiers_.empty() &&
+                 tier.minimumPopulation <= registry
+                     .basePriorityPopulationTiers_.back()
+                     .minimumPopulation))
+            {
+                fail("Base priority population tiers are invalid");
+            }
+            registry.basePriorityPopulationTiers_.push_back(tier);
+        }
+        if (registry.basePriorityPopulationTiers_.empty() ||
+            registry.basePriorityPopulationTiers_.front()
+                    .minimumPopulation != 0U)
+        {
+            fail("Base priority population tiers must start at zero");
+        }
         for (const Json &priorityValue :
              requiredArray(basePriorities, "requests"))
         {
@@ -1937,32 +1979,16 @@ ContentRegistry ContentRegistry::fromJson(
                 BasePriorityDefinitionId{
                     requiredString(priorityValue, "id")},
                 requiredString(priorityValue, "display_name"),
-                ItemDefinitionId{
-                    requiredString(priorityValue, "required_item")},
-                requiredPositiveUint(priorityValue, "required_quantity"),
-                {}};
+                parseBaseSupplyCategory(priorityValue, "category"),
+                requiredPositiveUint(priorityValue, "required_contribution"),
+                requiredString(priorityValue, "source_hint")};
             if (!hasPrefix(definition.id.value(), "base_priority."))
             {
                 fail("Base priority definition ID must use its namespace");
             }
-            const Json &reward = requiredObject(
-                priorityValue,
-                "resource_reward");
-            definition.resourceReward = BaseResourceBundle{
-                optionalUint(reward, "food"),
-                optionalUint(reward, "hygiene"),
-                optionalUint(reward, "morale"),
-                optionalUint(reward, "security")};
-            const ItemDefinition &requiredItem = registry.item(
-                definition.requiredItemDefinitionId);
-            if (definition.requiredQuantity > requiredItem.maxStackSize ||
-                definition.resourceReward.empty() ||
-                definition.resourceReward.food > 100U ||
-                definition.resourceReward.hygiene > 100U ||
-                definition.resourceReward.morale > 100U ||
-                definition.resourceReward.security > 100U)
+            if (definition.requiredContribution > 100U)
             {
-                fail("Base priority requirement or reward is invalid");
+                fail("Base priority contribution requirement is invalid");
             }
             const std::size_t index = registry.basePriorities_.size();
             if (!registry.basePriorityIndex_
@@ -1976,6 +2002,36 @@ ContentRegistry ContentRegistry::fromJson(
         if (registry.basePriorities_.empty())
         {
             fail("at least one Base priority definition is required");
+        }
+        for (const BasePriorityDefinition &priority :
+             registry.basePriorities_)
+        {
+            const bool hasContributor = std::any_of(
+                registry.items_.begin(),
+                registry.items_.end(),
+                [&priority](const ItemDefinition &item)
+                {
+                    if (!item.baseContribution.has_value())
+                        return false;
+                    const BaseResourceBundle &value =
+                        *item.baseContribution;
+                    switch (priority.category)
+                    {
+                    case BaseSupplyCategory::Food:
+                        return value.food > 0U;
+                    case BaseSupplyCategory::Medical:
+                        return value.hygiene > 0U;
+                    case BaseSupplyCategory::Recreation:
+                        return value.morale > 0U;
+                    case BaseSupplyCategory::Security:
+                        return value.security > 0U;
+                    }
+                    return false;
+                });
+            if (!hasContributor)
+            {
+                fail("Base priority category has no contributing item");
+            }
         }
 
         const Json &baseManufacturing = requiredObject(
@@ -3834,6 +3890,12 @@ const std::vector<BasePriorityDefinition> &
 ContentRegistry::basePriorities() const noexcept
 {
     return basePriorities_;
+}
+
+const std::vector<BasePriorityPopulationTier> &
+ContentRegistry::basePriorityPopulationTiers() const noexcept
+{
+    return basePriorityPopulationTiers_;
 }
 
 const BasePriorityDefinition &ContentRegistry::basePriority(

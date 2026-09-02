@@ -649,10 +649,12 @@ TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
     EXPECT_EQ(loaded.profile->basePriority.cycleIndex, 1U);
+    ASSERT_EQ(loaded.profile->basePriority.wishes.size(), 1U);
     EXPECT_EQ(
-        loaded.profile->basePriority.definitionId,
-        BasePriorityDefinitionId{"base_priority.reinforce_perimeter"});
-    EXPECT_FALSE(loaded.profile->basePriority.fulfilled);
+        loaded.profile->basePriority.wishes.front().definitionId,
+        profile.basePriority.wishes.front().definitionId);
+    EXPECT_FALSE(loaded.profile->basePriority.wishes.front().fulfilled);
+    EXPECT_FALSE(loaded.profile->basePriority.migratedLegacyCycle);
 }
 
 TEST(SaveRepositoryTest, SchemaV10RoundTripsActiveGunsmithJob)
@@ -3690,4 +3692,62 @@ TEST(SaveRepositoryTest, SchemaV42RoundTripsHomePerimeterAndV41MigratesEmpty)
     ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
     EXPECT_TRUE(migrated.profile->homePerimeter.sites.empty());
     EXPECT_FALSE(migrated.profile->homePerimeter.activeOuting.has_value());
+}
+
+TEST(SaveRepositoryTest,
+     SchemaV42PreservesLegacyWishCycleAndStatusWithoutReroll)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "legacy-single-wish-v42", content);
+    profile.basePopulation = BasePopulationState{24U, 10U};
+    profile.basePriority = BasePriorityState{
+        0U,
+        24U,
+        {{BasePriorityDefinitionId{"base_priority.restore_utilities"},
+          true}},
+        7U,
+        true};
+
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(
+            profile,
+            "home-region-placeable-storage-content-58",
+            42U),
+        content);
+
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(migrated.profile->basePriority.cycleIndex, 0U);
+    EXPECT_EQ(migrated.profile->basePriority.frozenPopulation, 24U);
+    EXPECT_EQ(migrated.profile->basePriority.missedCycleCount, 7U);
+    ASSERT_EQ(migrated.profile->basePriority.wishes.size(), 1U);
+    EXPECT_EQ(
+        migrated.profile->basePriority.wishes.front().definitionId,
+        BasePriorityDefinitionId{"base_priority.restore_utilities"});
+    EXPECT_TRUE(migrated.profile->basePriority.wishes.front().fulfilled);
+    EXPECT_TRUE(migrated.profile->basePriority.migratedLegacyCycle);
+    EXPECT_TRUE(validateProfileState(*migrated.profile, content).valid);
+}
+
+TEST(SaveRepositoryTest, CurrentSchemaRoundTripsMultipleBaseWishes)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "multiple-base-wishes-current", content);
+    profile.basePopulation = BasePopulationState{24U, 24U};
+    profile.basePriority = BasePriorityState{};
+    ASSERT_TRUE(synchronizeBasePriorityThrough(profile, content).changed);
+    ASSERT_EQ(profile.basePriority.wishes.size(), 3U);
+    profile.basePriority.wishes[1].fulfilled = true;
+    profile.basePriority.missedCycleCount = 5U;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(loaded.profile->basePriority, profile.basePriority);
+    EXPECT_EQ(
+        profileStateFingerprint(*loaded.profile),
+        profileStateFingerprint(profile));
 }

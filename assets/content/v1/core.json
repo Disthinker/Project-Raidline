@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "home-region-placeable-storage-content-58",
+  "content_version": "base-wishes-resource-tradeoff-content-59",
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -270,27 +270,39 @@
   },
   "base_priorities": {
     "cycle_minutes": 7200,
+    "population_tiers": [
+      {"minimum_population": 0, "wish_count": 1},
+      {"minimum_population": 12, "wish_count": 2},
+      {"minimum_population": 24, "wish_count": 3}
+    ],
     "requests": [
       {
         "id": "base_priority.comfort_cola",
         "display_name": "A Small Comfort",
-        "required_item": "item.loot.cola_basic",
-        "required_quantity": 1,
-        "resource_reward": {"morale": 12}
+        "category": "morale",
+        "required_contribution": 14,
+        "source_hint": "Comfort goods are common around service areas."
       },
       {
         "id": "base_priority.reinforce_perimeter",
         "display_name": "Reinforce the Perimeter",
-        "required_item": "item.loot.scrap_parts",
-        "required_quantity": 1,
-        "resource_reward": {"security": 16}
+        "category": "security",
+        "required_contribution": 18,
+        "source_hint": "Security materials are common in industrial sites."
       },
       {
         "id": "base_priority.restore_utilities",
         "display_name": "Restore Essential Utilities",
-        "required_item": "item.loot.electronics",
-        "required_quantity": 1,
-        "resource_reward": {"hygiene": 8, "security": 8}
+        "category": "hygiene",
+        "required_contribution": 16,
+        "source_hint": "Medical and cleaning supplies support sanitation."
+      },
+      {
+        "id": "base_priority.shared_meals",
+        "display_name": "Shared Meals",
+        "category": "food",
+        "required_contribution": 18,
+        "source_hint": "Food and sealed water are common in service areas."
       }
     ]
   },

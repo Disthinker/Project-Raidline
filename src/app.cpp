@@ -1020,6 +1020,8 @@ namespace
             return "RESOURCE SHORTAGE";
         case BaseOperationOverviewKind::ResidentPressure:
             return "RESIDENT PRESSURE";
+        case BaseOperationOverviewKind::BaseWish:
+            return "BASE WISH";
         }
         return "UNKNOWN";
     }
@@ -1111,6 +1113,7 @@ namespace
         const ItemDefinition *definition{};
         std::uint32_t ownedQuantity{};
         std::optional<AssetInstanceId> firstAssetId;
+        std::vector<AssetInstanceId> assetIds;
         bool assignedToSelectedCategory{};
         bool assignedElsewhere{};
     };
@@ -1145,6 +1148,7 @@ namespace
                     continue;
                 }
                 projection.ownedQuantity += asset.quantity;
+                projection.assetIds.push_back(id);
                 if (!projection.firstAssetId.has_value())
                 {
                     projection.firstAssetId = id;
@@ -3654,6 +3658,34 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Allocation)
     {
+        const std::vector<BasePriorityProjection> wishes =
+            projectBasePriorities(
+                gameSession_.profile(), publishedContentRegistry());
+        if (selectedBasePriorityIndex_ >= wishes.size())
+        {
+            selectedBasePriorityIndex_ = 0U;
+            selectedBasePriorityAssetIds_.clear();
+        }
+        for (std::size_t index{}; index < wishes.size(); ++index)
+        {
+            const SDL_FRect wishRow{
+                650.0F,
+                156.0F + static_cast<float>(index) * 44.0F,
+                500.0F,
+                38.0F};
+            if (contains(wishRow, click.position))
+            {
+                selectedBasePriorityIndex_ = index;
+                selectedBasePriorityAssetIds_.clear();
+                selectedBaseSupplyCategory_ = wishes[index].category;
+                baseSupplyPage_ = 0U;
+                profileAssetSelection_.reset();
+                uiMessage_ = wishes[index].fulfilled
+                    ? "BASE WISH ALREADY FULFILLED"
+                    : "BASE WISH SELECTED | CHOOSE CONTRIBUTION ITEMS";
+                return;
+            }
+        }
         constexpr std::array<BaseSupplyCategory, 4> categories{
             BaseSupplyCategory::Food,
             BaseSupplyCategory::Medical,
@@ -3663,13 +3695,15 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         {
             const SDL_FRect tab{
                 650.0F + static_cast<float>(index) * 126.0F,
-                218.0F,
+                300.0F,
                 120.0F,
                 34.0F};
             if (contains(tab, click.position))
             {
                 selectedBaseSupplyCategory_ = categories[index];
+                baseSupplyPage_ = 0U;
                 profileAssetSelection_.reset();
+                selectedBasePriorityAssetIds_.clear();
                 uiMessage_.clear();
                 return;
             }
@@ -3677,13 +3711,35 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
         const auto allocation = baseSupplyDefinitions(
             gameSession_.profile(), selectedBaseSupplyCategory_);
-        for (std::size_t index{};
-             index < allocation.size() && index < 7U;
-             ++index)
+        constexpr std::size_t entriesPerPage{5U};
+        const std::size_t pageCount = allocation.empty()
+            ? 1U
+            : 1U + (allocation.size() - 1U) / entriesPerPage;
+        baseSupplyPage_ = std::min(baseSupplyPage_, pageCount - 1U);
+        const SDL_FRect previousPage{650.0F, 540.0F, 64.0F, 18.0F};
+        const SDL_FRect nextPage{1086.0F, 540.0F, 64.0F, 18.0F};
+        if (contains(previousPage, click.position))
         {
+            if (baseSupplyPage_ > 0U)
+                --baseSupplyPage_;
+            return;
+        }
+        if (contains(nextPage, click.position))
+        {
+            if (baseSupplyPage_ + 1U < pageCount)
+                ++baseSupplyPage_;
+            return;
+        }
+        const std::size_t first = baseSupplyPage_ * entriesPerPage;
+        for (std::size_t visibleIndex{};
+             visibleIndex < entriesPerPage &&
+             first + visibleIndex < allocation.size();
+             ++visibleIndex)
+        {
+            const std::size_t index = first + visibleIndex;
             const SDL_FRect row{
                 650.0F,
-                262.0F + static_cast<float>(index) * 40.0F,
+                344.0F + static_cast<float>(visibleIndex) * 40.0F,
                 500.0F,
                 34.0F};
             if (contains(row, click.position))
@@ -3708,9 +3764,33 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     row.x + 8.0F, row.y + 7.0F, 20.0F, 20.0F};
                 if (!contains(check, click.position))
                 {
-                    uiMessage_ = projection.firstAssetId.has_value()
-                        ? "OWNED SUPPLY ITEM SELECTED"
-                        : "SUPPLY RULE HAS NO CURRENT ITEM";
+                    if (wishes.empty() ||
+                        wishes[selectedBasePriorityIndex_].fulfilled ||
+                        wishes[selectedBasePriorityIndex_].category !=
+                            selectedBaseSupplyCategory_ ||
+                        projection.assetIds.empty())
+                    {
+                        uiMessage_ = projection.assetIds.empty()
+                            ? "SUPPLY RULE HAS NO CURRENT ITEM"
+                            : "SELECT AN ACTIVE WISH WITH THIS CATEGORY";
+                        return;
+                    }
+                    const bool allSelected = std::all_of(
+                        projection.assetIds.begin(),
+                        projection.assetIds.end(),
+                        [this](AssetInstanceId id) {
+                            return selectedBasePriorityAssetIds_.contains(id);
+                        });
+                    for (AssetInstanceId id : projection.assetIds)
+                    {
+                        if (allSelected)
+                            selectedBasePriorityAssetIds_.erase(id);
+                        else
+                            selectedBasePriorityAssetIds_.insert(id);
+                    }
+                    uiMessage_ = allSelected
+                        ? "WISH CONTRIBUTION ITEMS REMOVED"
+                        : "WISH CONTRIBUTION ITEMS SELECTED";
                     return;
                 }
                 const std::optional<BaseSupplyCategory> next =
@@ -3742,6 +3822,34 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         {
             return;
         }
+        if (contains(priorityButton, click.position))
+        {
+            if (wishes.empty() ||
+                selectedBasePriorityIndex_ >= wishes.size())
+            {
+                uiMessage_ = "BASE WISH IS NOT AVAILABLE";
+                return;
+            }
+            const BasePriorityReceipt receipt =
+                gameSession_.executeBasePrioritySubmission(
+                    wishes[selectedBasePriorityIndex_].definitionId,
+                    std::vector<AssetInstanceId>{
+                        selectedBasePriorityAssetIds_.begin(),
+                        selectedBasePriorityAssetIds_.end()},
+                    nextProfileTransactionId("fulfill-base-priority"));
+            uiMessage_ = receipt.succeeded
+                ? "BASE WISH FULFILLED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded
+                ? SoundEventId::UiConfirm
+                : SoundEventId::UiDeny);
+            if (receipt.succeeded)
+            {
+                profileAssetSelection_.reset();
+                selectedBasePriorityAssetIds_.clear();
+            }
+            return;
+        }
         if (!profileAssetSelection_.has_value())
         {
             uiMessage_ = "SELECT AN OWNED SUPPLY ITEM FIRST";
@@ -3771,24 +3879,6 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 ? fmt::format(
                     "ITEM PROCESSED | CONSTRUCTION MATERIAL +{}",
                     receipt.materialUnits)
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
-            return;
-        }
-        if (contains(priorityButton, click.position))
-        {
-            const BasePriorityReceipt receipt =
-                gameSession_.executeBasePrioritySubmission(
-                    selectedId,
-                    nextProfileTransactionId("fulfill-base-priority"));
-            uiMessage_ = receipt.succeeded
-                ? "BASE WISH FULFILLED"
                 : receipt.message;
             gameAudio_.play(receipt.succeeded
                 ? SoundEventId::UiConfirm
@@ -15305,12 +15395,14 @@ void App::renderBaseAllocation()
 
     const BasePriorityState &priorityState =
         gameSession_.profile().basePriority;
-    const BasePriorityDefinition &priority =
-        publishedContentRegistry().basePriority(
-            priorityState.definitionId);
-    const ItemDefinition &priorityItem =
-        publishedContentRegistry().item(
-            priority.requiredItemDefinitionId);
+    const std::vector<BasePriorityProjection> wishes =
+        projectBasePriorities(
+            gameSession_.profile(), publishedContentRegistry());
+    if (selectedBasePriorityIndex_ >= wishes.size())
+    {
+        selectedBasePriorityIndex_ = 0U;
+        selectedBasePriorityAssetIds_.clear();
+    }
     const std::uint64_t cycleMinutes =
         publishedContentRegistry().basePriorityCycleMinutes();
     const std::uint64_t elapsedSinceProfileStart =
@@ -15323,31 +15415,52 @@ void App::renderBaseAllocation()
         elapsedSinceProfileStart % cycleMinutes;
     uiTextRenderer_.render(
         renderer_, 650.0F, 116.0F,
-        "CURRENT BASE WISH - ONE LOW-PRESENCE PRIORITY");
-    const std::string priorityName = fmt::format(
-        "{} | {}",
-        priority.displayName,
-        priorityState.fulfilled ? "FULFILLED" : "ACTIVE");
-    uiTextRenderer_.render(
-        renderer_, 650.0F, 142.0F, priorityName.c_str());
-    const std::string priorityRequirement = fmt::format(
-        "NEEDS {} x{} FROM BASE-ACCESSIBLE INVENTORY",
-        priorityItem.displayName,
-        priority.requiredQuantity);
-    uiTextRenderer_.render(
-        renderer_, 650.0F, 166.0F, priorityRequirement.c_str());
-    const BaseResourceBundle &wishReward = priority.resourceReward;
+        "BASE WISHES - SELECT ONE, THEN SELECT CONTRIBUTION ITEMS");
     const std::string priorityTiming = fmt::format(
-        "IMPROVES F{} H{} M{} S{} | {}H {:02}M LEFT | MISSED {}",
-        wishReward.food,
-        wishReward.hygiene,
-        wishReward.morale,
-        wishReward.security,
+        "POPULATION {} FROZEN | {}H {:02}M LEFT | MISSED TOTAL {}",
+        priorityState.frozenPopulation,
         remainingMinutes / kWorldMinutesPerHour,
         remainingMinutes % kWorldMinutesPerHour,
         priorityState.missedCycleCount);
     uiTextRenderer_.render(
-        renderer_, 650.0F, 190.0F, priorityTiming.c_str());
+        renderer_, 650.0F, 136.0F, priorityTiming.c_str());
+    for (std::size_t index{}; index < wishes.size(); ++index)
+    {
+        const BasePriorityProjection &wish = wishes[index];
+        const SDL_FRect row{
+            650.0F,
+            156.0F + static_cast<float>(index) * 44.0F,
+            500.0F,
+            38.0F};
+        const bool selected = index == selectedBasePriorityIndex_;
+        SDL_SetRenderDrawColor(
+            renderer_,
+            selected ? 52 : 30,
+            selected ? 92 : 50,
+            selected ? 76 : 46,
+            255);
+        SDL_RenderFillRect(renderer_, &row);
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 224 : 104, selected ? 198 : 152,
+            selected ? 116 : 112, 255);
+        SDL_RenderRect(renderer_, &row);
+        const std::string label = fmt::format(
+            "{} | {} | NEED {} | {}",
+            wish.displayName,
+            baseSupplyCategoryName(wish.category),
+            wish.requiredContribution,
+            wish.fulfilled ? "FULFILLED" : "ACTIVE");
+        uiTextRenderer_.render(
+            renderer_, row.x + 10.0F, row.y + 14.0F, label.c_str());
+    }
+    if (!wishes.empty() && selectedBasePriorityIndex_ < wishes.size())
+    {
+        const std::string hint = fmt::format(
+            "SOURCE HINT: {}",
+            wishes[selectedBasePriorityIndex_].sourceHint);
+        uiTextRenderer_.render(
+            renderer_, 650.0F, 286.0F, hint.c_str());
+    }
     constexpr std::array<BaseSupplyCategory, 4> categories{
         BaseSupplyCategory::Food,
         BaseSupplyCategory::Medical,
@@ -15357,7 +15470,7 @@ void App::renderBaseAllocation()
     {
         const SDL_FRect tab{
             650.0F + static_cast<float>(index) * 126.0F,
-            218.0F,
+            300.0F,
             120.0F,
             34.0F};
         const bool selected = categories[index] ==
@@ -15374,21 +15487,29 @@ void App::renderBaseAllocation()
     }
     const auto allocation = baseSupplyDefinitions(
         gameSession_.profile(), selectedBaseSupplyCategory_);
+    constexpr std::size_t entriesPerPage{5U};
+    const std::size_t pageCount = allocation.empty()
+        ? 1U
+        : 1U + (allocation.size() - 1U) / entriesPerPage;
+    baseSupplyPage_ = std::min(baseSupplyPage_, pageCount - 1U);
     if (allocation.empty())
     {
         uiTextRenderer_.render(
-            renderer_, 650.0F, 272.0F,
+            renderer_, 650.0F, 344.0F,
             "NO OWNED ITEMS CAN SUPPLY THIS CATEGORY");
     }
-    for (std::size_t index{};
-         index < allocation.size() && index < 7U;
-         ++index)
+    const std::size_t first = baseSupplyPage_ * entriesPerPage;
+    for (std::size_t visibleIndex{};
+         visibleIndex < entriesPerPage &&
+         first + visibleIndex < allocation.size();
+         ++visibleIndex)
     {
+        const std::size_t index = first + visibleIndex;
         const BaseSupplyDefinitionProjection &projection = allocation[index];
         const ItemDefinition &definition = *projection.definition;
         const SDL_FRect row{
             650.0F,
-            262.0F + static_cast<float>(index) * 40.0F,
+            344.0F + static_cast<float>(visibleIndex) * 40.0F,
             500.0F,
             34.0F};
         SDL_SetRenderDrawColor(
@@ -15398,9 +15519,12 @@ void App::renderBaseAllocation()
             projection.assignedToSelectedCategory ? 68 : 54,
             255);
         SDL_RenderFillRect(renderer_, &row);
-        const bool selected = projection.firstAssetId.has_value() &&
-            profileAssetSelection_.has_value() &&
-            *projection.firstAssetId == profileAssetSelection_->instanceId;
+        const bool selected = !projection.assetIds.empty() &&
+            std::all_of(
+                projection.assetIds.begin(), projection.assetIds.end(),
+                [this](AssetInstanceId id) {
+                    return selectedBasePriorityAssetIds_.contains(id);
+                });
         SDL_SetRenderDrawColor(
             renderer_, selected ? 232 : 98, selected ? 206 : 168,
             selected ? 126 : 120, 255);
@@ -15433,15 +15557,32 @@ void App::renderBaseAllocation()
                 baseSupplyCategoryName(existing->second));
         }
         const std::string label = fmt::format(
-            "{} x{} | +{} PER ITEM{}",
+            "{} x{} | +{} EACH | {}{}",
             definition.displayName,
             projection.ownedQuantity,
             baseSupplyContribution(
                 definition, selectedBaseSupplyCategory_),
+            selected ? "SELECTED FOR WISH" : "CLICK TO SELECT",
             assignment);
         uiTextRenderer_.render(
             renderer_, row.x + 38.0F, row.y + 13.0F, label.c_str());
     }
+    const SDL_FRect previousPage{650.0F, 540.0F, 64.0F, 18.0F};
+    const SDL_FRect nextPage{1086.0F, 540.0F, 64.0F, 18.0F};
+    SDL_SetRenderDrawColor(renderer_, 34, 62, 54, 255);
+    SDL_RenderFillRect(renderer_, &previousPage);
+    SDL_RenderFillRect(renderer_, &nextPage);
+    SDL_SetRenderDrawColor(renderer_, 120, 190, 162, 255);
+    SDL_RenderRect(renderer_, &previousPage);
+    SDL_RenderRect(renderer_, &nextPage);
+    uiTextRenderer_.render(
+        renderer_, previousPage.x + 26.0F, previousPage.y + 9.0F, "<");
+    uiTextRenderer_.render(
+        renderer_, nextPage.x + 26.0F, nextPage.y + 9.0F, ">");
+    const std::string pageLabel = fmt::format(
+        "PAGE {}/{}", baseSupplyPage_ + 1U, pageCount);
+    uiTextRenderer_.render(
+        renderer_, 870.0F, 549.0F, pageLabel.c_str());
 
     const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
     const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
@@ -15466,20 +15607,28 @@ void App::renderBaseAllocation()
         canProcessMaterial ? 132 : 66, 255);
     SDL_RenderFillRect(renderer_, &materialButton);
     bool canFulfillPriority{};
-    const char *priorityLabel = priorityState.fulfilled
-        ? "BASE WISH ALREADY FULFILLED"
-        : "SELECT MATCHING ACCESSIBLE ITEM";
-    if (profileAssetSelection_.has_value() && !priorityState.fulfilled)
+    std::string priorityLabel = "SELECT AN ACTIVE BASE WISH";
+    if (!wishes.empty() && selectedBasePriorityIndex_ < wishes.size())
     {
+        const BasePriorityProjection &wish =
+            wishes[selectedBasePriorityIndex_];
         const BasePriorityPlan plan = queryBasePrioritySubmission(
             gameSession_.profile(),
             publishedContentRegistry(),
             SubmitBasePriorityCommand{
-                profileAssetSelection_->instanceId});
+                wish.definitionId,
+                std::vector<AssetInstanceId>{
+                    selectedBasePriorityAssetIds_.begin(),
+                    selectedBasePriorityAssetIds_.end()}});
         canFulfillPriority = plan.canCommit;
-        priorityLabel = plan.canCommit
-            ? "FULFILL CURRENT BASE WISH"
-            : "SELECTED ITEM DOES NOT MATCH WISH";
+        priorityLabel = wish.fulfilled
+            ? "BASE WISH ALREADY FULFILLED"
+            : fmt::format(
+                "CONTRIBUTION {}/{} | EXCESS {} | {}",
+                plan.totalContribution,
+                wish.requiredContribution,
+                plan.canCommit ? plan.excessContribution : 0U,
+                plan.canCommit ? "FULFILL WISH" : "SELECT MORE ITEMS");
     }
     SDL_SetRenderDrawColor(
         renderer_, canFulfillPriority ? 82 : 62,
@@ -15502,7 +15651,7 @@ void App::renderBaseAllocation()
     uiTextRenderer_.render(
         renderer_, priorityButton.x + 24.0F,
         priorityButton.y + 18.0F,
-        priorityLabel);
+        priorityLabel.c_str());
     uiTextRenderer_.render(renderer_, 80.0F, 646.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {

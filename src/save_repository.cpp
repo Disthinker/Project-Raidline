@@ -788,6 +788,92 @@ BaseCommunityEventState parseBaseCommunityEvent(const Json &value)
         value.at("cycle_index").get<std::uint64_t>()};
 }
 
+Json basePriorityValue(const BasePriorityState &state)
+{
+    Json wishes = Json::array();
+    for (const BasePriorityWishState &wish : state.wishes)
+    {
+        wishes.push_back({
+            {"definition_id", wish.definitionId.value()},
+            {"fulfilled", wish.fulfilled}});
+    }
+    return {
+        {"cycle_index", state.cycleIndex},
+        {"frozen_population", state.frozenPopulation},
+        {"wishes", std::move(wishes)},
+        {"missed_cycle_count", state.missedCycleCount},
+        {"migrated_legacy_cycle", state.migratedLegacyCycle}};
+}
+
+BasePriorityState parseBasePriority(const Json &value)
+{
+    BasePriorityState state;
+    state.cycleIndex = value.at("cycle_index").get<std::uint64_t>();
+    state.frozenPopulation =
+        value.at("frozen_population").get<std::uint32_t>();
+    state.missedCycleCount =
+        value.at("missed_cycle_count").get<std::uint64_t>();
+    state.migratedLegacyCycle =
+        value.at("migrated_legacy_cycle").get<bool>();
+    for (const Json &wish : value.at("wishes"))
+    {
+        state.wishes.push_back({
+            BasePriorityDefinitionId{
+                wish.at("definition_id").get<std::string>()},
+            wish.at("fulfilled").get<bool>()});
+    }
+    return state;
+}
+
+Json legacyBasePriorityValue(const BasePriorityState &state)
+{
+    const BasePriorityWishState wish = state.wishes.empty()
+        ? BasePriorityWishState{}
+        : state.wishes.front();
+    return {
+        {"definition_id", wish.definitionId.value()},
+        {"cycle_index", state.cycleIndex},
+        {"fulfilled", wish.fulfilled},
+        {"missed_cycle_count", state.missedCycleCount}};
+}
+
+BasePriorityState parseLegacyBasePriority(
+    const Json &value,
+    std::uint32_t frozenPopulation)
+{
+    return BasePriorityState{
+        value.at("cycle_index").get<std::uint64_t>(),
+        frozenPopulation,
+        {{BasePriorityDefinitionId{
+              value.at("definition_id").get<std::string>()},
+          value.at("fulfilled").get<bool>()}},
+        value.at("missed_cycle_count").get<std::uint64_t>(),
+        true};
+}
+
+void reconcileLegacyBasePriority(
+    BasePriorityState &state,
+    const ContentRegistry &content)
+{
+    if (!state.migratedLegacyCycle || state.wishes.size() != 1U)
+    {
+        return;
+    }
+    const std::vector<BasePriorityDefinitionId> selected =
+        selectBasePriorityDefinitions(
+            state.cycleIndex,
+            state.frozenPopulation,
+            content);
+    if (selected.size() == 1U &&
+        selected.front() == state.wishes.front().definitionId)
+    {
+        // The legacy snapshot already represents the complete one-wish tier.
+        // Keep its cycle and completion bit without treating it as a rerolled
+        // compatibility exception.
+        state.migratedLegacyCycle = false;
+    }
+}
+
 Json vectorValue(Vec2 value)
 {
     return {{"x", value.x}, {"y", value.y}};
@@ -1047,12 +1133,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     }
     if (schemaVersion >= 11)
     {
-        payload["base_priority"] = {
-            {"definition_id", profile.basePriority.definitionId.value()},
-            {"cycle_index", profile.basePriority.cycleIndex},
-            {"fulfilled", profile.basePriority.fulfilled},
-            {"missed_cycle_count",
-             profile.basePriority.missedCycleCount}};
+        payload["base_priority"] = schemaVersion >= 43
+            ? basePriorityValue(profile.basePriority)
+            : legacyBasePriorityValue(profile.basePriority);
     }
     if (schemaVersion >= 12)
     {
@@ -1819,17 +1902,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             if (schemaVersion >= 11)
             {
                 payload["pending_raid"]["travel"]
-                    ["starting_base_priority"] = {
-                        {"definition_id",
-                         raid.travel.startingBasePriority
-                             .definitionId.value()},
-                        {"cycle_index",
-                         raid.travel.startingBasePriority.cycleIndex},
-                        {"fulfilled",
-                         raid.travel.startingBasePriority.fulfilled},
-                        {"missed_cycle_count",
-                         raid.travel.startingBasePriority
-                             .missedCycleCount}};
+                    ["starting_base_priority"] = schemaVersion >= 43
+                        ? basePriorityValue(
+                              raid.travel.startingBasePriority)
+                        : legacyBasePriorityValue(
+                              raid.travel.startingBasePriority);
             }
             if (schemaVersion >= 18)
             {
@@ -2247,7 +2324,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2405,7 +2482,10 @@ SaveLoadResult deserializeProfileEnvelope(
                  "content-beta-loadout-readiness-content-56") ||
             (schemaVersion >= 38 &&
              contentVersion ==
-                 "home-region-onboarding-content-57");
+                 "home-region-onboarding-content-57") ||
+            (schemaVersion >= 39 &&
+             contentVersion ==
+                 "home-region-placeable-storage-content-58");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2426,7 +2506,8 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 35 && schemaVersion != 36 &&
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
-              schemaVersion != 41 && schemaVersion != 42) ||
+              schemaVersion != 41 && schemaVersion != 42 &&
+              schemaVersion != 43) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2511,12 +2592,11 @@ SaveLoadResult deserializeProfileEnvelope(
         if (schemaVersion >= 11)
         {
             const Json &priority = payload.at("base_priority");
-            profile.basePriority = BasePriorityState{
-                BasePriorityDefinitionId{
-                    priority.at("definition_id").get<std::string>()},
-                priority.at("cycle_index").get<std::uint64_t>(),
-                priority.at("fulfilled").get<bool>(),
-                priority.at("missed_cycle_count").get<std::uint64_t>()};
+            profile.basePriority = schemaVersion >= 43
+                ? parseBasePriority(priority)
+                : parseLegacyBasePriority(
+                      priority,
+                      profile.basePopulation.ordinaryResidents);
         }
         else
         {
@@ -2555,6 +2635,14 @@ SaveLoadResult deserializeProfileEnvelope(
                 profile.basePopulation.injuredByProfession = {
                     profile.basePopulation.injuredResidents, 0U, 0U, 0U};
             }
+        }
+        if (schemaVersion >= 11 && schemaVersion < 43)
+        {
+            profile.basePriority.frozenPopulation =
+                profile.basePopulation.ordinaryResidents;
+            reconcileLegacyBasePriority(
+                profile.basePriority,
+                content);
         }
         if (schemaVersion >= 14)
         {
@@ -3764,21 +3852,19 @@ SaveLoadResult deserializeProfileEnvelope(
                             "resolved_demand_cycle_count")
                             .get<std::uint64_t>()},
                     schemaVersion >= 11
-                        ? BasePriorityState{
-                              BasePriorityDefinitionId{
-                                  travel.at("starting_base_priority")
-                                      .at("definition_id")
-                                      .get<std::string>()},
-                              travel.at("starting_base_priority")
-                                  .at("cycle_index")
-                                  .get<std::uint64_t>(),
-                              travel.at("starting_base_priority")
-                                  .at("fulfilled")
-                                  .get<bool>(),
-                              travel.at("starting_base_priority")
-                                  .at("missed_cycle_count")
-                                  .get<std::uint64_t>()}
+                        ? (schemaVersion >= 43
+                            ? parseBasePriority(
+                                  travel.at("starting_base_priority"))
+                            : parseLegacyBasePriority(
+                                  travel.at("starting_base_priority"),
+                                  profile.basePopulation.ordinaryResidents))
                         : BasePriorityState{}};
+                if (schemaVersion >= 11 && schemaVersion < 43)
+                {
+                    reconcileLegacyBasePriority(
+                        raid.travel.startingBasePriority,
+                        content);
+                }
                 if (schemaVersion < 11)
                 {
                     ProfileState startingState = profile;

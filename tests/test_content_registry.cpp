@@ -65,7 +65,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "home-region-placeable-storage-content-58");
+        "base-wishes-resource-tradeoff-content-59");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -189,12 +189,14 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.ammunition.5_45x39_standard"});
     EXPECT_EQ(rifleAmmunition.outputQuantity, 60U);
     EXPECT_EQ(rifleAmmunition.durationMinutes, 180U);
-    ASSERT_EQ(registry.basePriorities().size(), 3U);
+    ASSERT_EQ(registry.basePriorities().size(), 4U);
+    ASSERT_EQ(registry.basePriorityPopulationTiers().size(), 3U);
+    EXPECT_EQ(registry.basePriorityPopulationTiers().back().wishCount, 3U);
     const BasePriorityDefinition &comfort = registry.basePriority(
         BasePriorityDefinitionId{"base_priority.comfort_cola"});
-    EXPECT_EQ(comfort.requiredItemDefinitionId, alpha_content::lootCola);
-    EXPECT_EQ(comfort.requiredQuantity, 1U);
-    EXPECT_EQ(comfort.resourceReward, (BaseResourceBundle{0, 0, 12, 0}));
+    EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
+    EXPECT_EQ(comfort.requiredContribution, 14U);
+    EXPECT_FALSE(comfort.sourceHint.empty());
     ASSERT_EQ(registry.items().size(), 51U);
     ASSERT_EQ(registry.calibers().size(), 3U);
     EXPECT_EQ(
@@ -708,14 +710,20 @@ TEST(ContentRegistryTest, RejectsInvalidBasePriorityDefinitions)
     EXPECT_THROW(
         ContentRegistry::fromJson(replaceFirst(
             publishedJsonCopy(),
-            "\"required_item\": \"item.loot.cola_basic\"",
-            "\"required_item\": \"item.loot.unknown\"")),
+            "\"required_contribution\": 14",
+            "\"required_contribution\": 0")),
         ContentRegistryError);
     EXPECT_THROW(
         ContentRegistry::fromJson(replaceFirst(
             publishedJsonCopy(),
-            "\"resource_reward\": {\"morale\": 12}",
-            "\"resource_reward\": {}")),
+            "\"category\": \"morale\"",
+            "\"category\": \"unsupported\"")),
+        ContentRegistryError);
+    EXPECT_THROW(
+        ContentRegistry::fromJson(replaceFirst(
+            publishedJsonCopy(),
+            "{\"minimum_population\": 24, \"wish_count\": 3}",
+            "{\"minimum_population\": 12, \"wish_count\": 4}")),
         ContentRegistryError);
 }
 
