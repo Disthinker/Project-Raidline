@@ -227,9 +227,8 @@ bool facilityWorkPaused(
     return id.has_value() && baseFacilityOwned(profile, *id) &&
         !baseFacilityInstalled(profile, *id);
 }
-}
 
-BaseFacilityManagementProjection projectBaseFacilityManagement(
+BaseFacilityManagementProjection projectManagementFacts(
     const ProfileState &profile,
     const ContentRegistry &content,
     BaseFacilityKind kind)
@@ -263,9 +262,7 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
         projection.assignedWorker = workforce.medicalWorker;
     }
 
-    const bool constructionActive = activeConstructionTargets(
-        profile, content, kind);
-    if (constructionActive)
+    if (activeConstructionTargets(profile, content, kind))
     {
         const BaseConstructionProjection construction =
             projectBaseConstruction(profile, content);
@@ -294,6 +291,17 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
             projection.remainingMinutes = medical.remainingMinutes;
         }
     }
+    return projection;
+}
+}
+
+BaseFacilityManagementProjection projectBaseFacilityManagement(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind)
+{
+    BaseFacilityManagementProjection projection = projectManagementFacts(
+        profile, content, kind);
 
     appendOpenAction(projection);
     if (projection.status != BaseFacilityOperationalStatus::Operational)
@@ -349,6 +357,41 @@ BaseFacilityManagementProjection projectBaseFacilityManagement(
                 plan.canCommit,
                 plan.message,
                 std::nullopt});
+    }
+    return projection;
+}
+
+BaseFacilityWorldServiceProjection projectBaseFacilityWorldService(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind)
+{
+    const BaseFacilityManagementProjection management =
+        projectManagementFacts(profile, content, kind);
+    BaseFacilityWorldServiceProjection projection{
+        kind,
+        BaseFacilityWorldServiceStatus::Ready,
+        management.task,
+        management.remainingMinutes};
+
+    if (management.status != BaseFacilityOperationalStatus::Operational)
+    {
+        projection.status = BaseFacilityWorldServiceStatus::Blocked;
+    }
+    else if (management.task == BaseFacilityTaskKind::OutputReady)
+    {
+        projection.status = BaseFacilityWorldServiceStatus::OutputReady;
+    }
+    else if (management.task == BaseFacilityTaskKind::Construction ||
+             management.task == BaseFacilityTaskKind::Manufacturing ||
+             management.task == BaseFacilityTaskKind::ResidentTreatment)
+    {
+        projection.status = BaseFacilityWorldServiceStatus::Working;
+    }
+    else if (management.staffingApplicable &&
+             !management.assignedWorker.has_value())
+    {
+        projection.status = BaseFacilityWorldServiceStatus::NeedsStaff;
     }
     return projection;
 }

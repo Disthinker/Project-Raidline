@@ -904,6 +904,22 @@ TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
             "入口");
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "ENTRY | READY"),
+            "入口 | 可用");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "ENTRY | WORKING | 180 MIN"),
+            "入口 | 工作中 | 180 分钟");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "E - WORKSHOP & PRODUCTION | OUTPUT READY"),
+            "E - 工坊与生产 | 产物待领取");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "E - MEDICAL SERVICE | NEEDS STAFF"),
+            "E - 医疗服务 | 缺少人员");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU"),
             "B 基地建设 | TAB 物品栏 | M 地图 | ESC 菜单");
   EXPECT_EQ(localizeUiText(

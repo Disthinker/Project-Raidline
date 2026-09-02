@@ -61,6 +61,24 @@ struct BaseFacilityManagementProjection
     std::vector<BaseFacilityQuickActionProjection> quickActions;
 };
 
+enum class BaseFacilityWorldServiceStatus
+{
+    Ready,
+    Working,
+    OutputReady,
+    NeedsStaff,
+    Blocked
+};
+
+struct BaseFacilityWorldServiceProjection
+{
+    BaseFacilityKind facility{BaseFacilityKind::Storage};
+    BaseFacilityWorldServiceStatus status{
+        BaseFacilityWorldServiceStatus::Ready};
+    BaseFacilityTaskKind task{BaseFacilityTaskKind::Idle};
+    std::uint64_t remainingMinutes{};
+};
+
 enum class BaseOperationOverviewKind
 {
     OutputReady,
@@ -85,6 +103,12 @@ struct BaseOperationsOverviewProjection
 
 [[nodiscard]] BaseFacilityManagementProjection
 projectBaseFacilityManagement(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    BaseFacilityKind kind);
+
+[[nodiscard]] BaseFacilityWorldServiceProjection
+projectBaseFacilityWorldService(
     const ProfileState &profile,
     const ContentRegistry &content,
     BaseFacilityKind kind);
