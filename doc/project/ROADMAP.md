@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 聚合居民空间状态均已进入主线。当前推进基地物资流现场状态 v1，范围合同见 `doc/exec-plans/active/home-region-resource-flow-world-status-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 基地物资流现场状态均已进入主线。当前推进作业状态信息层级与快速定位 v1，范围合同见 `doc/exec-plans/active/home-region-operations-filter-v1.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -204,7 +204,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 聚合岗位世界占位反馈 v1 | 工坊与医疗所的岗位在世界中显示缺员、闲置、工作中或暂停 | 既有聚合专业分配和任务事实的只读投影、稳定作业点关联、无 schema/content 迁移 | PR #139 已通过 CI 与用户正常游玩验收，以 merge commit `abe2886` 进入 main |
 | Home Region 设施岗位现场操作 v1 | 直接从 Workshop/Medical 作业点完成选择、分配、清除和自动补员 | 稳定作业点命中、类型化岗位动作过滤、既有持久化命令、无 schema/content 迁移 | PR #140 已通过 CI 与用户正常游玩验收，以 merge commit `0f74a67` 进入 main |
 | Home Region 聚合居民空间状态 v1 | DormitoryBunk 显示居民、健康/受伤、床位与劳动力占用，并可打开宿舍或自动补员 | 既有人口/劳动力只读组合投影、稳定床位命中、类型化既有动作、无 schema/content 迁移 | PR #141 已通过 CI 与用户验收，以 merge commit `2f05626` 进入 main |
-| Home Region 基地物资流现场状态 v1 | StorageHandling / KitchenProcessing 显示统一库存、供给授权、资源池、人口需求与预计短缺，并可打开现有功能 | 既有资源与资产事实的只读组合投影、稳定作业点命中、无 schema/content 迁移 | 当前分支本地实现、Windows Debug 与 1427/1427 CTest 已完成，待 CI 与用户验收 |
+| Home Region 基地物资流现场状态 v1 | StorageHandling / KitchenProcessing 显示统一库存、供给授权、资源池、人口需求与预计短缺，并可打开现有功能 | 既有资源与资产事实的只读组合投影、稳定作业点命中、无 schema/content 迁移 | PR #142 已通过 CI 与用户验收，以 merge commit `b1194a1` 进入 main |
+| Home Region 作业状态信息层级与快速定位 v1 | 远中近缩放显示不同信息密度；运营总览可按需处理、进行中、已就绪筛选分页并定位设施 | 既有设施/岗位/居民/物资流纯投影、SDL 客户端筛选与分页、无 schema/content 迁移 | 当前分支本地实现完成；Windows Debug 全目标、71/71 定向与 1433/1433 全量 CTest 通过，等待 CI 和用户验收 |
 
 ## 当前 Combat Reliability 缺陷
 

@@ -1,6 +1,6 @@
 # Home Region 基地物资流现场状态 v1 ExecPlan
 
-状态：本地实现与自动化已完成，待提交、推送和 exact-head Windows/Ubuntu CI。分支 `codex/home-region-resource-flow-world-status-v1` 从用户已验收并合入的 PR #141 / `origin/main@2f05626` 创建。
+状态：用户正常游玩验收通过，PR #142 已以 merge commit `b1194a1` 进入 main。分支 `codex/home-region-resource-flow-world-status-v1` 从用户已验收并合入的 PR #141 / `origin/main@2f05626` 创建。
 
 ## 玩家结果与依赖
 

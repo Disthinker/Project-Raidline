@@ -1092,6 +1092,29 @@ TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
             "厨房与净水");
 }
 
+TEST(UiLocalizationTest, BaseOperationsFiltersAndAttentionAreBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "VIEW ALL 7 | NEEDS ACTION 2 | IN PROGRESS 3 | OUTPUT READY 1"),
+            "全部 7 | 需处理 2 | 进行中 3 | 产物待领取 1");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "KITCHEN / WATER | RESOURCE SHORTAGE"),
+            "厨房 / 净水 | 资源短缺");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DORMITORY | RESIDENT PRESSURE"),
+            "宿舍 | 居民压力");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "NO MATCHING OPERATIONS | PAGE 1/2"),
+            "当前筛选没有匹配的运营事项 | 页码 1/2");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "BASE OPERATIONS FILTER CHANGED"),
+            "已切换基地运营筛选");
+}
+
 TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   const std::filesystem::path settingsPath = uniqueSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());

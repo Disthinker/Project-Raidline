@@ -731,3 +731,75 @@ TEST(BaseFacilityManagementTest,
         profile, publishedContentRegistry());
     EXPECT_TRUE(projection.entries.empty());
 }
+
+TEST(BaseFacilityManagementTest,
+     OperationsOverviewProjectsInstalledResourceAndResidentAttention)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-operations-attention", publishedContentRegistry());
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    profile.baseConstruction.kitchenWaterLevel = 1U;
+    profile.baseResources.pool = BaseResourceBundle{};
+    profile.basePopulation.injuredResidents = 2U;
+    profile.basePopulation.injuredByProfession = {};
+    profile.basePopulation.injuredByProfession[static_cast<std::size_t>(
+        BaseResidentProfession::General)] = 2U;
+    const std::uint64_t fingerprint = profileStateFingerprint(profile);
+
+    const BaseOperationsOverviewProjection projection =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+    const auto shortage = std::find_if(
+        projection.entries.begin(), projection.entries.end(),
+        [](const BaseOperationOverviewEntry &entry)
+        {
+            return entry.kind ==
+                BaseOperationOverviewKind::ResourceShortage;
+        });
+    const auto residents = std::find_if(
+        projection.entries.begin(), projection.entries.end(),
+        [](const BaseOperationOverviewEntry &entry)
+        {
+            return entry.kind ==
+                BaseOperationOverviewKind::ResidentPressure;
+        });
+    ASSERT_NE(shortage, projection.entries.end());
+    EXPECT_EQ(shortage->facility, BaseFacilityKind::KitchenWater);
+    ASSERT_NE(residents, projection.entries.end());
+    EXPECT_EQ(residents->facility, BaseFacilityKind::Dormitory);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.kitchen_water"}] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    const BaseOperationsOverviewProjection reserve =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+    EXPECT_EQ(
+        std::count_if(
+            reserve.entries.begin(), reserve.entries.end(),
+            [](const BaseOperationOverviewEntry &entry)
+            {
+                return entry.kind ==
+                    BaseOperationOverviewKind::ResourceShortage;
+            }),
+        0);
+
+    profile.baseConstruction.facilities[
+        BaseFacilityDefinitionId{"base_facility.dormitory"}] =
+        BaseConstructionState::FacilityPlacement::Reserve;
+    const BaseOperationsOverviewProjection dormitoryReserve =
+        projectBaseOperationsOverview(
+            profile, publishedContentRegistry());
+    EXPECT_EQ(
+        std::count_if(
+            dormitoryReserve.entries.begin(), dormitoryReserve.entries.end(),
+            [](const BaseOperationOverviewEntry &entry)
+            {
+                return entry.kind ==
+                    BaseOperationOverviewKind::ResidentPressure;
+            }),
+        0);
+}

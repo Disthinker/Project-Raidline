@@ -274,9 +274,36 @@ namespace
         const SDL_FRect panel = baseOperationsOverviewBounds();
         return SDL_FRect{
             panel.x + 12.0F,
-            panel.y + 54.0F + static_cast<float>(index) * 36.0F,
+            panel.y + 68.0F + static_cast<float>(index) * 34.0F,
             panel.w - 24.0F,
-            30.0F};
+            28.0F};
+    }
+
+    SDL_FRect baseOperationsOverviewFilterButton(
+        std::size_t index) noexcept
+    {
+        const SDL_FRect panel = baseOperationsOverviewBounds();
+        return SDL_FRect{
+            panel.x + 12.0F + static_cast<float>(index) * 92.0F,
+            panel.y + 34.0F,
+            88.0F,
+            24.0F};
+    }
+
+    SDL_FRect baseOperationsOverviewPreviousPageButton() noexcept
+    {
+        const SDL_FRect panel = baseOperationsOverviewBounds();
+        return SDL_FRect{panel.x + 12.0F, panel.y + 212.0F, 34.0F, 22.0F};
+    }
+
+    SDL_FRect baseOperationsOverviewNextPageButton() noexcept
+    {
+        const SDL_FRect panel = baseOperationsOverviewBounds();
+        return SDL_FRect{
+            panel.x + panel.w - 46.0F,
+            panel.y + 212.0F,
+            34.0F,
+            22.0F};
     }
 
     SDL_FRect basePlacedFacilityInspectorButton(
@@ -989,8 +1016,29 @@ namespace
             return "PRODUCTION";
         case BaseOperationOverviewKind::StaffingGap:
             return "NO WORKER";
+        case BaseOperationOverviewKind::ResourceShortage:
+            return "RESOURCE SHORTAGE";
+        case BaseOperationOverviewKind::ResidentPressure:
+            return "RESIDENT PRESSURE";
         }
         return "UNKNOWN";
+    }
+
+    const char *baseOperationsOverviewFilterName(
+        BaseOperationsOverviewFilter filter) noexcept
+    {
+        switch (filter)
+        {
+        case BaseOperationsOverviewFilter::All:
+            return "VIEW ALL";
+        case BaseOperationsOverviewFilter::Attention:
+            return "NEEDS ACTION";
+        case BaseOperationsOverviewFilter::InProgress:
+            return "IN PROGRESS";
+        case BaseOperationsOverviewFilter::Ready:
+            return "OUTPUT READY";
+        }
+        return "VIEW ALL";
     }
 
     const char *baseOperationsFacilityName(BaseFacilityKind kind) noexcept
@@ -10923,6 +10971,10 @@ void App::renderBaseWorld()
             projectBaseResourceFlowWorldStatus(
                 gameSession_.profile(), publishedContentRegistry(),
                 facility.kind);
+        const BaseWorldInformationDetail informationDetail =
+            projectBaseWorldInformationDetail(
+                zoom,
+                selectedBaseFixedFacility_ == facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -11014,11 +11066,14 @@ void App::renderBaseWorld()
             renderer_, serviceColor.r, serviceColor.g,
             serviceColor.b, serviceColor.a);
         SDL_RenderFillRect(renderer_, &entrance);
-        const std::string serviceLabel = fmt::format(
-            "ENTRY | {}", baseFacilityWorldServiceLabel(service));
-        uiTextRenderer_.render(
-            renderer_, entrance.x - 2.0F, entrance.y + 12.0F,
-            serviceLabel.c_str());
+        if (informationDetail != BaseWorldInformationDetail::Marker)
+        {
+            const std::string serviceLabel = fmt::format(
+                "ENTRY | {}", baseFacilityWorldServiceLabel(service));
+            uiTextRenderer_.render(
+                renderer_, entrance.x - 2.0F, entrance.y + 12.0F,
+                serviceLabel.c_str());
+        }
         if (workSocket.has_value())
         {
             const bool active = service.activeWorkSocket.has_value() &&
@@ -11050,10 +11105,13 @@ void App::renderBaseWorld()
                 SDL_RenderRect(renderer_, &halo);
             }
             SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-            uiTextRenderer_.render(
-                renderer_, socketBounds.x,
-                socketBounds.y + socketBounds.h + 3.0F,
-                baseFacilityWorkSocketName(workSocket->kind));
+            if (informationDetail != BaseWorldInformationDetail::Marker)
+            {
+                uiTextRenderer_.render(
+                    renderer_, socketBounds.x,
+                    socketBounds.y + socketBounds.h + 3.0F,
+                    baseFacilityWorkSocketName(workSocket->kind));
+            }
 
             if (worker.has_value() &&
                 worker->workSocket == workSocket->kind)
@@ -11086,12 +11144,15 @@ void App::renderBaseWorld()
                     SDL_RenderFillRect(renderer_, &body);
                 }
                 SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-                const std::string workerLabel =
-                    baseFacilityWorkerWorldLabel(*worker);
-                uiTextRenderer_.render(
-                    renderer_, socketBounds.x,
-                    socketBounds.y - 18.0F,
-                    workerLabel.c_str());
+                if (informationDetail != BaseWorldInformationDetail::Marker)
+                {
+                    const std::string workerLabel =
+                        baseFacilityWorkerWorldLabel(*worker);
+                    uiTextRenderer_.render(
+                        renderer_, socketBounds.x,
+                        socketBounds.y - 18.0F,
+                        workerLabel.c_str());
+                }
             }
             if (residents.has_value() &&
                 residents->workSocket == workSocket->kind)
@@ -11133,18 +11194,25 @@ void App::renderBaseWorld()
                     }
                 }
                 SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-                const std::string populationLabel =
-                    baseResidentWorldPrimaryLabel(*residents);
-                const std::string workforceLabel =
-                    baseResidentWorldWorkforceLabel(*residents);
-                uiTextRenderer_.render(
-                    renderer_, socketBounds.x,
-                    socketBounds.y - 36.0F,
-                    populationLabel.c_str());
-                uiTextRenderer_.render(
-                    renderer_, socketBounds.x,
-                    socketBounds.y - 18.0F,
-                    workforceLabel.c_str());
+                if (informationDetail != BaseWorldInformationDetail::Marker)
+                {
+                    const std::string populationLabel =
+                        baseResidentWorldPrimaryLabel(*residents);
+                    uiTextRenderer_.render(
+                        renderer_, socketBounds.x,
+                        socketBounds.y - 18.0F,
+                        populationLabel.c_str());
+                    if (informationDetail ==
+                        BaseWorldInformationDetail::Detail)
+                    {
+                        const std::string workforceLabel =
+                            baseResidentWorldWorkforceLabel(*residents);
+                        uiTextRenderer_.render(
+                            renderer_, socketBounds.x,
+                            socketBounds.y - 36.0F,
+                            workforceLabel.c_str());
+                    }
+                }
             }
             if (resourceFlow.has_value() &&
                 resourceFlow->workSocket == workSocket->kind)
@@ -11179,16 +11247,25 @@ void App::renderBaseWorld()
                     }
                 }
                 SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-                const std::string primary =
-                    baseResourceFlowWorldPrimaryLabel(*resourceFlow);
-                const std::string secondary =
-                    baseResourceFlowWorldSecondaryLabel(*resourceFlow);
-                uiTextRenderer_.render(
-                    renderer_, socketBounds.x, socketBounds.y - 36.0F,
-                    primary.c_str());
-                uiTextRenderer_.render(
-                    renderer_, socketBounds.x, socketBounds.y - 18.0F,
-                    secondary.c_str());
+                if (informationDetail != BaseWorldInformationDetail::Marker)
+                {
+                    const std::string primary =
+                        baseResourceFlowWorldPrimaryLabel(*resourceFlow);
+                    uiTextRenderer_.render(
+                        renderer_, socketBounds.x,
+                        socketBounds.y - 18.0F,
+                        primary.c_str());
+                    if (informationDetail ==
+                        BaseWorldInformationDetail::Detail)
+                    {
+                        const std::string secondary =
+                            baseResourceFlowWorldSecondaryLabel(*resourceFlow);
+                        uiTextRenderer_.render(
+                            renderer_, socketBounds.x,
+                            socketBounds.y - 36.0F,
+                            secondary.c_str());
+                    }
+                }
             }
         }
     }
@@ -11606,14 +11683,50 @@ bool App::handleBaseOperationsOverviewClick(MousePosition position)
     if (!contains(baseOperationsOverviewBounds(), position))
         return false;
 
+    constexpr std::array<BaseOperationsOverviewFilter, 4U> filters{
+        BaseOperationsOverviewFilter::All,
+        BaseOperationsOverviewFilter::Attention,
+        BaseOperationsOverviewFilter::InProgress,
+        BaseOperationsOverviewFilter::Ready};
+    for (std::size_t index{}; index < filters.size(); ++index)
+    {
+        if (!contains(baseOperationsOverviewFilterButton(index), position))
+            continue;
+        baseOperationsOverviewFilter_ = filters[index];
+        baseOperationsOverviewPage_ = 0U;
+        baseFacilityContextMenu_.reset();
+        uiMessage_ = "BASE OPERATIONS FILTER CHANGED";
+        return true;
+    }
+
     const BaseOperationsOverviewProjection projection =
         projectBaseOperationsOverview(
             gameSession_.profile(), publishedContentRegistry());
-    for (std::size_t index{}; index < projection.entries.size(); ++index)
+    BaseOperationsOverviewPage page = projectBaseOperationsOverviewPage(
+        projection,
+        baseOperationsOverviewFilter_,
+        baseOperationsOverviewPage_);
+    baseOperationsOverviewPage_ = page.pageIndex;
+    if (contains(baseOperationsOverviewPreviousPageButton(), position))
+    {
+        if (baseOperationsOverviewPage_ > 0U)
+            --baseOperationsOverviewPage_;
+        uiMessage_ = "BASE OPERATIONS PREVIOUS PAGE";
+        return true;
+    }
+    if (contains(baseOperationsOverviewNextPageButton(), position))
+    {
+        if (baseOperationsOverviewPage_ + 1U < page.pageCount)
+            ++baseOperationsOverviewPage_;
+        uiMessage_ = "BASE OPERATIONS NEXT PAGE";
+        return true;
+    }
+    for (std::size_t index{}; index < page.visibleEntryCount; ++index)
     {
         if (!contains(baseOperationsOverviewRow(index), position))
             continue;
-        const BaseFacilityKind facility = projection.entries[index].facility;
+        const BaseFacilityKind facility =
+            projection.entries[page.entryIndices[index]].facility;
         selectedBasePlacedAssetId_.reset();
         selectedBaseFixedFacility_ = facility;
         baseFacilityContextMenu_.reset();
@@ -12741,6 +12854,12 @@ void App::renderBaseOperationsOverview()
     const BaseOperationsOverviewProjection projection =
         projectBaseOperationsOverview(
             gameSession_.profile(), publishedContentRegistry());
+    const BaseOperationsOverviewPage page =
+        projectBaseOperationsOverviewPage(
+            projection,
+            baseOperationsOverviewFilter_,
+            baseOperationsOverviewPage_);
+    baseOperationsOverviewPage_ = page.pageIndex;
     const SDL_FRect panel = baseOperationsOverviewBounds();
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 12, 23, 24, 242);
@@ -12751,29 +12870,67 @@ void App::renderBaseOperationsOverview()
         renderer_, panel.x + 12.0F, panel.y + 10.0F,
         "BASE OPERATIONS | CLICK TO LOCATE");
 
-    if (projection.entries.empty())
+    constexpr std::array<BaseOperationsOverviewFilter, 4U> filters{
+        BaseOperationsOverviewFilter::All,
+        BaseOperationsOverviewFilter::Attention,
+        BaseOperationsOverviewFilter::InProgress,
+        BaseOperationsOverviewFilter::Ready};
+    for (std::size_t index{}; index < filters.size(); ++index)
     {
+        const BaseOperationsOverviewPage filtered =
+            projectBaseOperationsOverviewPage(
+                projection, filters[index], 0U);
+        const bool selected = filters[index] == baseOperationsOverviewFilter_;
+        const SDL_FRect button = baseOperationsOverviewFilterButton(index);
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 48 : 28, selected ? 100 : 58,
+            selected ? 82 : 54, 246);
+        SDL_RenderFillRect(renderer_, &button);
+        SDL_SetRenderDrawColor(
+            renderer_, selected ? 126 : 78,
+            selected ? 214 : 122,
+            selected ? 174 : 112, 255);
+        SDL_RenderRect(renderer_, &button);
+        const std::string label = fmt::format(
+            "{} {}",
+            baseOperationsOverviewFilterName(filters[index]),
+            filtered.matchingEntryCount);
         uiTextRenderer_.render(
-            renderer_, panel.x + 12.0F, panel.y + 58.0F,
-            "NO ACTIVE OPERATIONS");
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-        return;
+            renderer_, button.x + 6.0F, button.y + 5.0F, label.c_str());
     }
 
-    for (std::size_t index{}; index < projection.entries.size(); ++index)
+    if (page.visibleEntryCount == 0U)
     {
-        const BaseOperationOverviewEntry &entry = projection.entries[index];
+        uiTextRenderer_.render(
+            renderer_, panel.x + 12.0F, panel.y + 76.0F,
+            projection.entries.empty()
+                ? "NO ACTIVE OPERATIONS"
+                : "NO MATCHING OPERATIONS");
+    }
+
+    for (std::size_t index{}; index < page.visibleEntryCount; ++index)
+    {
+        const BaseOperationOverviewEntry &entry =
+            projection.entries[page.entryIndices[index]];
         const SDL_FRect row = baseOperationsOverviewRow(index);
         const bool selected = selectedBaseFixedFacility_ == entry.facility;
+        const bool attention = baseOperationMatchesFilter(
+            entry.kind, BaseOperationsOverviewFilter::Attention);
         SDL_SetRenderDrawColor(
             renderer_, selected ? 48 : 30, selected ? 100 : 62,
             selected ? 82 : 58, 246);
         SDL_RenderFillRect(renderer_, &row);
         SDL_SetRenderDrawColor(
             renderer_,
-            entry.kind == BaseOperationOverviewKind::OutputReady ? 232 : 102,
-            entry.kind == BaseOperationOverviewKind::OutputReady ? 196 : 184,
-            entry.kind == BaseOperationOverviewKind::OutputReady ? 88 : 154,
+            entry.kind == BaseOperationOverviewKind::OutputReady
+                ? 232
+                : attention ? 226 : 102,
+            entry.kind == BaseOperationOverviewKind::OutputReady
+                ? 196
+                : attention ? 112 : 184,
+            entry.kind == BaseOperationOverviewKind::OutputReady
+                ? 88
+                : attention ? 76 : 154,
             255);
         SDL_RenderRect(renderer_, &row);
         std::string label = fmt::format(
@@ -12787,6 +12944,26 @@ void App::renderBaseOperationsOverview()
         uiTextRenderer_.render(
             renderer_, row.x + 9.0F, row.y + 7.0F, label.c_str());
     }
+
+    const SDL_FRect previous = baseOperationsOverviewPreviousPageButton();
+    const SDL_FRect next = baseOperationsOverviewNextPageButton();
+    SDL_SetRenderDrawColor(renderer_, 30, 62, 58, 246);
+    SDL_RenderFillRect(renderer_, &previous);
+    SDL_RenderFillRect(renderer_, &next);
+    SDL_SetRenderDrawColor(renderer_, 102, 184, 154, 255);
+    SDL_RenderRect(renderer_, &previous);
+    SDL_RenderRect(renderer_, &next);
+    uiTextRenderer_.render(
+        renderer_, previous.x + 12.0F, previous.y + 4.0F, "<");
+    uiTextRenderer_.render(
+        renderer_, next.x + 12.0F, next.y + 4.0F, ">");
+    const std::string pageLabel = fmt::format(
+        "PAGE {}/{}",
+        page.pageIndex + 1U,
+        page.pageCount);
+    uiTextRenderer_.render(
+        renderer_, panel.x + 164.0F, panel.y + 216.0F,
+        pageLabel.c_str());
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 

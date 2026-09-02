@@ -397,6 +397,7 @@ add_library(raidline_sdl_client STATIC
     src/base_build_catalog_presentation.h
     src/base_build_camera.cpp
     src/base_build_camera.h
+    src/base_operations_presentation.h
     src/developer_runtime_panel.h
     src/frame_pacing.cpp
     src/frame_pacing.h
@@ -615,6 +616,10 @@ raidline_add_test(
 raidline_add_test(
     BaseBuildCatalogPresentationTest
     tests/test_base_build_catalog_presentation.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    BaseOperationsPresentationTest
+    tests/test_base_operations_presentation.cpp
     raidline::sdl_client)
 raidline_add_test(
     RaidTacticalMapPresentationTest
