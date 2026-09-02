@@ -101,6 +101,45 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     {
         return std::nullopt;
     }
+    const RegionalBaseSiteDefinitionId perimeterSite{
+        baseWorld.siteDefinitionId()};
+    {
+        ProfileState candidate = profile_;
+        HomePerimeterGenerationContext generation{
+            perimeterSite,
+            baseWorld.worldSize(),
+            baseWorld.baseParcel(),
+            baseWorld.layout().movementBlockers};
+        const HomePerimeterEnsureReceipt ensured =
+            ensureHomePerimeterSnapshot(
+                candidate,
+                publishedContentRegistry(),
+                generation,
+                CommandContext{
+                    profile_.revision,
+                    nextRaidTransaction("home-perimeter-generate")});
+        if (!ensured.succeeded)
+        {
+            persistenceMessage_ = ensured.message;
+            return std::nullopt;
+        }
+        if (ensured.changed &&
+            !commitProfileCandidate(std::move(candidate)))
+            return std::nullopt;
+    }
+    const auto perimeterSnapshot = profile_.homePerimeter.sites.find(
+        perimeterSite);
+    baseWorld.configureHomePerimeter(
+        perimeterSnapshot == profile_.homePerimeter.sites.end()
+            ? nullptr : &perimeterSnapshot->second);
+    const auto restorePerimeterRuntime = [&]()
+    {
+        baseWorld.discardUncommittedShot();
+        baseWorld.configureHomePerimeter(nullptr);
+        const auto persisted = profile_.homePerimeter.sites.find(perimeterSite);
+        if (persisted != profile_.homePerimeter.sites.end())
+            baseWorld.configureHomePerimeter(&persisted->second);
+    };
     baseWorld.configureGroundBlockers(
         projectBaseGroundMovementBlockers(
             profile_,
@@ -265,11 +304,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
 
     const std::optional<BaseFacilityKind> facility =
         baseWorld.update(simulationInput, deltaTime);
-    if (!baseWorld.shotFiredLastUpdate())
-    {
-        return facility;
-    }
-    if (!input.developerInfiniteAmmo && pendingFireCommand.has_value())
+    if (baseWorld.shotFiredLastUpdate() &&
+        !input.developerInfiniteAmmo && pendingFireCommand.has_value())
     {
         ProfileState candidate = profile_;
         const WeaponAmmoReceipt committed = executeFireWeapon(
@@ -284,6 +320,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
              committed.result != WeaponAmmoResult::FiredAndMalfunctioned) ||
             !commitProfileCandidate(std::move(candidate), false))
         {
+            restorePerimeterRuntime();
             persistenceMessage_ = committed.message.empty()
                 ? "base shot could not be saved"
                 : committed.message;
@@ -292,15 +329,162 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         worldClockDirty_ = true;
         ++weaponFaultSequence_;
     }
-    const AssetRecord *currentWeapon = weapon.has_value()
-        ? profile_.assets.find(*weapon)
-        : nullptr;
-    if (currentWeapon != nullptr &&
-        currentWeapon->weaponMalfunction != WeaponMalfunctionType::None)
+    if (baseWorld.shotFiredLastUpdate())
     {
-        weaponClearGesture_.reset();
-        persistenceMessage_ = "weapon malfunction";
+        const AssetRecord *currentWeapon = weapon.has_value()
+            ? profile_.assets.find(*weapon)
+            : nullptr;
+        if (currentWeapon != nullptr &&
+            currentWeapon->weaponMalfunction != WeaponMalfunctionType::None)
+        {
+            weaponClearGesture_.reset();
+            persistenceMessage_ = "weapon malfunction";
+        }
     }
+
+    bool perimeterChanged{};
+    ProfileState perimeterCandidate = profile_;
+    auto candidateSite = perimeterCandidate.homePerimeter.sites.find(
+        perimeterSite);
+    if (candidateSite != perimeterCandidate.homePerimeter.sites.end())
+    {
+        const std::vector<HomePerimeterEnemySnapshot> runtimeEnemies =
+            baseWorld.perimeterEnemySnapshots();
+        for (HomePerimeterEnemySnapshot &persisted :
+             candidateSite->second.enemies)
+        {
+            const auto runtime = std::find_if(
+                runtimeEnemies.begin(), runtimeEnemies.end(),
+                [&](const HomePerimeterEnemySnapshot &enemy)
+                { return enemy.localId == persisted.localId; });
+            if (runtime != runtimeEnemies.end() &&
+                runtime->health != persisted.health)
+            {
+                persisted.health = runtime->health;
+                perimeterChanged = true;
+            }
+        }
+    }
+
+    if (baseWorld.perimeterDamageLastUpdate() > 0)
+    {
+        Pcg32 woundRandom{
+            perimeterCandidate.revision ^
+                perimeterCandidate.worldClock.elapsedWorldMinutes,
+            0x686f6d652d776f75ULL};
+        const IncomingDamageReceipt damaged = executeIncomingDamage(
+            perimeterCandidate,
+            publishedContentRegistry(),
+            IncomingDamageCommand{
+                baseWorld.perimeterDamageLastUpdate(),
+                HitRegion::Torso,
+                0,
+                1,
+                false,
+                WoundRollCommand{
+                    WoundSource::Scratch,
+                    woundRandom.bounded(10000U),
+                    15000U + woundRandom.bounded(10001U)}},
+            CommandContext{
+                perimeterCandidate.revision,
+                nextRaidTransaction("home-perimeter-damage")});
+        if (!damaged.succeeded)
+        {
+            persistenceMessage_ = damaged.message;
+            return facility;
+        }
+        perimeterChanged = true;
+    }
+
+    const HomeRegionSafetyZone zoneAfter = baseWorld.playerSafetyZone();
+    if (!homePerimeterOutingActive(perimeterCandidate, perimeterSite) &&
+        zoneAfter == HomeRegionSafetyZone::Perimeter)
+    {
+        const HomePerimeterEnsureReceipt begun = beginHomePerimeterOuting(
+            perimeterCandidate,
+            perimeterSite,
+            CommandContext{
+                perimeterCandidate.revision,
+                nextRaidTransaction("home-perimeter-outing")});
+        if (!begun.succeeded)
+        {
+            persistenceMessage_ = begun.message;
+            return facility;
+        }
+        perimeterChanged = perimeterChanged || begun.changed;
+    }
+
+    const bool rescue = perimeterCandidate.currentHealth <= 0;
+    const bool returned =
+        homePerimeterOutingActive(perimeterCandidate, perimeterSite) &&
+        zoneAfter == HomeRegionSafetyZone::SafeCore;
+    if (rescue || returned)
+    {
+        const HomePerimeterResultReceipt result =
+            completeHomePerimeterOuting(
+                perimeterCandidate,
+                rescue,
+                CommandContext{
+                    perimeterCandidate.revision,
+                    nextRaidTransaction(
+                        rescue ? "home-perimeter-rescue"
+                               : "home-perimeter-return")});
+        if (!result.succeeded)
+        {
+            persistenceMessage_ = result.message;
+            return facility;
+        }
+        static_cast<void>(synchronizeBaseDailySystemsThrough(
+            perimeterCandidate, publishedContentRegistry()));
+        static_cast<void>(applyBaseConstructionThrough(
+            perimeterCandidate, publishedContentRegistry()));
+        static_cast<void>(applyBaseManufacturingThrough(
+            perimeterCandidate, publishedContentRegistry()));
+        static_cast<void>(applyResidentTreatmentThrough(perimeterCandidate));
+        static_cast<void>(applyRecoveryTaskThrough(perimeterCandidate));
+        perimeterChanged = true;
+    }
+    else if (perimeterChanged &&
+             perimeterCandidate.revision == profile_.revision)
+    {
+        if (perimeterCandidate.revision ==
+            std::numeric_limits<ProfileRevision>::max())
+        {
+            persistenceMessage_ = "Home perimeter revision overflow";
+            return facility;
+        }
+        ++perimeterCandidate.revision;
+    }
+
+    // Movement stays runtime-only. Whenever another discrete perimeter fact is
+    // already being saved, checkpoint the current finite enemy positions too
+    // so process recovery resumes the same encounter without adding per-frame
+    // persistence work.
+    if (perimeterChanged &&
+        candidateSite != perimeterCandidate.homePerimeter.sites.end())
+    {
+        const std::vector<HomePerimeterEnemySnapshot> runtimeEnemies =
+            baseWorld.perimeterEnemySnapshots();
+        for (HomePerimeterEnemySnapshot &persisted :
+             candidateSite->second.enemies)
+        {
+            const auto runtime = std::find_if(
+                runtimeEnemies.begin(), runtimeEnemies.end(),
+                [&](const HomePerimeterEnemySnapshot &enemy)
+                { return enemy.localId == persisted.localId; });
+            if (runtime != runtimeEnemies.end())
+                persisted.position = runtime->position;
+        }
+    }
+
+    if (perimeterChanged &&
+        !commitProfileCandidate(std::move(perimeterCandidate)))
+    {
+        restorePerimeterRuntime();
+        return facility;
+    }
+    if (rescue)
+        baseWorld.resetAtMedicalPoint();
     return facility;
 }
 

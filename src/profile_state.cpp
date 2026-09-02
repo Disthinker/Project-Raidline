@@ -4221,6 +4221,57 @@ ProfileValidationResult validateProfileState(
         return {false, "Raid ground asset exists without pending Raid"};
     }
 
+    std::set<AssetInstanceId> perimeterLootIds;
+    for (const auto &[siteId, snapshot] : profile.homePerimeter.sites)
+    {
+        if (siteId != snapshot.baseSiteDefinitionId ||
+            snapshot.seed == 0U || snapshot.enemies.size() > 32U ||
+            snapshot.lootAssetIds.size() > 8U)
+            return {false, "Home perimeter snapshot is invalid"};
+        std::set<std::uint32_t> enemyIds;
+        for (const HomePerimeterEnemySnapshot &enemy : snapshot.enemies)
+        {
+            if (enemy.localId == 0U ||
+                !enemyIds.insert(enemy.localId).second ||
+                !std::isfinite(enemy.spawnPosition.x) ||
+                !std::isfinite(enemy.spawnPosition.y) ||
+                !std::isfinite(enemy.position.x) ||
+                !std::isfinite(enemy.position.y) ||
+                !std::isfinite(enemy.size.x) ||
+                !std::isfinite(enemy.size.y) ||
+                enemy.size.x <= 0.0F || enemy.size.y <= 0.0F ||
+                enemy.maximumHealth <= 0 || enemy.maximumHealth > 1000 ||
+                enemy.health < 0 || enemy.health > enemy.maximumHealth)
+                return {false, "Home perimeter enemy is invalid"};
+        }
+        for (const AssetInstanceId assetId : snapshot.lootAssetIds)
+        {
+            const AssetRecord *asset = profile.assets.find(assetId);
+            const auto *ground = asset == nullptr
+                ? nullptr
+                : std::get_if<BaseGroundAssetLocation>(&asset->location);
+            if (!perimeterLootIds.insert(assetId).second ||
+                (ground != nullptr &&
+                 ground->baseSiteDefinitionId != siteId))
+                return {false, "Home perimeter Loot ownership is invalid"};
+        }
+    }
+    for (const std::string &resultId :
+         profile.homePerimeter.committedResults)
+        if (resultId.empty())
+            return {false, "Home perimeter result ID is invalid"};
+    if (profile.homePerimeter.activeOuting.has_value())
+    {
+        const HomePerimeterOutingState &outing =
+            *profile.homePerimeter.activeOuting;
+        const auto site = profile.homePerimeter.sites.find(
+            outing.baseSiteDefinitionId);
+        if (outing.outingId.empty() || site == profile.homePerimeter.sites.end() ||
+            site->second.cycleIndex != outing.cycleIndex ||
+            profile.pendingRaid.has_value())
+            return {false, "Home perimeter outing is invalid"};
+    }
+
     if (profile.lastRaidResult.has_value() &&
         (profile.lastRaidResult->settlementId.empty() ||
          profile.lastRaidResult->baseThreatReducedUnits >
@@ -4362,6 +4413,36 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         profile.baseSiege.lastOutcome));
     hashInteger(hash, profile.baseSiege.lastSecuritySpent);
     hashInteger(hash, profile.baseSiege.lastPopulationLost);
+    for (const auto &[siteId, snapshot] : profile.homePerimeter.sites)
+    {
+        hashBytes(hash, siteId.value());
+        hashInteger(hash, snapshot.cycleIndex);
+        hashInteger(hash, snapshot.seed);
+        for (const HomePerimeterEnemySnapshot &enemy : snapshot.enemies)
+        {
+            hashInteger(hash, enemy.localId);
+            hashFloat(hash, enemy.spawnPosition.x);
+            hashFloat(hash, enemy.spawnPosition.y);
+            hashFloat(hash, enemy.position.x);
+            hashFloat(hash, enemy.position.y);
+            hashFloat(hash, enemy.size.x);
+            hashFloat(hash, enemy.size.y);
+            hashInteger(hash, enemy.maximumHealth);
+            hashInteger(hash, enemy.health);
+        }
+        for (const AssetInstanceId assetId : snapshot.lootAssetIds)
+            hashInteger(hash, assetId);
+    }
+    if (profile.homePerimeter.activeOuting.has_value())
+    {
+        hashBytes(hash, profile.homePerimeter.activeOuting->outingId);
+        hashBytes(hash,
+            profile.homePerimeter.activeOuting->baseSiteDefinitionId.value());
+        hashInteger(hash, profile.homePerimeter.activeOuting->cycleIndex);
+    }
+    for (const std::string &resultId :
+         profile.homePerimeter.committedResults)
+        hashBytes(hash, resultId);
     hashInteger(hash, profile.baseConstruction.materialUnits);
     hashInteger(hash, profile.baseConstruction.dormitoryLevel);
     hashInteger(hash, profile.baseConstruction.kitchenWaterLevel);

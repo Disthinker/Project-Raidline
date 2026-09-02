@@ -370,6 +370,33 @@ TEST(BaseWorldTest, ExposesWorkshopProductionFacility)
         "WORKSHOP & PRODUCTION");
 }
 
+TEST(BaseWorldTest, PerimeterSnapshotCreatesFiniteTargetsOutsideSafeBoundary)
+{
+    BaseWorld world;
+    const ContentRect core = world.baseParcel();
+    const Vec2 enemyPosition{
+        core.position.x + core.size.x * 0.5F,
+        core.position.y + core.size.y +
+            kHomePerimeterTransitionWidth + 240.0F};
+    HomePerimeterSiteSnapshot snapshot;
+    snapshot.baseSiteDefinitionId = RegionalBaseSiteDefinitionId{
+        world.siteDefinitionId()};
+    snapshot.cycleIndex = 4U;
+    snapshot.seed = 17U;
+    snapshot.enemies.push_back(HomePerimeterEnemySnapshot{
+        1U, enemyPosition, enemyPosition, {50.0F, 50.0F}, 3, 3});
+    world.configureHomePerimeter(&snapshot);
+
+    ASSERT_EQ(world.perimeterEnemies().size(), 1U);
+    EXPECT_EQ(world.playerSafetyZone(), HomeRegionSafetyZone::SafeCore);
+    for (int step{}; step < 120; ++step)
+        static_cast<void>(world.update(GameplayInput{}, 1.0F / 60.0F));
+    const Vec2 after = world.perimeterEnemies().front().position();
+    EXPECT_EQ(queryHomeRegionSafetyZone(
+                  {after.x + 25.0F, after.y + 25.0F}, core),
+              HomeRegionSafetyZone::Perimeter);
+}
+
 TEST(BaseWorldTest, FacilitySideDoesNotReplaceThePublishedEntrance)
 {
     BaseWorld world;

@@ -264,6 +264,46 @@ TEST(GameSessionTest, BaseWorldFireConsumesRealAmmoAndWeaponCondition)
     EXPECT_FALSE(session.profile().lastRaidResult.has_value());
 }
 
+TEST(GameSessionTest, WalkingOutAndBackCommitsOneLocalOuting)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("base-perimeter-outing"));
+    BaseWorld world;
+    static_cast<void>(session.updateBaseWorld(
+        world, GameplayInput{}, 1.0F / 60.0F));
+    const RegionalBaseSiteDefinitionId site{world.siteDefinitionId()};
+
+    GameplayInput outward;
+    outward.moveDown = true;
+    outward.sprint = true;
+    for (int step{}; step < 420 &&
+         !homePerimeterOutingActive(session.profile(), site); ++step)
+    {
+        static_cast<void>(session.updateBaseWorld(
+            world, outward, 1.0F / 60.0F));
+    }
+    ASSERT_TRUE(homePerimeterOutingActive(session.profile(), site));
+    const std::uint64_t beforeReturn =
+        session.profile().worldClock.elapsedWorldMinutes;
+
+    GameplayInput inward;
+    inward.moveUp = true;
+    inward.sprint = true;
+    for (int step{}; step < 420 &&
+         homePerimeterOutingActive(session.profile(), site); ++step)
+    {
+        static_cast<void>(session.updateBaseWorld(
+            world, inward, 1.0F / 60.0F));
+    }
+
+    EXPECT_FALSE(homePerimeterOutingActive(session.profile(), site));
+    EXPECT_EQ(session.profile().worldClock.elapsedWorldMinutes,
+              beforeReturn + kHomePerimeterReturnMinutes);
+    EXPECT_FALSE(session.profile().pendingRaid.has_value());
+    EXPECT_FALSE(session.profile().lastRaidResult.has_value());
+    EXPECT_TRUE(session.profile().lostRaidRecords.empty());
+}
+
 TEST(GameSessionTest, RaidTravelPreviewProjectsSelectedMapWithoutMutation)
 {
     GameSession session;

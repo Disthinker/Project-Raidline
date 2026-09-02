@@ -1297,6 +1297,58 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     {
         payload["base_siege"] = baseSiegeValue(profile.baseSiege);
     }
+    if (schemaVersion >= 42)
+    {
+        Json sites = Json::array();
+        for (const auto &[siteId, snapshot] : profile.homePerimeter.sites)
+        {
+            Json enemies = Json::array();
+            for (const HomePerimeterEnemySnapshot &enemy : snapshot.enemies)
+            {
+                enemies.push_back({
+                    {"local_id", enemy.localId},
+                    {"spawn_x", enemy.spawnPosition.x},
+                    {"spawn_y", enemy.spawnPosition.y},
+                    {"position_x", enemy.position.x},
+                    {"position_y", enemy.position.y},
+                    {"size_x", enemy.size.x},
+                    {"size_y", enemy.size.y},
+                    {"maximum_health", enemy.maximumHealth},
+                    {"health", enemy.health}});
+            }
+            sites.push_back({
+                {"site_definition_id", siteId.value()},
+                {"cycle_index", snapshot.cycleIndex},
+                {"seed", snapshot.seed},
+                {"enemies", std::move(enemies)},
+                {"loot_asset_ids", snapshot.lootAssetIds}});
+        }
+        Json committedResults = Json::array();
+        for (const std::string &resultId :
+             profile.homePerimeter.committedResults)
+            committedResults.push_back(resultId);
+        Json active = nullptr;
+        if (profile.homePerimeter.activeOuting.has_value())
+        {
+            active = {
+                {"outing_id", profile.homePerimeter.activeOuting->outingId},
+                {"site_definition_id",
+                 profile.homePerimeter.activeOuting->baseSiteDefinitionId.value()},
+                {"cycle_index",
+                 profile.homePerimeter.activeOuting->cycleIndex}};
+        }
+        payload["home_perimeter"] = {
+            {"sites", std::move(sites)},
+            {"active_outing", std::move(active)},
+            {"committed_results", std::move(committedResults)}};
+    }
+    else if (!profile.homePerimeter.sites.empty() ||
+             profile.homePerimeter.activeOuting.has_value() ||
+             !profile.homePerimeter.committedResults.empty())
+    {
+        throw std::invalid_argument{
+            "legacy schema cannot represent Home perimeter state"};
+    }
     if (schemaVersion >= 25)
     {
         payload["next_recovery_task_id"] = profile.nextRecoveryTaskId;
@@ -2195,7 +2247,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41)
+        schemaVersion != 41 && schemaVersion != 42)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2374,7 +2426,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 35 && schemaVersion != 36 &&
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
-              schemaVersion != 41) ||
+              schemaVersion != 41 && schemaVersion != 42) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2725,6 +2777,66 @@ SaveLoadResult deserializeProfileEnvelope(
         if (schemaVersion < 33)
         {
             normalizeBaseThreatCapacity(profile.baseSiege);
+        }
+        if (schemaVersion >= 42)
+        {
+            const Json &perimeter = payload.at("home_perimeter");
+            for (const Json &site : perimeter.at("sites"))
+            {
+                HomePerimeterSiteSnapshot snapshot;
+                snapshot.baseSiteDefinitionId =
+                    RegionalBaseSiteDefinitionId{
+                        site.at("site_definition_id").get<std::string>()};
+                snapshot.cycleIndex =
+                    site.at("cycle_index").get<std::uint64_t>();
+                snapshot.seed = site.at("seed").get<std::uint64_t>();
+                snapshot.lootAssetIds =
+                    site.at("loot_asset_ids")
+                        .get<std::vector<AssetInstanceId>>();
+                for (const Json &enemy : site.at("enemies"))
+                {
+                    snapshot.enemies.push_back(
+                        HomePerimeterEnemySnapshot{
+                            enemy.at("local_id").get<std::uint32_t>(),
+                            {enemy.at("spawn_x").get<float>(),
+                             enemy.at("spawn_y").get<float>()},
+                            {enemy.at("position_x").get<float>(),
+                             enemy.at("position_y").get<float>()},
+                            {enemy.at("size_x").get<float>(),
+                             enemy.at("size_y").get<float>()},
+                            enemy.at("maximum_health").get<int>(),
+                            enemy.at("health").get<int>()});
+                }
+                if (!profile.homePerimeter.sites.emplace(
+                        snapshot.baseSiteDefinitionId,
+                        std::move(snapshot)).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Home perimeter site is duplicated"};
+                }
+            }
+            if (!perimeter.at("active_outing").is_null())
+            {
+                const Json &active = perimeter.at("active_outing");
+                profile.homePerimeter.activeOuting =
+                    HomePerimeterOutingState{
+                        active.at("outing_id").get<std::string>(),
+                        RegionalBaseSiteDefinitionId{
+                            active.at("site_definition_id")
+                                .get<std::string>()},
+                        active.at("cycle_index").get<std::uint64_t>()};
+            }
+            for (const Json &result : perimeter.at("committed_results"))
+            {
+                const std::string resultId = result.get<std::string>();
+                if (resultId.empty() ||
+                    !profile.homePerimeter.committedResults
+                         .insert(resultId).second)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "Home perimeter result history is invalid"};
+                }
+            }
         }
         if (schemaVersion >= 20)
         {
