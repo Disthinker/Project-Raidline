@@ -79,6 +79,7 @@ struct BaseFacilityContextMenu
     std::optional<AssetInstanceId> assetId;
     std::optional<BaseFacilityKind> fixedFacility;
     MousePosition position{};
+    bool workforceStation{};
 };
 
 struct BaseFixedFacilityPlacementState
@@ -278,6 +279,8 @@ private:
     basePlacedFacilityAt(MousePosition position) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
     baseFixedFacilityAt(MousePosition position) const;
+    [[nodiscard]] std::optional<BaseFacilityKind>
+    baseWorkerFacilityAt(MousePosition position) const;
     void openBasePlacedFacility(AssetInstanceId assetId);
     void openBaseFixedFacility(BaseFacilityKind facility);
     void startBasePlacement(

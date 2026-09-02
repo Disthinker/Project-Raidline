@@ -82,6 +82,8 @@ TEST(BaseFacilityManagementTest,
     EXPECT_NE(findAction(
         workshop, BaseFacilityQuickActionKind::ClearWorker), nullptr);
     EXPECT_NE(findAction(
+        workshop, BaseFacilityQuickActionKind::AutoFillWorkers), nullptr);
+    EXPECT_NE(findAction(
         workshop, BaseFacilityQuickActionKind::StartUpgrade), nullptr);
     EXPECT_EQ(findAction(
         workshop, BaseFacilityQuickActionKind::CollectManufacturing), nullptr);
@@ -95,12 +97,60 @@ TEST(BaseFacilityManagementTest,
         medical, BaseFacilityQuickActionKind::StartResidentTreatment);
     ASSERT_NE(treatment, nullptr);
     EXPECT_FALSE(treatment->canCommit);
+    EXPECT_NE(findAction(
+        medical, BaseFacilityQuickActionKind::AutoFillWorkers), nullptr);
 
     const BaseFacilityManagementProjection dormitory =
         projectBaseFacilityManagement(
             profile, publishedContentRegistry(), BaseFacilityKind::Dormitory);
     EXPECT_NE(findAction(
         dormitory, BaseFacilityQuickActionKind::AutoFillWorkers), nullptr);
+    EXPECT_EQ(
+        std::count_if(
+            dormitory.quickActions.begin(), dormitory.quickActions.end(),
+            [](const BaseFacilityQuickActionProjection &action)
+            {
+                return action.kind ==
+                    BaseFacilityQuickActionKind::AutoFillWorkers;
+            }),
+        1);
+}
+
+TEST(BaseFacilityManagementTest,
+     WorkforceQuickActionsUseDomainPlansAndRemainPure)
+{
+    ProfileState profile = makeNewAlphaProfile(
+        "facility-workforce-actions", publishedContentRegistry());
+    const std::uint64_t initialFingerprint =
+        profileStateFingerprint(profile);
+
+    BaseFacilityManagementProjection workshop =
+        projectBaseFacilityManagement(
+            profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    const BaseFacilityQuickActionProjection *clear = findAction(
+        workshop, BaseFacilityQuickActionKind::ClearWorker);
+    const BaseFacilityQuickActionProjection *autoFill = findAction(
+        workshop, BaseFacilityQuickActionKind::AutoFillWorkers);
+    ASSERT_NE(clear, nullptr);
+    ASSERT_NE(autoFill, nullptr);
+    EXPECT_TRUE(clear->canCommit);
+    EXPECT_FALSE(autoFill->canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), initialFingerprint);
+
+    profile.baseWorkforce.workshopWorker.reset();
+    const std::uint64_t missingFingerprint =
+        profileStateFingerprint(profile);
+    workshop = projectBaseFacilityManagement(
+        profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
+    const BaseFacilityQuickActionProjection *assign = findAction(
+        workshop, BaseFacilityQuickActionKind::AssignBestWorker);
+    autoFill = findAction(
+        workshop, BaseFacilityQuickActionKind::AutoFillWorkers);
+    ASSERT_NE(assign, nullptr);
+    ASSERT_NE(autoFill, nullptr);
+    EXPECT_TRUE(assign->canCommit);
+    EXPECT_TRUE(autoFill->canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), missingFingerprint);
 }
 
 TEST(BaseFacilityManagementTest,

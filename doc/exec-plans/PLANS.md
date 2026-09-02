@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/home-region-workforce-world-status-v1.md`。PR #138 已由用户正常游玩验收并以 `5da9591` 进入 main；当前只把既有 Workshop/Medical 聚合岗位事实投影为作业点旁的缺员、闲置、工作和暂停占位，不并行增加逐人 NPC、寻路、动画、独立室内、正式美术、实时守城或 AI 小队。
+当前实现计划：`active/home-region-workforce-world-actions-v1.md`。PR #139 已由用户正常游玩验收并以 `abe2886` 进入 main；当前切片已通过 147/147 定向回归和 1421/1421 全量 CTest，只让 Workshop/Medical 岗位作业点直接提供分配、清除和自动补员操作，不并行增加逐人 NPC、排班、寻路、动画、独立室内、正式美术、实时守城或 AI 小队。
