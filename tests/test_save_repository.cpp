@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "base_workforce_domain.h"
+#include "home_perimeter_domain.h"
 
 #include <algorithm>
 #include <chrono>
@@ -3654,4 +3655,39 @@ TEST(SaveRepositoryTest,
         EXPECT_FLOAT_EQ(placements.at(kitchenWater).y, 0.35714287F);
     }
     EXPECT_TRUE(validateProfileState(*migrated.profile, content).valid);
+}
+TEST(SaveRepositoryTest, SchemaV42RoundTripsHomePerimeterAndV41MigratesEmpty)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewPublishedProfile(
+        "home-perimeter-save", content);
+    const RegionalBaseSiteDefinitionId site{
+        "regional_base_site.greyline_yard"};
+    const HomePerimeterGenerationContext generation{
+        site,
+        {12800.0F, 7200.0F},
+        {{5200.0F, 2800.0F}, {1600.0F, 1100.0F}},
+        {}};
+    ASSERT_TRUE(ensureHomePerimeterSnapshot(
+        profile, content, generation,
+        {profile.revision, "save-generate"}).succeeded);
+    ASSERT_TRUE(beginHomePerimeterOuting(
+        profile, site,
+        {profile.revision, "save-outing"}).succeeded);
+
+    const SaveLoadResult loaded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+    EXPECT_EQ(loaded.profile->homePerimeter, profile.homePerimeter);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile),
+              profileStateFingerprint(profile));
+
+    ProfileState legacy = makeNewPublishedProfile(
+        "home-perimeter-legacy", content);
+    const SaveLoadResult migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(legacy, content.contentVersion(), 41),
+        content);
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_TRUE(migrated.profile->homePerimeter.sites.empty());
+    EXPECT_FALSE(migrated.profile->homePerimeter.activeOuting.has_value());
 }

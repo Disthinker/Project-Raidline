@@ -26,6 +26,7 @@
 #include "base_service_domain.h"
 #include "gameplay_world.h"
 #include "inventory_domain.h"
+#include "home_perimeter_domain.h"
 #include "lost_raid_domain.h"
 #include "recovery_task_domain.h"
 #include "regional_operations_domain.h"

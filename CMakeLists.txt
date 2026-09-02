@@ -244,6 +244,8 @@ add_library(raidline_domain STATIC
     src/content_registry.h
     src/definition_id.h
     src/health_system.h
+    src/home_perimeter_domain.cpp
+    src/home_perimeter_domain.h
     src/economy_domain.cpp
     src/economy_domain.h
     src/inventory_domain.cpp
@@ -721,6 +723,10 @@ raidline_add_test(
 raidline_add_test(
     BaseGroundDomainTest
     tests/test_base_ground_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    HomePerimeterDomainTest
+    tests/test_home_perimeter_domain.cpp
     raidline::domain)
 raidline_add_test(
     BaseFacilityLayoutDomainTest

@@ -726,6 +726,68 @@ struct BaseConstructionState
         const BaseConstructionState &) = default;
 };
 
+// Home Region perimeter outings share the Base scene, but not the Raid
+// lifecycle. Their sparse, finite world facts are persisted so reopening the
+// game or crossing the safe boundary cannot reroll the current cycle.
+struct HomePerimeterEnemySnapshot
+{
+    std::uint32_t localId{};
+    Vec2 spawnPosition{};
+    Vec2 position{};
+    Vec2 size{50.0F, 50.0F};
+    int maximumHealth{3};
+    int health{3};
+
+    friend bool operator==(
+        const HomePerimeterEnemySnapshot &left,
+        const HomePerimeterEnemySnapshot &right) noexcept
+    {
+        return left.localId == right.localId &&
+            left.spawnPosition.x == right.spawnPosition.x &&
+            left.spawnPosition.y == right.spawnPosition.y &&
+            left.position.x == right.position.x &&
+            left.position.y == right.position.y &&
+            left.size.x == right.size.x && left.size.y == right.size.y &&
+            left.maximumHealth == right.maximumHealth &&
+            left.health == right.health;
+    }
+};
+
+struct HomePerimeterSiteSnapshot
+{
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    std::uint64_t cycleIndex{};
+    std::uint64_t seed{};
+    std::vector<HomePerimeterEnemySnapshot> enemies;
+    std::vector<AssetInstanceId> lootAssetIds;
+
+    friend bool operator==(
+        const HomePerimeterSiteSnapshot &,
+        const HomePerimeterSiteSnapshot &) = default;
+};
+
+struct HomePerimeterOutingState
+{
+    std::string outingId;
+    RegionalBaseSiteDefinitionId baseSiteDefinitionId;
+    std::uint64_t cycleIndex{};
+
+    friend bool operator==(
+        const HomePerimeterOutingState &,
+        const HomePerimeterOutingState &) = default;
+};
+
+struct HomePerimeterState
+{
+    std::map<RegionalBaseSiteDefinitionId, HomePerimeterSiteSnapshot> sites;
+    std::optional<HomePerimeterOutingState> activeOuting;
+    std::set<std::string> committedResults;
+
+    friend bool operator==(
+        const HomePerimeterState &,
+        const HomePerimeterState &) = default;
+};
+
 struct BaseFacilityLayoutState
 {
     // Centers are normalized within each site's Base parcel so the layout
@@ -959,6 +1021,7 @@ struct ProfileState
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
     BaseSiegeState baseSiege;
+    HomePerimeterState homePerimeter;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;

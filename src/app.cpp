@@ -10899,6 +10899,13 @@ void App::renderBaseWorld()
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const ContentRect &baseParcel = world.baseParcel();
+    const SDL_FRect transition{
+        baseParcel.position.x - kHomePerimeterTransitionWidth,
+        baseParcel.position.y - kHomePerimeterTransitionWidth,
+        baseParcel.size.x + kHomePerimeterTransitionWidth * 2.0F,
+        baseParcel.size.y + kHomePerimeterTransitionWidth * 2.0F};
+    SDL_SetRenderDrawColor(renderer_, 188, 174, 92, 82);
+    SDL_RenderRect(renderer_, &transition);
     const SDL_FRect parcel{baseParcel.position.x, baseParcel.position.y,
                            baseParcel.size.x, baseParcel.size.y};
     SDL_SetRenderDrawColor(renderer_, 30, 56, 50, 120);
@@ -11319,6 +11326,47 @@ void App::renderBaseWorld()
 
     renderBasePlacementPreview();
 
+    for (const Enemy &enemy : world.perimeterEnemies())
+    {
+        const Rect enemyBounds = enemy.bounds();
+        if (enemyBounds.position.x < camera.x - 96.0F ||
+            enemyBounds.position.y < camera.y - 96.0F ||
+            enemyBounds.position.x > camera.x + kWindowWidth / zoom + 96.0F ||
+            enemyBounds.position.y > camera.y + kWindowHeight / zoom + 96.0F)
+            continue;
+        SDL_FRect destination{
+            enemyBounds.position.x +
+                (enemyBounds.size.x - kEnemySpriteWidth) * 0.5F,
+            enemyBounds.position.y +
+                (enemyBounds.size.y - kEnemySpriteHeight) * 0.5F,
+            kEnemySpriteWidth,
+            kEnemySpriteHeight};
+        std::size_t frame = enemy.currentAnimationFrameIndex();
+        if (frame >= kEnemyMoveFrameCount)
+            frame = 0U;
+        const SDL_FRect source{
+            static_cast<float>(frame) * kEnemyMoveSourceFrameWidth,
+            enemy.facingDirection() == EnemyFacingDirection::Left
+                ? kEnemyMoveLeftRowY : kEnemyMoveRightRowY,
+            kEnemyMoveSourceFrameWidth,
+            kEnemyMoveSourceFrameHeight};
+        SDL_RenderTexture(
+            renderer_, enemyMoveHorizontalTexture_.get(), &source,
+            &destination);
+        if (!enemy.isDead())
+        {
+            SDL_SetRenderDrawColor(
+                renderer_,
+                enemy.awarenessState() == EnemyAwarenessState::Alerted
+                    ? 255U : 134U,
+                enemy.awarenessState() == EnemyAwarenessState::Alerted
+                    ? 76U : 146U,
+                72U,
+                235U);
+            SDL_RenderRect(renderer_, &destination);
+        }
+    }
+
     const Vec2 playerPosition = world.playerPosition();
     const Vec2 playerSize = world.playerSize();
     renderPlayerAvatar(
@@ -11333,6 +11381,27 @@ void App::renderBaseWorld()
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     static_cast<void>(SDL_SetRenderScale(renderer_, 1.0F, 1.0F));
+
+    const std::size_t livingPerimeterEnemies =
+        static_cast<std::size_t>(std::count_if(
+            world.perimeterEnemies().begin(),
+            world.perimeterEnemies().end(),
+            [](const Enemy &enemy) { return !enemy.isDead(); }));
+    const char *zoneName = "OUTER AREA";
+    if (world.playerSafetyZone() == HomeRegionSafetyZone::SafeCore)
+        zoneName = "SAFE CORE";
+    else if (world.playerSafetyZone() ==
+             HomeRegionSafetyZone::TransitionBuffer)
+        zoneName = "TRANSITION BUFFER";
+    const bool localOutingActive =
+        gameSession_.profile().homePerimeter.activeOuting.has_value();
+    const std::string perimeterStatus = fmt::format(
+        "HOME REGION | {} | OUTER HOSTILES {}{}",
+        zoneName,
+        livingPerimeterEnemies,
+        localOutingActive ? " | LOCAL OUTING ACTIVE" : "");
+    uiTextRenderer_.render(
+        renderer_, 16.0F, 612.0F, perimeterStatus.c_str());
 
     if (const auto ground = gameFlow_.nearestBaseGroundAsset())
     {

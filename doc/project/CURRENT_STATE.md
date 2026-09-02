@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@b1194a1`，PR #142 已合入并完成 Home Region 基地物资流现场状态 v1。
-- 当前开发分支：`codex/home-region-operations-filter-v1`，从 `origin/main@b1194a1` 创建。
-- 当前活动计划：`doc/exec-plans/active/home-region-operations-filter-v1.md`。
-- 当前切片把既有设施、岗位、居民和物资流状态收束为缩放信息层级与可筛选、分页、定位的运营总览；不新增新的设施任务或模拟状态。
-- PR #142 已通过 Windows Debug 全目标、83/83 定向回归、1427/1427 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、71/71 定向回归与 1433/1433 全量 CTest，等待 exact-head Windows/Ubuntu CI 和用户正常游玩验收；开发代理不启动游戏。
+- 已验收主线：`origin/main@60c83fa`，PR #143 已合入并完成 Home Region 作业状态信息层级与快速定位 v1。
+- 当前开发分支：`codex/home-region-perimeter-exploration-v1`，从 `origin/main@60c83fa` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-perimeter-exploration-v1.md`。
+- 当前切片在同一 Home Region 中建立 SafeCore、TransitionBuffer 与 Perimeter，提供有限感染者、低阶地面 Loot、返回与救回闭环；不嵌入 Raid 生命周期，也不提供导航。
+- PR #143 已通过 Windows Debug 全目标、71/71 定向回归、1433/1433 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、42/42 关键领域回归与 1444/1444 全量 CTest；等待 exact-head Windows/Ubuntu CI 和用户正常游玩验收，开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 基地物资流现场状态均已进入主线。当前切片改善基地状态的信息密度、筛选与定位，不改变任何领域所有权、结算或 Raid 生命周期。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 基地运营可读性均已进入主线。当前切片首次让玩家从安全基地直接步行进入本地外围，在不创建 Raid 的前提下形成有限战斗、拾取、返回和救回闭环。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -97,7 +97,10 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 80. **Home Region 设施作业点空间合同 v1**：五类空间化核心设施发布类型化、确定性的仓储装卸点、医疗床位、宿舍床位、厨房加工点和工坊工作台；活动任务突出对应点位。PR #138 已通过 CI 与用户正常游玩验收，以 merge commit `5da9591` 进入 main。
 81. **Home Region 聚合岗位世界占位反馈 v1**：Workshop/Medical 的既有聚合岗位在对应作业点显示缺员、闲置、工作中或暂停；只读投影复用真实专业分配与任务状态。PR #139 已通过 CI 与用户正常游玩验收，以 merge commit `abe2886` 进入 main。
 82. **Home Region 设施岗位现场操作 v1**：Workshop/Medical 作业点可直接选中设施并提供分配、清除和自动补员；所有按钮消费既有领域查询与持久化命令。PR #140 已通过 CI 与用户正常游玩验收，以 merge commit `0f74a67` 进入 main。
-83. **Home Region 聚合居民空间状态 v1（当前开发分支）**：DormitoryBunk 显示聚合居民、健康/受伤、床位、可用/已分配/建设占用，并提供宿舍打开与自动补员入口。
+83. **Home Region 聚合居民空间状态 v1**：DormitoryBunk 显示聚合居民、健康/受伤、床位、可用/已分配/建设占用，并提供宿舍打开与自动补员入口。PR #141 已通过 CI 与用户验收，以 `2f05626` 进入 main。
+84. **Home Region 基地物资流现场状态 v1**：仓库装卸点与厨房处理点显示统一库存、供给授权、资源池和预计短缺。PR #142 已通过 CI 与用户验收，以 `b1194a1` 进入 main。
+85. **Home Region 作业状态信息层级与快速定位 v1**：作业点随缩放显示不同信息密度，运营总览支持状态筛选、分页和设施定位。PR #143 已通过 CI 与用户验收，以 `60c83fa` 进入 main。
+86. **Home Region 外围探索与安全边界 v1（当前开发分支）**：安全核心外加入过渡缓冲与可探索外围；外围使用有限感染者、低阶地面 Loot、持久周期快照和本地返回/救回结果，不创建 Raid、撤离或 Settlement。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

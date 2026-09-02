@@ -35,8 +35,8 @@
 ## 流程与场景
 
 - `GameFlow` 只拥有屏幕级状态；`GameSession` 是长期组合根。
-- `BaseWorld` 与 `GameplayWorld` 互斥运行。两者可以组合同一 SDL-free 射击能力，但 Base 不生成敌人、不伤害居民/设施，也不推进 Loot、撤离、高危、RaidSession 或 Settlement 生命周期。
-- Home Region 的大地图、基地板块、道路和环境物只属于 `BaseWorld` 瞬态空间；相同 active Base 地点必须确定性生成相同布局。扩大 Base 空间不得创建 pending Raid、Raid 锚点、敌人、Loot、撤离、高危或 Settlement，也不得把环境生成结果写成新的 Profile 权威资产。
+- `BaseWorld` 与 `GameplayWorld` 互斥运行。两者可以组合同一 SDL-free 射击能力；Base 只允许组合窄 `HomePerimeterRuntime` 的有限感染者与低阶地面资产，不得嵌入 `RaidSession`、撤离、高危、RaidResult、失物或 Settlement 生命周期，也不得伤害居民/设施。
+- Home Region 的大地图、基地板块、道路和环境物属于 `BaseWorld` 瞬态空间；相同 active Base 地点必须确定性生成相同布局。外围周期快照是独立的 Profile 权威状态，只能记录站点、周期、有限敌人和已实例化 `BaseGroundAssetLocation` 的 Loot；不得创建 pending Raid、Raid 锚点、撤离、高危或 Settlement。
 - Base 场景、设施对象与 UI 不拥有 Stash、装备、货币或唯一资产。
 - `ProfileState::WorldClockState` 是 Base 与 Raid 共享的唯一权威时间；领域只保存整数世界分钟，日、时分和昼夜均为投影。现实时间戳、离线时长、SDL 帧或 UI 文本不得进入时间真值。
 - 只有未暂停的 Base 世界和 Active Raid 模拟可以推进时钟。主菜单、RaidResult、暂停菜单、Base 库存/设施模态页和离线时间必须冻结；Base 按检查点原子保存，Raid 时间只随 Settlement 提交。普通幸存者安全转移是唯一已启用的局中持久事实：它只能写入不含当前 Raid 装备、Loot、HP 和时间的干净恢复候选；异常退出保留该救援事实，同时其余状态仍回滚到出击前。

@@ -10,6 +10,7 @@
 #include "animation.h"
 #include "base_facility_layout_domain.h"
 #include "gameplay_input.h"
+#include "home_perimeter_domain.h"
 #include "home_region_layout.h"
 #include "raid_space_spatial_index.h"
 #include "rect.h"
@@ -104,6 +105,13 @@ public:
     outdoorPresentation(ContentRect visibleWorldBounds) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
     interactableFacility() const noexcept;
+    void configureHomePerimeter(
+        const HomePerimeterSiteSnapshot *snapshot);
+    [[nodiscard]] HomeRegionSafetyZone playerSafetyZone() const noexcept;
+    [[nodiscard]] const std::vector<Enemy> &perimeterEnemies() const noexcept;
+    [[nodiscard]] std::vector<HomePerimeterEnemySnapshot>
+    perimeterEnemySnapshots() const;
+    [[nodiscard]] int perimeterDamageLastUpdate() const noexcept;
 
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(
@@ -124,6 +132,7 @@ public:
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
     [[nodiscard]] Vec2 normalizedShotScreenShakeOffset() const noexcept;
+    void discardUncommittedShot() noexcept;
 
     void resetAtRaidGate() noexcept;
     void resetAtMedicalPoint() noexcept;
@@ -148,7 +157,11 @@ private:
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
     WorldShootingRuntime shooting_;
-    std::vector<Enemy> noCombatTargets_;
+    std::vector<Enemy> perimeterEnemies_;
+    std::vector<Vec2> perimeterEnemySpawns_;
+    std::optional<std::uint64_t> perimeterCycleIndex_;
+    int perimeterDamageLastUpdate_{};
+    float perimeterDamageProtectionRemainingSeconds_{};
     mutable HomeRegionPresentationProjection presentationCache_;
     mutable bool presentationCacheValid_{};
     mutable std::uint32_t cachedFirstChunkColumn_{};

@@ -2020,3 +2020,27 @@ TEST(PersistentSessionTest, LegacyPendingRaidSaveRestoresLoadoutWithoutLoss)
     EXPECT_TRUE(reopened.profile().committedSettlements.empty());
     EXPECT_FALSE(reopened.profile().lastRaidResult.has_value());
 }
+TEST(PersistentSessionTest, HomePerimeterSnapshotSurvivesProcessRestart)
+{
+    SessionSaveDirectory temporary;
+    GameSession first;
+    first.configurePersistence(temporary.path());
+    ASSERT_TRUE(first.startNewProfile("persistent-home-perimeter"));
+    BaseWorld firstWorld;
+    static_cast<void>(first.updateBaseWorld(
+        firstWorld, GameplayInput{}, 1.0F / 60.0F));
+    const RegionalBaseSiteDefinitionId site{
+        firstWorld.siteDefinitionId()};
+    ASSERT_TRUE(first.profile().homePerimeter.sites.contains(site));
+    const HomePerimeterSiteSnapshot expected =
+        first.profile().homePerimeter.sites.at(site);
+    ASSERT_GE(expected.enemies.size(), 7U);
+    ASSERT_GE(expected.lootAssetIds.size(), 2U);
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().homePerimeter.sites.contains(site));
+    EXPECT_EQ(reopened.profile().homePerimeter.sites.at(site), expected);
+    EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+}

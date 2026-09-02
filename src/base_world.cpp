@@ -201,6 +201,9 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
     presentationCacheValid_ = false;
     resetAtMedicalPoint();
     shooting_.clearSpatialTransientPresentation();
+    perimeterEnemies_.clear();
+    perimeterEnemySpawns_.clear();
+    perimeterCycleIndex_.reset();
     shooting_.reanchor(
         {playerPosition_.x + playerSize_.x * 0.5F,
          playerPosition_.y + playerSize_.y * 0.5F},
@@ -234,6 +237,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     const BaseInput &input,
     float deltaTime)
 {
+    perimeterDamageLastUpdate_ = 0;
+    perimeterDamageProtectionRemainingSeconds_ = std::max(
+        0.0F,
+        perimeterDamageProtectionRemainingSeconds_ -
+            std::max(0.0F, deltaTime));
     shooting_.beginFrame(deltaTime);
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
@@ -345,14 +353,174 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         playerIsMoving_,
         false,
         layout_.worldSize,
-        noCombatTargets_,
+        perimeterEnemies_,
         movementBlockers_));
+
+    const HomeRegionSafetyZone playerZone = playerSafetyZone();
+    for (std::size_t index = 0; index < perimeterEnemies_.size(); ++index)
+    {
+        Enemy &enemy = perimeterEnemies_[index];
+        if (enemy.isDead())
+            continue;
+        const Vec2 before = enemy.position();
+        const Vec2 enemyCenter{
+            before.x + enemy.size().x * 0.5F,
+            before.y + enemy.size().y * 0.5F};
+        const Vec2 offset{
+            playerCenter.x - enemyCenter.x,
+            playerCenter.y - enemyCenter.y};
+        const float distanceSquared =
+            offset.x * offset.x + offset.y * offset.y;
+        const bool playerExposed =
+            playerZone == HomeRegionSafetyZone::Perimeter;
+        const bool targetVisible = playerExposed &&
+            movementBlockerIndex_->hasLineOfSight(enemyCenter, playerCenter) &&
+            distanceSquared <= 900.0F * 900.0F;
+        if (targetVisible ||
+            (playerExposed && shooting_.shotFiredLastUpdate() &&
+             distanceSquared <= 1500.0F * 1500.0F))
+            enemy.hearTarget(playerCenter);
+
+        EnemyTacticalDirective directive;
+        directive.role = EnemyTacticalRole::Engage;
+        directive.canStartAttack = playerExposed;
+        const std::optional<Vec2> navigationTarget = playerExposed
+            ? std::nullopt
+            : std::optional<Vec2>{perimeterEnemySpawns_[index]};
+        static_cast<void>(enemy.updateTowardsTarget(
+            playerExposed ? playerCenter : perimeterEnemySpawns_[index],
+            directive,
+            deltaTime,
+            layout_.worldSize.x,
+            layout_.worldSize.y,
+            targetVisible,
+            navigationTarget,
+            !playerExposed));
+
+        Vec2 resolved = enemy.position();
+        const Rect queryBounds{
+            {std::min(before.x, resolved.x), std::min(before.y, resolved.y)},
+            {std::abs(resolved.x - before.x) + enemy.size().x,
+             std::abs(resolved.y - before.y) + enemy.size().y}};
+        movementBlockerIndex_->queryCandidateIndices(
+            queryBounds, movementCandidates_);
+        resolved.x = resolveHorizontalMovement(
+            before, enemy.size(), resolved.x,
+            *movementBlockerIndex_, movementCandidates_);
+        resolved.y = resolveVerticalMovement(
+            {resolved.x, before.y}, enemy.size(), resolved.y,
+            *movementBlockerIndex_, movementCandidates_);
+        const Vec2 resolvedCenter{
+            resolved.x + enemy.size().x * 0.5F,
+            resolved.y + enemy.size().y * 0.5F};
+        if (queryHomeRegionSafetyZone(resolvedCenter, layout_.baseParcel) !=
+            HomeRegionSafetyZone::Perimeter)
+            resolved = before;
+        static_cast<void>(enemy.setPosition(resolved));
+
+        if (!playerExposed ||
+            perimeterDamageProtectionRemainingSeconds_ > 0.0F)
+            continue;
+        const std::optional<Rect> hitbox = enemy.attackHitbox();
+        const std::optional<EnemyAttackConfig> attack = enemy.attackConfig();
+        if (enemy.hasGrabContactOpportunity() && hitbox.has_value() &&
+            isCollision(*hitbox, Rect{playerPosition_, playerSize_}))
+        {
+            static_cast<void>(enemy.confirmGrabContact());
+            continue;
+        }
+        if (enemy.hasAttackHitOpportunity() && hitbox.has_value() &&
+            attack.has_value() &&
+            isCollision(*hitbox, Rect{playerPosition_, playerSize_}) &&
+            enemy.consumeAttackHit())
+        {
+            perimeterDamageLastUpdate_ = std::max(1, attack->damage);
+            perimeterDamageProtectionRemainingSeconds_ = 0.25F;
+        }
+    }
 
     if (input.interactJustPressed)
     {
         return interactableFacility();
     }
     return std::nullopt;
+}
+
+void BaseWorld::configureHomePerimeter(
+    const HomePerimeterSiteSnapshot *snapshot)
+{
+    if (snapshot == nullptr)
+    {
+        perimeterEnemies_.clear();
+        perimeterEnemySpawns_.clear();
+        perimeterCycleIndex_.reset();
+        return;
+    }
+    if (perimeterCycleIndex_.has_value() &&
+        *perimeterCycleIndex_ == snapshot->cycleIndex &&
+        perimeterEnemies_.size() == snapshot->enemies.size())
+        return;
+
+    perimeterEnemies_.clear();
+    perimeterEnemySpawns_.clear();
+    perimeterEnemies_.reserve(snapshot->enemies.size());
+    perimeterEnemySpawns_.reserve(snapshot->enemies.size());
+    for (const HomePerimeterEnemySnapshot &enemy : snapshot->enemies)
+    {
+        perimeterEnemies_.emplace_back(
+            enemy.position,
+            enemy.size,
+            Vec2{},
+            enemy.maximumHealth,
+            static_cast<CombatTargetId>(enemy.localId));
+        const int damage = enemy.maximumHealth - enemy.health;
+        if (damage > 0)
+            static_cast<void>(perimeterEnemies_.back().takeDamage(damage));
+        perimeterEnemySpawns_.push_back(enemy.spawnPosition);
+    }
+    perimeterCycleIndex_ = snapshot->cycleIndex;
+}
+
+HomeRegionSafetyZone BaseWorld::playerSafetyZone() const noexcept
+{
+    return queryHomeRegionSafetyZone(
+        {playerPosition_.x + playerSize_.x * 0.5F,
+         playerPosition_.y + playerSize_.y * 0.5F},
+        layout_.baseParcel);
+}
+
+const std::vector<Enemy> &BaseWorld::perimeterEnemies() const noexcept
+{
+    return perimeterEnemies_;
+}
+
+std::vector<HomePerimeterEnemySnapshot>
+BaseWorld::perimeterEnemySnapshots() const
+{
+    std::vector<HomePerimeterEnemySnapshot> result;
+    result.reserve(perimeterEnemies_.size());
+    for (std::size_t index = 0; index < perimeterEnemies_.size(); ++index)
+    {
+        const Enemy &enemy = perimeterEnemies_[index];
+        result.push_back(HomePerimeterEnemySnapshot{
+            static_cast<std::uint32_t>(enemy.combatTargetId()),
+            perimeterEnemySpawns_[index],
+            enemy.position(),
+            enemy.size(),
+            enemy.maxHealth(),
+            enemy.health()});
+    }
+    return result;
+}
+
+int BaseWorld::perimeterDamageLastUpdate() const noexcept
+{
+    return perimeterDamageLastUpdate_;
+}
+
+void BaseWorld::discardUncommittedShot() noexcept
+{
+    shooting_.clearSpatialTransientPresentation();
 }
 
 Vec2 BaseWorld::playerPosition() const noexcept
