@@ -1,6 +1,6 @@
 # Home Region 聚合居民空间状态 v1 ExecPlan
 
-状态：本地实现与回归完成，待提交、exact-head Windows/Ubuntu CI 和用户正常游玩验收。分支 `codex/home-region-resident-world-status-v1` 从用户已验收并合入的 PR #140 / `origin/main@0f74a67` 创建。
+状态：Draft PR #141 已建立，本地实现与回归完成，待 exact-head Windows/Ubuntu CI 和用户正常游玩验收。分支 `codex/home-region-resident-world-status-v1` 从用户已验收并合入的 PR #140 / `origin/main@0f74a67` 创建。
 
 ## 玩家结果与依赖
 

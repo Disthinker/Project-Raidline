@@ -7,8 +7,8 @@
 - 已验收主线：`origin/main@0f74a67`，PR #140 已合入并完成 Home Region 设施岗位现场操作 v1。
 - 当前开发分支：`codex/home-region-resident-world-status-v1`，从 `origin/main@0f74a67` 创建。
 - 当前活动计划：`doc/exec-plans/active/home-region-resident-world-status-v1.md`。
-- 当前切片把现有聚合人口、床位和劳动力事实投影到宿舍床位，并提供左键选择、右键打开宿舍和自动补员；不创建逐人 NPC、寻路或动画。
-- PR #140 已通过 Windows Debug 全目标、147/147 定向回归、1421/1421 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已通过 Windows Debug 全目标、158/158 定向回归和 1424/1424 全量 CTest，尚待 exact-head Windows/Ubuntu CI 与用户正常游玩验收；开发代理不启动游戏。
+- Draft PR #141 把现有聚合人口、床位和劳动力事实投影到宿舍床位，并提供左键选择、右键打开宿舍和自动补员；不创建逐人 NPC、寻路或动画。
+- PR #140 已通过 Windows Debug 全目标、147/147 定向回归、1421/1421 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收。Draft PR #141 已通过 Windows Debug 全目标、158/158 定向回归和 1424/1424 全量 CTest，尚待 exact-head Windows/Ubuntu CI 与用户正常游玩验收；开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
