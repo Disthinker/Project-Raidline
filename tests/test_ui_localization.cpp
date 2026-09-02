@@ -1042,6 +1042,33 @@ TEST(UiLocalizationTest, BaseResidentWorldStatusIsBilingual) {
             "居民区域操作");
 }
 
+TEST(UiLocalizationTest, BaseResourceFlowWorldStatusIsBilingual) {
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "STORAGE | STACKS 18 | UNITS 42 | PREPARED"),
+            "仓储 | 堆数 18 | 件 42 | 已准备");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "SUPPLY RULES 3 | OWNED READY 2"),
+            "供给规则 3 | 当前有货 2");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "DAILY NEED | FOOD 8 HYGIENE 6 MORALE 5 SECURITY 4 | SHORTAGE"),
+            "每日需求 | 食物 8 卫生 6 士气 5 安全 4 | 短缺");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "POOL | FOOD 4 HYGIENE 5 MORALE 6 SECURITY 7 | GAP | FOOD 4 HYGIENE 1 MORALE 0 SECURITY 0"),
+            "储备 | 食物 4 卫生 5 士气 6 安全 7 | 缺口 | 食物 4 卫生 1 士气 0 安全 0");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESOURCE FLOW AREA SELECTED | LMB PANEL / RMB OPEN"),
+            "已选择物资流区域 | 左键查看面板 / 右键打开功能");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "RESOURCE FLOW ACTIONS"),
+            "物资流操作");
+}
+
 TEST(UiLocalizationTest, BaseOperationCompletionNoticesAreBilingual) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

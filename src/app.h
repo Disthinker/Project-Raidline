@@ -78,7 +78,8 @@ enum class BaseFacilityContextMenuMode
 {
     Facility,
     WorkforceStation,
-    ResidentArea
+    ResidentArea,
+    ResourceFlowArea
 };
 
 struct BaseFacilityContextMenu
@@ -291,6 +292,8 @@ private:
     baseWorkerFacilityAt(MousePosition position) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
     baseResidentFacilityAt(MousePosition position) const;
+    [[nodiscard]] std::optional<BaseFacilityKind>
+    baseResourceFlowFacilityAt(MousePosition position) const;
     void openBasePlacedFacility(AssetInstanceId assetId);
     void openBaseFixedFacility(BaseFacilityKind facility);
     void startBasePlacement(
