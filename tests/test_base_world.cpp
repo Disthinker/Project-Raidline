@@ -400,6 +400,7 @@ TEST(BaseWorldTest, ActiveFacilitiesPublishReservedEntranceWorkZones)
 {
     const BaseWorld world;
     const std::vector<ContentRect> blockers = world.basePlacementBlockers();
+    std::size_t socketCount{};
     for (const BaseFacility &facility : world.facilities())
     {
         if (!facility.active)
@@ -422,6 +423,12 @@ TEST(BaseWorldTest, ActiveFacilitiesPublishReservedEntranceWorkZones)
                     bounds.size.y == geometry.workZone.size.y;
             }));
         EXPECT_TRUE(inside(geometry.workZone, world.baseParcel()));
+        if (const auto socket = baseFacilityWorkSocket(facility);
+            socket.has_value())
+        {
+            ++socketCount;
+            EXPECT_TRUE(inside(socket->bounds, geometry.workZone));
+        }
         for (const ContentRect &environment : world.layout().movementBlockers)
             EXPECT_FALSE(overlaps(geometry.workZone, environment));
         for (const BaseFacility &other : world.facilities())
@@ -436,6 +443,7 @@ TEST(BaseWorldTest, ActiveFacilitiesPublishReservedEntranceWorkZones)
                 baseFacilityAccessGeometry(other).workZone));
         }
     }
+    EXPECT_EQ(socketCount, 4U);
 }
 
 TEST(BaseWorldTest, KitchenWaterRequiresOwnedSpatialActivation)

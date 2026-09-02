@@ -900,6 +900,14 @@ TEST(UiLocalizationTest, HomeRegionPlaceableStorageIsBilingual) {
 TEST(UiLocalizationTest, BaseBuildPanelIsBilingual) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,
+                "STORAGE HANDLING | MEDICAL BED | DORMITORY BUNK"),
+            "仓储装卸点 | 医疗床位 | 宿舍床位");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "KITCHEN STATION | WORKBENCH"),
+            "厨房加工点 | 工坊工作台");
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
                 "ENTRY"),
             "入口");
   EXPECT_EQ(localizeUiText(

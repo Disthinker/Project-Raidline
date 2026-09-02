@@ -246,6 +246,7 @@ TEST(BaseFacilityManagementTest,
         projectBaseFacilityWorldService(
             profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::NeedsStaff);
+    EXPECT_FALSE(workshop.activeWorkSocket.has_value());
 
     profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
         BaseConstructionProjectDefinitionId{
@@ -258,6 +259,9 @@ TEST(BaseFacilityManagementTest,
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Working);
     EXPECT_EQ(workshop.task, BaseFacilityTaskKind::Construction);
+    EXPECT_EQ(
+        workshop.activeWorkSocket,
+        BaseFacilityWorkSocketKind::WorkshopBench);
     EXPECT_EQ(workshop.remainingMinutes, 120U);
     profile.baseConstruction.activeProject.reset();
 
@@ -276,12 +280,18 @@ TEST(BaseFacilityManagementTest,
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Working);
     EXPECT_EQ(workshop.task, BaseFacilityTaskKind::Manufacturing);
+    EXPECT_EQ(
+        workshop.activeWorkSocket,
+        BaseFacilityWorkSocketKind::WorkshopBench);
     EXPECT_EQ(workshop.remainingMinutes, 180U);
 
     profile.baseManufacturing.activeOrder->outputReady = true;
     workshop = projectBaseFacilityWorldService(
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::OutputReady);
+    EXPECT_EQ(
+        workshop.activeWorkSocket,
+        BaseFacilityWorkSocketKind::WorkshopBench);
     EXPECT_EQ(workshop.remainingMinutes, 0U);
 
     profile.baseConstruction.facilities.at(
@@ -290,6 +300,7 @@ TEST(BaseFacilityManagementTest,
     workshop = projectBaseFacilityWorldService(
         profile, publishedContentRegistry(), BaseFacilityKind::Workshop);
     EXPECT_EQ(workshop.status, BaseFacilityWorldServiceStatus::Blocked);
+    EXPECT_FALSE(workshop.activeWorkSocket.has_value());
 }
 
 TEST(BaseFacilityManagementTest,

@@ -381,6 +381,25 @@ namespace
         return SDL_Color{174, 188, 180, 255};
     }
 
+    const char *baseFacilityWorkSocketName(
+        BaseFacilityWorkSocketKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case BaseFacilityWorkSocketKind::StorageHandling:
+            return "STORAGE HANDLING";
+        case BaseFacilityWorkSocketKind::MedicalBed:
+            return "MEDICAL BED";
+        case BaseFacilityWorkSocketKind::DormitoryBunk:
+            return "DORMITORY BUNK";
+        case BaseFacilityWorkSocketKind::KitchenProcessing:
+            return "KITCHEN STATION";
+        case BaseFacilityWorkSocketKind::WorkshopBench:
+            return "WORKBENCH";
+        }
+        return "WORK POINT";
+    }
+
     std::string baseFacilityWorldServiceLabel(
         const BaseFacilityWorldServiceProjection &projection)
     {
@@ -10694,6 +10713,8 @@ void App::renderBaseWorld()
                 gameSession_.profile(),
                 publishedContentRegistry(),
                 facility.kind);
+        const std::optional<BaseFacilityWorkSocketProjection> workSocket =
+            baseFacilityWorkSocket(facility);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -10790,6 +10811,42 @@ void App::renderBaseWorld()
         uiTextRenderer_.render(
             renderer_, entrance.x - 2.0F, entrance.y + 12.0F,
             serviceLabel.c_str());
+        if (workSocket.has_value())
+        {
+            const bool active = service.activeWorkSocket.has_value() &&
+                *service.activeWorkSocket == workSocket->kind;
+            const SDL_Color socketColor = active
+                ? serviceColor
+                : SDL_Color{128, 146, 138, 255};
+            const SDL_FRect socketBounds{
+                workSocket->bounds.position.x,
+                workSocket->bounds.position.y,
+                workSocket->bounds.size.x,
+                workSocket->bounds.size.y};
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(
+                renderer_, socketColor.r, socketColor.g,
+                socketColor.b, active ? 92 : 38);
+            SDL_RenderFillRect(renderer_, &socketBounds);
+            SDL_SetRenderDrawColor(
+                renderer_, socketColor.r, socketColor.g,
+                socketColor.b, active ? 255 : 150);
+            SDL_RenderRect(renderer_, &socketBounds);
+            if (active)
+            {
+                const SDL_FRect halo{
+                    socketBounds.x - 3.0F,
+                    socketBounds.y - 3.0F,
+                    socketBounds.w + 6.0F,
+                    socketBounds.h + 6.0F};
+                SDL_RenderRect(renderer_, &halo);
+            }
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+            uiTextRenderer_.render(
+                renderer_, socketBounds.x,
+                socketBounds.y + socketBounds.h + 3.0F,
+                baseFacilityWorkSocketName(workSocket->kind));
+        }
     }
 
     for (const BaseGroundAssetProjection &ground :

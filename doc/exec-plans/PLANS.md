@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前实现计划：`active/home-region-facility-service-status-v1.md`。PR #136 已由用户正常游玩验收并以 `d1c9b35` 进入 main；当前只把现有设施运行事实投影到入口服务点、世界提示和 Home Region 地图，不并行增加独立室内、NPC 模拟、设施旋转、供电管线、正式建筑美术、实时守城或 AI 小队。
+当前实现计划：`active/home-region-facility-work-sockets-v1.md`。PR #137 已由用户正常游玩验收并以 `95f830c` 进入 main；当前只为五类空间化核心设施建立稳定作业点并关联既有任务状态，不并行增加独立室内、NPC 模拟、设施旋转、供电管线、正式建筑美术、实时守城或 AI 小队。

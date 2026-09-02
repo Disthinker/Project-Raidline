@@ -32,6 +32,29 @@ std::optional<BaseFacilityDefinitionId> definitionId(
     return std::nullopt;
 }
 
+std::optional<BaseFacilityWorkSocketKind> workSocketKind(
+    BaseFacilityKind kind) noexcept
+{
+    switch (kind)
+    {
+    case BaseFacilityKind::Storage:
+        return BaseFacilityWorkSocketKind::StorageHandling;
+    case BaseFacilityKind::Medical:
+        return BaseFacilityWorkSocketKind::MedicalBed;
+    case BaseFacilityKind::Dormitory:
+        return BaseFacilityWorkSocketKind::DormitoryBunk;
+    case BaseFacilityKind::KitchenWater:
+        return BaseFacilityWorkSocketKind::KitchenProcessing;
+    case BaseFacilityKind::Workshop:
+        return BaseFacilityWorkSocketKind::WorkshopBench;
+    case BaseFacilityKind::Supply:
+    case BaseFacilityKind::Allocation:
+    case BaseFacilityKind::RaidGate:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 std::optional<BaseFacilityUpgradeTarget> upgradeTarget(
     BaseFacilityKind kind) noexcept
 {
@@ -392,6 +415,11 @@ BaseFacilityWorldServiceProjection projectBaseFacilityWorldService(
              !management.assignedWorker.has_value())
     {
         projection.status = BaseFacilityWorldServiceStatus::NeedsStaff;
+    }
+    if (projection.status == BaseFacilityWorldServiceStatus::Working ||
+        projection.status == BaseFacilityWorldServiceStatus::OutputReady)
+    {
+        projection.activeWorkSocket = workSocketKind(kind);
     }
     return projection;
 }
