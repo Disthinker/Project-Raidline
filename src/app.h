@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -207,6 +208,9 @@ private:
     RaidIntelligenceLoadout selectedRaidIntelligence_;
     BaseSupplyCategory selectedBaseSupplyCategory_{
         BaseSupplyCategory::Food};
+    std::size_t baseSupplyPage_{};
+    std::size_t selectedBasePriorityIndex_{};
+    std::set<AssetInstanceId> selectedBasePriorityAssetIds_;
     std::size_t selectedBaseManufacturingRecipeIndex_{};
     std::string uiMessage_;
     float specialHitFeedbackRemaining_{};

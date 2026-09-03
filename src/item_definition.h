@@ -292,6 +292,17 @@ struct BaseResourceBundle
         const BaseResourceBundle &) = default;
 };
 
+// Shared semantic categories used by Base supply policy and Base wishes.
+// The content layer and domain layer both consume this value; display names
+// never decide contribution eligibility.
+enum class BaseSupplyCategory
+{
+    Food,
+    Medical,
+    Recreation,
+    Security
+};
+
 // 一种物品的共享静态数据。
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
 struct ItemDefinition

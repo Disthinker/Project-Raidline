@@ -445,13 +445,23 @@ struct BasePriorityDefinition
 {
     BasePriorityDefinitionId id;
     std::string displayName;
-    ItemDefinitionId requiredItemDefinitionId;
-    std::uint32_t requiredQuantity{1};
-    BaseResourceBundle resourceReward;
+    BaseSupplyCategory category{BaseSupplyCategory::Food};
+    std::uint32_t requiredContribution{1};
+    std::string sourceHint;
 
     friend bool operator==(
         const BasePriorityDefinition &,
         const BasePriorityDefinition &) = default;
+};
+
+struct BasePriorityPopulationTier
+{
+    std::uint32_t minimumPopulation{};
+    std::uint32_t wishCount{1};
+
+    friend bool operator==(
+        const BasePriorityPopulationTier &,
+        const BasePriorityPopulationTier &) = default;
 };
 
 enum class BaseFacilityUpgradeTarget
@@ -781,6 +791,9 @@ public:
     [[nodiscard]] const std::vector<BasePriorityDefinition> &
     basePriorities() const noexcept;
 
+    [[nodiscard]] const std::vector<BasePriorityPopulationTier> &
+    basePriorityPopulationTiers() const noexcept;
+
     [[nodiscard]] const BasePriorityDefinition &basePriority(
         const BasePriorityDefinitionId &id) const;
 
@@ -861,6 +874,7 @@ private:
     std::vector<BaseCommunityEventDefinition> baseCommunityEvents_;
     std::uint32_t basePriorityCycleMinutes_{};
     std::vector<BasePriorityDefinition> basePriorities_;
+    std::vector<BasePriorityPopulationTier> basePriorityPopulationTiers_;
     std::uint32_t maximumBaseConstructionMaterials_{};
     std::vector<BaseFacilityDefinition> baseFacilities_;
     std::vector<BaseConstructionProjectDefinition>

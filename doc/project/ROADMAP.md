@@ -4,7 +4,7 @@
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 基地运营可读性均已进入主线。当前推进外围探索与安全边界 v1，范围合同见 `doc/exec-plans/active/home-region-perimeter-exploration-v1.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 外围探索基础均已进入主线。当前推进 Base 愿望与资源取舍 v2，范围合同见 `doc/exec-plans/active/base-wishes-resource-tradeoff-v2.md`，外部 GDD 继续只读。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 
@@ -206,7 +206,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 | Home Region 聚合居民空间状态 v1 | DormitoryBunk 显示居民、健康/受伤、床位与劳动力占用，并可打开宿舍或自动补员 | 既有人口/劳动力只读组合投影、稳定床位命中、类型化既有动作、无 schema/content 迁移 | PR #141 已通过 CI 与用户验收，以 merge commit `2f05626` 进入 main |
 | Home Region 基地物资流现场状态 v1 | StorageHandling / KitchenProcessing 显示统一库存、供给授权、资源池、人口需求与预计短缺，并可打开现有功能 | 既有资源与资产事实的只读组合投影、稳定作业点命中、无 schema/content 迁移 | PR #142 已通过 CI 与用户验收，以 merge commit `b1194a1` 进入 main |
 | Home Region 作业状态信息层级与快速定位 v1 | 远中近缩放显示不同信息密度；运营总览可按需处理、进行中、已就绪筛选分页并定位设施 | 既有设施/岗位/居民/物资流纯投影、SDL 客户端筛选与分页、无 schema/content 迁移 | PR #143 已通过 CI 与用户正常游玩验收，以 merge commit `60c83fa` 进入 main |
-| Home Region 外围探索与安全边界 v1 | 玩家从基地直接步行进入外围，与有限感染者战斗、拾取低阶物资并返回；外围死亡在保留资产的前提下救回 | SafeCore/TransitionBuffer/Perimeter、周期持久快照、BaseGround 唯一资产、幂等本地返回/救回、schema v42 | 当前分支已通过 Windows Debug 全目标、42/42 关键领域回归与 1444/1444 全量 CTest，等待 exact-head CI 和用户正常游玩验收；不提供导航 |
+| Home Region 外围探索与安全边界 v1 | 玩家从基地直接步行进入外围，与有限感染者战斗、拾取低阶物资并返回；外围死亡在保留资产的前提下救回 | SafeCore/TransitionBuffer/Perimeter、周期持久快照、BaseGround 唯一资产、幂等本地返回/救回、schema v42 | PR #144 已通过 CI 与用户正常游玩验收，以 `674f65e` 进入 main；不提供导航 |
+| Base 愿望与资源取舍 v2 | 每五日按冻结人口生成一至三个愿望，玩家明确选择物品并预览贡献/超额后原子完成 | 四类贡献、稳定选择、显式 AssetInstanceId 集合、士气账本、schema v43/content v59 | 当前分支已通过 Windows Debug 全目标、195/195 定向回归与 1447/1447 全量 CTest；等待提交、exact-head CI 和用户正常游玩验收 |
 
 ## 当前 Combat Reliability 缺陷
 

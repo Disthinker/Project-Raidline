@@ -667,7 +667,7 @@ TEST(BaseFacilityManagementTest,
         projectBaseOperationsOverview(
             profile, publishedContentRegistry());
 
-    ASSERT_EQ(projection.entries.size(), 4U);
+    ASSERT_EQ(projection.entries.size(), 5U);
     EXPECT_EQ(
         projection.entries[0].kind,
         BaseOperationOverviewKind::OutputReady);
@@ -691,6 +691,12 @@ TEST(BaseFacilityManagementTest,
     EXPECT_EQ(
         projection.entries[3].facility,
         BaseFacilityKind::Workshop);
+    EXPECT_EQ(
+        projection.entries[4].kind,
+        BaseOperationOverviewKind::BaseWish);
+    EXPECT_EQ(
+        projection.entries[4].facility,
+        BaseFacilityKind::Allocation);
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
@@ -717,7 +723,7 @@ TEST(BaseFacilityManagementTest,
     BaseOperationsOverviewProjection projection =
         projectBaseOperationsOverview(
             profile, publishedContentRegistry());
-    ASSERT_EQ(projection.entries.size(), 1U);
+    ASSERT_EQ(projection.entries.size(), 2U);
     EXPECT_EQ(
         projection.entries.front().kind,
         BaseOperationOverviewKind::Manufacturing);
@@ -729,7 +735,10 @@ TEST(BaseFacilityManagementTest,
         BaseConstructionState::FacilityPlacement::Installed;
     projection = projectBaseOperationsOverview(
         profile, publishedContentRegistry());
-    EXPECT_TRUE(projection.entries.empty());
+    ASSERT_EQ(projection.entries.size(), 1U);
+    EXPECT_EQ(
+        projection.entries.front().kind,
+        BaseOperationOverviewKind::BaseWish);
 }
 
 TEST(BaseFacilityManagementTest,

@@ -306,6 +306,20 @@ TEST(UiLocalizationTest, ChineseTranslatesBaseWishAndSubmissionErrors) {
                 UiLanguage::SimplifiedChinese,
                 "selected item does not match the current Base priority"),
             "所选物品不符合基地当前愿望");
+  const std::string multiple = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "BASE WISHES - SELECT ONE, THEN SELECT CONTRIBUTION ITEMS");
+  EXPECT_NE(multiple.find("基地愿望"), std::string::npos);
+  EXPECT_NE(multiple.find("投入物品"), std::string::npos);
+  const std::string source = localizeUiText(
+      UiLanguage::SimplifiedChinese,
+      "SOURCE HINT: Food and sealed water are common in service areas.");
+  EXPECT_NE(source.find("来源提示"), std::string::npos);
+  EXPECT_NE(source.find("密封饮用水"), std::string::npos);
+  EXPECT_EQ(localizeUiText(
+                UiLanguage::SimplifiedChinese,
+                "selected items do not provide enough contribution"),
+            "所选物品提供的贡献不足");
 }
 
 TEST(UiLocalizationTest, ChineseTranslatesPaidBaseMedicalService) {

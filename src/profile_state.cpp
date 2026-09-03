@@ -77,7 +77,7 @@ bool validBasePriorityState(
         const auto &definitions = content.basePriorities();
         const std::uint64_t cycleMinutes =
             content.basePriorityCycleMinutes();
-        if (!state.definitionId.valid() || definitions.empty() ||
+        if (state.wishes.empty() || definitions.empty() ||
             cycleMinutes == 0U)
         {
             return false;
@@ -87,11 +87,32 @@ bool validBasePriorityState(
                 ? 0U
                 : (elapsedWorldMinutes - kInitialWorldMinute) /
                       cycleMinutes;
-        return state.cycleIndex == expectedCycle &&
-               state.definitionId == definitions[
-                   expectedCycle % definitions.size()].id &&
-               content.basePriority(state.definitionId).id ==
-                   state.definitionId;
+        if (state.cycleIndex != expectedCycle ||
+            state.frozenPopulation > kMaximumOrdinaryResidents ||
+            state.wishes.size() > 3U)
+        {
+            return false;
+        }
+        std::set<BasePriorityDefinitionId> unique;
+        for (const BasePriorityWishState &wish : state.wishes)
+        {
+            if (!wish.definitionId.valid() ||
+                !unique.insert(wish.definitionId).second ||
+                content.basePriority(wish.definitionId).id != wish.definitionId)
+            {
+                return false;
+            }
+        }
+        if (state.migratedLegacyCycle)
+        {
+            return state.wishes.size() == 1U;
+        }
+        const std::vector<BasePriorityDefinitionId> expected =
+            selectBasePriorityDefinitions(
+                expectedCycle,
+                state.frozenPopulation,
+                content);
+        return state.wishes.size() == expected.size();
     }
     catch (...)
     {
@@ -1689,6 +1710,25 @@ ProfileValidationResult validateProfileState(
             content))
     {
         return {false, "Base priority state is invalid"};
+    }
+    if (!profile.basePriority.migratedLegacyCycle)
+    {
+        const std::vector<BasePriorityDefinitionId> expected =
+            selectBasePriorityDefinitions(
+                profile.basePriority.cycleIndex,
+                profile.basePriority.frozenPopulation,
+                content);
+        if (expected.size() != profile.basePriority.wishes.size() ||
+            !std::equal(
+                expected.begin(), expected.end(),
+                profile.basePriority.wishes.begin(),
+                [](const BasePriorityDefinitionId &left,
+                   const BasePriorityWishState &right) {
+                    return left == right.definitionId;
+                }))
+        {
+            return {false, "Base priority selection is invalid"};
+        }
     }
 
     AssetInstanceId maximumId{};
@@ -4512,10 +4552,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, order.outputAssetId);
         hashInteger(hash, order.outputReady ? 1U : 0U);
     }
-    hashBytes(hash, profile.basePriority.definitionId.value());
     hashInteger(hash, profile.basePriority.cycleIndex);
-    hashInteger(hash, profile.basePriority.fulfilled ? 1U : 0U);
+    hashInteger(hash, profile.basePriority.frozenPopulation);
+    for (const BasePriorityWishState &wish : profile.basePriority.wishes)
+    {
+        hashBytes(hash, wish.definitionId.value());
+        hashInteger(hash, wish.fulfilled ? 1U : 0U);
+    }
     hashInteger(hash, profile.basePriority.missedCycleCount);
+    hashInteger(hash, profile.basePriority.migratedLegacyCycle ? 1U : 0U);
     hashInteger(hash, profile.nextBaseServiceJobId);
     if (profile.gunsmithMaintenanceJob.has_value())
     {
@@ -5030,13 +5075,20 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash,
                     raid.travel.startingBaseResources
                         .resolvedDemandCycleCount);
-        hashBytes(hash,
-                  raid.travel.startingBasePriority.definitionId.value());
         hashInteger(hash, raid.travel.startingBasePriority.cycleIndex);
         hashInteger(hash,
-                    raid.travel.startingBasePriority.fulfilled ? 1U : 0U);
+                    raid.travel.startingBasePriority.frozenPopulation);
+        for (const BasePriorityWishState &wish :
+             raid.travel.startingBasePriority.wishes)
+        {
+            hashBytes(hash, wish.definitionId.value());
+            hashInteger(hash, wish.fulfilled ? 1U : 0U);
+        }
         hashInteger(hash,
                     raid.travel.startingBasePriority.missedCycleCount);
+        hashInteger(hash,
+                    raid.travel.startingBasePriority.migratedLegacyCycle
+                        ? 1U : 0U);
         hashInteger(hash, static_cast<std::uint32_t>(
             raid.travel.startingBaseMorale.tier));
         hashInteger(hash, static_cast<std::uint32_t>(

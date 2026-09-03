@@ -3,8 +3,8 @@
 ## 状态
 
 - 2026-09-02：PR #143 已由用户正常游玩验收并以 `60c83fa` 合入 `origin/main`。
-- 当前分支：`codex/home-region-perimeter-exploration-v1`，基线 `origin/main@60c83fa`。
-- 当前状态：实现、Windows Debug 全目标和 1444/1444 全量 CTest 已完成；等待 exact-head Windows/Ubuntu CI 与用户正常游玩验收。
+- 2026-09-02：本切片通过 Windows Debug 全目标、42/42 关键领域回归、1444/1444 全量 CTest、exact-head Windows/Ubuntu CI 与用户正常游玩验收；PR #144 以 `674f65e` 合入 `origin/main`。
+- 当前状态：已完成并进入接受主线。
 
 ## 产品结果
 

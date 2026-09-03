@@ -988,9 +988,13 @@ TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
     ProfileState initial = makeNewAlphaProfile(
         "persistent-base-priority",
         publishedContentRegistry());
-    const AssetInstanceId cola = addPendingItem(
+    initial.basePriority = BasePriorityState{
+        0U, 8U,
+        {{BasePriorityDefinitionId{"base_priority.comfort_cola"}, false}},
+        0U, true};
+    const AssetInstanceId comfort = addPendingItem(
         initial,
-        alpha_content::lootCola);
+        ItemDefinitionId{"item.loot.compact_game_set"});
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         initial,
@@ -1001,19 +1005,18 @@ TEST(PersistentSessionTest, BasePrioritySubmissionPersistsAcrossProcess)
     ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
     const BasePriorityReceipt receipt =
         active.executeBasePrioritySubmission(
-            cola,
+            BasePriorityDefinitionId{"base_priority.comfort_cola"},
+            {comfort},
             "persistent-fulfill-base-priority");
     ASSERT_TRUE(receipt.succeeded) << receipt.message;
-    EXPECT_TRUE(active.profile().basePriority.fulfilled);
+    EXPECT_TRUE(active.profile().basePriority.wishes.front().fulfilled);
 
     GameSession reopened;
     reopened.configurePersistence(temporary.path());
     ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
-    EXPECT_TRUE(reopened.profile().basePriority.fulfilled);
-    EXPECT_EQ(reopened.profile().assets.find(cola), nullptr);
-    EXPECT_EQ(
-        reopened.profile().baseResources.pool.morale,
-        52U);
+    EXPECT_TRUE(reopened.profile().basePriority.wishes.front().fulfilled);
+    EXPECT_EQ(reopened.profile().assets.find(comfort), nullptr);
+    EXPECT_EQ(reopened.profile().baseResources.pool.morale, 40U);
 }
 
 TEST(PersistentSessionTest, BasePrioritySaveFailurePreservesMemory)
@@ -1022,9 +1025,13 @@ TEST(PersistentSessionTest, BasePrioritySaveFailurePreservesMemory)
     ProfileState initial = makeNewAlphaProfile(
         "failed-base-priority-save",
         publishedContentRegistry());
-    const AssetInstanceId cola = addPendingItem(
+    initial.basePriority = BasePriorityState{
+        0U, 8U,
+        {{BasePriorityDefinitionId{"base_priority.comfort_cola"}, false}},
+        0U, true};
+    const AssetInstanceId comfort = addPendingItem(
         initial,
-        alpha_content::lootCola);
+        ItemDefinitionId{"item.loot.compact_game_set"});
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         initial,
@@ -1044,12 +1051,13 @@ TEST(PersistentSessionTest, BasePrioritySaveFailurePreservesMemory)
 
     const BasePriorityReceipt receipt =
         session.executeBasePrioritySubmission(
-            cola,
+            BasePriorityDefinitionId{"base_priority.comfort_cola"},
+            {comfort},
             "priority-save-must-not-commit");
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
-    EXPECT_NE(session.profile().assets.find(cola), nullptr);
-    EXPECT_FALSE(session.profile().basePriority.fulfilled);
+    EXPECT_NE(session.profile().assets.find(comfort), nullptr);
+    EXPECT_FALSE(session.profile().basePriority.wishes.front().fulfilled);
 }
 
 TEST(PersistentSessionTest, GunsmithMaintenancePersistsImmediately)

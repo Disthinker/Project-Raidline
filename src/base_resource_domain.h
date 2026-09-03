@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "inventory_domain.h"
 
@@ -171,15 +172,36 @@ struct BasePrioritySyncResult
     std::uint64_t newlyMissedCycles{};
 };
 
-// Selects the request for the current five-day content cycle. It can catch up
-// across arbitrary world-time jumps without iterating each missed cycle.
+// Selects the one-to-three requests for the current five-day content cycle,
+// freezing the population tier until the next boundary. It can catch up across
+// arbitrary world-time jumps without iterating each missed cycle.
 [[nodiscard]] BasePrioritySyncResult synchronizeBasePriorityThrough(
     ProfileState &profile,
     const ContentRegistry &content);
 
 struct SubmitBasePriorityCommand
 {
+    BasePriorityDefinitionId priorityDefinitionId;
+    std::vector<AssetInstanceId> assetIds;
+};
+
+struct BasePriorityAssetContribution
+{
     AssetInstanceId assetId{};
+    ItemDefinitionId itemDefinitionId;
+    std::uint32_t quantity{};
+    std::uint32_t contribution{};
+};
+
+struct BasePriorityProjection
+{
+    BasePriorityDefinitionId definitionId;
+    std::string displayName;
+    BaseSupplyCategory category{BaseSupplyCategory::Food};
+    std::uint32_t requiredContribution{};
+    std::string sourceHint;
+    bool fulfilled{};
+    std::vector<BasePriorityAssetContribution> eligibleAssets;
 };
 
 struct BasePriorityPlan
@@ -188,8 +210,9 @@ struct BasePriorityPlan
     DomainErrorCode error{DomainErrorCode::None};
     std::string message;
     ProfileRevision revision{};
-    std::uint32_t consumedQuantity{};
-    BaseResourceBundle reward;
+    std::uint32_t totalContribution{};
+    std::uint32_t excessContribution{};
+    std::vector<BasePriorityAssetContribution> consumedAssets;
 };
 
 struct BasePriorityReceipt
@@ -199,8 +222,21 @@ struct BasePriorityReceipt
     DomainErrorCode error{DomainErrorCode::None};
     std::string message;
     ProfileRevision revision{};
-    BaseResourceBundle reward;
+    BasePriorityDefinitionId priorityDefinitionId;
+    std::uint32_t totalContribution{};
+    std::uint32_t excessContribution{};
+    std::vector<AssetInstanceId> consumedAssetIds;
 };
+
+[[nodiscard]] std::vector<BasePriorityProjection> projectBasePriorities(
+    const ProfileState &profile,
+    const ContentRegistry &content);
+
+[[nodiscard]] std::vector<BasePriorityDefinitionId>
+selectBasePriorityDefinitions(
+    std::uint64_t cycleIndex,
+    std::uint32_t frozenPopulation,
+    const ContentRegistry &content);
 
 [[nodiscard]] BasePriorityPlan queryBasePrioritySubmission(
     const ProfileState &profile,
