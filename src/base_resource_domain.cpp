@@ -1,4 +1,5 @@
 #include "base_resource_domain.h"
+#include "base_wish_expedition.h"
 
 #include <array>
 #include <algorithm>
@@ -831,6 +832,9 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
             : (profile.worldClock.elapsedWorldMinutes -
                kInitialWorldMinute) / cycleMinutes;
     BasePriorityState &state = profile.basePriority;
+    const bool clearedFocus = state.focus && !isBaseWishActive(state, *state.focus);
+    if (clearedFocus)
+        state.focus.reset();
     if (state.wishes.empty())
     {
         state.cycleIndex = currentCycle;
@@ -849,7 +853,7 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
     }
     if (currentCycle <= state.cycleIndex)
     {
-        return {};
+        return {clearedFocus, 0U, 0U};
     }
     const std::uint64_t advanced = currentCycle - state.cycleIndex;
     const std::uint64_t currentMissed = static_cast<std::uint64_t>(
@@ -878,6 +882,7 @@ BasePrioritySyncResult synchronizeBasePriorityThrough(
         : state.missedCycleCount + missed;
     saturatedAdd(profile.baseMorale.pendingMissedWishCount, missed);
     state.cycleIndex = currentCycle;
+    state.focus.reset();
     state.frozenPopulation = profile.basePopulation.ordinaryResidents;
     state.wishes.clear();
     for (const BasePriorityDefinitionId &id :
@@ -1110,6 +1115,9 @@ BasePriorityReceipt executeBasePrioritySubmission(
             return wish.definitionId == command.priorityDefinitionId;
         });
     completed->fulfilled = true;
+    if (candidate.basePriority.focus &&
+        candidate.basePriority.focus->definitionId == command.priorityDefinitionId)
+        candidate.basePriority.focus.reset();
     saturatedAdd(candidate.baseMorale.pendingFulfilledWishCount, 1U);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;

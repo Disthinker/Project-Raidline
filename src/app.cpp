@@ -1,5 +1,6 @@
 // Implementation of the App class
 #include "app.h"
+#include "base_wish_expedition.h"
 
 #include <algorithm>
 #include <array>
@@ -1120,9 +1121,13 @@ namespace
 
     std::vector<BaseSupplyDefinitionProjection> baseSupplyDefinitions(
         const ProfileState &profile,
-        BaseSupplyCategory selectedCategory)
+        BaseSupplyCategory selectedCategory,
+        bool focusOnly = false)
     {
         std::vector<BaseSupplyDefinitionProjection> result;
+        if (focusOnly && profile.basePriority.focus)
+            selectedCategory = publishedContentRegistry().basePriority(
+                profile.basePriority.focus->definitionId).category;
         for (const ItemDefinition &definition :
              publishedContentRegistry().items())
         {
@@ -1155,7 +1160,7 @@ namespace
                 }
             }
             if (projection.ownedQuantity > 0U ||
-                projection.assignedToSelectedCategory)
+                (!focusOnly && projection.assignedToSelectedCategory))
             {
                 result.push_back(std::move(projection));
             }
@@ -3658,6 +3663,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Allocation)
     {
+        const auto focus = gameSession_.profile().basePriority.focus;
+        if (!focus) baseWishFocusFilter_ = false;
         const std::vector<BasePriorityProjection> wishes =
             projectBasePriorities(
                 gameSession_.profile(), publishedContentRegistry());
@@ -3676,6 +3683,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             if (contains(wishRow, click.position))
             {
                 selectedBasePriorityIndex_ = index;
+                baseWishFocusFilter_ = false;
                 selectedBasePriorityAssetIds_.clear();
                 selectedBaseSupplyCategory_ = wishes[index].category;
                 baseSupplyPage_ = 0U;
@@ -3685,6 +3693,38 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                     : "BASE WISH SELECTED | CHOOSE CONTRIBUTION ITEMS";
                 return;
             }
+        }
+        const SDL_FRect focusButton{80.0F, 626.0F, 148.0F, 30.0F};
+        const SDL_FRect cancelFocusButton{236.0F, 626.0F, 148.0F, 30.0F};
+        const SDL_FRect filterButton{392.0F, 626.0F, 148.0F, 30.0F};
+        if (contains(focusButton, click.position) || contains(cancelFocusButton, click.position))
+        {
+            std::optional<BaseWishInstanceId> nextFocus;
+            if (contains(focusButton, click.position))
+            {
+                if (wishes.empty()) return;
+                nextFocus = BaseWishInstanceId{gameSession_.profile().basePriority.cycleIndex,
+                    wishes[selectedBasePriorityIndex_].definitionId};
+            }
+            const auto receipt = gameSession_.executeBaseWishFocus(nextFocus,
+                nextProfileTransactionId("wish-focus"));
+            uiMessage_ = receipt.succeeded ? "WISH FOCUS SAVED" : receipt.message;
+            if (receipt.succeeded) baseWishFocusFilter_ = false;
+            gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+            return;
+        }
+        if (contains(filterButton, click.position))
+        {
+            if (!focus) { uiMessage_ = "No active wish focus"; return; }
+            baseWishFocusFilter_ = !baseWishFocusFilter_;
+            selectedBaseSupplyCategory_ = publishedContentRegistry().basePriority(focus->definitionId).category;
+            const auto focused = std::find_if(wishes.begin(), wishes.end(),
+                [&](const auto &wish) { return wish.definitionId == focus->definitionId; });
+            selectedBasePriorityIndex_ = static_cast<std::size_t>(focused - wishes.begin());
+            selectedBasePriorityAssetIds_.clear();
+            profileAssetSelection_.reset();
+            baseSupplyPage_ = 0U;
+            return;
         }
         constexpr std::array<BaseSupplyCategory, 4> categories{
             BaseSupplyCategory::Food,
@@ -3700,6 +3740,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 34.0F};
             if (contains(tab, click.position))
             {
+                baseWishFocusFilter_ = false;
                 selectedBaseSupplyCategory_ = categories[index];
                 baseSupplyPage_ = 0U;
                 profileAssetSelection_.reset();
@@ -3710,7 +3751,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         }
 
         const auto allocation = baseSupplyDefinitions(
-            gameSession_.profile(), selectedBaseSupplyCategory_);
+            gameSession_.profile(), selectedBaseSupplyCategory_, baseWishFocusFilter_);
         constexpr std::size_t entriesPerPage{5U};
         const std::size_t pageCount = allocation.empty()
             ? 1U
@@ -8663,7 +8704,7 @@ void App::renderStashOverlay()
                 float y = panel.y + 188.0F;
                 for (std::size_t index = 0;
                      index < result->returnedItemDefinitionIds.size() &&
-                     index < 9U;
+                     index < (result->wishReturn ? 5U : 9U);
                      ++index)
                 {
                     const std::string &name = publishedContentRegistry().item(
@@ -8684,6 +8725,21 @@ void App::renderStashOverlay()
                         ? "A LOST RAID RECORD IS AVAILABLE AT THE RAID GATE"
                         : "NO GEAR WAS CARRIED; NO LOST RECORD WAS CREATED");
             }
+        }
+        if (result && result->wishReturn)
+        {
+            const auto &summary = *result->wishReturn;
+            const std::string title = "WISH RETURN | " + publishedContentRegistry().basePriority(
+                summary.focus.wish.definitionId).displayName;
+            const std::string numbers = fmt::format("WISH ITEMS {} | CONTRIBUTION {}/{}",
+                summary.itemCount, summary.contribution, summary.focus.requiredContribution);
+            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 294.0F, title.c_str());
+            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 316.0F, numbers.c_str());
+            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 340.0F,
+                summary.expired ? (result->outcome == RaidResultOutcome::Extracted ?
+                    "WISH ENDED | ITEMS STAY IN PLACE" : "WISH ENDED | NO RETURNED CONTRIBUTION") :
+                summary.contribution >= summary.focus.requiredContribution ?
+                    "WISH STOCK SUFFICIENT | SUBMIT MANUALLY IN BASE" : "WISH STOCK INSUFFICIENT | NO EXTRA PENALTY");
         }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
@@ -15240,7 +15296,8 @@ void App::refreshDeveloperPerformanceOverlay()
 
 void App::renderBaseAllocation()
 {
-    const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
+    if (!gameSession_.profile().basePriority.focus) baseWishFocusFilter_ = false;
+    const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 636.0F};
     SDL_SetRenderDrawColor(renderer_, 18, 30, 27, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 92, 176, 142, 255);
@@ -15393,6 +15450,19 @@ void App::renderBaseAllocation()
     uiTextRenderer_.render(
         renderer_, 80.0F, 598.0F, productionSummary.c_str());
 
+    const std::array<std::pair<SDL_FRect, const char *>, 3> focusControls{{
+        {{80.0F, 626.0F, 148.0F, 30.0F}, "FOCUS SELECTED WISH"},
+        {{236.0F, 626.0F, 148.0F, 30.0F}, "CLEAR WISH FOCUS"},
+        {{392.0F, 626.0F, 148.0F, 30.0F}, baseWishFocusFilter_ ? "FILTER: FOCUSED STOCK" : "FILTER: ALL STOCK"}}};
+    for (const auto &[bounds, label] : focusControls)
+    {
+        SDL_SetRenderDrawColor(renderer_, 38, 70, 63, 255);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 174, 208, 170, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(renderer_, bounds.x + 7.0F, bounds.y + 10.0F, label);
+    }
+
     const BasePriorityState &priorityState =
         gameSession_.profile().basePriority;
     const std::vector<BasePriorityProjection> wishes =
@@ -15444,14 +15514,16 @@ void App::renderBaseAllocation()
             renderer_, selected ? 224 : 104, selected ? 198 : 152,
             selected ? 116 : 112, 255);
         SDL_RenderRect(renderer_, &row);
+        const std::string title = wish.displayName +
+            (priorityState.focus && priorityState.focus->definitionId == wish.definitionId ? " | FOCUSED" : "");
         const std::string label = fmt::format(
-            "{} | {} | NEED {} | {}",
-            wish.displayName,
+            "{} | NEED {} | {}",
             baseSupplyCategoryName(wish.category),
             wish.requiredContribution,
             wish.fulfilled ? "FULFILLED" : "ACTIVE");
+        uiTextRenderer_.render(renderer_, row.x + 10.0F, row.y + 4.0F, title.c_str());
         uiTextRenderer_.render(
-            renderer_, row.x + 10.0F, row.y + 14.0F, label.c_str());
+            renderer_, row.x + 10.0F, row.y + 22.0F, label.c_str());
     }
     if (!wishes.empty() && selectedBasePriorityIndex_ < wishes.size())
     {
@@ -15486,7 +15558,7 @@ void App::renderBaseAllocation()
             baseSupplyCategoryName(categories[index]));
     }
     const auto allocation = baseSupplyDefinitions(
-        gameSession_.profile(), selectedBaseSupplyCategory_);
+        gameSession_.profile(), selectedBaseSupplyCategory_, baseWishFocusFilter_);
     constexpr std::size_t entriesPerPage{5U};
     const std::size_t pageCount = allocation.empty()
         ? 1U
@@ -15652,10 +15724,10 @@ void App::renderBaseAllocation()
         renderer_, priorityButton.x + 24.0F,
         priorityButton.y + 18.0F,
         priorityLabel.c_str());
-    uiTextRenderer_.render(renderer_, 80.0F, 646.0F, "ESC CLOSE");
+    uiTextRenderer_.render(renderer_, 80.0F, 684.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {
-        uiTextRenderer_.render(renderer_, 470.0F, 646.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 250.0F, 684.0F, uiMessage_.c_str());
     }
 }
 
@@ -16637,6 +16709,19 @@ void App::renderBaseDeployment()
     renderScreenPrimaryButton(
         deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
     uiTextRenderer_.render(renderer_, 420.0F, 590.0F, "CLICK INTELLIGENCE TO BUY/SELECT | ENTER DEPLOY | ESC CLOSE");
+    if (profile.basePriority.focus)
+    {
+        const SDL_FRect focusPanel{360.0F, 615.0F, 820.0F, 84.0F};
+        SDL_SetRenderDrawColor(renderer_, 20, 35, 31, 248);
+        SDL_RenderFillRect(renderer_, &focusPanel);
+        SDL_SetRenderDrawColor(renderer_, 222, 234, 206, 255);
+        const auto relevance = projectBaseWishExpeditionRelevance(profile, content, map.id);
+        const std::string focusLabel = "EXPEDITION FOCUS | " + content.basePriority(
+            profile.basePriority.focus->definitionId).displayName;
+        uiTextRenderer_.render(renderer_, 378.0F, 627.0F, focusLabel.c_str());
+        uiTextRenderer_.render(renderer_, 378.0F, 649.0F, baseWishRelevanceName(relevance.relevance));
+        uiTextRenderer_.render(renderer_, 378.0F, 673.0F, relevance.reason.c_str());
+    }
 }
 
 void App::renderRegionalOperations()
@@ -17860,6 +17945,8 @@ void App::renderRaidTacticalMap()
             "CRISIS TARGET");
     }
 
+    const auto wishHints = gameSession_.profile().pendingRaid ? projectBaseWishResourceHints(
+        *gameSession_.profile().pendingRaid, publishedContentRegistry()) : std::vector<std::string>{};
     for (const RaidTacticalResourcePoint &resourcePoint :
          map.outdoorResourcePoints())
     {
@@ -17879,6 +17966,12 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &marker);
         SDL_SetRenderDrawColor(renderer_, 234, 228, 188, 235);
         SDL_RenderRect(renderer_, &marker);
+        if (std::find(wishHints.begin(), wishHints.end(), resourcePoint.instanceId) != wishHints.end())
+        {
+            // Reuse the already-permitted resource marker, never a route or an actual item position.
+            SDL_SetRenderDrawColor(renderer_, 234, 222, 140, 255);
+            uiTextRenderer_.render(renderer_, marker.x + marker.w + 3.0F, marker.y, "WISH SOURCE?");
+        }
     }
 
     if (tacticalMapEnemyDeploymentVisible(map))

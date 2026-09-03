@@ -17,6 +17,7 @@
 #include "raid_intelligence_types.h"
 #include "raid_map_generation.h"
 #include "world_clock.h"
+#include "base_wish_types.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -833,6 +834,7 @@ struct BasePriorityState
     std::vector<BasePriorityWishState> wishes;
     std::uint64_t missedCycleCount{};
     bool migratedLegacyCycle{};
+    std::optional<BaseWishInstanceId> focus;
 
     friend bool operator==(
         const BasePriorityState &,
@@ -994,6 +996,7 @@ struct PendingRaidSnapshot
     MedicalStatusState startingMedicalStatus;
     RaidIntelligenceLoadout intelligence;
     RaidTravelSnapshot travel;
+    std::optional<BaseWishExpeditionSnapshot> wishFocus;
 };
 
 struct LastRaidResult
@@ -1007,6 +1010,7 @@ struct LastRaidResult
     std::uint32_t rescuedInjuredResidents{};
     std::optional<std::string> lostRaidRecordId;
     std::uint32_t baseThreatReducedUnits{};
+    std::optional<BaseWishReturnSummary> wishReturn;
 };
 
 struct ProfileState

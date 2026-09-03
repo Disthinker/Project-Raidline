@@ -788,7 +788,34 @@ BaseCommunityEventState parseBaseCommunityEvent(const Json &value)
         value.at("cycle_index").get<std::uint64_t>()};
 }
 
-Json basePriorityValue(const BasePriorityState &state)
+Json wishInstanceValue(const BaseWishInstanceId &id)
+{
+    return {{"cycle_index", id.cycleIndex}, {"definition_id", id.definitionId.value()}};
+}
+
+BaseWishInstanceId parseWishInstance(const Json &value)
+{
+    return {value.at("cycle_index").get<std::uint64_t>(),
+        BasePriorityDefinitionId{value.at("definition_id").get<std::string>()}};
+}
+
+Json wishSnapshotValue(const BaseWishExpeditionSnapshot &focus)
+{
+    return {{"wish", wishInstanceValue(focus.wish)},
+        {"category", static_cast<unsigned>(focus.category)},
+        {"required", focus.requiredContribution}, {"version", focus.assessmentVersion}};
+}
+
+BaseWishExpeditionSnapshot parseWishSnapshot(const Json &value)
+{
+    const auto category = value.at("category").get<unsigned>();
+    if (category > static_cast<unsigned>(BaseSupplyCategory::Security))
+        throw std::invalid_argument{"invalid wish contribution category"};
+    return {parseWishInstance(value.at("wish")), static_cast<BaseSupplyCategory>(category),
+        value.at("required").get<std::uint32_t>(), value.at("version").get<std::string>()};
+}
+
+Json basePriorityValue(const BasePriorityState &state, std::uint32_t schemaVersion)
 {
     Json wishes = Json::array();
     for (const BasePriorityWishState &wish : state.wishes)
@@ -797,15 +824,18 @@ Json basePriorityValue(const BasePriorityState &state)
             {"definition_id", wish.definitionId.value()},
             {"fulfilled", wish.fulfilled}});
     }
-    return {
+    Json result = {
         {"cycle_index", state.cycleIndex},
         {"frozen_population", state.frozenPopulation},
         {"wishes", std::move(wishes)},
         {"missed_cycle_count", state.missedCycleCount},
         {"migrated_legacy_cycle", state.migratedLegacyCycle}};
+    if (schemaVersion >= 44)
+        result["focus"] = state.focus ? wishInstanceValue(*state.focus) : Json(nullptr);
+    return result;
 }
 
-BasePriorityState parseBasePriority(const Json &value)
+BasePriorityState parseBasePriority(const Json &value, std::uint32_t schemaVersion)
 {
     BasePriorityState state;
     state.cycleIndex = value.at("cycle_index").get<std::uint64_t>();
@@ -815,6 +845,8 @@ BasePriorityState parseBasePriority(const Json &value)
         value.at("missed_cycle_count").get<std::uint64_t>();
     state.migratedLegacyCycle =
         value.at("migrated_legacy_cycle").get<bool>();
+    if (schemaVersion >= 44 && !value.at("focus").is_null())
+        state.focus = parseWishInstance(value.at("focus"));
     for (const Json &wish : value.at("wishes"))
     {
         state.wishes.push_back({
@@ -1134,7 +1166,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     if (schemaVersion >= 11)
     {
         payload["base_priority"] = schemaVersion >= 43
-            ? basePriorityValue(profile.basePriority)
+            ? basePriorityValue(profile.basePriority, schemaVersion)
             : legacyBasePriorityValue(profile.basePriority);
     }
     if (schemaVersion >= 12)
@@ -1904,7 +1936,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 payload["pending_raid"]["travel"]
                     ["starting_base_priority"] = schemaVersion >= 43
                         ? basePriorityValue(
-                              raid.travel.startingBasePriority)
+                              raid.travel.startingBasePriority, schemaVersion)
                         : legacyBasePriorityValue(
                               raid.travel.startingBasePriority);
             }
@@ -2247,6 +2279,23 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     {
         payload["last_raid_result"] = nullptr;
     }
+    if (schemaVersion >= 44)
+    {
+        if (profile.pendingRaid)
+            payload["pending_raid"]["wish_focus"] = profile.pendingRaid->wishFocus
+                ? wishSnapshotValue(*profile.pendingRaid->wishFocus) : Json(nullptr);
+        if (profile.lastRaidResult)
+        {
+            Json summary = nullptr;
+            if (profile.lastRaidResult->wishReturn)
+            {
+                const auto &value = *profile.lastRaidResult->wishReturn;
+                summary = {{"focus", wishSnapshotValue(value.focus)}, {"items", value.itemCount},
+                    {"contribution", value.contribution}, {"expired", value.expired}};
+            }
+            payload["last_raid_result"]["wish_return"] = std::move(summary);
+        }
+    }
     return payload;
 }
 
@@ -2324,7 +2373,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2507,7 +2556,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43) ||
+              schemaVersion != 43 && schemaVersion != 44) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2593,7 +2642,7 @@ SaveLoadResult deserializeProfileEnvelope(
         {
             const Json &priority = payload.at("base_priority");
             profile.basePriority = schemaVersion >= 43
-                ? parseBasePriority(priority)
+                ? parseBasePriority(priority, schemaVersion)
                 : parseLegacyBasePriority(
                       priority,
                       profile.basePopulation.ordinaryResidents);
@@ -3854,7 +3903,7 @@ SaveLoadResult deserializeProfileEnvelope(
                     schemaVersion >= 11
                         ? (schemaVersion >= 43
                             ? parseBasePriority(
-                                  travel.at("starting_base_priority"))
+                                  travel.at("starting_base_priority"), schemaVersion)
                             : parseLegacyBasePriority(
                                   travel.at("starting_base_priority"),
                                   profile.basePopulation.ordinaryResidents))
@@ -4323,6 +4372,18 @@ SaveLoadResult deserializeProfileEnvelope(
             profile.lastRaidResult = std::move(result);
         }
 
+        if (schemaVersion >= 44)
+        {
+            if (profile.pendingRaid && !payload.at("pending_raid").at("wish_focus").is_null())
+                profile.pendingRaid->wishFocus = parseWishSnapshot(payload.at("pending_raid").at("wish_focus"));
+            if (profile.lastRaidResult && !payload.at("last_raid_result").at("wish_return").is_null())
+            {
+                const auto &value = payload.at("last_raid_result").at("wish_return");
+                profile.lastRaidResult->wishReturn = BaseWishReturnSummary{
+                    parseWishSnapshot(value.at("focus")), value.at("items").get<std::uint64_t>(),
+                    value.at("contribution").get<std::uint64_t>(), value.at("expired").get<bool>()};
+            }
+        }
         const ProfileValidationResult validation =
             validateProfileState(profile, content);
         if (!validation.valid)
