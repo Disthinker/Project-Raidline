@@ -411,6 +411,8 @@ public:
     [[nodiscard]] BaseWorkforceReceipt executeAutoFillBaseWorkers(
         std::string transactionId);
 
+    [[nodiscard]] BasePriorityReceipt executeBaseWishFocus(
+        std::optional<BaseWishInstanceId> focus, std::string transactionId);
     [[nodiscard]] BasePriorityReceipt executeBasePrioritySubmission(
         BasePriorityDefinitionId priorityDefinitionId,
         std::vector<AssetInstanceId> assetIds,

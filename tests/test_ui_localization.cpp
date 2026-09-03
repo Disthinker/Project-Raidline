@@ -22,6 +22,25 @@ TEST(UiLocalizationTest, EnglishIsUnchangedAndChineseTranslatesStaticText) {
             "继续游戏");
 }
 
+TEST(UiLocalizationTest, WishExpeditionControlsAndResultsAreBilingual) {
+  for (const auto text : {"WISH RELEVANCE: UNKNOWN", "WISH RELEVANCE: HIGH",
+      "WISH RELEVANCE: MEDIUM", "WISH RELEVANCE: LOW", "WISH RELEVANCE: NO KNOWN SOURCE",
+      "FOCUS SELECTED WISH", "CLEAR WISH FOCUS", "FILTER: FOCUSED STOCK", "FILTER: ALL STOCK",
+      "WISH FOCUS SAVED", "No active wish focus", "Wish focus is no longer active",
+      "Wish focus can only change in Base", "WISH ENDED | ITEMS STAY IN PLACE",
+      "WISH ENDED | NO RETURNED CONTRIBUTION",
+      "WISH STOCK SUFFICIENT | SUBMIT MANUALLY IN BASE", "WISH STOCK INSUFFICIENT | NO EXTRA PENALTY",
+      "WISH SOURCE?", "Resource relevance unknown - acquire supply intelligence",
+      "Published supply sources only - no guaranteed drops"}) {
+    EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);
+    EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, text), text) << text;
+  }
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WISH ITEMS 3 | CONTRIBUTION 18/18"),
+      "相关物品件数 3 | 贡献 18/18");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "EXPEDITION FOCUS | A Small Comfort"),
+      "出击关注 | 一点小小的慰藉");
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesBaseFacilityManagementCard) {
   EXPECT_EQ(localizeUiText(
                 UiLanguage::SimplifiedChinese,

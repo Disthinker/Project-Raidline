@@ -3,8 +3,8 @@
 ## 状态
 
 - 2026-09-02：PR #144 已由用户正常游玩验收并以 `674f65e` 合入 `origin/main`，Home Region 外围探索与安全边界 v1 正式关闭。
-- 当前分支：`codex/base-wishes-resource-tradeoff-v2`，准确基线 `origin/main@674f65e`。
-- 当前状态：领域、内容、schema v43 与客户端已实现；Windows Debug 全目标及 1447/1447 全量 CTest 通过，等待提交、exact-head 双平台 CI 和用户正常游玩验收。
+- 历史分支：`codex/base-wishes-resource-tradeoff-v2`，准确基线 `origin/main@674f65e`。
+- 已完成：2026-09-03 用户验收并授权合并；PR #145 的 head `b2d00d7` 已通过 Windows Debug 全目标、1447/1447 CTest、精确 head 双平台 CI，以 `5925f62` 普通合入 main。下一活动合同为 `base-wish-expedition-v1.md`。
 
 ## 产品结果
 

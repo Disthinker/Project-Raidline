@@ -209,6 +209,7 @@ private:
     BaseSupplyCategory selectedBaseSupplyCategory_{
         BaseSupplyCategory::Food};
     std::size_t baseSupplyPage_{};
+    bool baseWishFocusFilter_{};
     std::size_t selectedBasePriorityIndex_{};
     std::set<AssetInstanceId> selectedBasePriorityAssetIds_;
     std::size_t selectedBaseManufacturingRecipeIndex_{};

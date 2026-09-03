@@ -1,4 +1,5 @@
 #include "profile_state.h"
+#include "base_wish_expedition.h"
 
 #include "base_population_domain.h"
 #include "base_morale_domain.h"
@@ -94,6 +95,8 @@ bool validBasePriorityState(
             return false;
         }
         std::set<BasePriorityDefinitionId> unique;
+        if (state.focus && !isBaseWishActive(state, *state.focus))
+            return false;
         for (const BasePriorityWishState &wish : state.wishes)
         {
             if (!wish.definitionId.valid() ||
@@ -4327,12 +4330,64 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "last Raid result is invalid"};
     }
+    if (profile.pendingRaid && profile.pendingRaid->wishFocus.has_value() !=
+            profile.pendingRaid->travel.startingBasePriority.focus.has_value())
+        return {false, "Raid wish focus is missing its starting state"};
+    if (profile.pendingRaid && profile.pendingRaid->wishFocus)
+    {
+        const auto &raid = *profile.pendingRaid;
+        if (!validBaseWishSnapshot(*raid.wishFocus, content) ||
+            raid.travel.startingBasePriority.focus !=
+                std::optional<BaseWishInstanceId>{raid.wishFocus->wish})
+            return {false, "Raid wish focus is invalid"};
+    }
+    if (profile.lastRaidResult && profile.lastRaidResult->wishReturn)
+    {
+        const auto &result = *profile.lastRaidResult;
+        const auto &summary = *result.wishReturn;
+        if (!validBaseWishSnapshot(summary.focus, content) ||
+            summary.focus.wish.cycleIndex > profile.basePriority.cycleIndex ||
+            summary.itemCount > 1000000000ULL || summary.contribution > 1000000000000ULL ||
+            ((summary.itemCount == 0U) != (summary.contribution == 0U)) ||
+            (result.outcome != RaidResultOutcome::Extracted &&
+             (summary.itemCount != 0U || summary.contribution != 0U)))
+            return {false, "Raid wish return summary is invalid"};
+    }
     return {true, {}};
 }
 
 std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
 {
     std::uint64_t hash = 1469598103934665603ULL;
+    const auto hashFocus = [&hash](const std::optional<BaseWishInstanceId> &focus) {
+        hashInteger(hash, focus.has_value() ? 1U : 0U);
+        if (focus) { hashInteger(hash, focus->cycleIndex); hashBytes(hash, focus->definitionId.value()); }
+    };
+    const auto hashWishSnapshot = [&hash, &hashFocus](const BaseWishExpeditionSnapshot &focus) {
+        hashFocus(focus.wish);
+        hashInteger(hash, static_cast<unsigned>(focus.category));
+        hashInteger(hash, focus.requiredContribution);
+        hashBytes(hash, focus.assessmentVersion);
+    };
+    hashFocus(profile.basePriority.focus);
+    if (profile.pendingRaid)
+    {
+        hashFocus(profile.pendingRaid->travel.startingBasePriority.focus);
+        hashInteger(hash, profile.pendingRaid->wishFocus.has_value() ? 1U : 0U);
+        if (profile.pendingRaid->wishFocus) hashWishSnapshot(*profile.pendingRaid->wishFocus);
+    }
+    if (profile.lastRaidResult)
+    {
+        hashInteger(hash, profile.lastRaidResult->wishReturn.has_value() ? 1U : 0U);
+        if (profile.lastRaidResult->wishReturn)
+        {
+            const auto &summary = *profile.lastRaidResult->wishReturn;
+            hashWishSnapshot(summary.focus);
+            hashInteger(hash, summary.itemCount);
+            hashInteger(hash, summary.contribution);
+            hashInteger(hash, summary.expired ? 1U : 0U);
+        }
+    }
     hashBytes(hash, profile.profileId);
     hashInteger(hash, profile.revision);
     hashInteger(hash, profile.currency);

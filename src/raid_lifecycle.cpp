@@ -1,4 +1,5 @@
 #include "raid_lifecycle.h"
+#include "base_wish_expedition.h"
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
@@ -649,6 +650,7 @@ DeployReceipt executeDeploy(
     }
 
     PendingRaidSnapshot snapshot;
+    snapshot.wishFocus = freezeBaseWishFocus(candidate, content);
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
     snapshot.rulesVersion = highRiskCrisisRules
@@ -1936,6 +1938,10 @@ RaidSettlementReceipt settlePendingRaid(
             : 0U,
         lostRecordId,
         baseThreatReducedUnits};
+    if (raidSnapshot.wishFocus)
+        candidate.lastRaidResult->wishReturn = summarizeBaseWishReturn(
+            candidate, content, *raidSnapshot.wishFocus,
+            outcome == RaidResultOutcome::Extracted);
     ++candidate.revision;
     const ProfileValidationResult validation =
         validateProfileState(candidate, content);

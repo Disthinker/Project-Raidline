@@ -4,6 +4,7 @@
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
+#include "base_wish_expedition.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2473,6 +2474,23 @@ BaseWorkforceReceipt GameSession::executeAutoFillBaseWorkers(
         return receipt;
     }
     if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    return receipt;
+}
+
+BasePriorityReceipt GameSession::executeBaseWishFocus(
+    std::optional<BaseWishInstanceId> focus, std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    auto receipt = ::executeBaseWishFocus(candidate, publishedContentRegistry(),
+        focus, CommandContext{profile_.revision, std::move(transactionId)});
+    if (receipt.succeeded && !receipt.alreadyCommitted &&
+        !commitProfileCandidate(std::move(candidate)))
     {
         receipt.succeeded = false;
         receipt.error = DomainErrorCode::InvalidProfile;

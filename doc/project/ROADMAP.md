@@ -1,10 +1,12 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-09-02。
+最后核对：2026-09-03。
 
 ## 当前目标与交付节奏
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 外围探索基础均已进入主线。当前推进 Base 愿望与资源取舍 v2，范围合同见 `doc/exec-plans/active/base-wishes-resource-tradeoff-v2.md`，外部 GDD 继续只读。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索和基地愿望 v2（PR #145 / `5925f62`）均已进入主线。当前唯一切片是“基地愿望—远征研判闭环 v1”，合同见 `doc/exec-plans/active/base-wish-expedition-v1.md`，外部 GDD 继续只读。
+
+近期顺序：本切片完成关注、合法来源研判、出击冻结、实际带回摘要和手动分配闭环；自动化/CI 后由用户正常游玩验收。通过后向策划回报并评估实时守城前置或初始基地选择/引导阶段的准入，不继续横向追加愿望 UI、导航、第二地图或新美术。候选下一阶段尚未授权实施。
 
 路线以完整玩家结果组织，不再以 Week 编号或单个技术边界作为里程碑。一次宏切片连续完成领域、服务、客户端、自动化、PR 和 CI，人工验证统一放在最后由用户执行。
 

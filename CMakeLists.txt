@@ -264,6 +264,9 @@ add_library(raidline_domain STATIC
     src/lost_raid_domain.h
     src/loadout_progression.cpp
     src/loadout_progression.h
+    src/base_wish_expedition.cpp
+    src/base_wish_expedition.h
+    src/base_wish_types.h
     src/maintenance_domain.cpp
     src/maintenance_domain.h
     src/medical_domain.cpp
@@ -489,6 +492,7 @@ function(raidline_add_test target source module)
 endfunction()
 
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
+raidline_add_test(BaseWishExpeditionTest tests/test_base_wish_expedition.cpp raidline::services)
 raidline_add_test(
     CombatDamageDomainTest
     tests/test_combat_damage_domain.cpp

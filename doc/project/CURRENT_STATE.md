@@ -1,19 +1,19 @@
 # Project Raidline 当前状态
 
-最后核对：2026-09-02。
+最后核对：2026-09-03。
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@674f65e`，PR #144 已合入并完成 Home Region 外围探索与安全边界 v1。
-- 当前开发分支：`codex/base-wishes-resource-tradeoff-v2`，从 `origin/main@674f65e` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-wishes-resource-tradeoff-v2.md`。
-- 当前切片把五日基地愿望升级为按周期人口冻结的一至三个目标，允许玩家显式组合同分类物品并在一次原子提交前查看贡献与超额；不建立任务面板、导航或直接奖励。
-- PR #144 已通过 Windows Debug 全目标、42/42 关键领域回归、1444/1444 全量 CTest、最终 head Windows/Ubuntu CI 与用户正常游玩验收。当前切片已完成 Windows Debug 全目标、195/195 关键领域回归与 1447/1447 全量 CTest，等待提交、exact-head Windows/Ubuntu CI 和用户正常游玩验收；开发代理不启动游戏。
+- 已验收主线：`origin/main@5925f62`，PR #145 经用户验收和授权普通合并；已交付人口冻结的一至三个愿望、显式多物品贡献及超额预览，schema v43/content v59/rules v29。
+- 当前开发分支：`codex/base-wish-expedition-v1`，从 `origin/main@5925f62` 创建。
+- 当前活动计划：`doc/exec-plans/active/base-wish-expedition-v1.md`。
+- 当前切片：关注/取消愿望、情报权限下的出击地图来源研判、复用资源标记、实际带回贡献和分配页筛选。schema v44 只增加关注和摘要；content/rules 不变。不改变掉率、资产位置、失败合同，不建立导航、自动提交或直接奖励。
+- PR #145 基线为 Windows Debug 全目标、1447/1447 CTest、精确 head 双平台 CI 与用户正常游玩验收。当前切片的新增自动化、全量回归及 PR 证据见活动计划和 PR；用户正常游玩仍待完成，开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环，以及 Home Region 基地运营可读性均已进入主线。当前切片首次让玩家从安全基地直接步行进入本地外围，在不创建 Raid 的前提下形成有限战斗、拾取、返回和救回闭环。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索和基地愿望 v2 均已进入主线。当前将已接受的基地资源取舍与 Raid 搜寻判断接成闭环。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
