@@ -266,6 +266,7 @@ BaseDailySystemsResult synchronizeBaseDailySystemsThrough(
     const ContentRegistry &content)
 {
     BaseDailySystemsResult result;
+    if (!profile.homeFounding.established) return result;
     const std::uint64_t completedDays =
         projectWorldClock(profile.worldClock).completedDays;
     result.demand = applyBaseDailyDemandWithSupplyThrough(

@@ -6,6 +6,13 @@
 
 #include "ui_localization.h"
 
+TEST(UiLocalizationTest, FoundingPromptsHaveChineseText) {
+    for (const auto text : {"ESTABLISH YOUR ONLY MAIN BASE HERE?", "ENTER - ESTABLISH",
+         "TEMPORARY SUPPLY POINT - SHARED STASH", "CIVIC COURTYARD", "FREIGHT COURTYARD",
+         "TAB INVENTORY | M MAP | E INSPECT | ESC MENU"})
+        EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese,text), text);
+}
+
 namespace {
 std::filesystem::path uniqueSettingsPath() {
   const auto suffix =

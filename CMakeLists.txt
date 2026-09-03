@@ -265,6 +265,9 @@ add_library(raidline_domain STATIC
     src/loadout_progression.cpp
     src/loadout_progression.h
     src/base_wish_expedition.cpp
+    src/home_founding_domain.cpp
+    src/home_founding_domain.h
+    src/home_founding_types.h
     src/base_wish_expedition.h
     src/base_wish_types.h
     src/maintenance_domain.cpp
@@ -493,6 +496,7 @@ endfunction()
 
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
 raidline_add_test(BaseWishExpeditionTest tests/test_base_wish_expedition.cpp raidline::services)
+raidline_add_test(HomeFoundingTest tests/test_home_founding.cpp raidline::services)
 raidline_add_test(
     CombatDamageDomainTest
     tests/test_combat_damage_domain.cpp

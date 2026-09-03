@@ -18,6 +18,7 @@
 #include "raid_map_generation.h"
 #include "world_clock.h"
 #include "base_wish_types.h"
+#include "home_founding_types.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -1015,6 +1016,7 @@ struct LastRaidResult
 
 struct ProfileState
 {
+    HomeFoundingState homeFounding;
     std::string profileId;
     ProfileRevision revision{1};
     std::uint32_t currency{};

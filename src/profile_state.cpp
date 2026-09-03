@@ -1,4 +1,5 @@
 #include "profile_state.h"
+#include "home_founding_domain.h"
 #include "base_wish_expedition.h"
 
 #include "base_population_domain.h"
@@ -1203,11 +1204,14 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "regional active Base site is locked"};
     }
+    if (!validHomeFoundingState(profile))
+        return {false, "Home founding state is invalid"};
     if (activeBaseSite == nullptr ||
         profile.regionalOperations.technologyCore.instanceId !=
             "technology_core.primary" ||
-        profile.regionalOperations.technologyCore.baseSiteDefinitionId !=
-            activeBaseSite->id)
+        (profile.homeFounding.established &&
+         profile.regionalOperations.technologyCore.baseSiteDefinitionId !=
+            activeBaseSite->id))
     {
         return {false, "technology core and active Base site disagree"};
     }
@@ -1497,7 +1501,7 @@ ProfileValidationResult validateProfileState(
         return profile.baseConstruction.facilities.contains(
             BaseFacilityDefinitionId{std::string{value}});
     };
-    if (!ownsFacility("base_facility.warehouse") ||
+    if ((profile.homeFounding.established && !ownsFacility("base_facility.warehouse")) ||
         (profile.baseConstruction.dormitoryLevel > 0U) !=
             ownsFacility("base_facility.dormitory") ||
         (profile.baseConstruction.kitchenWaterLevel > 0U) !=
@@ -1509,7 +1513,7 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base facility ownership and levels disagree"};
     }
-    if (!publishedBaseFacilityLevel(
+    if (profile.homeFounding.established && (!publishedBaseFacilityLevel(
             profile.baseConstruction,
             BaseFacilityUpgradeTarget::Dormitory,
             content) ||
@@ -1524,7 +1528,7 @@ ProfileValidationResult validateProfileState(
         !publishedBaseFacilityLevel(
             profile.baseConstruction,
             BaseFacilityUpgradeTarget::Medical,
-            content))
+            content)))
     {
         return {false, "Base facility level is invalid"};
     }
@@ -1707,14 +1711,14 @@ ProfileValidationResult validateProfileState(
             return {false, "recovery task is invalid"};
         }
     }
-    if (!validBasePriorityState(
+    if (profile.homeFounding.established && !validBasePriorityState(
             profile.basePriority,
             profile.worldClock.elapsedWorldMinutes,
             content))
     {
         return {false, "Base priority state is invalid"};
     }
-    if (!profile.basePriority.migratedLegacyCycle)
+    if (profile.homeFounding.established && !profile.basePriority.migratedLegacyCycle)
     {
         const std::vector<BasePriorityDefinitionId> expected =
             selectBasePriorityDefinitions(
@@ -4359,6 +4363,12 @@ ProfileValidationResult validateProfileState(
 std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
 {
     std::uint64_t hash = 1469598103934665603ULL;
+    hashInteger(hash, profile.homeFounding.established ? 1U : 0U);
+    hashInteger(hash, profile.homeFounding.hintsDismissed ? 1U : 0U);
+    hashInteger(hash, profile.homeFounding.layoutVersion);
+    hashInteger(hash, profile.homeFounding.plots.size());
+    for (const auto &[region, plot] : profile.homeFounding.plots)
+    { hashBytes(hash, region.value()); hashBytes(hash, plot); }
     const auto hashFocus = [&hash](const std::optional<BaseWishInstanceId> &focus) {
         hashInteger(hash, focus.has_value() ? 1U : 0U);
         if (focus) { hashInteger(hash, focus->cycleIndex); hashBytes(hash, focus->definitionId.value()); }

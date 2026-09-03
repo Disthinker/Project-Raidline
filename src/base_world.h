@@ -79,7 +79,11 @@ public:
     void configureSite(std::string_view siteDefinitionId);
     void configureSite(
         std::string_view siteDefinitionId,
-        std::vector<BaseFacilitySpatialOverride> overrides);
+        std::vector<BaseFacilitySpatialOverride> overrides,
+        std::string plotId = {});
+    [[nodiscard]] bool surveying() const noexcept { return plotId_ == "survey"; }
+    [[nodiscard]] bool hasFoundingPlots() const noexcept { return !plotId_.empty(); }
+    [[nodiscard]] const std::string &plotId() const noexcept { return plotId_; }
 
     [[nodiscard]] std::optional<BaseFacilityKind> update(
         const BaseInput &input,
@@ -142,6 +146,7 @@ private:
     void rebuildCollisionIndex();
 
     std::string siteDefinitionId_;
+    std::string plotId_;
     HomeRegionLayout layout_;
     Vec2 playerPosition_{};
     Vec2 playerSize_{40.0F, 52.0F};

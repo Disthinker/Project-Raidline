@@ -72,7 +72,8 @@ bool accessMatchesActiveBase(
 {
     if (access.baseSiteDefinitionId.value().empty() ||
         access.baseSiteDefinitionId !=
-            profile.regionalOperations.technologyCore.baseSiteDefinitionId ||
+            (profile.homeFounding.established
+                ? profile.regionalOperations.technologyCore.baseSiteDefinitionId : kFoundingRegion) ||
         !finitePoint(access.playerCenter) ||
         !finitePoint(access.dropPosition) ||
         !std::isfinite(access.interactionRange) ||

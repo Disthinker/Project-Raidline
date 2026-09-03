@@ -2598,7 +2598,7 @@ void App::handleMainMenuCommand(MainMenuCommand command)
         const auto ticks = std::chrono::system_clock::now()
             .time_since_epoch().count();
         if (!gameFlow_.startNewGame(
-                "profile-" + std::to_string(ticks)))
+                "profile-" + std::to_string(ticks), true))
         {
             uiMessage_ = gameSession_.persistenceMessage();
             return;
@@ -5903,6 +5903,7 @@ void App::processEvents()
     pendingMainMenuCommand_.reset();
     pendingPauseMenuCommand_.reset();
     pendingScreenConfirm_ = false;
+    homeFoundingInputBlockedThisFrame_ = homeFoundingPrompt_.has_value();
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
 
@@ -5921,6 +5922,7 @@ void App::processEvents()
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
             {
                 windowHasInputFocus_ = false;
+                homeFoundingPrompt_.reset();
                 static_cast<void>(
                     SDL_SetWindowRelativeMouseMode(window_, false));
                 relativeMouseModeActive_ = false;
@@ -6017,6 +6019,58 @@ void App::processEvents()
             {
                 uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
                     gameSession_.persistenceMessage();
+            }
+        }
+
+        if (homeFoundingPrompt_)
+        {
+            homeFoundingInputBlockedThisFrame_ = true;
+            const bool key = event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat;
+            const bool click = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT;
+            const bool confirm = (key && event.key.scancode == SDL_SCANCODE_RETURN) ||
+                (click && contains(SDL_FRect{370,405,240,42}, MousePosition{event.button.x,event.button.y}));
+            const bool cancel = (key && event.key.scancode == SDL_SCANCODE_ESCAPE) ||
+                (click && contains(SDL_FRect{660,405,240,42}, MousePosition{event.button.x,event.button.y}));
+            if (confirm)
+            {
+                uiMessage_ = gameFlow_.establishHome(*homeFoundingPrompt_)
+                    ? "MAIN BASE ESTABLISHED - YOUR ITEMS ARE UNCHANGED"
+                    : gameSession_.persistenceMessage();
+                homeFoundingPrompt_.reset();
+            }
+            else if (cancel) homeFoundingPrompt_.reset();
+            input_.suppressPrimaryPointerUntilRelease();
+            continue;
+        }
+        if (gameFlow_.state() == GameFlowState::Base &&
+            !pauseMenu_.isOpen() && !developerWeaponPanelOpen_ &&
+            !tacticalMapOpen_ && !inventoryOverlayState_.isOpen() &&
+            !gameFlow_.activeBaseFacility() &&
+            event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
+        {
+            if (event.key.scancode == SDL_SCANCODE_H &&
+                !gameSession_.profile().homeFounding.hintsDismissed)
+            {
+                if (!gameSession_.dismissHomeHints())
+                    uiMessage_ = gameSession_.persistenceMessage();
+                continue;
+            }
+            if (event.key.scancode == SDL_SCANCODE_E && gameFlow_.baseWorld().surveying())
+            {
+                const auto &world = gameFlow_.baseWorld();
+                const Vec2 center{world.playerPosition().x + world.playerSize().x*0.5F,
+                    world.playerPosition().y + world.playerSize().y*0.5F};
+                for (const auto &plot : homePlotDefinitions())
+                {
+                    const float dx = center.x - plot.corePosition.x, dy = center.y - plot.corePosition.y;
+                    if (dx*dx + dy*dy <= 140.0F*140.0F)
+                    {
+                        homeFoundingPrompt_ = std::string{plot.id};
+                        homeFoundingInputBlockedThisFrame_ = true;
+                        break;
+                    }
+                }
+                if (homeFoundingPrompt_) continue;
             }
         }
 
@@ -6154,6 +6208,11 @@ void App::processEvents()
             event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
             event.key.scancode == SDL_SCANCODE_B)
         {
+            if (!gameSession_.profile().homeFounding.established)
+            {
+                uiMessage_ = "Establish your main base before building";
+                continue;
+            }
             if (basePlacementState_.has_value())
                 basePlacementState_.reset();
             if (baseFixedFacilityPlacementState_.has_value())
@@ -6486,6 +6545,7 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    if (homeFoundingInputBlockedThisFrame_) return;
     syncAmbience();
     consumePresentationAudioEvents();
     if (gameFlow_.state() != GameFlowState::Base &&
@@ -9999,7 +10059,7 @@ void App::syncRaidPointerCapture() noexcept
             inventoryOverlayState_.isOpen() ||
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
-                baseConstructionPanelOpen_,
+                baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
             medicalWheelOpen_,
             developerWeaponPanelOpen_,
             pauseMenu_.isOpen(),
@@ -11058,6 +11118,25 @@ void App::renderBaseWorld()
     SDL_RenderFillRect(renderer_, &parcel);
     SDL_SetRenderDrawColor(renderer_, 126, 196, 166, 240);
     SDL_RenderRect(renderer_, &parcel);
+
+    if (world.surveying())
+    {
+        SDL_SetRenderDrawColor(renderer_, 220, 230, 200, 255);
+        uiTextRenderer_.render(renderer_, kFoundingCamp.position.x,
+            kFoundingCamp.position.y - 26, "TEMPORARY SUPPLY POINT - SHARED STASH");
+    }
+    if (world.hasFoundingPlots())
+        for (const auto &plot : homePlotDefinitions())
+        {
+            const SDL_FRect bounds{plot.bounds.position.x,plot.bounds.position.y,plot.bounds.size.x,plot.bounds.size.y};
+            SDL_SetRenderDrawColor(renderer_, 165,180,120,180);
+            SDL_RenderRect(renderer_, &bounds);
+            const SDL_FRect core{plot.corePosition.x-20,plot.corePosition.y-20,40,40};
+            SDL_RenderFillRect(renderer_, &core);
+            uiTextRenderer_.render(renderer_,plot.bounds.position.x+24,plot.bounds.position.y+24,plot.name.data());
+            if (world.surveying())
+                uiTextRenderer_.render(renderer_,plot.corePosition.x-120,plot.corePosition.y+34,"E INSPECT BASE SITE");
+        }
 
     for (const RaidOutdoorPropSnapshot &prop : projection.props)
     {
@@ -13642,6 +13721,14 @@ void App::renderHomeRegionMap()
     SDL_RenderFillRect(renderer_, &baseBounds);
     SDL_SetRenderDrawColor(renderer_, 126, 224, 174, 255);
     SDL_RenderRect(renderer_, &baseBounds);
+    if (world.hasFoundingPlots())
+        for (const auto &plot : homePlotDefinitions())
+        {
+            const auto bounds = screenRect(plot.bounds);
+            SDL_SetRenderDrawColor(renderer_,210,201,129,240);
+            SDL_RenderRect(renderer_, &bounds);
+            uiTextRenderer_.render(renderer_,bounds.x,bounds.y+4,plot.name.data());
+        }
     for (const BaseFacility &facility : world.facilities())
     {
         if (!facility.active)
@@ -17378,6 +17465,12 @@ void App::renderBase()
     case TutorialProgress::Complete:
         break;
     }
+    const auto &founding = gameSession_.profile().homeFounding;
+    if (!founding.established)
+        goal = founding.hintsDismissed ? "" : "SURVEY THREE SITES | M MAP | E INSPECT | H HIDE HINTS";
+    else if (!founding.plots.empty())
+        goal = founding.hintsDismissed || gameSession_.profile().lastRaidResult ? ""
+            : "B BUILD (OPTIONAL) | TAB PREPARE | FIRST RAID | H HIDE HINTS";
     uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal.c_str());
     if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
         !baseFixedFacilityPlacementState_.has_value() &&
@@ -17386,7 +17479,10 @@ void App::renderBase()
     {
         uiTextRenderer_.render(
             renderer_, 48.0F, 676.0F,
-            "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU");
+            founding.established ? "B BASE BUILD | TAB INVENTORY | M MAP | ESC MENU"
+                : "TAB INVENTORY | M MAP | E INSPECT | ESC MENU");
+        if (!founding.established && !uiMessage_.empty())
+            uiTextRenderer_.render(renderer_, 48.0F, 650.0F, uiMessage_.c_str());
     }
 
     if (const auto facility = gameFlow_.activeBaseFacility())
@@ -17431,6 +17527,28 @@ void App::renderBase()
     renderBaseConstructionPanel();
     renderBaseOperationNotices();
     renderBaseSiegeWarning();
+    if (homeFoundingPrompt_)
+    {
+        const auto *plot = homePlotDefinition(*homeFoundingPrompt_);
+        if (plot)
+        {
+            const SDL_FRect panel{310,220,660,255};
+            SDL_SetRenderDrawColor(renderer_,24,30,26,255);
+            SDL_RenderFillRect(renderer_,&panel);
+            SDL_SetRenderDrawColor(renderer_,210,220,184,255);
+            SDL_RenderRect(renderer_,&panel);
+            uiTextRenderer_.render(renderer_,340,246,"ESTABLISH YOUR ONLY MAIN BASE HERE?");
+            uiTextRenderer_.render(renderer_,340,281,plot->name.data());
+            uiTextRenderer_.render(renderer_,340,311,plot->description.data());
+            uiTextRenderer_.render(renderer_,340,350,"One core / one starter budget / existing items kept");
+            const SDL_FRect confirm{370,405,240,42}, cancel{660,405,240,42};
+            SDL_SetRenderDrawColor(renderer_,60,90,66,255); SDL_RenderFillRect(renderer_,&confirm);
+            SDL_SetRenderDrawColor(renderer_,70,72,66,255); SDL_RenderFillRect(renderer_,&cancel);
+            SDL_SetRenderDrawColor(renderer_,232,236,217,255);
+            uiTextRenderer_.render(renderer_,390,418,"ENTER - ESTABLISH");
+            uiTextRenderer_.render(renderer_,680,418,"ESC - KEEP LOOKING");
+        }
+    }
 }
 
 void App::renderBaseOperationNotices()

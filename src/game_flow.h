@@ -30,7 +30,8 @@ public:
 
     void configurePersistence(std::filesystem::path directory);
 
-    [[nodiscard]] bool startNewGame(std::string profileId);
+    [[nodiscard]] bool startNewGame(std::string profileId, bool survey = false);
+    [[nodiscard]] bool establishHome(std::string_view plotId);
     [[nodiscard]] bool continueGame();
 
     [[nodiscard]]

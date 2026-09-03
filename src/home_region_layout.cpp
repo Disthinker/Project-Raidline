@@ -1,4 +1,5 @@
 #include "home_region_layout.h"
+#include "home_founding_types.h"
 
 #include <algorithm>
 #include <array>
@@ -316,6 +317,56 @@ HomeRegionLayout generateHomeRegionLayout(std::string_view siteDefinitionId)
                 RaidOutdoorPropKind::RoadBarrier, 22U);
     appendProps(layout, roadMask, propRandom, RaidOutdoorPropKind::Debris, 120U);
 
+    layout.layoutHash = homeRegionLayoutHash(layout);
+    return layout;
+}
+
+HomeRegionLayout generateFoundingHomeRegionLayout(
+    std::string_view siteDefinitionId, std::string_view plotId)
+{
+    auto layout = generateHomeRegionLayout(siteDefinitionId);
+    layout.layoutVersion = 2U;
+    const auto *selected = homePlotDefinition(plotId);
+    layout.baseParcel = selected ? selected->bounds : kFoundingCamp;
+    layout.districts.back().bounds = layout.baseParcel;
+    layout.districts.back().labelPosition = layout.baseParcel.position;
+    // Reserve every candidate and its connection before placing authored
+    // obstacles. Selection changes only the active parcel, not world props.
+    std::erase_if(layout.props, [&](const auto &prop) {
+        if (overlapsWithMargin(prop.bounds, kFoundingCamp, 100)) return true;
+        for (const auto &plot : homePlotDefinitions())
+        {
+            if (overlapsWithMargin(prop.bounds, plot.bounds, 100)) return true;
+            const ContentRect access{{plot.corePosition.x - 100, 1560}, {200, 1000}};
+            if (overlapsWithMargin(prop.bounds, access, 40)) return true;
+        }
+        return overlapsWithMargin(prop.bounds, {{700,2240},{7100,200}}, 40);
+    });
+    layout.movementBlockers.clear();
+    for (const auto &prop : layout.props)
+        if (prop.collidable) layout.movementBlockers.push_back(prop.bounds);
+    for (const auto &plot : homePlotDefinitions())
+        for (const auto &bounds : plot.fixedBlockers)
+        {
+            RaidOutdoorPropSnapshot prop{};
+            prop.instanceId = 30000U + static_cast<std::uint32_t>(layout.props.size());
+            prop.kind = RaidOutdoorPropKind::Warehouse;
+            prop.bounds = bounds;
+            prop.collidable = true;
+            layout.props.push_back(prop);
+            layout.movementBlockers.push_back(bounds);
+        }
+    std::vector<bool> roads(kColumns * kRows, false);
+    for (const auto &road : layout.roadCells) roads[road.row*kColumns + road.column] = true;
+    for (std::uint32_t row = 28; row <= 30; ++row)
+        for (std::uint32_t column = 10; column <= 97; ++column)
+            appendRoadCell(layout, roads, column, row, RaidOutdoorRoadKind::Access);
+    for (const auto &plot : homePlotDefinitions())
+        for (std::uint32_t row = 20; row <= 30; ++row)
+            for (std::uint32_t width = 0; width < 2; ++width)
+                appendRoadCell(layout, roads,
+                    static_cast<std::uint32_t>(plot.corePosition.x / kCellSize) + width,
+                    row, RaidOutdoorRoadKind::Access);
     layout.layoutHash = homeRegionLayoutHash(layout);
     return layout;
 }

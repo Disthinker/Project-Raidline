@@ -542,10 +542,11 @@ RegionalOperationsState parseRegionalOperations(
     if (schemaVersion >= 30)
     {
         const Json &core = value.at("technology_core");
+        const auto coreSite = core.at("base_site_definition_id").get<std::string>();
         state.technologyCore = {
             core.at("instance_id").get<std::string>(),
-            RegionalBaseSiteDefinitionId{
-                core.at("base_site_definition_id").get<std::string>()}};
+            schemaVersion >= 45 && coreSite.empty()
+                ? RegionalBaseSiteDefinitionId{} : RegionalBaseSiteDefinitionId{coreSite}};
     }
     else
     {
@@ -1412,6 +1413,17 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     {
         payload["base_siege"] = baseSiegeValue(profile.baseSiege);
     }
+    if (schemaVersion >= 45)
+    {
+        Json plots = Json::array();
+        for (const auto &[region, plot] : profile.homeFounding.plots)
+            plots.push_back({{"region", region.value()}, {"plot", plot}});
+        payload["home_founding"] = {{"established", profile.homeFounding.established},
+            {"hints_dismissed", profile.homeFounding.hintsDismissed}, {"plots", plots},
+            {"layout_version", profile.homeFounding.layoutVersion}};
+    }
+    else if (profile.homeFounding != HomeFoundingState{})
+        throw std::invalid_argument{"legacy schema cannot represent Home founding"};
     if (schemaVersion >= 42)
     {
         Json sites = Json::array();
@@ -2373,7 +2385,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2556,7 +2568,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2570,6 +2582,18 @@ SaveLoadResult deserializeProfileEnvelope(
         }
 
         ProfileState profile;
+        if (schemaVersion >= 45)
+        {
+            const auto &founding = payload.at("home_founding");
+            profile.homeFounding.established = founding.at("established").get<bool>();
+            profile.homeFounding.hintsDismissed = founding.at("hints_dismissed").get<bool>();
+            profile.homeFounding.layoutVersion = founding.at("layout_version").get<std::uint32_t>();
+            for (const auto &plot : founding.at("plots"))
+                if (!profile.homeFounding.plots.emplace(
+                    RegionalBaseSiteDefinitionId{plot.at("region").get<std::string>()},
+                    plot.at("plot").get<std::string>()).second)
+                    throw std::invalid_argument{"duplicate Home founding region"};
+        }
         profile.profileId = payload.at("profile_id").get<std::string>();
         profile.revision = payload.at("revision").get<ProfileRevision>();
         profile.currency = payload.at("currency").get<std::uint32_t>();

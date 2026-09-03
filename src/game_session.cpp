@@ -1,4 +1,5 @@
 #include "game_session.h"
+#include "home_founding_domain.h"
 
 #include "base_construction_domain.h"
 #include "base_manufacturing_domain.h"
@@ -104,6 +105,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     }
     const RegionalBaseSiteDefinitionId perimeterSite{
         baseWorld.siteDefinitionId()};
+    if (profile_.homeFounding.established)
     {
         ProfileState candidate = profile_;
         HomePerimeterGenerationContext generation{
@@ -343,6 +345,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         }
     }
 
+    if (!profile_.homeFounding.established) return facility;
     bool perimeterChanged{};
     ProfileState perimeterCandidate = profile_;
     auto candidateSite = perimeterCandidate.homePerimeter.sites.find(
@@ -607,13 +610,13 @@ bool GameSession::hasSavedProfile() const
            saveRepository_->primaryExists();
 }
 
-bool GameSession::startNewProfile(std::string profileId)
+bool GameSession::startNewProfile(std::string profileId, bool survey)
 {
     ProfileState candidate;
     std::string saveMessage;
     try
     {
-        candidate = makeNewAlphaProfile(
+        candidate = (survey ? makeNewHomeProfile : makeNewAlphaProfile)(
             std::move(profileId),
             publishedContentRegistry());
     }
@@ -647,6 +650,27 @@ bool GameSession::startNewProfile(std::string profileId)
     lastSaveLoadStatus_ = SaveLoadStatus::LoadedPrimary;
     persistenceMessage_ = std::move(saveMessage);
     return true;
+}
+
+bool GameSession::establishHome(std::string_view plotId,
+    const RegionalBaseSiteDefinitionId &region, Vec2 playerCenter)
+{
+    ProfileState candidate = profile_;
+    const auto receipt = executeHomeFounding(candidate, publishedContentRegistry(),
+        plotId, region, playerCenter,
+        CommandContext{profile_.revision, nextRaidTransaction("home-founding")});
+    if (!receipt.succeeded) { persistenceMessage_ = receipt.message; return false; }
+    return receipt.alreadyCommitted || commitProfileCandidate(std::move(candidate));
+}
+
+bool GameSession::dismissHomeHints()
+{
+    if (profile_.homeFounding.hintsDismissed) return true;
+    if (profile_.revision == std::numeric_limits<ProfileRevision>::max()) return false;
+    ProfileState candidate = profile_;
+    candidate.homeFounding.hintsDismissed = true;
+    ++candidate.revision;
+    return commitProfileCandidate(std::move(candidate));
 }
 
 bool GameSession::continueProfile()
@@ -2954,6 +2978,9 @@ GameSession::ordinarySurvivorRescuePlan() const
 
 void GameSession::advanceBaseWorldClock(float deltaTime)
 {
+    // The safe, pre-base survey has no operating Base or catch-up debt.
+    // This is a pause of the existing clock, not a second tutorial clock.
+    if (!profile_.homeFounding.established) return;
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
     {
@@ -5078,6 +5105,7 @@ void GameSession::refreshLoadoutTutorial()
 
 void GameSession::noteBaseFacility(BaseFacilityKind facility)
 {
+    if (!profile_.homeFounding.established) return;
     TutorialProgress next = profile_.tutorial;
     if (profile_.tutorial == TutorialProgress::FindStorage &&
         facility == BaseFacilityKind::Storage)
