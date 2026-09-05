@@ -56,6 +56,9 @@ BaseRestPlan queryBaseRest(
     const ProfileState &profile,
     const BaseRestCommand &command)
 {
+    if (!profile.homeFounding.established)
+        return failure(DomainErrorCode::IllegalDestination,
+            "Establish your main base before resting", profile.revision);
     if (profile.pendingRaid.has_value())
     {
         return failure(

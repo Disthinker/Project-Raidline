@@ -219,7 +219,10 @@ public:
     void configurePersistence(std::filesystem::path directory);
 
     [[nodiscard]] bool hasSavedProfile() const;
-    [[nodiscard]] bool startNewProfile(std::string profileId);
+    [[nodiscard]] bool startNewProfile(std::string profileId, bool survey = false);
+    [[nodiscard]] bool establishHome(std::string_view plotId,
+        const RegionalBaseSiteDefinitionId &region, Vec2 playerCenter);
+    [[nodiscard]] bool dismissHomeHints();
     [[nodiscard]] bool continueProfile();
 
     void advanceBaseWorldClock(float deltaTime);

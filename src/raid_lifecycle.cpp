@@ -408,6 +408,9 @@ DeployReceipt executeDeploy(
             "a Raid is already pending",
             profile.revision);
     }
+    if (!profile.homeFounding.established)
+        return deployFailure(RaidLifecycleError::InvalidCommand,
+            "Establish your main base before deploying", profile.revision);
     if (profile.baseSiege.warningActive)
     {
         return deployFailure(

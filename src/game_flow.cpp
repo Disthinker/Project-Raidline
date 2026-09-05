@@ -71,10 +71,10 @@ void GameFlow::configurePersistence(std::filesystem::path directory)
     gameSession_.configurePersistence(std::move(directory));
 }
 
-bool GameFlow::startNewGame(std::string profileId)
+bool GameFlow::startNewGame(std::string profileId, bool survey)
 {
     if (state_ != GameFlowState::MainMenu ||
-        !gameSession_.startNewProfile(std::move(profileId)))
+        !gameSession_.startNewProfile(std::move(profileId), survey))
     {
         return false;
     }
@@ -650,13 +650,17 @@ void GameFlow::syncBaseWorldSite()
 {
     if (!persistentAlphaMode_)
         return;
-    const RegionalBaseSiteDefinitionId siteDefinitionId =
-        gameSession_.profile().regionalOperations.technologyCore
-            .baseSiteDefinitionId;
+    const auto &profile = gameSession_.profile();
+    const RegionalBaseSiteDefinitionId siteDefinitionId = profile.homeFounding.established
+        ? profile.regionalOperations.technologyCore.baseSiteDefinitionId : kFoundingRegion;
+    const auto selectedPlot = profile.homeFounding.plots.find(siteDefinitionId);
+    const std::string plotId = !profile.homeFounding.established ? "survey"
+        : selectedPlot == profile.homeFounding.plots.end() ? "" : selectedPlot->second;
     const ContentRect baseParcel =
-        baseWorld_.siteDefinitionId() == siteDefinitionId.value()
+        baseWorld_.siteDefinitionId() == siteDefinitionId.value() && baseWorld_.plotId() == plotId
         ? baseWorld_.baseParcel()
-        : generateHomeRegionLayout(siteDefinitionId.value()).baseParcel;
+        : plotId.empty() ? generateHomeRegionLayout(siteDefinitionId.value()).baseParcel
+        : generateFoundingHomeRegionLayout(siteDefinitionId.value(), plotId).baseParcel;
     std::vector<BaseFacilitySpatialOverride> overrides;
     for (const BaseFacilitySpatialProjection &projection :
          projectBaseFacilityLayout(
@@ -672,7 +676,18 @@ void GameFlow::syncBaseWorldSite()
                     gameSession_.profile(),
                     projection.facilityDefinitionId)});
     }
-    baseWorld_.configureSite(siteDefinitionId.value(), std::move(overrides));
+    baseWorld_.configureSite(siteDefinitionId.value(), std::move(overrides), plotId);
+}
+
+bool GameFlow::establishHome(std::string_view plotId)
+{
+    if (state_ != GameFlowState::Base || activeBaseFacility_) return false;
+    const Vec2 center{baseWorld_.playerPosition().x + baseWorld_.playerSize().x * 0.5F,
+        baseWorld_.playerPosition().y + baseWorld_.playerSize().y * 0.5F};
+    if (!gameSession_.establishHome(plotId,
+        RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()}, center)) return false;
+    syncBaseWorldSite();
+    return true;
 }
 
 bool GameFlow::returnToMainMenu() noexcept

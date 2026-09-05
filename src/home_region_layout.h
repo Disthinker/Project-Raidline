@@ -57,6 +57,9 @@ struct HomeRegionLayout
 [[nodiscard]] HomeRegionLayout generateHomeRegionLayout(
     std::string_view siteDefinitionId);
 
+[[nodiscard]] HomeRegionLayout generateFoundingHomeRegionLayout(
+    std::string_view siteDefinitionId, std::string_view plotId);
+
 [[nodiscard]] std::uint64_t homeRegionLayoutHash(
     const HomeRegionLayout &layout) noexcept;
 

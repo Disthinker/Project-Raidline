@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 已验收主线：`origin/main@5925f62`，PR #145 经用户验收和授权普通合并；已交付人口冻结的一至三个愿望、显式多物品贡献及超额预览，schema v43/content v59/rules v29。
-- 当前开发分支：`codex/base-wish-expedition-v1`，从 `origin/main@5925f62` 创建。
-- 当前活动计划：`doc/exec-plans/active/base-wish-expedition-v1.md`。
-- 当前切片：关注/取消愿望、情报权限下的出击地图来源研判、复用资源标记、实际带回贡献和分配页筛选。schema v44 只增加关注和摘要；content/rules 不变。不改变掉率、资产位置、失败合同，不建立导航、自动提交或直接奖励。
-- PR #145 基线为 Windows Debug 全目标、1447/1447 CTest、精确 head 双平台 CI 与用户正常游玩验收。当前切片的新增自动化、全量回归及 PR 证据见活动计划和 PR；用户正常游玩仍待完成，开发代理不启动游戏。
+- 当前主线：`origin/main@f92df3e`，PR #146 经本轮用户授权普通合并；愿望—远征研判闭环已进入主线，schema v44/content v59/rules v29。PR #145 的正常游玩验收与其历史证据保留。
+- 当前开发分支：`codex/home-region-founding-v1`，从 `origin/main@f92df3e` 创建。
+- 当前活动计划：`doc/exec-plans/active/home-region-founding-v1.md`。
+- 当前切片：普通新档从临时物资点考察同一 Greyline 的三个局部地块，近距确认部署唯一核心，接通已有建设/整备/首次 Raid。schema v45 保存建立状态、局部 PlotId、Home 布局版本与可关闭提示；content/rules 不变。不新增导航、区域路线节点或美术。
+- PR #146 基线为 Windows Debug 全目标、1460/1460 CTest 和精确 head 双平台 CI。本片自动化证据见活动计划/PR；新档游玩、界面与旧档兼容的用户正常游玩验收仍待完成，开发代理不启动游戏。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索和基地愿望 v2 均已进入主线。当前将已接受的基地资源取舍与 Raid 搜寻判断接成闭环。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2 和愿望—远征研判闭环均已进入主线。当前交付“开局选址与首座基地建立”，不是新增一套基地经营系统。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -101,7 +101,9 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 84. **Home Region 基地物资流现场状态 v1**：仓库装卸点与厨房处理点显示统一库存、供给授权、资源池和预计短缺。PR #142 已通过 CI 与用户验收，以 `b1194a1` 进入 main。
 85. **Home Region 作业状态信息层级与快速定位 v1**：作业点随缩放显示不同信息密度，运营总览支持状态筛选、分页和设施定位。PR #143 已通过 CI 与用户验收，以 `60c83fa` 进入 main。
 86. **Home Region 外围探索与安全边界 v1**：安全核心外加入过渡缓冲与可探索外围；外围使用有限感染者、低阶地面 Loot、持久周期快照和本地返回/救回结果，不创建 Raid、撤离或 Settlement。PR #144 已通过 CI 与用户正常游玩验收，以 `674f65e` 进入 main。
-87. **Base 愿望与资源取舍 v2（当前开发分支）**：五日周期按冻结人口生成一至三个愿望；玩家显式选择当前愿望与可贡献资产，预览贡献/超额后一次完成，完成与错过只进入既有士气账本。
+87. **Base 愿望与资源取舍 v2（PR #145 已合入）**：五日周期按冻结人口生成一至三个愿望；玩家显式选择当前愿望与可贡献资产，预览贡献/超额后一次完成，完成与错过只进入既有士气账本。
+88. **愿望—远征研判闭环（PR #146 已合入）**：关注愿望、合法情报下地图来源研判、冻结关注与真实带回摘要、分配页相关物筛选；不修改掉率、不自动交付。
+89. **开局选址与首座基地建立（当前开发分支，待游玩）**：未建家状态、三候选地块、唯一核心原子建立、旧档保留旧布局；建立后继续消费原有基地与 Raid 系统。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 

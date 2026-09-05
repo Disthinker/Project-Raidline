@@ -126,15 +126,17 @@ baseFacilityWorkSocket(const BaseFacility &facility) noexcept
 
 void BaseWorld::configureSite(
     std::string_view siteDefinitionId,
-    std::vector<BaseFacilitySpatialOverride> overrides)
+    std::vector<BaseFacilitySpatialOverride> overrides,
+    std::string plotId)
 {
     const std::string normalized = siteDefinitionId.empty()
         ? "regional_base_site.greyline_yard" : std::string{siteDefinitionId};
-    if (normalized != siteDefinitionId_ || overrides != facilityOverrides_)
+    if (normalized != siteDefinitionId_ || overrides != facilityOverrides_ || plotId != plotId_)
     {
         const bool sameSite = normalized == siteDefinitionId_;
         const Vec2 previousPlayerPosition = playerPosition_;
         facilityOverrides_ = std::move(overrides);
+        plotId_ = std::move(plotId);
         rebuildSite(normalized);
         if (sameSite)
         {
@@ -151,7 +153,8 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
 {
     siteDefinitionId_ = siteDefinitionId;
     groundBlockers_.clear();
-    layout_ = generateHomeRegionLayout(siteDefinitionId_);
+    layout_ = plotId_.empty() ? generateHomeRegionLayout(siteDefinitionId_)
+        : generateFoundingHomeRegionLayout(siteDefinitionId_, plotId_);
     walkableBounds_ = Rect{{24.0F, 24.0F},
                            {layout_.worldSize.x - 48.0F,
                             layout_.worldSize.y - 48.0F}};
@@ -195,6 +198,12 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
         facility->bounds.position = {
             override.worldCenter.x - facility->bounds.size.x * 0.5F,
             override.worldCenter.y - facility->bounds.size.y * 0.5F};
+    }
+    if (surveying())
+    {
+        for (auto &facility : facilities_) facility.active = false;
+        facilities_[0] = BaseFacility{BaseFacilityKind::Storage,
+            {{origin.x + 30, origin.y + 30}, {100,80}}, true};
     }
     rebuildCollisionIndex();
     presentationCache_ = {};
@@ -825,6 +834,7 @@ void BaseWorld::resetAtMedicalPoint() noexcept
 {
     const Vec2 origin = layout_.baseParcel.position;
     playerPosition_ = Vec2{origin.x + 780.0F, origin.y + 900.0F};
+    if (surveying()) playerPosition_ = {origin.x + 140, origin.y + 150};
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
     shooting_.reanchor(

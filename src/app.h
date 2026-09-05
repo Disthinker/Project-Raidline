@@ -181,6 +181,8 @@ private:
     std::optional<BaseFixedFacilityPlacementState>
         baseFixedFacilityPlacementState_;
     bool baseConstructionPanelOpen_{};
+    std::optional<std::string> homeFoundingPrompt_;
+    bool homeFoundingInputBlockedThisFrame_{};
     BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
     std::size_t baseConstructionCatalogPage_{};
     std::size_t baseConstructionZoomIndex_{2U};
