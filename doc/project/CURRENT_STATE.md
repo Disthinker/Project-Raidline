@@ -4,16 +4,16 @@
 
 ## Git 与交付基线
 
-- 当前主线：`origin/main@805fd8b`，PR #147 经用户授权普通合并；开局选址与首座基地建立已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
-- 当前开发分支：`codex/first-raid-onboarding-v1`，从 `origin/main@805fd8b` 创建。
-- 当前活动计划：`doc/exec-plans/active/first-raid-onboarding-v1.md`。
-- 当前切片：首局整备—撤离—回营再出发。区分真实可击发、枪膛、胸挂 R 备用与其他随身弹药；首次出击读取真实地图阶段与撤离资格，真实结算后说明原位物品/既有损失恢复，并结束可关闭指导。不加新地图、导航、任务、奖励或强制配装；schema/content/rules 不变。
-- PR #147 基线为 Windows Debug 全目标、1477/1477 CTest 和精确 head 双平台 CI。本片 Windows Debug 全目标、93/93 定向与 1517/1517 全量 CTest（68.97 秒）已通过；精确 head 双平台 CI 待提交后运行，最终证据见活动计划/PR。正常游玩由用户最后执行，开发代理不启动游戏。
+- 当前主线：`origin/main@2ae898a`，PR #148 经用户明确授权普通合并；首局整备—撤离—回营再出发已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
+- 当前开发分支：`codex/base-defense-player-participation-v1`，从 `origin/main@2ae898a` 创建；当前仅阶段收尾与下一片计划，不含新玩法代码。
+- 当前活动计划：`doc/exec-plans/active/base-defense-player-participation-v1.md`（提案，待用户审查）。
+- Home Region 开局可玩闭环收尾。下一主阶段候选为玩家参与基地防守：先限定有限外围接敌、独立事件快照与共享自动防守结算，安全核心、个人资产和现有 Raid 合同不因计划而改变；正式范围确认前不实现。
+- PR #148 的 Windows Debug 全目标、93/93 定向与 1517/1517 全量 CTest（68.97 秒）已通过；head `a1e672c` 双平台 CI 同为 1517/1517，run `34083273520`。当前文档提交继承此代码基线，不宣称重新执行了 C++ 或正常游玩测试。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判与开局选址均已进入主线。当前交付“首局整备—撤离—回营再出发”，收束已有系统的首次完整体验，不新增基地经营系统。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判、开局选址及首局到第二次出击均已进入主线。Home Region 起步阶段收尾；当前是下一主阶段范围审查，不代表实时防守已经完成。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。
@@ -104,7 +104,7 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 87. **Base 愿望与资源取舍 v2（PR #145 已合入）**：五日周期按冻结人口生成一至三个愿望；玩家显式选择当前愿望与可贡献资产，预览贡献/超额后一次完成，完成与错过只进入既有士气账本。
 88. **愿望—远征研判闭环（PR #146 已合入）**：关注愿望、合法情报下地图来源研判、冻结关注与真实带回摘要、分配页相关物筛选；不修改掉率、不自动交付。
 89. **开局选址与首座基地建立（PR #147 已合入）**：未建家状态、三候选地块、唯一核心原子建立、旧档保留旧布局；建立后继续消费原有基地与 Raid 系统。普通合并提交 `805fd8b`。
-90. **首局整备—撤离—回营再出发（开发中）**：轻量供弹查询、可关闭上下文提示、冻结阶段/撤离解释、真实结算确认和第二局指导退场；尚不属于接受主线。
+90. **首局整备—撤离—回营再出发（PR #148 已合入）**：轻量供弹查询、可关闭上下文提示、冻结阶段/撤离解释、真实结算确认和第二局指导退场；自动化通过后按用户合并指令以 `2ae898a` 进入 main。
 
 每个宏切片内部按领域、服务、客户端和证据形成可回滚提交，但不再为单个技术边界中断玩家功能交付。人工验证统一放在自动化和 CI 之后，由用户执行。
 
