@@ -42,7 +42,11 @@ std::uint64_t
 BaseDefenseCheckpointWriter::request(const ProfileState &profile,
                                      std::string_view contentVersion) {
   const auto capturedAt = Clock::now();
-  auto candidate = std::move(retiredCopyBuffer_);
+  std::unique_ptr<ProfileState> candidate;
+  {
+    const std::lock_guard lock{mutex_};
+    candidate = std::move(retiredCopyBuffer_);
+  }
   if (candidate) {
     *candidate = profile;
   } else {
@@ -81,14 +85,13 @@ BaseDefenseCheckpointWriter::request(const ProfileState &profile,
                           std::move(version)};
     status_.pending = true;
     status_.lastCopyMilliseconds = copyMilliseconds;
+    if (retired) {
+      // A worker may have returned its completed buffer while this copy ran.
+      // Keep only one spare; destroy any displaced spare outside the lock.
+      retired->profile.swap(retiredCopyBuffer_);
+    }
   }
   wake_.notify_one();
-  if (retired) {
-    // This buffer was superseded only after its complete replacement was
-    // accepted. No worker can reference it; keep one bounded spare instead
-    // of releasing/reallocating the whole Registry on every coalescence.
-    retiredCopyBuffer_ = std::move(retired->profile);
-  }
   return generation;
 }
 
@@ -164,6 +167,10 @@ void BaseDefenseCheckpointWriter::run() {
       if (result.succeeded) {
         status_.durableGeneration = current.generation;
         lagStartedAt_ = current.capturedAt;
+        // Normal 250ms operation often finishes before the next request, so
+        // recycle successful writes as well as coalesced pending candidates.
+        if (!retiredCopyBuffer_)
+          retiredCopyBuffer_ = std::move(current.profile);
       } else {
         status_.failed = true;
         if (!pending_) {

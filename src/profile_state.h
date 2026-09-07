@@ -195,6 +195,15 @@ enum class WeaponReliabilityTier
 class AssetRegistry
 {
 public:
+    AssetRegistry() = default;
+    AssetRegistry(const AssetRegistry &) = default;
+    AssetRegistry(AssetRegistry &&) noexcept = default;
+    AssetRegistry &operator=(AssetRegistry &&) noexcept = default;
+    // Deep-copy assignment reuses matching stable-ID nodes. Like std::map
+    // assignment, allocation failure provides only the basic guarantee for
+    // this destination; callers needing atomicity must assign private scratch.
+    AssetRegistry &operator=(const AssetRegistry &source);
+
     [[nodiscard]] AssetInstanceId nextAssetId() const noexcept;
     void setNextAssetIdForLoad(AssetInstanceId nextAssetId);
 

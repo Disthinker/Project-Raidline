@@ -7,7 +7,7 @@
 - 当前主线：`origin/main@2ae898a`，PR #148 经用户明确授权普通合并；首局整备—撤离—回营再出发已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
 - 当前开发分支：`codex/base-defense-player-participation-v1`，从 `origin/main@2ae898a` 创建；PR #149 在用户确认后进入玩家实时防守 v1 实施。
 - 当前活动计划：`doc/exec-plans/active/base-defense-player-participation-v1.md`（2026-09-07 用户已确认；开发分支实现及本地自动化完成，未正常游玩验收）。
-- PR #149 Windows Debug 全目标及全量 CTest **1583/1583** 通过（59.96 秒，新增 66 项回归）；性能测试隔离串行运行，1000 资产/1000 阻挡/16 敌人真实战斗和后台保存 copy P95/P99 为 3.819/3.931ms。精确 head 双平台 CI 见 PR；不将无 SDL 压力数据写成可见全帧/发行硬件承诺。
+- PR #149 Windows Debug 全目标及全量 CTest **1587/1587** 通过（48.46 秒，新增 70 项回归）；性能测试隔离串行运行，1000 资产/1000 阻挡/16 敌人真实战斗和后台保存 copy P95/P99 为 0.903/2.366ms。首轮 Windows CI 复制性能失败后已优化稳定 ID 节点与完成缓冲复用，未放宽门槛；最终精确 head 双平台 CI 见 PR，不将无 SDL 压力数据写成可见全帧/发行硬件承诺。
 - Home Region 开局可玩闭环收尾。已确认的玩家实时防守 v1 在 PR #149 中实施：3 波有限现有感染者、最多 16 名活动敌人、6 次突破软失败；共享自动防守结果，真实个人消耗、无个人资产全损。安全核心仍受保护，只有事件标记的缓冲走廊开放交战。
 - PR #148 的 Windows Debug 全目标、93/93 定向与 1517/1517 全量 CTest（68.97 秒）已通过；head `a1e672c` 双平台 CI 同为 1517/1517，run `34083273520`。PR #149 新代码使用 schema v46/content v59/rules v29；具体门禁证据见活动计划，不能继承旧测试数作为本轮通过证据。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。

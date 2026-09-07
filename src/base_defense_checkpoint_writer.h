@@ -78,8 +78,10 @@ private:
   std::condition_variable wake_;
   std::condition_variable completed_;
   std::optional<Checkpoint> pending_;
-  // Main-thread-only scratch, never a third work request. At most three
+  // One mutex-protected spare, never a third work request. At most three
   // buffers exist: in-flight, pending, and this retired/copying buffer.
+  // Only a successful or superseded request may return here. The submitting
+  // thread takes exclusive ownership before copying outside the lock.
   // A failed copy discards scratch without touching the accepted pending.
   std::unique_ptr<ProfileState> retiredCopyBuffer_;
   BaseDefenseCheckpointStatus status_;

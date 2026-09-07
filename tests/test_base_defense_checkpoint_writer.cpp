@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 #include "base_defense_checkpoint_writer.h"
@@ -23,6 +24,7 @@ struct ControlledStore {
   bool failFirst{};
   std::vector<std::uint32_t> currencies;
   std::vector<std::string> versions;
+  std::vector<std::uint64_t> durableFingerprints;
 
   SaveWriteResult write(const ProfileState &profile, std::string_view version,
                         SaveWriteMetrics *metrics) {
@@ -39,6 +41,7 @@ struct ControlledStore {
       metrics->serializationMilliseconds = 0.1;
       metrics->commitMilliseconds = 0.2;
     }
+    durableFingerprints.push_back(profileStateFingerprint(profile));
     return attempt == 1 && failFirst
                ? SaveWriteResult{false, "simulated disk failure"}
                : SaveWriteResult{true, {}};
@@ -76,6 +79,143 @@ ProfileState profileForQueue(std::uint32_t currency) {
   profile.profileId = "checkpoint-queue-test";
   profile.currency = currency;
   return profile;
+}
+
+AssetRecord copyTestAsset(AssetInstanceId id) {
+  AssetRecord asset;
+  asset.instanceId = id;
+  asset.definitionId = ItemDefinitionId{"item.copy_test.definition"};
+  asset.quantity = 3;
+  asset.orientation = ItemOrientation::Degrees90;
+  asset.remainingCharges = 2;
+  asset.currentMaximumDurability = 81;
+  asset.currentDurability = 57;
+  asset.reliefBatchId = "copy-test-relief-batch";
+  asset.magazineRounds = {
+      {ItemDefinitionId{"ammo.copy_test.first"}, "first-round-relief"},
+      {ItemDefinitionId{"ammo.copy_test.second"}, std::nullopt}};
+  asset.chamberedRound = MagazineRoundRecord{
+      ItemDefinitionId{"ammo.copy_test.chamber"}, "chamber-relief"};
+  asset.location = RaidGroundAssetLocation{"copy-test-raid-identity", 23U};
+  return asset;
+}
+
+TEST(BaseDefenseCheckpointWriterTest,
+     RegistryCopyPreservesAllValuesAndReusesOnlyMatchingIds) {
+  static_assert(std::is_nothrow_move_constructible_v<AssetRegistry>);
+  static_assert(std::is_nothrow_move_assignable_v<AssetRegistry>);
+  ProfileState source = profileForQueue(7);
+  ProfileState destination = source;
+  for (const AssetInstanceId id : {2U, 4U, 7U})
+    ASSERT_TRUE(source.assets.insertLoaded(copyTestAsset(id)));
+  for (const AssetInstanceId id : {1U, 2U, 5U, 7U, 9U})
+    ASSERT_TRUE(destination.assets.insertLoaded(copyTestAsset(id)));
+  source.assets.setNextAssetIdForLoad(100);
+  destination.assets.setNextAssetIdForLoad(200);
+  source.revision = 99;
+  source.currency = 271;
+  source.medicalStatus.painkillerRemainingMs = 700;
+  source.committedTransactions.insert("preserve-all-profile-fields");
+  const auto original = profileStateFingerprint(source);
+  const AssetRecord *reused2 = destination.assets.find(2);
+  const AssetRecord *reused7 = destination.assets.find(7);
+  destination = source;
+  EXPECT_EQ(profileStateFingerprint(destination), original);
+  EXPECT_EQ(profileStateFingerprint(source), original);
+  EXPECT_EQ(destination.assets.nextAssetId(), 100U);
+  EXPECT_EQ(destination.assets.records().size(), 3U);
+  EXPECT_EQ(destination.assets.find(2), reused2);
+  EXPECT_EQ(destination.assets.find(7), reused7);
+  EXPECT_EQ(destination.assets.find(1), nullptr);
+  EXPECT_EQ(destination.assets.find(5), nullptr);
+  EXPECT_EQ(destination.assets.find(9), nullptr);
+  ASSERT_NE(destination.assets.find(4), nullptr);
+  EXPECT_NE(destination.assets.find(2), source.assets.find(2));
+  EXPECT_NE(destination.assets.find(2)->magazineRounds.data(),
+            source.assets.find(2)->magazineRounds.data());
+  source.assets.findMutable(2)->magazineRounds.front().definitionId =
+      ItemDefinitionId{"ammo.changed_after_copy"};
+  source.assets.findMutable(2)->chamberedRound->reliefBatchId = "changed";
+  source.assets.findMutable(2)->location = InstalledMagazineLocation{987U};
+  source.assets.setNextAssetIdForLoad(101);
+  EXPECT_EQ(profileStateFingerprint(destination), original);
+}
+
+TEST(BaseDefenseCheckpointWriterTest,
+     RegistryCopyHandlesSelfAssignmentEmptySourceAndExactHighWater) {
+  AssetRegistry source;
+  ASSERT_TRUE(source.insertLoaded(copyTestAsset(5)));
+  source.setNextAssetIdForLoad(77);
+  const AssetRecord *same = source.find(5);
+  source = static_cast<const AssetRegistry &>(source);
+  EXPECT_EQ(source.find(5), same);
+  EXPECT_EQ(source.nextAssetId(), 77U);
+  AssetRegistry destination{source};
+  EXPECT_NE(destination.find(5), source.find(5));
+  AssetRegistry empty;
+  empty.setNextAssetIdForLoad(6);
+  destination = empty;
+  EXPECT_TRUE(destination.records().empty());
+  EXPECT_EQ(destination.nextAssetId(), 6U);
+  destination = source;
+  EXPECT_EQ(destination.records().size(), 1U);
+  EXPECT_EQ(destination.nextAssetId(), 77U);
+  AssetRegistry moved{std::move(destination)};
+  EXPECT_EQ(moved.records().size(), 1U);
+  EXPECT_EQ(moved.nextAssetId(), 77U);
+}
+
+TEST(BaseDefenseCheckpointWriterTest,
+     CompletedWriteReusesItsProfileAndAssetNodesWithoutCoalescing) {
+  std::vector<const ProfileState *> profileAddresses;
+  std::vector<const AssetRecord *> assetAddresses;
+  std::vector<std::uint64_t> fingerprints;
+  BaseDefenseCheckpointWriter writer{
+      [&](const ProfileState &profile, std::string_view,
+          SaveWriteMetrics *) -> SaveWriteResult {
+        profileAddresses.push_back(&profile);
+        assetAddresses.push_back(profile.assets.find(2));
+        fingerprints.push_back(profileStateFingerprint(profile));
+        return {true, {}};
+      }};
+  ProfileState profile = profileForQueue(1);
+  ASSERT_TRUE(profile.assets.insertLoaded(copyTestAsset(2)));
+  profile.assets.setNextAssetIdForLoad(10);
+  for (std::uint32_t generation = 1; generation <= 3; ++generation) {
+    profile.currency = generation;
+    profile.assets.findMutable(2)->remainingCharges = generation;
+    static_cast<void>(writer.request(profile, "v1"));
+    ASSERT_TRUE(writer.flush().succeeded);
+    EXPECT_EQ(fingerprints.back(), profileStateFingerprint(profile));
+  }
+  ASSERT_EQ(profileAddresses.size(), 3U);
+  EXPECT_EQ(profileAddresses[0], profileAddresses[1]);
+  EXPECT_EQ(profileAddresses[1], profileAddresses[2]);
+  EXPECT_EQ(assetAddresses[0], assetAddresses[1]);
+  EXPECT_EQ(assetAddresses[1], assetAddresses[2]);
+  EXPECT_EQ(writer.snapshot().coalescedRequests, 0U);
+  EXPECT_EQ(writer.snapshot().durableGeneration, 3U);
+}
+
+TEST(BaseDefenseCheckpointWriterTest,
+     InFlightDeepAssetsStayFrozenUntilStoreCompletes) {
+  ControlledStore store;
+  BaseDefenseCheckpointWriter writer{store.operation()};
+  ReleaseOnExit release{store};
+  ProfileState profile = profileForQueue(1);
+  ASSERT_TRUE(profile.assets.insertLoaded(copyTestAsset(2)));
+  profile.assets.setNextAssetIdForLoad(10);
+  const auto expected = profileStateFingerprint(profile);
+  static_cast<void>(writer.request(profile, "v1"));
+  ASSERT_TRUE(store.waitStarted(1));
+  profile.assets.findMutable(2)->magazineRounds.clear();
+  profile.assets.findMutable(2)->chamberedRound.reset();
+  profile.assets.findMutable(2)->location = InstalledMagazineLocation{44U};
+  profile.assets.setNextAssetIdForLoad(20);
+  store.release();
+  ASSERT_TRUE(writer.flush().succeeded);
+  ASSERT_EQ(store.durableFingerprints.size(), 1U);
+  EXPECT_EQ(store.durableFingerprints[0], expected);
 }
 
 TEST(BaseDefenseCheckpointWriterTest, EmptyBarrierDoesNotCreateAWrite) {

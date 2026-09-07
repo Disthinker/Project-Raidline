@@ -436,6 +436,31 @@ AssetInstanceId AssetRegistry::nextAssetId() const noexcept
     return nextAssetId_;
 }
 
+AssetRegistry &AssetRegistry::operator=(const AssetRegistry &source)
+{
+    if (this == &source) return *this;
+    auto destination = records_.begin();
+    for (const auto &[id, record] : source.records_)
+    {
+        while (destination != records_.end() && destination->first < id)
+            destination = records_.erase(destination);
+        if (destination != records_.end() && destination->first == id)
+        {
+            // Copy the complete value, including ordered magazine rounds,
+            // chamber, location variant and future fields; never share it.
+            destination->second = record;
+            ++destination;
+        }
+        else
+        {
+            records_.emplace_hint(destination, id, record);
+        }
+    }
+    records_.erase(destination, records_.end());
+    nextAssetId_ = source.nextAssetId_;
+    return *this;
+}
+
 void AssetRegistry::setNextAssetIdForLoad(AssetInstanceId nextAssetId)
 {
     if (nextAssetId == 0)
