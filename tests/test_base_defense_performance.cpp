@@ -161,7 +161,7 @@ TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFire
                 break;
             const Vec2 position{entry.x + static_cast<float>(actorIndex % 4U) * 60.0F - 100.0F,
                                 entry.y + static_cast<float>(actorIndex / 4U) * 60.0F - 100.0F};
-            checkpoint.enemies.push_back(Enemy{position, {32.0F, 48.0F}, {}, 100, id}.checkpoint());
+            checkpoint.enemies.push_back(Enemy{position, {32.0F, 48.0F}, {}, wave.enemyMaxHealth, id}.checkpoint());
             ++actorIndex;
         }
     }

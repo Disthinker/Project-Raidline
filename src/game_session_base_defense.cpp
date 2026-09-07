@@ -61,6 +61,9 @@ bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
     world.configureGroundBlockers(
         projectBaseGroundMovementBlockers(profile_, publishedContentRegistry(),
                                           RegionalBaseSiteDefinitionId{world.siteDefinitionId()}));
+    // Equipment can change while a facility UI pauses Base simulation. Freeze
+    // the equipped weapon, not the previous/default runtime configuration.
+    synchronizeActiveBaseWeapon(world);
     auto prepared = world.prepareBaseDefenseSnapshot(std::move(inputs));
     if (!prepared)
     {

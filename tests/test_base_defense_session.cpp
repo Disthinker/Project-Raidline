@@ -214,6 +214,85 @@ TEST(BaseDefenseSessionTest, ManualStartExcludesRaidAndAutoDefense) {
             session.profile().baseSiege.siegeSequence);
 }
 
+TEST(BaseDefenseSessionTest,
+     RealAndInfiniteAmmunitionFireAtCoreDoesNotPauseDefense) {
+  for (const bool infinite : {false, true}) {
+    SCOPED_TRACE(infinite);
+    SaveFixture save;
+    GameFlow flow;
+    flow.configurePersistence(save.path);
+    ASSERT_TRUE(flow.startNewGame("defense-continuous-fire", false));
+    auto &session = flow.gameSession();
+    const auto rifle = assetFor(session.profile(), alpha_content::rifle);
+    const auto magazine = assetFor(session.profile(), alpha_content::magazine);
+    const auto ammo = assetFor(session.profile(), alpha_content::ammunition);
+    ASSERT_TRUE(
+        session
+            .executeProfileInventory(
+                InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon},
+                "equip")
+            .succeeded);
+    ASSERT_TRUE(session
+                    .executeProfileWeaponAmmo(
+                        LoadMagazineCommand{magazine, ammo, 30}, "load")
+                    .succeeded);
+    ASSERT_TRUE(
+        session
+            .executeProfileWeaponAmmo(
+                InstallMagazineAndChamberCommand{rifle, magazine}, "install")
+            .succeeded);
+    ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
+    ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+    unsigned shots = 0;
+    for (unsigned frame = 0; frame < 3000 && session.baseDefenseActive();
+         ++frame) {
+      BaseInput input;
+      input.firePressed = true;
+      input.developerInfiniteAmmo = infinite;
+      input.fireJustPressed = frame % 10 == 0;
+      const auto &enemies = flow.baseWorld().baseDefenseEnemies();
+      if (!enemies.empty()) {
+        const auto &enemy = enemies.front();
+        const Vec2 target{enemy.position().x + enemy.size().x / 2,
+                          enemy.position().y + enemy.size().y / 2};
+        const auto aim = flow.baseWorld().weaponAimWorldPosition();
+        input.aimWorldPosition = target;
+        input.aimMotionDelta = Vec2{target.x - aim.x, target.y - aim.y};
+      }
+      flow.updateBase(input, 0.02F);
+      shots += flow.baseWorld().shotFiredLastUpdate() ? 1 : 0;
+      ASSERT_FALSE(session.baseDefenseSaveBlocked())
+          << "frame=" << frame << " shots=" << shots << " "
+          << session.persistenceMessage();
+    }
+    EXPECT_GE(shots, 10U);
+  }
+}
+
+TEST(BaseDefenseSessionTest,
+     NewlyEquippedWeaponIsConfiguredBeforeDefenseSnapshot) {
+  GameFlow flow;
+  ASSERT_TRUE(flow.startNewGame("defense-new-weapon", false));
+  auto &session = flow.gameSession();
+  const auto rifle = assetFor(session.profile(), alpha_content::rifle);
+  ASSERT_TRUE(
+      session
+          .executeProfileInventory(
+              InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon},
+              "equip-before-warning")
+          .succeeded);
+  ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
+  ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+  const auto expected =
+      publishedContentRegistry().item(alpha_content::rifle).weaponUse;
+  ASSERT_TRUE(expected);
+  EXPECT_EQ(flow.baseWorld().baseDefenseCheckpoint()->shooting.weaponDamage,
+            expected->baseDamage);
+  flow.updateBase({}, 0.02F);
+  EXPECT_EQ(flow.baseWorld().baseDefenseCheckpoint()->shooting.weaponDamage,
+            expected->baseDamage);
+}
+
 TEST(BaseDefenseSessionTest, AbandonUsesOneSoftResultWithoutPersonalAssetLoss) {
   GameFlow flow;
   begin(flow);

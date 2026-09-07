@@ -238,7 +238,9 @@ BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBloc
     {
         auto wave = laneTemplates[w % laneTemplates.size()];
         wave.releaseSeconds = static_cast<float>(w) * 24.0F;
-        wave.enemyMaxHealth = 100;
+        // Ordinary infected use the current Raid health scale, not player HP.
+        // Previously frozen events retain their explicitly saved health.
+        wave.enemyMaxHealth = 12;
         for (std::uint32_t n = 0; n < perWave; ++n)
             wave.enemyIds.push_back(nextId++);
         s.wavePlans.push_back(std::move(wave));
@@ -267,7 +269,10 @@ bool BaseDefenseRuntime::resume(const BaseDefenseSnapshot &s,
     candidate.blockerIndex_ =
         RaidSpaceBlockerIndex::build(s.worldSize, candidate.enemyBlockers_, 320);
     candidate.navigation_ =
-        RaidSpaceNavigationField::build(enemySize, s.worldSize, candidate.enemyBlockers_);
+        // Collision permits touching a wall. An additional navigation-only
+        // margin rejects that legal start after separation pushes an actor
+        // against the wall, leaving it with no escape waypoint forever.
+        RaidSpaceNavigationField::build(enemySize, s.worldSize, candidate.enemyBlockers_, 0.0F);
     if (!candidate.blockerIndex_ || !candidate.navigation_)
         return false;
     for (const auto &wave : s.wavePlans)
@@ -460,13 +465,15 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         const Vec2 ec = center(e);
         const bool visible =
             exposed && distance(ec, pc) < 900 && blockerIndex_->hasLineOfSight(ec, pc);
-        const bool heard = exposed && shotFired && distance(ec, pc) < 1500;
-        const Vec2 goal = (visible || heard) ? pc : wave->target;
+        // Siege actors already have an invasion objective. Hearing alerts them
+        // (above), but only seeing an exposed player overrides that objective.
+        // Repeated unseen gunfire must not pin the wave behind a safe boundary.
+        const Vec2 goal = visible ? pc : wave->target;
         cached.navigationRefreshRemaining = std::max(0.0F, cached.navigationRefreshRemaining - dt);
         if (i == selected && (cached.navigationRefreshRemaining <= 0 || !cached.navigationTarget))
         {
             const auto navStart = std::chrono::steady_clock::now();
-            auto next = navigation_->nextWaypoint(ec, goal, visible ? 48.0F : 0.0F);
+            const auto next = navigation_->nextWaypoint(ec, goal, visible ? 48.0F : 0.0F);
             cached.navigationTarget = checkpointPoint(next.value_or(ec));
             cached.navigationRefreshRemaining = 0.10F;
             ++metrics_.navigationQueries;
@@ -480,7 +487,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         directive.role = EnemyTacticalRole::Engage;
         directive.canStartAttack = directive.canStartAttack && visible;
         static_cast<void>(e.updateTowardsTarget(
-            goal, directive, dt, state_.worldSize.x, state_.worldSize.y, visible || (!heard),
+            goal, directive, dt, state_.worldSize.x, state_.worldSize.y, true,
             cached.navigationTarget ? std::optional{runtimePoint(*cached.navigationTarget)}
                                     : std::optional{ec},
             true));
