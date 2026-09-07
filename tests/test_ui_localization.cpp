@@ -3,6 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <utility>
 
 #include "ui_localization.h"
 
@@ -11,6 +12,104 @@ TEST(UiLocalizationTest, FoundingPromptsHaveChineseText) {
          "TEMPORARY SUPPLY POINT - SHARED STASH", "CIVIC COURTYARD", "FREIGHT COURTYARD",
          "TAB INVENTORY | M MAP | E INSPECT | ESC MENU"})
         EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese,text), text);
+}
+
+TEST(UiLocalizationTest, FirstRaidSupplyCountersAreCompletelyReadable) {
+  for (const auto &[english, chinese] : {
+           std::pair{"CURRENT CHAMBER 1 | INSTALLED MAG 29 | CARRIED LOOSE 60",
+                     "枪膛 1 | 已装弹匣 29 | 随身散弹 60"},
+           std::pair{"R CANDIDATE: 30 ROUNDS | CAN RELOAD",
+                     "R 换弹候选：30 发 | 可以换弹"},
+           std::pair{"R CANDIDATE: 15 ROUNDS | CANNOT INSTALL",
+                     "R 换弹候选：15 发 | 无法安装"},
+           std::pair{"OTHER LOADED SPARES 2 / 60 ROUNDS | NOT R-READY",
+                     "其他已压弹备用匣 2 / 60 发 | 无法通过 R 快速换弹"},
+           std::pair{"R CANDIDATE: NONE | USE CHEST RIG MAGAZINE POCKETS",
+                     "R 换弹候选：无 | 请使用胸挂的弹匣分区"}}) {
+    EXPECT_EQ(localizeUiText(UiLanguage::English, english), english);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, english), chinese);
+  }
+}
+
+TEST(UiLocalizationTest, FirstRaidPreparationExplainsActionsWithoutEnglishFragments) {
+  for (const auto &[english, chinese] : {
+           std::pair{"FIRE READY NOW | NEXT SHOT USES THE CHAMBERED ROUND",
+                     "当前可击发 | 下一枪消耗枪膛中的子弹"},
+           std::pair{"CHAMBER EMPTY | NEXT FIRE INPUT ONLY CHAMBERS A ROUND",
+                     "枪膛为空 | 下一次按射击只会上膛，不会击发"},
+           std::pair{"CANNOT FIRE: NO FEED | LOOSE OR SPARE AMMO IS NOT LOADED",
+                     "无法击发：供弹未就绪 | 散装或备用弹药不等于已装填"},
+           std::pair{"CLOSE TAB; SELECT THIS WEAPON BEFORE RELOADING OR CLEARING",
+                     "关闭 Tab 背包；先切换到此武器，再换弹或清障"},
+           std::pair{"DRAG THE MAGAZINE TO THE WEAPON TO INSTALL AND CHAMBER",
+                     "将弹匣拖向武器，安装并自动上膛"},
+           std::pair{"ARMOR AND MEDICINE ARE OPTIONAL; EMPTY-HAND DEPLOY IS ALLOWED",
+                     "护甲和医疗物品为可选准备；允许空手出击"},
+           std::pair{"FIRE READY NOW | NOT THE SAME AS ROLE READY",
+                     "当前能够击发 | 不等同于配装职责达标"},
+           std::pair{"CANNOT FIRE NOW | CHECK WEAPON IN TAB INVENTORY",
+                     "当前无法击发 | 请打开 Tab 背包检查武器"}}) {
+    EXPECT_EQ(localizeUiText(UiLanguage::English, english), english);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, english), chinese);
+  }
+}
+
+TEST(UiLocalizationTest, FirstRaidClocksAndRealExtractionConditionsAreBilingual) {
+  for (const auto &[english, chinese] : {
+           std::pair{"REGULAR PHASE: 1200 S | NORMAL EXTRACTION: 3 S",
+                     "常规阶段时长：1200 S | 常规撤离需 3 S"},
+           std::pair{"REGULAR TIME LEFT: 413 S", "常规阶段剩余：413 S"},
+           std::pair{"NO HARD TIME LIMIT | NORMAL EXTRACTION: 6 S",
+                     "没有硬性时限 | 常规撤离需 6 S"},
+           std::pair{"ZERO TIME STARTS ONGOING HIGH RISK; IT IS NOT A RAID FAILURE",
+                     "倒计时归零后进入持续高危，不会直接判定对局失败"},
+           std::pair{"FINISH NORMAL EXTRACTION WITHOUT LEAVING; ITS GRACE WILL END",
+                     "请留在原地完成常规撤离；离开后宽限即失效"},
+           std::pair{"LIGHT EXTRACTION: READY | CARRY 22000 G / LIMIT 22000 G",
+                     "轻装撤离：符合条件 | 携带 22000 G / 上限 22000 G"},
+           std::pair{"LIGHT EXTRACTION: TOO HEAVY | CARRY 22001 G / LIMIT 22000 G",
+                     "轻装撤离：超重 | 携带 22001 G / 上限 22000 G"},
+           std::pair{"M MAP SHOWS ONLY DISCOVERED OR BRIEFED EXTRACTION INFORMATION",
+                     "M 地图仅显示已经发现或获得情报的撤离信息"}}) {
+    EXPECT_EQ(localizeUiText(UiLanguage::English, english), english);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, english), chinese);
+  }
+}
+
+TEST(UiLocalizationTest, FirstRaidReturnExplainsLocationsAndFailureRecovery) {
+  for (const auto &[english, chinese] : {
+           std::pair{"EXTRACTED: ITEMS STAY IN THEIR EQUIPMENT AND EXACT GRID POSITIONS",
+                     "撤离成功：物品保留在原装备栏位和精确格位中"},
+           std::pair{"RETURNED ITEMS INCLUDE YOUR ORIGINAL GEAR; THEY ARE NOT NET NEW LOOT",
+                     "带回物包括原有装备，并不等于本局净新增战利品"},
+           std::pair{"KEEP OR USE THEM; BASE SUPPLY AND WISHES REQUIRE YOUR CHOICE",
+                     "可保留或使用物品；基地供给和愿望投入均由你自行选择"},
+           std::pair{"BASE REMAINS; LOST CARRIED ITEMS DO NOT RETURN TO YOUR INVENTORY",
+                     "基地仍然保留；丢失的随身物品不会自动返回背包"},
+           std::pair{"USE THE EXISTING LOST-ITEM RECORD FOR NPC OR SELF RECOVERY",
+                     "通过现有失物记录委托 NPC 寻回，或自行寻找"},
+           std::pair{"CHECK BASE SUPPLY AND CONDITIONAL RELIEF TO PREPARE AGAIN",
+                     "查看基础供应和条件式救济，重新进行整备"},
+           std::pair{"TAB: CHECK YOUR ITEMS | PREPARE YOUR NEXT RAID",
+                     "Tab：检查随身物品 | 准备下一次出击"}}) {
+    EXPECT_EQ(localizeUiText(UiLanguage::English, english), english);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, english), chinese);
+  }
+}
+
+TEST(UiLocalizationTest, FirstRaidHintDismissalScopeIsExplicit) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "FIRST RAID | H HIDE HINTS FOR THIS RUN"),
+            "首次出击 | H 隐藏本局提示");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "FIRST RAID GUIDANCE | H HIDE HINTS"),
+            "首次出击指引 | H 隐藏提示");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "FIRST RAID | TAB PREPARE | H HIDE HINTS"),
+            "首次出击 | Tab 整备 | H 隐藏提示");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "hint acknowledgement save failed"),
+            "保存指引完成状态失败，请稍后重试");
 }
 
 namespace {

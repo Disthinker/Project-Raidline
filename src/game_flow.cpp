@@ -94,9 +94,9 @@ bool GameFlow::continueGame()
         return false;
     }
     persistentAlphaMode_ = true;
-    state_ = gameSession_.recoveredAbandonedRaid()
-        ? GameFlowState::RaidResult
-        : GameFlowState::Base;
+    // Legacy pending saves roll back to Base without producing a settlement.
+    // Keep the recovery diagnostic, but do not manufacture an empty result UI.
+    state_ = GameFlowState::Base;
     activeBaseFacility_.reset();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
@@ -623,6 +623,13 @@ bool GameFlow::returnToBase() noexcept
     if (state_ != GameFlowState::RaidResult ||
         gameSession_.state() !=
             GameSessionState::BetweenRaids)
+    {
+        return false;
+    }
+
+    // Settlement was already saved before GameSession entered BetweenRaids.
+    // This button only acknowledges that result; failed hint saves are retryable.
+    if (persistentAlphaMode_ && !gameSession_.finishFirstRaidHints())
     {
         return false;
     }

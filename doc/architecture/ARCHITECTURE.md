@@ -113,6 +113,10 @@ SessionProjection snapshot() const;
 
 schema v45 将已建立状态、按区域保存的 PlotId、Home 布局版本、提示关闭位写入校验外壳与 Profile 指纹；v44 及更早显式保持 legacy 布局。选址只改变活动安全地块与设施投影，不重生成周边环境或搬移 BaseGround。不存在导航、自动跑图或第二套任务状态。
 
+首局指导复用上述关闭位与真实已提交 RaidResult，不增加任务图或保存版本。`weapon_supply_projection` 是轻量纯领域投影：把 `queryFireWeapon` 的 Fired 与可提交但仅上膛/故障/损坏分开，并独立统计 R 候选和其他备用。`first_raid_guidance` 在 services 读取冻结运行时与已知地图信息，SDL 客户端 `first_raid_ui` 只绘制短提示和武器悬浮卡。供弹建议按 ProfileId/revision/真实仓库访问缓存，不在每帧复制整个 Raid；复杂查询先排除满匣和无空格的必失败组合。
+
+首个真实结果确认回营，或重开后再次 Deploy 时，指导关闭与原有候选保存一起提交。Raid 内 H 只隐藏本次运行，不能因 UI 偏好把未结算状态保存。旧 pending 恢复直接 Base，不制造空 RaidResult，也不算完成首次行动。
+
 ## 动作、模拟、射击与随机
 
 - Action 使用类型安全的状态变体。换弹、切换武器、医疗、撤离、武器维护与防具维护拥有各自前置条件、阶段和提交点，只共享窄时间线工具。Medkit 的首个实际治疗点原子消耗一次，部分治疗在中断后保留；止血与止痛在动作完成点提交。防具维护允许以基础速度的 45% 缓慢移动，完成前不产生部分修复或点数消耗。
