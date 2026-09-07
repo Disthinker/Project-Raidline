@@ -134,6 +134,8 @@ public:
     int run();
 
 private:
+    // Headless event-router regression tests; never creates a window or save path.
+    friend struct BaseSiegeUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -447,6 +449,16 @@ private:
     void renderBaseDefenseWorld();
     void renderBaseDefenseHud();
     [[nodiscard]] bool handleBaseDefenseControls();
+    void syncBaseSiegeWarningUi();
+    [[nodiscard]] bool baseSiegeWarningVisible() const;
+    [[nodiscard]] bool routeBaseSiegeWarningEvent(const SDL_Event &event);
+    [[nodiscard]] bool updateBaseSiegeWarning(float deltaTime);
+    enum class SiegeWarningAction { Dismiss, Reopen, Manual, Automatic };
+    std::optional<SiegeWarningAction> pendingSiegeWarningAction_;
+    std::string siegeWarningProfileId_;
+    std::uint64_t siegeWarningSequence_{};
+    bool siegeWarningDismissed_{};
+    bool siegeWarningBlocksGameplayThisFrame_{};
     bool baseDefenseAbandonArmed_{};
     bool baseDefenseObservedActive_{};
     bool baseDefenseResultVisible_{};

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "base_siege_warning_layout.h"
 #include <algorithm>
 #include <cmath>
 #include <fmt/format.h>
@@ -12,6 +13,132 @@ bool inside(SDL_FRect r, float x, float y)
     return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
 }
 } // namespace
+
+void App::syncBaseSiegeWarningUi()
+{
+    const auto &profile = gameSession_.profile();
+    if (!profile.baseSiege.warningActive || gameSession_.baseDefenseActive())
+    {
+        siegeWarningProfileId_.clear();
+        siegeWarningSequence_ = 0;
+        siegeWarningDismissed_ = false;
+        pendingSiegeWarningAction_.reset();
+        return;
+    }
+    if (siegeWarningProfileId_ != profile.profileId ||
+        siegeWarningSequence_ != profile.baseSiege.siegeSequence)
+    {
+        siegeWarningProfileId_ = profile.profileId;
+        siegeWarningSequence_ = profile.baseSiege.siegeSequence;
+        siegeWarningDismissed_ = false;
+        pendingSiegeWarningAction_.reset();
+    }
+}
+
+bool App::baseSiegeWarningVisible() const
+{
+    return gameFlow_.state() == GameFlowState::Base &&
+           gameSession_.profile().baseSiege.warningActive &&
+           !gameSession_.baseDefenseActive() && !siegeWarningDismissed_;
+}
+
+bool App::routeBaseSiegeWarningEvent(const SDL_Event &event)
+{
+    if (gameFlow_.state() != GameFlowState::Base ||
+        !gameSession_.profile().baseSiege.warningActive || gameSession_.baseDefenseActive())
+        return false;
+    const bool visible = baseSiegeWarningVisible();
+    const bool key = event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat;
+    const bool click = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                       event.button.button == SDL_BUTTON_LEFT;
+    std::optional<SiegeWarningAction> action;
+    if (key && (event.key.scancode == SDL_SCANCODE_F6 ||
+                (visible && event.key.scancode == SDL_SCANCODE_ESCAPE)))
+        action = visible ? SiegeWarningAction::Dismiss : SiegeWarningAction::Reopen;
+    else if (click && visible)
+    {
+        using namespace base_siege_warning_layout;
+        if (inside(close, event.button.x, event.button.y)) action = SiegeWarningAction::Dismiss;
+        else if (inside(manual, event.button.x, event.button.y)) action = SiegeWarningAction::Manual;
+        else if (inside(automatic, event.button.x, event.button.y)) action = SiegeWarningAction::Automatic;
+    }
+    else if (click && !relativeMouseModeActive_ &&
+             inside(base_siege_warning_layout::banner, event.button.x, event.button.y))
+        action = SiegeWarningAction::Reopen;
+    if (action && !pendingSiegeWarningAction_)
+        pendingSiegeWarningAction_ = action; // first action wins, including double clicks
+    if (visible || action || siegeWarningBlocksGameplayThisFrame_)
+    {
+        siegeWarningBlocksGameplayThisFrame_ = true;
+        input_.suppressPrimaryPointerUntilRelease();
+        return true;
+    }
+    return false;
+}
+
+bool App::updateBaseSiegeWarning(float deltaTime)
+{
+    syncBaseSiegeWarningUi();
+    const bool wasVisible = baseSiegeWarningVisible();
+    const auto action = pendingSiegeWarningAction_;
+    pendingSiegeWarningAction_.reset();
+    if (action)
+    {
+        switch (*action)
+        {
+        case SiegeWarningAction::Dismiss: siegeWarningDismissed_ = true; break;
+        case SiegeWarningAction::Reopen: siegeWarningDismissed_ = false; break;
+        case SiegeWarningAction::Manual:
+            uiMessage_ = gameSession_.startBaseRealtimeDefense(gameFlow_.baseWorld())
+                ? "BASE DEFENSE STARTED | INTERCEPT OUTSIDE THE CORE"
+                : gameSession_.persistenceMessage();
+            break;
+        case SiegeWarningAction::Automatic:
+        {
+            const auto receipt = gameSession_.executeBaseAutoDefense(
+                nextProfileTransactionId("base-auto-defense"));
+            uiMessage_ = receipt.succeeded
+                ? receipt.outcome == BaseSiegeOutcome::Defended
+                    ? "BASE DEFENDED | SAFETY PERIOD STARTED"
+                    : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED"
+                : receipt.message;
+            gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+            break;
+        }
+        }
+    }
+    // A deliberate choice wins over the automatic preset at the same deadline.
+    // On a rejected choice retain the warning/message for retry, without auto-settling.
+    if (!action || *action == SiegeWarningAction::Dismiss || *action == SiegeWarningAction::Reopen)
+        gameSession_.advanceBaseWorldClock(deltaTime);
+    syncBaseSiegeWarningUi();
+    const bool visible = baseSiegeWarningVisible();
+    if (wasVisible || visible)
+    {
+        basePlacementState_.reset();
+        baseFixedFacilityPlacementState_.reset();
+        baseConstructionPanelOpen_ = false;
+        deactivateBaseBuildCamera();
+        baseFacilityContextMenu_.reset();
+        tacticalMapOpen_ = false;
+        closeInventory();
+        gameFlow_.closeBaseFacility();
+        lostRaidRecordsOpen_ = false;
+        regionalOperationsOpen_ = false;
+        selectedLostRaidRecordId_.reset();
+        profileContextMenu_.reset();
+    }
+    if (wasVisible || visible || action || siegeWarningBlocksGameplayThisFrame_)
+    {
+        pendingBaseClicks_.clear();
+        pendingBaseRightClicks_.clear();
+        pendingInventoryUiEvents_.clear();
+        pendingProfileRightClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return true;
+    }
+    return false;
+}
 
 bool App::handleBaseDefenseControls()
 {

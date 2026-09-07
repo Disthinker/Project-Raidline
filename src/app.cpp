@@ -1,5 +1,6 @@
 // Implementation of the App class
 #include "app.h"
+#include "base_siege_warning_layout.h"
 #include "base_wish_expedition.h"
 #include "first_raid_guidance.h"
 
@@ -2673,7 +2674,7 @@ SDL_FRect App::regionalBasePerimeterSweepButton() const noexcept
 
 SDL_FRect App::baseAutoDefenseButton() const noexcept
 {
-    return SDL_FRect{345.0F, 474.0F, 280.0F, 52.0F};
+    return base_siege_warning_layout::automatic;
 }
 
 SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
@@ -2764,56 +2765,6 @@ void App::handleInventoryCancel()
 void App::updateBase(float deltaTime)
 {
     updateBaseOperationNotices(deltaTime);
-    if (handleBaseDefenseControls()) return;
-    gameSession_.advanceBaseWorldClock(deltaTime);
-    if (gameSession_.baseThreatProjection().warningActive && !gameSession_.baseDefenseActive())
-    {
-        basePlacementState_.reset();
-        baseFixedFacilityPlacementState_.reset();
-        baseConstructionPanelOpen_ = false;
-        deactivateBaseBuildCamera();
-        baseFacilityContextMenu_.reset();
-        tacticalMapOpen_ = false;
-        closeInventory();
-        gameFlow_.closeBaseFacility();
-        lostRaidRecordsOpen_ = false;
-        regionalOperationsOpen_ = false;
-        selectedLostRaidRecordId_.reset();
-        profileContextMenu_.reset();
-        for (const BasePointerClick &click : pendingBaseClicks_)
-        {
-            if (contains(SDL_FRect{650.0F,474.0F,280.0F,52.0F}, click.position))
-            {
-                const bool started = gameSession_.startBaseRealtimeDefense(gameFlow_.baseWorld());
-                uiMessage_ = started ? "BASE DEFENSE STARTED | INTERCEPT OUTSIDE THE CORE"
-                                     : gameSession_.persistenceMessage();
-                input_.suppressPrimaryPointerUntilRelease();
-                break;
-            }
-            if (!contains(baseAutoDefenseButton(), click.position))
-            {
-                continue;
-            }
-            const BaseAutoDefenseReceipt receipt =
-                gameSession_.executeBaseAutoDefense(
-                    nextProfileTransactionId("base-auto-defense"));
-            uiMessage_ = receipt.succeeded
-                ? receipt.outcome == BaseSiegeOutcome::Defended
-                    ? "BASE DEFENDED | SAFETY PERIOD STARTED"
-                    : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            break;
-        }
-        pendingBaseClicks_.clear();
-        pendingBaseRightClicks_.clear();
-        pendingInventoryUiEvents_.clear();
-        pendingProfileRightClicks_.clear();
-        return;
-    }
-
     if (developerWeaponPanelBlocksGameplayThisFrame_)
     {
         pendingBaseClicks_.clear();
@@ -2823,6 +2774,9 @@ void App::updateBase(float deltaTime)
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
+
+    if (handleBaseDefenseControls()) return;
+    if (updateBaseSiegeWarning(deltaTime)) return;
 
     if (baseConstructionPanelOpen_)
     {
@@ -5893,6 +5847,9 @@ void App::handleInventoryPartialTransferEvent(
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
+    syncBaseSiegeWarningUi();
+    pendingSiegeWarningAction_.reset();
+    siegeWarningBlocksGameplayThisFrame_ = baseSiegeWarningVisible();
     pendingInventoryUiEvents_.clear();
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
@@ -6216,6 +6173,12 @@ void App::processEvents()
             }
             continue;
         }
+
+        if (developerWeaponPanelBlocksGameplayThisFrame_)
+            continue;
+        syncBaseSiegeWarningUi();
+        if (routeBaseSiegeWarningEvent(event))
+            continue;
 
         if (gameFlow_.state() == GameFlowState::Base &&
             !pauseMenu_.isOpen() &&
@@ -6614,6 +6577,7 @@ void App::update(float deltaTime)
         return;
     }
     const bool existingModalHandlesEscape =
+        baseSiegeWarningVisible() || siegeWarningBlocksGameplayThisFrame_ ||
         baseDefenseResultVisible_ ||
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
@@ -6657,7 +6621,8 @@ void App::update(float deltaTime)
 
     if (gameFlow_.state() == GameFlowState::Base)
     {
-        if (screenConfirm &&
+        if (screenConfirm && !baseSiegeWarningVisible() &&
+            !siegeWarningBlocksGameplayThisFrame_ &&
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate)
         {
             static_cast<void>(handleScreenConfirm());
@@ -10081,7 +10046,7 @@ void App::syncRaidPointerCapture() noexcept
     const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
         !gameFlow_.activeBaseFacility().has_value() &&
         !gameSession_.baseDefenseSaveBlocked() && !baseDefenseResultVisible_ &&
-        !gameSession_.baseThreatProjection().warningActive;
+        !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
     const bool raidWorldActive = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
     const bool shouldCapture = shouldCaptureRaidPointer(
@@ -10127,7 +10092,7 @@ void App::renderAimCrosshair()
     const bool inBaseWorld = gameFlow_.state() == GameFlowState::Base &&
         !gameFlow_.activeBaseFacility().has_value() &&
         !gameSession_.baseDefenseSaveBlocked() && !baseDefenseResultVisible_ &&
-        !gameSession_.baseThreatProjection().warningActive;
+        !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
     const bool inRaidWorld = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
@@ -17678,6 +17643,18 @@ void App::renderBaseSiegeWarning()
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    if (!baseSiegeWarningVisible())
+    {
+        const auto banner = base_siege_warning_layout::banner;
+        SDL_SetRenderDrawColor(renderer_, 65, 39, 28, 240);
+        SDL_RenderFillRect(renderer_, &banner);
+        SDL_SetRenderDrawColor(renderer_, 205, 122, 62, 255);
+        SDL_RenderRect(renderer_, &banner);
+        const auto label = fmt::format("SIEGE TIMER {:02}:{:02} | F6 / CLICK: DEFENSE OPTIONS",
+            threat.warningRemainingSeconds / 60U, threat.warningRemainingSeconds % 60U);
+        uiTextRenderer_.render(renderer_, banner.x + 12, banner.y + 12, label.c_str());
+        return;
+    }
     SDL_SetRenderDrawColor(renderer_, 12, 10, 8, 214);
     const SDL_FRect shade{
         0.0F, 0.0F,
@@ -17736,7 +17713,7 @@ void App::renderBaseSiegeWarning()
     uiTextRenderer_.render(
         renderer_, button.x + 16.0F, button.y + 18.0F,
         "START AUTO DEFENSE NOW");
-    const SDL_FRect manual{650.0F,474.0F,280.0F,52.0F};
+    const SDL_FRect manual = base_siege_warning_layout::manual;
     SDL_SetRenderDrawColor(renderer_, 48, 78, 94, 255);
     SDL_RenderFillRect(renderer_, &manual);
     SDL_SetRenderDrawColor(renderer_, 220, 190, 120, 255);
@@ -17744,6 +17721,12 @@ void App::renderBaseSiegeWarning()
     uiTextRenderer_.render(renderer_, 674.0F, 492.0F, "DEFEND PERSONALLY");
     uiTextRenderer_.render(renderer_, 390.0F, 443.0F,
         "MANUAL: REAL AMMO / MEDICINE | NO SECURITY FEE");
+    const auto close = base_siege_warning_layout::close;
+    SDL_SetRenderDrawColor(renderer_, 92, 62, 48, 255);
+    SDL_RenderFillRect(renderer_, &close);
+    uiTextRenderer_.render(renderer_, close.x + 12, close.y + 8, "X");
+    uiTextRenderer_.render(renderer_, 360, 564,
+        "ESC / X: KEEP PREPARING | WARNING TIMER CONTINUES");
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(
