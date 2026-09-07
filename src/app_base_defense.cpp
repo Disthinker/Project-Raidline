@@ -57,10 +57,10 @@ bool App::routeBaseSiegeWarningEvent(const SDL_Event &event)
         action = visible ? SiegeWarningAction::Dismiss : SiegeWarningAction::Reopen;
     else if (click && visible)
     {
-        using namespace base_siege_warning_layout;
-        if (inside(close, event.button.x, event.button.y)) action = SiegeWarningAction::Dismiss;
-        else if (inside(manual, event.button.x, event.button.y)) action = SiegeWarningAction::Manual;
-        else if (inside(automatic, event.button.x, event.button.y)) action = SiegeWarningAction::Automatic;
+        namespace layout = base_siege_warning_layout;
+        if (inside(layout::close, event.button.x, event.button.y)) action = SiegeWarningAction::Dismiss;
+        else if (inside(layout::manual, event.button.x, event.button.y)) action = SiegeWarningAction::Manual;
+        else if (inside(layout::automatic, event.button.x, event.button.y)) action = SiegeWarningAction::Automatic;
     }
     else if (click && !relativeMouseModeActive_ &&
              inside(base_siege_warning_layout::banner, event.button.x, event.button.y))
