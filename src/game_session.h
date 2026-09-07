@@ -223,6 +223,7 @@ public:
     [[nodiscard]] bool establishHome(std::string_view plotId,
         const RegionalBaseSiteDefinitionId &region, Vec2 playerCenter);
     [[nodiscard]] bool dismissHomeHints();
+    [[nodiscard]] bool finishFirstRaidHints();
     [[nodiscard]] bool continueProfile();
 
     void advanceBaseWorldClock(float deltaTime);

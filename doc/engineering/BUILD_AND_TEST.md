@@ -51,10 +51,14 @@ ctest --test-dir build/windows-debug --output-on-failure -j 8
 - 修改纯领域类：构建对应测试目标，跑 focused tests，再跑全量 CTest。
 - 修改头文件或类布局：重建所有消费者；不能只看单个测试目标。
 - 修改 CMake：重新运行 `cmake --preset windows-debug` 后构建。
-- 修改 App/SDL 投影：构建主程序，跑领域/流程回归，并做真实窗口或至少进程启动冒烟。
+- 修改 App/SDL 投影：构建主程序，跑领域/流程回归；自动化与 CI 完成后由用户正常游玩验收，开发代理不启动游戏，也不用进程存活替代验收。
 - 修改资产管线：只有艺术包重新授权后，才运行相应 `tools/art_pipeline` 与 `tests/test_phase1_assets.py`；这些命令可能写 QA 输出，运行前先确认边界。
 
 ## stale binary 与 MSVC 头依赖
+
+### 本机 vcpkg 工具缓存失配排查（2026-09-07）
+
+PowerShell 版本改变也可能使既有 vcpkg ABI 缓存失效，不一定是 C++ 源码或依赖版本变化。若重新安装相同版本依赖时，旧 MSYS2 runtime 下载返回 404，先检查本机已缓存且 SHA 校验匹配的原生 pkgconf 工具；本次使用 pkgconf 2.3.0 的 `pkg-config.exe` 和配套 DLL，在配置子进程中设置 `PKG_CONFIG`、`VCPKG_KEEP_ENV_VARS=PKG_CONFIG` 后恢复构建。该临时绝对路径不是仓库或 CI 合同，工具不入库；不应升级依赖、关闭未完成的依赖安装或使用旧二进制绕过失败。
 
 CMakeLists 中保留了 MSVC 中文 `/showIncludes` 前缀修正。若出现源码与行为不一致或 `gtest_ar_` 栈损坏：
 

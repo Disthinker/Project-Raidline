@@ -25,6 +25,7 @@
 #include "raid_pointer_capture.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
+#include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
 {
@@ -216,6 +217,10 @@ private:
     std::set<AssetInstanceId> selectedBasePriorityAssetIds_;
     std::size_t selectedBaseManufacturingRecipeIndex_{};
     std::string uiMessage_;
+    WeaponSupplyProjection weaponSupplyCache_;
+    std::string weaponSupplyCacheProfileId_;
+    bool weaponSupplyCacheIncludesStash_{};
+    bool firstRaidHintsHiddenForRun_{};
     float specialHitFeedbackRemaining_{};
     HitSemantic specialHitSemantic_{HitSemantic::Normal};
     float playerDamageFeedbackRemaining_{};
@@ -461,6 +466,12 @@ private:
         bool inRaid,
         std::optional<AssetInstanceId> externalContainerId);
     void renderProfileContextMenu(bool inRaid);
+    const WeaponSupplyProjection &weaponSupply(bool includeStash);
+    void renderWeaponSupplyTooltip(
+        AssetInstanceId weaponId, MousePosition pointer, bool includeStash, bool inRaid);
+    void renderFirstRaidHints();
+    void renderFirstRaidHintCard(
+        const std::vector<std::string> &lines, float x, float y, float width);
     void renderMedicalWheel();
     void renderDeveloperWeaponPanel();
     void renderDeveloperPerformanceOverlay();

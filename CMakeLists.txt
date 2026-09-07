@@ -264,6 +264,8 @@ add_library(raidline_domain STATIC
     src/lost_raid_domain.h
     src/loadout_progression.cpp
     src/loadout_progression.h
+    src/weapon_supply_projection.cpp
+    src/weapon_supply_projection.h
     src/base_wish_expedition.cpp
     src/home_founding_domain.cpp
     src/home_founding_domain.h
@@ -380,6 +382,8 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/first_raid_guidance.cpp
+    src/first_raid_guidance.h
     src/base_facility_management.cpp
     src/base_facility_management.h
     src/game_flow.cpp
@@ -401,6 +405,7 @@ add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
     src/app.cpp
+    src/first_raid_ui.cpp
     src/app.h
     src/base_build_catalog_presentation.h
     src/base_build_camera.cpp
@@ -497,6 +502,9 @@ endfunction()
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
 raidline_add_test(BaseWishExpeditionTest tests/test_base_wish_expedition.cpp raidline::services)
 raidline_add_test(HomeFoundingTest tests/test_home_founding.cpp raidline::services)
+raidline_add_test(WeaponSupplyProjectionTest tests/test_weapon_supply_projection.cpp raidline::services)
+raidline_add_test(FirstRaidGuidanceTest tests/test_first_raid_guidance.cpp raidline::services)
+raidline_add_test(FirstRaidLifecycleTest tests/test_first_raid_lifecycle.cpp raidline::services)
 raidline_add_test(
     CombatDamageDomainTest
     tests/test_combat_damage_domain.cpp

@@ -25,6 +25,13 @@ namespace
     constexpr float kUnsuppressedGunshotNoiseRadius{900.0F};
     const LoadoutArchetypeDefinitionId kStarterLoadoutArchetype{
         "loadout_archetype.light_scavenger"};
+
+    bool hasCommittedRaidResult(const ProfileState &profile)
+    {
+        return !profile.pendingRaid && profile.lastRaidResult &&
+            profile.lastRaidResult->outcome != RaidResultOutcome::AbnormalQuit &&
+            profile.committedSettlements.contains(profile.lastRaidResult->settlementId);
+    }
 }
 
 GameSession::GameSession()
@@ -665,10 +672,26 @@ bool GameSession::establishHome(std::string_view plotId,
 
 bool GameSession::dismissHomeHints()
 {
+    // Raid UI may hide hints transiently, but must never checkpoint an active
+    // Raid merely to save a presentation preference.
+    if (alphaRaidActive_ || profile_.pendingRaid) return false;
     if (profile_.homeFounding.hintsDismissed) return true;
     if (profile_.revision == std::numeric_limits<ProfileRevision>::max()) return false;
     ProfileState candidate = profile_;
     candidate.homeFounding.hintsDismissed = true;
+    ++candidate.revision;
+    return commitProfileCandidate(std::move(candidate));
+}
+
+bool GameSession::finishFirstRaidHints()
+{
+    if (alphaRaidActive_ || !hasCommittedRaidResult(profile_)) return false;
+    if (profile_.homeFounding.hintsDismissed &&
+        profile_.tutorial == TutorialProgress::Complete) return true;
+    if (profile_.revision == std::numeric_limits<ProfileRevision>::max()) return false;
+    ProfileState candidate = profile_;
+    candidate.homeFounding.hintsDismissed = true;
+    candidate.tutorial = TutorialProgress::Complete;
     ++candidate.revision;
     return commitProfileCandidate(std::move(candidate));
 }
@@ -769,7 +792,18 @@ bool GameSession::deployAlpha(
     }
     const std::size_t number = profile_.committedSettlements.size() + 1U;
     ProfileState recoveryProfile = profile_;
-    ProfileState candidate = profile_;
+    // Reopening after a committed result may skip its result-screen button.
+    // A second deployment acknowledges that guide in the same clean Base
+    // checkpoint as deployment; rejection or save failure commits neither.
+    if (!recoveryProfile.homeFounding.hintsDismissed &&
+        hasCommittedRaidResult(recoveryProfile))
+    {
+        if (recoveryProfile.revision == std::numeric_limits<ProfileRevision>::max()) return false;
+        recoveryProfile.homeFounding.hintsDismissed = true;
+        recoveryProfile.tutorial = TutorialProgress::Complete;
+        ++recoveryProfile.revision;
+    }
+    ProfileState candidate = recoveryProfile;
     const std::string raidId = candidate.profileId + "-raid-" +
         std::to_string(number);
     const std::string settlementId = candidate.profileId + "-settlement-" +
@@ -790,7 +824,7 @@ bool GameSession::deployAlpha(
             std::move(baseSiteClearanceId),
             std::move(basePerimeterSweepId)},
         CommandContext{
-            profile_.revision,
+            recoveryProfile.revision,
             "deploy:" + raidId},
         progress);
     if (!receipt.succeeded || !candidate.pendingRaid.has_value())
@@ -1032,7 +1066,7 @@ bool GameSession::deployAlpha(
     if (saveRepository_.has_value())
     {
         const SaveWriteResult saved = saveRepository_->save(
-            profile_,
+            recoveryProfile,
             publishedContentRegistry().contentVersion());
         if (!saved.succeeded)
         {
@@ -5113,7 +5147,8 @@ void GameSession::noteBaseFacility(BaseFacilityKind facility)
         next = TutorialProgress::PrepareLoadout;
     }
     else if (profile_.tutorial == TutorialProgress::FindRaidGate &&
-             facility == BaseFacilityKind::RaidGate)
+             facility == BaseFacilityKind::RaidGate &&
+             profile_.homeFounding.hintsDismissed)
     {
         next = TutorialProgress::Complete;
     }

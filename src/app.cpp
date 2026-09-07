@@ -1,6 +1,7 @@
 // Implementation of the App class
 #include "app.h"
 #include "base_wish_expedition.h"
+#include "first_raid_guidance.h"
 
 #include <algorithm>
 #include <array>
@@ -780,53 +781,6 @@ namespace
             }
         }
         return std::nullopt;
-    }
-
-    struct WeaponReadiness
-    {
-        bool hasWeapon{};
-        bool hasChamberedRound{};
-        std::size_t compatibleMagazineRounds{};
-    };
-
-    WeaponReadiness weaponReadiness(const ProfileState &profile)
-    {
-        WeaponReadiness result;
-        std::vector<ItemDefinitionId> compatibleMagazines;
-        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
-        {
-            const auto weapon = equippedAsset(profile, slot);
-            if (!weapon.has_value())
-            {
-                continue;
-            }
-            const AssetRecord *asset = profile.assets.find(*weapon);
-            if (asset == nullptr)
-            {
-                continue;
-            }
-            result.hasWeapon = true;
-            result.hasChamberedRound = result.hasChamberedRound ||
-                asset->chamberedRound.has_value();
-            const ItemDefinition &definition =
-                publishedContentRegistry().item(asset->definitionId);
-            compatibleMagazines.insert(
-                compatibleMagazines.end(),
-                definition.compatibleMagazineDefinitionIds.begin(),
-                definition.compatibleMagazineDefinitionIds.end());
-        }
-        for (const auto &[id, asset] : profile.assets.records())
-        {
-            if (assetIsCarried(profile, id) &&
-                std::find(
-                    compatibleMagazines.begin(),
-                    compatibleMagazines.end(),
-                    asset.definitionId) != compatibleMagazines.end())
-            {
-                result.compatibleMagazineRounds += asset.magazineRounds.size();
-            }
-        }
-        return result;
     }
 
     bool contains(const SDL_FRect &rect, MousePosition point) noexcept
@@ -2148,6 +2102,9 @@ bool App::handleScreenConfirm()
         break;
     case GameFlowState::RaidResult:
         transitioned = gameFlow_.returnToBase();
+        uiMessage_ = transitioned
+            ? "TAB: CHECK YOUR ITEMS | PREPARE YOUR NEXT RAID"
+            : "hint acknowledgement save failed";
         break;
     }
 
@@ -2167,10 +2124,7 @@ bool App::tryDeployFromBase(
 {
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
-    const WeaponReadiness readiness = weaponReadiness(profile);
-    const std::size_t usableRounds = readiness.compatibleMagazineRounds +
-        (readiness.hasChamberedRound ? 1U : 0U);
-    const bool unsafe = !readiness.hasWeapon || usableRounds == 0;
+    const bool unsafe = !weaponSupply(false).anyWeaponCanFire;
     const LostRaidAgingPreview aging = gameSession_.lostRaidAgingPreview();
     const bool expiring = aging.recordsExpiringOnNextSettlement > 0U;
     if ((unsafe || expiring) && !deploymentWarningArmed_)
@@ -2568,6 +2522,8 @@ void App::handleMainMenuCommand(MainMenuCommand command)
 
     if (command == MainMenuCommand::Continue)
     {
+        weaponSupplyCacheProfileId_.clear();
+        firstRaidHintsHiddenForRun_ = false;
         if (!gameSession_.hasSavedProfile())
         {
             uiMessage_ = "NO VALID PRIMARY SAVE";
@@ -2604,6 +2560,8 @@ void App::handleMainMenuCommand(MainMenuCommand command)
             return;
         }
         newGameOverwriteArmed_ = false;
+        weaponSupplyCacheProfileId_.clear();
+        firstRaidHintsHiddenForRun_ = false;
         uiMessage_ = "NEW PROFILE CREATED";
         return;
     }
@@ -6042,19 +6000,25 @@ void App::processEvents()
             input_.suppressPrimaryPointerUntilRelease();
             continue;
         }
+        if (gameFlow_.state() != GameFlowState::MainMenu &&
+            !pauseMenu_.isOpen() && !developerWeaponPanelOpen_ &&
+            event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+            event.key.scancode == SDL_SCANCODE_H &&
+            !gameSession_.profile().homeFounding.hintsDismissed)
+        {
+            // A Raid-local display choice is never a save of the active Raid.
+            if (gameFlow_.state() == GameFlowState::Raid)
+                firstRaidHintsHiddenForRun_ = true;
+            else if (!gameSession_.dismissHomeHints())
+                uiMessage_ = gameSession_.persistenceMessage();
+            continue;
+        }
         if (gameFlow_.state() == GameFlowState::Base &&
             !pauseMenu_.isOpen() && !developerWeaponPanelOpen_ &&
             !tacticalMapOpen_ && !inventoryOverlayState_.isOpen() &&
             !gameFlow_.activeBaseFacility() &&
             event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
         {
-            if (event.key.scancode == SDL_SCANCODE_H &&
-                !gameSession_.profile().homeFounding.hintsDismissed)
-            {
-                if (!gameSession_.dismissHomeHints())
-                    uiMessage_ = gameSession_.persistenceMessage();
-                continue;
-            }
             if (event.key.scancode == SDL_SCANCODE_E && gameFlow_.baseWorld().surveying())
             {
                 const auto &world = gameFlow_.baseWorld();
@@ -14955,6 +14919,15 @@ void App::renderProfileInventory(
     }
     renderProfileDragFeedback(
         includeStash, inRaid, externalContainerId);
+    if (!profileInventoryInteraction_.pointerGestureActive() && !profileContextMenu_)
+    {
+        for (const auto slot : kWeaponEquipmentSlots)
+        {
+            if (contains(equipmentSlotRect(slot), MousePosition{pointerX, pointerY}))
+                if (const auto weapon = equippedAsset(profile, slot))
+                    renderWeaponSupplyTooltip(*weapon, MousePosition{pointerX, pointerY}, includeStash, inRaid);
+        }
+    }
     renderProfileContextMenu(inRaid);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
@@ -16741,10 +16714,10 @@ void App::renderBaseDeployment()
         uiTextRenderer_.render(renderer_, 800.0F, 478.0F, gapLine.c_str());
     }
 
-    const WeaponReadiness readiness = weaponReadiness(profile);
-    const bool capable = readiness.hasWeapon &&
-        (readiness.hasChamberedRound ||
-         readiness.compatibleMagazineRounds > 0);
+    const bool capable = weaponSupply(false).anyWeaponCanFire;
+    uiTextRenderer_.render(renderer_, 800.0F, 520.0F,
+        capable ? "FIRE READY NOW | NOT THE SAME AS ROLE READY"
+                : "CANNOT FIRE NOW | CHECK WEAPON IN TAB INVENTORY");
     if (!capable)
     {
         uiTextRenderer_.render(
@@ -17469,8 +17442,7 @@ void App::renderBase()
     if (!founding.established)
         goal = founding.hintsDismissed ? "" : "SURVEY THREE SITES | M MAP | E INSPECT | H HIDE HINTS";
     else if (!founding.plots.empty())
-        goal = founding.hintsDismissed || gameSession_.profile().lastRaidResult ? ""
-            : "B BUILD (OPTIONAL) | TAB PREPARE | FIRST RAID | H HIDE HINTS";
+        goal.clear(); // The contextual first-Raid card owns new-profile guidance.
     uiTextRenderer_.render(renderer_, 48.0F, 54.0F, goal.c_str());
     if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
         !baseFixedFacilityPlacementState_.has_value() &&
@@ -18344,9 +18316,15 @@ void App::render()
         renderRaidScreen();
         renderScreenPrimaryButton(
             "RETURN TO BASE");
+        if (uiMessage_ == "hint acknowledgement save failed")
+        {
+            SDL_SetRenderDrawColor(renderer_, 244, 204, 156, 255);
+            uiTextRenderer_.render(renderer_, 410.0F, 478.0F, uiMessage_.c_str());
+        }
         break;
     }
 
+    renderFirstRaidHints();
     renderPauseMenu();
     renderDeveloperPerformanceOverlay();
     renderDeveloperWeaponPanel();
