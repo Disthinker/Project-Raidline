@@ -38,6 +38,8 @@ struct WorldShootingAdvance
 class WorldShootingRuntime
 {
 public:
+    [[nodiscard]] WorldShootingCheckpoint checkpoint() const;
+    [[nodiscard]] bool restoreCheckpoint(const WorldShootingCheckpoint &);
     WorldShootingRuntime();
 
     void beginFrame(float deltaTime) noexcept;

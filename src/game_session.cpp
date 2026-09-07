@@ -110,9 +110,13 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     {
         return std::nullopt;
     }
+    if (baseDefenseActive() && !prepareBaseDefenseFrame(baseWorld))
+        return std::nullopt;
+    if (baseDefenseActive())
+        deltaTime = std::isfinite(deltaTime) ? std::clamp(deltaTime, 0.0F, 0.1F) : 0.0F;
     const RegionalBaseSiteDefinitionId perimeterSite{
         baseWorld.siteDefinitionId()};
-    if (profile_.homeFounding.established)
+    if (profile_.homeFounding.established && !baseDefenseActive())
     {
         ProfileState candidate = profile_;
         HomePerimeterGenerationContext generation{
@@ -150,11 +154,12 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         if (persisted != profile_.homePerimeter.sites.end())
             baseWorld.configureHomePerimeter(&persisted->second);
     };
-    baseWorld.configureGroundBlockers(
-        projectBaseGroundMovementBlockers(
-            profile_,
-            publishedContentRegistry(),
-            RegionalBaseSiteDefinitionId{baseWorld.siteDefinitionId()}));
+    if (!baseDefenseActive())
+        baseWorld.configureGroundBlockers(
+            projectBaseGroundMovementBlockers(
+                profile_,
+                publishedContentRegistry(),
+                RegionalBaseSiteDefinitionId{baseWorld.siteDefinitionId()}));
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         baseCombatElapsedSeconds_ += deltaTime;
@@ -231,6 +236,9 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         }
     }
     baseWorld.configureWeaponAmmunition(ammunitionPenetration);
+    if (baseDefenseActive() && hasPain(profile_.medicalStatus) &&
+        !painIsSuppressed(profile_.medicalStatus))
+        simulationInput.movementSpeedMultiplier *= 0.9F;
     if (simulationInput.sprint)
     {
         simulationInput.aimDownSights = false;
@@ -262,9 +270,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         if (!input.developerInfiniteAmmo && fire.canCommit &&
             fire.result == WeaponAmmoResult::Chambered)
         {
-            ProfileState candidate = profile_;
             const WeaponAmmoReceipt chambered = executeFireWeapon(
-                candidate,
+                profile_,
                 publishedContentRegistry(),
                 command,
                 CommandContext{
@@ -273,8 +280,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
             if (chambered.succeeded &&
-                chambered.result == WeaponAmmoResult::Chambered &&
-                commitProfileCandidate(std::move(candidate), false))
+                chambered.result == WeaponAmmoResult::Chambered)
             {
                 worldClockDirty_ = true;
                 presentationEvents_.push_back(
@@ -317,9 +323,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     if (baseWorld.shotFiredLastUpdate() &&
         !input.developerInfiniteAmmo && pendingFireCommand.has_value())
     {
-        ProfileState candidate = profile_;
         const WeaponAmmoReceipt committed = executeFireWeapon(
-            candidate,
+            profile_,
             publishedContentRegistry(),
             *pendingFireCommand,
             CommandContext{
@@ -327,9 +332,14 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                 nextRaidTransaction("base-fire")});
         if (!committed.succeeded ||
             (committed.result != WeaponAmmoResult::Fired &&
-             committed.result != WeaponAmmoResult::FiredAndMalfunctioned) ||
-            !commitProfileCandidate(std::move(candidate), false))
+             committed.result != WeaponAmmoResult::FiredAndMalfunctioned))
         {
+            if (baseDefenseActive())
+            {
+                baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
+                persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
+                return std::nullopt;
+            }
             restorePerimeterRuntime();
             persistenceMessage_ = committed.message.empty()
                 ? "base shot could not be saved"
@@ -352,6 +362,11 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         }
     }
 
+    if (baseDefenseActive())
+    {
+        finishBaseDefenseFrame(baseWorld, deltaTime);
+        return facility;
+    }
     if (!profile_.homeFounding.established) return facility;
     bool perimeterChanged{};
     ProfileState perimeterCandidate = profile_;
@@ -606,6 +621,8 @@ GameSession::nextItemInstanceId() const noexcept
 void GameSession::configurePersistence(
     std::filesystem::path directory)
 {
+    baseDefenseWriter_.reset();
+    baseDefenseWorld_ = nullptr;
     saveRepository_.emplace(std::move(directory));
     lastSaveLoadStatus_ = SaveLoadStatus::NotFound;
     persistenceMessage_.clear();
@@ -619,6 +636,10 @@ bool GameSession::hasSavedProfile() const
 
 bool GameSession::startNewProfile(std::string profileId, bool survey)
 {
+    baseDefenseWriter_.reset();
+    baseDefenseWorld_ = nullptr;
+    baseDefenseSaveBlocked_ = false;
+    pendingBaseDefenseEnd_.reset();
     ProfileState candidate;
     std::string saveMessage;
     try
@@ -698,6 +719,10 @@ bool GameSession::finishFirstRaidHints()
 
 bool GameSession::continueProfile()
 {
+    baseDefenseWriter_.reset();
+    baseDefenseWorld_ = nullptr;
+    baseDefenseSaveBlocked_ = false;
+    pendingBaseDefenseEnd_.reset();
     if (!saveRepository_.has_value())
     {
         persistenceMessage_ = "persistence is not configured";
@@ -785,7 +810,7 @@ bool GameSession::deployAlpha(
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId,
     const RaidDeploymentProgressCallback &progress)
 {
-    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || seed == 0 ||
+    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || baseDefenseActive() || seed == 0 ||
         mapDefinitionId.value().empty())
     {
         return false;
@@ -1982,24 +2007,9 @@ InventoryReceipt GameSession::executeProfileInventory(
     {
         return receipt;
     }
-    if (!alphaRaidActive_ && saveRepository_.has_value())
-    {
-        const SaveWriteResult result = saveRepository_->save(
-            candidate,
-            publishedContentRegistry().contentVersion());
-        if (!result.succeeded)
-        {
-            return InventoryReceipt{
-                false,
-                false,
-                DomainErrorCode::InvalidProfile,
-                result.message,
-                profile_.revision};
-        }
-        saveMessage = result.message;
-    }
-    profile_ = std::move(candidate);
-    persistenceMessage_ = std::move(saveMessage);
+    if (!commitProfileCandidate(std::move(candidate)))
+        return InventoryReceipt{false, false, DomainErrorCode::InvalidProfile,
+            persistenceMessage_, profile_.revision};
     if (!alphaRaidActive_)
     {
         refreshLoadoutTutorial();
@@ -2141,25 +2151,9 @@ EconomyReceipt GameSession::executeProfileEconomy(
     {
         return receipt;
     }
-    if (saveRepository_.has_value())
-    {
-        const SaveWriteResult result = saveRepository_->save(
-            candidate,
-            publishedContentRegistry().contentVersion());
-        if (!result.succeeded)
-        {
-            return EconomyReceipt{
-                false,
-                false,
-                DomainErrorCode::InvalidProfile,
-                result.message,
-                profile_.revision,
-                0};
-        }
-        saveMessage = result.message;
-    }
-    profile_ = std::move(candidate);
-    persistenceMessage_ = std::move(saveMessage);
+    if (!commitProfileCandidate(std::move(candidate)))
+        return EconomyReceipt{false, false, DomainErrorCode::InvalidProfile,
+            persistenceMessage_, profile_.revision, 0};
     return receipt;
 }
 
@@ -3015,6 +3009,9 @@ void GameSession::advanceBaseWorldClock(float deltaTime)
     // The safe, pre-base survey has no operating Base or catch-up debt.
     // This is a pause of the existing clock, not a second tutorial clock.
     if (!profile_.homeFounding.established) return;
+    // During real-time defense the complete clock/combat checkpoint advances
+    // together in updateBaseWorld, including while an inventory is open.
+    if (baseDefenseActive()) return;
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
     {
@@ -3087,6 +3084,7 @@ BaseAutoDefenseReceipt GameSession::executeBaseAutoDefense(
 
 bool GameSession::checkpointWorldClock()
 {
+    if (baseDefenseActive()) return checkpointBaseDefense(true);
     if (alphaRaidActive_ || profile_.pendingRaid.has_value())
     {
         persistenceMessage_ =
@@ -3258,8 +3256,8 @@ void GameSession::advanceWorldClockFromSimulation(
 
     if (minutes > 0U)
     {
-        if (!allowPeriodicCheckpoint && alphaRaidActive_ &&
-            profile_.pendingRaid.has_value())
+        if (!allowPeriodicCheckpoint &&
+            ((alphaRaidActive_ && profile_.pendingRaid.has_value()) || baseDefenseActive()))
         {
             // The active Raid owns an already validated, in-memory Profile.
             // Copying that Profile once per world minute also copied the full
@@ -3309,7 +3307,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 construction,
                 manufacturing,
                 residentTreatment,
-                true);
+                alphaRaidActive_);
             static_cast<void>(daily);
             worldClockDirty_ = true;
             pendingWorldSeconds_ = remainingWorldSeconds;
@@ -3398,6 +3396,7 @@ void GameSession::advanceWorldClockFromSimulation(
 
 void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
 {
+    if (baseDefenseActive()) return;
     if (!std::isfinite(deltaTime) || deltaTime <= 0.0F ||
         alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
@@ -4778,6 +4777,8 @@ std::string GameSession::nextRaidTransaction(std::string_view prefix)
     return std::string{prefix} + ":" +
         (profile_.pendingRaid.has_value()
              ? profile_.pendingRaid->raidId
+             : profile_.activeBaseDefense.has_value()
+             ? profile_.activeBaseDefense->eventId
              : profile_.profileId) + ":" +
         std::to_string(raidCommandSequence_);
 }
@@ -5093,6 +5094,16 @@ bool GameSession::commitProfileCandidate(
     ProfileState candidate,
     bool persist)
 {
+    if (baseDefenseActive())
+    {
+        // Commands join the current coherent Base activity. Only start/end/
+        // quit are durability barriers; no inventory or fire callback writes.
+        if (baseDefenseSaveBlocked_) return false;
+        captureBaseDefenseCheckpoint(candidate);
+        profile_ = std::move(candidate);
+        worldClockDirty_ = true;
+        return true;
+    }
     std::string saveMessage;
     if (persist && saveRepository_.has_value())
     {

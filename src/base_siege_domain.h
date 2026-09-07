@@ -1,6 +1,7 @@
 #pragma once
 
 #include "inventory_domain.h"
+#include <string_view>
 
 inline constexpr std::uint32_t kBaseSiegeThreatThreshold = 100U;
 inline constexpr std::uint32_t kBaseSiegeWarningSeconds = 180U;
@@ -65,6 +66,28 @@ struct BaseAutoDefenseReceipt
     std::uint32_t populationLost{};
     std::uint64_t safeUntilWorldMinute{};
 };
+
+struct BaseRealtimeDefensePlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::uint32_t maximumPublicResourceLoss{5U};
+    std::uint32_t maximumPopulationLoss{1U};
+};
+
+[[nodiscard]] std::string baseSiegeEventId(const ProfileState &profile);
+[[nodiscard]] BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
+    const ProfileState &profile, const ContentRegistry &content,
+    const BaseDefenseSnapshot &snapshot);
+[[nodiscard]] BaseAutoDefenseReceipt executeBaseRealtimeDefenseStart(
+    ProfileState &profile, const ContentRegistry &content,
+    const BaseDefenseSnapshot &snapshot, const CommandContext &context);
+[[nodiscard]] BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
+    ProfileState &profile, const ContentRegistry &content,
+    std::string_view eventId, BaseDefenseEndReason reason,
+    const CommandContext &context);
 
 struct BasePerimeterSweepPlan
 {

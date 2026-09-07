@@ -19,6 +19,7 @@
 #include "world_clock.h"
 #include "base_wish_types.h"
 #include "home_founding_types.h"
+#include "base_defense_state.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -571,6 +572,8 @@ struct BaseSiegeState
     BaseSiegeOutcome lastOutcome{BaseSiegeOutcome::None};
     std::uint32_t lastSecuritySpent{};
     std::uint32_t lastPopulationLost{};
+    // Zero preserves pre-v46 historical state without inventing event IDs.
+    std::uint64_t lastResolvedSequence{};
 
     friend bool operator==(
         const BaseSiegeState &,
@@ -1030,6 +1033,7 @@ struct ProfileState
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
     BaseSiegeState baseSiege;
+    std::optional<BaseDefenseSnapshot> activeBaseDefense;
     HomePerimeterState homePerimeter;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;

@@ -246,6 +246,8 @@ HomePerimeterEnsureReceipt beginHomePerimeterOuting(
     const RegionalBaseSiteDefinitionId &siteDefinitionId,
     const CommandContext &command)
 {
+    if (profile.activeBaseDefense)
+        return failure(profile, "Base defense already owns the active Base activity");
     if (command.expectedRevision != profile.revision ||
         command.transactionId.empty())
         return failure(profile, "Home perimeter command is stale");

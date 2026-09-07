@@ -1,6 +1,7 @@
 #include "base_world.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -66,6 +67,18 @@ bool finiteRect(ContentRect bounds) noexcept
         std::isfinite(bounds.size.x) && std::isfinite(bounds.size.y) &&
         bounds.size.x > 0.0F && bounds.size.y > 0.0F;
 }
+
+std::string defenseLayoutIdentity(const HomeRegionLayout &layout,
+    const std::vector<BallisticBlocker> &blockers)
+{
+    std::uint64_t h=layout.layoutHash;
+    for (const auto &b:blockers) {
+        for (float f:{b.bounds.position.x,b.bounds.position.y,b.bounds.size.x,b.bounds.size.y}) {
+            h^=std::bit_cast<std::uint32_t>(f);h*=1099511628211ULL;
+        }
+    }
+    return "home-defense-layout-"+std::to_string(h);
+}
 }
 
 BaseWorld::BaseWorld()
@@ -129,6 +142,9 @@ void BaseWorld::configureSite(
     std::vector<BaseFacilitySpatialOverride> overrides,
     std::string plotId)
 {
+    // Queue outcomes remain authoritative in Profile. Their new spatial
+    // geometry takes effect after this frozen defense activity concludes.
+    if (baseDefense_) return;
     const std::string normalized = siteDefinitionId.empty()
         ? "regional_base_site.greyline_yard" : std::string{siteDefinitionId};
     if (normalized != siteDefinitionId_ || overrides != facilityOverrides_ || plotId != plotId_)
@@ -210,6 +226,7 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
     presentationCacheValid_ = false;
     resetAtMedicalPoint();
     shooting_.clearSpatialTransientPresentation();
+    baseDefense_.reset();
     perimeterEnemies_.clear();
     perimeterEnemySpawns_.clear();
     perimeterCycleIndex_.reset();
@@ -246,6 +263,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     const BaseInput &input,
     float deltaTime)
 {
+    if (baseDefense_ && std::isfinite(deltaTime)) deltaTime=std::clamp(deltaTime,0.0F,0.1F);
     perimeterDamageLastUpdate_ = 0;
     perimeterDamageProtectionRemainingSeconds_ = std::max(
         0.0F,
@@ -353,6 +371,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     {
         shooting_.reanchor(
             playerCenter, playerFacingDirection_, layout_.worldSize);
+    }
+    if (baseDefense_) {
+        baseDefense_->advance(input,deltaTime,playerPosition_,playerSize_,
+            playerIsMoving_,shooting_,movementBlockers_);
+        return input.interactJustPressed ? interactableFacility() : std::nullopt;
     }
     static_cast<void>(shooting_.advanceShots(
         input,
@@ -527,6 +550,87 @@ int BaseWorld::perimeterDamageLastUpdate() const noexcept
     return perimeterDamageLastUpdate_;
 }
 
+std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
+    BaseDefenseSnapshot s) const
+{
+    if (baseDefense_ || surveying()) return std::nullopt;
+    s.siteDefinitionId=siteDefinitionId_;s.plotId=plotId_;
+    s.worldSize=layout_.worldSize;s.safeCore={layout_.baseParcel.position,layout_.baseParcel.size};
+    s.layoutIdentity=defenseLayoutIdentity(layout_,movementBlockers_);
+    s.movementBlockers.clear();
+    for (const auto &blocker:movementBlockers_) s.movementBlockers.push_back(blocker.bounds);
+    s.playerPosition=playerPosition_;s.shooting=shooting_.checkpoint();
+    return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_);
+}
+bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
+{
+    std::vector<BallisticBlocker> frozen;
+    BallisticBlockerId next=1;
+    for (auto rect:s.movementBlockers) frozen.push_back({next++,rect});
+    if (s.siteDefinitionId!=siteDefinitionId_ || s.plotId!=plotId_ ||
+        s.worldSize.x!=layout_.worldSize.x || s.worldSize.y!=layout_.worldSize.y ||
+        s.safeCore.position.x!=layout_.baseParcel.position.x ||
+        s.safeCore.position.y!=layout_.baseParcel.position.y ||
+        s.safeCore.size.x!=layout_.baseParcel.size.x || s.safeCore.size.y!=layout_.baseParcel.size.y ||
+        s.layoutIdentity!=defenseLayoutIdentity(layout_,frozen)) return false;
+    BaseDefenseRuntime candidate;
+    if (!candidate.resume(s,frozen)) return false;
+    auto index=RaidSpaceBlockerIndex::build(layout_.worldSize,frozen,320);
+    if (!index) return false;
+    const Rect playerBody{s.playerPosition,playerSize_};
+    if(playerBody.position.x<0 || playerBody.position.y<0 ||
+        playerBody.position.x+playerBody.size.x>s.worldSize.x ||
+        playerBody.position.y+playerBody.size.y>s.worldSize.y) return false;
+    std::vector<std::size_t> playerCandidates;
+    index->queryCandidateIndices(playerBody,playerCandidates);
+    for(auto i:playerCandidates)
+        if(isCollision(playerBody,index->blockerBounds(i))) return false;
+    WorldShootingRuntime shootingCandidate=shooting_;
+    if (!shootingCandidate.restoreCheckpoint(s.shooting)) return false;
+    baseDefense_=std::move(candidate);shooting_=std::move(shootingCandidate);
+    movementBlockers_=std::move(frozen);movementBlockerIndex_=std::move(index);
+    playerPosition_=s.playerPosition;
+    playerFacingDirection_=shooting_.aimDirection();playerIsMoving_=false;
+    if(playerFacingDirection_.x!=0) playerHorizontalFacing_=playerFacingDirection_.x;
+    playerMovementAnimator_.reset();
+    return true;
+}
+std::optional<BaseDefenseSnapshot> BaseWorld::baseDefenseCheckpoint() const
+{
+    if (!baseDefense_) return std::nullopt;
+    return baseDefense_->checkpoint(shooting_);
+}
+const BaseDefenseSnapshot *BaseWorld::baseDefenseState() const noexcept
+{
+    return baseDefense_ ? &baseDefense_->state() : nullptr;
+}
+bool BaseWorld::baseDefenseActive() const noexcept {return baseDefense_.has_value();}
+const std::vector<Enemy> &BaseWorld::baseDefenseEnemies() const noexcept
+{
+    static const std::vector<Enemy> empty;
+    return baseDefense_ ? baseDefense_->enemies() : empty;
+}
+int BaseWorld::baseDefenseDamageLastUpdate() const noexcept
+{
+    return baseDefense_ ? baseDefense_->damageLastUpdate() : 0;
+}
+std::optional<EnemyAttackType> BaseWorld::baseDefenseAttackTypeLastUpdate() const noexcept
+{
+    return baseDefense_ ? baseDefense_->attackTypeLastUpdate() : std::nullopt;
+}
+const BaseDefenseRuntimeMetrics &BaseWorld::baseDefenseMetrics() const noexcept
+{
+    static const BaseDefenseRuntimeMetrics empty;
+    return baseDefense_ ? baseDefense_->metrics() : empty;
+}
+void BaseWorld::clearBaseDefense() noexcept
+{
+    if (!baseDefense_) return;
+    baseDefense_.reset();shooting_.clearSpatialTransientPresentation();
+    rebuildCollisionIndex();
+    perimeterDamageProtectionRemainingSeconds_=0.25F;
+}
+
 void BaseWorld::discardUncommittedShot() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
@@ -698,6 +802,7 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockersExcluding(
 void BaseWorld::configureGroundBlockers(
     std::vector<ContentRect> blockers)
 {
+    if (baseDefense_) return;
     if (blockers == groundBlockers_)
         return;
     groundBlockers_ = std::move(blockers);

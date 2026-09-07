@@ -70,6 +70,7 @@ public:
     [[nodiscard]] float cooldownRemaining() const noexcept;
 
 private:
+    friend class WorldShootingRuntime;
     WeaponFireConfig config_;
     float cooldownRemaining_{};
     float spreadDegrees_{};

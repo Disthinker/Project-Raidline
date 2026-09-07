@@ -20,6 +20,14 @@ struct SaveWriteResult
     std::string message;
 };
 
+struct SaveWriteMetrics
+{
+    double validationMilliseconds{};
+    double serializationMilliseconds{};
+    double commitMilliseconds{};
+    double totalMilliseconds{};
+};
+
 struct SaveLoadResult
 {
     SaveLoadStatus status{SaveLoadStatus::NotFound};
@@ -36,7 +44,8 @@ public:
 
     [[nodiscard]] SaveWriteResult save(
         const ProfileState &profile,
-        std::string_view contentVersion) const;
+        std::string_view contentVersion,
+        SaveWriteMetrics *metrics = nullptr) const;
 
     [[nodiscard]] SaveLoadResult load(
         const ContentRegistry &content) const;
@@ -55,7 +64,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 45);
+    std::uint32_t schemaVersion = 46);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

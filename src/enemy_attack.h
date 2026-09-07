@@ -127,6 +127,7 @@ public:
     currentConfig() const noexcept;
 
 private:
+    friend class Enemy;
     EnemyAttackConfigSet configs_;
     EnemyAttackPhase phase_{EnemyAttackPhase::Idle};
     std::optional<EnemyAttackType> type_;

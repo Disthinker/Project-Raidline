@@ -46,6 +46,7 @@ public:
     }
 
 private:
+    friend class WorldShootingRuntime;
     std::uint64_t state_{};
     std::uint64_t increment_{};
 };

@@ -1,6 +1,8 @@
 #include "save_repository.h"
+#include "base_defense_serialization.h"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <limits>
 #include <set>
@@ -582,9 +584,9 @@ BaseSiegeOutcome parseBaseSiegeOutcome(std::string_view value)
     throw std::runtime_error{"Base siege outcome is invalid"};
 }
 
-Json baseSiegeValue(const BaseSiegeState &state)
+Json baseSiegeValue(const BaseSiegeState &state, std::uint32_t schemaVersion)
 {
-    return {
+    Json result{
         {"raid_threat_units", state.raidThreatUnits},
         {"population_threat_units", state.populationThreatUnits},
         {"site_threat_units", state.siteThreatUnits},
@@ -597,6 +599,8 @@ Json baseSiegeValue(const BaseSiegeState &state)
         {"last_outcome", baseSiegeOutcomeValue(state.lastOutcome)},
         {"last_security_spent", state.lastSecuritySpent},
         {"last_population_lost", state.lastPopulationLost}};
+    if (schemaVersion >= 46) result["last_resolved_sequence"]=state.lastResolvedSequence;
+    return result;
 }
 
 BaseSiegeState defaultBaseSiege(const WorldClockState &clock)
@@ -609,7 +613,7 @@ BaseSiegeState defaultBaseSiege(const WorldClockState &clock)
     return state;
 }
 
-BaseSiegeState parseBaseSiege(const Json &value)
+BaseSiegeState parseBaseSiege(const Json &value, std::uint32_t schemaVersion)
 {
     return {
         value.at("raid_threat_units").get<std::uint32_t>(),
@@ -624,7 +628,8 @@ BaseSiegeState parseBaseSiege(const Json &value)
         parseBaseSiegeOutcome(
             value.at("last_outcome").get<std::string>()),
         value.at("last_security_spent").get<std::uint32_t>(),
-        value.at("last_population_lost").get<std::uint32_t>()};
+        value.at("last_population_lost").get<std::uint32_t>(),
+        schemaVersion >= 46 ? value.at("last_resolved_sequence").get<std::uint64_t>() : 0U};
 }
 
 Json optionalProfessionValue(
@@ -1411,8 +1416,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     }
     if (schemaVersion >= 32)
     {
-        payload["base_siege"] = baseSiegeValue(profile.baseSiege);
+        payload["base_siege"] = baseSiegeValue(profile.baseSiege, schemaVersion);
     }
+    if (schemaVersion >= 46)
+        payload["active_base_defense"] = profile.activeBaseDefense
+            ? baseDefenseSnapshotJson(*profile.activeBaseDefense) : Json(nullptr);
+    else if (profile.activeBaseDefense)
+        throw std::runtime_error("Active Base defense cannot be written to an older schema");
     if (schemaVersion >= 45)
     {
         Json plots = Json::array();
@@ -2146,7 +2156,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {
                     payload["pending_raid"]["travel"]
                         ["starting_base_siege"] =
-                            baseSiegeValue(raid.travel.startingBaseSiege);
+                            baseSiegeValue(raid.travel.startingBaseSiege, schemaVersion);
                 }
             }
         }
@@ -2385,7 +2395,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2568,7 +2578,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2933,8 +2943,10 @@ SaveLoadResult deserializeProfileEnvelope(
                   payload.at("regional_operations"), content, schemaVersion)
             : defaultRegionalOperations(content);
         profile.baseSiege = schemaVersion >= 32
-            ? parseBaseSiege(payload.at("base_siege"))
+            ? parseBaseSiege(payload.at("base_siege"), schemaVersion)
             : defaultBaseSiege(profile.worldClock);
+        if (schemaVersion >= 46 && !payload.at("active_base_defense").is_null())
+            profile.activeBaseDefense = parseBaseDefenseSnapshotJson(payload.at("active_base_defense"));
         if (schemaVersion < 33)
         {
             normalizeBaseThreatCapacity(profile.baseSiege);
@@ -4020,7 +4032,7 @@ SaveLoadResult deserializeProfileEnvelope(
                         profile.regionalOperations;
                 }
                 raid.travel.startingBaseSiege = schemaVersion >= 32
-                    ? parseBaseSiege(travel.at("starting_base_siege"))
+                    ? parseBaseSiege(travel.at("starting_base_siege"), schemaVersion)
                     : defaultBaseSiege(raid.travel.startingWorldClock);
                 if (schemaVersion < 33)
                 {
@@ -4444,10 +4456,33 @@ bool SaveRepository::primaryExists() const
 
 SaveWriteResult SaveRepository::save(
     const ProfileState &profile,
-    std::string_view contentVersion) const
+    std::string_view contentVersion,
+    SaveWriteMetrics *metrics) const
 {
+    using Clock = std::chrono::steady_clock;
+    if (metrics) *metrics = {};
+    struct FinishMetrics
+    {
+        SaveWriteMetrics *metrics;
+        Clock::time_point startedAt{Clock::now()};
+        ~FinishMetrics()
+        {
+            if (!metrics) return;
+            metrics->totalMilliseconds = std::chrono::duration<double, std::milli>{
+                Clock::now() - startedAt}.count();
+            metrics->commitMilliseconds = std::max(
+                0.0, metrics->totalMilliseconds - metrics->validationMilliseconds -
+                         metrics->serializationMilliseconds);
+        }
+    } finishMetrics{metrics};
+    const auto validationStartedAt = Clock::now();
     const ProfileValidationResult validation =
         validateProfileState(profile, publishedContentRegistry());
+    if (metrics)
+    {
+        metrics->validationMilliseconds = std::chrono::duration<double, std::milli>{
+            Clock::now() - validationStartedAt}.count();
+    }
     if (!validation.valid)
     {
         return {false, validation.message};
@@ -4460,7 +4495,13 @@ SaveWriteResult SaveRepository::save(
         return {false, "save directory could not be created"};
     }
 
+    const auto serializationStartedAt = Clock::now();
     const std::string text = serializeProfileEnvelope(profile, contentVersion);
+    if (metrics)
+    {
+        metrics->serializationMilliseconds = std::chrono::duration<double, std::milli>{
+            Clock::now() - serializationStartedAt}.count();
+    }
     if (!writeText(temporaryPath_, text))
     {
         return {false, "temporary save could not be written"};

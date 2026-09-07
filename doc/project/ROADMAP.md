@@ -6,7 +6,7 @@
 
 Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、远征研判、开局选址及首局整备—撤离—回营再出发（PR #148 / `2ae898a`）均已进入主线。Home Region 开局可玩闭环收尾，外部 GDD 继续只读。
 
-下一主阶段由 2026-09-07 策划推荐为 **Home Defense Vertical Slice：基地实时防守**。当前只提交首片 `doc/exec-plans/active/base-defense-player-participation-v1.md` 供用户审查：三分钟预警→亲自/自动选择→有限外围进攻与核心防线→统一结果→继续经营。方案明确活动安全例外与检查点恢复，确认前不写玩法代码；不再继续加基地总览、通知或导航小页。
+当前主阶段为 **Home Defense Vertical Slice：基地实时防守**。用户于 2026-09-07 确认 `doc/exec-plans/active/base-defense-player-participation-v1.md`，PR #149 实施三分钟预警→亲自/自动选择→有限外围进攻与核心防线→统一结果→继续经营。schema v46 开始保存同一场防守的完整检查点；活动只在标记走廊局部开放缓冲区交战，安全核心仍不可侵入。该分支尚未正常游玩验收，不写成主线事实；不再继续加基地总览、通知或导航小页。
 
 顺序：①玩家亲自实时防守 v1；②首片验收后再评审固定防御位与少量基础工事；③再评审公共投入与动态难度加固。②③不是当前实施授权；NPC 守军/指挥、AI 小队、第二主题、程序化室内、正式美术/P1 音频仍延期。首片同时解决 Base 小规模敌人循环和逐击同步保存的扩展风险，不只增加敌人数量。
 

@@ -28,6 +28,8 @@ TEST(DeveloperRuntimePanelTest, MouseButtonsExposeRuntimeToggles)
         developerPanelActionAt(
             inside(developerPublishedCatalogButton()), 25U),
         DeveloperPanelAction{DeveloperPanelActionKind::GrantPublishedCatalog});
+    EXPECT_EQ(developerPanelActionAt(inside(developerBaseSiegeButton()), 25U),
+        DeveloperPanelAction{DeveloperPanelActionKind::TriggerBaseSiegeWarning});
 }
 
 TEST(DeveloperRuntimePanelTest, ParameterRowsAndButtonsPreserveStableIndex)

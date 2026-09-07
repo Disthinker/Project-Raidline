@@ -17,4 +17,4 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
-当前审查计划：`active/base-defense-player-participation-v1.md`。PR #148 已由用户授权以 `2ae898a` 普通合入 main，Home Region 开局可玩闭环收尾。下一片先审查玩家参与基地防守的范围与中断合同，计划确认前不写玩法代码；旧首局/建家/愿望/远征计划保留为历史证据，不继续以新增管理小页延长阶段。
+当前实施计划：`active/base-defense-player-participation-v1.md`。PR #148 已由用户授权以 `2ae898a` 普通合入 main，Home Region 开局可玩闭环收尾。2026-09-07 用户确认玩家亲自实时防守 v1，PR #149 连续实施领域、运行时、一致检查点和界面；交付前保持 Draft，等待独立自动化与用户正常游玩证据。旧首局/建家/愿望/远征计划保留为历史证据，不继续以新增管理小页延长阶段。

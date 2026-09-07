@@ -11,6 +11,7 @@
 #include "rect.h"
 #include "vec2.h"
 #include "health_system.h"
+#include "combat_runtime_checkpoint.h"
 
 enum class EnemyFacingDirection
 {
@@ -32,6 +33,8 @@ const char *enemyMovementStateName(
 class Enemy
 {
 public:
+    [[nodiscard]] EnemyRuntimeCheckpoint checkpoint() const noexcept;
+    [[nodiscard]] static std::optional<Enemy> restoreCheckpoint(const EnemyRuntimeCheckpoint &);
     Enemy(
         Vec2 position,
         Vec2 size,

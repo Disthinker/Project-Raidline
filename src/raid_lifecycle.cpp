@@ -411,7 +411,7 @@ DeployReceipt executeDeploy(
     if (!profile.homeFounding.established)
         return deployFailure(RaidLifecycleError::InvalidCommand,
             "Establish your main base before deploying", profile.revision);
-    if (profile.baseSiege.warningActive)
+    if (profile.baseSiege.warningActive || profile.activeBaseDefense)
     {
         return deployFailure(
             RaidLifecycleError::InvalidCommand,

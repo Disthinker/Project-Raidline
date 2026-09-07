@@ -44,6 +44,7 @@ public:
     const EnemySquadConfig &config() const noexcept;
 
 private:
+    friend class BaseDefenseRuntime;
     EnemySquadConfig config_;
     std::size_t attackScheduleCursor_{};
     std::vector<std::size_t> reservedAttackers_;

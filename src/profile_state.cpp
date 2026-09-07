@@ -40,35 +40,6 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-bool validMedicalStatus(const MedicalStatusState &status) noexcept
-{
-    if (status.painkillerRemainingMs > 180000)
-    {
-        return false;
-    }
-    switch (status.bleeding)
-    {
-    case BleedingSeverity::None:
-        return status.lightBleedingRemainingMs == 0 &&
-               status.bleedingDamageRemainingMs == 0 &&
-               status.painScreamRemainingMs == 0;
-    case BleedingSeverity::Light:
-        return status.lightBleedingRemainingMs > 0 &&
-               status.lightBleedingRemainingMs <= 40000 &&
-               status.bleedingDamageRemainingMs > 0 &&
-               status.bleedingDamageRemainingMs <= 1000 &&
-               status.painScreamRemainingMs > 0 &&
-               status.painScreamRemainingMs <= 25000;
-    case BleedingSeverity::Heavy:
-        return status.lightBleedingRemainingMs == 0 &&
-               status.bleedingDamageRemainingMs > 0 &&
-               status.bleedingDamageRemainingMs <= 500 &&
-               status.painScreamRemainingMs > 0 &&
-               status.painScreamRemainingMs <= 25000;
-    }
-    return false;
-}
-
 bool validBasePriorityState(
     const BasePriorityState &state,
     std::uint64_t elapsedWorldMinutes,
@@ -1093,7 +1064,7 @@ ProfileValidationResult validateProfileState(
         profile.nextBaseServiceJobId == 0 ||
         profile.assets.nextAssetId() == 0 ||
         profile.currentHealth < 0 || profile.currentHealth > 100 ||
-        (profile.currentHealth == 0 && !profile.pendingRaid.has_value()))
+        (profile.currentHealth == 0 && !profile.pendingRaid.has_value() && !profile.activeBaseDefense))
     {
         return {false, "profile header is invalid"};
     }
@@ -1281,9 +1252,23 @@ ProfileValidationResult validateProfileState(
         (siege.lastOutcome == BaseSiegeOutcome::None &&
          (siege.lastSecuritySpent != 0U ||
           siege.lastPopulationLost != 0U)) ||
-        siege.lastPopulationLost > 1U)
+        siege.lastPopulationLost > 1U || siege.lastResolvedSequence > siege.siegeSequence)
     {
         return {false, "Base siege state is invalid"};
+    }
+    if (profile.activeBaseDefense)
+    {
+        const auto &defense = *profile.activeBaseDefense;
+        std::string message;
+        const auto plot=profile.homeFounding.plots.find(activeBaseSite->id);
+        const std::string expectedPlot=plot==profile.homeFounding.plots.end()?"":plot->second;
+        if (profile.pendingRaid || profile.homePerimeter.activeOuting || siege.warningActive ||
+            defense.eventId != baseSiegeEventId(profile) ||
+            defense.siegeSequence != siege.siegeSequence ||
+            defense.siegeSequence <= siege.lastResolvedSequence ||
+            defense.siteDefinitionId != activeBaseSite->id.value() || defense.plotId != expectedPlot ||
+            !validateBaseDefenseSnapshot(defense,message))
+            return {false, "Base defense checkpoint is invalid: " + message};
     }
     const BaseResourceBundle &resources = profile.baseResources.pool;
     const BaseResourceBundle &shortfall =
@@ -4518,6 +4503,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         profile.baseSiege.lastOutcome));
     hashInteger(hash, profile.baseSiege.lastSecuritySpent);
     hashInteger(hash, profile.baseSiege.lastPopulationLost);
+    hashInteger(hash, profile.baseSiege.lastResolvedSequence);
+    hashInteger(hash, profile.activeBaseDefense.has_value()?1U:0U);
+    if (profile.activeBaseDefense)
+        hashInteger(hash,baseDefenseCheckpointHash(*profile.activeBaseDefense));
     for (const auto &[siteId, snapshot] : profile.homePerimeter.sites)
     {
         hashBytes(hash, siteId.value());
@@ -5125,6 +5114,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             raid.travel.startingBaseSiege.lastOutcome));
         hashInteger(hash, raid.travel.startingBaseSiege.lastSecuritySpent);
         hashInteger(hash, raid.travel.startingBaseSiege.lastPopulationLost);
+        hashInteger(hash, raid.travel.startingBaseSiege.lastResolvedSequence);
         hashInteger(hash, raid.travel.startingBaseResources.pool.food);
         hashInteger(hash, raid.travel.startingBaseResources.pool.hygiene);
         hashInteger(hash, raid.travel.startingBaseResources.pool.morale);

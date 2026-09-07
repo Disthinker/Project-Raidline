@@ -444,6 +444,12 @@ private:
     void renderRegionalOperations();
     void renderBaseSiegeQueuedNotice();
     void renderBaseSiegeWarning();
+    void renderBaseDefenseWorld();
+    void renderBaseDefenseHud();
+    [[nodiscard]] bool handleBaseDefenseControls();
+    bool baseDefenseAbandonArmed_{};
+    bool baseDefenseObservedActive_{};
+    bool baseDefenseResultVisible_{};
     void renderLostRaidRecords();
     void renderProfileGrid(
         ProfileContainerId container,

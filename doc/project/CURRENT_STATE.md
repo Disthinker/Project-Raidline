@@ -5,15 +5,16 @@
 ## Git 与交付基线
 
 - 当前主线：`origin/main@2ae898a`，PR #148 经用户明确授权普通合并；首局整备—撤离—回营再出发已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
-- 当前开发分支：`codex/base-defense-player-participation-v1`，从 `origin/main@2ae898a` 创建；当前仅阶段收尾与下一片计划，不含新玩法代码。
-- 当前活动计划：`doc/exec-plans/active/base-defense-player-participation-v1.md`（提案，待用户审查）。
-- Home Region 开局可玩闭环收尾。下一主阶段候选为玩家参与基地防守：先限定有限外围接敌、独立事件快照与共享自动防守结算，安全核心、个人资产和现有 Raid 合同不因计划而改变；正式范围确认前不实现。
-- PR #148 的 Windows Debug 全目标、93/93 定向与 1517/1517 全量 CTest（68.97 秒）已通过；head `a1e672c` 双平台 CI 同为 1517/1517，run `34083273520`。当前文档提交继承此代码基线，不宣称重新执行了 C++ 或正常游玩测试。
+- 当前开发分支：`codex/base-defense-player-participation-v1`，从 `origin/main@2ae898a` 创建；PR #149 在用户确认后进入玩家实时防守 v1 实施。
+- 当前活动计划：`doc/exec-plans/active/base-defense-player-participation-v1.md`（2026-09-07 用户已确认；开发分支实现及本地自动化完成，未正常游玩验收）。
+- PR #149 Windows Debug 全目标及全量 CTest **1583/1583** 通过（59.96 秒，新增 66 项回归）；性能测试隔离串行运行，1000 资产/1000 阻挡/16 敌人真实战斗和后台保存 copy P95/P99 为 3.819/3.931ms。精确 head 双平台 CI 见 PR；不将无 SDL 压力数据写成可见全帧/发行硬件承诺。
+- Home Region 开局可玩闭环收尾。已确认的玩家实时防守 v1 在 PR #149 中实施：3 波有限现有感染者、最多 16 名活动敌人、6 次突破软失败；共享自动防守结果，真实个人消耗、无个人资产全损。安全核心仍受保护，只有事件标记的缓冲走廊开放交战。
+- PR #148 的 Windows Debug 全目标、93/93 定向与 1517/1517 全量 CTest（68.97 秒）已通过；head `a1e672c` 双平台 CI 同为 1517/1517，run `34083273520`。PR #149 新代码使用 schema v46/content v59/rules v29；具体门禁证据见活动计划，不能继承旧测试数作为本轮通过证据。
 - Week29 `codex/week29-combat-feedback-and-attack-animation@6c23389` 未进入 main；正式 Grab/Scratch/Bite 图像及所有新正式美术生产继续暂停。用户于 2026-08-21 仅授权当前 ArtWorkbench P0 音效包接入。
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判、开局选址及首局到第二次出击均已进入主线。Home Region 起步阶段收尾；当前是下一主阶段范围审查，不代表实时防守已经完成。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判、开局选址及首局到第二次出击均已进入主线。Home Region 起步阶段收尾；当前是实时防守首片实施与回归，不代表该功能已进入主线或通过正常游玩验收。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。

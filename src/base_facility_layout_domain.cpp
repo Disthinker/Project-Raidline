@@ -143,7 +143,7 @@ BaseFacilityLayoutPlan queryPlacementGeometry(
         false, DomainErrorCode::IllegalDestination,
         "Base facility placement is not valid", profile.revision,
         definitionId, {}};
-    if (profile.pendingRaid.has_value() ||
+    if (profile.pendingRaid.has_value() || profile.baseSiege.warningActive || profile.activeBaseDefense ||
         access.baseSiteDefinitionId !=
             profile.regionalOperations.technologyCore.baseSiteDefinitionId ||
         !isSpatialBaseFacility(definitionId) ||

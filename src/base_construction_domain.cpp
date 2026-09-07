@@ -417,7 +417,7 @@ queryStartBaseConstruction(const ProfileState &profile,
                                "construction project does not exist",
                                profile.revision);
   }
-  if (profile.baseSiege.warningActive) {
+  if (profile.baseSiege.warningActive || profile.activeBaseDefense) {
     return constructionFailure(DomainErrorCode::IllegalDestination,
                                "new construction is locked during siege warning",
                                profile.revision);
@@ -692,7 +692,7 @@ InstallBaseFacilityPlan queryInstallBaseFacility(
             "Base facility installation is unavailable during a Raid",
             profile.revision, command.definitionId};
   }
-  if (profile.baseSiege.warningActive) {
+  if (profile.baseSiege.warningActive || profile.activeBaseDefense) {
     return {false, DomainErrorCode::IllegalDestination,
             "Base facility installation is locked during siege warning",
             profile.revision, command.definitionId};
