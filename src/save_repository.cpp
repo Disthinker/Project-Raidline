@@ -2556,7 +2556,9 @@ SaveLoadResult deserializeProfileEnvelope(
                  "home-region-onboarding-content-57") ||
             (schemaVersion >= 39 &&
              contentVersion ==
-                 "home-region-placeable-storage-content-58");
+                 "home-region-placeable-storage-content-58") ||
+            (schemaVersion >= 43 &&
+             contentVersion == "base-wishes-resource-tradeoff-content-59");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

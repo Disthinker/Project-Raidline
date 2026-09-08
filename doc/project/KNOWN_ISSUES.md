@@ -4,6 +4,9 @@
 
 ## 当前切片边界
 
+- 2026-09-08 最新覆盖：RL-LIFECYCLE-001 已获用户正常游玩验收（#150@2ff1a69），未合入。后续仅实施 `enemy-combat-contract-v1`：新生成普通感染者统一配置，三环境共用爆头/弱点领域反馈；不顺带整合 Navigation/Session/Persistence。
+- 新切片兼容边界：旧 Daily 3 HP、旧 Defense 100 HP 等已冻结事件继续保留原值；需要新周期/新事件比较统一配置，不通过加载改血或复活。普通感染者未新增独立弱点区域，特殊反馈必须来自 HitResult；新代码仍待用户验收。
+
 - RL-LIFECYCLE-001（2026-09-08，处理中）：Daily/Base 忽略死亡移除结果，Session 只同步存活 ID，数量差异触发全体运行时重建；存在敌人回退/复活及平行出生数组错位。归类为 Gameplay Lifecycle / Activity Orchestration Architecture Debt。新玩法暂停；仅执行 `active/gameplay-framework-consolidation.md` Phase A/B，完成后强制评估，不默认继续导航/战斗顺序/存档重构。独立 stacked 分支基于未合入的 #149@d43bab0。
 
 - PR #149 第二轮拒绝：武器装备后未运行 Base 帧就开始防守会冻结默认伤害 1（基础步枪应为 4）；入侵波次误用玩家式 100 HP（当前 Raid 普通敌人 12 HP）。新增事件已修复；已冻结旧事件的数值和在途弹道不自动重写，F10 自定义也不被加载时覆盖。可继续旧事件或正常结束后验证新一场，不能把旧 100 HP 当成新生成结果。

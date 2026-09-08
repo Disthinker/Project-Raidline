@@ -1,5 +1,6 @@
 #pragma once
 #include "base_defense_state.h"
+#include "enemy_combat_definition.h"
 #include "enemy_squad.h"
 #include "raid_space_query.h"
 #include "world_shooting_runtime.h"
@@ -21,7 +22,8 @@ class BaseDefenseRuntime
 {
   public:
     [[nodiscard]] static std::optional<BaseDefenseSnapshot>
-    prepare(BaseDefenseSnapshot seedInputs, std::span<const BallisticBlocker> blockers);
+    prepare(BaseDefenseSnapshot seedInputs, std::span<const BallisticBlocker> blockers,
+            const EnemyCombatDefinition &enemyDefinition);
     [[nodiscard]] bool resume(const BaseDefenseSnapshot &,
                               std::span<const BallisticBlocker> blockers);
     void advance(const GameplayInput &, float dt, Vec2 playerPosition, Vec2 playerSize, bool moving,

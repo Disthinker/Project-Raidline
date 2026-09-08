@@ -88,6 +88,7 @@ struct ItemDefinitionTag;
 struct CaliberDefinitionTag;
 struct LootTableDefinitionTag;
 struct EnemyDeploymentDefinitionTag;
+struct EnemyCombatDefinitionTag;
 struct MapDefinitionTag;
 struct RaidSpaceDefinitionTag;
 struct BasePriorityDefinitionTag;
@@ -107,6 +108,7 @@ using CaliberDefinitionId = DefinitionId<CaliberDefinitionTag>;
 using LootTableDefinitionId = DefinitionId<LootTableDefinitionTag>;
 using EnemyDeploymentDefinitionId =
     DefinitionId<EnemyDeploymentDefinitionTag>;
+using EnemyCombatDefinitionId = DefinitionId<EnemyCombatDefinitionTag>;
 using MapDefinitionId = DefinitionId<MapDefinitionTag>;
 using RaidSpaceDefinitionId = DefinitionId<RaidSpaceDefinitionTag>;
 using BasePriorityDefinitionId = DefinitionId<BasePriorityDefinitionTag>;

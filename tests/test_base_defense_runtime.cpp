@@ -28,7 +28,7 @@ std::optional<BaseDefenseSnapshot> arena()
     s.worldSize = {6000, 6000};
     s.safeCore = {{2300, 2300}, {1200, 1000}};
     s.playerPosition = {2800, 2700};
-    return BaseDefenseRuntime::prepare(s, {});
+    return BaseDefenseRuntime::prepare(s, {}, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
 }
 } // namespace
 
@@ -92,8 +92,8 @@ TEST(BaseDefenseRuntimeTest, SitesAndFoundingPlotsHaveResumableDeterministicRout
     {
         BaseWorld world;
         world.configureSite(site);
-        auto first = world.prepareBaseDefenseSnapshot(seed());
-        auto second = world.prepareBaseDefenseSnapshot(seed());
+        auto first = world.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
+        auto second = world.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
         ASSERT_TRUE(first) << site;
         ASSERT_TRUE(second);
         EXPECT_EQ(first->layoutHash, second->layoutHash);
@@ -104,7 +104,7 @@ TEST(BaseDefenseRuntimeTest, SitesAndFoundingPlotsHaveResumableDeterministicRout
     {
         BaseWorld world;
         world.configureSite("regional_base_site.greyline_yard", {}, std::string{plot.id});
-        auto first = world.prepareBaseDefenseSnapshot(seed());
+        auto first = world.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
         ASSERT_TRUE(first) << plot.id;
         ASSERT_TRUE(world.resumeBaseDefense(*first)) << plot.id;
     }
@@ -113,7 +113,7 @@ TEST(BaseDefenseRuntimeTest, SitesAndFoundingPlotsHaveResumableDeterministicRout
 TEST(BaseDefenseRuntimeTest, HidingInCoreDoesNotStopBreachesOrDamageSafePlayer)
 {
     BaseWorld world;
-    auto saved = world.prepareBaseDefenseSnapshot(seed());
+    auto saved = world.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(saved);
     ASSERT_TRUE(world.resumeBaseDefense(*saved));
     for (unsigned i = 0; i < 7200 && world.baseDefenseState()->breachedIds.size() < 6; ++i)
@@ -235,7 +235,7 @@ TEST(BaseDefenseRuntimeTest, WallTouchingInvaderCanResumeAndLeaveTheWall)
 TEST(BaseDefenseRuntimeTest, ResumeProducesSameWaveAndMovementContinuation)
 {
     BaseWorld first, second;
-    auto initial = first.prepareBaseDefenseSnapshot(seed());
+    auto initial = first.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(initial);
     ASSERT_TRUE(first.resumeBaseDefense(*initial));
     for (unsigned i = 0; i < 180; ++i)
@@ -261,7 +261,7 @@ TEST(BaseDefenseRuntimeTest, FullyBlockedSiteRejectsWithoutPartialWave)
     input.safeCore = {{1800, 1800}, {1400, 1000}};
     input.playerPosition = {2300, 2300};
     const std::vector<BallisticBlocker> blockers{{1, {{0, 0}, {5000, 5000}}}};
-    EXPECT_FALSE(BaseDefenseRuntime::prepare(input, blockers));
+    EXPECT_FALSE(BaseDefenseRuntime::prepare(input, blockers, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId())));
     EXPECT_TRUE(input.wavePlans.empty());
     EXPECT_EQ(input.spawnedEnemyCount, 0);
 }
@@ -275,7 +275,7 @@ TEST(BaseDefenseRuntimeTest, OrdinaryPerimeterActorsAreNotSiegeTargetsOrRewards)
     ordinary.enemies.push_back({1, {500, 500}, {500, 500}, {32, 48}, 100, 80});
     world.configureHomePerimeter(&ordinary);
     const auto before = world.perimeterEnemySnapshots();
-    auto prepared = world.prepareBaseDefenseSnapshot(seed());
+    auto prepared = world.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(prepared);
     ASSERT_TRUE(world.resumeBaseDefense(*prepared));
     for (unsigned i = 0; i < 180; ++i)
@@ -291,7 +291,7 @@ TEST(BaseDefenseRuntimeTest, OrdinaryPerimeterActorsAreNotSiegeTargetsOrRewards)
 TEST(BaseDefenseRuntimeTest, FacilityQueueGeometryIsFrozenAcrossResume)
 {
     BaseWorld first;
-    auto prepared = first.prepareBaseDefenseSnapshot(seed());
+    auto prepared = first.prepareBaseDefenseSnapshot(seed(), publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(prepared);
     ASSERT_TRUE(first.resumeBaseDefense(*prepared));
     const auto old = first.facilities().front().bounds;

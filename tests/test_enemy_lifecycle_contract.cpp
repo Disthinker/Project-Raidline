@@ -22,7 +22,7 @@ struct EnemyLifecycleTestAccess {
   HomePerimeterSiteSnapshot perimeter;
   std::array<CombatTargetId, 3> ids{1, 2, 3};
 
-  explicit EnemyLifecycleTestAccess(Activity kind) : activity(kind) {
+  explicit EnemyLifecycleTestAccess(Activity kind, int health = 3) : activity(kind) {
     const std::array<Vec2, 3> positions{
         {{2000, 2000}, {2200, 2000}, {2400, 2000}}};
     if (kind == Activity::Daily) {
@@ -35,8 +35,8 @@ struct EnemyLifecycleTestAccess {
                                      positions[i],
                                      positions[i],
                                      {50, 50},
-                                     3,
-                                     3});
+                                     health,
+                                     health});
       daily->configureHomePerimeter(&perimeter);
       daily->playerPosition_ = {100, 100};
       daily->movementBlockers_.clear();
@@ -45,7 +45,7 @@ struct EnemyLifecycleTestAccess {
     } else if (kind == Activity::Raid) {
       std::vector<EnemySpawn> spawns;
       for (auto p : positions)
-        spawns.push_back(EnemySpawn{p, {50, 50}, 3});
+        spawns.push_back(EnemySpawn{p, {50, 50}, health});
       raid = std::make_unique<GameplayWorld>(spawns, 100);
       raid->worldSize_ = {6000, 6000};
       static_cast<void>(raid->player_.setPosition({100, 100}));
@@ -69,7 +69,7 @@ struct EnemyLifecycleTestAccess {
       s.worldSize = {6000, 6000};
       s.safeCore = {{2300, 2300}, {1200, 1000}};
       s.playerPosition = {2800, 2700};
-      const auto prepared = BaseDefenseRuntime::prepare(s, {});
+      const auto prepared = BaseDefenseRuntime::prepare(s, {}, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
       if (!prepared)
         throw std::runtime_error("invalid test arena");
       defense = std::make_unique<BaseDefenseRuntime>();
@@ -80,7 +80,7 @@ struct EnemyLifecycleTestAccess {
       for (std::size_t i = 0; i < ids.size(); ++i) {
         ids[i] = prepared->wavePlans.front().enemyIds[i];
         defense->enemies_.spawn(
-            Enemy{positions[i], {50, 50}, {}, 3, ids[i]},
+            Enemy{positions[i], {50, 50}, {}, health, ids[i]},
             {checkpointPoint({positions[i].x + 25, positions[i].y + 25}), 100,
              0.1F});
       }
@@ -156,6 +156,37 @@ struct EnemyLifecycleTestAccess {
         s.hitResultsLastUpdate().begin(), s.hitResultsLastUpdate().end(),
         [](const HitResult &hit) { return hit.targetKilled; }));
   }
+
+  void combatTick(const GameplayInput &input, float dt) {
+    if (daily) static_cast<void>(daily->update(input, dt));
+    else if (raid) raid->update(input, dt);
+    else {
+      defenseShooting.beginFrame(dt);
+      const Vec2 center{combatPlayerPosition.x + 20, combatPlayerPosition.y + 26};
+      defenseShooting.updateAim(input, center, {1, 0}, {6000, 6000}, dt);
+      defense->advance(input, dt, combatPlayerPosition, {40, 52}, false,
+                       defenseShooting, {});
+    }
+  }
+  Vec2 combatPlayerPosition{};
+  void aimAndFire(float localY, bool aimPastTarget) {
+    const Vec2 p = actors().front().position();
+    const Vec2 size = daily ? daily->playerSize() : raid
+        ? Vec2{raid->player_.size(), raid->player_.size()} : Vec2{40, 52};
+    combatPlayerPosition = {p.x - 150, p.y + localY - size.y * 0.5F};
+    if (daily) daily->playerPosition_ = combatPlayerPosition;
+    if (raid) static_cast<void>(raid->player_.setPosition(combatPlayerPosition));
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.baseDamage = 4;
+    auto handling = deriveWeaponHandling(weapon);
+    handling.minimumSpreadDegrees = handling.maximumSpreadDegrees = 0;
+    shooting().configureWeapon(weapon, handling, false);
+    GameplayInput aim;
+    aim.aimWorldPosition = Vec2{p.x + (aimPastTarget ? 100.0F : 25.0F), p.y + localY};
+    combatTick(aim, 0.000001F);
+    aim.fireJustPressed = true;
+    combatTick(aim, 0.001F);
+  }
 };
 
 class EnemyLifecycleContract : public testing::TestWithParam<Activity> {};
@@ -167,6 +198,54 @@ TEST_P(EnemyLifecycleContract, NonLethalPreservesIdentityAndAttachedState) {
   ASSERT_NE(fixture.actors().find(fixture.ids[1]), nullptr);
   EXPECT_EQ(fixture.actors().find(fixture.ids[1])->health(), 2);
   EXPECT_TRUE(fixture.attached(fixture.ids[1]));
+  EXPECT_EQ(fixture.deaths(), 0U);
+}
+
+TEST_P(EnemyLifecycleContract, SameRealShotProducesSameDamageAndSpecialFeedback) {
+  // Fresh adapters for torso, true head and a ray crossing the head without
+  // fire-time reticle intent. Fire/aim/sweep are production paths, not fake hits.
+  for (unsigned scenario = 0; scenario < 3; ++scenario) {
+    EnemyLifecycleTestAccess fixture{GetParam(), 12};
+    fixture.aimAndFire(scenario == 0 ? 25.0F : 5.0F, scenario == 2);
+    for (int i = 0; i < 80 && fixture.shooting().hitResultsLastUpdate().empty(); ++i)
+      fixture.combatTick({}, 0.005F);
+    const auto &hits = fixture.shooting().hitResultsLastUpdate();
+    ASSERT_EQ(hits.size(), 1U) << scenario;
+    const bool head = scenario == 1;
+    EXPECT_EQ(hits[0].targetId, fixture.ids[0]);
+    EXPECT_EQ(hits[0].semantic, head ? HitSemantic::Headshot : HitSemantic::Normal);
+    EXPECT_EQ(hits[0].damageApplied, head ? 8 : 4);
+    ASSERT_NE(fixture.actors().find(fixture.ids[0]), nullptr);
+    EXPECT_EQ(fixture.actors().find(fixture.ids[0])->health(), head ? 4 : 8);
+    const auto feedback = fixture.shooting().hitFeedbackPresentation();
+    EXPECT_EQ(feedback.semantic, hits[0].semantic);
+    EXPECT_FLOAT_EQ(feedback.remainingSeconds, head ? 0.18F : 0.0F);
+    if (fixture.daily) EXPECT_EQ(fixture.daily->hitFeedbackPresentation(), feedback);
+    if (fixture.raid) EXPECT_EQ(fixture.raid->hitFeedbackPresentation(), feedback);
+    fixture.combatTick({}, 0.05F);
+    EXPECT_NEAR(fixture.shooting().hitFeedbackPresentation().remainingSeconds,
+                head ? 0.13F : 0.0F, 0.0001F);
+    for (int i = 0; i < 4; ++i) fixture.combatTick({}, 0.05F);
+    EXPECT_EQ(fixture.shooting().hitFeedbackPresentation(), HitFeedbackPresentationSnapshot{});
+  }
+}
+
+TEST_P(EnemyLifecycleContract, LethalHeadFeedbackSurvivesRemovalButNotSpatialReset) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 8};
+  fixture.aimAndFire(5.0F, false);
+  for (int i = 0; i < 80 && fixture.shooting().hitResultsLastUpdate().empty(); ++i)
+    fixture.combatTick({}, 0.005F);
+  ASSERT_EQ(fixture.deaths(), 1U);
+  EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+  EXPECT_FALSE(fixture.attached(fixture.ids[0]));
+  EXPECT_EQ(fixture.shooting().hitFeedbackPresentation().semantic, HitSemantic::Headshot);
+  const auto checkpoint = fixture.shooting().checkpoint();
+  WorldShootingRuntime restored;
+  ASSERT_TRUE(restored.restoreCheckpoint(checkpoint));
+  EXPECT_EQ(restored.hitFeedbackPresentation(), HitFeedbackPresentationSnapshot{});
+  fixture.shooting().clearSpatialTransientPresentation();
+  EXPECT_EQ(fixture.shooting().hitFeedbackPresentation(), HitFeedbackPresentationSnapshot{});
+  fixture.combatTick({}, 0.01F);
   EXPECT_EQ(fixture.deaths(), 0U);
 }
 
@@ -318,7 +397,7 @@ TEST(EnemyLifecycleOwnership, NewActivityCannotInheritPreviousTargetIntent) {
   seed.siegeSequence = 1;
   seed.seed = 12345;
   seed.frozenPopulation = 8;
-  const auto candidate = fixture.daily->prepareBaseDefenseSnapshot(seed);
+  const auto candidate = fixture.daily->prepareBaseDefenseSnapshot(seed, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
   ASSERT_TRUE(candidate);
   EXPECT_TRUE(candidate->shooting.flights.empty());
   // Preparing is a query, not a successful activity transition or a rollback.
@@ -348,6 +427,7 @@ static void checkDailyPersistence(bool rejectFirstSave) {
   const auto survivor = fixture.actors()[1].combatTargetId();
   const Vec2 before = fixture.actors()[1].position();
   const auto count = fixture.actors().size();
+  const auto originalHealth = fixture.actors()[0].health();
   const auto fingerprint = profileStateFingerprint(session.profile());
   const auto obstruction = save.path / "profile.tmp.json";
   if (rejectFirstSave)
@@ -358,7 +438,7 @@ static void checkDailyPersistence(bool rejectFirstSave) {
     EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
     ASSERT_EQ(fixture.actors().size(), count);
     ASSERT_NE(fixture.actors().find(victim), nullptr);
-    EXPECT_EQ(fixture.actors().find(victim)->health(), 3);
+    EXPECT_EQ(fixture.actors().find(victim)->health(), originalHealth);
     ASSERT_TRUE(std::filesystem::remove(obstruction));
     fixture.queueHit(victim, 100);
     static_cast<void>(session.updateBaseWorld(*fixture.daily, {}, 0.000001F));

@@ -210,8 +210,10 @@ HomePerimeterEnsureReceipt ensureHomePerimeterSnapshot(
     {
         const Vec2 position = generatedPosition(
             random, {50.0F, 50.0F}, context, accepted);
+        const int health = content.enemyCombatDefinition(
+            ordinaryInfectedDefinitionId()).maximumHealth;
         snapshot.enemies.push_back(HomePerimeterEnemySnapshot{
-            index + 1U, position, position, {50.0F, 50.0F}, 3, 3});
+            index + 1U, position, position, {50.0F, 50.0F}, health, health});
     }
 
     const ItemDefinitionId lootDefinitions[] = {

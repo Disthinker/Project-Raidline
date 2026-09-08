@@ -223,8 +223,6 @@ private:
     std::string weaponSupplyCacheProfileId_;
     bool weaponSupplyCacheIncludesStash_{};
     bool firstRaidHintsHiddenForRun_{};
-    float specialHitFeedbackRemaining_{};
-    HitSemantic specialHitSemantic_{HitSemantic::Normal};
     float playerDamageFeedbackRemaining_{};
     bool lastIncomingDamageReducedByArmor_{};
     bool medicalWheelOpen_{};

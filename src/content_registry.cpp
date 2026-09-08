@@ -827,6 +827,46 @@ ContentRegistry ContentRegistry::fromJson(
         registry.contentVersion_ =
             requiredString(root, "content_version");
 
+        // Legacy content keeps its inline spawn values. Current published
+        // content has one authoritative definition for ordinary infected.
+        if (root.contains("enemy_combat_definitions"))
+        {
+            for (const Json &value : requiredArray(root, "enemy_combat_definitions"))
+            {
+                EnemyCombatDefinition definition{
+                    EnemyCombatDefinitionId{requiredString(value, "id")},
+                    requiredPositiveInt(value, "maximum_health")};
+                if (!hasPrefix(definition.id.value(), "enemy.") ||
+                    !registry.enemyCombatDefinitions_.emplace(definition.id, definition).second)
+                    fail("invalid or duplicate enemy combat definition ID");
+            }
+            if (!registry.enemyCombatDefinitions_.contains(ordinaryInfectedDefinitionId()))
+                fail("ordinary infected combat definition is required");
+        }
+        else
+        {
+            if (registry.contentVersion_ == "enemy-combat-contract-content-60")
+                fail("enemy combat definitions are required by content 60");
+            registry.enemyCombatDefinitions_.emplace(
+                ordinaryInfectedDefinitionId(),
+                EnemyCombatDefinition{ordinaryInfectedDefinitionId(), 12});
+        }
+        const auto enemyMaximumHealth = [&](const Json &value)
+        {
+            if (const auto id = optionalString(value, "enemy_combat_definition"))
+            {
+                if (value.contains("maximum_health"))
+                    fail("enemy spawn cannot override its combat definition");
+                const auto found = registry.enemyCombatDefinitions_.find(EnemyCombatDefinitionId{*id});
+                if (found == registry.enemyCombatDefinitions_.end())
+                    fail("unknown enemy combat definition");
+                return found->second.maximumHealth;
+            }
+            if (registry.contentVersion_ == "enemy-combat-contract-content-60")
+                fail("current enemy spawns must reference a combat definition");
+            return requiredPositiveInt(value, "maximum_health");
+        };
+
         const Json &baseServices = requiredObject(root, "base_services");
         const Json &gunsmith = requiredObject(
             baseServices,
@@ -2231,9 +2271,7 @@ ContentRegistry ContentRegistry::fromJson(
                     EnemySpawnDefinition{
                         parseVec2(enemyValue, "position"),
                         size,
-                        requiredPositiveInt(
-                            enemyValue,
-                            "maximum_health")});
+                        enemyMaximumHealth(enemyValue)});
             }
 
             if (definition.enemies.empty())
@@ -2792,9 +2830,7 @@ ContentRegistry ContentRegistry::fromJson(
                         EnemySpawnDefinition{
                             parseVec2(spawnValue, "position"),
                             size,
-                            requiredPositiveInt(
-                                spawnValue,
-                                "maximum_health")});
+                            enemyMaximumHealth(spawnValue)});
                 }
                 definition.highRisk.activationControlPoint =
                     parseRect(highRisk, "activation_control_point");
@@ -3002,8 +3038,7 @@ ContentRegistry ContentRegistry::fromJson(
                             EnemySpawnDefinition{
                                 parseVec2(enemyValue, "position"),
                                 size,
-                                requiredPositiveInt(
-                                    enemyValue, "maximum_health")});
+                                enemyMaximumHealth(enemyValue)});
                     }
                     interior.lootTableId = LootTableDefinitionId{
                         requiredString(interiorValue, "loot_table")};
@@ -4072,6 +4107,15 @@ ContentRegistry::map(
     const MapDefinitionId &id) const
 {
     return lookup(mapIndex_, maps_, id, "map");
+}
+
+const EnemyCombatDefinition &ContentRegistry::enemyCombatDefinition(
+    const EnemyCombatDefinitionId &id) const
+{
+    const auto found = enemyCombatDefinitions_.find(id);
+    if (found == enemyCombatDefinitions_.end())
+        throw ContentRegistryError{"unknown enemy combat definition ID"};
+    return found->second;
 }
 
 const RaidInteriorDefinition &ContentRegistry::raidInterior(

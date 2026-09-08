@@ -64,7 +64,8 @@ bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
     // Equipment can change while a facility UI pauses Base simulation. Freeze
     // the equipped weapon, not the previous/default runtime configuration.
     synchronizeActiveBaseWeapon(world);
-    auto prepared = world.prepareBaseDefenseSnapshot(std::move(inputs));
+    auto prepared = world.prepareBaseDefenseSnapshot(std::move(inputs),
+        publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     if (!prepared)
     {
         persistenceMessage_ = "NO LEGAL DEFENSE APPROACH | AUTO DEFENSE REMAINS AVAILABLE";
