@@ -1,4 +1,5 @@
 #include "base_defense_runtime.h"
+#include "navigation_refresh_selection.h"
 #include "collision.h"
 #include "home_perimeter_domain.h"
 #include "stable_random.h"
@@ -440,11 +441,11 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
                            visible && e.hasAttackOpportunity(pc)});
     }
     auto directives = enemies_.squad().decide(members, pc);
-    const std::size_t selected =
-        enemies_.empty() ? 0 : state_.navigationScheduleCursor % enemies_.size();
-    if (!enemies_.empty())
-        state_.navigationScheduleCursor =
-            static_cast<std::uint32_t>((selected + 1) % enemies_.size());
+    // Preserve Defense's single rotating turn even when that actor is cooling down.
+    const auto selection = selectNavigationRefresh(
+        enemies_.view(), state_.navigationScheduleCursor, 1U,
+        [](std::size_t) { return true; });
+    state_.navigationScheduleCursor = static_cast<std::uint32_t>(selection.nextCursor);
     for (std::size_t i = 0; i < enemies_.size(); ++i)
     {
         auto &e = enemies_[i];
@@ -461,7 +462,8 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         // Repeated unseen gunfire must not pin the wave behind a safe boundary.
         const Vec2 goal = visible ? pc : wave->target;
         cached.navigationRefreshRemaining = std::max(0.0F, cached.navigationRefreshRemaining - dt);
-        if (i == selected && (cached.navigationRefreshRemaining <= 0 || !cached.navigationTarget))
+        if (selection.target == e.combatTargetId() &&
+            (cached.navigationRefreshRemaining <= 0 || !cached.navigationTarget))
         {
             const auto navStart = std::chrono::steady_clock::now();
             const auto next = navigation_->nextWaypoint(ec, goal, visible ? 48.0F : 0.0F);

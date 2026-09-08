@@ -70,6 +70,10 @@ old event uses old HP, finish that event normally before comparing new enemies.
 
 ## Evidence
 
+- Acceptance update: user normal-play passed. Exact head 47c696b Windows/Ubuntu
+  CI run 34186994633 succeeded. #151 remains unmerged; next narrow selection
+  contract explicitly stacks on this accepted dependency.
+
 - Baseline: clean 2ff1a69; prior 1625 tests and exact-head CI belong to #150 only.
 - Implemented: 82 published spawn references resolve through the shared definition;
   Daily/Defense creation consume that definition, while restore keeps frozen HP.

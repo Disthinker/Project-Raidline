@@ -1,4 +1,5 @@
 #include "gameplay_world.h"
+#include "navigation_refresh_selection.h"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,6 @@ namespace
     constexpr float kMaximumEnemySubsteps{2048.0F};
     constexpr float kEnemyNavigationRefreshSeconds{0.10F};
     constexpr float kEnemyNavigationGoalRefreshDistance{32.0F};
-    constexpr std::size_t kMaximumNavigationQueriesPerEnemySubstep{1U};
     constexpr float kMinimumHighRiskSpawnDistance{260.0F};
 
     constexpr int kScorePerEnemy{100};
@@ -1115,7 +1115,6 @@ void GameplayWorld::update(
     {
         bool targetVisible{};
         bool refreshRequired{};
-        bool selectedForRefresh{};
         bool allowUnawareNavigation{};
         std::optional<Vec2> reachableGoal;
     };
@@ -1271,32 +1270,12 @@ void GameplayWorld::update(
             refreshRequiredCount += intent.refreshRequired ? 1U : 0U;
         }
 
-        std::size_t selectedRefreshCount{};
         std::size_t &scheduleCursor = activeNavigationScheduleCursor();
-        if (!activeEnemySet.empty())
-        {
-            scheduleCursor %= activeEnemySet.size();
-            for (std::size_t scanned{};
-                 scanned < activeEnemySet.size() &&
-                 selectedRefreshCount <
-                     kMaximumNavigationQueriesPerEnemySubstep;
-                 ++scanned)
-            {
-                const std::size_t candidate =
-                    (scheduleCursor + scanned) % activeEnemySet.size();
-                if (!navigationIntents[candidate].refreshRequired)
-                {
-                    continue;
-                }
-                navigationIntents[candidate].selectedForRefresh = true;
-                ++selectedRefreshCount;
-                scheduleCursor = (candidate + 1U) % activeEnemySet.size();
-            }
-        }
-        else
-        {
-            scheduleCursor = 0U;
-        }
+        const auto refreshSelection = selectNavigationRefresh(
+            activeEnemySet.view(), scheduleCursor, activeEnemySet.size(),
+            [&](std::size_t candidate) { return navigationIntents[candidate].refreshRequired; });
+        scheduleCursor = activeEnemySet.empty() ? 0U : refreshSelection.nextCursor;
+        const std::size_t selectedRefreshCount = refreshSelection.target ? 1U : 0U;
         simulationWorkloadLastUpdate_.navigationRefreshesDeferred +=
             refreshRequiredCount - selectedRefreshCount;
 
@@ -1329,7 +1308,7 @@ void GameplayWorld::update(
             {
                 EnemyNavigationRuntime &navigation =
                     activeEnemySet.state(activeEnemySet[enemyIndex].combatTargetId()).navigation;
-                if (intent.selectedForRefresh)
+                if (refreshSelection.target == enemy.combatTargetId())
                 {
                     ++navigationQueriesLastUpdate_;
                     ++simulationWorkloadLastUpdate_.navigationQueries;
