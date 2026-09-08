@@ -40,12 +40,18 @@ class BaseDefenseRuntime
     [[nodiscard]] bool playerExposed(Vec2 center) const noexcept;
 
   private:
+    friend struct EnemyLifecycleTestAccess;
     BaseDefenseSnapshot state_;
-    std::vector<Enemy> enemies_;
+    struct EnemyAttachedState
+    {
+        std::optional<CheckpointPoint> navigationTarget;
+        float navigationRefreshRemaining{};
+        std::optional<float> contactSeconds;
+    };
+    EnemyRoster<EnemyAttachedState> enemies_;
     std::vector<BallisticBlocker> enemyBlockers_;
     std::optional<RaidSpaceBlockerIndex> blockerIndex_;
     std::optional<RaidSpaceNavigationField> navigation_;
-    EnemySquadCoordinator coordinator_;
     std::vector<std::size_t> blockerScratch_;
     int damageLastUpdate_{};
     std::optional<EnemyAttackType> attackTypeLastUpdate_;

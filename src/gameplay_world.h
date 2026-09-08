@@ -429,6 +429,7 @@ public:
     ItemInstanceId nextItemInstanceId() const noexcept;
 
 private:
+    friend struct EnemyLifecycleTestAccess;
     struct EnemyNavigationRuntime
     {
         std::optional<Vec2> goal;
@@ -449,6 +450,12 @@ private:
         float ambushActivationDistance{240.0F};
     };
 
+    struct EnemyAttachedState
+    {
+        EnemyNavigationRuntime navigation;
+        EnemyEncounterRuntime encounter;
+    };
+
     struct InteriorRuntime
     {
         RaidSpaceDefinitionId id;
@@ -459,10 +466,8 @@ private:
         Vec2 exteriorReturn{};
         Vec2 interiorSpawn{};
         ContentRect interiorExit;
-        std::vector<Enemy> enemies;
+        EnemyRoster<EnemyAttachedState> enemies;
         std::vector<BallisticBlocker> ballisticBlockers;
-        std::vector<EnemyNavigationRuntime> enemyNavigation;
-        std::vector<EnemyEncounterRuntime> enemyEncounters;
         std::optional<RaidSpaceBlockerIndex> blockerIndex;
         std::size_t navigationScheduleCursor{};
         std::size_t initialEnemyCount{};
@@ -501,10 +506,8 @@ private:
 
     WorldShootingRuntime shooting_;
     CombatTargetId nextCombatTargetId_{1};
-    std::vector<Enemy> enemies_;
+    EnemyRoster<EnemyAttachedState> enemies_;
     std::size_t initialOutdoorEnemyCount_{};
-    std::vector<EnemyNavigationRuntime> enemyNavigation_;
-    std::vector<EnemyEncounterRuntime> enemyEncounters_;
     std::vector<BallisticBlocker> ballisticBlockers_;
     RaidGeneratedMapLayout outdoorLayout_;
     std::uint32_t outdoorColumns_{};
@@ -533,7 +536,6 @@ private:
     std::optional<std::size_t> activeInteriorIndex_;
     std::vector<NavigationFieldCache> navigationFieldCache_;
     bool spaceTransitionedLastUpdate_{};
-    EnemySquadCoordinator enemySquadCoordinator_;
 
     std::vector<GroundItem> groundItems_;
     GridInventory inventory_{{10, 6}};
@@ -600,16 +602,8 @@ private:
     [[nodiscard]] float worldWidth() const noexcept;
     [[nodiscard]] float worldHeight() const noexcept;
     [[nodiscard]] Vec2 activeWorldSize() const noexcept;
-    [[nodiscard]] std::vector<Enemy> &activeEnemies() noexcept;
-    [[nodiscard]] const std::vector<Enemy> &activeEnemies() const noexcept;
-    [[nodiscard]] std::vector<EnemyNavigationRuntime> &
-    activeEnemyNavigation() noexcept;
-    [[nodiscard]] const std::vector<EnemyNavigationRuntime> &
-    activeEnemyNavigation() const noexcept;
-    [[nodiscard]] std::vector<EnemyEncounterRuntime> &
-    activeEnemyEncounters() noexcept;
-    [[nodiscard]] const std::vector<EnemyEncounterRuntime> &
-    activeEnemyEncounters() const noexcept;
+    [[nodiscard]] EnemyRoster<EnemyAttachedState> &activeEnemies() noexcept;
+    [[nodiscard]] const EnemyRoster<EnemyAttachedState> &activeEnemies() const noexcept;
     [[nodiscard]] const std::vector<BallisticBlocker> &
     activeBallisticBlockers() const noexcept;
     [[nodiscard]] const RaidSpaceBlockerIndex &

@@ -1,8 +1,10 @@
 # Project Raidline 产品交付路线
 
-最后核对：2026-09-07。
+最后核对：2026-09-08。
 
 ## 当前目标与交付节奏
+
+**当前优先级覆盖（2026-09-08）：暂停所有新玩法，执行 Enemy Lifecycle 整合 Phase A/B。** 基于 #149@d43bab0 的独立 stacked 分支先解决 Daily 击杀回退/复活，统一稳定身份、移除和附属导航/目标状态清理。当前不实施攻击顺序统一、Daily 真实寻路或存档重构；B 完成后提交实际调用链和证据再评估。下列防守扩展顺序冻结为候选，不能自动继续。
 
 Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、远征研判、开局选址及首局整备—撤离—回营再出发（PR #148 / `2ae898a`）均已进入主线。Home Region 开局可玩闭环收尾，外部 GDD 继续只读。
 

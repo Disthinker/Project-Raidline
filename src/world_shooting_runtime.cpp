@@ -291,7 +291,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     bool shooterMoving,
     bool controlsSuppressed,
     Vec2 worldSize,
-    std::vector<Enemy> &targets,
+    EnemyLifecycle &targets,
     const std::vector<BallisticBlocker> &blockers)
 {
     const std::optional<ShotSpec> shot = weaponFire_.update(
@@ -479,7 +479,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     }
     hitResultsLastUpdate_ = std::move(resolved.hits);
     return WorldShootingAdvance{
-        std::move(resolved.removedEnemyIndices), resolved.enemiesKilled};
+        std::move(resolved.removals), resolved.enemiesKilled};
 }
 
 void WorldShootingRuntime::configureWeapon(

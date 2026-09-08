@@ -117,6 +117,8 @@ public:
     [[nodiscard]] std::vector<HomePerimeterEnemySnapshot>
     perimeterEnemySnapshots() const;
     [[nodiscard]] int perimeterDamageLastUpdate() const noexcept;
+    [[nodiscard]] const std::vector<EnemyRemovalFact> &perimeterRemovalsLastUpdate() const noexcept
+    { return perimeterRemovals_; }
     [[nodiscard]] std::optional<BaseDefenseSnapshot> prepareBaseDefenseSnapshot(
         BaseDefenseSnapshot seedInputs) const;
     [[nodiscard]] bool resumeBaseDefense(const BaseDefenseSnapshot &snapshot);
@@ -154,6 +156,7 @@ public:
     void resetAtMedicalPoint() noexcept;
 
 private:
+    friend struct EnemyLifecycleTestAccess;
     void rebuildSite(std::string_view siteDefinitionId);
     void rebuildCollisionIndex();
 
@@ -174,8 +177,8 @@ private:
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
     WorldShootingRuntime shooting_;
-    std::vector<Enemy> perimeterEnemies_;
-    std::vector<Vec2> perimeterEnemySpawns_;
+    EnemyRoster<Vec2> perimeterEnemies_;
+    std::vector<EnemyRemovalFact> perimeterRemovals_;
     std::optional<std::uint64_t> perimeterCycleIndex_;
     int perimeterDamageLastUpdate_{};
     float perimeterDamageProtectionRemainingSeconds_{};

@@ -6,6 +6,20 @@
 
 namespace
 {
+    EnemyRoster<> makeEnemies(std::initializer_list<Enemy> values)
+    {
+        EnemyRoster<> result;
+        CombatTargetId id = 1;
+        for (auto enemy : values)
+        {
+            if (enemy.combatTargetId() == kInvalidCombatTargetId)
+                enemy = Enemy{enemy.position(), enemy.size(), enemy.velocity(), enemy.maxHealth(), id};
+            result.spawn(std::move(enemy));
+            ++id;
+        }
+        return result;
+    }
+
     ShotCollisionCandidate makeShot(
         ShotId shotId,
         Vec2 position,
@@ -30,8 +44,8 @@ TEST(HitResolutionTest, LethalHitConsumesShotAndEnemy)
 {
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 10.0F})};
-    std::vector<Enemy> enemies{
-        Enemy{Vec2{15.0F, 15.0F}, Vec2{10.0F, 10.0F}}};
+    auto enemies = makeEnemies({
+        Enemy{Vec2{15.0F, 15.0F}, Vec2{10.0F, 10.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -41,8 +55,8 @@ TEST(HitResolutionTest, LethalHitConsumesShotAndEnemy)
     ASSERT_EQ(result.consumedShotIds.size(), 1U);
     EXPECT_EQ(result.consumedShotIds[0], 1U);
     EXPECT_EQ(result.enemiesKilled, 1U);
-    ASSERT_EQ(result.removedEnemyIndices.size(), 1U);
-    EXPECT_EQ(result.removedEnemyIndices.front(), 0U);
+    ASSERT_EQ(result.removals.size(), 1U);
+    EXPECT_EQ(result.removals.front().id, 1U);
 }
 
 TEST(HitResolutionTest, NoHitKeepsEnemiesAndDoesNotConsumeShot)
@@ -50,12 +64,12 @@ TEST(HitResolutionTest, NoHitKeepsEnemiesAndDoesNotConsumeShot)
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 10.0F}),
         makeShot(2, Vec2{20.0F, 20.0F})};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{100.0F, 100.0F},
             Vec2{10.0F, 10.0F},
             Vec2{},
-            3}};
+            3}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -71,12 +85,12 @@ TEST(HitResolutionTest, NonLethalHitProducesDomainResult)
 {
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(42, Vec2{20.0F, 30.0F}, Vec2{8.0F, 20.0F}, 2)};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{24.0F, 35.0F},
             Vec2{20.0F, 20.0F},
             Vec2{},
-            3}};
+            3}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -97,13 +111,13 @@ TEST(HitResolutionTest, NonLethalHitProducesDomainResult)
 
 TEST(HitResolutionTest, HeadAndLegHitsAreResolvedByDomainGeometry)
 {
-    std::vector<Enemy> headEnemies{
+    auto headEnemies = makeEnemies({
         Enemy{
             Vec2{100.0F, 100.0F},
             Vec2{40.0F, 80.0F},
             Vec2{},
             10,
-            71}};
+            71}});
     const HitResolutionResult head = resolveShotEnemyHits(
         {makeShot(
             7,
@@ -117,8 +131,8 @@ TEST(HitResolutionTest, HeadAndLegHitsAreResolvedByDomainGeometry)
     EXPECT_EQ(head.hits[0].semantic, HitSemantic::Headshot);
     EXPECT_EQ(head.hits[0].damageApplied, 6);
 
-    std::vector<Enemy> legEnemies{
-        Enemy{Vec2{100.0F, 100.0F}, Vec2{40.0F, 80.0F}, Vec2{}, 10}};
+    auto legEnemies = makeEnemies({
+        Enemy{Vec2{100.0F, 100.0F}, Vec2{40.0F, 80.0F}, Vec2{}, 10}});
     const HitResolutionResult legs = resolveShotEnemyHits(
         {makeShot(8, Vec2{110.0F, 168.0F}, Vec2{8.0F, 8.0F}, 4)},
         legEnemies);
@@ -141,7 +155,7 @@ TEST(HitResolutionTest,
             81};
     };
 
-    std::vector<Enemy> noAimEnemies{makeEnemy()};
+    auto noAimEnemies = makeEnemies({makeEnemy()});
     const HitResolutionResult noAim = resolveShotEnemyHits(
         {ShotCollisionCandidate{
             20,
@@ -156,7 +170,7 @@ TEST(HitResolutionTest,
     EXPECT_EQ(noAim.hits[0].semantic, HitSemantic::Normal);
     EXPECT_EQ(noAim.hits[0].damageApplied, 3);
 
-    std::vector<Enemy> wrongTargetEnemies{makeEnemy()};
+    auto wrongTargetEnemies = makeEnemies({makeEnemy()});
     const HitResolutionResult wrongTarget = resolveShotEnemyHits(
         {ShotCollisionCandidate{
             21,
@@ -169,7 +183,7 @@ TEST(HitResolutionTest,
     ASSERT_EQ(wrongTarget.hits.size(), 1U);
     EXPECT_EQ(wrongTarget.hits[0].semantic, HitSemantic::Normal);
 
-    std::vector<Enemy> matchedEnemies{makeEnemy()};
+    auto matchedEnemies = makeEnemies({makeEnemy()});
     const HitResolutionResult matched = resolveShotEnemyHits(
         {ShotCollisionCandidate{
             22,
@@ -188,13 +202,13 @@ TEST(HitResolutionTest,
 TEST(HitResolutionTest,
      WeakPointRequiresMatchingTargetRegionAndPhysicalImpact)
 {
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{100.0F, 100.0F},
             Vec2{40.0F, 80.0F},
             Vec2{},
             20,
-            91}};
+            91}});
     const HitResolutionResult matched = resolveShotEnemyHits(
         {ShotCollisionCandidate{
             23,
@@ -209,13 +223,13 @@ TEST(HitResolutionTest,
     EXPECT_EQ(matched.hits[0].semantic, HitSemantic::WeakPoint);
     EXPECT_EQ(matched.hits[0].damageApplied, 6);
 
-    std::vector<Enemy> mismatchEnemies{
+    auto mismatchEnemies = makeEnemies({
         Enemy{
             Vec2{100.0F, 100.0F},
             Vec2{40.0F, 80.0F},
             Vec2{},
             20,
-            91}};
+            91}});
     const HitResolutionResult mismatch = resolveShotEnemyHits(
         {ShotCollisionCandidate{
             24,
@@ -247,9 +261,9 @@ TEST(HitResolutionTest, OneShotHitsAtMostOneEnemy)
 {
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F})};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{Vec2{12.0F, 12.0F}, Vec2{5.0F, 5.0F}},
-        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}};
+        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -267,12 +281,12 @@ TEST(HitResolutionTest, OverkillCountsOnlyOneKill)
             Vec2{10.0F, 10.0F},
             Vec2{10.0F, 10.0F},
             10)};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{10.0F, 10.0F},
             Vec2{10.0F, 10.0F},
             Vec2{},
-            2}};
+            2}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -288,12 +302,12 @@ TEST(HitResolutionTest, MultipleShotsAccumulateDamageAndCountOneKill)
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 15.0F}),
         makeShot(2, Vec2{20.0F, 20.0F})};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{5.0F, 5.0F},
             Vec2{30.0F, 30.0F},
             Vec2{},
-            2}};
+            2}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -309,9 +323,9 @@ TEST(HitResolutionTest, LaterShotCanHitNextEnemyAfterEarlierKill)
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F}),
         makeShot(2, Vec2{10.0F, 10.0F}, Vec2{20.0F, 20.0F})};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{Vec2{12.0F, 12.0F}, Vec2{5.0F, 5.0F}},
-        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}};
+        Enemy{Vec2{18.0F, 18.0F}, Vec2{5.0F, 5.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -319,9 +333,9 @@ TEST(HitResolutionTest, LaterShotCanHitNextEnemyAfterEarlierKill)
     EXPECT_TRUE(enemies.empty());
     EXPECT_EQ(result.hits.size(), 2U);
     EXPECT_EQ(result.enemiesKilled, 2U);
-    EXPECT_EQ(
-        result.removedEnemyIndices,
-        (std::vector<std::size_t>{0U, 1U}));
+    ASSERT_EQ(result.removals.size(), 2U);
+    EXPECT_EQ(result.removals[0].id, 1U);
+    EXPECT_EQ(result.removals[1].id, 2U);
 }
 
 TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
@@ -329,8 +343,8 @@ TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(1, Vec2{10.0F, 10.0F}),
         makeShot(2, Vec2{10.0F, 10.0F})};
-    std::vector<Enemy> enemies{
-        Enemy{Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}}};
+    auto enemies = makeEnemies({
+        Enemy{Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -342,11 +356,11 @@ TEST(HitResolutionTest, DeadEnemyDoesNotConsumeLaterShot)
     EXPECT_EQ(result.enemiesKilled, 1U);
 }
 
-TEST(HitResolutionTest, PreDeadEnemyReportsItsPrunedParallelIndex)
+TEST(HitResolutionTest, PreDeadEnemyReportsStableIdentity)
 {
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}},
-        Enemy{Vec2{30.0F, 10.0F}, Vec2{10.0F, 10.0F}}};
+        Enemy{Vec2{30.0F, 10.0F}, Vec2{10.0F, 10.0F}}});
     ASSERT_TRUE(enemies.front().takeDamage(enemies.front().maxHealth()));
 
     const HitResolutionResult result = resolveShotEnemyHits({}, enemies);
@@ -354,9 +368,8 @@ TEST(HitResolutionTest, PreDeadEnemyReportsItsPrunedParallelIndex)
     ASSERT_EQ(enemies.size(), 1U);
     EXPECT_FLOAT_EQ(enemies.front().position().x, 30.0F);
     EXPECT_EQ(result.enemiesKilled, 0U);
-    EXPECT_EQ(
-        result.removedEnemyIndices,
-        (std::vector<std::size_t>{0U}));
+    ASSERT_EQ(result.removals.size(), 1U);
+    EXPECT_EQ(result.removals[0].id, 1U);
 }
 
 TEST(HitResolutionTest, InvalidCandidateCannotDamageOrBeConsumed)
@@ -364,12 +377,12 @@ TEST(HitResolutionTest, InvalidCandidateCannotDamageOrBeConsumed)
     const std::vector<ShotCollisionCandidate> shots{
         makeShot(kInvalidShotId, Vec2{10.0F, 10.0F}),
         makeShot(2, Vec2{10.0F, 10.0F}, Vec2{10.0F, 10.0F}, 0)};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{
             Vec2{10.0F, 10.0F},
             Vec2{10.0F, 10.0F},
             Vec2{},
-            3}};
+            3}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -389,8 +402,8 @@ TEST(HitResolutionTest, ContinuousSweepHitsThinTargetWithoutTunnelling)
             Vec2{300.0F, 50.0F},
             2.0F,
             1}};
-    std::vector<Enemy> enemies{
-        Enemy{Vec2{149.0F, 45.0F}, Vec2{2.0F, 10.0F}}};
+    auto enemies = makeEnemies({
+        Enemy{Vec2{149.0F, 45.0F}, Vec2{2.0F, 10.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -410,9 +423,9 @@ TEST(HitResolutionTest, ContinuousSweepChoosesNearestTarget)
             Vec2{300.0F, 50.0F},
             2.0F,
             1}};
-    std::vector<Enemy> enemies{
+    auto enemies = makeEnemies({
         Enemy{Vec2{200.0F, 45.0F}, Vec2{10.0F, 10.0F}},
-        Enemy{Vec2{100.0F, 45.0F}, Vec2{10.0F, 10.0F}}};
+        Enemy{Vec2{100.0F, 45.0F}, Vec2{10.0F, 10.0F}}});
 
     const HitResolutionResult result =
         resolveShotEnemyHits(shots, enemies);
@@ -432,8 +445,8 @@ TEST(HitResolutionTest, NearestObstacleConsumesShotBeforeEnemy)
             Vec2{300.0F, 50.0F},
             2.0F,
             4}};
-    std::vector<Enemy> enemies{
-        Enemy{Vec2{200.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}};
+    auto enemies = makeEnemies({
+        Enemy{Vec2{200.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}});
     const std::vector<BallisticBlocker> blockers{
         BallisticBlocker{1, Rect{Vec2{100.0F, 30.0F}, Vec2{20.0F, 40.0F}}}};
 
@@ -461,8 +474,8 @@ TEST(HitResolutionTest, NearestEnemyStillWinsWhenObstacleIsBehind)
             Vec2{300.0F, 50.0F},
             2.0F,
             2}};
-    std::vector<Enemy> enemies{
-        Enemy{Vec2{80.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}};
+    auto enemies = makeEnemies({
+        Enemy{Vec2{80.0F, 40.0F}, Vec2{20.0F, 20.0F}, Vec2{}, 5}});
     const std::vector<BallisticBlocker> blockers{
         BallisticBlocker{1, Rect{Vec2{180.0F, 30.0F}, Vec2{20.0F, 40.0F}}}};
 

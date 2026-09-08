@@ -91,14 +91,14 @@ std::optional<HitRegion> hitRegionAtPoint(
 
 HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,
-    std::vector<Enemy> &enemies)
+    EnemyLifecycle &enemies)
 {
     return resolveShotHits(shots, enemies, {});
 }
 
 HitResolutionResult resolveShotHits(
     const std::vector<ShotCollisionCandidate> &shots,
-    std::vector<Enemy> &enemies,
+    EnemyLifecycle &enemies,
     const std::vector<BallisticBlocker> &blockers)
 {
     HitResolutionResult result{};
@@ -245,7 +245,8 @@ HitResolutionResult resolveShotHits(
                 damage.damageApplied,
                 killed,
                 damage.region,
-                damage.semantic});
+                damage.semantic,
+                enemy.combatTargetId()});
 
         if (killed)
         {
@@ -253,24 +254,7 @@ HitResolutionResult resolveShotHits(
         }
     }
 
-    // Prune every dead object, including enemies that were marked dead by a
-    // scenario/test command before this resolver ran. Reporting the complete
-    // sorted index set lets the owning world prune all parallel per-enemy
-    // runtime state with the exact same shape change.
-    for (std::size_t index{}; index < enemies.size(); ++index)
-    {
-        if (enemies[index].isDead())
-        {
-            result.removedEnemyIndices.push_back(index);
-        }
-    }
-
-    std::erase_if(
-        enemies,
-        [](const Enemy &enemy)
-        {
-            return enemy.isDead();
-        });
+    result.removals = enemies.removeDead();
 
     return result;
 }

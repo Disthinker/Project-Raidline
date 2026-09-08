@@ -397,6 +397,39 @@ TEST(BaseWorldTest, PerimeterSnapshotCreatesFiniteTargetsOutsideSafeBoundary)
               HomeRegionSafetyZone::Perimeter);
 }
 
+TEST(BaseWorldTest, LethalPerimeterShotDoesNotRebuildSurvivorsFromStaleSnapshot)
+{
+    BaseWorld world;
+    world.configureWeaponFire(*itemDefinition(ItemId::Rifle).weaponUse);
+    const Vec2 player = world.playerPosition();
+    const Vec2 victim{player.x + 100.0F, player.y};
+    const Vec2 survivor{player.x + 100.0F, player.y + 160.0F};
+    HomePerimeterSiteSnapshot snapshot;
+    snapshot.baseSiteDefinitionId = RegionalBaseSiteDefinitionId{world.siteDefinitionId()};
+    snapshot.cycleIndex = 4U;
+    snapshot.seed = 17U;
+    snapshot.enemies = {
+        {11U, victim, victim, {50.0F, 50.0F}, 1, 1},
+        {22U, survivor, survivor, {50.0F, 50.0F}, 100, 100}};
+    world.configureHomePerimeter(&snapshot);
+    GameplayInput fire;
+    fire.aimWorldPosition = Vec2{victim.x + 25.0F, victim.y + 25.0F};
+    fire.firePressed = true;
+    fire.fireJustPressed = true;
+    for (int frame = 0; frame < 120 && world.perimeterEnemies().size() == 2U; ++frame)
+        static_cast<void>(world.update(fire, 1.0F / 60.0F));
+    ASSERT_EQ(world.perimeterEnemies().size(), 1U) << "real shot must kill first target";
+    ASSERT_EQ(world.perimeterEnemies().front().combatTargetId(), 22U);
+    const Vec2 before = world.perimeterEnemies().front().position();
+    world.configureHomePerimeter(&snapshot); // same call made by Session next frame
+    ASSERT_EQ(world.perimeterEnemies().size(), 1U) << "same cycle must not resurrect dead actor";
+    EXPECT_EQ(world.perimeterEnemies().front().combatTargetId(), 22U);
+    EXPECT_FLOAT_EQ(world.perimeterEnemies().front().position().x, before.x);
+    EXPECT_FLOAT_EQ(world.perimeterEnemies().front().position().y, before.y);
+    ASSERT_EQ(world.perimeterEnemySnapshots().size(), 1U);
+    EXPECT_FLOAT_EQ(world.perimeterEnemySnapshots().front().spawnPosition.y, survivor.y);
+}
+
 TEST(BaseWorldTest, FacilitySideDoesNotReplaceThePublishedEntrance)
 {
     BaseWorld world;

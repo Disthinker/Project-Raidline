@@ -227,8 +227,8 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
     resetAtMedicalPoint();
     shooting_.clearSpatialTransientPresentation();
     baseDefense_.reset();
-    perimeterEnemies_.clear();
-    perimeterEnemySpawns_.clear();
+    perimeterEnemies_.reset();
+    perimeterRemovals_.clear();
     perimeterCycleIndex_.reset();
     shooting_.reanchor(
         {playerPosition_.x + playerSize_.x * 0.5F,
@@ -377,7 +377,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             playerIsMoving_,shooting_,movementBlockers_);
         return input.interactJustPressed ? interactableFacility() : std::nullopt;
     }
-    static_cast<void>(shooting_.advanceShots(
+    perimeterRemovals_ = shooting_.advanceShots(
         input,
         deltaTime,
         playerCenter,
@@ -386,7 +386,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         false,
         layout_.worldSize,
         perimeterEnemies_,
-        movementBlockers_));
+        movementBlockers_).removals;
 
     const HomeRegionSafetyZone playerZone = playerSafetyZone();
     for (std::size_t index = 0; index < perimeterEnemies_.size(); ++index)
@@ -418,9 +418,9 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         directive.canStartAttack = playerExposed;
         const std::optional<Vec2> navigationTarget = playerExposed
             ? std::nullopt
-            : std::optional<Vec2>{perimeterEnemySpawns_[index]};
+            : std::optional<Vec2>{perimeterEnemies_.state(enemy.combatTargetId())};
         static_cast<void>(enemy.updateTowardsTarget(
-            playerExposed ? playerCenter : perimeterEnemySpawns_[index],
+            playerExposed ? playerCenter : perimeterEnemies_.state(enemy.combatTargetId()),
             directive,
             deltaTime,
             layout_.worldSize.x,
@@ -483,32 +483,34 @@ void BaseWorld::configureHomePerimeter(
 {
     if (snapshot == nullptr)
     {
-        perimeterEnemies_.clear();
-        perimeterEnemySpawns_.clear();
+        perimeterEnemies_.reset();
+        perimeterRemovals_.clear();
         perimeterCycleIndex_.reset();
         return;
     }
     if (perimeterCycleIndex_.has_value() &&
-        *perimeterCycleIndex_ == snapshot->cycleIndex &&
-        perimeterEnemies_.size() == snapshot->enemies.size())
+        *perimeterCycleIndex_ == snapshot->cycleIndex)
         return;
 
-    perimeterEnemies_.clear();
-    perimeterEnemySpawns_.clear();
+    perimeterEnemies_.reset();
+    perimeterRemovals_.clear();
     perimeterEnemies_.reserve(snapshot->enemies.size());
-    perimeterEnemySpawns_.reserve(snapshot->enemies.size());
     for (const HomePerimeterEnemySnapshot &enemy : snapshot->enemies)
     {
-        perimeterEnemies_.emplace_back(
+        if (enemy.health <= 0)
+        {
+            perimeterEnemies_.restoreRetiredIdentity(enemy.localId);
+            continue;
+        }
+        perimeterEnemies_.spawn(Enemy{
             enemy.position,
             enemy.size,
             Vec2{},
             enemy.maximumHealth,
-            static_cast<CombatTargetId>(enemy.localId));
+            static_cast<CombatTargetId>(enemy.localId)}, enemy.spawnPosition);
         const int damage = enemy.maximumHealth - enemy.health;
         if (damage > 0)
             static_cast<void>(perimeterEnemies_.back().takeDamage(damage));
-        perimeterEnemySpawns_.push_back(enemy.spawnPosition);
     }
     perimeterCycleIndex_ = snapshot->cycleIndex;
 }
@@ -536,7 +538,7 @@ BaseWorld::perimeterEnemySnapshots() const
         const Enemy &enemy = perimeterEnemies_[index];
         result.push_back(HomePerimeterEnemySnapshot{
             static_cast<std::uint32_t>(enemy.combatTargetId()),
-            perimeterEnemySpawns_[index],
+            perimeterEnemies_.state(enemy.combatTargetId()),
             enemy.position(),
             enemy.size(),
             enemy.maxHealth(),

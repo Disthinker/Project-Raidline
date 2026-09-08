@@ -511,16 +511,17 @@ Enemy::attackConfig() const noexcept
 
 bool Enemy::hasAttackHitOpportunity() const noexcept
 {
-  return attack_.hasHitOpportunity();
+  return !isDead() && attack_.hasHitOpportunity();
 }
 
 bool Enemy::hasGrabContactOpportunity() const noexcept
 {
-  return attack_.hasGrabContactOpportunity();
+  return !isDead() && attack_.hasGrabContactOpportunity();
 }
 
 bool Enemy::confirmGrabContact() noexcept
 {
+  if (isDead()) return false;
   const bool confirmed = attack_.tryConfirmGrabContact();
   if (confirmed)
   {
@@ -533,7 +534,7 @@ bool Enemy::confirmGrabContact() noexcept
 
 bool Enemy::consumeAttackHit() noexcept
 {
-  return attack_.tryConsumeHit();
+  return !isDead() && attack_.tryConsumeHit();
 }
 
 EnemyFacingDirection Enemy::facingDirection() const
@@ -617,6 +618,9 @@ bool Enemy::takeDamage(int damage)
   else if (killed)
   {
     impactSlowRemaining_ = 0.0F;
+    attack_ = EnemyAttackState{};
+    velocity_ = {};
+    movementState_ = EnemyMovementState::Stationary;
   }
   return killed;
 }

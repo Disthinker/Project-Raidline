@@ -287,16 +287,20 @@ bool BaseDefenseRuntime::resume(const BaseDefenseSnapshot &s,
         auto restored = Enemy::restoreCheckpoint(e);
         if (!restored || !clearFootprint(center(*restored), *candidate.blockerIndex_))
             return false;
-        candidate.enemies_.push_back(std::move(*restored));
+        candidate.enemies_.spawn(std::move(*restored), {e.navigationTarget, e.navigationRefreshRemaining, {}});
     }
-    candidate.coordinator_.attackScheduleCursor_ = s.attackScheduleCursor;
+    for (const auto id : s.killedIds) candidate.enemies_.restoreRetiredIdentity(id);
+    for (const auto id : s.breachedIds) candidate.enemies_.restoreRetiredIdentity(id);
+    for (const auto &contact : s.contacts)
+        candidate.enemies_.state(contact.enemyId).contactSeconds = contact.seconds;
+    candidate.enemies_.squad().attackScheduleCursor_ = s.attackScheduleCursor;
     for (auto id : s.reservedAttackers)
     {
         const auto found = std::find_if(candidate.enemies_.begin(), candidate.enemies_.end(),
                                         [&](const Enemy &e) { return e.combatTargetId() == id; });
         if (found == candidate.enemies_.end())
             return false;
-        candidate.coordinator_.reservedAttackers_.push_back(
+        candidate.enemies_.squad().reservedAttackers_.push_back(
             static_cast<std::size_t>(std::distance(candidate.enemies_.begin(), found)));
     }
     *this = std::move(candidate);
@@ -347,8 +351,8 @@ void BaseDefenseRuntime::spawn(float dt, Vec2 playerCenter)
             if (std::any_of(enemies_.begin(), enemies_.end(),
                             [&](const Enemy &e) { return distance(center(e), entry) < 54; }))
                 continue;
-            enemies_.emplace_back(Vec2{entry.x - enemySize.x / 2, entry.y - enemySize.y / 2},
-                                  enemySize, Vec2{}, wave.enemyMaxHealth, wave.enemyIds[offset]);
+            enemies_.spawn(Enemy{Vec2{entry.x - enemySize.x / 2, entry.y - enemySize.y / 2},
+                                  enemySize, Vec2{}, wave.enemyMaxHealth, wave.enemyIds[offset]});
             ++state_.spawnedEnemyCount;
             state_.nextSpawnDelay = 0.65F;
             synchronizeActorCheckpoints();
@@ -366,16 +370,16 @@ void BaseDefenseRuntime::synchronizeActorCheckpoints()
     for (const auto &e : enemies_)
     {
         auto checkpoint = e.checkpoint();
-        const auto old = std::find_if(state_.enemies.begin(), state_.enemies.end(),
-                                      [&](const auto &v) { return v.id == checkpoint.id; });
-        if (old != state_.enemies.end())
-        {
-            checkpoint.navigationTarget = old->navigationTarget;
-            checkpoint.navigationRefreshRemaining = old->navigationRefreshRemaining;
-        }
+        const auto &attached = enemies_.state(e.combatTargetId());
+        checkpoint.navigationTarget = attached.navigationTarget;
+        checkpoint.navigationRefreshRemaining = attached.navigationRefreshRemaining;
         next.push_back(std::move(checkpoint));
     }
     state_.enemies = std::move(next);
+    state_.contacts.clear();
+    for (const auto &e : enemies_)
+        if (const auto seconds = enemies_.state(e.combatTargetId()).contactSeconds)
+            state_.contacts.push_back({e.combatTargetId(), *seconds});
 }
 
 void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 playerPosition,
@@ -394,35 +398,19 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
                             playerPosition.y + playerSize.y / 2};
     state_.elapsedSeconds += dt;
     spawn(dt, playerCenter);
-    std::vector<std::uint64_t> previousIds;
-    previousIds.reserve(enemies_.size());
-    for (const auto &e : enemies_)
-        previousIds.push_back(e.combatTargetId());
-    static_cast<void>(shooting.advanceShots(input, dt, playerCenter,
-                                            std::max(playerSize.x, playerSize.y), moving, false,
-                                            state_.worldSize, enemies_, shotBlockers));
-    for (auto id : previousIds)
-        if (std::none_of(enemies_.begin(), enemies_.end(),
-                         [&](const Enemy &e) { return e.combatTargetId() == id; }))
-            state_.killedIds.push_back(id);
-    if (enemies_.size() != previousIds.size())
-    {
-        coordinator_.reservedAttackers_.clear();
-        synchronizeActorCheckpoints();
-    }
+    const auto resolved = shooting.advanceShots(input, dt, playerCenter,
+        std::max(playerSize.x, playerSize.y), moving, false,
+        state_.worldSize, enemies_, shotBlockers);
+    for (const auto &fact : resolved.removals)
+        if (fact.reason == EnemyRemovalReason::Death)
+            state_.killedIds.push_back(fact.id);
     const unsigned steps = static_cast<unsigned>(std::ceil(dt / (1.0F / 30.0F)));
     for (unsigned i = 0; i < steps && !breached(); ++i)
         step(dt / static_cast<float>(steps), playerPosition, playerSize,
              shooting.shotFiredLastUpdate());
-    std::erase_if(state_.contacts,
-                  [&](const auto &c)
-                  {
-                      return std::none_of(enemies_.begin(), enemies_.end(), [&](const Enemy &e)
-                                          { return e.combatTargetId() == c.enemyId; });
-                  });
-    state_.attackScheduleCursor = static_cast<std::uint32_t>(coordinator_.attackScheduleCursor_);
+    state_.attackScheduleCursor = static_cast<std::uint32_t>(enemies_.squad().attackScheduleCursor_);
     state_.reservedAttackers.clear();
-    for (auto index : coordinator_.reservedAttackers_)
+    for (auto index : enemies_.squad().reservedAttackers_)
         state_.reservedAttackers.push_back(enemies_[index].combatTargetId());
     synchronizeActorCheckpoints();
     metrics_.activeEnemies = enemies_.size();
@@ -448,7 +436,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         members.push_back({center(e), true, e.awarenessState(), e.attackPhase(),
                            visible && e.hasAttackOpportunity(pc)});
     }
-    auto directives = coordinator_.decide(members, pc);
+    auto directives = enemies_.squad().decide(members, pc);
     const std::size_t selected =
         enemies_.empty() ? 0 : state_.navigationScheduleCursor % enemies_.size();
     if (!enemies_.empty())
@@ -460,7 +448,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         const auto *wave = waveFor(e.combatTargetId());
         if (!wave)
             continue;
-        auto &cached = state_.enemies[i];
+        auto &cached = enemies_.state(e.combatTargetId());
         const Vec2 before = e.position();
         const Vec2 ec = center(e);
         const bool visible =
@@ -512,18 +500,11 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         if (!playerExposed({resolved.x + e.size().x / 2, resolved.y + e.size().y / 2}))
             resolved = before;
         static_cast<void>(e.setPosition(resolved));
-        auto contact = std::find_if(state_.contacts.begin(), state_.contacts.end(),
-                                    [&](const auto &c) { return c.enemyId == e.combatTargetId(); });
+        auto &contact = cached.contactSeconds;
         if (distance(center(e), wave->target) < 58)
         {
-            if (contact == state_.contacts.end())
-            {
-                state_.contacts.push_back({e.combatTargetId(), dt});
-                contact = std::prev(state_.contacts.end());
-            }
-            else
-                contact->seconds += dt;
-            if (contact->seconds >= contactSeconds)
+            contact = contact.value_or(0.0F) + dt;
+            if (*contact >= contactSeconds)
             {
                 state_.breachedIds.push_back(e.combatTargetId());
                 if (breached())
@@ -531,8 +512,8 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
                 continue;
             }
         }
-        else if (contact != state_.contacts.end())
-            contact->seconds = 0;
+        else if (contact)
+            *contact = 0;
         if (!exposed || state_.damageProtectionSeconds > 0 ||
             !blockerIndex_->hasLineOfSight(center(e), pc))
             continue;
@@ -551,18 +532,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
             state_.damageProtectionSeconds = 0.25F;
         }
     }
-    const auto old = enemies_.size();
-    std::erase_if(enemies_,
-                  [&](const Enemy &e)
-                  {
-                      return std::find(state_.breachedIds.begin(), state_.breachedIds.end(),
-                                       e.combatTargetId()) != state_.breachedIds.end();
-                  });
-    if (enemies_.size() != old)
-    {
-        coordinator_.reservedAttackers_.clear();
-        synchronizeActorCheckpoints();
-    }
+    static_cast<void>(enemies_.removeForObjective(state_.breachedIds));
 }
 
 bool BaseDefenseRuntime::completed() const noexcept

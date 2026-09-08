@@ -43,6 +43,8 @@ public:
     [[nodiscard]]
     const EnemySquadConfig &config() const noexcept;
 
+    void invalidateActorMembership() noexcept { reservedAttackers_.clear(); }
+
 private:
     friend class BaseDefenseRuntime;
     EnemySquadConfig config_;

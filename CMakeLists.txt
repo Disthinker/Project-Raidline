@@ -778,6 +778,7 @@ raidline_add_test(
     raidline::domain)
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
+raidline_add_test(EnemyLifecycleContractTest tests/test_enemy_lifecycle_contract.cpp raidline::services)
 raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkpoint_writer.cpp raidline::services)
 raidline_add_test(BaseDefenseSessionTest tests/test_base_defense_session.cpp raidline::services)
 raidline_add_test(BaseSiegeUiTest tests/test_base_siege_ui.cpp raidline::sdl_client)

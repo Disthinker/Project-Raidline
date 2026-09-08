@@ -44,11 +44,11 @@ save timing. Existing damage numbers are not rebalanced in this work.
 
 ## Steps and gates
 
-- [ ] A: reproduce baseline bug with real Base shooting/configuration; characterize
+- [x] A: reproduce baseline bug with real Base shooting/configuration; characterize
   Raid and Defense; add reusable three-consumer lifecycle tests. Record red evidence.
-- [ ] B: private authoritative collection, stable-ID results, single removal path
+- [x] B: private authoritative collection, stable-ID results, single removal path
   including navigation/target attachments; migrate all three existing consumers.
-- [ ] Verify nonlethal/lethal/multiple hits/single death, first-middle-last removal,
+- [x] Verify nonlethal/lethal/multiple hits/single death, first-middle-last removal,
   survivor identity/position, no dead attack/nav/target, no accidental respawn.
 - [ ] Full Windows Debug build, focused and full CTest, exact-head Windows/Ubuntu CI.
 - [ ] STOP after B: actual before/after calls, code/test statistics, remaining debt.
@@ -81,3 +81,87 @@ until structural bug fix, common contract, full tests/CI and user acceptance pas
 - Initial B focused pass: 138 existing/added BaseWorld, GameplayWorld,
   BaseDefenseRuntime and HitResolution tests, 4.86s. The red reproduction now
   passes. Not yet a final full-suite or CI result.
+- Final local Windows Debug: all affected targets rebuilt; **1624/1624 CTest,
+  zero failures, 57.98s**. Baseline 1606 retained; 18 added: 12 parameterized
+  actual-activity contracts, 3 ownership/restore tests, 2 real temporary-directory
+  Session save/rejection tests, and the original real-shot Base reproduction.
+- Contract fixtures arrange deterministic actors and logical flights through
+  narrow test friendship, then call actual Daily/Defense/Raid updates. They do
+  not initialize SDL windows/audio or touch player saves. Tiny-step contracts
+  isolate lifetime/position effects; existing full-step navigation, shooting,
+  Defense continuation and mixed performance tests remain enabled.
+- Unchanged Defense stress: 16 enemies/1000 blockers/1000 assets, 45 shots,
+  12 inventory operations, 14 damage operations, 7 medical operations.
+  Checkpoint copy P95/P99 **1.0099/2.5836ms**, simulation max **0.5889ms**,
+  no-SDL main-iteration P95/P99/max **8.8091/11.2854/13.8123ms**. This is not
+  a rendered FPS or shipping hardware guarantee. No threshold relaxation.
+- CI is recorded on the stacked PR at its exact head. Existing workflow only
+  automatically triggers PRs targeting main, so dispatch that unchanged workflow
+  explicitly for the integration branch; verify run head SHA and both jobs.
+
+## Phase B actual Before / After
+
+Before: three callers passed mutable enemy vectors to shooting. Hit resolution
+erased the vector and exported indices; Daily dropped the result, Raid erased
+parallel arrays, Defense inferred kills from set differences and separately
+erased breached actors. All were exposed to shape-change omissions.
+
+After:
+
+```text
+Daily / Defense / Raid (existing spawn and frame-order policies)
+  -> WorldShootingRuntime::advanceShots(EnemyLifecycle&)
+  -> resolveShotHits (damage + stable target IDs)
+  -> EnemyLifecycle::removeDead
+       -> remove bound attachment by CombatTargetId
+       -> compact private actor vector
+       -> invalidate squad membership reservations
+  -> stable EnemyRemovalFact values -> activity consequences
+       Daily: Session records existing DTO health=0
+       Defense: killed IDs advance existing wave outcome
+       Raid: existing shot kill score
+```
+
+Defense objective/breach requests use `removeForObjective` on the same lifecycle,
+with a distinct reason. Explicit restore imports existing tombstones, not new
+death consequences. No new ID domain, schema, content or rules version.
+
+| Responsibility | Before | After |
+| --- | --- | --- |
+| Actor collection mutation | consumer vectors + shared resolver + Defense erase | private EnemyLifecycle collection; consumers submit spawn/removal requests |
+| Dead cleanup | caller-dependent | one mandatory path inside shared resolver |
+| Spawn/nav/target attachment lifetime | 5 parallel array declarations across Daily and Raid; Defense uses DTO as nav cache | EnemyRoster<State> owns ID-bound attachments and removes them automatically |
+| Raid attachment access helpers | four vector getters | removed; state(id) |
+| Defense death inference | before/after ID scan | explicit removal facts |
+| Attack membership | caller cleanup / implicit next decide | invalidated by shared lifecycle on structural removal |
+| Daily reload | same-cycle count mismatch rebuilds all | explicit reset/new cycle only; dead DTO records not spawned |
+| Session | misses removed IDs | 9-line consumption of Profile-relevant death facts, no transient cleanup |
+| Spawn/target/waves/reward/failure/save policy | each activity | still each activity |
+
+The new shared lifecycle header is 148 lines (including comments/formatting);
+no CombatSpaceRuntime, manager framework or new runtime translation unit was
+introduced. Changed production-file and insertion/deletion totals are measured
+from the final PR diff, not asserted as a deduplication percentage. Insertions
+include migrated call sites; deletions include adapters/comments, not all are
+"duplicate algorithms removed".
+
+## Mandatory pause and remaining debt
+
+Phase B implementation is finished. **Do not start Phase C or new gameplay.**
+Full CI and user normal-play gates remain separate from local automation.
+
+Remaining real duplication: Raid and Defense still independently refresh/issue
+navigation queries and run enemy updates. Daily intentionally retains direct
+steering. Frame order remains Raid enemy-first, Daily/Defense shot-first. Those
+are not silently unified in this lifetime PR. Save trigger/recovery policies
+remain distinct and are not evidence that all persistence code must be merged.
+
+Recommended next decision AFTER user verification: inspect whether a narrow
+navigation scheduling helper is warranted for the two existing path consumers;
+treat Daily pathfinding and frame-order convergence as separately accepted
+behavior changes. Do not automatically approve Combat/Session/Persistence phases.
+
+Future Rescue can reuse this registry, death/target cleanup and contract harness
+without writing deletion glue. It would still need to reuse/select an existing
+update orchestration; this phase does NOT claim a universal shared combat pipeline
+or zero integration cost for a new activity.

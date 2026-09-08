@@ -4,6 +4,14 @@
 
 ## PR #149：实时基地防守边界（开发分支，未验收）
 
+### Enemy Lifecycle 整合（2026-09-08，stacked 分支，未验收）
+
+- `EnemyLifecycle` 私有拥有活动 Enemy 集合及现有 CombatTargetId 身份记录；`EnemyRoster<State>` 按值绑定各消费者自己的瞬态状态。只有生命周期模块能物理删除 Enemy，死亡/目标完成移除会同时清理附属状态和攻击预约。它不包含寻路算法、AI 更新循环、Profile 或保存策略。
+- `resolveShotHits -> removeDead` 在同一共享入口完成伤害后的生命周期收束；返回 `EnemyRemovalFact{id, position, reason}`，`HitResult` 带目标 ID，跨模块不再传数组移除索引。已死亡对象立即不可攻击或作为命中目标；在当前命中批次末统一压缩集合。
+- Daily 附属状态为出生位置；Raid 为现有 navigation/encounter；Defense 为现有 navigation/contact。活动仍决定出生、目标、波次/巡逻及结果，不能依靠另一个平行数组的 erase 维持一致性。
+- Daily 同周期配置不重建活跃世界；Session 只按明确死亡事实更新既有快照 health=0。显式载入跳过死亡记录并导入退休 ID，不发布第二次死亡。存档 DTO/schema 不变；保存失败仍走原显式一致恢复，不能把失败恢复写成永久死亡提交成功。
+- 当前仍保留三种活动各自的更新顺序和导航调度算法；这两项并未借重构改变。后续是否需要收拢必须在 Phase B 证据评审后决定。
+
 - `ProfileState::activeBaseDefense` 是唯一可选活动快照；`BaseSiegeState` 持有围攻序号和最近已结算序号。自动与手动模式共用事件身份及结果事务，不能按模式重复奖励。
 - `BaseWorld` 组合 `BaseDefenseRuntime`，后者只拥有本事件有限敌人、波次、防线和导航；资产、弹药、医疗及世界时钟仍唯一属于 `GameSession` 的 Profile。普通外围敌人冻结并隐藏，事件结束后原样恢复。
 - 快照包含冻结碰撞几何、路径、稳定敌人 ID、AI/攻击已消费状态、逻辑弹道、准星、随机流及服务序列；保留攻击名额时保存稳定敌人 ID，恢复才映射为运行时索引。不保存 SDL、粒子或资源指针。

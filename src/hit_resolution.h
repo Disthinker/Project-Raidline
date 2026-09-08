@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-#include "enemy.h"
+#include "enemy_lifecycle.h"
 #include "shot_resolution.h"
 #include "vec2.h"
 
@@ -33,10 +33,7 @@ struct HitResolutionResult
 {
     std::vector<HitResult> hits;
     std::vector<ShotId> consumedShotIds;
-    // Indices refer to the enemy vector as it existed when resolution began.
-    // GameplayWorld uses them to remove parallel per-enemy runtime state after
-    // resolveShotHits has removed the killed Enemy objects.
-    std::vector<std::size_t> removedEnemyIndices;
+    std::vector<EnemyRemovalFact> removals;
     std::size_t enemiesKilled{0};
 };
 
@@ -47,10 +44,10 @@ struct HitResolutionResult
 [[nodiscard]]
 HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,
-    std::vector<Enemy> &enemies);
+    EnemyLifecycle &enemies);
 
 [[nodiscard]]
 HitResolutionResult resolveShotHits(
     const std::vector<ShotCollisionCandidate> &shots,
-    std::vector<Enemy> &enemies,
+    EnemyLifecycle &enemies,
     const std::vector<BallisticBlocker> &blockers);
