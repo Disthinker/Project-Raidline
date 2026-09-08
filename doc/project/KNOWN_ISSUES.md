@@ -4,6 +4,9 @@
 
 ## 当前切片边界
 
+- 最新覆盖：#152 导航刷新选择已验收且精确 CI 通过，未合并。当前审计发现 Daily 只传整数损失且 Session 将所有攻击当作 Scratch，丢失 Bite 类型/部位/护甲语义；由 `enemy-incoming-damage-contract-v1` 修正并统一三环境完整受伤事实，属于有意数值/伤势修正，不是纯行为保持重构。
+- 仍保留的时序差异：Daily/Defense 先射击后敌人，Raid 相反；Daily Grab 下一更新才消费 Bite，Defense/Raid 同子步消费；保护期间攻击消费规则也不同。本轮以真实适配器测试固定这些差异，不静默统一，不据此启动 Session/Persistence 大重构。
+
 - 2026-09-08 最新覆盖：RL-LIFECYCLE-001 已获用户正常游玩验收（#150@2ff1a69），未合入。后续仅实施 `enemy-combat-contract-v1`：新生成普通感染者统一配置，三环境共用爆头/弱点领域反馈；不顺带整合 Navigation/Session/Persistence。
 - 新切片兼容边界：旧 Daily 3 HP、旧 Defense 100 HP 等已冻结事件继续保留原值；需要新周期/新事件比较统一配置，不通过加载改血或复活。普通感染者未新增独立弱点区域，特殊反馈必须来自 HitResult；新代码仍待用户验收。
 

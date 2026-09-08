@@ -1392,6 +1392,7 @@ void GameplayWorld::update(
                 }
 
                 if (resolveEnemyAttackDamage(
+                        enemy.combatTargetId(),
                         EnemyAttackType::Bite,
                         biteConfig->damage))
                 {
@@ -1437,6 +1438,7 @@ void GameplayWorld::update(
             }
 
             if (resolveEnemyAttackDamage(
+                    enemy.combatTargetId(),
                     *enemy.attackType(),
                     attackConfig->damage))
             {
@@ -2224,6 +2226,7 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
 }
 
 bool GameplayWorld::resolveEnemyAttackDamage(
+    CombatTargetId sourceEnemyId,
     EnemyAttackType type,
     int legacyDamage)
 {
@@ -2242,7 +2245,7 @@ bool GameplayWorld::resolveEnemyAttackDamage(
         return damagePlayer(legacyDamage);
     }
 
-    const EnemyAttackCombatDamage damage = enemyAttackCombatDamage(type);
+    const auto damage = enemyAttackDamageObservation(sourceEnemyId, type);
     if (damage.baseDamage <= 0)
     {
         return false;
@@ -2253,18 +2256,7 @@ bool GameplayWorld::resolveEnemyAttackDamage(
     }
     enemyDamageProtectionRemainingSeconds_ =
         kEnemyDamageProtectionDurationSeconds;
-    pendingPlayerDamageObservations_.push_back(
-        PlayerDamageObservation{
-            damage.baseDamage,
-            damage.region,
-            damage.penetration,
-            damage.armorDamage,
-            damage.weakPoint,
-            type == EnemyAttackType::Scratch
-                ? WoundSource::Scratch
-                : type == EnemyAttackType::Bite
-                    ? WoundSource::Bite
-                    : WoundSource::None});
+    pendingPlayerDamageObservations_.push_back(damage);
     return false;
 }
 

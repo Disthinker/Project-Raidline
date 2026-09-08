@@ -169,6 +169,36 @@ struct EnemyLifecycleTestAccess {
     }
   }
   Vec2 combatPlayerPosition{};
+  void placeCombatPlayer(Vec2 position) {
+    combatPlayerPosition = position;
+    if (daily) daily->playerPosition_ = position;
+    if (raid) static_cast<void>(raid->player_.setPosition(position));
+  }
+  void prepareIncomingAttack(EnemyAttackType type, std::size_t index = 0) {
+    combatPlayerPosition = {1060, 1000};
+    if (daily) {
+      daily->playerPosition_ = combatPlayerPosition;
+      daily->layout_.baseParcel = {{5000, 5000}, {300, 300}};
+    }
+    if (raid) {
+      static_cast<void>(raid->player_.setPosition(combatPlayerPosition));
+      raid->deferPlayerDamageResolution_ = true;
+    }
+    auto &enemy = actors()[index];
+    static_cast<void>(enemy.setPosition({1000, 1000}));
+    const auto initialType = type == EnemyAttackType::Bite ? EnemyAttackType::Grab : type;
+    if (!enemy.tryStartAttack(initialType, {1, 0})) throw std::runtime_error("attack setup");
+    static_cast<void>(enemy.update(enemy.attackConfig()->windupDuration + 0.00001F, 6000, 6000));
+    static_cast<void>(enemy.setPosition({1000, 1000}));
+    if (type == EnemyAttackType::Bite && !enemy.confirmGrabContact())
+      throw std::runtime_error("bite setup");
+  }
+  std::vector<PlayerDamageObservation> incoming() {
+    if (raid) return raid->takePlayerDamageObservations();
+    const auto fact = daily ? daily->perimeterDamageObservation()
+                            : defense->damageObservationLastUpdate();
+    return fact ? std::vector<PlayerDamageObservation>{*fact} : std::vector<PlayerDamageObservation>{};
+  }
   void aimAndFire(float localY, bool aimPastTarget) {
     const Vec2 p = actors().front().position();
     const Vec2 size = daily ? daily->playerSize() : raid
@@ -190,6 +220,61 @@ struct EnemyLifecycleTestAccess {
 };
 
 class EnemyLifecycleContract : public testing::TestWithParam<Activity> {};
+
+TEST_P(EnemyLifecycleContract, IncomingScratchAndBitePreserveFullDamageFact) {
+  for (const auto type : {EnemyAttackType::Scratch, EnemyAttackType::Bite}) {
+    EnemyLifecycleTestAccess fixture{GetParam(), 12};
+    fixture.prepareIncomingAttack(type);
+    fixture.combatTick({}, 0.000001F);
+    const auto facts = fixture.incoming();
+    ASSERT_EQ(facts.size(), 1U);
+    EXPECT_EQ(facts.front(), enemyAttackDamageObservation(fixture.ids[0], type));
+    EXPECT_EQ(facts.front().baseDamage, type == EnemyAttackType::Scratch ? 12 : 18);
+    fixture.combatTick({}, 0.000001F);
+    EXPECT_TRUE(fixture.incoming().empty());
+  }
+}
+
+TEST_P(EnemyLifecycleContract, SimultaneousAttacksPreserveDamageProtection) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch, 0);
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch, 1);
+  fixture.combatTick({}, 0.000001F);
+  const auto facts = fixture.incoming();
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts[0].sourceEnemyId, fixture.ids[0]);
+  fixture.combatTick({}, 0.01F);
+  EXPECT_TRUE(fixture.incoming().empty());
+}
+
+TEST_P(EnemyLifecycleContract, SameFrameLethalShotCharacterizesExistingOrder) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch);
+  fixture.queueHit(fixture.ids[0], 100);
+  fixture.combatTick({}, 0.000001F);
+  EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+  const auto facts = fixture.incoming();
+  // Intentional characterization, not convergence: Raid enemy-first;
+  // Daily/Defense shot-first. Any future reorder must update this explicitly.
+  EXPECT_EQ(facts.size(), GetParam() == Activity::Raid ? 1U : 0U);
+  fixture.combatTick({}, 0.001F);
+  EXPECT_TRUE(fixture.incoming().empty());
+}
+
+TEST_P(EnemyLifecycleContract, GrabFollowupCharacterizesExistingTiming) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Grab);
+  fixture.placeCombatPlayer({1020, 1000});
+  fixture.combatTick({}, 0.000001F);
+  auto facts = fixture.incoming();
+  if (GetParam() == Activity::Daily) {
+    EXPECT_TRUE(facts.empty()); // Daily defers confirmed Bite to the next update.
+    fixture.combatTick({}, 0.000001F);
+    facts = fixture.incoming();
+  }
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts.front(), enemyAttackDamageObservation(fixture.ids[0], EnemyAttackType::Bite));
+}
 
 TEST_P(EnemyLifecycleContract, NonLethalPreservesIdentityAndAttachedState) {
   EnemyLifecycleTestAccess fixture{GetParam()};

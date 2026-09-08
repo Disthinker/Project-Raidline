@@ -4,6 +4,11 @@
 
 ## Git 与交付基线
 
+- 本轮本地证据：敌人受伤事实切片 Windows Debug 全构建、12/12 新三环境测试及 1657/1657 全量 CTest（58.68 秒）通过；精确提交 CI 与正常游玩验收以新 PR 为准，不能继承上轮验收。
+
+- 最新覆盖：#152@a98090a 已获用户验收，Windows/Ubuntu CI run `34188461419` 成功，仍未合入。当前显式 stacked 分支 `codex/enemy-incoming-damage-contract-v1` 基于 #152；活动计划 `active/enemy-incoming-damage-contract-v1.md`。新代码只统一敌人已命中后的受伤事实，不调整帧顺序或存档。
+- 有意修正：外围攻击不再使用旧 1/2 HP 与统一 Scratch 推断；正式抓伤为 12 躯干伤害、咬伤为 18 头部伤害，并传递正确伤势与防具参数。数值为护甲结算前值。现有 0.25 秒保护、Base 救回与防守软失败不变，旧快照不重写。本轮测试/验收另行记录。
+
 - 导航刷新选择切片本地证据：Windows Debug 全目标构建、1645/1645 CTest（55.63 秒）通过；新增 8 项选择合同。双平台精确提交 CI 和用户可见行为验收以新 PR 为准，不视为主线完成。
 
 - 最新覆盖：#151@47c696b 已获用户验收，精确 head 双平台 CI run `34186994633` 成功，尚未合入。当前显式 stacked 分支 `codex/navigation-refresh-contract-v1` 基于该提交，仅提取 Raid/Defense 有界导航轮询选择；目标结果使用稳定 ID，保留各自刷新策略、Daily 直线转向及原更新顺序。活动计划：`active/navigation-refresh-contract-v1.md`。

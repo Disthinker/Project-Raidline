@@ -391,8 +391,7 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
                                  const std::vector<BallisticBlocker> &shotBlockers)
 {
     const auto started = std::chrono::steady_clock::now();
-    damageLastUpdate_ = 0;
-    attackTypeLastUpdate_.reset();
+    damageObservation_.reset();
     metrics_ = {};
     if (!std::isfinite(dt) || dt <= 0 || completed() || breached())
         return;
@@ -530,10 +529,8 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         const auto attack = e.attackConfig();
         if (attack && e.hasAttackHitOpportunity() && e.consumeAttackHit())
         {
-            attackTypeLastUpdate_ = e.attackType();
-            damageLastUpdate_ = attackTypeLastUpdate_
-                                    ? enemyAttackCombatDamage(*attackTypeLastUpdate_).baseDamage
-                                    : 0;
+            damageObservation_ = enemyAttackDamageObservation(
+                e.combatTargetId(), *e.attackType());
             state_.damageProtectionSeconds = 0.25F;
         }
     }

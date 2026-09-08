@@ -117,6 +117,9 @@ public:
     [[nodiscard]] std::vector<HomePerimeterEnemySnapshot>
     perimeterEnemySnapshots() const;
     [[nodiscard]] int perimeterDamageLastUpdate() const noexcept;
+    [[nodiscard]] std::optional<PlayerDamageObservation> perimeterDamageObservation() const noexcept { return perimeterDamageObservation_; }
+    [[nodiscard]] std::optional<PlayerDamageObservation> baseDefenseDamageObservation() const noexcept
+    { return baseDefense_ ? baseDefense_->damageObservationLastUpdate() : std::nullopt; }
     [[nodiscard]] const std::vector<EnemyRemovalFact> &perimeterRemovalsLastUpdate() const noexcept
     { return perimeterRemovals_; }
     [[nodiscard]] std::optional<BaseDefenseSnapshot> prepareBaseDefenseSnapshot(
@@ -182,7 +185,7 @@ private:
     EnemyRoster<Vec2> perimeterEnemies_;
     std::vector<EnemyRemovalFact> perimeterRemovals_;
     std::optional<std::uint64_t> perimeterCycleIndex_;
-    int perimeterDamageLastUpdate_{};
+    std::optional<PlayerDamageObservation> perimeterDamageObservation_;
     float perimeterDamageProtectionRemainingSeconds_{};
     std::optional<BaseDefenseRuntime> baseDefense_;
     mutable HomeRegionPresentationProjection presentationCache_;

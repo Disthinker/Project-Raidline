@@ -17,6 +17,7 @@
 #include "loot_table.h"
 #include "particle_system.h"
 #include "player.h"
+#include "player_damage_observation.h"
 #include "logical_ballistics.h"
 #include "raid_session.h"
 #include "raid_map_generation.h"
@@ -161,16 +162,6 @@ struct RaidOutdoorPresentationProjection
     std::vector<RaidOutdoorLabelProjection> labels;
     std::size_t queriedChunkCount{};
     std::uint64_t cacheRevision{};
-};
-
-struct PlayerDamageObservation
-{
-    int baseDamage{};
-    HitRegion region{HitRegion::Torso};
-    int penetration{};
-    int armorDamage{};
-    bool weakPoint{};
-    WoundSource woundSource{WoundSource::None};
 };
 
 class GameplayWorld
@@ -588,6 +579,7 @@ private:
         std::uint32_t quantity);
 
     [[nodiscard]] bool resolveEnemyAttackDamage(
+        CombatTargetId sourceEnemyId,
         EnemyAttackType type,
         int legacyDamage);
 

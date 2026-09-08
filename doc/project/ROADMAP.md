@@ -4,6 +4,8 @@
 
 ## 当前目标与交付节奏
 
+当前窄切片为敌人受伤事实合同（基于已验收 #152）：移除外围旧伤害与 Session 对攻击类型的猜测，三环境传递同一 PlayerDamageObservation。仅该修正改变外围受伤强度；时序/控制/保存策略保持。完成后依据同帧证据评审攻击接触与保护语义是否需要收拢，不默认重写所有 Combat/Session/Persistence。
+
 最新窄切片：敌人配置/战斗反馈 #151 已验收且双平台 CI 通过，未合并。继续有界导航刷新选择合同：只统一单次轮询机制与稳定 ID 结果，不统一 Raid/Defense 目标策略，不引入 Daily 寻路或 Session/Persistence 重构。详见 `active/navigation-refresh-contract-v1.md`；后续阶段仍需根据实际重复重新评估。
 
 2026-09-08 后续裁决：Phase A/B 生命周期结果已获用户验收，依赖 PR 尚未合入。用户授权下一窄切片“敌人配置与战斗反馈合同统一”，见 `active/enemy-combat-contract-v1.md`：同定义新敌人同血量，同领域命中同反馈，保留活动生成/波次/后果/保存策略。完成后再依据剩余真实重复评审导航调度与战斗入口；不默认执行 Session/Persistence 大重构或恢复新玩法。下方 Phase A/B 为历史阶段边界。

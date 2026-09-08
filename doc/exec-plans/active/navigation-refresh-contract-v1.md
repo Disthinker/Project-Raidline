@@ -36,6 +36,10 @@ duplication after this contract; target-policy differences are intentional.
 
 ## Evidence
 
+- User normal-play accepted; exact head a98090a Windows/Ubuntu CI run
+  34188461419 succeeded. PR #152 remains unmerged. Next explicit stacked scope
+  is incoming enemy damage facts, not all remaining architecture phases.
+
 - Implemented shared selection and migrated both real consumers. Raid no longer
   carries a selected-for-refresh array flag; it compares the selected stable ID.
 - Windows Debug full incremental build passed; full CTest **1645/1645**, zero
