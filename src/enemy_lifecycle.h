@@ -7,6 +7,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -25,11 +26,6 @@ struct EnemyRemovalFact {
 class EnemyLifecycle {
 public:
   virtual ~EnemyLifecycle() = default;
-  EnemyLifecycle() = default;
-  EnemyLifecycle(EnemyLifecycle &&) noexcept = default;
-  EnemyLifecycle &operator=(EnemyLifecycle &&) noexcept = default;
-  EnemyLifecycle(const EnemyLifecycle &) = default;
-  EnemyLifecycle &operator=(const EnemyLifecycle &) = default;
 
   const std::vector<Enemy> &view() const noexcept { return actors_; }
   operator const std::vector<Enemy> &() const noexcept { return actors_; }
@@ -77,6 +73,13 @@ public:
   }
 
 protected:
+  // Only the complete typed owner may copy/move actors together with
+  // attachments.
+  EnemyLifecycle() = default;
+  EnemyLifecycle(EnemyLifecycle &&) noexcept = default;
+  EnemyLifecycle &operator=(EnemyLifecycle &&) noexcept = default;
+  EnemyLifecycle(const EnemyLifecycle &) = default;
+  EnemyLifecycle &operator=(const EnemyLifecycle &) = default;
   void registerActor(Enemy actor) {
     const auto id = actor.combatTargetId();
     if (id == kInvalidCombatTargetId || usedIds_.contains(id))
@@ -102,6 +105,7 @@ private:
         facts.push_back({e.combatTargetId(), e.position(), reason});
     if (facts.empty())
       return facts;
+    static_assert(std::is_nothrow_move_assignable_v<Enemy>);
     // Allocate facts before mutation. Never retain actor references across
     // erase.
     for (const auto &fact : facts)
@@ -120,6 +124,8 @@ private:
 // bound to the previous owner. No activity can forget attached-state removal.
 template <class State = std::monostate>
 class EnemyRoster final : public EnemyLifecycle {
+  static_assert(std::is_nothrow_destructible_v<State>);
+
 public:
   void spawn(Enemy actor, State state = {}) {
     const auto id = actor.combatTargetId();

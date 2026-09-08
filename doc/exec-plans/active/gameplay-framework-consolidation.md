@@ -81,9 +81,9 @@ until structural bug fix, common contract, full tests/CI and user acceptance pas
 - Initial B focused pass: 138 existing/added BaseWorld, GameplayWorld,
   BaseDefenseRuntime and HitResolution tests, 4.86s. The red reproduction now
   passes. Not yet a final full-suite or CI result.
-- Final local Windows Debug: all affected targets rebuilt; **1624/1624 CTest,
-  zero failures, 57.98s**. Baseline 1606 retained; 18 added: 12 parameterized
-  actual-activity contracts, 3 ownership/restore tests, 2 real temporary-directory
+- Final local Windows Debug: all affected targets rebuilt; **1625/1625 CTest,
+  zero failures, 54.60s**. Baseline 1606 retained; 19 added: 12 parameterized
+  actual-activity contracts, 4 ownership/restore/transition tests, 2 real temporary-directory
   Session save/rejection tests, and the original real-shot Base reproduction.
 - Contract fixtures arrange deterministic actors and logical flights through
   narrow test friendship, then call actual Daily/Defense/Raid updates. They do
@@ -138,7 +138,7 @@ death consequences. No new ID domain, schema, content or rules version.
 | Session | misses removed IDs | 9-line consumption of Profile-relevant death facts, no transient cleanup |
 | Spawn/target/waves/reward/failure/save policy | each activity | still each activity |
 
-The new shared lifecycle header is 148 lines (including comments/formatting);
+The new shared lifecycle header is 154 lines (including comments/formatting);
 no CombatSpaceRuntime, manager framework or new runtime translation unit was
 introduced. Changed production-file and insertion/deletion totals are measured
 from the final PR diff, not asserted as a deduplication percentage. Insertions
@@ -146,6 +146,14 @@ include migrated call sites; deletions include adapters/comments, not all are
 "duplicate algorithms removed".
 
 ## Mandatory pause and remaining debt
+
+Final ownership checks prohibit base-only assignment (which could omit typed
+attachments). Starting a new Defense activity clears only the candidate's old
+Daily logical flights: local target IDs must not alias targets in another
+activity. The live Daily state is unchanged if preparation is rejected, and
+same-event checkpoint restore still retains its own flights. This explicit
+transition cleanup has a real-adapter regression test; it does not change
+simulation order, navigation algorithms or the save schema.
 
 Phase B implementation is finished. **Do not start Phase C or new gameplay.**
 Full CI and user normal-play gates remain separate from local automation.

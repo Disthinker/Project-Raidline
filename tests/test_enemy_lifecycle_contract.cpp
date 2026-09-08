@@ -272,6 +272,8 @@ TEST(EnemyLifecycleOwnership,
 template <class T>
 concept CanEraseActors = requires(T &v) { v.erase(v.begin()); };
 static_assert(!CanEraseActors<EnemyRoster<>>);
+static_assert(!std::is_assignable_v<EnemyLifecycle &, const EnemyLifecycle &>);
+static_assert(!std::is_assignable_v<EnemyLifecycle &, EnemyLifecycle &&>);
 static_assert(!std::is_convertible_v<EnemyRoster<> &, std::vector<Enemy> &>);
 
 TEST(EnemyLifecycleOwnership, MoveAndCopyDoNotBindCleanupToPreviousOwner) {
@@ -300,6 +302,27 @@ TEST(EnemyLifecycleOwnership,
   restored.spawn(Enemy{{}, {20, 20}, {}, 3, 8});
   EXPECT_THROW(restored.restoreRetiredIdentity(8), std::invalid_argument);
   EXPECT_NE(restored.find(8), nullptr);
+}
+
+TEST(EnemyLifecycleOwnership, NewActivityCannotInheritPreviousTargetIntent) {
+  EnemyLifecycleTestAccess fixture{Activity::Daily};
+  fixture.queueHit(fixture.ids[1], 3);
+  auto old = fixture.shooting().checkpoint();
+  ASSERT_EQ(old.flights.size(), 1U);
+  old.flights.front().aimedTarget = fixture.ids[1];
+  old.flights.front().aimedRegion =
+      static_cast<std::uint32_t>(HitRegion::Torso);
+  ASSERT_TRUE(fixture.shooting().restoreCheckpoint(old));
+  BaseDefenseSnapshot seed;
+  seed.eventId = "lifecycle-new-activity";
+  seed.siegeSequence = 1;
+  seed.seed = 12345;
+  seed.frozenPopulation = 8;
+  const auto candidate = fixture.daily->prepareBaseDefenseSnapshot(seed);
+  ASSERT_TRUE(candidate);
+  EXPECT_TRUE(candidate->shooting.flights.empty());
+  // Preparing is a query, not a successful activity transition or a rollback.
+  EXPECT_EQ(fixture.shooting().checkpoint(), old);
 }
 
 static void checkDailyPersistence(bool rejectFirstSave) {

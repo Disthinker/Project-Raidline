@@ -562,6 +562,9 @@ std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
     s.movementBlockers.clear();
     for (const auto &blocker:movementBlockers_) s.movementBlockers.push_back(blocker.bounds);
     s.playerPosition=playerPosition_;s.shooting=shooting_.checkpoint();
+    // A new activity reuses local target IDs, not the previous activity's shots.
+    // Only the candidate is changed; a rejected start preserves the live world.
+    s.shooting.flights.clear();
     return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_);
 }
 bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
