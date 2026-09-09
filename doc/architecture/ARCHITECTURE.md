@@ -2,9 +2,10 @@
 
 最后核对：2026-09-09。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及已授权切片向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。下方长期目标类名不是全部已落地的类；当前实现由 BaseWorld / BaseDefenseRuntime / GameplayWorld 组合窄能力。
 
-## 实时基地防守与框架整合（集成 #156 已验收，尚未合入）
+## 实时基地防守与框架整合（已验收并合入）
 
-2026-09-09：#156@`f16544d` 用户正常游玩与 exact-head 双平台 CI 通过；main 仍 `2ae898a`。
+2026-09-09：#149–#157 已普通合并；CI 计时隔离 #159 合入后的 main 为 `c6d4597`，
+合并 head 双平台 CI `34331350462` 各 1697/1697 通过。
 完整 Before/After、机制/策略矩阵、测试与保留债见 [玩法框架整合收尾评审](GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
 本次结束代码整合，不引入万能 CombatSpaceRuntime 或全局 Session 管理器。
 
@@ -27,6 +28,18 @@
 - schema v46 的活动恢复不重抽布局、不离线推进；终局检查点先完成幂等结算再接受新输入。Raid 原有出击前回滚合同不变。普通队列沿唯一时钟推进，但布局碰撞冻结到事件结束。
 
 ## 架构原则
+
+### 工事在制边界（不是完整防守工事发布）
+
+当前实现分支为固定防御位/木制路障宏切片的第一内部检查点。
+`ProfileState::baseFortifications` 唯一持有强类型实例、储备/slot 和耐久，不进入 AssetRegistry。
+`ContentRegistry` 读取一个不可变木制路障定义；纯领域查询和候选命令处理建材、维修、收纳及迁徙，
+Session 的窄入口仅加持久化屏障。序列化独立模块维护 schema v47，不重写 v1 防守检查点。
+`baseDefensePositionCandidates` 在 simulation 生成静态位置候选，不把碰撞坐标放进 UI。
+
+当前**没有**安装命令、B 目录入口、拆障组件、v2 预警准备或自动防守工事收益；这部分保留在
+[同一实施计划](../exec-plans/active/base-defense-fixed-positions-v1.md) 继续完成。
+候选局部净空与原防守准备测试不等于最终全局安装合同，不能提前宣布工事可游玩。
 
 - 保留 C++20、SDL3 与当前玩法代码，采用模块化单体，不引入 ECS、服务定位器、脚本虚拟机或通用事件总线。
 - Windows PC 是首发与真实窗口验收目标；Linux 继续承担编译和 SDL 无关领域回归，不构成同步发行承诺。

@@ -1,4 +1,5 @@
 #include "base_migration_domain.h"
+#include "base_fortification_domain.h"
 
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
@@ -306,6 +307,7 @@ BaseMigrationReceipt executeBaseMigration(
         sourceOutpost.shortcutOperationsSinceRestoration = 0U;
     }
     candidate.regionalOperations.activeBaseNodeId = target.nodeId;
+    storeAllBaseFortifications(candidate.baseFortifications);
     candidate.regionalOperations.technologyCore.baseSiteDefinitionId =
         target.id;
     candidate.committedTransactions.insert(context.transactionId);

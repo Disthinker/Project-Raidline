@@ -17,6 +17,7 @@
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
 #include "base_siege_domain.h"
+#include "base_fortification_domain.h"
 #include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
@@ -337,6 +338,7 @@ public:
         const InventoryCommand &command,
         std::string transactionId);
 
+    [[nodiscard]] FortificationReceipt executeBaseFortification(const FortificationCommand &);
     [[nodiscard]] BaseGroundReceipt executeBaseGroundAsset(
         const BaseGroundCommand &command,
         std::string transactionId);

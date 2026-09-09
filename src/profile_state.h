@@ -1041,6 +1041,7 @@ struct ProfileState
     BasePopulationState basePopulation;
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
+    BaseFortificationState baseFortifications;
     BaseSiegeState baseSiege;
     std::optional<BaseDefenseSnapshot> activeBaseDefense;
     HomePerimeterState homePerimeter;

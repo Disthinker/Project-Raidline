@@ -307,7 +307,7 @@ TEST(BaseDefenseDomainTest, Schema46RoundTripsActiveDefenseAndServiceSequences)
     s.pendingWorldSeconds = 0.75;
     s.baseCombatElapsedSeconds = 14.5F;
     s.medicalTickAccumulatorSeconds = 0.17F;
-    auto text = serializeProfileEnvelope(p, publishedContentRegistry().contentVersion());
+    auto text = serializeProfileEnvelope(p, publishedContentRegistry().contentVersion(), 46);
     EXPECT_EQ(nlohmann::json::parse(text).at("schema_version"), 46);
     auto loaded = deserializeProfileEnvelope(text, publishedContentRegistry());
     ASSERT_TRUE(loaded.profile) << loaded.message;

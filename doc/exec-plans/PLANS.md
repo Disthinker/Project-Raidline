@@ -17,6 +17,11 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
 
+2026-09-09 最新活动计划：`active/base-defense-fixed-positions-v1.md`。
+#149–#157 与 #159 已合入 main@c6d4597；工事在独立分支实施，当前只完成第 1 步的一部分。
+没有安装/战斗/UI 交付，保持 Draft，不单独发布内部检查点；普通玩法验收统一放在完整闭环之后。
+以下“当前唯一门禁”均为历史记录：
+
 2026-09-09 当前唯一门禁：`active/combat-runtime-boundaries-v1.md` 实施与用户验收完成，
 本轮已交付 [玩法框架整合收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
 集成 #156@f16544d 的代码重构阶段收尾；#149–#156 未合并，main 仍为 2ae898a。

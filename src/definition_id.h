@@ -102,6 +102,8 @@ struct RegionalOutpostDefinitionTag;
 struct RegionalBaseSiteDefinitionTag;
 struct BaseFacilityDefinitionTag;
 struct LoadoutArchetypeDefinitionTag;
+struct FortificationDefinitionTag;
+using FortificationDefinitionId = DefinitionId<FortificationDefinitionTag>;
 
 using ItemDefinitionId = DefinitionId<ItemDefinitionTag>;
 using CaliberDefinitionId = DefinitionId<CaliberDefinitionTag>;

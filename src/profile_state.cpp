@@ -1,4 +1,5 @@
 #include "profile_state.h"
+#include "base_fortification_domain.h"
 #include "home_founding_domain.h"
 #include "base_wish_expedition.h"
 
@@ -1262,6 +1263,8 @@ ProfileValidationResult validateProfileState(
         return {false, "regional outpost capacity is exceeded"};
     }
     const BaseSiegeState &siege = profile.baseSiege;
+    if (const auto result = validateBaseFortifications(profile, content); !result.valid)
+        return result;
     if (siege.raidThreatUnits > kBaseSiegeThreatThreshold ||
         siege.populationThreatUnits > kBaseSiegeThreatThreshold ||
         siege.siteThreatUnits > kBaseSiegeThreatThreshold ||
@@ -4514,6 +4517,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, count);
         }
         hashInteger(hash, state.shortcutOperationsSinceRestoration);
+    }
+    // Empty migrated state must not perturb legacy fingerprint-seeded events.
+    if (!profile.baseFortifications.instances.empty() || profile.baseFortifications.nextInstanceId != 1)
+    {
+        hashInteger(hash, 0x666f7274696679ULL);
+        hashInteger(hash, baseFortificationFingerprint(profile.baseFortifications));
     }
     hashInteger(hash, profile.baseSiege.raidThreatUnits);
     hashInteger(hash, profile.baseSiege.populationThreatUnits);
