@@ -1,5 +1,14 @@
 # Home Defense Vertical Slice：玩家亲自实时防守 v1
 
+## 已验收主线交付 — 2026-09-09
+
+用户验收并授权后，#149 及后续 #150–#157 生命周期/战斗合同修复与收尾文档已按顺序普通合入
+`origin/main@c3eb19c`。完整树等于验收 tip，未将存在已知问题的 #149 单独作为最终交付。
+合并后 Windows Debug 1697/1697（64.99 秒）；最终主线双平台 CI 为 run 34323812733，结果记录于交付 PR。
+schema/content/Raid rules 为 46/60/29。下一项仅完成
+[固定防御位与基础路障产品/技术评审](base-defense-fixed-positions-v1.md)，待确认才实施。
+下方 Draft/未验收/未合并表述保留为历史过程，不覆盖此状态。
+
 ## 状态、授权和唯一范围
 
 2026-09-07，用户要求“请合并然后继续下一步开发”。PR #148@a1e672c 已按授权普通合并为 origin/main@2ae898a；Home Region 开局可玩闭环收尾。本计划来自同日策划任务的只读阶段裁决、开发主控与独立代码审查；外部 GDD 不修改。当前分支 codex/base-defense-player-participation-v1 从该接受基线创建。

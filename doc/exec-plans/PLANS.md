@@ -17,11 +17,12 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
 
-2026-09-09 当前唯一门禁：`active/combat-runtime-boundaries-v1.md` 实施与用户验收完成，
-本轮已交付 [玩法框架整合收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
-集成 #156@f16544d 的代码重构阶段收尾；#149–#156 未合并，main 仍为 2ae898a。
-下一项是取得明确授权后的整条依赖链合并交付及最终 CI，不默认开启新玩法或大重构。
-本轮独立 `codex/gameplay-consolidation-closeout` 只包含文档，显式依赖 #156。
+2026-09-09 当前唯一门禁：用户验收并授权后，#149–#157 已按顺序普通合入 main@c3eb19c，
+完整树等于验收 tip；合并后本地全量 1697/1697，最终 main 双平台 CI 单独执行。
+[玩法框架整合收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md) 与主线状态已同步。
+下一份 [固定防御位与基础路障 v1 评审](active/base-defense-fixed-positions-v1.md) 已完成，
+状态为方案待确认，尚无工事代码。`codex/base-defense-fortification-review` 从接受 main 创建，
+仅文档；不把提案当实现、不恢复 NPC/自由筑墙或整体 Navigation/Session/Persistence 重构。
 
 以下为各切片当时的优先级记录；不得覆盖上方当前门禁：
 
