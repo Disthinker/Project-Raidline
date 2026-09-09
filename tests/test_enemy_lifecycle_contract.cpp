@@ -1,5 +1,6 @@
 #include "base_world.h"
 #include "game_session.h"
+#include "game_flow.h"
 #include "gameplay_world.h"
 #include <array>
 #include <chrono>
@@ -101,6 +102,9 @@ struct EnemyLifecycleTestAccess {
     if (raid)
       return raid->shooting_;
     return defenseShooting;
+  }
+  static WorldShootingRuntime &baseShooting(BaseWorld &world) {
+    return world.shooting_;
   }
   bool attached(CombatTargetId id) {
     if (daily)
@@ -770,4 +774,268 @@ TEST(EnemyLifecycleSession,
 TEST(EnemyLifecycleSession,
      FailedDailySaveRestoresConsistentlyAndRetryPersistsDeath) {
   checkDailyPersistence(true);
+}
+
+namespace {
+struct BoundarySave {
+  std::filesystem::path path = std::filesystem::temp_directory_path() /
+      ("raidline-boundary-" + std::to_string(
+          std::chrono::steady_clock::now().time_since_epoch().count()));
+  ~BoundarySave() {
+    std::error_code ignored;
+    std::filesystem::remove_all(path, ignored);
+  }
+};
+
+void queueBaseFlight(BaseWorld &world) {
+  ASSERT_FALSE(world.perimeterEnemies().empty());
+  const auto &enemy = world.perimeterEnemies().front();
+  auto &shooting = EnemyLifecycleTestAccess::baseShooting(world);
+  auto state = shooting.checkpoint();
+  LogicalFlightCheckpoint flight;
+  flight.id = state.nextShotId++;
+  flight.origin = flight.position = checkpointPoint(
+      {enemy.position().x + 25, enemy.position().y + 25});
+  flight.direction = {1, 0};
+  flight.impact = {flight.origin[0] + 100, flight.origin[1]};
+  flight.speed = 6000;
+  flight.extent = 1;
+  flight.maximumDistance = 100;
+  flight.damage = 100;
+  flight.tracerLifetime = 0.05F;
+  flight.aimedTarget = enemy.combatTargetId();
+  flight.aimedRegion = static_cast<std::uint32_t>(HitRegion::Torso);
+  state.flights.push_back(flight);
+  ASSERT_TRUE(shooting.restoreCheckpoint(state));
+}
+
+void expectSameRoster(const BaseWorld &actual, const BaseWorld &expected) {
+  const auto a = actual.perimeterEnemySnapshots();
+  const auto b = expected.perimeterEnemySnapshots();
+  ASSERT_EQ(a.size(), b.size());
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    EXPECT_EQ(a[i].localId, b[i].localId);
+    EXPECT_EQ(a[i].health, b[i].health);
+    EXPECT_FLOAT_EQ(a[i].position.x, b[i].position.x);
+    EXPECT_FLOAT_EQ(a[i].position.y, b[i].position.y);
+  }
+}
+} // namespace
+
+TEST(CombatRuntimeBoundary, SameProcessProfileLoadMatchesFreshProcess) {
+  for (const bool newProfile : {false, true}) {
+    SCOPED_TRACE(newProfile);
+    BoundarySave save;
+    GameFlow reused;
+    reused.configurePersistence(save.path);
+    ASSERT_TRUE(reused.startNewGame("boundary-first"));
+    const ItemDefinitionId rifleDefinition{"item.weapon.rifle_basic"};
+    const auto &records = reused.gameSession().profile().assets.records();
+    const auto rifle = std::find_if(records.begin(), records.end(), [&](const auto &record) {
+      return record.second.definitionId == rifleDefinition;
+    });
+    ASSERT_NE(rifle, records.end());
+    ASSERT_TRUE(reused.gameSession().executeProfileInventory(
+        InventoryEquipCommand{rifle->first, EquipmentSlotKind::PrimaryWeapon}, "boundary-equip").succeeded);
+    reused.updateBase({}, 0.000001F);
+    const auto initialCount = reused.baseWorld().perimeterEnemies().size();
+    ASSERT_GT(initialCount, 1U);
+    queueBaseFlight(reused.baseWorld());
+    // Simulate transient combat newer than the durable Profile. The reload,
+    // not a normal same-cycle synchronization, must import authoritative state.
+    static_cast<void>(reused.baseWorld().update({}, 0.000001F));
+    ASSERT_EQ(reused.baseWorld().perimeterEnemies().size(), initialCount - 1);
+    queueBaseFlight(reused.baseWorld());
+    ASSERT_TRUE(reused.returnToMainMenu());
+    if (newProfile) ASSERT_TRUE(reused.startNewGame("boundary-second"));
+    else ASSERT_TRUE(reused.continueGame());
+    EXPECT_TRUE(EnemyLifecycleTestAccess::baseShooting(reused.baseWorld()).logicalBallistics().empty());
+    reused.updateBase({}, 0.000001F);
+    GameFlow fresh;
+    fresh.configurePersistence(save.path);
+    ASSERT_TRUE(fresh.continueGame());
+    fresh.updateBase({}, 0.000001F);
+    expectSameRoster(reused.baseWorld(), fresh.baseWorld());
+    EXPECT_EQ(reused.baseWorld().perimeterEnemies().size(), initialCount);
+    if (!newProfile)
+      EXPECT_EQ(EnemyLifecycleTestAccess::baseShooting(reused.baseWorld()).checkpoint().weaponDamage,
+                publishedContentRegistry().item(rifleDefinition).weaponUse->baseDamage);
+  }
+}
+
+TEST(CombatRuntimeBoundary, DailyCycleReplacementDropsOldFlightsButSameCycleDoesNot) {
+  EnemyLifecycleTestAccess fixture{Activity::Daily};
+  fixture.queueHit(fixture.ids[1], 100);
+  const auto before = fixture.shooting().checkpoint();
+  fixture.daily->configureHomePerimeter(&fixture.perimeter);
+  EXPECT_EQ(fixture.shooting().checkpoint(), before);
+  ++fixture.perimeter.cycleIndex;
+  fixture.daily->configureHomePerimeter(&fixture.perimeter);
+  EXPECT_TRUE(fixture.shooting().logicalBallistics().empty());
+  fixture.tick();
+  EXPECT_EQ(fixture.actors().size(), 3U);
+  EXPECT_EQ(fixture.deaths(), 0U);
+}
+
+TEST(CombatRuntimeBoundary, RelocationCannotResumeOldSpatialShooting) {
+  for (const bool atGate : {false, true}) {
+    SCOPED_TRACE(atGate);
+    EnemyLifecycleTestAccess fixture{Activity::Daily};
+    fixture.aimAndFire(25, false);
+    ASSERT_TRUE(fixture.shooting().shotFiredLastUpdate());
+    fixture.queueHit(fixture.ids[1], 100);
+    if (atGate) fixture.daily->resetAtRaidGate();
+    else fixture.daily->resetAtMedicalPoint();
+    EXPECT_TRUE(fixture.shooting().logicalBallistics().empty());
+    EXPECT_FALSE(fixture.shooting().shotFiredLastUpdate());
+    EXPECT_TRUE(fixture.shooting().hitResultsLastUpdate().empty());
+    fixture.tick();
+    EXPECT_EQ(fixture.actors().size(), 3U);
+  }
+}
+
+TEST(CombatRuntimeBoundary, AcceptedDeployClearsDailyShotsRejectedDeployPreservesThem) {
+  for (const bool reject : {false, true}) {
+    SCOPED_TRACE(reject);
+    GameFlow flow;
+    ASSERT_TRUE(flow.startNewGame("boundary-deploy"));
+    flow.updateBase({}, 0.000001F);
+    queueBaseFlight(flow.baseWorld());
+    const auto before = EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).checkpoint();
+    const auto fingerprint = profileStateFingerprint(flow.gameSession().profile());
+    EXPECT_EQ(flow.deploy(MapDefinitionId{reject ? "map.unknown" : "map.v0.test"}), !reject);
+    if (reject) {
+      EXPECT_EQ(EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).checkpoint(), before);
+      EXPECT_EQ(profileStateFingerprint(flow.gameSession().profile()), fingerprint);
+    } else {
+      EXPECT_TRUE(EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).logicalBallistics().empty());
+      EXPECT_TRUE(flow.gameSession().world().logicalBallistics().empty());
+    }
+  }
+}
+
+TEST(CombatRuntimeBoundary, SpatialClearDropsFactsButPreservesWeaponAndShotSequence) {
+  EnemyLifecycleTestAccess fixture{Activity::Daily};
+  fixture.aimAndFire(25, false);
+  ASSERT_TRUE(fixture.shooting().shotFiredLastUpdate());
+  auto expected = fixture.shooting().checkpoint();
+  expected.flights.clear();
+  fixture.daily->clearSpatialCombatState();
+  EXPECT_FALSE(fixture.shooting().shotFiredLastUpdate());
+  EXPECT_EQ(fixture.shooting().checkpoint(), expected);
+  EXPECT_TRUE(fixture.shooting().shotPresentationSnapshots().empty());
+  EXPECT_TRUE(fixture.shooting().shotFeedbackPresentationSnapshots().empty());
+  EXPECT_TRUE(fixture.shooting().hitResultsLastUpdate().empty());
+  EXPECT_FALSE(fixture.daily->perimeterDamageObservation());
+}
+
+TEST(CombatRuntimeBoundary, FailedProfileLoadOrCreationDoesNotInvalidateLiveWorld) {
+  BoundarySave save;
+  GameFlow flow;
+  ASSERT_TRUE(flow.startNewGame("boundary-reject"));
+  flow.updateBase({}, 0.000001F);
+  queueBaseFlight(flow.baseWorld());
+  const auto before = EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).checkpoint();
+  const auto count = flow.baseWorld().perimeterEnemies().size();
+  const auto fingerprint = profileStateFingerprint(flow.gameSession().profile());
+  ASSERT_TRUE(flow.returnToMainMenu());
+  flow.configurePersistence(save.path);
+  EXPECT_FALSE(flow.continueGame()); // no save exists
+  ASSERT_TRUE(std::filesystem::create_directories(save.path / "profile.tmp.json"));
+  EXPECT_FALSE(flow.startNewGame("boundary-rejected-new"));
+  EXPECT_EQ(flow.state(), GameFlowState::MainMenu);
+  EXPECT_EQ(profileStateFingerprint(flow.gameSession().profile()), fingerprint);
+  EXPECT_EQ(EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).checkpoint(), before);
+  EXPECT_EQ(flow.baseWorld().perimeterEnemies().size(), count);
+}
+
+TEST(CombatRuntimeBoundary, DefenseRoundTripRetainsDailyRosterAndRestoresOnlyOwnFlight) {
+  GameFlow flow;
+  ASSERT_TRUE(flow.startNewGame("boundary-defense"));
+  flow.updateBase({}, 0.000001F);
+  BaseWorld dailyBefore = flow.baseWorld();
+  queueBaseFlight(flow.baseWorld());
+  ASSERT_TRUE(flow.gameSession().triggerDeveloperBaseSiegeWarning());
+  ASSERT_TRUE(flow.gameSession().startBaseRealtimeDefense(flow.baseWorld()));
+  ASSERT_TRUE(flow.baseWorld().baseDefenseCheckpoint()->shooting.flights.empty());
+  expectSameRoster(flow.baseWorld(), dailyBefore);
+
+  BaseInput fire;
+  fire.firePressed = fire.fireJustPressed = true;
+  const auto position = flow.baseWorld().playerPosition();
+  fire.aimWorldPosition = Vec2{position.x + 500, position.y};
+  static_cast<void>(flow.baseWorld().update(fire, 0.000001F));
+  auto saved = flow.baseWorld().baseDefenseCheckpoint();
+  ASSERT_TRUE(saved);
+  ASSERT_FALSE(saved->shooting.flights.empty());
+  const auto expected = baseDefenseCheckpointHash(*saved);
+  ASSERT_TRUE(flow.baseWorld().resumeBaseDefense(*saved));
+  EXPECT_EQ(baseDefenseCheckpointHash(*flow.baseWorld().baseDefenseCheckpoint()), expected);
+  auto invalid = *saved;
+  invalid.layoutIdentity = "not-this-layout";
+  EXPECT_FALSE(flow.baseWorld().resumeBaseDefense(invalid));
+  EXPECT_EQ(baseDefenseCheckpointHash(*flow.baseWorld().baseDefenseCheckpoint()), expected);
+  expectSameRoster(flow.baseWorld(), dailyBefore);
+  ASSERT_TRUE(flow.gameSession().abandonBaseRealtimeDefense());
+  EXPECT_FALSE(flow.baseWorld().baseDefenseActive());
+  EXPECT_TRUE(EnemyLifecycleTestAccess::baseShooting(flow.baseWorld()).logicalBallistics().empty());
+  EXPECT_FALSE(flow.baseWorld().shotFiredLastUpdate());
+  expectSameRoster(flow.baseWorld(), dailyBefore);
+}
+
+TEST(CombatRuntimeBoundary, EmptyInitialShootingCheckpointCannotInheritPriorFlights) {
+  EnemyLifecycleTestAccess fixture{Activity::Daily};
+  fixture.queueHit(fixture.ids[0], 100);
+  auto expected = fixture.shooting().checkpoint();
+  expected.flights.clear();
+  ASSERT_TRUE(fixture.shooting().restoreCheckpoint(WorldShootingCheckpoint{}));
+  EXPECT_EQ(fixture.shooting().checkpoint(), expected);
+}
+
+TEST(CombatRuntimeBoundary, PortalRoundTripsKeepSpaceRosterAndDiscardPreviousTargetFlights) {
+  RaidWorldConfig config;
+  config.worldSize = {800, 600};
+  config.playerSpawn = {100, 100};
+  config.extractionPoint = {{650, 450}, {100, 100}};
+  config.initialEnemies = {EnemySpawn{{620, 100}, {50, 50}, 12}};
+  RaidInteriorWorldConfig interior;
+  interior.id = RaidSpaceDefinitionId{"raid_space.test.boundary"};
+  interior.displayName = "Boundary test";
+  interior.worldSize = {480, 360};
+  interior.exteriorEntrance = {{80, 80}, {100, 100}};
+  interior.exteriorReturn = {100, 100};
+  interior.interiorSpawn = {80, 80};
+  interior.interiorExit = {{60, 60}, {120, 120}};
+  interior.initialEnemies = {EnemySpawn{{300, 80}, {50, 50}, 12}};
+  config.interiors.push_back(interior);
+  EnemyLifecycleTestAccess fixture{Activity::Raid};
+  fixture.raid = std::make_unique<GameplayWorld>(std::move(config));
+  const auto outdoor = fixture.actors().front().checkpoint();
+  fixture.queueHit(outdoor.id, 100);
+  GameplayInput portal;
+  portal.interactJustPressed = true;
+  fixture.raid->update(portal, 0);
+  ASSERT_FALSE(fixture.raid->inOutdoorRaidSpace());
+  EXPECT_TRUE(fixture.shooting().logicalBallistics().empty());
+  const auto inside = fixture.actors().front().checkpoint();
+  fixture.queueHit(inside.id, 100);
+  fixture.raid->update(portal, 0);
+  ASSERT_TRUE(fixture.raid->inOutdoorRaidSpace());
+  EXPECT_TRUE(fixture.shooting().logicalBallistics().empty());
+  EXPECT_EQ(fixture.actors().front().checkpoint(), outdoor);
+  fixture.raid->update(portal, 0);
+  // The active-space AI may reselect its role on re-entry, even at dt=0.
+  // Identity, damage and position must survive; this is not an AI freeze rule.
+  EXPECT_EQ(fixture.actors().front().checkpoint().id, inside.id);
+  EXPECT_EQ(fixture.actors().front().checkpoint().health, inside.health);
+  EXPECT_EQ(fixture.actors().front().checkpoint().position, inside.position);
+  fixture.hit(inside.id, 100);
+  ASSERT_TRUE(fixture.actors().empty());
+  EXPECT_FALSE(fixture.attached(inside.id));
+  fixture.raid->update(portal, 0);
+  EXPECT_EQ(fixture.actors().front().checkpoint(), outdoor);
+  fixture.raid->update(portal, 0);
+  EXPECT_TRUE(fixture.actors().empty());
+  EXPECT_FALSE(fixture.attached(inside.id));
+  EXPECT_TRUE(fixture.shooting().hitResultsLastUpdate().empty());
 }

@@ -362,6 +362,52 @@ TEST(BaseDefenseSessionTest, OpeningFacilityDoesNotFreezeAttack) {
   EXPECT_EQ(flow.activeBaseFacility(), BaseFacilityKind::Supply);
 }
 
+TEST(BaseDefenseSessionTest, SameProcessAndFreshLoadPreserveOwnFlightAndWeaponConfiguration) {
+  SaveFixture save;
+  GameFlow flow;
+  flow.configurePersistence(save.path);
+  ASSERT_TRUE(flow.startNewGame("boundary-defense-flight"));
+  auto &session = flow.gameSession();
+  const auto rifle = assetFor(session.profile(), alpha_content::rifle);
+  const auto magazine = assetFor(session.profile(), alpha_content::magazine);
+  const auto ammo = assetFor(session.profile(), alpha_content::ammunition);
+  ASSERT_TRUE(session.executeProfileInventory(
+      InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon}, "equip").succeeded);
+  ASSERT_TRUE(session.executeProfileWeaponAmmo(
+      LoadMagazineCommand{magazine, ammo, 12}, "load").succeeded);
+  ASSERT_TRUE(session.executeProfileWeaponAmmo(
+      InstallMagazineAndChamberCommand{rifle, magazine}, "install").succeeded);
+  ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
+  ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+  BaseInput fire;
+  fire.firePressed = fire.fireJustPressed = true;
+  const auto position = flow.baseWorld().playerPosition();
+  fire.aimWorldPosition = Vec2{position.x + 500, position.y};
+  flow.updateBase(fire, 0.000001F);
+  ASSERT_TRUE(flow.baseWorld().shotFiredLastUpdate());
+  ASSERT_FALSE(flow.baseWorld().baseDefenseCheckpoint()->shooting.flights.empty());
+  const auto checkpoint = *flow.baseWorld().baseDefenseCheckpoint();
+  const auto assets = assetsJson(session.profile());
+  ASSERT_TRUE(flow.returnToMainMenu());
+  ASSERT_TRUE(flow.continueGame()) << session.persistenceMessage();
+  EXPECT_EQ(flow.baseWorld().baseDefenseCheckpoint()->shooting, checkpoint.shooting);
+  EXPECT_EQ(assetsJson(session.profile()), assets);
+  EXPECT_FALSE(flow.baseWorld().shotFiredLastUpdate());
+
+  GameFlow fresh;
+  fresh.configurePersistence(save.path);
+  ASSERT_TRUE(fresh.continueGame());
+  EXPECT_EQ(baseDefenseCheckpointHash(*flow.baseWorld().baseDefenseCheckpoint()),
+            baseDefenseCheckpointHash(*fresh.baseWorld().baseDefenseCheckpoint()));
+  flow.updateBase({}, 0.016F);
+  fresh.updateBase({}, 0.016F);
+  EXPECT_EQ(baseDefenseCheckpointHash(*flow.baseWorld().baseDefenseCheckpoint()),
+            baseDefenseCheckpointHash(*fresh.baseWorld().baseDefenseCheckpoint()));
+  EXPECT_EQ(assetsJson(session.profile()), assetsJson(fresh.gameSession().profile()));
+  EXPECT_EQ(flow.baseWorld().baseDefenseCheckpoint()->shooting.weaponDamage,
+            publishedContentRegistry().item(alpha_content::rifle).weaponUse->baseDamage);
+}
+
 TEST(BaseDefenseSessionTest, StartSaveFailureLeavesWarningAndProfileUntouched) {
   SaveFixture save;
   GameFlow flow;

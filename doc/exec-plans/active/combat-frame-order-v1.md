@@ -1,5 +1,10 @@
 # Combat frame order v1
 
+2026-09-09 acceptance update: user accepted #155@c0b0664. Exact-head CI
+34313046163 passed Windows and Ubuntu (1687 each); still unmerged. The next
+independent stacked scope is `combat-runtime-boundaries-v1.md`. Historical
+pending-acceptance statements below describe this slice's original delivery.
+
 ## Scope and baseline
 
 2026-09-09: user accepted #154@b7937c3 and requested the next planned step.

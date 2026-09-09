@@ -44,6 +44,9 @@
 
 ## 流程与场景
 
+- 成功替换 Profile 必须明确失效旧 Base 敌人/退休身份/周期缓存，再从新权威状态导入；普通同周期同步不得触发重建。成功出击、回营定位和外围换周期清除旧空间弹道及伤害/击杀/击发帧结果，失败的读取/保存/出击/检查点校验不得先清理原运行时。
+- 同一防守事件恢复必须保留其完整冻结弹道、敌人和消耗；不能按“切场景”一律清空。Raid 室内/室外各自持有 EnemyRoster，进出只清空间弹道/帧结果，不重抽敌人或复活死者。空间清理不迁移资产，不引入新的 ID、存档字段或第二结算。
+
 - `GameFlow` 只拥有屏幕级状态；`GameSession` 是长期组合根。
 - `BaseWorld` 与 `GameplayWorld` 互斥运行。两者可以组合同一 SDL-free 射击能力；Base 只允许组合窄 `HomePerimeterRuntime` 的有限感染者与低阶地面资产，不得嵌入 `RaidSession`、撤离、高危、RaidResult、失物或 Settlement 生命周期，也不得伤害居民/设施。
 - Home Region 的大地图、基地板块、道路和环境物属于 `BaseWorld` 瞬态空间；相同 active Base 地点必须确定性生成相同布局。外围周期快照是独立的 Profile 权威状态，只能记录站点、周期、有限敌人和已实例化 `BaseGroundAssetLocation` 的 Loot；不得创建 pending Raid、Raid 锚点、撤离、高危或 Settlement。
