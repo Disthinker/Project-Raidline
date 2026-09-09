@@ -4,6 +4,9 @@
 
 ## Git 与交付基线
 
+- 2026-09-08 最新覆盖：用户已验收 #150@2ff1a69 的 Enemy Lifecycle 修复；#149/#150 仍未合入。当前独立 stacked 分支为 `codex/enemy-combat-contract-v1`，显式依赖 #150，活动计划为 `active/enemy-combat-contract-v1.md`。下方原生命周期“待验收”记录为历史证据。
+- 本轮统一新生成普通感染者为 `enemy.infected.basic`（12 HP），Base/Defense/Raid 共用领域命中反馈投影；旧快照血量、伤势、死亡不重写。schema v46/content v60/rules v29。Windows Debug 全目标构建、155/155 定向及 1637/1637 全量 CTest 通过；本轮精确提交 CI 与正常游玩证据见新 PR，不视为已合入或已验收。
+
 - 当前主线：`origin/main@2ae898a`，PR #148 经用户明确授权普通合并；首局整备—撤离—回营再出发已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
 - 当前开发分支：`codex/gameplay-framework-consolidation`，显式 stacked 依赖未合入的 #149@`d43bab0`；不改变 #149 原分支，不自动合并。
 - 当前活动计划：`doc/exec-plans/active/gameplay-framework-consolidation.md`。新玩法暂停，仅 Phase A/B（复现与 Enemy Lifecycle）；完成后强制评估，不默认继续 Navigation/Combat Pipeline/Session/Persistence 全部重构。以下 #149 记录为依赖背景，不代表验收通过。

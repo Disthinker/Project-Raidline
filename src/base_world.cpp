@@ -553,7 +553,7 @@ int BaseWorld::perimeterDamageLastUpdate() const noexcept
 }
 
 std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
-    BaseDefenseSnapshot s) const
+    BaseDefenseSnapshot s, const EnemyCombatDefinition &enemyDefinition) const
 {
     if (baseDefense_ || surveying()) return std::nullopt;
     s.siteDefinitionId=siteDefinitionId_;s.plotId=plotId_;
@@ -565,7 +565,7 @@ std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
     // A new activity reuses local target IDs, not the previous activity's shots.
     // Only the candidate is changed; a rejected start preserves the live world.
     s.shooting.flights.clear();
-    return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_);
+    return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_,enemyDefinition);
 }
 bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
 {

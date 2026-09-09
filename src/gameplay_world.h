@@ -272,6 +272,8 @@ public:
 
     [[nodiscard]] const std::vector<HitResult> &
     hitResultsLastUpdate() const noexcept;
+    [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
+    { return shooting_.hitFeedbackPresentation(); }
 
     [[nodiscard]]
     const std::vector<GroundItem> &

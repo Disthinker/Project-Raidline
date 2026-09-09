@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "definition_id.h"
+#include "enemy_combat_definition.h"
 #include "item_definition.h"
 #include "raid_intelligence_types.h"
 #include "vec2.h"
@@ -847,6 +848,9 @@ public:
     const EnemyDeploymentDefinition &enemyDeployment(
         const EnemyDeploymentDefinitionId &id) const;
 
+    [[nodiscard]] const EnemyCombatDefinition &enemyCombatDefinition(
+        const EnemyCombatDefinitionId &id) const;
+
     [[nodiscard]]
     const MapDefinition &map(
         const MapDefinitionId &id) const;
@@ -862,6 +866,7 @@ private:
     std::vector<ItemDefinitionId> fixedSupplyItemIds_;
     std::vector<LootTableDefinition> lootTables_;
     std::vector<EnemyDeploymentDefinition> enemyDeployments_;
+    std::map<EnemyCombatDefinitionId, EnemyCombatDefinition> enemyCombatDefinitions_;
     std::vector<MapDefinition> maps_;
     std::vector<LoadoutArchetypeDefinition> loadoutArchetypes_;
     GunsmithFullMaintenanceDefinition gunsmithFullMaintenance_;

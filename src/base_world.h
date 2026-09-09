@@ -120,7 +120,7 @@ public:
     [[nodiscard]] const std::vector<EnemyRemovalFact> &perimeterRemovalsLastUpdate() const noexcept
     { return perimeterRemovals_; }
     [[nodiscard]] std::optional<BaseDefenseSnapshot> prepareBaseDefenseSnapshot(
-        BaseDefenseSnapshot seedInputs) const;
+        BaseDefenseSnapshot seedInputs, const EnemyCombatDefinition &enemyDefinition) const;
     [[nodiscard]] bool resumeBaseDefense(const BaseDefenseSnapshot &snapshot);
     [[nodiscard]] std::optional<BaseDefenseSnapshot> baseDefenseCheckpoint() const;
     [[nodiscard]] const BaseDefenseSnapshot *baseDefenseState() const noexcept;
@@ -144,6 +144,8 @@ public:
     [[nodiscard]] const std::vector<Particle> &particles() const noexcept;
     [[nodiscard]] const std::vector<HitResult> &
     hitResultsLastUpdate() const noexcept;
+    [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
+    { return shooting_.hitFeedbackPresentation(); }
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
     weaponAccuracyProjection() const noexcept;

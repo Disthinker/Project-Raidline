@@ -134,7 +134,7 @@ TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFire
     inputs.frozenSiteThreat =
         content.regionalBaseSite(RegionalBaseSiteDefinitionId{inputs.siteDefinitionId})
             .dailyBaseThreatUnits;
-    auto prepared = BaseDefenseRuntime::prepare(inputs, blockers);
+    auto prepared = BaseDefenseRuntime::prepare(inputs, blockers, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(prepared);
     ASSERT_TRUE(executeBaseRealtimeDefenseStart(profile, content, *prepared,
                                                 {profile.revision, "perf-defense-start"})

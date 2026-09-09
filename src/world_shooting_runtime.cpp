@@ -239,6 +239,7 @@ void WorldShootingRuntime::beginFrame(float deltaTime) noexcept
         return;
     }
     shotFeedbackPresentation_.update(deltaTime);
+    hitFeedbackPresentation_.update(deltaTime);
     particleSystem_.update(deltaTime);
     for (TracerPresentationSegment &tracer : tracerPresentations_)
     {
@@ -477,6 +478,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     {
         particleSystem_.emitImpact(hit.position);
     }
+    hitFeedbackPresentation_.consume(resolved.hits);
     hitResultsLastUpdate_ = std::move(resolved.hits);
     return WorldShootingAdvance{
         std::move(resolved.removals), resolved.enemiesKilled};
@@ -557,6 +559,7 @@ void WorldShootingRuntime::clearSpatialTransientPresentation() noexcept
     tracerPresentations_.clear();
     particleSystem_.clear();
     shotFeedbackPresentation_.reset();
+    hitFeedbackPresentation_.reset();
     hitResultsLastUpdate_.clear();
 }
 

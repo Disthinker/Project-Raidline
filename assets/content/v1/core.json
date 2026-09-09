@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "content_version": "base-wishes-resource-tradeoff-content-59",
+  "content_version": "enemy-combat-contract-content-60",
+  "enemy_combat_definitions": [
+    {"id": "enemy.infected.basic", "maximum_health": 12}
+  ],
   "base_services": {
     "gunsmith_full_maintenance": {
       "base_cost": 40,
@@ -1671,127 +1674,127 @@
     {
       "id": "enemy_deployment.v0.default",
       "enemies": [
-        {"position": {"x": 600, "y": 100}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 350, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 930, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 600, "y": 100}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 350, "y": 500}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 930, "y": 500}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.alpha.central_pressure",
       "enemies": [
-        {"position": {"x": 500, "y": 270}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 650, "y": 330}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 790, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 610, "y": 460}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 860, "y": 450}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 500, "y": 270}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 650, "y": 330}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 790, "y": 260}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 610, "y": 460}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 860, "y": 450}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.alpha.route_blockade",
       "enemies": [
-        {"position": {"x": 330, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 570, "y": 180}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 850, "y": 160}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 980, "y": 350}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 760, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 330, "y": 130}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 570, "y": 180}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 850, "y": 160}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 980, "y": 350}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 760, "y": 570}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.alpha.resource_pressure",
       "enemies": [
-        {"position": {"x": 360, "y": 520}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 520, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 700, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 900, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1030, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 360, "y": 520}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 520, "y": 570}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 700, "y": 500}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 900, "y": 560}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1030, "y": 430}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.riverside.crossroads",
       "enemies": [
-        {"position": {"x": 430, "y": 310}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 620, "y": 210}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 700, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1030, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 430, "y": 310}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 620, "y": 210}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 700, "y": 430}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1030, "y": 500}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.riverside.warehouse_patrol",
       "enemies": [
-        {"position": {"x": 250, "y": 420}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 590, "y": 390}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 740, "y": 180}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1050, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 860, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 250, "y": 420}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 590, "y": 390}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 740, "y": 180}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1050, "y": 260}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 860, "y": 560}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.riverside.outer_sweep",
       "enemies": [
-        {"position": {"x": 170, "y": 150}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 650, "y": 110}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1120, "y": 170}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1090, "y": 590}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 320, "y": 580}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 170, "y": 150}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 650, "y": 110}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1120, "y": 170}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1090, "y": 590}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 320, "y": 580}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.industrial.center_hold",
       "enemies": [
-        {"position": {"x": 450, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 600, "y": 230}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 820, "y": 410}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 910, "y": 500}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 450, "y": 260}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 600, "y": 230}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 820, "y": 410}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 910, "y": 500}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.industrial.tank_patrol",
       "enemies": [
-        {"position": {"x": 430, "y": 480}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 850, "y": 210}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 850, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1100, "y": 390}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1120, "y": 570}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 430, "y": 480}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 850, "y": 210}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 850, "y": 570}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1100, "y": 390}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1120, "y": 570}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.industrial.western_push",
       "enemies": [
-        {"position": {"x": 110, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 430, "y": 130}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 430, "y": 590}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 730, "y": 520}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1100, "y": 60}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 110, "y": 130}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 430, "y": 130}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 430, "y": 590}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 730, "y": 520}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1100, "y": 60}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.frontier.crossroads_watch",
       "enemies": [
-        {"position": {"x": 720, "y": 350}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1260, "y": 560}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1830, "y": 410}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 2070, "y": 900}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1380, "y": 1110}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 720, "y": 350}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1260, "y": 560}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1830, "y": 410}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 2070, "y": 900}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1380, "y": 1110}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.frontier.outer_patrol",
       "enemies": [
-        {"position": {"x": 420, "y": 260}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1160, "y": 190}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 2210, "y": 300}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 2290, "y": 1160}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 540, "y": 1190}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 420, "y": 260}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1160, "y": 190}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 2210, "y": 300}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 2290, "y": 1160}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 540, "y": 1190}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     },
     {
       "id": "enemy_deployment.frontier.resource_guard",
       "enemies": [
-        {"position": {"x": 610, "y": 970}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 980, "y": 1060}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1510, "y": 980}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 1910, "y": 1120}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-        {"position": {"x": 2150, "y": 760}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+        {"position": {"x": 610, "y": 970}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 980, "y": 1060}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1510, "y": 980}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 1910, "y": 1120}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+        {"position": {"x": 2150, "y": 760}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
       ]
     }
   ],
@@ -1869,10 +1872,10 @@
           {"id": "depot_cache_2", "position": {"x": 1140, "y": 600}}
         ],
         "pressure_spawns": [
-          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
         ]
       },
       "storage_loot_table": "loot.storage_cabinet.default",
@@ -1951,10 +1954,10 @@
           {"id": "riverside_cache_2", "position": {"x": 390, "y": 600}}
         ],
         "pressure_spawns": [
-          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
         ]
       },
       "storage_loot_table": "loot.storage_cabinet.default",
@@ -2034,10 +2037,10 @@
           {"id": "ashworks_cache_2", "position": {"x": 1150, "y": 600}}
         ],
         "pressure_spawns": [
-          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+          {"position": {"x": 20, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 30}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 20, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 1210, "y": 640}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
         ]
       },
       "storage_loot_table": "loot.storage_cabinet.default",
@@ -2142,8 +2145,8 @@
             {"id": "office_crates", "bounds": {"position": {"x": 650, "y": 455}, "size": {"x": 150, "y": 75}}}
           ],
           "enemies": [
-            {"position": {"x": 590, "y": 170}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-            {"position": {"x": 820, "y": 430}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+            {"position": {"x": 590, "y": 170}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+            {"position": {"x": 820, "y": 430}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
           ],
           "loot_table": "loot.raid.alpha",
           "loot_slots": [
@@ -2175,9 +2178,9 @@
             {"id": "freight_service_barrier", "bounds": {"position": {"x": 900, "y": 350}, "size": {"x": 150, "y": 70}}}
           ],
           "enemies": [
-            {"position": {"x": 470, "y": 190}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-            {"position": {"x": 810, "y": 80}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-            {"position": {"x": 810, "y": 400}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+            {"position": {"x": 470, "y": 190}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+            {"position": {"x": 810, "y": 80}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+            {"position": {"x": 810, "y": 400}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
           ],
           "loot_table": "loot.raid.alpha",
           "loot_slots": [
@@ -2268,10 +2271,10 @@
           }
         ],
         "pressure_spawns": [
-          {"position": {"x": 30, "y": 40}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 2480, "y": 40}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 30, "y": 1350}, "size": {"x": 50, "y": 50}, "maximum_health": 12},
-          {"position": {"x": 2480, "y": 1350}, "size": {"x": 50, "y": 50}, "maximum_health": 12}
+          {"position": {"x": 30, "y": 40}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 2480, "y": 40}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 30, "y": 1350}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"},
+          {"position": {"x": 2480, "y": 1350}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
         ]
       },
       "storage_loot_table": "loot.storage_cabinet.default",

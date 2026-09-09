@@ -6,6 +6,7 @@
 #include "enemy.h"
 #include "gameplay_input.h"
 #include "hit_resolution.h"
+#include "hit_feedback_presentation.h"
 #include "item_definition.h"
 #include "logical_ballistics.h"
 #include "particle_system.h"
@@ -82,6 +83,8 @@ public:
     [[nodiscard]] const std::vector<Particle> &particles() const noexcept;
     [[nodiscard]] const std::vector<HitResult> &
     hitResultsLastUpdate() const noexcept;
+    [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
+    { return hitFeedbackPresentation_.snapshot(); }
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
     [[nodiscard]] float spreadDegrees() const noexcept;
     [[nodiscard]] float visualRecoilPixels() const noexcept;
@@ -112,6 +115,7 @@ private:
     std::vector<LogicalBallisticFlight> logicalBallistics_;
     std::vector<TracerPresentationSegment> tracerPresentations_;
     ShotFeedbackPresentationState shotFeedbackPresentation_;
+    HitFeedbackPresentationState hitFeedbackPresentation_;
     ShotId nextShotId_{1};
     WeaponFireState weaponFire_;
     WeaponAimState weaponAim_;

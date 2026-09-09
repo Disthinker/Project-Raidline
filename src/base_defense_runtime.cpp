@@ -129,8 +129,11 @@ bool reachable(const RaidSpaceNavigationField &navigation, Vec2 from, Vec2 targe
 } // namespace
 
 std::optional<BaseDefenseSnapshot>
-BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBlocker> blockers)
+BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBlocker> blockers,
+                            const EnemyCombatDefinition &enemyDefinition)
 {
+    if (!enemyDefinition.id.valid() || enemyDefinition.maximumHealth <= 0)
+        return std::nullopt;
     s.movementBlockers.clear();
     for (const auto &blocker : blockers)
         s.movementBlockers.push_back(blocker.bounds);
@@ -240,7 +243,7 @@ BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBloc
         wave.releaseSeconds = static_cast<float>(w) * 24.0F;
         // Ordinary infected use the current Raid health scale, not player HP.
         // Previously frozen events retain their explicitly saved health.
-        wave.enemyMaxHealth = 12;
+        wave.enemyMaxHealth = enemyDefinition.maximumHealth;
         for (std::uint32_t n = 0; n < perWave; ++n)
             wave.enemyIds.push_back(nextId++);
         s.wavePlans.push_back(std::move(wave));

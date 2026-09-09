@@ -6904,21 +6904,9 @@ void App::update(float deltaTime)
         gameAudio_.play(SoundEventId::InfectedAlert);
     }
 
-    specialHitFeedbackRemaining_ = std::max(
-        0.0F,
-        specialHitFeedbackRemaining_ - std::max(0.0F, deltaTime));
     playerDamageFeedbackRemaining_ = std::max(
         0.0F,
         playerDamageFeedbackRemaining_ - std::max(0.0F, deltaTime));
-    for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
-    {
-        if (hit.semantic == HitSemantic::Normal)
-        {
-            continue;
-        }
-        specialHitSemantic_ = hit.semantic;
-        specialHitFeedbackRemaining_ = 0.18F;
-    }
     if (gameSession_.lastIncomingDamage().has_value())
     {
         lastIncomingDamageReducedByArmor_ =
@@ -10161,15 +10149,18 @@ void App::renderAimCrosshair()
     drawVerticalArm(
         center.y + feedbackRadius,
         center.y + feedbackRadius + kArmLength);
-    if (specialHitFeedbackRemaining_ > 0.0F)
+    const HitFeedbackPresentationSnapshot hitFeedback = inBaseWorld
+        ? gameFlow_.baseWorld().hitFeedbackPresentation()
+        : gameSession_.world().hitFeedbackPresentation();
+    if (hitFeedback.remainingSeconds > 0.0F)
     {
-        const Uint8 red = specialHitSemantic_ == HitSemantic::WeakPoint
+        const Uint8 red = hitFeedback.semantic == HitSemantic::WeakPoint
             ? 246
             : 250;
-        const Uint8 green = specialHitSemantic_ == HitSemantic::WeakPoint
+        const Uint8 green = hitFeedback.semantic == HitSemantic::WeakPoint
             ? 92
             : 194;
-        const Uint8 blue = specialHitSemantic_ == HitSemantic::WeakPoint
+        const Uint8 blue = hitFeedback.semantic == HitSemantic::WeakPoint
             ? 92
             : 72;
         SDL_SetRenderDrawColor(renderer_, red, green, blue, 245);
