@@ -379,6 +379,15 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         for (HomePerimeterEnemySnapshot &persisted :
              candidateSite->second.enemies)
         {
+            const auto &removals = baseWorld.perimeterRemovalsLastUpdate();
+            if (std::any_of(removals.begin(), removals.end(), [&](const EnemyRemovalFact &fact) {
+                    return fact.id == persisted.localId && fact.reason == EnemyRemovalReason::Death;
+                }))
+            {
+                perimeterChanged = perimeterChanged || persisted.health != 0;
+                persisted.health = 0;
+                continue;
+            }
             const auto runtime = std::find_if(
                 runtimeEnemies.begin(), runtimeEnemies.end(),
                 [&](const HomePerimeterEnemySnapshot &enemy)

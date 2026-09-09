@@ -93,6 +93,7 @@ struct HitResult
     bool targetKilled{false};
     HitRegion region{HitRegion::Torso};
     HitSemantic semantic{HitSemantic::Normal};
+    CombatTargetId targetId{kInvalidCombatTargetId};
 };
 
 // Read-only App projection for one short, already-travelled tracer segment.

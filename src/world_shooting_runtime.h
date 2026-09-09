@@ -27,7 +27,7 @@ struct WeaponAccuracyProjection
 
 struct WorldShootingAdvance
 {
-    std::vector<std::size_t> removedTargetIndices;
+    std::vector<EnemyRemovalFact> removals;
     std::size_t targetsKilled{};
 };
 
@@ -60,7 +60,7 @@ public:
         bool shooterMoving,
         bool controlsSuppressed,
         Vec2 worldSize,
-        std::vector<Enemy> &targets,
+        EnemyLifecycle &targets,
         const std::vector<BallisticBlocker> &blockers);
 
     void configureWeapon(

@@ -1,12 +1,13 @@
 # Project Raidline 当前状态
 
-最后核对：2026-09-07。
+最后核对：2026-09-08。
 
 ## Git 与交付基线
 
 - 当前主线：`origin/main@2ae898a`，PR #148 经用户明确授权普通合并；首局整备—撤离—回营再出发已进入主线，schema v45/content v59/rules v29。既有阶段的验收证据保留。
-- 当前开发分支：`codex/base-defense-player-participation-v1`，从 `origin/main@2ae898a` 创建；PR #149 在用户确认后进入玩家实时防守 v1 实施。
-- 当前活动计划：`doc/exec-plans/active/base-defense-player-participation-v1.md`（2026-09-07 用户已确认；开发分支实现及本地自动化完成，未正常游玩验收）。
+- 当前开发分支：`codex/gameplay-framework-consolidation`，显式 stacked 依赖未合入的 #149@`d43bab0`；不改变 #149 原分支，不自动合并。
+- 当前活动计划：`doc/exec-plans/active/gameplay-framework-consolidation.md`。新玩法暂停，仅 Phase A/B（复现与 Enemy Lifecycle）；完成后强制评估，不默认继续 Navigation/Combat Pipeline/Session/Persistence 全部重构。以下 #149 记录为依赖背景，不代表验收通过。
+- 生命周期整合已完成本地 Windows Debug 全目标构建与 **1625/1625 CTest（54.60 秒）**；含 12 个真实三环境合同实例、死亡保存/拒绝恢复及跨活动目标失效回归。精确提交 CI 记录在 stacked PR；用户正常游玩仍待验收，不将本地证据写成主线完成。
 - PR #149 最新返工为“入侵敌人像无敌、核心旁连射后停滞”：冻结防守前同步当前装备武器，新增波次恢复普通 Raid 的 12 HP 标度；听到但看不到玩家时保留防线目标，修复贴墙碰撞与导航额外间距不一致。旧事件仍保留冻结血量和射击检查点，不重抽/重置存档；旧 100 HP 波次需结束后再验证新波次平衡。回归与精确提交 CI 证据见活动计划/PR，仍待用户复验。
 - PR #149 正常游玩发现预警按钮无响应、无法收起；本轮仅返工该交互。修复 Base 预警的事件路由，增加 Esc/X 收起和 F6/提示条重开；倒计时前后均通过同一领域命令处理选择，点击不穿透为射击，已有自动预设保持。新增 14 项无窗口输入/双语测试，最新完整验证见活动计划和 PR；此前 1587 项证据不是本轮结果。仍待用户复验，不合并、不启动下一片。
 - PR #149 Windows Debug 全目标及全量 CTest **1587/1587** 通过（48.46 秒，新增 70 项回归）；性能测试隔离串行运行，1000 资产/1000 阻挡/16 敌人真实战斗和后台保存 copy P95/P99 为 0.903/2.366ms。首轮 Windows CI 复制性能失败后已优化稳定 ID 节点与完成缓冲复用，未放宽门槛；最终精确 head 双平台 CI 见 PR，不将无 SDL 压力数据写成可见全帧/发行硬件承诺。

@@ -59,7 +59,7 @@ TEST(BaseDefenseRuntimeTest, ShootingCheckpointPreservesFlightAndRandomCadence)
     GameplayInput input;
     input.aimWorldPosition = Vec2{2781, 1927};
     input.firePressed = true;
-    std::vector<Enemy> targets1, targets2;
+    EnemyRoster<> targets1, targets2;
     const std::vector<BallisticBlocker> blockers;
     first.beginFrame(0.001F);
     first.updateAim(input, {1000, 1000}, {1, 0}, {6000, 6000}, 0.001F);
