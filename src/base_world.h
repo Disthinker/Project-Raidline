@@ -133,6 +133,10 @@ public:
     [[nodiscard]] std::optional<EnemyAttackType> baseDefenseAttackTypeLastUpdate() const noexcept;
     [[nodiscard]] const BaseDefenseRuntimeMetrics &baseDefenseMetrics() const noexcept;
     void clearBaseDefense() noexcept;
+    // Accepted Profile replacement is not a same-cycle synchronization.
+    void resetCombatForProfileLoad() noexcept;
+    // Discard space-local flights/facts, retaining the current enemy roster.
+    void clearSpatialCombatState() noexcept;
 
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(

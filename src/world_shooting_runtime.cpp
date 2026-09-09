@@ -164,7 +164,13 @@ WorldShootingCheckpoint WorldShootingRuntime::checkpoint() const
 bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
 {
     if (!validateWorldShootingCheckpoint(s)) return false;
-    if (!s.initialized) return true;
+    if (!s.initialized)
+    {
+        // An empty initial checkpoint has no flight history. Keep the caller's
+        // configured weapon, not an unrelated space's in-flight target intent.
+        clearSpatialTransientPresentation();
+        return true;
+    }
     WorldShootingRuntime candidate;
     const auto &f = s.fireConfig;
     candidate.weaponFire_ = WeaponFireState{WeaponFireConfig{
@@ -561,6 +567,7 @@ void WorldShootingRuntime::clearSpatialTransientPresentation() noexcept
     shotFeedbackPresentation_.reset();
     hitFeedbackPresentation_.reset();
     hitResultsLastUpdate_.clear();
+    shotFiredLastUpdate_ = false;
 }
 
 const std::vector<LogicalBallisticFlight> &

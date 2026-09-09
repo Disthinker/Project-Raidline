@@ -481,6 +481,8 @@ void BaseWorld::configureHomePerimeter(
 {
     if (snapshot == nullptr)
     {
+        if (perimeterCycleIndex_ && !baseDefense_)
+            clearSpatialCombatState();
         perimeterEnemies_.reset();
         perimeterRemovals_.clear();
         perimeterCycleIndex_.reset();
@@ -490,6 +492,10 @@ void BaseWorld::configureHomePerimeter(
         *perimeterCycleIndex_ == snapshot->cycleIndex)
         return;
 
+    // Local enemy IDs may be reused by a new cycle. Never carry a previous
+    // cycle's aim intent/flight into it; an active Defense owns its own shots.
+    if (!baseDefense_)
+        clearSpatialCombatState();
     perimeterEnemies_.reset();
     perimeterRemovals_.clear();
     perimeterEnemies_.reserve(snapshot->enemies.size());
@@ -629,9 +635,25 @@ const BaseDefenseRuntimeMetrics &BaseWorld::baseDefenseMetrics() const noexcept
 void BaseWorld::clearBaseDefense() noexcept
 {
     if (!baseDefense_) return;
-    baseDefense_.reset();shooting_.clearSpatialTransientPresentation();
+    baseDefense_.reset();clearSpatialCombatState();
     rebuildCollisionIndex();
     perimeterDamageProtectionRemainingSeconds_=0.25F;
+}
+
+void BaseWorld::clearSpatialCombatState() noexcept
+{
+    shooting_.clearSpatialTransientPresentation();
+    perimeterRemovals_.clear();
+    perimeterDamageObservation_.reset();
+}
+
+void BaseWorld::resetCombatForProfileLoad() noexcept
+{
+    clearBaseDefense();
+    configureHomePerimeter(nullptr);
+    clearSpatialCombatState();
+    shooting_ = WorldShootingRuntime{};
+    perimeterDamageProtectionRemainingSeconds_ = 0.0F;
 }
 
 void BaseWorld::discardUncommittedShot() noexcept
@@ -924,6 +946,7 @@ std::optional<BaseFacilityKind> BaseWorld::interactableFacility() const noexcept
 
 void BaseWorld::resetAtRaidGate() noexcept
 {
+    clearSpatialCombatState();
     const BaseFacility &gate = facilities_.back();
     playerPosition_ = Vec2{
         gate.bounds.position.x + gate.bounds.size.x * 0.5F -
@@ -940,6 +963,7 @@ void BaseWorld::resetAtRaidGate() noexcept
 
 void BaseWorld::resetAtMedicalPoint() noexcept
 {
+    clearSpatialCombatState();
     const Vec2 origin = layout_.baseParcel.position;
     playerPosition_ = Vec2{origin.x + 780.0F, origin.y + 900.0F};
     if (surveying()) playerPosition_ = {origin.x + 140, origin.y + 150};

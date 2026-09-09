@@ -4,6 +4,10 @@
 
 ## Git 与交付基线
 
+- 当前覆盖：用户已验收 #155@`c0b0664`，精确 head CI `34313046163` Windows/Ubuntu 各 1687/1687 通过，未合并。`origin/main` 仍为 `2ae898a`。本轮 `codex/combat-runtime-boundaries-v1` 显式依赖 #155，计划 `active/combat-runtime-boundaries-v1.md`；下方分支状态为历史记录。
+- 本轮修复：成功读取/替换 Profile 时失效旧 Base 敌人缓存；成功出击、回营定位、外围换周期清除旧空间弹道与帧结果。普通同周期更新不重建，失败操作不清理；同场防守恢复保留自己的弹道/敌人/消耗。未修改帧顺序、数值、资源或保存政策，schema v46/content v60/rules v29 不变。
+- 本地 Windows Debug 全目标构建、149/149 定向、1697/1697 全量 CTest（64.66 秒）通过，新增 10 项注册测试；精确 CI 证据以本轮 PR 为准，正常游玩待验收，未启动游戏。
+
 - 最新覆盖：用户已验收 #154@`b7937c3`；双平台精确提交 CI run `34298809360` 成功，仍未合入。当前分支 `codex/combat-frame-order-v1` 显式 stacked 依赖 #154，计划 `active/combat-frame-order-v1.md`。`origin/main` 仍为 `2ae898a`；下方“待验收/时序未统一”属于之前切片记录。
 - 本轮为有意时序变更：三环境均先敌人推进/接触、后射击/死亡清理。Daily/Defense 的枪声在成功击发后通知存活敌人，下一次敌人推进消费，不再重放本帧。防守突破已退休目标不能再算击杀；进入终局后不再产生新射击。保留活动策略、伤害数值和保护，未修改 GameSession、Raid 主循环、存档、资源或 manifest；schema v46/content v60/rules v29 不变。
 - 本轮证据：Windows Debug 全目标增量构建、95/95 定向、1687/1687 全量 CTest（73.65 秒）通过，新增 14 项注册测试；精确提交双平台 CI 见新 PR。本轮人工验收仍待完成，不继承 #154 验收。

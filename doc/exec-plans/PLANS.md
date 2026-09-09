@@ -17,6 +17,8 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 当前总计划：`active/core-extraction-alpha.md`。
 
+2026-09-09 当前覆盖：#155@c0b0664 已获用户验收，双平台 CI 34313046163 通过，未合并。当前活动计划为 `active/combat-runtime-boundaries-v1.md`，显式 stacked 依赖 #155；修复已复现的跨 Profile/活动/周期旧敌人与弹道残留，保留同场防守恢复合同。之后进入整合收尾评审，不默认继续大范围重构或新玩法。
+
 2026-09-09 最新覆盖：已验收 #154 接触合同后，当前窄切片为 `active/combat-frame-order-v1.md`，统一三环境敌人先推进/接触、后射击清理；显式依赖 #154、不自动合并。新玩法继续暂停，完成后只审计运行时组合/切换边界和真实剩余重复，不默认执行完整 Session/Persistence 重构。
 
 2026-09-08 当前优先级覆盖：`active/gameplay-framework-consolidation.md`，仅 Phase A/B。暂停下述产品片后续扩展；整合在 #149@d43bab0 的独立 stacked 分支交付，B 后强制暂停评估。原防守计划只作为依赖和历史证据。

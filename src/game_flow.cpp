@@ -81,6 +81,7 @@ bool GameFlow::startNewGame(std::string profileId, bool survey)
     state_ = GameFlowState::Base;
     persistentAlphaMode_ = true;
     activeBaseFacility_.reset();
+    baseWorld_.resetCombatForProfileLoad();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
     if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
@@ -99,6 +100,7 @@ bool GameFlow::continueGame()
     // Keep the recovery diagnostic, but do not manufacture an empty result UI.
     state_ = GameFlowState::Base;
     activeBaseFacility_.reset();
+    baseWorld_.resetCombatForProfileLoad();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
     if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
@@ -143,6 +145,7 @@ bool GameFlow::deploy(
             return false;
         }
         activeBaseFacility_.reset();
+        baseWorld_.clearSpatialCombatState();
         state_ = GameFlowState::Raid;
         return true;
     }
@@ -158,6 +161,7 @@ bool GameFlow::deploy(
 
         firstDeploymentPending_ = false;
         activeBaseFacility_.reset();
+        baseWorld_.clearSpatialCombatState();
         state_ = GameFlowState::Raid;
         return true;
     }
@@ -167,6 +171,7 @@ bool GameFlow::deploy(
         return false;
     }
 
+    baseWorld_.clearSpatialCombatState();
     state_ = GameFlowState::Raid;
     activeBaseFacility_.reset();
     return true;

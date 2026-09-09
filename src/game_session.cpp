@@ -679,6 +679,7 @@ bool GameSession::startNewProfile(std::string profileId, bool survey)
     profile_ = std::move(candidate);
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
+    configuredBaseWeaponAssetId_.reset();
     developerWeaponOverrides_.clear();
     deferredRaidBasePresentationEvents_.clear();
     alphaRaidActive_ = false;
@@ -801,6 +802,7 @@ bool GameSession::continueProfile()
     profile_ = std::move(candidate);
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
+    configuredBaseWeaponAssetId_.reset();
     developerWeaponOverrides_.clear();
     deferredRaidBasePresentationEvents_.clear();
     alphaRaidActive_ = false;
