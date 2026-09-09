@@ -84,6 +84,8 @@
 - 普通命中最终不显示准星 X；只有命中部位与击发意图双重验证后的爆头/弱点可以显示专用反馈，不得把普通命中临时标成爆头或弱点。
 - 敌人与玩家单纯重叠不造成被动伤害。Grab 本身 0 伤害，只能在接触后原子转换为 Bite；AI 不独立选择 Bite。
 - Scratch/Bite 使用 `Windup → Active → Recovery → Idle`；未命中 Grab 使用 `Windup → Active → OffBalance → Idle`。一次动作链最多提交一次伤害。
+- Daily/Defense/Raid 的有效攻击接触统一通过 `resolveEnemyAttackContact`：存活敌人、活动允许的目标、攻击机会、碰撞与视线同时成立后才消费；有效 Grab 在同一次调用中转换并消费 Bite。保护期间仍消费合法接触，但不产生伤害/控制、不延长保护，也不在保护结束后补发。
+- 接触函数不拥有集合、导航、Profile 或保存策略。既有 0.25 秒计时由活动推进和检查点保存，结果的来源身份使用 `CombatTargetId`；活动只消费明确的伤害/控制结果。当前 Base 不新增控制运行时，原 Daily/Defense shot-first 与 Raid enemy-first 顺序仍由活动保留。
 
 ## 持久化与幂等
 

@@ -199,6 +199,29 @@ struct EnemyLifecycleTestAccess {
                             : defense->damageObservationLastUpdate();
     return fact ? std::vector<PlayerDamageObservation>{*fact} : std::vector<PlayerDamageObservation>{};
   }
+  void setProtection(float seconds) {
+    if (daily) daily->perimeterDamageProtectionRemainingSeconds_ = seconds;
+    else if (raid) raid->enemyDamageProtectionRemainingSeconds_ = seconds;
+    else defense->state_.damageProtectionSeconds = seconds;
+  }
+  float protection() const {
+    if (daily) return daily->perimeterDamageProtectionRemainingSeconds_;
+    if (raid) return raid->enemyDamageProtectionRemainingSeconds_;
+    return defense->state_.damageProtectionSeconds;
+  }
+  bool playerControlled() const { return raid && raid->player_.isControlled(); }
+  void blockContactLine() {
+    const std::vector<BallisticBlocker> wall{{1, {{1053, 990}, {4, 90}}}};
+    if (daily) {
+      daily->movementBlockers_ = wall;
+      daily->movementBlockerIndex_ = RaidSpaceBlockerIndex::build(daily->worldSize(), wall);
+    } else if (raid) {
+      raid->ballisticBlockers_ = wall;
+      raid->outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(raid->worldSize_, wall);
+    } else {
+      defense->blockerIndex_ = RaidSpaceBlockerIndex::build({6000, 6000}, wall);
+    }
+  }
   void aimAndFire(float localY, bool aimPastTarget) {
     const Vec2 p = actors().front().position();
     const Vec2 size = daily ? daily->playerSize() : raid
@@ -261,19 +284,63 @@ TEST_P(EnemyLifecycleContract, SameFrameLethalShotCharacterizesExistingOrder) {
   EXPECT_TRUE(fixture.incoming().empty());
 }
 
-TEST_P(EnemyLifecycleContract, GrabFollowupCharacterizesExistingTiming) {
+TEST_P(EnemyLifecycleContract, GrabContactImmediatelyConsumesOneBite) {
   EnemyLifecycleTestAccess fixture{GetParam(), 12};
   fixture.prepareIncomingAttack(EnemyAttackType::Grab);
   fixture.placeCombatPlayer({1020, 1000});
   fixture.combatTick({}, 0.000001F);
-  auto facts = fixture.incoming();
-  if (GetParam() == Activity::Daily) {
-    EXPECT_TRUE(facts.empty()); // Daily defers confirmed Bite to the next update.
-    fixture.combatTick({}, 0.000001F);
-    facts = fixture.incoming();
-  }
+  const auto facts = fixture.incoming();
   ASSERT_EQ(facts.size(), 1U);
   EXPECT_EQ(facts.front(), enemyAttackDamageObservation(fixture.ids[0], EnemyAttackType::Bite));
+  EXPECT_TRUE(fixture.actors()[0].checkpoint().hitConsumed);
+  fixture.combatTick({}, 0.000001F);
+  EXPECT_TRUE(fixture.incoming().empty());
+}
+
+TEST_P(EnemyLifecycleContract, ProtectedContactsCannotQueueDamageOrControl) {
+  for (auto type : {EnemyAttackType::Scratch, EnemyAttackType::Grab, EnemyAttackType::Bite}) {
+    EnemyLifecycleTestAccess fixture{GetParam(), 12};
+    fixture.prepareIncomingAttack(type);
+    if (type == EnemyAttackType::Grab) fixture.placeCombatPlayer({1020, 1000});
+    fixture.setProtection(0.2F);
+    fixture.combatTick({}, 0.000001F);
+    EXPECT_TRUE(fixture.incoming().empty());
+    EXPECT_TRUE(fixture.actors()[0].checkpoint().hitConsumed);
+    EXPECT_NEAR(fixture.protection(), 0.2F - 0.000001F, 0.0000001F);
+    EXPECT_FALSE(fixture.playerControlled());
+    fixture.setProtection(0);
+    fixture.combatTick({}, 0.000001F);
+    EXPECT_TRUE(fixture.incoming().empty());
+    EXPECT_FALSE(fixture.playerControlled());
+    EXPECT_FLOAT_EQ(fixture.protection(), 0);
+  }
+}
+
+TEST_P(EnemyLifecycleContract, AttackHitboxOverlapCannotHitThroughWall) {
+  for (auto type : {EnemyAttackType::Scratch, EnemyAttackType::Bite}) {
+    EnemyLifecycleTestAccess fixture{GetParam(), 12};
+    fixture.prepareIncomingAttack(type);
+    fixture.blockContactLine();
+    fixture.combatTick({}, 0.000001F);
+    EXPECT_TRUE(fixture.incoming().empty());
+    EXPECT_FALSE(fixture.actors()[0].checkpoint().hitConsumed);
+    EXPECT_FLOAT_EQ(fixture.protection(), 0);
+    EXPECT_FALSE(fixture.playerControlled());
+  }
+}
+
+TEST_P(EnemyLifecycleContract, SimultaneousScratchAndGrabDoNotAddProtectedControl) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch, 0);
+  fixture.prepareIncomingAttack(EnemyAttackType::Grab, 1);
+  fixture.placeCombatPlayer({1038, 1000});
+  fixture.combatTick({}, 0.000001F);
+  const auto facts = fixture.incoming();
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts[0], enemyAttackDamageObservation(fixture.ids[0], EnemyAttackType::Scratch));
+  EXPECT_TRUE(fixture.actors()[0].checkpoint().hitConsumed);
+  EXPECT_TRUE(fixture.actors()[1].checkpoint().hitConsumed);
+  EXPECT_FALSE(fixture.playerControlled());
 }
 
 TEST_P(EnemyLifecycleContract, NonLethalPreservesIdentityAndAttachedState) {

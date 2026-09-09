@@ -571,17 +571,10 @@ private:
     float enemyDamageProtectionRemainingSeconds_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;
 
-    static constexpr float kEnemyDamageProtectionDurationSeconds{0.25F};
-
     void spawnGroundItem(
         ItemId definitionId,
         Vec2 position,
         std::uint32_t quantity);
-
-    [[nodiscard]] bool resolveEnemyAttackDamage(
-        CombatTargetId sourceEnemyId,
-        EnemyAttackType type,
-        int legacyDamage);
 
     [[nodiscard]]
     std::optional<std::size_t>

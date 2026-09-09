@@ -348,6 +348,7 @@ add_library(raidline_simulation STATIC
     src/enemy_ai.h
     src/enemy_attack.cpp
     src/enemy_attack.h
+    src/enemy_attack_contact.h
     src/enemy_squad.cpp
     src/enemy_squad.h
     src/extraction_point.cpp
@@ -779,6 +780,7 @@ raidline_add_test(
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
 raidline_add_test(EnemyLifecycleContractTest tests/test_enemy_lifecycle_contract.cpp raidline::services)
+raidline_add_test(EnemyAttackContactTest tests/test_enemy_attack_contact.cpp raidline::simulation)
 raidline_add_test(EnemyCombatContractTest tests/test_enemy_combat_contract.cpp raidline::services)
 raidline_add_test(NavigationRefreshSelectionTest tests/test_navigation_refresh_selection.cpp raidline::simulation)
 raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkpoint_writer.cpp raidline::services)
