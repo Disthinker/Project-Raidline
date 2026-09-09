@@ -469,3 +469,68 @@ TEST(BaseDefenseRuntimeTest, BreachRetiresBeforeAttackAndStopsAtLimitWithoutEras
         EXPECT_TRUE(validateBaseDefenseSnapshot(runtime.checkpoint(shooting), reason)) << reason;
     }
 }
+
+TEST(BaseDefenseRuntimeTest, BreachBeforeShotCannotAlsoKillAndTerminalFrameCannotFire)
+{
+    for (bool terminal : {false, true})
+    {
+        auto saved = arena();
+        ASSERT_TRUE(saved);
+        const auto &wave = saved->wavePlans.front();
+        const auto alreadyBreached = terminal ? 5U : 0U;
+        saved->elapsedSeconds = 1;
+        saved->spawnedEnemyCount = alreadyBreached + 1;
+        saved->nextSpawnDelay = 1000;
+        saved->breachedIds.assign(wave.enemyIds.begin(), wave.enemyIds.begin() + alreadyBreached);
+        const auto id = wave.enemyIds[alreadyBreached];
+        Enemy enemy{{wave.target.x - 16, wave.target.y - 24}, {32, 48}, {}, 12, id};
+        saved->enemies.push_back(enemy.checkpoint());
+        saved->contacts.push_back({id, 0.345F});
+        BaseDefenseRuntime runtime;
+        ASSERT_TRUE(runtime.resume(*saved, {}));
+        WorldShootingRuntime shooting;
+        auto shotState = shooting.checkpoint();
+        LogicalFlightCheckpoint shot;
+        shot.id = shotState.nextShotId++;
+        shot.origin = shot.position = checkpointPoint(wave.target);
+        shot.direction = {1, 0};
+        shot.impact = {wave.target.x + 100, wave.target.y};
+        shot.speed = 6000;
+        shot.extent = 1;
+        shot.maximumDistance = 100;
+        shot.damage = 100;
+        shot.tracerLifetime = 0.05F;
+        shotState.flights.push_back(shot);
+        ASSERT_TRUE(shooting.restoreCheckpoint(shotState));
+        GameplayInput fire;
+        fire.fireJustPressed = true;
+        shooting.beginFrame(0.01F);
+        runtime.advance(fire, 0.01F, saved->playerPosition, {40, 52}, false, shooting, {});
+        EXPECT_EQ(runtime.breached(), terminal);
+        EXPECT_EQ(runtime.state().breachedIds.size(), alreadyBreached + 1);
+        EXPECT_TRUE(runtime.state().killedIds.empty());
+        EXPECT_TRUE(runtime.enemies().empty());
+        EXPECT_TRUE(shooting.hitResultsLastUpdate().empty());
+        EXPECT_EQ(shooting.shotFiredLastUpdate(), !terminal);
+        if (terminal)
+        {
+            EXPECT_EQ(shooting.checkpoint().nextShotId, shotState.nextShotId);
+            EXPECT_EQ(shooting.checkpoint().flights, shotState.flights);
+        }
+        const auto checkpoint = runtime.checkpoint(shooting);
+        std::string reason;
+        ASSERT_TRUE(validateBaseDefenseSnapshot(checkpoint, reason)) << reason;
+        BaseDefenseRuntime resumed;
+        WorldShootingRuntime resumedShooting;
+        ASSERT_TRUE(resumed.resume(checkpoint, {}));
+        ASSERT_TRUE(resumedShooting.restoreCheckpoint(checkpoint.shooting));
+        shooting.beginFrame(0.01F);
+        resumedShooting.beginFrame(0.01F);
+        runtime.advance({}, 0.01F, saved->playerPosition, {40, 52}, false, shooting, {});
+        resumed.advance({}, 0.01F, saved->playerPosition, {40, 52}, false, resumedShooting, {});
+        EXPECT_EQ(baseDefenseCheckpointHash(runtime.checkpoint(shooting)),
+                  baseDefenseCheckpointHash(resumed.checkpoint(resumedShooting)));
+        EXPECT_EQ(runtime.state().breachedIds.size(), alreadyBreached + 1);
+        EXPECT_TRUE(runtime.state().killedIds.empty());
+    }
+}

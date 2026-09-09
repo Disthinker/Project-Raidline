@@ -402,16 +402,26 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
                             playerPosition.y + playerSize.y / 2};
     state_.elapsedSeconds += dt;
     spawn(dt, playerCenter);
-    const auto resolved = shooting.advanceShots(input, dt, playerCenter,
-        std::max(playerSize.x, playerSize.y), moving, false,
-        state_.worldSize, enemies_, shotBlockers);
-    for (const auto &fact : resolved.removals)
-        if (fact.reason == EnemyRemovalReason::Death)
-            state_.killedIds.push_back(fact.id);
+    // Match Raid's enemy-first contact order, including objective retirement.
     const unsigned steps = static_cast<unsigned>(std::ceil(dt / (1.0F / 30.0F)));
     for (unsigned i = 0; i < steps && !breached(); ++i)
-        step(dt / static_cast<float>(steps), playerPosition, playerSize,
-             shooting.shotFiredLastUpdate());
+        step(dt / static_cast<float>(steps), playerPosition, playerSize);
+    if (!breached() && !completed())
+    {
+        const auto resolved = shooting.advanceShots(input, dt, playerCenter,
+            std::max(playerSize.x, playerSize.y), moving, false,
+            state_.worldSize, enemies_, shotBlockers);
+        for (const auto &fact : resolved.removals)
+            if (fact.reason == EnemyRemovalReason::Death)
+                state_.killedIds.push_back(fact.id);
+        // Hearing does not replace the wave objective or replay enemy movement.
+        if (shooting.shotFiredLastUpdate() && playerExposed(playerCenter))
+            for (auto &enemy : enemies_)
+                if (distance(center(enemy), playerCenter) < 1500)
+                    enemy.hearTarget(playerCenter);
+    }
+    // Shot removal invalidates squad membership. Export only the surviving
+    // coordinator state, never the pre-shot vector indices.
     state_.attackScheduleCursor = static_cast<std::uint32_t>(enemies_.squad().attackScheduleCursor_);
     state_.reservedAttackers.clear();
     for (auto index : enemies_.squad().reservedAttackers_)
@@ -424,7 +434,7 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
             .count();
 }
 
-void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bool shotFired)
+void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize)
 {
     state_.damageProtectionSeconds = std::max(0.0F, state_.damageProtectionSeconds - dt);
     const Vec2 pc{playerPosition.x + playerSize.x / 2, playerPosition.y + playerSize.y / 2};
@@ -433,11 +443,11 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
     members.reserve(enemies_.size());
     for (auto &e : enemies_)
     {
-        const bool visible = exposed && distance(center(e), pc) < 900 &&
+        const bool visible = !e.isDead() && exposed && distance(center(e), pc) < 900 &&
                              blockerIndex_->hasLineOfSight(center(e), pc);
-        if (visible || (exposed && shotFired && distance(center(e), pc) < 1500))
+        if (visible)
             e.hearTarget(pc);
-        members.push_back({center(e), true, e.awarenessState(), e.attackPhase(),
+        members.push_back({center(e), !e.isDead(), e.awarenessState(), e.attackPhase(),
                            visible && e.hasAttackOpportunity(pc)});
     }
     auto directives = enemies_.squad().decide(members, pc);
@@ -449,6 +459,8 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
     for (std::size_t i = 0; i < enemies_.size(); ++i)
     {
         auto &e = enemies_[i];
+        if (e.isDead())
+            continue;
         const auto *wave = waveFor(e.combatTargetId());
         if (!wave)
             continue;
@@ -458,7 +470,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         const bool visible =
             exposed && distance(ec, pc) < 900 && blockerIndex_->hasLineOfSight(ec, pc);
         // Siege actors already have an invasion objective. Hearing alerts them
-        // (above), but only seeing an exposed player overrides that objective.
+        // (after shooting), but only seeing an exposed player overrides it.
         // Repeated unseen gunfire must not pin the wave behind a safe boundary.
         const Vec2 goal = visible ? pc : wave->target;
         cached.navigationRefreshRemaining = std::max(0.0F, cached.navigationRefreshRemaining - dt);
