@@ -4,6 +4,10 @@
 
 ## Git 与交付基线
 
+- 最新覆盖：用户已验收 #154@`b7937c3`；双平台精确提交 CI run `34298809360` 成功，仍未合入。当前分支 `codex/combat-frame-order-v1` 显式 stacked 依赖 #154，计划 `active/combat-frame-order-v1.md`。`origin/main` 仍为 `2ae898a`；下方“待验收/时序未统一”属于之前切片记录。
+- 本轮为有意时序变更：三环境均先敌人推进/接触、后射击/死亡清理。Daily/Defense 的枪声在成功击发后通知存活敌人，下一次敌人推进消费，不再重放本帧。防守突破已退休目标不能再算击杀；进入终局后不再产生新射击。保留活动策略、伤害数值和保护，未修改 GameSession、Raid 主循环、存档、资源或 manifest；schema v46/content v60/rules v29 不变。
+- 本轮证据：Windows Debug 全目标增量构建、95/95 定向、1687/1687 全量 CTest（73.65 秒）通过，新增 14 项注册测试；精确提交双平台 CI 见新 PR。本轮人工验收仍待完成，不继承 #154 验收。
+
 - 最新覆盖：当前为 `codex/enemy-contact-protection-v1`，显式 stacked 依赖 #153@`d70f861`。#153 精确 head Windows/Ubuntu CI run `34247787567` 成功，但仍是 Draft、未合并、待正常游玩验收；“继续计划”不记为验收。`origin/main` 仍为 `2ae898a`，下方切片状态为历史记录。
 - 当前计划 `active/enemy-contact-protection-v1.md`：Daily/Defense/Raid 复用单敌人的接触—Grab/Bite—消费—0.25 秒保护解析。保护中的合法接触不排队、不追加控制；Daily 增加接触遮挡并同帧消费 Bite。这些是明确的行为修正，不是纯代码移动。帧顺序、安全区、波次、寻路策略、失败与保存政策保持；schema v46/content v60/rules v29 不变。自动化与用户验收分别记录在该计划及新 PR。
 - 本轮证据：Windows Debug 全目标构建、89/89 定向和 1673/1673 全量 CTest（72.82 秒）通过，包括现有串行防守性能门禁。新增 16 项注册测试，另显式更新三环境 Grab 时序合同；精确 head CI 见 PR，正常游玩待验收。

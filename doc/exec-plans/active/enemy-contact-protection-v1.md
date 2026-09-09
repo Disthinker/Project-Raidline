@@ -1,5 +1,10 @@
 # Enemy contact and damage protection v1
 
+2026-09-09 acceptance update: user accepted #154@b7937c3. Exact-head CI
+34298809360 passed on Windows and Ubuntu (1673/1673 each). Not merged.
+The next explicitly dependent slice is `combat-frame-order-v1.md`; prior
+pending-acceptance and preserved-order statements below are historical evidence.
+
 ## Scope / dependency
 
 2026-09-09: user requests execution of the staged consolidation plan. Explicit

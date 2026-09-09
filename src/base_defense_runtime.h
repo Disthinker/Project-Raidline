@@ -60,7 +60,7 @@ class BaseDefenseRuntime
     std::optional<PlayerDamageObservation> damageObservation_;
     BaseDefenseRuntimeMetrics metrics_;
     void spawn(float dt, Vec2 playerCenter);
-    void step(float dt, Vec2 playerPosition, Vec2 playerSize, bool shotFired);
+    void step(float dt, Vec2 playerPosition, Vec2 playerSize);
     void synchronizeActorCheckpoints();
     [[nodiscard]] const BaseDefenseWaveSnapshot *waveFor(std::uint64_t id) const noexcept;
 };

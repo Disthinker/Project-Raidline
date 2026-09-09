@@ -204,6 +204,26 @@ struct EnemyLifecycleTestAccess {
     else if (raid) raid->enemyDamageProtectionRemainingSeconds_ = seconds;
     else defense->state_.damageProtectionSeconds = seconds;
   }
+  void restoreAttackWindup() {
+    auto state = actors()[0].checkpoint();
+    state.attackPhase = static_cast<std::uint32_t>(EnemyAttackPhase::Windup);
+    state.attackRemaining = 0.18F;
+    state.hitConsumed = state.activeOpportunityPending = false;
+    auto restored = Enemy::restoreCheckpoint(state);
+    if (!restored) throw std::runtime_error("windup restore");
+    actors()[0] = std::move(*restored);
+  }
+  void prepareOccludedNoiseScene() {
+    placeCombatPlayer({1000, 2000});
+    const std::vector<BallisticBlocker> wall{{1, {{1500, 1800}, {20, 450}}}};
+    if (daily) {
+      daily->layout_.baseParcel = {{5000, 5000}, {300, 300}};
+      daily->movementBlockers_ = wall;
+      daily->movementBlockerIndex_ = RaidSpaceBlockerIndex::build(daily->worldSize(), wall);
+    } else if (defense) {
+      defense->blockerIndex_ = RaidSpaceBlockerIndex::build({6000, 6000}, wall);
+    }
+  }
   float protection() const {
     if (daily) return daily->perimeterDamageProtectionRemainingSeconds_;
     if (raid) return raid->enemyDamageProtectionRemainingSeconds_;
@@ -270,18 +290,98 @@ TEST_P(EnemyLifecycleContract, SimultaneousAttacksPreserveDamageProtection) {
   EXPECT_TRUE(fixture.incoming().empty());
 }
 
-TEST_P(EnemyLifecycleContract, SameFrameLethalShotCharacterizesExistingOrder) {
+TEST_P(EnemyLifecycleContract, EnemyContactPrecedesSameFrameLethalShot) {
   EnemyLifecycleTestAccess fixture{GetParam(), 12};
   fixture.prepareIncomingAttack(EnemyAttackType::Scratch);
   fixture.queueHit(fixture.ids[0], 100);
   fixture.combatTick({}, 0.000001F);
   EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
   const auto facts = fixture.incoming();
-  // Intentional characterization, not convergence: Raid enemy-first;
-  // Daily/Defense shot-first. Any future reorder must update this explicitly.
-  EXPECT_EQ(facts.size(), GetParam() == Activity::Raid ? 1U : 0U);
+  // Explicit behavior migration from #154: all three adapters now preserve
+  // contact accepted before the same frame's shot resolution/removal.
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts[0], enemyAttackDamageObservation(fixture.ids[0], EnemyAttackType::Scratch));
+  EXPECT_EQ(fixture.deaths(), 1U);
+  EXPECT_FALSE(fixture.attached(fixture.ids[0]));
   fixture.combatTick({}, 0.001F);
   EXPECT_TRUE(fixture.incoming().empty());
+  EXPECT_EQ(fixture.deaths(), 0U);
+  EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+}
+
+TEST_P(EnemyLifecycleContract, KillBeforeAttackWindowPreventsFutureContact) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch);
+  fixture.restoreAttackWindup();
+  fixture.queueHit(fixture.ids[0], 100);
+  fixture.combatTick({}, 0.000001F);
+  EXPECT_TRUE(fixture.incoming().empty());
+  EXPECT_EQ(fixture.deaths(), 1U);
+  EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+  for (int i = 0; i < 5; ++i) {
+    fixture.combatTick({}, 0.05F);
+    EXPECT_TRUE(fixture.incoming().empty());
+    EXPECT_EQ(fixture.deaths(), 0U);
+    EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+  }
+}
+
+TEST_P(EnemyLifecycleContract, NonLethalShotAndContactBothPreserveStableIdentity) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Scratch);
+  fixture.queueHit(fixture.ids[0], 1);
+  fixture.combatTick({}, 0.000001F);
+  const auto facts = fixture.incoming();
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts[0].sourceEnemyId, fixture.ids[0]);
+  const auto *enemy = fixture.actors().find(fixture.ids[0]);
+  ASSERT_NE(enemy, nullptr);
+  EXPECT_EQ(enemy->health(), 11);
+  EXPECT_TRUE(enemy->checkpoint().hitConsumed);
+  EXPECT_TRUE(fixture.attached(fixture.ids[0]));
+  EXPECT_EQ(fixture.deaths(), 0U);
+  fixture.combatTick({}, 0.01F);
+  EXPECT_TRUE(fixture.incoming().empty());
+}
+
+TEST_P(EnemyLifecycleContract, ProtectedContactFollowedByKillDoesNotCreateDamageFact) {
+  EnemyLifecycleTestAccess fixture{GetParam(), 12};
+  fixture.prepareIncomingAttack(EnemyAttackType::Bite);
+  fixture.setProtection(0.2F);
+  fixture.queueHit(fixture.ids[0], 100, 3);
+  fixture.combatTick({}, 0.000001F);
+  EXPECT_TRUE(fixture.incoming().empty());
+  EXPECT_FALSE(fixture.playerControlled());
+  EXPECT_EQ(fixture.deaths(), 1U);
+  EXPECT_EQ(fixture.actors().find(fixture.ids[0]), nullptr);
+  fixture.setProtection(0);
+  fixture.combatTick({}, 0.000001F);
+  EXPECT_TRUE(fixture.incoming().empty());
+  EXPECT_EQ(fixture.deaths(), 0U);
+}
+
+TEST_P(EnemyLifecycleContract, ShotImpactDoesNotRetroactivelySlowCurrentEnemyMovement) {
+  EnemyLifecycleTestAccess hit{GetParam(), 12}, quiet{GetParam(), 12};
+  hit.prepareIncomingAttack(EnemyAttackType::Grab);
+  quiet.prepareIncomingAttack(EnemyAttackType::Grab);
+  hit.placeCombatPlayer({1400, 1000});
+  quiet.placeCombatPlayer({1400, 1000});
+  hit.queueHit(hit.ids[0], 1);
+  hit.combatTick({}, 0.03F);
+  quiet.combatTick({}, 0.03F);
+  const auto *wounded = hit.actors().find(hit.ids[0]);
+  const auto *unharmed = quiet.actors().find(quiet.ids[0]);
+  ASSERT_NE(wounded, nullptr);
+  ASSERT_NE(unharmed, nullptr);
+  EXPECT_EQ(wounded->health(), 11);
+  EXPECT_TRUE(wounded->isImpactSlowed());
+  EXPECT_GT(wounded->position().x, 1000);
+  EXPECT_FLOAT_EQ(wounded->position().x, unharmed->position().x);
+  EXPECT_FLOAT_EQ(wounded->position().y, unharmed->position().y);
+  hit.combatTick({}, 0.03F);
+  quiet.combatTick({}, 0.03F);
+  EXPECT_LT(hit.actors().find(hit.ids[0])->position().x,
+            quiet.actors().find(quiet.ids[0])->position().x);
 }
 
 TEST_P(EnemyLifecycleContract, GrabContactImmediatelyConsumesOneBite) {
@@ -498,6 +598,42 @@ TEST(EnemyLifecycleOwnership,
   EXPECT_THROW(actors.spawn(Enemy{{}, {20, 20}, {}, 3, 7}),
                std::invalid_argument);
   EXPECT_TRUE(actors.empty());
+}
+
+TEST(CombatFrameOrder, HomeShotNoiseIsAcceptedOnlyAndDoesNotReplayEnemyMovement) {
+  for (auto activity : {Activity::Daily, Activity::Defense}) {
+    for (bool blockedBySprint : {false, true}) {
+      EnemyLifecycleTestAccess firing{activity, 12}, quiet{activity, 12};
+      firing.prepareOccludedNoiseScene();
+      quiet.prepareOccludedNoiseScene();
+      GameplayInput input;
+      input.aimWorldPosition = Vec2{1020, 1500}; // fire away from all test actors
+      input.sprint = blockedBySprint;
+      quiet.combatTick(input, 0.01F);
+      input.fireJustPressed = true;
+      firing.combatTick(input, 0.01F);
+      EXPECT_EQ(firing.shooting().shotFiredLastUpdate(), !blockedBySprint);
+      for (std::size_t i = 0; i < firing.ids.size(); ++i) {
+        const auto &heard = firing.actors()[i];
+        const auto &unheard = quiet.actors()[i];
+        EXPECT_FLOAT_EQ(heard.position().x, unheard.position().x);
+        EXPECT_FLOAT_EQ(heard.position().y, unheard.position().y);
+        if (blockedBySprint) {
+          EXPECT_EQ(heard.checkpoint(), unheard.checkpoint());
+        } else {
+          const auto known = heard.lastKnownTargetPosition();
+          ASSERT_TRUE(known);
+          const auto size = firing.daily ? firing.daily->playerSize() : Vec2{40, 52};
+          EXPECT_FLOAT_EQ(known->x, 1000 + size.x * 0.5F);
+          EXPECT_FLOAT_EQ(known->y, 2000 + size.y * 0.5F);
+        }
+      }
+      input.fireJustPressed = false;
+      firing.combatTick(input, 0.01F);
+      EXPECT_FALSE(firing.shooting().shotFiredLastUpdate());
+      EXPECT_EQ(firing.actors().size(), 3U);
+    }
+  }
 }
 
 template <class T>

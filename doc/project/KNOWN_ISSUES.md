@@ -4,6 +4,9 @@
 
 ## 当前切片边界
 
+- 2026-09-09 最新覆盖：#154 接触合同已获用户验收，未合并。`combat-frame-order-v1` 将同帧攻防统一为敌人推进/接触先于射击。基线 red contract 明确证明 Daily/Defense 的同帧致死射击此前会抹去接触事实，而 Raid 不会；本轮为有意行为变更，待新的正常游玩验收，不继承 #154 的验收。
+- 仍保留的策略：Daily 直线转向，Raid/Defense 既有寻路；Base 无 Raid 的眩晕运行时；目标、生成、波次、安全区、失败与保存各自负责。下一步审计跨活动切换/恢复的实际调用和剩余重复，不默认引入万能 Facade 或 Session/Persistence 大重构。下方“仍保留的时序差异”是修正前记录。
+
 - 2026-09-09 最新覆盖：#153 已有精确 head 双平台 CI，通过状态不等于正常游玩验收或合并。本轮 `enemy-contact-protection-v1` 修正保护期间攻击消费差异、Raid 被保护的 Bite 仍追加控制、Daily 隔墙接触及延后一帧的 Bite。范围仅接触合同，不启动全局帧顺序/Session/Persistence 重构；本轮人工验收待完成。下方差异列表是修正前证据。
 - 仍保留且待下一轮评审：Daily/Defense 先射击后敌人，Raid 先敌人后射击；Daily 直线转向，Raid/Defense 使用现有路径；Base 不拥有 Raid 的玩家控制状态。不能把这些策略差异描述为本轮已统一，也不能以此为由直接创建万能 CombatSpaceRuntime。
 

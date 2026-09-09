@@ -378,17 +378,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             playerIsMoving_,shooting_,movementBlockers_);
         return input.interactJustPressed ? interactableFacility() : std::nullopt;
     }
-    perimeterRemovals_ = shooting_.advanceShots(
-        input,
-        deltaTime,
-        playerCenter,
-        std::max(playerSize_.x, playerSize_.y),
-        playerIsMoving_,
-        false,
-        layout_.worldSize,
-        perimeterEnemies_,
-        movementBlockers_).removals;
-
+    // Combat order matches Raid: movement/contact first, shots/removal second.
+    // No actor reference or index escapes this loop into shot-driven removal.
     const HomeRegionSafetyZone playerZone = playerSafetyZone();
     for (std::size_t index = 0; index < perimeterEnemies_.size(); ++index)
     {
@@ -409,9 +400,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         const bool targetVisible = playerExposed &&
             movementBlockerIndex_->hasLineOfSight(enemyCenter, playerCenter) &&
             distanceSquared <= 900.0F * 900.0F;
-        if (targetVisible ||
-            (playerExposed && shooting_.shotFiredLastUpdate() &&
-             distanceSquared <= 1500.0F * 1500.0F))
+        if (targetVisible)
             enemy.hearTarget(playerCenter);
 
         EnemyTacticalDirective directive;
@@ -459,6 +448,25 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                     {p.x + enemy.size().x * 0.5F, p.y + enemy.size().y * 0.5F}, playerCenter);
             });
         if (contact.damage) perimeterDamageObservation_ = contact.damage;
+    }
+
+    perimeterRemovals_ = shooting_.advanceShots(
+        input, deltaTime, playerCenter,
+        std::max(playerSize_.x, playerSize_.y), playerIsMoving_, false,
+        layout_.worldSize, perimeterEnemies_, movementBlockers_).removals;
+    // Only accepted shots alert survivors. Awareness changes now; movement
+    // consumes it on the next update, never by replaying the current frame.
+    if (shooting_.shotFiredLastUpdate() &&
+        playerZone == HomeRegionSafetyZone::Perimeter)
+    {
+        for (auto &enemy : perimeterEnemies_)
+        {
+            const Vec2 p = enemy.position();
+            const float dx = p.x + enemy.size().x * 0.5F - playerCenter.x;
+            const float dy = p.y + enemy.size().y * 0.5F - playerCenter.y;
+            if (dx * dx + dy * dy <= 1500.0F * 1500.0F)
+                enemy.hearTarget(playerCenter);
+        }
     }
 
     if (input.interactJustPressed)
