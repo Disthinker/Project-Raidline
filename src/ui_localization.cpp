@@ -46,6 +46,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"CONFIRM ABANDON: PUBLIC SOFT LOSS", "确认放弃：有限公共资源损失"},
      {"ABANDON DEFENSE...", "放弃本次防守…"},
      {"SAVE PROTECTION PAUSED | RETRY", "存档保护已暂停 | 点击重试"},
+     {"BASE SAVE PROTECTION PAUSED | RETRY", "基地存档保护已暂停 | 点击重试"},
      {"DEFEND PERSONALLY", "亲自防守"},
      {"ESC / X: KEEP PREPARING | WARNING TIMER CONTINUES", "Esc / X：收起并继续整备 | 预警倒计时继续"},
      {" | F6 / CLICK: DEFENSE OPTIONS", " | F6 / 点击：防守选项"},

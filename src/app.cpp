@@ -6144,7 +6144,7 @@ void App::processEvents()
         }
 
         if (gameFlow_.state() == GameFlowState::Base &&
-            (gameSession_.baseDefenseSaveBlocked() || baseDefenseResultVisible_) &&
+            (gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked() || baseDefenseResultVisible_) &&
             !pauseMenu_.isOpen() && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
             event.button.button == SDL_BUTTON_LEFT)
         {
@@ -10033,7 +10033,7 @@ void App::syncRaidPointerCapture() noexcept
 {
     const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
         !gameFlow_.activeBaseFacility().has_value() &&
-        !gameSession_.baseDefenseSaveBlocked() && !baseDefenseResultVisible_ &&
+        !gameSession_.baseDefenseSaveBlocked() && !gameSession_.baseDailySaveBlocked() && !baseDefenseResultVisible_ &&
         !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
     const bool raidWorldActive = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
@@ -10079,7 +10079,7 @@ void App::renderAimCrosshair()
 {
     const bool inBaseWorld = gameFlow_.state() == GameFlowState::Base &&
         !gameFlow_.activeBaseFacility().has_value() &&
-        !gameSession_.baseDefenseSaveBlocked() && !baseDefenseResultVisible_ &&
+        !gameSession_.baseDefenseSaveBlocked() && !gameSession_.baseDailySaveBlocked() && !baseDefenseResultVisible_ &&
         !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
     const bool inRaidWorld = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();

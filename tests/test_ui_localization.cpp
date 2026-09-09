@@ -10,6 +10,7 @@
 TEST(UiLocalizationTest, BaseDefenseControlsAndCountersAreBilingual) {
     for (const auto text : {"DEFEND PERSONALLY", "ABANDON DEFENSE...",
          "CONFIRM ABANDON: PUBLIC SOFT LOSS", "SAVE PROTECTION PAUSED | RETRY",
+         "BASE SAVE PROTECTION PAUSED | RETRY",
          "BASE LAYOUT LOCKED DURING DEFENSE", "CREATE BASE SIEGE WARNING",
          "CORE DEFENSE LINE", "ESC MENU: SAVE / ABANDON DEFENSE"}) {
         EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);

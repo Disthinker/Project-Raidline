@@ -719,21 +719,23 @@ static void checkDailyPersistence(bool rejectFirstSave) {
   const auto survivor = fixture.actors()[1].combatTargetId();
   const Vec2 before = fixture.actors()[1].position();
   const auto count = fixture.actors().size();
-  const auto originalHealth = fixture.actors()[0].health();
-  const auto fingerprint = profileStateFingerprint(session.profile());
   const auto obstruction = save.path / "profile.tmp.json";
   if (rejectFirstSave)
     ASSERT_TRUE(std::filesystem::create_directory(obstruction));
   fixture.queueHit(victim, 100);
   static_cast<void>(session.updateBaseWorld(*fixture.daily, {}, 0.000001F));
   if (rejectFirstSave) {
+    // Daily combat accepts the fact in memory, then checkpoints off-thread.
+    // A broken store must freeze, never resurrect the already killed actor.
+    EXPECT_FALSE(session.checkpointWorldClock());
+    EXPECT_TRUE(session.baseDailySaveBlocked());
+    ASSERT_EQ(fixture.actors().size(), count - 1);
+    EXPECT_EQ(fixture.actors().find(victim), nullptr);
+    const auto fingerprint = profileStateFingerprint(session.profile());
+    static_cast<void>(session.updateBaseWorld(*fixture.daily, {}, 0.1F));
     EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
-    ASSERT_EQ(fixture.actors().size(), count);
-    ASSERT_NE(fixture.actors().find(victim), nullptr);
-    EXPECT_EQ(fixture.actors().find(victim)->health(), originalHealth);
     ASSERT_TRUE(std::filesystem::remove(obstruction));
-    fixture.queueHit(victim, 100);
-    static_cast<void>(session.updateBaseWorld(*fixture.daily, {}, 0.000001F));
+    ASSERT_TRUE(session.retryBaseDailySave());
   }
   ASSERT_EQ(fixture.actors().size(), count - 1);
   const RegionalBaseSiteDefinitionId site{fixture.daily->siteDefinitionId()};
@@ -749,6 +751,7 @@ static void checkDailyPersistence(bool rejectFirstSave) {
   EXPECT_FLOAT_EQ(fixture.actors().find(survivor)->position().x, before.x);
   EXPECT_FLOAT_EQ(fixture.actors().find(survivor)->position().y, before.y);
 
+  ASSERT_TRUE(session.checkpointWorldClock());
   GameSession resumed;
   resumed.configurePersistence(save.path);
   ASSERT_TRUE(resumed.continueProfile()) << resumed.persistenceMessage();
@@ -772,7 +775,7 @@ TEST(EnemyLifecycleSession,
 }
 
 TEST(EnemyLifecycleSession,
-     FailedDailySaveRestoresConsistentlyAndRetryPersistsDeath) {
+     FailedDailySaveFreezesWithoutResurrectionAndRetryPersistsDeath) {
   checkDailyPersistence(true);
 }
 
