@@ -2,11 +2,14 @@
 
 最后核对：2026-09-09。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及已授权切片向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。下方长期目标类名不是全部已落地的类；当前实现由 BaseWorld / BaseDefenseRuntime / GameplayWorld 组合窄能力。
 
-## 实时基地防守与框架整合（集成 #156 已验收，尚未合入）
+## 实时基地防守与框架整合（已验收并合入主线）
 
-2026-09-09：#156@`f16544d` 用户正常游玩与 exact-head 双平台 CI 通过；main 仍 `2ae898a`。
+2026-09-09：用户验收并授权后，#149–#157 已普通合入 `main@c3eb19c`，完整树等于验收 tip。
+合并后本地 1697/1697；最终 main 双平台 CI 单独执行，结果见当前状态/PR。
 完整 Before/After、机制/策略矩阵、测试与保留债见 [玩法框架整合收尾评审](GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
 本次结束代码整合，不引入万能 CombatSpaceRuntime 或全局 Session 管理器。
+下一份 [固定防御位与基础路障评审](../exec-plans/active/base-defense-fixed-positions-v1.md)
+只提出真实消费者需要的工事状态与碰撞失效边界，尚未进入代码，不表示有通用可破坏物框架。
 
 ### Enemy Lifecycle 与共享战斗合同
 

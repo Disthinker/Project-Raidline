@@ -1,5 +1,17 @@
 # Combat runtime boundaries v1
 
+## Mainline delivery — 2026-09-09
+
+After user acceptance and explicit merge authorization, #149–#157 were merged
+in dependency order with ordinary merge commits. Main is c3eb19c; its entire
+tree equals accepted a68a82e and its production tree equals f16544d.
+Post-merge local Windows CTest: 1697/1697 in 64.99s; exact-main CI run
+34323812733 is recorded in the delivery PR. No code or save format changed.
+The next agreed product review is
+[fixed defense positions and one barricade](base-defense-fixed-positions-v1.md),
+not another global framework rewrite. This review is not gameplay implementation.
+The unmerged statements below are the historical pre-delivery record.
+
 ## Acceptance and closeout — 2026-09-09
 
 User accepted #156@f16544d in the next turn. Exact-head CI 34320466698 passed
