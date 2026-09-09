@@ -1,5 +1,16 @@
 # Enemy Lifecycle consolidation — Phase A/B
 
+## Current status override — 2026-09-09
+
+Phase A/B (#150) and the subsequently authorized narrow slices #151–#156 are
+implemented. User accepted integrated #156@f16544d; exact-head Windows/Ubuntu CI
+passed. The mandatory Phase B pause was followed by individual decisions, not
+blanket authorization for the former broad phases. The closing review is now
+complete: [actual contracts, policies, debt and delivery gates](../../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md).
+Code consolidation can close; the dependency chain remains unmerged and new
+gameplay remains paused. All pending statements below describe their historical
+slice, not today's integrated build. No further architecture phase is automatic.
+
 ## Scope and baseline
 
 2026-09-08: user pauses new gameplay. Implement only characterization and Enemy
@@ -50,8 +61,8 @@ save timing. Existing damage numbers are not rebalanced in this work.
   including navigation/target attachments; migrate all three existing consumers.
 - [x] Verify nonlethal/lethal/multiple hits/single death, first-middle-last removal,
   survivor identity/position, no dead attack/nav/target, no accidental respawn.
-- [ ] Full Windows Debug build, focused and full CTest, exact-head Windows/Ubuntu CI.
-- [ ] STOP after B: actual before/after calls, code/test statistics, remaining debt.
+- [x] Full Windows Debug build, focused and full CTest, exact-head Windows/Ubuntu CI (#150: run 34177559722; later integration evidence in closeout).
+- [x] STOP after B: actual before/after calls, code/test statistics, remaining debt; later work proceeded only as separately accepted narrow slices.
 
 Reproduction tests first run red locally; normal committed gates must be green,
 not permanently disabled or weakened. Header/layout changes rebuild all affected

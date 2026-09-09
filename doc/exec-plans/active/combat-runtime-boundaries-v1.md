@@ -1,5 +1,25 @@
 # Combat runtime boundaries v1
 
+## Acceptance and closeout — 2026-09-09
+
+User accepted #156@f16544d in the next turn. Exact-head CI 34320466698 passed
+Windows and Ubuntu (1697 tests each); this is integrated-tip acceptance, not a
+retroactive claim that every historical head passed manual play. #149–#156
+remain unmerged, with main at 2ae898a.
+
+The planned closing review is complete in
+[Gameplay framework closeout](../../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md):
+actual before/after chain, ownership/policy matrix, 51 cross-activity contract
+instances, remaining debt, cumulative diff and dependency delivery order.
+Current Windows full rerun: 1697/1697 in 66.16s; unchanged-code build needs no work.
+No new C++ defect justified another implementation slice. Code consolidation
+can close; next gate is explicitly authorized dependency-chain delivery, not
+automatic gameplay or Session/Persistence expansion. This follow-up only edits
+documentation on `codex/gameplay-consolidation-closeout`, based on this PR.
+
+Below is the original implementation record; its pending acceptance/CI text is
+historical and superseded by this section.
+
 ## Baseline and scope
 
 2026-09-09: user accepted #155@c0b0664 and requested the next planned gate.
