@@ -230,19 +230,16 @@ bool GameSession::prepareBaseDefenseFrame(BaseWorld &world)
 
 void GameSession::finishBaseDefenseFrame(BaseWorld &world, float deltaTime)
 {
-    if (world.baseDefenseDamageLastUpdate() > 0)
+    if (const auto damage = world.baseDefenseDamageObservation();
+        damage && damage->baseDamage > 0)
     {
         Pcg32 wounds{profile_.activeBaseDefense->seed,
                      woundRandomSequence_ + 0x73696567652d6874ULL};
-        const auto attackType =
-            world.baseDefenseAttackTypeLastUpdate().value_or(EnemyAttackType::Scratch);
-        const auto attack = enemyAttackCombatDamage(attackType);
         const auto receipt = executeIncomingDamageInSimulation(
             profile_, publishedContentRegistry(),
-            {world.baseDefenseDamageLastUpdate(), attack.region, attack.penetration,
-             attack.armorDamage, attack.weakPoint,
-             WoundRollCommand{attackType == EnemyAttackType::Bite ? WoundSource::Bite
-                                                                  : WoundSource::Scratch,
+            {damage->baseDamage, damage->region, damage->penetration,
+             damage->armorDamage, damage->weakPoint,
+             WoundRollCommand{damage->woundSource,
                               wounds.bounded(10000U), 15000U + wounds.bounded(10001U)}},
             {profile_.revision, nextRaidTransaction("base-defense-hit")});
         if (!receipt.succeeded)

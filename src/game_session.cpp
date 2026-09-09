@@ -401,7 +401,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         }
     }
 
-    if (baseWorld.perimeterDamageLastUpdate() > 0)
+    if (const auto damage = baseWorld.perimeterDamageObservation();
+        damage && damage->baseDamage > 0)
     {
         Pcg32 woundRandom{
             perimeterCandidate.revision ^
@@ -411,13 +412,13 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             perimeterCandidate,
             publishedContentRegistry(),
             IncomingDamageCommand{
-                baseWorld.perimeterDamageLastUpdate(),
-                HitRegion::Torso,
-                0,
-                1,
-                false,
+                damage->baseDamage,
+                damage->region,
+                damage->penetration,
+                damage->armorDamage,
+                damage->weakPoint,
                 WoundRollCommand{
-                    WoundSource::Scratch,
+                    damage->woundSource,
                     woundRandom.bounded(10000U),
                     15000U + woundRandom.bounded(10001U)}},
             CommandContext{

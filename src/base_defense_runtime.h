@@ -2,6 +2,7 @@
 #include "base_defense_state.h"
 #include "enemy_combat_definition.h"
 #include "enemy_squad.h"
+#include "player_damage_observation.h"
 #include "raid_space_query.h"
 #include "world_shooting_runtime.h"
 #include <optional>
@@ -33,10 +34,11 @@ class BaseDefenseRuntime
     [[nodiscard]] BaseDefenseSnapshot checkpoint(const WorldShootingRuntime &) const;
     [[nodiscard]] bool completed() const noexcept;
     [[nodiscard]] bool breached() const noexcept;
-    [[nodiscard]] int damageLastUpdate() const noexcept { return damageLastUpdate_; }
+    [[nodiscard]] int damageLastUpdate() const noexcept { return damageObservation_ ? damageObservation_->baseDamage : 0; }
+    [[nodiscard]] std::optional<PlayerDamageObservation> damageObservationLastUpdate() const noexcept { return damageObservation_; }
     [[nodiscard]] std::optional<EnemyAttackType> attackTypeLastUpdate() const noexcept
     {
-        return attackTypeLastUpdate_;
+        return damageObservation_ ? damageObservation_->attackType : std::nullopt;
     }
     [[nodiscard]] const BaseDefenseRuntimeMetrics &metrics() const noexcept { return metrics_; }
     [[nodiscard]] bool playerExposed(Vec2 center) const noexcept;
@@ -55,8 +57,7 @@ class BaseDefenseRuntime
     std::optional<RaidSpaceBlockerIndex> blockerIndex_;
     std::optional<RaidSpaceNavigationField> navigation_;
     std::vector<std::size_t> blockerScratch_;
-    int damageLastUpdate_{};
-    std::optional<EnemyAttackType> attackTypeLastUpdate_;
+    std::optional<PlayerDamageObservation> damageObservation_;
     BaseDefenseRuntimeMetrics metrics_;
     void spawn(float dt, Vec2 playerCenter);
     void step(float dt, Vec2 playerPosition, Vec2 playerSize, bool shotFired);

@@ -264,7 +264,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     float deltaTime)
 {
     if (baseDefense_ && std::isfinite(deltaTime)) deltaTime=std::clamp(deltaTime,0.0F,0.1F);
-    perimeterDamageLastUpdate_ = 0;
+    perimeterDamageObservation_.reset();
     perimeterDamageProtectionRemainingSeconds_ = std::max(
         0.0F,
         perimeterDamageProtectionRemainingSeconds_ -
@@ -466,7 +466,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             isCollision(*hitbox, Rect{playerPosition_, playerSize_}) &&
             enemy.consumeAttackHit())
         {
-            perimeterDamageLastUpdate_ = std::max(1, attack->damage);
+            perimeterDamageObservation_ = enemyAttackDamageObservation(
+                enemy.combatTargetId(), *enemy.attackType());
             perimeterDamageProtectionRemainingSeconds_ = 0.25F;
         }
     }
@@ -549,7 +550,7 @@ BaseWorld::perimeterEnemySnapshots() const
 
 int BaseWorld::perimeterDamageLastUpdate() const noexcept
 {
-    return perimeterDamageLastUpdate_;
+    return perimeterDamageObservation_ ? perimeterDamageObservation_->baseDamage : 0;
 }
 
 std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
