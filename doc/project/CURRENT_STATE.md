@@ -4,6 +4,10 @@
 
 ## Git 与交付基线
 
+- 导航刷新选择切片本地证据：Windows Debug 全目标构建、1645/1645 CTest（55.63 秒）通过；新增 8 项选择合同。双平台精确提交 CI 和用户可见行为验收以新 PR 为准，不视为主线完成。
+
+- 最新覆盖：#151@47c696b 已获用户验收，精确 head 双平台 CI run `34186994633` 成功，尚未合入。当前显式 stacked 分支 `codex/navigation-refresh-contract-v1` 基于该提交，仅提取 Raid/Defense 有界导航轮询选择；目标结果使用稳定 ID，保留各自刷新策略、Daily 直线转向及原更新顺序。活动计划：`active/navigation-refresh-contract-v1.md`。
+
 - 2026-09-08 最新覆盖：用户已验收 #150@2ff1a69 的 Enemy Lifecycle 修复；#149/#150 仍未合入。当前独立 stacked 分支为 `codex/enemy-combat-contract-v1`，显式依赖 #150，活动计划为 `active/enemy-combat-contract-v1.md`。下方原生命周期“待验收”记录为历史证据。
 - 本轮统一新生成普通感染者为 `enemy.infected.basic`（12 HP），Base/Defense/Raid 共用领域命中反馈投影；旧快照血量、伤势、死亡不重写。schema v46/content v60/rules v29。Windows Debug 全目标构建、155/155 定向及 1637/1637 全量 CTest 通过；本轮精确提交 CI 与正常游玩证据见新 PR，不视为已合入或已验收。
 
