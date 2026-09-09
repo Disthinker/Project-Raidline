@@ -1,4 +1,5 @@
 #include "gameplay_world.h"
+#include "enemy_attack_contact.h"
 #include "navigation_refresh_selection.h"
 
 #include <algorithm>
@@ -1359,97 +1360,26 @@ void GameplayWorld::update(
                 ++enemiesAlertedLastUpdate_;
             }
 
-            if (enemy.hasGrabContactOpportunity())
-            {
-                const std::optional<Rect> grabHitbox =
-                    enemy.attackHitbox();
-                if (!grabHitbox.has_value() ||
-                    !hasLineOfSight(
-                        enemyCenter(enemy),
-                        playerCenter(player_)) ||
-                    !isCollision(
-                        *grabHitbox,
-                        playerBounds(player_)))
-                {
-                    continue;
-                }
-
-                // Grab itself deals no damage. Contact atomically changes the
-                // owned attack state to the Bite follow-up, then consumes that
-                // follow-up once before mutating Player/Raid state.
-                if (!enemy.confirmGrabContact())
-                {
-                    std::terminate();
-                }
-
-                const std::optional<EnemyAttackConfig> biteConfig =
-                    enemy.attackConfig();
-                if (!biteConfig.has_value() ||
-                    enemy.attackType() != EnemyAttackType::Bite ||
-                    !enemy.consumeAttackHit())
-                {
-                    std::terminate();
-                }
-
-                if (resolveEnemyAttackDamage(
-                        enemy.combatTargetId(),
-                        EnemyAttackType::Bite,
-                        biteConfig->damage))
-                {
-                    return;
-                }
-
-                if (biteConfig->controlDuration > 0.0F)
-                {
-                    static_cast<void>(
-                        player_.applyControl(
-                            biteConfig->controlDuration));
-                }
+            const auto contact = resolveEnemyAttackContact(
+                enemy, playerBounds(player_), !player_.isDead(),
+                enemyDamageProtectionRemainingSeconds_, [&] {
+                    return hasLineOfSight(enemyCenter(enemy), playerCenter(player_));
+                });
+            if (!contact.damage)
                 continue;
-            }
 
-            if (!enemy.hasAttackHitOpportunity())
-            {
-                continue;
-            }
-
-            const std::optional<Rect> hitbox =
-                enemy.attackHitbox();
-            const std::optional<EnemyAttackConfig> attackConfig =
-                enemy.attackConfig();
-
-            if (!hitbox.has_value() ||
-                !attackConfig.has_value() ||
-                !hasLineOfSight(
-                    enemyCenter(enemy),
-                    playerCenter(player_)) ||
-                !isCollision(
-                    *hitbox,
-                    playerBounds(player_)))
-            {
-                continue;
-            }
-
-            // Consume before mutating Player/Raid so a large frame cannot
-            // submit the same attack hit twice.
-            if (!enemy.consumeAttackHit())
-            {
-                std::terminate();
-            }
-
-            if (resolveEnemyAttackDamage(
-                    enemy.combatTargetId(),
-                    *enemy.attackType(),
-                    attackConfig->damage))
-            {
+            // Legacy V0 owns its three-HP player. Profile-backed Raid instead
+            // forwards the accepted fact to the existing armor/wound consumer.
+            if (deferPlayerDamageResolution_)
+                pendingPlayerDamageObservations_.push_back(*contact.damage);
+            else if (damagePlayer(contact.legacyDamage))
                 return;
-            }
 
-            if (attackConfig->controlDuration > 0.0F)
+            if (contact.controlDuration > 0.0F)
             {
                 static_cast<void>(
                     player_.applyControl(
-                        attackConfig->controlDuration));
+                        contact.controlDuration));
             }
         }
     }
@@ -2223,41 +2153,6 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
             enemies[index].hearTarget(source);
         }
     }
-}
-
-bool GameplayWorld::resolveEnemyAttackDamage(
-    CombatTargetId sourceEnemyId,
-    EnemyAttackType type,
-    int legacyDamage)
-{
-    if (!deferPlayerDamageResolution_)
-    {
-        if (legacyDamage > 0 &&
-            enemyDamageProtectionRemainingSeconds_ > 0.0F)
-        {
-            return false;
-        }
-        if (legacyDamage > 0)
-        {
-            enemyDamageProtectionRemainingSeconds_ =
-                kEnemyDamageProtectionDurationSeconds;
-        }
-        return damagePlayer(legacyDamage);
-    }
-
-    const auto damage = enemyAttackDamageObservation(sourceEnemyId, type);
-    if (damage.baseDamage <= 0)
-    {
-        return false;
-    }
-    if (enemyDamageProtectionRemainingSeconds_ > 0.0F)
-    {
-        return false;
-    }
-    enemyDamageProtectionRemainingSeconds_ =
-        kEnemyDamageProtectionDurationSeconds;
-    pendingPlayerDamageObservations_.push_back(damage);
-    return false;
 }
 
 bool GameplayWorld::canInteractWithContainer() const noexcept

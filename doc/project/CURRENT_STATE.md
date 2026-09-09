@@ -1,8 +1,12 @@
 # Project Raidline 当前状态
 
-最后核对：2026-09-08。
+最后核对：2026-09-09。
 
 ## Git 与交付基线
+
+- 最新覆盖：当前为 `codex/enemy-contact-protection-v1`，显式 stacked 依赖 #153@`d70f861`。#153 精确 head Windows/Ubuntu CI run `34247787567` 成功，但仍是 Draft、未合并、待正常游玩验收；“继续计划”不记为验收。`origin/main` 仍为 `2ae898a`，下方切片状态为历史记录。
+- 当前计划 `active/enemy-contact-protection-v1.md`：Daily/Defense/Raid 复用单敌人的接触—Grab/Bite—消费—0.25 秒保护解析。保护中的合法接触不排队、不追加控制；Daily 增加接触遮挡并同帧消费 Bite。这些是明确的行为修正，不是纯代码移动。帧顺序、安全区、波次、寻路策略、失败与保存政策保持；schema v46/content v60/rules v29 不变。自动化与用户验收分别记录在该计划及新 PR。
+- 本轮证据：Windows Debug 全目标构建、89/89 定向和 1673/1673 全量 CTest（72.82 秒）通过，包括现有串行防守性能门禁。新增 16 项注册测试，另显式更新三环境 Grab 时序合同；精确 head CI 见 PR，正常游玩待验收。
 
 - 本轮本地证据：敌人受伤事实切片 Windows Debug 全构建、12/12 新三环境测试及 1657/1657 全量 CTest（58.68 秒）通过；精确提交 CI 与正常游玩验收以新 PR 为准，不能继承上轮验收。
 

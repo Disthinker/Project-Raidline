@@ -1,8 +1,11 @@
 # Project Raidline 已知问题与待办
 
-最后核对：2026-09-07。
+最后核对：2026-09-09。
 
 ## 当前切片边界
+
+- 2026-09-09 最新覆盖：#153 已有精确 head 双平台 CI，通过状态不等于正常游玩验收或合并。本轮 `enemy-contact-protection-v1` 修正保护期间攻击消费差异、Raid 被保护的 Bite 仍追加控制、Daily 隔墙接触及延后一帧的 Bite。范围仅接触合同，不启动全局帧顺序/Session/Persistence 重构；本轮人工验收待完成。下方差异列表是修正前证据。
+- 仍保留且待下一轮评审：Daily/Defense 先射击后敌人，Raid 先敌人后射击；Daily 直线转向，Raid/Defense 使用现有路径；Base 不拥有 Raid 的玩家控制状态。不能把这些策略差异描述为本轮已统一，也不能以此为由直接创建万能 CombatSpaceRuntime。
 
 - 最新覆盖：#152 导航刷新选择已验收且精确 CI 通过，未合并。当前审计发现 Daily 只传整数损失且 Session 将所有攻击当作 Scratch，丢失 Bite 类型/部位/护甲语义；由 `enemy-incoming-damage-contract-v1` 修正并统一三环境完整受伤事实，属于有意数值/伤势修正，不是纯行为保持重构。
 - 仍保留的时序差异：Daily/Defense 先射击后敌人，Raid 相反；Daily Grab 下一更新才消费 Bite，Defense/Raid 同子步消费；保护期间攻击消费规则也不同。本轮以真实适配器测试固定这些差异，不静默统一，不据此启动 Session/Persistence 大重构。

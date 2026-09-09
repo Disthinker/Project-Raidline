@@ -1,4 +1,5 @@
 #include "base_world.h"
+#include "enemy_attack_contact.h"
 
 #include <algorithm>
 #include <bit>
@@ -450,26 +451,14 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             resolved = before;
         static_cast<void>(enemy.setPosition(resolved));
 
-        if (!playerExposed ||
-            perimeterDamageProtectionRemainingSeconds_ > 0.0F)
-            continue;
-        const std::optional<Rect> hitbox = enemy.attackHitbox();
-        const std::optional<EnemyAttackConfig> attack = enemy.attackConfig();
-        if (enemy.hasGrabContactOpportunity() && hitbox.has_value() &&
-            isCollision(*hitbox, Rect{playerPosition_, playerSize_}))
-        {
-            static_cast<void>(enemy.confirmGrabContact());
-            continue;
-        }
-        if (enemy.hasAttackHitOpportunity() && hitbox.has_value() &&
-            attack.has_value() &&
-            isCollision(*hitbox, Rect{playerPosition_, playerSize_}) &&
-            enemy.consumeAttackHit())
-        {
-            perimeterDamageObservation_ = enemyAttackDamageObservation(
-                enemy.combatTargetId(), *enemy.attackType());
-            perimeterDamageProtectionRemainingSeconds_ = 0.25F;
-        }
+        const auto contact = resolveEnemyAttackContact(
+            enemy, Rect{playerPosition_, playerSize_}, playerExposed,
+            perimeterDamageProtectionRemainingSeconds_, [&] {
+                const auto p = enemy.position();
+                return movementBlockerIndex_->hasLineOfSight(
+                    {p.x + enemy.size().x * 0.5F, p.y + enemy.size().y * 0.5F}, playerCenter);
+            });
+        if (contact.damage) perimeterDamageObservation_ = contact.damage;
     }
 
     if (input.interactJustPressed)

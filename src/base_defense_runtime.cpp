@@ -1,4 +1,5 @@
 #include "base_defense_runtime.h"
+#include "enemy_attack_contact.h"
 #include "navigation_refresh_selection.h"
 #include "collision.h"
 #include "home_perimeter_domain.h"
@@ -518,21 +519,10 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize, bo
         }
         else if (contact)
             *contact = 0;
-        if (!exposed || state_.damageProtectionSeconds > 0 ||
-            !blockerIndex_->hasLineOfSight(center(e), pc))
-            continue;
-        const auto hit = e.attackHitbox();
-        if (!hit || !isCollision(*hit, {playerPosition, playerSize}))
-            continue;
-        if (e.hasGrabContactOpportunity())
-            static_cast<void>(e.confirmGrabContact());
-        const auto attack = e.attackConfig();
-        if (attack && e.hasAttackHitOpportunity() && e.consumeAttackHit())
-        {
-            damageObservation_ = enemyAttackDamageObservation(
-                e.combatTargetId(), *e.attackType());
-            state_.damageProtectionSeconds = 0.25F;
-        }
+        const auto attackContact = resolveEnemyAttackContact(
+            e, {playerPosition, playerSize}, exposed, state_.damageProtectionSeconds,
+            [&] { return blockerIndex_->hasLineOfSight(center(e), pc); });
+        if (attackContact.damage) damageObservation_ = attackContact.damage;
     }
     static_cast<void>(enemies_.removeForObjective(state_.breachedIds));
 }
