@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "animation.h"
+#include "base_defense_runtime.h"
 #include "base_facility_layout_domain.h"
 #include "gameplay_input.h"
 #include "home_perimeter_domain.h"
@@ -116,6 +117,17 @@ public:
     [[nodiscard]] std::vector<HomePerimeterEnemySnapshot>
     perimeterEnemySnapshots() const;
     [[nodiscard]] int perimeterDamageLastUpdate() const noexcept;
+    [[nodiscard]] std::optional<BaseDefenseSnapshot> prepareBaseDefenseSnapshot(
+        BaseDefenseSnapshot seedInputs) const;
+    [[nodiscard]] bool resumeBaseDefense(const BaseDefenseSnapshot &snapshot);
+    [[nodiscard]] std::optional<BaseDefenseSnapshot> baseDefenseCheckpoint() const;
+    [[nodiscard]] const BaseDefenseSnapshot *baseDefenseState() const noexcept;
+    [[nodiscard]] bool baseDefenseActive() const noexcept;
+    [[nodiscard]] const std::vector<Enemy> &baseDefenseEnemies() const noexcept;
+    [[nodiscard]] int baseDefenseDamageLastUpdate() const noexcept;
+    [[nodiscard]] std::optional<EnemyAttackType> baseDefenseAttackTypeLastUpdate() const noexcept;
+    [[nodiscard]] const BaseDefenseRuntimeMetrics &baseDefenseMetrics() const noexcept;
+    void clearBaseDefense() noexcept;
 
     void configureWeaponFire(const WeaponUseDefinition &definition);
     void configureWeaponFire(
@@ -167,6 +179,7 @@ private:
     std::optional<std::uint64_t> perimeterCycleIndex_;
     int perimeterDamageLastUpdate_{};
     float perimeterDamageProtectionRemainingSeconds_{};
+    std::optional<BaseDefenseRuntime> baseDefense_;
     mutable HomeRegionPresentationProjection presentationCache_;
     mutable bool presentationCacheValid_{};
     mutable std::uint32_t cachedFirstChunkColumn_{};

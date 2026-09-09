@@ -19,6 +19,7 @@
 #include "world_clock.h"
 #include "base_wish_types.h"
 #include "home_founding_types.h"
+#include "base_defense_state.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -194,6 +195,15 @@ enum class WeaponReliabilityTier
 class AssetRegistry
 {
 public:
+    AssetRegistry() = default;
+    AssetRegistry(const AssetRegistry &) = default;
+    AssetRegistry(AssetRegistry &&) noexcept = default;
+    AssetRegistry &operator=(AssetRegistry &&) noexcept = default;
+    // Deep-copy assignment reuses matching stable-ID nodes. Like std::map
+    // assignment, allocation failure provides only the basic guarantee for
+    // this destination; callers needing atomicity must assign private scratch.
+    AssetRegistry &operator=(const AssetRegistry &source);
+
     [[nodiscard]] AssetInstanceId nextAssetId() const noexcept;
     void setNextAssetIdForLoad(AssetInstanceId nextAssetId);
 
@@ -571,6 +581,8 @@ struct BaseSiegeState
     BaseSiegeOutcome lastOutcome{BaseSiegeOutcome::None};
     std::uint32_t lastSecuritySpent{};
     std::uint32_t lastPopulationLost{};
+    // Zero preserves pre-v46 historical state without inventing event IDs.
+    std::uint64_t lastResolvedSequence{};
 
     friend bool operator==(
         const BaseSiegeState &,
@@ -1030,6 +1042,7 @@ struct ProfileState
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
     BaseSiegeState baseSiege;
+    std::optional<BaseDefenseSnapshot> activeBaseDefense;
     HomePerimeterState homePerimeter;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;

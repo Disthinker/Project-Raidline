@@ -43,13 +43,19 @@ struct IncomingDamageReceipt
     WoundRollResult wound;
 };
 
-[[nodiscard]] IncomingDamagePlan queryIncomingDamage(
-    const ProfileState &profile,
-    const ContentRegistry &content,
-    const IncomingDamageCommand &command);
+[[nodiscard]] IncomingDamagePlan queryIncomingDamage(const ProfileState &profile,
+                                                     const ContentRegistry &content,
+                                                     const IncomingDamageCommand &command);
 
-[[nodiscard]] IncomingDamageReceipt executeIncomingDamage(
-    ProfileState &profile,
-    const ContentRegistry &content,
-    const IncomingDamageCommand &command,
-    const CommandContext &context);
+[[nodiscard]] IncomingDamageReceipt executeIncomingDamage(ProfileState &profile,
+                                                          const ContentRegistry &content,
+                                                          const IncomingDamageCommand &command,
+                                                          const CommandContext &context);
+
+// Hot-path variant for the active simulation's already validated Profile.
+// Revalidates only health, medical state and equipped armor; does not scan or
+// copy unrelated assets. Save/load and external commands retain full validation.
+[[nodiscard]] IncomingDamageReceipt
+executeIncomingDamageInSimulation(ProfileState &profile, const ContentRegistry &content,
+                                  const IncomingDamageCommand &command,
+                                  const CommandContext &context);

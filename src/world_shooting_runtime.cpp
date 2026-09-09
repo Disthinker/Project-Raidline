@@ -98,6 +98,138 @@ WorldShootingRuntime::WorldShootingRuntime()
 {
 }
 
+WorldShootingCheckpoint WorldShootingRuntime::checkpoint() const
+{
+    WorldShootingCheckpoint s;
+    s.initialized = true; s.nextShotId = nextShotId_;
+    const auto &f = weaponFire_.config_;
+    s.fireConfig = {f.shotInterval, f.minimumSpreadDegrees, f.maximumSpreadDegrees,
+        f.spreadPerShotDegrees, f.recoveryDelay, f.spreadRecoveryDegreesPerSecond,
+        f.aimDownSightsAccuracyMultiplier, f.aimDownSightsStabilityMultiplier,
+        f.movingSpreadFraction, f.sprintingSpreadFraction,
+        f.reticleMotionSpreadDegreesPerSecond, f.reticleMotionSoftThreshold,
+        f.reticleMotionFullSpeed, f.nearDistanceSpreadScale,
+        f.distanceBloomAtEffectiveRange, f.overEffectiveRangeSpreadMultiplier};
+    s.fireState = {weaponFire_.cooldownRemaining_, weaponFire_.spreadDegrees_,
+        weaponFire_.contextualMinimumSpreadDegrees_, weaponFire_.contextualMaximumSpreadDegrees_,
+        weaponFire_.recoveryDelayRemaining_, weaponFire_.movementBloomFraction_,
+        weaponFire_.reticleMotionBloomFraction_, weaponFire_.shotBloomFraction_,
+        weaponFire_.distanceBloomFraction_, weaponFire_.combinedBloomFraction_,
+        weaponFire_.lastAimDownSightsProgress_, weaponFire_.lastDistanceSpreadFactor_,
+        weaponFire_.lastOverEffectiveRangeFactor_};
+    s.spreadSeed = f.spreadSeed; s.spreadRandomState = weaponFire_.random_.state_;
+    s.spreadRandomIncrement = weaponFire_.random_.increment_;
+    s.burstShotCount = weaponFire_.burstShotCount_;
+    const auto &a = weaponAim_.config_;
+    s.aimConfig = {a.maximumReticleSpeed, a.controlAcceleration, a.recoilInitialSpeed,
+        a.recoilDeceleration, a.recoilLateralRatio, a.recoilBendDurationSeconds,
+        a.aimDownSightsDurationSeconds, a.effectiveRange, a.maximumRange};
+    s.aimVectors = {checkpointPoint(weaponAim_.currentWorldPosition_),
+        checkpointPoint(weaponAim_.targetWorldPosition_), checkpointPoint(weaponAim_.inputWorldPosition_),
+        checkpointPoint(weaponAim_.shootingOrigin_), checkpointPoint(weaponAim_.worldSize_),
+        checkpointPoint(weaponAim_.controlVelocity_), checkpointPoint(weaponAim_.recoilVelocity_),
+        checkpointPoint(weaponAim_.recoilTargetDirection_), checkpointPoint(weaponAim_.lastDirection_)};
+    s.aimDownSightsProgress = weaponAim_.aimDownSightsProgress_;
+    s.recoilBendRemaining = weaponAim_.recoilBendRemainingSeconds_;
+    s.aimControlMode = static_cast<std::uint32_t>(weaponAim_.controlMode_);
+    s.aimInitialized = weaponAim_.initialized_; s.recoilSeed = a.recoilSeed;
+    s.recoilRandomState = weaponAim_.recoilRandom_.state_;
+    s.recoilRandomIncrement = weaponAim_.recoilRandom_.increment_;
+    s.weaponDamage = weaponBaseDamage_; s.weaponPenetration = weaponPenetration_;
+    s.maximumRange = weaponMaximumRange_; s.logicalSpeed = weaponLogicalBallisticSpeed_;
+    s.tracerStyle = static_cast<std::uint32_t>(weaponTracerStyle_);
+    s.tracerLength = weaponTracerLength_; s.tracerOpacity = weaponTracerOpacity_;
+    s.tracerLifetime = weaponTracerLifetimeSeconds_;
+    s.flights.reserve(logicalBallistics_.size());
+    for (const auto &flight : logicalBallistics_) {
+        LogicalFlightCheckpoint v;
+        v.id = flight.shotId_; v.origin = checkpointPoint(flight.origin_);
+        v.position = checkpointPoint(flight.currentPosition_); v.direction = checkpointPoint(flight.direction_);
+        v.impact = checkpointPoint(flight.impactPosition_); v.speed = flight.speed_;
+        v.extent = flight.collisionExtent_; v.travelled = flight.distanceTravelled_;
+        v.maximumDistance = flight.maximumDistance_; v.damage = flight.damage_; v.penetration = flight.penetration_;
+        if (flight.aimIntent_) {
+            v.aimedTarget = flight.aimIntent_->targetId;
+            v.aimedRegion = static_cast<std::uint32_t>(flight.aimIntent_->region);
+            v.weakPoint = flight.aimIntent_->weakPoint;
+        }
+        v.tracerStyle = static_cast<std::uint32_t>(flight.tracerStyle_);
+        v.tracerLength = flight.tracerLength_; v.tracerOpacity = flight.tracerOpacity_;
+        v.tracerLifetime = flight.tracerLifetimeSeconds_;
+        s.flights.push_back(v);
+    }
+    return s;
+}
+
+bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
+{
+    if (!validateWorldShootingCheckpoint(s)) return false;
+    if (!s.initialized) return true;
+    WorldShootingRuntime candidate;
+    const auto &f = s.fireConfig;
+    candidate.weaponFire_ = WeaponFireState{WeaponFireConfig{
+        f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9],
+        f[10], f[11], f[12], f[13], f[14], f[15], s.spreadSeed}};
+    auto &fire = candidate.weaponFire_;
+    const auto &v = s.fireState;
+    fire.cooldownRemaining_ = v[0]; fire.spreadDegrees_ = v[1];
+    fire.contextualMinimumSpreadDegrees_ = v[2]; fire.contextualMaximumSpreadDegrees_ = v[3];
+    fire.recoveryDelayRemaining_ = v[4]; fire.movementBloomFraction_ = v[5];
+    fire.reticleMotionBloomFraction_ = v[6]; fire.shotBloomFraction_ = v[7];
+    fire.distanceBloomFraction_ = v[8]; fire.combinedBloomFraction_ = v[9];
+    fire.lastAimDownSightsProgress_ = v[10]; fire.lastDistanceSpreadFactor_ = v[11];
+    fire.lastOverEffectiveRangeFactor_ = v[12]; fire.burstShotCount_ = s.burstShotCount;
+    fire.random_.state_ = s.spreadRandomState; fire.random_.increment_ = s.spreadRandomIncrement;
+    const auto &a = s.aimConfig;
+    candidate.weaponAim_ = WeaponAimState{WeaponAimConfig{
+        a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], s.recoilSeed}};
+    auto &aim = candidate.weaponAim_;
+    aim.currentWorldPosition_ = runtimePoint(s.aimVectors[0]);
+    aim.targetWorldPosition_ = runtimePoint(s.aimVectors[1]);
+    aim.inputWorldPosition_ = runtimePoint(s.aimVectors[2]);
+    aim.shootingOrigin_ = runtimePoint(s.aimVectors[3]);
+    aim.worldSize_ = runtimePoint(s.aimVectors[4]);
+    aim.controlVelocity_ = runtimePoint(s.aimVectors[5]);
+    aim.recoilVelocity_ = runtimePoint(s.aimVectors[6]);
+    aim.recoilTargetDirection_ = runtimePoint(s.aimVectors[7]);
+    aim.lastDirection_ = runtimePoint(s.aimVectors[8]);
+    aim.aimDownSightsProgress_ = s.aimDownSightsProgress;
+    aim.recoilBendRemainingSeconds_ = s.recoilBendRemaining;
+    aim.controlMode_ = static_cast<AimControlMode>(s.aimControlMode);
+    aim.initialized_ = s.aimInitialized; aim.recoilRandom_.state_ = s.recoilRandomState;
+    aim.recoilRandom_.increment_ = s.recoilRandomIncrement;
+    candidate.nextShotId_ = s.nextShotId; candidate.weaponBaseDamage_ = s.weaponDamage;
+    candidate.weaponPenetration_ = s.weaponPenetration; candidate.weaponMaximumRange_ = s.maximumRange;
+    candidate.weaponLogicalBallisticSpeed_ = s.logicalSpeed;
+    candidate.weaponTracerStyle_ = static_cast<TracerStyle>(s.tracerStyle);
+    candidate.weaponTracerLength_ = s.tracerLength; candidate.weaponTracerOpacity_ = s.tracerOpacity;
+    candidate.weaponTracerLifetimeSeconds_ = s.tracerLifetime;
+    for (const auto &vflight : s.flights) {
+        std::optional<ShotAimIntent> intent;
+        if (vflight.aimedTarget) intent = ShotAimIntent{vflight.aimedTarget,
+            static_cast<HitRegion>(vflight.aimedRegion), vflight.weakPoint};
+        const auto resolution = resolveShotCommand(ShotCommand{vflight.id,
+            runtimePoint(vflight.origin), runtimePoint(vflight.direction), vflight.speed,
+            vflight.extent, vflight.damage, vflight.maximumDistance, intent, vflight.penetration});
+        if (!resolution.accepted()) return false;
+        LogicalBallisticFlight flight{resolution, static_cast<TracerStyle>(vflight.tracerStyle),
+            vflight.tracerLength, vflight.tracerOpacity, vflight.tracerLifetime};
+        // Validation above verifies direction and geometry. Preserve the
+        // original float bits: resolving a saved direction again can normalize
+        // it by another ULP and alter subsequent swept collision segments.
+        flight.origin_ = runtimePoint(vflight.origin);
+        flight.direction_ = runtimePoint(vflight.direction);
+        flight.speed_ = vflight.speed;
+        flight.maximumDistance_ = vflight.maximumDistance;
+        flight.currentPosition_ = runtimePoint(vflight.position);
+        flight.impactPosition_ = runtimePoint(vflight.impact);
+        flight.distanceTravelled_ = vflight.travelled;
+        candidate.logicalBallistics_.push_back(flight);
+    }
+    *this = std::move(candidate);
+    return true;
+}
+
 void WorldShootingRuntime::beginFrame(float deltaTime) noexcept
 {
     hitResultsLastUpdate_.clear();

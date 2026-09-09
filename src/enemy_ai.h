@@ -117,6 +117,7 @@ public:
     float searchTimeRemaining() const noexcept;
 
 private:
+    friend class Enemy;
     EnemyAiConfig config_;
     float grabCooldownRemaining_{};
     float scratchCooldownRemaining_{};

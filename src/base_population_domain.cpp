@@ -59,6 +59,9 @@ BaseRestPlan queryBaseRest(
     if (!profile.homeFounding.established)
         return failure(DomainErrorCode::IllegalDestination,
             "Establish your main base before resting", profile.revision);
+    if (profile.activeBaseDefense)
+        return failure(DomainErrorCode::IllegalDestination,
+            "Base rest is unavailable during realtime defense", profile.revision);
     if (profile.pendingRaid.has_value())
     {
         return failure(
@@ -114,6 +117,9 @@ BaseRestReceipt executeBaseRest(
     const BaseRestCommand &command,
     const CommandContext &context)
 {
+    if (profile.activeBaseDefense)
+        return {false, false, DomainErrorCode::IllegalDestination,
+                "Base rest is unavailable during realtime defense", profile.revision};
     if (context.transactionId.empty())
     {
         return {false, false, DomainErrorCode::InvalidTransaction,

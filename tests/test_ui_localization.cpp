@@ -7,6 +7,19 @@
 
 #include "ui_localization.h"
 
+TEST(UiLocalizationTest, BaseDefenseControlsAndCountersAreBilingual) {
+    for (const auto text : {"DEFEND PERSONALLY", "ABANDON DEFENSE...",
+         "CONFIRM ABANDON: PUBLIC SOFT LOSS", "SAVE PROTECTION PAUSED | RETRY",
+         "BASE LAYOUT LOCKED DURING DEFENSE", "CREATE BASE SIEGE WARNING",
+         "CORE DEFENSE LINE", "ESC MENU: SAVE / ABANDON DEFENSE"}) {
+        EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);
+        EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, text), text);
+    }
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+        "BASE DEFENSE | WAVE 2/3 | PROCESSED 9/27 | BREACH 1/6"),
+        "基地防守 | 波次 2/3 | 已处理 9/27 | 突破 1/6");
+}
+
 TEST(UiLocalizationTest, FoundingPromptsHaveChineseText) {
     for (const auto text : {"ESTABLISH YOUR ONLY MAIN BASE HERE?", "ENTER - ESTABLISH",
          "TEMPORARY SUPPLY POINT - SHARED STASH", "CIVIC COURTYARD", "FREIGHT COURTYARD",

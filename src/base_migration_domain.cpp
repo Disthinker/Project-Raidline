@@ -58,7 +58,7 @@ BaseMigrationPlan queryBaseMigration(
                 "main Base migration is unavailable during a Raid",
                 command.targetSiteDefinitionId);
         }
-        if (profile.baseSiege.warningActive)
+        if (profile.baseSiege.warningActive || profile.activeBaseDefense)
         {
             return failure(
                 profile, DomainErrorCode::IllegalDestination,

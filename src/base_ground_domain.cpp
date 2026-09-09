@@ -131,6 +131,8 @@ bool placeableAssetFits(
 {
     if (!definition.basePlacement.has_value())
         return true;
+    if (profile.baseSiege.warningActive || profile.activeBaseDefense)
+        return false;
     if (!access.placementContext.has_value())
         return false;
     const BaseGroundPlacementContext &context = *access.placementContext;
@@ -466,6 +468,9 @@ BaseGroundReceipt applyPickup(
         hasDirectChildren(candidate, affectedId);
     if (definition.basePlacement.has_value())
     {
+        if (candidate.baseSiege.warningActive || candidate.activeBaseDefense)
+            return failure(DomainErrorCode::IllegalDestination,
+                           "Base storage layout is locked during defense", candidate.revision);
         if (nonEmptyContainer)
         {
             return failure(

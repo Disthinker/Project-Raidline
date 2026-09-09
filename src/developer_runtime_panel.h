@@ -24,6 +24,7 @@ enum class DeveloperPanelActionKind
     ToggleCrisisReveal,
     TriggerHighRisk,
     GrantPublishedCatalog,
+    TriggerBaseSiegeWarning,
     ResetWeaponTuning,
     SelectWeaponParameter,
     DecreaseWeaponParameter,
@@ -74,6 +75,11 @@ inline constexpr DeveloperPanelRect developerResetWeaponButton() noexcept
 inline constexpr DeveloperPanelRect developerPublishedCatalogButton() noexcept
 {
     return {124.0F, 108.0F, 270.0F, 34.0F};
+}
+
+inline constexpr DeveloperPanelRect developerBaseSiegeButton() noexcept
+{
+    return {405.0F, 108.0F, 245.0F, 34.0F};
 }
 
 inline constexpr float kDeveloperParameterFirstRowY{174.0F};
@@ -134,6 +140,8 @@ inline std::optional<DeveloperPanelAction> developerPanelActionAt(
     if (developerPanelContains(developerPublishedCatalogButton(), point))
         return DeveloperPanelAction{
             DeveloperPanelActionKind::GrantPublishedCatalog};
+    if (developerPanelContains(developerBaseSiegeButton(), point))
+        return DeveloperPanelAction{DeveloperPanelActionKind::TriggerBaseSiegeWarning};
 
     for (std::size_t index{}; index < parameterCount; ++index)
     {

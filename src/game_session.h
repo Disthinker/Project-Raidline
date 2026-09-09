@@ -37,6 +37,7 @@
 #include "raid_rescue_domain.h"
 #include "raid_settlement.h"
 #include "save_repository.h"
+#include "base_defense_checkpoint_writer.h"
 #include "self_recovery_domain.h"
 #include "stash.h"
 #include "maintenance_domain.h"
@@ -105,6 +106,8 @@ enum class GameSessionPresentationEvent
     BaseMedicalUpgradeCompleted,
     BaseManufacturingCompleted,
     BaseResidentTreatmentCompleted,
+    PlayerHurtLight,
+    PlayerHurtHeavy,
 };
 
 struct DeveloperWeaponTuningSnapshot
@@ -227,6 +230,14 @@ public:
     [[nodiscard]] bool continueProfile();
 
     void advanceBaseWorldClock(float deltaTime);
+    [[nodiscard]] bool startBaseRealtimeDefense(BaseWorld &world);
+    [[nodiscard]] bool restoreBaseDefenseRuntime(BaseWorld &world);
+    [[nodiscard]] bool abandonBaseRealtimeDefense();
+    [[nodiscard]] bool retryBaseDefenseSave();
+    [[nodiscard]] bool triggerDeveloperBaseSiegeWarning();
+    [[nodiscard]] bool baseDefenseActive() const noexcept;
+    [[nodiscard]] bool baseDefenseSaveBlocked() const noexcept;
+    [[nodiscard]] BaseDefenseCheckpointStatus baseDefenseCheckpointStatus() const;
     [[nodiscard]] bool checkpointWorldClock();
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
     [[nodiscard]] BaseThreatProjection baseThreatProjection() const noexcept;
@@ -517,6 +528,14 @@ private:
     std::optional<AssetInstanceId> configuredWeaponAssetId_;
     std::optional<AssetInstanceId> configuredBaseWeaponAssetId_;
     float baseCombatElapsedSeconds_{};
+    // BaseWorld is owned by the surrounding GameFlow. No worker accesses it.
+    BaseWorld *baseDefenseWorld_{};
+    std::unique_ptr<BaseDefenseCheckpointWriter> baseDefenseWriter_;
+    float baseDefenseCheckpointElapsed_{};
+    bool baseDefenseSaveBlocked_{};
+    bool baseDefenseLagPause_{};
+    bool baseDefenseSimulationRejected_{};
+    std::optional<BaseDefenseEndReason> pendingBaseDefenseEnd_;
 
     struct DeveloperWeaponHiddenOverrides
     {
@@ -557,6 +576,11 @@ private:
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
         bool persist = true);
+    void captureBaseDefenseCheckpoint(ProfileState &candidate) const;
+    [[nodiscard]] bool checkpointBaseDefense(bool wait);
+    [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason);
+    [[nodiscard]] bool prepareBaseDefenseFrame(BaseWorld &world);
+    void finishBaseDefenseFrame(BaseWorld &world, float deltaTime);
     void refreshLoadoutTutorial();
     void advanceWorldClockFromSimulation(
         float deltaTime,

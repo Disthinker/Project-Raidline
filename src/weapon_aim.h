@@ -72,6 +72,7 @@ public:
     [[nodiscard]] bool recoilActive() const noexcept;
 
 private:
+    friend class WorldShootingRuntime;
     WeaponAimConfig config_;
     Vec2 currentWorldPosition_{};
     Vec2 targetWorldPosition_{};

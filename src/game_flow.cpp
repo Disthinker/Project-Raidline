@@ -83,6 +83,7 @@ bool GameFlow::startNewGame(std::string profileId, bool survey)
     activeBaseFacility_.reset();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
+    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
     return true;
 }
 
@@ -100,6 +101,7 @@ bool GameFlow::continueGame()
     activeBaseFacility_.reset();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
+    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
     return true;
 }
 
@@ -174,13 +176,14 @@ void GameFlow::updateBase(
     const BaseInput &input,
     float deltaTime)
 {
-    if (state_ != GameFlowState::Base || activeBaseFacility_.has_value())
+    if (state_ != GameFlowState::Base ||
+        (activeBaseFacility_.has_value() && !gameSession_.baseDefenseActive()))
     {
         return;
     }
     syncBaseWorldSite();
-    activeBaseFacility_ = gameSession_.updateBaseWorld(
-        baseWorld_, input, deltaTime);
+    const auto opened = gameSession_.updateBaseWorld(baseWorld_, input, deltaTime);
+    if (!activeBaseFacility_) activeBaseFacility_ = opened;
     if (activeBaseFacility_.has_value())
     {
         gameSession_.noteBaseFacility(*activeBaseFacility_);
@@ -655,6 +658,14 @@ bool GameFlow::returnToBase() noexcept
 
 void GameFlow::syncBaseWorldSite()
 {
+    // Existing queues may complete during combat, but the active event owns
+    // its frozen collision geometry until settlement releases the layout.
+    if (baseWorld_.baseDefenseActive())
+    {
+        const auto &active = gameSession_.profile().activeBaseDefense;
+        if (active && baseWorld_.baseDefenseState()->eventId == active->eventId) return;
+        baseWorld_.clearBaseDefense();
+    }
     if (!persistentAlphaMode_)
         return;
     const auto &profile = gameSession_.profile();
@@ -702,6 +713,11 @@ bool GameFlow::returnToMainMenu() noexcept
     if (state_ != GameFlowState::Base && state_ != GameFlowState::Raid)
     {
         return false;
+    }
+    if (state_ == GameFlowState::Base && gameSession_.baseDefenseActive())
+    {
+        try { if (!gameSession_.checkpointWorldClock()) return false; }
+        catch (...) { return false; }
     }
     // An active persistent Raid deliberately remains uncommitted in memory.
     // Continue reloads the pre-Raid save and follows the existing idempotent

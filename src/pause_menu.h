@@ -6,7 +6,8 @@ enum class PauseMenuCommand
     Settings,
     MainMenu,
     ExitDesktop,
-    ToggleLanguage
+    ToggleLanguage,
+    AbandonBaseDefense
 };
 
 // SDL-independent modal state. App owns hit testing and rendering while this

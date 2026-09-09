@@ -79,6 +79,51 @@ CombatTargetId Enemy::combatTargetId() const noexcept
   return combatTargetId_;
 }
 
+EnemyRuntimeCheckpoint Enemy::checkpoint() const noexcept
+{
+  EnemyRuntimeCheckpoint s;
+  s.id = combatTargetId_; s.position = checkpointPoint(position_);
+  s.size = checkpointPoint(size_); s.velocity = checkpointPoint(velocity_);
+  s.health = health_.current(); s.maximumHealth = health_.maximum();
+  s.facing = static_cast<std::uint32_t>(facingDirection_);
+  s.movement = static_cast<std::uint32_t>(movementState_);
+  s.role = static_cast<std::uint32_t>(tacticalRole_);
+  s.awareness = static_cast<std::uint32_t>(ai_.awarenessState_);
+  s.attackPhase = static_cast<std::uint32_t>(attack_.phase_);
+  if (attack_.type_) s.attackType = static_cast<std::uint32_t>(*attack_.type_);
+  s.attackDirection = checkpointPoint(attack_.direction_);
+  s.aiMoveDirection = checkpointPoint(ai_.currentMoveDirection_);
+  if (ai_.lastKnownTargetPosition_) s.lastKnownTarget = checkpointPoint(*ai_.lastKnownTargetPosition_);
+  s.attackRemaining = attack_.phaseRemaining_; s.impactSlowRemaining = impactSlowRemaining_;
+  s.grabCooldown = ai_.grabCooldownRemaining_; s.scratchCooldown = ai_.scratchCooldownRemaining_;
+  s.specialChargeHold = ai_.specialChargeHoldTime_; s.searchRemaining = ai_.searchTimeRemaining_;
+  s.specialChargeArmed = ai_.specialChargeArmed_; s.hitConsumed = attack_.hitConsumed_;
+  s.activeOpportunityPending = attack_.activeOpportunityPending_;
+  return s;
+}
+
+std::optional<Enemy> Enemy::restoreCheckpoint(const EnemyRuntimeCheckpoint &s)
+{
+  if (!validateEnemyRuntimeCheckpoint(s)) return std::nullopt;
+  Enemy e{runtimePoint(s.position), runtimePoint(s.size), runtimePoint(s.velocity), s.maximumHealth, s.id};
+  e.health_ = Health{s.maximumHealth, s.health};
+  e.facingDirection_ = static_cast<EnemyFacingDirection>(s.facing);
+  e.movementState_ = static_cast<EnemyMovementState>(s.movement);
+  e.tacticalRole_ = static_cast<EnemyTacticalRole>(s.role);
+  e.ai_.awarenessState_ = static_cast<EnemyAwarenessState>(s.awareness);
+  e.attack_.phase_ = static_cast<EnemyAttackPhase>(s.attackPhase);
+  if (s.attackType) e.attack_.type_ = static_cast<EnemyAttackType>(*s.attackType);
+  e.attack_.direction_ = runtimePoint(s.attackDirection);
+  e.ai_.currentMoveDirection_ = runtimePoint(s.aiMoveDirection);
+  if (s.lastKnownTarget) e.ai_.lastKnownTargetPosition_ = runtimePoint(*s.lastKnownTarget);
+  e.attack_.phaseRemaining_ = s.attackRemaining; e.impactSlowRemaining_ = s.impactSlowRemaining;
+  e.ai_.grabCooldownRemaining_ = s.grabCooldown; e.ai_.scratchCooldownRemaining_ = s.scratchCooldown;
+  e.ai_.specialChargeHoldTime_ = s.specialChargeHold; e.ai_.searchTimeRemaining_ = s.searchRemaining;
+  e.ai_.specialChargeArmed_ = s.specialChargeArmed; e.attack_.hitConsumed_ = s.hitConsumed;
+  e.attack_.activeOpportunityPending_ = s.activeOpportunityPending;
+  return e;
+}
+
 Vec2 Enemy::position() const
 {
   return position_;

@@ -1,6 +1,7 @@
 #include "base_siege_domain.h"
 
 #include "base_workforce_domain.h"
+#include "home_perimeter_domain.h"
 
 #include <algorithm>
 #include <array>
@@ -138,6 +139,47 @@ void clearThreatForSafetyPeriod(
             ? std::numeric_limits<std::uint64_t>::max()
             : profile.worldClock.elapsedWorldMinutes + duration;
 }
+
+void applyDefenseOutcome(ProfileState &profile,
+                         const ContentRegistry &content, bool success)
+{
+    BaseSiegeState &state = profile.baseSiege;
+    state.lastPopulationLost = 0U;
+    if (success)
+    {
+        state.lastOutcome = BaseSiegeOutcome::Defended;
+        profile.baseConstruction.materialUnits = std::min<std::uint32_t>(
+            content.maximumBaseConstructionMaterials(),
+            profile.baseConstruction.materialUnits + 8U);
+        if (profile.baseMorale.pendingPositiveEventCount !=
+            std::numeric_limits<std::uint64_t>::max())
+            ++profile.baseMorale.pendingPositiveEventCount;
+        clearThreatForSafetyPeriod(profile, kBaseSiegeSuccessSafeDays);
+    }
+    else
+    {
+        state.lastOutcome = BaseSiegeOutcome::SoftFailure;
+        auto subtract = [](std::uint32_t &value) { value = value > 5U ? value - 5U : 0U; };
+        subtract(profile.baseResources.pool.food);
+        subtract(profile.baseResources.pool.hygiene);
+        subtract(profile.baseResources.pool.morale);
+        state.lastPopulationLost = removeOneUnprotectedResident(profile);
+        if (profile.baseMorale.pendingNegativeEventCount !=
+            std::numeric_limits<std::uint64_t>::max())
+            ++profile.baseMorale.pendingNegativeEventCount;
+        clearThreatForSafetyPeriod(profile, kBaseSiegeFailureSafeDays);
+    }
+    state.lastResolvedSequence = state.siegeSequence;
+}
+
+BaseAutoDefenseReceipt defenseReceipt(const ProfileState &profile,
+                                      bool already = false)
+{
+    return {true, already, DomainErrorCode::None, {}, profile.revision,
+            profile.baseSiege.lastOutcome, profile.baseSiege.lastSecuritySpent,
+            profile.baseSiege.lastPopulationLost,
+            profile.baseSiege.safeUntilWorldMinute};
+}
 }
 
 std::uint32_t totalBaseThreat(const BaseSiegeState &state) noexcept
@@ -260,7 +302,7 @@ BasePerimeterSweepPlan queryBasePerimeterSweep(
         plan.message = "Base perimeter sweep is unavailable during a Raid";
         return plan;
     }
-    if (profile.baseSiege.warningActive)
+    if (profile.baseSiege.warningActive || profile.activeBaseDefense)
     {
         plan.error = DomainErrorCode::IllegalDestination;
         plan.message = "Base siege warning must be resolved first";
@@ -301,7 +343,8 @@ BasePerimeterSweepPlan queryBasePerimeterSweep(
 bool activateBaseSiegeWarningIfEligible(ProfileState &profile) noexcept
 {
     BaseSiegeState &state = profile.baseSiege;
-    if (state.warningActive || profile.pendingRaid.has_value() ||
+    if (state.warningActive || profile.activeBaseDefense || profile.pendingRaid.has_value() ||
+        state.siegeSequence == std::numeric_limits<std::uint64_t>::max() ||
         totalBaseThreat(state) < kBaseSiegeThreatThreshold ||
         profile.worldClock.elapsedWorldMinutes < state.safeUntilWorldMinute)
     {
@@ -321,7 +364,7 @@ bool advanceBaseSiegeWarning(
     std::uint32_t elapsedSeconds) noexcept
 {
     BaseSiegeState &state = profile.baseSiege;
-    if (!state.warningActive || elapsedSeconds == 0U ||
+    if (profile.activeBaseDefense || !state.warningActive || elapsedSeconds == 0U ||
         state.warningRemainingSeconds == 0U)
     {
         return false;
@@ -337,7 +380,7 @@ BaseAutoDefensePlan queryBaseAutoDefense(
     const ProfileState &profile,
     const ContentRegistry &content) noexcept
 {
-    if (!profile.baseSiege.warningActive)
+    if (profile.activeBaseDefense || !profile.baseSiege.warningActive)
     {
         return {false, DomainErrorCode::IllegalDestination,
                 "Base is not under siege warning", profile.revision};
@@ -370,8 +413,17 @@ BaseAutoDefenseReceipt executeBaseAutoDefense(
         return {false, false, DomainErrorCode::InvalidTransaction,
                 "transaction ID is empty", profile.revision};
     }
+    if (!profile.baseSiege.warningActive && !profile.activeBaseDefense &&
+        profile.baseSiege.siegeSequence != 0U &&
+        profile.baseSiege.lastResolvedSequence == profile.baseSiege.siegeSequence)
+    {
+        return defenseReceipt(profile, true);
+    }
     if (profile.committedTransactions.contains(context.transactionId))
     {
+        if (profile.activeBaseDefense || profile.baseSiege.warningActive)
+            return {false, false, DomainErrorCode::InvalidTransaction,
+                    "transaction ID belongs to another defense operation", profile.revision};
         return {true, true, DomainErrorCode::None, {}, profile.revision,
                 profile.baseSiege.lastOutcome,
                 profile.baseSiege.lastSecuritySpent,
@@ -395,41 +447,7 @@ BaseAutoDefenseReceipt executeBaseAutoDefense(
     state.lastSecuritySpent = std::min(
         plan.requiredSecurity, candidate.baseResources.pool.security);
     candidate.baseResources.pool.security -= state.lastSecuritySpent;
-    state.lastPopulationLost = 0U;
-    if (plan.projectedSuccess)
-    {
-        state.lastOutcome = BaseSiegeOutcome::Defended;
-        candidate.baseConstruction.materialUnits =
-            std::min<std::uint32_t>(
-                content.maximumBaseConstructionMaterials(),
-                candidate.baseConstruction.materialUnits + 8U);
-        if (candidate.baseMorale.pendingPositiveEventCount !=
-            std::numeric_limits<std::uint64_t>::max())
-        {
-            ++candidate.baseMorale.pendingPositiveEventCount;
-        }
-        clearThreatForSafetyPeriod(candidate, kBaseSiegeSuccessSafeDays);
-    }
-    else
-    {
-        state.lastOutcome = BaseSiegeOutcome::SoftFailure;
-        candidate.baseResources.pool.food =
-            candidate.baseResources.pool.food > 5U
-            ? candidate.baseResources.pool.food - 5U : 0U;
-        candidate.baseResources.pool.hygiene =
-            candidate.baseResources.pool.hygiene > 5U
-            ? candidate.baseResources.pool.hygiene - 5U : 0U;
-        candidate.baseResources.pool.morale =
-            candidate.baseResources.pool.morale > 5U
-            ? candidate.baseResources.pool.morale - 5U : 0U;
-        state.lastPopulationLost = removeOneUnprotectedResident(candidate);
-        if (candidate.baseMorale.pendingNegativeEventCount !=
-            std::numeric_limits<std::uint64_t>::max())
-        {
-            ++candidate.baseMorale.pendingNegativeEventCount;
-        }
-        clearThreatForSafetyPeriod(candidate, kBaseSiegeFailureSafeDays);
-    }
+    applyDefenseOutcome(candidate, content, plan.projectedSuccess);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
@@ -445,6 +463,143 @@ BaseAutoDefenseReceipt executeBaseAutoDefense(
             profile.baseSiege.lastSecuritySpent,
             profile.baseSiege.lastPopulationLost,
             profile.baseSiege.safeUntilWorldMinute};
+}
+
+std::string baseSiegeEventId(const ProfileState &profile)
+{
+    return profile.profileId + "-base-siege-" +
+        std::to_string(profile.baseSiege.siegeSequence);
+}
+
+BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
+    const ProfileState &profile, const ContentRegistry &content,
+    const BaseDefenseSnapshot &snapshot)
+{
+    auto reject = [&](DomainErrorCode error, std::string message) {
+        return BaseRealtimeDefensePlan{false, error, std::move(message), profile.revision};
+    };
+    if (!profile.baseSiege.warningActive || profile.activeBaseDefense ||
+        profile.pendingRaid || !profile.homeFounding.established)
+        return reject(DomainErrorCode::IllegalDestination,
+                      "Realtime defense requires an established Base under warning");
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return reject(DomainErrorCode::RevisionOverflow, "profile revision cannot advance");
+    const auto *site = activeSite(profile, content);
+    if (site == nullptr || snapshot.siteDefinitionId != site->id.value() ||
+        snapshot.eventId != baseSiegeEventId(profile) ||
+        snapshot.siegeSequence != profile.baseSiege.siegeSequence ||
+        snapshot.siegeSequence <= profile.baseSiege.lastResolvedSequence ||
+        snapshot.frozenPopulation != profile.basePopulation.ordinaryResidents ||
+        snapshot.frozenMoraleTier != static_cast<std::uint32_t>(profile.baseMorale.tier) ||
+        snapshot.frozenSiteThreat != site->dailyBaseThreatUnits)
+        return reject(DomainErrorCode::InvalidProfile, "Defense event identity or frozen inputs are stale");
+    const auto plot = profile.homeFounding.plots.find(site->id);
+    const std::string expectedPlot = plot == profile.homeFounding.plots.end() ? "" : plot->second;
+    if (snapshot.plotId != expectedPlot || snapshot.elapsedSeconds != 0.0F ||
+        snapshot.spawnedEnemyCount != 0U || !snapshot.enemies.empty() ||
+        !snapshot.killedIds.empty() || !snapshot.breachedIds.empty())
+        return reject(DomainErrorCode::InvalidProfile, "Defense start must use a fresh frozen layout");
+    std::string message;
+    if (!validateBaseDefenseSnapshot(snapshot, message))
+        return reject(DomainErrorCode::InvalidProfile, std::move(message));
+    return {true, DomainErrorCode::None, {}, profile.revision};
+}
+
+BaseAutoDefenseReceipt executeBaseRealtimeDefenseStart(
+    ProfileState &profile, const ContentRegistry &content,
+    const BaseDefenseSnapshot &snapshot, const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return {false, false, DomainErrorCode::InvalidTransaction, "transaction ID is empty", profile.revision};
+    if (profile.activeBaseDefense && profile.activeBaseDefense->eventId == snapshot.eventId &&
+        profile.committedTransactions.contains(context.transactionId))
+        return {true, true, DomainErrorCode::None, {}, profile.revision};
+    if (context.expectedRevision != profile.revision)
+        return {false, false, DomainErrorCode::StaleRevision, "profile revision is stale", profile.revision};
+    if (profile.committedTransactions.contains(context.transactionId))
+        return {false, false, DomainErrorCode::InvalidTransaction, "transaction ID has another result", profile.revision};
+    const auto plan = queryBaseRealtimeDefenseStart(profile, content, snapshot);
+    if (!plan.canCommit)
+        return {false, false, plan.error, plan.message, profile.revision};
+    ProfileState candidate = profile;
+    candidate.activeBaseDefense = snapshot;
+    // The Base event takes over the existing outing without invoking its
+    // return/rescue settlement. Personal Loot stays where it is, and a later
+    // defense rescue is therefore charged once instead of 240 + 90 minutes.
+    if (candidate.homePerimeter.activeOuting)
+    {
+        const std::string handoff = snapshot.eventId + "-perimeter-handoff";
+        candidate.homePerimeter.committedResults.insert(handoff);
+        candidate.committedTransactions.insert(handoff);
+        candidate.homePerimeter.activeOuting.reset();
+    }
+    candidate.baseSiege.warningActive = false;
+    candidate.baseSiege.warningRemainingSeconds = 0U;
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto validation = validateProfileState(candidate, content);
+    if (!validation.valid)
+        return {false, false, DomainErrorCode::InvalidProfile, validation.message, profile.revision};
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
+}
+
+BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
+    ProfileState &profile, const ContentRegistry &content,
+    std::string_view eventId, BaseDefenseEndReason reason,
+    const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return {false, false, DomainErrorCode::InvalidTransaction, "transaction ID is empty", profile.revision};
+    if (!profile.activeBaseDefense && profile.baseSiege.lastResolvedSequence != 0U &&
+        eventId == profile.profileId + "-base-siege-" +
+            std::to_string(profile.baseSiege.lastResolvedSequence))
+        return defenseReceipt(profile, true);
+    if (context.expectedRevision != profile.revision)
+        return {false, false, DomainErrorCode::StaleRevision, "profile revision is stale", profile.revision};
+    if (profile.committedTransactions.contains(context.transactionId))
+        return {false, false, DomainErrorCode::InvalidTransaction, "transaction ID has another result", profile.revision};
+    if (!profile.activeBaseDefense || profile.activeBaseDefense->eventId != eventId || profile.pendingRaid)
+        return {false, false, DomainErrorCode::IllegalDestination, "Defense event is not active", profile.revision};
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return {false, false, DomainErrorCode::RevisionOverflow, "profile revision cannot advance", profile.revision};
+    const auto &snapshot = *profile.activeBaseDefense;
+    std::string message;
+    if (!validateBaseDefenseSnapshot(snapshot, message))
+        return {false, false, DomainErrorCode::InvalidProfile, message, profile.revision};
+    std::size_t planned{};
+    for (const auto &wave : snapshot.wavePlans) planned += wave.enemyIds.size();
+    const bool breached = snapshot.breachedIds.size() >= snapshot.breachLimit;
+    const bool down = profile.currentHealth <= 0;
+    const bool completed = !breached && !down && snapshot.enemies.empty() &&
+        snapshot.killedIds.size() + snapshot.breachedIds.size() == planned;
+    if ((reason == BaseDefenseEndReason::Completed && !completed) ||
+        (reason == BaseDefenseEndReason::PlayerDown && !down) ||
+        (reason == BaseDefenseEndReason::Breached && !breached) ||
+        static_cast<std::uint32_t>(reason) > static_cast<std::uint32_t>(BaseDefenseEndReason::Abandoned))
+        return {false, false, DomainErrorCode::IllegalDestination, "Defense result has not occurred", profile.revision};
+    ProfileState candidate = profile;
+    // Downed-player rescue is Base-only: it never invokes Raid loss or the
+    // complete perimeter-return transaction (which would charge time twice).
+    if (down)
+    {
+        candidate.currentHealth = kHomePerimeterRescueHealth;
+        candidate.medicalStatus = {};
+        if (advanceWorldClock(candidate.worldClock, kHomePerimeterRescueMinutes).minutesApplied !=
+            kHomePerimeterRescueMinutes)
+            return {false, false, DomainErrorCode::IllegalDestination,
+                    "Base defense rescue time cannot advance", profile.revision};
+    }
+    candidate.baseSiege.lastSecuritySpent = 0U;
+    applyDefenseOutcome(candidate, content, reason == BaseDefenseEndReason::Completed);
+    candidate.activeBaseDefense.reset();
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto validation = validateProfileState(candidate, content);
+    if (!validation.valid)
+        return {false, false, DomainErrorCode::InvalidProfile, validation.message, profile.revision};
+    profile = std::move(candidate);
+    return defenseReceipt(profile);
 }
 
 const char *baseThreatTierName(BaseThreatTier tier) noexcept

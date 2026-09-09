@@ -21,6 +21,7 @@ find_package(GTest CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
 set(RAIDLINE_PUBLISHED_CONTENT_FILE
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/content/v1/core.json")
@@ -210,6 +211,12 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/base_defense_state.cpp
+    src/base_defense_state.h
+    src/base_defense_serialization.cpp
+    src/base_defense_serialization.h
+    src/combat_runtime_checkpoint.cpp
+    src/combat_runtime_checkpoint.h
     src/alpha_content_ids.h
     src/base_ground_domain.cpp
     src/base_ground_domain.h
@@ -325,6 +332,8 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/base_defense_runtime.cpp
+    src/base_defense_runtime.h
     src/animation.cpp
     src/animation.h
     src/base_world.cpp
@@ -382,6 +391,9 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/base_defense_checkpoint_writer.cpp
+    src/base_defense_checkpoint_writer.h
+    src/game_session_base_defense.cpp
     src/first_raid_guidance.cpp
     src/first_raid_guidance.h
     src/base_facility_management.cpp
@@ -399,11 +411,13 @@ target_link_libraries(
     PUBLIC
     raidline::domain
     raidline::simulation
+    Threads::Threads
     PRIVATE
     nlohmann_json::nlohmann_json)
 add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
+    src/app_base_defense.cpp
     src/app.cpp
     src/first_raid_ui.cpp
     src/app.h
@@ -496,7 +510,13 @@ function(raidline_add_test target source module)
         PRIVATE
         GTest::gtest_main
         ${module})
-    gtest_discover_tests(${target})
+    if(target STREQUAL "BaseDefensePerformanceTest")
+        # Timing gates need an isolated CPU/allocator, not competition with
+        # the concurrent 128-seed map validation and other test processes.
+        gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
+    else()
+        gtest_discover_tests(${target})
+    endif()
 endfunction()
 
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
@@ -756,6 +776,12 @@ raidline_add_test(
     BaseSiegeDomainTest
     tests/test_base_siege_domain.cpp
     raidline::domain)
+raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
+raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
+raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkpoint_writer.cpp raidline::services)
+raidline_add_test(BaseDefenseSessionTest tests/test_base_defense_session.cpp raidline::services)
+raidline_add_test(BaseSiegeUiTest tests/test_base_siege_ui.cpp raidline::sdl_client)
+raidline_add_test(BaseDefensePerformanceTest tests/test_base_defense_performance.cpp raidline::services)
 raidline_add_test(
     RaidRescueDomainTest
     tests/test_raid_rescue_domain.cpp

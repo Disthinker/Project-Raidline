@@ -59,6 +59,11 @@ BaseSiteFeatureRepairPlan queryBaseSiteFeatureRepair(
                 "Base site feature repair is unavailable during a Raid",
                 site.id);
         }
+        if (profile.baseSiege.warningActive || profile.activeBaseDefense)
+        {
+            return failure(profile, DomainErrorCode::IllegalDestination,
+                "Base site feature repair is locked during Base defense", site.id);
+        }
         const auto state = profile.regionalOperations.baseSites.find(site.id);
         if (state == profile.regionalOperations.baseSites.end())
         {

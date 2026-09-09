@@ -43,6 +43,7 @@ public:
     [[nodiscard]] float tracerLifetimeSeconds() const noexcept;
 
 private:
+    friend class WorldShootingRuntime;
     ShotId shotId_{kInvalidShotId};
     Vec2 origin_{};
     Vec2 currentPosition_{};
