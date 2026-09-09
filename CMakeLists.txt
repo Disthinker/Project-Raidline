@@ -902,3 +902,9 @@ raidline_add_test(
     ProfileInventoryInteractionTest
     tests/test_profile_inventory_interaction.cpp
     raidline::sdl_client)
+
+# Apply per-case timing isolation after GoogleTest's generated discovery files.
+# TEST_INCLUDE_FILES / <target>_TESTS preserve the CMake 3.15 baseline; TEST_FILTER
+# would require 3.22 or isolating the entire functional GameplayWorld test target.
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GameplayTimingTests.cmake")
