@@ -4,6 +4,12 @@
 
 ## Git 与交付基线
 
+- **当前唯一状态（2026-09-09）**：用户已验收集成代码 #156@`f16544d`；exact-head CI `34320466698` Windows/Ubuntu 各 1697/1697 通过。本次收尾复查 Windows Debug 构建无需重编，全量 CTest **1697/1697（66.16 秒）**。`origin/main` 仍为 `2ae898a`；#149–#156 全部未合并，验收集成 tip 不等于每个历史 head 均合格。
+- **裁决**：Enemy Lifecycle 及已授权后续窄整合可以结束代码重构；没有证据要求继续大范围 Navigation/Combat/Session/Persistence 整合。共享合同、实际调用链、51 项三环境合同实例及保留 Policy 见 [收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
+- 本轮 `codex/gameplay-consolidation-closeout` 显式依赖已验收 #156，只同步收尾/架构/路线文档；没有修改游戏代码、内容、测试、资源或存档。下一步为**授权后的整条依赖链合并交付**，不能只合入有已知缺陷的 #149 后结束。新玩法暂不恢复。
+
+### 历史切片记录（不得覆盖上方现状）
+
 - 当前覆盖：用户已验收 #155@`c0b0664`，精确 head CI `34313046163` Windows/Ubuntu 各 1687/1687 通过，未合并。`origin/main` 仍为 `2ae898a`。本轮 `codex/combat-runtime-boundaries-v1` 显式依赖 #155，计划 `active/combat-runtime-boundaries-v1.md`；下方分支状态为历史记录。
 - 本轮修复：成功读取/替换 Profile 时失效旧 Base 敌人缓存；成功出击、回营定位、外围换周期清除旧空间弹道与帧结果。普通同周期更新不重建，失败操作不清理；同场防守恢复保留自己的弹道/敌人/消耗。未修改帧顺序、数值、资源或保存政策，schema v46/content v60/rules v29 不变。
 - 本地 Windows Debug 全目标构建、149/149 定向、1697/1697 全量 CTest（64.66 秒）通过，新增 10 项注册测试；精确 CI 证据以本轮 PR 为准，正常游玩待验收，未启动游戏。
@@ -41,7 +47,7 @@
 
 ## 当前产品里程碑
 
-Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判、开局选址及首局到第二次出击均已进入主线。Home Region 起步阶段收尾；当前是实时防守首片实施与回归，不代表该功能已进入主线或通过正常游玩验收。
+Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随机大地图”阶段、Content Beta 成长闭环、Home Region 外围探索、基地愿望 v2、愿望—远征研判、开局选址及首局到第二次出击均已进入主线。Home Region 起步阶段已收尾；实时防守及玩法框架整合已在 #156 集成版本通过用户验收，尚未进入主线。本轮完成代码收尾评审，主线交付仍待合并授权。
 
 1. **Persistent Base**：PR #58 已合入，Profile/AssetRegistry、可行走 Base、Stash/三槽配装、固定经济/救济、schema v1 与跨进程恢复成为接受基线。
 2. **Extraction Loop**：PR #59 已通过本地自动化、exact-head CI 与用户 7/7 集中真实窗口验收，并以 merge commit `ed45baa` 进入 main。

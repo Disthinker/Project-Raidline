@@ -1,16 +1,23 @@
 # Project Raidline 完整版目标架构
 
-最后核对：2026-09-07。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及已授权切片向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。
+最后核对：2026-09-09。本文描述 Windows PC、纯单机离线完整版的长期技术边界，以及已授权切片向该边界迁移的顺序。实际完成度以 `doc/project/CURRENT_STATE.md` 和测试证据为准。下方长期目标类名不是全部已落地的类；当前实现由 BaseWorld / BaseDefenseRuntime / GameplayWorld 组合窄能力。
 
-## PR #149：实时基地防守边界（开发分支，未验收）
+## 实时基地防守与框架整合（集成 #156 已验收，尚未合入）
 
-### Enemy Lifecycle 整合（2026-09-08，stacked 分支，未验收）
+2026-09-09：#156@`f16544d` 用户正常游玩与 exact-head 双平台 CI 通过；main 仍 `2ae898a`。
+完整 Before/After、机制/策略矩阵、测试与保留债见 [玩法框架整合收尾评审](GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
+本次结束代码整合，不引入万能 CombatSpaceRuntime 或全局 Session 管理器。
+
+### Enemy Lifecycle 与共享战斗合同
 
 - `EnemyLifecycle` 私有拥有活动 Enemy 集合及现有 CombatTargetId 身份记录；`EnemyRoster<State>` 按值绑定各消费者自己的瞬态状态。只有生命周期模块能物理删除 Enemy，死亡/目标完成移除会同时清理附属状态和攻击预约。它不包含寻路算法、AI 更新循环、Profile 或保存策略。
 - `resolveShotHits -> removeDead` 在同一共享入口完成伤害后的生命周期收束；返回 `EnemyRemovalFact{id, position, reason}`，`HitResult` 带目标 ID，跨模块不再传数组移除索引。已死亡对象立即不可攻击或作为命中目标；在当前命中批次末统一压缩集合。
 - Daily 附属状态为出生位置；Raid 为现有 navigation/encounter；Defense 为现有 navigation/contact。活动仍决定出生、目标、波次/巡逻及结果，不能依靠另一个平行数组的 erase 维持一致性。
 - Daily 同周期配置不重建活跃世界；Session 只按明确死亡事实更新既有快照 health=0。显式载入跳过死亡记录并导入退休 ID，不发布第二次死亡。存档 DTO/schema 不变；保存失败仍走原显式一致恢复，不能把失败恢复写成永久死亡提交成功。
-- 当前仍保留三种活动各自的更新顺序和导航调度算法；这两项并未借重构改变。后续是否需要收拢必须在 Phase B 证据评审后决定。
+- 新普通感染者共享 `enemy.infected.basic` 配置；旧冻结快照不改血。`WorldShootingRuntime` 统一消费 HitResult 并提供特殊命中投影，App 不按环境猜测爆头。
+- 三活动现已统一敌人推进/接触先于射击/死亡清理；接触调用 `resolveEnemyAttackContact`，共同消费保护中的攻击且不追加伤害/控制。`PlayerDamageObservation` 保留完整受伤事实，Profile 后果仍由 Session 原有事务消费。这些包含已单独验收的时序/数值变化，不是纯代码搬移。
+- Raid/Defense 共享有界 `selectNavigationRefresh`，刷新资格、扫描预算和目标仍属于策略；Daily 保留直接转向。局部循环索引不作为跨模块生命周期身份。
+- 成功 Profile 替换明确重置 Base 战斗缓存；出击/定位/周期替换清除旧空间弹道和帧事实。失败操作不先清理，同场 Defense 保留完整检查点、Raid 每空间保留 roster。无需新 schema 或统一全部保存策略。
 
 - `ProfileState::activeBaseDefense` 是唯一可选活动快照；`BaseSiegeState` 持有围攻序号和最近已结算序号。自动与手动模式共用事件身份及结果事务，不能按模式重复奖励。
 - `BaseWorld` 组合 `BaseDefenseRuntime`，后者只拥有本事件有限敌人、波次、防线和导航；资产、弹药、医疗及世界时钟仍唯一属于 `GameSession` 的 Profile。普通外围敌人冻结并隐藏，事件结束后原样恢复。

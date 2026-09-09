@@ -15,7 +15,15 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 活动计划应能让接管者不依赖聊天历史继续工作。普通实现细节由开发主控决定；只有产品支柱、失败损失、商业模式、叙事主方向或显著范围扩张才升级给用户。
 
-当前总计划：`active/core-extraction-alpha.md`。
+产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
+
+2026-09-09 当前唯一门禁：`active/combat-runtime-boundaries-v1.md` 实施与用户验收完成，
+本轮已交付 [玩法框架整合收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
+集成 #156@f16544d 的代码重构阶段收尾；#149–#156 未合并，main 仍为 2ae898a。
+下一项是取得明确授权后的整条依赖链合并交付及最终 CI，不默认开启新玩法或大重构。
+本轮独立 `codex/gameplay-consolidation-closeout` 只包含文档，显式依赖 #156。
+
+以下为各切片当时的优先级记录；不得覆盖上方当前门禁：
 
 2026-09-09 当前覆盖：#155@c0b0664 已获用户验收，双平台 CI 34313046163 通过，未合并。当前活动计划为 `active/combat-runtime-boundaries-v1.md`，显式 stacked 依赖 #155；修复已复现的跨 Profile/活动/周期旧敌人与弹道残留，保留同场防守恢复合同。之后进入整合收尾评审，不默认继续大范围重构或新玩法。
 
