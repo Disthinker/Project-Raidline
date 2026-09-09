@@ -4,6 +4,15 @@
 
 ## Git 与交付基线
 
+### 2026-09-09 合并后验证异常：当前门禁
+
+- 用户验收并授权后，#149–#157 全部普通合入 `origin/main@c3eb19c`；完整树等于接受 tip `a68a82e`。
+  合并后本地 Windows Debug 1697/1697（64.99 秒），但最终 main CI `34323812733` 的 Windows 有一项百敌性能计时失败（61.185ms > 25ms），不能宣布最终双平台通过。
+- 独立分支 `codex/ci-gameplay-timing-isolation` 仅修正四项 GameplayWorld 性能测试漏配串行隔离，保持阈值、场景、断言、游戏代码与存档不变；见 [当前修复计划](../exec-plans/active/ci-gameplay-timing-isolation.md)。已记录二十次未改代码的本地单测通过，不据此抹去 CI 失败。
+- 下一玩法的固定防御位/单种路障评审在独立 Draft #158（`370b1ca`），尚未实现；本 CI 修复不叠加该提案。先收束验证门禁，再确认新玩法范围。后续精确 CI 结果记录在修复 PR；开发代理未启动游戏。
+
+下方为合并前收尾记录，不覆盖上述实际主线与 CI 状态：
+
 - **当前唯一状态（2026-09-09）**：用户已验收集成代码 #156@`f16544d`；exact-head CI `34320466698` Windows/Ubuntu 各 1697/1697 通过。本次收尾复查 Windows Debug 构建无需重编，全量 CTest **1697/1697（66.16 秒）**。`origin/main` 仍为 `2ae898a`；#149–#156 全部未合并，验收集成 tip 不等于每个历史 head 均合格。
 - **裁决**：Enemy Lifecycle 及已授权后续窄整合可以结束代码重构；没有证据要求继续大范围 Navigation/Combat/Session/Persistence 整合。共享合同、实际调用链、51 项三环境合同实例及保留 Policy 见 [收尾评审](../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
 - 本轮 `codex/gameplay-consolidation-closeout` 显式依赖已验收 #156，只同步收尾/架构/路线文档；没有修改游戏代码、内容、测试、资源或存档。下一步为**授权后的整条依赖链合并交付**，不能只合入有已知缺陷的 #149 后结束。新玩法暂不恢复。
