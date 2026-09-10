@@ -3,6 +3,8 @@
 #include "ui_localization.h"
 #include <gtest/gtest.h>
 #include <memory>
+#include <chrono>
+#include <filesystem>
 
 // Exercises the production SDL event queue and App update, without SDL video,
 // renderer, window, audio device, or persistence repository.
@@ -43,6 +45,53 @@ void key(SDL_Scancode code) {
     event.type = SDL_EVENT_KEY_UP;
     event.key.down = false;
     ASSERT_TRUE(SDL_PushEvent(&event));
+}
+
+TEST(BaseDailySaveUiTest, FailedCheckpointHasClickableRetryWithoutFireOrDefense) {
+    struct TemporaryStore {
+        std::filesystem::path path = std::filesystem::temp_directory_path() /
+            ("raidline-daily-ui-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        ~TemporaryStore() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
+    } store;
+    ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+    struct QuitEvents { ~QuitEvents() { SDL_Quit(); } } quit;
+    auto app = std::make_unique<App>();
+    auto &flow = Access::flow(*app);
+    flow.configurePersistence(store.path);
+    ASSERT_TRUE(flow.startNewGame("daily-ui", false));
+    Access::frame(*app, 0.000001F);
+    auto &session = flow.gameSession();
+    session.advanceBaseWorldClock(1);
+    const auto obstruction = store.path / "profile.tmp.json";
+    ASSERT_TRUE(std::filesystem::create_directory(obstruction));
+    ASSERT_FALSE(session.checkpointWorldClock());
+    ASSERT_TRUE(session.baseDailySaveBlocked());
+    const auto accepted = profileStateFingerprint(session.profile());
+    click({978, 197, 282, 32});
+    Access::frame(*app, 0.1F);
+    EXPECT_TRUE(session.baseDailySaveBlocked());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), accepted);
+    EXPECT_FALSE(flow.baseWorld().shotFiredLastUpdate());
+    EXPECT_FALSE(Access::pointerPressed(*app));
+    key(SDL_SCANCODE_F10); Access::frame(*app, 0.1F);
+    EXPECT_TRUE(Access::developer(*app));
+    key(SDL_SCANCODE_ESCAPE); Access::frame(*app, 0.1F);
+    EXPECT_FALSE(Access::developer(*app));
+    key(SDL_SCANCODE_ESCAPE); Access::frame(*app, 0.1F);
+    EXPECT_TRUE(Access::paused(*app));
+    key(SDL_SCANCODE_ESCAPE); Access::frame(*app, 0.1F);
+    EXPECT_FALSE(Access::paused(*app));
+    ASSERT_TRUE(std::filesystem::remove(obstruction));
+    click({978, 197, 282, 32});
+    Access::frame(*app, 0.000001F);
+    EXPECT_FALSE(session.baseDailySaveBlocked());
+    EXPECT_FALSE(session.baseDefenseActive());
+    EXPECT_FALSE(flow.baseWorld().shotFiredLastUpdate());
+    EXPECT_FALSE(Access::pointerPressed(*app));
+    const auto saved = SaveRepository{store.path}.load(publishedContentRegistry());
+    ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(profileStateFingerprint(*saved.profile), accepted);
 }
 class BaseSiegeUiTest : public ::testing::Test {
 protected:

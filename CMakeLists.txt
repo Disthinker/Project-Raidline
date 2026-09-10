@@ -402,6 +402,7 @@ add_library(raidline_services STATIC
     src/base_defense_checkpoint_writer.cpp
     src/base_defense_checkpoint_writer.h
     src/game_session_base_defense.cpp
+    src/game_session_daily_checkpoint.cpp
     src/game_session_base_fortification.cpp
     src/first_raid_guidance.cpp
     src/first_raid_guidance.h
@@ -519,7 +520,7 @@ function(raidline_add_test target source module)
         PRIVATE
         GTest::gtest_main
         ${module})
-    if(target STREQUAL "BaseDefensePerformanceTest")
+    if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -793,6 +794,7 @@ raidline_add_test(EnemyAttackContactTest tests/test_enemy_attack_contact.cpp rai
 raidline_add_test(EnemyCombatContractTest tests/test_enemy_combat_contract.cpp raidline::services)
 raidline_add_test(NavigationRefreshSelectionTest tests/test_navigation_refresh_selection.cpp raidline::simulation)
 raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkpoint_writer.cpp raidline::services)
+raidline_add_test(BaseDailyCheckpointTest tests/test_base_daily_checkpoint.cpp raidline::services)
 raidline_add_test(BaseDefenseSessionTest tests/test_base_defense_session.cpp raidline::services)
 raidline_add_test(BaseSiegeUiTest tests/test_base_siege_ui.cpp raidline::sdl_client)
 raidline_add_test(BaseDefensePerformanceTest tests/test_base_defense_performance.cpp raidline::services)

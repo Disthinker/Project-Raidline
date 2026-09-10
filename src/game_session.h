@@ -239,6 +239,9 @@ public:
     [[nodiscard]] bool baseDefenseActive() const noexcept;
     [[nodiscard]] bool baseDefenseSaveBlocked() const noexcept;
     [[nodiscard]] BaseDefenseCheckpointStatus baseDefenseCheckpointStatus() const;
+    [[nodiscard]] bool baseDailySaveBlocked() const noexcept;
+    [[nodiscard]] bool retryBaseDailySave();
+    [[nodiscard]] BaseDefenseCheckpointStatus baseDailyCheckpointStatus() const;
     [[nodiscard]] bool checkpointWorldClock();
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
     [[nodiscard]] BaseThreatProjection baseThreatProjection() const noexcept;
@@ -490,6 +493,7 @@ public:
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
+    friend struct BaseDailyCheckpointTestAccess;
     ProfileState profile_;
     std::optional<SaveRepository> saveRepository_;
     std::optional<ProfileState> activeRaidRecoveryProfile_;
@@ -538,6 +542,11 @@ private:
     bool baseDefenseLagPause_{};
     bool baseDefenseSimulationRejected_{};
     std::optional<BaseDefenseEndReason> pendingBaseDefenseEnd_;
+    // Reuses the bounded immutable-Profile writer, never a second concurrent
+    // writer for the same repository. Daily owns only its cadence/failure policy.
+    std::unique_ptr<BaseDefenseCheckpointWriter> baseDailyWriter_;
+    float baseDailyCheckpointElapsed_{};
+    bool baseDailySaveBlocked_{};
 
     struct DeveloperWeaponHiddenOverrides
     {
@@ -583,6 +592,10 @@ private:
     [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason);
     [[nodiscard]] bool prepareBaseDefenseFrame(BaseWorld &world);
     void finishBaseDefenseFrame(BaseWorld &world, float deltaTime);
+    [[nodiscard]] bool prepareBaseDailyFrame(float deltaTime);
+    void finishBaseDailyFrame();
+    [[nodiscard]] bool checkpointBaseDaily(bool wait);
+    [[nodiscard]] bool drainBaseDailyCheckpoint();
     void refreshLoadoutTutorial();
     void advanceWorldClockFromSimulation(
         float deltaTime,

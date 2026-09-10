@@ -142,6 +142,19 @@ bool App::updateBaseSiegeWarning(float deltaTime)
 
 bool App::handleBaseDefenseControls()
 {
+    if (!gameSession_.baseDefenseActive() && gameSession_.baseDailySaveBlocked())
+    {
+        for (const auto &click : pendingBaseClicks_)
+            if (inside(kDefenseRetry, click.position.x, click.position.y))
+                static_cast<void>(gameSession_.retryBaseDailySave());
+        // Poll lag completion without advancing actors or consuming ammunition.
+        static_cast<void>(gameSession_.updateBaseWorld(gameFlow_.baseWorld(), {}, 0.0F));
+        pendingInventoryUiEvents_.clear();
+        pendingBaseClicks_.clear();
+        pendingBaseRightClicks_.clear();
+        input_.suppressPrimaryPointerUntilRelease();
+        return true;
+    }
     if (gameSession_.baseDefenseActive())
         baseDefenseObservedActive_ = true;
     else if (baseDefenseObservedActive_)
@@ -235,6 +248,23 @@ void App::renderBaseDefenseHud()
 {
     if (!gameSession_.baseDefenseActive())
     {
+        if (gameSession_.baseDailySaveBlocked())
+        {
+            SDL_SetRenderDrawColor(renderer_, 145, 66, 40, 255);
+            SDL_RenderFillRect(renderer_, &kDefenseRetry);
+            uiTextRenderer_.render(renderer_, kDefenseRetry.x + 10.0F, kDefenseRetry.y + 9.0F,
+                                   "SAVE PROTECTION PAUSED | RETRY");
+        }
+        if (developerPerformanceOverlayOpen_)
+        {
+            const auto s = gameSession_.baseDailyCheckpointStatus();
+            const auto text = fmt::format(
+                "BASE CHECKPOINT | COPY {:.2f}ms | JSON {:.2f}ms | COMMIT {:.2f}ms | LAG {:.0f}ms | {}/{}",
+                s.lastCopyMilliseconds, s.lastWriteMetrics.serializationMilliseconds,
+                s.lastWriteMetrics.commitMilliseconds, s.durabilityLagMilliseconds,
+                s.durableGeneration, s.requestedGeneration);
+            uiTextRenderer_.render(renderer_, 16.0F, 580.0F, text.c_str());
+        }
         if (!baseDefenseResultVisible_)
             return;
         const auto &result = gameSession_.profile().baseSiege;

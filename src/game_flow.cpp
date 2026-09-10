@@ -719,7 +719,7 @@ bool GameFlow::returnToMainMenu() noexcept
     {
         return false;
     }
-    if (state_ == GameFlowState::Base && gameSession_.baseDefenseActive())
+    if (state_ == GameFlowState::Base)
     {
         try { if (!gameSession_.checkpointWorldClock()) return false; }
         catch (...) { return false; }
