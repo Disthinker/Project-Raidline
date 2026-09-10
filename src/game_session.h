@@ -46,6 +46,8 @@
 
 enum class BaseFacilityKind;
 class BaseWorld;
+struct InstallFortificationCommand;
+struct FortificationPlacementPlan;
 
 enum class GameSessionState
 {
@@ -342,6 +344,10 @@ public:
         std::string transactionId);
 
     [[nodiscard]] FortificationReceipt executeBaseFortification(const FortificationCommand &);
+    [[nodiscard]] FortificationPlacementPlan queryBaseFortificationPlacement(
+        const BaseWorld &, const InstallFortificationCommand &) const;
+    [[nodiscard]] FortificationReceipt installBaseFortification(
+        const BaseWorld &, const InstallFortificationCommand &, ProfileRevision expectedRevision);
     [[nodiscard]] BaseGroundReceipt executeBaseGroundAsset(
         const BaseGroundCommand &command,
         std::string transactionId);
