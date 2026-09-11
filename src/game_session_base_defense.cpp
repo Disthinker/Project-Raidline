@@ -1,4 +1,6 @@
 #include "base_morale_domain.h"
+#include "base_defense_ownership.h"
+#include "base_defense_preparation.h"
 #include "base_world.h"
 #include "game_session.h"
 #include "stable_random.h"
@@ -34,6 +36,7 @@ bool GameSession::triggerDeveloperBaseSiegeWarning()
     candidate.baseSiege.siteThreatUnits = 0U;
     if (!activateBaseSiegeWarningIfEligible(candidate))
         return false;
+    candidate.baseDefenseWarning = prepareBaseDefenseWarning(candidate, publishedContentRegistry());
     ++candidate.revision;
     return commitProfileCandidate(std::move(candidate));
 }
@@ -64,8 +67,25 @@ bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
     // Equipment can change while a facility UI pauses Base simulation. Freeze
     // the equipped weapon, not the previous/default runtime configuration.
     synchronizeActiveBaseWeapon(world);
-    auto prepared = world.prepareBaseDefenseSnapshot(std::move(inputs),
-        publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
+    std::optional<BaseDefenseSnapshot> prepared;
+    if (profile_.baseDefenseWarning)
+    {
+        prepared = profile_.baseDefenseWarning->layout;
+        if (prepared)
+        {
+            for (auto &f : prepared->fortifications)
+            {
+                const auto owner = profile_.baseFortifications.instances.find(f.id);
+                if (owner == profile_.baseFortifications.instances.end()) return false;
+                f.initialDurability = f.durability = owner->second.durability;
+            }
+            prepared->layoutHash = baseDefenseLayoutHash(*prepared);
+            prepared = world.checkoutFrozenDefense(std::move(*prepared));
+        }
+    }
+    else
+        prepared = world.prepareBaseDefenseSnapshot(std::move(inputs),
+            publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     if (!prepared)
     {
         persistenceMessage_ = "NO LEGAL DEFENSE APPROACH | AUTO DEFENSE REMAINS AVAILABLE";
@@ -138,10 +158,10 @@ bool GameSession::restoreBaseDefenseRuntime(BaseWorld &world)
     return true;
 }
 
-void GameSession::captureBaseDefenseCheckpoint(ProfileState &candidate) const
+bool GameSession::captureBaseDefenseCheckpoint(ProfileState &candidate) const
 {
-    if (!candidate.activeBaseDefense || !baseDefenseWorld_)
-        return;
+    if (!candidate.activeBaseDefense) return true;
+    if (!baseDefenseWorld_) return false;
     if (auto snapshot = baseDefenseWorld_->baseDefenseCheckpoint())
     {
         snapshot->activeWeaponSlot = static_cast<std::uint32_t>(activeWeaponSlot_);
@@ -152,8 +172,9 @@ void GameSession::captureBaseDefenseCheckpoint(ProfileState &candidate) const
         snapshot->pendingWorldSeconds = pendingWorldSeconds_;
         snapshot->baseCombatElapsedSeconds = baseCombatElapsedSeconds_;
         snapshot->medicalTickAccumulatorSeconds = medicalTickAccumulatorSeconds_;
-        candidate.activeBaseDefense = std::move(snapshot);
+        return captureOwnedDefenseCheckpoint(candidate, std::move(*snapshot), publishedContentRegistry());
     }
+    return false;
 }
 
 bool GameSession::checkpointBaseDefense(bool wait)
@@ -164,7 +185,12 @@ bool GameSession::checkpointBaseDefense(bool wait)
         return false;
     if (wait && pendingBaseDefenseEnd_)
         return finalizeBaseDefense(*pendingBaseDefenseEnd_);
-    captureBaseDefenseCheckpoint(profile_);
+    if (!captureBaseDefenseCheckpoint(profile_))
+    {
+        baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
+        persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
+        return false;
+    }
     if (!baseDefenseWriter_ && saveRepository_)
         baseDefenseWriter_ = std::make_unique<BaseDefenseCheckpointWriter>(*saveRepository_);
     if (baseDefenseWriter_)
@@ -305,7 +331,12 @@ bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason)
         return true;
     if (baseDefenseSimulationRejected_)
         return false;
-    captureBaseDefenseCheckpoint(profile_);
+    if (!captureBaseDefenseCheckpoint(profile_))
+    {
+        baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
+        persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
+        return false;
+    }
     ProfileState candidate = profile_;
     const auto receipt = executeBaseRealtimeDefenseSettlement(
         candidate, publishedContentRegistry(), profile_.activeBaseDefense->eventId, reason,

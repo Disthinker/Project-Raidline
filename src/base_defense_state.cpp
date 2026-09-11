@@ -27,7 +27,7 @@ void rect(std::uint64_t &h, Rect r) noexcept
     point(h, r.position);
     point(h, r.size);
 }
-void text(std::uint64_t &h, const std::string &s) noexcept
+void text(std::uint64_t &h, std::string_view s) noexcept
 {
     number(h, s.size());
     for (const unsigned char c : s)
@@ -99,6 +99,21 @@ std::uint64_t baseDefenseLayoutHash(const BaseDefenseSnapshot &s) noexcept
     number(h, s.frozenSiteThreat);
     number(h, s.breachLimit);
     number(h, s.maximumActiveEnemies);
+    if (s.rulesVersion == kFortifiedBaseDefenseRulesVersion)
+    {
+        number(h, s.fortifications.size());
+        for (const auto &f : s.fortifications)
+        {
+            number(h, f.id.value);
+            text(h, f.definition.value());
+            text(h, f.slot.site.value());
+            text(h, f.slot.plot);
+            number(h, static_cast<unsigned>(f.slot.side));
+            rect(h, f.footprint);
+            number(h, f.maximumDurability);
+            number(h, f.initialDurability);
+        }
+    }
     return h;
 }
 
@@ -110,7 +125,8 @@ bool validateBaseDefenseSnapshot(const BaseDefenseSnapshot &s, std::string &mess
         return false;
     };
     if (s.eventId.empty() || s.siegeSequence == 0U || s.mode != BaseDefenseMode::Realtime ||
-        s.rulesVersion != kBaseDefenseRulesVersion || s.siteDefinitionId.empty() ||
+        (s.rulesVersion != kBaseDefenseRulesVersion &&
+         s.rulesVersion != kFortifiedBaseDefenseRulesVersion) || s.siteDefinitionId.empty() ||
         s.layoutIdentity.empty() || !std::isfinite(s.worldSize.x) ||
         !std::isfinite(s.worldSize.y) || s.worldSize.x <= 0.0F || s.worldSize.y <= 0.0F ||
         !validRect(s.safeCore, s.worldSize) || s.wavePlans.size() != 3U ||
@@ -120,6 +136,18 @@ bool validateBaseDefenseSnapshot(const BaseDefenseSnapshot &s, std::string &mess
         s.maximumActiveEnemies != kBaseDefenseMaximumActiveEnemies || s.frozenMoraleTier > 2U ||
         s.layoutHash != baseDefenseLayoutHash(s))
         return fail("Defense identity, layout or rule contract is invalid");
+    if (!validateFortificationCheckpoints(s.fortifications, s.fortificationGeometryRevision) ||
+        (s.rulesVersion == kBaseDefenseRulesVersion &&
+         (!s.fortifications.empty() || !s.fortificationAttacks.empty())))
+        return fail("Defense fortification checkpoint is invalid or belongs to another rule");
+    for (const auto &f : s.fortifications)
+    {
+        if (f.slot.site.value() != s.siteDefinitionId || f.slot.plot != s.plotId ||
+            !validRect(f.footprint, s.worldSize) || overlaps(f.footprint, s.safeCore) ||
+            std::any_of(s.movementBlockers.begin(), s.movementBlockers.end(),
+                        [&](Rect r) { return overlaps(r, f.footprint); }))
+            return fail("Defense fortification placement is invalid");
+    }
     for (const auto &r : s.movementBlockers)
         if (!validRect(r, s.worldSize))
             return fail("Defense frozen obstacle is invalid");
@@ -200,6 +228,17 @@ bool validateBaseDefenseSnapshot(const BaseDefenseSnapshot &s, std::string &mess
             return fail("Defense enemy progress does not match the frozen spawn order");
     }
     std::set<std::uint64_t> contacts;
+    std::set<std::uint64_t> boundAttackers;
+    for (const auto &binding : s.fortificationAttacks)
+    {
+        const auto enemy = std::find_if(s.enemies.begin(), s.enemies.end(),
+            [&](const auto &e) { return e.id == binding.enemyId; });
+        if (enemy == s.enemies.end() || !boundAttackers.insert(binding.enemyId).second ||
+            !enemy->attackType || *enemy->attackType != 1U || enemy->attackPhase == 0U ||
+            std::none_of(s.fortifications.begin(), s.fortifications.end(),
+                [&](const auto &f) { return f.id == binding.target; }))
+            return fail("Defense structure attack binding is invalid");
+    }
     std::set<std::uint64_t> reserved;
     for (const auto id : s.reservedAttackers)
         if (!active.contains(id) || !reserved.insert(id).second)
@@ -344,5 +383,16 @@ std::uint64_t baseDefenseCheckpointHash(const BaseDefenseSnapshot &s) noexcept
     number(h, std::bit_cast<std::uint64_t>(s.pendingWorldSeconds));
     real(h, s.baseCombatElapsedSeconds);
     real(h, s.medicalTickAccumulatorSeconds);
+    if (s.rulesVersion == kFortifiedBaseDefenseRulesVersion)
+    {
+        number(h, s.fortificationGeometryRevision);
+        for (const auto &f : s.fortifications) number(h, f.durability);
+        number(h, s.fortificationAttacks.size());
+        for (const auto &binding : s.fortificationAttacks)
+        {
+            number(h, binding.enemyId);
+            number(h, binding.target.value);
+        }
+    }
     return h;
 }

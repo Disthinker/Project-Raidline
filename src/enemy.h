@@ -72,6 +72,8 @@ public:
     bool tryStartAttack(
         EnemyAttackType type,
         Vec2 direction) noexcept;
+    [[nodiscard]] bool hasStructureScratchOpportunity(Vec2 surface) const noexcept;
+    [[nodiscard]] bool tryStartStructureScratch(Vec2 surface) noexcept;
 
     [[nodiscard]]
     EnemyAttackPhase attackPhase() const noexcept;

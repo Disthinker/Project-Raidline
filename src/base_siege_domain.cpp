@@ -1,4 +1,5 @@
 #include "base_siege_domain.h"
+#include "base_defense_ownership.h"
 
 #include "base_workforce_domain.h"
 #include "home_perimeter_domain.h"
@@ -131,6 +132,7 @@ void clearThreatForSafetyPeriod(
     state.siteThreatUnits = 0U;
     state.warningActive = false;
     state.warningRemainingSeconds = 0U;
+    profile.baseDefenseWarning.reset();
     const std::uint64_t duration =
         static_cast<std::uint64_t>(days) * kWorldMinutesPerDay;
     state.safeUntilWorldMinute =
@@ -138,6 +140,47 @@ void clearThreatForSafetyPeriod(
                 std::numeric_limits<std::uint64_t>::max() - duration
             ? std::numeric_limits<std::uint64_t>::max()
             : profile.worldClock.elapsedWorldMinutes + duration;
+}
+
+bool approachUsesSide(const BaseDefenseSnapshot &snapshot, DefenseSide side) noexcept
+{
+    const auto &core = snapshot.safeCore;
+    for (const auto &wave : snapshot.wavePlans)
+    {
+        const auto target = wave.target;
+        const bool alignedY = target.y >= core.position.y && target.y <= core.position.y + core.size.y;
+        const bool alignedX = target.x >= core.position.x && target.x <= core.position.x + core.size.x;
+        // The frozen defense-line target, not a current enemy or UI marker,
+        // defines the approach. Repeated waves on one side count only once.
+        switch (side)
+        {
+        case DefenseSide::West: if (alignedY && target.x < core.position.x) return true; break;
+        case DefenseSide::East: if (alignedY && target.x > core.position.x + core.size.x) return true; break;
+        case DefenseSide::North: if (alignedX && target.y < core.position.y) return true; break;
+        case DefenseSide::South: if (alignedX && target.y > core.position.y + core.size.y) return true; break;
+        }
+    }
+    return false;
+}
+
+void projectFortificationDiscount(BaseAutoDefensePlan &plan, const ProfileState &profile) noexcept
+{
+    if (!profile.baseDefenseWarning || !profile.baseDefenseWarning->layout) return;
+    const auto &snapshot = *profile.baseDefenseWarning->layout;
+    if (snapshot.rulesVersion != kFortifiedBaseDefenseRulesVersion) return;
+    // Read-only UI hot path: at most 64 owners x 4 frozen structures x 3 waves.
+    // Full frozen geometry/hash validation belongs to load/commit, not render.
+    for (const auto &[id, owner] : profile.baseFortifications.instances)
+    {
+        if (plan.fortificationDiscount == plan.participatingFortifications.size() ||
+            plan.requiredSecurity <= 8U) break;
+        if (!owner.slot || owner.durability < kAutoDefenseFortificationWear) continue;
+        const auto frozen = std::find_if(snapshot.fortifications.begin(), snapshot.fortifications.end(),
+            [&](const auto &f) { return f.id == id && f.definition == owner.definition && f.slot == *owner.slot; });
+        if (frozen == snapshot.fortifications.end() || !approachUsesSide(snapshot, owner.slot->side)) continue;
+        plan.participatingFortifications[plan.fortificationDiscount++] = id;
+        --plan.requiredSecurity;
+    }
 }
 
 void applyDefenseOutcome(ProfileState &profile,
@@ -398,9 +441,11 @@ BaseAutoDefensePlan queryBaseAutoDefense(
     }
     const std::uint32_t required = autoDefenseSecurityRequirement(
         profile, content);
-    return {true, DomainErrorCode::None, {}, profile.revision,
-            required, profile.baseResources.pool.security,
-            profile.baseResources.pool.security >= required};
+    BaseAutoDefensePlan plan{true, DomainErrorCode::None, {}, profile.revision,
+                            required, profile.baseResources.pool.security};
+    projectFortificationDiscount(plan, profile);
+    plan.projectedSuccess = plan.availableSecurity >= plan.requiredSecurity;
+    return plan;
 }
 
 BaseAutoDefenseReceipt executeBaseAutoDefense(
@@ -435,6 +480,8 @@ BaseAutoDefenseReceipt executeBaseAutoDefense(
         return {false, false, DomainErrorCode::StaleRevision,
                 "profile revision is stale", profile.revision};
     }
+    if (const auto validation = validateDefenseWarning(profile, content); !validation.valid)
+        return {false, false, DomainErrorCode::InvalidProfile, validation.message, profile.revision};
     const BaseAutoDefensePlan plan = queryBaseAutoDefense(profile, content);
     if (!plan.canCommit)
     {
@@ -447,6 +494,9 @@ BaseAutoDefenseReceipt executeBaseAutoDefense(
     state.lastSecuritySpent = std::min(
         plan.requiredSecurity, candidate.baseResources.pool.security);
     candidate.baseResources.pool.security -= state.lastSecuritySpent;
+    for (std::uint32_t i = 0; i < plan.fortificationDiscount; ++i)
+        candidate.baseFortifications.instances.at(plan.participatingFortifications[i]).durability -=
+            kAutoDefenseFortificationWear;
     applyDefenseOutcome(candidate, content, plan.projectedSuccess);
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -482,6 +532,19 @@ BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
         profile.pendingRaid || !profile.homeFounding.established)
         return reject(DomainErrorCode::IllegalDestination,
                       "Realtime defense requires an established Base under warning");
+    if (profile.baseDefenseWarning)
+    {
+        if (!validateDefenseWarning(profile, content).valid || !profile.baseDefenseWarning->layout ||
+            snapshot.rulesVersion != kFortifiedBaseDefenseRulesVersion ||
+            !matchesDefenseWarning(snapshot, *profile.baseDefenseWarning->layout) ||
+            !validateDefenseFortificationOwnership(profile, content, snapshot).valid ||
+            std::any_of(snapshot.fortifications.begin(), snapshot.fortifications.end(),
+                [](const auto &f) { return f.initialDurability != f.durability; }))
+            return reject(DomainErrorCode::InvalidProfile, "Defense differs from frozen warning or owners");
+    }
+    else if (snapshot.rulesVersion != kBaseDefenseRulesVersion)
+        return reject(DomainErrorCode::IllegalDestination,
+                      "Fortified defense requires a frozen warning");
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
         return reject(DomainErrorCode::RevisionOverflow, "profile revision cannot advance");
     const auto *site = activeSite(profile, content);
@@ -489,9 +552,10 @@ BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
         snapshot.eventId != baseSiegeEventId(profile) ||
         snapshot.siegeSequence != profile.baseSiege.siegeSequence ||
         snapshot.siegeSequence <= profile.baseSiege.lastResolvedSequence ||
-        snapshot.frozenPopulation != profile.basePopulation.ordinaryResidents ||
-        snapshot.frozenMoraleTier != static_cast<std::uint32_t>(profile.baseMorale.tier) ||
-        snapshot.frozenSiteThreat != site->dailyBaseThreatUnits)
+        (!profile.baseDefenseWarning &&
+         (snapshot.frozenPopulation != profile.basePopulation.ordinaryResidents ||
+          snapshot.frozenMoraleTier != static_cast<std::uint32_t>(profile.baseMorale.tier) ||
+          snapshot.frozenSiteThreat != site->dailyBaseThreatUnits)))
         return reject(DomainErrorCode::InvalidProfile, "Defense event identity or frozen inputs are stale");
     const auto plot = profile.homeFounding.plots.find(site->id);
     const std::string expectedPlot = plot == profile.homeFounding.plots.end() ? "" : plot->second;
@@ -565,7 +629,8 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
         return {false, false, DomainErrorCode::RevisionOverflow, "profile revision cannot advance", profile.revision};
     const auto &snapshot = *profile.activeBaseDefense;
     std::string message;
-    if (!validateBaseDefenseSnapshot(snapshot, message))
+    if (!validateBaseDefenseSnapshot(snapshot, message) ||
+        !validateDefenseFortificationOwnership(profile, content, snapshot).valid)
         return {false, false, DomainErrorCode::InvalidProfile, message, profile.revision};
     std::size_t planned{};
     for (const auto &wave : snapshot.wavePlans) planned += wave.enemyIds.size();

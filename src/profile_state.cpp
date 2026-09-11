@@ -1,4 +1,6 @@
 #include "profile_state.h"
+#include "base_fortification_domain.h"
+#include "base_defense_ownership.h"
 #include "home_founding_domain.h"
 #include "base_wish_expedition.h"
 
@@ -1262,6 +1264,10 @@ ProfileValidationResult validateProfileState(
         return {false, "regional outpost capacity is exceeded"};
     }
     const BaseSiegeState &siege = profile.baseSiege;
+    if (const auto result = validateBaseFortifications(profile, content); !result.valid)
+        return result;
+    if (const auto result = validateDefenseWarning(profile, content); !result.valid)
+        return result;
     if (siege.raidThreatUnits > kBaseSiegeThreatThreshold ||
         siege.populationThreatUnits > kBaseSiegeThreatThreshold ||
         siege.siteThreatUnits > kBaseSiegeThreatThreshold ||
@@ -1287,12 +1293,17 @@ ProfileValidationResult validateProfileState(
         std::string message;
         const auto plot=profile.homeFounding.plots.find(activeBaseSite->id);
         const std::string expectedPlot=plot==profile.homeFounding.plots.end()?"":plot->second;
-        if (profile.pendingRaid || profile.homePerimeter.activeOuting || siege.warningActive ||
+        if ((profile.baseDefenseWarning && defense.rulesVersion != kFortifiedBaseDefenseRulesVersion) ||
+            (defense.rulesVersion == kFortifiedBaseDefenseRulesVersion &&
+             (!profile.baseDefenseWarning || !profile.baseDefenseWarning->layout ||
+              !matchesDefenseWarning(defense, *profile.baseDefenseWarning->layout))) ||
+            profile.pendingRaid || profile.homePerimeter.activeOuting || siege.warningActive ||
             defense.eventId != baseSiegeEventId(profile) ||
             defense.siegeSequence != siege.siegeSequence ||
             defense.siegeSequence <= siege.lastResolvedSequence ||
             defense.siteDefinitionId != activeBaseSite->id.value() || defense.plotId != expectedPlot ||
-            !validateBaseDefenseSnapshot(defense,message))
+            !validateBaseDefenseSnapshot(defense,message) ||
+            !validateDefenseFortificationOwnership(profile, content, defense).valid)
             return {false, "Base defense checkpoint is invalid: " + message};
     }
     const BaseResourceBundle &resources = profile.baseResources.pool;
@@ -4515,6 +4526,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         }
         hashInteger(hash, state.shortcutOperationsSinceRestoration);
     }
+    // Empty migrated state must not perturb legacy fingerprint-seeded events.
+    if (!profile.baseFortifications.instances.empty() || profile.baseFortifications.nextInstanceId != 1)
+    {
+        hashInteger(hash, 0x666f7274696679ULL);
+        hashInteger(hash, baseFortificationFingerprint(profile.baseFortifications));
+    }
     hashInteger(hash, profile.baseSiege.raidThreatUnits);
     hashInteger(hash, profile.baseSiege.populationThreatUnits);
     hashInteger(hash, profile.baseSiege.siteThreatUnits);
@@ -4532,6 +4549,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.activeBaseDefense.has_value()?1U:0U);
     if (profile.activeBaseDefense)
         hashInteger(hash,baseDefenseCheckpointHash(*profile.activeBaseDefense));
+    if (profile.baseDefenseWarning)
+    {
+        hashInteger(hash, 0x7761726e696e6732ULL);
+        hashBytes(hash, profile.baseDefenseWarning->eventId);
+        hashInteger(hash, profile.baseDefenseWarning->layout.has_value() ? 1U : 0U);
+        if (profile.baseDefenseWarning->layout)
+            hashInteger(hash, baseDefenseCheckpointHash(*profile.baseDefenseWarning->layout));
+    }
     for (const auto &[siteId, snapshot] : profile.homePerimeter.sites)
     {
         hashBytes(hash, siteId.value());

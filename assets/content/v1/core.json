@@ -1,6 +1,17 @@
 {
   "schema_version": 1,
-  "content_version": "enemy-combat-contract-content-60",
+  "content_version": "base-fortification-foundation-content-61",
+  "fortifications": [
+    {
+      "id": "fortification.wood_barricade",
+      "display_name": "WOOD BARRICADE",
+      "maximum_durability": 120,
+      "build_material_units": 8,
+      "repair_per_material_unit": 30,
+      "length": 160,
+      "depth": 48
+    }
+  ],
   "enemy_combat_definitions": [
     {"id": "enemy.infected.basic", "maximum_health": 12}
   ],

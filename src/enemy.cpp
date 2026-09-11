@@ -381,6 +381,25 @@ EnemyAttackPhase Enemy::attackPhase() const noexcept
   return attack_.phase();
 }
 
+bool Enemy::hasStructureScratchOpportunity(Vec2 surface) const noexcept
+{
+  return !isDead() && attack_.phase() == EnemyAttackPhase::Idle &&
+      std::isfinite(surface.x) && std::isfinite(surface.y) &&
+      ai_.cooldownRemaining(EnemyAttackType::Scratch) <= 0.0F &&
+      std::hypot(surface.x - position_.x - size_.x / 2,
+                 surface.y - position_.y - size_.y / 2) <= ai_.config().scratchAttackDistance;
+}
+
+bool Enemy::tryStartStructureScratch(Vec2 surface) noexcept
+{
+  if (!hasStructureScratchOpportunity(surface) ||
+      !tryStartAttack(EnemyAttackType::Scratch,
+                     {surface.x - position_.x - size_.x / 2,
+                      surface.y - position_.y - size_.y / 2})) return false;
+  ai_.recordAttackStarted(EnemyAttackType::Scratch);
+  return true;
+}
+
 bool Enemy::hasAttackOpportunity(
     Vec2 targetPosition) const noexcept
 {

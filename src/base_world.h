@@ -76,6 +76,8 @@ class BaseWorld
 {
 public:
     BaseWorld();
+    [[nodiscard]] std::optional<BaseDefenseSnapshot> checkoutFrozenDefense(
+        BaseDefenseSnapshot snapshot) const;
 
     void configureSite(std::string_view siteDefinitionId);
     void configureSite(

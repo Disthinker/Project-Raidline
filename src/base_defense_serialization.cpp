@@ -1,6 +1,7 @@
 #include "base_defense_serialization.h"
 #include "combat_runtime_checkpoint_json.h"
 #include <nlohmann/json.hpp>
+#include <limits>
 
 namespace
 {
@@ -9,6 +10,14 @@ Json point(Vec2 v) { return Json::array({v.x, v.y}); }
 Vec2 readPoint(const Json &j) { return {j.at(0).get<float>(), j.at(1).get<float>()}; }
 Json rect(Rect r) { return {point(r.position), point(r.size)}; }
 Rect readRect(const Json &j) { return {readPoint(j.at(0)), readPoint(j.at(1))}; }
+std::uint64_t readUnsigned(const Json &j, std::uint64_t maximum)
+{
+    if ((!j.is_number_unsigned() && !(j.is_number_integer() && j.get<std::int64_t>() >= 0)) ||
+        j.get<std::uint64_t>() > maximum) throw std::runtime_error("Invalid structure integer");
+    return j.get<std::uint64_t>();
+}
+std::uint32_t read32(const Json &j)
+{ return static_cast<std::uint32_t>(readUnsigned(j, std::numeric_limits<std::uint32_t>::max())); }
 } // namespace
 
 nlohmann::json baseDefenseSnapshotJson(const BaseDefenseSnapshot &s)
@@ -36,7 +45,7 @@ nlohmann::json baseDefenseSnapshotJson(const BaseDefenseSnapshot &s)
     }
     for (const auto &c : s.contacts)
         contacts.push_back({{"enemy_id", c.enemyId}, {"seconds", c.seconds}});
-    return {{"event_id", s.eventId},
+    Json result{{"event_id", s.eventId},
             {"siege_sequence", s.siegeSequence},
             {"mode", "realtime"},
             {"rules_version", s.rulesVersion},
@@ -78,6 +87,22 @@ nlohmann::json baseDefenseSnapshotJson(const BaseDefenseSnapshot &s)
             {"pending_world_seconds", s.pendingWorldSeconds},
             {"base_combat_elapsed", s.baseCombatElapsedSeconds},
             {"medical_tick_accumulator", s.medicalTickAccumulatorSeconds}};
+    if (s.rulesVersion == kFortifiedBaseDefenseRulesVersion)
+    {
+        auto structures = Json::array(), bindings = Json::array();
+        for (const auto &f : s.fortifications)
+            structures.push_back({{"id", f.id.value}, {"definition", f.definition.value()},
+                {"site", f.slot.site.value()}, {"plot", f.slot.plot},
+                {"side", static_cast<unsigned>(f.slot.side)}, {"footprint", rect(f.footprint)},
+                {"maximum", f.maximumDurability}, {"initial", f.initialDurability},
+                {"durability", f.durability}});
+        for (const auto &b : s.fortificationAttacks)
+            bindings.push_back({{"enemy", b.enemyId}, {"target", b.target.value}});
+        result["fortifications"] = std::move(structures);
+        result["fortification_attacks"] = std::move(bindings);
+        result["fortification_geometry_revision"] = s.fortificationGeometryRevision;
+    }
+    return result;
 }
 
 BaseDefenseSnapshot parseBaseDefenseSnapshotJson(const nlohmann::json &j)
@@ -141,6 +166,32 @@ BaseDefenseSnapshot parseBaseDefenseSnapshotJson(const nlohmann::json &j)
     s.pendingWorldSeconds = j.at("pending_world_seconds").get<double>();
     s.baseCombatElapsedSeconds = j.at("base_combat_elapsed").get<float>();
     s.medicalTickAccumulatorSeconds = j.at("medical_tick_accumulator").get<float>();
+    if (s.rulesVersion == kFortifiedBaseDefenseRulesVersion)
+    {
+        const auto &structures = j.at("fortifications"), &bindings = j.at("fortification_attacks");
+        if (!structures.is_array() || structures.size() > 4 || !bindings.is_array() ||
+            bindings.size() > kBaseDefenseMaximumActiveEnemies)
+            throw std::runtime_error("Unbounded structure checkpoint");
+        for (const auto &f : structures)
+        {
+            const auto side = read32(f.at("side"));
+            if (side > 3) throw std::runtime_error("Invalid structure side");
+            s.fortifications.push_back({
+                {readUnsigned(f.at("id"), UINT64_MAX)},
+                FortificationDefinitionId{f.at("definition").get<std::string>()},
+                {RegionalBaseSiteDefinitionId{f.at("site").get<std::string>()},
+                 f.at("plot").get<std::string>(), static_cast<DefenseSide>(side)},
+                readRect(f.at("footprint")), read32(f.at("maximum")), read32(f.at("initial")),
+                read32(f.at("durability"))});
+        }
+        for (const auto &b : bindings)
+            s.fortificationAttacks.push_back({readUnsigned(b.at("enemy"), UINT64_MAX),
+                                              {readUnsigned(b.at("target"), UINT64_MAX)}});
+        s.fortificationGeometryRevision = read32(j.at("fortification_geometry_revision"));
+    }
+    else if (j.contains("fortifications") || j.contains("fortification_attacks") ||
+             j.contains("fortification_geometry_revision"))
+        throw std::runtime_error("Legacy defense cannot acquire structures during load");
     std::string message;
     if (!validateBaseDefenseSnapshot(s, message))
         throw std::runtime_error(message);

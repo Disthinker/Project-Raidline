@@ -52,4 +52,6 @@ Do not add retries, remove cases or broaden into a performance framework.
 - [x] Four timing cases repeated ten times each: 40/40 executions passed in 14.31s.
 - [x] Full local Windows CTest: 1697/1697 in 69.75s; timing cases run after
   concurrent workload completes, with the original limits intact.
-- [ ] Exact-head Windows/Ubuntu CI (final results recorded in the PR).
+- [x] Exact-head 61187e3 Windows/Ubuntu CI 34326245418 passed (1697/1697 each).
+- [x] User authorized ordinary merge: #159 -> main@c6d4597. Merge-head CI
+  34331350462 also passed both platforms; no gameplay/schema/assets changed by #159.

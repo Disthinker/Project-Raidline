@@ -1,4 +1,5 @@
 #pragma once
+#include "base_fortification_types.h"
 
 #include <cstdint>
 #include <map>
@@ -711,6 +712,12 @@ struct LoadoutArchetypeDefinition
 class ContentRegistry
 {
 public:
+    [[nodiscard]] const FortificationDefinition *findFortification(
+        const FortificationDefinitionId &id) const noexcept
+    {
+        const auto found = fortifications_.find(id);
+        return found == fortifications_.end() ? nullptr : &found->second;
+    }
     [[nodiscard]]
     static ContentRegistry fromJson(
         std::string_view jsonText);
@@ -859,6 +866,7 @@ public:
         const RaidSpaceDefinitionId &id) const;
 
 private:
+    std::map<FortificationDefinitionId, FortificationDefinition> fortifications_;
     std::string contentVersion_;
     std::vector<std::string> publishedResources_;
     std::vector<CaliberDefinition> calibers_;

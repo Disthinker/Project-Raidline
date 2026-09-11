@@ -5,6 +5,7 @@
 #include "player_damage_observation.h"
 #include "raid_space_query.h"
 #include "world_shooting_runtime.h"
+#include "fortification_runtime.h"
 #include <optional>
 #include <span>
 
@@ -16,6 +17,9 @@ struct BaseDefenseRuntimeMetrics
     std::size_t substeps{};
     double updateMilliseconds{};
     double navigationMilliseconds{};
+    std::size_t fortificationDamageFacts{};
+    std::size_t fortificationsDisabled{};
+    std::size_t dynamicGeometryBatches{};
 };
 
 // Owns siege-source actors only. It never owns or mutates Profile/Registry.
@@ -42,6 +46,8 @@ class BaseDefenseRuntime
     }
     [[nodiscard]] const BaseDefenseRuntimeMetrics &metrics() const noexcept { return metrics_; }
     [[nodiscard]] bool playerExposed(Vec2 center) const noexcept;
+    [[nodiscard]] const FortificationRuntime &fortifications() const noexcept { return fortifications_; }
+    [[nodiscard]] const std::vector<BallisticBlocker> &worldBlockers() const noexcept { return worldBlockers_; }
 
   private:
     friend struct EnemyLifecycleTestAccess;
@@ -51,6 +57,7 @@ class BaseDefenseRuntime
         std::optional<CheckpointPoint> navigationTarget;
         float navigationRefreshRemaining{};
         std::optional<float> contactSeconds;
+        std::optional<FortificationInstanceId> structureAttack;
     };
     EnemyRoster<EnemyAttachedState> enemies_;
     std::vector<BallisticBlocker> enemyBlockers_;
@@ -59,6 +66,9 @@ class BaseDefenseRuntime
     std::vector<std::size_t> blockerScratch_;
     std::optional<PlayerDamageObservation> damageObservation_;
     BaseDefenseRuntimeMetrics metrics_;
+    FortificationRuntime fortifications_;
+    std::vector<BallisticBlocker> worldBlockers_;
+    void refreshWorldBlockers();
     void spawn(float dt, Vec2 playerCenter);
     void step(float dt, Vec2 playerPosition, Vec2 playerSize);
     void synchronizeActorCheckpoints();

@@ -322,6 +322,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 {std::abs(desiredX - playerPosition_.x) + playerSize_.x,
                  std::abs(desiredYForQuery - playerPosition_.y) +
                      playerSize_.y}};
+            const Vec2 beforeMovement = playerPosition_;
             movementBlockerIndex_->queryCandidateIndices(
                 queryBounds, movementCandidates_);
             playerPosition_.x = resolveHorizontalMovement(
@@ -330,6 +331,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 desiredX,
                 *movementBlockerIndex_,
                 movementCandidates_);
+
+            if (baseDefense_)
+                for (const auto &f : baseDefense_->fortifications().snapshots())
+                    if (f.durability) playerPosition_.x = resolveHorizontalCollision(
+                        {beforeMovement, playerSize_}, playerPosition_.x, f.footprint);
 
             const float desiredY = std::clamp(
                 playerPosition_.y + direction.y * speed * deltaTime,
@@ -341,6 +347,10 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 desiredY,
                 *movementBlockerIndex_,
                 movementCandidates_);
+            if (baseDefense_)
+                for (const auto &f : baseDefense_->fortifications().snapshots())
+                    if (f.durability) playerPosition_.y = resolveVerticalCollision(
+                        {{playerPosition_.x, beforeMovement.y}, playerSize_}, playerPosition_.y, f.footprint);
         }
         else
         {
@@ -571,6 +581,29 @@ std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
     s.shooting.flights.clear();
     return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_,enemyDefinition);
 }
+std::optional<BaseDefenseSnapshot> BaseWorld::checkoutFrozenDefense(BaseDefenseSnapshot s) const
+{
+    if (baseDefense_ || surveying() || s.siteDefinitionId != siteDefinitionId_ || s.plotId != plotId_)
+        return std::nullopt;
+    std::vector<BallisticBlocker> frozen;
+    BallisticBlockerId next = 1;
+    for (const auto &bounds : s.movementBlockers) frozen.push_back({next++, bounds});
+    if (s.layoutIdentity != defenseLayoutIdentity(layout_, frozen) ||
+        s.worldSize.x != layout_.worldSize.x || s.worldSize.y != layout_.worldSize.y)
+        return std::nullopt;
+    const Rect body{playerPosition_, playerSize_};
+    for (const auto &bounds : s.movementBlockers)
+        if (isCollision(body, bounds)) return std::nullopt;
+    for (const auto &f : s.fortifications)
+        if (f.durability && isCollision(body, f.footprint)) return std::nullopt;
+    // Spawn retains its existing player-distance safety gate. Walking toward
+    // a frozen entry delays that spawn rather than rerolling the approach.
+    s.playerPosition = playerPosition_;
+    s.shooting = shooting_.checkpoint();
+    s.shooting.flights.clear();
+    return s;
+}
+
 bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
 {
     std::vector<BallisticBlocker> frozen;
@@ -587,6 +620,7 @@ bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
     auto index=RaidSpaceBlockerIndex::build(layout_.worldSize,frozen,320);
     if (!index) return false;
     const Rect playerBody{s.playerPosition,playerSize_};
+    if (!candidate.fortifications().clear(playerBody)) return false;
     if(playerBody.position.x<0 || playerBody.position.y<0 ||
         playerBody.position.x+playerBody.size.x>s.worldSize.x ||
         playerBody.position.y+playerBody.size.y>s.worldSize.y) return false;

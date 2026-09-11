@@ -17,6 +17,7 @@
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
 #include "base_siege_domain.h"
+#include "base_fortification_domain.h"
 #include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_resident_medical_domain.h"
@@ -45,6 +46,8 @@
 
 enum class BaseFacilityKind;
 class BaseWorld;
+struct InstallFortificationCommand;
+struct FortificationPlacementPlan;
 
 enum class GameSessionState
 {
@@ -238,6 +241,9 @@ public:
     [[nodiscard]] bool baseDefenseActive() const noexcept;
     [[nodiscard]] bool baseDefenseSaveBlocked() const noexcept;
     [[nodiscard]] BaseDefenseCheckpointStatus baseDefenseCheckpointStatus() const;
+    [[nodiscard]] bool baseDailySaveBlocked() const noexcept;
+    [[nodiscard]] bool retryBaseDailySave();
+    [[nodiscard]] BaseDefenseCheckpointStatus baseDailyCheckpointStatus() const;
     [[nodiscard]] bool checkpointWorldClock();
     [[nodiscard]] WorldClockProjection worldClockProjection() const noexcept;
     [[nodiscard]] BaseThreatProjection baseThreatProjection() const noexcept;
@@ -337,6 +343,11 @@ public:
         const InventoryCommand &command,
         std::string transactionId);
 
+    [[nodiscard]] FortificationReceipt executeBaseFortification(const FortificationCommand &);
+    [[nodiscard]] FortificationPlacementPlan queryBaseFortificationPlacement(
+        const BaseWorld &, const InstallFortificationCommand &) const;
+    [[nodiscard]] FortificationReceipt installBaseFortification(
+        const BaseWorld &, const InstallFortificationCommand &, ProfileRevision expectedRevision);
     [[nodiscard]] BaseGroundReceipt executeBaseGroundAsset(
         const BaseGroundCommand &command,
         std::string transactionId);
@@ -488,6 +499,7 @@ public:
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
+    friend struct BaseDailyCheckpointTestAccess;
     ProfileState profile_;
     std::optional<SaveRepository> saveRepository_;
     std::optional<ProfileState> activeRaidRecoveryProfile_;
@@ -536,6 +548,11 @@ private:
     bool baseDefenseLagPause_{};
     bool baseDefenseSimulationRejected_{};
     std::optional<BaseDefenseEndReason> pendingBaseDefenseEnd_;
+    // Reuses the bounded immutable-Profile writer, never a second concurrent
+    // writer for the same repository. Daily owns only its cadence/failure policy.
+    std::unique_ptr<BaseDefenseCheckpointWriter> baseDailyWriter_;
+    float baseDailyCheckpointElapsed_{};
+    bool baseDailySaveBlocked_{};
 
     struct DeveloperWeaponHiddenOverrides
     {
@@ -576,11 +593,15 @@ private:
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
         bool persist = true);
-    void captureBaseDefenseCheckpoint(ProfileState &candidate) const;
+    [[nodiscard]] bool captureBaseDefenseCheckpoint(ProfileState &candidate) const;
     [[nodiscard]] bool checkpointBaseDefense(bool wait);
     [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason);
     [[nodiscard]] bool prepareBaseDefenseFrame(BaseWorld &world);
     void finishBaseDefenseFrame(BaseWorld &world, float deltaTime);
+    [[nodiscard]] bool prepareBaseDailyFrame(float deltaTime);
+    void finishBaseDailyFrame();
+    [[nodiscard]] bool checkpointBaseDaily(bool wait);
+    [[nodiscard]] bool drainBaseDailyCheckpoint();
     void refreshLoadoutTutorial();
     void advanceWorldClockFromSimulation(
         float deltaTime,

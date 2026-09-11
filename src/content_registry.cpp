@@ -826,6 +826,34 @@ ContentRegistry ContentRegistry::fromJson(
         ContentRegistry registry;
         registry.contentVersion_ =
             requiredString(root, "content_version");
+        const bool requiresEnemyDefinitionReferences =
+            registry.contentVersion_ == "enemy-combat-contract-content-60" ||
+            registry.contentVersion_ == "base-fortification-foundation-content-61";
+
+        if (root.contains("fortifications"))
+        {
+            for (const auto &value : requiredArray(root, "fortifications"))
+            {
+                FortificationDefinition definition{
+                    FortificationDefinitionId{requiredString(value, "id")},
+                    requiredString(value, "display_name"),
+                    requiredPositiveUint(value, "maximum_durability"),
+                    requiredPositiveUint(value, "build_material_units"),
+                    requiredPositiveUint(value, "repair_per_material_unit"),
+                    value.at("length").get<float>(), value.at("depth").get<float>()};
+                if (definition.id != kWoodBarricadeDefinition ||
+                    definition.maximumDurability > 10000 || definition.buildMaterialUnits > 10000 ||
+                    definition.repairPerMaterialUnit > definition.maximumDurability ||
+                    !std::isfinite(definition.length) || !std::isfinite(definition.depth) ||
+                    definition.length < 32 || definition.length > 240 ||
+                    definition.depth < 16 || definition.depth > 80 ||
+                    !registry.fortifications_.emplace(definition.id, definition).second)
+                    fail("invalid or duplicate fortification definition");
+            }
+        }
+        if (registry.contentVersion_ == "base-fortification-foundation-content-61" &&
+            !registry.fortifications_.contains(kWoodBarricadeDefinition))
+            fail("wood barricade definition is required by content 61");
 
         // Legacy content keeps its inline spawn values. Current published
         // content has one authoritative definition for ordinary infected.
@@ -845,7 +873,7 @@ ContentRegistry ContentRegistry::fromJson(
         }
         else
         {
-            if (registry.contentVersion_ == "enemy-combat-contract-content-60")
+            if (requiresEnemyDefinitionReferences)
                 fail("enemy combat definitions are required by content 60");
             registry.enemyCombatDefinitions_.emplace(
                 ordinaryInfectedDefinitionId(),
@@ -862,7 +890,7 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("unknown enemy combat definition");
                 return found->second.maximumHealth;
             }
-            if (registry.contentVersion_ == "enemy-combat-contract-content-60")
+            if (requiresEnemyDefinitionReferences)
                 fail("current enemy spawns must reference a combat definition");
             return requiredPositiveInt(value, "maximum_health");
         };

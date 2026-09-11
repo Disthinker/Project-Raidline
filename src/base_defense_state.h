@@ -1,14 +1,18 @@
 #pragma once
 
 #include "combat_runtime_checkpoint.h"
+#include "fortification_checkpoint.h"
 #include "rect.h"
 #include "vec2.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 inline constexpr std::uint32_t kBaseDefenseRulesVersion = 1U;
+// Legacy events keep v1; new schema-48 warning preparations opt into v2.
+inline constexpr std::uint32_t kFortifiedBaseDefenseRulesVersion = 2U;
 inline constexpr std::uint32_t kBaseDefenseMaximumActiveEnemies = 16U;
 inline constexpr std::uint32_t kBaseDefenseBreachLimit = 6U;
 
@@ -55,6 +59,9 @@ struct BaseDefenseSnapshot
     Vec2 worldSize{};
     Rect safeCore{};
     std::vector<Rect> movementBlockers;
+    std::vector<FortificationSnapshot> fortifications;
+    std::uint32_t fortificationGeometryRevision{};
+    std::vector<FortificationAttackBinding> fortificationAttacks;
     std::vector<Rect> corridors;
     std::vector<Rect> coreDefenseZones;
     std::vector<BaseDefenseWaveSnapshot> wavePlans;
@@ -88,6 +95,14 @@ struct BaseDefenseSnapshot
     double pendingWorldSeconds{};
     float baseCombatElapsedSeconds{};
     float medicalTickAccumulatorSeconds{};
+};
+
+// Presence marks a new warning even when no legal realtime layout exists.
+// A missing layout keeps automatic defense available, without retry/reroll.
+struct BaseDefenseWarningSnapshot
+{
+    std::string eventId;
+    std::optional<BaseDefenseSnapshot> layout;
 };
 
 [[nodiscard]] std::uint64_t baseDefenseLayoutHash(const BaseDefenseSnapshot &snapshot) noexcept;

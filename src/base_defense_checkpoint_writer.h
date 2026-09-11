@@ -29,6 +29,8 @@ struct BaseDefenseCheckpointStatus {
   }
 };
 
+// Shared by Daily and Defense; the historical type name is retained to avoid
+// unrelated API churn. This mechanism has no activity/wave/death policy.
 // One Profile owner submits coherent snapshots on the main thread. The worker
 // owns only immutable copies. While this writer exists, every write to its
 // repository MUST pass through it (including terminal/quit barriers).

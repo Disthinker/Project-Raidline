@@ -211,7 +211,15 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/base_fortification_domain.cpp
+    src/base_defense_ownership.cpp
+    src/base_fortification_domain.h
+    src/base_fortification_types.h
+    src/base_fortification_serialization.cpp
+    src/base_fortification_serialization.h
     src/base_defense_state.cpp
+    src/fortification_checkpoint.cpp
+    src/fortification_checkpoint.h
     src/base_defense_state.h
     src/base_defense_serialization.cpp
     src/base_defense_serialization.h
@@ -332,7 +340,11 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/base_defense_positions.cpp
+    src/base_defense_positions.h
     src/base_defense_runtime.cpp
+    src/fortification_runtime.cpp
+    src/fortification_runtime.h
     src/base_defense_runtime.h
     src/animation.cpp
     src/animation.h
@@ -395,6 +407,11 @@ add_library(raidline_services STATIC
     src/base_defense_checkpoint_writer.cpp
     src/base_defense_checkpoint_writer.h
     src/game_session_base_defense.cpp
+    src/game_session_daily_checkpoint.cpp
+    src/game_session_base_fortification.cpp
+    src/base_defense_preparation.cpp
+    src/base_fortification_placement.cpp
+    src/base_fortification_placement.h
     src/first_raid_guidance.cpp
     src/first_raid_guidance.h
     src/base_facility_management.cpp
@@ -511,7 +528,8 @@ function(raidline_add_test target source module)
         PRIVATE
         GTest::gtest_main
         ${module})
-    if(target STREQUAL "BaseDefensePerformanceTest")
+    if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
+       OR target STREQUAL "FortificationRuntimeTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -778,12 +796,18 @@ raidline_add_test(
     tests/test_base_siege_domain.cpp
     raidline::domain)
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
+raidline_add_test(BaseFortificationTest tests/test_base_fortification.cpp raidline::services)
+raidline_add_test(BaseFortificationPlacementTest tests/test_base_fortification_placement.cpp raidline::services)
+raidline_add_test(BaseDefenseOwnershipTest tests/test_base_defense_ownership.cpp raidline::services)
+raidline_add_test(BaseAutoFortificationTest tests/test_base_auto_fortification.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
+raidline_add_test(FortificationRuntimeTest tests/test_fortification_runtime.cpp raidline::simulation)
 raidline_add_test(EnemyLifecycleContractTest tests/test_enemy_lifecycle_contract.cpp raidline::services)
 raidline_add_test(EnemyAttackContactTest tests/test_enemy_attack_contact.cpp raidline::simulation)
 raidline_add_test(EnemyCombatContractTest tests/test_enemy_combat_contract.cpp raidline::services)
 raidline_add_test(NavigationRefreshSelectionTest tests/test_navigation_refresh_selection.cpp raidline::simulation)
 raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkpoint_writer.cpp raidline::services)
+raidline_add_test(BaseDailyCheckpointTest tests/test_base_daily_checkpoint.cpp raidline::services)
 raidline_add_test(BaseDefenseSessionTest tests/test_base_defense_session.cpp raidline::services)
 raidline_add_test(BaseSiegeUiTest tests/test_base_siege_ui.cpp raidline::sdl_client)
 raidline_add_test(BaseDefensePerformanceTest tests/test_base_defense_performance.cpp raidline::services)

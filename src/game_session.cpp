@@ -1,4 +1,5 @@
 #include "game_session.h"
+#include "base_defense_preparation.h"
 #include "home_founding_domain.h"
 
 #include "base_construction_domain.h"
@@ -31,6 +32,31 @@ namespace
         return !profile.pendingRaid && profile.lastRaidResult &&
             profile.lastRaidResult->outcome != RaidResultOutcome::AbnormalQuit &&
             profile.committedSettlements.contains(profile.lastRaidResult->settlementId);
+    }
+
+    // Bounded Daily participants, keyed by the existing stable enemy identity.
+    // No Registry, currency, ID allocation or whole-Profile assignment here.
+    void checkpointPerimeterEnemies(HomePerimeterSiteSnapshot &site,
+        const std::vector<HomePerimeterEnemySnapshot> &runtime,
+        const std::vector<EnemyRemovalFact> &removals) noexcept
+    {
+        for (auto &saved : site.enemies)
+        {
+            if (std::any_of(removals.begin(), removals.end(), [&](const auto &fact) {
+                return fact.id == saved.localId && fact.reason == EnemyRemovalReason::Death;
+            }))
+            {
+                saved.health = 0;
+                continue;
+            }
+            const auto live = std::find_if(runtime.begin(), runtime.end(),
+                [&](const auto &enemy) { return enemy.localId == saved.localId; });
+            if (live != runtime.end())
+            {
+                saved.health = live->health;
+                saved.position = live->position;
+            }
+        }
     }
 }
 
@@ -112,11 +138,17 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     }
     if (baseDefenseActive() && !prepareBaseDefenseFrame(baseWorld))
         return std::nullopt;
+    if (!baseDefenseActive() && !prepareBaseDailyFrame(deltaTime))
+        return std::nullopt;
     if (baseDefenseActive())
         deltaTime = std::isfinite(deltaTime) ? std::clamp(deltaTime, 0.0F, 0.1F) : 0.0F;
     const RegionalBaseSiteDefinitionId perimeterSite{
         baseWorld.siteDefinitionId()};
-    if (profile_.homeFounding.established && !baseDefenseActive())
+    const auto existingPerimeter = profile_.homePerimeter.sites.find(perimeterSite);
+    const bool needsPerimeter = !profile_.homePerimeter.activeOuting &&
+        (existingPerimeter == profile_.homePerimeter.sites.end() ||
+         existingPerimeter->second.cycleIndex != homePerimeterCycleIndex(profile_.worldClock));
+    if (profile_.homeFounding.established && !baseDefenseActive() && needsPerimeter)
     {
         ProfileState candidate = profile_;
         HomePerimeterGenerationContext generation{
@@ -367,38 +399,61 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         finishBaseDefenseFrame(baseWorld, deltaTime);
         return facility;
     }
-    if (!profile_.homeFounding.established) return facility;
+    if (!profile_.homeFounding.established) {
+        finishBaseDailyFrame();
+        return facility;
+    }
+    const auto runtimeSnapshot = baseWorld.perimeterEnemySnapshots();
+    const auto currentSite = profile_.homePerimeter.sites.find(perimeterSite);
+    const bool enemyChanged = currentSite != profile_.homePerimeter.sites.end() &&
+        std::any_of(currentSite->second.enemies.begin(), currentSite->second.enemies.end(),
+            [&](const HomePerimeterEnemySnapshot &saved) {
+                if (saved.health > 0 && std::any_of(baseWorld.perimeterRemovalsLastUpdate().begin(),
+                    baseWorld.perimeterRemovalsLastUpdate().end(), [&](const EnemyRemovalFact &fact) {
+                        return fact.id == saved.localId && fact.reason == EnemyRemovalReason::Death;
+                    })) return true;
+                const auto live = std::find_if(runtimeSnapshot.begin(), runtimeSnapshot.end(),
+                    [&](const auto &enemy) { return enemy.localId == saved.localId; });
+                return live != runtimeSnapshot.end() && live->health != saved.health;
+            });
+    const bool outing = homePerimeterOutingActive(profile_, perimeterSite);
+    const auto zone = baseWorld.playerSafetyZone();
+    const auto damageObservation = baseWorld.perimeterDamageObservation();
+    const bool otherPerimeterFact = (damageObservation && damageObservation->baseDamage > 0) ||
+        (!outing && zone == HomeRegionSafetyZone::Perimeter) ||
+        (outing && zone == HomeRegionSafetyZone::SafeCore) || profile_.currentHealth <= 0;
+    // No full Profile copy on idle/movement frames. Movement remains transient;
+    // only accepted discrete facts need a candidate, not every frame or shot.
+    if (!enemyChanged && !otherPerimeterFact) {
+        finishBaseDailyFrame();
+        return facility;
+    }
+    if (enemyChanged && !otherPerimeterFact)
+    {
+        if (profile_.revision == std::numeric_limits<ProfileRevision>::max())
+        {
+            persistenceMessage_ = "Home perimeter revision overflow";
+            return facility;
+        }
+        // Ordinary hits/deaths change only this small, already validated site
+        // participant. Keeping a thousand unrelated inventory assets out of
+        // the transaction is as important as keeping disk I/O off this frame.
+        checkpointPerimeterEnemies(currentSite->second, runtimeSnapshot,
+            baseWorld.perimeterRemovalsLastUpdate());
+        ++profile_.revision;
+        worldClockDirty_ = true;
+        finishBaseDailyFrame();
+        return facility;
+    }
     bool perimeterChanged{};
     ProfileState perimeterCandidate = profile_;
     auto candidateSite = perimeterCandidate.homePerimeter.sites.find(
         perimeterSite);
     if (candidateSite != perimeterCandidate.homePerimeter.sites.end())
     {
-        const std::vector<HomePerimeterEnemySnapshot> runtimeEnemies =
-            baseWorld.perimeterEnemySnapshots();
-        for (HomePerimeterEnemySnapshot &persisted :
-             candidateSite->second.enemies)
-        {
-            const auto &removals = baseWorld.perimeterRemovalsLastUpdate();
-            if (std::any_of(removals.begin(), removals.end(), [&](const EnemyRemovalFact &fact) {
-                    return fact.id == persisted.localId && fact.reason == EnemyRemovalReason::Death;
-                }))
-            {
-                perimeterChanged = perimeterChanged || persisted.health != 0;
-                persisted.health = 0;
-                continue;
-            }
-            const auto runtime = std::find_if(
-                runtimeEnemies.begin(), runtimeEnemies.end(),
-                [&](const HomePerimeterEnemySnapshot &enemy)
-                { return enemy.localId == persisted.localId; });
-            if (runtime != runtimeEnemies.end() &&
-                runtime->health != persisted.health)
-            {
-                persisted.health = runtime->health;
-                perimeterChanged = true;
-            }
-        }
+        checkpointPerimeterEnemies(candidateSite->second, runtimeSnapshot,
+            baseWorld.perimeterRemovalsLastUpdate());
+        perimeterChanged = enemyChanged;
     }
 
     if (const auto damage = baseWorld.perimeterDamageObservation();
@@ -496,31 +551,26 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     // already being saved, checkpoint the current finite enemy positions too
     // so process recovery resumes the same encounter without adding per-frame
     // persistence work.
+    // Damage/result commands may replace their candidate Profile. Never keep
+    // a map iterator into the previous candidate across those transactions.
+    candidateSite = perimeterCandidate.homePerimeter.sites.find(perimeterSite);
     if (perimeterChanged &&
         candidateSite != perimeterCandidate.homePerimeter.sites.end())
     {
-        const std::vector<HomePerimeterEnemySnapshot> runtimeEnemies =
-            baseWorld.perimeterEnemySnapshots();
-        for (HomePerimeterEnemySnapshot &persisted :
-             candidateSite->second.enemies)
-        {
-            const auto runtime = std::find_if(
-                runtimeEnemies.begin(), runtimeEnemies.end(),
-                [&](const HomePerimeterEnemySnapshot &enemy)
-                { return enemy.localId == persisted.localId; });
-            if (runtime != runtimeEnemies.end())
-                persisted.position = runtime->position;
-        }
+        checkpointPerimeterEnemies(candidateSite->second, runtimeSnapshot,
+            baseWorld.perimeterRemovalsLastUpdate());
     }
 
     if (perimeterChanged &&
-        !commitProfileCandidate(std::move(perimeterCandidate)))
+        !commitProfileCandidate(std::move(perimeterCandidate), false))
     {
         restorePerimeterRuntime();
         return facility;
     }
     if (rescue)
         baseWorld.resetAtMedicalPoint();
+    if (perimeterChanged) worldClockDirty_ = true;
+    finishBaseDailyFrame();
     return facility;
 }
 
@@ -631,6 +681,8 @@ GameSession::nextItemInstanceId() const noexcept
 void GameSession::configurePersistence(
     std::filesystem::path directory)
 {
+    if (!drainBaseDailyCheckpoint())
+        throw std::runtime_error{"Cannot change repository with an unsaved Base checkpoint"};
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     saveRepository_.emplace(std::move(directory));
@@ -646,6 +698,7 @@ bool GameSession::hasSavedProfile() const
 
 bool GameSession::startNewProfile(std::string profileId, bool survey)
 {
+    if (!drainBaseDailyCheckpoint()) return false;
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
@@ -730,6 +783,7 @@ bool GameSession::finishFirstRaidHints()
 
 bool GameSession::continueProfile()
 {
+    if (!drainBaseDailyCheckpoint()) return false;
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
@@ -828,6 +882,7 @@ bool GameSession::deployAlpha(
         return false;
     }
     const std::size_t number = profile_.committedSettlements.size() + 1U;
+    if (!drainBaseDailyCheckpoint()) return false;
     ProfileState recoveryProfile = profile_;
     // Reopening after a committed result may skip its result-screen button.
     // A second deployment acknowledges that guide in the same clean Base
@@ -3103,32 +3158,7 @@ bool GameSession::checkpointWorldClock()
             "active Raid time can only be saved by Settlement";
         return false;
     }
-    if (!worldClockDirty_)
-    {
-        return true;
-    }
-    const ProfileValidationResult validation =
-        validateProfileState(profile_, publishedContentRegistry());
-    if (!validation.valid)
-    {
-        persistenceMessage_ = validation.message;
-        return false;
-    }
-    if (saveRepository_.has_value())
-    {
-        const SaveWriteResult saved = saveRepository_->save(
-            profile_,
-            publishedContentRegistry().contentVersion());
-        if (!saved.succeeded)
-        {
-            persistenceMessage_ = saved.message;
-            return false;
-        }
-        persistenceMessage_ = saved.message;
-    }
-    worldClockDirty_ = false;
-    worldClockCheckpointElapsedSeconds_ = 0.0F;
-    return true;
+    return retryBaseDailySave();
 }
 
 WorldClockProjection GameSession::worldClockProjection() const noexcept
@@ -3244,7 +3274,7 @@ void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)
 {
-    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    if (baseDailySaveBlocked_ || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
     {
         return;
     }
@@ -3408,7 +3438,7 @@ void GameSession::advanceWorldClockFromSimulation(
 
 void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
 {
-    if (baseDefenseActive()) return;
+    if (baseDefenseActive() || baseDailySaveBlocked_) return;
     if (!std::isfinite(deltaTime) || deltaTime <= 0.0F ||
         alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
@@ -3421,6 +3451,7 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
     bool changed = activated;
     if (activated)
     {
+        candidate.baseDefenseWarning = prepareBaseDefenseWarning(candidate, publishedContentRegistry());
         if (candidate.revision ==
             std::numeric_limits<ProfileRevision>::max())
         {
@@ -5111,12 +5142,18 @@ bool GameSession::commitProfileCandidate(
         // Commands join the current coherent Base activity. Only start/end/
         // quit are durability barriers; no inventory or fire callback writes.
         if (baseDefenseSaveBlocked_) return false;
-        captureBaseDefenseCheckpoint(candidate);
+        if (!captureBaseDefenseCheckpoint(candidate))
+        {
+            baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
+            persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
+            return false;
+        }
         profile_ = std::move(candidate);
         worldClockDirty_ = true;
         return true;
     }
     std::string saveMessage;
+    if (persist && !drainBaseDailyCheckpoint()) return false;
     if (persist && saveRepository_.has_value())
     {
         const SaveWriteResult result = saveRepository_->save(
