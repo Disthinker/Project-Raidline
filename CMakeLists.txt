@@ -798,6 +798,7 @@ raidline_add_test(
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
 raidline_add_test(BaseFortificationTest tests/test_base_fortification.cpp raidline::services)
 raidline_add_test(BaseFortificationPlacementTest tests/test_base_fortification_placement.cpp raidline::services)
+raidline_add_test(BaseDailyFortificationTest tests/test_base_daily_fortification.cpp raidline::services)
 raidline_add_test(BaseDefenseOwnershipTest tests/test_base_defense_ownership.cpp raidline::services)
 raidline_add_test(BaseAutoFortificationTest tests/test_base_auto_fortification.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)

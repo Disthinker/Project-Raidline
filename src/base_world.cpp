@@ -1,9 +1,11 @@
 #include "base_world.h"
 #include "enemy_attack_contact.h"
+#include "base_defense_positions.h"
 
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -170,6 +172,8 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
 {
     siteDefinitionId_ = siteDefinitionId;
     groundBlockers_.clear();
+    configuredFortifications_.reset();
+    dailyFortifications_ = {};
     layout_ = plotId_.empty() ? generateHomeRegionLayout(siteDefinitionId_)
         : generateFoundingHomeRegionLayout(siteDefinitionId_, plotId_);
     walkableBounds_ = Rect{{24.0F, 24.0F},
@@ -258,6 +262,52 @@ void BaseWorld::rebuildCollisionIndex()
         layout_.worldSize, movementBlockers_, 320.0F);
     if (!movementBlockerIndex_.has_value())
         throw std::logic_error{"Home Region blocker index is invalid"};
+    refreshDailyShotBlockers();
+}
+
+void BaseWorld::refreshDailyShotBlockers()
+{
+    dailyShotBlockers_ = movementBlockers_;
+    for (const auto &f : dailyFortifications_.snapshots())
+        if (f.durability)
+            dailyShotBlockers_.push_back({std::numeric_limits<BallisticBlockerId>::max() -
+                static_cast<unsigned>(f.slot.side), f.footprint});
+}
+
+bool BaseWorld::configureFortifications(const BaseFortificationState &state,
+                                       const ContentRegistry &content)
+{
+    // Defense owns its checked-out state until its final Profile commit.
+    if (baseDefense_) return true;
+    if (configuredFortifications_ && configuredFortifications_->instances == state.instances)
+        return true;
+    std::vector<FortificationSnapshot> snapshots;
+    for (const auto &[id, record] : state.instances)
+    {
+        if (!record.slot) continue;
+        if (record.slot->site.value() != siteDefinitionId_ || record.slot->plot != plotId_)
+            return false;
+        const auto *definition = content.findFortification(record.definition);
+        if (!definition) return false;
+        const auto slots = baseDefensePositionCandidates(layout_, plotId_, *definition);
+        const auto side = static_cast<std::size_t>(record.slot->side);
+        if (side >= slots.size() || !slots[side].available || slots[side].key != *record.slot)
+            return false;
+        const auto r = slots[side].footprint;
+        snapshots.push_back({id, record.definition, *record.slot, {r.position, r.size},
+            definition->maximumDurability, record.durability, record.durability});
+    }
+    FortificationRuntime candidate;
+    if (!candidate.restore(snapshots, 0)) return false;
+    dailyFortifications_ = std::move(candidate);
+    configuredFortifications_ = state;
+    refreshDailyShotBlockers();
+    return true;
+}
+
+std::span<const FortificationSnapshot> BaseWorld::fortifications() const noexcept
+{
+    return baseDefense_ ? baseDefense_->fortifications().snapshots() : dailyFortifications_.snapshots();
 }
 
 std::optional<BaseFacilityKind> BaseWorld::update(
@@ -332,10 +382,9 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 *movementBlockerIndex_,
                 movementCandidates_);
 
-            if (baseDefense_)
-                for (const auto &f : baseDefense_->fortifications().snapshots())
-                    if (f.durability) playerPosition_.x = resolveHorizontalCollision(
-                        {beforeMovement, playerSize_}, playerPosition_.x, f.footprint);
+            for (const auto &f : fortifications())
+                if (f.durability) playerPosition_.x = resolveHorizontalCollision(
+                    {beforeMovement, playerSize_}, playerPosition_.x, f.footprint);
 
             const float desiredY = std::clamp(
                 playerPosition_.y + direction.y * speed * deltaTime,
@@ -347,10 +396,9 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 desiredY,
                 *movementBlockerIndex_,
                 movementCandidates_);
-            if (baseDefense_)
-                for (const auto &f : baseDefense_->fortifications().snapshots())
-                    if (f.durability) playerPosition_.y = resolveVerticalCollision(
-                        {{playerPosition_.x, beforeMovement.y}, playerSize_}, playerPosition_.y, f.footprint);
+            for (const auto &f : fortifications())
+                if (f.durability) playerPosition_.y = resolveVerticalCollision(
+                    {{playerPosition_.x, beforeMovement.y}, playerSize_}, playerPosition_.y, f.footprint);
         }
         else
         {
@@ -409,6 +457,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             playerZone == HomeRegionSafetyZone::Perimeter;
         const bool targetVisible = playerExposed &&
             movementBlockerIndex_->hasLineOfSight(enemyCenter, playerCenter) &&
+            dailyFortifications_.lineOfSight(enemyCenter, playerCenter) &&
             distanceSquared <= 900.0F * 900.0F;
         if (targetVisible)
             enemy.hearTarget(playerCenter);
@@ -439,9 +488,15 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         resolved.x = resolveHorizontalMovement(
             before, enemy.size(), resolved.x,
             *movementBlockerIndex_, movementCandidates_);
+        for (const auto &f : dailyFortifications_.snapshots())
+            if (f.durability) resolved.x = resolveHorizontalCollision(
+                {before, enemy.size()}, resolved.x, f.footprint);
         resolved.y = resolveVerticalMovement(
             {resolved.x, before.y}, enemy.size(), resolved.y,
             *movementBlockerIndex_, movementCandidates_);
+        for (const auto &f : dailyFortifications_.snapshots())
+            if (f.durability) resolved.y = resolveVerticalCollision(
+                {{resolved.x, before.y}, enemy.size()}, resolved.y, f.footprint);
         const Vec2 resolvedCenter{
             resolved.x + enemy.size().x * 0.5F,
             resolved.y + enemy.size().y * 0.5F};
@@ -455,6 +510,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             perimeterDamageProtectionRemainingSeconds_, [&] {
                 const auto p = enemy.position();
                 return movementBlockerIndex_->hasLineOfSight(
+                    {p.x + enemy.size().x * 0.5F, p.y + enemy.size().y * 0.5F}, playerCenter) &&
+                    dailyFortifications_.lineOfSight(
                     {p.x + enemy.size().x * 0.5F, p.y + enemy.size().y * 0.5F}, playerCenter);
             });
         if (contact.damage) perimeterDamageObservation_ = contact.damage;
@@ -463,7 +520,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     perimeterRemovals_ = shooting_.advanceShots(
         input, deltaTime, playerCenter,
         std::max(playerSize_.x, playerSize_.y), playerIsMoving_, false,
-        layout_.worldSize, perimeterEnemies_, movementBlockers_).removals;
+        layout_.worldSize, perimeterEnemies_, dailyShotBlockers_).removals;
     // Only accepted shots alert survivors. Awareness changes now; movement
     // consumes it on the next update, never by replaying the current frame.
     if (shooting_.shotFiredLastUpdate() &&
@@ -684,6 +741,9 @@ void BaseWorld::clearSpatialCombatState() noexcept
 void BaseWorld::resetCombatForProfileLoad() noexcept
 {
     clearBaseDefense();
+    configuredFortifications_.reset();
+    dailyFortifications_ = {};
+    refreshDailyShotBlockers();
     configureHomePerimeter(nullptr);
     clearSpatialCombatState();
     shooting_ = WorldShootingRuntime{};

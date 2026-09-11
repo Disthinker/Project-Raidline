@@ -108,6 +108,9 @@ public:
     [[nodiscard]] std::vector<ContentRect>
     basePlacementBlockersExcluding(BaseFacilityKind facility) const;
     void configureGroundBlockers(std::vector<ContentRect> blockers);
+    // Bounded Profile projection, never a route proof or enemy reconstruction.
+    [[nodiscard]] bool configureFortifications(const BaseFortificationState &, const ContentRegistry &);
+    [[nodiscard]] std::span<const FortificationSnapshot> fortifications() const noexcept;
     [[nodiscard]] const HomeRegionPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
@@ -170,6 +173,7 @@ private:
     friend struct EnemyLifecycleTestAccess;
     void rebuildSite(std::string_view siteDefinitionId);
     void rebuildCollisionIndex();
+    void refreshDailyShotBlockers();
 
     std::string siteDefinitionId_;
     std::string plotId_;
@@ -188,6 +192,9 @@ private:
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
     WorldShootingRuntime shooting_;
+    FortificationRuntime dailyFortifications_;
+    std::optional<BaseFortificationState> configuredFortifications_;
+    std::vector<BallisticBlocker> dailyShotBlockers_;
     EnemyRoster<Vec2> perimeterEnemies_;
     std::vector<EnemyRemovalFact> perimeterRemovals_;
     std::optional<std::uint64_t> perimeterCycleIndex_;

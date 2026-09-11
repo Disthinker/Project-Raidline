@@ -212,6 +212,19 @@ bool App::handleBaseDefenseControls()
 
 void App::renderBaseDefenseWorld()
 {
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    for (const auto &f : gameFlow_.baseWorld().fortifications())
+    {
+        const auto r = f.footprint;
+        const SDL_FRect area{r.position.x, r.position.y, r.size.x, r.size.y};
+        SDL_SetRenderDrawColor(renderer_, 132, 96, 54, f.durability ? 235 : 75);
+        SDL_RenderFillRect(renderer_, &area);
+        SDL_SetRenderDrawColor(renderer_, 214, 176, 108, 255);
+        SDL_RenderRect(renderer_, &area);
+        const std::string label = std::string{f.durability ? "WOOD BARRICADE " : "BARRICADE REMNANT "} +
+            std::to_string(f.durability) + "/" + std::to_string(f.maximumDurability);
+        uiTextRenderer_.render(renderer_, area.x, area.y - 22.0F, label.c_str());
+    }
     const auto *state = gameFlow_.baseWorld().baseDefenseState();
     if (!state)
         return;
