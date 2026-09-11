@@ -26,6 +26,16 @@ struct BaseSiegeUiTestAccess {
 namespace {
 using Access = BaseSiegeUiTestAccess;
 namespace layout = base_siege_warning_layout;
+TEST(BaseSiegeUiLocalizationTest, FortificationPreviewConsumesDomainCostAndHasChinese) {
+    BaseAutoDefensePlan plan;
+    plan.fortificationDiscount = 2;
+    const auto text = layout::fortificationCostText(plan);
+    EXPECT_EQ(text, "FORTIFICATIONS | SECURITY -2 | 2 x DURABILITY -30");
+    EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, text), "工事抵扣安保 -2 | 2 件，每件耐久 -30");
+    plan.fortificationDiscount = 0;
+    EXPECT_NE(layout::fortificationCostText(plan).find("0 x"), std::string::npos);
+}
 void click(SDL_FRect bounds) {
     SDL_Event event{};
     event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;

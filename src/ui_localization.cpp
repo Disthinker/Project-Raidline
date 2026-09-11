@@ -14,6 +14,8 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"FORTIFICATIONS | SECURITY -", "工事抵扣安保 -"},
+     {" x DURABILITY -", " 件，每件耐久 -"},
      {"NO LEGAL DEFENSE APPROACH | AUTO DEFENSE REMAINS AVAILABLE", "没有合法进攻路线 | 仍可选择自动防守"},
      {"BASE LAYOUT LOCKED DURING DEFENSE", "防守预警或战斗期间，基地布局暂时锁定"},
      {"Base rest is unavailable during realtime defense", "实时防守期间不能休息跳过时间"},

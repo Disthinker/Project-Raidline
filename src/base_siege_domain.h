@@ -2,6 +2,7 @@
 
 #include "inventory_domain.h"
 #include <string_view>
+#include <array>
 
 inline constexpr std::uint32_t kBaseSiegeThreatThreshold = 100U;
 inline constexpr std::uint32_t kBaseSiegeWarningSeconds = 180U;
@@ -10,6 +11,7 @@ inline constexpr std::uint32_t kBaseSiegeSuccessSafeDays = 7U;
 inline constexpr std::uint32_t kBaseSiegeFailureSafeDays = 12U;
 inline constexpr std::uint32_t kBaseSiegeMinimumResidents = 4U;
 inline constexpr std::uint32_t kBasePerimeterSweepMinimumThreat = 40U;
+inline constexpr std::uint32_t kAutoDefenseFortificationWear = 30U;
 
 enum class BaseThreatTier
 {
@@ -52,6 +54,10 @@ struct BaseAutoDefensePlan
     std::uint32_t requiredSecurity{};
     std::uint32_t availableSecurity{};
     bool projectedSuccess{};
+    std::uint32_t fortificationDiscount{};
+    // Only the first fortificationDiscount entries participate; stable owners,
+    // not wave indexes. Each contributes one Security and pays the same wear.
+    std::array<FortificationInstanceId, 2> participatingFortifications{};
 };
 
 struct BaseAutoDefenseReceipt
