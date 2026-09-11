@@ -71,6 +71,25 @@ void complete(ProfileState &p)
 }
 } // namespace
 
+TEST(BaseDefenseDomainTest, RuntimeV2CannotBypassPendingWarningAndProfileCheckoutGate)
+{
+    auto p = warningProfile();
+    auto s = planFor(p);
+    s.rulesVersion = kFortifiedBaseDefenseRulesVersion;
+    s.layoutHash = baseDefenseLayoutHash(s);
+    std::string message;
+    ASSERT_TRUE(validateBaseDefenseSnapshot(s, message)) << message;
+    const auto before = profileStateFingerprint(p);
+    EXPECT_FALSE(queryBaseRealtimeDefenseStart(p, publishedContentRegistry(), s).canCommit);
+    EXPECT_FALSE(executeBaseRealtimeDefenseStart(p, publishedContentRegistry(), s,
+        {p.revision, "unsupported-checkout"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(p), before);
+    start(p);
+    p.activeBaseDefense->rulesVersion = kFortifiedBaseDefenseRulesVersion;
+    p.activeBaseDefense->layoutHash = baseDefenseLayoutHash(*p.activeBaseDefense);
+    EXPECT_FALSE(validateProfileState(p, publishedContentRegistry()).valid);
+}
+
 TEST(BaseDefenseDomainTest, QueryIsPureAndStartDoesNotChargeSecurity)
 {
     auto p = warningProfile();

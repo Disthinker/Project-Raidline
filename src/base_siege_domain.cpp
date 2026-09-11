@@ -482,6 +482,11 @@ BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
         profile.pendingRaid || !profile.homeFounding.established)
         return reject(DomainErrorCode::IllegalDestination,
                       "Realtime defense requires an established Base under warning");
+    // Internal v2 runtime proof is not a production checkout. Keep the domain
+    // gate until warning-time geometry and Profile durability write-back ship.
+    if (snapshot.rulesVersion != kBaseDefenseRulesVersion)
+        return reject(DomainErrorCode::IllegalDestination,
+                      "Fortified defense requires the pending warning checkout contract");
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
         return reject(DomainErrorCode::RevisionOverflow, "profile revision cannot advance");
     const auto *site = activeSite(profile, content);

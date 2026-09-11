@@ -322,6 +322,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 {std::abs(desiredX - playerPosition_.x) + playerSize_.x,
                  std::abs(desiredYForQuery - playerPosition_.y) +
                      playerSize_.y}};
+            const Vec2 beforeMovement = playerPosition_;
             movementBlockerIndex_->queryCandidateIndices(
                 queryBounds, movementCandidates_);
             playerPosition_.x = resolveHorizontalMovement(
@@ -330,6 +331,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 desiredX,
                 *movementBlockerIndex_,
                 movementCandidates_);
+
+            if (baseDefense_)
+                for (const auto &f : baseDefense_->fortifications().snapshots())
+                    if (f.durability) playerPosition_.x = resolveHorizontalCollision(
+                        {beforeMovement, playerSize_}, playerPosition_.x, f.footprint);
 
             const float desiredY = std::clamp(
                 playerPosition_.y + direction.y * speed * deltaTime,
@@ -341,6 +347,10 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 desiredY,
                 *movementBlockerIndex_,
                 movementCandidates_);
+            if (baseDefense_)
+                for (const auto &f : baseDefense_->fortifications().snapshots())
+                    if (f.durability) playerPosition_.y = resolveVerticalCollision(
+                        {{playerPosition_.x, beforeMovement.y}, playerSize_}, playerPosition_.y, f.footprint);
         }
         else
         {
@@ -587,6 +597,7 @@ bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
     auto index=RaidSpaceBlockerIndex::build(layout_.worldSize,frozen,320);
     if (!index) return false;
     const Rect playerBody{s.playerPosition,playerSize_};
+    if (!candidate.fortifications().clear(playerBody)) return false;
     if(playerBody.position.x<0 || playerBody.position.y<0 ||
         playerBody.position.x+playerBody.size.x>s.worldSize.x ||
         playerBody.position.y+playerBody.size.y>s.worldSize.y) return false;

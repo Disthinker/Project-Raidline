@@ -1,6 +1,7 @@
 #pragma once
 
 #include "combat_runtime_checkpoint.h"
+#include "fortification_checkpoint.h"
 #include "rect.h"
 #include "vec2.h"
 
@@ -9,6 +10,9 @@
 #include <vector>
 
 inline constexpr std::uint32_t kBaseDefenseRulesVersion = 1U;
+// Opt-in frozen runtime contract. Production warning preparation remains v1
+// until the warning/Profile checkout consumer is delivered in this Draft.
+inline constexpr std::uint32_t kFortifiedBaseDefenseRulesVersion = 2U;
 inline constexpr std::uint32_t kBaseDefenseMaximumActiveEnemies = 16U;
 inline constexpr std::uint32_t kBaseDefenseBreachLimit = 6U;
 
@@ -55,6 +59,9 @@ struct BaseDefenseSnapshot
     Vec2 worldSize{};
     Rect safeCore{};
     std::vector<Rect> movementBlockers;
+    std::vector<FortificationSnapshot> fortifications;
+    std::uint32_t fortificationGeometryRevision{};
+    std::vector<FortificationAttackBinding> fortificationAttacks;
     std::vector<Rect> corridors;
     std::vector<Rect> coreDefenseZones;
     std::vector<BaseDefenseWaveSnapshot> wavePlans;

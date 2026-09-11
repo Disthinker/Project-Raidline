@@ -1290,7 +1290,8 @@ ProfileValidationResult validateProfileState(
         std::string message;
         const auto plot=profile.homeFounding.plots.find(activeBaseSite->id);
         const std::string expectedPlot=plot==profile.homeFounding.plots.end()?"":plot->second;
-        if (profile.pendingRaid || profile.homePerimeter.activeOuting || siege.warningActive ||
+        if (defense.rulesVersion != kBaseDefenseRulesVersion ||
+            profile.pendingRaid || profile.homePerimeter.activeOuting || siege.warningActive ||
             defense.eventId != baseSiegeEventId(profile) ||
             defense.siegeSequence != siege.siegeSequence ||
             defense.siegeSequence <= siege.lastResolvedSequence ||

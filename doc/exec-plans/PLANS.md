@@ -17,7 +17,11 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
 
-2026-09-10 最新活动计划：`active/base-defense-fixed-positions-v1.md`。
+2026-09-11 最新活动计划：`active/base-defense-fixed-positions-v1.md`。
+内部第 2 步已接入真实拆障、失效清理与 runtime v2 检查点；尚未接入新预警和 Profile
+签出/写回，生产仍 v1，B 购买仍关闭。下一步完成冻结/保存、自动磨损及建设 UI，统一试玩。
+
+以下为上一内部检查点：
 #161 命中卡顿修复已验收并普通合入 #160 分支 `b179ac9`，main 仍为 c6d4597。
 工事恢复内部安装/换位与通路证明；实体受损/v2 冻结/自动磨损/B 界面未完成，整个 #160 保持 Draft。
 
