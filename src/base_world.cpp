@@ -581,6 +581,29 @@ std::optional<BaseDefenseSnapshot> BaseWorld::prepareBaseDefenseSnapshot(
     s.shooting.flights.clear();
     return BaseDefenseRuntime::prepare(std::move(s),movementBlockers_,enemyDefinition);
 }
+std::optional<BaseDefenseSnapshot> BaseWorld::checkoutFrozenDefense(BaseDefenseSnapshot s) const
+{
+    if (baseDefense_ || surveying() || s.siteDefinitionId != siteDefinitionId_ || s.plotId != plotId_)
+        return std::nullopt;
+    std::vector<BallisticBlocker> frozen;
+    BallisticBlockerId next = 1;
+    for (const auto &bounds : s.movementBlockers) frozen.push_back({next++, bounds});
+    if (s.layoutIdentity != defenseLayoutIdentity(layout_, frozen) ||
+        s.worldSize.x != layout_.worldSize.x || s.worldSize.y != layout_.worldSize.y)
+        return std::nullopt;
+    const Rect body{playerPosition_, playerSize_};
+    for (const auto &bounds : s.movementBlockers)
+        if (isCollision(body, bounds)) return std::nullopt;
+    for (const auto &f : s.fortifications)
+        if (f.durability && isCollision(body, f.footprint)) return std::nullopt;
+    // Spawn retains its existing player-distance safety gate. Walking toward
+    // a frozen entry delays that spawn rather than rerolling the approach.
+    s.playerPosition = playerPosition_;
+    s.shooting = shooting_.checkpoint();
+    s.shooting.flights.clear();
+    return s;
+}
+
 bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
 {
     std::vector<BallisticBlocker> frozen;

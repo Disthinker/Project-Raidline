@@ -1,4 +1,5 @@
 #include "game_session.h"
+#include "base_defense_preparation.h"
 #include "home_founding_domain.h"
 
 #include "base_construction_domain.h"
@@ -3450,6 +3451,7 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
     bool changed = activated;
     if (activated)
     {
+        candidate.baseDefenseWarning = prepareBaseDefenseWarning(candidate, publishedContentRegistry());
         if (candidate.revision ==
             std::numeric_limits<ProfileRevision>::max())
         {
@@ -5140,7 +5142,12 @@ bool GameSession::commitProfileCandidate(
         // Commands join the current coherent Base activity. Only start/end/
         // quit are durability barriers; no inventory or fire callback writes.
         if (baseDefenseSaveBlocked_) return false;
-        captureBaseDefenseCheckpoint(candidate);
+        if (!captureBaseDefenseCheckpoint(candidate))
+        {
+            baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
+            persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
+            return false;
+        }
         profile_ = std::move(candidate);
         worldClockDirty_ = true;
         return true;

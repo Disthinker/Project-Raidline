@@ -11,6 +11,7 @@
 #include "alpha_content_ids.h"
 #include "base_defense_checkpoint_writer.h"
 #include "base_defense_runtime.h"
+#include "base_defense_ownership.h"
 #include "base_siege_domain.h"
 #include "inventory_domain.h"
 #include "medical_domain.h"
@@ -54,7 +55,7 @@ struct PerformanceSaveDirectory
     }
 };
 
-TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFireInventoryAndSave)
+void runDefensePerformance(bool fortified)
 {
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile("defense-performance", content);
@@ -134,8 +135,26 @@ TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFire
     inputs.frozenSiteThreat =
         content.regionalBaseSite(RegionalBaseSiteDefinitionId{inputs.siteDefinitionId})
             .dailyBaseThreatUnits;
+    if (fortified)
+    {
+        inputs.rulesVersion = kFortifiedBaseDefenseRulesVersion;
+        for (const auto &b : blockers) inputs.movementBlockers.push_back(b.bounds);
+        for (std::uint32_t side = 0; side < 4; ++side)
+        {
+            const FortificationInstanceId id{side + 1U};
+            const DefenseSlotKey slot{RegionalBaseSiteDefinitionId{inputs.siteDefinitionId}, "",
+                                      static_cast<DefenseSide>(side)};
+            const Rect footprint = side < 2
+                ? Rect{{side == 0 ? 2760.0F : 4240.0F, 3420}, {48, 160}}
+                : Rect{{3420, side == 2 ? 2760.0F : 4240.0F}, {160, 48}};
+            inputs.fortifications.push_back({id, kWoodBarricadeDefinition, slot, footprint, 120, 120, 120});
+            profile.baseFortifications.instances.emplace(id, FortificationRecord{kWoodBarricadeDefinition, 120, slot});
+        }
+        profile.baseFortifications.nextInstanceId = 5;
+    }
     auto prepared = BaseDefenseRuntime::prepare(inputs, blockers, publishedContentRegistry().enemyCombatDefinition(ordinaryInfectedDefinitionId()));
     ASSERT_TRUE(prepared);
+    if (fortified) profile.baseDefenseWarning = BaseDefenseWarningSnapshot{inputs.eventId, *prepared};
     ASSERT_TRUE(executeBaseRealtimeDefenseStart(profile, content, *prepared,
                                                 {profile.revision, "perf-defense-start"})
                     .succeeded);
@@ -252,14 +271,24 @@ TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFire
         if (frame % 3 == 0)
         {
             const auto copyStart = Clock::now();
-            profile.activeBaseDefense = runtime.checkpoint(shooting);
+            if (fortified)
+            {
+                ASSERT_TRUE(captureOwnedDefenseCheckpoint(profile, runtime.checkpoint(shooting), content));
+            }
+            else
+                profile.activeBaseDefense = runtime.checkpoint(shooting);
             static_cast<void>(writer.request(profile, content.contentVersion()));
             copies.push_back(elapsedMilliseconds(copyStart));
             profileClones.push_back(writer.snapshot().lastCopyMilliseconds);
         }
         frames.push_back(elapsedMilliseconds(frameStart));
     }
-    profile.activeBaseDefense = runtime.checkpoint(shooting);
+    if (fortified)
+    {
+        ASSERT_TRUE(captureOwnedDefenseCheckpoint(profile, runtime.checkpoint(shooting), content));
+    }
+    else
+        profile.activeBaseDefense = runtime.checkpoint(shooting);
     static_cast<void>(writer.request(profile, content.contentVersion()));
     const auto durable = writer.flush();
     ASSERT_TRUE(durable.succeeded) << durable.message;
@@ -285,5 +314,15 @@ TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFire
     EXPECT_LT(copyP95, 4.0);
     EXPECT_LT(copyP99, 8.0);
     EXPECT_LT(slowestSimulation, 25.0);
+}
+
+TEST(BaseDefensePerformanceTest, SixteenEnemiesThousandAssetsAndBlockersWithFireInventoryAndSave)
+{
+    runDefensePerformance(false);
+}
+
+TEST(BaseDefensePerformanceTest, FortifiedWarningAndOwnerWritebackKeepOriginalCheckpointBudgets)
+{
+    runDefensePerformance(true);
 }
 } // namespace

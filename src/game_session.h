@@ -593,7 +593,7 @@ private:
     [[nodiscard]] bool commitProfileCandidate(
         ProfileState candidate,
         bool persist = true);
-    void captureBaseDefenseCheckpoint(ProfileState &candidate) const;
+    [[nodiscard]] bool captureBaseDefenseCheckpoint(ProfileState &candidate) const;
     [[nodiscard]] bool checkpointBaseDefense(bool wait);
     [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason);
     [[nodiscard]] bool prepareBaseDefenseFrame(BaseWorld &world);

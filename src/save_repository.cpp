@@ -1423,6 +1423,15 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["base_fortifications"] = baseFortificationsJson(profile.baseFortifications);
     else if (!profile.baseFortifications.instances.empty() || profile.baseFortifications.nextInstanceId != 1)
         throw std::invalid_argument("Fortification ownership cannot be written to a legacy schema");
+    if (schemaVersion >= 48)
+        payload["base_defense_warning"] = profile.baseDefenseWarning
+            ? Json{{"event_id", profile.baseDefenseWarning->eventId},
+                   {"layout", profile.baseDefenseWarning->layout
+                       ? baseDefenseSnapshotJson(*profile.baseDefenseWarning->layout) : Json(nullptr)}}
+            : Json(nullptr);
+    else if (profile.baseDefenseWarning || (profile.activeBaseDefense &&
+             profile.activeBaseDefense->rulesVersion != kBaseDefenseRulesVersion))
+        throw std::invalid_argument("Frozen defense warning requires schema 48");
     if (schemaVersion >= 46)
         payload["active_base_defense"] = profile.activeBaseDefense
             ? baseDefenseSnapshotJson(*profile.activeBaseDefense) : Json(nullptr);
@@ -2400,7 +2409,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2586,7 +2595,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2955,6 +2964,14 @@ SaveLoadResult deserializeProfileEnvelope(
             : defaultBaseSiege(profile.worldClock);
         if (schemaVersion >= 47)
             profile.baseFortifications = parseBaseFortificationsJson(payload.at("base_fortifications"));
+        if (schemaVersion >= 48 && !payload.at("base_defense_warning").is_null())
+        {
+            const auto &warning = payload.at("base_defense_warning");
+            profile.baseDefenseWarning = BaseDefenseWarningSnapshot{
+                warning.at("event_id").get<std::string>(), {}};
+            if (!warning.at("layout").is_null())
+                profile.baseDefenseWarning->layout = parseBaseDefenseSnapshotJson(warning.at("layout"));
+        }
         if (schemaVersion >= 46 && !payload.at("active_base_defense").is_null())
             profile.activeBaseDefense = parseBaseDefenseSnapshotJson(payload.at("active_base_defense"));
         if (schemaVersion < 33)

@@ -6,12 +6,12 @@
 #include "vec2.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 inline constexpr std::uint32_t kBaseDefenseRulesVersion = 1U;
-// Opt-in frozen runtime contract. Production warning preparation remains v1
-// until the warning/Profile checkout consumer is delivered in this Draft.
+// Legacy events keep v1; new schema-48 warning preparations opt into v2.
 inline constexpr std::uint32_t kFortifiedBaseDefenseRulesVersion = 2U;
 inline constexpr std::uint32_t kBaseDefenseMaximumActiveEnemies = 16U;
 inline constexpr std::uint32_t kBaseDefenseBreachLimit = 6U;
@@ -95,6 +95,14 @@ struct BaseDefenseSnapshot
     double pendingWorldSeconds{};
     float baseCombatElapsedSeconds{};
     float medicalTickAccumulatorSeconds{};
+};
+
+// Presence marks a new warning even when no legal realtime layout exists.
+// A missing layout keeps automatic defense available, without retry/reroll.
+struct BaseDefenseWarningSnapshot
+{
+    std::string eventId;
+    std::optional<BaseDefenseSnapshot> layout;
 };
 
 [[nodiscard]] std::uint64_t baseDefenseLayoutHash(const BaseDefenseSnapshot &snapshot) noexcept;

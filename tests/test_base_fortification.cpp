@@ -315,19 +315,36 @@ TEST(BaseFortificationTest, ServiceSaveFailureCommitsNeitherMaterialsNorInstance
 
 TEST(BaseFortificationTest, OldDefenseCheckpointAndWarningRemainRuleOneAfterMigration)
 {
-    GameFlow flow;
-    ASSERT_TRUE(flow.startNewGame("old-fortification-warning", false));
-    ASSERT_TRUE(flow.gameSession().triggerDeveloperBaseSiegeWarning());
-    const auto warning = flow.gameSession().profile().baseSiege;
-    const auto serializedWarning = serializeProfileEnvelope(flow.gameSession().profile(),
+    // Explicit legacy input, not the production developer trigger which now
+    // freezes a schema-48 warning. Never downgrade a newly prepared event.
+    auto profile = makeNewAlphaProfile("old-fortification-warning", content);
+    profile.baseSiege.raidThreatUnits = 100;
+    profile.baseSiege.safeUntilWorldMinute = profile.worldClock.elapsedWorldMinutes;
+    ASSERT_TRUE(activateBaseSiegeWarningIfEligible(profile));
+    const auto warning = profile.baseSiege;
+    const auto serializedWarning = serializeProfileEnvelope(profile,
                                                             "enemy-combat-contract-content-60", 46);
     auto restoredWarning = deserializeProfileEnvelope(serializedWarning, content);
     ASSERT_TRUE(restoredWarning.profile) << restoredWarning.message;
     EXPECT_EQ(restoredWarning.profile->baseSiege, warning);
-    ASSERT_TRUE(flow.gameSession().startBaseRealtimeDefense(flow.baseWorld()));
-    const auto &old = *flow.gameSession().profile().activeBaseDefense;
+    EXPECT_FALSE(restoredWarning.profile->baseDefenseWarning);
+    BaseWorld world;
+    BaseDefenseSnapshot inputs;
+    inputs.eventId = baseSiegeEventId(profile);
+    inputs.siegeSequence = profile.baseSiege.siegeSequence;
+    inputs.seed = 91;
+    inputs.frozenPopulation = profile.basePopulation.ordinaryResidents;
+    inputs.frozenMoraleTier = static_cast<std::uint32_t>(profile.baseMorale.tier);
+    inputs.frozenSiteThreat = content.regionalBaseSite(
+        profile.regionalOperations.technologyCore.baseSiteDefinitionId).dailyBaseThreatUnits;
+    const auto prepared = world.prepareBaseDefenseSnapshot(inputs,
+        content.enemyCombatDefinition(ordinaryInfectedDefinitionId()));
+    ASSERT_TRUE(prepared);
+    ASSERT_TRUE(executeBaseRealtimeDefenseStart(profile, content, *prepared,
+        {profile.revision, "legacy-start"}).succeeded);
+    const auto &old = *profile.activeBaseDefense;
     auto restored =
-        deserializeProfileEnvelope(serializeProfileEnvelope(flow.gameSession().profile(),
+        deserializeProfileEnvelope(serializeProfileEnvelope(profile,
                                                             "enemy-combat-contract-content-60", 46),
                                    content);
     ASSERT_TRUE(restored.profile) << restored.message;

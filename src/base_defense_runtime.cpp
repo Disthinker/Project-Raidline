@@ -164,9 +164,16 @@ BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBloc
     for (std::uint32_t sideAttempt = 0; sideAttempt < 4 && lanes.size() < 2; ++sideAttempt)
     {
         const std::uint32_t side = (firstSide + sideAttempt) % 4;
-        for (unsigned slot = 0; slot < 5; ++slot)
+        const auto fixed = std::find_if(s.fortifications.begin(), s.fortifications.end(),
+            [&](const auto &f) { return static_cast<std::uint32_t>(f.slot.side) == side; });
+        const bool hasFixed = s.rulesVersion == kFortifiedBaseDefenseRulesVersion &&
+                              fixed != s.fortifications.end();
+        for (unsigned slot = 0; slot < (hasFixed ? 6U : 5U); ++slot)
         {
-            const float fraction = 0.25F + 0.125F * static_cast<float>(slot);
+            const float fraction = hasFixed && slot == 0
+                ? (side < 2 ? (fixed->footprint.position.y + fixed->footprint.size.y / 2 - c.position.y) / c.size.y
+                            : (fixed->footprint.position.x + fixed->footprint.size.x / 2 - c.position.x) / c.size.x)
+                : 0.25F + 0.125F * static_cast<float>(slot - (hasFixed ? 1U : 0U));
             Vec2 target{}, outward{};
             if (side == 0)
             {
@@ -193,7 +200,12 @@ BaseDefenseRuntime::prepare(BaseDefenseSnapshot s, std::span<const BallisticBloc
             for (unsigned entryAttempt = 0; entryAttempt < 6; ++entryAttempt)
             {
                 const float extension = 1050 + 120 * static_cast<float>(entryAttempt / 3);
-                const float lateral = (static_cast<int>(entryAttempt % 3) - 1) * 160.0F;
+                // Prefer the installed position's approach axis. Legacy lanes
+                // retain their original lateral ordering and random contract.
+                const int lateralSlot = hasFixed
+                    ? (entryAttempt % 3 == 0 ? 0 : (entryAttempt % 3 == 1 ? -1 : 1))
+                    : static_cast<int>(entryAttempt % 3) - 1;
+                const float lateral = lateralSlot * 160.0F;
                 const Vec2 entry{target.x + outward.x * extension - outward.y * lateral,
                                  target.y + outward.y * extension + outward.x * lateral};
                 if (distance(entry, s.playerPosition) < 650 || !clearFootprint(entry, *index))

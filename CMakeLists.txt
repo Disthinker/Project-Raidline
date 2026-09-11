@@ -212,6 +212,7 @@ endfunction()
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
     src/base_fortification_domain.cpp
+    src/base_defense_ownership.cpp
     src/base_fortification_domain.h
     src/base_fortification_types.h
     src/base_fortification_serialization.cpp
@@ -408,6 +409,7 @@ add_library(raidline_services STATIC
     src/game_session_base_defense.cpp
     src/game_session_daily_checkpoint.cpp
     src/game_session_base_fortification.cpp
+    src/base_defense_preparation.cpp
     src/base_fortification_placement.cpp
     src/base_fortification_placement.h
     src/first_raid_guidance.cpp
@@ -796,6 +798,7 @@ raidline_add_test(
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
 raidline_add_test(BaseFortificationTest tests/test_base_fortification.cpp raidline::services)
 raidline_add_test(BaseFortificationPlacementTest tests/test_base_fortification_placement.cpp raidline::services)
+raidline_add_test(BaseDefenseOwnershipTest tests/test_base_defense_ownership.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
 raidline_add_test(FortificationRuntimeTest tests/test_fortification_runtime.cpp raidline::simulation)
 raidline_add_test(EnemyLifecycleContractTest tests/test_enemy_lifecycle_contract.cpp raidline::services)

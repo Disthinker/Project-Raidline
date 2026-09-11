@@ -1,4 +1,5 @@
 #include "base_siege_domain.h"
+#include "base_defense_ownership.h"
 
 #include "base_workforce_domain.h"
 #include "home_perimeter_domain.h"
@@ -131,6 +132,7 @@ void clearThreatForSafetyPeriod(
     state.siteThreatUnits = 0U;
     state.warningActive = false;
     state.warningRemainingSeconds = 0U;
+    profile.baseDefenseWarning.reset();
     const std::uint64_t duration =
         static_cast<std::uint64_t>(days) * kWorldMinutesPerDay;
     state.safeUntilWorldMinute =
@@ -482,11 +484,19 @@ BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
         profile.pendingRaid || !profile.homeFounding.established)
         return reject(DomainErrorCode::IllegalDestination,
                       "Realtime defense requires an established Base under warning");
-    // Internal v2 runtime proof is not a production checkout. Keep the domain
-    // gate until warning-time geometry and Profile durability write-back ship.
-    if (snapshot.rulesVersion != kBaseDefenseRulesVersion)
+    if (profile.baseDefenseWarning)
+    {
+        if (!validateDefenseWarning(profile, content).valid || !profile.baseDefenseWarning->layout ||
+            snapshot.rulesVersion != kFortifiedBaseDefenseRulesVersion ||
+            !matchesDefenseWarning(snapshot, *profile.baseDefenseWarning->layout) ||
+            !validateDefenseFortificationOwnership(profile, content, snapshot).valid ||
+            std::any_of(snapshot.fortifications.begin(), snapshot.fortifications.end(),
+                [](const auto &f) { return f.initialDurability != f.durability; }))
+            return reject(DomainErrorCode::InvalidProfile, "Defense differs from frozen warning or owners");
+    }
+    else if (snapshot.rulesVersion != kBaseDefenseRulesVersion)
         return reject(DomainErrorCode::IllegalDestination,
-                      "Fortified defense requires the pending warning checkout contract");
+                      "Fortified defense requires a frozen warning");
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
         return reject(DomainErrorCode::RevisionOverflow, "profile revision cannot advance");
     const auto *site = activeSite(profile, content);
@@ -494,9 +504,10 @@ BaseRealtimeDefensePlan queryBaseRealtimeDefenseStart(
         snapshot.eventId != baseSiegeEventId(profile) ||
         snapshot.siegeSequence != profile.baseSiege.siegeSequence ||
         snapshot.siegeSequence <= profile.baseSiege.lastResolvedSequence ||
-        snapshot.frozenPopulation != profile.basePopulation.ordinaryResidents ||
-        snapshot.frozenMoraleTier != static_cast<std::uint32_t>(profile.baseMorale.tier) ||
-        snapshot.frozenSiteThreat != site->dailyBaseThreatUnits)
+        (!profile.baseDefenseWarning &&
+         (snapshot.frozenPopulation != profile.basePopulation.ordinaryResidents ||
+          snapshot.frozenMoraleTier != static_cast<std::uint32_t>(profile.baseMorale.tier) ||
+          snapshot.frozenSiteThreat != site->dailyBaseThreatUnits)))
         return reject(DomainErrorCode::InvalidProfile, "Defense event identity or frozen inputs are stale");
     const auto plot = profile.homeFounding.plots.find(site->id);
     const std::string expectedPlot = plot == profile.homeFounding.plots.end() ? "" : plot->second;
@@ -570,7 +581,8 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
         return {false, false, DomainErrorCode::RevisionOverflow, "profile revision cannot advance", profile.revision};
     const auto &snapshot = *profile.activeBaseDefense;
     std::string message;
-    if (!validateBaseDefenseSnapshot(snapshot, message))
+    if (!validateBaseDefenseSnapshot(snapshot, message) ||
+        !validateDefenseFortificationOwnership(profile, content, snapshot).valid)
         return {false, false, DomainErrorCode::InvalidProfile, message, profile.revision};
     std::size_t planned{};
     for (const auto &wave : snapshot.wavePlans) planned += wave.enemyIds.size();
