@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "stable_random.h"
+#include "raid_district_fill.h"
 
 namespace
 {
@@ -1435,20 +1436,7 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
 
 RaidTerrainKind baseTerrainForDistrict(RaidDistrictKind kind) noexcept
 {
-    switch (kind)
-    {
-    case RaidDistrictKind::Industrial:
-    case RaidDistrictKind::Logistics:
-    case RaidDistrictKind::RoadsideService:
-        return RaidTerrainKind::Concrete;
-    case RaidDistrictKind::Highway:
-        return RaidTerrainKind::Asphalt;
-    case RaidDistrictKind::Greenbelt:
-        return RaidTerrainKind::Grass;
-    case RaidDistrictKind::OpenGround:
-        return RaidTerrainKind::Dirt;
-    }
-    return RaidTerrainKind::Dirt;
+    return raidDistrictFill(kind).terrain;
 }
 
 std::vector<RaidTerrainSpan> generateTerrain(
@@ -1757,8 +1745,7 @@ void populateProps(
             const std::uint16_t district = districtAtFineCell(
                 definition, districtField, column, row);
             const RaidDistrictKind kind = districtDefinitions[district].kind;
-            if (kind == RaidDistrictKind::Industrial ||
-                kind == RaidDistrictKind::Logistics)
+            if (raidDistrictFill(kind).largeBuildings)
                 compoundCandidates.push_back({column, row});
         }
     for (std::size_t remaining = compoundCandidates.size();
@@ -1777,12 +1764,11 @@ void populateProps(
             definition, districtField, origin.column, origin.row);
         const RaidDistrictKind districtKind =
             districtDefinitions[district].kind;
-        std::uint32_t widthCells = districtKind == RaidDistrictKind::Industrial
-            ? 12U + random.bounded(7U)
-            : 10U + random.bounded(7U);
-        std::uint32_t heightCells = districtKind == RaidDistrictKind::Industrial
-            ? 7U + random.bounded(5U)
-            : 6U + random.bounded(5U);
+        const RaidDistrictFill fill = raidDistrictFill(districtKind);
+        std::uint32_t widthCells = fill.minimumWidthCells +
+            random.bounded(fill.widthVariation);
+        std::uint32_t heightCells = fill.minimumHeightCells +
+            random.bounded(fill.heightVariation);
         const std::uint8_t quarterTurns = static_cast<std::uint8_t>(
             random.bounded(2U));
         if (quarterTurns % 2U != 0U)
@@ -1795,9 +1781,7 @@ void populateProps(
         if (!rectIsAvailable(bounds, true, district))
             continue;
         appendReservedProp(
-            districtKind == RaidDistrictKind::Industrial
-                ? RaidOutdoorPropKind::Factory
-                : RaidOutdoorPropKind::Warehouse,
+            fill.building,
             RaidOutdoorPropState::Weathered,
             bounds,
             quarterTurns,
@@ -1820,19 +1804,8 @@ void populateProps(
              districtKind == RaidDistrictKind::OpenGround) &&
             random.bounded(4U) != 0U)
             continue;
-        RaidOutdoorPropKind kind = RaidOutdoorPropKind::Container;
-        if (districtKind == RaidDistrictKind::Industrial)
-            kind = layout.ballisticBlockers.size() % 3U == 0U
-                ? RaidOutdoorPropKind::EngineeringEquipment
-                : RaidOutdoorPropKind::Container;
-        else if (districtKind == RaidDistrictKind::Highway ||
-                 districtKind == RaidDistrictKind::OpenGround ||
-                 districtKind == RaidDistrictKind::Greenbelt)
-            kind = RaidOutdoorPropKind::Container;
-        else if (districtKind == RaidDistrictKind::RoadsideService)
-            kind = layout.ballisticBlockers.size() % 2U == 0U
-                ? RaidOutdoorPropKind::EngineeringEquipment
-                : RaidOutdoorPropKind::Container;
+        const RaidOutdoorPropKind kind = raidDistrictFill(districtKind)
+            .smallBlocker(layout.ballisticBlockers.size());
         const std::uint8_t quarterTurns = static_cast<std::uint8_t>(
             random.bounded(4U));
         const Vec2 size = orientedSize(
