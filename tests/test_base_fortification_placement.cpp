@@ -314,6 +314,7 @@ TEST(BaseFortificationPlacementTest, RealSessionSaveFailureLeavesSlotAndRuntimeU
     ASSERT_TRUE(std::filesystem::create_directory(obstruction));
     const auto refused = session.installBaseFortification(flow.baseWorld(), command, plan.revision);
     EXPECT_FALSE(refused.succeeded);
+    EXPECT_TRUE(flow.baseWorld().fortifications().empty());
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
     EXPECT_EQ(flow.baseWorld().perimeterEnemySnapshots(), enemies);
     ASSERT_TRUE(std::filesystem::remove(obstruction));
@@ -325,6 +326,15 @@ TEST(BaseFortificationPlacementTest, RealSessionSaveFailureLeavesSlotAndRuntimeU
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(session.profile()));
     EXPECT_EQ(loaded.profile->baseFortifications.instances.at({1}).slot, command.slot);
+    // Production session projects only the committed owner on the next update.
+    flow.updateBase({}, 0.0F);
+    ASSERT_EQ(flow.baseWorld().fortifications().size(), 1U);
+    EXPECT_EQ(flow.baseWorld().fortifications()[0].id, FortificationInstanceId{1});
+    EXPECT_EQ(flow.baseWorld().perimeterEnemySnapshots(), enemies);
+    ASSERT_TRUE(session.executeBaseFortification(StoreFortificationCommand{{1}}).succeeded);
+    flow.updateBase({}, 0.0F);
+    EXPECT_TRUE(flow.baseWorld().fortifications().empty());
+    EXPECT_EQ(flow.baseWorld().perimeterEnemySnapshots(), enemies);
 }
 
 TEST(BaseFortificationPlacementTest, RejectedPreviewPreservesRealEnemyIdentityAndPosition)

@@ -187,11 +187,18 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             baseWorld.configureHomePerimeter(&persisted->second);
     };
     if (!baseDefenseActive())
+    {
         baseWorld.configureGroundBlockers(
             projectBaseGroundMovementBlockers(
                 profile_,
                 publishedContentRegistry(),
                 RegionalBaseSiteDefinitionId{baseWorld.siteDefinitionId()}));
+        if (!baseWorld.configureFortifications(profile_.baseFortifications, publishedContentRegistry()))
+        {
+            persistenceMessage_ = "Invalid base fortification projection";
+            return std::nullopt;
+        }
+    }
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         baseCombatElapsedSeconds_ += deltaTime;

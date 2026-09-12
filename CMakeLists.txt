@@ -436,6 +436,8 @@ add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
     src/app_base_defense.cpp
+    src/app_base_fortification.cpp
+    src/base_fortification_build_ui.h
     src/app.cpp
     src/first_raid_ui.cpp
     src/app.h
@@ -798,6 +800,7 @@ raidline_add_test(
 raidline_add_test(BaseDefenseDomainTest tests/test_base_defense_domain.cpp raidline::services)
 raidline_add_test(BaseFortificationTest tests/test_base_fortification.cpp raidline::services)
 raidline_add_test(BaseFortificationPlacementTest tests/test_base_fortification_placement.cpp raidline::services)
+raidline_add_test(BaseDailyFortificationTest tests/test_base_daily_fortification.cpp raidline::services)
 raidline_add_test(BaseDefenseOwnershipTest tests/test_base_defense_ownership.cpp raidline::services)
 raidline_add_test(BaseAutoFortificationTest tests/test_base_auto_fortification.cpp raidline::services)
 raidline_add_test(BaseDefenseRuntimeTest tests/test_base_defense_runtime.cpp raidline::simulation)
@@ -810,6 +813,7 @@ raidline_add_test(BaseDefenseCheckpointWriterTest tests/test_base_defense_checkp
 raidline_add_test(BaseDailyCheckpointTest tests/test_base_daily_checkpoint.cpp raidline::services)
 raidline_add_test(BaseDefenseSessionTest tests/test_base_defense_session.cpp raidline::services)
 raidline_add_test(BaseSiegeUiTest tests/test_base_siege_ui.cpp raidline::sdl_client)
+raidline_add_test(FortificationBuildUiTest tests/test_fortification_build_ui.cpp raidline::sdl_client)
 raidline_add_test(BaseDefensePerformanceTest tests/test_base_defense_performance.cpp raidline::services)
 raidline_add_test(
     RaidRescueDomainTest

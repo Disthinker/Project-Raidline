@@ -2782,6 +2782,11 @@ void App::updateBase(float deltaTime)
     {
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
+            if (cancelBaseFortificationUi())
+            {
+                pendingBaseClicks_.clear(); pendingBaseRightClicks_.clear();
+                uiMessage_.clear(); input_.suppressPrimaryPointerUntilRelease(); return;
+            }
             if (baseFacilityContextMenu_.has_value())
             {
                 baseFacilityContextMenu_.reset();
@@ -2802,7 +2807,15 @@ void App::updateBase(float deltaTime)
             return;
         }
         if (updateBaseBuildCameraKeyboard(deltaTime))
+        {
             baseFacilityContextMenu_.reset();
+            fortificationBuildUi_.menu.reset();
+        }
+        updateBaseFortificationUi();
+        if (!baseConstructionPanelOpen_)
+        {
+            pendingBaseClicks_.clear(); pendingBaseRightClicks_.clear(); return;
+        }
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
             if (baseFacilityContextMenu_.has_value())
@@ -5938,6 +5951,7 @@ void App::processEvents()
                     baseBuildViewportWorldSize()))
             {
                 baseFacilityContextMenu_.reset();
+                fortificationBuildUi_.menu.reset();
             }
             if ((gameFlow_.state() == GameFlowState::Raid ||
                  gameFlow_.state() == GameFlowState::Base) &&
@@ -6185,7 +6199,7 @@ void App::processEvents()
             event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
             event.key.scancode == SDL_SCANCODE_B)
         {
-            if (gameSession_.baseDefenseActive() || gameSession_.profile().baseSiege.warningActive)
+            if (gameSession_.baseDefenseActive())
             {
                 uiMessage_ = "BASE LAYOUT LOCKED DURING DEFENSE";
                 continue;
@@ -6221,6 +6235,8 @@ void App::processEvents()
                 tacticalMapOpen_ = false;
                 medicalWheelOpen_ = false;
                 baseConstructionPanelOpen_ = true;
+                fortificationBuildUi_ = {};
+                fortificationBuildUi_.category = gameSession_.profile().baseSiege.warningActive;
                 baseConstructionCatalogPage_ = 0U;
                 selectedBasePlacedAssetId_.reset();
                 selectedBaseFixedFacility_.reset();
@@ -6300,9 +6316,12 @@ void App::processEvents()
                 {
                     const MousePosition position{
                         event.button.x, event.button.y};
-                    if (!contains(baseBuildBarBounds(), position) &&
-                        !contains(baseFacilityInspectorBounds(), position) &&
-                        !contains(baseOperationsOverviewBounds(), position))
+                    if (fortificationBuildUi_.category && contains(baseBuildBarBounds(), position))
+                        pendingBaseRightClicks_.push_back(position);
+                    else if (!contains(baseBuildBarBounds(), position) &&
+                        (fortificationBuildUi_.category ||
+                        (!contains(baseFacilityInspectorBounds(), position) &&
+                        !contains(baseOperationsOverviewBounds(), position))))
                         baseBuildCamera_.beginPointer(
                             {position.x, position.y});
                 }
@@ -6579,6 +6598,7 @@ void App::update(float deltaTime)
     const bool existingModalHandlesEscape =
         baseSiegeWarningVisible() || siegeWarningBlocksGameplayThisFrame_ ||
         baseDefenseResultVisible_ ||
+        baseConstructionPanelOpen_ ||
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
@@ -9719,6 +9739,7 @@ void App::focusBaseFixedFacility(BaseFacilityKind facility) noexcept
 
 void App::deactivateBaseBuildCamera() noexcept
 {
+    fortificationBuildUi_ = {};
     baseBuildCamera_.deactivate();
 }
 
@@ -11547,6 +11568,7 @@ void App::renderBaseWorld()
 
     renderBasePlacementPreview();
     renderBaseDefenseWorld();
+    renderBaseFortificationPreview();
 
     for (const Enemy &enemy : world.baseDefenseActive() ? world.baseDefenseEnemies() : world.perimeterEnemies())
     {
@@ -11751,6 +11773,7 @@ std::size_t App::baseBuildCatalogEntryCount() const
 
 void App::handleBaseConstructionPanelClick(MousePosition position)
 {
+    if (handleBaseFortificationClick(position)) return;
     if (handleBaseOperationsOverviewClick(position))
         return;
     if (handleBaseFacilityInspectorClick(position))
@@ -12225,6 +12248,7 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
 
 void App::handleBaseConstructionRightClick(MousePosition position)
 {
+    if (handleBaseFortificationRightClick(position)) return;
     if (contains(baseBuildBarBounds(), position) ||
         contains(baseFacilityInspectorBounds(), position) ||
         contains(baseOperationsOverviewBounds(), position))
@@ -12899,6 +12923,8 @@ void App::renderBaseConstructionPanel()
         gameFlow_.state() != GameFlowState::Base)
         return;
 
+    if (fortificationBuildUi_.category) { renderBaseFortificationPanel(); return; }
+
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const SDL_FRect panel = baseBuildBarBounds();
     SDL_SetRenderDrawColor(renderer_, 18, 30, 31, 248);
@@ -13132,7 +13158,8 @@ void App::renderBaseConstructionPanel()
                 : "NO UNPLACED FACILITIES");
     }
     if (!uiMessage_.empty())
-        uiTextRenderer_.render(renderer_, 88.0F, 664.0F, uiMessage_.c_str());
+        uiTextRenderer_.render(renderer_, 88.0F, 680.0F, uiMessage_.c_str());
+    renderBaseFortificationCategoryButton();
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
     renderBaseOperationsOverview();

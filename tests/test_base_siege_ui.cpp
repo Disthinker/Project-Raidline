@@ -26,6 +26,10 @@ struct BaseSiegeUiTestAccess {
 namespace {
 using Access = BaseSiegeUiTestAccess;
 namespace layout = base_siege_warning_layout;
+TEST(BaseSiegeUiLocalizationTest, DailyAndDefenseWoodLabelsShareChineseFallback) {
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "WOOD BARRICADE 30/120"), "木制路障 30/120");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "BARRICADE REMNANT 0/120"), "路障残架 0/120");
+}
 TEST(BaseSiegeUiLocalizationTest, FortificationPreviewConsumesDomainCostAndHasChinese) {
     BaseAutoDefensePlan plan;
     plan.fortificationDiscount = 2;

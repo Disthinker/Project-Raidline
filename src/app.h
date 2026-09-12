@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include "base_build_camera.h"
+#include "base_fortification_build_ui.h"
 #include "base_operations_presentation.h"
 #include "game_flow.h"
 #include "game_audio.h"
@@ -136,6 +137,7 @@ public:
 private:
     // Headless event-router regression tests; never creates a window or save path.
     friend struct BaseSiegeUiTestAccess;
+    friend struct FortificationBuildUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -184,6 +186,7 @@ private:
     std::optional<BaseFixedFacilityPlacementState>
         baseFixedFacilityPlacementState_;
     bool baseConstructionPanelOpen_{};
+    BaseFortificationBuildUi fortificationBuildUi_;
     std::optional<std::string> homeFoundingPrompt_;
     bool homeFoundingInputBlockedThisFrame_{};
     BaseConstructionPage baseConstructionPage_{BaseConstructionPage::Purchase};
@@ -287,6 +290,14 @@ private:
     void commitMedicalWheelSelection();
     void handleDeveloperPanelClick(MousePosition position);
     void handleBaseConstructionPanelClick(MousePosition position);
+    void updateBaseFortificationUi();
+    bool handleBaseFortificationClick(MousePosition);
+    bool handleBaseFortificationRightClick(MousePosition);
+    bool cancelBaseFortificationUi();
+    void beginFortificationPlacement(FortificationInstanceId);
+    void renderBaseFortificationPanel();
+    void renderBaseFortificationCategoryButton();
+    void renderBaseFortificationPreview();
     [[nodiscard]] bool handleBaseOperationsOverviewClick(
         MousePosition position);
     [[nodiscard]] bool handleBaseFacilityInspectorClick(
