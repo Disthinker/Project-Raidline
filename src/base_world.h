@@ -111,6 +111,7 @@ public:
     // Bounded Profile projection, never a route proof or enemy reconstruction.
     [[nodiscard]] bool configureFortifications(const BaseFortificationState &, const ContentRegistry &);
     [[nodiscard]] std::span<const FortificationSnapshot> fortifications() const noexcept;
+    [[nodiscard]] std::uint64_t placementGeometryRevision() const noexcept { return placementGeometryRevision_; }
     [[nodiscard]] const HomeRegionPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
     [[nodiscard]] std::optional<BaseFacilityKind>
@@ -174,6 +175,7 @@ private:
     void rebuildSite(std::string_view siteDefinitionId);
     void rebuildCollisionIndex();
     void refreshDailyShotBlockers();
+    std::uint64_t placementGeometryRevision_{};
 
     std::string siteDefinitionId_;
     std::string plotId_;

@@ -244,6 +244,7 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
 
 void BaseWorld::rebuildCollisionIndex()
 {
+    ++placementGeometryRevision_;
     movementBlockers_.clear();
     BallisticBlockerId id{1U};
     movementBlockers_.reserve(layout_.movementBlockers.size() +
@@ -894,6 +895,8 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockers() const
     for (const ContentRect &bounds : groundBlockers_)
         result.push_back(bounds);
     result.push_back(ContentRect{playerPosition_, playerSize_});
+    for (const auto &f : fortifications())
+        result.push_back({f.footprint.position, f.footprint.size}); // remnants reserve repair space
     return result;
 }
 
@@ -915,6 +918,8 @@ std::vector<ContentRect> BaseWorld::basePlacementBlockersExcluding(
     for (const ContentRect &bounds : groundBlockers_)
         result.push_back(bounds);
     result.push_back(ContentRect{playerPosition_, playerSize_});
+    for (const auto &f : fortifications())
+        result.push_back({f.footprint.position, f.footprint.size});
     return result;
 }
 

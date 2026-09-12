@@ -39,8 +39,7 @@ struct FortificationPlacementPlan : FortificationPlan
 // authoritative Profile together. Expensive route proof runs on placement
 // requests, never in combat/update loops. No enemy/world mutation and no
 // navigation UI are involved.
-// Internal #160 checkpoint: the B catalog remains closed until destructible
-// collision, defense-v2 freeze/restore and UI consumers ship together.
+// B previews cache this proof; installation revalidates against current state.
 [[nodiscard]] FortificationPlacementPlan queryFortificationPlacement(
     const ProfileState &, const ContentRegistry &, const BaseWorld &,
     const InstallFortificationCommand &);

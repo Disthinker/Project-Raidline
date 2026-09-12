@@ -140,6 +140,8 @@ FortificationPlacementPlan queryFortificationPlacement(const ProfileState &profi
                     "Fixed position has no legal static clearance");
 
     std::vector<ContentRect> reserved{ContentRect{world.playerPosition(), world.playerSize()}};
+    for (const auto &enemy : world.perimeterEnemies())
+        reserved.push_back({enemy.position(), enemy.size()});
     std::vector<BallisticBlocker> blockers;
     auto addBlocker = [&](ContentRect r) {
         blockers.push_back(

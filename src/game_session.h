@@ -344,6 +344,7 @@ public:
         std::string transactionId);
 
     [[nodiscard]] FortificationReceipt executeBaseFortification(const FortificationCommand &);
+    [[nodiscard]] FortificationReceipt repairBaseFortification(const BaseWorld &, FortificationInstanceId);
     [[nodiscard]] FortificationPlacementPlan queryBaseFortificationPlacement(
         const BaseWorld &, const InstallFortificationCommand &) const;
     [[nodiscard]] FortificationReceipt installBaseFortification(
