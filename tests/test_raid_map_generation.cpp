@@ -8,6 +8,7 @@
 
 #include "content_registry.h"
 #include "raid_map_generation.h"
+#include "raid_district_fill.h"
 
 namespace
 {
@@ -221,6 +222,49 @@ bool districtTouchesKind(
         }
     return false;
 }
+}
+
+TEST(RaidMapGenerationTest, FrontierV4AcceptedBaselineHashes)
+{
+    const MapDefinition &map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    const auto anchors = publishedAnchors(map);
+    // Capture from the accepted generator before adding a second theme. A
+    // deterministic repeat alone cannot detect a deterministic regression.
+    constexpr std::array<std::pair<std::uint64_t, std::uint64_t>, 3> accepted{{
+        {1ULL, 15387931812094865162ULL},
+        {42ULL, 3232885663766108429ULL},
+        {910223ULL, 14375321402881869312ULL}}};
+    for (const auto &[seed, hash] : accepted)
+    {
+        SCOPED_TRACE(seed);
+        const auto layout = generateRaidMapLayout(map, seed, anchors);
+        EXPECT_EQ(layout.layoutVersion, 4U);
+        EXPECT_FALSE(layout.usedFallback);
+        EXPECT_EQ(layout.layoutHash, hash);
+    }
+}
+
+TEST(RaidMapGenerationTest, DistrictFillSeparatesTerrainBuildingsAndEquipment)
+{
+    const auto industrial = raidDistrictFill(RaidDistrictKind::Industrial);
+    const auto logistics = raidDistrictFill(RaidDistrictKind::Logistics);
+    EXPECT_TRUE(industrial.largeBuildings);
+    EXPECT_TRUE(logistics.largeBuildings);
+    EXPECT_EQ(industrial.building, RaidOutdoorPropKind::Factory);
+    EXPECT_EQ(logistics.building, RaidOutdoorPropKind::Warehouse);
+    EXPECT_EQ(industrial.smallBlocker(3), RaidOutdoorPropKind::EngineeringEquipment);
+    EXPECT_EQ(industrial.smallBlocker(4), RaidOutdoorPropKind::Container);
+    EXPECT_EQ(logistics.smallBlocker(3), RaidOutdoorPropKind::Container);
+    EXPECT_EQ(raidDistrictFill(RaidDistrictKind::Highway).terrain,
+              RaidTerrainKind::Asphalt);
+    EXPECT_EQ(raidDistrictFill(RaidDistrictKind::Greenbelt).terrain,
+              RaidTerrainKind::Grass);
+    EXPECT_EQ(raidDistrictFill(RaidDistrictKind::OpenGround).terrain,
+              RaidTerrainKind::Dirt);
+    EXPECT_FALSE(raidDistrictFill(RaidDistrictKind::RoadsideService).largeBuildings);
+    EXPECT_EQ(raidDistrictFill(RaidDistrictKind::RoadsideService).smallBlocker(2),
+              RaidOutdoorPropKind::EngineeringEquipment);
 }
 
 TEST(RaidMapGenerationTest, FixedMapsPreservePublishedBlockers)

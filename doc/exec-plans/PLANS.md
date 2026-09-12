@@ -17,6 +17,13 @@ ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划�
 
 产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
 
+2026-09-12 最新收尾：`active/base-defense-fixed-positions-v1.md` 已完成用户验收，#162 普通
+合入 main@2ae1a8c，验收树 a3e67cb；精确双平台各 1795/1795。该路径保留为历史证据。
+下一单一产品片正在向策划核对，不默认继续守城/工事/NPC/导航。以下未交付记录是历史状态。
+
+策划回复后已建立 `active/hospital-raid-theme-v1.md`：下一主题的完整实施合同，尚无医院代码。
+在 `codex/hospital-raid-theme-v1` 同一 Draft 内推进，不混入已合并 #162。
+
 2026-09-11 最新活动计划：`active/base-defense-fixed-positions-v1.md`。
 内部第 2 步已接入真实拆障、失效清理与 runtime v2 检查点；尚未接入新预警和 Profile
 签出/写回，生产仍 v1，B 购买仍关闭。下一步完成冻结/保存、自动磨损及建设 UI，统一试玩。
