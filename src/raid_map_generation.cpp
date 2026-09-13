@@ -1128,7 +1128,16 @@ std::vector<RaidLandmarkPlacementSnapshot> placeLandmarks(
         placement.bounds = *selected;
         placement.districtInstanceId = selectedDistrict;
         const ContentRect bounds = *selected;
-        placement.structures = {
+        if (!landmark.structures.empty())
+        {
+            for (const ContentRect &structure : landmark.structures)
+                placement.structures.push_back({
+                    {bounds.position.x + bounds.size.x * structure.position.x,
+                     bounds.position.y + bounds.size.y * structure.position.y},
+                    {bounds.size.x * structure.size.x,
+                     bounds.size.y * structure.size.y}});
+        }
+        else placement.structures = {
             {{bounds.position.x + bounds.size.x * 0.06F,
               bounds.position.y + bounds.size.y * 0.08F},
              {bounds.size.x * 0.58F, bounds.size.y * 0.40F}},

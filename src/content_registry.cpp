@@ -2434,6 +2434,29 @@ ContentRegistry ContentRegistry::fromJson(
                     {
                         fail("procedural landmark template is invalid");
                     }
+                    if (landmark.contains("structures"))
+                    {
+                        const auto &structures = requiredArray(landmark, "structures");
+                        if (structures.empty() || structures.size() > 16U)
+                            fail("landmark structures must contain 1 to 16 footprints");
+                        for (const Json &structure : structures)
+                        {
+                            const ContentRect rect = parseRect(structure, "bounds");
+                            // Keep an exterior margin and a southern approach to
+                            // the existing road sockets. Bounds are normalized.
+                            if (rect.position.x < 0.04F || rect.position.y < 0.04F ||
+                                rect.position.x + rect.size.x > 0.96F ||
+                                rect.position.y + rect.size.y > 0.90F)
+                                fail("landmark structure is outside the reserved interior");
+                            for (const auto &other : landmarkDefinition.structures)
+                                if (rect.position.x < other.position.x + other.size.x &&
+                                    rect.position.x + rect.size.x > other.position.x &&
+                                    rect.position.y < other.position.y + other.size.y &&
+                                    rect.position.y + rect.size.y > other.position.y)
+                                    fail("landmark structures overlap");
+                            landmarkDefinition.structures.push_back(rect);
+                        }
+                    }
                     value.landmarkTemplates.push_back(
                         std::move(landmarkDefinition));
                 }

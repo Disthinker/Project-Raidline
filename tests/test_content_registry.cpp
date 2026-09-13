@@ -49,6 +49,34 @@ TEST(DefinitionIdTest, AcceptsStableNamespacedIdentifiers)
     EXPECT_EQ(id.value(), "item.weapon.rifle_basic");
 }
 
+TEST(ContentRegistryTest, AuthoredLandmarkFootprintsAreValidatedAndPreserved)
+{
+    const auto load = [](std::string_view structures)
+    {
+        return ContentRegistry::fromJson(replaceFirst(publishedJsonCopy(),
+            "\"footprint_cells\": {\"x\": 18, \"y\": 12}",
+            std::string{"\"footprint_cells\": {\"x\": 18, \"y\": 12}, \"structures\": "} +
+                std::string{structures}));
+    };
+    const auto registry = load(R"([
+        {"bounds":{"position":{"x":0.08,"y":0.08},"size":{"x":0.84,"y":0.24}}},
+        {"bounds":{"position":{"x":0.08,"y":0.36},"size":{"x":0.24,"y":0.48}}},
+        {"bounds":{"position":{"x":0.68,"y":0.36},"size":{"x":0.24,"y":0.48}}}
+    ])");
+    const auto &landmark = registry.map(MapDefinitionId{"map.raid.frontier_exchange"})
+        .proceduralOutdoor.landmarkTemplates.front();
+    ASSERT_EQ(landmark.structures.size(), 3U);
+    EXPECT_FLOAT_EQ(landmark.structures.front().size.x, 0.84F);
+    EXPECT_THROW(static_cast<void>(load("[]")), ContentRegistryError);
+    EXPECT_THROW(static_cast<void>(load(R"([
+        {"bounds":{"position":{"x":0.1,"y":0.1},"size":{"x":1,"y":0.2}}}
+    ])")), ContentRegistryError);
+    EXPECT_THROW(static_cast<void>(load(R"([
+        {"bounds":{"position":{"x":0.1,"y":0.1},"size":{"x":0.4,"y":0.4}}},
+        {"bounds":{"position":{"x":0.2,"y":0.2},"size":{"x":0.4,"y":0.4}}}
+    ])")), ContentRegistryError);
+}
+
 TEST(DefinitionIdTest, RejectsUnsafeOrUnnamespacedIdentifiers)
 {
     EXPECT_THROW(ItemDefinitionId{""}, std::invalid_argument);

@@ -285,6 +285,49 @@ TEST(RaidMapGenerationTest, FixedMapsPreservePublishedBlockers)
     }
 }
 
+TEST(RaidMapGenerationTest, AuthoredHospitalCourtyardKeepsItsShapeAcrossSeeds)
+{
+    auto map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    // Geometry prototype only: not a published hospital map or a replacement
+    // for its later district/resource/entry integration.
+    auto &landmark = map.proceduralOutdoor.landmarkTemplates.front();
+    landmark.structures = {
+        {{0.08F, 0.08F}, {0.84F, 0.24F}},
+        {{0.08F, 0.36F}, {0.24F, 0.48F}},
+        {{0.68F, 0.36F}, {0.24F, 0.48F}}};
+    const auto anchors = publishedAnchors(map);
+    for (std::uint64_t seed = 1; seed <= 128; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        const auto layout = generateRaidMapLayout(map, seed, anchors);
+        ASSERT_FALSE(layout.landmarks.empty());
+        const auto &placed = layout.landmarks.front();
+        ASSERT_EQ(placed.structures.size(), landmark.structures.size());
+        EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, anchors));
+        for (std::size_t index = 0; index < placed.structures.size(); ++index)
+        {
+            const auto &local = landmark.structures[index];
+            const auto &world = placed.structures[index];
+            EXPECT_FLOAT_EQ(world.position.x,
+                placed.bounds.position.x + placed.bounds.size.x * local.position.x);
+            EXPECT_FLOAT_EQ(world.position.y,
+                placed.bounds.position.y + placed.bounds.size.y * local.position.y);
+            EXPECT_FLOAT_EQ(world.size.x, placed.bounds.size.x * local.size.x);
+            EXPECT_FLOAT_EQ(world.size.y, placed.bounds.size.y * local.size.y);
+        }
+        EXPECT_EQ(layout, generateRaidMapLayout(map, seed, anchors));
+    }
+    map.proceduralOutdoor.minimumBlockers = 1U;
+    map.proceduralOutdoor.maximumBlockers = 1U;
+    const auto fallback = generateRaidMapLayout(map, 77119U, anchors);
+    ASSERT_TRUE(fallback.usedFallback);
+    EXPECT_EQ(fallback, generateRaidMapLayout(map, 88220U, anchors));
+    ASSERT_FALSE(fallback.landmarks.empty());
+    EXPECT_EQ(fallback.landmarks.front().structures.size(), 3U);
+    EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, fallback, anchors));
+}
+
 TEST(RaidMapGenerationTest, ProceduralMapIsDeterministicAndConnected)
 {
     const MapDefinition &map = publishedContentRegistry().map(

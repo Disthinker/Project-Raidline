@@ -557,6 +557,9 @@ struct RaidLandmarkTemplateDefinition
     std::string displayName;
     RaidDistrictKind districtKind{RaidDistrictKind::Logistics};
     Vec2 footprintCells{8.0F, 6.0F};
+    // Optional authored footprints in normalized landmark-local coordinates.
+    // Empty retains the legacy three-building layout, including its hash.
+    std::vector<ContentRect> structures;
 
     friend bool operator==(
         const RaidLandmarkTemplateDefinition &left,
@@ -566,7 +569,8 @@ struct RaidLandmarkTemplateDefinition
             left.displayName == right.displayName &&
             left.districtKind == right.districtKind &&
             left.footprintCells.x == right.footprintCells.x &&
-            left.footprintCells.y == right.footprintCells.y;
+            left.footprintCells.y == right.footprintCells.y &&
+            left.structures == right.structures;
     }
 };
 
