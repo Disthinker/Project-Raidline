@@ -75,6 +75,21 @@ std::string testSaveChecksum(std::string_view text)
     return result;
 }
 
+TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("hospital-legacy-content-61", content);
+    ASSERT_TRUE(executeDeploy(profile, content,
+        DeployCommand{"legacy-frontier-raid", "legacy-frontier-settlement", 42U,
+                      MapDefinitionId{"map.raid.frontier_exchange"}},
+        CommandContext{profile.revision, "legacy-frontier-deploy"}).succeeded);
+    const auto migrated = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, "base-fortification-foundation-content-61"), content);
+    ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
+    EXPECT_EQ(serializeProfileEnvelope(*migrated.profile, content.contentVersion()),
+              serializeProfileEnvelope(profile, content.contentVersion()));
+}
+
 TEST(SaveRepositoryTest, Schema39RoundTripsBaseGroundAndSchema38StillLoads)
 {
     const ContentRegistry &content = publishedContentRegistry();

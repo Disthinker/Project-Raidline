@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-fortification-foundation-content-61",
+  "content_version": "hospital-raid-theme-content-62",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -44,6 +44,12 @@
     "initial_base_node_id": "region_node.base.greyline_yard",
     "maximum_established_outposts": 2,
     "nodes": [
+      {
+        "id": "region_node.raid.hospital_district",
+        "display_name": "Hospital District",
+        "kind": "raid",
+        "map_definition_id": "map.raid.hospital_district"
+      },
       {"id": "region_node.base.greyline_yard", "display_name": "Greyline Yard", "kind": "base"},
       {"id": "region_node.raid.greyline_west", "display_name": "Greyline West", "kind": "raid", "map_definition_id": "map.v0.test"},
       {"id": "region_node.raid.riverside", "display_name": "Riverside Service Road", "kind": "raid", "map_definition_id": "map.raid.riverside"},
@@ -127,6 +133,13 @@
       }
     ],
     "routes": [
+      {
+        "id": "region_route.hospital_direct",
+        "display_name": "Hospital Access",
+        "from": "region_node.base.greyline_yard",
+        "to": "region_node.raid.hospital_district",
+        "travel_minutes": 150
+      },
       {"id": "region_route.greyline_direct", "display_name": "Greyline Access Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.greyline_west", "travel_minutes": 45},
       {"id": "region_route.riverside_direct", "display_name": "Riverside Main Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.riverside", "travel_minutes": 90},
       {"id": "region_route.industrial_direct", "display_name": "Ashworks Freight Road", "from": "region_node.base.greyline_yard", "to": "region_node.raid.industrial", "travel_minutes": 150},
@@ -1443,6 +1456,126 @@
   ],
   "loot_tables": [
     {
+      "id": "loot.hospital.general_v1",
+      "roll_count": 1,
+      "entries": [
+        {
+          "item": "item.loot.toilet_paper",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 2
+        },
+        {
+          "item": "item.loot.sealed_water",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 2
+        },
+        {
+          "item": "item.loot.cola_basic",
+          "weight": 15,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.loot.scrap_parts",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.bandage_basic",
+          "weight": 15,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.medkit_alpha",
+          "weight": 5,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "loot.hospital.clinical_v1",
+      "roll_count": 1,
+      "entries": [
+        {
+          "item": "item.medical.bandage_basic",
+          "weight": 25,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.medkit_alpha",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.tourniquet_basic",
+          "weight": 10,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.painkiller_basic",
+          "weight": 10,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.loot.toilet_paper",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 2
+        },
+        {
+          "item": "item.loot.sealed_water",
+          "weight": 15,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "loot.hospital.high_risk_v1",
+      "roll_count": 1,
+      "entries": [
+        {
+          "item": "item.medical.medkit_alpha",
+          "weight": 35,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.tourniquet_basic",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.medical.painkiller_basic",
+          "weight": 20,
+          "minimum_quantity": 1,
+          "maximum_quantity": 1
+        },
+        {
+          "item": "item.loot.toilet_paper",
+          "weight": 15,
+          "minimum_quantity": 1,
+          "maximum_quantity": 2
+        },
+        {
+          "item": "item.loot.sealed_water",
+          "weight": 10,
+          "minimum_quantity": 1,
+          "maximum_quantity": 2
+        }
+      ]
+    },
+    {
       "id": "loot.storage_cabinet.default",
       "roll_count": 3,
       "entries": [
@@ -2312,6 +2445,960 @@
         {"id": "resource_2", "route": "resource", "position": {"x": 920, "y": 1220}},
         {"id": "resource_3", "route": "resource", "position": {"x": 1540, "y": 1160}},
         {"id": "resource_4", "route": "resource", "position": {"x": 2020, "y": 1030}}
+      ]
+    },
+    {
+      "id": "map.raid.hospital_district",
+      "display_name": "Hospital District",
+      "route_profile": "HOSPITAL CAMPUS | AMBULANCE ACCESS | SERVICE STREETS",
+      "procedural_outdoor": {
+        "layout_version": 4,
+        "columns": 160,
+        "rows": 90,
+        "district_columns": 40,
+        "district_rows": 18,
+        "chunk_size_cells": 16,
+        "minimum_branch_roads": 6,
+        "maximum_branch_roads": 10,
+        "minimum_blockers": 150,
+        "maximum_blockers": 260,
+        "minimum_decorative_props": 180,
+        "maximum_decorative_props": 320,
+        "minimum_road_obstacles": 40,
+        "maximum_road_obstacles": 65,
+        "minimum_puddle_patches": 20,
+        "maximum_puddle_patches": 35,
+        "minimum_initial_enemies": 24,
+        "maximum_initial_enemies": 32,
+        "minimum_enemy_spawn_distance": 1200,
+        "maximum_attempts": 12,
+        "anchor_clearance_cells": 2,
+        "district_archetypes": [
+          {
+            "id": "district.hospital.campus",
+            "display_name": "HOSPITAL CAMPUS",
+            "kind": "roadside_service",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.parking",
+            "display_name": "AMBULANCE PARKING",
+            "kind": "open_ground",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.access",
+            "display_name": "HOSPITAL ACCESS ROAD",
+            "kind": "highway",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.shops",
+            "display_name": "CLINIC SERVICE STREET",
+            "kind": "roadside_service",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.residential",
+            "display_name": "RESIDENTIAL EDGE",
+            "kind": "roadside_service",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.park",
+            "display_name": "HOSPITAL GARDEN",
+            "kind": "greenbelt",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.service_yard",
+            "display_name": "HOSPITAL SERVICE YARD",
+            "kind": "open_ground",
+            "instance_count": 1
+          },
+          {
+            "id": "district.hospital.waste_ground",
+            "display_name": "VACANT GREENBELT",
+            "kind": "greenbelt",
+            "instance_count": 1
+          }
+        ],
+        "landmark_templates": [
+          {
+            "id": "landmark.hospital.main_building",
+            "display_name": "DISTRICT HOSPITAL",
+            "district_kind": "roadside_service",
+            "footprint_cells": {
+              "x": 18,
+              "y": 12
+            },
+            "structures": [
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.08,
+                    "y": 0.08
+                  },
+                  "size": {
+                    "x": 0.84,
+                    "y": 0.24
+                  }
+                }
+              },
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.08,
+                    "y": 0.36
+                  },
+                  "size": {
+                    "x": 0.24,
+                    "y": 0.48
+                  }
+                }
+              },
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.68,
+                    "y": 0.36
+                  },
+                  "size": {
+                    "x": 0.24,
+                    "y": 0.48
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "landmark.hospital.service_clinic",
+            "display_name": "SERVICE CLINIC",
+            "district_kind": "roadside_service",
+            "footprint_cells": {
+              "x": 12,
+              "y": 10
+            },
+            "structures": [
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.08,
+                    "y": 0.08
+                  },
+                  "size": {
+                    "x": 0.84,
+                    "y": 0.32
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "landmark.hospital.transport_depot",
+            "display_name": "AMBULANCE SERVICE DEPOT",
+            "district_kind": "open_ground",
+            "footprint_cells": {
+              "x": 14,
+              "y": 10
+            },
+            "structures": [
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.06,
+                    "y": 0.08
+                  },
+                  "size": {
+                    "x": 0.3,
+                    "y": 0.6
+                  }
+                }
+              },
+              {
+                "bounds": {
+                  "position": {
+                    "x": 0.64,
+                    "y": 0.08
+                  },
+                  "size": {
+                    "x": 0.3,
+                    "y": 0.6
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "resource_point_archetypes": [
+          {
+            "id": "resource_point.hospital.street_supplies",
+            "display_name": "STREET SUPPLIES",
+            "kind": "ordinary",
+            "loot_table": "loot.hospital.general_v1",
+            "allowed_district_kinds": [
+              "highway",
+              "open_ground",
+              "greenbelt",
+              "roadside_service"
+            ],
+            "minimum_instances": 5,
+            "maximum_instances": 6,
+            "capacity": 2,
+            "risk_tier": 1,
+            "footprint_cells": {
+              "x": 3,
+              "y": 3
+            }
+          },
+          {
+            "id": "resource_point.hospital.clinical_stock",
+            "display_name": "CLINICAL STOCK",
+            "kind": "landmark_specific",
+            "loot_table": "loot.hospital.clinical_v1",
+            "landmark_definition_id": "landmark.hospital.main_building",
+            "minimum_instances": 1,
+            "maximum_instances": 1,
+            "capacity": 3,
+            "risk_tier": 3,
+            "footprint_cells": {
+              "x": 3,
+              "y": 3
+            }
+          },
+          {
+            "id": "resource_point.hospital.service_stock",
+            "display_name": "CLINIC SUPPLIES",
+            "kind": "high_value",
+            "loot_table": "loot.hospital.clinical_v1",
+            "allowed_district_kinds": [
+              "roadside_service"
+            ],
+            "minimum_instances": 2,
+            "maximum_instances": 3,
+            "capacity": 2,
+            "risk_tier": 2,
+            "footprint_cells": {
+              "x": 3,
+              "y": 3
+            }
+          }
+        ],
+        "encounter_archetypes": [
+          {
+            "id": "encounter.hospital.access_patrol",
+            "kind": "patrol",
+            "allowed_district_kinds": [
+              "highway",
+              "open_ground",
+              "greenbelt"
+            ],
+            "minimum_groups": 3,
+            "maximum_groups": 4,
+            "minimum_members": 3,
+            "maximum_members": 4,
+            "activation_distance": 360,
+            "patrol_radius": 320
+          },
+          {
+            "id": "encounter.hospital.stock_guard",
+            "kind": "guard",
+            "allowed_district_kinds": [
+              "roadside_service",
+              "open_ground"
+            ],
+            "minimum_groups": 3,
+            "maximum_groups": 3,
+            "minimum_members": 3,
+            "maximum_members": 4,
+            "activation_distance": 320,
+            "patrol_radius": 160
+          },
+          {
+            "id": "encounter.hospital.service_ambush",
+            "kind": "ambush",
+            "allowed_district_kinds": [
+              "roadside_service",
+              "open_ground"
+            ],
+            "minimum_groups": 2,
+            "maximum_groups": 2,
+            "minimum_members": 3,
+            "maximum_members": 4,
+            "activation_distance": 220,
+            "patrol_radius": 120
+          }
+        ],
+        "anchor_district_kinds": {
+          "high_risk_control": [
+            "roadside_service"
+          ],
+          "advanced_resource": [
+            "roadside_service"
+          ],
+          "normal_extraction": [
+            "highway",
+            "open_ground"
+          ],
+          "emergency_extraction": [
+            "highway",
+            "open_ground"
+          ]
+        }
+      },
+      "interiors": [
+        {
+          "id": "raid_space.hospital_district.main_building",
+          "display_name": "District Hospital Interior",
+          "intelligence_price": 210,
+          "world_size": {
+            "x": 2400,
+            "y": 1440
+          },
+          "exterior_placements": [
+            {
+              "id": "hospital_south_entrance",
+              "entrance": {
+                "position": {
+                  "x": 2220,
+                  "y": 380
+                },
+                "size": {
+                  "x": 120,
+                  "y": 80
+                }
+              },
+              "return_point": {
+                "x": 2280,
+                "y": 480
+              }
+            },
+            {
+              "id": "hospital_alternate_entrance",
+              "entrance": {
+                "position": {
+                  "x": 1420,
+                  "y": 180
+                },
+                "size": {
+                  "x": 120,
+                  "y": 80
+                }
+              },
+              "return_point": {
+                "x": 1480,
+                "y": 280
+              }
+            }
+          ],
+          "interior_spawn": {
+            "x": 1180,
+            "y": 1280
+          },
+          "interior_exit": {
+            "position": {
+              "x": 1080,
+              "y": 1250
+            },
+            "size": {
+              "x": 240,
+              "y": 150
+            }
+          },
+          "ballistic_blockers": [
+            {
+              "id": "reception_counter",
+              "bounds": {
+                "position": {
+                  "x": 980,
+                  "y": 1070
+                },
+                "size": {
+                  "x": 440,
+                  "y": 80
+                }
+              }
+            },
+            {
+              "id": "waiting_benches_west",
+              "bounds": {
+                "position": {
+                  "x": 440,
+                  "y": 1120
+                },
+                "size": {
+                  "x": 300,
+                  "y": 55
+                }
+              }
+            },
+            {
+              "id": "waiting_benches_east",
+              "bounds": {
+                "position": {
+                  "x": 1650,
+                  "y": 1120
+                },
+                "size": {
+                  "x": 300,
+                  "y": 55
+                }
+              }
+            },
+            {
+              "id": "ward_partition_upper",
+              "bounds": {
+                "position": {
+                  "x": 760,
+                  "y": 100
+                },
+                "size": {
+                  "x": 40,
+                  "y": 380
+                }
+              }
+            },
+            {
+              "id": "ward_partition_lower",
+              "bounds": {
+                "position": {
+                  "x": 760,
+                  "y": 670
+                },
+                "size": {
+                  "x": 40,
+                  "y": 260
+                }
+              }
+            },
+            {
+              "id": "pharmacy_partition_upper",
+              "bounds": {
+                "position": {
+                  "x": 1600,
+                  "y": 100
+                },
+                "size": {
+                  "x": 40,
+                  "y": 380
+                }
+              }
+            },
+            {
+              "id": "pharmacy_partition_lower",
+              "bounds": {
+                "position": {
+                  "x": 1600,
+                  "y": 670
+                },
+                "size": {
+                  "x": 40,
+                  "y": 260
+                }
+              }
+            },
+            {
+              "id": "ward_beds_north",
+              "bounds": {
+                "position": {
+                  "x": 160,
+                  "y": 200
+                },
+                "size": {
+                  "x": 360,
+                  "y": 80
+                }
+              }
+            },
+            {
+              "id": "ward_beds_south",
+              "bounds": {
+                "position": {
+                  "x": 160,
+                  "y": 700
+                },
+                "size": {
+                  "x": 360,
+                  "y": 80
+                }
+              }
+            },
+            {
+              "id": "pharmacy_shelves",
+              "bounds": {
+                "position": {
+                  "x": 1800,
+                  "y": 200
+                },
+                "size": {
+                  "x": 370,
+                  "y": 80
+                }
+              }
+            },
+            {
+              "id": "emergency_beds",
+              "bounds": {
+                "position": {
+                  "x": 1800,
+                  "y": 700
+                },
+                "size": {
+                  "x": 370,
+                  "y": 80
+                }
+              }
+            },
+            {
+              "id": "service_counter",
+              "bounds": {
+                "position": {
+                  "x": 980,
+                  "y": 190
+                },
+                "size": {
+                  "x": 440,
+                  "y": 65
+                }
+              }
+            }
+          ],
+          "enemies": [
+            {
+              "position": {
+                "x": 430,
+                "y": 400
+              },
+              "size": {
+                "x": 50,
+                "y": 50
+              },
+              "enemy_combat_definition": "enemy.infected.basic"
+            },
+            {
+              "position": {
+                "x": 1930,
+                "y": 400
+              },
+              "size": {
+                "x": 50,
+                "y": 50
+              },
+              "enemy_combat_definition": "enemy.infected.basic"
+            },
+            {
+              "position": {
+                "x": 450,
+                "y": 850
+              },
+              "size": {
+                "x": 50,
+                "y": 50
+              },
+              "enemy_combat_definition": "enemy.infected.basic"
+            },
+            {
+              "position": {
+                "x": 1940,
+                "y": 850
+              },
+              "size": {
+                "x": 50,
+                "y": 50
+              },
+              "enemy_combat_definition": "enemy.infected.basic"
+            }
+          ],
+          "loot_table": "loot.hospital.clinical_v1",
+          "loot_slots": [
+            {
+              "id": "hospital_reception",
+              "position": {
+                "x": 880,
+                "y": 1200
+              }
+            },
+            {
+              "id": "hospital_ward",
+              "position": {
+                "x": 620,
+                "y": 390
+              }
+            },
+            {
+              "id": "hospital_pharmacy",
+              "position": {
+                "x": 2190,
+                "y": 390
+              }
+            },
+            {
+              "id": "hospital_emergency",
+              "position": {
+                "x": 2190,
+                "y": 850
+              }
+            },
+            {
+              "id": "hospital_service",
+              "position": {
+                "x": 1450,
+                "y": 380
+              }
+            }
+          ]
+        }
+      ],
+      "operation_briefing": {
+        "difficulty": "HIGH",
+        "warning": "MEDICAL STOCK BEHIND A FIXED HOSPITAL APPROACH",
+        "transport_price": 55,
+        "resource_price": 70,
+        "enemy_price": 65
+      },
+      "travel": {
+        "outbound_minutes": 150,
+        "return_minutes": 150,
+        "failure_regroup_minutes": 300
+      },
+      "recovery": {
+        "service_fee": 130,
+        "duration_minutes": 720
+      },
+      "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
+      "background_tint": {
+        "red": 160,
+        "green": 180,
+        "blue": 165
+      },
+      "world_size": {
+        "x": 12800,
+        "y": 7200
+      },
+      "walkable_bounds": {
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "size": {
+          "x": 12800,
+          "y": 7200
+        }
+      },
+      "player_spawn": {
+        "x": 160,
+        "y": 720
+      },
+      "default_inventory": {
+        "width": 10,
+        "height": 6
+      },
+      "ballistic_blockers": [],
+      "ground_items": [],
+      "storage_cabinet": {
+        "bounds": {
+          "position": {
+            "x": 20,
+            "y": 20
+          },
+          "size": {
+            "x": 64,
+            "y": 64
+          }
+        },
+        "interaction_range": 64,
+        "inventory": {
+          "width": 6,
+          "height": 6
+        }
+      },
+      "extraction_point": {
+        "position": {
+          "x": 2260,
+          "y": 1120
+        },
+        "size": {
+          "x": 160,
+          "y": 140
+        }
+      },
+      "raid_rules": {
+        "duration_seconds": 1200,
+        "extraction_duration_seconds": 3
+      },
+      "high_risk": {
+        "regular_phase_duration_seconds": 1200,
+        "emergency_extraction_point": {
+          "position": {
+            "x": 170,
+            "y": 560
+          },
+          "size": {
+            "x": 170,
+            "y": 130
+          }
+        },
+        "emergency_extraction_duration_seconds": 12,
+        "conditional_extraction_point": {
+          "position": {
+            "x": 1780,
+            "y": 140
+          },
+          "size": {
+            "x": 170,
+            "y": 130
+          }
+        },
+        "conditional_extraction_duration_seconds": 6,
+        "conditional_extraction_maximum_weight_grams": 22000,
+        "initial_wave_delay_seconds": 3,
+        "wave_interval_seconds": 15,
+        "wave_size": 2,
+        "active_enemy_cap": 48,
+        "activation_control_point": {
+          "position": {
+            "x": 2160,
+            "y": 620
+          },
+          "size": {
+            "x": 150,
+            "y": 84
+          }
+        },
+        "activation_duration_seconds": 4,
+        "advanced_resource_area": {
+          "position": {
+            "x": 1080,
+            "y": 980
+          },
+          "size": {
+            "x": 360,
+            "y": 230
+          }
+        },
+        "advanced_loot_table": "loot.hospital.high_risk_v1",
+        "advanced_loot_slots": [
+          {
+            "id": "frontier_cache_1",
+            "position": {
+              "x": 1160,
+              "y": 1040
+            }
+          },
+          {
+            "id": "frontier_cache_2",
+            "position": {
+              "x": 1370,
+              "y": 1150
+            }
+          }
+        ],
+        "crises": [
+          {
+            "id": "crisis.hospital.access_surge",
+            "display_name": "Hospital Access Surge",
+            "warning": "PRESSURE CONVERGES ON THE MEDICAL APPROACH",
+            "allowed_district_kinds": [
+              "roadside_service",
+              "highway"
+            ],
+            "initial_wave_delay_seconds": 5,
+            "wave_interval_seconds": 15,
+            "wave_size": 3,
+            "active_enemy_cap": 48,
+            "pressure_spawn_count": 3,
+            "advanced_loot_table": "loot.hospital.high_risk_v1"
+          }
+        ],
+        "pressure_spawns": [
+          {
+            "position": {
+              "x": 30,
+              "y": 40
+            },
+            "size": {
+              "x": 50,
+              "y": 50
+            },
+            "enemy_combat_definition": "enemy.infected.basic"
+          },
+          {
+            "position": {
+              "x": 2480,
+              "y": 40
+            },
+            "size": {
+              "x": 50,
+              "y": 50
+            },
+            "enemy_combat_definition": "enemy.infected.basic"
+          },
+          {
+            "position": {
+              "x": 30,
+              "y": 1350
+            },
+            "size": {
+              "x": 50,
+              "y": 50
+            },
+            "enemy_combat_definition": "enemy.infected.basic"
+          },
+          {
+            "position": {
+              "x": 2480,
+              "y": 1350
+            },
+            "size": {
+              "x": 50,
+              "y": 50
+            },
+            "enemy_combat_definition": "enemy.infected.basic"
+          }
+        ]
+      },
+      "storage_loot_table": "loot.storage_cabinet.default",
+      "enemy_deployment": "enemy_deployment.frontier.crossroads_watch",
+      "spawn_extraction_pairs": [
+        {
+          "id": "west_to_southeast",
+          "player_spawn": {
+            "x": 150,
+            "y": 700
+          },
+          "extraction_point": {
+            "position": {
+              "x": 2260,
+              "y": 1120
+            },
+            "size": {
+              "x": 160,
+              "y": 140
+            }
+          }
+        },
+        {
+          "id": "southwest_to_north",
+          "player_spawn": {
+            "x": 180,
+            "y": 1240
+          },
+          "extraction_point": {
+            "position": {
+              "x": 1120,
+              "y": 80
+            },
+            "size": {
+              "x": 180,
+              "y": 130
+            }
+          }
+        },
+        {
+          "id": "northeast_to_west",
+          "player_spawn": {
+            "x": 2320,
+            "y": 220
+          },
+          "extraction_point": {
+            "position": {
+              "x": 100,
+              "y": 1040
+            },
+            "size": {
+              "x": 170,
+              "y": 150
+            }
+          }
+        }
+      ],
+      "raid_enemy_deployments": [
+        "enemy_deployment.frontier.crossroads_watch",
+        "enemy_deployment.frontier.outer_patrol",
+        "enemy_deployment.frontier.resource_guard"
+      ],
+      "raid_loot_table": "loot.hospital.general_v1",
+      "raid_loot_slots": [
+        {
+          "id": "central_1",
+          "route": "central",
+          "position": {
+            "x": 760,
+            "y": 610
+          }
+        },
+        {
+          "id": "central_2",
+          "route": "central",
+          "position": {
+            "x": 1290,
+            "y": 690
+          }
+        },
+        {
+          "id": "central_3",
+          "route": "central",
+          "position": {
+            "x": 1810,
+            "y": 650
+          }
+        },
+        {
+          "id": "perimeter_1",
+          "route": "perimeter",
+          "position": {
+            "x": 360,
+            "y": 260
+          }
+        },
+        {
+          "id": "perimeter_2",
+          "route": "perimeter",
+          "position": {
+            "x": 2180,
+            "y": 250
+          }
+        },
+        {
+          "id": "perimeter_3",
+          "route": "perimeter",
+          "position": {
+            "x": 2240,
+            "y": 1210
+          }
+        },
+        {
+          "id": "resource_1",
+          "route": "resource",
+          "position": {
+            "x": 520,
+            "y": 1050
+          }
+        },
+        {
+          "id": "resource_2",
+          "route": "resource",
+          "position": {
+            "x": 920,
+            "y": 1220
+          }
+        },
+        {
+          "id": "resource_3",
+          "route": "resource",
+          "position": {
+            "x": 1540,
+            "y": 1160
+          }
+        },
+        {
+          "id": "resource_4",
+          "route": "resource",
+          "position": {
+            "x": 2020,
+            "y": 1030
+          }
+        }
       ]
     }
   ]

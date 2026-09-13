@@ -107,7 +107,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-fortification-foundation-content-61");
+        "hospital-raid-theme-content-62");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -307,7 +307,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_NE(
         freightBay.worldSize.x,
         frontierWithInterior.interiors.front().worldSize.x);
-    ASSERT_EQ(registry.lootTables().size(), 15U);
+    ASSERT_EQ(registry.lootTables().size(), 18U);
     const auto lootItemIds = [&](std::string_view tableId)
     {
         std::set<ItemDefinitionId> ids;
@@ -355,7 +355,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_TRUE(freightCrisisLoot.contains(
         ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}));
     ASSERT_EQ(registry.enemyDeployments().size(), 13U);
-    ASSERT_EQ(registry.maps().size(), 4U);
+    ASSERT_EQ(registry.maps().size(), 5U);
 
     std::set<MapDefinitionId> mapIds;
     std::set<EnemyDeploymentDefinitionId> raidDeploymentIds;
@@ -376,8 +376,9 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_GT(publishedMap.travel.returnMinutes, 0U);
         EXPECT_GE(publishedMap.travel.failureRegroupMinutes,
                   publishedMap.travel.returnMinutes);
-        EXPECT_TRUE(outboundTravelMinutes.insert(
-            publishedMap.travel.outboundMinutes).second);
+        const bool hospital = publishedMap.id == MapDefinitionId{"map.raid.hospital_district"};
+        if (!hospital)
+            EXPECT_TRUE(outboundTravelMinutes.insert(publishedMap.travel.outboundMinutes).second);
         EXPECT_GT(publishedMap.backgroundTint.red, 0U);
         EXPECT_GT(publishedMap.backgroundTint.green, 0U);
         EXPECT_GT(publishedMap.backgroundTint.blue, 0U);
@@ -387,8 +388,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_TRUE(publishedMap.highRisk.enabled);
         EXPECT_FLOAT_EQ(
             publishedMap.highRisk.regularPhaseDurationSeconds,
-            publishedMap.id ==
-                    MapDefinitionId{"map.raid.frontier_exchange"}
+            (hospital || publishedMap.id ==
+                    MapDefinitionId{"map.raid.frontier_exchange"})
                 ? 1200.0F
                 : 180.0F);
         EXPECT_FLOAT_EQ(
@@ -403,15 +404,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.highRisk.waveSize, 2U);
         EXPECT_EQ(
             publishedMap.highRisk.activeEnemyCap,
-            publishedMap.id ==
-                    MapDefinitionId{"map.raid.frontier_exchange"}
+            (hospital || publishedMap.id ==
+                    MapDefinitionId{"map.raid.frontier_exchange"})
                 ? 48U
                 : 8U);
         EXPECT_EQ(publishedMap.highRisk.pressureSpawns.size(), 4U);
         EXPECT_FLOAT_EQ(publishedMap.highRisk.activationDurationSeconds, 4.0F);
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
         EXPECT_EQ(publishedMap.highRisk.advancedLootTableId,
-                  LootTableDefinitionId{"loot.raid.high_risk_v1"});
+                  LootTableDefinitionId{hospital ? "loot.hospital.high_risk_v1" : "loot.raid.high_risk_v1"});
+        if (!hospital)
+        {
         ASSERT_TRUE(publishedMap.rescue.has_value());
         EXPECT_EQ(
             publishedMap.rescue->subjectKind,
@@ -420,6 +423,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_FLOAT_EQ(
             publishedMap.rescue->interactionDurationSeconds,
             2.0F);
+        }
+        else
+        {
+            EXPECT_FALSE(publishedMap.rescue.has_value());
+        }
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
              publishedMap.raidEnemyDeploymentIds)

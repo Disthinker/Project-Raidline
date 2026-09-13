@@ -288,7 +288,7 @@ TEST(RaidMapGenerationTest, HospitalCandidateHasDistinctExteriorAndFixedInterior
     EXPECT_TRUE(fallback.usedFallback);
     EXPECT_EQ(fallback, generateRaidMapLayout(bad, 88U, anchors));
     EXPECT_TRUE(raidMapLayoutConnectsAnchors(bad, fallback, anchors));
-    EXPECT_EQ(publishedContentRegistry().maps().size(), 4U);
+    EXPECT_EQ(publishedContentRegistry().maps().size(), 5U);
 }
 
 TEST(RaidMapGenerationTest, DistrictFillSeparatesTerrainBuildingsAndEquipment)

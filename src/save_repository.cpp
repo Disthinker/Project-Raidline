@@ -2573,7 +2573,8 @@ SaveLoadResult deserializeProfileEnvelope(
                  "home-region-placeable-storage-content-58") ||
             (schemaVersion >= 43 &&
              contentVersion == "base-wishes-resource-tradeoff-content-59") ||
-            (schemaVersion >= 46 && contentVersion == "enemy-combat-contract-content-60");
+            (schemaVersion >= 46 && contentVersion == "enemy-combat-contract-content-60") ||
+            (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&

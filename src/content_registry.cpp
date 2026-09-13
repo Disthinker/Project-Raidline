@@ -828,7 +828,8 @@ ContentRegistry ContentRegistry::fromJson(
             requiredString(root, "content_version");
         const bool requiresEnemyDefinitionReferences =
             registry.contentVersion_ == "enemy-combat-contract-content-60" ||
-            registry.contentVersion_ == "base-fortification-foundation-content-61";
+            registry.contentVersion_ == "base-fortification-foundation-content-61" ||
+            registry.contentVersion_ == "hospital-raid-theme-content-62";
 
         if (root.contains("fortifications"))
         {
@@ -851,7 +852,8 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("invalid or duplicate fortification definition");
             }
         }
-        if (registry.contentVersion_ == "base-fortification-foundation-content-61" &&
+        if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
+             registry.contentVersion_ == "hospital-raid-theme-content-62") &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 

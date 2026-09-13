@@ -474,6 +474,69 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
     }
 }
 
+TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroughRealSession)
+{
+    for (const std::uint64_t seed : {1ULL, 42ULL, 910223ULL})
+    {
+        GameSession session;
+        ASSERT_TRUE(session.startNewProfile("hospital-session"));
+        ASSERT_TRUE(session.deployAlpha(seed, MapDefinitionId{"map.raid.hospital_district"}))
+            << session.persistenceMessage();
+        ASSERT_TRUE(session.profile().pendingRaid.has_value());
+        const auto &pending = *session.profile().pendingRaid;
+        ASSERT_EQ(pending.interiors.size(), 1U);
+        EXPECT_EQ(pending.interiors.front().id,
+                  RaidSpaceDefinitionId{"raid_space.hospital_district.main_building"});
+        EXPECT_EQ(session.world().tacticalMap().specialLocations().size(), 1U);
+        EXPECT_TRUE(pending.highRiskCrisis.has_value());
+        const auto loaded = deserializeProfileEnvelope(
+            serializeProfileEnvelope(session.profile(), publishedContentRegistry().contentVersion()),
+            publishedContentRegistry());
+        ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
+        EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, publishedContentRegistry().contentVersion()),
+                  serializeProfileEnvelope(session.profile(), publishedContentRegistry().contentVersion()));
+        const auto interior = pending.interiors.front();
+        GameplayInput interact;
+        interact.interactJustPressed = true;
+        ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+            interior.exteriorEntrance.position));
+        session.update(interact, 0.0F);
+        ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+        ASSERT_EQ(session.world().enemies().size(), 4U);
+        auto &enemy = const_cast<Enemy &>(session.world().enemies().front());
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+        session.update(GameplayInput{}, 0.0F);
+        const auto survivors = session.world().enemies().size();
+        ASSERT_LT(survivors, 4U);
+        ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+            interior.interiorExit.position));
+        session.update(interact, 0.0F);
+        ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+        ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+            interior.exteriorEntrance.position));
+        session.update(interact, 0.0F);
+        ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+        EXPECT_EQ(session.world().enemies().size(), survivors);
+        if (seed == 42U)
+        {
+            ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+                interior.interiorExit.position));
+            session.update(interact, 0.0F);
+            ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+            ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+                session.world().extractionPoint().bounds().position));
+            for (int frame = 0; frame < 40 && session.profile().pendingRaid; ++frame)
+                session.update(GameplayInput{}, 0.1F);
+        }
+        else
+        {
+            ASSERT_TRUE(session.activeQuitAlphaRaid());
+        }
+        EXPECT_FALSE(session.profile().pendingRaid.has_value());
+        EXPECT_FALSE(session.activeQuitAlphaRaid());
+    }
+}
+
 TEST(AlphaExtractionSessionTest,
      FrontierProjectsFrozenHighRiskAndRescueObjectivesToTacticalMap)
 {
