@@ -209,6 +209,14 @@ struct RaidExteriorPlacementDefinition
     }
 };
 
+struct RaidRoomLabelDefinition
+{
+    std::string id;
+    std::string displayName;
+    ContentRect bounds;
+    friend bool operator==(const RaidRoomLabelDefinition &, const RaidRoomLabelDefinition &) = default;
+};
+
 struct RaidInteriorDefinition
 {
     RaidSpaceDefinitionId id;
@@ -225,6 +233,10 @@ struct RaidInteriorDefinition
     std::vector<EnemySpawnDefinition> enemies;
     LootTableDefinitionId lootTableId;
     std::vector<RaidLootSlotDefinition> lootSlots;
+
+    // Decorative signs only: not collision, discovery, loot or navigation.
+    // Geometry changes require a new space identity, not reinterpretation of a saved room.
+    std::vector<RaidRoomLabelDefinition> roomLabels;
 
     friend bool operator==(
         const RaidInteriorDefinition &,
@@ -557,6 +569,9 @@ struct RaidLandmarkTemplateDefinition
     std::string displayName;
     RaidDistrictKind districtKind{RaidDistrictKind::Logistics};
     Vec2 footprintCells{8.0F, 6.0F};
+    // Optional authored footprints in normalized landmark-local coordinates.
+    // Empty retains the legacy three-building layout, including its hash.
+    std::vector<ContentRect> structures;
 
     friend bool operator==(
         const RaidLandmarkTemplateDefinition &left,
@@ -566,7 +581,8 @@ struct RaidLandmarkTemplateDefinition
             left.displayName == right.displayName &&
             left.districtKind == right.districtKind &&
             left.footprintCells.x == right.footprintCells.x &&
-            left.footprintCells.y == right.footprintCells.y;
+            left.footprintCells.y == right.footprintCells.y &&
+            left.structures == right.structures;
     }
 };
 
@@ -648,6 +664,7 @@ struct ProceduralOutdoorDefinition
     std::uint32_t maximumAttempts{8};
     std::uint32_t anchorClearanceCells{1};
     std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;
+    std::map<std::string, std::vector<RaidDistrictKind>> anchorDistrictKinds;
     std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
     std::vector<RaidResourcePointArchetypeDefinition> resourcePointArchetypes;
     std::vector<RaidEncounterArchetypeDefinition> encounterArchetypes;

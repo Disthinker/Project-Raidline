@@ -828,7 +828,8 @@ ContentRegistry ContentRegistry::fromJson(
             requiredString(root, "content_version");
         const bool requiresEnemyDefinitionReferences =
             registry.contentVersion_ == "enemy-combat-contract-content-60" ||
-            registry.contentVersion_ == "base-fortification-foundation-content-61";
+            registry.contentVersion_ == "base-fortification-foundation-content-61" ||
+            registry.contentVersion_ == "hospital-raid-theme-content-62";
 
         if (root.contains("fortifications"))
         {
@@ -851,7 +852,8 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("invalid or duplicate fortification definition");
             }
         }
-        if (registry.contentVersion_ == "base-fortification-foundation-content-61" &&
+        if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
+             registry.contentVersion_ == "hospital-raid-theme-content-62") &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -2415,6 +2417,28 @@ ContentRegistry ContentRegistry::fromJson(
                     value.districtArchetypes.push_back(std::move(archetype));
                 }
                 std::set<std::string> landmarkIds;
+                if (procedural.contains("anchor_district_kinds"))
+                {
+                    const auto &constraints = requiredObject(procedural, "anchor_district_kinds");
+                    const std::set<std::string> allowedRoles{
+                        "player_spawn", "normal_extraction", "emergency_extraction",
+                        "conditional_extraction", "high_risk_control", "advanced_resource", "rescue"};
+                    for (const auto &[role, kinds] : constraints.items())
+                    {
+                        if (!allowedRoles.contains(role) || !kinds.is_array() || kinds.empty())
+                            fail("invalid thematic anchor district constraint");
+                        auto &allowed = value.anchorDistrictKinds[role];
+                        for (const auto &kind : kinds)
+                        {
+                            const auto parsed = parseRaidDistrictKind(Json{{"kind", kind}}, "kind");
+                            if (std::find(allowed.begin(), allowed.end(), parsed) != allowed.end() ||
+                                std::none_of(value.districtArchetypes.begin(), value.districtArchetypes.end(),
+                                    [&](const auto &district) { return district.kind == parsed; }))
+                                fail("thematic anchor refers to a missing or duplicate district kind");
+                            allowed.push_back(parsed);
+                        }
+                    }
+                }
                 for (const Json &landmark :
                      requiredArray(procedural, "landmark_templates"))
                 {
@@ -2433,6 +2457,29 @@ ContentRegistry ContentRegistry::fromJson(
                         landmarkDefinition.footprintCells.y > 24.0F)
                     {
                         fail("procedural landmark template is invalid");
+                    }
+                    if (landmark.contains("structures"))
+                    {
+                        const auto &structures = requiredArray(landmark, "structures");
+                        if (structures.empty() || structures.size() > 16U)
+                            fail("landmark structures must contain 1 to 16 footprints");
+                        for (const Json &structure : structures)
+                        {
+                            const ContentRect rect = parseRect(structure, "bounds");
+                            // Keep an exterior margin and a southern approach to
+                            // the existing road sockets. Bounds are normalized.
+                            if (rect.position.x < 0.04F || rect.position.y < 0.04F ||
+                                rect.position.x + rect.size.x > 0.96F ||
+                                rect.position.y + rect.size.y > 0.90F)
+                                fail("landmark structure is outside the reserved interior");
+                            for (const auto &other : landmarkDefinition.structures)
+                                if (rect.position.x < other.position.x + other.size.x &&
+                                    rect.position.x + rect.size.x > other.position.x &&
+                                    rect.position.y < other.position.y + other.size.y &&
+                                    rect.position.y + rect.size.y > other.position.y)
+                                    fail("landmark structures overlap");
+                            landmarkDefinition.structures.push_back(rect);
+                        }
                     }
                     value.landmarkTemplates.push_back(
                         std::move(landmarkDefinition));
@@ -2573,6 +2620,18 @@ ContentRegistry ContentRegistry::fromJson(
                         value.encounterArchetypes.push_back(
                             std::move(archetype));
                     }
+                }
+                if (!value.encounterArchetypes.empty())
+                {
+                    std::uint64_t requiredPopulation{}, maximumCapacity{};
+                    for (const auto &archetype : value.encounterArchetypes)
+                    {
+                        requiredPopulation += static_cast<std::uint64_t>(archetype.maximumGroups) * archetype.minimumMembers;
+                        maximumCapacity += static_cast<std::uint64_t>(archetype.maximumGroups) * archetype.maximumMembers;
+                    }
+                    if (requiredPopulation > value.minimumInitialEnemies ||
+                        maximumCapacity < value.maximumInitialEnemies)
+                        fail("encounter groups cannot support every configured enemy population");
                 }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
@@ -3014,6 +3073,26 @@ ContentRegistry ContentRegistry::fromJson(
                         interiorValue, "intelligence_price");
                     interior.worldSize =
                         parseVec2(interiorValue, "world_size");
+                    if (interiorValue.contains("room_labels"))
+                    {
+                        const auto &labels = requiredArray(interiorValue, "room_labels");
+                        if (labels.size() > 16U) fail("too many Raid room labels");
+                        std::set<std::string> ids;
+                        for (const auto &value : labels)
+                        {
+                            RaidRoomLabelDefinition label{
+                                requiredString(value, "id"),
+                                requiredString(value, "display_name"),
+                                parseRect(value, "bounds")};
+                            const auto &b = label.bounds;
+                            if (label.id.empty() || label.displayName.empty() ||
+                                !ids.insert(label.id).second || b.position.x < 0 || b.position.y < 0 ||
+                                b.position.x + b.size.x > interior.worldSize.x ||
+                                b.position.y + b.size.y > interior.worldSize.y)
+                                fail("invalid Raid room label");
+                            interior.roomLabels.push_back(std::move(label));
+                        }
+                    }
                     std::set<std::string> exteriorPlacementIds;
                     for (const Json &placementValue :
                          requiredArray(

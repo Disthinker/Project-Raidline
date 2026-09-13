@@ -8,6 +8,7 @@
 #include "raid_lifecycle.h"
 #include "recovery_task_domain.h"
 #include "self_recovery_domain.h"
+#include "save_repository.h"
 
 namespace
 {
@@ -101,6 +102,67 @@ TEST(SelfRecoveryDomainTest,
             { return loot.assetId == root.assetId; }));
     }
     EXPECT_TRUE(validateProfileState(profile, publishedContentRegistry()).valid);
+}
+
+TEST(SelfRecoveryDomainTest, HospitalLossSupportsBothExclusiveRecoveryPathsAfterReload)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    auto profile = makeNewAlphaProfile("hospital-loss-recovery", content);
+    const auto record = createLoss(profile, "hospital", hospital);
+    const auto rifle = firstAsset(profile, alpha_content::rifle);
+    const auto savedLoss = serializeProfileEnvelope(profile, content.contentVersion());
+    for (const bool npc : {false, true})
+    {
+        auto loaded = deserializeProfileEnvelope(savedLoss, content);
+        ASSERT_TRUE(loaded.profile) << loaded.message;
+        auto state = std::move(*loaded.profile);
+        if (npc)
+        {
+            const auto quote = queryStartRecoveryTask(state, content, record);
+            ASSERT_TRUE(quote.canCommit) << quote.message;
+            EXPECT_EQ(quote.serviceFee, content.map(hospital).recovery.serviceFee);
+            ASSERT_TRUE(executeStartRecoveryTask(state, content, record,
+                CommandContext{state.revision,"hospital-npc-start"}).succeeded);
+            const auto fingerprint = profileStateFingerprint(state);
+            EXPECT_FALSE(deployRecovery(state, record, hospital).succeeded);
+            EXPECT_EQ(profileStateFingerprint(state), fingerprint);
+            auto saved = deserializeProfileEnvelope(serializeProfileEnvelope(state, content.contentVersion()), content);
+            ASSERT_TRUE(saved.profile) << saved.message;
+            state = std::move(*saved.profile);
+            state.worldClock.elapsedWorldMinutes = state.recoveryTask->completionWorldMinute;
+            ASSERT_TRUE(applyRecoveryTaskThrough(state).becameReady);
+            const auto receipt = executeCollectRecoveryTask(state, content,
+                CommandContext{state.revision,"hospital-npc-collect"});
+            ASSERT_TRUE(receipt.succeeded) << receipt.message;
+            const auto after = profileStateFingerprint(state);
+            EXPECT_TRUE(executeCollectRecoveryTask(state, content,
+                CommandContext{state.revision,"hospital-npc-collect"}).alreadyCommitted);
+            EXPECT_EQ(profileStateFingerprint(state), after);
+            EXPECT_FALSE(state.recoveryTask);
+        }
+        else
+        {
+            ASSERT_TRUE(deployRecovery(state, record, hospital).succeeded);
+            ASSERT_TRUE(state.pendingRaid->selfRecovery);
+            ASSERT_NE(findRaidAnchorPlacement(state.pendingRaid->spatialLayout, kRaidAnchorSelfRecovery), nullptr);
+            EXPECT_FALSE(queryStartRecoveryTask(state, content, record).canCommit);
+            ASSERT_TRUE(executeOpenRaidSelfRecovery(state, content,
+                CommandContext{state.revision,"hospital-cache-open"}).succeeded);
+            ASSERT_TRUE(pickupRaidLoot(state, content, rifle,
+                CommandContext{state.revision,"hospital-cache-pick"}).succeeded);
+            const auto carried = state.assets.find(rifle)->location;
+            ASSERT_TRUE(settlePendingRaid(state, content,"self-recovery-settlement",
+                RaidResultOutcome::Extracted).succeeded);
+            ASSERT_NE(state.assets.find(rifle), nullptr);
+            EXPECT_EQ(state.assets.find(rifle)->location, carried);
+        }
+        EXPECT_FALSE(state.lostRaidRecords.contains(record));
+        EXPECT_TRUE(validateProfileState(state, content).valid);
+        auto finalLoad = deserializeProfileEnvelope(serializeProfileEnvelope(state, content.contentVersion()),content);
+        ASSERT_TRUE(finalLoad.profile) << finalLoad.message;
+        EXPECT_EQ(profileStateFingerprint(*finalLoad.profile), profileStateFingerprint(state));
+    }
 }
 
 TEST(SelfRecoveryDomainTest,

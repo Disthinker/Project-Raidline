@@ -108,6 +108,9 @@ struct RaidInteriorMapProjection
     Vec2 worldSize{};
     ContentRect exit;
     std::span<const BallisticBlocker> blockers;
+    // Only this rectangle may be drawn; unknown layouts reveal no exploration history.
+    ContentRect visibleBounds;
+    bool layoutKnown{};
 };
 
 struct RaidSpacePortalProjection
