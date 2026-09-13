@@ -1295,8 +1295,14 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
     std::vector<RaidAnchorPlacementSnapshot> result;
     std::optional<Vec2> playerCenter;
     std::size_t interiorOrdinal{};
-    for (const RaidMapAnchorRequest &request : effectiveAnchorRequests(anchors))
+    for (RaidMapAnchorRequest request : effectiveAnchorRequests(anchors))
     {
+        if (request.allowedDistrictKinds.empty())
+        {
+            const auto constraint = definition.anchorDistrictKinds.find(request.id);
+            if (constraint != definition.anchorDistrictKinds.end())
+                request.allowedDistrictKinds = constraint->second;
+        }
         const RaidLandmarkPlacementSnapshot *requiredLandmark{};
         if (!request.landmarkDefinitionId.empty())
         {
@@ -2148,14 +2154,20 @@ RaidGeneratedMapLayout generateRaidMapLayout(
         }
 
         MapDefinition fallbackMap = map;
-        fallbackMap.proceduralOutdoor.minimumBlockers = 700U;
-        fallbackMap.proceduralOutdoor.maximumBlockers = 700U;
-        fallbackMap.proceduralOutdoor.minimumDecorativeProps = 1200U;
-        fallbackMap.proceduralOutdoor.maximumDecorativeProps = 1200U;
-        fallbackMap.proceduralOutdoor.minimumRoadObstacles = 140U;
-        fallbackMap.proceduralOutdoor.maximumRoadObstacles = 140U;
-        fallbackMap.proceduralOutdoor.minimumPuddlePatches = 60U;
-        fallbackMap.proceduralOutdoor.maximumPuddlePatches = 60U;
+        // Preserve the accepted 320x180 fallback exactly, but do not pack the
+        // full Frontier population of props into a smaller theme.
+        const auto scaled = [&](std::uint32_t count) {
+            return std::max(1U, static_cast<std::uint32_t>(
+                static_cast<std::uint64_t>(count) * definition.columns * definition.rows / (320U * 180U)));
+        };
+        fallbackMap.proceduralOutdoor.minimumBlockers = scaled(700U);
+        fallbackMap.proceduralOutdoor.maximumBlockers = scaled(700U);
+        fallbackMap.proceduralOutdoor.minimumDecorativeProps = scaled(1200U);
+        fallbackMap.proceduralOutdoor.maximumDecorativeProps = scaled(1200U);
+        fallbackMap.proceduralOutdoor.minimumRoadObstacles = scaled(140U);
+        fallbackMap.proceduralOutdoor.maximumRoadObstacles = scaled(140U);
+        fallbackMap.proceduralOutdoor.minimumPuddlePatches = scaled(60U);
+        fallbackMap.proceduralOutdoor.maximumPuddlePatches = scaled(60U);
         RaidGeneratedMapLayout fallback = generateV3Layout(
             fallbackMap,
             0x46524f4e54494552ULL,

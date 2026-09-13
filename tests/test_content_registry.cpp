@@ -10,6 +10,7 @@
 
 #include "alpha_content_ids.h"
 #include "content_registry.h"
+#include "hospital_content_candidate.h"
 
 namespace
 {
@@ -47,6 +48,19 @@ TEST(DefinitionIdTest, AcceptsStableNamespacedIdentifiers)
     const ItemDefinitionId id{"item.weapon.rifle_basic"};
     EXPECT_TRUE(id.valid());
     EXPECT_EQ(id.value(), "item.weapon.rifle_basic");
+}
+
+TEST(ContentRegistryTest, HospitalAnchorConstraintsRejectTyposAndMissingKinds)
+{
+    auto root = hospitalContentCandidateJson();
+    auto &constraints = root["maps"].back()["procedural_outdoor"]["anchor_district_kinds"];
+    constraints["high_risk_control"] = {"industrial"};
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
+    constraints["high_risk_control"] = {"roadside_service", "roadside_service"};
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
+    constraints["high_risk_control"] = {"roadside_service"};
+    constraints["high_risk_typo"] = {"roadside_service"};
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, AuthoredLandmarkFootprintsAreValidatedAndPreserved)

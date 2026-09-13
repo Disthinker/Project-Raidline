@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "raid_space_query.h"
+#include "hospital_content_candidate.h"
 
 namespace
 {
@@ -38,6 +39,25 @@ TEST(RaidSpaceQueryTest, LineOfSightUsesPublishedBlockerInterior)
         Vec2{40.0F, 40.0F},
         Vec2{160.0F, 40.0F},
         blockers));
+}
+
+TEST(RaidSpaceQueryTest, HospitalInteriorConnectsExitRoomsLootAndEnemies)
+{
+    const auto content = hospitalContentCandidate();
+    const auto &interior = content.map(MapDefinitionId{"map.raid.hospital_district"}).interiors.front();
+    std::vector<BallisticBlocker> blockers;
+    for (const auto &definition : interior.ballisticBlockers)
+        blockers.push_back({static_cast<std::uint64_t>(blockers.size() + 1U),
+            {definition.bounds.position, definition.bounds.size}});
+    const auto field = RaidSpaceNavigationField::build({50, 50}, interior.worldSize, blockers);
+    ASSERT_TRUE(field.has_value());
+    for (const auto &slot : interior.lootSlots)
+    {
+        SCOPED_TRACE(slot.id);
+        EXPECT_TRUE(field->nextWaypoint(interior.interiorSpawn, slot.position, 0.0F).has_value());
+    }
+    for (const auto &enemy : interior.enemies)
+        EXPECT_TRUE(field->nextWaypoint(enemy.position, interior.interiorSpawn, 0.0F).has_value());
 }
 
 TEST(RaidSpaceQueryTest, ClearRouteReturnsGoal)

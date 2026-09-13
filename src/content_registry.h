@@ -652,6 +652,7 @@ struct ProceduralOutdoorDefinition
     std::uint32_t maximumAttempts{8};
     std::uint32_t anchorClearanceCells{1};
     std::vector<RaidDistrictArchetypeDefinition> districtArchetypes;
+    std::map<std::string, std::vector<RaidDistrictKind>> anchorDistrictKinds;
     std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
     std::vector<RaidResourcePointArchetypeDefinition> resourcePointArchetypes;
     std::vector<RaidEncounterArchetypeDefinition> encounterArchetypes;

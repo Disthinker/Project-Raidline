@@ -5,10 +5,12 @@
 #include <chrono>
 #include <limits>
 #include <queue>
+#include <set>
 
 #include "content_registry.h"
 #include "raid_map_generation.h"
 #include "raid_district_fill.h"
+#include "hospital_content_candidate.h"
 
 namespace
 {
@@ -243,6 +245,50 @@ TEST(RaidMapGenerationTest, FrontierV4AcceptedBaselineHashes)
         EXPECT_FALSE(layout.usedFallback);
         EXPECT_EQ(layout.layoutHash, hash);
     }
+}
+
+TEST(RaidMapGenerationTest, HospitalCandidateHasDistinctExteriorAndFixedInterior)
+{
+    const auto content = hospitalContentCandidate();
+    const auto &map = content.map(MapDefinitionId{"map.raid.hospital_district"});
+    EXPECT_FLOAT_EQ(map.worldSize.x, 12800.0F);
+    EXPECT_FLOAT_EQ(map.worldSize.y, 7200.0F);
+    ASSERT_EQ(map.interiors.size(), 1U);
+    EXPECT_EQ(map.interiors.front().id.value(),
+              "raid_space.hospital_district.main_building");
+    EXPECT_EQ(map.interiors.front().ballisticBlockers.size(), 12U);
+    const auto anchors = publishedAnchors(map);
+    std::set<std::uint64_t> hashes;
+    for (std::uint64_t seed = 1U; seed <= 128U; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        const auto layout = generateRaidMapLayout(map, seed, anchors);
+        EXPECT_FALSE(layout.usedFallback);
+        EXPECT_EQ(layout.districts.size(), 8U);
+        EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, anchors));
+        ASSERT_EQ(layout.landmarks.size(), 3U);
+        EXPECT_EQ(layout.landmarks.front().definitionId, "landmark.hospital.main_building");
+        ASSERT_NE(findRaidAnchorPlacement(layout, raidIndexedAnchorId("interior", 0)), nullptr);
+        hashes.insert(layout.layoutHash);
+        for (const std::string_view role : {kRaidAnchorHighRiskControl, kRaidAnchorAdvancedResource})
+        {
+            const auto *anchor = findRaidAnchorPlacement(layout, role);
+            ASSERT_NE(anchor, nullptr);
+            ASSERT_GT(anchor->districtInstanceId, 0U);
+            EXPECT_EQ(layout.districts.at(anchor->districtInstanceId - 1U).kind,
+                      RaidDistrictKind::RoadsideService);
+        }
+        EXPECT_EQ(layout, generateRaidMapLayout(map, seed, anchors));
+    }
+    EXPECT_GT(hashes.size(), 120U);
+    auto bad = map;
+    bad.proceduralOutdoor.minimumBlockers = 1U;
+    bad.proceduralOutdoor.maximumBlockers = 1U;
+    const auto fallback = generateRaidMapLayout(bad, 77U, anchors);
+    EXPECT_TRUE(fallback.usedFallback);
+    EXPECT_EQ(fallback, generateRaidMapLayout(bad, 88U, anchors));
+    EXPECT_TRUE(raidMapLayoutConnectsAnchors(bad, fallback, anchors));
+    EXPECT_EQ(publishedContentRegistry().maps().size(), 4U);
 }
 
 TEST(RaidMapGenerationTest, DistrictFillSeparatesTerrainBuildingsAndEquipment)

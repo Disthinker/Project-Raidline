@@ -2415,6 +2415,28 @@ ContentRegistry ContentRegistry::fromJson(
                     value.districtArchetypes.push_back(std::move(archetype));
                 }
                 std::set<std::string> landmarkIds;
+                if (procedural.contains("anchor_district_kinds"))
+                {
+                    const auto &constraints = requiredObject(procedural, "anchor_district_kinds");
+                    const std::set<std::string> allowedRoles{
+                        "player_spawn", "normal_extraction", "emergency_extraction",
+                        "conditional_extraction", "high_risk_control", "advanced_resource", "rescue"};
+                    for (const auto &[role, kinds] : constraints.items())
+                    {
+                        if (!allowedRoles.contains(role) || !kinds.is_array() || kinds.empty())
+                            fail("invalid thematic anchor district constraint");
+                        auto &allowed = value.anchorDistrictKinds[role];
+                        for (const auto &kind : kinds)
+                        {
+                            const auto parsed = parseRaidDistrictKind(Json{{"kind", kind}}, "kind");
+                            if (std::find(allowed.begin(), allowed.end(), parsed) != allowed.end() ||
+                                std::none_of(value.districtArchetypes.begin(), value.districtArchetypes.end(),
+                                    [&](const auto &district) { return district.kind == parsed; }))
+                                fail("thematic anchor refers to a missing or duplicate district kind");
+                            allowed.push_back(parsed);
+                        }
+                    }
+                }
                 for (const Json &landmark :
                      requiredArray(procedural, "landmark_templates"))
                 {
