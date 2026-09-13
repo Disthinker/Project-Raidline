@@ -10,7 +10,8 @@
 TEST(UiLocalizationTest, HospitalRoomsAreBilingual)
 {
     for (const auto *text : {"RECEPTION / WAITING", "INPATIENT WARD",
-         "PHARMACY / MEDICAL STOCK", "EMERGENCY TREATMENT", "SERVICE CORRIDOR", "HOSPITAL EXIT"})
+         "PHARMACY / MEDICAL STOCK", "EMERGENCY TREATMENT", "SERVICE CORRIDOR", "HOSPITAL EXIT",
+         "LOCAL VIEW ONLY"})
     {
         EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);
         EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, text), text);

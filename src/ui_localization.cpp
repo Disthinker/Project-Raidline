@@ -876,6 +876,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"INTERIOR MAP UNAVAILABLE", "室内地图尚不可用"},
      {"INTERIOR MAP", "建筑内部地图"},
      {"PERMANENT INTELLIGENCE", "永久情报"},
+     {"LOCAL VIEW ONLY", "仅显示当前位置周围"},
      {"INTERIOR PLAN", "建筑内部图"},
      {"PERMANENTLY KNOWN", "已永久掌握"},
      {"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",

@@ -1544,16 +1544,22 @@ GameplayWorld::activeInteriorMapProjection() const noexcept
         return std::nullopt;
     }
     const InteriorRuntime &interior = interiors_[*activeInteriorIndex_];
-    if (!interior.layoutKnown)
-    {
-        return std::nullopt;
-    }
+    const Vec2 center{player_.position().x + player_.size() * 0.5F,
+                      player_.position().y + player_.size() * 0.5F};
+    constexpr float localRadius = 180.0F;
+    const Vec2 minimum{std::max(0.0F, center.x - localRadius),
+                       std::max(0.0F, center.y - localRadius)};
+    const Vec2 maximum{std::min(interior.worldSize.x, center.x + localRadius),
+                       std::min(interior.worldSize.y, center.y + localRadius)};
     return RaidInteriorMapProjection{
         interior.id,
         interior.displayName,
         interior.worldSize,
         interior.interiorExit,
-        interior.ballisticBlockers};
+        interior.ballisticBlockers,
+        interior.layoutKnown ? ContentRect{{}, interior.worldSize}
+            : ContentRect{minimum, {maximum.x - minimum.x, maximum.y - minimum.y}},
+        interior.layoutKnown};
 }
 
 const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(

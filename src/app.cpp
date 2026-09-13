@@ -9657,8 +9657,7 @@ void App::renderShotPresentations()
 Vec2 App::raidWorldCameraOffset() const noexcept
 {
     if (!gameFlow_.isRaidScreen() ||
-        !gameSession_.world().raidSession().isActive() ||
-        !gameSession_.world().inOutdoorRaidSpace())
+        !gameSession_.world().raidSession().isActive())
     {
         return {};
     }
@@ -17802,7 +17801,7 @@ void App::renderRaidTacticalMap()
             SDL_RenderFillRect(renderer_, &panel);
             SDL_SetRenderDrawColor(renderer_, 86, 142, 126, 255);
             SDL_RenderRect(renderer_, &panel);
-            SDL_SetRenderDrawColor(renderer_, 31, 52, 52, 245);
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
             SDL_RenderFillRect(renderer_, &chart);
             const auto screenRect = [chart, &interior](ContentRect rect)
             {
@@ -17812,6 +17811,13 @@ void App::renderRaidTacticalMap()
                     rect.size.x / interior->worldSize.x * chart.w,
                     rect.size.y / interior->worldSize.y * chart.h};
             };
+            const SDL_FRect visible = screenRect(interior->visibleBounds);
+            const SDL_Rect mapClip{static_cast<int>(std::ceil(visible.x)),
+                static_cast<int>(std::ceil(visible.y)),
+                static_cast<int>(visible.w), static_cast<int>(visible.h)};
+            SDL_SetRenderClipRect(renderer_, &mapClip);
+            SDL_SetRenderDrawColor(renderer_, 31, 52, 52, 255);
+            SDL_RenderFillRect(renderer_, &chart);
             for (const BallisticBlocker &blocker : interior->blockers)
             {
                 const SDL_FRect bounds = screenRect(ContentRect{
@@ -17826,6 +17832,8 @@ void App::renderRaidTacticalMap()
             SDL_RenderRect(renderer_, &exit);
             uiTextRenderer_.render(
                 renderer_, exit.x + 5.0F, exit.y + 4.0F, "EXIT");
+
+            SDL_SetRenderClipRect(renderer_, nullptr);
 
             const Player &player = gameSession_.world().player();
             const Vec2 center{
@@ -17842,8 +17850,9 @@ void App::renderRaidTacticalMap()
                 renderer_, marker.x, marker.y - 7.0F,
                 marker.x, marker.y + 7.0F);
             const std::string title = fmt::format(
-                "INTERIOR MAP | {} | PERMANENT INTELLIGENCE",
-                interior->displayName);
+                "INTERIOR MAP | {} | {}",
+                interior->displayName,
+                interior->layoutKnown ? "PERMANENT INTELLIGENCE" : "LOCAL VIEW ONLY");
             uiTextRenderer_.render(
                 renderer_, 144.0F, 76.0F, title.c_str());
             uiTextRenderer_.render(
