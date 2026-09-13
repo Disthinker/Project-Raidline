@@ -50,6 +50,24 @@ TEST(DefinitionIdTest, AcceptsStableNamespacedIdentifiers)
     EXPECT_EQ(id.value(), "item.weapon.rifle_basic");
 }
 
+TEST(ContentRegistryTest, HospitalRoomSignsRejectBadIdentityAndOutOfBounds)
+{
+    auto root = hospitalContentCandidateJson();
+    auto &labels = root["maps"].back()["interiors"][0]["room_labels"];
+    labels[1]["id"] = labels[0]["id"];
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
+    labels[1]["id"] = "ward";
+    labels[0]["bounds"]["position"]["x"] = 2400;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, HospitalPopulationMustFitEveryEncounterGroupRoll)
+{
+    auto root = hospitalContentCandidateJson();
+    root["maps"].back()["procedural_outdoor"]["encounter_archetypes"][0]["minimum_members"] = 3;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, HospitalAnchorConstraintsRejectTyposAndMissingKinds)
 {
     auto root = hospitalContentCandidateJson();

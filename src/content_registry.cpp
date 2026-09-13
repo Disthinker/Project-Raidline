@@ -2621,6 +2621,18 @@ ContentRegistry ContentRegistry::fromJson(
                             std::move(archetype));
                     }
                 }
+                if (!value.encounterArchetypes.empty())
+                {
+                    std::uint64_t requiredPopulation{}, maximumCapacity{};
+                    for (const auto &archetype : value.encounterArchetypes)
+                    {
+                        requiredPopulation += static_cast<std::uint64_t>(archetype.maximumGroups) * archetype.minimumMembers;
+                        maximumCapacity += static_cast<std::uint64_t>(archetype.maximumGroups) * archetype.maximumMembers;
+                    }
+                    if (requiredPopulation > value.minimumInitialEnemies ||
+                        maximumCapacity < value.maximumInitialEnemies)
+                        fail("encounter groups cannot support every configured enemy population");
+                }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
                 if ((value.layoutVersion != 3U &&
@@ -3061,6 +3073,26 @@ ContentRegistry ContentRegistry::fromJson(
                         interiorValue, "intelligence_price");
                     interior.worldSize =
                         parseVec2(interiorValue, "world_size");
+                    if (interiorValue.contains("room_labels"))
+                    {
+                        const auto &labels = requiredArray(interiorValue, "room_labels");
+                        if (labels.size() > 16U) fail("too many Raid room labels");
+                        std::set<std::string> ids;
+                        for (const auto &value : labels)
+                        {
+                            RaidRoomLabelDefinition label{
+                                requiredString(value, "id"),
+                                requiredString(value, "display_name"),
+                                parseRect(value, "bounds")};
+                            const auto &b = label.bounds;
+                            if (label.id.empty() || label.displayName.empty() ||
+                                !ids.insert(label.id).second || b.position.x < 0 || b.position.y < 0 ||
+                                b.position.x + b.size.x > interior.worldSize.x ||
+                                b.position.y + b.size.y > interior.worldSize.y)
+                                fail("invalid Raid room label");
+                            interior.roomLabels.push_back(std::move(label));
+                        }
+                    }
                     std::set<std::string> exteriorPlacementIds;
                     for (const Json &placementValue :
                          requiredArray(

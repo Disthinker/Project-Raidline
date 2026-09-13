@@ -6,6 +6,7 @@
 
 #include "raid_space_query.h"
 #include "hospital_content_candidate.h"
+#include "raid_space_signage.h"
 
 namespace
 {
@@ -58,6 +59,31 @@ TEST(RaidSpaceQueryTest, HospitalInteriorConnectsExitRoomsLootAndEnemies)
     }
     for (const auto &enemy : interior.enemies)
         EXPECT_TRUE(field->nextWaypoint(enemy.position, interior.interiorSpawn, 0.0F).has_value());
+}
+
+TEST(RaidSpaceQueryTest, HospitalSignsStayInTheirOwnSpaceAndCamera)
+{
+    const auto &map = publishedContentRegistry().map(MapDefinitionId{"map.raid.hospital_district"});
+    const auto &interior = map.interiors.front();
+    const auto signs = raidRoomSigns(map, interior.id, interior.worldSize);
+    ASSERT_EQ(signs.size(), 6U);
+    EXPECT_TRUE(raidRoomSigns(map, outdoorRaidSpaceId(), interior.worldSize).empty());
+    EXPECT_TRUE(raidRoomSigns(map, interior.id, {12800,7200}).empty());
+    for (const auto &sign : signs)
+    {
+        EXPECT_TRUE(raidSignVisible(sign.bounds, {{0,0},interior.worldSize}));
+        EXPECT_FALSE(raidSignVisible(sign.bounds, {{5000,5000},{1280,720}}));
+        for (const auto &blocker : interior.ballisticBlockers)
+            EXPECT_FALSE(raidSignVisible(sign.bounds, blocker.bounds));
+    }
+    RaidLandmarkPlacementSnapshot landmark;
+    landmark.displayName = "DISTRICT HOSPITAL";
+    landmark.structures = {{{100,100},{300,200}}};
+    RaidOutdoorPropSnapshot prop;
+    prop.bounds = landmark.structures.front();
+    EXPECT_EQ(raidLandmarkStructureSign(prop, {&landmark,1}), "DISTRICT HOSPITAL");
+    prop.bounds.position.x += 1;
+    EXPECT_TRUE(raidLandmarkStructureSign(prop, {&landmark,1}).empty());
 }
 
 TEST(RaidSpaceQueryTest, ClearRouteReturnsGoal)

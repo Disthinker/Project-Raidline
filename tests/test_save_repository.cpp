@@ -90,6 +90,34 @@ TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaCha
               serializeProfileEnvelope(profile, content.contentVersion()));
 }
 
+TEST(SaveRepositoryTest, LegacyHospitalPopulationRemainsFrozenAfterPolicyRepair)
+{
+    // Reconstruct the previously shipped hospital population policy without
+    // asking the tightened content loader to approve it for new deployments.
+    auto legacyContent = publishedContentRegistry();
+    auto &oldMap = const_cast<MapDefinition &>(legacyContent.map(MapDefinitionId{"map.raid.hospital_district"}));
+    oldMap.proceduralOutdoor.encounterArchetypes.front().minimumMembers = 3;
+    bool checked{};
+    for (std::uint64_t seed=1; seed<=32 && !checked; ++seed)
+    {
+        auto profile = makeNewAlphaProfile("old-hospital-small-population", legacyContent);
+        const auto deployed = executeDeploy(profile, legacyContent,
+            DeployCommand{"old-hospital", "old-hospital-settlement", seed,
+                MapDefinitionId{"map.raid.hospital_district"}},
+            CommandContext{profile.revision,"old-hospital-deploy"});
+        if (!deployed.succeeded) continue;
+        const auto count = std::count_if(profile.pendingRaid->enemies.begin(), profile.pendingRaid->enemies.end(),
+            [](const auto &enemy) { return enemy.spaceId == outdoorRaidSpaceId(); });
+        if (count >= 27) continue;
+        const auto envelope = serializeProfileEnvelope(profile, legacyContent.contentVersion());
+        const auto loaded = deserializeProfileEnvelope(envelope, publishedContentRegistry());
+        ASSERT_TRUE(loaded.profile) << loaded.message;
+        EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, legacyContent.contentVersion()), envelope);
+        checked = true;
+    }
+    EXPECT_TRUE(checked);
+}
+
 TEST(SaveRepositoryTest, Schema39RoundTripsBaseGroundAndSchema38StillLoads)
 {
     const ContentRegistry &content = publishedContentRegistry();

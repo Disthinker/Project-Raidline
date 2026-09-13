@@ -209,6 +209,14 @@ struct RaidExteriorPlacementDefinition
     }
 };
 
+struct RaidRoomLabelDefinition
+{
+    std::string id;
+    std::string displayName;
+    ContentRect bounds;
+    friend bool operator==(const RaidRoomLabelDefinition &, const RaidRoomLabelDefinition &) = default;
+};
+
 struct RaidInteriorDefinition
 {
     RaidSpaceDefinitionId id;
@@ -225,6 +233,10 @@ struct RaidInteriorDefinition
     std::vector<EnemySpawnDefinition> enemies;
     LootTableDefinitionId lootTableId;
     std::vector<RaidLootSlotDefinition> lootSlots;
+
+    // Decorative signs only: not collision, discovery, loot or navigation.
+    // Geometry changes require a new space identity, not reinterpretation of a saved room.
+    std::vector<RaidRoomLabelDefinition> roomLabels;
 
     friend bool operator==(
         const RaidInteriorDefinition &,

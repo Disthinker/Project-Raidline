@@ -2695,7 +2695,7 @@
             ],
             "minimum_groups": 3,
             "maximum_groups": 4,
-            "minimum_members": 3,
+            "minimum_members": 2,
             "maximum_members": 4,
             "activation_distance": 360,
             "patrol_radius": 320
@@ -2750,6 +2750,14 @@
         {
           "id": "raid_space.hospital_district.main_building",
           "display_name": "District Hospital Interior",
+          "room_labels": [
+            {"id":"reception","display_name":"RECEPTION / WAITING","bounds":{"position":{"x":840,"y":1175},"size":{"x":300,"y":32}}},
+            {"id":"ward","display_name":"INPATIENT WARD","bounds":{"position":{"x":300,"y":340},"size":{"x":280,"y":32}}},
+            {"id":"pharmacy","display_name":"PHARMACY / MEDICAL STOCK","bounds":{"position":{"x":1810,"y":330},"size":{"x":360,"y":32}}},
+            {"id":"emergency","display_name":"EMERGENCY TREATMENT","bounds":{"position":{"x":1810,"y":810},"size":{"x":330,"y":32}}},
+            {"id":"service","display_name":"SERVICE CORRIDOR","bounds":{"position":{"x":1030,"y":345},"size":{"x":300,"y":32}}},
+            {"id":"exit","display_name":"HOSPITAL EXIT","bounds":{"position":{"x":1080,"y":1390},"size":{"x":240,"y":32}}}
+          ],
           "intelligence_price": 210,
           "world_size": {
             "x": 2400,

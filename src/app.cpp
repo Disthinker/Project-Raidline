@@ -32,6 +32,7 @@
 #include "loadout_progression.h"
 #include "profile_container_presentation.h"
 #include "raid_camera.h"
+#include "raid_space_signage.h"
 #include "raid_tactical_map_presentation.h"
 
 namespace
@@ -8988,6 +8989,25 @@ void App::renderBackground(bool drawOutdoorDetails)
                              worldSize.x - 2.0F, worldSize.y - 2.0F};
         SDL_SetRenderDrawColor(renderer_, 130, 119, 84, 255);
         SDL_RenderRect(renderer_, &room);
+        if (gameSession_.profile().pendingRaid)
+        {
+            const auto &map = publishedContentRegistry().map(
+                gameSession_.profile().pendingRaid->mapDefinitionId);
+            const ContentRect view{raidWorldCameraOffset(),
+                {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
+            for (const auto &sign : raidRoomSigns(map,
+                     gameSession_.world().activeRaidSpaceId(), worldSize))
+            {
+                if (!raidSignVisible(sign.bounds, view)) continue;
+                const SDL_FRect plate{sign.bounds.position.x, sign.bounds.position.y,
+                    sign.bounds.size.x, sign.bounds.size.y};
+                SDL_SetRenderDrawColor(renderer_, 24, 44, 39, 220);
+                SDL_RenderFillRect(renderer_, &plate);
+                SDL_SetRenderDrawColor(renderer_, 176, 217, 193, 255);
+                uiTextRenderer_.render(renderer_, plate.x + 5, plate.y + 5,
+                    sign.displayName.c_str());
+            }
+        }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -10004,10 +10024,12 @@ void App::renderBallisticBlockers()
                 SDL_RenderRect(renderer_, &bounds);
             }
             SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
+            const auto structureSign = raidLandmarkStructureSign(prop,
+                gameSession_.profile().pendingRaid->spatialLayout.landmarks);
             uiTextRenderer_.render(
                 renderer_, bounds.x + 3.0F,
                 prop.collidable ? bounds.y + 3.0F : bounds.y - 14.0F,
-                raidOutdoorPropLabel(prop.kind));
+                structureSign.empty() ? raidOutdoorPropLabel(prop.kind) : structureSign.data());
         }
         SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
         for (const RaidOutdoorLabelProjection &label : projection.labels)

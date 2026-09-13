@@ -11,6 +11,7 @@
 
 #include "alpha_content_ids.h"
 #include "game_session.h"
+#include "medical_domain.h"
 
 namespace
 {
@@ -472,6 +473,70 @@ TEST(AlphaExtractionSessionTest, DeployProjectsFrozenSpecialLocationToMap)
         EXPECT_EQ(projection.displayName, snapshot.displayName);
         EXPECT_EQ(projection.entrance, snapshot.exteriorEntrance);
     }
+}
+
+TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskReloadAndUse)
+{
+    TemporarySaveDirectory directory;
+    AssetInstanceId medicalId{};
+    std::optional<AssetLocation> carriedLocation;
+    const auto &content = publishedContentRegistry();
+    {
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.startNewProfile("hospital-carried-medicine"));
+        const auto backpack = assets(session.profile(), alpha_content::backpack).front();
+        ASSERT_TRUE(session.executeProfileInventory(
+            InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack}, "hospital-equip").succeeded);
+        ASSERT_TRUE(session.deployAlpha(42U, MapDefinitionId{"map.raid.hospital_district"}));
+        const auto interior = session.profile().pendingRaid->interiors.front();
+        auto &player = const_cast<Player &>(session.world().player());
+        ASSERT_TRUE(player.setPosition(interior.exteriorEntrance.position));
+        GameplayInput interact;
+        interact.interactJustPressed = true;
+        session.update(interact, 0);
+        ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+        const auto &loot = session.profile().pendingRaid->loot;
+        const auto found = std::find_if(loot.begin(), loot.end(), [&](const auto &entry) {
+            return entry.spaceId == interior.id && content.item(entry.definitionId).medicalUse.has_value();
+        });
+        ASSERT_NE(found, loot.end());
+        medicalId = found->assetId;
+        const auto position = found->position;
+        ASSERT_TRUE(player.setPosition({position.x - 25, position.y - 25}));
+        session.update(interact, 0);
+        ASSERT_NE(session.profile().assets.find(medicalId), nullptr);
+        carriedLocation = session.profile().assets.find(medicalId)->location;
+        ASSERT_TRUE(std::holds_alternative<StoredAssetLocation>(*carriedLocation));
+        EXPECT_EQ(std::get<StoredAssetLocation>(*carriedLocation).container,
+                  ProfileContainerId::compartment(backpack, 0));
+        ASSERT_TRUE(player.setPosition(interior.interiorExit.position));
+        session.update(interact, 0);
+        ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+        ASSERT_TRUE(player.setPosition(session.world().extractionPoint().bounds().position));
+        for (int i=0; i<40 && session.profile().pendingRaid; ++i)
+            session.update(GameplayInput{}, 0.1F);
+        ASSERT_FALSE(session.profile().pendingRaid);
+        EXPECT_EQ(session.profile().assets.find(medicalId)->location, *carriedLocation);
+    }
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_NE(reopened.profile().assets.find(medicalId), nullptr);
+    EXPECT_EQ(reopened.profile().assets.find(medicalId)->location, *carriedLocation);
+    auto profile = reopened.profile();
+    profile.currentHealth = 50;
+    static_cast<void>(applyWoundRoll(profile.medicalStatus,
+        WoundRollCommand{WoundSource::Scratch, 0, 15000}));
+    const auto before = profile.assets.find(medicalId)->remainingCharges;
+    const auto currency = profile.currency;
+    const auto used = executeMedicalUse(profile, content, medicalId, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "hospital-use-returned-medicine"});
+    ASSERT_TRUE(used.succeeded) << used.message;
+    const auto *after = profile.assets.find(medicalId);
+    EXPECT_TRUE(after == nullptr || after->remainingCharges < before);
+    EXPECT_EQ(profile.currency, currency);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
 TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroughRealSession)

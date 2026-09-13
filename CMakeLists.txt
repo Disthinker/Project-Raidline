@@ -862,7 +862,7 @@ raidline_add_test(
 raidline_add_test(
     SelfRecoveryDomainTest
     tests/test_self_recovery_domain.cpp
-    raidline::domain)
+    raidline::services) # Also verifies recovery ownership across save/reload.
 raidline_add_test(
     RegionalOperationsDomainTest
     tests/test_regional_operations_domain.cpp
