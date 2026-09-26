@@ -21,6 +21,34 @@
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
 
+TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
+{
+    const auto &content = publishedContentRegistry();
+    std::set<std::uint64_t> hashes;
+    for (std::uint64_t seed=1; seed<=128; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        auto profile = makeNewAlphaProfile("hospital-seed-contract", content);
+        const auto receipt = executeDeploy(profile, content,
+            DeployCommand{"hospital-raid", "hospital-settlement", seed,
+                MapDefinitionId{"map.raid.hospital_district"}},
+            CommandContext{profile.revision,"hospital-deploy"});
+        ASSERT_TRUE(receipt.succeeded) << receipt.message;
+        ASSERT_TRUE(profile.pendingRaid);
+        const auto &raid = *profile.pendingRaid;
+        ASSERT_EQ(raid.interiors.size(), 1U);
+        EXPECT_EQ(raid.interiors.front().worldSize.x, 2400);
+        EXPECT_TRUE(raid.highRiskCrisis.has_value());
+        EXPECT_TRUE(validateProfileState(profile, content).valid);
+        hashes.insert(raid.spatialLayout.layoutHash);
+        for (const auto id : {kRaidAnchorPlayerSpawn, kRaidAnchorNormalExtraction,
+             kRaidAnchorEmergencyExtraction, kRaidAnchorConditionalExtraction,
+             kRaidAnchorHighRiskControl, kRaidAnchorAdvancedResource})
+            ASSERT_NE(findRaidAnchorPlacement(raid.spatialLayout, id), nullptr);
+    }
+    EXPECT_GT(hashes.size(), 96U);
+}
+
 namespace
 {
 AssetInstanceId firstAsset(

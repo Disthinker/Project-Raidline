@@ -509,6 +509,25 @@ TEST(PersistentSessionTest, BaseWorldClockCheckpointsWithoutRevisionChurn)
     EXPECT_EQ(reopened.profile().revision, revision);
 }
 
+TEST(PersistentSessionTest, UnsettledHospitalRestoresExactPreRaidProfileAfterDiskReload)
+{
+    SessionSaveDirectory temporary;
+    std::uint64_t before{};
+    {
+        GameSession active;
+        active.configurePersistence(temporary.path());
+        ASSERT_TRUE(active.startNewProfile("hospital-abandoned"));
+        before = profileStateFingerprint(active.profile());
+        ASSERT_TRUE(active.deployAlpha(42U, MapDefinitionId{"map.raid.hospital_district"}));
+        active.update(GameplayInput{}, 0.1F);
+    }
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_FALSE(reopened.profile().pendingRaid);
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), before);
+}
+
 TEST(PersistentSessionTest, UnsettledRaidClockRollsBackWithPreRaidSave)
 {
     SessionSaveDirectory temporary;

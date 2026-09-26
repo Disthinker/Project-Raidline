@@ -12,6 +12,25 @@ TEST(RaidCameraTest, SmallWorldNeverScrolls)
     EXPECT_FLOAT_EQ(offset.y, 0.0F);
 }
 
+TEST(RaidCameraTest, HospitalEntranceAndMovementStayVisibleInActiveSpace)
+{
+    const Vec2 world{2400.0F, 1440.0F};
+    const Vec2 viewport{1280.0F, 720.0F};
+    for (const Vec2 focus : {Vec2{1200.0F, 1380.0F}, Vec2{1850.0F, 810.0F},
+                             Vec2{350.0F, 340.0F}, Vec2{1200.0F, 720.0F}})
+    {
+        const auto camera = raidCameraOffset(focus, world, viewport);
+        const auto screen = raidWorldToScreen(focus, camera);
+        EXPECT_GE(screen.x, 0.0F);
+        EXPECT_LT(screen.x, viewport.x);
+        EXPECT_GE(screen.y, 0.0F);
+        EXPECT_LT(screen.y, viewport.y);
+        EXPECT_FLOAT_EQ(raidScreenToWorld(screen, camera).x, focus.x);
+    }
+    EXPECT_NE(raidCameraOffset({1200, 720}, world, viewport).x,
+              raidCameraOffset({1400, 720}, world, viewport).x);
+}
+
 TEST(RaidCameraTest, LargeWorldCentersAndClampsToEveryEdge)
 {
     const Vec2 centered = raidCameraOffset(

@@ -2807,6 +2807,8 @@ TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
     EXPECT_EQ(mapProjection->id,
               RaidSpaceDefinitionId{"raid_space.test.office"});
     EXPECT_EQ(mapProjection->blockers.size(), 1U);
+    EXPECT_TRUE(mapProjection->layoutKnown);
+    EXPECT_EQ(mapProjection->visibleBounds, (ContentRect{{}, {480.0F, 360.0F}}));
     EXPECT_EQ(mapProjection->exit,
               (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
 
@@ -2831,6 +2833,35 @@ TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)
                     outdoorEnemyPosition.x);
     EXPECT_FLOAT_EQ(world.enemies().front().position().y,
                     outdoorEnemyPosition.y);
+}
+
+TEST(GameplayWorldRaidTest, UnknownLargeInteriorMapFollowsPlayerWithoutRememberingVisitedArea)
+{
+    auto config = makeInteriorDiscoveryWorldConfig();
+    config.playerSpawn = {100.0F, 100.0F};
+    config.interiors.front().worldSize = {2400.0F, 1440.0F};
+    config.interiors.front().interiorSpawn = {1100.0F, 700.0F};
+    GameplayWorld world{std::move(config)};
+    EXPECT_FALSE(world.activeInteriorMapProjection());
+    GameplayInput enter;
+    enter.interactJustPressed = true;
+    world.update(enter, 0.0F);
+    auto before = world.activeInteriorMapProjection();
+    ASSERT_TRUE(before);
+    EXPECT_FALSE(before->layoutKnown);
+    EXPECT_FLOAT_EQ(before->visibleBounds.size.x, 360.0F);
+    EXPECT_FLOAT_EQ(before->visibleBounds.size.y, 360.0F);
+    GameplayInput move;
+    move.moveRight = true;
+    for (int frame = 0; frame < 100; ++frame) world.update(move, 0.02F);
+    const auto after = world.activeInteriorMapProjection();
+    ASSERT_TRUE(after);
+    EXPECT_GT(after->visibleBounds.position.x, before->visibleBounds.position.x);
+    EXPECT_FLOAT_EQ(after->visibleBounds.size.x, 360.0F);
+    EXPECT_FALSE(after->layoutKnown);
+    const auto repeated = world.activeInteriorMapProjection();
+    EXPECT_EQ(repeated->visibleBounds, after->visibleBounds);
+    EXPECT_LT(after->visibleBounds.position.x + after->visibleBounds.size.x, 2400.0F);
 }
 
 TEST(GameplayWorldRaidTest, OutdoorInteriorPortalAppearsOnlyAfterDiscovery)
@@ -2869,7 +2900,11 @@ TEST(GameplayWorldRaidTest, EnteringPortalDiscoversItBeforeSpaceTransition)
         world.visibleRaidSpacePortals().front().bounds,
         (ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}}));
     EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
-    EXPECT_FALSE(world.activeInteriorMapProjection().has_value());
+    const auto localMap = world.activeInteriorMapProjection();
+    ASSERT_TRUE(localMap.has_value());
+    EXPECT_FALSE(localMap->layoutKnown);
+    EXPECT_LE(localMap->visibleBounds.size.x, 360.0F);
+    EXPECT_LE(localMap->visibleBounds.size.y, 360.0F);
 }
 
 TEST(GameplayWorldPerformanceTest,
