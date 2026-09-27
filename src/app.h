@@ -138,6 +138,7 @@ private:
     // Headless event-router regression tests; never creates a window or save path.
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
+    friend struct WeaponInventoryUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -446,6 +447,22 @@ private:
     void renderBaseOperationNotices();
     void renderHomeRegionMap();
     void renderBaseStorage();
+    bool weaponComponentsOpen_{};
+    bool inventoryWeaponComponentsOpen_{};
+    std::optional<AssetInstanceId> profileDetailsAsset_;
+    void renderProfileWeaponDetails();
+    void handleProfileContextMenuClick(MousePosition position, bool inRaid);
+    AssetInstanceId componentWeapon_{};
+    AssetInstanceId componentChoice_{};
+    WeaponComponentSlot componentSlot_{WeaponComponentSlot::Barrel};
+    std::size_t componentWeaponPage_{};
+    std::size_t componentChoicePage_{};
+    std::optional<WeaponComponentPlan> componentPreview_;
+    WeaponComponentCommand componentPreviewCommand_;
+    std::string componentPreviewProfile_;
+    const WeaponComponentPlan &weaponComponentPreview();
+    void renderWeaponComponents();
+    void handleWeaponComponentsClick(MousePosition position);
     void renderBaseSupply();
     void renderBaseAllocation();
     void renderBaseMedicalService();

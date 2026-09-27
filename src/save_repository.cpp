@@ -1003,6 +1003,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"type", "installed_magazine"},
                 {"weapon_asset_id", installed->weaponAssetId}};
         }
+        else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
+        {
+            if (schemaVersion < 49) throw std::invalid_argument("weapon components require schema 49");
+            location = {{"type", "installed_weapon_component"}, {"weapon_asset_id", component->weaponAssetId}};
+        }
         else if (const auto *ground =
                      std::get_if<RaidGroundAssetLocation>(&asset.location))
         {
@@ -2409,7 +2414,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2574,7 +2579,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 43 &&
              contentVersion == "base-wishes-resource-tradeoff-content-59") ||
             (schemaVersion >= 46 && contentVersion == "enemy-combat-contract-content-60") ||
-            (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61");
+            (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61") ||
+            (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2596,7 +2602,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3410,6 +3416,10 @@ SaveLoadResult deserializeProfileEnvelope(
             {
                 asset.location = InstalledMagazineLocation{
                     location.at("weapon_asset_id").get<AssetInstanceId>()};
+            }
+            else if (schemaVersion >= 49 && locationType == "installed_weapon_component")
+            {
+                asset.location = InstalledWeaponComponentLocation{location.at("weapon_asset_id").get<AssetInstanceId>()};
             }
             else if (schemaVersion >= 2 && locationType == "raid_ground")
             {

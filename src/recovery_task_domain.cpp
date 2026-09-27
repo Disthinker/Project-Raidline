@@ -41,6 +41,8 @@ std::optional<AssetInstanceId> parentAssetId(
     {
         return installed->weaponAssetId;
     }
+    if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
+        return component->weaponAssetId;
     return std::nullopt;
 }
 
@@ -76,6 +78,11 @@ bool recoverAsset(
     RecoveryTaskId taskId,
     AssetInstanceId assetId)
 {
+    // An installed component follows the weapon's frozen recovery roll. It is
+    // never independently recovered or discarded while still installed.
+    if (const auto *asset = profile.assets.find(assetId))
+        if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset->location))
+            assetId = component->weaponAssetId;
     const RecoveryTendency tendency = recoveryTendency(
         profile, content, record, assetId);
     const std::uint32_t baseChance =
@@ -194,6 +201,8 @@ RecoveryTendency recoveryTendency(
 {
     static_cast<void>(record);
     const AssetRecord &asset = *profile.assets.find(assetId);
+    if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location))
+        return RecoveryTendency::High;
     const ItemDefinition &definition = content.item(asset.definitionId);
     if (definition.category == ItemCategory::Weapon ||
         definition.category == ItemCategory::ProtectiveGear)

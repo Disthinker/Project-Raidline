@@ -336,7 +336,8 @@ BaseGroundReceipt applyDrop(
             "asset is not accessible from the current Base position",
             candidate.revision);
     }
-    if (std::holds_alternative<InstalledMagazineLocation>(asset->location))
+    if (std::holds_alternative<InstalledMagazineLocation>(asset->location) ||
+        std::holds_alternative<InstalledWeaponComponentLocation>(asset->location))
     {
         return failure(
             DomainErrorCode::IllegalDestination,

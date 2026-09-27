@@ -381,6 +381,7 @@ namespace
         {
             return ItemCategory::Maintenance;
         }
+        if (value == "weapon_component") return ItemCategory::WeaponComponent;
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -829,7 +830,8 @@ ContentRegistry ContentRegistry::fromJson(
         const bool requiresEnemyDefinitionReferences =
             registry.contentVersion_ == "enemy-combat-contract-content-60" ||
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
-            registry.contentVersion_ == "hospital-raid-theme-content-62";
+            registry.contentVersion_ == "hospital-raid-theme-content-62" ||
+            registry.contentVersion_ == "weapon-components-content-63";
 
         if (root.contains("fortifications"))
         {
@@ -853,7 +855,8 @@ ContentRegistry ContentRegistry::fromJson(
             }
         }
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
-             registry.contentVersion_ == "hospital-raid-theme-content-62") &&
+             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
+             registry.contentVersion_ == "weapon-components-content-63") &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1594,6 +1597,37 @@ ContentRegistry ContentRegistry::fromJson(
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
+            if (itemValue.contains("weapon_component"))
+            {
+                const auto &c = itemValue.at("weapon_component");
+                WeaponComponentDefinition component;
+                component.weaponDefinitionId = ItemDefinitionId{c.at("weapon").get<std::string>()};
+                const auto slot = c.at("slot").get<std::string>();
+                if (slot == "barrel") component.slot = WeaponComponentSlot::Barrel;
+                else if (slot == "handguard") component.slot = WeaponComponentSlot::Handguard;
+                else if (slot == "grip") component.slot = WeaponComponentSlot::Grip;
+                else fail("unknown weapon component slot");
+                component.providesUnderbarrel = c.value("provides_underbarrel", false);
+                component.requiresUnderbarrel = c.value("requires_underbarrel", false);
+                component.recoilControl = c.value("recoil_control", 0);
+                component.stability = c.value("stability", 0);
+                component.handlingSpeed = c.value("handling_speed", 0);
+                component.ergonomics = c.value("ergonomics", 0);
+                component.accuracy = c.value("accuracy", 0);
+                component.effectiveRange = c.value("effective_range", 0.0F);
+                if (definition.category != ItemCategory::WeaponComponent || definition.maxStackSize != 1 ||
+                    (component.providesUnderbarrel && component.slot != WeaponComponentSlot::Handguard) ||
+                    (component.requiresUnderbarrel && component.slot != WeaponComponentSlot::Grip) ||
+                    (component.recoilControl < -50 || component.recoilControl > 50) || (component.stability < -50 || component.stability > 50) ||
+                    (component.handlingSpeed < -50 || component.handlingSpeed > 50) || (component.ergonomics < -50 || component.ergonomics > 50) ||
+                    (component.accuracy < -50 || component.accuracy > 50) || !std::isfinite(component.effectiveRange) ||
+                    std::abs(component.effectiveRange) > 500)
+                    fail("invalid weapon component capability");
+                definition.weaponComponent = component;
+            }
+            else if (definition.category == ItemCategory::WeaponComponent)
+                fail("component definition requires capability");
+
             definition.baseContribution = parseBaseContribution(itemValue);
             definition.baseConstructionMaterialValue = optionalUint(
                 itemValue,
@@ -1923,6 +1957,10 @@ ContentRegistry ContentRegistry::fromJson(
 
         for (const ItemDefinition &definition : registry.items_)
         {
+            if (definition.weaponComponent &&
+                !registry.item(definition.weaponComponent->weaponDefinitionId).weaponUse)
+                fail("component platform must be a weapon");
+
             if (definition.marketBuyPrice > 0U)
             {
                 registry.fixedSupplyItemIds_.push_back(

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "weapon_component_domain.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -479,6 +481,8 @@ public:
         AssetInstanceId kitAssetId,
         AssetInstanceId armorAssetId,
         std::string transactionId);
+    [[nodiscard]] InventoryReceipt executeBaseWeaponComponentChange(const WeaponComponentCommand &, std::string transactionId);
+
     [[nodiscard]] GunsmithMaintenanceReceipt executeBaseGunsmithMaintenance(
         AssetInstanceId weaponAssetId,
         std::string transactionId);
