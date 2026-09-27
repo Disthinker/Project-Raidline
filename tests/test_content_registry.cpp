@@ -125,7 +125,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "hospital-raid-theme-content-62");
+        "weapon-components-content-63");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -257,7 +257,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 51U);
+    ASSERT_EQ(registry.items().size(), 54U);
     ASSERT_EQ(registry.calibers().size(), 3U);
     EXPECT_EQ(
         registry.caliber(CaliberDefinitionId{"caliber.5_45x39"})

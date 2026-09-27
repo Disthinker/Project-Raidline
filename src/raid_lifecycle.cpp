@@ -172,6 +172,8 @@ std::set<AssetInstanceId> assetTreeIds(
             {
                 child = result.contains(installed->weaponAssetId);
             }
+            if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
+                child = result.contains(component->weaponAssetId);
             if (child && result.insert(assetId).second)
             {
                 changed = true;

@@ -1,3 +1,4 @@
+#include "weapon_component_domain.h"
 #include "inventory_domain.h"
 
 #include "lost_raid_domain.h"
@@ -217,6 +218,11 @@ bool validateCandidate(
             }
         }
     }
+    if (!validateWeaponComponents(candidate, content).valid)
+    {
+        receipt = failure(DomainErrorCode::IllegalDestination, "invalid weapon components", candidate.revision);
+        return false;
+    }
     if (candidate.assets.nextAssetId() <= maximumId)
     {
         receipt = failure(
@@ -235,6 +241,8 @@ InventoryReceipt applyMove(
     bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
+    if (source && std::holds_alternative<InstalledWeaponComponentLocation>(source->location))
+        return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
     if (source == nullptr)
     {
         return failure(

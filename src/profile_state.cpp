@@ -1,3 +1,4 @@
+#include "weapon_component_domain.h"
 #include "profile_state.h"
 #include "base_fortification_domain.h"
 #include "base_defense_ownership.h"
@@ -34,7 +35,7 @@ constexpr InventoryGridSize kBaseIntakeSize{20, 12};
 const std::string kWarehouseCatalogGrantTransaction{
     "bootstrap.warehouse_catalog.content_54"};
 const std::string kDeveloperWarehouseCatalogGrantTransaction{
-    "developer.warehouse_catalog.content_56"};
+    "developer.warehouse_catalog.content_63"};
 
 class WarehouseCatalogCapacityError final : public std::runtime_error
 {
@@ -796,6 +797,12 @@ bool assetIsCarried(
             current = installed->weaponAssetId;
             continue;
         }
+        if (const auto *installed =
+                std::get_if<InstalledWeaponComponentLocation>(&asset->location))
+        {
+            current = installed->weaponAssetId;
+            continue;
+        }
         return false;
     }
     return false;
@@ -919,6 +926,12 @@ bool assetIsBaseAccessible(
         }
         if (const auto *installed =
                 std::get_if<InstalledMagazineLocation>(&asset->location))
+        {
+            current = installed->weaponAssetId;
+            continue;
+        }
+        if (const auto *installed =
+                std::get_if<InstalledWeaponComponentLocation>(&asset->location))
         {
             current = installed->weaponAssetId;
             continue;
@@ -1087,6 +1100,9 @@ ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content)
 {
+    if (const auto components = validateWeaponComponents(profile, content); !components.valid)
+        return components;
+
     if (profile.profileId.empty() || profile.revision == 0 ||
         profile.nextBaseServiceJobId == 0 ||
         profile.assets.nextAssetId() == 0 ||
@@ -1862,6 +1878,9 @@ ProfileValidationResult validateProfileState(
                 return {false, "weapon chamber state is invalid"};
             }
         }
+
+        if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location))
+            continue;
 
         if (const auto *equipped =
                 std::get_if<EquippedAssetLocation>(&asset.location))
@@ -4758,6 +4777,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashInteger(hash, 2U);
             hashInteger(hash, installed->weaponAssetId);
+        }
+        else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
+        {
+            hashInteger(hash, 8U);
+            hashInteger(hash, component->weaponAssetId);
         }
         else if (const auto *ground =
                      std::get_if<RaidGroundAssetLocation>(&asset.location))

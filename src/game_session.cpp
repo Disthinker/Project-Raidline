@@ -249,7 +249,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                     else
                     {
                         weaponHandling = deriveWeaponHandling(
-                            *definition.weaponUse);
+                            effectiveWeaponUse(profile_, publishedContentRegistry(), weaponAsset->instanceId));
                     }
                 }
                 const std::optional<ItemDefinitionId> ammunitionId =
@@ -1527,7 +1527,7 @@ bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
             activeWeaponSlot_,
             targetSlot,
             0.0F,
-            deriveWeaponHandling(*definition.weaponUse)
+            deriveWeaponHandling(effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId))
                     .switchDurationSeconds /
                 handlingMultiplier});
     }
@@ -1680,8 +1680,8 @@ GameSession::developerWeaponTuning() const
         return DeveloperWeaponTuningSnapshot{
             *weapon,
             asset->definitionId,
-            *definition.weaponUse,
-            deriveWeaponHandling(*definition.weaponUse),
+            effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId),
+            deriveWeaponHandling(effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId)),
             false};
     }
     catch (...)
@@ -1738,7 +1738,7 @@ bool GameSession::adjustDeveloperWeaponTuning(
     {
         developerWeaponOverrides_.push_back(DeveloperWeaponOverride{
             *weapon,
-            *definition->weaponUse,
+            effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId),
             {}});
         index = developerWeaponOverrides_.size() - 1U;
     }
@@ -2039,8 +2039,8 @@ bool GameSession::resetDeveloperWeaponTuning()
         if (activeRaid)
         {
             world_->configureWeaponFire(
-                *definition.weaponUse,
-                deriveWeaponHandling(*definition.weaponUse),
+                effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId),
+                deriveWeaponHandling(effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId)),
                 true);
             configuredWeaponAssetId_ = *weapon;
             configuredBaseWeaponAssetId_.reset();
@@ -2986,6 +2986,29 @@ ArmorMaintenanceReceipt GameSession::executeBaseArmorMaintenance(
     return receipt;
 }
 
+InventoryReceipt GameSession::executeBaseWeaponComponentChange(const WeaponComponentCommand &command, std::string transactionId)
+{
+    ProfileState candidate = profile_;
+    auto receipt = executeWeaponComponentChange(candidate, publishedContentRegistry(), command,
+        CommandContext{profile_.revision, std::move(transactionId)});
+    if (!receipt.succeeded) return receipt;
+    if (!commitProfileCandidate(std::move(candidate)))
+    {
+        receipt.succeeded = false;
+        receipt.error = DomainErrorCode::InvalidProfile;
+        receipt.message = persistenceMessage_;
+        receipt.revision = profile_.revision;
+    }
+    else
+    {
+        configuredWeaponAssetId_.reset();
+        configuredBaseWeaponAssetId_.reset();
+        // Developer tuning must not mask a newly committed player modification.
+        developerWeaponOverrides_.clear();
+    }
+    return receipt;
+}
+
 GunsmithMaintenanceReceipt GameSession::executeBaseGunsmithMaintenance(
     AssetInstanceId weaponAssetId,
     std::string transactionId)
@@ -3118,7 +3141,7 @@ WarehouseCatalogGrantReceipt GameSession::grantDeveloperWarehouseCatalog()
 bool GameSession::developerWarehouseCatalogGranted() const noexcept
 {
     return profile_.committedTransactions.contains(
-        "developer.warehouse_catalog.content_56");
+        "developer.warehouse_catalog.content_63");
 }
 
 BaseThreatProjection GameSession::baseThreatProjection() const noexcept
@@ -3722,7 +3745,7 @@ void GameSession::updateAlphaRaid(
                 if (definition.weaponUse.has_value())
                 {
                     weaponHandling = deriveWeaponHandling(
-                        *definition.weaponUse);
+                        effectiveWeaponUse(profile_, publishedContentRegistry(), weaponAsset->instanceId));
                 }
                 std::optional<ItemDefinitionId> ammunitionId;
                 if (weaponAsset->chamberedRound.has_value())
@@ -4884,7 +4907,7 @@ void GameSession::synchronizeActiveAlphaWeapon()
             }
             else
             {
-                world_->configureWeaponFire(*definition.weaponUse);
+                world_->configureWeaponFire(effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId));
             }
         }
     }
@@ -4948,7 +4971,7 @@ void GameSession::synchronizeActiveBaseWeapon(BaseWorld &baseWorld)
         }
         else
         {
-            baseWorld.configureWeaponFire(*definition.weaponUse);
+            baseWorld.configureWeaponFire(effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId));
         }
     }
     catch (...)

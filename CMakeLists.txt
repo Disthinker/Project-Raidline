@@ -251,6 +251,8 @@ add_library(raidline_domain STATIC
     src/base_medical_service_domain.h
     src/base_resource_domain.cpp
     src/base_resource_domain.h
+    src/weapon_component_domain.cpp
+    src/weapon_component_domain.h
     src/base_service_domain.cpp
     src/base_service_domain.h
     src/combat_damage_domain.cpp
@@ -936,3 +938,7 @@ raidline_add_test(
 # would require 3.22 or isolating the entire functional GameplayWorld test target.
 set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GameplayTimingTests.cmake")
+
+raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
+
+raidline_add_test(WeaponInventoryUiTest tests/test_weapon_inventory_ui.cpp raidline::sdl_client)

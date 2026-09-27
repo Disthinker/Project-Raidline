@@ -334,7 +334,7 @@ TEST(ProfileStateTest, DeveloperCatalogRejectsPendingRaidWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), before);
     EXPECT_EQ(profile.assets.nextAssetId(), highWater);
     EXPECT_FALSE(profile.committedTransactions.contains(
-        "developer.warehouse_catalog.content_56"));
+        "developer.warehouse_catalog.content_63"));
 }
 
 TEST(ProfileStateTest, FullWarehouseRejectsDeveloperCatalogWithoutMutation)
@@ -375,7 +375,7 @@ TEST(ProfileStateTest, FullWarehouseRejectsDeveloperCatalogWithoutMutation)
     EXPECT_EQ(profileStateFingerprint(profile), before);
     EXPECT_EQ(profile.assets.nextAssetId(), highWater);
     EXPECT_FALSE(profile.committedTransactions.contains(
-        "developer.warehouse_catalog.content_56"));
+        "developer.warehouse_catalog.content_63"));
 }
 
 TEST(ProfileStateTest, BackwardHighWaterMarkIsRejected)

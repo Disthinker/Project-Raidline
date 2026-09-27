@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "hospital-raid-theme-content-62",
+  "content_version": "weapon-components-content-63",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -390,6 +390,105 @@
     }
   ],
   "items": [
+    {
+      "id": "item.component.precision_barrel",
+      "display_name": "5.45 Precision Barrel",
+      "category": "weapon_component",
+      "inventory": {
+        "width": 3,
+        "height": 1,
+        "can_rotate": true
+      },
+      "max_stack_size": 1,
+      "unit_weight_grams": 650,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 40,
+          "y": 24
+        },
+        "pickup_size": {
+          "x": 48,
+          "y": 32
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_recycle_price": 60,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "barrel",
+        "accuracy": 12,
+        "effective_range": 180,
+        "handling_speed": -12,
+        "ergonomics": -5
+      }
+    },
+    {
+      "id": "item.component.rail_handguard",
+      "display_name": "5.45 Rail Handguard",
+      "category": "weapon_component",
+      "inventory": {
+        "width": 2,
+        "height": 1,
+        "can_rotate": true
+      },
+      "max_stack_size": 1,
+      "unit_weight_grams": 350,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 40,
+          "y": 24
+        },
+        "pickup_size": {
+          "x": 48,
+          "y": 32
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_recycle_price": 35,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "handguard",
+        "provides_underbarrel": true
+      }
+    },
+    {
+      "id": "item.component.vertical_grip",
+      "display_name": "Vertical Grip",
+      "category": "weapon_component",
+      "inventory": {
+        "width": 1,
+        "height": 1,
+        "can_rotate": true
+      },
+      "max_stack_size": 1,
+      "unit_weight_grams": 150,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 40,
+          "y": 24
+        },
+        "pickup_size": {
+          "x": 48,
+          "y": 32
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_recycle_price": 45,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "grip",
+        "requires_underbarrel": true,
+        "recoil_control": 12,
+        "stability": 8,
+        "handling_speed": -5
+      }
+    },
     {
       "id": "item.loot.cola_basic",
       "legacy_id": "cola",
@@ -1656,6 +1755,7 @@
       "id": "loot.raid.ashworks_industrial_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.rail_handguard", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.scrap_parts", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.electronics", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.copper_wire_spool", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
@@ -1702,6 +1802,7 @@
       "id": "loot.frontier.secured_cargo_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.precision_barrel", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},{"item": "item.component.vertical_grip", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.precision_components", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.machine_tool_set", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.electronics", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
@@ -1741,6 +1842,7 @@
       "id": "loot.frontier.fabrication_stock_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.rail_handguard", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},{"item": "item.component.vertical_grip", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.industrial_fasteners", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 3},
         {"item": "item.loot.copper_wire_spool", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.machine_tool_set", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
@@ -1788,6 +1890,7 @@
       "id": "loot.frontier.crisis.industrial_breach_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.precision_barrel", "weight": 7, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.precision_components", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.maintenance.armor_kit_basic", "weight": 14, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.ammunition.5_45x39_enhanced", "weight": 22, "minimum_quantity": 16, "maximum_quantity": 30},
@@ -1802,6 +1905,7 @@
       "id": "loot.frontier.crisis.freight_lockdown_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.vertical_grip", "weight": 7, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.precision_components", "weight": 18, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.ammunition.7_62x51_standard", "weight": 20, "minimum_quantity": 14, "maximum_quantity": 30},
         {"item": "item.ammunition.7_62x51_enhanced", "weight": 14, "minimum_quantity": 10, "maximum_quantity": 20},

@@ -141,6 +141,12 @@ struct RecoveryTaskAssetLocation
         const RecoveryTaskAssetLocation &) = default;
 };
 
+struct InstalledWeaponComponentLocation
+{
+    AssetInstanceId weaponAssetId{};
+    friend bool operator==(const InstalledWeaponComponentLocation &, const InstalledWeaponComponentLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
@@ -149,7 +155,8 @@ using AssetLocation = std::variant<
     BaseGroundAssetLocation,
     BaseServiceAssetLocation,
     LostRaidAssetLocation,
-    RecoveryTaskAssetLocation>;
+    RecoveryTaskAssetLocation,
+    InstalledWeaponComponentLocation>;
 
 struct MagazineRoundRecord
 {

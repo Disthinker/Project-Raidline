@@ -219,7 +219,7 @@ TEST(PersistentSessionTest, NewPlayableProfileStartsWithFiniteStarterAssets)
     EXPECT_TRUE(profile.committedTransactions.contains(
         "bootstrap.warehouse_catalog.content_54"));
     EXPECT_FALSE(profile.committedTransactions.contains(
-        "developer.warehouse_catalog.content_56"));
+        "developer.warehouse_catalog.content_63"));
 }
 
 TEST(PersistentSessionTest, DeveloperCatalogGrantPersistsAndIsIdempotent)
@@ -2070,4 +2070,35 @@ TEST(PersistentSessionTest, HomePerimeterSnapshotSurvivesProcessRestart)
     ASSERT_TRUE(reopened.profile().homePerimeter.sites.contains(site));
     EXPECT_EQ(reopened.profile().homePerimeter.sites.at(site), expected);
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
+}
+
+TEST(PersistentSessionTest, OldDeveloperCatalogCanReceiveComponentsOnceAndPersist)
+{
+    SessionSaveDirectory temporary;
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewPublishedProfile("old-catalog-components", content);
+    std::vector<AssetInstanceId> parts;
+    for (const auto &[id, asset] : profile.assets.records())
+        if (content.item(asset.definitionId).weaponComponent) parts.push_back(id);
+    ASSERT_EQ(parts.size(), 3U);
+    for (auto id : parts) ASSERT_TRUE(profile.assets.erase(id));
+    profile.committedTransactions.insert("developer.warehouse_catalog.content_56");
+    ASSERT_TRUE(SaveRepository{temporary.path()}.save(profile, content.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(temporary.path());
+    ASSERT_TRUE(session.continueProfile());
+    EXPECT_FALSE(session.developerWarehouseCatalogGranted());
+    const auto receipt = session.grantDeveloperWarehouseCatalog();
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.addedDefinitionCount, 3U);
+    for (const auto *id : {"item.component.precision_barrel", "item.component.rail_handguard", "item.component.vertical_grip"})
+        EXPECT_NE(findDefinition(session.profile(), ItemDefinitionId{id}), 0U);
+    const auto fingerprint = profileStateFingerprint(session.profile());
+    EXPECT_TRUE(session.grantDeveloperWarehouseCatalog().alreadyGranted);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile());
+    EXPECT_TRUE(reopened.developerWarehouseCatalogGranted());
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), fingerprint);
 }

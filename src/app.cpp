@@ -1384,11 +1384,11 @@ namespace
         const char *label{"BLOCKED"};
     };
 
-    SDL_FRect profileContextActionRect(MousePosition anchor) noexcept
+    SDL_FRect profileContextActionRect(MousePosition anchor, std::size_t row = 0, std::size_t rows = 1) noexcept
     {
         return SDL_FRect{
             std::clamp(anchor.x, 16.0F, 1000.0F),
-            std::clamp(anchor.y, 16.0F, 654.0F),
+            std::clamp(anchor.y, 16.0F, 700.0F - 46.0F * rows) + 46.0F * row,
             264.0F,
             46.0F};
     }
@@ -1447,6 +1447,15 @@ namespace
             return "CHAMBER ROUND";
         }
         return std::nullopt;
+    }
+
+    std::vector<const char *> profileContextLabels(const ProfileState &profile, const AssetRecord &asset, bool inRaid)
+    {
+        std::vector<const char *> labels;
+        if (publishedContentRegistry().item(asset.definitionId).weaponUse)
+            labels = {"WEAPON DETAILS", "MODIFY WEAPON"};
+        if (const auto action = profileContextActionLabel(profile, asset, inRaid)) labels.push_back(*action);
+        return labels;
     }
 
     double orientationAngle(
@@ -2731,6 +2740,8 @@ void App::closeInventory() noexcept
 {
     // Tab / browsing Esc closes the inventory and clears all pointer state,
     // hover state, and transient pointer selection.
+    inventoryWeaponComponentsOpen_ = false;
+    profileDetailsAsset_.reset();
     inventoryInteraction_.reset();
     profileInventoryInteraction_.reset();
     profileContextMenu_.reset();
@@ -2743,6 +2754,13 @@ void App::closeInventory() noexcept
 
 void App::handleInventoryCancel()
 {
+    if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_)
+    {
+        inventoryWeaponComponentsOpen_ = false;
+        profileDetailsAsset_.reset();
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
     if (profileContextMenu_.has_value())
     {
         profileContextMenu_.reset();
@@ -4220,6 +4238,21 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Supply)
     {
+        if (contains(SDL_FRect{860, 92, 340, 32}, click.position))
+        {
+            weaponComponentsOpen_ = !weaponComponentsOpen_;
+            componentWeapon_ = 0;
+            componentChoice_ = 0;
+            componentWeaponPage_ = componentChoicePage_ = 0;
+            uiMessage_.clear();
+            return;
+        }
+        if (weaponComponentsOpen_)
+        {
+            handleWeaponComponentsClick(click.position);
+            return;
+        }
+
         const auto &supply =
             publishedContentRegistry().fixedSupplyItemIds();
         for (std::size_t index = 0; index < supply.size(); ++index)
@@ -4712,6 +4745,24 @@ void App::handleProfileInventoryUiEvent(
     const InventoryUiEvent &event,
     bool inRaid)
 {
+    if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_)
+    {
+        if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event);
+            pointer && pointer->type == InventoryPointerEventType::LeftButtonDown)
+        {
+            if (contains(SDL_FRect{860, 92, 340, 32}, pointer->position))
+            {
+                inventoryWeaponComponentsOpen_ = false;
+                profileDetailsAsset_.reset();
+                uiMessage_.clear();
+            }
+            else if (inventoryWeaponComponentsOpen_ && !inRaid)
+                handleWeaponComponentsClick(pointer->position);
+            input_.suppressPrimaryPointerUntilRelease();
+        }
+        return;
+    }
+
     const std::optional<AssetInstanceId> externalContainerId = inRaid
         ? std::nullopt
         : openedBaseGroundContainerId_;
@@ -4987,16 +5038,7 @@ void App::handleProfileInventoryUiEvent(
     case InventoryPointerEventType::LeftButtonDown:
         if (profileContextMenu_.has_value())
         {
-            if (contains(
-                    profileContextActionRect(profileContextMenu_->position),
-                    pointer.position))
-            {
-                executeProfileContextAction(inRaid);
-            }
-            else
-            {
-                profileContextMenu_.reset();
-            }
+            handleProfileContextMenuClick(pointer.position, inRaid);
             return;
         }
         beginPress(pointer.position, false, false);
@@ -5013,6 +5055,7 @@ void App::handleProfileInventoryUiEvent(
 
 void App::handleProfileRightClick(MousePosition position, bool inRaid)
 {
+    if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_) return;
     if (profileInventoryInteraction_.pointerGestureActive())
     {
         return;
@@ -5044,8 +5087,7 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
             return;
         }
     }
-    if (!profileContextActionLabel(
-            gameSession_.profile(), *hit->asset, inRaid).has_value())
+    if (profileContextLabels(gameSession_.profile(), *hit->asset, inRaid).empty())
     {
         profileContextMenu_.reset();
         return;
@@ -14347,18 +14389,16 @@ void App::renderProfileContextMenu(bool inRaid)
     {
         return;
     }
-    const auto label = profileContextActionLabel(
-        gameSession_.profile(), *asset, inRaid);
-    if (!label.has_value())
+    const auto labels = profileContextLabels(gameSession_.profile(), *asset, inRaid);
+    for (std::size_t row = 0; row < labels.size(); ++row)
     {
-        return;
+        const auto bounds = profileContextActionRect(profileContextMenu_->position, row, labels.size());
+        SDL_SetRenderDrawColor(renderer_, 24, 34, 38, 250);
+        SDL_RenderFillRect(renderer_, &bounds);
+        SDL_SetRenderDrawColor(renderer_, 118, 188, 190, 255);
+        SDL_RenderRect(renderer_, &bounds);
+        uiTextRenderer_.render(renderer_, bounds.x + 12, bounds.y + 16, labels[row]);
     }
-    const SDL_FRect menu = profileContextActionRect(profileContextMenu_->position);
-    SDL_SetRenderDrawColor(renderer_, 24, 34, 38, 250);
-    SDL_RenderFillRect(renderer_, &menu);
-    SDL_SetRenderDrawColor(renderer_, 118, 188, 190, 255);
-    SDL_RenderRect(renderer_, &menu);
-    uiTextRenderer_.render(renderer_, menu.x + 12.0F, menu.y + 18.0F, *label);
 }
 
 void App::renderMedicalWheel()
@@ -14733,6 +14773,9 @@ void App::renderProfileInventory(
     bool inRaid,
     std::optional<AssetInstanceId> externalContainerId)
 {
+    if (inventoryWeaponComponentsOpen_ && !inRaid) { renderWeaponComponents(); return; }
+    if (profileDetailsAsset_) { renderProfileWeaponDetails(); return; }
+
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const bool showRightPanel = includeStash || externalContainerId.has_value();
     const SDL_FRect panel = showRightPanel
@@ -15123,11 +15166,17 @@ void App::renderAlphaRaidLoot()
 
 void App::renderBaseSupply()
 {
+    if (weaponComponentsOpen_) { renderWeaponComponents(); return; }
     const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
     SDL_SetRenderDrawColor(renderer_, 24, 25, 18, 248);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 170, 154, 94, 255);
     SDL_RenderRect(renderer_, &panel);
+    const SDL_FRect modifyButton{860, 92, 340, 32};
+    SDL_SetRenderDrawColor(renderer_, 58, 86, 90, 255);
+    SDL_RenderFillRect(renderer_, &modifyButton);
+    SDL_SetRenderDrawColor(renderer_, 235, 230, 200, 255);
+    uiTextRenderer_.render(renderer_, 876, 100, "GUNSMITH - COMPONENTS");
     const std::string currency = fmt::format(
         "SUPPLY & RECOVERY | CURRENCY {}",
         gameSession_.profile().currency);
@@ -15198,11 +15247,13 @@ void App::renderBaseSupply()
             SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
             SDL_RenderRect(renderer_, &row);
         }
+        const auto componentValue = installedWeaponComponentRecycleValue(gameSession_.profile(), publishedContentRegistry(), asset->instanceId);
         const std::string label = fmt::format(
-            "{} x{} | RECYCLE {}{}",
+            "{} x{} | RECYCLE {}{}{}",
             definition.displayName,
             asset->quantity,
-            definition.marketRecyclePrice * asset->quantity,
+            definition.marketRecyclePrice * asset->quantity + componentValue,
+            componentValue ? " | INCLUDES COMPONENTS" : "",
             asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
         SDL_SetRenderDrawColor(
             renderer_,
@@ -18565,4 +18616,238 @@ int App::run()
     }
     shutdown();
     return 0;
+}
+
+
+namespace
+{
+std::vector<AssetInstanceId> componentWeapons(const ProfileState &profile)
+{
+    std::vector<AssetInstanceId> result;
+    const auto &content = publishedContentRegistry();
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if (!assetIsBaseAccessible(profile, id)) continue;
+        for (const auto &definition : content.items())
+            if (definition.weaponComponent && definition.weaponComponent->weaponDefinitionId == asset.definitionId)
+            { result.push_back(id); break; }
+    }
+    return result;
+}
+std::vector<AssetInstanceId> componentChoices(const ProfileState &profile, AssetInstanceId weaponId, WeaponComponentSlot slot)
+{
+    std::vector<AssetInstanceId> result{0};
+    const auto *weapon = profile.assets.find(weaponId);
+    if (!weapon) return result;
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        const auto &capability = publishedContentRegistry().item(asset.definitionId).weaponComponent;
+        if (capability && capability->weaponDefinitionId == weapon->definitionId && capability->slot == slot &&
+            std::holds_alternative<StoredAssetLocation>(asset.location) && assetIsBaseAccessible(profile, id))
+            result.push_back(id);
+    }
+    return result;
+}
+}
+
+void App::handleWeaponComponentsClick(MousePosition position)
+{
+    const auto &profile = gameSession_.profile();
+    const auto weapons = componentWeapons(profile);
+    const auto choices = componentChoices(profile, componentWeapon_, componentSlot_);
+    const auto pageClick = [&](float x, std::size_t count, std::size_t &page) {
+        if (contains(SDL_FRect{x, 450, 130, 30}, position)) { if (page) --page; return true; }
+        if (contains(SDL_FRect{x + 150, 450, 130, 30}, position)) { if ((page + 1) * 6 < count) ++page; return true; }
+        return false;
+    };
+    if (pageClick(70, weapons.size(), componentWeaponPage_) || pageClick(400, choices.size(), componentChoicePage_)) return;
+    for (std::size_t index = 0; index < 3; ++index)
+        if (contains(SDL_FRect{400 + 108.0F * index, 145, 100, 34}, position))
+        { componentSlot_ = static_cast<WeaponComponentSlot>(index); componentChoice_ = 0; componentChoicePage_ = 0; uiMessage_.clear(); return; }
+    for (std::size_t row = 0; row < 6; ++row)
+    {
+        const auto weaponIndex = componentWeaponPage_ * 6 + row;
+        if (weaponIndex < weapons.size() && contains(SDL_FRect{70, 210 + 38.0F * row, 310, 32}, position))
+        { componentWeapon_ = weapons[weaponIndex]; componentChoice_ = 0; componentChoicePage_ = 0; uiMessage_.clear(); return; }
+        const auto choiceIndex = componentChoicePage_ * 6 + row;
+        if (choiceIndex < choices.size() && contains(SDL_FRect{400, 210 + 38.0F * row, 310, 32}, position))
+        { componentChoice_ = choices[choiceIndex]; uiMessage_.clear(); return; }
+    }
+    if (contains(SDL_FRect{760, 550, 400, 38}, position))
+    {
+        const auto receipt = gameSession_.executeBaseWeaponComponentChange(
+            {componentWeapon_, componentSlot_, componentChoice_}, nextProfileTransactionId("weapon-component"));
+        uiMessage_ = receipt.succeeded ? "COMPONENT CHANGE SAVED" : receipt.message;
+        gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+        if (receipt.succeeded) { componentChoice_ = 0; componentChoicePage_ = 0; }
+    }
+}
+
+void App::renderWeaponComponents()
+{
+    const auto &profile = gameSession_.profile();
+    const auto &content = publishedContentRegistry();
+    const auto weapons = componentWeapons(profile);
+    if (std::find(weapons.begin(), weapons.end(), componentWeapon_) == weapons.end())
+        componentWeapon_ = weapons.empty() ? 0 : weapons.front();
+    const auto choices = componentChoices(profile, componentWeapon_, componentSlot_);
+    if (std::find(choices.begin(), choices.end(), componentChoice_) == choices.end()) componentChoice_ = 0;
+    componentWeaponPage_ = std::min(componentWeaponPage_, weapons.empty() ? 0U : (weapons.size() - 1) / 6);
+    componentChoicePage_ = std::min(componentChoicePage_, (choices.size() - 1) / 6);
+    const SDL_FRect panel{40, 70, 1200, 600};
+    SDL_SetRenderDrawColor(renderer_, 24, 29, 30, 250); SDL_RenderFillRect(renderer_, &panel);
+    const auto text = [&](float x, float y, const std::string &label) {
+        SDL_SetRenderDrawColor(renderer_, 232, 225, 201, 255);
+        uiTextRenderer_.render(renderer_, x, y, label.c_str());
+    };
+    const auto button = [&](SDL_FRect bounds, const std::string &label, bool selected = false) {
+        SDL_SetRenderDrawColor(renderer_, selected ? 78 : 43, selected ? 100 : 60, 65, 255);
+        SDL_RenderFillRect(renderer_, &bounds); text(bounds.x + 6, bounds.y + 8, label);
+    };
+    text(70, 100, "GUNSMITH - COMPONENTS");
+    button({860,92,340,32}, inventoryWeaponComponentsOpen_ ? "BACK TO INVENTORY" : "BACK TO SUPPLY");
+    text(70, 155, "SELECT WEAPON");
+    constexpr std::array<const char *, 3> slots{"BARREL", "HANDGUARD", "GRIP"};
+    for (std::size_t index = 0; index < slots.size(); ++index)
+        button({400 + 108.0F * index, 145, 100, 34}, slots[index], static_cast<std::size_t>(componentSlot_) == index);
+    text(400, 188, "SELECT COMPONENT OR RESTORE DEFAULT");
+    for (std::size_t row = 0; row < 6; ++row)
+    {
+        auto index = componentWeaponPage_ * 6 + row;
+        if (index < weapons.size())
+        {
+            const auto *asset = profile.assets.find(weapons[index]);
+            button({70,210 + 38.0F * row,310,32}, content.item(asset->definitionId).displayName, componentWeapon_ == weapons[index]);
+        }
+        index = componentChoicePage_ * 6 + row;
+        if (index < choices.size())
+        {
+            const auto *asset = profile.assets.find(choices[index]);
+            button({400,210 + 38.0F * row,310,32}, asset ? content.item(asset->definitionId).displayName : "RESTORE DEFAULT", componentChoice_ == choices[index]);
+        }
+    }
+    button({70,450,130,30}, "PREVIOUS"); button({220,450,130,30}, "NEXT");
+    button({400,450,130,30}, "PREVIOUS"); button({550,450,130,30}, "NEXT");
+    text(70, 495, "INSTALLED COMPONENTS");
+    float installedY = 524;
+    for (const auto &[id, asset] : profile.assets.records())
+        if (const auto *parent = std::get_if<InstalledWeaponComponentLocation>(&asset.location);
+            parent && parent->weaponAssetId == componentWeapon_)
+        { text(70, installedY, content.item(asset.definitionId).displayName); installedY += 25; }
+    const auto &plan = weaponComponentPreview();
+    text(760, 155, "CURRENT -> PREVIEW");
+    if (componentWeapon_)
+    {
+        const auto current = effectiveWeaponUse(profile, content, componentWeapon_);
+        const auto &after = plan.canCommit ? plan.after : current;
+        const auto stat = [&](float y, const char *label, auto before, auto next) { text(760, y, fmt::format("{} {} -> {}", label, before, next)); };
+        stat(195, "RECOIL CONTROL", current.recoilControl, after.recoilControl);
+        stat(225, "STABILITY", current.stability, after.stability);
+        stat(255, "HANDLING", current.handlingSpeed, after.handlingSpeed);
+        stat(285, "ERGONOMICS", current.ergonomics, after.ergonomics);
+        stat(315, "ACCURACY", current.accuracy, after.accuracy);
+        stat(345, "EFFECTIVE RANGE", current.effectiveRange, after.effectiveRange);
+    }
+    if (plan.canCommit)
+    {
+        float y = 390;
+        for (const auto &returned : plan.returned)
+        {
+            text(760, y, content.item(profile.assets.find(returned.assetId)->definitionId).displayName);
+            text(760, y + 20, fmt::format("RETURN TO STASH ({}, {})", returned.destination.origin.x + 1, returned.destination.origin.y + 1));
+            y += 48;
+        }
+    }
+    else text(70, 610, plan.message);
+    button({760,550,400,38}, "CONFIRM COMPONENT CHANGE", plan.canCommit);
+    if (!uiMessage_.empty()) text(70, 640, uiMessage_);
+}
+
+const WeaponComponentPlan &App::weaponComponentPreview()
+{
+    const auto &profile = gameSession_.profile();
+    const WeaponComponentCommand command{componentWeapon_, componentSlot_, componentChoice_};
+    if (!componentPreview_ || componentPreview_->revision != profile.revision ||
+        componentPreviewProfile_ != profile.profileId || componentPreviewCommand_ != command)
+    {
+        componentPreview_ = queryWeaponComponentChange(profile, publishedContentRegistry(), command);
+        componentPreviewCommand_ = command;
+        componentPreviewProfile_ = profile.profileId;
+    }
+    return *componentPreview_;
+}
+
+
+void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
+{
+    if (!profileContextMenu_) return;
+    const auto menu = *profileContextMenu_;
+    const auto &profile = gameSession_.profile();
+    const auto *asset = profile.assets.find(menu.instanceId);
+    if (!asset) { profileContextMenu_.reset(); return; }
+    const auto labels = profileContextLabels(profile, *asset, inRaid);
+    for (std::size_t row = 0; row < labels.size(); ++row)
+    {
+        if (!contains(profileContextActionRect(menu.position, row, labels.size()), position)) continue;
+        if (publishedContentRegistry().item(asset->definitionId).weaponUse && row < 2)
+        {
+            profileContextMenu_.reset();
+            profileInventoryInteraction_.reset();
+            input_.suppressPrimaryPointerUntilRelease();
+            uiMessage_.clear();
+            if (row == 0) { profileDetailsAsset_ = asset->instanceId; return; }
+            if (inRaid || profile.pendingRaid || profile.activeBaseDefense)
+            { uiMessage_ = "MODIFICATION REQUIRES BASE"; return; }
+            const auto weapons = componentWeapons(profile);
+            const auto found = std::find(weapons.begin(), weapons.end(), asset->instanceId);
+            if (found == weapons.end())
+            { uiMessage_ = "UNSUPPORTED WEAPON PLATFORM"; return; }
+            componentWeapon_ = asset->instanceId;
+            componentWeaponPage_ = static_cast<std::size_t>(found - weapons.begin()) / 6;
+            componentChoice_ = 0;
+            componentChoicePage_ = 0;
+            componentSlot_ = WeaponComponentSlot::Barrel;
+            componentPreview_.reset();
+            inventoryWeaponComponentsOpen_ = true;
+            return;
+        }
+        executeProfileContextAction(inRaid);
+        return;
+    }
+    profileContextMenu_.reset();
+}
+
+void App::renderProfileWeaponDetails()
+{
+    const auto &profile = gameSession_.profile();
+    const auto *asset = profile.assets.find(*profileDetailsAsset_);
+    if (!asset) { profileDetailsAsset_.reset(); return; }
+    const auto &content = publishedContentRegistry();
+    const auto &definition = content.item(asset->definitionId);
+    const auto weapon = effectiveWeaponUse(profile, content, asset->instanceId);
+    const SDL_FRect panel{40, 70, 1200, 600};
+    SDL_SetRenderDrawColor(renderer_, 24, 29, 30, 250);
+    SDL_RenderFillRect(renderer_, &panel);
+    const auto text = [&](float x, float y, const std::string &label) {
+        uiTextRenderer_.render(renderer_, x, y, label.c_str());
+    };
+    text(70, 100, "WEAPON DETAILS");
+    const SDL_FRect back{860, 92, 340, 32};
+    SDL_SetRenderDrawColor(renderer_, 43, 60, 65, 255);
+    SDL_RenderFillRect(renderer_, &back);
+    text(866, 100, "BACK TO INVENTORY");
+    text(70, 155, definition.displayName);
+    text(70, 200, fmt::format("RECOIL CONTROL {}", weapon.recoilControl));
+    text(70, 235, fmt::format("STABILITY {}", weapon.stability));
+    text(70, 270, fmt::format("HANDLING {}", weapon.handlingSpeed));
+    text(70, 305, fmt::format("ERGONOMICS {}", weapon.ergonomics));
+    text(70, 340, fmt::format("ACCURACY {}", weapon.accuracy));
+    text(70, 375, fmt::format("EFFECTIVE RANGE {:.0f}", weapon.effectiveRange));
+    text(640, 155, "INSTALLED COMPONENTS");
+    float y = 200;
+    for (const auto &[id, part] : profile.assets.records())
+        if (const auto *location = std::get_if<InstalledWeaponComponentLocation>(&part.location);
+            location && location->weaponAssetId == asset->instanceId)
+        { text(640, y, content.item(part.definitionId).displayName); y += 35; }
+    if (y == 200) text(640, y, "DEFAULT CONFIGURATION");
 }
