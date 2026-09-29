@@ -167,6 +167,16 @@ class GameSession
 {
 public:
     GameSession();
+    // Only a fresh, repository-free session may become the disposable range.
+    [[nodiscard]] bool startDeveloperRange();
+    [[nodiscard]] bool developerRangeActive() const noexcept { return developerRange_; }
+    [[nodiscard]] bool developerRangeAtConsole() const noexcept;
+    [[nodiscard]] bool grantDeveloperRangeLoadout(const ItemDefinitionId &weapon,
+        const ItemDefinitionId &ammunition, const std::optional<ItemDefinitionId> &armor);
+    [[nodiscard]] bool grantDeveloperRangeItem(const ItemDefinitionId &item);
+    [[nodiscard]] bool resetDeveloperRangeEnemies(const EnemyCombatDefinitionId &enemy,
+        std::size_t pad, std::size_t count);
+
 
     explicit GameSession(
         InventoryGridSize stashSize);
@@ -505,6 +515,7 @@ public:
 
 private:
     friend struct BaseDailyCheckpointTestAccess;
+    bool developerRange_{};
     ProfileState profile_;
     std::optional<SaveRepository> saveRepository_;
     std::optional<ProfileState> activeRaidRecoveryProfile_;

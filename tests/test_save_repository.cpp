@@ -2003,6 +2003,11 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
             {}},
         {profile.revision, "save-v49-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    // Historical content predates armored guards; build the old frozen snapshot.
+    for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
+    {
+        enemy.torsoArmor.reset();
+    }
     downgradeFrontierLootIdentityToRulesV26(profile);
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
@@ -2037,6 +2042,11 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
             {}},
         {profile.revision, "save-v50-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    // Historical content predates armored guards; build the old frozen snapshot.
+    for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
+    {
+        enemy.torsoArmor.reset();
+    }
     downgradeFrontierHighRiskCrisisToRulesV27(
         profile, content.map(profile.pendingRaid->mapDefinitionId));
     profile.pendingRaid->rulesVersion =
@@ -2073,6 +2083,11 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
             {}},
         {profile.revision, "save-v51-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    // Historical content predates armored guards; build the old frozen snapshot.
+    for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
+    {
+        enemy.torsoArmor.reset();
+    }
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis.has_value());
     profile.pendingRaid->rulesVersion =
         "procedural-frontier-high-risk-crisis-28";

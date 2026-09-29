@@ -27,6 +27,7 @@ BaseDefenseSnapshot defenseSeed()
 }
 void useLegacyInlineSpawns(Json &value)
 {
+    if (value.is_object()) value.erase("armored_member_definition");
     if (value.is_object() && value.contains("enemy_combat_definition"))
     {
         value.erase("enemy_combat_definition");
@@ -43,6 +44,8 @@ TEST(EnemyCombatDefinitionTest, OneDefinitionFeedsDailyDefenseOutdoorInteriorAnd
     {
         auto json = contentJson();
         json["enemy_combat_definitions"][0]["maximum_health"] = health;
+        // The armor-only variant must retain the ordinary actor's health contract.
+        json["enemy_combat_definitions"][1]["maximum_health"] = health;
         const auto content = ContentRegistry::fromJson(json.dump());
         const auto &definition = content.enemyCombatDefinition(ordinaryInfectedDefinitionId());
         EXPECT_EQ(definition.maximumHealth, health);

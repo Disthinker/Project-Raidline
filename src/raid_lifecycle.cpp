@@ -836,6 +836,8 @@ DeployReceipt executeDeploy(
                     enemy.maximumHealth,
                     outdoorRaidSpaceId(),
                     group.instanceId});
+                if (member == 0 && archetype.armoredMemberDefinition)
+                    snapshot.enemies.back().torsoArmor = content.enemyCombatDefinition(*archetype.armoredMemberDefinition).torsoArmor;
                 group.memberEnemyIndices.push_back(
                     static_cast<std::uint32_t>(enemyIndex));
             }

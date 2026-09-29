@@ -421,6 +421,7 @@ add_library(raidline_services STATIC
     src/game_flow.cpp
     src/game_flow.h
     src/game_session.cpp
+    src/developer_test_range.cpp
     src/game_session.h
     src/save_repository.cpp
     src/save_repository.h
@@ -441,6 +442,7 @@ add_library(raidline_sdl_client STATIC
     src/app_base_fortification.cpp
     src/base_fortification_build_ui.h
     src/app.cpp
+    src/app_developer_range.cpp
     src/first_raid_ui.cpp
     src/app.h
     src/base_build_catalog_presentation.h
@@ -942,3 +944,8 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
 
 raidline_add_test(WeaponInventoryUiTest tests/test_weapon_inventory_ui.cpp raidline::sdl_client)
+
+raidline_add_test(ArmoredInfectedTest tests/test_armored_infected.cpp raidline::services)
+
+raidline_add_test(DeveloperRangeTest tests/test_developer_test_range.cpp raidline::services)
+raidline_add_test(DeveloperRangeUiTest tests/test_developer_range_ui.cpp raidline::sdl_client)

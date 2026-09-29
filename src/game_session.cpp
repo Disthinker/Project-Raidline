@@ -958,6 +958,7 @@ bool GameSession::deployAlpha(
                 enemy.position,
                 enemy.size,
                 enemy.maximumHealth};
+            spawn.torsoArmor = enemy.torsoArmor;
             if (group != snapshot.encounterGroups.end())
             {
                 spawn.encounterGroupInstanceId = group->instanceId;
@@ -1067,6 +1068,7 @@ bool GameSession::deployAlpha(
                         enemy.position,
                         enemy.size,
                         enemy.maximumHealth});
+                    runtime.initialEnemies.back().torsoArmor = enemy.torsoArmor;
                 }
             }
             worldConfig.interiors.push_back(std::move(runtime));
@@ -1230,7 +1232,7 @@ bool GameSession::basePerimeterSweepObjectiveSecured() const noexcept
 RaidOperationProjection GameSession::raidOperationProjection() const noexcept
 {
     const bool active = alphaRaidActive_ && profile_.pendingRaid.has_value() &&
-        profile_.pendingRaid->basePerimeterSweep.has_value();
+        profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     return RaidOperationProjection{
         active,
         active && basePerimeterSweepObjectiveSecured_};
@@ -3619,7 +3621,7 @@ void GameSession::updateAlphaRaid(
     {
         raidElapsedSeconds_ += deltaTime;
     }
-    if (!profile_.pendingRaid.has_value())
+    if (!developerRange_ && !profile_.pendingRaid.has_value())
     {
         alphaRaidActive_ = false;
         outpostRestorationObjectiveSecured_ = false;
@@ -3628,14 +3630,15 @@ void GameSession::updateAlphaRaid(
         state_ = GameSessionState::BetweenRaids;
         return;
     }
-    if (alphaRaidActive_ && world_->raidSession().isActive())
+    if (!developerRange_ && alphaRaidActive_ && world_->raidSession().isActive())
     {
         advanceWorldClockFromSimulation(deltaTime, false);
     }
     synchronizeActiveAlphaWeapon();
     if (input.quitRaidJustPressed && alphaRaidActive_)
     {
-        static_cast<void>(activeQuitAlphaRaid());
+        if (developerRange_) state_ = GameSessionState::BetweenRaids;
+        else static_cast<void>(activeQuitAlphaRaid());
         return;
     }
     const RaidSessionState currentState = world_->raidSession().state();
@@ -3915,7 +3918,7 @@ void GameSession::updateAlphaRaid(
          (automaticFire && simulationInput.firePressed)))
     {
         Pcg32 faultRandom{
-            profile_.pendingRaid->seed ^ 0x776561706f6e2d66ULL,
+            (profile_.pendingRaid ? profile_.pendingRaid->seed : 1ULL) ^ 0x776561706f6e2d66ULL,
             weaponFaultSequence_ + 0x6661756c742d726fULL};
         const FireWeaponCommand fireCommand{
             *weapon,
@@ -3976,11 +3979,11 @@ void GameSession::updateAlphaRaid(
     }
 
     const bool restorationActive =
-        profile_.pendingRaid->outpostRestoration.has_value();
+        profile_.pendingRaid && profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
-        profile_.pendingRaid->baseSiteClearance.has_value();
+        profile_.pendingRaid && profile_.pendingRaid->baseSiteClearance.has_value();
     const bool perimeterSweepActive =
-        profile_.pendingRaid->basePerimeterSweep.has_value();
+        profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->update(simulationInput, deltaTime);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)
@@ -4048,7 +4051,7 @@ void GameSession::updateAlphaRaid(
     }
     advanceAlphaMedicalStatus(deltaTime);
 
-    if (profile_.pendingRaid->selfRecovery.has_value() &&
+    if (profile_.pendingRaid && profile_.pendingRaid->selfRecovery.has_value() &&
         !profile_.pendingRaid->selfRecovery->opened)
     {
         const bool canContinue = selfRecoveryCacheInRange() &&
@@ -4561,13 +4564,19 @@ void GameSession::advanceAlphaMedicalStatus(float deltaTime)
         ProfileState candidate = profile_;
         ++medicalRandomSequence_;
         Pcg32 random{
-            candidate.pendingRaid->seed ^ medicalRandomSequence_,
+            (candidate.pendingRaid ? candidate.pendingRaid->seed : 1ULL) ^ medicalRandomSequence_,
             0x7061696e2d736372ULL};
         const MedicalAdvanceResult advanced = advanceMedicalStatus(
             candidate.medicalStatus,
             candidate.currentHealth,
             100,
             15000U + random.bounded(10001U));
+        if (developerRange_ && candidate.currentHealth == 0)
+        {
+            static_cast<void>(world_->damagePlayer(world_->player().health()));
+            state_ = GameSessionState::BetweenRaids;
+            return;
+        }
         if (candidate.medicalStatus == profile_.medicalStatus &&
             candidate.currentHealth == profile_.currentHealth)
         {
@@ -4606,10 +4615,25 @@ void GameSession::applyAlphaIncomingDamage()
             break;
         }
 
+        // A disposable range has no persisted death state. Resolve lethal damage
+        // through the same domain, then leave without manufacturing a Raid result.
+        if (developerRange_)
+        {
+            const auto plan = queryIncomingDamage(profile_, publishedContentRegistry(),
+                IncomingDamageCommand{observation.baseDamage, observation.region,
+                    observation.penetration, observation.armorDamage, observation.weakPoint, {}});
+            if (plan.canCommit && plan.resolution.damageApplied >= profile_.currentHealth)
+            {
+                lastIncomingDamage_ = plan.resolution;
+                static_cast<void>(world_->damagePlayer(plan.resolution.damageApplied));
+                state_ = GameSessionState::BetweenRaids;
+                break;
+            }
+        }
         ProfileState candidate = profile_;
         const std::uint64_t woundSequence = ++woundRandomSequence_;
         Pcg32 woundRandom{
-            profile_.pendingRaid->seed ^ woundSequence,
+            (profile_.pendingRaid ? profile_.pendingRaid->seed : 1ULL) ^ woundSequence,
             0x776f756e642d726fULL};
         const IncomingDamageReceipt receipt = executeIncomingDamage(
             candidate,
@@ -4646,6 +4670,7 @@ void GameSession::applyAlphaIncomingDamage()
 
 bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
 {
+    if (developerRange_) { state_ = GameSessionState::BetweenRaids; return true; }
     if (!profile_.pendingRaid.has_value())
     {
         return false;

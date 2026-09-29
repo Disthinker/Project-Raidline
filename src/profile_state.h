@@ -292,6 +292,7 @@ struct RaidEnemySnapshot
     int maximumHealth{};
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
     std::string encounterGroupInstanceId;
+    std::optional<EnemyArmorState> torsoArmor;
 
     friend bool operator==(
         const RaidEnemySnapshot &left,
@@ -303,7 +304,7 @@ struct RaidEnemySnapshot
             left.maximumHealth == right.maximumHealth &&
             left.spaceId == right.spaceId &&
             left.encounterGroupInstanceId ==
-                right.encounterGroupInstanceId;
+                right.encounterGroupInstanceId && left.torsoArmor == right.torsoArmor;
     }
 };
 

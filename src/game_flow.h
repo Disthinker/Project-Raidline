@@ -27,6 +27,8 @@ public:
 
     [[nodiscard]]
     bool startGame() noexcept;
+    [[nodiscard]] bool enterDeveloperRange();
+    [[nodiscard]] bool leaveDeveloperRange() noexcept;
 
     void configurePersistence(std::filesystem::path directory);
 
@@ -165,6 +167,7 @@ private:
         Vec2 worldPosition) const;
 
     GameSession gameSession_;
+    std::unique_ptr<GameSession> suspendedRangeSession_;
     BaseWorld baseWorld_;
     GameFlowState state_{GameFlowState::MainMenu};
     bool firstDeploymentPending_{true};

@@ -831,7 +831,8 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "enemy-combat-contract-content-60" ||
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
-            registry.contentVersion_ == "weapon-components-content-63";
+            registry.contentVersion_ == "weapon-components-content-63" ||
+            registry.contentVersion_ == "raid-armored-infected-content-64";
 
         if (root.contains("fortifications"))
         {
@@ -856,7 +857,8 @@ ContentRegistry ContentRegistry::fromJson(
         }
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
-             registry.contentVersion_ == "weapon-components-content-63") &&
+             registry.contentVersion_ == "weapon-components-content-63" ||
+             registry.contentVersion_ == "raid-armored-infected-content-64") &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -869,6 +871,15 @@ ContentRegistry ContentRegistry::fromJson(
                 EnemyCombatDefinition definition{
                     EnemyCombatDefinitionId{requiredString(value, "id")},
                     requiredPositiveInt(value, "maximum_health")};
+                if (value.contains("torso_armor"))
+                {
+                    const auto &armor = requiredObject(value, "torso_armor");
+                    definition.torsoArmor = EnemyArmorState{
+                        requiredPositiveInt(armor, "protection_requirement"),
+                        requiredPositiveUint(armor, "durability"),
+                        requiredPositiveUint(armor, "durability_loss_basis_points")};
+                    if (!definition.torsoArmor->valid()) fail("invalid enemy torso armor");
+                }
                 if (!hasPrefix(definition.id.value(), "enemy.") ||
                     !registry.enemyCombatDefinitions_.emplace(definition.id, definition).second)
                     fail("invalid or duplicate enemy combat definition ID");
@@ -2654,6 +2665,15 @@ ContentRegistry ContentRegistry::fromJson(
                             archetype.patrolRadius > 800.0F)
                         {
                             fail("procedural encounter archetype is invalid");
+                        }
+                        if (const auto id = optionalString(encounter, "armored_member_definition"))
+                        {
+                            const auto found = registry.enemyCombatDefinitions_.find(EnemyCombatDefinitionId{*id});
+                            if (found == registry.enemyCombatDefinitions_.end() || !found->second.torsoArmor ||
+                                archetype.kind != RaidEncounterKind::Guard ||
+                                found->second.maximumHealth != registry.enemyCombatDefinitions_.at(ordinaryInfectedDefinitionId()).maximumHealth)
+                                fail("invalid armored guard definition");
+                            archetype.armoredMemberDefinition = found->first;
                         }
                         value.encounterArchetypes.push_back(
                             std::move(archetype));

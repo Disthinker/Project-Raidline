@@ -1,3 +1,4 @@
+#include "developer_test_range.h"
 #include "gameplay_world.h"
 #include "enemy_attack_contact.h"
 #include "navigation_refresh_selection.h"
@@ -495,7 +496,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 spawn.size,
                 Vec2{},
                 spawn.maxHealth,
-                nextCombatTargetId_++});
+                nextCombatTargetId_++, spawn.torsoArmor});
             const Vec2 spawnCenter{
                 spawn.position.x + spawn.size.x * 0.5F,
                 spawn.position.y + spawn.size.y * 0.5F};
@@ -520,6 +521,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         }
         interiors_.push_back(std::move(interior));
     }
+    developerRange_ = config.developerRange;
     player_ = Player{
         config.playerSpawn.x,
         config.playerSpawn.y,
@@ -818,7 +820,7 @@ GameplayWorld::GameplayWorld(
             spawn.size,
             Vec2{},
             spawn.maxHealth,
-            nextCombatTargetId_++});
+            nextCombatTargetId_++, spawn.torsoArmor});
         const Vec2 spawnCenter{
             spawn.position.x + spawn.size.x * 0.5F,
             spawn.position.y + spawn.size.y * 0.5F};
@@ -2879,7 +2881,7 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
                 candidate.size,
                 Vec2{},
                 candidate.maxHealth,
-                nextCombatTargetId_++});
+                nextCombatTargetId_++, candidate.torsoArmor});
             const ContentRect pressureArea =
                 highRiskAdvancedResourceArea_.value_or(ContentRect{
                     candidate.position, candidate.size});
@@ -2947,4 +2949,28 @@ bool GameplayWorld::canSpawnHighRiskEnemy(
             return !enemy.isDead() &&
                    isCollision(candidate, enemy.bounds());
         });
+}
+
+
+bool GameplayWorld::resetDeveloperRangeEnemies(const EnemyCombatDefinition &definition,
+    std::size_t pad, std::size_t count)
+{
+    if (!developerRange_ || !raidSession_.isActive() || pad >= kDeveloperRangePads.size() ||
+        count > 5 || nextCombatTargetId_ >= std::numeric_limits<CombatTargetId>::max() - count ||
+        definition.maximumHealth <= 0 || (definition.torsoArmor && !definition.torsoArmor->valid())) return false;
+    EnemyRoster<EnemyAttachedState> candidate;
+    auto nextId = nextCombatTargetId_;
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        const Vec2 position{kDeveloperRangePads[pad].x + static_cast<float>(i % 3) * 80,
+            kDeveloperRangePads[pad].y + static_cast<float>(i / 3) * 90};
+        candidate.spawn(Enemy{position, {50, 50}, {}, definition.maximumHealth, nextId++, definition.torsoArmor});
+        candidate.state(candidate.back().combatTargetId()).encounter.home = position;
+    }
+    enemies_ = std::move(candidate);
+    nextCombatTargetId_ = nextId;
+    initialOutdoorEnemyCount_ = enemies_.size();
+    navigationFieldCache_.clear();
+    clearSpatialTransientPresentation();
+    return true;
 }

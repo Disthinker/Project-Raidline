@@ -1,4 +1,6 @@
 #pragma once
+#include "enemy_armor.h"
+#include <optional>
 
 #include "definition_id.h"
 
@@ -8,6 +10,7 @@ struct EnemyCombatDefinition
 {
     EnemyCombatDefinitionId id;
     int maximumHealth{};
+    std::optional<EnemyArmorState> torsoArmor;
 };
 
 inline EnemyCombatDefinitionId ordinaryInfectedDefinitionId()

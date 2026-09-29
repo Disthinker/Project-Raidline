@@ -40,7 +40,8 @@ public:
         Vec2 size,
         Vec2 velocity = Vec2{},
         int maxHealth = 1,
-        CombatTargetId combatTargetId = kInvalidCombatTargetId);
+        CombatTargetId combatTargetId = kInvalidCombatTargetId,
+        std::optional<EnemyArmorState> torsoArmor = std::nullopt);
 
     [[nodiscard]] CombatTargetId combatTargetId() const noexcept;
     Vec2 position() const;
@@ -126,6 +127,8 @@ public:
     std::size_t currentAnimationFrameIndex() const;
 
     [[nodiscard]] bool takeDamage(int damage);
+    [[nodiscard]] const std::optional<EnemyArmorState> &torsoArmor() const noexcept { return torsoArmor_; }
+    void applyArmorLoss(std::uint32_t loss) noexcept;
     void hearTarget(Vec2 targetPosition) noexcept;
 
     [[nodiscard]] bool isImpactSlowed() const noexcept;
@@ -144,6 +147,7 @@ private:
     EnemyFacingDirection facingDirection_;
     Animator movementAnimator_;
     Health health_;
+    std::optional<EnemyArmorState> torsoArmor_;
     EnemyAttackState attack_;
     EnemyAiState ai_;
     EnemyMovementState movementState_{EnemyMovementState::Stationary};
