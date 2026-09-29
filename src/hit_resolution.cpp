@@ -107,7 +107,8 @@ HitResolutionResult resolveShotHits(
     {
         if (shot.shotId == kInvalidShotId ||
             shot.damage <= 0 ||
-            shot.penetration < 0)
+            shot.penetration < 0 ||
+            std::find(result.consumedShotIds.begin(), result.consumedShotIds.end(), shot.shotId) != result.consumedShotIds.end())
         {
             continue;
         }
@@ -226,15 +227,17 @@ HitResolutionResult resolveShotHits(
             CombatDamageCommand{
                 shot.damage,
                 region,
-                0,
                 shot.penetration,
+                shot.damage,
                 weakPoint,
-                std::nullopt});
+                physicalRegion == HitRegion::Torso && enemy.torsoArmor()
+                    ? std::optional{enemy.torsoArmor()->protection()} : std::nullopt});
         if (!damage.resolved())
         {
             continue;
         }
 
+        enemy.applyArmorLoss(damage.armorDurabilityLoss);
         const bool killed = enemy.takeDamage(damage.damageApplied);
 
         result.hits.push_back(
@@ -246,7 +249,9 @@ HitResolutionResult resolveShotHits(
                 killed,
                 damage.region,
                 damage.semantic,
-                enemy.combatTargetId()});
+                enemy.combatTargetId(),
+                damage.armorReducedDamage,
+                damage.armorDurabilityLoss > 0 && enemy.torsoArmor()->durability == 0});
 
         if (killed)
         {

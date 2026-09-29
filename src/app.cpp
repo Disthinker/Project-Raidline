@@ -23,6 +23,8 @@
 
 #include "content_registry.h"
 #include "developer_runtime_panel.h"
+#include "developer_range_panel.h"
+#include "developer_test_range.h"
 #include "frame_timing.h"
 #include "alpha_content_ids.h"
 #include "base_build_catalog_presentation.h"
@@ -2008,6 +2010,7 @@ GameplayInput App::makeGameplayInput() const
         !inventoryOverlayState_.isOpen() &&
         !medicalWheelOpen_ &&
         !developerWeaponPanelOpen_ &&
+        !developerRangePanelOpen_ &&
         !tacticalMapOpen_)
     {
         input.aimMotionDelta = pendingRelativeAimMotion_;
@@ -4756,7 +4759,7 @@ void App::handleProfileInventoryUiEvent(
                 profileDetailsAsset_.reset();
                 uiMessage_.clear();
             }
-            else if (inventoryWeaponComponentsOpen_ && !inRaid)
+            else if (inventoryWeaponComponentsOpen_ && (!inRaid || gameSession_.developerRangeAtConsole()))
                 handleWeaponComponentsClick(pointer->position);
             input_.suppressPrimaryPointerUntilRelease();
         }
@@ -6106,6 +6109,34 @@ void App::processEvents()
             continue;
         }
 
+        if (gameSession_.developerRangeActive() && !pauseMenu_.isOpen())
+        {
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                event.key.scancode == SDL_SCANCODE_F8)
+            {
+                if (developerRangePanelOpen_ || gameSession_.developerRangeAtConsole())
+                {
+                    developerRangePanelOpen_ = !developerRangePanelOpen_;
+                    closeInventory();
+                    developerWeaponPanelOpen_ = false;
+                    tacticalMapOpen_ = false;
+                }
+                else uiMessage_ = "RETURN TO RANGE CONSOLE TO OPEN F8";
+                developerWeaponPanelBlocksGameplayThisFrame_ = true;
+                input_.suppressPrimaryPointerUntilRelease();
+                continue;
+            }
+            if (developerRangePanelOpen_)
+            {
+                developerWeaponPanelBlocksGameplayThisFrame_ = true;
+                input_.suppressPrimaryPointerUntilRelease();
+                if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE)
+                    developerRangePanelOpen_ = false;
+                else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT)
+                    handleDeveloperRangeClick({event.button.x, event.button.y});
+                continue;
+            }
+        }
         const bool developerPanelAvailable =
             gameFlow_.state() == GameFlowState::Base ||
             (gameFlow_.state() == GameFlowState::Raid &&
@@ -6517,6 +6548,27 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
     switch (action->kind)
     {
+    case DeveloperPanelActionKind::EnterTestRange:
+        if (gameSession_.developerRangeActive())
+        {
+            static_cast<void>(gameFlow_.leaveDeveloperRange());
+            developerRangePanelOpen_ = false;
+            developerWeaponPanelOpen_ = false;
+        }
+        else if (gameFlow_.enterDeveloperRange())
+        {
+            closeInventory();
+            tacticalMapOpen_ = false;
+            medicalWheelOpen_ = false;
+            developerWeaponPanelOpen_ = false;
+            developerRangePanelOpen_ = true;
+            developerRangeSelection_ = {};
+            savedRangeDeveloperSettings_ = std::array{developerInfiniteAmmoEnabled_, developerMapFogEnabled_, developerCrisisRevealEnabled_};
+            developerInfiniteAmmoEnabled_ = false;
+            uiMessage_ = "RANGE: SELECT EQUIPMENT, THEN GRANT KIT";
+        }
+        else uiMessage_ = "RANGE REQUIRES AN IDLE BASE";
+        break;
     case DeveloperPanelActionKind::ToggleMapFog:
         developerMapFogEnabled_ = !developerMapFogEnabled_;
         uiMessage_ = developerMapFogEnabled_
@@ -6595,6 +6647,18 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    if (!gameSession_.developerRangeActive())
+    {
+        developerRangePanelOpen_ = false;
+        if (savedRangeDeveloperSettings_)
+        {
+            developerInfiniteAmmoEnabled_ = (*savedRangeDeveloperSettings_)[0];
+            developerMapFogEnabled_ = (*savedRangeDeveloperSettings_)[1];
+            developerCrisisRevealEnabled_ = (*savedRangeDeveloperSettings_)[2];
+            savedRangeDeveloperSettings_.reset();
+        }
+    }
+    if (developerRangePanelOpen_) return;
     if (homeFoundingInputBlockedThisFrame_) return;
     syncAmbience();
     consumePresentationAudioEvents();
@@ -6930,6 +6994,16 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if (gameFlow_.state() == GameFlowState::Base)
+    {
+        closeInventory();
+        tacticalMapOpen_ = false;
+        medicalWheelOpen_ = false;
+        developerWeaponPanelOpen_ = false;
+        uiMessage_ = "RETURNED FROM TEST RANGE | ORIGINAL PROFILE RESTORED";
+        input_.suppressPrimaryPointerUntilRelease();
+        return;
+    }
     consumePresentationAudioEvents();
 
     if (gameSession_.world().shotFiredLastUpdate())
@@ -9011,6 +9085,29 @@ void App::renderStashOverlay()
 
 void App::renderBackground(bool drawOutdoorDetails)
 {
+    if (gameSession_.developerRangeActive())
+    {
+        SDL_SetRenderDrawColor(renderer_, 24, 31, 33, 255);
+        SDL_RenderClear(renderer_);
+        SDL_SetRenderDrawColor(renderer_, 48, 62, 65, 255);
+        for (float x = 0; x <= kDeveloperRangeSize.x; x += 100)
+            SDL_RenderLine(renderer_, x, 0, x, kDeveloperRangeSize.y);
+        for (float y = 0; y <= kDeveloperRangeSize.y; y += 100)
+            SDL_RenderLine(renderer_, 0, y, kDeveloperRangeSize.x, y);
+        for (std::size_t i = 0; i < kDeveloperRangePads.size(); ++i)
+        {
+            const auto p = kDeveloperRangePads[i];
+            const SDL_FRect rect{p.x - 10, p.y - 10, 240, 160};
+            SDL_SetRenderDrawColor(renderer_, 193, 151, 79, 255);
+            SDL_RenderRect(renderer_, &rect);
+            uiTextRenderer_.render(renderer_, p.x, p.y - 35, fmt::format("TARGET PAD {}", i + 1).c_str());
+        }
+        const SDL_FRect console{kDeveloperRangeConsole.x - 40, kDeveloperRangeConsole.y - 35, 200, 110};
+        SDL_SetRenderDrawColor(renderer_, 80, 181, 158, 255);
+        SDL_RenderRect(renderer_, &console);
+        uiTextRenderer_.render(renderer_, console.x, console.y - 30, "RANGE CONSOLE | F8");
+        return;
+    }
     if (gameSession_.world().isAlphaRaidWorld() &&
         !gameSession_.world().inOutdoorRaidSpace())
     {
@@ -10113,7 +10210,7 @@ void App::renderBallisticBlockers()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::syncRaidPointerCapture() noexcept
+bool App::shouldCaptureWorldPointer() const noexcept
 {
     const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
         !gameFlow_.activeBaseFacility().has_value() &&
@@ -10121,7 +10218,7 @@ void App::syncRaidPointerCapture() noexcept
         !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
     const bool raidWorldActive = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
-    const bool shouldCapture = shouldCaptureRaidPointer(
+    return shouldCaptureRaidPointer(
         RaidPointerCaptureContext{
             raidWorldActive || baseWorldActive,
             raidWorldActive || baseWorldActive,
@@ -10130,11 +10227,15 @@ void App::syncRaidPointerCapture() noexcept
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
             medicalWheelOpen_,
-            developerWeaponPanelOpen_,
+            developerWeaponPanelOpen_ || developerRangePanelOpen_,
             pauseMenu_.isOpen(),
             tacticalMapOpen_,
             windowHasInputFocus_});
+}
 
+void App::syncRaidPointerCapture() noexcept
+{
+    const bool shouldCapture = shouldCaptureWorldPointer();
     if (shouldCapture != relativeMouseModeActive_)
     {
         if (SDL_SetWindowRelativeMouseMode(window_, shouldCapture))
@@ -10174,6 +10275,7 @@ void App::renderAimCrosshair()
         medicalWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
+        developerRangePanelOpen_ ||
         pauseMenu_.isOpen() ||
         (!inBaseWorld && !inRaidWorld))
     {
@@ -10236,6 +10338,9 @@ void App::renderAimCrosshair()
     const HitFeedbackPresentationSnapshot hitFeedback = inBaseWorld
         ? gameFlow_.baseWorld().hitFeedbackPresentation()
         : gameSession_.world().hitFeedbackPresentation();
+    if (hitFeedback.armorFeedbackSeconds > 0.0F)
+        uiTextRenderer_.render(renderer_, center.x + 24, center.y + 26,
+            hitFeedback.armorBroken ? "ENEMY ARMOR BROKEN" : "ENEMY ARMOR ABSORBED HIT");
     if (hitFeedback.remainingSeconds > 0.0F)
     {
         const Uint8 red = hitFeedback.semantic == HitSemantic::WeakPoint
@@ -10639,6 +10744,26 @@ void App::renderEnemies()
                 enemyMoveHorizontalTexture_.get(),
                 &sourceRect,
                 &enemyRect);
+        }
+
+        if (enemy.torsoArmor())
+        {
+            const bool intact = enemy.torsoArmor()->durability > 0;
+            const SDL_FRect vest{bounds.position.x + bounds.size.x * 0.20F,
+                bounds.position.y + bounds.size.y * 0.29F, bounds.size.x * 0.60F, bounds.size.y * 0.43F};
+            SDL_SetRenderDrawColor(renderer_, 48, 58, 62, 255);
+            SDL_RenderFillRect(renderer_, &vest);
+            SDL_SetRenderDrawColor(renderer_, 220, 215, 175, 255);
+            SDL_RenderRect(renderer_, &vest);
+            if (intact) {
+                SDL_RenderLine(renderer_, vest.x, vest.y + vest.h/2, vest.x + vest.w, vest.y + vest.h/2);
+                SDL_RenderLine(renderer_, vest.x + vest.w/2, vest.y, vest.x + vest.w/2, vest.y + vest.h);
+            } else {
+                SDL_RenderLine(renderer_, vest.x, vest.y, vest.x + vest.w*0.4F, vest.y + vest.h*0.5F);
+                SDL_RenderLine(renderer_, vest.x + vest.w*0.6F, vest.y + vest.h*0.5F, vest.x + vest.w, vest.y + vest.h);
+            }
+            uiTextRenderer_.render(renderer_, enemyRect.x, enemyRect.y - 16,
+                intact ? "TORSO ARMOR" : "BROKEN VEST");
         }
 
         if (enemy.isImpactSlowed())
@@ -14548,6 +14673,8 @@ void App::renderDeveloperWeaponPanel()
     if (gameFlow_.state() == GameFlowState::Base)
         renderButton(developerBaseSiegeButton(), gameSession_.baseDefenseActive(),
             "CREATE BASE SIEGE WARNING");
+    renderButton({670, 108, 280, 34}, gameSession_.developerRangeActive(),
+        gameSession_.developerRangeActive() ? "LEAVE TEST RANGE" : "ENTER COMBAT TEST RANGE");
     const std::string crisisIdentityLine = crisis.has_value()
         ? fmt::format(
               "CRISIS DEBUG: {} | DISTRICT {} | RESOURCE POINT {}",
@@ -14773,7 +14900,7 @@ void App::renderProfileInventory(
     bool inRaid,
     std::optional<AssetInstanceId> externalContainerId)
 {
-    if (inventoryWeaponComponentsOpen_ && !inRaid) { renderWeaponComponents(); return; }
+    if (inventoryWeaponComponentsOpen_ && (!inRaid || gameSession_.developerRangeAtConsole())) { renderWeaponComponents(); return; }
     if (profileDetailsAsset_) { renderProfileWeaponDetails(); return; }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -18358,6 +18485,11 @@ void App::renderRaidTacticalMap()
         map.hasIntelligence(RaidIntelligenceCategory::Enemy)
             ? "ACTIVE" : "UNKNOWN");
     uiTextRenderer_.render(renderer_, 532.0F, 76.0F, permissions.c_str());
+    if (map.hasIntelligence(RaidIntelligenceCategory::Enemy) && gameSession_.profile().pendingRaid &&
+        std::any_of(gameSession_.profile().pendingRaid->enemies.begin(), gameSession_.profile().pendingRaid->enemies.end(),
+            [](const RaidEnemySnapshot &enemy) { return enemy.torsoArmor.has_value(); }))
+        uiTextRenderer_.render(renderer_, 144, 640, "ENEMY INTEL: SOME RESOURCE GUARDS WEAR TORSO ARMOR");
+
     if (map.hasIntelligence(RaidIntelligenceCategory::Transport))
     {
         const RaidSession &raidSession =
@@ -18502,6 +18634,7 @@ void App::render()
     renderPauseMenu();
     renderDeveloperPerformanceOverlay();
     renderDeveloperWeaponPanel();
+    renderDeveloperRangePanel();
 
     SDL_RenderPresent(
         renderer_);
@@ -18796,7 +18929,7 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
             input_.suppressPrimaryPointerUntilRelease();
             uiMessage_.clear();
             if (row == 0) { profileDetailsAsset_ = asset->instanceId; return; }
-            if (inRaid || profile.pendingRaid || profile.activeBaseDefense)
+            if ((inRaid && !gameSession_.developerRangeAtConsole()) || profile.pendingRaid || profile.activeBaseDefense)
             { uiMessage_ = "MODIFICATION REQUIRES BASE"; return; }
             const auto weapons = componentWeapons(profile);
             const auto found = std::find(weapons.begin(), weapons.end(), asset->instanceId);

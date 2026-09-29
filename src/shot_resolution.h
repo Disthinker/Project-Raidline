@@ -94,6 +94,8 @@ struct HitResult
     HitRegion region{HitRegion::Torso};
     HitSemantic semantic{HitSemantic::Normal};
     CombatTargetId targetId{kInvalidCombatTargetId};
+    bool armorReducedDamage{};
+    bool armorBroken{};
 };
 
 // Read-only App projection for one short, already-travelled tracer segment.

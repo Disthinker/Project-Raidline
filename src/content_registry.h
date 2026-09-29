@@ -611,6 +611,7 @@ struct RaidEncounterArchetypeDefinition
     std::uint32_t maximumMembers{5};
     float activationDistance{240.0F};
     float patrolRadius{320.0F};
+    std::optional<EnemyCombatDefinitionId> armoredMemberDefinition;
 
     friend bool operator==(
         const RaidEncounterArchetypeDefinition &,

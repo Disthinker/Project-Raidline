@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <limits>
 #include <vector>
+#include <stdexcept>
 
 namespace
 {
@@ -56,7 +57,8 @@ Enemy::Enemy(
     Vec2 size,
     Vec2 velocity,
     int maxHealth,
-    CombatTargetId combatTargetId)
+    CombatTargetId combatTargetId,
+    std::optional<EnemyArmorState> torsoArmor)
     : combatTargetId_{combatTargetId},
       position_(position),
       size_(size),
@@ -67,11 +69,13 @@ Enemy::Enemy(
           makeEnemyMoveClip(),
           AnimationPlayMode::Loop},
       health_{maxHealth},
+      torsoArmor_{torsoArmor},
       movementState_{
           velocity.x != 0.0F || velocity.y != 0.0F
               ? EnemyMovementState::Normal
               : EnemyMovementState::Stationary}
 {
+  if (torsoArmor_ && !torsoArmor_->valid()) throw std::invalid_argument("invalid enemy armor");
 }
 
 CombatTargetId Enemy::combatTargetId() const noexcept
@@ -84,6 +88,7 @@ EnemyRuntimeCheckpoint Enemy::checkpoint() const noexcept
   EnemyRuntimeCheckpoint s;
   s.id = combatTargetId_; s.position = checkpointPoint(position_);
   s.size = checkpointPoint(size_); s.velocity = checkpointPoint(velocity_);
+  s.torsoArmor = torsoArmor_;
   s.health = health_.current(); s.maximumHealth = health_.maximum();
   s.facing = static_cast<std::uint32_t>(facingDirection_);
   s.movement = static_cast<std::uint32_t>(movementState_);
@@ -105,7 +110,7 @@ EnemyRuntimeCheckpoint Enemy::checkpoint() const noexcept
 std::optional<Enemy> Enemy::restoreCheckpoint(const EnemyRuntimeCheckpoint &s)
 {
   if (!validateEnemyRuntimeCheckpoint(s)) return std::nullopt;
-  Enemy e{runtimePoint(s.position), runtimePoint(s.size), runtimePoint(s.velocity), s.maximumHealth, s.id};
+  Enemy e{runtimePoint(s.position), runtimePoint(s.size), runtimePoint(s.velocity), s.maximumHealth, s.id, s.torsoArmor};
   e.health_ = Health{s.maximumHealth, s.health};
   e.facingDirection_ = static_cast<EnemyFacingDirection>(s.facing);
   e.movementState_ = static_cast<EnemyMovementState>(s.movement);
@@ -788,4 +793,9 @@ void Enemy::refreshMovementStateFromAttack() noexcept
   }
 
   movementState_ = EnemyMovementState::Stationary;
+}
+
+void Enemy::applyArmorLoss(std::uint32_t loss) noexcept
+{
+  if (torsoArmor_) torsoArmor_->durability -= std::min(loss, torsoArmor_->durability);
 }

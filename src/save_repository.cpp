@@ -1623,6 +1623,10 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 enemyValue["encounter_group_instance_id"] =
                     enemy.encounterGroupInstanceId;
             }
+            if (enemy.torsoArmor) {
+                if (schemaVersion < 50) throw std::invalid_argument("enemy armor requires schema 50");
+                enemyValue["torso_armor"] = {enemy.torsoArmor->protectionRequirement, enemy.torsoArmor->durability, enemy.torsoArmor->durabilityLossBasisPoints};
+            }
             enemies.push_back(std::move(enemyValue));
         }
         Json encounterGroups = Json::array();
@@ -2414,7 +2418,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2580,7 +2584,8 @@ SaveLoadResult deserializeProfileEnvelope(
              contentVersion == "base-wishes-resource-tradeoff-content-59") ||
             (schemaVersion >= 46 && contentVersion == "enemy-combat-contract-content-60") ||
             (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61") ||
-            (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62");
+            (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62") ||
+            (schemaVersion >= 49 && contentVersion == "weapon-components-content-63");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2602,7 +2607,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3531,6 +3536,11 @@ SaveLoadResult deserializeProfileEnvelope(
                         ? enemy.at("encounter_group_instance_id")
                               .get<std::string>()
                         : std::string{}});
+                if (enemy.contains("torso_armor")) {
+                    if (schemaVersion < 50) throw std::invalid_argument("legacy enemy cannot contain armor");
+                    const auto &armor = enemy.at("torso_armor");
+                    raid.enemies.back().torsoArmor = EnemyArmorState{armor.at(0).get<int>(), armor.at(1).get<std::uint32_t>(), armor.at(2).get<std::uint32_t>()};
+                }
             }
             if (schemaVersion >= 37)
             {

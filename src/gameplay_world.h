@@ -65,6 +65,7 @@ struct EnemySpawn
     Vec2 encounterHome{};
     std::vector<Vec2> patrolPoints;
     float ambushActivationDistance{240.0F};
+    std::optional<EnemyArmorState> torsoArmor;
 };
 
 struct HighRiskWorldConfig
@@ -147,6 +148,7 @@ struct RaidWorldConfig
     std::optional<OrdinarySurvivorRescue> rescue;
     RaidIntelligenceLoadout intelligence;
     std::vector<RaidTacticalObjective> tacticalObjectives;
+    bool developerRange{};
 };
 
 struct RaidOutdoorLabelProjection
@@ -171,6 +173,8 @@ class GameplayWorld
 {
 public:
     GameplayWorld();
+    [[nodiscard]] bool resetDeveloperRangeEnemies(const EnemyCombatDefinition &definition,
+        std::size_t pad, std::size_t count);
 
     // 可重复 Raid 会话传入本局第一个未使用的稳定 ID。
     explicit GameplayWorld(
@@ -570,6 +574,7 @@ private:
     RaidSimulationWorkload simulationWorkloadLastUpdate_{};
     std::vector<std::size_t> blockerQueryScratch_;
     bool alphaRaidWorld_{};
+    bool developerRange_{};
     bool deferPlayerDamageResolution_{};
     float enemyDamageProtectionRemainingSeconds_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;

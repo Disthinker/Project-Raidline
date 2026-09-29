@@ -1,4 +1,6 @@
 #pragma once
+#include "enemy_armor.h"
+#include <optional>
 
 #include "vec2.h"
 #include <array>
@@ -26,6 +28,7 @@ struct EnemyRuntimeCheckpoint
     bool specialChargeArmed{}, hitConsumed{}, activeOpportunityPending{};
     std::optional<CheckpointPoint> navigationTarget;
     float navigationRefreshRemaining{};
+    std::optional<EnemyArmorState> torsoArmor;
     friend bool operator==(const EnemyRuntimeCheckpoint &,
                            const EnemyRuntimeCheckpoint &) = default;
 };

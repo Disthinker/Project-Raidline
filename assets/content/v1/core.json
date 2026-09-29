@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "weapon-components-content-63",
+  "content_version": "raid-armored-infected-content-64",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -13,7 +13,8 @@
     }
   ],
   "enemy_combat_definitions": [
-    {"id": "enemy.infected.basic", "maximum_health": 12}
+    {"id": "enemy.infected.basic", "maximum_health": 12},
+    {"id": "enemy.infected.armored", "maximum_health": 12, "torso_armor": {"protection_requirement": 7, "durability": 9, "durability_loss_basis_points": 10000}}
   ],
   "base_services": {
     "gunsmith_full_maintenance": {
@@ -2366,7 +2367,8 @@
         ],
         "encounter_archetypes": [
           {"id": "encounter.frontier.road_patrol", "kind": "patrol", "allowed_district_kinds": ["highway", "open_ground", "greenbelt"], "minimum_groups": 3, "maximum_groups": 4, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 400},
-          {"id": "encounter.frontier.resource_guard", "kind": "guard", "allowed_district_kinds": ["industrial", "logistics", "roadside_service"], "minimum_groups": 3, "maximum_groups": 3, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 160},
+          {"id": "encounter.frontier.resource_guard",
+            "armored_member_definition": "enemy.infected.armored", "kind": "guard", "allowed_district_kinds": ["industrial", "logistics", "roadside_service"], "minimum_groups": 3, "maximum_groups": 3, "minimum_members": 3, "maximum_members": 5, "activation_distance": 360, "patrol_radius": 160},
           {"id": "encounter.frontier.route_ambush", "kind": "ambush", "allowed_district_kinds": ["highway", "logistics", "roadside_service"], "minimum_groups": 2, "maximum_groups": 3, "minimum_members": 3, "maximum_members": 5, "activation_distance": 220, "patrol_radius": 120}
         ]
       },

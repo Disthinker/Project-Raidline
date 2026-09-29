@@ -19,6 +19,7 @@ struct DeveloperPanelRect
 
 enum class DeveloperPanelActionKind
 {
+    EnterTestRange,
     ToggleMapFog,
     ToggleInfiniteAmmo,
     ToggleCrisisReveal,
@@ -123,6 +124,8 @@ inline std::optional<DeveloperPanelAction> developerPanelActionAt(
     DeveloperPanelPoint point,
     std::size_t parameterCount) noexcept
 {
+    if (developerPanelContains({670, 108, 280, 34}, point))
+        return DeveloperPanelAction{DeveloperPanelActionKind::EnterTestRange};
     if (developerPanelContains(developerFogButton(), point))
         return DeveloperPanelAction{DeveloperPanelActionKind::ToggleMapFog};
     if (developerPanelContains(developerInfiniteAmmoButton(), point))

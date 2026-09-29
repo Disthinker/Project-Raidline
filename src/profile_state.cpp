@@ -4077,6 +4077,8 @@ ProfileValidationResult validateProfileState(
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
+            if (enemy.torsoArmor && (!enemy.torsoArmor->valid() || enemy.torsoArmor->durability == 0))
+                return {false, "invalid frozen enemy armor"};
             Vec2 spaceSize = raidMap->worldSize;
             if (enemy.spaceId != outdoorRaidSpaceId())
             {
@@ -4946,6 +4948,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, enemy.maximumHealth);
             hashBytes(hash, enemy.spaceId.value());
             hashBytes(hash, enemy.encounterGroupInstanceId);
+            if (enemy.torsoArmor) {
+                hashBytes(hash, "torso-armor");
+                hashInteger(hash, enemy.torsoArmor->protectionRequirement);
+                hashInteger(hash, enemy.torsoArmor->durability);
+                hashInteger(hash, enemy.torsoArmor->durabilityLossBasisPoints);
+            }
         }
         for (const RaidEncounterGroupSnapshot &group : raid.encounterGroups)
         {

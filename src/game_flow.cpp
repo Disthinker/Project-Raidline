@@ -618,6 +618,11 @@ void GameFlow::update(
     }
 
     gameSession_.update(input, deltaTime);
+    if (suspendedRangeSession_ && gameSession_.state() == GameSessionState::BetweenRaids)
+    {
+        static_cast<void>(leaveDeveloperRange());
+        return;
+    }
 
     if (gameSession_.state() ==
         GameSessionState::BetweenRaids)
@@ -715,6 +720,7 @@ bool GameFlow::establishHome(std::string_view plotId)
 
 bool GameFlow::returnToMainMenu() noexcept
 {
+    if (suspendedRangeSession_) static_cast<void>(leaveDeveloperRange());
     if (state_ != GameFlowState::Base && state_ != GameFlowState::Raid)
     {
         return false;

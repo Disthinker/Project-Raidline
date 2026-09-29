@@ -139,6 +139,7 @@ private:
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
+    friend struct DeveloperRangeUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -233,6 +234,11 @@ private:
     bool tacticalMapOpen_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
+    std::optional<std::array<bool, 3>> savedRangeDeveloperSettings_;
+    bool developerRangePanelOpen_{};
+    std::array<std::size_t, 7> developerRangeSelection_{};
+    void renderDeveloperRangePanel();
+    void handleDeveloperRangeClick(MousePosition position);
     bool developerWeaponPanelOpen_{};
     bool developerWeaponPanelBlocksGameplayThisFrame_{};
     std::size_t developerWeaponParameterIndex_{};
@@ -431,6 +437,7 @@ private:
     void closeInventory() noexcept;
 
     void render();
+    [[nodiscard]] bool shouldCaptureWorldPointer() const noexcept;
     void syncRaidPointerCapture() noexcept;
     void renderMainMenu();
     void renderPauseMenu();

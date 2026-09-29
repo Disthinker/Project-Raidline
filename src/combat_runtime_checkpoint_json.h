@@ -31,6 +31,7 @@ inline void to_json(nlohmann::json &j, const EnemyRuntimeCheckpoint &v)
     FIELD(activeOpportunityPending);
     FIELD(navigationRefreshRemaining);
 #undef FIELD
+    if (v.torsoArmor) j["torsoArmor"] = {v.torsoArmor->protectionRequirement, v.torsoArmor->durability, v.torsoArmor->durabilityLossBasisPoints};
     j["attackType"] = v.attackType ? nlohmann::json(*v.attackType) : nlohmann::json(nullptr);
     j["lastKnownTarget"] =
         v.lastKnownTarget ? nlohmann::json(*v.lastKnownTarget) : nlohmann::json(nullptr);
@@ -64,6 +65,8 @@ inline void from_json(const nlohmann::json &j, EnemyRuntimeCheckpoint &v)
     FIELD(activeOpportunityPending);
     FIELD(navigationRefreshRemaining);
 #undef FIELD
+    v.torsoArmor.reset();
+    if (j.contains("torsoArmor")) { const auto &a = j.at("torsoArmor"); v.torsoArmor = EnemyArmorState{a.at(0).get<int>(), a.at(1).get<std::uint32_t>(), a.at(2).get<std::uint32_t>()}; }
     v.attackType = j.at("attackType").is_null()
                        ? std::nullopt
                        : std::optional{j.at("attackType").get<std::uint32_t>()};
