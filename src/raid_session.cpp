@@ -68,9 +68,11 @@ void RaidSession::update(
     float deltaTime,
     bool playerInNormalExtractionPoint,
     bool playerInEmergencyExtractionPoint,
-    bool playerInConditionalExtractionPoint) noexcept
+    bool playerInConditionalExtractionPoint,
+    bool signalCallRequested) noexcept
 {
     enteredHighRiskLastUpdate_ = false;
+    signalCalledLastUpdate_ = false;
     if (!isActive())
     {
         return;
@@ -113,10 +115,11 @@ void RaidSession::update(
             extractionRoute_ = RaidExtractionRoute::EmergencyConditional;
         }
         else if (emergencyExtractionOpen() &&
-                 playerInEmergencyExtractionPoint)
+                 playerInEmergencyExtractionPoint && signalCallRequested)
         {
             state_ = RaidSessionState::Extracting;
             extractionRoute_ = RaidExtractionRoute::EmergencySignal;
+            signalCalledLastUpdate_ = true;
         }
     }
 
@@ -187,6 +190,15 @@ void RaidSession::update(
         cancelExtraction();
         state_ = RaidSessionState::RaidEnded;
     }
+}
+
+bool RaidSession::interruptSignalExtraction() noexcept
+{
+    if (state_ != RaidSessionState::Extracting ||
+        extractionRoute_ != RaidExtractionRoute::EmergencySignal)
+        return false;
+    cancelExtraction();
+    return true;
 }
 
 bool RaidSession::markPlayerDead() noexcept

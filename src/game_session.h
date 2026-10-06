@@ -221,6 +221,7 @@ public:
     conditionalExtractionWeightLimitGrams() const noexcept;
 
     [[nodiscard]] bool conditionalExtractionEligible() const noexcept;
+    [[nodiscard]] bool canCallSignalExtraction(bool inventoryOpen = false) const noexcept;
 
     [[nodiscard]]
     GameSessionState state() const noexcept;
@@ -647,6 +648,7 @@ private:
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
+    [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };
 
 [[nodiscard]]

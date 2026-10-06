@@ -4393,6 +4393,10 @@ TEST(GameplayWorldRaidTest, HighRiskEmergencySignalExtractionCompletes)
     ASSERT_FALSE(world.raidSession().normalExtractionOpen());
 
     world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    GameplayInput call;
+    call.interactJustPressed = true;
+    world.update(call, 0.0F);
     ASSERT_EQ(
         world.raidSession().extractionRoute(),
         RaidExtractionRoute::EmergencySignal);
@@ -4404,6 +4408,173 @@ TEST(GameplayWorldRaidTest, HighRiskEmergencySignalExtractionCompletes)
     EXPECT_EQ(
         world.raidSession().state(),
         RaidSessionState::Extracted);
+}
+
+TEST(GameplayWorldRaidTest, SignalCallRespectsInventoryEligibilityAndRescue)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    call.inventoryOpen = true;
+    world.update(call, 0.0F);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    call.inventoryOpen = false;
+    call.extractionEligible = false;
+    EXPECT_FALSE(world.canCallSignalExtraction(call));
+    world.update(call, 0.0F);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    call.extractionEligible = true;
+    world.update(call, 0.0F);
+    ASSERT_TRUE(world.raidSession().signalCalledLastUpdate());
+    EXPECT_FALSE(world.damagePlayer(1));
+    world.update(GameplayInput{}, 0.1F);
+    EXPECT_EQ(world.raidSession().extractionRoute(), RaidExtractionRoute::EmergencySignal);
+
+    GameplayWorld controlled{config};
+    ASSERT_TRUE(controlled.triggerHighRiskForDeveloper());
+    ASSERT_TRUE(const_cast<Player &>(controlled.player()).applyControl(1.0F));
+    controlled.update(call, 0.0F);
+    EXPECT_FALSE(controlled.raidSession().signalCalledLastUpdate());
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        config.highRisk.emergencyExtractionPoint, 2.0F};
+    GameplayWorld rescue{config};
+    ASSERT_TRUE(rescue.triggerHighRiskForDeveloper());
+    rescue.update(call, 0.0F);
+    EXPECT_FALSE(rescue.raidSession().signalCalledLastUpdate());
+}
+
+TEST(GameplayWorldRaidTest, SignalStimulusIsLocalAndDoesNotTrackOrSpawnEnemies)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.worldSize = Vec2{4000.0F, 1000.0F};
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    config.initialEnemies = {
+        EnemySpawn{Vec2{100.0F, 320.0F}, Vec2{50.0F, 50.0F}, 12},
+        EnemySpawn{Vec2{3000.0F, 320.0F}, Vec2{50.0F, 50.0F}, 12}};
+    for (auto &enemy : config.initialEnemies)
+        enemy.encounterGroupInstanceId = "same-group";
+    config.ballisticBlockers = {
+        BallisticBlocker{1, Rect{Vec2{400.0F, 0.0F}, Vec2{80.0F, 800.0F}}}};
+    GameplayWorld world{std::move(config)};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    world.update(call, 0.0F);
+    ASSERT_TRUE(world.raidSession().signalCalledLastUpdate());
+    ASSERT_EQ(world.aliveEnemyCount(), 2U);
+    const auto heard = world.enemies()[0].lastKnownTargetPosition();
+    ASSERT_TRUE(heard.has_value());
+    EXPECT_FALSE(world.enemies()[1].lastKnownTargetPosition().has_value());
+    GameplayInput move;
+    move.moveRight = true;
+    world.update(move, 0.1F);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    ASSERT_TRUE(world.enemies()[0].lastKnownTargetPosition().has_value());
+    EXPECT_FLOAT_EQ(world.enemies()[0].lastKnownTargetPosition()->x, heard->x);
+    EXPECT_EQ(world.aliveEnemyCount(), 2U);
+}
+
+TEST(GameplayWorldRaidTest, SpaceTransitionConsumesCallWithoutAlertingInterior)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    auto interior = makeInteriorDiscoveryWorldConfig().interiors.front();
+    interior.exteriorEntrance = config.highRisk.emergencyExtractionPoint;
+    interior.exteriorReturn = config.playerSpawn;
+    interior.initialEnemies = {EnemySpawn{Vec2{350.0F, 250.0F}, Vec2{50.0F, 50.0F}, 12}};
+    interior.ballisticBlockers = {
+        BallisticBlocker{2, Rect{Vec2{240.0F, 0.0F}, Vec2{40.0F, 360.0F}}}};
+    config.interiors.push_back(interior);
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    EXPECT_FALSE(world.canCallSignalExtraction(call));
+    world.update(call, 0.0F);
+    ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    EXPECT_FALSE(world.enemies()[0].lastKnownTargetPosition().has_value());
+    world.update(call, 0.0F);
+    ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+}
+
+TEST(GameplayWorldRaidTest, SignalControlExpiryStillInterruptsAndRequiresAnotherPress)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    config.highRisk.emergencyExtractionDurationSeconds = 12.0F;
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    ASSERT_TRUE(world.canCallSignalExtraction(call));
+    world.update(call, 0.1F);
+    ASSERT_GT(world.raidSession().extractionTimeElapsed(), 0.0F);
+    ASSERT_TRUE(const_cast<Player &>(world.player()).applyControl(0.01F));
+    EXPECT_FALSE(world.canCallSignalExtraction(call));
+    world.update(call, 0.02F); // control expires in this update; F must not restart it
+    EXPECT_FALSE(world.player().isControlled());
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(world.raidSession().extractionTimeElapsed(), 0.0F);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    EXPECT_TRUE(world.signalInterruptedVisible());
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    world.update(call, 0.0F);
+    EXPECT_TRUE(world.raidSession().signalCalledLastUpdate());
+}
+
+TEST(GameplayWorldRaidTest, BiteInterruptsSignalInTheAttackFrame)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    config.highRisk.emergencyExtractionDurationSeconds = 30.0F;
+    config.highRisk.emergencyExtractionPoint =
+        ContentRect{Vec2{0.0F, 0.0F}, config.worldSize};
+    config.initialEnemies = {EnemySpawn{Vec2{600.0F, 100.0F}, Vec2{50.0F, 50.0F}, 12}};
+    config.deferPlayerDamageResolution = false;
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    ASSERT_TRUE(advanceUntilFirstScratchHits(world));
+    ASSERT_TRUE(retreatAndHoldUntilGrabStarts(world));
+    GameplayInput call;
+    call.interactJustPressed = true;
+    world.update(call, 0.0F);
+    ASSERT_EQ(world.raidSession().extractionRoute(), RaidExtractionRoute::EmergencySignal);
+    ASSERT_TRUE(advanceUntilGrabBites(world));
+    ASSERT_TRUE(world.player().isControlled());
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(world.raidSession().extractionTimeElapsed(), 0.0F);
+    EXPECT_TRUE(world.signalInterruptedVisible());
+}
+
+TEST(GameplayWorldRaidTest, SignalLeavingClearsProgressAndNeedsNewEdge)
+{
+    auto config = makeHighRiskWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = 100.0F;
+    config.highRisk.emergencyExtractionDurationSeconds = 12.0F;
+    GameplayWorld world{std::move(config)};
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    world.update(call, 0.1F);
+    GameplayInput move;
+    move.moveRight = true;
+    world.update(move, 1.0F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    EXPECT_FLOAT_EQ(world.raidSession().extractionTimeElapsed(), 0.0F);
+    EXPECT_TRUE(world.signalInterruptedVisible());
+    move.moveRight = false;
+    move.moveLeft = true;
+    world.update(move, 1.0F);
+    EXPECT_EQ(world.raidSession().state(), RaidSessionState::InRaid);
+    world.update(call, 0.0F);
+    EXPECT_TRUE(world.raidSession().signalCalledLastUpdate());
+    EXPECT_FALSE(world.signalInterruptedVisible());
 }
 
 TEST(GameplayWorldRaidTest, ConditionalExtractionConsumesServiceEligibility)

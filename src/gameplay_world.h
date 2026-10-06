@@ -304,6 +304,10 @@ public:
     [[nodiscard]] const std::optional<ExtractionPoint> &
     emergencyExtractionPoint() const noexcept;
 
+    [[nodiscard]] bool canCallSignalExtraction(const GameplayInput &input) const noexcept;
+    [[nodiscard]] bool signalInterruptedVisible() const noexcept
+    { return signalInterruptedSeconds_ > 0.0F; }
+
     [[nodiscard]] const std::optional<ExtractionPoint> &
     conditionalExtractionPoint() const noexcept;
 
@@ -542,6 +546,7 @@ private:
     StorageCabinet storageCabinet_;
     ExtractionPoint extractionPoint_;
     std::optional<ExtractionPoint> emergencyExtractionPoint_;
+    float signalInterruptedSeconds_{};
     std::optional<ExtractionPoint> conditionalExtractionPoint_;
     std::uint64_t conditionalExtractionMaximumWeightGrams_{};
     RaidSession raidSession_;

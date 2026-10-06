@@ -1057,6 +1057,15 @@ void GameplayWorld::update(
         conditionalExtractionPoint_.has_value() &&
         input.conditionalExtractionEligible &&
         conditionalExtractionPoint_->contains(playerCenter(player_));
+    const bool wasCallingSignal =
+        raidSession_.extractionRoute() == RaidExtractionRoute::EmergencySignal;
+    if (std::isfinite(deltaTime) && deltaTime > 0.0F)
+    {
+        signalInterruptedSeconds_ = std::max(0.0F, signalInterruptedSeconds_ - deltaTime);
+    }
+    // A control that expires during Player::update must still interrupt this call.
+    if (controlsSuppressedAtFrameStart)
+        static_cast<void>(raidSession_.interruptSignalExtraction());
     raidSession_.update(
         deltaTime,
         input.extractionEligible && inOutdoorRaidSpace() &&
@@ -1065,7 +1074,29 @@ void GameplayWorld::update(
         input.extractionEligible && !player_.isControlled() &&
             playerInEmergencyExtraction,
         input.extractionEligible && !player_.isControlled() &&
-            playerInConditionalExtraction);
+            playerInConditionalExtraction,
+        input.interactJustPressed && !controlsSuppressedAtFrameStart &&
+            !spaceTransitionedLastUpdate_ && canCallSignalExtraction(input));
+    if (wasCallingSignal && raidSession_.isActive() &&
+        raidSession_.extractionRoute() != RaidExtractionRoute::EmergencySignal)
+    {
+        signalInterruptedSeconds_ = 3.0F;
+    }
+    if (raidSession_.signalCalledLastUpdate())
+    {
+        signalInterruptedSeconds_ = 0.0F;
+        // One local stimulus per accepted call. Unlike gunshot group alerts,
+        // this must not recruit remote members or inactive interior spaces.
+        constexpr float signalNoiseRadius = 1200.0F;
+        for (Enemy &enemy : activeEnemies())
+        {
+            if (!enemy.isDead() && distanceSquared(enemyCenter(enemy), centerAfterMovement) <=
+                signalNoiseRadius * signalNoiseRadius)
+            {
+                enemy.hearTarget(centerAfterMovement);
+            }
+        }
+    }
     updateHighRiskActivation(input, deltaTime, centerAfterMovement);
     updateOrdinarySurvivorRescue(input, deltaTime, centerAfterMovement);
     if (raidSession_.phase() == RaidPhase::HighRisk)
@@ -1382,6 +1413,8 @@ void GameplayWorld::update(
                 static_cast<void>(
                     player_.applyControl(
                         contact.controlDuration));
+                if (raidSession_.interruptSignalExtraction())
+                    signalInterruptedSeconds_ = 3.0F;
             }
         }
     }
@@ -1391,7 +1424,7 @@ void GameplayWorld::update(
         player_.isControlled();
 
     if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
-        input.interactJustPressed)
+        !raidSession_.signalCalledLastUpdate() && input.interactJustPressed)
     {
         tryPickupOne();
     }
@@ -2117,6 +2150,19 @@ GameplayWorld::takePlayerDamageObservations()
     std::vector<PlayerDamageObservation> observations;
     observations.swap(pendingPlayerDamageObservations_);
     return observations;
+}
+
+bool GameplayWorld::canCallSignalExtraction(const GameplayInput &input) const noexcept
+{
+    return input.extractionEligible && !input.inventoryOpen &&
+        !raidSpacePortalInteractionInRange() &&
+        !(input.conditionalExtractionEligible && conditionalExtractionPoint_.has_value() &&
+          conditionalExtractionPoint_->contains(playerCenter(player_))) &&
+        inOutdoorRaidSpace() && raidSession_.emergencyExtractionOpen() &&
+        raidSession_.state() == RaidSessionState::InRaid &&
+        !player_.isControlled() && emergencyExtractionPoint_.has_value() &&
+        emergencyExtractionPoint_->contains(playerCenter(player_)) &&
+        !ordinarySurvivorRescueInteractionInRange();
 }
 
 void GameplayWorld::emitPlayerNoise(float radius) noexcept

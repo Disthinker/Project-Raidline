@@ -7469,6 +7469,22 @@ void App::renderDebugText()
         raidTimeText.c_str());
 
     float leftHudLineY = 180.0F;
+    const bool signalCallAvailable = gameSession_.canCallSignalExtraction(
+        inventoryOverlayState_.isOpen());
+    const char *signalHint = nullptr;
+    if (raidSession.extractionRoute() == RaidExtractionRoute::EmergencySignal)
+        signalHint = "SIGNAL SENT - NEARBY ENEMIES ALERTED";
+    else if (gameSession_.world().signalInterruptedVisible())
+        signalHint = signalCallAvailable
+            ? "SIGNAL INTERRUPTED - RETURN AND PRESS F TO RETRY"
+            : "SIGNAL INTERRUPTED";
+    else if (signalCallAvailable)
+        signalHint = "F - CALL EXTRACTION (ATTRACTS NEARBY ENEMIES)";
+    if (signalHint != nullptr)
+    {
+        uiTextRenderer_.render(renderer_, 20.0F, leftHudLineY, signalHint);
+        leftHudLineY += 16.0F;
+    }
     if (raidSession.phase() == RaidPhase::HighRisk &&
         gameSession_.world().highRiskActiveEnemyCap() > 0U)
     {
@@ -9429,7 +9445,8 @@ void App::renderExtractionPoint()
             *emergency,
             RaidExtractionRoute::EmergencySignal,
             raidSession.emergencyExtractionOpen(),
-            "SIGNAL EXTRACTION",
+            gameSession_.canCallSignalExtraction(inventoryOverlayState_.isOpen())
+                ? "SIGNAL EXTRACTION | F TO CALL" : "SIGNAL EXTRACTION",
             true,
             "SIGNAL LOCKED");
     }

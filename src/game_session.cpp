@@ -661,6 +661,24 @@ bool GameSession::conditionalExtractionEligible() const noexcept
            currentRaidCarriedWeightGrams() <= limit;
 }
 
+bool GameSession::raidWorldInteractionAvailable(bool inventoryOpen) const noexcept
+{
+    return !inventoryOpen && !raidActionState_.active().has_value() &&
+        !(selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
+          profile_.pendingRaid->selfRecovery.has_value() &&
+          !profile_.pendingRaid->selfRecovery->opened);
+}
+
+bool GameSession::canCallSignalExtraction(bool inventoryOpen) const noexcept
+{
+    if (!world_ || !raidWorldInteractionAvailable(inventoryOpen))
+        return false;
+    GameplayInput input;
+    input.inventoryOpen = inventoryOpen;
+    input.conditionalExtractionEligible = conditionalExtractionEligible();
+    return world_->canCallSignalExtraction(input);
+}
+
 GameSessionState GameSession::state() const noexcept
 {
     return state_;
@@ -3787,16 +3805,10 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
-        simulationInput.interactJustPressed = false;
-        simulationInput.interactPressed = false;
         sprintFireIntentPending_ = false;
         sprintFireReadyRemaining_ = 0.0F;
     }
-    const bool selfRecoveryOwnsInteraction =
-        selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
-        profile_.pendingRaid->selfRecovery.has_value() &&
-        !profile_.pendingRaid->selfRecovery->opened;
-    if (selfRecoveryOwnsInteraction)
+    if (!raidWorldInteractionAvailable(input.inventoryOpen))
     {
         simulationInput.interactJustPressed = false;
         simulationInput.interactPressed = false;
@@ -4442,6 +4454,7 @@ void GameSession::updateAlphaRaid(
 
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
+        !world_->raidSession().signalCalledLastUpdate() &&
         !raidActionState_.active().has_value() &&
         !world_->highRiskControlInteractionInRange() &&
         !world_->ordinarySurvivorRescueInteractionInRange())
