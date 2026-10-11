@@ -1,6 +1,7 @@
 #include "base_world.h"
 #include "enemy_attack_contact.h"
 #include "base_defense_positions.h"
+#include "raid_camera.h"
 
 #include <algorithm>
 #include <bit>
@@ -415,8 +416,20 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         input.aimMotionDelta.has_value();
     if (pointerAiming)
     {
+        GameplayInput aimInput = input;
+        if (input.aimViewport && validRaidViewport(*input.aimViewport))
+        {
+            const Vec2 camera = raidCameraOffset(
+                playerCenter, layout_.worldSize, input.aimViewport->size);
+            if (input.aimWorldPosition)
+            {
+                aimInput.aimWorldPosition = raidScreenToWorld(
+                    raidWorldToScreen(*input.aimWorldPosition, input.aimViewport->position), camera);
+            }
+            aimInput.aimWorldBounds = raidReticleWorldBounds(camera, input.aimViewport->size);
+        }
         shooting_.updateAim(
-            input,
+            aimInput,
             playerCenter,
             playerFacingDirection_,
             layout_.worldSize,

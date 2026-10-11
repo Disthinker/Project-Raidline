@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <utility>
 
 namespace
 {
@@ -44,41 +43,19 @@ Vec2 raidScreenToWorld(Vec2 screenPosition, Vec2 cameraOffset) noexcept
             screenPosition.y + cameraOffset.y};
 }
 
-Rect raidReticleWorldBounds(
-    Vec2 cameraOffset,
-    Vec2 worldSize,
-    Vec2 viewportSize,
-    float outsideMargin) noexcept
+bool validRaidViewport(Rect viewport) noexcept
 {
-    if (!finite(cameraOffset) || !finite(worldSize) ||
-        !finite(viewportSize) || worldSize.x <= 0.0F ||
-        worldSize.y <= 0.0F || viewportSize.x <= 0.0F ||
-        viewportSize.y <= 0.0F || !std::isfinite(outsideMargin))
+    return finite(viewport.position) && finite(viewport.size) &&
+        viewport.size.x >= 1.0F && viewport.size.y >= 1.0F;
+}
+
+Rect raidReticleWorldBounds(Vec2 cameraOffset, Vec2 viewportSize) noexcept
+{
+    if (!validRaidViewport(Rect{cameraOffset, viewportSize}))
     {
         return {};
     }
-
-    const float safeOutsideMargin = std::max(0.0F, outsideMargin);
-    const auto axisBounds = [safeOutsideMargin](
-                                float camera,
-                                float world,
-                                float viewport)
-    {
-        const float visibleStart = std::clamp(camera, 0.0F, world);
-        const float visibleEnd = std::clamp(
-            camera + viewport, visibleStart, world);
-        const float minimum = std::max(
-            0.0F, visibleStart - safeOutsideMargin);
-        const float maximum = std::min(
-            world, visibleEnd + safeOutsideMargin);
-        return std::pair{minimum, maximum};
-    };
-
-    const auto [minimumX, maximumX] = axisBounds(
-        cameraOffset.x, worldSize.x, viewportSize.x);
-    const auto [minimumY, maximumY] = axisBounds(
-        cameraOffset.y, worldSize.y, viewportSize.y);
     return Rect{
-        {minimumX, minimumY},
-        {maximumX - minimumX, maximumY - minimumY}};
+        cameraOffset,
+        {viewportSize.x - 1.0F, viewportSize.y - 1.0F}};
 }

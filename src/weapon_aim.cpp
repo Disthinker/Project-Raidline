@@ -21,6 +21,18 @@ namespace
         return std::isfinite(value) && value > 0.0F;
     }
 
+    bool validBounds(Rect bounds) noexcept
+    {
+        return finite(bounds.position) && finite(bounds.size) &&
+            bounds.size.x >= 0.0F && bounds.size.y >= 0.0F;
+    }
+
+    Vec2 clampToBounds(Vec2 point, Rect bounds) noexcept
+    {
+        return {std::clamp(point.x, bounds.position.x, bounds.position.x + bounds.size.x),
+                std::clamp(point.y, bounds.position.y, bounds.position.y + bounds.size.y)};
+    }
+
     float length(Vec2 value) noexcept
     {
         return std::sqrt(value.x * value.x + value.y * value.y);
@@ -102,20 +114,21 @@ void WeaponAimState::update(
     bool aimDownSights,
     float deltaTime,
     std::optional<Vec2> inputMotionDelta,
-    AimControlMode controlMode) noexcept
+    AimControlMode controlMode,
+    std::optional<Rect> movementBounds) noexcept
 {
     if (!finite(targetWorldPosition) ||
         !finite(shootingOrigin) ||
         !finite(worldSize) ||
         worldSize.x <= 0.0F || worldSize.y <= 0.0F ||
-        !std::isfinite(deltaTime) || deltaTime < 0.0F)
+        !std::isfinite(deltaTime) || deltaTime < 0.0F ||
+        (movementBounds && !validBounds(*movementBounds)))
     {
         return;
     }
 
-    const Vec2 clampedInputPosition{
-        std::clamp(targetWorldPosition.x, 0.0F, worldSize.x),
-        std::clamp(targetWorldPosition.y, 0.0F, worldSize.y)};
+    const Rect bounds = movementBounds.value_or(Rect{{}, worldSize});
+    const Vec2 clampedInputPosition = clampToBounds(targetWorldPosition, bounds);
     shootingOrigin_ = shootingOrigin;
     worldSize_ = worldSize;
 
@@ -169,25 +182,13 @@ void WeaponAimState::update(
         // cursor position. The mapped world anchor delta above only follows
         // viewport translation; it does not reintroduce a window-edge dead
         // zone when the player reverses mouse direction.
-        targetWorldPosition_.x = std::clamp(
-            targetWorldPosition_.x + motion.x,
-            0.0F,
-            worldSize_.x);
-        targetWorldPosition_.y = std::clamp(
-            targetWorldPosition_.y + motion.y,
-            0.0F,
-            worldSize_.y);
+        targetWorldPosition_ = clampToBounds(
+            {targetWorldPosition_.x + motion.x, targetWorldPosition_.y + motion.y}, bounds);
 
         if (controlMode_ == AimControlMode::Direct)
         {
-            currentWorldPosition_.x = std::clamp(
-                currentWorldPosition_.x + motion.x,
-                0.0F,
-                worldSize_.x);
-            currentWorldPosition_.y = std::clamp(
-                currentWorldPosition_.y + motion.y,
-                0.0F,
-                worldSize_.y);
+            currentWorldPosition_ = clampToBounds(
+                {currentWorldPosition_.x + motion.x, currentWorldPosition_.y + motion.y}, bounds);
             if (deltaTime > 0.0F)
             {
                 controlVelocity_ = Vec2{
@@ -205,7 +206,7 @@ void WeaponAimState::update(
     while (remaining > 0.0F)
     {
         const float step = std::min(remaining, kMaximumAimStep);
-        advanceStep(step);
+        advanceStep(step, bounds);
         remaining -= step;
     }
 
@@ -218,6 +219,10 @@ void WeaponAimState::update(
                 (aimDownSights ? progressStep : -progressStep),
             0.0F,
             1.0F);
+    }
+    if (movementBounds)
+    {
+        constrainToBounds(bounds);
     }
 }
 
@@ -254,7 +259,40 @@ void WeaponAimState::reanchor(
     initialized_ = true;
 }
 
-void WeaponAimState::advanceStep(float deltaTime) noexcept
+void WeaponAimState::relocate(
+    Vec2 shootingOrigin, Vec2 worldSize, Vec2 translation,
+    std::optional<Rect> movementBounds) noexcept
+{
+    if (!finite(shootingOrigin) || !finite(translation) || !finite(worldSize) ||
+        worldSize.x <= 0.0F || worldSize.y <= 0.0F ||
+        (movementBounds && !validBounds(*movementBounds))) return;
+    if (!initialized_)
+    {
+        reanchor(shootingOrigin, lastDirection_, worldSize);
+        if (movementBounds) constrainToBounds(*movementBounds);
+        return;
+    }
+    const Rect bounds = movementBounds.value_or(Rect{{}, worldSize});
+    const auto translate = [&](Vec2 point)
+    {
+        return clampToBounds({point.x + translation.x, point.y + translation.y}, bounds);
+    };
+    currentWorldPosition_ = translate(currentWorldPosition_);
+    targetWorldPosition_ = translate(targetWorldPosition_);
+    inputWorldPosition_ = translate(inputWorldPosition_);
+    shootingOrigin_ = shootingOrigin;
+    worldSize_ = worldSize;
+}
+
+void WeaponAimState::rebaseInput(Vec2 inputWorldPosition) noexcept
+{
+    if (!initialized_ || !finite(inputWorldPosition)) return;
+    inputWorldPosition_ = Vec2{
+        std::clamp(inputWorldPosition.x, 0.0F, worldSize_.x),
+        std::clamp(inputWorldPosition.y, 0.0F, worldSize_.y)};
+}
+
+void WeaponAimState::advanceStep(float deltaTime, Rect bounds) noexcept
 {
     if (controlMode_ == AimControlMode::HighMagnificationInertial)
     {
@@ -328,14 +366,9 @@ void WeaponAimState::advanceStep(float deltaTime) noexcept
     // Recoil moves both the reticle and its control destination. Otherwise a
     // stationary absolute mouse position would become an automatic recovery
     // spring after every shot.
-    targetWorldPosition_.x = std::clamp(
-        targetWorldPosition_.x + recoilDisplacement.x,
-        0.0F,
-        worldSize_.x);
-    targetWorldPosition_.y = std::clamp(
-        targetWorldPosition_.y + recoilDisplacement.y,
-        0.0F,
-        worldSize_.y);
+    targetWorldPosition_ = clampToBounds(
+        {targetWorldPosition_.x + recoilDisplacement.x,
+         targetWorldPosition_.y + recoilDisplacement.y}, bounds);
 
     const Vec2 controlDisplacement =
         controlMode_ == AimControlMode::HighMagnificationInertial
@@ -347,10 +380,7 @@ void WeaponAimState::advanceStep(float deltaTime) noexcept
         controlDisplacement.x + recoilDisplacement.x;
     currentWorldPosition_.y +=
         controlDisplacement.y + recoilDisplacement.y;
-    currentWorldPosition_.x = std::clamp(
-        currentWorldPosition_.x, 0.0F, worldSize_.x);
-    currentWorldPosition_.y = std::clamp(
-        currentWorldPosition_.y, 0.0F, worldSize_.y);
+    currentWorldPosition_ = clampToBounds(currentWorldPosition_, bounds);
 
     lastDirection_ = normalizedOr(
         Vec2{

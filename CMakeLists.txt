@@ -342,6 +342,8 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/raid_camera.cpp
+    src/raid_camera.h
     src/base_defense_positions.cpp
     src/base_defense_positions.h
     src/base_defense_runtime.cpp
@@ -466,8 +468,6 @@ add_library(raidline_sdl_client STATIC
     src/profile_container_presentation.h
     src/profile_inventory_interaction.cpp
     src/profile_inventory_interaction.h
-    src/raid_camera.cpp
-    src/raid_camera.h
     src/raid_pointer_capture.h
     src/raid_tactical_map_presentation.cpp
     src/raid_tactical_map_presentation.h
@@ -671,7 +671,7 @@ raidline_add_test(
 raidline_add_test(
     RaidCameraTest
     tests/test_raid_camera.cpp
-    raidline::sdl_client)
+    raidline::simulation)
 raidline_add_test(
     BaseBuildCameraTest
     tests/test_base_build_camera.cpp
@@ -743,6 +743,7 @@ raidline_add_test(
     raidline::domain)
 raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
 raidline_add_test(RaidSceneContainerUiTest tests/test_raid_scene_container_ui.cpp raidline::sdl_client)
+raidline_add_test(PointerContinuityUiTest tests/test_pointer_continuity_ui.cpp raidline::sdl_client)
 raidline_add_test(
     InventoryDomainTest
     tests/test_inventory_domain.cpp

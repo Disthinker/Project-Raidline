@@ -45,7 +45,8 @@ public:
         bool aimDownSights,
         float deltaTime,
         std::optional<Vec2> inputMotionDelta = std::nullopt,
-        AimControlMode controlMode = AimControlMode::Direct) noexcept;
+        AimControlMode controlMode = AimControlMode::Direct,
+        std::optional<Rect> movementBounds = std::nullopt) noexcept;
 
     void applyShotRecoil(Vec2 shootingOrigin) noexcept;
     void reanchor(
@@ -53,6 +54,10 @@ public:
         Vec2 direction,
         Vec2 worldSize) noexcept;
     void reconfigure(WeaponAimConfig config);
+    void relocate(
+        Vec2 shootingOrigin, Vec2 worldSize, Vec2 translation,
+        std::optional<Rect> movementBounds = std::nullopt) noexcept;
+    void rebaseInput(Vec2 inputWorldPosition) noexcept;
     void constrainToBounds(Rect bounds) noexcept;
 
     [[nodiscard]] Vec2 actualWorldPosition() const noexcept;
@@ -89,6 +94,6 @@ private:
     bool initialized_{};
     Pcg32 recoilRandom_;
 
-    void advanceStep(float deltaTime) noexcept;
+    void advanceStep(float deltaTime, Rect bounds) noexcept;
     [[nodiscard]] float nextSignedUnit() noexcept;
 };

@@ -135,12 +135,13 @@ public:
     int run();
 
 private:
-    // Headless event-router regression tests; never creates a window or save path.
+    // Headless event-router regression tests; never runs the game loop.
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
+    friend struct PointerContinuityUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -161,6 +162,8 @@ private:
     std::vector<BasePointerClick> pendingBaseClicks_;
     bool pendingBaseRotate_{};
     std::optional<Vec2> pointerWorldPosition_;
+    // Stable screen anchor for world aim; UI cursor travel never changes it.
+    std::optional<Vec2> worldAimPointerAnchor_;
     bool systemCursorHidden_{false};
     bool relativeMouseModeActive_{false};
     bool windowHasInputFocus_{true};

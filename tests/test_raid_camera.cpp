@@ -68,27 +68,39 @@ TEST(RaidCameraTest, NonFiniteInputFallsBackToStableOrigin)
     EXPECT_FLOAT_EQ(offset.y, 0.0F);
 }
 
-TEST(RaidCameraTest, ReticleBoundsPermitOneDiameterOutsideVisibleWorld)
+TEST(RaidCameraTest, ReticleBoundsStayInsideLastWindowPixel)
 {
     const Rect bounds = raidReticleWorldBounds(
         {640.0F, 360.0F},
-        {2560.0F, 1440.0F},
-        {1280.0F, 720.0F},
-        48.0F);
+        {1280.0F, 720.0F});
 
-    EXPECT_FLOAT_EQ(bounds.position.x, 592.0F);
-    EXPECT_FLOAT_EQ(bounds.position.y, 312.0F);
-    EXPECT_FLOAT_EQ(bounds.size.x, 1376.0F);
-    EXPECT_FLOAT_EQ(bounds.size.y, 816.0F);
+    EXPECT_FLOAT_EQ(bounds.position.x, 640.0F);
+    EXPECT_FLOAT_EQ(bounds.position.y, 360.0F);
+    EXPECT_FLOAT_EQ(bounds.size.x, 1279.0F);
+    EXPECT_FLOAT_EQ(bounds.size.y, 719.0F);
 }
 
-TEST(RaidCameraTest, ReticleBoundsUseWholeTinyWorld)
+TEST(RaidCameraTest, SmallWorldReticleStillUsesFullWindow)
 {
+    const auto camera = raidCameraOffset({48,32}, {96,64}, {1280,720});
     const Rect bounds = raidReticleWorldBounds(
-        {}, {96.0F, 64.0F}, {1280.0F, 720.0F}, 48.0F);
+        camera, {1280.0F, 720.0F});
 
     EXPECT_FLOAT_EQ(bounds.position.x, 0.0F);
     EXPECT_FLOAT_EQ(bounds.position.y, 0.0F);
-    EXPECT_FLOAT_EQ(bounds.size.x, 96.0F);
-    EXPECT_FLOAT_EQ(bounds.size.y, 64.0F);
+    EXPECT_FLOAT_EQ(bounds.size.x, 1279.0F);
+    EXPECT_FLOAT_EQ(bounds.size.y, 719.0F);
+}
+
+TEST(RaidCameraTest, InvalidViewportIsRejectedAndSinglePixelIsBounded)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(validRaidViewport({{nan,0}, {1280,720}}));
+    EXPECT_FALSE(validRaidViewport({{}, {0,720}}));
+    EXPECT_FALSE(validRaidViewport({{}, {1280,nan}}));
+    const auto bounds = raidReticleWorldBounds({123,456},{1,1});
+    EXPECT_FLOAT_EQ(bounds.position.x,123);
+    EXPECT_FLOAT_EQ(bounds.position.y,456);
+    EXPECT_FLOAT_EQ(bounds.size.x,0);
+    EXPECT_FLOAT_EQ(bounds.size.y,0);
 }

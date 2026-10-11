@@ -1,4 +1,5 @@
 #include "world_shooting_runtime.h"
+#include "raid_camera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -276,18 +277,26 @@ void WorldShootingRuntime::updateAim(
     {
         desired = *input.aimWorldPosition;
     }
+    if (!allowPointerInput)
+    {
+        desired = weaponAim_.inputWorldPosition_;
+    }
+    else if (aimInputRebasePending_)
+    {
+        // Legacy simulation callers have no viewport projection. Only they
+        // need a first absolute sample to establish the new input anchor.
+        weaponAim_.rebaseInput(desired);
+        aimInputRebasePending_ = false;
+    }
     weaponAim_.update(
         desired,
         shooterCenter,
         worldSize,
         input.aimDownSights,
         deltaTime,
-        input.aimMotionDelta,
-        AimControlMode::Direct);
-    if (allowPointerInput && input.aimWorldBounds.has_value())
-    {
-        weaponAim_.constrainToBounds(*input.aimWorldBounds);
-    }
+        allowPointerInput ? input.aimMotionDelta : std::optional<Vec2>{Vec2{}},
+        AimControlMode::Direct,
+        input.aimWorldBounds);
 }
 
 WorldShootingAdvance WorldShootingRuntime::advanceShots(
@@ -557,6 +566,27 @@ void WorldShootingRuntime::reanchor(
     Vec2 worldSize) noexcept
 {
     weaponAim_.reanchor(shooterCenter, direction, worldSize);
+    aimInputRebasePending_ = false;
+}
+
+void WorldShootingRuntime::relocate(
+    Vec2 previousCenter, Vec2 nextCenter, Vec2 worldSize,
+    std::optional<Rect> previousViewport) noexcept
+{
+    Vec2 translation{nextCenter.x - previousCenter.x, nextCenter.y - previousCenter.y};
+    std::optional<Rect> bounds;
+    const bool hasViewport = previousViewport && validRaidViewport(*previousViewport);
+    if (hasViewport)
+    {
+        const Vec2 camera = raidCameraOffset(nextCenter, worldSize, previousViewport->size);
+        translation = {camera.x - previousViewport->position.x,
+                       camera.y - previousViewport->position.y};
+        bounds = raidReticleWorldBounds(camera, previousViewport->size);
+    }
+    weaponAim_.relocate(nextCenter, worldSize, translation, bounds);
+    // Viewport-aware input is translated with the reticle, so the next
+    // sample must still consume genuine camera/device movement immediately.
+    aimInputRebasePending_ = !hasViewport;
 }
 
 void WorldShootingRuntime::clearSpatialTransientPresentation() noexcept

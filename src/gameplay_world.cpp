@@ -1,5 +1,6 @@
 #include "developer_test_range.h"
 #include "gameplay_world.h"
+#include "raid_camera.h"
 #include "enemy_attack_contact.h"
 #include "navigation_refresh_selection.h"
 
@@ -1036,8 +1037,23 @@ void GameplayWorld::update(
     spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input);
 
     const Vec2 centerAfterMovement = playerCenter(player_);
+    GameplayInput aimInput = input;
+    if (input.aimViewport && validRaidViewport(*input.aimViewport))
+    {
+        // Render uses the camera after movement/transfer. Resolve this same
+        // projection before aim and firing, rather than one frame later.
+        const Vec2 camera = raidCameraOffset(
+            centerAfterMovement, activeWorldSize(), input.aimViewport->size);
+        if (input.aimWorldPosition)
+        {
+            aimInput.aimWorldPosition = raidScreenToWorld(
+                raidWorldToScreen(*input.aimWorldPosition, input.aimViewport->position),
+                camera);
+        }
+        aimInput.aimWorldBounds = raidReticleWorldBounds(camera, input.aimViewport->size);
+    }
     shooting_.updateAim(
-        input,
+        aimInput,
         centerAfterMovement,
         player_.facingDirection(),
         activeWorldSize(),
@@ -2788,10 +2804,11 @@ bool GameplayWorld::tryTransitionRaidSpace(
         static_cast<void>(player_.setPosition(interior->interiorSpawn));
     }
     clearSpatialTransientPresentation();
-    shooting_.reanchor(
+    shooting_.relocate(
+        center,
         playerCenter(player_),
-        player_.facingDirection(),
-        activeWorldSize());
+        activeWorldSize(),
+        input.aimViewport);
     return true;
 }
 
