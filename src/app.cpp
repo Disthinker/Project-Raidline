@@ -41,9 +41,6 @@ namespace
 {
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
-    // Roughly one current reticle diameter. Relative aiming may briefly move
-    // the reticle center this far beyond the viewport, but never farther.
-    constexpr float kReticleViewportOutsideMargin{48.0F};
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
     constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
     constexpr std::size_t kBaseBuildCardsPerPage{4U};
@@ -1994,24 +1991,21 @@ GameplayInput App::makeGameplayInput() const
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
 
     const Vec2 aimCamera = raidWorldCameraOffset();
-    if (pointerWorldPosition_.has_value())
+    const auto &aimPointer = worldAimPointerAnchor_.has_value()
+        ? worldAimPointerAnchor_ : pointerWorldPosition_;
+    if (aimPointer.has_value())
     {
         input.aimWorldPosition = raidScreenToWorld(
-            *pointerWorldPosition_, aimCamera);
+            *aimPointer, aimCamera);
     }
-    input.aimWorldBounds = raidReticleWorldBounds(
+    input.aimViewport = Rect{
         aimCamera,
-        gameSession_.world().raidSpaceWorldSize(),
         {static_cast<float>(kWindowWidth),
-         static_cast<float>(kWindowHeight)},
-        kReticleViewportOutsideMargin);
+         static_cast<float>(kWindowHeight)}};
+    input.aimWorldBounds = raidReticleWorldBounds(
+        aimCamera, input.aimViewport->size);
 
-    if (relativeMouseModeActive_ &&
-        !inventoryOverlayState_.isOpen() &&
-        !medicalWheelOpen_ &&
-        !developerWeaponPanelOpen_ &&
-        !developerRangePanelOpen_ &&
-        !tacticalMapOpen_)
+    if (relativeMouseModeActive_ && shouldCaptureWorldPointer())
     {
         input.aimMotionDelta = pendingRelativeAimMotion_;
     }
@@ -2064,22 +2058,26 @@ GameplayInput App::makeBaseGameplayInput() const
     input.aimDownSights = input_.isSecondaryPointerPressed();
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
 
-    const BaseWorld &world = gameFlow_.baseWorld();
     const Vec2 aimCamera = baseWorldCameraOffset();
-    if (pointerWorldPosition_.has_value())
+    const auto &aimPointer = worldAimPointerAnchor_.has_value()
+        ? worldAimPointerAnchor_ : pointerWorldPosition_;
+    if (aimPointer.has_value())
     {
         input.aimWorldPosition = raidScreenToWorld(
-            *pointerWorldPosition_, aimCamera);
+            *aimPointer, aimCamera);
     }
     input.aimWorldBounds = raidReticleWorldBounds(
         aimCamera,
-        world.worldSize(),
         {static_cast<float>(kWindowWidth),
-         static_cast<float>(kWindowHeight)},
-        kReticleViewportOutsideMargin);
-    input.aimMotionDelta = relativeMouseModeActive_
-        ? std::optional<Vec2>{pendingRelativeAimMotion_}
-        : std::nullopt;
+         static_cast<float>(kWindowHeight)});
+    if (!baseBuildCamera_.active())
+    {
+        input.aimViewport = Rect{
+            aimCamera,
+            {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
+    }
+    input.aimMotionDelta = relativeMouseModeActive_ && shouldCaptureWorldPointer()
+        ? pendingRelativeAimMotion_ : Vec2{};
     input.interactJustPressed =
         input_.wasActionJustPressed(GameAction::Interact);
     input.interactPressed = input_.isActionPressed(GameAction::Interact);
@@ -10313,10 +10311,28 @@ void App::syncRaidPointerCapture() noexcept
     const bool shouldCapture = shouldCaptureWorldPointer();
     if (shouldCapture != relativeMouseModeActive_)
     {
+        const Vec2 reticle = gameFlow_.isRaidScreen()
+            ? raidWorldToScreen(gameSession_.world().weaponAimWorldPosition(), raidWorldCameraOffset())
+            : raidWorldToScreen(gameFlow_.baseWorld().weaponAimWorldPosition(), baseWorldCameraOffset());
+        if (!shouldCapture && windowHasInputFocus_ && window_ != nullptr)
+        {
+            int width = kWindowWidth;
+            int height = kWindowHeight;
+            static_cast<void>(SDL_GetWindowSize(window_, &width, &height));
+            pointerWorldPosition_ = Vec2{
+                std::clamp(reticle.x, 0.0F, static_cast<float>(std::max(1, width) - 1)),
+                std::clamp(reticle.y, 0.0F, static_cast<float>(std::max(1, height) - 1))};
+            // SDL uses this position when relative mode ends. Warp before
+            // releasing capture so its motion cannot enter world aiming.
+            SDL_WarpMouseInWindow(window_, pointerWorldPosition_->x, pointerWorldPosition_->y);
+        }
         if (SDL_SetWindowRelativeMouseMode(window_, shouldCapture))
         {
+            if (shouldCapture && !worldAimPointerAnchor_)
+                worldAimPointerAnchor_ = pointerWorldPosition_.value_or(reticle);
             relativeMouseModeActive_ = shouldCapture;
             pendingRelativeAimMotion_ = Vec2{};
+            if (shouldCapture) input_.suppressPrimaryPointerUntilRelease();
         }
     }
 

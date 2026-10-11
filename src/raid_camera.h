@@ -16,11 +16,10 @@
     Vec2 screenPosition,
     Vec2 cameraOffset) noexcept;
 
-// World-space rectangle in which the reticle center may move. outsideMargin
-// permits a small, recoverable excursion beyond the current viewport while
-// the world bounds still remain authoritative.
+[[nodiscard]] bool validRaidViewport(Rect viewport) noexcept;
+
+// Inclusive pixel-center bounds of the full window, including blank space
+// when a map is smaller than the viewport. Ballistics keep their world bounds.
 [[nodiscard]] Rect raidReticleWorldBounds(
     Vec2 cameraOffset,
-    Vec2 worldSize,
-    Vec2 viewportSize,
-    float outsideMargin) noexcept;
+    Vec2 viewportSize) noexcept;

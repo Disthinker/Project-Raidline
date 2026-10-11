@@ -283,3 +283,42 @@ TEST(WeaponAimStateTest, VisibleBoundsClampAimAndDiscardOutwardVelocity)
     EXPECT_FLOAT_EQ(aim.controlVelocity().x, 0.0F);
     EXPECT_FLOAT_EQ(aim.controlVelocity().y, 0.0F);
 }
+
+TEST(WeaponAimStateTest, SmallMapUsesWindowBoundsAndReverseMotionHasNoOvershootDebt)
+{
+    WeaponAimState aim;
+    const Rect window{{}, {1279,719}};
+    const Vec2 origin{48,32};
+    aim.update({640,360},origin,{96,64},false,0,Vec2{},AimControlMode::Direct,window);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,640);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,360);
+    aim.update({640,360},origin,{96,64},false,0,Vec2{10000,-10000},AimControlMode::Direct,window);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,1279);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,0);
+    aim.update({640,360},origin,{96,64},false,0,Vec2{},AimControlMode::Direct,window);
+    aim.update({640,360},origin,{96,64},false,0,Vec2{-5,7},AimControlMode::Direct,window);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,1274);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,7);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().x,1274);
+    EXPECT_FLOAT_EQ(aim.targetWorldPosition().y,7);
+}
+
+TEST(WeaponAimStateTest, RecoilStaysInsideWindowWithoutAutomaticReturn)
+{
+    WeaponAimState aim;
+    const Rect window{{}, {1279,719}};
+    const Vec2 origin{1200,600};
+    aim.update({1278,718},origin,{2560,1440},false,0,Vec2{},AimControlMode::Direct,window);
+    aim.applyShotRecoil(origin);
+    for (int step=0; step<100; ++step)
+    {
+        aim.update({1278,718},origin,{2560,1440},false,0.01F,Vec2{},AimControlMode::Direct,window);
+        EXPECT_GE(aim.actualWorldPosition().x,0); EXPECT_LE(aim.actualWorldPosition().x,1279);
+        EXPECT_GE(aim.actualWorldPosition().y,0); EXPECT_LE(aim.actualWorldPosition().y,719);
+    }
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,1279);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,719);
+    aim.update({1278,718},origin,{2560,1440},false,0,Vec2{-17,-13},AimControlMode::Direct,window);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,1262);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,706);
+}

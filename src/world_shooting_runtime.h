@@ -71,6 +71,9 @@ public:
     void configureWeapon(const WeaponUseDefinition &definition);
     void configureAmmunition(int penetration) noexcept;
     void reanchor(Vec2 shooterCenter, Vec2 direction, Vec2 worldSize) noexcept;
+    void relocate(
+        Vec2 previousCenter, Vec2 nextCenter, Vec2 worldSize,
+        std::optional<Rect> previousViewport = std::nullopt) noexcept;
     void clearSpatialTransientPresentation() noexcept;
 
     [[nodiscard]] const std::vector<LogicalBallisticFlight> &
@@ -130,4 +133,5 @@ private:
     ParticleSystem particleSystem_;
     std::vector<HitResult> hitResultsLastUpdate_;
     bool shotFiredLastUpdate_{};
+    bool aimInputRebasePending_{};
 };

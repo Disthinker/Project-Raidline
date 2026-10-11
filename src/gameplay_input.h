@@ -38,6 +38,10 @@ struct GameplayInput
     // so rendering and authoritative firing direction cannot diverge.
     std::optional<Rect> aimWorldBounds;
 
+    // Full client viewport in world coordinates, before movement/portal
+    // transfer. Transient projection data; no SDL or persisted camera state.
+    std::optional<Rect> aimViewport;
+
     // 只在 F 从未按下变为按下的这一帧为 true。
     bool interactJustPressed{};
     // 可中断的世界交互读取持续状态；单击拾取仍使用上面的边沿。

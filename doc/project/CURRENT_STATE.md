@@ -1,5 +1,12 @@
 # Project Raidline 当前状态
 
+## 2026-10-11 最新入口：窗口锚定 v2 已通过用户验收，交付中
+
+- task `pointer-aim-continuity-v1` / plan `RL-POINTER-WINDOW-ANCHOR-v2`；用户明确“窗口锚定 v2 验收通过，请完成提交与合并，启动下一项开发。”。已验收候选 `RL-POINTER-WINDOW-ANCHOR-v2-local-cfff4c1d7de2`，源码清单摘要 `cfff4c1d7de2f1ad93fabd0e7a4913a04f39667c1907db481df7aa98c256c2eb`，准星窗口锚定/限位及菜单接续验收通过；原 v1 失败历史保留。
+- Windows Debug 全目标构建与最终 1898/1898 CTest、定向 57+1 项通过；候选源码/构建 hash 核对未变。交付从已验收 main `772fba0d3068a69bb207566d21a01913eb224451` 的干净 checkout，分支 `codex/pointer-window-anchor-v2`，仅 15 个代码/测试/CMake 路径与[本任务计划](../exec-plans/active/pointer-aim-continuity-v1.md)、本入口记录；其他脏文件及原工作区 HEAD/branch/index 保留。
+- 本入口随候选提交。该提交在 main 可达时为已交付，尚未合入时为交付中；准确 commit/PR/Windows 与 Ubuntu CI/普通合并需按实际 Git/PR 查询，不能从文档推断。无 CI 专用补提交，不启动游戏，不改信任/权限。
+- 用户已要求下一项；合并后按现有三线程链路向策划请求单一任务，主控调查并提出具体版本计划。没有该新任务的明确方案批准前，不编辑游戏代码/生产资产/提交新任务。以下旧状态均为历史，不覆盖本入口。
+
 ## 2026-10-11 当前入口：三线程协作配置维护 v1
 
 - 最新协作规则 `RL-COLLAB-20261011-v1`；本次用户直接授权配置维护，不是游戏开发或资产生产。[维护任务](../exec-plans/active/collaboration-maintenance-v1.md) 记录方案/候选/真实授权及验证；用户现已验收并明确授权本轮提交与合并。该配置提交在 `main` 可达时为已交付，尚在交付分支且未合入时为交付中，恢复时以真实 Git/PR 记录核对；不含鼠标修复，暂不启动下一项开发。格式/引用/加载、原三角色重读、两条真实通信通过；15 个隔离模型场景符合要求、辅助脚本 5/5，通过事实与未验证边界见[维护报告](../engineering/COLLABORATION_MAINTENANCE_2026-10-11.md)。
