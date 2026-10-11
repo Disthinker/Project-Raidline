@@ -1,29 +1,17 @@
 ---
 name: raidline-architecture-domain-invariants
-description: Design and review Project Raidline ownership, domain commands, stable IDs, persistence, inventory, settlement, shooting contracts, and C++ lifetime safety.
+description: Review Raidline ownership, Enemy lifecycle, transactions or save-contract changes; not presentation-only edits.
 ---
 
-# Raidline Architecture and Domain Invariants
+# Architecture and Domain Invariants
 
-## Review ownership first
+Trace the changed execution path and authoritative owners. Read the affected sections of doc/architecture/INVARIANTS.md; consult ARCHITECTURE.md for composition. Root AGENTS.md supplies shared guardrails.
 
-Identify the authoritative owner of every instance before reviewing behavior. An item instance has one location; action holds are explicit locations; death, interruption, deploy, and settlement must resolve every temporary location.
+Check the contracts actually touched:
+- Asset/location changes: exactly one owner; temporary action locations resolve on interruption/death; queries do not mutate and rejection preserves all participants.
+- Enemy lifecycle: stable existing Enemy/CombatTarget identity; one death fact; removed/dead actors cannot attack, navigate or remain targets. Exercise real Daily/Defense/Raid adapters for shared lifecycle changes, including same-frame hits and first/middle/last removal with survivors unchanged.
+- Runtime composition: keep shared mechanism separate from spawn/target/wave/reward/save policy. Do not move transient internals into GameSession or an all-purpose facade.
+- C++ lifetime: no dangling vector references across structural mutation or commit; verify ownership/move and compiled consumers.
+- Persistence changes only: explicit schema/ID mapping, high-water validation, old/frozen snapshots, round trip, corrupt-main/backup recovery and repeated settlement. Do not upgrade schema simply to tidy architecture.
 
-## Review command safety
-
-- Queries do not mutate. Rejected commands preserve all participants.
-- Multi-owner operations commit atomically and return a domain result suitable for App projection.
-- Never retain `std::vector` references, iterators, or indexes across structural mutation.
-- Definitions are immutable shared data; runtime instances are move-only and use stable IDs.
-- UI, animation, names, and colors do not decide legality or semantic results.
-
-## Review persistence and lifecycle
-
-- Save versions, stable IDs, relationships, ID high-water marks, and idempotency keys.
-- Never save pointers, UI cells, vector positions, or scene object addresses.
-- Migrations are explicit and have round-trip, old-version, corrupt-main/backup, and repeated-settlement tests.
-- Avoid global service locators, universal frameworks, and unconsumed future state.
-
-## Review evidence
-
-Require focused invariant tests for success, rejection, capacity failure, duplicate ID, interruption, retry, and idempotency. Treat compiler/static analysis as evidence, not proof of gameplay correctness.
+Add focused success and failure tests for the changed contract (capacity, interruption, retry, duplicate identity as applicable). Report actual before/after call paths, intentional behavior changes and validation gaps; compilation alone is not behavioral proof.

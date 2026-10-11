@@ -1,26 +1,18 @@
 ---
 name: raidline-build-test-regression
-description: Configure, build, test, diagnose, and report Project Raidline local and CI regression evidence.
+description: Run or diagnose Raidline builds, regression tests and exact-revision CI; not documentation wording changes.
 ---
 
-# Raidline Build Test and Regression
+# Build, Test and Regression
 
-## Use the supported Windows baseline
+Inspect the diff first. Use the setup/commands in doc/engineering/BUILD_AND_TEST.md; read presets, dependency manifest or workflow only when changing or diagnosing that layer. Historical run logs are not current commands.
 
-Enter the configured Visual Studio Developer Shell with x64 host/x64 target, restore the repository working directory after shell initialization, set UTF-8 code page and `VCPKG_ROOT`, then use the `windows-debug` preset.
+On Windows, initialize the configured VS Developer Shell (x64 host/target), restore the repository working directory, set UTF-8 and VCPKG_ROOT, then use windows-debug.
 
-## Match evidence to risk
+- Incremental build and focused tests during implementation; reconfigure if CMake inputs change.
+- Rebuild all affected targets after headers/class layout change. For gtest_ar_ stack corruption or source/binary disagreement, inspect Ninja dependencies and object timestamps before rerunning.
+- Root AGENTS.md requires full CTest before code push and exact-head Windows/Ubuntu CI for C++ PRs. Do not repeat a complete cycle for each internal edit.
+- For instruction/docs-only changes, validate affected formats, links and loading instead of unrelated C++ tests.
+- Art-pipeline tests apply only to authorized art work; inspect their generated-output behavior first.
 
-- Run focused tests while implementing and full CTest before push.
-- Reconfigure when CMake inputs change.
-- Rebuild every affected target when headers or class layout change.
-- Run Python asset tests only for an explicitly authorized asset-pipeline task.
-- Require exact-head Windows and Ubuntu CI for C++ PRs.
-
-## Diagnose stale builds
-
-If behavior disagrees with source or MSVC/GTest reports `gtest_ar_` stack corruption, inspect Ninja dependencies and object timestamps, rebuild affected targets, and rerun. Never count an old binary as evidence for new code.
-
-## Report concisely
-
-Record commit, preset, targets, registered test count, passed/failed count, duration, CI URLs/status, and any untested risk.
+Return exact revision, commands/preset/targets, counts and failures, CI identity when applicable, and skipped checks with reasons. Do not count stale binaries or static checks as gameplay acceptance.

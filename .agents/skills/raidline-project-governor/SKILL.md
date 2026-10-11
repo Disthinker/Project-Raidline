@@ -1,28 +1,16 @@
 ---
 name: raidline-project-governor
-description: Control Project Raidline scope, dependencies, branches, release evidence, commits, pushes, and pull requests for product delivery.
+description: Coordinate Raidline next-task selection, restore approval state, and close accepted deliveries through the existing three threads.
 ---
 
-# Raidline Project Governor
+# Project Governor
 
-## Establish the delivery baseline
+Use root AGENTS.md for human gates. Read CURRENT_STATE and the relevant ExecPlan before choosing any action. Use [real thread map and transport](../../../doc/coordination/THREADS.md) when coordinating, not same-name custom workers.
 
-Read `AGENTS.md`, the active scope contract, `doc/project/CURRENT_STATE.md`, `doc/project/KNOWN_ISSUES.md`, `doc/project/ROADMAP.md`, and the active ExecPlan. Fetch and report branch, HEAD, `origin/main`, worktree state, dependency PRs, and CI before writes.
+1. Identify task/state/plan version/candidate and actual human instruction. Resume an approved unfinished task inside scope. Waiting for plan/fix approval or human acceptance remains waiting after “continue”; explain the missing gate. Explicit pause/skip preserves true state and isolates later work.
+2. With no approved active task, or an explicit next-task request, send latest accepted facts/issues/dependencies to the existing planner. Validate the correlated reply, take its single task, inspect real code, then use feature-slice-delivery to prepare the plan. Planner advice never approves implementation. Art queries before approval are read-only; no art need means no art call.
+3. Before baseline/release actions, fetch and verify branch, HEAD, worktree, accepted main, dependency PR and exact-head CI. Do not copy an unaccepted dependency into a delivery. Ordinary choices inside an approved contract are autonomous; material changes return to approval. External GDD stays read-only.
+4. Explicit acceptance of the unchanged current candidate authorizes agreed closeout/commit/merge without another routine merge question. Verify the exact accepted file set/tree, target and necessary tests/dependencies. Honor existing pre-acceptance checkpoint restrictions; at this baseline there is no standing authorization for this maintenance's commit/push/PR. Configured origin is not remote authorization. Record local commit/merge and remote push/PR merge separately; preserve the authorized strategy and unrelated dirt.
+5. Required CI/dependency/conflict/permission problems leave “accepted, delivery blocked”; never bypass, claim merged or materially change the accepted candidate. Retry only still-valid authorization. Consult existing commit/PR/task evidence before repeating delivery. Sync planner/necessary art after actual delivery, report identifiers/evidence and suggest the next player result; do not start it. No teaching ledger or extra CI-only commit.
 
-## Control scope and dependencies
-
-- Map every requested change to the active product slice and its explicit exclusions.
-- Treat an open dependency PR as a dependency, not as code to duplicate or silently cherry-pick.
-- Escalate only changes to product pillars, failure loss, business model, narrative direction, or material scope. Resolve ordinary architecture, numbers, and acceptance details within the active contract.
-- Record GDD/code conflicts without editing the external GDD repository.
-
-## Control delivery
-
-- Use one focused `codex/...` branch from the accepted baseline.
-- Require a self-contained ExecPlan, automated evidence, relevant manual acceptance, risk notes, and rollback before marking the slice complete.
-- Prefer coherent commits with explicit contract changes. Push and open a reviewable PR; do not auto-merge, force-push, or rewrite shared history.
-- Report verified, paused, pending, blocked, and deferred items separately.
-
-## Close by evidence
-
-The closeout contains build identity, tests, manual checks, deviations, known risks, commit, branch, PR, and dependency state. Teaching summaries and learning ledgers are not required.
+Keep the small state/version/approval fields in the existing task record using [PLANS](../../../doc/exec-plans/PLANS.md). A coordination tool receipt is not the target's result. Keep wrong-version replies as history; do not use them to advance state. If native transport is unavailable, report that limitation and stop dependent selection instead of inventing planner output.

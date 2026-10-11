@@ -1,5 +1,7 @@
 # Art Production Task Protocol
 
+Current collaboration gates come from root AGENTS.md and `doc/coordination/roles/art-controller.md`. This protocol grants no production/publication authorization. Before production, bind the package to the human-approved task/plan version and latest package scope. Before publishing, name a single writer per official asset path/manifest (default art-control); main owns code integration. Catalog indexing authorization does not grant game publication, and old pause records do not override a newer explicit human authorization.
+
 ## Art-control task
 
 The art-control task is an orchestrator and reviewer, not an image generator.
@@ -10,8 +12,10 @@ For every asset package it must:
 2. Define a bounded package ID, output inventory, candidate count, style
    anchors, technical constraints, negative constraints, and acceptance gate.
 3. Write the exact production brief and prompts under `.prompts/art/`.
-4. Create a dedicated user-visible Codex task for that asset family and send it
-   the brief.
+4. Delegate a scoped temporary production worker when needed and authorized;
+   create a new user-visible persistent task only if the human explicitly asks
+   for one. Existing three-thread roles are preserved. Supply the bounded brief
+   and exact human-approved scope; delegation itself supplies no approval.
 5. Wait for `result.json` and candidate paths from the production task.
 6. Review visual identity, style consistency, dimensions, Alpha, pivots,
    margins, naming, and runtime fit.
