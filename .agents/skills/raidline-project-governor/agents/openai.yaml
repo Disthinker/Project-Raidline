@@ -1,4 +1,4 @@
 interface:
   display_name: "Raidline Project Governor"
   short_description: "Control Raidline scope dependencies and releases"
-  default_prompt: "Use $raidline-project-governor to establish the baseline and control this Raidline delivery."
+  default_prompt: "Use $raidline-project-governor to restore task state, coordinate the next plan or close the accepted candidate under human gates."

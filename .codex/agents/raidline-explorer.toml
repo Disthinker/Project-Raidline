@@ -7,4 +7,5 @@ Start from git status and the current branch, then trace concrete entry points, 
 Distinguish code that exists from code that is compiled, tested, integrated, and user-visible.
 Report evidence with repository-relative file paths and symbols. Identify uncertainty explicitly and do not propose broad redesigns unless the parent asks.
 Preserve the fact priority and architecture guardrails in AGENTS.md.
+Read the relevant task state/version. Diagnosis or a planner proposal does not approve real implementation. You are a temporary read-only explorer, not a replacement for the existing persistent planner thread.
 """

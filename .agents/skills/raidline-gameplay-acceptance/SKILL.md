@@ -1,26 +1,16 @@
 ---
 name: raidline-gameplay-acceptance
-description: Plan and execute Project Raidline real-window player-flow acceptance, capture defects, and separate product judgments from implementation regressions.
+description: Prepare Raidline user playtests or triage gameplay feedback without launching the game; not automated builds or feature explanations.
 ---
 
-# Raidline Gameplay Playtest and Acceptance
+# Gameplay Acceptance
 
-## Build an executable checklist
+Use the active plan and exact built revision to give the user one consolidated normal-play flow after automation. State starting conditions, ordinary controls and visible outcomes. Include cancellation, capacity, repeated input, death/quit or a second run only where the changed behavior needs them. Do not require special single-step buttons or launch the executable on the user's behalf.
 
-Derive checks from the active ExecPlan. Each check states initial state, player inputs, visible expected outcome, authoritative state expected after the action, and failure evidence to capture.
+When feedback arrives, pair visible evidence with the affected contract/tests. Distinguish:
+- Regression: accepted contract broken; investigate and propose the minimal fix, then wait for the user's fix-plan approval.
+- Product issue: works but is confusing, tedious or not fun.
+- Scope expansion: needs excluded systems or a materially different product decision.
+- Presentation debt: usable fallback without authorized final art/audio.
 
-## Test player flows
-
-- Use the exact built revision and record window/build identity.
-- Cover the complete vertical path, not isolated screens only.
-- Include cancellation, capacity failure, repeated input, death/quit, return flow, and a second run when relevant.
-- Do not infer domain correctness solely from visuals; pair manual findings with state/test evidence.
-
-## Classify findings
-
-- Regression: violates an accepted contract.
-- Product issue: the contract works but is confusing, tedious, or not fun.
-- Scope request: requires an excluded system or materially expands the slice.
-- Presentation debt: behavior is readable with fallback but lacks authorized final art/audio.
-
-Only product-pillar, loss-model, business-model, narrative, or major-scope findings require user direction. Ordinary defects return to the active slice.
+Every user Bug requires the feature-slice-delivery diagnosis/plan/approval flow before real code changes, regardless of size. Ordinary failures found while implementing an already approved plan can be corrected within contract. Record human acceptance separately from CI/tests and bind it to the unchanged candidate. Waiting acceptance stays waiting after a vague “continue”; explicit acceptance of this candidate triggers agreed delivery via project-governor without a habitual second merge question. Report gaps honestly; screenshots alone do not establish domain correctness.

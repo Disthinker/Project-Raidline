@@ -1,0 +1,58 @@
+# Archived plan index (through 2026-09)
+
+Historical snapshot, not current instructions. The entries below described different dated checkpoints; use ../PLANS.md and doc/project/CURRENT_STATE.md for active work. Backtick paths below are relative to the original doc/exec-plans directory. Archived during instruction maintenance; no old acceptance is promoted to current fact.
+
+# Project Raidline ExecPlan 规范
+
+ExecPlan 是可执行、可验证、可回滚的产品切片合同。新计划以玩家结果或领域迁移命名，不再以 Week 编号命名；旧 Week 计划保留为历史证据。
+
+每份活动计划必须包含：
+
+1. 产品结果、唯一范围来源和明确排除。
+2. 当前 Git/PR/构建基线与依赖关系。
+3. V0 差距及可复用、需重构、需新建、停止扩展项。
+4. 状态所有权、领域命令/结果、稳定 ID 和持久化影响。
+5. 实施步骤与每步退出条件。
+6. 自动化门槛、真实窗口验收和证据格式。
+7. 提交/PR 边界、风险、回滚和未解决问题。
+8. 进度记录；只有证据完成后才能勾选。
+
+活动计划应能让接管者不依赖聊天历史继续工作。普通实现细节由开发主控决定；只有产品支柱、失败损失、商业模式、叙事主方向或显著范围扩张才升级给用户。
+
+产品历史总计划：`active/core-extraction-alpha.md`；不表示现在重新执行 Alpha。
+
+2026-09-12 最新收尾：`active/base-defense-fixed-positions-v1.md` 已完成用户验收，#162 普通
+合入 main@2ae1a8c，验收树 a3e67cb；精确双平台各 1795/1795。该路径保留为历史证据。
+下一单一产品片正在向策划核对，不默认继续守城/工事/NPC/导航。以下未交付记录是历史状态。
+
+策划回复后已建立 `active/hospital-raid-theme-v1.md`：下一主题的完整实施合同，尚无医院代码。
+在 `codex/hospital-raid-theme-v1` 同一 Draft 内推进，不混入已合并 #162。
+
+2026-09-11 最新活动计划：`active/base-defense-fixed-positions-v1.md`。
+内部第 2 步已接入真实拆障、失效清理与 runtime v2 检查点；尚未接入新预警和 Profile
+签出/写回，生产仍 v1，B 购买仍关闭。下一步完成冻结/保存、自动磨损及建设 UI，统一试玩。
+
+以下为上一内部检查点：
+#161 命中卡顿修复已验收并普通合入 #160 分支 `b179ac9`，main 仍为 c6d4597。
+工事恢复内部安装/换位与通路证明；实体受损/v2 冻结/自动磨损/B 界面未完成，整个 #160 保持 Draft。
+
+以下为上一内部检查点记录：
+#149–#157 与 #159 已合入 main@c6d4597；工事在独立分支实施，当前只完成第 1 步的一部分。
+没有安装/战斗/UI 交付，保持 Draft，不单独发布内部检查点；普通玩法验收统一放在完整闭环之后。
+以下“当前唯一门禁”均为历史记录：
+
+2026-09-09 当前唯一门禁：`active/combat-runtime-boundaries-v1.md` 实施与用户验收完成，
+本轮已交付 [玩法框架整合收尾评审](../../architecture/GAMEPLAY_FRAMEWORK_CLOSEOUT.md)。
+集成 #156@f16544d 的代码重构阶段收尾；#149–#156 未合并，main 仍为 2ae898a。
+下一项是取得明确授权后的整条依赖链合并交付及最终 CI，不默认开启新玩法或大重构。
+本轮独立 `codex/gameplay-consolidation-closeout` 只包含文档，显式依赖 #156。
+
+以下为各切片当时的优先级记录；不得覆盖上方当前门禁：
+
+2026-09-09 当前覆盖：#155@c0b0664 已获用户验收，双平台 CI 34313046163 通过，未合并。当前活动计划为 `active/combat-runtime-boundaries-v1.md`，显式 stacked 依赖 #155；修复已复现的跨 Profile/活动/周期旧敌人与弹道残留，保留同场防守恢复合同。之后进入整合收尾评审，不默认继续大范围重构或新玩法。
+
+2026-09-09 最新覆盖：已验收 #154 接触合同后，当前窄切片为 `active/combat-frame-order-v1.md`，统一三环境敌人先推进/接触、后射击清理；显式依赖 #154、不自动合并。新玩法继续暂停，完成后只审计运行时组合/切换边界和真实剩余重复，不默认执行完整 Session/Persistence 重构。
+
+2026-09-08 当前优先级覆盖：`active/gameplay-framework-consolidation.md`，仅 Phase A/B。暂停下述产品片后续扩展；整合在 #149@d43bab0 的独立 stacked 分支交付，B 后强制暂停评估。原防守计划只作为依赖和历史证据。
+
+当前实施计划：`active/base-defense-player-participation-v1.md`。PR #148 已由用户授权以 `2ae898a` 普通合入 main，Home Region 开局可玩闭环收尾。2026-09-07 用户确认玩家亲自实时防守 v1，PR #149 连续实施领域、运行时、一致检查点和界面；交付前保持 Draft，等待独立自动化与用户正常游玩证据。旧首局/建家/愿望/远征计划保留为历史证据，不继续以新增管理小页延长阶段。

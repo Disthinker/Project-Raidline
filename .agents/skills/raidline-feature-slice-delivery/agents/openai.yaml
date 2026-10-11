@@ -1,4 +1,4 @@
 interface:
   display_name: "Raidline Feature Slice Delivery"
   short_description: "Deliver one playable Raidline product slice"
-  default_prompt: "Use $raidline-feature-slice-delivery to deliver this Raidline slice end to end."
+  default_prompt: "Use $raidline-feature-slice-delivery in the current plan, approved implementation, Bug diagnosis or human acceptance stage."
