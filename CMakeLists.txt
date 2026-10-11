@@ -741,6 +741,8 @@ raidline_add_test(
     ProfileStateTest
     tests/test_profile_state.cpp
     raidline::domain)
+raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
+raidline_add_test(RaidSceneContainerUiTest tests/test_raid_scene_container_ui.cpp raidline::sdl_client)
 raidline_add_test(
     InventoryDomainTest
     tests/test_inventory_domain.cpp

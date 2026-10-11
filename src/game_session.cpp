@@ -2077,6 +2077,55 @@ bool GameSession::resetDeveloperWeaponTuning()
     }
 }
 
+bool GameSession::raidSceneContainerAvailable(AssetInstanceId id) const
+{
+    if (!alphaRaidActive_ || !world_ || !world_->raidSession().isActive() || world_->player().isDead() || world_->player().isControlled()) return false;
+    const Vec2 p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    return raidSceneContainerAccessible(profile_, {id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}});
+}
+
+bool GameSession::canOpenRaidSceneContainer(AssetInstanceId id) const
+{
+    return raidSceneContainerAvailable(id) && raidWorldInteractionAvailable(false) && !world_->raidSpacePortalInteractionInRange();
+}
+
+std::optional<AssetInstanceId> GameSession::nearbyRaidSceneContainer() const
+{
+    std::optional<AssetInstanceId> result;
+    float closest = 72.0F * 72.0F;
+    if (!world_) return result;
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    for (const auto &[id, asset] : profile_.assets.records())
+        if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location); scene && canOpenRaidSceneContainer(id))
+        {
+            const float dx = scene->position.x - p.x - half, dy = scene->position.y - p.y - half;
+            const float distance = dx * dx + dy * dy;
+            if (distance <= closest) { closest = distance; result = id; }
+        }
+    return result;
+}
+
+InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const
+{
+    if (!raidSceneContainerAvailable(id)) return {false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    return queryInventory(profile_, publishedContentRegistry(), command, &access);
+}
+
+InventoryReceipt GameSession::executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId)
+{
+    if (!raidSceneContainerAvailable(id)) return {false, false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    return executeInventory(profile_, publishedContentRegistry(), command,
+        {profile_.revision, std::move(transactionId)}, &access);
+}
+
 InventoryReceipt GameSession::executeProfileInventory(
     const InventoryCommand &command,
     std::string transactionId)

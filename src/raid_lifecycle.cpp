@@ -1698,6 +1698,32 @@ DeployReceipt executeDeploy(
         }
     }
 
+    // Freeze two existing interior rolls in fixed scene storage. No additional
+    // reward roll or ground duplicate is introduced.
+    for (const auto &interior : map->interiors)
+    {
+        if (interior.id != RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"} &&
+            interior.id != RaidSpaceDefinitionId{"raid_space.frontier_exchange.freight_service_bay"}) continue;
+        if (interior.lootSlots.size() < 2U) continue;
+        if (!snapshot.startingAssets) snapshot.startingAssets = profile.assets;
+        const auto containerId = candidate.assets.create(
+            content.item(ItemDefinitionId{"item.container.base_storage_crate"}),
+            RaidSceneContainerAssetLocation{snapshot.raidId, interior.id, interior.lootSlots.front().position});
+        std::size_t moved{};
+        for (auto &loot : snapshot.loot)
+        {
+            if (loot.spaceId != interior.id || moved >= 2U) continue;
+            auto *asset = candidate.assets.findMutable(loot.assetId);
+            const auto container = ProfileContainerId::compartment(containerId, 0);
+            const auto fit = findFirstProfileFit(candidate, content, container,
+                content.item(asset->definitionId), asset->orientation, asset->instanceId);
+            if (!fit) return deployFailure(RaidLifecycleError::InvalidProfile,
+                "frozen scene Loot does not fit its container", profile.revision);
+            asset->location = StoredAssetLocation{container, *fit};
+            loot.sceneContainerAssetId = containerId;
+            ++moved;
+        }
+    }
     candidate.pendingRaid = std::move(snapshot);
     if (!advanceProfileWorldTime(
             candidate,
@@ -1797,7 +1823,8 @@ RaidSettlementReceipt settlePendingRaid(
     for (const auto &[assetId, asset] : candidate.assets.records())
     {
         const bool onGround =
-            std::holds_alternative<RaidGroundAssetLocation>(asset.location);
+            std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
+            std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location);
         if (onGround)
         {
             const std::set<AssetInstanceId> tree =
@@ -2060,6 +2087,7 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     std::set<AssetInstanceId> generatedLoot;
     for (const RaidLootSnapshot &loot : candidate.pendingRaid->loot)
     {
+        if (candidate.pendingRaid->startingAssets) break;
         if (selfRecoveryAssetIds.contains(loot.assetId))
         {
             continue;
@@ -2082,6 +2110,8 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     {
         static_cast<void>(candidate.assets.erase(assetId));
     }
+    if (candidate.pendingRaid->startingAssets)
+        candidate.assets = *candidate.pendingRaid->startingAssets;
     candidate.currentHealth = startingHealth;
     candidate.medicalStatus = startingMedicalStatus;
     candidate.worldClock = startingWorldClock;

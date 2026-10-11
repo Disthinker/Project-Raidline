@@ -1,5 +1,6 @@
 #include "weapon_component_domain.h"
 #include "profile_state.h"
+#include "inventory_domain.h"
 #include "base_fortification_domain.h"
 #include "base_defense_ownership.h"
 #include "home_founding_domain.h"
@@ -1922,6 +1923,21 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+        {
+            if (!profile.pendingRaid || !profile.pendingRaid->startingAssets || scene->raidId != profile.pendingRaid->raidId ||
+                asset.definitionId != ItemDefinitionId{"item.container.base_storage_crate"} || asset.quantity != 1U)
+                return {false, "Raid scene container ownership is invalid"};
+            const auto &map = content.map(profile.pendingRaid->mapDefinitionId);
+            const auto interior = std::find_if(map.interiors.begin(), map.interiors.end(),
+                [&](const auto &value) { return value.id == scene->spaceId; });
+            if (interior == map.interiors.end() || interior->lootSlots.empty() ||
+                (scene->spaceId != RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"} &&
+                 scene->spaceId != RaidSpaceDefinitionId{"raid_space.frontier_exchange.freight_service_bay"}) ||
+                scene->position.x != interior->lootSlots.front().position.x || scene->position.y != interior->lootSlots.front().position.y)
+                return {false, "Raid scene container frozen placement is invalid"};
+            continue;
+        }
         if (const auto *ground =
                 std::get_if<RaidGroundAssetLocation>(&asset.location))
         {
@@ -2250,6 +2266,28 @@ ProfileValidationResult validateProfileState(
         catch (...)
         {
             return {false, "pending Raid map is invalid"};
+        }
+        std::set<RaidSpaceDefinitionId> sceneSpaces;
+        for (const auto &[id, asset] : profile.assets.records())
+            if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+            {
+                if (!sceneSpaces.insert(scene->spaceId).second) return {false, "duplicate Raid scene container"};
+                const auto origins = std::count_if(raid.loot.begin(), raid.loot.end(),
+                    [&](const auto &loot) { return loot.sceneContainerAssetId == id; });
+                if (origins != 2) return {false, "Raid scene container frozen rolls are invalid"};
+            }
+        if (raid.startingAssets)
+        {
+            if (sceneSpaces.size() != 2U) return {false, "Raid scene container snapshot is incomplete"};
+            const auto graph = validateInventoryAssetGraph(*raid.startingAssets, content);
+            if (!graph.valid) return {false, "Raid scene rollback asset graph is invalid: " + graph.message};
+            for (const auto &[id, asset] : raid.startingAssets->records())
+            {
+                static_cast<void>(id);
+                if (std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
+                    std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location))
+                    return {false, "Raid rollback contains generated scene assets"};
+            }
         }
         const bool legacyPlayableOutdoorRules =
             raid.rulesVersion == "procedural-playable-outdoor-layout-21";
@@ -3990,6 +4028,14 @@ ProfileValidationResult validateProfileState(
                     firstInteriorSlot = end;
                 }
             }
+            if (loot.sceneContainerAssetId != 0U)
+            {
+                const auto *root = profile.assets.find(loot.sceneContainerAssetId);
+                const auto *scene = root ? std::get_if<RaidSceneContainerAssetLocation>(&root->location) : nullptr;
+                if (!scene || scene->spaceId != loot.spaceId || loot.requiresHighRisk ||
+                    (!loot.collected && raidSceneContainerRoot(profile, loot.assetId) != loot.sceneContainerAssetId))
+                    return {false, "Raid scene Loot frozen origin is invalid"};
+            }
             if (loot.assetId == 0 || loot.definitionId.value().empty() ||
                 loot.quantity == 0 ||
                 !snapshotLoot.insert(loot.assetId).second ||
@@ -4000,10 +4046,12 @@ ProfileValidationResult validateProfileState(
                 (!loot.collected && asset == nullptr) ||
                 (asset != nullptr &&
                  !groundAssetIds.contains(loot.assetId) &&
-                 !assetIsCarried(profile, loot.assetId)) ||
+                 !assetIsCarried(profile, loot.assetId) &&
+                 !raidSceneContainerRoot(profile, loot.assetId)) ||
                 (loot.collected && asset != nullptr &&
                  !groundAssetIds.contains(loot.assetId) &&
-                 !assetIsCarried(profile, loot.assetId)) ||
+                 !assetIsCarried(profile, loot.assetId) &&
+                 !raidSceneContainerRoot(profile, loot.assetId)) ||
                 (asset != nullptr &&
                  asset->definitionId != loot.definitionId))
             {
@@ -4792,6 +4840,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, ground->raidId);
             hashInteger(hash, ground->lootSlotIndex);
         }
+        else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+        {
+            hashInteger(hash, 9U);
+            hashBytes(hash, scene->raidId);
+            hashBytes(hash, scene->spaceId.value());
+            hashFloat(hash, scene->position.x);
+            hashFloat(hash, scene->position.y);
+        }
         else if (const auto *service =
                      std::get_if<BaseServiceAssetLocation>(&asset.location))
         {
@@ -4837,6 +4893,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        if (raid.startingAssets)
+        {
+            ProfileState baseline;
+            baseline.assets = *raid.startingAssets;
+            hashInteger(hash, profileStateFingerprint(baseline));
+        }
         hashBytes(hash, raid.raidId);
         hashBytes(hash, raid.settlementId);
         hashBytes(hash, raid.rulesVersion);
@@ -5014,6 +5076,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, loot.spaceId.value());
             hashBytes(hash, loot.resourcePointInstanceId);
             hashInteger(hash, loot.resourcePointSlotIndex);
+            hashInteger(hash, loot.sceneContainerAssetId);
         }
         for (const RaidInteriorSnapshot &interior : raid.interiors)
         {

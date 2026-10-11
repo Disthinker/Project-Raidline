@@ -949,10 +949,10 @@ MagazineRoundRecord parseRound(const Json &value)
     return round;
 }
 
-Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
+Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersion)
 {
     Json assets = Json::array();
-    for (const auto &[id, asset] : profile.assets.records())
+    for (const auto &[id, asset] : registry.records())
     {
         static_cast<void>(id);
         Json location;
@@ -1020,6 +1020,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 {"type", "raid_ground"},
                 {"raid_id", ground->raidId},
                 {"loot_slot_index", ground->lootSlotIndex}};
+        }
+        else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+        {
+            if (schemaVersion < 51) throw std::invalid_argument("Raid scene containers require schema 51");
+            location = {{"type", "raid_scene_container"}, {"raid_id", scene->raidId},
+                {"space_id", scene->spaceId.value()}, {"position", vectorValue(scene->position)}};
         }
         else if (const auto *ground =
                      std::get_if<BaseGroundAssetLocation>(&asset.location))
@@ -1112,6 +1118,231 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         }
         assets.push_back(std::move(value));
     }
+
+    return assets;
+}
+
+SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
+    std::uint32_t schemaVersion, const ContentRegistry &content)
+{
+        for (const Json &value : values)
+        {
+            AssetRecord asset;
+            asset.instanceId = value.at("instance_id").get<AssetInstanceId>();
+            asset.definitionId = ItemDefinitionId{
+                value.at("definition_id").get<std::string>()};
+            asset.quantity = value.at("quantity").get<std::uint32_t>();
+            const auto orientation = parseOrientation(
+                value.at("orientation").get<std::string>());
+            if (!orientation.has_value())
+            {
+                return {SaveLoadStatus::Failed, std::nullopt, "asset orientation is invalid"};
+            }
+            asset.orientation = *orientation;
+            asset.remainingCharges =
+                value.at("remaining_charges").get<std::uint32_t>();
+            if (schemaVersion >= 3)
+            {
+                asset.currentMaximumDurability = value.at(
+                    "current_maximum_durability").get<std::uint32_t>();
+                asset.currentDurability = value.at(
+                    "current_durability").get<std::uint32_t>();
+            }
+            else
+            {
+                const ItemDefinition &definition =
+                    content.item(asset.definitionId);
+                if (definition.armorProtection.has_value())
+                {
+                    asset.currentMaximumDurability =
+                        definition.armorProtection->maximumDurability;
+                    asset.currentDurability = asset.currentMaximumDurability;
+                }
+            }
+            const ItemDefinition &assetDefinition =
+                content.item(asset.definitionId);
+            if (schemaVersion < 5 &&
+                assetDefinition.weaponCondition.has_value())
+            {
+                asset.currentMaximumDurability =
+                    assetDefinition.weaponCondition->maximumDurabilityCenti;
+                asset.currentDurability = asset.currentMaximumDurability;
+                asset.weaponMalfunction = WeaponMalfunctionType::None;
+            }
+            else if (schemaVersion >= 5)
+            {
+                const auto malfunction = parseMalfunction(
+                    value.at("weapon_malfunction").get<std::string>());
+                if (!malfunction.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "weapon malfunction is invalid"};
+                }
+                asset.weaponMalfunction = *malfunction;
+            }
+            if (schemaVersion < 6 &&
+                assetDefinition.weaponCondition.has_value() &&
+                asset.currentMaximumDurability == 0)
+            {
+                // Schema v5 could contain legacy weapon instances that only
+                // became durable production weapons in content v4 (the
+                // pistol). Give those instances the new definition baseline
+                // without overwriting condition already persisted by v5.
+                asset.currentMaximumDurability =
+                    assetDefinition.weaponCondition->maximumDurabilityCenti;
+                asset.currentDurability = asset.currentMaximumDurability;
+                asset.weaponMalfunction = WeaponMalfunctionType::None;
+            }
+            if (value.contains("relief_batch_id"))
+            {
+                asset.reliefBatchId =
+                    value.at("relief_batch_id").get<std::string>();
+                if (asset.reliefBatchId->empty())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt, "relief batch ID is empty"};
+                }
+            }
+            if (schemaVersion >= 2)
+            {
+                for (const Json &round : value.at("magazine_rounds"))
+                {
+                    asset.magazineRounds.push_back(parseRound(round));
+                }
+                if (!value.at("chambered_round").is_null())
+                {
+                    asset.chamberedRound =
+                        parseRound(value.at("chambered_round"));
+                }
+            }
+
+            const Json &location = value.at("location");
+            const std::string locationType =
+                location.at("type").get<std::string>();
+            if (locationType == "equipped")
+            {
+                const auto slot = parseSlot(
+                    location.at("slot").get<std::string>());
+                if (!slot.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt, "equipment slot is invalid"};
+                }
+                asset.location = EquippedAssetLocation{*slot};
+            }
+            else if (locationType == "stored")
+            {
+                const Json &container = location.at("container");
+                ProfileContainerId containerId;
+                const std::string containerType =
+                    container.at("type").get<std::string>();
+                if (containerType == "stash")
+                {
+                    containerId = ProfileContainerId::stash();
+                }
+                else if (schemaVersion >= 7 &&
+                         containerType == "base_intake")
+                {
+                    containerId = ProfileContainerId::baseIntake();
+                }
+                else if (containerType == "asset_compartment")
+                {
+                    containerId = ProfileContainerId::compartment(
+                        container.at("owner_asset_id").get<AssetInstanceId>(),
+                        container.at("compartment").get<std::uint32_t>());
+                }
+                else
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt, "container type is invalid"};
+                }
+                const Json &origin = location.at("origin");
+                asset.location = StoredAssetLocation{
+                    containerId,
+                    GridPosition{
+                        origin.at("x").get<int>(),
+                        origin.at("y").get<int>()}};
+            }
+            else if (schemaVersion >= 2 &&
+                     locationType == "installed_magazine")
+            {
+                asset.location = InstalledMagazineLocation{
+                    location.at("weapon_asset_id").get<AssetInstanceId>()};
+            }
+            else if (schemaVersion >= 49 && locationType == "installed_weapon_component")
+            {
+                asset.location = InstalledWeaponComponentLocation{location.at("weapon_asset_id").get<AssetInstanceId>()};
+            }
+            else if (schemaVersion >= 2 && locationType == "raid_ground")
+            {
+                asset.location = RaidGroundAssetLocation{
+                    location.at("raid_id").get<std::string>(),
+                    location.at("loot_slot_index").get<std::uint32_t>()};
+            }
+            else if (schemaVersion >= 51 && locationType == "raid_scene_container")
+            {
+                asset.location = RaidSceneContainerAssetLocation{
+                    location.at("raid_id").get<std::string>(),
+                    RaidSpaceDefinitionId{location.at("space_id").get<std::string>()},
+                    parseVector(location.at("position"))};
+            }
+            else if (schemaVersion >= 39 && locationType == "base_ground")
+            {
+                const Json &position = location.at("position");
+                asset.location = BaseGroundAssetLocation{
+                    RegionalBaseSiteDefinitionId{
+                        location.at("base_site_definition_id")
+                            .get<std::string>()},
+                    Vec2{
+                        position.at("x").get<float>(),
+                        position.at("y").get<float>()}};
+            }
+            else if (schemaVersion >= 10 && locationType == "base_service")
+            {
+                asset.location = BaseServiceAssetLocation{
+                    location.at("job_id").get<BaseServiceJobId>()};
+            }
+            else if (schemaVersion >= 24 && locationType == "lost_raid")
+            {
+                const auto slot = parseSlot(
+                    location.at("source_slot").get<std::string>());
+                if (!slot.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "lost Raid source slot is invalid"};
+                }
+                asset.location = LostRaidAssetLocation{
+                    location.at("record_id").get<std::string>(),
+                    *slot};
+            }
+            else if (schemaVersion >= 25 &&
+                     locationType == "recovery_task")
+            {
+                const auto slot = parseSlot(
+                    location.at("source_slot").get<std::string>());
+                if (!slot.has_value())
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "recovery task source slot is invalid"};
+                }
+                asset.location = RecoveryTaskAssetLocation{
+                    location.at("task_id").get<RecoveryTaskId>(),
+                    *slot};
+            }
+            else
+            {
+                return {SaveLoadStatus::Failed, std::nullopt, "asset location type is invalid"};
+            }
+
+            if (!registry.insertLoaded(std::move(asset)))
+            {
+                return {SaveLoadStatus::Failed, std::nullopt, "asset ID is duplicated"};
+            }
+        }
+
+    return {SaveLoadStatus::LoadedPrimary, std::nullopt, {}};
+}
+
+Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
+{
+    Json assets = assetRegistryValue(profile.assets, schemaVersion);
 
     Json transactions = Json::array();
     for (const std::string &transaction : profile.committedTransactions)
@@ -1674,6 +1905,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 lootEntry["resource_point_slot_index"] =
                     entry.resourcePointSlotIndex;
             }
+            if (schemaVersion >= 51) lootEntry["scene_container_asset_id"] = entry.sceneContainerAssetId;
+            else if (entry.sceneContainerAssetId) throw std::invalid_argument("scene Loot origin requires schema 51");
             loot.push_back(std::move(lootEntry));
         }
         payload["pending_raid"] = {
@@ -1693,6 +1926,11 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"loot", std::move(loot)},
             {"carried_root_asset_ids", raid.carriedRootAssetIds},
             {"starting_health", raid.startingHealth}};
+        if (raid.startingAssets && schemaVersion < 51) throw std::invalid_argument("scene rollback requires schema 51");
+        if (schemaVersion >= 51)
+            payload["pending_raid"]["starting_assets"] = raid.startingAssets
+                ? Json{{"next_asset_id", raid.startingAssets->nextAssetId()},
+                       {"assets", assetRegistryValue(*raid.startingAssets, schemaVersion)}} : Json(nullptr);
         if (schemaVersion >= 4)
         {
             payload["pending_raid"]["starting_medical_status"] = {
@@ -2418,7 +2656,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2607,7 +2845,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3281,210 +3519,8 @@ SaveLoadResult deserializeProfileEnvelope(
             }
         }
 
-        for (const Json &value : payload.at("assets"))
-        {
-            AssetRecord asset;
-            asset.instanceId = value.at("instance_id").get<AssetInstanceId>();
-            asset.definitionId = ItemDefinitionId{
-                value.at("definition_id").get<std::string>()};
-            asset.quantity = value.at("quantity").get<std::uint32_t>();
-            const auto orientation = parseOrientation(
-                value.at("orientation").get<std::string>());
-            if (!orientation.has_value())
-            {
-                return {SaveLoadStatus::Failed, std::nullopt, "asset orientation is invalid"};
-            }
-            asset.orientation = *orientation;
-            asset.remainingCharges =
-                value.at("remaining_charges").get<std::uint32_t>();
-            if (schemaVersion >= 3)
-            {
-                asset.currentMaximumDurability = value.at(
-                    "current_maximum_durability").get<std::uint32_t>();
-                asset.currentDurability = value.at(
-                    "current_durability").get<std::uint32_t>();
-            }
-            else
-            {
-                const ItemDefinition &definition =
-                    content.item(asset.definitionId);
-                if (definition.armorProtection.has_value())
-                {
-                    asset.currentMaximumDurability =
-                        definition.armorProtection->maximumDurability;
-                    asset.currentDurability = asset.currentMaximumDurability;
-                }
-            }
-            const ItemDefinition &assetDefinition =
-                content.item(asset.definitionId);
-            if (schemaVersion < 5 &&
-                assetDefinition.weaponCondition.has_value())
-            {
-                asset.currentMaximumDurability =
-                    assetDefinition.weaponCondition->maximumDurabilityCenti;
-                asset.currentDurability = asset.currentMaximumDurability;
-                asset.weaponMalfunction = WeaponMalfunctionType::None;
-            }
-            else if (schemaVersion >= 5)
-            {
-                const auto malfunction = parseMalfunction(
-                    value.at("weapon_malfunction").get<std::string>());
-                if (!malfunction.has_value())
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt,
-                            "weapon malfunction is invalid"};
-                }
-                asset.weaponMalfunction = *malfunction;
-            }
-            if (schemaVersion < 6 &&
-                assetDefinition.weaponCondition.has_value() &&
-                asset.currentMaximumDurability == 0)
-            {
-                // Schema v5 could contain legacy weapon instances that only
-                // became durable production weapons in content v4 (the
-                // pistol). Give those instances the new definition baseline
-                // without overwriting condition already persisted by v5.
-                asset.currentMaximumDurability =
-                    assetDefinition.weaponCondition->maximumDurabilityCenti;
-                asset.currentDurability = asset.currentMaximumDurability;
-                asset.weaponMalfunction = WeaponMalfunctionType::None;
-            }
-            if (value.contains("relief_batch_id"))
-            {
-                asset.reliefBatchId =
-                    value.at("relief_batch_id").get<std::string>();
-                if (asset.reliefBatchId->empty())
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt, "relief batch ID is empty"};
-                }
-            }
-            if (schemaVersion >= 2)
-            {
-                for (const Json &round : value.at("magazine_rounds"))
-                {
-                    asset.magazineRounds.push_back(parseRound(round));
-                }
-                if (!value.at("chambered_round").is_null())
-                {
-                    asset.chamberedRound =
-                        parseRound(value.at("chambered_round"));
-                }
-            }
-
-            const Json &location = value.at("location");
-            const std::string locationType =
-                location.at("type").get<std::string>();
-            if (locationType == "equipped")
-            {
-                const auto slot = parseSlot(
-                    location.at("slot").get<std::string>());
-                if (!slot.has_value())
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt, "equipment slot is invalid"};
-                }
-                asset.location = EquippedAssetLocation{*slot};
-            }
-            else if (locationType == "stored")
-            {
-                const Json &container = location.at("container");
-                ProfileContainerId containerId;
-                const std::string containerType =
-                    container.at("type").get<std::string>();
-                if (containerType == "stash")
-                {
-                    containerId = ProfileContainerId::stash();
-                }
-                else if (schemaVersion >= 7 &&
-                         containerType == "base_intake")
-                {
-                    containerId = ProfileContainerId::baseIntake();
-                }
-                else if (containerType == "asset_compartment")
-                {
-                    containerId = ProfileContainerId::compartment(
-                        container.at("owner_asset_id").get<AssetInstanceId>(),
-                        container.at("compartment").get<std::uint32_t>());
-                }
-                else
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt, "container type is invalid"};
-                }
-                const Json &origin = location.at("origin");
-                asset.location = StoredAssetLocation{
-                    containerId,
-                    GridPosition{
-                        origin.at("x").get<int>(),
-                        origin.at("y").get<int>()}};
-            }
-            else if (schemaVersion >= 2 &&
-                     locationType == "installed_magazine")
-            {
-                asset.location = InstalledMagazineLocation{
-                    location.at("weapon_asset_id").get<AssetInstanceId>()};
-            }
-            else if (schemaVersion >= 49 && locationType == "installed_weapon_component")
-            {
-                asset.location = InstalledWeaponComponentLocation{location.at("weapon_asset_id").get<AssetInstanceId>()};
-            }
-            else if (schemaVersion >= 2 && locationType == "raid_ground")
-            {
-                asset.location = RaidGroundAssetLocation{
-                    location.at("raid_id").get<std::string>(),
-                    location.at("loot_slot_index").get<std::uint32_t>()};
-            }
-            else if (schemaVersion >= 39 && locationType == "base_ground")
-            {
-                const Json &position = location.at("position");
-                asset.location = BaseGroundAssetLocation{
-                    RegionalBaseSiteDefinitionId{
-                        location.at("base_site_definition_id")
-                            .get<std::string>()},
-                    Vec2{
-                        position.at("x").get<float>(),
-                        position.at("y").get<float>()}};
-            }
-            else if (schemaVersion >= 10 && locationType == "base_service")
-            {
-                asset.location = BaseServiceAssetLocation{
-                    location.at("job_id").get<BaseServiceJobId>()};
-            }
-            else if (schemaVersion >= 24 && locationType == "lost_raid")
-            {
-                const auto slot = parseSlot(
-                    location.at("source_slot").get<std::string>());
-                if (!slot.has_value())
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt,
-                            "lost Raid source slot is invalid"};
-                }
-                asset.location = LostRaidAssetLocation{
-                    location.at("record_id").get<std::string>(),
-                    *slot};
-            }
-            else if (schemaVersion >= 25 &&
-                     locationType == "recovery_task")
-            {
-                const auto slot = parseSlot(
-                    location.at("source_slot").get<std::string>());
-                if (!slot.has_value())
-                {
-                    return {SaveLoadStatus::Failed, std::nullopt,
-                            "recovery task source slot is invalid"};
-                }
-                asset.location = RecoveryTaskAssetLocation{
-                    location.at("task_id").get<RecoveryTaskId>(),
-                    *slot};
-            }
-            else
-            {
-                return {SaveLoadStatus::Failed, std::nullopt, "asset location type is invalid"};
-            }
-
-            if (!profile.assets.insertLoaded(std::move(asset)))
-            {
-                return {SaveLoadStatus::Failed, std::nullopt, "asset ID is duplicated"};
-            }
-        }
+        const auto assetLoad = parseAssetRegistry(profile.assets, payload.at("assets"), schemaVersion, content);
+        if (assetLoad.status == SaveLoadStatus::Failed) return assetLoad;
 
         if (schemaVersion >= 10 &&
             !payload.at("gunsmith_maintenance_job").is_null())
@@ -3609,6 +3645,19 @@ SaveLoadResult deserializeProfileEnvelope(
                         ? entry.at("resource_point_slot_index")
                               .get<std::uint32_t>()
                         : 0U});
+            }
+            if (schemaVersion >= 51)
+            {
+                for (std::size_t i{}; i < raid.loot.size(); ++i)
+                    raid.loot[i].sceneContainerAssetId = value.at("loot")[i].at("scene_container_asset_id").get<AssetInstanceId>();
+                if (!value.at("starting_assets").is_null())
+                {
+                    raid.startingAssets.emplace();
+                    const auto &baseline = value.at("starting_assets");
+                    raid.startingAssets->setNextAssetIdForLoad(baseline.at("next_asset_id").get<AssetInstanceId>());
+                    const auto loaded = parseAssetRegistry(*raid.startingAssets, baseline.at("assets"), schemaVersion, content);
+                    if (loaded.status == SaveLoadStatus::Failed) return loaded;
+                }
             }
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")

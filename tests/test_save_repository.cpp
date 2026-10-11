@@ -34,6 +34,24 @@
 
 namespace
 {
+// Historical pending-Raid fixtures predate scene storage. Preserve their
+// original frozen Loot identities and positions rather than downgrading new data.
+void stripSceneStorageForLegacySnapshot(ProfileState &profile)
+{
+    if (!profile.pendingRaid) return;
+    std::vector<AssetInstanceId> roots;
+    for (const auto &[id, asset] : profile.assets.records())
+        if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location)) roots.push_back(id);
+    for (auto &loot : profile.pendingRaid->loot)
+        if (loot.sceneContainerAssetId)
+        {
+            profile.assets.findMutable(loot.assetId)->location = RaidGroundAssetLocation{profile.pendingRaid->raidId, loot.slotIndex};
+            loot.sceneContainerAssetId = 0;
+        }
+    for (auto id : roots) static_cast<void>(profile.assets.erase(id));
+    profile.pendingRaid->startingAssets.reset();
+}
+
 class TemporarySaveDirectory
 {
 public:
@@ -2003,6 +2021,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
             {}},
         {profile.revision, "save-v49-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     // Historical content predates armored guards; build the old frozen snapshot.
     for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
     {
@@ -2042,6 +2061,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
             {}},
         {profile.revision, "save-v50-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     // Historical content predates armored guards; build the old frozen snapshot.
     for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
     {
@@ -2083,6 +2103,7 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
             {}},
         {profile.revision, "save-v51-pending-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     // Historical content predates armored guards; build the old frozen snapshot.
     for (RaidEnemySnapshot &enemy : profile.pendingRaid->enemies)
     {
@@ -2235,6 +2256,7 @@ TEST(SaveRepositoryTest,
             {}},
         {profile.revision, "save-layout-v3-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     downgradeFrontierResourceEcologyToLayoutV3(
         profile, content.map(profile.pendingRaid->mapDefinitionId));
     const ProfileValidationResult downgradedValidation =
@@ -2279,6 +2301,7 @@ TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
             {}},
         {profile.revision, "save-layout-v2-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     PendingRaidSnapshot &raid = *profile.pendingRaid;
     const MapDefinition &publishedMap = content.map(raid.mapDefinitionId);
     downgradeFrontierLootToLegacySlots(profile, publishedMap);
@@ -3120,6 +3143,7 @@ TEST(SaveRepositoryTest,
             {}},
         {profile.revision, "save-known-interior-deploy"}).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(profile);
     ASSERT_EQ(profile.pendingRaid->interiors.size(), 2U);
     ASSERT_TRUE(profile.pendingRaid->interiors.front().layoutKnown);
     EXPECT_FALSE(profile.pendingRaid->interiors[1].layoutKnown);
@@ -3305,6 +3329,7 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
         {legacyProfile.revision, "save-legacy-interior-deploy"})
                     .succeeded);
     ASSERT_TRUE(legacyProfile.pendingRaid.has_value());
+    stripSceneStorageForLegacySnapshot(legacyProfile);
     PendingRaidSnapshot &raid = *legacyProfile.pendingRaid;
     downgradeFrontierLootToLegacySlots(legacyProfile, map);
     const RaidSpaceDefinitionId secondInteriorId = map.interiors[1].id;

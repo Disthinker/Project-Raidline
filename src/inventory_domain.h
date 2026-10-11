@@ -60,13 +60,29 @@ struct InventoryPlan
     ProfileRevision revision{};
 };
 
+[[nodiscard]] ProfileValidationResult validateInventoryAssetGraph(const AssetRegistry &assets, const ContentRegistry &content);
+
+struct RaidSceneContainerAccess
+{
+    AssetInstanceId containerAssetId{};
+    RaidSpaceDefinitionId spaceId;
+    Vec2 playerCenter{};
+};
+
+[[nodiscard]] std::optional<AssetInstanceId> raidSceneContainerRoot(
+    const ProfileState &profile, AssetInstanceId assetId);
+[[nodiscard]] bool raidSceneContainerAccessible(
+    const ProfileState &profile, const RaidSceneContainerAccess &access);
+
 [[nodiscard]] InventoryPlan queryInventory(
     const ProfileState &profile,
     const ContentRegistry &content,
-    const InventoryCommand &command);
+    const InventoryCommand &command,
+    const RaidSceneContainerAccess *sceneAccess = nullptr);
 
 [[nodiscard]] InventoryReceipt executeInventory(
     ProfileState &profile,
     const ContentRegistry &content,
     const InventoryCommand &command,
-    const CommandContext &context);
+    const CommandContext &context,
+    const RaidSceneContainerAccess *sceneAccess = nullptr);

@@ -140,6 +140,7 @@ private:
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
+    friend struct RaidSceneContainerUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
 
@@ -184,6 +185,7 @@ private:
     std::optional<ProfileAssetSelection> profileAssetSelection_;
     std::optional<ProfileContextMenu> profileContextMenu_;
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
+    std::optional<AssetInstanceId> openedRaidSceneContainerId_;
     std::optional<BasePlacementState> basePlacementState_;
     std::optional<BaseFixedFacilityPlacementState>
         baseFixedFacilityPlacementState_;

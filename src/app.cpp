@@ -830,7 +830,7 @@ namespace
                         kBaseStashCellSize,
                         fmt::format(
                             "{} | COMPARTMENT {}",
-                            definition.displayName,
+                            std::holds_alternative<RaidSceneContainerAssetLocation>(owner->location) ? "SCENE STORAGE" : definition.displayName,
                             index + 1U)});
                     y += static_cast<float>(compartment.height) *
                         kBaseStashCellSize + 38.0F;
@@ -2750,6 +2750,7 @@ void App::closeInventory() noexcept
     profileContextMenu_.reset();
     profileAssetSelection_.reset();
     openedBaseGroundContainerId_.reset();
+    openedRaidSceneContainerId_.reset();
 
     inventoryOverlayState_.close();
     input_.suppressPrimaryPointerUntilRelease();
@@ -4767,7 +4768,7 @@ void App::handleProfileInventoryUiEvent(
     }
 
     const std::optional<AssetInstanceId> externalContainerId = inRaid
-        ? std::nullopt
+        ? openedRaidSceneContainerId_
         : openedBaseGroundContainerId_;
     const bool includeStash = !inRaid &&
         inventoryOverlayState_.showsExternalContainer() &&
@@ -4784,7 +4785,7 @@ void App::handleProfileInventoryUiEvent(
     }
     if (std::holds_alternative<InventoryQuickTransferEvent>(event))
     {
-        if (inRaid)
+        if (inRaid && !externalContainerId)
         {
             return;
         }
@@ -4808,7 +4809,7 @@ void App::handleProfileInventoryUiEvent(
         if (const auto equipmentTarget = queryProfileQuickEquipTarget(
                 profile,
                 publishedContentRegistry(),
-                asset.instanceId))
+                asset.instanceId); equipmentTarget && !(inRaid && externalContainerId))
         {
             executeProfileDrop(
                 ProfileDropRequest{
@@ -4819,7 +4820,7 @@ void App::handleProfileInventoryUiEvent(
                         0,
                         asset.orientation},
                     *equipmentTarget},
-                false);
+                inRaid);
             return;
         }
         if (!includeStash && !externalContainerId.has_value())
@@ -4867,6 +4868,18 @@ void App::handleProfileInventoryUiEvent(
         }
         for (ProfileContainerId container : destinations)
         {
+            if (inRaid && externalContainerId && definition.maxStackSize > 1U)
+                for (const auto *stack : assetsInContainer(profile, container))
+                {
+                    if (stack->instanceId == asset.instanceId || stack->definitionId != asset.definitionId) continue;
+                    const auto location = std::get<StoredAssetLocation>(stack->location);
+                    const InventoryCommand merge = InventoryMoveCommand{asset.instanceId, 0, location, asset.orientation};
+                    if (gameSession_.queryRaidSceneContainerInventory(*externalContainerId, merge).canCommit)
+                    {
+                        executeProfileDrop({{asset.instanceId, profile.revision, asset.location, 0, asset.orientation}, StoredCellTarget{location}}, true);
+                        return;
+                    }
+                }
             const auto fit = findFirstProfileFit(
                 profile,
                 publishedContentRegistry(),
@@ -4909,7 +4922,9 @@ void App::handleProfileInventoryUiEvent(
                     0,
                     std::get<StoredCellTarget>(request.target).location,
                     asset.orientation};
-                allowed = externalContainerId.has_value()
+                allowed = inRaid && externalContainerId
+                    ? gameSession_.queryRaidSceneContainerInventory(*externalContainerId, command).canCommit
+                    : externalContainerId.has_value()
                     ? gameFlow_.queryBaseGroundContainerInventory(
                           *externalContainerId,
                           command).canCommit
@@ -4920,7 +4935,7 @@ void App::handleProfileInventoryUiEvent(
             }
             if (allowed)
             {
-                executeProfileDrop(request, false);
+                executeProfileDrop(request, inRaid);
                 return;
             }
         }
@@ -5064,7 +5079,7 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
         return;
     }
     const std::optional<AssetInstanceId> externalContainerId = inRaid
-        ? std::nullopt
+        ? openedRaidSceneContainerId_
         : openedBaseGroundContainerId_;
     const bool includeStash = !inRaid &&
         inventoryOverlayState_.showsExternalContainer() &&
@@ -5103,6 +5118,13 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
 void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
 {
     const ProfileState &profile = gameSession_.profile();
+    if (inRaid && raidSceneContainerRoot(profile, request.source.instanceId) &&
+        !std::holds_alternative<StoredCellTarget>(request.target) && !std::holds_alternative<EquipmentSlotTarget>(request.target))
+    {
+        uiMessage_ = "MOVE ITEM TO CARRIED INVENTORY FIRST";
+        gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
     if (!profileDragSourceMatches(profile, request.source))
     {
         uiMessage_ = "INVENTORY CHANGED - TRY AGAIN";
@@ -5156,7 +5178,9 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 const std::string transactionId = nextProfileTransactionId(
                     inRaid ? "raid-move" : "base-move");
                 const InventoryReceipt receipt =
-                    !inRaid && openedBaseGroundContainerId_.has_value()
+                    inRaid && openedRaidSceneContainerId_
+                        ? gameSession_.executeRaidSceneContainerInventory(*openedRaidSceneContainerId_, command, transactionId)
+                        : !inRaid && openedBaseGroundContainerId_.has_value()
                         ? gameFlow_.executeBaseGroundContainerInventory(
                               *openedBaseGroundContainerId_,
                               command,
@@ -5180,7 +5204,9 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                 const std::string transactionId = nextProfileTransactionId(
                     inRaid ? "raid-equip" : "base-equip");
                 const InventoryReceipt receipt =
-                    !inRaid && openedBaseGroundContainerId_.has_value()
+                    inRaid && openedRaidSceneContainerId_
+                        ? gameSession_.executeRaidSceneContainerInventory(*openedRaidSceneContainerId_, command, transactionId)
+                        : !inRaid && openedBaseGroundContainerId_.has_value()
                         ? gameFlow_.executeBaseGroundContainerInventory(
                               *openedBaseGroundContainerId_,
                               command,
@@ -6647,6 +6673,14 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    // Revoke the external view before processing queued clicks or stale drags.
+    if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
+    {
+        closeInventory();
+        pendingInventoryUiEvents_.clear();
+        pendingProfileRightClicks_.clear();
+        uiMessage_ = "SCENE CONTAINER OUT OF RANGE";
+    }
     if (!gameSession_.developerRangeActive())
     {
         developerRangePanelOpen_ = false;
@@ -6966,6 +7000,25 @@ void App::update(float deltaTime)
     {
         gameplayInput.quitRaidJustPressed = false;
     }
+    if (gameplayInput.interactJustPressed && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
+        !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
+        inputDecision.controlAction == InventoryFrameControlAction::None)
+    {
+        if (const auto container = gameSession_.nearbyRaidSceneContainer())
+        {
+            profileInventoryInteraction_.reset();
+            profileContextMenu_.reset();
+            openedRaidSceneContainerId_ = container;
+            inventoryOverlayState_.openContainerInventory();
+            input_.suppressPrimaryPointerUntilRelease();
+            gameplayInput.inventoryOpen = true;
+            gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
+            gameplayInput.fireJustPressed = gameplayInput.firePressed = false;
+            gameplayInput.reloadJustPressed = gameplayInput.healJustPressed = false;
+            gameplayInput.weaponSlotJustPressed.reset();
+            uiMessage_ = "SCENE CONTAINER OPENED | WORLD CONTINUES";
+        }
+    }
     const InventoryContainerInteractionDecision
         containerDecision =
             decideInventoryContainerInteraction(
@@ -6994,6 +7047,11 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
+    {
+        closeInventory();
+        uiMessage_ = "SCENE CONTAINER OUT OF RANGE";
+    }
     if (gameFlow_.state() == GameFlowState::Base)
     {
         closeInventory();
@@ -8315,7 +8373,7 @@ void App::renderInventoryOverlay()
 
     if (gameSession_.world().isAlphaRaidWorld())
     {
-        renderProfileInventory(false, true);
+        renderProfileInventory(false, true, openedRaidSceneContainerId_);
         return;
     }
 
@@ -14264,7 +14322,9 @@ void App::renderProfileDragFeedback(
                             source->quantity,
                             typedTarget.location,
                             source->orientation};
-                        allowed = externalContainerId.has_value()
+                        allowed = inRaid && externalContainerId
+                            ? gameSession_.queryRaidSceneContainerInventory(*externalContainerId, command).canCommit
+                            : externalContainerId.has_value()
                             ? gameFlow_.queryBaseGroundContainerInventory(
                                   *externalContainerId,
                                   command).canCommit
@@ -14307,7 +14367,9 @@ void App::renderProfileDragFeedback(
                     const InventoryCommand command = InventoryEquipCommand{
                         source->instanceId,
                         typedTarget.slot};
-                    const bool allowed = externalContainerId.has_value()
+                    const bool allowed = inRaid && externalContainerId
+                        ? gameSession_.queryRaidSceneContainerInventory(*externalContainerId, command).canCommit
+                        : externalContainerId.has_value()
                         ? gameFlow_.queryBaseGroundContainerInventory(
                               *externalContainerId,
                               command).canCommit
@@ -14412,6 +14474,12 @@ void App::renderProfileDragFeedback(
             *target);
     }
 
+    if (inRaid && raidSceneContainerRoot(profile, source->instanceId) && target &&
+        !std::holds_alternative<StoredCellTarget>(*target) && !std::holds_alternative<EquipmentSlotTarget>(*target))
+    {
+        feedback.kind = ProfileDropFeedbackKind::Invalid;
+        feedback.label = "MOVE ITEM TO CARRIED INVENTORY FIRST";
+    }
     SDL_Color color{212, 72, 72, 255};
     if (feedback.kind == ProfileDropFeedbackKind::Ordinary)
     {
@@ -14929,6 +14997,7 @@ void App::renderProfileInventory(
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 102, 156, 168, 255);
     SDL_RenderRect(renderer_, &panel);
+    if (inRaid) SDL_SetRenderDrawColor(renderer_, 230, 230, 210, 255);
     uiTextRenderer_.render(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
     if (includeStash)
     {
@@ -14938,7 +15007,9 @@ void App::renderProfileInventory(
     else if (externalContainerId.has_value())
     {
         uiTextRenderer_.render(
-            renderer_, 668.0F, 70.0F, "BASE GROUND CONTAINER");
+            renderer_, 668.0F, 70.0F, inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER");
+        if (!inRaid)
+        {
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
         const SDL_FRect pickup = profileGroundContainerPickupRect();
         SDL_SetRenderDrawColor(renderer_, 38, 70, 64, 255);
@@ -14948,6 +15019,12 @@ void App::renderProfileInventory(
         uiTextRenderer_.render(
             renderer_, pickup.x + 14.0F, pickup.y + 10.0F,
             "PICK UP CONTAINER");
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(renderer_, 220, 220, 190, 255);
+            uiTextRenderer_.render(renderer_, 668, 100, "F: QUICK TRANSFER | WORLD CONTINUES");
+        }
     }
 
     const SDL_FRect preview{42.0F, 96.0F, 150.0F, 250.0F};
@@ -15264,6 +15341,20 @@ void App::renderAlphaRaidLoot()
             SDL_RenderFillRect(renderer_, &progress);
         }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    }
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location);
+        if (!scene || scene->spaceId != gameSession_.world().activeRaidSpaceId()) continue;
+        const SDL_FRect box{scene->position.x - 24, scene->position.y - 18, 48, 36};
+        SDL_SetRenderDrawColor(renderer_, 86, 76, 52, 255);
+        SDL_RenderFillRect(renderer_, &box);
+        SDL_SetRenderDrawColor(renderer_, 224, 195, 123, 255);
+        SDL_RenderRect(renderer_, &box);
+        SDL_RenderLine(renderer_, box.x, box.y + 12, box.x + box.w, box.y + 12);
+        SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
+        uiTextRenderer_.render(renderer_, box.x, box.y - 20,
+            !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: OPEN STORAGE" : "SCENE STORAGE");
     }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {

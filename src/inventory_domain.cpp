@@ -1,5 +1,6 @@
 #include "weapon_component_domain.h"
 #include "inventory_domain.h"
+#include <cmath>
 
 #include "lost_raid_domain.h"
 
@@ -561,11 +562,72 @@ InventoryReceipt apply(
 }
 }
 
+ProfileValidationResult validateInventoryAssetGraph(const AssetRegistry &assets, const ContentRegistry &content)
+{
+    ProfileState candidate;
+    candidate.assets = assets;
+    InventoryReceipt receipt;
+    const bool valid = validateCandidate(candidate, content, receipt, false);
+    return {valid, receipt.message};
+}
+
+std::optional<AssetInstanceId> raidSceneContainerRoot(
+    const ProfileState &profile, AssetInstanceId assetId)
+{
+    std::set<AssetInstanceId> visited;
+    while (visited.insert(assetId).second)
+    {
+        const AssetRecord *asset = profile.assets.find(assetId);
+        if (!asset) return std::nullopt;
+        if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset->location)) return assetId;
+        if (const auto *stored = std::get_if<StoredAssetLocation>(&asset->location); stored && stored->container.kind == ProfileContainerKind::AssetCompartment)
+            assetId = stored->container.ownerAssetId;
+        else if (const auto *mag = std::get_if<InstalledMagazineLocation>(&asset->location)) assetId = mag->weaponAssetId;
+        else if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&asset->location)) assetId = part->weaponAssetId;
+        else return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneContainerAccess &access)
+{
+    const auto *asset = profile.assets.find(access.containerAssetId);
+    const auto *scene = asset ? std::get_if<RaidSceneContainerAssetLocation>(&asset->location) : nullptr;
+    if (!scene || !profile.pendingRaid || scene->raidId != profile.pendingRaid->raidId || scene->spaceId != access.spaceId ||
+        !std::isfinite(access.playerCenter.x) || !std::isfinite(access.playerCenter.y)) return false;
+    const float dx = scene->position.x - access.playerCenter.x, dy = scene->position.y - access.playerCenter.y;
+    return dx * dx + dy * dy <= 72.0F * 72.0F;
+}
+
+namespace
+{
+bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &command, const RaidSceneContainerAccess *access)
+{
+    const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
+    const auto sourceRoot = raidSceneContainerRoot(profile, sourceId);
+    std::optional<AssetInstanceId> destinationRoot;
+    if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
+        destinationRoot = raidSceneContainerRoot(profile, move->destination.container.ownerAssetId);
+    if (!sourceRoot && !destinationRoot) return true;
+    if (!access || !raidSceneContainerAccessible(profile, *access)) return false;
+    if ((sourceRoot && *sourceRoot != access->containerAssetId) || (destinationRoot && *destinationRoot != access->containerAssetId)) return false;
+    const auto *source = profile.assets.find(sourceId);
+    if (!source || std::holds_alternative<RaidSceneContainerAssetLocation>(source->location)) return false;
+    if (!sourceRoot && !assetIsCarried(profile, sourceId)) return false;
+    if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && !destinationRoot)
+        return move->destination.container.kind == ProfileContainerKind::AssetCompartment && assetIsCarried(profile, move->destination.container.ownerAssetId);
+    return true;
+}
+}
+
 InventoryPlan queryInventory(
     const ProfileState &profile,
     const ContentRegistry &content,
-    const InventoryCommand &command)
+    const InventoryCommand &command,
+    const RaidSceneContainerAccess *sceneAccess)
 {
+    if (!sceneCommandAllowed(profile, command, sceneAccess))
+        return {false, DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision};
     ProfileState candidate;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
@@ -582,7 +644,8 @@ InventoryReceipt executeInventory(
     ProfileState &profile,
     const ContentRegistry &content,
     const InventoryCommand &command,
-    const CommandContext &context)
+    const CommandContext &context,
+    const RaidSceneContainerAccess *sceneAccess)
 {
     if (context.transactionId.empty())
     {
@@ -611,6 +674,9 @@ InventoryReceipt executeInventory(
             profile.revision);
     }
 
+    if (!sceneCommandAllowed(profile, command, sceneAccess))
+        return failure(DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision);
+
     AssetRegistry originalAssets = profile.assets;
     std::set<std::string> committedTransactions =
         profile.committedTransactions;
@@ -638,6 +704,16 @@ InventoryReceipt executeInventory(
         return receipt;
     }
 
+    // Ground-origin rolls are already collected by pickupRaidLoot before they
+    // can be stored. Audit frozen scene origins without allocating after apply.
+    if (profile.pendingRaid)
+        for (auto &loot : profile.pendingRaid->loot)
+        {
+            const auto *before = originalAssets.find(loot.assetId);
+            const auto *after = profile.assets.find(loot.assetId);
+            if (loot.sceneContainerAssetId && before &&
+                (!after || before->location != after->location || before->quantity != after->quantity)) loot.collected = true;
+        }
     profile.committedTransactions = std::move(committedTransactions);
     ++profile.revision;
     receipt.revision = profile.revision;

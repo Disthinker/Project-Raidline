@@ -352,6 +352,12 @@ public:
     grantDeveloperWarehouseCatalog();
     [[nodiscard]] bool developerWarehouseCatalogGranted() const noexcept;
 
+    [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidSceneContainer() const;
+    [[nodiscard]] bool raidSceneContainerAvailable(AssetInstanceId id) const;
+    [[nodiscard]] bool canOpenRaidSceneContainer(AssetInstanceId id) const;
+    [[nodiscard]] InventoryPlan queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const;
+    [[nodiscard]] InventoryReceipt executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId);
+
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
         std::string transactionId);
