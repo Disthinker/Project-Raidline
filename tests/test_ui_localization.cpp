@@ -7,6 +7,19 @@
 
 #include "ui_localization.h"
 
+TEST(UiLocalizationTest, SignalCallFeedbackIsBilingual)
+{
+    for (const auto *text : {"SIGNAL EXTRACTION | F TO CALL",
+         "F - CALL EXTRACTION (ATTRACTS NEARBY ENEMIES)",
+         "SIGNAL SENT - NEARBY ENEMIES ALERTED",
+         "SIGNAL INTERRUPTED",
+         "SIGNAL INTERRUPTED - RETURN AND PRESS F TO RETRY"})
+    {
+        EXPECT_EQ(localizeUiText(UiLanguage::English, text), text);
+        EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, text), text);
+    }
+}
+
 TEST(UiLocalizationTest, HospitalRoomsAreBilingual)
 {
     for (const auto *text : {"RECEPTION / WAITING", "INPATIENT WARD",

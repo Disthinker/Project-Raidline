@@ -661,6 +661,24 @@ bool GameSession::conditionalExtractionEligible() const noexcept
            currentRaidCarriedWeightGrams() <= limit;
 }
 
+bool GameSession::raidWorldInteractionAvailable(bool inventoryOpen) const noexcept
+{
+    return !inventoryOpen && !raidActionState_.active().has_value() &&
+        !(selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
+          profile_.pendingRaid->selfRecovery.has_value() &&
+          !profile_.pendingRaid->selfRecovery->opened);
+}
+
+bool GameSession::canCallSignalExtraction(bool inventoryOpen) const noexcept
+{
+    if (!world_ || !raidWorldInteractionAvailable(inventoryOpen))
+        return false;
+    GameplayInput input;
+    input.inventoryOpen = inventoryOpen;
+    input.conditionalExtractionEligible = conditionalExtractionEligible();
+    return world_->canCallSignalExtraction(input);
+}
+
 GameSessionState GameSession::state() const noexcept
 {
     return state_;
@@ -2057,6 +2075,55 @@ bool GameSession::resetDeveloperWeaponTuning()
     {
         return false;
     }
+}
+
+bool GameSession::raidSceneContainerAvailable(AssetInstanceId id) const
+{
+    if (!alphaRaidActive_ || !world_ || !world_->raidSession().isActive() || world_->player().isDead() || world_->player().isControlled()) return false;
+    const Vec2 p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    return raidSceneContainerAccessible(profile_, {id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}});
+}
+
+bool GameSession::canOpenRaidSceneContainer(AssetInstanceId id) const
+{
+    return raidSceneContainerAvailable(id) && raidWorldInteractionAvailable(false) && !world_->raidSpacePortalInteractionInRange();
+}
+
+std::optional<AssetInstanceId> GameSession::nearbyRaidSceneContainer() const
+{
+    std::optional<AssetInstanceId> result;
+    float closest = 72.0F * 72.0F;
+    if (!world_) return result;
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    for (const auto &[id, asset] : profile_.assets.records())
+        if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location); scene && canOpenRaidSceneContainer(id))
+        {
+            const float dx = scene->position.x - p.x - half, dy = scene->position.y - p.y - half;
+            const float distance = dx * dx + dy * dy;
+            if (distance <= closest) { closest = distance; result = id; }
+        }
+    return result;
+}
+
+InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const
+{
+    if (!raidSceneContainerAvailable(id)) return {false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    return queryInventory(profile_, publishedContentRegistry(), command, &access);
+}
+
+InventoryReceipt GameSession::executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId)
+{
+    if (!raidSceneContainerAvailable(id)) return {false, false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
+    const auto p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    return executeInventory(profile_, publishedContentRegistry(), command,
+        {profile_.revision, std::move(transactionId)}, &access);
 }
 
 InventoryReceipt GameSession::executeProfileInventory(
@@ -3787,16 +3854,10 @@ void GameSession::updateAlphaRaid(
     {
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
-        simulationInput.interactJustPressed = false;
-        simulationInput.interactPressed = false;
         sprintFireIntentPending_ = false;
         sprintFireReadyRemaining_ = 0.0F;
     }
-    const bool selfRecoveryOwnsInteraction =
-        selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
-        profile_.pendingRaid->selfRecovery.has_value() &&
-        !profile_.pendingRaid->selfRecovery->opened;
-    if (selfRecoveryOwnsInteraction)
+    if (!raidWorldInteractionAvailable(input.inventoryOpen))
     {
         simulationInput.interactJustPressed = false;
         simulationInput.interactPressed = false;
@@ -4442,6 +4503,7 @@ void GameSession::updateAlphaRaid(
 
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
+        !world_->raidSession().signalCalledLastUpdate() &&
         !raidActionState_.active().has_value() &&
         !world_->highRiskControlInteractionInRange() &&
         !world_->ordinarySurvivorRescueInteractionInRange())

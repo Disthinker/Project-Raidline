@@ -221,6 +221,7 @@ public:
     conditionalExtractionWeightLimitGrams() const noexcept;
 
     [[nodiscard]] bool conditionalExtractionEligible() const noexcept;
+    [[nodiscard]] bool canCallSignalExtraction(bool inventoryOpen = false) const noexcept;
 
     [[nodiscard]]
     GameSessionState state() const noexcept;
@@ -350,6 +351,12 @@ public:
     [[nodiscard]] WarehouseCatalogGrantReceipt
     grantDeveloperWarehouseCatalog();
     [[nodiscard]] bool developerWarehouseCatalogGranted() const noexcept;
+
+    [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidSceneContainer() const;
+    [[nodiscard]] bool raidSceneContainerAvailable(AssetInstanceId id) const;
+    [[nodiscard]] bool canOpenRaidSceneContainer(AssetInstanceId id) const;
+    [[nodiscard]] InventoryPlan queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const;
+    [[nodiscard]] InventoryReceipt executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId);
 
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
@@ -647,6 +654,7 @@ private:
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
+    [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };
 
 [[nodiscard]]

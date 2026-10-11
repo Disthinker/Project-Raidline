@@ -91,6 +91,15 @@ struct RaidGroundAssetLocation
 // A persistent ownership root placed in one Home Region Base site. Children
 // stored in the root's compartments continue to follow the root without
 // acquiring independent world positions.
+struct RaidSceneContainerAssetLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+    friend bool operator==(const RaidSceneContainerAssetLocation &a, const RaidSceneContainerAssetLocation &b)
+    { return a.raidId == b.raidId && a.spaceId == b.spaceId && a.position.x == b.position.x && a.position.y == b.position.y; }
+};
+
 struct BaseGroundAssetLocation
 {
     RegionalBaseSiteDefinitionId baseSiteDefinitionId;
@@ -152,6 +161,7 @@ using AssetLocation = std::variant<
     EquippedAssetLocation,
     InstalledMagazineLocation,
     RaidGroundAssetLocation,
+    RaidSceneContainerAssetLocation,
     BaseGroundAssetLocation,
     BaseServiceAssetLocation,
     LostRaidAssetLocation,
@@ -351,6 +361,7 @@ struct RaidLootSnapshot
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
     std::string resourcePointInstanceId;
     std::uint32_t resourcePointSlotIndex{};
+    AssetInstanceId sceneContainerAssetId{};
 
     friend bool operator==(
         const RaidLootSnapshot &left,
@@ -368,7 +379,8 @@ struct RaidLootSnapshot
             left.resourcePointInstanceId ==
                 right.resourcePointInstanceId &&
             left.resourcePointSlotIndex ==
-                right.resourcePointSlotIndex;
+                right.resourcePointSlotIndex &&
+            left.sceneContainerAssetId == right.sceneContainerAssetId;
     }
 };
 
@@ -1004,6 +1016,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
+    std::optional<AssetRegistry> startingAssets; // schema 51: exact pre-deploy assets for scene-container rollback
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;

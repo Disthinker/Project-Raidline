@@ -186,12 +186,75 @@ TEST(RaidSessionTest, HighRiskClosesNormalExtractionAndOpensEmergencySignal)
     EXPECT_EQ(session.state(), RaidSessionState::InRaid);
     EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::None);
 
-    session.update(4.0F, false, true);
+    session.update(4.0F, false, true, false, true);
     EXPECT_EQ(session.state(), RaidSessionState::Extracted);
     EXPECT_EQ(
         session.extractionRoute(),
         RaidExtractionRoute::EmergencySignal);
     EXPECT_FLOAT_EQ(session.extractionProgress(), 1.0F);
+}
+
+TEST(RaidSessionTest, SignalNeedsExplicitCallAndNeverRefreshesActiveProgress)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+    session.update(0.0F, false, true, false, true);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
+    ASSERT_TRUE(session.triggerHighRisk());
+    session.update(1.0F, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    session.update(1.0F, false, false, false, true);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
+    session.update(1.0F, false, true, false, true);
+    EXPECT_TRUE(session.signalCalledLastUpdate());
+    session.update(1.0F, false, true, false, true);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
+    EXPECT_FLOAT_EQ(session.extractionTimeElapsed(), 2.0F);
+    session.update(0.0F, false, false);
+    EXPECT_FLOAT_EQ(session.extractionTimeElapsed(), 0.0F);
+    session.update(1.0F, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    session.update(0.0F, false, true, false, true);
+    EXPECT_TRUE(session.signalCalledLastUpdate());
+    session.update(20.0F, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::Extracted);
+    session.update(1.0F, false, true, false, true);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
+}
+
+TEST(RaidSessionTest, SignalInterruptionIsIdempotentAndDoesNotCancelOtherRoutes)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+    session.update(0.1F, true, false);
+    EXPECT_FALSE(session.interruptSignalExtraction());
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::Normal);
+    session.update(0.0F, false, false);
+    ASSERT_TRUE(session.triggerHighRisk());
+    session.update(0.1F, false, true, false, true);
+    ASSERT_TRUE(session.interruptSignalExtraction());
+    EXPECT_TRUE(session.signalCalledLastUpdate()); // accepted input remains consumed
+    EXPECT_FALSE(session.interruptSignalExtraction());
+    EXPECT_FLOAT_EQ(session.extractionTimeElapsed(), 0.0F);
+    session.update(0.1F, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::InRaid);
+    session.update(0.1F, false, false, true);
+    EXPECT_FALSE(session.interruptSignalExtraction());
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::EmergencyConditional);
+}
+
+TEST(RaidSessionTest, SignalCallDoesNotOverrideConditionalOrDeath)
+{
+    RaidSession session{highRiskConfig()};
+    ASSERT_TRUE(session.start());
+    ASSERT_TRUE(session.triggerHighRisk());
+    session.update(0.0F, false, true, true, true);
+    EXPECT_EQ(session.extractionRoute(), RaidExtractionRoute::EmergencyConditional);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
+    ASSERT_TRUE(session.markPlayerDead());
+    session.update(20.0F, false, true, false, true);
+    EXPECT_EQ(session.state(), RaidSessionState::PlayerDead);
+    EXPECT_FALSE(session.signalCalledLastUpdate());
 }
 
 TEST(RaidSessionTest, ConditionalExtractionRequiresContinuousEligibility)

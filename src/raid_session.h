@@ -65,7 +65,13 @@ public:
         float deltaTime,
         bool playerInNormalExtractionPoint,
         bool playerInEmergencyExtractionPoint,
-        bool playerInConditionalExtractionPoint) noexcept;
+        bool playerInConditionalExtractionPoint,
+        bool signalCallRequested = false) noexcept;
+
+    [[nodiscard]] bool signalCalledLastUpdate() const noexcept
+    { return signalCalledLastUpdate_; }
+
+    [[nodiscard]] bool interruptSignalExtraction() noexcept;
 
     [[nodiscard]]
     bool markPlayerDead() noexcept;
@@ -121,6 +127,7 @@ private:
     RaidExtractionRoute extractionRoute_{RaidExtractionRoute::None};
     bool normalExtractionGraceActive_{};
     bool enteredHighRiskLastUpdate_{};
+    bool signalCalledLastUpdate_{};
 
     [[nodiscard]] float activeExtractionDuration() const noexcept;
     void cancelExtraction() noexcept;

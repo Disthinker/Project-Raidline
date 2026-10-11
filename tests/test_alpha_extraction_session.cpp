@@ -102,6 +102,32 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
         "procedural-playable-outdoor-layout-21");
 }
 
+TEST(AlphaExtractionSessionTest, SignalCallIsExplicitFreeAndInventoryGated)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("alpha-signal-call"));
+    ASSERT_TRUE(session.deployAlpha(77235, MapDefinitionId{"map.v0.test"}));
+    ASSERT_TRUE(session.world().triggerHighRiskForDeveloper());
+    ASSERT_TRUE(session.world().emergencyExtractionPoint().has_value());
+    const auto bounds = session.world().emergencyExtractionPoint()->bounds();
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(bounds.position));
+    session.update(GameplayInput{}, 0.0F);
+    ASSERT_EQ(session.world().raidSession().state(), RaidSessionState::InRaid);
+    const auto fingerprint = profileStateFingerprint(session.profile());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    call.inventoryOpen = true;
+    session.update(call, 0.0F);
+    EXPECT_FALSE(session.world().raidSession().signalCalledLastUpdate());
+    call.inventoryOpen = false;
+    session.update(call, 0.0F);
+    EXPECT_TRUE(session.world().raidSession().signalCalledLastUpdate());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+    session.update(call, 0.0F);
+    EXPECT_FALSE(session.world().raidSession().signalCalledLastUpdate());
+    EXPECT_EQ(profileStateFingerprint(session.profile()), fingerprint);
+}
+
 TEST(AlphaExtractionSessionTest,
      BaseSiteClearingObjectiveFollowsInitialEnemiesAndFailureStaysLocked)
 {
@@ -433,6 +459,23 @@ TEST(AlphaExtractionSessionTest,
         Vec2{recovery->cachePosition.x - half,
              recovery->cachePosition.y - half}));
     ASSERT_TRUE(session.raidSelfRecoveryProjection()->interactionInRange);
+    // Put the cache at the signal zone to exercise the overlapping service gate.
+    ASSERT_TRUE(session.world().triggerHighRiskForDeveloper());
+    const auto signalBounds = session.world().emergencyExtractionPoint()->bounds();
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(signalBounds.position));
+    auto &pending = *const_cast<ProfileState &>(session.profile()).pendingRaid;
+    pending.selfRecovery->cachePosition = Vec2{
+        signalBounds.position.x + half, signalBounds.position.y + half};
+    GameplayInput call;
+    call.interactJustPressed = true;
+    ASSERT_TRUE(session.world().canCallSignalExtraction(call));
+    EXPECT_FALSE(session.canCallSignalExtraction());
+    session.update(call, 0.0F);
+    EXPECT_FALSE(session.world().raidSession().signalCalledLastUpdate());
+    // Restore the frozen loss location before exercising the recovery transaction.
+    const_cast<ProfileState &>(session.profile()).pendingRaid->selfRecovery->cachePosition = recovery->cachePosition;
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+        Vec2{recovery->cachePosition.x - half, recovery->cachePosition.y - half}));
 
     GameplayInput held;
     held.interactPressed = true;
@@ -1271,6 +1314,34 @@ TEST(AlphaExtractionSessionTest, DeploySelectsFirstOccupiedWeaponSlot)
         EquipmentSlotKind::Sidearm);
 }
 
+TEST(AlphaExtractionSessionTest, SignalReadinessMatchesReloadAndInventoryGates)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("signal-readiness"));
+    prepareArmedLoadout(session);
+    ASSERT_TRUE(session.deployAlpha(77235, MapDefinitionId{"map.v0.test"}));
+    ASSERT_TRUE(session.world().triggerHighRiskForDeveloper());
+    const auto bounds = session.world().emergencyExtractionPoint()->bounds();
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(bounds.position));
+    ASSERT_TRUE(session.canCallSignalExtraction());
+    EXPECT_FALSE(session.canCallSignalExtraction(true));
+    GameplayInput reload;
+    reload.reloadJustPressed = true;
+    session.update(reload, 0.0F);
+    ASSERT_TRUE(session.raidActionState().active().has_value());
+    EXPECT_FALSE(session.canCallSignalExtraction());
+    GameplayInput call;
+    call.interactJustPressed = true;
+    session.update(call, 0.0F);
+    EXPECT_FALSE(session.world().raidSession().signalCalledLastUpdate());
+    session.update(GameplayInput{}, 2.0F);
+    ASSERT_FALSE(session.raidActionState().active().has_value());
+    ASSERT_TRUE(session.canCallSignalExtraction());
+    session.update(call, 0.0F);
+    EXPECT_TRUE(session.world().raidSession().signalCalledLastUpdate());
+    EXPECT_FALSE(session.canCallSignalExtraction());
+}
+
 TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSeconds)
 {
     GameSession session;
@@ -1853,7 +1924,16 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
         session.profile().assets.find(medkit)->remainingCharges;
     ASSERT_TRUE(session.deployAlpha(93431));
     static_cast<void>(session.takePresentationEvents());
+    ASSERT_TRUE(session.world().triggerHighRiskForDeveloper());
+    const auto signalBounds = session.world().emergencyExtractionPoint()->bounds();
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(signalBounds.position));
+    ASSERT_TRUE(session.canCallSignalExtraction());
     ASSERT_TRUE(session.startAlphaMedical(medkit));
+    EXPECT_FALSE(session.canCallSignalExtraction());
+    GameplayInput signalCall;
+    signalCall.interactJustPressed = true;
+    session.update(signalCall, 0.0F);
+    EXPECT_FALSE(session.world().raidSession().signalCalledLastUpdate());
     EXPECT_EQ(
         session.takePresentationEvents(),
         std::vector<GameSessionPresentationEvent>{

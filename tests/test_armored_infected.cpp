@@ -99,10 +99,23 @@ TEST(ArmoredInfectedTest, FrozenArmorRoundTripsAndOldSchemaDoesNotGainArmor) {
     EXPECT_EQ(loaded.profile->pendingRaid->enemies,p.pendingRaid->enemies);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),49)),std::invalid_argument);
+    // This fixture represents a Raid frozen before either armor or scene
+    // storage existed. Do not downgrade a newly generated schema-51 Raid.
+    std::vector<AssetInstanceId> sceneRoots;
+    for (const auto &[id,asset]:p.assets.records())
+        if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location)) sceneRoots.push_back(id);
+    for (auto &loot:p.pendingRaid->loot) if (loot.sceneContainerAssetId) {
+        p.assets.findMutable(loot.assetId)->location=RaidGroundAssetLocation{p.pendingRaid->raidId,loot.slotIndex};
+        loot.sceneContainerAssetId=0;
+    }
+    for (auto id:sceneRoots) ASSERT_TRUE(p.assets.erase(id));
+    p.pendingRaid->startingAssets.reset();
     for(auto &e:p.pendingRaid->enemies) e.torsoArmor.reset();
     const auto old=deserializeProfileEnvelope(serializeProfileEnvelope(p,"weapon-components-content-63",49),content());
     ASSERT_TRUE(old.profile) << old.message;
     EXPECT_EQ(old.profile->pendingRaid->enemies,p.pendingRaid->enemies);
+    EXPECT_FALSE(old.profile->pendingRaid->startingAssets);
+    for (const auto &[id,asset]:old.profile->assets.records()) { static_cast<void>(id); EXPECT_FALSE(std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location)); }
     p.pendingRaid->enemies.front().torsoArmor=EnemyArmorState{7,1001,10000};
     EXPECT_FALSE(validateProfileState(p,content()).valid);
 }
