@@ -827,6 +827,7 @@ namespace
                         kBaseStashCellSize,
                         fmt::format(
                             "{} | COMPARTMENT {}",
+                            std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location) ? "CORPSE" :
                             std::holds_alternative<RaidSceneContainerAssetLocation>(owner->location) ? "SCENE STORAGE" : definition.displayName,
                             index + 1U)});
                     y += static_cast<float>(compartment.height) *
@@ -7014,7 +7015,9 @@ void App::update(float deltaTime)
             gameplayInput.fireJustPressed = gameplayInput.firePressed = false;
             gameplayInput.reloadJustPressed = gameplayInput.healJustPressed = false;
             gameplayInput.weaponSlotJustPressed.reset();
-            uiMessage_ = "SCENE CONTAINER OPENED | WORLD CONTINUES";
+            const auto *root = gameSession_.profile().assets.find(*container);
+            uiMessage_ = root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)
+                ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
         }
     }
     const InventoryContainerInteractionDecision
@@ -14161,9 +14164,8 @@ void App::renderProfileAsset(
             break;
         }
         SDL_RenderFillRect(renderer_, &bounds);
-        const std::string shortName = definition.displayName.substr(
-            0,
-            std::min<std::size_t>(definition.displayName.size(), 12));
+        const std::string shortName = localizeUiLabel(
+            uiTextRenderer_.language(), definition.displayName, 12);
         SDL_SetRenderDrawColor(renderer_, 232, 236, 232, 255);
         uiTextRenderer_.render(
             renderer_,
@@ -14265,6 +14267,7 @@ void App::renderProfileGrid(
             x + grid.w,
             y + static_cast<float>(row) * cellSize);
     }
+    SDL_SetRenderDrawColor(renderer_, 230, 230, 210, 255);
     uiTextRenderer_.render(renderer_, x, y - 20.0F, label);
 
     for (const AssetRecord *asset : assetsInContainer(profile, container))
@@ -15022,8 +15025,13 @@ void App::renderProfileInventory(
     }
     else if (externalContainerId.has_value())
     {
+        const AssetRecord *externalOwner = gameSession_.profile().assets.find(
+            *externalContainerId);
+        const bool corpse = inRaid && externalOwner != nullptr &&
+            std::holds_alternative<RaidCorpseContainerAssetLocation>(externalOwner->location);
         uiTextRenderer_.render(
-            renderer_, 668.0F, 70.0F, inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER");
+            renderer_, 668.0F, 70.0F,
+            corpse ? "CORPSE" : inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER");
         if (!inRaid)
         {
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
@@ -15039,7 +15047,7 @@ void App::renderProfileInventory(
         else
         {
             SDL_SetRenderDrawColor(renderer_, 220, 220, 190, 255);
-            uiTextRenderer_.render(renderer_, 668, 100, "F: QUICK TRANSFER | WORLD CONTINUES");
+            uiTextRenderer_.render(renderer_, 668, 92, "F: QUICK TRANSFER | WORLD CONTINUES");
         }
     }
 
@@ -15162,9 +15170,8 @@ void App::renderProfileInventory(
         SDL_SetRenderDrawColor(renderer_, 78, 118, 124, 255);
         SDL_RenderRect(renderer_, &inspection);
         float lineY = inspection.y + 8.0F;
-        const std::string displayName = definition.displayName.substr(
-            0,
-            std::min<std::size_t>(definition.displayName.size(), 20U));
+        const std::string displayName = localizeUiLabel(
+            uiTextRenderer_.language(), definition.displayName, 20);
         uiTextRenderer_.render(
             renderer_, inspection.x + 6.0F, lineY, displayName.c_str());
         lineY += 22.0F;
@@ -15372,6 +15379,23 @@ void App::renderAlphaRaidLoot()
         uiTextRenderer_.render(renderer_, box.x, box.y - 20,
             !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: OPEN STORAGE" : "SCENE STORAGE");
     }
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
+        if (!corpse || !corpse->deathPosition || corpse->spaceId != gameSession_.world().activeRaidSpaceId()) continue;
+        const auto p = *corpse->deathPosition;
+        const SDL_FRect body{p.x - 26, p.y - 10, 52, 20};
+        SDL_SetRenderDrawColor(renderer_, 86, 63, 58, 255);
+        SDL_RenderFillRect(renderer_, &body);
+        SDL_SetRenderDrawColor(renderer_, 191, 164, 150, 255);
+        SDL_RenderRect(renderer_, &body);
+        SDL_RenderLine(renderer_, p.x - 14, p.y, p.x + 14, p.y);
+        const bool empty = assetsInContainer(profile, ProfileContainerId::compartment(id, 0)).empty();
+        SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
+        uiTextRenderer_.render(renderer_, body.x, body.y - 20,
+            !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: SEARCH CORPSE" :
+            empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE");
+    }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
         if (!gameSession_.raidLootAccessible(loot))
@@ -15463,8 +15487,8 @@ void App::renderBaseSupply()
         SDL_RenderRect(renderer_, &row);
         const std::uint32_t quantity =
             definition.category == ItemCategory::Ammunition ? 30U : 1U;
-        const std::string supplyName = definition.displayName.substr(
-            0, std::min<std::size_t>(definition.displayName.size(), 10U));
+        const std::string supplyName = localizeUiLabel(
+            uiTextRenderer_.language(), definition.displayName, 10);
         const std::string label = fmt::format(
             "BUY {} x{} | {}",
             supplyName,

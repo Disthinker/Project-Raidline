@@ -7,6 +7,78 @@
 
 #include "ui_localization.h"
 
+TEST(UiLocalizationTest, ChineseRaidBriefingKeepsMapAndRouteNamesRecognizable)
+{
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "MAP 4/5 | Frontier Exchange"),
+              "地图 4/5 | 边境交换站");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "MAP 3/5 | Ashworks Yard"),
+              "地图 3/5 | 灰烬工场");
+    const std::string route =
+        "Ashworks Industrial Road > Ashworks Industrial > Industrial Service Spur";
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, route),
+              "灰烬工场道路 > 灰烬工场 > 工业服务支路");
+    EXPECT_EQ(localizeUiText(UiLanguage::English, route), route);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "Industrial Fasteners x2"),
+              "工业紧固件 x2");
+}
+
+TEST(UiLocalizationTest, ChineseRegionalRoutesKeepWholeNamesAndAvoidPrefixDamage)
+{
+    const std::string route =
+        "Greyline Yard Relay > Greyline Yard > Greyline Relay Access > Eastern Freight Cut";
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, route),
+              "灰线场站中继站 > 灰线场站 > 灰线中继站通道 > 东部货运捷径");
+    EXPECT_EQ(localizeUiText(UiLanguage::English, route), route);
+    const std::string briefing =
+        "DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS";
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, briefing),
+              "分区道路网络 | 大型室外区域 | 固定地标");
+}
+
+TEST(UiLocalizationTest, ChineseConstructionRecipesKeepUpgradeNamesAndQuantities)
+{
+    const std::string recipes =
+        "Medical Facility Upgrade x1 | Dormitory Expansion x2 | Workshop Upgrade x3";
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, recipes),
+              "医疗设施升级 x1 | 宿舍扩建 x2 | 工坊升级 x3");
+    EXPECT_EQ(localizeUiText(UiLanguage::English, recipes), recipes);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "Warehouse | Kitchen & Water Station"),
+              "仓储 | 厨房与净水站");
+}
+
+TEST(UiLocalizationTest, ChineseCompartmentTitlesKeepNumbersAndTransferControls)
+{
+    const std::string title = "CORPSE | COMPARTMENT 1";
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, title),
+              "尸体 | 储物格 1");
+    EXPECT_EQ(localizeUiText(UiLanguage::English, title), title);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "SCENE STORAGE | COMPARTMENT 2"),
+              "场景储物箱 | 储物格 2");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                            "F: QUICK TRANSFER | WORLD CONTINUES"),
+              "F：快速转移 | 世界继续运行");
+}
+
+TEST(UiLocalizationTest, ShortItemLabelsTranslateBeforeClippingAndKeepCompleteUtf8)
+{
+    EXPECT_EQ(localizeUiLabel(UiLanguage::SimplifiedChinese, "Expedition Backpack", 12),
+              "远征背包");
+    EXPECT_EQ(localizeUiLabel(UiLanguage::SimplifiedChinese, "Industrial Fasteners", 12),
+              "工业紧固件");
+    EXPECT_EQ(localizeUiLabel(UiLanguage::English, "Expedition Backpack", 12),
+              "Expedition B");
+    EXPECT_EQ(localizeUiLabel(UiLanguage::SimplifiedChinese, "边境交换站", 7),
+              "边境交");
+    EXPECT_EQ(localizeUiLabel(UiLanguage::SimplifiedChinese, "5.45制式步枪", 6),
+              "5.45制");
+    EXPECT_TRUE(localizeUiLabel(UiLanguage::SimplifiedChinese, "远征背包", 0).empty());
+}
+
 TEST(UiLocalizationTest, SignalCallFeedbackIsBilingual)
 {
     for (const auto *text : {"SIGNAL EXTRACTION | F TO CALL",

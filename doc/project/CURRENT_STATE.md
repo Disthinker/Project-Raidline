@@ -1,5 +1,37 @@
 # Project Raidline 当前状态
 
+## 当前：边境交换站搜尸中文修正版已验收，交付中
+
+用户于2026-10-13明确验收当前中文修正版，并要求提交与合并。本次只交付搜尸功能、中文修正和对应任务文档；其他未提交代码和配置保持原样。
+
+- 候选编号末尾 **03f42d4333a9**，源码23路径与Debug程序核对未变。
+- Windows Debug 专项104项、全量1924项通过；主线依赖CI通过。准确提交的Windows/Ubuntu CI通过后，沿用普通合并。
+- 不启动游戏，不操作真实存档，不开始下一项开发。桌面 **Project Raidline Debug** 仍指向已验收程序。
+
+本任务提交在main可达且合并提交CI通过时为已交付；准确提交、PR和CI以实际Git/远端查询为准，不从本页推断。详见[任务说明](../exec-plans/active/raid-corpse-search-v1.md)。
+
+## 历史记录
+
+以下保留当时的进度和证据，不代表现在还要执行这些步骤。当前状态以本页开头和当前任务说明为准。
+
+## 2026-10-13 验收入口与反馈已简化
+
+- 已按用户请求精简根指令和交付报告模板；聊天给结论、必要影响及下一步，详细证据保留[当前任务记录](../exec-plans/active/raid-corpse-search-v1.md)。审批/验收门槛不变。
+- 桌面 `Project Raidline Debug.lnk` 指向下面同一搜尸待验收构建；目标和工作目录已读回核对。21路径候选源码/程序hash未变，未启动游戏、未提交或合并，仍待用户正常游玩验收。
+
+## 2026-10-12 当前候选：Frontier 尸体搜索试点 v1（待用户验收）
+
+- task `raid-corpse-search-v1` / plan `RL-RAID-CORPSE-SEARCH-v1`，用户明确批准后完成本地实施，候选 **`RL-RAID-CORPSE-SEARCH-v1-local-2b7c77f6d58b`**。三个既有护甲守卫、三份原ordinary Loot冻结与独立尸体根；F/格子取舍、终局和旧schema边界接通。schema52 / Frontier新rules30 / content64，正式资源未改。[完成证据与统一验收清单](../exec-plans/active/raid-corpse-search-v1.md)。
+- Windows Debug全目标构建成功；定向 **261/261**，最终完整CTest **1918/1918**（111.93秒），新增20项。五seed旧/新部署审计逐项一致。四项App指针函数与camera/aim/relocate/Base指针文件原代码保留，窗口锚定/菜单回归通过。依赖main CI38145513346首轮失败、重跑第2次success，未改旧测试。
+- 开发分支 `codex/raid-corpse-search-v1` / HEAD `f6a288b4da7579814b69a682dde9652812543528`，本片完全未提交、index为空，无push/PR/merge或本片远端CI。开发worktree `E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011`，正确验收程序 `E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011\build\windows-debug\Project_Raidline.exe`；原目录旧鼠标分支/HEAD、代码及其他脏文件继续保留，不用原目录旧程序验收尸体。
+- 21路径+构建hash清单在支持工作区 `tmp/raid-corpse-search-20261012/candidate.json`；manifest `2b7c77f6d58b7473244b27a62ce46a55f5e4d7b028a9522911690e3625aee479`，构建SHA256 `3767cf6fc19e799add8bd0c1bf22b2d073ba24a045b0aebf9eb2874763243a6a`。候选冻结，尚无用户正常游玩验收；未启动游戏、未操作真实存档、未改信任/权限/模型，等待用户按清单复验，不启动其他开发。以下保留审批与实施过程历史。
+
+## 2026-10-12 当前开发：Frontier 尸体搜索试点 v1
+
+- task `raid-corpse-search-v1` / plan `RL-RAID-CORPSE-SEARCH-v1` / state **实施中**；真实用户明确“同意 RL-RAID-CORPSE-SEARCH-v1，请按方案开发，保留已验收的窗口锚定和菜单行为，完成后提供验收清单，暂不提交或合并。”。保留窗口锚定/菜单行为；不提交/推送/PR/合并，不启动游戏。
+- 基线 `f6a288b4da7579814b69a682dde9652812543528` / 独立分支 `codex/raid-corpse-search-v1`，开发 worktree `E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011`；原目录旧鼠标分支/HEAD与其他未提交修改原字节保留。三个试点、三份原ordinary结果、独立尸体根、schema52/rules30/content64沿用[已批准计划](../exec-plans/active/raid-corpse-search-v1.md)。新候选完成前无本片验证/人工验收。
+- 合并后CI38145513346首轮Windows旧临时保存用例失败，Ubuntu成功；失败job已重跑，单独记录，不写成通过。以下为审批前/交付历史。
+
 ## 2026-10-11 最新入口：窗口锚定 v2 已通过用户验收，交付中
 
 - task `pointer-aim-continuity-v1` / plan `RL-POINTER-WINDOW-ANCHOR-v2`；用户明确“窗口锚定 v2 验收通过，请完成提交与合并，启动下一项开发。”。已验收候选 `RL-POINTER-WINDOW-ANCHOR-v2-local-cfff4c1d7de2`，源码清单摘要 `cfff4c1d7de2f1ad93fabd0e7a4913a04f39667c1907db481df7aa98c256c2eb`，准星窗口锚定/限位及菜单接续验收通过；原 v1 失败历史保留。

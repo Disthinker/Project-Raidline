@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -15,6 +16,7 @@
 #include "grid_inventory.h"
 #include "ground_item.h"
 #include "loot_table.h"
+#include "raid_corpse_search.h"
 #include "particle_system.h"
 #include "player.h"
 #include "player_damage_observation.h"
@@ -66,6 +68,7 @@ struct EnemySpawn
     std::vector<Vec2> patrolPoints;
     float ambushActivationDistance{240.0F};
     std::optional<EnemyArmorState> torsoArmor;
+    std::string sourceEnemyId;
 };
 
 struct HighRiskWorldConfig
@@ -221,6 +224,8 @@ public:
 
     [[nodiscard]]
     const Player &player() const;
+    [[nodiscard]] const std::vector<RaidCorpseDeathFact> &pendingCorpseDeaths() const noexcept { return pendingCorpseDeaths_; }
+    void acknowledgeCorpseDeath(std::string_view sourceId);
 
     [[nodiscard]]
     // Test-only visibility into non-entity logical flight records. App and
@@ -511,6 +516,8 @@ private:
     WorldShootingRuntime shooting_;
     CombatTargetId nextCombatTargetId_{1};
     EnemyRoster<EnemyAttachedState> enemies_;
+    std::map<CombatTargetId, RaidCorpseDeathFact> corpseSources_;
+    std::vector<RaidCorpseDeathFact> pendingCorpseDeaths_;
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<BallisticBlocker> ballisticBlockers_;
     RaidGeneratedMapLayout outdoorLayout_;

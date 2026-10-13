@@ -1,3 +1,4 @@
+#include "raid_corpse_search.h"
 #include "weapon_component_domain.h"
 #include "inventory_domain.h"
 #include <cmath>
@@ -579,7 +580,8 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
     {
         const AssetRecord *asset = profile.assets.find(assetId);
         if (!asset) return std::nullopt;
-        if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset->location)) return assetId;
+        if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset->location) ||
+            std::holds_alternative<RaidCorpseContainerAssetLocation>(asset->location)) return assetId;
         if (const auto *stored = std::get_if<StoredAssetLocation>(&asset->location); stored && stored->container.kind == ProfileContainerKind::AssetCompartment)
             assetId = stored->container.ownerAssetId;
         else if (const auto *mag = std::get_if<InstalledMagazineLocation>(&asset->location)) assetId = mag->weaponAssetId;
@@ -592,6 +594,8 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
 bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneContainerAccess &access)
 {
     const auto *asset = profile.assets.find(access.containerAssetId);
+    if (asset && std::holds_alternative<RaidCorpseContainerAssetLocation>(asset->location))
+        return raidCorpseAccessible(profile, access.containerAssetId, access.spaceId, access.playerCenter);
     const auto *scene = asset ? std::get_if<RaidSceneContainerAssetLocation>(&asset->location) : nullptr;
     if (!scene || !profile.pendingRaid || scene->raidId != profile.pendingRaid->raidId || scene->spaceId != access.spaceId ||
         !std::isfinite(access.playerCenter.x) || !std::isfinite(access.playerCenter.y)) return false;
@@ -612,7 +616,8 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
     if (!access || !raidSceneContainerAccessible(profile, *access)) return false;
     if ((sourceRoot && *sourceRoot != access->containerAssetId) || (destinationRoot && *destinationRoot != access->containerAssetId)) return false;
     const auto *source = profile.assets.find(sourceId);
-    if (!source || std::holds_alternative<RaidSceneContainerAssetLocation>(source->location)) return false;
+    if (!source || std::holds_alternative<RaidSceneContainerAssetLocation>(source->location) ||
+        std::holds_alternative<RaidCorpseContainerAssetLocation>(source->location)) return false;
     if (!sourceRoot && !assetIsCarried(profile, sourceId)) return false;
     if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && !destinationRoot)
         return move->destination.container.kind == ProfileContainerKind::AssetCompartment && assetIsCarried(profile, move->destination.container.ownerAssetId);
@@ -711,7 +716,7 @@ InventoryReceipt executeInventory(
         {
             const auto *before = originalAssets.find(loot.assetId);
             const auto *after = profile.assets.find(loot.assetId);
-            if (loot.sceneContainerAssetId && before &&
+            if ((loot.sceneContainerAssetId || loot.corpseContainerAssetId) && before &&
                 (!after || before->location != after->location || before->quantity != after->quantity)) loot.collected = true;
         }
     profile.committedTransactions = std::move(committedTransactions);

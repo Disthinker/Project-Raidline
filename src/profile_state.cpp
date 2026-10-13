@@ -1,3 +1,4 @@
+#include "raid_corpse_search.h"
 #include "weapon_component_domain.h"
 #include "profile_state.h"
 #include "inventory_domain.h"
@@ -1923,6 +1924,7 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location)) continue; // Validated by the independent corpse contract below.
         if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
         {
             if (!profile.pendingRaid || !profile.pendingRaid->startingAssets || scene->raidId != profile.pendingRaid->raidId ||
@@ -2249,6 +2251,9 @@ ProfileValidationResult validateProfileState(
         }
     }
 
+    const auto corpseValidation = validateRaidCorpseBindings(profile, content);
+    if (!corpseValidation.valid) return corpseValidation;
+
     if (claimedServiceAssetIds != serviceAssetIds)
     {
         return {false, "Base service asset exists without its typed job"};
@@ -2285,7 +2290,8 @@ ProfileValidationResult validateProfileState(
             {
                 static_cast<void>(id);
                 if (std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
-                    std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location))
+                    std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location) ||
+                    std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location))
                     return {false, "Raid rollback contains generated scene assets"};
             }
         }
@@ -2297,7 +2303,7 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
         const bool highRiskCrisisRules =
             raid.rulesVersion == "procedural-frontier-high-risk-crisis-28" ||
-            raid.rulesVersion == "content-beta-loot-economy-29";
+            raid.rulesVersion == "content-beta-loot-economy-29" || raid.rulesVersion == kRaidCorpseRulesVersion;
         const bool frontierLootIdentityRules =
             raid.rulesVersion == "procedural-frontier-loot-identity-27" ||
             highRiskCrisisRules;
@@ -4840,6 +4846,15 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, ground->raidId);
             hashInteger(hash, ground->lootSlotIndex);
         }
+        else if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location))
+        {
+            hashInteger(hash, 10U);
+            hashBytes(hash, corpse->raidId);
+            hashBytes(hash, corpse->spaceId.value());
+            hashBytes(hash, corpse->sourceEnemyId);
+            hashInteger(hash, corpse->deathPosition ? 1U : 0U);
+            if (corpse->deathPosition) { hashFloat(hash, corpse->deathPosition->x); hashFloat(hash, corpse->deathPosition->y); }
+        }
         else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
         {
             hashInteger(hash, 9U);
@@ -5010,6 +5025,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, enemy.maximumHealth);
             hashBytes(hash, enemy.spaceId.value());
             hashBytes(hash, enemy.encounterGroupInstanceId);
+            hashBytes(hash, enemy.sourceEnemyId);
             if (enemy.torsoArmor) {
                 hashBytes(hash, "torso-armor");
                 hashInteger(hash, enemy.torsoArmor->protectionRequirement);
@@ -5077,6 +5093,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, loot.resourcePointInstanceId);
             hashInteger(hash, loot.resourcePointSlotIndex);
             hashInteger(hash, loot.sceneContainerAssetId);
+            hashInteger(hash, loot.corpseContainerAssetId);
         }
         for (const RaidInteriorSnapshot &interior : raid.interiors)
         {

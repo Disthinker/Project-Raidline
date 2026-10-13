@@ -4,6 +4,7 @@
 #include "hit_feedback_presentation.h"
 #include "combat_runtime_checkpoint_json.h"
 #include "raid_lifecycle.h"
+#include "raid_corpse_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -80,6 +81,7 @@ TEST(ArmoredInfectedTest, FrontierReplacementPreservesPopulationGeometryAndLootA
     for (unsigned seed=1;seed<=8;++seed) {
         const auto baseline=deploy(ordinary,seed);
         auto upgraded=deploy(content(),seed);
+        stripCorpseBindingsForLegacySnapshot(upgraded);
         auto &s=*upgraded.pendingRaid;
         EXPECT_EQ(s.enemies.size(),baseline.pendingRaid->enemies.size());
         unsigned count=0;
@@ -101,6 +103,7 @@ TEST(ArmoredInfectedTest, FrozenArmorRoundTripsAndOldSchemaDoesNotGainArmor) {
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),49)),std::invalid_argument);
     // This fixture represents a Raid frozen before either armor or scene
     // storage existed. Do not downgrade a newly generated schema-51 Raid.
+    stripCorpseBindingsForLegacySnapshot(p);
     std::vector<AssetInstanceId> sceneRoots;
     for (const auto &[id,asset]:p.assets.records())
         if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location)) sceneRoots.push_back(id);

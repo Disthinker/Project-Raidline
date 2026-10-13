@@ -24,6 +24,7 @@
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_corpse_legacy_fixture.h"
 #include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
 #include "recovery_task_domain.h"
@@ -39,6 +40,7 @@ namespace
 void stripSceneStorageForLegacySnapshot(ProfileState &profile)
 {
     if (!profile.pendingRaid) return;
+    stripCorpseBindingsForLegacySnapshot(profile);
     std::vector<AssetInstanceId> roots;
     for (const auto &[id, asset] : profile.assets.records())
         if (std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location)) roots.push_back(id);
