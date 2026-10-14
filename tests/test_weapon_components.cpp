@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
@@ -166,8 +167,8 @@ TEST(WeaponComponentsTest, DeathReloadAndBothRecoveryPathsPreserveTheSameCompone
         else
         {
             ASSERT_TRUE(executeDeploy(state, content(), DeployCommand{"recovery", "recovered", 9403, MapDefinitionId{"map.v0.test"}, {}, "component-loss"}, {state.revision, "self"}).succeeded);
-            ASSERT_TRUE(executeOpenRaidSelfRecovery(state, content(), {state.revision, "open"}).succeeded);
-            ASSERT_TRUE(pickupRaidLoot(state, content(), weapon, {state.revision, "pickup"}).succeeded);
+            ASSERT_TRUE(openObservedRaidSelfRecovery(state, content(), {state.revision, "open"}).succeeded);
+            ASSERT_TRUE(pickupObservedRaidLoot(state, content(), weapon, {state.revision, "pickup"}).succeeded);
             ASSERT_TRUE(settlePendingRaid(state, content(), "recovered", RaidResultOutcome::Extracted).succeeded);
         }
         ASSERT_NE(state.assets.find(part), nullptr);
@@ -223,7 +224,7 @@ TEST(WeaponComponentsTest, PublishedLootCanBeExtractedInstalledAndRolledBackWith
         for (const auto &loot : profile.pendingRaid->loot) if (loot.definitionId == rail) { generated = loot.assetId; break; }
         if (!generated) continue;
         found = true;
-        ASSERT_TRUE(pickupRaidLoot(profile, content(), generated, {profile.revision, "loot-pickup"}).succeeded);
+        ASSERT_TRUE(pickupObservedRaidLoot(profile, content(), generated, {profile.revision, "loot-pickup"}).succeeded);
         ASSERT_TRUE(settlePendingRaid(profile, content(), "extract", RaidResultOutcome::Extracted).succeeded);
         ASSERT_TRUE(executeWeaponComponentChange(profile, content(), {weapon, WeaponComponentSlot::Handguard, generated}, {profile.revision, "install-found"}).succeeded);
         ASSERT_EQ(std::get<InstalledWeaponComponentLocation>(profile.assets.find(generated)->location).weaponAssetId, weapon);

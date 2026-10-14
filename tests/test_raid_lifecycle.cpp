@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include <gtest/gtest.h>
 
 #include "base_workforce_domain.h"
@@ -2060,7 +2061,7 @@ TEST(RaidLifecycleTest, ExtractionRetainsCarriedAndPickedAssetsExactlyOnce)
     ASSERT_TRUE(deploy(profile).succeeded);
     ASSERT_TRUE(profile.pendingRaid.has_value());
     const AssetInstanceId loot = profile.pendingRaid->loot.front().assetId;
-    ASSERT_TRUE(pickupRaidLoot(
+    ASSERT_TRUE(pickupObservedRaidLoot(
         profile,
         publishedContentRegistry(),
         loot,
@@ -2153,7 +2154,7 @@ TEST(RaidLifecycleTest, PickupMayMergeAwayHistoricalSnapshotAsset)
         profile,
         publishedContentRegistry()).valid);
 
-    const InventoryReceipt pickedUp = pickupRaidLoot(
+    const InventoryReceipt pickedUp = pickupObservedRaidLoot(
         profile,
         publishedContentRegistry(),
         loot,
@@ -2192,7 +2193,7 @@ TEST(RaidLifecycleTest, RejectedPickupRestoresFrozenLootMarker)
     const AssetInstanceId loot = profile.pendingRaid->loot.front().assetId;
     const std::uint64_t before = profileStateFingerprint(profile);
 
-    const InventoryReceipt rejected = pickupRaidLoot(
+    const InventoryReceipt rejected = pickupObservedRaidLoot(
         profile,
         publishedContentRegistry(),
         loot,

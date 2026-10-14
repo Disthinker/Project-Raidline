@@ -141,4 +141,5 @@ struct RaidTravelPreview
     const ContentRegistry &content,
     AssetInstanceId assetId,
     const CommandContext &context,
-    const RaidVisibilityProjection *observation = nullptr);
+    const RaidVisibilityProjection *observation = nullptr,
+    const RaidObservationKey *currentObservation = nullptr);

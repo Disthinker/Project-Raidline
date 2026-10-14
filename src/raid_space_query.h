@@ -14,6 +14,14 @@
     const RaidSpaceBlockerIndex &, const RaidSpaceDefinitionId &, Vec2 observer,
     std::size_t *blockerTests = nullptr);
 
+struct RaidObservationWork
+{
+    std::size_t localBlockers{}, rays{}, blockerTests{};
+};
+[[nodiscard]] RaidVisibilityProjection buildRaidSpaceConeVisibility(
+    const RaidSpaceBlockerIndex &, const RaidObservationKey &,
+    RaidObservationWork *work = nullptr);
+
 struct RaidSpaceNavigationQuery
 {
     Vec2 start{};

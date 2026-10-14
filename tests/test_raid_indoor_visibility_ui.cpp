@@ -86,6 +86,7 @@ struct RaidIndoorVisibilityUiTestAccess
         auto &session = a.gameSession_;
         const auto interior = session.profile().pendingRaid->interiors.front();
         RaidWorldConfig config;
+        config.lightConeObservationEnabled=true;
         config.worldSize =
             publishedContentRegistry()
                 .map(session.profile().pendingRaid->mapDefinitionId)
@@ -159,6 +160,14 @@ class RaidIndoorVisibilityUiTest : public testing::Test
         const float half = session().world().player().size() * 0.5F;
         ASSERT_TRUE(const_cast<Player &>(session().world().player())
                         .setPosition({p.x - half, p.y - half}));
+        GameplayInput input;
+        const auto &enemy=session().world().enemies().front();
+        input.aimWorldPosition=Vec2{enemy.position().x+enemy.size().x/2,enemy.position().y+enemy.size().y/2};
+        input.aimWorldBounds=Rect{{},session().world().raidSpaceWorldSize()};
+        const_cast<GameplayWorld &>(session().world()).update(input,0);
+        const auto actual=session().world().weaponAimWorldPosition();
+        input.aimMotionDelta=Vec2{input.aimWorldPosition->x-actual.x,input.aimWorldPosition->y-actual.y};
+        const_cast<GameplayWorld &>(session().world()).update(input,0);
     }
     void SetUp() override
     {
@@ -274,7 +283,8 @@ TEST_F(RaidIndoorVisibilityUiTest,
     ASSERT_TRUE(session().world().indoorObservation().pointVisible({525, 188}));
     paint();
     EXPECT_FALSE(enemyPixel(525, 145));
-    EXPECT_TRUE(enemyPixel(525, 188));
+    // Keep the sprite sample clear of the always-visible crosshair arm.
+    EXPECT_TRUE(enemyPixel(535, 188));
     if (const char *dir = std::getenv("RAIDLINE_INDOOR_VISIBILITY_QA_DIR"))
     {
         std::filesystem::create_directories(dir);
@@ -443,7 +453,7 @@ TEST_F(RaidIndoorVisibilityUiTest,
     A::syntheticRoom(*app, true);
     position({400, 190});
     auto &enemy = const_cast<Enemy &>(session().world().enemies().front());
-    ASSERT_TRUE(session().world().raidEnemyObservable(enemy.combatTargetId()));
+    ASSERT_FALSE(session().world().raidEnemyObservable(enemy.combatTargetId()));
     ASSERT_GT(enemy.position().x, A::camera(*app).x + 1280);
     const auto sample = [&]
     {

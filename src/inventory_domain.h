@@ -69,6 +69,7 @@ struct RaidSceneContainerAccess
     RaidSpaceDefinitionId spaceId;
     Vec2 playerCenter{};
     std::optional<RaidVisibilityProjection> observation;
+    std::optional<RaidObservationKey> currentObservation;
 };
 
 [[nodiscard]] std::optional<AssetInstanceId> raidSceneContainerRoot(
