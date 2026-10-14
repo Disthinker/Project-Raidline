@@ -14,6 +14,10 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"Visible Enemies", "可见敌人"},
+     {"Visible Ground Items", "可见地面物资"},
+     {"STORAGE ACCESS LOST", "已无法继续访问储物容器"},
+     {"Scene container is no longer accessible", "已无法继续访问储物容器"},
      {"COMBAT TEST RANGE | TEMPORARY EQUIPMENT ONLY", "战斗测试场 | 仅使用临时装备"},
      {"F8 AT CONSOLE | ESC CLOSE | SIMULATION PAUSED WHILE PANEL OPEN", "控制台旁按 F8 | Esc 关闭 | 面板打开时暂停战斗"},
      {"EQUIPMENT, DAMAGE AND REWARDS NEVER WRITE TO YOUR BASE SAVE", "测试装备、损耗和奖励不会写入基地存档"},
@@ -2070,6 +2074,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"Enemies", "敌人"},
      {"Alerted", "已警觉"},
      {"Searching", "搜索中"},
+     {"INDOOR OBSERVATION UNAVAILABLE", "室内视野暂不可用"},
      {"Ground Items", "地面物品"},
      {"Inventory Items", "物品栏物品"},
      {"Interact", "交互"},

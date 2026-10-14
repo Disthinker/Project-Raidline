@@ -4,6 +4,7 @@
 #include <variant>
 
 #include "profile_state.h"
+#include "raid_visibility.h"
 
 struct CommandContext
 {
@@ -67,6 +68,7 @@ struct RaidSceneContainerAccess
     AssetInstanceId containerAssetId{};
     RaidSpaceDefinitionId spaceId;
     Vec2 playerCenter{};
+    std::optional<RaidVisibilityProjection> observation;
 };
 
 [[nodiscard]] std::optional<AssetInstanceId> raidSceneContainerRoot(

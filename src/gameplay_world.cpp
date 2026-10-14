@@ -1548,6 +1548,45 @@ Vec2 GameplayWorld::raidSpaceWorldSize() const noexcept
     return activeWorldSize();
 }
 
+const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
+{
+    const Vec2 center = playerCenter(player_);
+    if (!isAlphaRaidWorld() || inOutdoorRaidSpace())
+    {
+        indoorObservationCache_.valid = false;
+        indoorObservationCacheReady_ = false;
+        return indoorObservationCache_;
+    }
+    if (!indoorObservationCacheReady_ ||
+        indoorObservationCache_.spaceId != activeRaidSpaceId() ||
+        indoorObservationCache_.observer.x != center.x ||
+        indoorObservationCache_.observer.y != center.y)
+    {
+        indoorObservationCache_ = buildRaidSpaceVisibility(
+            activeBlockerIndex(), activeRaidSpaceId(), center);
+        ++indoorObservationBuildCount_;
+        indoorObservationCache_.geometryRevision = indoorObservationBuildCount_;
+        indoorObservationCacheReady_ = true;
+    }
+    return indoorObservationCache_;
+}
+
+bool GameplayWorld::raidBoundsObservable(Rect bounds) const
+{
+    return !isAlphaRaidWorld() || inOutdoorRaidSpace() ||
+           indoorObservation().boundsVisible(bounds);
+}
+
+bool GameplayWorld::raidEnemyObservable(CombatTargetId id) const
+{
+    const auto &actors = enemies();
+    const auto found =
+        std::find_if(actors.begin(), actors.end(),
+                     [id](const auto &e) { return e.combatTargetId() == id; });
+    return found != actors.end() && !found->isDead() &&
+           raidBoundsObservable(found->bounds());
+}
+
 std::vector<RaidSpacePortalProjection>
 GameplayWorld::visibleRaidSpacePortals() const
 {

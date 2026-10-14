@@ -334,7 +334,7 @@ public:
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
     [[nodiscard]] bool
-    raidLootAccessible(const RaidLootSnapshot &loot) const noexcept;
+    raidLootAccessible(const RaidLootSnapshot &loot) const;
 
     [[nodiscard]] const ProfileState &profile() const noexcept;
     [[nodiscard]] EquipmentSlotKind activeAlphaWeaponSlot() const noexcept;
@@ -521,6 +521,7 @@ public:
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
+    friend struct RaidIndoorVisibilityUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};
     ProfileState profile_;
@@ -653,6 +654,7 @@ private:
     [[nodiscard]] bool secureOrdinarySurvivorRescue();
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
+    [[nodiscard]] RaidSceneContainerAccess raidSceneAccess(AssetInstanceId) const;
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
     [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };

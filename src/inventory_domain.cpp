@@ -600,6 +600,9 @@ bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneCo
     if (!scene || !profile.pendingRaid || scene->raidId != profile.pendingRaid->raidId || scene->spaceId != access.spaceId ||
         !std::isfinite(access.playerCenter.x) || !std::isfinite(access.playerCenter.y)) return false;
     const float dx = scene->position.x - access.playerCenter.x, dy = scene->position.y - access.playerCenter.y;
+    if (scene->spaceId != outdoorRaidSpaceId() &&
+        (!access.observation || !access.observation->matches(access.spaceId,access.playerCenter) ||
+         !access.observation->boundsVisible({{scene->position.x-24,scene->position.y-18},{48,36}}))) return false;
     return dx * dx + dy * dy <= 72.0F * 72.0F;
 }
 

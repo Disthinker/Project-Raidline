@@ -54,50 +54,7 @@ namespace
         Vec2 end,
         const Rect &rect) noexcept
     {
-        if (!finite(start) || !finite(end) || !finite(rect.position) ||
-            !finitePositive(rect.size))
-        {
-            return true;
-        }
-
-        const float lowerX = rect.position.x + kGeometryEpsilon;
-        const float upperX = rect.position.x + rect.size.x - kGeometryEpsilon;
-        const float lowerY = rect.position.y + kGeometryEpsilon;
-        const float upperY = rect.position.y + rect.size.y - kGeometryEpsilon;
-        if (lowerX >= upperX || lowerY >= upperY)
-        {
-            return false;
-        }
-
-        const Vec2 delta{end.x - start.x, end.y - start.y};
-        float enter{};
-        float leave{1.0F};
-        const auto clipAxis = [&](float origin, float movement,
-                                  float lower, float upper)
-        {
-            if (std::abs(movement) <= kGeometryEpsilon)
-            {
-                return origin > lower && origin < upper;
-            }
-
-            float first = (lower - origin) / movement;
-            float second = (upper - origin) / movement;
-            if (first > second)
-            {
-                std::swap(first, second);
-            }
-            enter = std::max(enter, first);
-            leave = std::min(leave, second);
-            return enter <= leave;
-        };
-
-        if (!clipAxis(start.x, delta.x, lowerX, upperX) ||
-            !clipAxis(start.y, delta.y, lowerY, upperY))
-        {
-            return false;
-        }
-        return leave >= 0.0F && enter <= 1.0F &&
-               leave - enter > kGeometryEpsilon;
+        return raidSightSegmentIntersectsRectInterior(start,end,rect);
     }
 
     Rect expandedForActor(
@@ -128,6 +85,105 @@ namespace
                point.y <= worldSize.y - half.y;
     }
 
+}
+
+RaidVisibilityProjection
+buildRaidSpaceVisibility(const RaidSpaceBlockerIndex &index,
+                         const RaidSpaceDefinitionId &space, Vec2 observer,
+                         std::size_t *blockerTests)
+{
+    if (blockerTests)
+        *blockerTests = 0;
+    RaidVisibilityProjection result;
+    result.spaceId = space;
+    result.observer = observer;
+    result.worldSize = index.worldSize();
+    if (!finite(observer) || observer.x < 0 || observer.y < 0 ||
+        observer.x > result.worldSize.x || observer.y > result.worldSize.y)
+        return result;
+    for (std::size_t i = 0; i < index.blockerCount(); ++i)
+        if (pointInsideOpenRect(observer, index.blockerBounds(i)))
+            return result;
+    std::vector<float> angles;
+    const auto corner = [&](Vec2 p)
+    {
+        const float angle = std::atan2(p.y - observer.y, p.x - observer.x);
+        for (float offset : {-0.00001F, 0.0F, 0.00001F})
+            angles.push_back(
+                std::atan2(std::sin(angle + offset), std::cos(angle + offset)));
+    };
+    corner({0, 0});
+    corner({result.worldSize.x, 0});
+    corner(result.worldSize);
+    corner({0, result.worldSize.y});
+    for (std::size_t i = 0; i < index.blockerCount(); ++i)
+    {
+        const auto r = index.blockerBounds(i);
+        corner(r.position);
+        corner({r.position.x + r.size.x, r.position.y});
+        corner({r.position.x + r.size.x, r.position.y + r.size.y});
+        corner({r.position.x, r.position.y + r.size.y});
+    }
+    std::sort(angles.begin(), angles.end());
+    angles.erase(std::unique(angles.begin(), angles.end(), [](float a, float b)
+                             { return std::abs(a - b) < 0.0000001F; }),
+                 angles.end());
+    std::vector<std::size_t> candidates;
+    for (float angle : angles)
+    {
+        const Vec2 direction{std::cos(angle), std::sin(angle)};
+        float distance = std::numeric_limits<float>::infinity();
+        if (direction.x > 0.0000001F)
+            distance = std::min(distance, (result.worldSize.x - observer.x) /
+                                              direction.x);
+        else if (direction.x < -0.0000001F)
+            distance = std::min(distance, -observer.x / direction.x);
+        if (direction.y > 0.0000001F)
+            distance = std::min(distance, (result.worldSize.y - observer.y) /
+                                              direction.y);
+        else if (direction.y < -0.0000001F)
+            distance = std::min(distance, -observer.y / direction.y);
+        Vec2 end{observer.x + direction.x * distance,
+                 observer.y + direction.y * distance};
+        index.queryCandidateIndices(
+            {{std::min(observer.x, end.x), std::min(observer.y, end.y)},
+             {std::abs(end.x - observer.x), std::abs(end.y - observer.y)}},
+            candidates);
+        for (auto candidate : candidates)
+        {
+            if (blockerTests)
+                ++*blockerTests;
+            const auto r = index.blockerBounds(candidate);
+            float enter = 0, leave = distance;
+            const auto axis =
+                [&](float origin, float movement, float low, float high)
+            {
+                if (std::abs(movement) < 0.0000001F)
+                    return origin >= low && origin <= high;
+                float a = (low - origin) / movement,
+                      b = (high - origin) / movement;
+                if (a > b)
+                    std::swap(a, b);
+                enter = std::max(enter, a);
+                leave = std::min(leave, b);
+                return enter <= leave;
+            };
+            if (axis(observer.x, direction.x, r.position.x,
+                     r.position.x + r.size.x) &&
+                axis(observer.y, direction.y, r.position.y,
+                     r.position.y + r.size.y) &&
+                enter > 0 && enter <= distance && leave >= enter)
+                distance = enter;
+        }
+        result.boundary.push_back(
+            {std::clamp(observer.x + direction.x * distance, 0.0F,
+                        result.worldSize.x),
+             std::clamp(observer.y + direction.y * distance, 0.0F,
+                        result.worldSize.y)});
+    }
+    result.geometryRevision = 1;
+    result.valid = result.boundary.size() >= 3;
+    return result;
 }
 
 bool raidSpaceHasLineOfSight(

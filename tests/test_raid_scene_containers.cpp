@@ -6,6 +6,7 @@
 #include "game_session.h"
 #include "raid_lifecycle.h"
 #include "save_repository.h"
+#include "raid_visibility_fixture.h"
 
 namespace {
 const auto &content = publishedContentRegistry();
@@ -35,6 +36,7 @@ protected:
         const auto ids = boxes(p); ASSERT_EQ(ids.size(),2U); box=ids.front();
         const auto scene=std::get<RaidSceneContainerAssetLocation>(p.assets.find(box)->location);
         access = {box, scene.spaceId, scene.position};
+        access.observation=observeFrozenRaidInterior(p,scene.spaceId,scene.position);
     }
     InventoryReceipt move(AssetInstanceId id, ProfileContainerId target, GridPosition position, std::uint32_t quantity=0) {
         return executeInventory(p,content,InventoryMoveCommand{id,quantity,{target,position},ItemOrientation::Degrees0},
@@ -108,7 +110,8 @@ TEST_F(RaidSceneContainerTest, DistanceSpaceOtherBoxAndWholeRootRejectWithoutMut
     EXPECT_FALSE(move(box,ProfileContainerId::compartment(bag,0),{2,0}).succeeded);
     EXPECT_FALSE(move(item,ProfileContainerId::stash(),{0,0}).succeeded);
     EXPECT_EQ(profileStateFingerprint(p),hash);
-    const auto exact=RaidSceneContainerAccess{box,access.spaceId,{access.playerCenter.x+72,access.playerCenter.y}};
+    auto exact=RaidSceneContainerAccess{box,access.spaceId,{access.playerCenter.x+72,access.playerCenter.y}};
+    exact.observation=observeFrozenRaidInterior(p,exact.spaceId,exact.playerCenter);
     EXPECT_TRUE(raidSceneContainerAccessible(p,exact));
 }
 TEST_F(RaidSceneContainerTest, TakeDepositReopenAndRetryKeepTheSameInstances) {
