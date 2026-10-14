@@ -1,0 +1,18 @@
+#pragma once
+
+#include "profile_state.h"
+
+inline constexpr std::string_view kRaidCorpseRulesVersion{"content-frontier-corpse-search-30"};
+
+struct RaidCorpseDeathFact
+{
+    std::string sourceEnemyId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+};
+
+// Freeze existing ordinary rolls, atomically. Never roll new rewards.
+[[nodiscard]] ProfileValidationResult freezeRaidCorpseLoot(ProfileState &, const ContentRegistry &);
+[[nodiscard]] ProfileValidationResult validateRaidCorpseBindings(const ProfileState &, const ContentRegistry &);
+[[nodiscard]] bool revealRaidCorpse(ProfileState &, const ContentRegistry &, const RaidCorpseDeathFact &);
+[[nodiscard]] bool raidCorpseAccessible(const ProfileState &, AssetInstanceId, const RaidSpaceDefinitionId &, Vec2);

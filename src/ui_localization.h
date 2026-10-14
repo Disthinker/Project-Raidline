@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -16,6 +17,12 @@ enum class UiLanguage { English, SimplifiedChinese };
 // the returned display text.
 [[nodiscard]] std::string localizeUiText(UiLanguage language,
                                          std::string_view englishText);
+
+// Translate before fitting a short label. ASCII uses one display column and
+// non-ASCII code points use two; clipping preserves complete UTF-8 sequences.
+[[nodiscard]] std::string localizeUiLabel(UiLanguage language,
+                                         std::string_view englishText,
+                                         std::size_t maximumColumns);
 
 [[nodiscard]] UiLanguage
 loadUiLanguage(const std::filesystem::path &settingsPath) noexcept;

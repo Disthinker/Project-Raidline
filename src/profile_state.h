@@ -100,6 +100,22 @@ struct RaidSceneContainerAssetLocation
     { return a.raidId == b.raidId && a.spaceId == b.spaceId && a.position.x == b.position.x && a.position.y == b.position.y; }
 };
 
+// One deploy-frozen, non-carryable root. No position means the source enemy
+// is still alive; the first accepted death exposes the same asset tree.
+struct RaidCorpseContainerAssetLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    std::string sourceEnemyId;
+    std::optional<Vec2> deathPosition;
+    friend bool operator==(const RaidCorpseContainerAssetLocation &a, const RaidCorpseContainerAssetLocation &b)
+    {
+        return a.raidId == b.raidId && a.spaceId == b.spaceId && a.sourceEnemyId == b.sourceEnemyId &&
+            a.deathPosition.has_value() == b.deathPosition.has_value() &&
+            (!a.deathPosition || (a.deathPosition->x == b.deathPosition->x && a.deathPosition->y == b.deathPosition->y));
+    }
+};
+
 struct BaseGroundAssetLocation
 {
     RegionalBaseSiteDefinitionId baseSiteDefinitionId;
@@ -166,7 +182,8 @@ using AssetLocation = std::variant<
     BaseServiceAssetLocation,
     LostRaidAssetLocation,
     RecoveryTaskAssetLocation,
-    InstalledWeaponComponentLocation>;
+    InstalledWeaponComponentLocation,
+    RaidCorpseContainerAssetLocation>;
 
 struct MagazineRoundRecord
 {
@@ -303,6 +320,7 @@ struct RaidEnemySnapshot
     RaidSpaceDefinitionId spaceId{outdoorRaidSpaceId()};
     std::string encounterGroupInstanceId;
     std::optional<EnemyArmorState> torsoArmor;
+    std::string sourceEnemyId;
 
     friend bool operator==(
         const RaidEnemySnapshot &left,
@@ -314,7 +332,8 @@ struct RaidEnemySnapshot
             left.maximumHealth == right.maximumHealth &&
             left.spaceId == right.spaceId &&
             left.encounterGroupInstanceId ==
-                right.encounterGroupInstanceId && left.torsoArmor == right.torsoArmor;
+                right.encounterGroupInstanceId && left.torsoArmor == right.torsoArmor &&
+            left.sourceEnemyId == right.sourceEnemyId;
     }
 };
 
@@ -362,6 +381,7 @@ struct RaidLootSnapshot
     std::string resourcePointInstanceId;
     std::uint32_t resourcePointSlotIndex{};
     AssetInstanceId sceneContainerAssetId{};
+    AssetInstanceId corpseContainerAssetId{};
 
     friend bool operator==(
         const RaidLootSnapshot &left,
@@ -380,7 +400,8 @@ struct RaidLootSnapshot
                 right.resourcePointInstanceId &&
             left.resourcePointSlotIndex ==
                 right.resourcePointSlotIndex &&
-            left.sceneContainerAssetId == right.sceneContainerAssetId;
+            left.sceneContainerAssetId == right.sceneContainerAssetId &&
+            left.corpseContainerAssetId == right.corpseContainerAssetId;
     }
 };
 

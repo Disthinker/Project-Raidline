@@ -63,6 +63,16 @@ TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcro
         }
         EXPECT_EQ(moved,4U);
         auto legacy=a;
+        // Historical schema50 fixture has no corpse ownership/source fields.
+        legacy.pendingRaid->rulesVersion="content-beta-loot-economy-29";
+        for(auto &enemy:legacy.pendingRaid->enemies) enemy.sourceEnemyId.clear();
+        for(auto &loot:legacy.pendingRaid->loot) if(loot.corpseContainerAssetId) {
+            legacy.assets.findMutable(loot.assetId)->location=RaidGroundAssetLocation{legacy.pendingRaid->raidId,loot.slotIndex};
+            loot.corpseContainerAssetId=0;
+        }
+        std::vector<AssetInstanceId> corpseIds;
+        for(const auto &[id,asset]:legacy.assets.records()) if(std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location))corpseIds.push_back(id);
+        for(auto id:corpseIds) ASSERT_TRUE(legacy.assets.erase(id));
         for (auto &loot:legacy.pendingRaid->loot) if (loot.sceneContainerAssetId) {
             legacy.assets.findMutable(loot.assetId)->location=RaidGroundAssetLocation{legacy.pendingRaid->raidId,loot.slotIndex};
             loot.sceneContainerAssetId=0;

@@ -1021,6 +1021,13 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 {"raid_id", ground->raidId},
                 {"loot_slot_index", ground->lootSlotIndex}};
         }
+        else if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location))
+        {
+            if (schemaVersion < 52) throw std::invalid_argument("Raid corpses require schema 52");
+            location = {{"type", "raid_corpse_container"}, {"raid_id", corpse->raidId},
+                {"space_id", corpse->spaceId.value()}, {"source_enemy_id", corpse->sourceEnemyId},
+                {"death_position", corpse->deathPosition ? vectorValue(*corpse->deathPosition) : Json(nullptr)}};
+        }
         else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
         {
             if (schemaVersion < 51) throw std::invalid_argument("Raid scene containers require schema 51");
@@ -1275,6 +1282,13 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                 asset.location = RaidGroundAssetLocation{
                     location.at("raid_id").get<std::string>(),
                     location.at("loot_slot_index").get<std::uint32_t>()};
+            }
+            else if (schemaVersion >= 52 && locationType == "raid_corpse_container")
+            {
+                RaidCorpseContainerAssetLocation corpse{location.at("raid_id").get<std::string>(),
+                    RaidSpaceDefinitionId{location.at("space_id").get<std::string>()}, location.at("source_enemy_id").get<std::string>(), std::nullopt};
+                if (!location.at("death_position").is_null()) corpse.deathPosition = parseVector(location.at("death_position"));
+                asset.location = std::move(corpse);
             }
             else if (schemaVersion >= 51 && locationType == "raid_scene_container")
             {
@@ -1854,6 +1868,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 enemyValue["encounter_group_instance_id"] =
                     enemy.encounterGroupInstanceId;
             }
+            if (schemaVersion >= 52) enemyValue["source_enemy_id"] = enemy.sourceEnemyId;
+            else if (!enemy.sourceEnemyId.empty()) throw std::invalid_argument("corpse enemy source requires schema 52");
             if (enemy.torsoArmor) {
                 if (schemaVersion < 50) throw std::invalid_argument("enemy armor requires schema 50");
                 enemyValue["torso_armor"] = {enemy.torsoArmor->protectionRequirement, enemy.torsoArmor->durability, enemy.torsoArmor->durabilityLossBasisPoints};
@@ -1905,6 +1921,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
                 lootEntry["resource_point_slot_index"] =
                     entry.resourcePointSlotIndex;
             }
+            if (schemaVersion >= 52) lootEntry["corpse_container_asset_id"] = entry.corpseContainerAssetId;
+            else if (entry.corpseContainerAssetId) throw std::invalid_argument("corpse Loot origin requires schema 52");
             if (schemaVersion >= 51) lootEntry["scene_container_asset_id"] = entry.sceneContainerAssetId;
             else if (entry.sceneContainerAssetId) throw std::invalid_argument("scene Loot origin requires schema 51");
             loot.push_back(std::move(lootEntry));
@@ -2656,7 +2674,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2845,7 +2863,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3572,6 +3590,9 @@ SaveLoadResult deserializeProfileEnvelope(
                         ? enemy.at("encounter_group_instance_id")
                               .get<std::string>()
                         : std::string{}});
+                if (schemaVersion >= 52) raid.enemies.back().sourceEnemyId = enemy.at("source_enemy_id").get<std::string>();
+                else if (enemy.contains("source_enemy_id") && !enemy.at("source_enemy_id").get<std::string>().empty())
+                    return {SaveLoadStatus::Failed, std::nullopt, "legacy schema contains a corpse source"};
                 if (enemy.contains("torso_armor")) {
                     if (schemaVersion < 50) throw std::invalid_argument("legacy enemy cannot contain armor");
                     const auto &armor = enemy.at("torso_armor");
@@ -3659,6 +3680,13 @@ SaveLoadResult deserializeProfileEnvelope(
                     if (loaded.status == SaveLoadStatus::Failed) return loaded;
                 }
             }
+            if (schemaVersion >= 52)
+                for (std::size_t i{}; i < raid.loot.size(); ++i)
+                    raid.loot[i].corpseContainerAssetId = value.at("loot")[i].at("corpse_container_asset_id").get<AssetInstanceId>();
+            else
+                for (const auto &loot : value.at("loot"))
+                    if (loot.contains("corpse_container_asset_id") && loot.at("corpse_container_asset_id").get<AssetInstanceId>())
+                        return {SaveLoadStatus::Failed, std::nullopt, "legacy schema contains a corpse origin"};
             raid.carriedRootAssetIds =
                 value.at("carried_root_asset_ids")
                     .get<std::vector<AssetInstanceId>>();

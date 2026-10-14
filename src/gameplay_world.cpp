@@ -822,6 +822,8 @@ GameplayWorld::GameplayWorld(
             Vec2{},
             spawn.maxHealth,
             nextCombatTargetId_++, spawn.torsoArmor});
+        if (!spawn.sourceEnemyId.empty())
+            corpseSources_.emplace(enemies_.back().combatTargetId(), RaidCorpseDeathFact{spawn.sourceEnemyId, outdoorRaidSpaceId(), {spawn.size.x * 0.5F, spawn.size.y * 0.5F}});
         const Vec2 spawnCenter{
             spawn.position.x + spawn.size.x * 0.5F,
             spawn.position.y + spawn.size.y * 0.5F};
@@ -1456,10 +1458,24 @@ void GameplayWorld::update(
         activeEnemySet,
         activeBlockerSet);
 
+    for (const auto &death : shootingAdvance.removals)
+    {
+        const auto source = corpseSources_.find(death.id);
+        if (source == corpseSources_.end() || death.reason != EnemyRemovalReason::Death) continue;
+        auto fact = source->second;
+        fact.position.x += death.position.x; fact.position.y += death.position.y;
+        pendingCorpseDeaths_.push_back(std::move(fact));
+        corpseSources_.erase(source);
+    }
     // EnemyLifecycle already removed actors and all attached runtime state.
     score_ += static_cast<int>(shootingAdvance.targetsKilled) *
         kScorePerEnemy;
 
+}
+
+void GameplayWorld::acknowledgeCorpseDeath(std::string_view sourceId)
+{
+    std::erase_if(pendingCorpseDeaths_, [sourceId](const auto &fact) { return fact.sourceEnemyId == sourceId; });
 }
 
 const Player &

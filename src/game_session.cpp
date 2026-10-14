@@ -1,3 +1,4 @@
+#include "raid_corpse_search.h"
 #include "game_session.h"
 #include "base_defense_preparation.h"
 #include "home_founding_domain.h"
@@ -977,6 +978,7 @@ bool GameSession::deployAlpha(
                 enemy.size,
                 enemy.maximumHealth};
             spawn.torsoArmor = enemy.torsoArmor;
+            spawn.sourceEnemyId = enemy.sourceEnemyId;
             if (group != snapshot.encounterGroups.end())
             {
                 spawn.encounterGroupInstanceId = group->instanceId;
@@ -2098,9 +2100,13 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidSceneContainer() const
     const auto p = world_->player().position();
     const float half = world_->player().size() * 0.5F;
     for (const auto &[id, asset] : profile_.assets.records())
-        if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location); scene && canOpenRaidSceneContainer(id))
+        if (canOpenRaidSceneContainer(id))
         {
-            const float dx = scene->position.x - p.x - half, dy = scene->position.y - p.y - half;
+            Vec2 position{};
+            if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location)) position = scene->position;
+            else if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location); corpse && corpse->deathPosition) position = *corpse->deathPosition;
+            else continue;
+            const float dx = position.x - p.x - half, dy = position.y - p.y - half;
             const float distance = dx * dx + dy * dy;
             if (distance <= closest) { closest = distance; result = id; }
         }
@@ -4046,6 +4052,9 @@ void GameSession::updateAlphaRaid(
     const bool perimeterSweepActive =
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->update(simulationInput, deltaTime);
+    const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
+    for (const auto &fact : corpseDeaths)
+        if (revealRaidCorpse(profile_, publishedContentRegistry(), fact)) world_->acknowledgeCorpseDeath(fact.sourceEnemyId);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)
     {

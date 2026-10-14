@@ -614,6 +614,12 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"F: QUICK TRANSFER | WORLD CONTINUES", "F：快速转移 | 世界继续运行"},
      {"F: OPEN STORAGE", "F：打开储物箱"},
      {"SCENE STORAGE", "场景储物箱"},
+     {"COMPARTMENT", "储物格"},
+     {"CORPSE", "尸体"},
+     {"CORPSE OPENED | WORLD CONTINUES", "已打开尸体 | 世界继续运行"},
+     {"F: SEARCH CORPSE", "F：搜索尸体"},
+     {"SEARCHABLE CORPSE", "可搜索尸体"},
+     {"EMPTY CORPSE", "已搜空尸体"},
      {"Scene container is no longer in range", "场景容器已不在交互范围内"},
      {"Scene container is outside the accessible inventory scope", "物品操作超出可访问的场景容器范围"},
      {"BASE GROUND CONTAINER OPENED", "已打开基地地面容器"},
@@ -1063,6 +1069,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
       "旧版未归位物资（移动后恢复）"},
      {"ASSIGNED", "已分配"},
      {"Engineering", "工程"},
+     {"Medical Facility Upgrade", "医疗设施升级"},
+     {"Medical Facility", "医疗设施"},
      {"Medical", "医疗"},
      {"General", "通用"},
      {"Combat", "战斗"},
@@ -1707,6 +1715,18 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"Riverside Main Road", "河畔主路"},
      {"Ashworks Freight Road", "灰烬工场货运道路"},
      {"Frontier Trunk Road", "边境干道"},
+     {"Ashworks Industrial Road", "灰烬工场道路"},
+     {"Ashworks Yard Access", "灰烬物流场站通道"},
+     {"Industrial Service Spur", "工业服务支路"},
+     {"Eastern Freight Cut", "东部货运捷径"},
+     {"Western Freight Link", "西部货运联络线"},
+     {"Ashworks Riverside Road", "灰烬河畔道路"},
+     {"Ashworks Frontier Road", "灰烬边境道路"},
+     {"Greyline Relay Access", "灰线中继站通道"},
+     {"Greyline Local Cut", "灰线本地捷径"},
+     {"Greyline Riverside Cut", "灰线河畔捷径"},
+     {"Greyline Yard Relay", "灰线场站中继站"},
+     {"Ashworks Industrial", "灰烬工场"},
      {"Old Service Relay", "老旧服务中继站"},
      {"Greyline Yard", "灰线场站"},
      {"Greyline West", "灰线西区"},
@@ -1716,6 +1736,16 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"Frontier Exchange", "边境交换站"},
      {"Hospital District", "医院片区"},
      {"Hospital Access", "医院通道"},
+     {"Dormitory Expansion", "宿舍扩建"},
+     {"Workshop Upgrade", "工坊升级"},
+     {"Kitchen & Water Station", "厨房与净水站"},
+     {"Warehouse", "仓储"},
+     {"Dormitory", "宿舍"},
+     {"Workshop", "工坊"},
+     {"DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS",
+      "分区道路网络 | 大型室外区域 | 固定地标"},
+     {"ROAD AND BLOCK LAYOUT CHANGES EACH DEPLOYMENT",
+      "每次出击的道路和街区布局都会变化"},
      {"HOSPITAL CAMPUS | AMBULANCE ACCESS | SERVICE STREETS", "医院园区 | 急救通道 | 生活服务街"},
      {"MEDICAL STOCK BEHIND A FIXED HOSPITAL APPROACH", "穿过医院入口搜寻医疗储备"},
      {"HOSPITAL CAMPUS", "医院园区"},
@@ -2184,6 +2214,28 @@ std::string localizeUiText(UiLanguage language, std::string_view englishText) {
     replaceAll(localized, english, chinese);
   }
   return localized;
+}
+
+std::string localizeUiLabel(UiLanguage language, std::string_view englishText,
+                           std::size_t maximumColumns) {
+  const std::string localized = localizeUiText(language, englishText);
+  std::size_t offset{};
+  std::size_t columns{};
+  while (offset < localized.size()) {
+    const auto first = static_cast<unsigned char>(localized[offset]);
+    const std::size_t bytes = first < 0x80U ? 1U
+        : (first & 0xE0U) == 0xC0U ? 2U
+        : (first & 0xF0U) == 0xE0U ? 3U
+        : (first & 0xF8U) == 0xF0U ? 4U : 0U;
+    const std::size_t width = bytes == 1U ? 1U : 2U;
+    if (bytes == 0U || bytes > localized.size() - offset ||
+        width > maximumColumns - columns) {
+      break;
+    }
+    offset += bytes;
+    columns += width;
+  }
+  return localized.substr(0, offset);
 }
 
 UiLanguage loadUiLanguage(const std::filesystem::path &settingsPath) noexcept {

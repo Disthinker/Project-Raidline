@@ -1,3 +1,4 @@
+#include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
 #include "base_wish_expedition.h"
 
@@ -658,8 +659,12 @@ DeployReceipt executeDeploy(
     snapshot.wishFocus = freezeBaseWishFocus(candidate, content);
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
+    const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
+        std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
+            [](const auto &group) { return group.id == "encounter.frontier.resource_guard" && group.armoredMemberDefinition.has_value(); });
     snapshot.rulesVersion = highRiskCrisisRules
-        ? "content-beta-loot-economy-29"
+        ? (corpseTrial
+            ? std::string{kRaidCorpseRulesVersion} : "content-beta-loot-economy-29")
         : encounterEcologyRules
         ? "procedural-frontier-loot-identity-27"
         : resourceEcologyRules
@@ -1725,6 +1730,8 @@ DeployReceipt executeDeploy(
         }
     }
     candidate.pendingRaid = std::move(snapshot);
+    const auto corpseFreeze = freezeRaidCorpseLoot(candidate, content);
+    if (!corpseFreeze.valid) return deployFailure(RaidLifecycleError::InvalidProfile, corpseFreeze.message, profile.revision);
     if (!advanceProfileWorldTime(
             candidate,
             content,
@@ -1824,7 +1831,8 @@ RaidSettlementReceipt settlePendingRaid(
     {
         const bool onGround =
             std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
-            std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location);
+            std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location) ||
+            std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location);
         if (onGround)
         {
             const std::set<AssetInstanceId> tree =

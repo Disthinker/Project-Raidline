@@ -300,6 +300,8 @@ add_library(raidline_domain STATIC
     src/recovery_task_domain.h
     src/profile_combat_domain.cpp
     src/profile_combat_domain.h
+    src/raid_corpse_search.cpp
+    src/raid_corpse_search.h
     src/raid_lifecycle.cpp
     src/regional_operations_domain.cpp
     src/regional_operations_domain.h
@@ -742,6 +744,7 @@ raidline_add_test(
     tests/test_profile_state.cpp
     raidline::domain)
 raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
+raidline_add_test(RaidCorpseSearchTest tests/test_raid_corpse_search.cpp raidline::services)
 raidline_add_test(RaidSceneContainerUiTest tests/test_raid_scene_container_ui.cpp raidline::sdl_client)
 raidline_add_test(PointerContinuityUiTest tests/test_pointer_continuity_ui.cpp raidline::sdl_client)
 raidline_add_test(
