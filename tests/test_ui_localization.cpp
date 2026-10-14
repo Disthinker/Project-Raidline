@@ -1374,3 +1374,15 @@ TEST(UiLocalizationTest, CorruptSettingFallsBackToChinese) {
   EXPECT_EQ(loadUiLanguage(settingsPath), UiLanguage::SimplifiedChinese);
   std::filesystem::remove_all(settingsPath.parent_path());
 }
+
+TEST(UiLocalizationTest, IndoorObservationCountersAndAccessLossAreFullyChinese) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+                          "Visible Enemies: 2 | Alerted 1 | Searching 0"),
+            "可见敌人: 2 | 已警觉 1 | 搜索中 0");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"Visible Ground Items: 3"),
+            "可见地面物资: 3");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"STORAGE ACCESS LOST"),
+            "已无法继续访问储物容器");
+  EXPECT_EQ(localizeUiText(UiLanguage::English,"Visible Enemies: 2/2"),
+            "Visible Enemies: 2/2");
+}

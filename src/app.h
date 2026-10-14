@@ -142,8 +142,11 @@ private:
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
+    friend struct RaidIndoorVisibilityUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
+    Texture indoorInformationLayer_;
+    Texture indoorShadowMask_;
 
     InputSystem input_;
     Uint64 lastCounter_{};
@@ -540,6 +543,8 @@ private:
         std::size_t animationFrame);
     void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
+    [[nodiscard]] bool ensureIndoorObservationTargets();
+    [[nodiscard]] bool renderIndoorInformationLayer(const SDL_Rect &worldViewport);
     [[nodiscard]] Vec2 baseWorldCameraOffset() const noexcept;
     [[nodiscard]] float baseConstructionZoom() const noexcept;
     [[nodiscard]] Vec2 baseScreenToWorld(Vec2 screenPosition) const noexcept;

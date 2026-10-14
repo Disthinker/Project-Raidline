@@ -2159,7 +2159,8 @@ InventoryReceipt pickupRaidLoot(
     ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId assetId,
-    const CommandContext &context)
+    const CommandContext &context,
+    const RaidVisibilityProjection *observation)
 {
     const AssetRecord *asset = profile.assets.find(assetId);
     if (asset == nullptr ||
@@ -2185,6 +2186,18 @@ InventoryReceipt pickupRaidLoot(
     }
 
     const ItemDefinition &definition = content.item(asset->definitionId);
+    if(snapshot->spaceId!=outdoorRaidSpaceId())
+    {
+        const Vec2 size=definition.worldRenderSize;
+        const Rect bounds{{snapshot->position.x-size.x*0.5F,snapshot->position.y-size.y*0.5F},size};
+        if(!observation || !observation->valid || observation->spaceId!=snapshot->spaceId ||
+           !observation->boundsVisible(bounds))
+            return {false,false,DomainErrorCode::IllegalDestination,"Raid Loot is outside observed space",profile.revision};
+        const auto p=observation->observer;
+        const float dx=p.x-snapshot->position.x,dy=p.y-snapshot->position.y;
+        if(dx*dx+dy*dy>72.0F*72.0F)
+            return {false,false,DomainErrorCode::IllegalDestination,"Raid Loot is no longer in range",profile.revision};
+    }
     const auto commitMove = [&](const InventoryCommand &command)
     {
         snapshot->collected = true;

@@ -8,6 +8,11 @@
 #include "hit_resolution.h"
 #include "raid_space_spatial_index.h"
 #include "vec2.h"
+#include "raid_visibility.h"
+
+[[nodiscard]] RaidVisibilityProjection buildRaidSpaceVisibility(
+    const RaidSpaceBlockerIndex &, const RaidSpaceDefinitionId &, Vec2 observer,
+    std::size_t *blockerTests = nullptr);
 
 struct RaidSpaceNavigationQuery
 {

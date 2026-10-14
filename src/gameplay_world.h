@@ -260,6 +260,10 @@ public:
     [[nodiscard]] std::string_view
     activeRaidSpaceDisplayName() const noexcept;
     [[nodiscard]] Vec2 raidSpaceWorldSize() const noexcept;
+    [[nodiscard]] const RaidVisibilityProjection &indoorObservation() const;
+    [[nodiscard]] bool raidBoundsObservable(Rect bounds) const;
+    [[nodiscard]] bool raidEnemyObservable(CombatTargetId id) const;
+    [[nodiscard]] std::uint64_t indoorObservationBuildCount() const noexcept { return indoorObservationBuildCount_; }
     [[nodiscard]] std::vector<RaidSpacePortalProjection>
     visibleRaidSpacePortals() const;
     [[nodiscard]] bool raidSpacePortalInteractionInRange() const noexcept;
@@ -528,6 +532,9 @@ private:
     std::uint32_t outdoorChunkRows_{};
     std::vector<OutdoorPresentationChunk> outdoorPresentationChunks_;
     mutable RaidOutdoorPresentationProjection outdoorPresentationCache_;
+    mutable RaidVisibilityProjection indoorObservationCache_;
+    mutable bool indoorObservationCacheReady_{};
+    mutable std::uint64_t indoorObservationBuildCount_{};
     mutable bool outdoorPresentationCacheValid_{};
     mutable std::uint32_t outdoorPresentationFirstChunkColumn_{};
     mutable std::uint32_t outdoorPresentationLastChunkColumn_{};

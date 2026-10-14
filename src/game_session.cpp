@@ -2079,12 +2079,19 @@ bool GameSession::resetDeveloperWeaponTuning()
     }
 }
 
+RaidSceneContainerAccess GameSession::raidSceneAccess(AssetInstanceId id) const
+{
+    const auto p=world_->player().position();
+    const float half=world_->player().size()*0.5F;
+    RaidSceneContainerAccess access{id,world_->activeRaidSpaceId(),{p.x+half,p.y+half},std::nullopt};
+    if(!world_->inOutdoorRaidSpace())access.observation=world_->indoorObservation();
+    return access;
+}
+
 bool GameSession::raidSceneContainerAvailable(AssetInstanceId id) const
 {
     if (!alphaRaidActive_ || !world_ || !world_->raidSession().isActive() || world_->player().isDead() || world_->player().isControlled()) return false;
-    const Vec2 p = world_->player().position();
-    const float half = world_->player().size() * 0.5F;
-    return raidSceneContainerAccessible(profile_, {id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}});
+    return raidSceneContainerAccessible(profile_, raidSceneAccess(id));
 }
 
 bool GameSession::canOpenRaidSceneContainer(AssetInstanceId id) const
@@ -2115,19 +2122,15 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidSceneContainer() const
 
 InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const
 {
-    if (!raidSceneContainerAvailable(id)) return {false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
-    const auto p = world_->player().position();
-    const float half = world_->player().size() * 0.5F;
-    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    if (!raidSceneContainerAvailable(id)) return {false, DomainErrorCode::IllegalDestination, "Scene container is no longer accessible", profile_.revision};
+    const RaidSceneContainerAccess access=raidSceneAccess(id);
     return queryInventory(profile_, publishedContentRegistry(), command, &access);
 }
 
 InventoryReceipt GameSession::executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId)
 {
-    if (!raidSceneContainerAvailable(id)) return {false, false, DomainErrorCode::IllegalDestination, "Scene container is no longer in range", profile_.revision};
-    const auto p = world_->player().position();
-    const float half = world_->player().size() * 0.5F;
-    const RaidSceneContainerAccess access{id, world_->activeRaidSpaceId(), {p.x + half, p.y + half}};
+    if (!raidSceneContainerAvailable(id)) return {false, false, DomainErrorCode::IllegalDestination, "Scene container is no longer accessible", profile_.revision};
+    const RaidSceneContainerAccess access=raidSceneAccess(id);
     return executeInventory(profile_, publishedContentRegistry(), command,
         {profile_.revision, std::move(transactionId)}, &access);
 }
@@ -4525,7 +4528,8 @@ void GameSession::updateAlphaRaid(
                 *loot,
                 CommandContext{
                     profile_.revision,
-                    nextRaidTransaction("pickup")});
+                    nextRaidTransaction("pickup")},
+                world_->inOutdoorRaidSpace()?nullptr:&world_->indoorObservation());
             if (receipt.succeeded)
             {
                 presentationEvents_.push_back(
@@ -5201,8 +5205,17 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
 }
 
 bool GameSession::raidLootAccessible(
-    const RaidLootSnapshot &loot) const noexcept
+    const RaidLootSnapshot &loot) const
 {
+    if(!world_ || loot.spaceId!=world_->activeRaidSpaceId() ||
+       (loot.requiresHighRisk && world_->raidSession().phase()!=RaidPhase::HighRisk))return false;
+    if(!world_->inOutdoorRaidSpace())
+    {
+        const auto *asset=profile_.assets.find(loot.assetId);
+        if(!asset)return false;
+        const Vec2 size=publishedContentRegistry().item(asset->definitionId).worldRenderSize;
+        return world_->raidBoundsObservable({{loot.position.x-size.x*0.5F,loot.position.y-size.y*0.5F},size});
+    }
     return world_ != nullptr &&
         loot.spaceId == world_->activeRaidSpaceId() &&
         (!loot.requiresHighRisk ||

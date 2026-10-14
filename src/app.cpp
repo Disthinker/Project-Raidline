@@ -1919,6 +1919,13 @@ bool App::initialize()
         return false;
     }
 
+    if (!ensureIndoorObservationTargets())
+    {
+        fmt::print("Indoor observation target creation failed: {}\n", SDL_GetError());
+        shutdown();
+        return false;
+    }
+
     float displayRefreshHz{};
     const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window_);
     if (displayId != 0U)
@@ -6678,7 +6685,7 @@ void App::update(float deltaTime)
         closeInventory();
         pendingInventoryUiEvents_.clear();
         pendingProfileRightClicks_.clear();
-        uiMessage_ = "SCENE CONTAINER OUT OF RANGE";
+        uiMessage_ = gameSession_.world().inOutdoorRaidSpace() ? "SCENE CONTAINER OUT OF RANGE" : "STORAGE ACCESS LOST";
     }
     if (!gameSession_.developerRangeActive())
     {
@@ -7051,7 +7058,7 @@ void App::update(float deltaTime)
     if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
     {
         closeInventory();
-        uiMessage_ = "SCENE CONTAINER OUT OF RANGE";
+        uiMessage_ = gameSession_.world().inOutdoorRaidSpace() ? "SCENE CONTAINER OUT OF RANGE" : "STORAGE ACCESS LOST";
     }
     if (gameFlow_.state() == GameFlowState::Base)
     {
@@ -7384,12 +7391,19 @@ void App::renderDebugText()
         52.0f,
         playerHealthText.c_str());
 
+    const bool indoorVisibility=gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace();
+    const Vec2 camera=raidWorldCameraOffset();
+    const auto onScreen=[&](Rect bounds)
+    {
+        return !indoorVisibility || (bounds.position.x<camera.x+kWindowWidth && bounds.position.y<camera.y+kWindowHeight &&
+            bounds.position.x+bounds.size.x>camera.x && bounds.position.y+bounds.size.y>camera.y);
+    };
     std::size_t aliveEnemyCount{};
     std::size_t alertedEnemyCount{};
     std::size_t searchingEnemyCount{};
     for (const Enemy &enemy : gameSession_.world().enemies())
     {
-        if (!enemy.isDead())
+        if (!enemy.isDead() && (!indoorVisibility || (gameSession_.world().raidEnemyObservable(enemy.combatTargetId()) && onScreen(enemy.bounds()))))
         {
             ++aliveEnemyCount;
             if (enemy.awarenessState() == EnemyAwarenessState::Alerted)
@@ -7405,9 +7419,9 @@ void App::renderDebugText()
 
     const std::string enemyHealthText =
         fmt::format(
-            "Enemies: {}/{} | Alerted {} | Searching {}",
+            fmt::runtime((gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? "Visible Enemies: {0} | Alerted {2} | Searching {3}" : "Enemies: {}/{} | Alerted {} | Searching {}"),
             aliveEnemyCount,
-            gameSession_.world().enemies().size(),
+            (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? aliveEnemyCount : gameSession_.world().enemies().size(),
             alertedEnemyCount,
             searchingEnemyCount);
 
@@ -7433,7 +7447,10 @@ void App::renderDebugText()
                                  [&](const RaidLootSnapshot &entry)
                                  { return entry.assetId == asset.instanceId; });
                 if (snapshot != loot.end() &&
-                    gameSession_.raidLootAccessible(*snapshot))
+                    gameSession_.raidLootAccessible(*snapshot) &&
+                    onScreen({{snapshot->position.x-publishedContentRegistry().item(asset.definitionId).worldRenderSize.x*0.5F,
+                               snapshot->position.y-publishedContentRegistry().item(asset.definitionId).worldRenderSize.y*0.5F},
+                               publishedContentRegistry().item(asset.definitionId).worldRenderSize}))
                 {
                     ++groundCount;
                 }
@@ -7441,7 +7458,7 @@ void App::renderDebugText()
         }
     }
     const std::string groundItemText =
-        fmt::format("Ground Items: {}", groundCount);
+        fmt::format(fmt::runtime((gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? "Visible Ground Items: {}" : "Ground Items: {}"), groundCount);
 
     uiTextRenderer_.render(
         renderer_,
@@ -10787,6 +10804,7 @@ void App::renderEnemies()
          ++enemyIndex)
     {
         const Enemy &enemy = enemies[enemyIndex];
+        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
         const Rect bounds = enemy.bounds();
         const float spriteX =
             bounds.position.x +
@@ -10929,6 +10947,7 @@ void App::renderEnemyAttackTelegraphs()
     for (const Enemy &enemy :
          gameSession_.world().enemies())
     {
+        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
         const std::optional<EnemyAttackType> attackType =
             enemy.attackType();
         if (!attackType.has_value())
@@ -15369,6 +15388,7 @@ void App::renderAlphaRaidLoot()
     {
         const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location);
         if (!scene || scene->spaceId != gameSession_.world().activeRaidSpaceId()) continue;
+        if (!gameSession_.world().raidBoundsObservable({{scene->position.x-24,scene->position.y-18},{48,36}})) continue;
         const SDL_FRect box{scene->position.x - 24, scene->position.y - 18, 48, 36};
         SDL_SetRenderDrawColor(renderer_, 86, 76, 52, 255);
         SDL_RenderFillRect(renderer_, &box);
@@ -15383,6 +15403,7 @@ void App::renderAlphaRaidLoot()
     {
         const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
         if (!corpse || !corpse->deathPosition || corpse->spaceId != gameSession_.world().activeRaidSpaceId()) continue;
+        if (!gameSession_.world().raidBoundsObservable({{corpse->deathPosition->x-26,corpse->deathPosition->y-10},{52,20}})) continue;
         const auto p = *corpse->deathPosition;
         const SDL_FRect body{p.x - 26, p.y - 10, 52, 20};
         SDL_SetRenderDrawColor(renderer_, 86, 63, 58, 255);
@@ -18668,6 +18689,168 @@ void App::renderRaidTacticalMap()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+bool App::ensureIndoorObservationTargets()
+{
+    if (!renderer_)
+        return false;
+    if (!indoorInformationLayer_.valid())
+        indoorInformationLayer_ = Texture{SDL_CreateTexture(
+            renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+            kWindowWidth, kWindowHeight)};
+    if (!indoorShadowMask_.valid())
+        indoorShadowMask_ = Texture{SDL_CreateTexture(
+            renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+            kWindowWidth, kWindowHeight)};
+    return indoorInformationLayer_.valid() && indoorShadowMask_.valid() &&
+           SDL_SetTextureBlendMode(indoorInformationLayer_.get(),
+                                   SDL_BLENDMODE_NONE) &&
+           SDL_SetTextureBlendMode(indoorShadowMask_.get(),
+                                   SDL_BLENDMODE_BLEND) &&
+           SDL_SetTextureScaleMode(indoorInformationLayer_.get(),
+                                   SDL_SCALEMODE_NEAREST);
+}
+
+bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
+{
+    if (!ensureIndoorObservationTargets())
+        return false;
+    SDL_Texture *originalTarget = SDL_GetRenderTarget(renderer_);
+    SDL_Rect originalViewport{}, originalClip{};
+    SDL_GetRenderViewport(renderer_, &originalViewport);
+    const bool viewportSet = SDL_RenderViewportSet(renderer_);
+    const bool clipSet = SDL_RenderClipEnabled(renderer_);
+    SDL_GetRenderClipRect(renderer_, &originalClip);
+    SDL_BlendMode originalBlend{};
+    SDL_GetRenderDrawBlendMode(renderer_, &originalBlend);
+    Uint8 r{}, g{}, b{}, a{};
+    SDL_GetRenderDrawColor(renderer_, &r, &g, &b, &a);
+    struct Restore
+    {
+        SDL_Renderer *renderer;
+        SDL_Texture *target;
+        SDL_Rect viewport, clip;
+        bool viewportSet, clipSet;
+        SDL_BlendMode blend;
+        Uint8 r, g, b, a;
+        ~Restore()
+        {
+            SDL_SetRenderTarget(renderer, target);
+            SDL_SetRenderViewport(renderer, viewportSet ? &viewport : nullptr);
+            SDL_SetRenderClipRect(renderer, clipSet ? &clip : nullptr);
+            SDL_SetRenderDrawBlendMode(renderer, blend);
+            SDL_SetRenderDrawColor(renderer, r, g, b, a);
+        }
+    } restore{renderer_,
+              originalTarget,
+              originalViewport,
+              originalClip,
+              viewportSet,
+              clipSet,
+              originalBlend,
+              r,
+              g,
+              b,
+              a};
+
+    const auto &view = gameSession_.world().indoorObservation();
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    const Rect screenWorld{
+        {-static_cast<float>(worldViewport.x),
+         -static_cast<float>(worldViewport.y)},
+        {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
+    if (view.valid)
+        for (std::size_t i = 0; i < view.boundary.size(); ++i)
+        {
+            const auto polygon = clipRaidVisibilityTriangle(
+                view.observer, view.boundary[i],
+                view.boundary[(i + 1) % view.boundary.size()], screenWorld);
+            if (polygon.size() < 3)
+                continue;
+            const int first = static_cast<int>(vertices.size());
+            for (auto p : polygon)
+            {
+                const SDL_FPoint screen{
+                    p.x + static_cast<float>(worldViewport.x),
+                    p.y + static_cast<float>(worldViewport.y)};
+                vertices.push_back(
+                    {screen,
+                     {1, 1, 1, 1},
+                     {std::clamp(screen.x / static_cast<float>(kWindowWidth),
+                                 0.0F, 1.0F),
+                      std::clamp(screen.y / static_cast<float>(kWindowHeight),
+                                 0.0F, 1.0F)}});
+            }
+            for (int j = 1; j + 1 < static_cast<int>(polygon.size()); ++j)
+            {
+                indices.push_back(first);
+                indices.push_back(first + j);
+                indices.push_back(first + j + 1);
+            }
+        }
+    if (!SDL_SetRenderTarget(renderer_, indoorShadowMask_.get()))
+        return false;
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_RenderClear(renderer_);
+    auto maskVertices = vertices;
+    for (auto &vertex : maskVertices)
+        vertex.color = {0, 0, 0, 0};
+    if (!indices.empty() &&
+        !SDL_RenderGeometry(renderer_, nullptr, maskVertices.data(),
+                            static_cast<int>(maskVertices.size()),
+                            indices.data(), static_cast<int>(indices.size())))
+        return false;
+
+    if (!SDL_SetRenderTarget(renderer_, indoorInformationLayer_.get()))
+        return false;
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+    SDL_SetRenderViewport(renderer_, &worldViewport);
+    // An opaque copy of the original background preserves straight-alpha
+    // sprites/effects exactly; clipping the finished pixels avoids blending
+    // their alpha a second time and works on the software renderer too.
+    renderBackground();
+    renderExtractionPoint();
+    renderRaidSpacePortal();
+    renderBallisticBlockers();
+    renderAlphaRaidLoot();
+    renderEnemyAttackTelegraphs();
+    renderEnemies();
+    renderPlayer();
+    renderShotPresentations();
+    renderShotFeedbackPresentations();
+    renderParticles();
+
+    if (!SDL_SetRenderTarget(renderer_, originalTarget))
+        return false;
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
+    SDL_Rect screenClip = originalClip;
+    screenClip.x += originalViewport.x;
+    screenClip.y += originalViewport.y;
+    SDL_SetRenderClipRect(renderer_, clipSet ? &screenClip : nullptr);
+    SDL_SetTextureAlphaMod(indoorShadowMask_.get(), 64);
+    if (!SDL_RenderTexture(renderer_, indoorShadowMask_.get(), nullptr,
+                           nullptr))
+        return false;
+    if (!indices.empty() &&
+        !SDL_RenderGeometry(renderer_, indoorInformationLayer_.get(),
+                            vertices.data(), static_cast<int>(vertices.size()),
+                            indices.data(), static_cast<int>(indices.size())))
+        return false;
+    // Static portal labels are information about the layout, not hidden actors.
+    SDL_SetRenderViewport(renderer_, &worldViewport);
+    SDL_SetRenderClipRect(renderer_, clipSet ? &originalClip : nullptr);
+    renderRaidSpacePortal();
+    return true;
+}
+
 void App::renderRaidScreen()
 {
     const Vec2 cameraOffset = raidWorldCameraOffset();
@@ -18676,20 +18859,18 @@ void App::renderRaidScreen()
     const SDL_Rect worldViewport{
         static_cast<int>(std::lround(shakePixels.x - cameraOffset.x)),
         static_cast<int>(std::lround(shakePixels.y - cameraOffset.y)),
-        static_cast<int>(std::ceil(std::max(
-            activeWorldSize.x, static_cast<float>(kWindowWidth)))),
-        static_cast<int>(std::ceil(std::max(
-            activeWorldSize.y, static_cast<float>(kWindowHeight))))};
-    const bool worldIsTranslated =
-        worldViewport.x != 0 || worldViewport.y != 0;
+        static_cast<int>(std::ceil(
+            std::max(activeWorldSize.x, static_cast<float>(kWindowWidth)))),
+        static_cast<int>(std::ceil(
+            std::max(activeWorldSize.y, static_cast<float>(kWindowHeight))))};
+    const bool worldIsTranslated = worldViewport.x != 0 || worldViewport.y != 0;
     if (worldIsTranslated)
     {
         // Keep only the inexpensive ground layer underneath camera and
         // screen-shake translation so viewport edges never expose black
         // strips. Outdoor details are queried and drawn once in world space.
         renderBackground(false);
-        static_cast<void>(
-            SDL_SetRenderViewport(renderer_, &worldViewport));
+        static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
     }
     renderBackground();
     renderExtractionPoint();
@@ -18700,22 +18881,36 @@ void App::renderRaidScreen()
         renderStorageCabinet();
     }
 
-    // 地面物品位于角色与敌人下层。
-    if (gameSession_.world().isAlphaRaidWorld())
+    const bool indoorVisibility = gameSession_.world().isAlphaRaidWorld() &&
+                                  !gameSession_.world().inOutdoorRaidSpace();
+    if (indoorVisibility)
     {
-        renderAlphaRaidLoot();
+        if (!renderIndoorInformationLayer(worldViewport))
+        {
+            uiMessage_ = "INDOOR OBSERVATION UNAVAILABLE";
+            SDL_LogError(SDL_LOG_CATEGORY_RENDER,
+                         "Indoor observation failed: %s", SDL_GetError());
+        }
     }
     else
     {
-        renderGroundItems();
-    }
+        // 地面物品位于角色与敌人下层。
+        if (gameSession_.world().isAlphaRaidWorld())
+        {
+            renderAlphaRaidLoot();
+        }
+        else
+        {
+            renderGroundItems();
+        }
 
-    renderEnemyAttackTelegraphs();
-    renderEnemies();
-    renderPlayer();
-    renderShotPresentations();
-    renderShotFeedbackPresentations();
-    renderParticles();
+        renderEnemyAttackTelegraphs();
+        renderEnemies();
+        renderPlayer();
+        renderShotPresentations();
+        renderShotFeedbackPresentations();
+        renderParticles();
+    }
 
     // Crosshair and every UI/modal layer stay in stable screen coordinates;
     // screen shake therefore cannot alter aiming or inventory interaction.
@@ -18816,6 +19011,8 @@ void App::shutdown()
     }
 
     enemyMoveHorizontalTexture_.reset();
+    indoorInformationLayer_.reset();
+    indoorShadowMask_.reset();
     playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
     backgroundTexture_.reset();

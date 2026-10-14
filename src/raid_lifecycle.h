@@ -140,4 +140,5 @@ struct RaidTravelPreview
     ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId assetId,
-    const CommandContext &context);
+    const CommandContext &context,
+    const RaidVisibilityProjection *observation = nullptr);
