@@ -543,11 +543,21 @@ private:
     std::vector<OutdoorPresentationChunk> outdoorPresentationChunks_;
     mutable RaidOutdoorPresentationProjection outdoorPresentationCache_;
     mutable RaidVisibilityProjection indoorObservationCache_;
+    mutable RaidVisibilityBoundsQuery observationBoundsQuery_;
     mutable bool indoorObservationCacheReady_{};
     mutable std::uint64_t indoorObservationBuildCount_{};
-    // Frame-local read pointer: clear before update/removal/spawn/roster replacement.
-    struct EnemyObservationCacheEntry { Rect bounds; bool observable{}; const Enemy *actor{}; };
-    mutable std::map<CombatTargetId, EnemyObservationCacheEntry> enemyObservationCache_;
+    // Frame-local stable-ID lookup; verify the live ID at its position on every
+    // query and clear before update/removal/spawn/roster replacement. No actor
+    // pointers.
+    struct EnemyObservationCacheEntry
+    {
+        CombatTargetId id{};
+        Rect bounds;
+        bool computed{}, observable{};
+        std::size_t position{};
+    };
+    mutable std::vector<EnemyObservationCacheEntry> enemyObservationCache_;
+    mutable bool enemyObservationIndexReady_{};
     mutable std::uint64_t enemyObservationSolveCount_{};
     mutable RaidObservationWork observationWork_;
     bool raidDaylight_{true};

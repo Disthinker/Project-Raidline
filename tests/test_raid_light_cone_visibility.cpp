@@ -601,6 +601,139 @@ TEST(RaidLightConeVisibilityTest,
 }
 
 TEST(RaidLightConeVisibilityTest,
+     PreparedBoundsPreservePartialVisibilityAtAllThreeLightSettings)
+{
+    const std::vector<BallisticBlocker> walls{{1, {{1120, 900}, {20, 200}}},
+                                              {2, {{900, 1220}, {300, 15}}}};
+    const auto index = RaidSpaceBlockerIndex::build({3000, 3000}, walls);
+    ASSERT_TRUE(index);
+    for (const auto environment :
+         {RaidLightEnvironment::DayOutdoor, RaidLightEnvironment::NightOutdoor,
+          RaidLightEnvironment::WeakIndoor})
+    {
+        const auto parameters = raidSightParameters(environment);
+        for (int heading = 0; heading < 24; ++heading)
+        {
+            const float a = heading * 6.28318530718F / 24;
+            const auto view = buildRaidSpaceConeVisibility(
+                *index, {room,
+                         {1000, 1000},
+                         {std::cos(a), std::sin(a)},
+                         parameters.angleDegrees,
+                         parameters.maximumDistance,
+                         environment,
+                         1});
+            ASSERT_TRUE(view.validGeometry());
+            const RaidVisibilityBoundsQuery query{view};
+            for (int target = 0; target < 64; ++target)
+            {
+                const float b = target * 6.28318530718F / 64;
+                const float radius = 50 + (target % 7) * 180.0F;
+                const Rect bounds{{1000 + std::cos(b) * radius - 25,
+                                   1000 + std::sin(b) * radius - 25},
+                                  {50, 50}};
+                EXPECT_EQ(query.boundsVisible(bounds),
+                          view.boundsVisible(bounds))
+                    << heading << ':' << target;
+            }
+            for (const Rect sliver :
+                 {Rect{{1119.999F, 899.999F}, {0.002F, 0.002F}},
+                  Rect{{1140.001F, 950}, {0.001F, 40}},
+                  Rect{{1000, 1000}, {0.0005F, 0.0005F}}})
+                EXPECT_EQ(query.boundsVisible(sliver),
+                          view.boundsVisible(sliver));
+        }
+    }
+}
+
+TEST(RaidLightConeVisibilityTest,
+     PreparedBoundsOwnSnapshotAndNeverCacheValidityOfMutableCommandContext)
+{
+    auto view = cone({1, 0}, 110, 500);
+    const Rect front{{1100, 975}, {50, 50}};
+    const RaidVisibilityBoundsQuery snapshot{view};
+    ASSERT_TRUE(snapshot.boundsVisible(front));
+    view.boundary.front().x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(view.matches(view.key()));
+    EXPECT_FALSE(view.boundsVisible(front));
+    EXPECT_FALSE(RaidVisibilityBoundsQuery{view}.boundsVisible(front));
+    view.boundary.clear();
+    EXPECT_TRUE(
+        snapshot.boundsVisible(front)); // Owned data, no source references.
+    EXPECT_FALSE(RaidVisibilityBoundsQuery{}.boundsVisible(front));
+    for (const Rect invalid :
+         {Rect{{1100, 975}, {0, 50}}, Rect{{1100, 975}, {-1, 50}},
+          Rect{{1100, 975}, {std::numeric_limits<float>::infinity(), 50}}})
+        EXPECT_FALSE(snapshot.boundsVisible(invalid));
+}
+
+TEST(RaidLightConeVisibilityTest,
+     PreparedBoundsPreserveFarMapRoundoffAndLegacyFullRoom)
+{
+    const auto index = RaidSpaceBlockerIndex::build({25600, 14400}, {});
+    ASSERT_TRUE(index);
+    for (int heading = 0; heading < 36; ++heading)
+    {
+        const float a = heading * 6.28318530718F / 36;
+        const auto view = buildRaidSpaceConeVisibility(
+            *index, {outdoorRaidSpaceId(),
+                     {22051, 6031},
+                     {std::cos(a), std::sin(a)},
+                     100,
+                     600,
+                     RaidLightEnvironment::NightOutdoor,
+                     1});
+        ASSERT_TRUE(view.validGeometry());
+        const RaidVisibilityBoundsQuery query{view};
+        for (int target = 0; target < 32; ++target)
+        {
+            const float b = target * 6.28318530718F / 32;
+            const Rect bounds{
+                {22051 + std::cos(b) * 600 - 25, 6031 + std::sin(b) * 600 - 25},
+                {50, 50}};
+            EXPECT_EQ(query.boundsVisible(bounds), view.boundsVisible(bounds));
+        }
+    }
+    const auto legacy = buildRaidSpaceVisibility(*index, room, {1000, 1000});
+    ASSERT_TRUE(legacy.validGeometry());
+    const RaidVisibilityBoundsQuery query{legacy};
+    for (const Rect bounds :
+         {Rect{{100, 100}, {50, 50}}, Rect{{1200, 975}, {50, 50}},
+          Rect{{750, 975}, {50, 50}}, Rect{{-100, -100}, {10, 10}}})
+        EXPECT_EQ(query.boundsVisible(bounds), legacy.boundsVisible(bounds));
+}
+
+TEST(RaidLightConeVisibilityTest,
+     ActorIndexRetainsStableIdsAfterMiddleRemovalAndRefreshesLiveBounds)
+{
+    auto c = config();
+    c.initialEnemies = {EnemySpawn{{1100, 975}, {50, 50}, 100},
+                        EnemySpawn{{1200, 975}, {50, 50}, 100},
+                        EnemySpawn{{1300, 975}, {50, 50}, 100}};
+    GameplayWorld w{c};
+    aim(w, {1500, 1000}, false, 0);
+    const auto first = w.enemies()[0].combatTargetId();
+    const auto middle = w.enemies()[1].combatTargetId();
+    const auto last = w.enemies()[2].combatTargetId();
+    ASSERT_TRUE(w.raidEnemyObservable(first));
+    ASSERT_TRUE(w.raidEnemyObservable(middle));
+    ASSERT_TRUE(w.raidEnemyObservable(last));
+    EXPECT_FALSE(w.raidEnemyObservable(kInvalidCombatTargetId));
+    static_cast<void>(const_cast<Enemy &>(w.enemies()[1]).takeDamage(10000));
+    EXPECT_FALSE(w.raidEnemyObservable(middle));
+    aim(w, {1500, 1000}, false, 0);
+    ASSERT_EQ(w.enemies().size(), 2);
+    EXPECT_EQ(w.enemies()[0].combatTargetId(), first);
+    EXPECT_EQ(w.enemies()[1].combatTargetId(), last);
+    EXPECT_TRUE(w.raidEnemyObservable(first));
+    EXPECT_TRUE(w.raidEnemyObservable(last));
+    EXPECT_FALSE(w.raidEnemyObservable(middle));
+    ASSERT_TRUE(const_cast<Enemy &>(w.enemies()[1]).setPosition({800, 975}));
+    EXPECT_FALSE(w.raidEnemyObservable(last));
+    EXPECT_TRUE(w.raidEnemyObservable(first));
+}
+
+TEST(RaidLightConeVisibilityTest,
      PublishedFiveSpacesAndDenseLocalGeometryStayWithinObservationBudget)
 {
     for (const auto map : {MapDefinitionId{"map.raid.frontier_exchange"},

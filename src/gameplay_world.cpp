@@ -1004,6 +1004,7 @@ void GameplayWorld::update(
 {
     spaceTransitionedLastUpdate_ = false;
     enemyObservationCache_.clear(); // Bound to this simulation frame; never retain removed actors.
+    enemyObservationIndexReady_ = false;
     shooting_.beginFrame(deltaTime);
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
@@ -1653,6 +1654,7 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
     {
         const auto key = raidObservationKey();
         enemyObservationCache_.clear();
+        enemyObservationIndexReady_ = false;
         if (lightConeObservationEnabled_)
             indoorObservationCache_ = buildRaidSpaceConeVisibility(
                 activeBlockerIndex(), key, &observationWork_);
@@ -1673,6 +1675,8 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
                 {0, 0}, {size.x, 0}, size, {0, size.y}};
             indoorObservationCache_.valid = true;
         }
+        observationBoundsQuery_ =
+            RaidVisibilityBoundsQuery{indoorObservationCache_};
         ++indoorObservationBuildCount_;
         indoorObservationCacheReady_ = true;
     }
@@ -1681,8 +1685,10 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
 
 bool GameplayWorld::raidBoundsObservable(Rect bounds) const
 {
-    return !isAlphaRaidWorld() ||
-           indoorObservation().boundsVisible(bounds);
+    if (!isAlphaRaidWorld())
+        return true;
+    static_cast<void>(indoorObservation());
+    return observationBoundsQuery_.boundsVisible(bounds);
 }
 
 HitFeedbackPresentationSnapshot GameplayWorld::observableHitFeedback() const
@@ -1719,27 +1725,49 @@ bool GameplayWorld::raidEnemyObservable(CombatTargetId id) const
         const Enemy *found = activeEnemies().find(id);
         return found && raidBoundsObservable(found->bounds());
     }
-    const auto &view = raidObservation(); // Refresh pose/light/space before
-                                          // reading cached eligibility.
-    const auto cached = enemyObservationCache_.find(id);
-    const Enemy *found = cached == enemyObservationCache_.end()
-                             ? activeEnemies().find(id)
-                             : cached->second.actor;
-    if (!found || found->isDead())
+    static_cast<void>(raidObservation()); // Refresh pose/light/space before
+                                          // cached eligibility.
+    if (!enemyObservationIndexReady_)
+    {
+        enemyObservationCache_.reserve(activeEnemies().size());
+        for (std::size_t position = 0; position < activeEnemies().size();
+             ++position)
+            enemyObservationCache_.push_back(
+                {activeEnemies()[position].combatTargetId(),
+                 {},
+                 false,
+                 false,
+                 position});
+        std::sort(enemyObservationCache_.begin(), enemyObservationCache_.end(),
+                  [](const auto &a, const auto &b) { return a.id < b.id; });
+        enemyObservationIndexReady_ = true;
+    }
+    const auto cached = std::lower_bound(
+        enemyObservationCache_.begin(), enemyObservationCache_.end(), id,
+        [](const auto &entry, CombatTargetId target)
+        { return entry.id < target; });
+    if (cached == enemyObservationCache_.end() || cached->id != id)
+        return false;
+    if (cached->position >= activeEnemies().size())
+        return false;
+    const Enemy *found = &activeEnemies()[cached->position];
+    if (found->combatTargetId() != id || found->isDead())
         return false;
     const auto bounds = found->bounds();
-    if (cached != enemyObservationCache_.end())
+    if (cached->computed)
     {
-        const auto previous = cached->second.bounds;
+        const auto previous = cached->bounds;
         if (previous.position.x == bounds.position.x &&
             previous.position.y == bounds.position.y &&
             previous.size.x == bounds.size.x &&
             previous.size.y == bounds.size.y)
-            return cached->second.observable;
+            return cached->observable;
     }
     ++enemyObservationSolveCount_;
-    const bool observable = view.boundsVisible(bounds);
-    enemyObservationCache_[id] = {bounds, observable, found};
+    const bool observable = observationBoundsQuery_.boundsVisible(bounds);
+    cached->bounds = bounds;
+    cached->observable = observable;
+    cached->computed = true;
     return observable;
 }
 
@@ -3243,6 +3271,7 @@ bool GameplayWorld::resetDeveloperRangeEnemies(const EnemyCombatDefinition &defi
     }
     enemyObservationCache_.clear();
     enemies_ = std::move(candidate);
+    enemyObservationIndexReady_ = false;
     nextCombatTargetId_ = nextId;
     initialOutdoorEnemyCount_ = enemies_.size();
     navigationFieldCache_.clear();

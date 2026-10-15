@@ -41,6 +41,10 @@ inline void measureCone(const RaidSpaceBlockerIndex &index,
                 1};
             const auto start = std::chrono::steady_clock::now();
             const auto view = buildRaidSpaceConeVisibility(index, key, &work);
+            // Include construction/validation in the timed region, just as the
+            // production world rebuild does. Target count and budget stay
+            // fixed.
+            const RaidVisibilityBoundsQuery query{view};
             for (int n = 0; n < count; ++n)
             {
                 const float angle = n * 6.28318530718F / count;
@@ -49,7 +53,7 @@ inline void measureCone(const RaidSpaceBlockerIndex &index,
                     {key.observer.x + std::cos(angle) * radius - 25,
                      key.observer.y + std::sin(angle) * radius - 25},
                     {50, 50}};
-                seen = seen + (view.boundsVisible(bounds) ? 1 : 0);
+                seen = seen + (query.boundsVisible(bounds) ? 1 : 0);
             }
             const auto elapsed = std::chrono::duration<double, std::milli>(
                                      std::chrono::steady_clock::now() - start)

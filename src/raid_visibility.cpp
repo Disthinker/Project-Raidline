@@ -268,3 +268,101 @@ bool RaidVisibilityProjection::boundsVisible(Rect rect) const
     }
     return false;
 }
+
+bool RaidVisibilityBoundsQuery::Edge::overlaps(Vec2 center, float hx, float hy,
+                                               float sign) const noexcept
+{
+    return sign * (delta.x * (center.y - origin.y) -
+                   delta.y * (center.x - origin.x)) +
+               absoluteX * hy + absoluteY * hx >=
+           -0.0001F;
+}
+
+RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
+    const RaidVisibilityProjection &view)
+{
+    if (!view.validGeometry())
+        return;
+    valid_ = true;
+    bounded_ = view.maximumDistance > 0;
+    observer_ = view.observer;
+    maximumDistanceSquared_ = view.maximumDistance * view.maximumDistance;
+    const float half = view.angleDegrees * 3.14159265358979323846F / 360;
+    const float c = std::cos(half), s = std::sin(half);
+    leftDirection_ = {view.direction.x * c + view.direction.y * s,
+                      view.direction.y * c - view.direction.x * s};
+    rightDirection_ = {view.direction.x * c - view.direction.y * s,
+                       view.direction.y * c + view.direction.x * s};
+    triangles_.reserve(view.boundary.size());
+    const auto edge = [](Vec2 a, Vec2 b)
+    {
+        const Vec2 delta{b.x - a.x, b.y - a.y};
+        return Edge{a, delta, std::abs(delta.x), std::abs(delta.y)};
+    };
+    for (std::size_t i = 0; i < view.boundary.size(); ++i)
+    {
+        const auto p = view.boundary[i],
+                   q = view.boundary[(i + 1) % view.boundary.size()];
+        const auto area = cross(observer_, p, q);
+        if (std::abs(area) < 0.00001F)
+            continue;
+        triangles_.push_back(
+            {{std::min({observer_.x, p.x, q.x}),
+              std::min({observer_.y, p.y, q.y})},
+             {std::max({observer_.x, p.x, q.x}),
+              std::max({observer_.y, p.y, q.y})},
+             area > 0 ? 1.0F : -1.0F,
+             {edge(observer_, p), edge(p, q), edge(q, observer_)}});
+    }
+}
+
+bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
+{
+    if (!valid_ || !finite(rect.position) || !finite(rect.size) ||
+        rect.size.x <= 0 || rect.size.y <= 0)
+        return false;
+    if (bounded_)
+    {
+        const float x = std::clamp(observer_.x, rect.position.x,
+                                   rect.position.x + rect.size.x) -
+                        observer_.x;
+        const float y = std::clamp(observer_.y, rect.position.y,
+                                   rect.position.y + rect.size.y) -
+                        observer_.y;
+        if (x * x + y * y > maximumDistanceSquared_)
+            return false;
+        const Vec2 center{rect.position.x + rect.size.x / 2 - observer_.x,
+                          rect.position.y + rect.size.y / 2 - observer_.y};
+        const auto extent = [&](Vec2 d)
+        {
+            return std::abs(d.x) * rect.size.y / 2 +
+                   std::abs(d.y) * rect.size.x / 2;
+        };
+        if (leftDirection_.x * center.y - leftDirection_.y * center.x +
+                    extent(leftDirection_) <
+                -0.0001F ||
+            rightDirection_.x * center.y - rightDirection_.y * center.x -
+                    extent(rightDirection_) >
+                0.0001F)
+            return false;
+    }
+    const float dx = std::min(kRaidSightGeometryEpsilon, rect.size.x * 0.1F);
+    const float dy = std::min(kRaidSightGeometryEpsilon, rect.size.y * 0.1F);
+    const float left = rect.position.x + dx,
+                right = rect.position.x + rect.size.x - dx;
+    const float top = rect.position.y + dy,
+                bottom = rect.position.y + rect.size.y - dy;
+    const Vec2 center{(left + right) / 2, (top + bottom) / 2};
+    const float hx = (right - left) / 2, hy = (bottom - top) / 2;
+    for (const auto &triangle : triangles_)
+    {
+        if (triangle.maximum.x < left || triangle.minimum.x > right ||
+            triangle.maximum.y < top || triangle.minimum.y > bottom)
+            continue;
+        if (triangle.edges[0].overlaps(center, hx, hy, triangle.sign) &&
+            triangle.edges[1].overlaps(center, hx, hy, triangle.sign) &&
+            triangle.edges[2].overlaps(center, hx, hy, triangle.sign))
+            return true;
+    }
+    return false;
+}
