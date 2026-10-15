@@ -213,7 +213,8 @@ EconomyReceipt applyRecycle(
             "lost Raid assets require a recovery transaction",
             candidate.revision);
     }
-    if (std::holds_alternative<InstalledWeaponComponentLocation>(asset->location))
+    if (std::holds_alternative<InstalledWeaponComponentLocation>(asset->location) ||
+        std::holds_alternative<InstalledDeviceBatteryLocation>(asset->location))
         return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
     const ItemDefinition &definition = content.item(asset->definitionId);
     if (asset->reliefBatchId.has_value() ||
@@ -245,6 +246,17 @@ EconomyReceipt applyRecycle(
             "currency would overflow",
             candidate.revision);
     }
+    const auto componentRoots = components;
+    for (const auto &[id, child] : candidate.assets.records())
+        if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&child.location); battery &&
+            (battery->deviceAssetId == command.instanceId || std::find(componentRoots.begin(), componentRoots.end(), battery->deviceAssetId) != componentRoots.end()))
+        {
+            if (child.reliefBatchId) return failure(DomainErrorCode::IllegalDestination, "asset cannot be recycled", candidate.revision);
+            components.push_back(id);
+            value += content.item(child.definitionId).marketRecyclePrice;
+        }
+    if (value > std::numeric_limits<std::uint32_t>::max() - candidate.currency)
+        return failure(DomainErrorCode::Capacity, "currency would overflow", candidate.revision);
     for (auto id : components) static_cast<void>(candidate.assets.erase(id));
     candidate.currency += static_cast<std::uint32_t>(value);
     static_cast<void>(candidate.assets.erase(asset->instanceId));

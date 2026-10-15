@@ -44,6 +44,11 @@ std::optional<std::string> lostRaidRecordForAsset(
             current = installed->weaponAssetId;
             continue;
         }
+        if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
+        {
+            current = battery->deviceAssetId;
+            continue;
+        }
         return std::nullopt;
     }
     return std::nullopt;

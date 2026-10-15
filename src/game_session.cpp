@@ -711,6 +711,8 @@ void GameSession::configurePersistence(
         throw std::runtime_error{"Cannot change repository with an unsaved Base checkpoint"};
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
+    weaponLightBindingRevision_=0; weaponLightBinding_={};
+    lightKeyPending_=false; lightKeyHeldSeconds_=0;
     saveRepository_.emplace(std::move(directory));
     lastSaveLoadStatus_ = SaveLoadStatus::NotFound;
     persistenceMessage_.clear();
@@ -809,6 +811,8 @@ bool GameSession::finishFirstRaidHints()
 
 bool GameSession::continueProfile()
 {
+    weaponLightBindingRevision_=0; weaponLightBinding_={};
+    lightKeyPending_=false; lightKeyHeldSeconds_=0;
     if (!drainBaseDailyCheckpoint()) return false;
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
@@ -1563,6 +1567,71 @@ bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
     }
 }
 
+WeaponLightProjection GameSession::activeWeaponLight() const
+{
+    const auto weapon = activeAlphaWeapon().value_or(0);
+    if (weaponLightBindingRevision_ != profile_.revision || weaponLightBinding_.weaponAssetId != weapon)
+    {
+        weaponLightBinding_ = findWeaponLight(profile_, publishedContentRegistry(), weapon);
+        weaponLightBindingRevision_ = profile_.revision;
+    }
+    const bool switching = raidActionState_.active() && std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active());
+    const bool allowed = alphaRaidActive_ && !developerRange_ && world_ && world_->raidSession().isActive() &&
+                         world_->lightConeObservationEnabled() && !switching;
+    return queryWeaponLight(profile_, publishedContentRegistry(), weaponLightBinding_, allowed);
+}
+
+void GameSession::synchronizeWeaponLight(float seconds)
+{
+    if (!world_) return;
+    auto projection = activeWeaponLight();
+    const bool switching = raidActionState_.active() && std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active());
+    const bool allowed = alphaRaidActive_ && !developerRange_ && world_->raidSession().isActive() && world_->lightConeObservationEnabled() && !switching;
+    advanceWeaponLight(profile_, publishedContentRegistry(), projection.binding, allowed, seconds);
+    projection = activeWeaponLight();
+    world_->setWeaponLight(projection.output ? projection.binding.deviceAssetId : 0,
+                           projection.output ? projection.binding.batteryAssetId : 0,
+                           projection.output ? projection.light.angleDegrees : 0,
+                           projection.output ? projection.light.maximumDistance : 0,
+                           projection.output ? projection.light.backgroundRadius : 0);
+}
+
+InventoryReceipt GameSession::toggleWeaponLight()
+{
+    const auto light = activeWeaponLight();
+    if (!alphaRaidActive_ || !world_->raidSession().isActive() || !world_->lightConeObservationEnabled() || !light.binding.deviceAssetId)
+        return {false, false, DomainErrorCode::IllegalDestination, "NO ACTIVE WEAPON LIGHT", profile_.revision};
+    auto candidate = profile_;
+    auto receipt = executeDeviceSwitch(candidate, publishedContentRegistry(), light.binding.deviceAssetId,
+                                      {candidate.revision, nextRaidTransaction("weapon-light")});
+    if (receipt.succeeded && !commitProfileCandidate(std::move(candidate), false))
+        return {false, false, DomainErrorCode::InvalidProfile, persistenceMessage_, profile_.revision};
+    synchronizeWeaponLight();
+    if (receipt.succeeded) persistenceMessage_ = activeWeaponLight().switchOn ? "WEAPON LIGHT INTENT ON" : "WEAPON LIGHT OFF";
+    return receipt;
+}
+
+InventoryReceipt GameSession::changeDeviceBattery(DeviceBatteryCommand command, std::string transactionId)
+{
+    const bool raid = alphaRaidActive_ && world_ && world_->raidSession().isActive();
+    if ((alphaRaidActive_ && !raid) || (!raid && (profile_.pendingRaid || profile_.activeBaseDefense)))
+        return {false, false, DomainErrorCode::IllegalDestination, "BATTERY CHANGE UNAVAILABLE", profile_.revision};
+    DeviceBatteryAccess access{raid};
+    if (raid && profile_.pendingRaid)
+    {
+        const auto p = world_->player().position(); const auto half = world_->player().size() * 0.5F;
+        access.overflow = RaidDroppedBatteryLocation{profile_.pendingRaid->raidId, world_->activeRaidSpaceId(), {p.x+half,p.y+half}};
+    }
+    auto candidate = profile_;
+    auto receipt = executeDeviceBatteryChange(candidate, publishedContentRegistry(), command, access,
+                                             {candidate.revision, std::move(transactionId)});
+    if (!receipt.succeeded) { persistenceMessage_=receipt.message; return receipt; }
+    if (!commitProfileCandidate(std::move(candidate), !raid))
+        return {false, false, DomainErrorCode::InvalidProfile, persistenceMessage_, profile_.revision};
+    synchronizeWeaponLight();
+    return receipt;
+}
+
 bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 {
     const bool inBase = !alphaRaidActive_ &&
@@ -1578,12 +1647,10 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
     const AssetRecord *record = weapon.has_value()
         ? profile_.assets.find(*weapon)
         : nullptr;
-    if (record == nullptr ||
-        record->weaponMalfunction == WeaponMalfunctionType::None)
-    {
-        weaponClearGesture_.reset();
-        return false;
-    }
+    const auto light = activeWeaponLight();
+    const bool lampFault = alphaRaidActive_ && world_->lightConeObservationEnabled() && light.switchOn && light.interrupted && light.remainingMs;
+    const bool weaponFault = record && record->weaponMalfunction != WeaponMalfunctionType::None;
+    if (!weaponFault && !lampFault) { weaponClearGesture_.reset(); return false; }
     const float elapsedSeconds = alphaRaidActive_
         ? raidElapsedSeconds_ : baseCombatElapsedSeconds_;
     if (!weaponClearGesture_.observe(delta, elapsedSeconds))
@@ -1591,16 +1658,19 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
         return false;
     }
     ProfileState candidate = profile_;
-    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
-        candidate,
-        publishedContentRegistry(),
-        ClearWeaponMalfunctionCommand{*weapon},
-        CommandContext{
-            profile_.revision,
-            nextRaidTransaction("clear-malfunction")});
+    const bool lampRestored = lampFault && restoreWeaponLight(candidate, publishedContentRegistry(), light.binding);
+    bool gunRestored = false;
+    if (weaponFault)
+        gunRestored = executeWeaponAmmo(candidate, publishedContentRegistry(), ClearWeaponMalfunctionCommand{*weapon},
+            {candidate.revision, nextRaidTransaction("clear-malfunction")}).succeeded;
+    if (lampRestored && !gunRestored)
+    {
+        if (candidate.revision == std::numeric_limits<ProfileRevision>::max()) return false;
+        ++candidate.revision;
+    }
     weaponClearGesture_.reset();
-    const bool cleared = receipt.succeeded &&
-        commitProfileCandidate(std::move(candidate), false);
+    const bool cleared = (lampRestored || gunRestored) && commitProfileCandidate(std::move(candidate), false);
+    if (cleared) synchronizeWeaponLight();
     if (cleared)
     {
         if (inBase)
@@ -4053,6 +4123,21 @@ void GameSession::updateAlphaRaid(
         simulationInput.firePressed = false;
     }
 
+    if (input.inventoryOpen || input.freezeObservationDirection)
+    { lightKeyPending_=false; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
+    else
+    {
+        if (input.lightJustPressed) { lightKeyPending_=true; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
+        if (lightKeyPending_ && std::isfinite(deltaTime) && deltaTime>0) lightKeyHeldSeconds_ += deltaTime;
+        if (lightKeyPending_ && lightKeyHeldSeconds_>=0.35F && !lightLongPressConsumed_)
+        { lightLongPressConsumed_=true; persistenceMessage_="ONLY WEAPON LIGHT | TAP U"; }
+        if (input.lightJustReleased)
+        {
+            if (lightKeyPending_ && !lightLongPressConsumed_) { const auto receipt=toggleWeaponLight(); if (!receipt.succeeded) persistenceMessage_=receipt.message; }
+            lightKeyPending_=false; lightKeyHeldSeconds_=0;
+        }
+    }
+    synchronizeWeaponLight(deltaTime);
     const bool restorationActive =
         profile_.pendingRaid && profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
@@ -4521,6 +4606,7 @@ void GameSession::updateAlphaRaid(
         }
     }
 
+    synchronizeWeaponLight(); // A completed switch affects observation before this frame can interact.
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
         !world_->raidSession().signalCalledLastUpdate() &&
@@ -5209,6 +5295,13 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
             bestDistance = distance;
             result = loot.assetId;
         }
+    }
+    for (const auto &[id, asset] : profile_.assets.records())
+    {
+        const auto *drop=std::get_if<RaidDroppedBatteryLocation>(&asset.location);
+        if (!drop || drop->spaceId!=world_->activeRaidSpaceId() || !world_->raidBoundsObservable({{drop->position.x-12,drop->position.y-12},{24,24}})) continue;
+        const float dx=drop->position.x-playerCenter.x, dy=drop->position.y-playerCenter.y;
+        if (dx*dx+dy*dy<=bestDistance) { bestDistance=dx*dx+dy*dy; result=id; }
     }
     return result;
 }

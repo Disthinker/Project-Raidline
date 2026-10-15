@@ -7,6 +7,7 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <array>
 #include <queue>
 #include <vector>
 
@@ -203,14 +204,19 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     result.maximumDistance = key.maximumDistance;
     result.environment = key.environment;
     const auto o = key.observer;
-    const float radius = key.maximumDistance;
+    result.lightAssetId = key.lightAssetId; result.lightBatteryId = key.lightBatteryId;
+    result.lightAngleDegrees = key.lightAngleDegrees; result.lightDistance = key.lightDistance;
+    const float radius = std::max(key.maximumDistance, key.lightDistance);
     if (!finite(o) || !finite(key.direction) || !std::isfinite(radius) ||
-        radius <= 0 || !std::isfinite(key.angleDegrees) ||
+        radius <= 0 || !std::isfinite(key.maximumDistance) || key.maximumDistance <= 0 || !std::isfinite(key.angleDegrees) ||
         key.angleDegrees <= 0 || key.angleDegrees > 180 ||
         std::abs(std::hypot(key.direction.x, key.direction.y) - 1) > 0.001F ||
         o.x < 0 || o.y < 0 || o.x > result.worldSize.x ||
         o.y > result.worldSize.y || key.geometryRevision == 0)
         return result;
+    if (!std::isfinite(key.lightDistance) || !std::isfinite(key.lightAngleDegrees) ||
+        (key.lightAssetId ? (!key.lightBatteryId || key.lightAngleDegrees <= 0 || key.lightAngleDegrees > 180 || key.lightDistance <= 0 || key.lightDistance > 1500) :
+                            (key.lightBatteryId || key.lightAngleDegrees != 0 || key.lightDistance != 0))) return result;
     std::vector<std::size_t> candidates;
     index.queryCandidateIndices(
         {{o.x - radius, o.y - radius}, {radius * 2, radius * 2}}, candidates);
@@ -231,13 +237,21 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             return result;
     constexpr float pi = 3.14159265358979323846F;
     const float axisAngle = std::atan2(key.direction.y, key.direction.x);
-    const float half = key.angleDegrees * pi / 360;
+    const float ambientHalf = key.angleDegrees * pi / 360;
+    const float lightHalf = key.lightAngleDegrees * pi / 360;
+    const float half = std::max(ambientHalf, lightHalf);
+    const auto radiusAt = [&](float angle) {
+        return std::max(std::abs(angle)<=ambientHalf+0.0000001F ? key.maximumDistance : 0.0F,
+                        key.lightAssetId && std::abs(angle)<=lightHalf+0.0000001F ? key.lightDistance : 0.0F);
+    };
     std::vector<float> angles;
     // At most one world unit of inward arc error, never revealing beyond range.
     const int arcSegments =
         std::max(2, static_cast<int>(std::ceil(half * 2 / 0.035F)));
     for (int n = 0; n <= arcSegments; ++n)
         angles.push_back(-half + half * 2 * n / arcSegments);
+    if (key.lightAssetId)
+        for (float edge : {-ambientHalf, ambientHalf, -lightHalf, lightHalf}) angles.push_back(edge);
     const auto corner = [&](Vec2 p)
     {
         const float angle = std::atan2(p.y - o.y, p.x - o.x) - axisAngle;
@@ -258,6 +272,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         corner({r.position.x + r.size.x, r.position.y + r.size.y});
         corner({r.position.x, r.position.y + r.size.y});
     }
+    if (key.lightAssetId)
+        for (auto &angle : angles)
+            for (float seam : {ambientHalf,lightHalf})
+                if (std::abs(std::abs(angle)-seam)<=0.000002F) angle=std::copysign(seam,angle);
     std::sort(angles.begin(), angles.end());
     angles.erase(std::unique(angles.begin(), angles.end(), [](float a, float b)
                              { return std::abs(a - b) < 1e-7F; }),
@@ -266,7 +284,17 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     for (float angle : angles)
     {
         const Vec2 d{std::cos(axisAngle + angle), std::sin(axisAngle + angle)};
-        float length = radius;
+        std::array<float,2> limits{radiusAt(angle),0};
+        std::size_t limitCount=1;
+        if (key.lightAssetId && (std::abs(std::abs(angle)-ambientHalf)<1e-7F || std::abs(std::abs(angle)-lightHalf)<1e-7F) && std::abs(angle)<half-1e-7F)
+        {
+            limits={radiusAt(angle-0.000001F),radiusAt(angle+0.000001F)};
+            if (limits[0]!=limits[1]) limitCount=2;
+        }
+        for (std::size_t limitIndex=0; limitIndex<limitCount; ++limitIndex)
+        {
+        if (work) ++work->rays;
+        float length = limits[limitIndex];
         if (d.x > 1e-7F)
             length = std::min(length, (result.worldSize.x - o.x) / d.x);
         else if (d.x < -1e-7F)
@@ -302,11 +330,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         result.boundary.push_back(
             {std::clamp(o.x + d.x * length, 0.0F, result.worldSize.x),
              std::clamp(o.y + d.y * length, 0.0F, result.worldSize.y)});
+        }
     }
     result.boundary.push_back(
         o); // Close both sector edges at its apex, never across the rear.
-    if (work)
-        work->rays = angles.size();
     result.valid = result.boundary.size() >= 3;
     return result;
 }

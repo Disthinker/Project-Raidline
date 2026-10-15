@@ -267,6 +267,10 @@ public:
     [[nodiscard]] RaidObservationKey raidObservationKey() const;
     [[nodiscard]] bool lightConeObservationEnabled() const noexcept { return lightConeObservationEnabled_; }
     void setRaidDaylight(bool day) noexcept { raidDaylight_ = day; }
+    void setWeaponLight(std::uint64_t device, std::uint64_t battery, float angle, float distance, float backgroundRadius) noexcept;
+    [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return weaponLightBackgroundRadius_; }
+    [[nodiscard]] const std::array<RaidVisibilityProjection,2> &weaponLightBackgroundObservations() const
+    { static_cast<void>(raidObservation()); return weaponLightBackgroundCache_; }
     [[nodiscard]] RaidObservationWork observationWork() const noexcept { return observationWork_; }
     [[nodiscard]] bool raidBoundsObservable(Rect bounds) const;
     [[nodiscard]] bool raidEnemyObservable(CombatTargetId id) const;
@@ -560,6 +564,9 @@ private:
     mutable bool enemyObservationIndexReady_{};
     mutable std::uint64_t enemyObservationSolveCount_{};
     mutable RaidObservationWork observationWork_;
+    mutable std::array<RaidVisibilityProjection,2> weaponLightBackgroundCache_;
+    std::uint64_t weaponLightDevice_{}, weaponLightBattery_{};
+    float weaponLightAngle_{}, weaponLightDistance_{}, weaponLightBackgroundRadius_{};
     bool raidDaylight_{true};
     bool lightConeObservationEnabled_{};
     bool observationDirectionFrozen_{};

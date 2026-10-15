@@ -25,6 +25,9 @@ struct RaidObservationKey
                              // slice.
     RaidLightEnvironment environment{RaidLightEnvironment::WeakIndoor};
     std::uint64_t geometryRevision{1};
+    std::uint64_t lightAssetId{}, lightBatteryId{};
+    float lightAngleDegrees{}, lightDistance{};
+
     friend bool operator==(const RaidObservationKey &a,
                            const RaidObservationKey &b)
     {
@@ -34,7 +37,8 @@ struct RaidObservationKey
                a.angleDegrees == b.angleDegrees &&
                a.maximumDistance == b.maximumDistance &&
                a.environment == b.environment &&
-               a.geometryRevision == b.geometryRevision;
+               a.geometryRevision == b.geometryRevision && a.lightAssetId == b.lightAssetId && a.lightBatteryId == b.lightBatteryId &&
+               a.lightAngleDegrees == b.lightAngleDegrees && a.lightDistance == b.lightDistance;
     }
 };
 
@@ -59,6 +63,8 @@ struct RaidVisibilityProjection
     float angleDegrees{360};
     float maximumDistance{};
     RaidLightEnvironment environment{RaidLightEnvironment::WeakIndoor};
+    std::uint64_t lightAssetId{}, lightBatteryId{};
+    float lightAngleDegrees{}, lightDistance{};
 
     [[nodiscard]] RaidObservationKey key() const;
     // Cache comparison only. Commands must use matches(), which validates

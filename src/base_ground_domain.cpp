@@ -337,7 +337,8 @@ BaseGroundReceipt applyDrop(
             candidate.revision);
     }
     if (std::holds_alternative<InstalledMagazineLocation>(asset->location) ||
-        std::holds_alternative<InstalledWeaponComponentLocation>(asset->location))
+        std::holds_alternative<InstalledWeaponComponentLocation>(asset->location) ||
+        std::holds_alternative<InstalledDeviceBatteryLocation>(asset->location))
     {
         return failure(
             DomainErrorCode::IllegalDestination,

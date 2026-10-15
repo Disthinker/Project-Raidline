@@ -382,6 +382,7 @@ namespace
             return ItemCategory::Maintenance;
         }
         if (value == "weapon_component") return ItemCategory::WeaponComponent;
+        if (value == "battery") return ItemCategory::Battery;
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -832,7 +833,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            registry.contentVersion_ == "raid-armored-infected-content-64";
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65");
 
         if (root.contains("fortifications"))
         {
@@ -858,7 +859,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             registry.contentVersion_ == "raid-armored-infected-content-64") &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1617,9 +1618,12 @@ ContentRegistry ContentRegistry::fromJson(
                 if (slot == "barrel") component.slot = WeaponComponentSlot::Barrel;
                 else if (slot == "handguard") component.slot = WeaponComponentSlot::Handguard;
                 else if (slot == "grip") component.slot = WeaponComponentSlot::Grip;
+                else if (slot == "light") component.slot = WeaponComponentSlot::Light;
                 else fail("unknown weapon component slot");
                 component.providesUnderbarrel = c.value("provides_underbarrel", false);
                 component.requiresUnderbarrel = c.value("requires_underbarrel", false);
+                component.providesLightMount = c.value("provides_light_mount", false);
+                component.requiresLightMount = c.value("requires_light_mount", false);
                 component.recoilControl = c.value("recoil_control", 0);
                 component.stability = c.value("stability", 0);
                 component.handlingSpeed = c.value("handling_speed", 0);
@@ -1628,6 +1632,8 @@ ContentRegistry ContentRegistry::fromJson(
                 component.effectiveRange = c.value("effective_range", 0.0F);
                 if (definition.category != ItemCategory::WeaponComponent || definition.maxStackSize != 1 ||
                     (component.providesUnderbarrel && component.slot != WeaponComponentSlot::Handguard) ||
+                    (component.providesLightMount && component.slot != WeaponComponentSlot::Handguard) ||
+                    (component.requiresLightMount && component.slot != WeaponComponentSlot::Light) ||
                     (component.requiresUnderbarrel && component.slot != WeaponComponentSlot::Grip) ||
                     (component.recoilControl < -50 || component.recoilControl > 50) || (component.stability < -50 || component.stability > 50) ||
                     (component.handlingSpeed < -50 || component.handlingSpeed > 50) || (component.ergonomics < -50 || component.ergonomics > 50) ||
@@ -1638,6 +1644,31 @@ ContentRegistry ContentRegistry::fromJson(
             }
             else if (definition.category == ItemCategory::WeaponComponent)
                 fail("component definition requires capability");
+
+            definition.battery = itemValue.value("battery", false);
+            if (definition.battery && (definition.category != ItemCategory::Battery || definition.maximumCharges == 0 ||
+                definition.maximumCharges > 3600000U || definition.maxStackSize > 10U)) fail("invalid battery capability");
+            if (definition.category == ItemCategory::Battery && !definition.battery) fail("battery capability required");
+            if (itemValue.contains("weapon_light"))
+            {
+                const auto &v = itemValue.at("weapon_light");
+                WeaponLightDefinition light;
+                light.angleDegrees = v.at("angle_degrees").get<float>();
+                light.maximumDistance = v.at("maximum_distance").get<float>();
+                light.backgroundRadius = v.at("background_radius").get<float>();
+                light.lowBatteryPercent = v.at("low_battery_percent").get<std::uint32_t>();
+                light.lowOutputIntervalMs = v.at("low_output_interval_ms").get<std::uint32_t>();
+                light.flickerDurationMs = v.at("flicker_duration_ms").get<std::uint32_t>();
+                if (!definition.weaponComponent || definition.weaponComponent->slot != WeaponComponentSlot::Light ||
+                    !definition.weaponComponent->requiresLightMount || !std::isfinite(light.angleDegrees) || light.angleDegrees <= 0 || light.angleDegrees > 180 ||
+                    !std::isfinite(light.maximumDistance) || light.maximumDistance <= 0 || light.maximumDistance > 1500 ||
+                    !std::isfinite(light.backgroundRadius) || light.backgroundRadius < 0 || light.backgroundRadius > 200 ||
+                    light.lowBatteryPercent == 0 || light.lowBatteryPercent > 50 || light.lowOutputIntervalMs < 1000 ||
+                    light.lowOutputIntervalMs > 60000 || light.flickerDurationMs > 150) fail("invalid weapon light capability");
+                definition.weaponLight = light;
+            }
+            else if (definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Light)
+                fail("light slot requires light capability");
 
             definition.baseContribution = parseBaseContribution(itemValue);
             definition.baseConstructionMaterialValue = optionalUint(

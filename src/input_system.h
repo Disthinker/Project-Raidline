@@ -24,6 +24,7 @@ enum class GameAction
     // 背包开关。
     ToggleInventory,
     ToggleTacticalMap,
+    WeaponLight,
 
     // 背包 UI 输入。
     InventoryCancel,

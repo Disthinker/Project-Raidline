@@ -125,7 +125,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-armored-infected-content-64");
+        "weapon-flashlight-battery-content-65");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -257,7 +257,17 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 54U);
+    ASSERT_EQ(registry.items().size(), 56U);
+    const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
+    const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
+    ASSERT_TRUE(light.weaponLight);
+    ASSERT_TRUE(light.weaponComponent);
+    EXPECT_EQ(light.weaponComponent->slot, WeaponComponentSlot::Light);
+    EXPECT_TRUE(light.weaponComponent->requiresLightMount);
+    EXPECT_TRUE(battery.battery);
+    EXPECT_EQ(battery.maxStackSize, 10U);
+    EXPECT_EQ(battery.maximumCharges, 600000U);
+    EXPECT_TRUE(registry.item(ItemDefinitionId{"item.component.rail_handguard"}).weaponComponent->providesLightMount);
     ASSERT_EQ(registry.calibers().size(), 3U);
     EXPECT_EQ(
         registry.caliber(CaliberDefinitionId{"caliber.5_45x39"})

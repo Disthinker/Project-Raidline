@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "tactical_device_domain.h"
 #include "raid_lifecycle.h"
 #include "base_wish_expedition.h"
 
@@ -175,6 +176,8 @@ std::set<AssetInstanceId> assetTreeIds(
             }
             if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
                 child = result.contains(component->weaponAssetId);
+            if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location))
+                child = result.contains(battery->deviceAssetId);
             if (child && result.insert(assetId).second)
             {
                 changed = true;
@@ -1807,6 +1810,12 @@ RaidSettlementReceipt settlePendingRaid(
     }
 
     ProfileState candidate = profile;
+    // Abandoned overflow cells are not rewards or carried loss roots.
+    std::vector<AssetInstanceId> abandonedCells;
+    for (const auto &[id, asset] : candidate.assets.records())
+        if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location)) abandonedCells.push_back(id);
+    for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
+
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
@@ -2163,6 +2172,9 @@ InventoryReceipt pickupRaidLoot(
     const RaidVisibilityProjection *observation,
     const RaidObservationKey *currentObservation)
 {
+    if (const auto *cell = profile.assets.find(assetId); cell && std::holds_alternative<RaidDroppedBatteryLocation>(cell->location))
+        return pickupDroppedBattery(profile, content, assetId, context, observation, currentObservation);
+
     const AssetRecord *asset = profile.assets.find(assetId);
     if (asset == nullptr ||
         !std::holds_alternative<RaidGroundAssetLocation>(asset->location))

@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
 #include "inventory_domain.h"
 #include <cmath>
@@ -220,7 +221,7 @@ bool validateCandidate(
             }
         }
     }
-    if (!validateWeaponComponents(candidate, content).valid)
+    if (!validateTacticalDevices(candidate, content).valid || !validateWeaponComponents(candidate, content).valid)
     {
         receipt = failure(DomainErrorCode::IllegalDestination, "invalid weapon components", candidate.revision);
         return false;
@@ -243,7 +244,8 @@ InventoryReceipt applyMove(
     bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
-    if (source && std::holds_alternative<InstalledWeaponComponentLocation>(source->location))
+    if (source && (std::holds_alternative<InstalledWeaponComponentLocation>(source->location) ||
+                   std::holds_alternative<InstalledDeviceBatteryLocation>(source->location)))
         return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
     if (source == nullptr)
     {
@@ -320,6 +322,20 @@ InventoryReceipt applyMove(
             candidate.revision);
     }
 
+    // Only unused batteries stack. Swapping or merging used cells would otherwise
+    // silently copy the destination's charge or initialize a split to full charge.
+    if (definition.battery)
+    {
+        const auto hits = overlappingAssets(candidate, content, command.destination, definition,
+                                           command.destinationOrientation, source->instanceId);
+        for (auto hit : hits)
+        {
+            const auto *other = candidate.assets.find(hit);
+            if (other && other->definitionId == source->definitionId &&
+                (source->remainingCharges != definition.maximumCharges || other->remainingCharges != definition.maximumCharges))
+                return failure(DomainErrorCode::IllegalDestination, "USED BATTERIES CANNOT STACK", candidate.revision);
+        }
+    }
     const AssetLocation originalLocation = source->location;
     const ItemOrientation originalOrientation = source->orientation;
     const std::set<AssetInstanceId> overlaps = overlappingAssets(
@@ -586,6 +602,7 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
             assetId = stored->container.ownerAssetId;
         else if (const auto *mag = std::get_if<InstalledMagazineLocation>(&asset->location)) assetId = mag->weaponAssetId;
         else if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&asset->location)) assetId = part->weaponAssetId;
+        else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location)) assetId = battery->deviceAssetId;
         else return std::nullopt;
     }
     return std::nullopt;

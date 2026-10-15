@@ -172,6 +172,31 @@ struct InstalledWeaponComponentLocation
     friend bool operator==(const InstalledWeaponComponentLocation &, const InstalledWeaponComponentLocation &) = default;
 };
 
+struct InstalledDeviceBatteryLocation
+{
+    AssetInstanceId deviceAssetId{};
+    friend bool operator==(const InstalledDeviceBatteryLocation &, const InstalledDeviceBatteryLocation &) = default;
+};
+
+// Only replacement-cell overflow uses this root. It is not generated Loot
+// and cannot change frozen slot budgets or be loaded outside its active Raid.
+struct RaidDroppedBatteryLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+    friend bool operator==(const RaidDroppedBatteryLocation &a, const RaidDroppedBatteryLocation &b)
+    { return a.raidId == b.raidId && a.spaceId == b.spaceId && a.position.x == b.position.x && a.position.y == b.position.y; }
+};
+
+struct TacticalDeviceState
+{
+    bool switchOn{}, interrupted{};
+    std::uint32_t lowOutputElapsedMs{}, flickerRemainingMs{};
+    double outputRemainderMs{};
+    friend bool operator==(const TacticalDeviceState &, const TacticalDeviceState &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
@@ -183,7 +208,9 @@ using AssetLocation = std::variant<
     LostRaidAssetLocation,
     RecoveryTaskAssetLocation,
     InstalledWeaponComponentLocation,
-    RaidCorpseContainerAssetLocation>;
+    RaidCorpseContainerAssetLocation,
+    InstalledDeviceBatteryLocation,
+    RaidDroppedBatteryLocation>;
 
 struct MagazineRoundRecord
 {
@@ -211,6 +238,7 @@ struct AssetRecord
     AssetLocation location{StoredAssetLocation{
         ProfileContainerId::stash(),
         GridPosition{}}};
+    std::optional<TacticalDeviceState> deviceState;
 };
 
 enum class WeaponReliabilityTier

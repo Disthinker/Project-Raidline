@@ -49,7 +49,7 @@ raidSightParameters(RaidLightEnvironment environment) noexcept
 RaidObservationKey RaidVisibilityProjection::key() const
 {
     return {spaceId,         observer,    direction,       angleDegrees,
-            maximumDistance, environment, geometryRevision};
+            maximumDistance, environment, geometryRevision, lightAssetId, lightBatteryId, lightAngleDegrees, lightDistance};
 }
 
 bool RaidVisibilityProjection::hasSameParameters(
@@ -62,7 +62,8 @@ bool RaidVisibilityProjection::hasSameParameters(
            angleDegrees == current.angleDegrees &&
            maximumDistance == current.maximumDistance &&
            environment == current.environment &&
-           geometryRevision == current.geometryRevision;
+           geometryRevision == current.geometryRevision && lightAssetId == current.lightAssetId && lightBatteryId == current.lightBatteryId &&
+           lightAngleDegrees == current.lightAngleDegrees && lightDistance == current.lightDistance;
 }
 
 bool RaidVisibilityProjection::matches(
@@ -117,7 +118,11 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
          (angleDegrees > 180 ||
           std::abs(std::hypot(direction.x, direction.y) - 1) > 0.001F)))
         return false;
+    if (!std::isfinite(lightAngleDegrees) || !std::isfinite(lightDistance) ||
+        (lightAssetId ? (!lightBatteryId || lightAngleDegrees <= 0 || lightAngleDegrees > 180 || lightDistance <= 0 || lightDistance > 1500 || maximumDistance <= 0) :
+                        (lightBatteryId != 0 || lightAngleDegrees != 0 || lightDistance != 0))) return false;
     double area{};
+    const float cosLightHalf = std::cos(lightAngleDegrees * 3.14159265358979323846F / 360);
     const float cosHalf =
         std::cos(angleDegrees * 3.14159265358979323846F / 360);
     for (std::size_t i = 0; i < boundary.size(); ++i)
@@ -135,11 +140,52 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
             const float dx = p.x - observer.x, dy = p.y - observer.y;
             const float squared = dx * dx + dy * dy,
                         dot = dx * direction.x + dy * direction.y;
-            if (squared >
-                    (maximumDistance + 0.01F) * (maximumDistance + 0.01F) ||
-                dot < -0.01F ||
-                (dot + 0.01F) * (dot + 0.01F) < squared * cosHalf * cosHalf)
-                return false;
+            const auto within = [&](float distance, float cosine) {
+                return squared <= (distance + 0.01F) * (distance + 0.01F) && dot >= -0.01F &&
+                       (dot + 0.01F) * (dot + 0.01F) >= squared * cosine * cosine;
+            };
+            if (!within(maximumDistance, cosHalf) && !(lightAssetId && within(lightDistance, cosLightHalf))) return false;
+            if (lightAssetId && angleDegrees != lightAngleDegrees)
+            {
+                // Each angular subsegment must fit its own range. Testing only
+                // vertices (or the enclosing angle/range) fills the union's
+                // concave notch, including bridges ending exactly on a seam.
+                const Vec2 edge{q.x-p.x, q.y-p.y};
+                const float length=std::hypot(edge.x,edge.y);
+                const float inner=std::min(angleDegrees,lightAngleDegrees);
+                std::array<float,4> cuts{0,1}; std::size_t count=2;
+                bool radialStep=false;
+                for (float sign : {-1.0F,1.0F})
+                {
+                    const float theta=inner*sign*3.14159265358979323846F/360;
+                    const Vec2 ray{direction.x*std::cos(theta)-direction.y*std::sin(theta),
+                                   direction.x*std::sin(theta)+direction.y*std::cos(theta)};
+                    const double first=static_cast<double>(dx)*ray.y-static_cast<double>(dy)*ray.x;
+                    const double last=static_cast<double>(q.x-observer.x)*ray.y-static_cast<double>(q.y-observer.y)*ray.x;
+                    // Float translation at far map coordinates has <=0.01
+                    // world-unit roundoff; a radial step has zero ideal area.
+                    if (std::abs(first)<=0.01 && std::abs(last)<=0.01) { radialStep=true; break; }
+                    const double denominator=first-last;
+                    if (std::abs(denominator)<0.000001) continue;
+                    const double t=first/denominator;
+                    if (t>0 && t<1) cuts[count++]=static_cast<float>(t);
+                }
+                if (!radialStep)
+                {
+                    std::sort(cuts.begin(),cuts.begin()+count);
+                    for (std::size_t n=1;n<count;++n)
+                    {
+                        const float a=cuts[n-1], b=cuts[n];
+                        if ((b-a)*length<=0.02F) continue;
+                        const float mx=dx+edge.x*(a+b)*0.5F, my=dy+edge.y*(a+b)*0.5F;
+                        const float radius=std::hypot(mx,my), forward=mx*direction.x+my*direction.y;
+                        const float cap=std::max(forward+0.01F>=radius*cosHalf ? maximumDistance : 0.0F,
+                                                 forward+0.01F>=radius*cosLightHalf ? lightDistance : 0.0F);
+                        for (float t : {a,b})
+                            if (std::hypot(dx+edge.x*t,dy+edge.y*t)>cap+0.02F) return false;
+                    }
+                }
+            }
         }
         area += (static_cast<double>(p.x) - observer.x) * (q.y - observer.y) -
                 (static_cast<double>(p.y) - observer.y) * (q.x - observer.x);
@@ -215,9 +261,9 @@ bool RaidVisibilityProjection::boundsVisible(Rect rect) const
         const float y = std::clamp(observer.y, rect.position.y,
                                    rect.position.y + rect.size.y) -
                         observer.y;
-        if (x * x + y * y > maximumDistance * maximumDistance)
+        if (x * x + y * y > std::max(maximumDistance, lightDistance) * std::max(maximumDistance, lightDistance))
             return false;
-        const float half = angleDegrees * 3.14159265358979323846F / 360;
+        const float half = std::max(angleDegrees, lightAngleDegrees) * 3.14159265358979323846F / 360;
         const float c = std::cos(half), s = std::sin(half);
         const Vec2 left{direction.x * c + direction.y * s,
                         direction.y * c - direction.x * s};
@@ -286,8 +332,9 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
     valid_ = true;
     bounded_ = view.maximumDistance > 0;
     observer_ = view.observer;
-    maximumDistanceSquared_ = view.maximumDistance * view.maximumDistance;
-    const float half = view.angleDegrees * 3.14159265358979323846F / 360;
+    const float maximum = std::max(view.maximumDistance, view.lightDistance);
+    maximumDistanceSquared_ = maximum * maximum;
+    const float half = std::max(view.angleDegrees, view.lightAngleDegrees) * 3.14159265358979323846F / 360;
     const float c = std::cos(half), s = std::sin(half);
     leftDirection_ = {view.direction.x * c + view.direction.y * s,
                       view.direction.y * c - view.direction.x * s};
