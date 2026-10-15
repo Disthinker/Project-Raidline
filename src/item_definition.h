@@ -35,7 +35,8 @@ enum class ItemCategory
     ProtectiveGear,
     Maintenance,
     Loot,
-    WeaponComponent
+    WeaponComponent,
+    Battery
 };
 
 enum class WeaponMalfunctionType
@@ -306,7 +307,13 @@ enum class BaseSupplyCategory
 
 // 一种物品的共享静态数据。
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
-enum class WeaponComponentSlot { Barrel, Handguard, Grip };
+enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light };
+
+struct WeaponLightDefinition
+{
+    float angleDegrees{120}, maximumDistance{900}, backgroundRadius{120};
+    std::uint32_t lowBatteryPercent{20}, lowOutputIntervalMs{25000}, flickerDurationMs{150};
+};
 
 struct WeaponComponentDefinition
 {
@@ -320,6 +327,7 @@ struct WeaponComponentDefinition
     int ergonomics{};
     int accuracy{};
     float effectiveRange{};
+    bool providesLightMount{}, requiresLightMount{};
 };
 
 struct ItemDefinition
@@ -374,6 +382,8 @@ struct ItemDefinition
     std::optional<ArmorMaintenanceDefinition> armorMaintenance;
     std::optional<WeaponUseDefinition> weaponUse;
     std::optional<WeaponComponentDefinition> weaponComponent;
+    std::optional<WeaponLightDefinition> weaponLight;
+    bool battery{};
 
     // Versioned content fact used by extraction and future encumbrance
     // consumers. Quantities and loose/magazine rounds multiply this value.

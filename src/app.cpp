@@ -39,6 +39,7 @@
 
 namespace
 {
+    const char *lightStateLabel(const WeaponLightProjection &light);
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
@@ -2034,6 +2035,9 @@ GameplayInput App::makeGameplayInput() const
         input_.wasActionJustPressed(GameAction::Reload);
     input.healJustPressed =
         input_.wasActionJustPressed(GameAction::Heal);
+    input.lightJustPressed = input_.wasActionJustPressed(GameAction::WeaponLight);
+    input.lightJustReleased = input_.wasActionJustReleased(GameAction::WeaponLight);
+    input.lightPressed = input_.isActionPressed(GameAction::WeaponLight);
     if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
     {
         input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
@@ -2750,7 +2754,7 @@ void App::closeInventory() noexcept
     // Tab / browsing Esc closes the inventory and clears all pointer state,
     // hover state, and transient pointer selection.
     inventoryWeaponComponentsOpen_ = false;
-    profileDetailsAsset_.reset();
+    profileDetailsAsset_.reset(); deviceBatteryDrag_.reset();
     inventoryInteraction_.reset();
     profileInventoryInteraction_.reset();
     profileContextMenu_.reset();
@@ -2767,7 +2771,7 @@ void App::handleInventoryCancel()
     if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_)
     {
         inventoryWeaponComponentsOpen_ = false;
-        profileDetailsAsset_.reset();
+        profileDetailsAsset_.reset(); deviceBatteryDrag_.reset();
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
@@ -4268,8 +4272,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         for (std::size_t index = 0; index < supply.size(); ++index)
         {
             const SDL_FRect row{
-                76.0F + static_cast<float>(index / 6U) * 140.0F,
-                164.0F + static_cast<float>(index % 6U) * 46.0F,
+                76.0F + static_cast<float>(index / 7U) * 140.0F,
+                164.0F + static_cast<float>(index % 7U) * 46.0F,
                 132.0F,
                 40.0F};
             if (!contains(row, click.position))
@@ -4757,13 +4761,15 @@ void App::handleProfileInventoryUiEvent(
 {
     if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_)
     {
+        if (profileDetailsAsset_)
+            if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event)) handleWeaponLightDetailsPointer(*pointer,inRaid);
         if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event);
             pointer && pointer->type == InventoryPointerEventType::LeftButtonDown)
         {
             if (contains(SDL_FRect{860, 92, 340, 32}, pointer->position))
             {
                 inventoryWeaponComponentsOpen_ = false;
-                profileDetailsAsset_.reset();
+                profileDetailsAsset_.reset(); deviceBatteryDrag_.reset();
                 uiMessage_.clear();
             }
             else if (inventoryWeaponComponentsOpen_ && (!inRaid || gameSession_.developerRangeAtConsole()))
@@ -6730,6 +6736,7 @@ void App::update(float deltaTime)
         gameFlow_.state() == GameFlowState::Raid;
     if (pauseMenu_.isOpen())
     {
+        gameSession_.cancelWeaponLightInput();
         if (escapePressed)
         {
             static_cast<void>(pauseMenu_.handleEscape());
@@ -6757,6 +6764,7 @@ void App::update(float deltaTime)
     if (pauseEligible && escapePressed && !existingModalHandlesEscape)
     {
         pauseMenu_.open();
+        gameSession_.cancelWeaponLightInput();
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
@@ -14179,6 +14187,7 @@ void App::renderProfileAsset(
         case ItemCategory::Weapon:
             SDL_SetRenderDrawColor(renderer_, 94, 112, 122, alpha);
             break;
+        case ItemCategory::Battery:
         case ItemCategory::Magazine:
         case ItemCategory::Ammunition:
             SDL_SetRenderDrawColor(renderer_, 116, 98, 54, alpha);
@@ -15435,6 +15444,16 @@ void App::renderAlphaRaidLoot()
             !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: SEARCH CORPSE" :
             empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE");
     }
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        const auto *drop=std::get_if<RaidDroppedBatteryLocation>(&asset.location);
+        if (!drop || drop->spaceId!=gameSession_.world().activeRaidSpaceId() ||
+            !gameSession_.world().raidBoundsObservable({{drop->position.x-12,drop->position.y-12},{24,24}})) continue;
+        const SDL_FRect cell{drop->position.x-10,drop->position.y-7,20,14};
+        SDL_SetRenderDrawColor(renderer_,160,154,86,255); SDL_RenderFillRect(renderer_,&cell);
+        SDL_SetRenderDrawColor(renderer_,230,224,168,255); SDL_RenderRect(renderer_,&cell);
+        uiTextRenderer_.render(renderer_,cell.x-12,cell.y-24,"USED BATTERY | F");
+    }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
         if (!gameSession_.raidLootAccessible(loot))
@@ -15516,8 +15535,8 @@ void App::renderBaseSupply()
         const ItemDefinition &definition =
             publishedContentRegistry().item(supply[index]);
         const SDL_FRect row{
-            76.0F + static_cast<float>(index / 6U) * 140.0F,
-            164.0F + static_cast<float>(index % 6U) * 46.0F,
+            76.0F + static_cast<float>(index / 7U) * 140.0F,
+            164.0F + static_cast<float>(index % 7U) * 46.0F,
             132.0F,
             40.0F};
         SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
@@ -15527,14 +15546,12 @@ void App::renderBaseSupply()
         const std::uint32_t quantity =
             definition.category == ItemCategory::Ammunition ? 30U : 1U;
         const std::string supplyName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.displayName, 10);
+            uiTextRenderer_.language(), definition.displayName, 14);
         const std::string label = fmt::format(
-            "BUY {} x{} | {}",
-            supplyName,
-            quantity,
-            definition.marketBuyPrice * quantity);
+            "BUY X{} | {}", quantity, definition.marketBuyPrice * quantity);
         SDL_SetRenderDrawColor(renderer_, 232, 224, 178, 255);
-        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 16.0F, label.c_str());
+        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 3.0F, supplyName.c_str());
+        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 23.0F, label.c_str());
     }
 
     SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
@@ -18856,6 +18873,25 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     if (!SDL_RenderTexture(renderer_, indoorShadowMask_.get(), nullptr,
                            nullptr))
         return false;
+    // This light is drawn onto background pixels before copying any entities.
+    // Its separate occluded fan must never grant observation or interaction.
+    if (gameSession_.world().weaponLightBackgroundRadius()>0)
+    {
+        std::vector<SDL_Vertex> nearVertices;
+        for (const auto &near : gameSession_.world().weaponLightBackgroundObservations())
+            for (std::size_t i=0; near.valid && i<near.boundary.size(); ++i)
+            {
+                const auto polygon=clipRaidVisibilityTriangle(near.observer,near.boundary[i],near.boundary[(i+1)%near.boundary.size()],screenWorld);
+                for (std::size_t j=1; j+1<polygon.size(); ++j) for (const auto p : {polygon[0],polygon[j],polygon[j+1]})
+                {
+                    const float fade=std::clamp(1.0F-std::hypot(p.x-near.observer.x,p.y-near.observer.y)/gameSession_.world().weaponLightBackgroundRadius(),0.0F,1.0F);
+                    nearVertices.push_back({{p.x+worldViewport.x,p.y+worldViewport.y},{0.09F,0.08F,0.04F,fade},{0,0}});
+                }
+            }
+        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_ADD);
+        if (!nearVertices.empty()) SDL_RenderGeometry(renderer_,nullptr,nearVertices.data(),static_cast<int>(nearVertices.size()),nullptr,0);
+        SDL_SetRenderDrawBlendMode(renderer_,originalBlend);
+    }
     if (!indices.empty() &&
         !SDL_RenderGeometry(renderer_, indoorInformationLayer_.get(),
                             vertices.data(), static_cast<int>(vertices.size()),
@@ -18939,6 +18975,17 @@ void App::renderRaidScreen()
     }
     renderAimCrosshair();
     renderCombatFeedback();
+    const auto light=gameSession_.activeWeaponLight();
+    if (light.binding.deviceAssetId && !inventoryOverlayState_.isOpen())
+    {
+        SDL_SetRenderDrawColor(renderer_,234,225,169,255);
+        uiTextRenderer_.render(renderer_,16,620,
+            fmt::format("{} | BATTERY CHARGE {}% | U",lightStateLabel(light),
+                light.capacityMs ? static_cast<std::uint64_t>(light.remainingMs)*100/light.capacityMs : 0).c_str());
+    }
+    if (!inventoryOverlayState_.isOpen() && (gameSession_.persistenceMessage()=="ONLY WEAPON LIGHT | TAP U" ||
+        gameSession_.persistenceMessage()=="NO ACTIVE WEAPON LIGHT"))
+        uiTextRenderer_.render(renderer_,16,644,gameSession_.persistenceMessage().c_str());
     renderRaidTacticalMap();
 
     // 背包覆盖层显示在游戏世界上方。
@@ -19158,7 +19205,7 @@ void App::handleWeaponComponentsClick(MousePosition position)
         return false;
     };
     if (pageClick(70, weapons.size(), componentWeaponPage_) || pageClick(400, choices.size(), componentChoicePage_)) return;
-    for (std::size_t index = 0; index < 3; ++index)
+    for (std::size_t index = 0; index < 4; ++index)
         if (contains(SDL_FRect{400 + 108.0F * index, 145, 100, 34}, position))
         { componentSlot_ = static_cast<WeaponComponentSlot>(index); componentChoice_ = 0; componentChoicePage_ = 0; uiMessage_.clear(); return; }
     for (std::size_t row = 0; row < 6; ++row)
@@ -19204,7 +19251,7 @@ void App::renderWeaponComponents()
     text(70, 100, "GUNSMITH - COMPONENTS");
     button({860,92,340,32}, inventoryWeaponComponentsOpen_ ? "BACK TO INVENTORY" : "BACK TO SUPPLY");
     text(70, 155, "SELECT WEAPON");
-    constexpr std::array<const char *, 3> slots{"BARREL", "HANDGUARD", "GRIP"};
+    constexpr std::array<const char *, 4> slots{"BARREL", "HANDGUARD", "GRIP", "WEAPON LIGHT"};
     for (std::size_t index = 0; index < slots.size(); ++index)
         button({400 + 108.0F * index, 145, 100, 34}, slots[index], static_cast<std::size_t>(componentSlot_) == index);
     text(400, 188, "SELECT COMPONENT OR RESTORE DEFAULT");
@@ -19223,8 +19270,8 @@ void App::renderWeaponComponents()
             button({400,210 + 38.0F * row,310,32}, asset ? content.item(asset->definitionId).displayName : "RESTORE DEFAULT", componentChoice_ == choices[index]);
         }
     }
-    button({70,450,130,30}, "PREVIOUS"); button({220,450,130,30}, "NEXT");
-    button({400,450,130,30}, "PREVIOUS"); button({550,450,130,30}, "NEXT");
+    button({70,450,130,30}, "PREVIOUS PAGE"); button({220,450,130,30}, "NEXT PAGE");
+    button({400,450,130,30}, "PREVIOUS PAGE"); button({550,450,130,30}, "NEXT PAGE");
     text(70, 495, "INSTALLED COMPONENTS");
     float installedY = 524;
     for (const auto &[id, asset] : profile.assets.records())
@@ -19232,7 +19279,7 @@ void App::renderWeaponComponents()
             parent && parent->weaponAssetId == componentWeapon_)
         { text(70, installedY, content.item(asset.definitionId).displayName); installedY += 25; }
     const auto &plan = weaponComponentPreview();
-    text(760, 155, "CURRENT -> PREVIEW");
+    text(860, 155, "CURRENT -> PREVIEW");
     if (componentWeapon_)
     {
         const auto current = effectiveWeaponUse(profile, content, componentWeapon_);
@@ -19314,11 +19361,73 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
     profileContextMenu_.reset();
 }
 
+namespace
+{
+std::vector<AssetInstanceId> detailBatteries(const ProfileState &profile, bool inRaid)
+{
+    std::vector<AssetInstanceId> result;
+    for (const auto &[id, asset] : profile.assets.records())
+        if (std::holds_alternative<StoredAssetLocation>(asset.location) && publishedContentRegistry().item(asset.definitionId).battery &&
+            (inRaid ? assetIsCarried(profile,id) : assetIsBaseAccessible(profile,id))) result.push_back(id);
+    return result;
+}
+const char *lightStateLabel(const WeaponLightProjection &light)
+{
+    if (!light.binding.deviceAssetId) return "NO WEAPON LIGHT INSTALLED";
+    if (!light.remainingMs) return "LIGHT EMPTY";
+    if (!light.switchOn) return "WEAPON LIGHT OFF";
+    if (light.interrupted || light.flickering) return "LIGHT INTERRUPTED | SHAKE TO RESTORE";
+    return light.output ? "WEAPON LIGHT ON" : "LIGHT OUTPUT PAUSED";
+}
+}
+
+void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bool inRaid)
+{
+    if (!profileDetailsAsset_) return;
+    deviceBatteryDragPosition_=event.position;
+    const auto light=findWeaponLight(gameSession_.profile(),publishedContentRegistry(),*profileDetailsAsset_);
+    const auto batteries=detailBatteries(gameSession_.profile(),inRaid);
+    if (event.type==InventoryPointerEventType::LeftButtonDown)
+    {
+        deviceBatteryDrag_.reset();
+        if (contains(SDL_FRect{70,602,100,32},event.position)) { if (deviceBatteryPage_) --deviceBatteryPage_; return; }
+        if (contains(SDL_FRect{190,602,100,32},event.position)) { if ((deviceBatteryPage_+1)*10<batteries.size()) ++deviceBatteryPage_; return; }
+        if (light.deviceAssetId && contains(SDL_FRect{640,420,150,30},event.position))
+        {
+            const auto r=gameSession_.changeDeviceBattery({light.deviceAssetId,0},nextProfileTransactionId("remove-battery"));
+            uiMessage_=r.succeeded ? "BATTERY CHANGE COMPLETE" : r.message;
+            input_.suppressPrimaryPointerUntilRelease(); return;
+        }
+        if (!light.deviceAssetId) return;
+        for (std::size_t slot=0; slot<10; ++slot)
+        {
+            const auto index=deviceBatteryPage_*10+slot;
+            if (index<batteries.size() && contains(SDL_FRect{70+110.0F*slot,490,104,70},event.position))
+            {
+                const auto *asset=gameSession_.profile().assets.find(batteries[index]);
+                deviceBatteryDrag_=ProfileDragSource{asset->instanceId,gameSession_.profile().revision,asset->location,1,asset->orientation};
+                input_.suppressPrimaryPointerUntilRelease(); return;
+            }
+        }
+    }
+    if (event.type==InventoryPointerEventType::LeftButtonUp && deviceBatteryDrag_)
+    {
+        const auto source=*deviceBatteryDrag_; deviceBatteryDrag_.reset();
+        if (light.deviceAssetId && contains(SDL_FRect{1090,350,96,76},event.position))
+        {
+            if (!profileDragSourceMatches(gameSession_.profile(),source)) { uiMessage_="BATTERY SOURCE CHANGED"; return; }
+            const auto r=gameSession_.changeDeviceBattery({light.deviceAssetId,source.instanceId},nextProfileTransactionId("replace-battery"));
+            uiMessage_=r.succeeded ? "BATTERY CHANGE COMPLETE" : r.message;
+        }
+        input_.suppressPrimaryPointerUntilRelease();
+    }
+}
+
 void App::renderProfileWeaponDetails()
 {
     const auto &profile = gameSession_.profile();
     const auto *asset = profile.assets.find(*profileDetailsAsset_);
-    if (!asset) { profileDetailsAsset_.reset(); return; }
+    if (!asset) { profileDetailsAsset_.reset(); deviceBatteryDrag_.reset(); return; }
     const auto &content = publishedContentRegistry();
     const auto &definition = content.item(asset->definitionId);
     const auto weapon = effectiveWeaponUse(profile, content, asset->instanceId);
@@ -19326,6 +19435,7 @@ void App::renderProfileWeaponDetails()
     SDL_SetRenderDrawColor(renderer_, 24, 29, 30, 250);
     SDL_RenderFillRect(renderer_, &panel);
     const auto text = [&](float x, float y, const std::string &label) {
+        SDL_SetRenderDrawColor(renderer_,232,225,201,255);
         uiTextRenderer_.render(renderer_, x, y, label.c_str());
     };
     text(70, 100, "WEAPON DETAILS");
@@ -19347,4 +19457,37 @@ void App::renderProfileWeaponDetails()
             location && location->weaponAssetId == asset->instanceId)
         { text(640, y, content.item(part.definitionId).displayName); y += 35; }
     if (y == 200) text(640, y, "DEFAULT CONFIGURATION");
+    const bool inRaid=gameSession_.alphaRaidActive();
+    const auto binding=findWeaponLight(profile,content,asset->instanceId);
+    const auto active=gameSession_.activeWeaponLight();
+    const auto light=queryWeaponLight(profile,content,binding,inRaid && active.binding.weaponAssetId==asset->instanceId && active.output);
+    text(640,350,"WEAPON LIGHT");
+    text(640,380,lightStateLabel(light));
+    text(640,398,fmt::format("BATTERY CHARGE {}%",light.capacityMs ? static_cast<std::uint64_t>(light.remainingMs)*100/light.capacityMs : 0));
+    const SDL_FRect remove{640,420,150,30};
+    SDL_SetRenderDrawColor(renderer_,43,60,65,255); SDL_RenderFillRect(renderer_,&remove); text(646,425,"REMOVE BATTERY");
+    const SDL_FRect batterySlot{1090,350,96,76};
+    SDL_SetRenderDrawColor(renderer_,binding.deviceAssetId ? 80 : 43,76,45,255); SDL_RenderFillRect(renderer_,&batterySlot);
+    SDL_SetRenderDrawColor(renderer_,230,220,166,255); SDL_RenderRect(renderer_,&batterySlot); text(1096,372,"BATTERY SLOT");
+    text(70,455,"DRAG ONE BATTERY INTO LIGHT");
+    const auto batteries=detailBatteries(profile,inRaid);
+    if (deviceBatteryPage_*10>=batteries.size()) deviceBatteryPage_=0;
+    for (std::size_t slot=0; slot<10 && deviceBatteryPage_*10+slot<batteries.size(); ++slot)
+    {
+        const auto &cell=*profile.assets.find(batteries[deviceBatteryPage_*10+slot]);
+        const auto capacity=content.item(cell.definitionId).maximumCharges;
+        const SDL_FRect bounds{70+110.0F*slot,490,104,70};
+        SDL_SetRenderDrawColor(renderer_,73,73,48,255); SDL_RenderFillRect(renderer_,&bounds);
+        SDL_SetRenderDrawColor(renderer_,225,219,170,255); SDL_RenderRect(renderer_,&bounds);
+        text(bounds.x+5,bounds.y+8,fmt::format("BATTERY X{}",cell.quantity));
+        text(bounds.x+5,bounds.y+38,fmt::format("{}%",static_cast<std::uint64_t>(cell.remainingCharges)*100/capacity));
+    }
+    text(70,608,"PREVIOUS PAGE"); text(190,608,"NEXT PAGE");
+    text(330,608,fmt::format("PAGE {} / {}",deviceBatteryPage_+1,std::max<std::size_t>(1,(batteries.size()+9)/10)));
+    if (deviceBatteryDrag_)
+    {
+        const SDL_FRect ghost{deviceBatteryDragPosition_.x-16,deviceBatteryDragPosition_.y-12,32,24};
+        SDL_SetRenderDrawColor(renderer_,230,220,140,210); SDL_RenderFillRect(renderer_,&ghost);
+    }
+    text(70,646,uiMessage_);
 }

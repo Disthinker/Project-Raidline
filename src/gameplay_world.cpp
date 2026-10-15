@@ -1615,6 +1615,16 @@ Vec2 GameplayWorld::currentObservationDirection() const noexcept
     return std::isfinite(length) && length>0.0001F ? Vec2{direction.x/length,direction.y/length} : observationDirection_;
 }
 
+void GameplayWorld::setWeaponLight(std::uint64_t device, std::uint64_t battery, float angle, float distance, float radius) noexcept
+{
+    const bool active = lightConeObservationEnabled_ && device && battery && std::isfinite(angle) && angle>0 && angle<=180 && std::isfinite(distance) && distance>0 && distance<=1500;
+    weaponLightDevice_=active?device:0; weaponLightBattery_=active?battery:0;
+    weaponLightAngle_=active?angle:0; weaponLightDistance_=active?distance:0;
+    const float background=active && std::isfinite(radius)?std::clamp(radius,0.0F,200.0F):0;
+    if (background!=weaponLightBackgroundRadius_) indoorObservationCacheReady_=false;
+    weaponLightBackgroundRadius_=background;
+}
+
 RaidObservationKey GameplayWorld::raidObservationKey() const
 {
     const auto parameters = currentObservationParameters();
@@ -1624,7 +1634,7 @@ RaidObservationKey GameplayWorld::raidObservationKey() const
             parameters.angleDegrees,
             parameters.maximumDistance,
             currentObservationEnvironment(),
-            1};
+            1, weaponLightDevice_, weaponLightBattery_, weaponLightAngle_, weaponLightDistance_};
 }
 
 const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
@@ -1650,7 +1660,9 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
         indoorObservationCache_.maximumDistance != parameters.maximumDistance ||
         indoorObservationCache_.environment !=
             currentObservationEnvironment() ||
-        indoorObservationCache_.geometryRevision != 1)
+        indoorObservationCache_.geometryRevision != 1 || indoorObservationCache_.lightAssetId != weaponLightDevice_ ||
+        indoorObservationCache_.lightBatteryId != weaponLightBattery_ || indoorObservationCache_.lightAngleDegrees != weaponLightAngle_ ||
+        indoorObservationCache_.lightDistance != weaponLightDistance_)
     {
         const auto key = raidObservationKey();
         enemyObservationCache_.clear();
@@ -1677,6 +1689,17 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
         }
         observationBoundsQuery_ =
             RaidVisibilityBoundsQuery{indoorObservationCache_};
+        weaponLightBackgroundCache_ = {};
+        if (weaponLightDevice_ && weaponLightBackgroundRadius_>0)
+            for (std::size_t side=0; side<2; ++side)
+            {
+                RaidObservationKey near{activeRaidSpaceId(), center, {side ? -1.0F : 1.0F,0}, 180,
+                                        weaponLightBackgroundRadius_, currentObservationEnvironment(),1};
+                RaidObservationWork nearWork;
+                weaponLightBackgroundCache_[side]=buildRaidSpaceConeVisibility(activeBlockerIndex(),near,&nearWork);
+                observationWork_.localBlockers+=nearWork.localBlockers; observationWork_.rays+=nearWork.rays;
+                observationWork_.blockerTests+=nearWork.blockerTests;
+            }
         ++indoorObservationBuildCount_;
         indoorObservationCacheReady_ = true;
     }

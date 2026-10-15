@@ -1003,6 +1003,17 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 {"type", "installed_magazine"},
                 {"weapon_asset_id", installed->weaponAssetId}};
         }
+        else if (const auto *drop = std::get_if<RaidDroppedBatteryLocation>(&asset.location))
+        {
+            if (schemaVersion < 53) throw std::invalid_argument("dropped batteries require schema 53");
+            location = {{"type", "raid_dropped_battery"}, {"raid_id", drop->raidId}, {"space_id", drop->spaceId.value()},
+                        {"x", drop->position.x}, {"y", drop->position.y}};
+        }
+        else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location))
+        {
+            if (schemaVersion < 53) throw std::invalid_argument("device batteries require schema 53");
+            location = {{"type", "installed_device_battery"}, {"device_asset_id", battery->deviceAssetId}};
+        }
         else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         {
             if (schemaVersion < 49) throw std::invalid_argument("weapon components require schema 49");
@@ -1090,6 +1101,8 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 {"source_slot", slotName(task.sourceSlot)}};
         }
 
+        if (schemaVersion < 53 && asset.definitionId == ItemDefinitionId{"item.battery.universal"})
+            throw std::invalid_argument("battery item requires schema 53");
         Json value{
             {"instance_id", asset.instanceId},
             {"definition_id", asset.definitionId.value()},
@@ -1123,6 +1136,13 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
             value["weapon_malfunction"] =
                 malfunctionName(asset.weaponMalfunction);
         }
+        if (asset.deviceState)
+        {
+            if (schemaVersion < 53) throw std::invalid_argument("electronic device state requires schema 53");
+            const auto &s = *asset.deviceState;
+            value["device_state"] = {{"switch_on", s.switchOn}, {"interrupted", s.interrupted},
+                {"low_output_ms", s.lowOutputElapsedMs}, {"flicker_remaining_ms", s.flickerRemainingMs}, {"remainder_ms", s.outputRemainderMs}};
+        }
         assets.push_back(std::move(value));
     }
 
@@ -1138,7 +1158,15 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             asset.instanceId = value.at("instance_id").get<AssetInstanceId>();
             asset.definitionId = ItemDefinitionId{
                 value.at("definition_id").get<std::string>()};
+            if (schemaVersion < 53 && (content.item(asset.definitionId).battery || content.item(asset.definitionId).weaponLight || value.contains("device_state")))
+                return {SaveLoadStatus::Failed, std::nullopt, "electronic state requires schema 53"};
             asset.quantity = value.at("quantity").get<std::uint32_t>();
+            if (schemaVersion >= 53 && value.contains("device_state"))
+            {
+                const auto &s = value.at("device_state");
+                asset.deviceState = TacticalDeviceState{s.at("switch_on").get<bool>(), s.at("interrupted").get<bool>(),
+                    s.at("low_output_ms").get<std::uint32_t>(), s.at("flicker_remaining_ms").get<std::uint32_t>(), s.at("remainder_ms").get<double>()};
+            }
             const auto orientation = parseOrientation(
                 value.at("orientation").get<std::string>());
             if (!orientation.has_value())
@@ -1273,6 +1301,11 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                 asset.location = InstalledMagazineLocation{
                     location.at("weapon_asset_id").get<AssetInstanceId>()};
             }
+            else if (schemaVersion >= 53 && locationType == "raid_dropped_battery")
+                asset.location = RaidDroppedBatteryLocation{location.at("raid_id").get<std::string>(),
+                    RaidSpaceDefinitionId{location.at("space_id").get<std::string>()}, {location.at("x").get<float>(), location.at("y").get<float>()}};
+            else if (schemaVersion >= 53 && locationType == "installed_device_battery")
+                asset.location = InstalledDeviceBatteryLocation{location.at("device_asset_id").get<AssetInstanceId>()};
             else if (schemaVersion >= 49 && locationType == "installed_weapon_component")
             {
                 asset.location = InstalledWeaponComponentLocation{location.at("weapon_asset_id").get<AssetInstanceId>()};
@@ -2674,7 +2707,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2841,7 +2874,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 46 && contentVersion == "enemy-combat-contract-content-60") ||
             (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61") ||
             (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62") ||
-            (schemaVersion >= 49 && contentVersion == "weapon-components-content-63");
+            (schemaVersion >= 49 && contentVersion == "weapon-components-content-63") ||
+            (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2863,7 +2897,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};

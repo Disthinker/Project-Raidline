@@ -1,15 +1,15 @@
 # Project Raidline 当前状态
 
 <!-- current-plan:begin -->
-## 当前：光照扇形视野性能修复已获交付确认，提交与合并中
+## 当前：武器手电与通用电池 v1 验收通过，交付中
 
-2026-10-15，用户针对冻结候选 **40afb04eaab6** 明确要求“请提交并合并”。本轮交付该候选，保留原视野、窗口准星、菜单、搜尸和M权限，继续使用[PR #172](https://github.com/Disthinker/Project-Raidline/pull/172)。
+2026-10-15，用户已验收候选 **d8f220986bd9** 并明确要求提交与合并。本轮只交付该候选，保留窗口准星、菜单、搜尸、视野和M地图权限。
 
-- 本地完整构建、专项245/245、全量1980/1980、离屏与性能35/35通过，源码与程序指纹核对未变。
-- 只追加本修复六个源码/测试路径及三份任务文档；准确新head双平台CI通过后普通合并，再检查合并树与合并提交CI。
-- 桌面 **Project Raidline Debug** 保持同一候选。原工作区、旧鼠标修复、配置和其他未提交修改保留；不启动游戏或下一项开发。
+- 本地完整构建及全量 **2008/2008** 通过；程序和源码指纹未变。桌面 **Project Raidline Debug** 保持同一已验收程序。
+- 本轮待完成准确提交的Windows/Ubuntu CI、普通合并及合并后双平台CI；全部完成后才记为已交付。
+- 原工作目录分支、HEAD和其他未提交修改保留。不启动游戏，不开始下一项开发。
 
-当前尚未合并。实际提交、远端检查及交付状态见[任务记录](../exec-plans/active/raid-light-cone-visibility-v1.md)。
+实际提交、检查与交付结果见[任务记录](../exec-plans/active/weapon-flashlight-battery-v1.md)。[试玩清单](../acceptance/weapon-flashlight-battery-v1.md)保留为历史，无须重复验收。
 <!-- current-plan:end -->
 
 ## 上一项交付时记录（历史）：边境交换站搜尸中文修正版

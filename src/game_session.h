@@ -1,6 +1,7 @@
 #pragma once
 
 #include "weapon_component_domain.h"
+#include "tactical_device_domain.h"
 
 #include <array>
 #include <cstddef>
@@ -330,6 +331,10 @@ public:
         AssetInstanceId armorAssetId);
     [[nodiscard]] bool startAlphaWeaponSwitch(EquipmentSlotKind targetSlot);
     [[nodiscard]] bool observeAlphaWeaponClearMotion(Vec2 delta);
+    [[nodiscard]] WeaponLightProjection activeWeaponLight() const;
+    [[nodiscard]] InventoryReceipt changeDeviceBattery(DeviceBatteryCommand, std::string transactionId);
+    [[nodiscard]] InventoryReceipt toggleWeaponLight();
+    void cancelWeaponLightInput() noexcept { lightKeyPending_=false; lightLongPressConsumed_=false; lightKeyHeldSeconds_=0; }
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 
@@ -523,6 +528,7 @@ public:
 private:
     friend struct RaidIndoorVisibilityUiTestAccess;
     friend struct RaidLightConeVisibilityUiTestAccess;
+    friend struct TacticalDeviceUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};
     ProfileState profile_;
@@ -556,6 +562,11 @@ private:
     float baseSiegeWarningSecondAccumulator_{};
     bool worldClockDirty_{};
     WeaponClearGesture weaponClearGesture_;
+    mutable WeaponLightBinding weaponLightBinding_;
+    mutable ProfileRevision weaponLightBindingRevision_{};
+    bool lightKeyPending_{}, lightLongPressConsumed_{};
+    float lightKeyHeldSeconds_{};
+    void synchronizeWeaponLight(float seconds = 0);
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};

@@ -49,6 +49,7 @@ struct GameplayInput
 
     bool reloadJustPressed{};
     bool healJustPressed{};
+    bool lightJustPressed{}, lightJustReleased{}, lightPressed{};
     std::optional<EquipmentSlotKind> weaponSlotJustPressed;
     bool quitRaidJustPressed{};
     bool inventoryOpen{};

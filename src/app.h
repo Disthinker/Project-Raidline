@@ -139,6 +139,7 @@ private:
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
+    friend struct TacticalDeviceUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
@@ -467,6 +468,10 @@ private:
     bool inventoryWeaponComponentsOpen_{};
     std::optional<AssetInstanceId> profileDetailsAsset_;
     void renderProfileWeaponDetails();
+    void handleWeaponLightDetailsPointer(const InventoryPointerEvent &, bool inRaid);
+    std::optional<ProfileDragSource> deviceBatteryDrag_;
+    MousePosition deviceBatteryDragPosition_{};
+    std::size_t deviceBatteryPage_{};
     void handleProfileContextMenuClick(MousePosition position, bool inRaid);
     AssetInstanceId componentWeapon_{};
     AssetInstanceId componentChoice_{};

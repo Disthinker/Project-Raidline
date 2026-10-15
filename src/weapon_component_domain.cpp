@@ -25,7 +25,7 @@ ProfileValidationResult validateWeaponComponents(const ProfileState &profile, co
                 profile.recoveryTask->recoveredAssetIds.contains(id) !=
                     profile.recoveryTask->recoveredAssetIds.contains(weapon->instanceId))
                 return {false, "component recovery outcome differs from weapon"};
-            if (definition.weaponComponent->requiresUnderbarrel)
+            if (definition.weaponComponent->requiresUnderbarrel || definition.weaponComponent->requiresLightMount)
             {
                 bool supported = false;
                 for (const auto &[otherId, other] : profile.assets.records())
@@ -33,9 +33,9 @@ ProfileValidationResult validateWeaponComponents(const ProfileState &profile, co
                     const auto *parent = std::get_if<InstalledWeaponComponentLocation>(&other.location);
                     if (!parent || parent->weaponAssetId != weapon->instanceId) continue;
                     const auto &capability = content.item(other.definitionId).weaponComponent;
-                    supported |= capability && capability->providesUnderbarrel;
+                    supported |= capability && (definition.weaponComponent->requiresLightMount ? capability->providesLightMount : capability->providesUnderbarrel);
                 }
-                if (!supported) return {false, "UNDERBARREL RAIL REQUIRED"};
+                if (!supported) return {false, definition.weaponComponent->requiresLightMount ? "LIGHT MOUNT REQUIRED" : "UNDERBARREL RAIL REQUIRED"};
             }
         }
     }
@@ -91,7 +91,7 @@ WeaponComponentPlan prepare(ProfileState &candidate, const ContentRegistry &cont
     for (const auto &definition : content.items())
         platform |= definition.weaponComponent && definition.weaponComponent->weaponDefinitionId == weapon->definitionId;
     if (!platform) return reject(DomainErrorCode::IncompatibleEquipment, "UNSUPPORTED WEAPON PLATFORM");
-    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard && command.slot != WeaponComponentSlot::Grip)
+    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard && command.slot != WeaponComponentSlot::Grip && command.slot != WeaponComponentSlot::Light)
         return reject(DomainErrorCode::IncompatibleEquipment, "INVALID COMPONENT SLOT");
     if (command.componentAssetId)
     {
@@ -118,23 +118,28 @@ WeaponComponentPlan prepare(ProfileState &candidate, const ContentRegistry &cont
     for (auto id : removed) { outgoing.push_back(*candidate.assets.find(id)); static_cast<void>(candidate.assets.erase(id)); }
     if (command.componentAssetId)
         candidate.assets.findMutable(command.componentAssetId)->location = InstalledWeaponComponentLocation{command.weaponAssetId};
-    bool rail = false;
+    bool rail = false, lightMount = false;
     for (const auto &[id, asset] : candidate.assets.records())
     {
         const auto *parent = std::get_if<InstalledWeaponComponentLocation>(&asset.location);
         if (parent && parent->weaponAssetId == command.weaponAssetId)
+        {
             rail |= content.item(asset.definitionId).weaponComponent->providesUnderbarrel;
+            lightMount |= content.item(asset.definitionId).weaponComponent->providesLightMount;
+        }
     }
-    if (!rail)
+    if (!rail || !lightMount)
     {
         removed.clear();
         for (const auto &[id, asset] : candidate.assets.records())
         {
             const auto *parent = std::get_if<InstalledWeaponComponentLocation>(&asset.location);
-            if (parent && parent->weaponAssetId == command.weaponAssetId && content.item(asset.definitionId).weaponComponent->requiresUnderbarrel)
+            if (parent && parent->weaponAssetId == command.weaponAssetId &&
+                ((!rail && content.item(asset.definitionId).weaponComponent->requiresUnderbarrel) ||
+                 (!lightMount && content.item(asset.definitionId).weaponComponent->requiresLightMount)))
             {
                 if (id == command.componentAssetId)
-                    return reject(DomainErrorCode::IncompatibleEquipment, "UNDERBARREL RAIL REQUIRED");
+                    return reject(DomainErrorCode::IncompatibleEquipment, content.item(asset.definitionId).weaponComponent->requiresLightMount ? "LIGHT MOUNT REQUIRED" : "UNDERBARREL RAIL REQUIRED");
                 removed.push_back(id);
             }
         }

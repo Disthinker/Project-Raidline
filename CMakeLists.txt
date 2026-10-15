@@ -251,6 +251,8 @@ add_library(raidline_domain STATIC
     src/base_medical_service_domain.h
     src/base_resource_domain.cpp
     src/base_resource_domain.h
+    src/tactical_device_domain.cpp
+    src/tactical_device_domain.h
     src/weapon_component_domain.cpp
     src/weapon_component_domain.h
     src/base_service_domain.cpp
@@ -539,7 +541,7 @@ function(raidline_add_test target source module)
         GTest::gtest_main
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
-       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest")
+       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -954,6 +956,8 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GameplayTimingTests.cmake")
 
 raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
+raidline_add_test(WeaponLightTest tests/test_weapon_light.cpp raidline::services)
+raidline_add_test(WeaponLightUiTest tests/test_weapon_light_ui.cpp raidline::sdl_client)
 
 raidline_add_test(WeaponInventoryUiTest tests/test_weapon_inventory_ui.cpp raidline::sdl_client)
 

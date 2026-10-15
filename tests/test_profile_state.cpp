@@ -118,15 +118,15 @@ TEST(ProfileStateTest, NewAlphaProfileCreatesContractAssets)
     EXPECT_EQ(pistolMagazines, 2U);
 }
 
-TEST(ProfileStateTest, NewPublishedProfileCreatesCompleteWarehouseCatalog)
+TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchasedElectronics)
 {
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState profile = makeNewPublishedProfile(
         "published-profile-test", content);
 
     EXPECT_EQ(profile.revision, 1U);
-    EXPECT_EQ(profile.assets.records().size(), content.items().size() + 5U);
-    EXPECT_EQ(profile.assets.nextAssetId(), content.items().size() + 6U);
+    EXPECT_EQ(profile.assets.records().size(), content.items().size() + 3U);
+    EXPECT_EQ(profile.assets.nextAssetId(), content.items().size() + 4U);
     EXPECT_TRUE(profile.committedTransactions.contains(
         "bootstrap.warehouse_catalog.content_54"));
     EXPECT_TRUE(validateProfileState(profile, content).valid);
@@ -145,6 +145,10 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesCompleteWarehouseCatalog)
                     (!entry.second.reliefBatchId.has_value() ||
                      definition.maxStackSize == 1U);
             });
+        if (definition.weaponLight || definition.battery) {
+            EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
+            continue;
+        }
         ASSERT_NE(stored, profile.assets.records().end())
             << definition.definitionId.value();
         if (definition.maxStackSize > 1U)

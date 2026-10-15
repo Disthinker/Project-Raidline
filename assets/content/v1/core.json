@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-armored-infected-content-64",
+  "content_version": "weapon-flashlight-battery-content-65",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -392,6 +392,75 @@
   ],
   "items": [
     {
+      "id": "item.component.weapon_flashlight_basic",
+      "display_name": "Weapon Flashlight",
+      "category": "weapon_component",
+      "inventory": {
+        "width": 1,
+        "height": 1,
+        "can_rotate": true
+      },
+      "max_stack_size": 1,
+      "unit_weight_grams": 150,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 40,
+          "y": 24
+        },
+        "pickup_size": {
+          "x": 48,
+          "y": 32
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_recycle_price": 37,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "light",
+        "requires_light_mount": true
+      },
+      "market_buy_price": 150,
+      "weapon_light": {
+        "angle_degrees": 120,
+        "maximum_distance": 900,
+        "background_radius": 120,
+        "low_battery_percent": 20,
+        "low_output_interval_ms": 25000,
+        "flicker_duration_ms": 150
+      }
+    },
+    {
+      "id": "item.battery.universal",
+      "display_name": "Universal Battery",
+      "category": "battery",
+      "inventory": {
+        "width": 1,
+        "height": 1,
+        "can_rotate": true
+      },
+      "max_stack_size": 10,
+      "unit_weight_grams": 25,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 40,
+          "y": 24
+        },
+        "pickup_size": {
+          "x": 48,
+          "y": 32
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_recycle_price": 5,
+      "market_buy_price": 20,
+      "maximum_charges": 600000,
+      "battery": true
+    },
+    {
       "id": "item.component.precision_barrel",
       "display_name": "5.45 Precision Barrel",
       "category": "weapon_component",
@@ -453,7 +522,7 @@
       "weapon_component": {
         "weapon": "item.weapon.rifle_5_45_service",
         "slot": "handguard",
-        "provides_underbarrel": true
+        "provides_underbarrel": true, "provides_light_mount": true
       }
     },
     {

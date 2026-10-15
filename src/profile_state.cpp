@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
 #include "profile_state.h"
 #include "inventory_domain.h"
@@ -274,7 +275,8 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
-        definitions.push_back(&definition);
+        // New light devices and cells are purchased, never catalog grants.
+        if (!definition.weaponLight && !definition.battery) definitions.push_back(&definition);
     }
     std::stable_sort(
         definitions.begin(),
@@ -510,6 +512,7 @@ AssetInstanceId AssetRegistry::create(
         std::nullopt,
         WeaponMalfunctionType::None,
         std::move(location)};
+    if (definition.weaponLight) record.deviceState = TacticalDeviceState{};
     if (!records_.emplace(id, std::move(record)).second)
     {
         throw std::logic_error{"asset ID allocation collided"};
@@ -805,6 +808,11 @@ bool assetIsCarried(
             current = installed->weaponAssetId;
             continue;
         }
+        if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
+        {
+            current = battery->deviceAssetId;
+            continue;
+        }
         return false;
     }
     return false;
@@ -936,6 +944,11 @@ bool assetIsBaseAccessible(
                 std::get_if<InstalledWeaponComponentLocation>(&asset->location))
         {
             current = installed->weaponAssetId;
+            continue;
+        }
+        if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
+        {
+            current = battery->deviceAssetId;
             continue;
         }
         return false;
@@ -1104,6 +1117,7 @@ ProfileValidationResult validateProfileState(
 {
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
         return components;
+    if (const auto devices = validateTacticalDevices(profile, content); !devices.valid) return devices;
 
     if (profile.profileId.empty() || profile.revision == 0 ||
         profile.nextBaseServiceJobId == 0 ||
@@ -1881,7 +1895,8 @@ ProfileValidationResult validateProfileState(
             }
         }
 
-        if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location))
+        if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location) ||
+            std::holds_alternative<InstalledDeviceBatteryLocation>(asset.location))
             continue;
 
         if (const auto *equipped =
@@ -1924,6 +1939,7 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location)) continue; // Validated by device ownership contract.
         if (std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location)) continue; // Validated by the independent corpse contract below.
         if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
         {
@@ -4797,6 +4813,16 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, asset.quantity);
         hashInteger(hash, static_cast<std::uint32_t>(asset.orientation));
         hashInteger(hash, asset.remainingCharges);
+        if (asset.deviceState)
+        {
+            // Do not add a marker to legacy assets: preserve historical fingerprints.
+            hashBytes(hash, "device53");
+            hashInteger(hash, asset.deviceState->switchOn ? 1U : 0U);
+            hashInteger(hash, asset.deviceState->interrupted ? 1U : 0U);
+            hashInteger(hash, asset.deviceState->lowOutputElapsedMs);
+            hashInteger(hash, asset.deviceState->flickerRemainingMs);
+            hashInteger(hash, std::bit_cast<std::uint64_t>(asset.deviceState->outputRemainderMs));
+        }
         hashInteger(hash, asset.currentMaximumDurability);
         hashInteger(hash, asset.currentDurability);
         hashInteger(hash, static_cast<std::uint32_t>(asset.weaponMalfunction));
@@ -4833,6 +4859,16 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashInteger(hash, 2U);
             hashInteger(hash, installed->weaponAssetId);
+        }
+        else if (const auto *drop = std::get_if<RaidDroppedBatteryLocation>(&asset.location))
+        {
+            hashInteger(hash, 12U); hashBytes(hash, drop->raidId); hashBytes(hash, drop->spaceId.value());
+            hashFloat(hash, drop->position.x); hashFloat(hash, drop->position.y);
+        }
+        else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location))
+        {
+            hashInteger(hash, 11U);
+            hashInteger(hash, battery->deviceAssetId);
         }
         else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         {

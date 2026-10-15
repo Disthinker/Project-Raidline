@@ -43,6 +43,7 @@ std::optional<AssetInstanceId> parentAssetId(
     }
     if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         return component->weaponAssetId;
+    if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location)) return battery->deviceAssetId;
     return std::nullopt;
 }
 
@@ -83,6 +84,13 @@ bool recoverAsset(
     if (const auto *asset = profile.assets.find(assetId))
         if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset->location))
             assetId = component->weaponAssetId;
+    if (const auto *asset = profile.assets.find(assetId))
+        if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
+        {
+            assetId = battery->deviceAssetId;
+            if (const auto *device = profile.assets.find(assetId))
+                if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&device->location)) assetId = part->weaponAssetId;
+        }
     const RecoveryTendency tendency = recoveryTendency(
         profile, content, record, assetId);
     const std::uint32_t baseChance =
@@ -201,7 +209,8 @@ RecoveryTendency recoveryTendency(
 {
     static_cast<void>(record);
     const AssetRecord &asset = *profile.assets.find(assetId);
-    if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location))
+    if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location) ||
+        std::holds_alternative<InstalledDeviceBatteryLocation>(asset.location))
         return RecoveryTendency::High;
     const ItemDefinition &definition = content.item(asset.definitionId);
     if (definition.category == ItemCategory::Weapon ||
