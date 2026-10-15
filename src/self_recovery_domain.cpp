@@ -107,10 +107,27 @@ InventoryReceipt applyOpen(
 }
 }
 
+namespace
+{
+bool recoveryObserved(const ProfileState &profile, const RaidVisibilityProjection *view,
+                      const RaidObservationKey *current)
+{
+    if(!profile.pendingRaid || !profile.pendingRaid->selfRecovery || !view || !current ||
+       current->spaceId != outdoorRaidSpaceId() || !view->matches(*current)) return false;
+    const auto p=profile.pendingRaid->selfRecovery->cachePosition;
+    const float dx=p.x-current->observer.x,dy=p.y-current->observer.y;
+    return dx*dx+dy*dy <= 82*82 && view->boundsVisible({{p.x-30,p.y-22},{60,44}});
+}
+}
+
 RaidSelfRecoveryPlan queryOpenRaidSelfRecovery(
     const ProfileState &profile,
-    const ContentRegistry &content)
+    const ContentRegistry &content,
+    const RaidVisibilityProjection *observation,
+    const RaidObservationKey *currentObservation)
 {
+    if(!recoveryObserved(profile,observation,currentObservation))
+        return {false,DomainErrorCode::IllegalDestination,"Lost cache is outside current observation",profile.revision,0};
     ProfileState candidate = profile;
     const InventoryReceipt receipt = applyOpen(candidate, content);
     const std::size_t rootCount = profile.pendingRaid.has_value() &&
@@ -124,7 +141,9 @@ RaidSelfRecoveryPlan queryOpenRaidSelfRecovery(
 InventoryReceipt executeOpenRaidSelfRecovery(
     ProfileState &profile,
     const ContentRegistry &content,
-    const CommandContext &context)
+    const CommandContext &context,
+    const RaidVisibilityProjection *observation,
+    const RaidObservationKey *currentObservation)
 {
     if (context.transactionId.empty())
     {
@@ -152,6 +171,8 @@ InventoryReceipt executeOpenRaidSelfRecovery(
             profile.revision);
     }
 
+    if(!recoveryObserved(profile,observation,currentObservation))
+        return failure(DomainErrorCode::IllegalDestination,"Lost cache is outside current observation",profile.revision);
     ProfileState candidate = profile;
     InventoryReceipt receipt = applyOpen(candidate, content);
     if (!receipt.succeeded)

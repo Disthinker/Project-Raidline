@@ -1045,6 +1045,9 @@ bool GameSession::deployAlpha(
         };
 
         RaidWorldConfig worldConfig;
+        worldConfig.lightConeObservationEnabled =
+            candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
+            candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
         worldConfig.worldSize = map.worldSize;
         worldConfig.playerSpawn = snapshot.playerSpawn;
         worldConfig.extractionPoint = snapshot.extractionPoint;
@@ -1204,6 +1207,7 @@ bool GameSession::deployAlpha(
     }
     persistenceMessage_ = std::move(saveMessage);
     world_.swap(candidateWorld);
+    world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     activeRaidRecoveryProfile_ = std::move(recoveryProfile);
     deferredRaidBasePresentationEvents_.clear();
     settlement_ = RaidSettlement{};
@@ -2084,7 +2088,8 @@ RaidSceneContainerAccess GameSession::raidSceneAccess(AssetInstanceId id) const
     const auto p=world_->player().position();
     const float half=world_->player().size()*0.5F;
     RaidSceneContainerAccess access{id,world_->activeRaidSpaceId(),{p.x+half,p.y+half},std::nullopt};
-    if(!world_->inOutdoorRaidSpace())access.observation=world_->indoorObservation();
+    access.observation=world_->raidObservation();
+    access.currentObservation=world_->raidObservationKey();
     return access;
 }
 
@@ -4054,6 +4059,7 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid && profile_.pendingRaid->baseSiteClearance.has_value();
     const bool perimeterSweepActive =
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
+    world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     world_->update(simulationInput, deltaTime);
     const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
     for (const auto &fact : corpseDeaths)
@@ -4144,12 +4150,14 @@ void GameSession::updateAlphaRaid(
         if (selfRecoveryInteractionSeconds_ >= duration)
         {
             ProfileState candidate = profile_;
+            const auto currentObservation = world_->raidObservationKey();
             const InventoryReceipt opened = executeOpenRaidSelfRecovery(
                 candidate,
                 publishedContentRegistry(),
                 CommandContext{
                     profile_.revision,
-                    nextRaidTransaction("self-recovery-open")});
+                    nextRaidTransaction("self-recovery-open")},
+                &world_->raidObservation(), &currentObservation);
             if (opened.succeeded)
             {
                 static_cast<void>(commitProfileCandidate(
@@ -4522,6 +4530,7 @@ void GameSession::updateAlphaRaid(
     {
         if (const auto loot = nearbyRaidLoot())
         {
+            const auto currentObservation = world_->raidObservationKey();
             const InventoryReceipt receipt = pickupRaidLoot(
                 profile_,
                 publishedContentRegistry(),
@@ -4529,7 +4538,7 @@ void GameSession::updateAlphaRaid(
                 CommandContext{
                     profile_.revision,
                     nextRaidTransaction("pickup")},
-                world_->inOutdoorRaidSpace()?nullptr:&world_->indoorObservation());
+                &world_->raidObservation(), &currentObservation);
             if (receipt.succeeded)
             {
                 presentationEvents_.push_back(
@@ -5209,17 +5218,10 @@ bool GameSession::raidLootAccessible(
 {
     if(!world_ || loot.spaceId!=world_->activeRaidSpaceId() ||
        (loot.requiresHighRisk && world_->raidSession().phase()!=RaidPhase::HighRisk))return false;
-    if(!world_->inOutdoorRaidSpace())
-    {
-        const auto *asset=profile_.assets.find(loot.assetId);
-        if(!asset)return false;
-        const Vec2 size=publishedContentRegistry().item(asset->definitionId).worldRenderSize;
-        return world_->raidBoundsObservable({{loot.position.x-size.x*0.5F,loot.position.y-size.y*0.5F},size});
-    }
-    return world_ != nullptr &&
-        loot.spaceId == world_->activeRaidSpaceId() &&
-        (!loot.requiresHighRisk ||
-         world_->raidSession().phase() == RaidPhase::HighRisk);
+    const auto *asset=profile_.assets.find(loot.assetId);
+    if(!asset)return false;
+    const Vec2 size=publishedContentRegistry().item(asset->definitionId).worldRenderSize;
+    return world_->raidBoundsObservable({{loot.position.x-size.x*0.5F,loot.position.y-size.y*0.5F},size});
 }
 
 bool GameSession::selfRecoveryCacheInRange() const noexcept
@@ -5241,7 +5243,7 @@ bool GameSession::selfRecoveryCacheInRange() const noexcept
     const float dx = cache.x - playerCenter.x;
     const float dy = cache.y - playerCenter.y;
     constexpr float kInteractionRadius = 82.0F;
-    return dx * dx + dy * dy <=
+    return world_->raidBoundsObservable({{cache.x-30,cache.y-22},{60,44}}) && dx * dx + dy * dy <=
         kInteractionRadius * kInteractionRadius;
 }
 

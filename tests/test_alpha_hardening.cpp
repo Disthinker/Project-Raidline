@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -349,7 +350,7 @@ TEST(AlphaHardeningTest, TenMixedRaidsSurviveRepeatedProcessReloads)
         {
             for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
             {
-                const InventoryReceipt pickedUp = pickupRaidLoot(
+                const InventoryReceipt pickedUp = pickupObservedRaidLoot(
                     profile,
                     publishedContentRegistry(),
                     loot.assetId,

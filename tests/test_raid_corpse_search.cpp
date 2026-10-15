@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include "alpha_content_ids.h"
 #include "game_session.h"
 #include "raid_corpse_search.h"
@@ -47,6 +48,8 @@ protected:
         const auto &loc = std::get<RaidCorpseContainerAssetLocation>(p.assets.find(body)->location);
         death = {loc.sourceEnemyId, loc.spaceId, {1000,1000}};
         access = {body, loc.spaceId, death.position};
+        access.observation=observeAssetContractPoint(p,loc.spaceId,death.position);
+        access.currentObservation=access.observation->key();
         const auto items = assetsInContainer(p, ProfileContainerId::compartment(body,0)); ASSERT_EQ(items.size(),1U); item=items.front()->instanceId;
     }
     void expose() { ASSERT_TRUE(revealRaidCorpse(p,content,death)); }

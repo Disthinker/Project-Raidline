@@ -522,6 +522,7 @@ public:
 
 private:
     friend struct RaidIndoorVisibilityUiTestAccess;
+    friend struct RaidLightConeVisibilityUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};
     ProfileState profile_;

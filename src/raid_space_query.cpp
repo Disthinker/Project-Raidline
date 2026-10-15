@@ -186,6 +186,131 @@ buildRaidSpaceVisibility(const RaidSpaceBlockerIndex &index,
     return result;
 }
 
+RaidVisibilityProjection
+buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
+                             const RaidObservationKey &key,
+                             RaidObservationWork *work)
+{
+    if (work)
+        *work = {};
+    RaidVisibilityProjection result;
+    result.spaceId = key.spaceId;
+    result.observer = key.observer;
+    result.worldSize = index.worldSize();
+    result.geometryRevision = key.geometryRevision;
+    result.direction = key.direction;
+    result.angleDegrees = key.angleDegrees;
+    result.maximumDistance = key.maximumDistance;
+    result.environment = key.environment;
+    const auto o = key.observer;
+    const float radius = key.maximumDistance;
+    if (!finite(o) || !finite(key.direction) || !std::isfinite(radius) ||
+        radius <= 0 || !std::isfinite(key.angleDegrees) ||
+        key.angleDegrees <= 0 || key.angleDegrees > 180 ||
+        std::abs(std::hypot(key.direction.x, key.direction.y) - 1) > 0.001F ||
+        o.x < 0 || o.y < 0 || o.x > result.worldSize.x ||
+        o.y > result.worldSize.y || key.geometryRevision == 0)
+        return result;
+    std::vector<std::size_t> candidates;
+    index.queryCandidateIndices(
+        {{o.x - radius, o.y - radius}, {radius * 2, radius * 2}}, candidates);
+    std::erase_if(candidates,
+                  [&](auto i)
+                  {
+                      const auto r = index.blockerBounds(i);
+                      const float x = std::clamp(o.x, r.position.x,
+                                                 r.position.x + r.size.x);
+                      const float y = std::clamp(o.y, r.position.y,
+                                                 r.position.y + r.size.y);
+                      return std::hypot(o.x - x, o.y - y) > radius;
+                  });
+    if (work)
+        work->localBlockers = candidates.size();
+    for (auto i : candidates)
+        if (pointInsideOpenRect(o, index.blockerBounds(i)))
+            return result;
+    constexpr float pi = 3.14159265358979323846F;
+    const float axisAngle = std::atan2(key.direction.y, key.direction.x);
+    const float half = key.angleDegrees * pi / 360;
+    std::vector<float> angles;
+    // At most one world unit of inward arc error, never revealing beyond range.
+    const int arcSegments =
+        std::max(2, static_cast<int>(std::ceil(half * 2 / 0.035F)));
+    for (int n = 0; n <= arcSegments; ++n)
+        angles.push_back(-half + half * 2 * n / arcSegments);
+    const auto corner = [&](Vec2 p)
+    {
+        const float angle = std::atan2(p.y - o.y, p.x - o.x) - axisAngle;
+        const float local = std::atan2(std::sin(angle), std::cos(angle));
+        for (float offset : {-0.00001F, 0.0F, 0.00001F})
+            if (local + offset >= -half && local + offset <= half)
+                angles.push_back(local + offset);
+    };
+    corner({0, 0});
+    corner({result.worldSize.x, 0});
+    corner(result.worldSize);
+    corner({0, result.worldSize.y});
+    for (auto i : candidates)
+    {
+        const auto r = index.blockerBounds(i);
+        corner(r.position);
+        corner({r.position.x + r.size.x, r.position.y});
+        corner({r.position.x + r.size.x, r.position.y + r.size.y});
+        corner({r.position.x, r.position.y + r.size.y});
+    }
+    std::sort(angles.begin(), angles.end());
+    angles.erase(std::unique(angles.begin(), angles.end(), [](float a, float b)
+                             { return std::abs(a - b) < 1e-7F; }),
+                 angles.end());
+    result.boundary.reserve(angles.size() + 1);
+    for (float angle : angles)
+    {
+        const Vec2 d{std::cos(axisAngle + angle), std::sin(axisAngle + angle)};
+        float length = radius;
+        if (d.x > 1e-7F)
+            length = std::min(length, (result.worldSize.x - o.x) / d.x);
+        else if (d.x < -1e-7F)
+            length = std::min(length, -o.x / d.x);
+        if (d.y > 1e-7F)
+            length = std::min(length, (result.worldSize.y - o.y) / d.y);
+        else if (d.y < -1e-7F)
+            length = std::min(length, -o.y / d.y);
+        for (auto i : candidates)
+        {
+            if (work)
+                ++work->blockerTests;
+            const auto r = index.blockerBounds(i);
+            float enter = 0, leave = length;
+            const auto slab =
+                [&](float origin, float movement, float low, float high)
+            {
+                if (std::abs(movement) < 1e-7F)
+                    return origin >= low && origin <= high;
+                float a = (low - origin) / movement,
+                      b = (high - origin) / movement;
+                if (a > b)
+                    std::swap(a, b);
+                enter = std::max(enter, a);
+                leave = std::min(leave, b);
+                return enter <= leave;
+            };
+            if (slab(o.x, d.x, r.position.x, r.position.x + r.size.x) &&
+                slab(o.y, d.y, r.position.y, r.position.y + r.size.y) &&
+                enter >= 0 && enter <= length && leave > enter + 0.00001F)
+                length = enter;
+        }
+        result.boundary.push_back(
+            {std::clamp(o.x + d.x * length, 0.0F, result.worldSize.x),
+             std::clamp(o.y + d.y * length, 0.0F, result.worldSize.y)});
+    }
+    result.boundary.push_back(
+        o); // Close both sector edges at its apex, never across the rear.
+    if (work)
+        work->rays = angles.size();
+    result.valid = result.boundary.size() >= 3;
+    return result;
+}
+
 bool raidSpaceHasLineOfSight(
     Vec2 start,
     Vec2 end,

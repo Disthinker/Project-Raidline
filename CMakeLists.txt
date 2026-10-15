@@ -539,7 +539,7 @@ function(raidline_add_test target source module)
         GTest::gtest_main
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
-       OR target STREQUAL "FortificationRuntimeTest")
+       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -749,6 +749,8 @@ raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp ra
 raidline_add_test(RaidCorpseSearchTest tests/test_raid_corpse_search.cpp raidline::services)
 raidline_add_test(RaidIndoorVisibilityTest tests/test_raid_indoor_visibility.cpp raidline::services)
 raidline_add_test(RaidIndoorVisibilityUiTest tests/test_raid_indoor_visibility_ui.cpp raidline::sdl_client)
+raidline_add_test(RaidLightConeVisibilityTest tests/test_raid_light_cone_visibility.cpp raidline::services)
+raidline_add_test(RaidLightConeVisibilityUiTest tests/test_raid_light_cone_visibility_ui.cpp raidline::sdl_client)
 raidline_add_test(RaidSceneContainerUiTest tests/test_raid_scene_container_ui.cpp raidline::sdl_client)
 raidline_add_test(PointerContinuityUiTest tests/test_pointer_continuity_ui.cpp raidline::sdl_client)
 raidline_add_test(

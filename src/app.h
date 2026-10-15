@@ -143,6 +143,7 @@ private:
     friend struct RaidSceneContainerUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
     friend struct RaidIndoorVisibilityUiTestAccess;
+    friend struct RaidLightConeVisibilityUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
     Texture indoorInformationLayer_;

@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include <gtest/gtest.h>
 
 #include "base_workforce_domain.h"
@@ -3050,7 +3051,7 @@ TEST(SaveRepositoryTest,
     ASSERT_TRUE(loaded.profile->pendingRaid->selfRecovery.has_value());
     EXPECT_FALSE(loaded.profile->pendingRaid->selfRecovery->opened);
 
-    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+    ASSERT_TRUE(openObservedRaidSelfRecovery(
         profile,
         content,
         CommandContext{profile.revision, "save-self-recovery-open"})

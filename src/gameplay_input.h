@@ -52,6 +52,8 @@ struct GameplayInput
     std::optional<EquipmentSlotKind> weaponSlotJustPressed;
     bool quitRaidJustPressed{};
     bool inventoryOpen{};
+    // Interface/focus cursor must never rotate the world observation cone.
+    bool freezeObservationDirection{};
     float movementSpeedMultiplier{1.0F};
 
     // Service-owned profile query; the world only consumes this eligibility

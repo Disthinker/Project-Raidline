@@ -13,9 +13,13 @@ struct RaidSelfRecoveryPlan
 
 [[nodiscard]] RaidSelfRecoveryPlan queryOpenRaidSelfRecovery(
     const ProfileState &profile,
-    const ContentRegistry &content);
+    const ContentRegistry &content,
+    const RaidVisibilityProjection *observation = nullptr,
+    const RaidObservationKey *currentObservation = nullptr);
 
 [[nodiscard]] InventoryReceipt executeOpenRaidSelfRecovery(
     ProfileState &profile,
     const ContentRegistry &content,
-    const CommandContext &context);
+    const CommandContext &context,
+    const RaidVisibilityProjection *observation = nullptr,
+    const RaidObservationKey *currentObservation = nullptr);

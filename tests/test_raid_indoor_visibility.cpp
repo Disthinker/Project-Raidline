@@ -126,8 +126,8 @@ TEST(RaidIndoorVisibilityTest,
          interior.interiorExit.position.y + interior.interiorExit.size.y / 2});
     session.update(enter, 0);
     EXPECT_TRUE(session.world().inOutdoorRaidSpace());
-    EXPECT_FALSE(session.world().indoorObservation().valid);
-    EXPECT_TRUE(session.world().raidBoundsObservable({{900, 900}, {20, 20}}));
+    EXPECT_TRUE(session.world().raidObservation().valid);
+    EXPECT_EQ(session.world().raidObservation().spaceId,outdoorRaidSpaceId());
 }
 TEST(RaidIndoorVisibilityTest,
      MissingAndStaleIndoorInventoryObservationRejectWithoutMutation)
@@ -169,6 +169,7 @@ TEST(RaidIndoorVisibilityTest,
     auto clear = observe(loc.position, {}, {1200, 800});
     clear.spaceId = loc.spaceId;
     access.observation = clear;
+    access.currentObservation=clear.key();
     access.playerCenter.x += 1;
     EXPECT_FALSE(
         executeInventory(p, content, command, {p.revision, "stale"}, &access)
@@ -201,17 +202,20 @@ TEST(RaidIndoorVisibilityTest,
         pickupRaidLoot(p, content, id, {p.revision, "missing"}).succeeded);
     EXPECT_EQ(profileStateFingerprint(p), hash);
     auto view = observe(pos, {}, {2400, 1440});
+    auto key=view.key();
     EXPECT_FALSE(
-        pickupRaidLoot(p, content, id, {p.revision, "wrong-space"}, &view)
+        pickupRaidLoot(p, content, id, {p.revision, "wrong-space"}, &view, &key)
             .succeeded);
     EXPECT_EQ(profileStateFingerprint(p), hash);
     view.spaceId = loot->spaceId;
     view.observer.x += 100;
+    key=view.key();
     EXPECT_FALSE(
-        pickupRaidLoot(p, content, id, {p.revision, "far"}, &view).succeeded);
+        pickupRaidLoot(p, content, id, {p.revision, "far"}, &view, &key).succeeded);
     EXPECT_EQ(profileStateFingerprint(p), hash);
     view.observer = pos;
-    EXPECT_TRUE(pickupRaidLoot(p, content, id, {p.revision, "visible"}, &view)
+    key=view.key();
+    EXPECT_TRUE(pickupRaidLoot(p, content, id, {p.revision, "visible"}, &view, &key)
                     .succeeded);
 }
 

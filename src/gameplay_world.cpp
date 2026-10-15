@@ -279,6 +279,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         throw std::invalid_argument{"RaidWorldConfig is invalid"};
     }
     worldSize_ = config.worldSize;
+    lightConeObservationEnabled_ = config.lightConeObservationEnabled;
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     ballisticBlockers_ = std::move(config.ballisticBlockers);
@@ -464,6 +465,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             interiorConfig.interiorExit,
             {},
             std::move(interiorConfig.ballisticBlockers)};
+        interior.lightEnvironment = interiorConfig.lightEnvironment;
         for (const BallisticBlocker &blocker : interior.ballisticBlockers)
         {
             if (blocker.id == 0 ||
@@ -1001,6 +1003,8 @@ void GameplayWorld::update(
     float deltaTime)
 {
     spaceTransitionedLastUpdate_ = false;
+    enemyObservationCache_.clear(); // Bound to this simulation frame; never retain removed actors.
+    enemyObservationIndexReady_ = false;
     shooting_.beginFrame(deltaTime);
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
@@ -1054,6 +1058,10 @@ void GameplayWorld::update(
         }
         aimInput.aimWorldBounds = raidReticleWorldBounds(camera, input.aimViewport->size);
     }
+    const bool freezeObservation = input.freezeObservationDirection || input.inventoryOpen;
+    if (freezeObservation && !observationDirectionFrozen_)
+        observationDirection_ = weaponAimDirection();
+    observationDirectionFrozen_ = freezeObservation;
     shooting_.updateAim(
         aimInput,
         centerAfterMovement,
@@ -1062,6 +1070,8 @@ void GameplayWorld::update(
         deltaTime,
         !spaceTransitionedLastUpdate_);
     static_cast<void>(player_.faceDirection(shooting_.aimDirection()));
+    if (!observationDirectionFrozen_) observationDirection_ = weaponAimDirection();
+    updateObservationLight(deltaTime);
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     const float highRiskTimeBeforeUpdate =
@@ -1548,24 +1558,126 @@ Vec2 GameplayWorld::raidSpaceWorldSize() const noexcept
     return activeWorldSize();
 }
 
+void GameplayWorld::updateObservationLight(float seconds)
+{
+    const auto environment =
+        activeInteriorIndex_
+            ? interiors_[*activeInteriorIndex_].lightEnvironment
+            : (raidDaylight_ ? RaidLightEnvironment::DayOutdoor
+                             : RaidLightEnvironment::NightOutdoor);
+    const auto target = raidSightParameters(environment);
+    if (observationLightSpace_ != activeRaidSpaceId())
+    {
+        observationLightSpace_ = activeRaidSpaceId();
+        observationLightEnvironment_ = environment;
+        observationParameters_ = observationTransitionStart_ = target;
+        observationLightTransitionSeconds_ = 0.5F;
+        return;
+    }
+    if (observationLightEnvironment_ != environment)
+    {
+        observationLightEnvironment_ = environment;
+        observationTransitionStart_ = observationParameters_;
+        observationLightTransitionSeconds_ = 0;
+    }
+    if (std::isfinite(seconds) && seconds > 0)
+        observationLightTransitionSeconds_ =
+            std::min(0.5F, observationLightTransitionSeconds_ + seconds);
+    const float t = observationLightTransitionSeconds_ / 0.5F;
+    observationParameters_ = {
+        observationTransitionStart_.angleDegrees +
+            (target.angleDegrees - observationTransitionStart_.angleDegrees) *
+                t,
+        observationTransitionStart_.maximumDistance +
+            (target.maximumDistance -
+             observationTransitionStart_.maximumDistance) *
+                t};
+}
+
+RaidLightEnvironment GameplayWorld::currentObservationEnvironment() const noexcept
+{
+    if(!lightConeObservationEnabled_) return RaidLightEnvironment::WeakIndoor;
+    return activeInteriorIndex_ ? interiors_[*activeInteriorIndex_].lightEnvironment :
+        (raidDaylight_ ? RaidLightEnvironment::DayOutdoor : RaidLightEnvironment::NightOutdoor);
+}
+
+RaidSightParameters GameplayWorld::currentObservationParameters() const noexcept
+{
+    if(!lightConeObservationEnabled_) return {360,0};
+    return observationLightSpace_ == activeRaidSpaceId() ? observationParameters_ : raidSightParameters(currentObservationEnvironment());
+}
+
+Vec2 GameplayWorld::currentObservationDirection() const noexcept
+{
+    if(!lightConeObservationEnabled_) return {1,0};
+    Vec2 direction = observationDirectionFrozen_ ? observationDirection_ : weaponAimDirection();
+    const float length=std::hypot(direction.x,direction.y);
+    return std::isfinite(length) && length>0.0001F ? Vec2{direction.x/length,direction.y/length} : observationDirection_;
+}
+
+RaidObservationKey GameplayWorld::raidObservationKey() const
+{
+    const auto parameters = currentObservationParameters();
+    return {activeRaidSpaceId(),
+            playerCenter(player_),
+            currentObservationDirection(),
+            parameters.angleDegrees,
+            parameters.maximumDistance,
+            currentObservationEnvironment(),
+            1};
+}
+
 const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
 {
     const Vec2 center = playerCenter(player_);
-    if (!isAlphaRaidWorld() || inOutdoorRaidSpace())
+    if (!isAlphaRaidWorld())
     {
         indoorObservationCache_.valid = false;
         indoorObservationCacheReady_ = false;
         return indoorObservationCache_;
     }
+    const auto direction = currentObservationDirection();
+    const auto parameters = currentObservationParameters();
+    // Compare borrowed space identity and scalar parameters on the hot path.
+    // Only a rebuild or a submitted command needs an owned context string.
     if (!indoorObservationCacheReady_ ||
         indoorObservationCache_.spaceId != activeRaidSpaceId() ||
         indoorObservationCache_.observer.x != center.x ||
-        indoorObservationCache_.observer.y != center.y)
+        indoorObservationCache_.observer.y != center.y ||
+        indoorObservationCache_.direction.x != direction.x ||
+        indoorObservationCache_.direction.y != direction.y ||
+        indoorObservationCache_.angleDegrees != parameters.angleDegrees ||
+        indoorObservationCache_.maximumDistance != parameters.maximumDistance ||
+        indoorObservationCache_.environment !=
+            currentObservationEnvironment() ||
+        indoorObservationCache_.geometryRevision != 1)
     {
-        indoorObservationCache_ = buildRaidSpaceVisibility(
-            activeBlockerIndex(), activeRaidSpaceId(), center);
+        const auto key = raidObservationKey();
+        enemyObservationCache_.clear();
+        enemyObservationIndexReady_ = false;
+        if (lightConeObservationEnabled_)
+            indoorObservationCache_ = buildRaidSpaceConeVisibility(
+                activeBlockerIndex(), key, &observationWork_);
+        else if (!inOutdoorRaidSpace())
+            indoorObservationCache_ = buildRaidSpaceVisibility(
+                activeBlockerIndex(), activeRaidSpaceId(), center);
+        else
+        {
+            // Out-of-scope activities retain their existing unobstructed
+            // presentation, but submissions still receive a current context.
+            indoorObservationCache_ = {};
+            indoorObservationCache_.spaceId = activeRaidSpaceId();
+            indoorObservationCache_.observer = center;
+            indoorObservationCache_.worldSize = activeWorldSize();
+            indoorObservationCache_.geometryRevision = 1;
+            const auto size = activeWorldSize();
+            indoorObservationCache_.boundary = {
+                {0, 0}, {size.x, 0}, size, {0, size.y}};
+            indoorObservationCache_.valid = true;
+        }
+        observationBoundsQuery_ =
+            RaidVisibilityBoundsQuery{indoorObservationCache_};
         ++indoorObservationBuildCount_;
-        indoorObservationCache_.geometryRevision = indoorObservationBuildCount_;
         indoorObservationCacheReady_ = true;
     }
     return indoorObservationCache_;
@@ -1573,18 +1685,90 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
 
 bool GameplayWorld::raidBoundsObservable(Rect bounds) const
 {
-    return !isAlphaRaidWorld() || inOutdoorRaidSpace() ||
-           indoorObservation().boundsVisible(bounds);
+    if (!isAlphaRaidWorld())
+        return true;
+    static_cast<void>(indoorObservation());
+    return observationBoundsQuery_.boundsVisible(bounds);
+}
+
+HitFeedbackPresentationSnapshot GameplayWorld::observableHitFeedback() const
+{
+    auto feedback = hitFeedbackPresentation();
+    if (!isAlphaRaidWorld() || !lightConeObservationEnabled_)
+        return feedback;
+    const auto visible = [&](const std::optional<HitFeedbackSource> &source)
+    {
+        if (!source || source->targetId == kInvalidCombatTargetId ||
+            !raidObservation().pointVisible(source->position))
+            return false;
+        // Removed targets retain the actual impact fact; living targets must
+        // still be observable at their current position. Never infer a hit.
+        return source->targetKilled || raidEnemyObservable(source->targetId);
+    };
+    if (!visible(feedback.semanticSource))
+    {
+        feedback.remainingSeconds = 0;
+        feedback.semantic = HitSemantic::Normal;
+    }
+    if (!visible(feedback.armorSource))
+    {
+        feedback.armorFeedbackSeconds = 0;
+        feedback.armorBroken = false;
+    }
+    return feedback;
 }
 
 bool GameplayWorld::raidEnemyObservable(CombatTargetId id) const
 {
-    const auto &actors = enemies();
-    const auto found =
-        std::find_if(actors.begin(), actors.end(),
-                     [id](const auto &e) { return e.combatTargetId() == id; });
-    return found != actors.end() && !found->isDead() &&
-           raidBoundsObservable(found->bounds());
+    if (!lightConeObservationEnabled_)
+    {
+        const Enemy *found = activeEnemies().find(id);
+        return found && raidBoundsObservable(found->bounds());
+    }
+    static_cast<void>(raidObservation()); // Refresh pose/light/space before
+                                          // cached eligibility.
+    if (!enemyObservationIndexReady_)
+    {
+        enemyObservationCache_.reserve(activeEnemies().size());
+        for (std::size_t position = 0; position < activeEnemies().size();
+             ++position)
+            enemyObservationCache_.push_back(
+                {activeEnemies()[position].combatTargetId(),
+                 {},
+                 false,
+                 false,
+                 position});
+        std::sort(enemyObservationCache_.begin(), enemyObservationCache_.end(),
+                  [](const auto &a, const auto &b) { return a.id < b.id; });
+        enemyObservationIndexReady_ = true;
+    }
+    const auto cached = std::lower_bound(
+        enemyObservationCache_.begin(), enemyObservationCache_.end(), id,
+        [](const auto &entry, CombatTargetId target)
+        { return entry.id < target; });
+    if (cached == enemyObservationCache_.end() || cached->id != id)
+        return false;
+    if (cached->position >= activeEnemies().size())
+        return false;
+    const Enemy *found = &activeEnemies()[cached->position];
+    if (found->combatTargetId() != id || found->isDead())
+        return false;
+    const auto bounds = found->bounds();
+    if (cached->computed)
+    {
+        const auto previous = cached->bounds;
+        if (previous.position.x == bounds.position.x &&
+            previous.position.y == bounds.position.y &&
+            previous.size.x == bounds.size.x &&
+            previous.size.y == bounds.size.y)
+            return cached->observable;
+    }
+    ++enemyObservationSolveCount_;
+    const bool observable = observationBoundsQuery_.boundsVisible(bounds);
+    cached->bounds = bounds;
+    cached->observable = observable;
+    cached->computed = true;
+    return observable;
 }
 
 std::vector<RaidSpacePortalProjection>
@@ -3085,7 +3269,9 @@ bool GameplayWorld::resetDeveloperRangeEnemies(const EnemyCombatDefinition &defi
         candidate.spawn(Enemy{position, {50, 50}, {}, definition.maximumHealth, nextId++, definition.torsoArmor});
         candidate.state(candidate.back().combatTargetId()).encounter.home = position;
     }
+    enemyObservationCache_.clear();
     enemies_ = std::move(candidate);
+    enemyObservationIndexReady_ = false;
     nextCombatTargetId_ = nextId;
     initialOutdoorEnemyCount_ = enemies_.size();
     navigationFieldCache_.clear();

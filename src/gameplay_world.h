@@ -103,6 +103,7 @@ struct RaidInteriorWorldConfig
     ContentRect interiorExit;
     std::vector<EnemySpawn> initialEnemies;
     std::vector<BallisticBlocker> ballisticBlockers;
+    RaidLightEnvironment lightEnvironment{RaidLightEnvironment::WeakIndoor};
 };
 
 struct RaidInteriorMapProjection
@@ -152,6 +153,7 @@ struct RaidWorldConfig
     RaidIntelligenceLoadout intelligence;
     std::vector<RaidTacticalObjective> tacticalObjectives;
     bool developerRange{};
+    bool lightConeObservationEnabled{};
 };
 
 struct RaidOutdoorLabelProjection
@@ -261,8 +263,14 @@ public:
     activeRaidSpaceDisplayName() const noexcept;
     [[nodiscard]] Vec2 raidSpaceWorldSize() const noexcept;
     [[nodiscard]] const RaidVisibilityProjection &indoorObservation() const;
+    [[nodiscard]] const RaidVisibilityProjection &raidObservation() const { return indoorObservation(); }
+    [[nodiscard]] RaidObservationKey raidObservationKey() const;
+    [[nodiscard]] bool lightConeObservationEnabled() const noexcept { return lightConeObservationEnabled_; }
+    void setRaidDaylight(bool day) noexcept { raidDaylight_ = day; }
+    [[nodiscard]] RaidObservationWork observationWork() const noexcept { return observationWork_; }
     [[nodiscard]] bool raidBoundsObservable(Rect bounds) const;
     [[nodiscard]] bool raidEnemyObservable(CombatTargetId id) const;
+    [[nodiscard]] std::uint64_t enemyObservationSolveCount() const noexcept { return enemyObservationSolveCount_; }
     [[nodiscard]] std::uint64_t indoorObservationBuildCount() const noexcept { return indoorObservationBuildCount_; }
     [[nodiscard]] std::vector<RaidSpacePortalProjection>
     visibleRaidSpacePortals() const;
@@ -281,6 +289,7 @@ public:
     hitResultsLastUpdate() const noexcept;
     [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
     { return shooting_.hitFeedbackPresentation(); }
+    [[nodiscard]] HitFeedbackPresentationSnapshot observableHitFeedback() const;
 
     [[nodiscard]]
     const std::vector<GroundItem> &
@@ -484,6 +493,7 @@ private:
         std::optional<RaidSpaceBlockerIndex> blockerIndex;
         std::size_t navigationScheduleCursor{};
         std::size_t initialEnemyCount{};
+        RaidLightEnvironment lightEnvironment{RaidLightEnvironment::WeakIndoor};
     };
 
     struct NavigationFieldCache
@@ -533,8 +543,36 @@ private:
     std::vector<OutdoorPresentationChunk> outdoorPresentationChunks_;
     mutable RaidOutdoorPresentationProjection outdoorPresentationCache_;
     mutable RaidVisibilityProjection indoorObservationCache_;
+    mutable RaidVisibilityBoundsQuery observationBoundsQuery_;
     mutable bool indoorObservationCacheReady_{};
     mutable std::uint64_t indoorObservationBuildCount_{};
+    // Frame-local stable-ID lookup; verify the live ID at its position on every
+    // query and clear before update/removal/spawn/roster replacement. No actor
+    // pointers.
+    struct EnemyObservationCacheEntry
+    {
+        CombatTargetId id{};
+        Rect bounds;
+        bool computed{}, observable{};
+        std::size_t position{};
+    };
+    mutable std::vector<EnemyObservationCacheEntry> enemyObservationCache_;
+    mutable bool enemyObservationIndexReady_{};
+    mutable std::uint64_t enemyObservationSolveCount_{};
+    mutable RaidObservationWork observationWork_;
+    bool raidDaylight_{true};
+    bool lightConeObservationEnabled_{};
+    bool observationDirectionFrozen_{};
+    Vec2 observationDirection_{1,0};
+    RaidSpaceDefinitionId observationLightSpace_;
+    RaidLightEnvironment observationLightEnvironment_{RaidLightEnvironment::DayOutdoor};
+    RaidSightParameters observationParameters_{180,1000};
+    RaidSightParameters observationTransitionStart_{180,1000};
+    float observationLightTransitionSeconds_{0.5F};
+    void updateObservationLight(float seconds);
+    [[nodiscard]] RaidLightEnvironment currentObservationEnvironment() const noexcept;
+    [[nodiscard]] RaidSightParameters currentObservationParameters() const noexcept;
+    [[nodiscard]] Vec2 currentObservationDirection() const noexcept;
     mutable bool outdoorPresentationCacheValid_{};
     mutable std::uint32_t outdoorPresentationFirstChunkColumn_{};
     mutable std::uint32_t outdoorPresentationLastChunkColumn_{};

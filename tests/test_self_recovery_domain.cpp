@@ -1,3 +1,4 @@
+#include "raid_visibility_fixture.h"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -70,6 +71,25 @@ DeployReceipt deployRecovery(
             mapDefinitionId, {}, record},
         CommandContext{profile.revision, "self-recovery-deploy"});
 }
+}
+
+TEST(SelfRecoveryDomainTest, CurrentObservationRequiredForQueryAndFinalOpen)
+{
+    const auto &content=publishedContentRegistry();
+    auto profile=makeNewAlphaProfile("self-cone",content);
+    const auto record=createLoss(profile,"cone"); ASSERT_TRUE(deployRecovery(profile,record).succeeded);
+    const auto point=profile.pendingRaid->selfRecovery->cachePosition;
+    const auto view=observeAssetContractPoint(profile,outdoorRaidSpaceId(),point);
+    auto key=view.key(); const auto hash=profileStateFingerprint(profile);
+    EXPECT_FALSE(queryOpenRaidSelfRecovery(profile,content).canCommit);
+    EXPECT_FALSE(executeOpenRaidSelfRecovery(profile,content,{profile.revision,"missing"}).succeeded);
+    key.direction={-1,0};
+    EXPECT_FALSE(executeOpenRaidSelfRecovery(profile,content,{profile.revision,"old-heading"},&view,&key).succeeded);
+    key=view.key(); key.observer.x+=100;
+    EXPECT_FALSE(executeOpenRaidSelfRecovery(profile,content,{profile.revision,"old-position"},&view,&key).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile),hash);
+    key=view.key(); EXPECT_TRUE(queryOpenRaidSelfRecovery(profile,content,&view,&key).canCommit);
+    EXPECT_TRUE(executeOpenRaidSelfRecovery(profile,content,{profile.revision,"current"},&view,&key).succeeded);
 }
 
 TEST(SelfRecoveryDomainTest,
@@ -147,9 +167,9 @@ TEST(SelfRecoveryDomainTest, HospitalLossSupportsBothExclusiveRecoveryPathsAfter
             ASSERT_TRUE(state.pendingRaid->selfRecovery);
             ASSERT_NE(findRaidAnchorPlacement(state.pendingRaid->spatialLayout, kRaidAnchorSelfRecovery), nullptr);
             EXPECT_FALSE(queryStartRecoveryTask(state, content, record).canCommit);
-            ASSERT_TRUE(executeOpenRaidSelfRecovery(state, content,
+            ASSERT_TRUE(openObservedRaidSelfRecovery(state, content,
                 CommandContext{state.revision,"hospital-cache-open"}).succeeded);
-            ASSERT_TRUE(pickupRaidLoot(state, content, rifle,
+            ASSERT_TRUE(pickupObservedRaidLoot(state, content, rifle,
                 CommandContext{state.revision,"hospital-cache-pick"}).succeeded);
             const auto carried = state.assets.find(rifle)->location;
             ASSERT_TRUE(settlePendingRaid(state, content,"self-recovery-settlement",
@@ -206,7 +226,7 @@ TEST(SelfRecoveryDomainTest,
     ASSERT_TRUE(deployRecovery(profile, recordId).succeeded);
     const std::size_t roots = profile.pendingRaid->selfRecovery->roots.size();
 
-    const InventoryReceipt opened = executeOpenRaidSelfRecovery(
+    const InventoryReceipt opened = openObservedRaidSelfRecovery(
         profile, publishedContentRegistry(),
         CommandContext{profile.revision, "self-recovery-open"});
 
@@ -224,7 +244,7 @@ TEST(SelfRecoveryDomainTest,
                 { return root.assetId == loot.assetId; });
         }), static_cast<std::ptrdiff_t>(roots));
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
-    const InventoryReceipt replay = executeOpenRaidSelfRecovery(
+    const InventoryReceipt replay = openObservedRaidSelfRecovery(
         profile, publishedContentRegistry(),
         CommandContext{profile.revision, "self-recovery-open"});
     EXPECT_TRUE(replay.succeeded);
@@ -239,13 +259,13 @@ TEST(SelfRecoveryDomainTest,
         "self-recovery-success", publishedContentRegistry());
     const std::string recordId = createLoss(profile, "success");
     ASSERT_TRUE(deployRecovery(profile, recordId).succeeded);
-    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+    ASSERT_TRUE(openObservedRaidSelfRecovery(
         profile, publishedContentRegistry(),
         CommandContext{profile.revision, "self-recovery-success-open"})
                     .succeeded);
     const AssetInstanceId rifle = firstAsset(profile, alpha_content::rifle);
     const AssetInstanceId backpack = firstAsset(profile, alpha_content::backpack);
-    ASSERT_TRUE(pickupRaidLoot(
+    ASSERT_TRUE(pickupObservedRaidLoot(
         profile, publishedContentRegistry(), rifle,
         CommandContext{profile.revision, "self-recovery-success-pick"})
                     .succeeded);
@@ -270,12 +290,12 @@ TEST(SelfRecoveryDomainTest,
         "self-recovery-fail", publishedContentRegistry());
     const std::string oldRecord = createLoss(failed, "fail");
     ASSERT_TRUE(deployRecovery(failed, oldRecord).succeeded);
-    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+    ASSERT_TRUE(openObservedRaidSelfRecovery(
         failed, publishedContentRegistry(),
         CommandContext{failed.revision, "self-recovery-fail-open"})
                     .succeeded);
     const AssetInstanceId rifle = firstAsset(failed, alpha_content::rifle);
-    ASSERT_TRUE(pickupRaidLoot(
+    ASSERT_TRUE(pickupObservedRaidLoot(
         failed, publishedContentRegistry(), rifle,
         CommandContext{failed.revision, "self-recovery-fail-pick"})
                     .succeeded);
@@ -291,7 +311,7 @@ TEST(SelfRecoveryDomainTest,
         "self-recovery-rollback", publishedContentRegistry());
     const std::string restoredRecord = createLoss(rolledBack, "rollback");
     ASSERT_TRUE(deployRecovery(rolledBack, restoredRecord).succeeded);
-    ASSERT_TRUE(executeOpenRaidSelfRecovery(
+    ASSERT_TRUE(openObservedRaidSelfRecovery(
         rolledBack, publishedContentRegistry(),
         CommandContext{rolledBack.revision, "self-recovery-rollback-open"})
                     .succeeded);

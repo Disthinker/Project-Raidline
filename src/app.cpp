@@ -7052,6 +7052,9 @@ void App::update(float deltaTime)
         gameplayInput = GameplayInput{};
     }
 
+    gameplayInput.freezeObservationDirection = inventoryOverlayState_.isOpen() ||
+        tacticalMapOpen_ || medicalWheelOpen_ || developerWeaponPanelOpen_ ||
+        developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
     gameFlow_.update(
         gameplayInput,
         deltaTime);
@@ -7391,7 +7394,8 @@ void App::renderDebugText()
         52.0f,
         playerHealthText.c_str());
 
-    const bool indoorVisibility=gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace();
+    const bool indoorVisibility=gameSession_.world().isAlphaRaidWorld() &&
+        (gameSession_.world().lightConeObservationEnabled() || !gameSession_.world().inOutdoorRaidSpace());
     const Vec2 camera=raidWorldCameraOffset();
     const auto onScreen=[&](Rect bounds)
     {
@@ -7419,9 +7423,9 @@ void App::renderDebugText()
 
     const std::string enemyHealthText =
         fmt::format(
-            fmt::runtime((gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? "Visible Enemies: {0} | Alerted {2} | Searching {3}" : "Enemies: {}/{} | Alerted {} | Searching {}"),
+            fmt::runtime(indoorVisibility ? "Visible Enemies: {0} | Alerted {2} | Searching {3}" : "Enemies: {}/{} | Alerted {} | Searching {}"),
             aliveEnemyCount,
-            (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? aliveEnemyCount : gameSession_.world().enemies().size(),
+            indoorVisibility ? aliveEnemyCount : gameSession_.world().enemies().size(),
             alertedEnemyCount,
             searchingEnemyCount);
 
@@ -7458,7 +7462,7 @@ void App::renderDebugText()
         }
     }
     const std::string groundItemText =
-        fmt::format(fmt::runtime((gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace()) ? "Visible Ground Items: {}" : "Ground Items: {}"), groundCount);
+        fmt::format(fmt::runtime(indoorVisibility ? "Visible Ground Items: {}" : "Ground Items: {}"), groundCount);
 
     uiTextRenderer_.render(
         renderer_,
@@ -7565,10 +7569,12 @@ void App::renderDebugText()
         gameSession_.world().highRiskActiveEnemyCap() > 0U)
     {
         const std::string pressureText = fmt::format(
-            "Pressure wave {} | Next {:.0f}s | Active {}/{} | Converging on crisis target",
+            fmt::runtime(indoorVisibility
+                ? "Pressure wave {} | Next {:.0f}s | Visible Enemies {} | Converging on crisis target"
+                : "Pressure wave {} | Next {:.0f}s | Active {}/{} | Converging on crisis target"),
             gameSession_.world().highRiskPressureWaveCount(),
             gameSession_.world().highRiskNextWaveSeconds(),
-            gameSession_.world().aliveEnemyCount(),
+            indoorVisibility ? aliveEnemyCount : gameSession_.world().aliveEnemyCount(),
             gameSession_.world().highRiskActiveEnemyCap());
         uiTextRenderer_.render(
             renderer_,
@@ -7714,10 +7720,12 @@ void App::renderDebugText()
         gameSessionText.c_str());
 
     std::string enemyAiText{"Enemy AI: none"};
-    if (!gameSession_.world().enemies().empty())
+    const auto &diagnosticActors=gameSession_.world().enemies();
+    const auto diagnosticEnemy=std::find_if(diagnosticActors.begin(),diagnosticActors.end(),[&](const Enemy &enemy)
+    { return !indoorVisibility || (!enemy.isDead() && onScreen(enemy.bounds()) && gameSession_.world().raidEnemyObservable(enemy.combatTargetId())); });
+    if (diagnosticEnemy!=diagnosticActors.end())
     {
-        const Enemy &enemy =
-            gameSession_.world().enemies().front();
+        const Enemy &enemy = *diagnosticEnemy;
         if (enemy.isDead())
         {
             enemyAiText = "Enemy AI: defeated";
@@ -7758,6 +7766,7 @@ void App::renderDebugText()
         }
     }
 
+    if(indoorVisibility && enemyAiText.starts_with("Lead AI")) enemyAiText.replace(0,7,"Visible target AI");
     uiTextRenderer_.render(
         renderer_,
         980.0F,
@@ -10448,11 +10457,19 @@ void App::renderAimCrosshair()
         center.y + feedbackRadius + kArmLength);
     const HitFeedbackPresentationSnapshot hitFeedback = inBaseWorld
         ? gameFlow_.baseWorld().hitFeedbackPresentation()
-        : gameSession_.world().hitFeedbackPresentation();
-    if (hitFeedback.armorFeedbackSeconds > 0.0F)
+        : gameSession_.world().observableHitFeedback();
+    const auto feedbackSourceOnScreen = [&](const std::optional<HitFeedbackSource> &source)
+    {
+        if (inBaseWorld || !gameSession_.world().lightConeObservationEnabled()) return true;
+        if (!source) return false;
+        const Vec2 camera=raidWorldCameraOffset();
+        return source->position.x>=camera.x && source->position.y>=camera.y &&
+            source->position.x<camera.x+kWindowWidth && source->position.y<camera.y+kWindowHeight;
+    };
+    if (hitFeedback.armorFeedbackSeconds > 0.0F && feedbackSourceOnScreen(hitFeedback.armorSource))
         uiTextRenderer_.render(renderer_, center.x + 24, center.y + 26,
             hitFeedback.armorBroken ? "ENEMY ARMOR BROKEN" : "ENEMY ARMOR ABSORBED HIT");
-    if (hitFeedback.remainingSeconds > 0.0F)
+    if (hitFeedback.remainingSeconds > 0.0F && feedbackSourceOnScreen(hitFeedback.semanticSource))
     {
         const Uint8 red = hitFeedback.semantic == HitSemantic::WeakPoint
             ? 246
@@ -10804,7 +10821,7 @@ void App::renderEnemies()
          ++enemyIndex)
     {
         const Enemy &enemy = enemies[enemyIndex];
-        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
+        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
         const Rect bounds = enemy.bounds();
         const float spriteX =
             bounds.position.x +
@@ -10947,7 +10964,7 @@ void App::renderEnemyAttackTelegraphs()
     for (const Enemy &enemy :
          gameSession_.world().enemies())
     {
-        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().inOutdoorRaidSpace() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
+        if (gameSession_.world().isAlphaRaidWorld() && !gameSession_.world().raidEnemyObservable(enemy.combatTargetId())) continue;
         const std::optional<EnemyAttackType> attackType =
             enemy.attackType();
         if (!attackType.has_value())
@@ -15337,7 +15354,8 @@ void App::renderAlphaRaidLoot()
     const std::optional<RaidSelfRecoveryProjection> recovery =
         gameSession_.raidSelfRecoveryProjection();
     if (recovery.has_value() && !recovery->opened &&
-        gameSession_.world().inOutdoorRaidSpace())
+        gameSession_.world().inOutdoorRaidSpace() &&
+        gameSession_.world().raidBoundsObservable({{recovery->cachePosition.x-30,recovery->cachePosition.y-22},{60,44}}))
     {
         const SDL_FRect glow{
             recovery->cachePosition.x - 38.0F,
@@ -18752,7 +18770,7 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
               b,
               a};
 
-    const auto &view = gameSession_.world().indoorObservation();
+    const auto &view = gameSession_.world().raidObservation();
     std::vector<SDL_Vertex> vertices;
     std::vector<int> indices;
     const Rect screenWorld{
@@ -18822,7 +18840,6 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     renderAlphaRaidLoot();
     renderEnemyAttackTelegraphs();
     renderEnemies();
-    renderPlayer();
     renderShotPresentations();
     renderShotFeedbackPresentations();
     renderParticles();
@@ -18882,12 +18899,12 @@ void App::renderRaidScreen()
     }
 
     const bool indoorVisibility = gameSession_.world().isAlphaRaidWorld() &&
-                                  !gameSession_.world().inOutdoorRaidSpace();
+        (gameSession_.world().lightConeObservationEnabled() || !gameSession_.world().inOutdoorRaidSpace());
     if (indoorVisibility)
     {
         if (!renderIndoorInformationLayer(worldViewport))
         {
-            uiMessage_ = "INDOOR OBSERVATION UNAVAILABLE";
+            uiMessage_ = "RAID OBSERVATION UNAVAILABLE";
             SDL_LogError(SDL_LOG_CATEGORY_RENDER,
                          "Indoor observation failed: %s", SDL_GetError());
         }
@@ -18911,6 +18928,8 @@ void App::renderRaidScreen()
         renderShotFeedbackPresentations();
         renderParticles();
     }
+
+    if (indoorVisibility) renderPlayer(); // Own avatar is never hidden by its observation cone.
 
     // Crosshair and every UI/modal layer stay in stable screen coordinates;
     // screen shake therefore cannot alter aiming or inventory interaction.

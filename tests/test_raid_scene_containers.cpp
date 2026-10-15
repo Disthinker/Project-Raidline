@@ -37,6 +37,7 @@ protected:
         const auto scene=std::get<RaidSceneContainerAssetLocation>(p.assets.find(box)->location);
         access = {box, scene.spaceId, scene.position};
         access.observation=observeFrozenRaidInterior(p,scene.spaceId,scene.position);
+        access.currentObservation=access.observation->key();
     }
     InventoryReceipt move(AssetInstanceId id, ProfileContainerId target, GridPosition position, std::uint32_t quantity=0) {
         return executeInventory(p,content,InventoryMoveCommand{id,quantity,{target,position},ItemOrientation::Degrees0},
@@ -112,6 +113,7 @@ TEST_F(RaidSceneContainerTest, DistanceSpaceOtherBoxAndWholeRootRejectWithoutMut
     EXPECT_EQ(profileStateFingerprint(p),hash);
     auto exact=RaidSceneContainerAccess{box,access.spaceId,{access.playerCenter.x+72,access.playerCenter.y}};
     exact.observation=observeFrozenRaidInterior(p,exact.spaceId,exact.playerCenter);
+    exact.currentObservation=exact.observation->key();
     EXPECT_TRUE(raidSceneContainerAccessible(p,exact));
 }
 TEST_F(RaidSceneContainerTest, TakeDepositReopenAndRetryKeepTheSameInstances) {
