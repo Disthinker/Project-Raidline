@@ -271,7 +271,9 @@ TEST(WeaponComponentsTest, InvalidContentCannotPublishComponentCapabilities)
     for (const std::string fault : {"unknown-platform", "wrong-slot", "bad-stat", "stackable"})
     {
         auto json = original;
-        auto &part = json["items"][0];
+        auto it=std::find_if(json["items"].begin(),json["items"].end(),[](const auto &item){return item.contains("weapon_component");});
+        ASSERT_NE(it,json["items"].end());
+        auto &part = *it;
         ASSERT_TRUE(part.contains("weapon_component"));
         if (fault == "unknown-platform") part["weapon_component"]["weapon"] = "item.weapon.missing";
         if (fault == "wrong-slot") part["weapon_component"]["slot"] = "unknown";

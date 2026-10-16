@@ -464,7 +464,7 @@ void BaseDefenseRuntime::refreshWorldBlockers()
 
 void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 playerPosition,
                                  Vec2 playerSize, bool moving, WorldShootingRuntime &shooting,
-                                 const std::vector<BallisticBlocker> &shotBlockers)
+                                 const std::vector<BallisticBlocker> &shotBlockers, WorldMeleeRuntime *melee)
 {
     const auto started = std::chrono::steady_clock::now();
     damageObservation_.reset();
@@ -491,6 +491,9 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
         for (const auto &fact : resolved.removals)
             if (fact.reason == EnemyRemovalReason::Death)
                 state_.killedIds.push_back(fact.id);
+        if(melee) melee->prepare(input.meleeJustPressed,input.inventoryOpen,
+            playerCenter,shooting.aimDirection(),enemies_,
+            [&](Vec2 a,Vec2 b){return blockerIndex_->hasLineOfSight(a,b) && fortifications_.lineOfSight(a,b);});
         // Hearing does not replace the wave objective or replay enemy movement.
         if (shooting.shotFiredLastUpdate() && playerExposed(playerCenter))
             for (auto &enemy : enemies_)
@@ -679,4 +682,12 @@ BaseDefenseSnapshot BaseDefenseRuntime::checkpoint(const WorldShootingRuntime &s
     auto result = state_;
     result.shooting = shooting.checkpoint();
     return result;
+}
+
+bool BaseDefenseRuntime::commitPreparedMelee(WorldMeleeRuntime &melee)
+{
+    if(completed() || breached() || !melee.commitPrepared(enemies_))return false;
+    for(const auto &death:melee.removals())if(death.reason==EnemyRemovalReason::Death)state_.killedIds.push_back(death.id);
+    if(!melee.removals().empty())state_.reservedAttackers.clear();
+    synchronizeActorCheckpoints();return true;
 }

@@ -17,6 +17,7 @@
 #include "rect.h"
 #include "vec2.h"
 #include "world_shooting_runtime.h"
+#include "world_melee_runtime.h"
 
 enum class BaseFacilityKind
 {
@@ -150,6 +151,10 @@ public:
         const WeaponHandlingParameters &handling,
         bool preserveWeaponFireTransientState);
     void configureWeaponAmmunition(int penetration) noexcept;
+    void configureMelee(std::optional<MeleeUseDefinition> use, bool usable, std::uint64_t assetId=0) noexcept {melee_.configure(use,usable,assetId);}
+    [[nodiscard]] const WorldMeleeRuntime &melee() const noexcept {return melee_;}
+    [[nodiscard]] bool commitPreparedMelee();
+    void cancelPreparedMelee() noexcept {melee_.cancelPrepared();}
     [[nodiscard]] std::vector<ShotPresentationSnapshot>
     shotPresentationSnapshots() const;
     [[nodiscard]] std::vector<ShotFeedbackPresentationSnapshot>
@@ -172,6 +177,7 @@ public:
 
 private:
     friend struct EnemyLifecycleTestAccess;
+    friend struct MeleeTestAccess;
     void rebuildSite(std::string_view siteDefinitionId);
     void rebuildCollisionIndex();
     void refreshDailyShotBlockers();
@@ -194,6 +200,7 @@ private:
     std::optional<RaidSpaceBlockerIndex> movementBlockerIndex_;
     std::vector<std::size_t> movementCandidates_;
     WorldShootingRuntime shooting_;
+    WorldMeleeRuntime melee_;
     FortificationRuntime dailyFortifications_;
     std::optional<BaseFortificationState> configuredFortifications_;
     std::vector<BallisticBlocker> dailyShotBlockers_;

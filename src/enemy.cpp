@@ -631,11 +631,11 @@ std::size_t Enemy::currentAnimationFrameIndex() const
   return movementAnimator_.currentFrameIndex();
 }
 
-bool Enemy::takeDamage(int damage)
+bool Enemy::takeDamage(int damage, EnemyImpactReaction reaction)
 {
   const bool wasDead = isDead();
   const bool killed = health_.takeDamage(damage);
-  if (!wasDead && !killed)
+  if (!wasDead && !killed && reaction == EnemyImpactReaction::Slow)
   {
     impactSlowRemaining_ = kImpactSlowDurationSeconds;
   }

@@ -5,6 +5,7 @@
 #include "player_damage_observation.h"
 #include "raid_space_query.h"
 #include "world_shooting_runtime.h"
+#include "world_melee_runtime.h"
 #include "fortification_runtime.h"
 #include <optional>
 #include <span>
@@ -32,7 +33,8 @@ class BaseDefenseRuntime
     [[nodiscard]] bool resume(const BaseDefenseSnapshot &,
                               std::span<const BallisticBlocker> blockers);
     void advance(const GameplayInput &, float dt, Vec2 playerPosition, Vec2 playerSize, bool moving,
-                 WorldShootingRuntime &shooting, const std::vector<BallisticBlocker> &shotBlockers);
+                 WorldShootingRuntime &shooting, const std::vector<BallisticBlocker> &shotBlockers, WorldMeleeRuntime *melee=nullptr);
+    [[nodiscard]] bool commitPreparedMelee(WorldMeleeRuntime &);
     [[nodiscard]] const BaseDefenseSnapshot &state() const noexcept { return state_; }
     [[nodiscard]] const std::vector<Enemy> &enemies() const noexcept { return enemies_; }
     [[nodiscard]] BaseDefenseSnapshot checkpoint(const WorldShootingRuntime &) const;
@@ -51,6 +53,7 @@ class BaseDefenseRuntime
 
   private:
     friend struct EnemyLifecycleTestAccess;
+    friend struct MeleeTestAccess;
     BaseDefenseSnapshot state_;
     struct EnemyAttachedState
     {

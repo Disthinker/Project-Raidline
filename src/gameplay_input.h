@@ -13,6 +13,7 @@ struct GameplayInput
     bool moveLeft{};
     bool moveRight{};
     bool sprint{};
+    bool meleeJustPressed{}, meleePressed{};
 
     bool fireJustPressed{};
     bool firePressed{};

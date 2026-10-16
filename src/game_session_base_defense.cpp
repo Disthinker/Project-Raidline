@@ -280,6 +280,8 @@ void GameSession::finishBaseDefenseFrame(BaseWorld &world, float deltaTime)
                                           ? GameSessionPresentationEvent::PlayerHurtHeavy
                                           : GameSessionPresentationEvent::PlayerHurtLight);
     }
+    if(!commitPlayerMelee(world,profile_.currentHealth>0))
+    {baseDefenseSaveBlocked_=baseDefenseSimulationRejected_=true;return;}
     // The same medical rules as Raid, with only their small participants staged.
     // A Base defense has no PendingRaid and must not call the Raid-only ticker.
     if (hasPain(profile_.medicalStatus) || profile_.medicalStatus.painkillerRemainingMs > 0)

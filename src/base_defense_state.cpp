@@ -247,6 +247,8 @@ bool validateBaseDefenseSnapshot(const BaseDefenseSnapshot &s, std::string &mess
         if (!active.contains(c.enemyId) || !contacts.insert(c.enemyId).second ||
             !nonnegative(c.seconds))
             return fail("Defense line contact is invalid");
+    if (!std::isfinite(s.meleeRecoverySeconds) || s.meleeRecoverySeconds<0 || s.meleeRecoverySeconds>10)
+        return fail("Defense melee recovery is invalid");
     if (!validateWorldShootingCheckpoint(s.shooting))
         return fail("Defense shooting checkpoint is invalid");
     if ((s.elapsedSeconds > 0.0F || s.spawnedEnemyCount > 0U) && !s.shooting.initialized)
@@ -259,6 +261,7 @@ std::uint64_t baseDefenseCheckpointHash(const BaseDefenseSnapshot &s) noexcept
 {
     std::uint64_t h = baseDefenseLayoutHash(s);
     number(h, s.layoutHash);
+    if(s.meleeRecoverySeconds>0){number(h,0x6d656c65653534ULL);real(h,s.meleeRecoverySeconds);}
     real(h, s.elapsedSeconds);
     number(h, s.currentWave);
     number(h, s.spawnedEnemyCount);

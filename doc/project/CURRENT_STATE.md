@@ -1,15 +1,15 @@
 # Project Raidline 当前状态
 
 <!-- current-plan:begin -->
-## 当前：武器手电与通用电池 v1 验收通过，交付中
+## 当前：快速近战 v1 验收通过，交付中
 
-2026-10-15，用户已验收候选 **d8f220986bd9** 并明确要求提交与合并。本轮只交付该候选，保留窗口准星、菜单、搜尸、视野和M地图权限。
+2026-10-16，用户已验收候选 **8fc7f4ddf1ea** 并明确要求提交与合并。本轮只交付该候选，保留已验收窗口准星、菜单、搜尸、视野、手电电池和M地图权限。
 
-- 本地完整构建及全量 **2008/2008** 通过；程序和源码指纹未变。桌面 **Project Raidline Debug** 保持同一已验收程序。
-- 本轮待完成准确提交的Windows/Ubuntu CI、普通合并及合并后双平台CI；全部完成后才记为已交付。
-- 原工作目录分支、HEAD和其他未提交修改保留。不启动游戏，不开始下一项开发。
+- 本地全目标构建与完整注册CTest **2055/2055通过**；源码及Debug程序指纹核对未变，桌面入口仍为同一已验收程序。
+- 待完成准确PR提交的Windows/Ubuntu CI、普通合并、合并树核对与合并提交双平台CI，全部通过后才记录已交付。
+- 原目录旧分支、HEAD、index和其他未提交修改保留。不启动游戏，不操作真实存档，不开始下一项开发。
 
-实际提交、检查与交付结果见[任务记录](../exec-plans/active/weapon-flashlight-battery-v1.md)。[试玩清单](../acceptance/weapon-flashlight-battery-v1.md)保留为历史，无须重复验收。
+实际提交和交付证据见[任务记录](../exec-plans/active/quick-melee-self-defense-v1.md)；[试玩清单](../acceptance/quick-melee-self-defense-v1.md)保留为历史，无须重复验收。
 <!-- current-plan:end -->
 
 ## 上一项交付时记录（历史）：边境交换站搜尸中文修正版

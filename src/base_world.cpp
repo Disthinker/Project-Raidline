@@ -323,6 +323,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         perimeterDamageProtectionRemainingSeconds_ -
             std::max(0.0F, deltaTime));
     shooting_.beginFrame(deltaTime);
+    melee_.beginFrame(deltaTime);
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         Vec2 direction{
@@ -447,7 +448,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     }
     if (baseDefense_) {
         baseDefense_->advance(input,deltaTime,playerPosition_,playerSize_,
-            playerIsMoving_,shooting_,movementBlockers_);
+            playerIsMoving_,shooting_,movementBlockers_,&melee_);
         return input.interactJustPressed ? interactableFacility() : std::nullopt;
     }
     // Combat order matches Raid: movement/contact first, shots/removal second.
@@ -535,6 +536,9 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         input, deltaTime, playerCenter,
         std::max(playerSize_.x, playerSize_.y), playerIsMoving_, false,
         layout_.worldSize, perimeterEnemies_, dailyShotBlockers_).removals;
+    melee_.prepare(input.meleeJustPressed,input.inventoryOpen,
+        playerCenter,shooting_.aimDirection(),
+        perimeterEnemies_,[&](Vec2 a,Vec2 b){return movementBlockerIndex_->hasLineOfSight(a,b) && dailyFortifications_.lineOfSight(a,b);});
     // Only accepted shots alert survivors. Awareness changes now; movement
     // consumes it on the next update, never by replaying the current frame.
     if (shooting_.shotFiredLastUpdate() &&
@@ -701,7 +705,9 @@ bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
         if(isCollision(playerBody,index->blockerBounds(i))) return false;
     WorldShootingRuntime shootingCandidate=shooting_;
     if (!shootingCandidate.restoreCheckpoint(s.shooting)) return false;
-    baseDefense_=std::move(candidate);shooting_=std::move(shootingCandidate);
+    WorldMeleeRuntime meleeCandidate=melee_;
+    if(!meleeCandidate.restoreRecovery(s.meleeRecoverySeconds))return false;
+    baseDefense_=std::move(candidate);shooting_=std::move(shootingCandidate);melee_=std::move(meleeCandidate);
     movementBlockers_=std::move(frozen);movementBlockerIndex_=std::move(index);
     playerPosition_=s.playerPosition;
     playerFacingDirection_=shooting_.aimDirection();playerIsMoving_=false;
@@ -712,7 +718,9 @@ bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
 std::optional<BaseDefenseSnapshot> BaseWorld::baseDefenseCheckpoint() const
 {
     if (!baseDefense_) return std::nullopt;
-    return baseDefense_->checkpoint(shooting_);
+    auto result=baseDefense_->checkpoint(shooting_);
+    result.meleeRecoverySeconds=melee_.recoverySeconds();
+    return result;
 }
 const BaseDefenseSnapshot *BaseWorld::baseDefenseState() const noexcept
 {
@@ -761,6 +769,7 @@ void BaseWorld::resetCombatForProfileLoad() noexcept
     configureHomePerimeter(nullptr);
     clearSpatialCombatState();
     shooting_ = WorldShootingRuntime{};
+    melee_ = WorldMeleeRuntime{};
     perimeterDamageProtectionRemainingSeconds_ = 0.0F;
 }
 
@@ -1110,4 +1119,12 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
         return "RAID DEPLOYMENT";
     }
     return "UNKNOWN";
+}
+
+bool BaseWorld::commitPreparedMelee()
+{
+    if(baseDefense_) return baseDefense_->commitPreparedMelee(melee_);
+    if(!melee_.commitPrepared(perimeterEnemies_))return false;
+    perimeterRemovals_.insert(perimeterRemovals_.end(),melee_.removals().begin(),melee_.removals().end());
+    return true;
 }

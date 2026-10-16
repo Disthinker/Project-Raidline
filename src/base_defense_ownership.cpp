@@ -11,7 +11,7 @@ bool fresh(const BaseDefenseSnapshot &s)
         s.nextSpawnDelay == 0 && s.navigationScheduleCursor == 0 && s.attackScheduleCursor == 0 &&
         s.enemies.empty() && s.killedIds.empty() && s.breachedIds.empty() &&
         s.contacts.empty() && s.reservedAttackers.empty() && s.fortificationAttacks.empty() &&
-        s.fortificationGeometryRevision == 0;
+        s.fortificationGeometryRevision == 0 && s.meleeRecoverySeconds == 0;
 }
 }
 

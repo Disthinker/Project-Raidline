@@ -211,6 +211,8 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/melee_attack.cpp
+    src/melee_attack.h
     src/base_fortification_domain.cpp
     src/base_defense_ownership.cpp
     src/base_fortification_domain.h
@@ -348,6 +350,8 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/world_melee_runtime.cpp
+    src/world_melee_runtime.h
     src/raid_camera.cpp
     src/raid_camera.h
     src/base_defense_positions.cpp
@@ -414,6 +418,7 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/game_session_melee.cpp
     src/base_defense_checkpoint_writer.cpp
     src/base_defense_checkpoint_writer.h
     src/game_session_base_defense.cpp
@@ -446,6 +451,7 @@ target_link_libraries(
 add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
+    src/app_melee.cpp
     src/app_base_defense.cpp
     src/app_base_fortification.cpp
     src/base_fortification_build_ui.h
@@ -957,6 +963,8 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 
 raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
 raidline_add_test(WeaponLightTest tests/test_weapon_light.cpp raidline::services)
+raidline_add_test(MeleeAttackTest tests/test_melee_attack.cpp raidline::services)
+raidline_add_test(MeleeInventoryUiTest tests/test_melee_inventory_ui.cpp raidline::sdl_client)
 raidline_add_test(WeaponLightUiTest tests/test_weapon_light_ui.cpp raidline::sdl_client)
 
 raidline_add_test(WeaponInventoryUiTest tests/test_weapon_inventory_ui.cpp raidline::sdl_client)

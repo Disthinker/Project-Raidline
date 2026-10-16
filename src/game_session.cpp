@@ -129,9 +129,10 @@ void GameSession::update(
 
 std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     BaseWorld &baseWorld,
-    const GameplayInput &input,
+    const GameplayInput &rawInput,
     float deltaTime)
 {
+    GameplayInput input=rawInput;
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
     {
@@ -205,6 +206,11 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         baseCombatElapsedSeconds_ += deltaTime;
     }
 
+    const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
+    baseWorld.configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
+    prepareMeleeInput(input,deltaTime,baseWorld.melee().recoverySeconds());
+    if(fireSuppressedUntilRelease_){if(rawInput.firePressed || rawInput.fireJustPressed)input.firePressed=input.fireJustPressed=false;else fireSuppressedUntilRelease_=false;}
+    if(sprintSuppressedUntilRelease_){if(rawInput.sprint)input.sprint=false;else sprintSuppressedUntilRelease_=false;}
     if (input.weaponSlotJustPressed.has_value() &&
         isWeaponEquipmentSlot(*input.weaponSlotJustPressed) &&
         *input.weaponSlotJustPressed != activeWeaponSlot_ &&
@@ -411,6 +417,41 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         finishBaseDailyFrame();
         return facility;
     }
+    // A daily hit can be followed by a return/rescue save transaction. Keep
+    // only the knife participant until that transaction accepts; rejected
+    // saves must restore both its wear and the enemy roster, without copying
+    // the entire inventory on every attack.
+    struct DailyMeleeRollback
+    {
+        ProfileState &profile;
+        bool &dirty;
+        const decltype(restorePerimeterRuntime) &restore;
+        std::optional<AssetInstanceId> asset;
+        std::uint32_t durability{};
+        ProfileRevision revision{};
+        bool wasDirty{};
+        ~DailyMeleeRollback()
+        {
+            if (!asset) return;
+            profile.assets.findMutable(*asset)->currentDurability=durability;
+            profile.revision=revision;dirty=wasDirty;restore();
+        }
+        void accept() noexcept {asset.reset();}
+    } meleeRollback{profile_,worldClockDirty_,restorePerimeterRuntime,
+        baseWorld.melee().result().contact ? equippedAsset(profile_,EquipmentSlotKind::QuickMelee):std::nullopt,
+        0,profile_.revision,worldClockDirty_};
+    if(meleeRollback.asset)meleeRollback.durability=profile_.assets.find(*meleeRollback.asset)->currentDurability;
+    bool meleeAllowed=profile_.currentHealth>0;
+    if(baseWorld.melee().result().attempted)
+    {
+        if(const auto damage=baseWorld.perimeterDamageObservation();damage && damage->baseDamage>0)
+        {
+            const auto expected=queryIncomingDamage(profile_,publishedContentRegistry(),
+                {damage->baseDamage,damage->region,damage->penetration,damage->armorDamage,damage->weakPoint,{}});
+            meleeAllowed=expected.canCommit && expected.resolution.damageApplied<profile_.currentHealth;
+        }
+        if(!commitPlayerMelee(baseWorld,meleeAllowed)){restorePerimeterRuntime();return facility;}
+    }
     const auto runtimeSnapshot = baseWorld.perimeterEnemySnapshots();
     const auto currentSite = profile_.homePerimeter.sites.find(perimeterSite);
     const bool enemyChanged = currentSite != profile_.homePerimeter.sites.end() &&
@@ -433,6 +474,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     // No full Profile copy on idle/movement frames. Movement remains transient;
     // only accepted discrete facts need a candidate, not every frame or shot.
     if (!enemyChanged && !otherPerimeterFact) {
+        meleeRollback.accept();
         finishBaseDailyFrame();
         return facility;
     }
@@ -450,6 +492,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             baseWorld.perimeterRemovalsLastUpdate());
         ++profile_.revision;
         worldClockDirty_ = true;
+        meleeRollback.accept();
         finishBaseDailyFrame();
         return facility;
     }
@@ -578,6 +621,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     if (rescue)
         baseWorld.resetAtMedicalPoint();
     if (perimeterChanged) worldClockDirty_ = true;
+    meleeRollback.accept();
     finishBaseDailyFrame();
     return facility;
 }
@@ -665,6 +709,7 @@ bool GameSession::conditionalExtractionEligible() const noexcept
 bool GameSession::raidWorldInteractionAvailable(bool inventoryOpen) const noexcept
 {
     return !inventoryOpen && !raidActionState_.active().has_value() &&
+        (!world_ || !world_->melee().blocksActions()) &&
         !(selfRecoveryCacheInRange() && profile_.pendingRaid.has_value() &&
           profile_.pendingRaid->selfRecovery.has_value() &&
           !profile_.pendingRaid->selfRecovery->opened);
@@ -3764,9 +3809,10 @@ void GameSession::publishDeferredRaidBasePresentationEvents()
 }
 
 void GameSession::updateAlphaRaid(
-    const GameplayInput &input,
+    const GameplayInput &rawInput,
     float deltaTime)
 {
+    GameplayInput input=rawInput;
     lastIncomingDamage_.reset();
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
@@ -3803,6 +3849,9 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
         return;
     }
+    const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
+    world_->configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
+    prepareMeleeInput(input,deltaTime,world_->melee().recoverySeconds());
     if (input.inventoryOpen || input.sprint || input.firePressed ||
         input.fireJustPressed || input.reloadJustPressed ||
         input.healJustPressed || input.weaponSlotJustPressed.has_value() ||
@@ -3948,7 +3997,7 @@ void GameSession::updateAlphaRaid(
     }
     if (fireSuppressedUntilRelease_)
     {
-        if (input.firePressed)
+        if (rawInput.firePressed)
         {
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
@@ -3960,7 +4009,7 @@ void GameSession::updateAlphaRaid(
     }
     if (sprintSuppressedUntilRelease_)
     {
-        if (input.sprint)
+        if (rawInput.sprint)
         {
             simulationInput.sprint = false;
         }
@@ -4146,6 +4195,13 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     world_->update(simulationInput, deltaTime);
+    const bool meleeFrame=world_->melee().result().attempted;
+    if(meleeFrame)
+    {
+        applyAlphaIncomingDamage();
+        if(!commitPlayerMelee(*world_,profile_.currentHealth>0 && !world_->player().isControlled()))
+        {state_=GameSessionState::SettlementBlocked;return;}
+    }
     const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
     for (const auto &fact : corpseDeaths)
         if (revealRaidCorpse(profile_, publishedContentRegistry(), fact)) world_->acknowledgeCorpseDeath(fact.sourceEnemyId);
@@ -4203,7 +4259,7 @@ void GameSession::updateAlphaRaid(
         }
     }
 
-    applyAlphaIncomingDamage();
+    if(!meleeFrame)applyAlphaIncomingDamage();
     if (lastIncomingDamage_.has_value() &&
         lastIncomingDamage_->damageApplied > 0)
     {
