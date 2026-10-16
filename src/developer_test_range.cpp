@@ -9,7 +9,7 @@ template<class Predicate> std::vector<ItemDefinitionId> choices(Predicate predic
 {
     std::vector<ItemDefinitionId> result;
     for (const auto &item : publishedContentRegistry().items())
-        if (item.visualAssetsPublished && predicate(item)) result.push_back(item.definitionId);
+        if ((item.visualAssetsPublished || item.meleeUse) && predicate(item)) result.push_back(item.definitionId);
     return result;
 }
 bool addSupply(ProfileState &profile, const ItemDefinition &item)
@@ -41,7 +41,7 @@ std::vector<ItemDefinitionId> developerRangeAmmunition(const ItemDefinitionId &w
 std::vector<ItemDefinitionId> developerRangeArmor()
 { return choices([](const auto &i) { return i.armorProtection && i.equipmentSlot == EquipmentSlotKind::BodyArmor; }); }
 std::vector<ItemDefinitionId> developerRangeSupplies()
-{ return choices([](const auto &i) { return i.medicalUse || i.armorProtection || i.weaponComponent || i.weaponMaintenance || i.armorMaintenance || i.magazineUse; }); }
+{ return choices([](const auto &i) { return i.meleeUse || i.medicalUse || i.armorProtection || i.weaponComponent || i.weaponMaintenance || i.armorMaintenance || i.magazineUse; }); }
 
 bool GameSession::startDeveloperRange()
 {
@@ -123,7 +123,7 @@ bool GameSession::grantDeveloperRangeItem(const ItemDefinitionId &itemId)
     if (!developerRangeAtConsole()) return false;
     try {
         const auto &item = publishedContentRegistry().item(itemId);
-        if (!item.visualAssetsPublished) return false;
+        if (!item.visualAssetsPublished && !item.meleeUse) return false;
         ProfileState candidate = profile_;
         if (!addSupply(candidate, item)) return false;
         ++candidate.revision;

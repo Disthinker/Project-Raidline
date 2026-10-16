@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "weapon-flashlight-battery-content-65",
+  "content_version": "quick-melee-self-defense-content-66",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -391,6 +391,44 @@
     }
   ],
   "items": [
+    {
+      "id": "item.weapon.utility_knife",
+      "display_name": "Utility Knife",
+      "category": "melee_weapon",
+      "inventory": {
+        "width": 1,
+        "height": 2,
+        "can_rotate": true
+      },
+      "max_stack_size": 1,
+      "unit_weight_grams": 400,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {
+          "x": 16,
+          "y": 32
+        },
+        "pickup_size": {
+          "x": 24,
+          "y": 40
+        }
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_buy_price": 120,
+      "market_recycle_price": 30,
+      "equipment_slot": "quick_melee",
+      "melee_use": {
+        "damage": 4,
+        "penetration": 0,
+        "armor_damage": 1,
+        "range": 72,
+        "angle_degrees": 90,
+        "recovery_seconds": 0.65,
+        "maximum_durability_centi": 10000,
+        "wear_per_hit_centi": 50
+      }
+    },
     {
       "id": "item.component.weapon_flashlight_basic",
       "display_name": "Weapon Flashlight",

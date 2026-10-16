@@ -1,4 +1,5 @@
 #include "save_repository.h"
+#include "alpha_content_ids.h"
 #include "base_fortification_serialization.h"
 #include "base_defense_serialization.h"
 
@@ -109,6 +110,8 @@ std::string slotName(EquipmentSlotKind slot)
         return "helmet";
     case EquipmentSlotKind::BodyArmor:
         return "body_armor";
+    case EquipmentSlotKind::QuickMelee:
+        return "quick_melee";
     }
     return "invalid";
 }
@@ -122,6 +125,7 @@ std::optional<EquipmentSlotKind> parseSlot(std::string_view value)
     if (value == "backpack") return EquipmentSlotKind::Backpack;
     if (value == "helmet") return EquipmentSlotKind::Helmet;
     if (value == "body_armor") return EquipmentSlotKind::BodyArmor;
+    if (value == "quick_melee") return EquipmentSlotKind::QuickMelee;
     return std::nullopt;
 }
 
@@ -955,6 +959,10 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
     for (const auto &[id, asset] : registry.records())
     {
         static_cast<void>(id);
+        if (schemaVersion < 54 && (asset.definitionId == alpha_content::utilityKnife ||
+            (std::holds_alternative<EquippedAssetLocation>(asset.location) &&
+             std::get<EquippedAssetLocation>(asset.location).slot == EquipmentSlotKind::QuickMelee)))
+            throw std::invalid_argument("melee equipment requires schema 54");
         Json location;
         if (const auto *stored =
                 std::get_if<StoredAssetLocation>(&asset.location))
@@ -1158,6 +1166,8 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             asset.instanceId = value.at("instance_id").get<AssetInstanceId>();
             asset.definitionId = ItemDefinitionId{
                 value.at("definition_id").get<std::string>()};
+            if (schemaVersion < 54 && content.item(asset.definitionId).meleeUse)
+                return {SaveLoadStatus::Failed, std::nullopt, "melee equipment requires schema 54"};
             if (schemaVersion < 53 && (content.item(asset.definitionId).battery || content.item(asset.definitionId).weaponLight || value.contains("device_state")))
                 return {SaveLoadStatus::Failed, std::nullopt, "electronic state requires schema 53"};
             asset.quantity = value.at("quantity").get<std::uint32_t>();
@@ -1715,6 +1725,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
     else if (profile.baseDefenseWarning || (profile.activeBaseDefense &&
              profile.activeBaseDefense->rulesVersion != kBaseDefenseRulesVersion))
         throw std::invalid_argument("Frozen defense warning requires schema 48");
+    if(schemaVersion<54 && profile.activeBaseDefense && profile.activeBaseDefense->meleeRecoverySeconds>0)
+        throw std::invalid_argument("melee checkpoint requires schema 54");
     if (schemaVersion >= 46)
         payload["active_base_defense"] = profile.activeBaseDefense
             ? baseDefenseSnapshotJson(*profile.activeBaseDefense) : Json(nullptr);
@@ -2707,7 +2719,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2875,7 +2887,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 47 && contentVersion == "base-fortification-foundation-content-61") ||
             (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62") ||
             (schemaVersion >= 49 && contentVersion == "weapon-components-content-63") ||
-            (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64");
+            (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64") ||
+            (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2897,7 +2910,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3276,6 +3289,9 @@ SaveLoadResult deserializeProfileEnvelope(
         }
         if (schemaVersion >= 46 && !payload.at("active_base_defense").is_null())
             profile.activeBaseDefense = parseBaseDefenseSnapshotJson(payload.at("active_base_defense"));
+        if(schemaVersion<54 && ((profile.activeBaseDefense && profile.activeBaseDefense->meleeRecoverySeconds>0) ||
+            (profile.baseDefenseWarning && profile.baseDefenseWarning->layout && profile.baseDefenseWarning->layout->meleeRecoverySeconds>0)))
+            return {SaveLoadStatus::Failed,std::nullopt,"melee checkpoint requires schema 54"};
         if (schemaVersion < 33)
         {
             normalizeBaseThreatCapacity(profile.baseSiege);

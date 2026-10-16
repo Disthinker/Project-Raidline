@@ -25,6 +25,7 @@ enum class GameAction
     ToggleInventory,
     ToggleTacticalMap,
     WeaponLight,
+    QuickMelee,
 
     // 背包 UI 输入。
     InventoryCancel,

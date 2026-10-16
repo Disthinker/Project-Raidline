@@ -102,6 +102,7 @@ nlohmann::json baseDefenseSnapshotJson(const BaseDefenseSnapshot &s)
         result["fortification_attacks"] = std::move(bindings);
         result["fortification_geometry_revision"] = s.fortificationGeometryRevision;
     }
+    if(s.meleeRecoverySeconds>0)result["melee_recovery_seconds"]=s.meleeRecoverySeconds;
     return result;
 }
 
@@ -110,6 +111,7 @@ BaseDefenseSnapshot parseBaseDefenseSnapshotJson(const nlohmann::json &j)
     if (j.at("mode").get<std::string>() != "realtime")
         throw std::runtime_error("Defense mode is invalid");
     BaseDefenseSnapshot s;
+    s.meleeRecoverySeconds=j.value("melee_recovery_seconds",0.0F);
     s.eventId = j.at("event_id").get<std::string>();
     s.siegeSequence = j.at("siege_sequence").get<std::uint64_t>();
     s.rulesVersion = j.at("rules_version").get<std::uint32_t>();

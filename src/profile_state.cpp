@@ -276,7 +276,7 @@ std::size_t populatePublishedWarehouseCatalog(
     for (const ItemDefinition &definition : content.items())
     {
         // New light devices and cells are purchased, never catalog grants.
-        if (!definition.weaponLight && !definition.battery) definitions.push_back(&definition);
+        if (!definition.weaponLight && !definition.battery && !definition.meleeUse) definitions.push_back(&definition);
     }
     std::stable_sort(
         definitions.begin(),
@@ -501,12 +501,12 @@ AssetInstanceId AssetRegistry::create(
             ? definition.armorProtection->maximumDurability
             : definition.weaponCondition.has_value()
                 ? definition.weaponCondition->maximumDurabilityCenti
-                : 0U,
+                : definition.meleeUse ? definition.meleeUse->maximumDurabilityCenti : 0U,
         definition.armorProtection.has_value()
             ? definition.armorProtection->maximumDurability
             : definition.weaponCondition.has_value()
                 ? definition.weaponCondition->maximumDurabilityCenti
-                : 0U,
+                : definition.meleeUse ? definition.meleeUse->maximumDurabilityCenti : 0U,
         std::move(reliefBatchId),
         {},
         std::nullopt,
@@ -1832,6 +1832,13 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "armor durability is outside definition limits"};
             }
+        }
+        else if (definition->meleeUse)
+        {
+            if (asset.currentMaximumDurability != definition->meleeUse->maximumDurabilityCenti ||
+                asset.currentDurability > asset.currentMaximumDurability || asset.weaponMalfunction != WeaponMalfunctionType::None ||
+                asset.chamberedRound || !asset.magazineRounds.empty())
+                return {false, "melee durability or ammunition state is invalid"};
         }
         else if (definition->weaponCondition.has_value())
         {
@@ -5489,7 +5496,7 @@ WeaponReliabilityTier weaponReliabilityTier(
     const AssetRecord &weapon,
     const ItemDefinition &definition) noexcept
 {
-    if (!definition.weaponCondition.has_value() ||
+    if ((!definition.weaponCondition && !definition.meleeUse) ||
         weapon.currentDurability == 0)
     {
         return WeaponReliabilityTier::Broken;

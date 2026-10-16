@@ -1006,6 +1006,7 @@ void GameplayWorld::update(
     enemyObservationCache_.clear(); // Bound to this simulation frame; never retain removed actors.
     enemyObservationIndexReady_ = false;
     shooting_.beginFrame(deltaTime);
+    melee_.beginFrame(deltaTime);
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
     simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
@@ -1468,18 +1469,10 @@ void GameplayWorld::update(
         activeEnemySet,
         activeBlockerSet);
 
-    for (const auto &death : shootingAdvance.removals)
-    {
-        const auto source = corpseSources_.find(death.id);
-        if (source == corpseSources_.end() || death.reason != EnemyRemovalReason::Death) continue;
-        auto fact = source->second;
-        fact.position.x += death.position.x; fact.position.y += death.position.y;
-        pendingCorpseDeaths_.push_back(std::move(fact));
-        corpseSources_.erase(source);
-    }
-    // EnemyLifecycle already removed actors and all attached runtime state.
-    score_ += static_cast<int>(shootingAdvance.targetsKilled) *
-        kScorePerEnemy;
+    consumeEnemyRemovals(shootingAdvance.removals);
+    melee_.prepare(input.meleeJustPressed,controlsSuppressed || input.inventoryOpen || !raidSession_.isActive(),
+        playerCenter(player_),shooting_.aimDirection(),
+        activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
 
 }
 
@@ -3299,5 +3292,27 @@ bool GameplayWorld::resetDeveloperRangeEnemies(const EnemyCombatDefinition &defi
     initialOutdoorEnemyCount_ = enemies_.size();
     navigationFieldCache_.clear();
     clearSpatialTransientPresentation();
+    return true;
+}
+
+void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> deaths)
+{
+    for (const auto &death:deaths)
+    {
+        if (death.reason!=EnemyRemovalReason::Death) continue;
+        score_+=kScorePerEnemy;
+        const auto source=corpseSources_.find(death.id);
+        if(source==corpseSources_.end())continue;
+        auto fact=source->second;fact.position.x+=death.position.x;fact.position.y+=death.position.y;
+        pendingCorpseDeaths_.push_back(std::move(fact));corpseSources_.erase(source);
+    }
+}
+bool GameplayWorld::commitPreparedMelee()
+{
+    if(player_.isDead() || player_.isControlled() || !raidSession_.isActive()) {melee_.cancelPrepared();return false;}
+    if(!melee_.commitPrepared(activeEnemies()))return false;
+    consumeEnemyRemovals(melee_.removals());
+    // The observable target cache must never retain a removed actor.
+    if(!melee_.removals().empty()){enemyObservationCache_.clear();enemyObservationIndexReady_=false;}
     return true;
 }

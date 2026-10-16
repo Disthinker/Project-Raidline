@@ -36,7 +36,8 @@ enum class ItemCategory
     Maintenance,
     Loot,
     WeaponComponent,
-    Battery
+    Battery,
+    MeleeWeapon
 };
 
 enum class WeaponMalfunctionType
@@ -132,7 +133,8 @@ enum class EquipmentSlotKind
     ChestRig,
     Backpack,
     Helmet,
-    BodyArmor
+    BodyArmor,
+    QuickMelee
 };
 
 [[nodiscard]] bool isWeaponEquipmentSlot(
@@ -309,6 +311,13 @@ enum class BaseSupplyCategory
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
 enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light };
 
+struct MeleeUseDefinition
+{
+    int damage{4}, penetration{}, armorDamage{1};
+    float range{72.0F}, angleDegrees{90.0F}, recoverySeconds{0.65F};
+    std::uint32_t maximumDurabilityCenti{10000}, wearPerHitCenti{50};
+};
+
 struct WeaponLightDefinition
 {
     float angleDegrees{120}, maximumDistance{900}, backgroundRadius{120};
@@ -397,6 +406,7 @@ struct ItemDefinition
     // processing a returned salvage item. It is not one of the four daily
     // Base operating resources and never happens automatically.
     std::uint32_t baseConstructionMaterialValue{};
+    std::optional<MeleeUseDefinition> meleeUse;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

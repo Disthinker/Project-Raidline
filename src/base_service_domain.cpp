@@ -86,8 +86,7 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
     }
 
     const ItemDefinition &definition = content.item(weapon->definitionId);
-    if (definition.category != ItemCategory::Weapon ||
-        !definition.weaponCondition.has_value())
+    if ((!definition.weaponCondition || definition.category != ItemCategory::Weapon) && !definition.meleeUse)
     {
         return maintenanceFailure(
             DomainErrorCode::IllegalDestination,
@@ -95,7 +94,7 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
             profile.revision);
     }
     const std::uint32_t factoryMaximum =
-        definition.weaponCondition->maximumDurabilityCenti;
+        definition.meleeUse ? definition.meleeUse->maximumDurabilityCenti : definition.weaponCondition->maximumDurabilityCenti;
     if (weapon->currentDurability >= factoryMaximum &&
         weapon->currentMaximumDurability >= factoryMaximum &&
         weapon->weaponMalfunction == WeaponMalfunctionType::None)
@@ -112,8 +111,9 @@ GunsmithMaintenancePlan queryGunsmithMaintenance(
         factoryMaximum - weapon->currentDurability;
     const std::uint32_t maximumMissing =
         factoryMaximum - weapon->currentMaximumDurability;
-    const std::uint64_t quoted =
-        static_cast<std::uint64_t>(service.baseCost) +
+    const std::uint64_t quoted = definition.meleeUse
+        ? 20U + (static_cast<std::uint64_t>(currentMissing) + 199U) / 200U
+        : static_cast<std::uint64_t>(service.baseCost) +
         static_cast<std::uint64_t>(durabilityPointsRoundedUp(currentMissing)) *
             service.currentDurabilityCostPerPoint +
         static_cast<std::uint64_t>(durabilityPointsRoundedUp(maximumMissing)) *

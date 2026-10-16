@@ -101,14 +101,14 @@ namespace
         EquipmentSlotKind::PrimaryWeapon,
         EquipmentSlotKind::SecondaryWeapon,
         EquipmentSlotKind::Sidearm};
-    constexpr std::array<EquipmentSlotKind, 7> kProfileEquipmentSlots{
+    constexpr std::array<EquipmentSlotKind, 8> kProfileEquipmentSlots{
         EquipmentSlotKind::PrimaryWeapon,
         EquipmentSlotKind::SecondaryWeapon,
         EquipmentSlotKind::Sidearm,
         EquipmentSlotKind::Helmet,
         EquipmentSlotKind::BodyArmor,
         EquipmentSlotKind::ChestRig,
-        EquipmentSlotKind::Backpack};
+        EquipmentSlotKind::Backpack,EquipmentSlotKind::QuickMelee};
 
     const char *equipmentSlotLabel(EquipmentSlotKind slot) noexcept
     {
@@ -128,6 +128,8 @@ namespace
             return "CHEST RIG";
         case EquipmentSlotKind::Backpack:
             return "BACKPACK";
+        case EquipmentSlotKind::QuickMelee:
+            return "V QUICK MELEE";
         }
         return "UNKNOWN";
     }
@@ -198,6 +200,18 @@ namespace
     SDL_FRect baseGunsmithButton() noexcept
     {
         return SDL_FRect{890.0F, 554.0F, 280.0F, 48.0F};
+    }
+
+    std::vector<const AssetRecord *> baseSupplyStashAssets(const ProfileState &profile)
+    {
+        auto items=assetsInContainer(profile,ProfileContainerId::stash());
+        // The existing service panel has twelve rows. Newly purchased knives
+        // must be selectable there even when the legacy catalog fills Stash.
+        // All other items retain their previous relative order.
+        std::stable_partition(items.begin(),items.end(),[](const AssetRecord *asset){
+            return publishedContentRegistry().item(asset->definitionId).meleeUse.has_value();
+        });
+        return items;
     }
 
     SDL_FRect baseMedicalServiceButton() noexcept
@@ -744,6 +758,8 @@ namespace
             return SDL_FRect{408.0F, 300.0F, 172.0F, 58.0F};
         case EquipmentSlotKind::Backpack:
             return SDL_FRect{214.0F, 364.0F, 366.0F, 54.0F};
+        case EquipmentSlotKind::QuickMelee:
+            return SDL_FRect{42.0F,448.0F,150.0F,64.0F};
         }
         return SDL_FRect{};
     }
@@ -1455,6 +1471,7 @@ namespace
         std::vector<const char *> labels;
         if (publishedContentRegistry().item(asset.definitionId).weaponUse)
             labels = {"WEAPON DETAILS", "MODIFY WEAPON"};
+        if (publishedContentRegistry().item(asset.definitionId).meleeUse) labels={"MELEE DETAILS"};
         if (const auto action = profileContextActionLabel(profile, asset, inRaid)) labels.push_back(*action);
         return labels;
     }
@@ -2038,6 +2055,8 @@ GameplayInput App::makeGameplayInput() const
     input.lightJustPressed = input_.wasActionJustPressed(GameAction::WeaponLight);
     input.lightJustReleased = input_.wasActionJustReleased(GameAction::WeaponLight);
     input.lightPressed = input_.isActionPressed(GameAction::WeaponLight);
+    input.meleeJustPressed = input_.wasActionJustPressed(GameAction::QuickMelee);
+    input.meleePressed = input_.isActionPressed(GameAction::QuickMelee);
     if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
     {
         input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
@@ -2056,6 +2075,8 @@ GameplayInput App::makeGameplayInput() const
 GameplayInput App::makeBaseGameplayInput() const
 {
     GameplayInput input{};
+    input.meleeJustPressed=input_.wasActionJustPressed(GameAction::QuickMelee);
+    input.meleePressed=input_.isActionPressed(GameAction::QuickMelee);
     input.moveUp = input_.isActionPressed(GameAction::MoveUp);
     input.moveDown = input_.isActionPressed(GameAction::MoveDown);
     input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
@@ -3129,6 +3150,7 @@ void App::updateBase(float deltaTime)
     }
 
     BaseInput input = makeBaseGameplayInput();
+    input.freezeObservationDirection=tacticalMapOpen_ || !windowHasInputFocus_;
     if (tacticalMapOpen_)
     {
         input.movementSpeedMultiplier = 0.45F;
@@ -4299,9 +4321,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         }
 
         std::size_t rowIndex{};
-        for (const AssetRecord *asset : assetsInContainer(
-                 gameSession_.profile(),
-                 ProfileContainerId::stash()))
+        for (const AssetRecord *asset : baseSupplyStashAssets(gameSession_.profile()))
         {
             if (rowIndex >= 12)
             {
@@ -11945,6 +11965,7 @@ void App::renderBaseWorld()
         world.playerFacingDirection(),
         world.playerIsMoving(),
         world.playerAnimationFrame());
+    renderMeleeSwing(world.melee());
     renderShotPresentations();
     renderShotFeedbackPresentations();
     renderParticles();
@@ -11952,6 +11973,7 @@ void App::renderBaseWorld()
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     static_cast<void>(SDL_SetRenderScale(renderer_, 1.0F, 1.0F));
 
+    renderMeleeStatus();
     const std::size_t livingPerimeterEnemies =
         static_cast<std::size_t>(std::count_if(
             world.perimeterEnemies().begin(),
@@ -14185,6 +14207,7 @@ void App::renderProfileAsset(
         switch (definition.category)
         {
         case ItemCategory::Weapon:
+        case ItemCategory::MeleeWeapon:
             SDL_SetRenderDrawColor(renderer_, 94, 112, 122, alpha);
             break;
         case ItemCategory::Battery:
@@ -14210,7 +14233,7 @@ void App::renderProfileAsset(
         }
         SDL_RenderFillRect(renderer_, &bounds);
         const std::string shortName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.displayName, 12);
+            uiTextRenderer_.language(), definition.meleeUse ? "KNIFE" : definition.displayName, 12);
         SDL_SetRenderDrawColor(renderer_, 232, 236, 232, 255);
         uiTextRenderer_.render(
             renderer_,
@@ -14222,7 +14245,7 @@ void App::renderProfileAsset(
     SDL_SetRenderDrawColor(renderer_, 214, 220, 214, alpha);
     SDL_RenderRect(renderer_, &bounds);
     renderItemQuantityBadge(renderer_, bounds, asset.quantity);
-    if (showWeaponCondition && definition.weaponCondition.has_value())
+    if (showWeaponCondition && (definition.weaponCondition.has_value() || definition.meleeUse))
     {
         const std::string condition = fmt::format(
             "D {:.2f}/{:.2f}",
@@ -15141,7 +15164,7 @@ void App::renderProfileInventory(
                     const ItemDefinition &definition =
                         publishedContentRegistry().item(asset->definitionId);
                     const std::string durability =
-                        definition.weaponCondition.has_value()
+                        (definition.weaponCondition.has_value() || definition.meleeUse)
                             ? fmt::format(
                                   "DUR {:.2f}/{:.2f}",
                                   static_cast<float>(
@@ -15557,9 +15580,7 @@ void App::renderBaseSupply()
     SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
     uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT AN ITEM");
     std::size_t rowIndex{};
-    for (const AssetRecord *asset : assetsInContainer(
-             gameSession_.profile(),
-             ProfileContainerId::stash()))
+    for (const AssetRecord *asset : baseSupplyStashAssets(gameSession_.profile()))
     {
         if (rowIndex >= 12) break;
         const ItemDefinition &definition =
@@ -18966,6 +18987,7 @@ void App::renderRaidScreen()
     }
 
     if (indoorVisibility) renderPlayer(); // Own avatar is never hidden by its observation cone.
+    renderMeleeSwing(gameSession_.world().melee());
 
     // Crosshair and every UI/modal layer stay in stable screen coordinates;
     // screen shake therefore cannot alter aiming or inventory interaction.
@@ -18975,6 +18997,7 @@ void App::renderRaidScreen()
     }
     renderAimCrosshair();
     renderCombatFeedback();
+    renderMeleeStatus();
     const auto light=gameSession_.activeWeaponLight();
     if (light.binding.deviceAssetId && !inventoryOverlayState_.isOpen())
     {
@@ -19333,6 +19356,11 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
     for (std::size_t row = 0; row < labels.size(); ++row)
     {
         if (!contains(profileContextActionRect(menu.position, row, labels.size()), position)) continue;
+        if (publishedContentRegistry().item(asset->definitionId).meleeUse && row==0)
+        {
+            profileContextMenu_.reset();profileInventoryInteraction_.reset();
+            input_.suppressPrimaryPointerUntilRelease();uiMessage_.clear();profileDetailsAsset_=asset->instanceId;return;
+        }
         if (publishedContentRegistry().item(asset->definitionId).weaponUse && row < 2)
         {
             profileContextMenu_.reset();
@@ -19384,6 +19412,7 @@ const char *lightStateLabel(const WeaponLightProjection &light)
 void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bool inRaid)
 {
     if (!profileDetailsAsset_) return;
+    if(const auto *a=gameSession_.profile().assets.find(*profileDetailsAsset_);a && publishedContentRegistry().item(a->definitionId).meleeUse)return;
     deviceBatteryDragPosition_=event.position;
     const auto light=findWeaponLight(gameSession_.profile(),publishedContentRegistry(),*profileDetailsAsset_);
     const auto batteries=detailBatteries(gameSession_.profile(),inRaid);
@@ -19430,6 +19459,7 @@ void App::renderProfileWeaponDetails()
     if (!asset) { profileDetailsAsset_.reset(); deviceBatteryDrag_.reset(); return; }
     const auto &content = publishedContentRegistry();
     const auto &definition = content.item(asset->definitionId);
+    if(definition.meleeUse){renderProfileMeleeDetails(*asset,definition);return;}
     const auto weapon = effectiveWeaponUse(profile, content, asset->instanceId);
     const SDL_FRect panel{40, 70, 1200, 600};
     SDL_SetRenderDrawColor(renderer_, 24, 29, 30, 250);

@@ -32,6 +32,7 @@
 #include "weapon_fire.h"
 #include "weapon_aim.h"
 #include "world_shooting_runtime.h"
+#include "world_melee_runtime.h"
 
 struct RaidSimulationWorkload
 {
@@ -387,6 +388,10 @@ public:
         const WeaponHandlingParameters &handling,
         bool preserveWeaponFireTransientState);
     void configureWeaponAmmunition(int penetration) noexcept;
+    void configureMelee(std::optional<MeleeUseDefinition> use, bool usable, std::uint64_t assetId=0) noexcept {melee_.configure(use,usable,assetId);}
+    [[nodiscard]] const WorldMeleeRuntime &melee() const noexcept {return melee_;}
+    [[nodiscard]] bool commitPreparedMelee();
+    void cancelPreparedMelee() noexcept {melee_.cancelPrepared();}
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 
@@ -532,6 +537,8 @@ private:
     Player player_;
 
     WorldShootingRuntime shooting_;
+    WorldMeleeRuntime melee_;
+    void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);
     CombatTargetId nextCombatTargetId_{1};
     EnemyRoster<EnemyAttachedState> enemies_;
     std::map<CombatTargetId, RaidCorpseDeathFact> corpseSources_;

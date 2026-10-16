@@ -383,6 +383,7 @@ namespace
         }
         if (value == "weapon_component") return ItemCategory::WeaponComponent;
         if (value == "battery") return ItemCategory::Battery;
+        if (value == "melee_weapon") return ItemCategory::MeleeWeapon;
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -435,6 +436,7 @@ namespace
         {
             return EquipmentSlotKind::BodyArmor;
         }
+        if (value == "quick_melee") return EquipmentSlotKind::QuickMelee;
         fail("equipment slot is not supported: " + std::string{value});
     }
 
@@ -833,7 +835,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66");
 
         if (root.contains("fortifications"))
         {
@@ -859,7 +861,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1609,6 +1611,31 @@ ContentRegistry ContentRegistry::fromJson(
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
+            if (itemValue.contains("melee_use"))
+            {
+                const auto &m = itemValue.at("melee_use");
+                MeleeUseDefinition use;
+                use.damage = m.at("damage").get<int>();
+                use.penetration = m.at("penetration").get<int>();
+                use.armorDamage = m.at("armor_damage").get<int>();
+                use.range = m.at("range").get<float>();
+                use.angleDegrees = m.at("angle_degrees").get<float>();
+                use.recoverySeconds = m.at("recovery_seconds").get<float>();
+                use.maximumDurabilityCenti = m.at("maximum_durability_centi").get<std::uint32_t>();
+                use.wearPerHitCenti = m.at("wear_per_hit_centi").get<std::uint32_t>();
+                if (definition.category != ItemCategory::MeleeWeapon || definition.equipmentSlot != EquipmentSlotKind::QuickMelee ||
+                    !definition.compatibleEquipmentSlots.empty() || definition.maxStackSize != 1 ||
+                    definition.weaponUse || definition.weaponCondition || definition.weaponMaintenance || definition.armorProtection ||
+                    use.damage <= 0 || use.damage > 100 || use.penetration < 0 || use.penetration > 10 || use.armorDamage < 0 ||
+                    !std::isfinite(use.range) || use.range <= 0 || use.range > 100 ||
+                    !std::isfinite(use.angleDegrees) || use.angleDegrees <= 0 || use.angleDegrees > 180 ||
+                    !std::isfinite(use.recoverySeconds) || use.recoverySeconds <= 0 || use.recoverySeconds > 10 ||
+                    use.maximumDurabilityCenti != 10000 || use.wearPerHitCenti == 0 || use.wearPerHitCenti > 10000)
+                    fail("invalid melee capability");
+                definition.meleeUse = use;
+            }
+            if ((definition.category == ItemCategory::MeleeWeapon || definition.equipmentSlot == EquipmentSlotKind::QuickMelee) && !definition.meleeUse)
+                fail("melee slot and category require melee capability");
             if (itemValue.contains("weapon_component"))
             {
                 const auto &c = itemValue.at("weapon_component");

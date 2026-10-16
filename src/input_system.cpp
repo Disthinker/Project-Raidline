@@ -232,6 +232,8 @@ InputSystem::mapScancodeToAction(
 
     case SDL_SCANCODE_U:
         return GameAction::WeaponLight;
+    case SDL_SCANCODE_V:
+        return GameAction::QuickMelee;
 
     case SDL_SCANCODE_ESCAPE:
         return GameAction::InventoryCancel;

@@ -140,6 +140,7 @@ private:
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
     friend struct TacticalDeviceUiTestAccess;
+    friend struct MeleeUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
@@ -468,6 +469,9 @@ private:
     bool inventoryWeaponComponentsOpen_{};
     std::optional<AssetInstanceId> profileDetailsAsset_;
     void renderProfileWeaponDetails();
+    void renderProfileMeleeDetails(const AssetRecord &,const ItemDefinition &);
+    void renderMeleeSwing(const WorldMeleeRuntime &);
+    void renderMeleeStatus();
     void handleWeaponLightDetailsPointer(const InventoryPointerEvent &, bool inRaid);
     std::optional<ProfileDragSource> deviceBatteryDrag_;
     MousePosition deviceBatteryDragPosition_{};

@@ -30,6 +30,8 @@ enum class EnemyMovementState
 const char *enemyMovementStateName(
     EnemyMovementState state) noexcept;
 
+enum class EnemyImpactReaction { Slow, None };
+
 class Enemy
 {
 public:
@@ -126,7 +128,7 @@ public:
     [[nodiscard]] float acquireTargetDistance() const noexcept;
     std::size_t currentAnimationFrameIndex() const;
 
-    [[nodiscard]] bool takeDamage(int damage);
+    [[nodiscard]] bool takeDamage(int damage, EnemyImpactReaction reaction = EnemyImpactReaction::Slow);
     [[nodiscard]] const std::optional<EnemyArmorState> &torsoArmor() const noexcept { return torsoArmor_; }
     void applyArmorLoss(std::uint32_t loss) noexcept;
     void hearTarget(Vec2 targetPosition) noexcept;

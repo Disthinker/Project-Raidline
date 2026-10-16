@@ -901,7 +901,8 @@ DeployReceipt executeDeploy(
              EquipmentSlotKind::ChestRig,
              EquipmentSlotKind::Backpack,
              EquipmentSlotKind::Helmet,
-             EquipmentSlotKind::BodyArmor})
+             EquipmentSlotKind::BodyArmor,
+             EquipmentSlotKind::QuickMelee})
     {
         if (const auto root = equippedAsset(candidate, slot))
         {
@@ -2240,7 +2241,8 @@ InventoryReceipt pickupRaidLoot(
              EquipmentSlotKind::ChestRig,
              EquipmentSlotKind::Backpack,
              EquipmentSlotKind::Helmet,
-             EquipmentSlotKind::BodyArmor})
+             EquipmentSlotKind::BodyArmor,
+             EquipmentSlotKind::QuickMelee})
     {
         if (itemCanEquipInSlot(definition, slot) &&
             !equippedAsset(profile, slot).has_value())

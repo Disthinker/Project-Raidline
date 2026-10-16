@@ -87,6 +87,7 @@ struct BaseDefenseSnapshot
     Vec2 playerPosition{};
     float damageProtectionSeconds{};
     WorldShootingCheckpoint shooting;
+    float meleeRecoverySeconds{};
     std::uint32_t activeWeaponSlot{};
     std::uint64_t commandSequence{};
     std::uint64_t weaponFaultSequence{};
