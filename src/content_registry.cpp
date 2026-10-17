@@ -384,6 +384,7 @@ namespace
         if (value == "weapon_component") return ItemCategory::WeaponComponent;
         if (value == "battery") return ItemCategory::Battery;
         if (value == "melee_weapon") return ItemCategory::MeleeWeapon;
+        if (value == "throwable") return ItemCategory::Throwable;
         if (value == "loot")
         {
             return ItemCategory::Loot;
@@ -835,7 +836,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67");
 
         if (root.contains("fortifications"))
         {
@@ -861,7 +862,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1611,6 +1612,32 @@ ContentRegistry ContentRegistry::fromJson(
             definition.weaponMaintenance = parseWeaponMaintenance(itemValue);
             definition.armorMaintenance = parseArmorMaintenance(itemValue);
             definition.weaponUse = parseWeaponUse(itemValue);
+            if (itemValue.contains("noise_decoy_use"))
+            {
+                const auto &n = itemValue.at("noise_decoy_use");
+                NoiseDecoyUseDefinition use{
+                    requiredFiniteFloat(n, "range", true),
+                    requiredFiniteFloat(n, "flight_seconds", true),
+                    requiredFiniteFloat(n, "radius", true),
+                    requiredFiniteFloat(n, "duration_seconds", true),
+                    requiredFiniteFloat(n, "pulse_interval_seconds", true)};
+                if (definition.category != ItemCategory::Throwable || definition.equipmentSlot ||
+                    !definition.compatibleEquipmentSlots.empty() || !definition.containerCompartments.empty() ||
+                    definition.weaponUse || definition.medicalUse || definition.armorProtection ||
+                    definition.weaponCondition || definition.weaponMaintenance || definition.armorMaintenance ||
+                    definition.maximumCharges || definition.magazineCapacity || itemValue.contains("melee_use") ||
+                    itemValue.contains("weapon_component") || itemValue.contains("weapon_light") ||
+                    itemValue.contains("ammunition_use") || itemValue.contains("magazine_use") ||
+                    itemValue.value("battery", false) ||
+                    use.range > 1000 || use.flightSeconds > 5 || use.radius > 1000 ||
+                    use.durationSeconds > 30 || use.pulseIntervalSeconds < 0.1F ||
+                    use.pulseIntervalSeconds > use.durationSeconds ||
+                    use.durationSeconds / use.pulseIntervalSeconds > 32 || definition.maxStackSize > 3)
+                    fail("invalid noise decoy capability");
+                definition.noiseDecoyUse = use;
+            }
+            if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse)
+                fail("throwable requires noise decoy capability");
             if (itemValue.contains("melee_use"))
             {
                 const auto &m = itemValue.at("melee_use");

@@ -275,8 +275,8 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
-        // New light devices and cells are purchased, never catalog grants.
-        if (!definition.weaponLight && !definition.battery && !definition.meleeUse) definitions.push_back(&definition);
+        // Tactical equipment is purchased, never an automatic catalog grant.
+        if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse) definitions.push_back(&definition);
     }
     std::stable_sort(
         definitions.begin(),

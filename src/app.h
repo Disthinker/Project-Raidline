@@ -141,6 +141,7 @@ private:
     friend struct WeaponInventoryUiTestAccess;
     friend struct TacticalDeviceUiTestAccess;
     friend struct MeleeUiTestAccess;
+    friend struct NoiseDecoyUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
@@ -241,6 +242,17 @@ private:
     bool firstRaidHintsHiddenForRun_{};
     float playerDamageFeedbackRemaining_{};
     bool lastIncomingDamageReducedByArmor_{};
+    bool throwableWheelOpen_{};
+    std::vector<AssetInstanceId> throwableWheelOptions_;
+    std::size_t throwableWheelSelected_{};
+    std::optional<AssetInstanceId> selectedThrowable_;
+    bool throwableRightWasDown_{};
+    std::uint64_t throwableCommandSequence_{};
+    void updateThrowableInput(GameplayInput &);
+    void cancelThrowableUi();
+    void renderThrowableUi();
+    void renderNoiseDecoyWorld();
+    void renderProfileDecoyDetails(const AssetRecord &, const ItemDefinition &);
     bool medicalWheelOpen_{};
     bool tacticalMapOpen_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;

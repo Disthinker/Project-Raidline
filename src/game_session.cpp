@@ -1094,6 +1094,8 @@ bool GameSession::deployAlpha(
         };
 
         RaidWorldConfig worldConfig;
+        worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
+            !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.lightConeObservationEnabled =
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
@@ -1373,6 +1375,7 @@ bool GameSession::startAlphaReload(
     AssetInstanceId weaponAssetId,
     AssetInstanceId magazineAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
         activeAlphaWeapon() !=
             std::optional<AssetInstanceId>{weaponAssetId} ||
@@ -1410,6 +1413,7 @@ bool GameSession::startAlphaLoadMagazine(
     AssetInstanceId magazineAssetId,
     std::uint32_t quantity)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     const AssetRecord *ammunition = profile_.assets.find(ammunitionAssetId);
     const AssetRecord *magazine = profile_.assets.find(magazineAssetId);
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
@@ -1464,6 +1468,7 @@ bool GameSession::startAlphaLoadMagazine(
 
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     const AssetRecord *asset = profile_.assets.find(medkitAssetId);
     if (asset == nullptr)
     {
@@ -1486,6 +1491,7 @@ bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 
 bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1525,6 +1531,7 @@ bool GameSession::startAlphaWeaponMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId weaponAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1549,6 +1556,7 @@ bool GameSession::startAlphaArmorMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId armorAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1571,6 +1579,7 @@ bool GameSession::startAlphaArmorMaintenance(
 
 bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
         !isWeaponEquipmentSlot(targetSlot) ||
         targetSlot == activeWeaponSlot_)
@@ -1731,6 +1740,7 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 bool GameSession::startAlphaUnloadMagazine(
     AssetInstanceId magazineAssetId)
 {
+    if (world_ && world_->noiseDecoy().flight()) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -2854,6 +2864,8 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     const WeaponAmmoCommand &command,
     std::string transactionId)
 {
+    if (alphaRaidActive_ && world_ && world_->noiseDecoy().flight())
+        return {false,false,DomainErrorCode::IllegalDestination,"DECOY UNAVAILABLE HERE",profile_.revision,WeaponAmmoResult::Dry,std::nullopt};
     ProfileState candidate = profile_;
     WeaponAmmoReceipt receipt = executeWeaponAmmo(
         candidate,
@@ -3851,6 +3863,7 @@ void GameSession::updateAlphaRaid(
     }
     const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
     world_->configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
+    prepareNoiseDecoyInput(input,rawInput);
     prepareMeleeInput(input,deltaTime,world_->melee().recoverySeconds());
     if (input.inventoryOpen || input.sprint || input.firePressed ||
         input.fireJustPressed || input.reloadJustPressed ||
@@ -4195,6 +4208,7 @@ void GameSession::updateAlphaRaid(
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     world_->update(simulationInput, deltaTime);
+    if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
     {
@@ -4934,6 +4948,8 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         state_ = GameSessionState::SettlementBlocked;
         return false;
     }
+    world_->commitNoiseDecoy({});
+    decoyFireSuppressedUntilRelease_=false;
     raidActionState_.cancel();
     weaponClearGesture_.reset();
     raidElapsedSeconds_ = 0.0F;

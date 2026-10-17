@@ -37,7 +37,8 @@ enum class ItemCategory
     Loot,
     WeaponComponent,
     Battery,
-    MeleeWeapon
+    MeleeWeapon,
+    Throwable
 };
 
 enum class WeaponMalfunctionType
@@ -339,6 +340,15 @@ struct WeaponComponentDefinition
     bool providesLightMount{}, requiresLightMount{};
 };
 
+struct NoiseDecoyUseDefinition
+{
+    float range{450.0F};
+    float flightSeconds{0.5F};
+    float radius{500.0F};
+    float durationSeconds{6.0F};
+    float pulseIntervalSeconds{1.0F};
+};
+
 struct ItemDefinition
 {
     ItemDefinitionId definitionId;
@@ -407,6 +417,7 @@ struct ItemDefinition
     // Base operating resources and never happens automatically.
     std::uint32_t baseConstructionMaterialValue{};
     std::optional<MeleeUseDefinition> meleeUse;
+    std::optional<NoiseDecoyUseDefinition> noiseDecoyUse;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

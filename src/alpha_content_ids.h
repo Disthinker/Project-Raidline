@@ -4,6 +4,7 @@
 
 namespace alpha_content
 {
+inline const ItemDefinitionId noiseDecoy{"item.throwable.noise_decoy"};
 inline const ItemDefinitionId utilityKnife{"item.weapon.utility_knife"};
 inline const ItemDefinitionId rifle{"item.weapon.rifle_basic"};
 inline const ItemDefinitionId pistol{"item.weapon.pistol_basic"};

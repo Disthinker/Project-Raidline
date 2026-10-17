@@ -1472,6 +1472,7 @@ namespace
         if (publishedContentRegistry().item(asset.definitionId).weaponUse)
             labels = {"WEAPON DETAILS", "MODIFY WEAPON"};
         if (publishedContentRegistry().item(asset.definitionId).meleeUse) labels={"MELEE DETAILS"};
+        if (publishedContentRegistry().item(asset.definitionId).noiseDecoyUse) labels={"DECOY DETAILS"};
         if (const auto action = profileContextActionLabel(profile, asset, inRaid)) labels.push_back(*action);
         return labels;
     }
@@ -6776,7 +6777,7 @@ void App::update(float deltaTime)
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
-        medicalWheelOpen_ ||
+        medicalWheelOpen_ || throwableWheelOpen_ || selectedThrowable_.has_value() ||
         tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
         (gameFlow_.state() == GameFlowState::Base &&
@@ -6996,7 +6997,8 @@ void App::update(float deltaTime)
         !tacticalMapOpen_ &&
         !developerWeaponPanelOpen_)
     {
-        if (input_.wasActionJustPressed(GameAction::Heal) &&
+        if (!throwableWheelOpen_ && !selectedThrowable_ && !gameSession_.world().noiseDecoy().flight() &&
+            input_.wasActionJustPressed(GameAction::Heal) &&
             !gameSession_.raidActionState().active().has_value())
         {
             openMedicalWheel();
@@ -7034,6 +7036,7 @@ void App::update(float deltaTime)
     {
         gameplayInput.quitRaidJustPressed = false;
     }
+    updateThrowableInput(gameplayInput);
     if (gameplayInput.interactJustPressed && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
         inputDecision.controlAction == InventoryFrameControlAction::None)
@@ -7081,7 +7084,7 @@ void App::update(float deltaTime)
     }
 
     gameplayInput.freezeObservationDirection = inventoryOverlayState_.isOpen() ||
-        tacticalMapOpen_ || medicalWheelOpen_ || developerWeaponPanelOpen_ ||
+        tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || developerWeaponPanelOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
     gameFlow_.update(
         gameplayInput,
@@ -7102,6 +7105,8 @@ void App::update(float deltaTime)
         return;
     }
     consumePresentationAudioEvents();
+    for (unsigned pulse=0; pulse<gameSession_.world().noiseDecoy().pulsesLastUpdate(); ++pulse)
+        gameAudio_.play(SoundEventId::NoiseDecoyPulse);
 
     if (gameSession_.world().shotFiredLastUpdate())
     {
@@ -10356,7 +10361,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
-            medicalWheelOpen_,
+            medicalWheelOpen_ || throwableWheelOpen_,
             developerWeaponPanelOpen_ || developerRangePanelOpen_,
             pauseMenu_.isOpen(),
             tacticalMapOpen_,
@@ -10420,7 +10425,7 @@ void App::renderAimCrosshair()
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
-        medicalWheelOpen_ ||
+        medicalWheelOpen_ || throwableWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         developerRangePanelOpen_ ||
@@ -18881,6 +18886,7 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     renderShotPresentations();
     renderShotFeedbackPresentations();
     renderParticles();
+    renderNoiseDecoyWorld();
 
     if (!SDL_SetRenderTarget(renderer_, originalTarget))
         return false;
@@ -18984,6 +18990,7 @@ void App::renderRaidScreen()
         renderShotPresentations();
         renderShotFeedbackPresentations();
         renderParticles();
+    renderNoiseDecoyWorld();
     }
 
     if (indoorVisibility) renderPlayer(); // Own avatar is never hidden by its observation cone.
@@ -19014,6 +19021,7 @@ void App::renderRaidScreen()
     // 背包覆盖层显示在游戏世界上方。
     renderInventoryOverlay();
     renderMedicalWheel();
+    renderThrowableUi();
 
     if (gameSession_.world().raidSession().isTerminal() ||
         gameFlow_.state() == GameFlowState::RaidResult)
@@ -19356,7 +19364,7 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
     for (std::size_t row = 0; row < labels.size(); ++row)
     {
         if (!contains(profileContextActionRect(menu.position, row, labels.size()), position)) continue;
-        if (publishedContentRegistry().item(asset->definitionId).meleeUse && row==0)
+        if ((publishedContentRegistry().item(asset->definitionId).meleeUse || publishedContentRegistry().item(asset->definitionId).noiseDecoyUse) && row==0)
         {
             profileContextMenu_.reset();profileInventoryInteraction_.reset();
             input_.suppressPrimaryPointerUntilRelease();uiMessage_.clear();profileDetailsAsset_=asset->instanceId;return;
@@ -19412,7 +19420,7 @@ const char *lightStateLabel(const WeaponLightProjection &light)
 void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bool inRaid)
 {
     if (!profileDetailsAsset_) return;
-    if(const auto *a=gameSession_.profile().assets.find(*profileDetailsAsset_);a && publishedContentRegistry().item(a->definitionId).meleeUse)return;
+    if(const auto *a=gameSession_.profile().assets.find(*profileDetailsAsset_);a && (publishedContentRegistry().item(a->definitionId).meleeUse || publishedContentRegistry().item(a->definitionId).noiseDecoyUse))return;
     deviceBatteryDragPosition_=event.position;
     const auto light=findWeaponLight(gameSession_.profile(),publishedContentRegistry(),*profileDetailsAsset_);
     const auto batteries=detailBatteries(gameSession_.profile(),inRaid);
@@ -19460,6 +19468,7 @@ void App::renderProfileWeaponDetails()
     const auto &content = publishedContentRegistry();
     const auto &definition = content.item(asset->definitionId);
     if(definition.meleeUse){renderProfileMeleeDetails(*asset,definition);return;}
+    if(definition.noiseDecoyUse){renderProfileDecoyDetails(*asset,definition);return;}
     const auto weapon = effectiveWeaponUse(profile, content, asset->instanceId);
     const SDL_FRect panel{40, 70, 1200, 600};
     SDL_SetRenderDrawColor(renderer_, 24, 29, 30, 250);
