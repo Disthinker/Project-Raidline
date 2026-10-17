@@ -33,6 +33,7 @@
 #include "weapon_aim.h"
 #include "world_shooting_runtime.h"
 #include "world_melee_runtime.h"
+#include "raid_noise_decoy_runtime.h"
 
 struct RaidSimulationWorkload
 {
@@ -154,6 +155,7 @@ struct RaidWorldConfig
     RaidIntelligenceLoadout intelligence;
     std::vector<RaidTacticalObjective> tacticalObjectives;
     bool developerRange{};
+    bool noiseDecoyEnabled{};
     bool lightConeObservationEnabled{};
 };
 
@@ -177,6 +179,7 @@ struct RaidOutdoorPresentationProjection
 
 class GameplayWorld
 {
+    friend struct NoiseDecoyTestAccess;
 public:
     GameplayWorld();
     [[nodiscard]] bool resetDeveloperRangeEnemies(const EnemyCombatDefinition &definition,
@@ -407,6 +410,11 @@ public:
     takePlayerDamageObservations();
 
     void emitPlayerNoise(float radius) noexcept;
+    [[nodiscard]] bool noiseDecoyEnabled() const noexcept { return noiseDecoyEnabled_; }
+    [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
+    [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2 aim, const NoiseDecoyUseDefinition &) const;
+    void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
+
 
     [[nodiscard]]
     bool canInteractWithContainer() const noexcept;
@@ -485,6 +493,7 @@ private:
     {
         EnemyNavigationRuntime navigation;
         EnemyEncounterRuntime encounter;
+        bool noiseResponsive{};
     };
 
     struct InteriorRuntime
@@ -646,6 +655,11 @@ private:
     std::vector<std::size_t> blockerQueryScratch_;
     bool alphaRaidWorld_{};
     bool developerRange_{};
+    bool noiseDecoyEnabled_{};
+    RaidNoiseDecoyRuntime noiseDecoy_;
+    void updateNoiseDecoy(float seconds);
+    [[nodiscard]] std::optional<Vec2> noiseInvestigationGoal(Enemy &, bool targetVisible, Vec2 playerPosition);
+
     bool deferPlayerDamageResolution_{};
     float enemyDamageProtectionRemainingSeconds_{};
     std::vector<PlayerDamageObservation> pendingPlayerDamageObservations_;

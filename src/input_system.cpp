@@ -200,6 +200,10 @@ InputSystem::mapScancodeToAction(
     case SDL_SCANCODE_R:
         return GameAction::Reload;
 
+    case SDL_SCANCODE_4:
+    case SDL_SCANCODE_KP_4:
+        return GameAction::SelectThrowable;
+
     case SDL_SCANCODE_5:
     case SDL_SCANCODE_KP_5:
         return GameAction::Heal;

@@ -280,6 +280,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     }
     worldSize_ = config.worldSize;
     lightConeObservationEnabled_ = config.lightConeObservationEnabled;
+    noiseDecoyEnabled_ = config.noiseDecoyEnabled && !config.developerRange;
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     ballisticBlockers_ = std::move(config.ballisticBlockers);
@@ -512,6 +513,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 spawn.patrolPoints,
                 0U,
                 spawn.ambushActivationDistance};
+            interior.enemies.state(interior.enemies.back().combatTargetId()).noiseResponsive = true;
         }
         interior.initialEnemyCount = interior.enemies.size();
         interior.blockerIndex = RaidSpaceBlockerIndex::build(
@@ -838,6 +840,7 @@ GameplayWorld::GameplayWorld(
             spawn.patrolPoints,
             0U,
             spawn.ambushActivationDistance};
+        enemies_.state(enemies_.back().combatTargetId()).noiseResponsive = true;
     }
     initialOutdoorEnemyCount_ = enemies_.size();
     outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
@@ -1012,6 +1015,7 @@ void GameplayWorld::update(
     simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
     if (!raidSession_.isActive())
     {
+        noiseDecoy_.clear();
         return;
     }
 
@@ -1145,6 +1149,8 @@ void GameplayWorld::update(
             raidSession_.highRiskTimeElapsed() -
                 highRiskTimeBeforeUpdate));
 
+    updateNoiseDecoy(deltaTime);
+
     // Bounded substeps keep attack phase transitions and one-shot hit
     // opportunities observable even when a render frame is long.
     std::size_t enemySubsteps{1U};
@@ -1248,9 +1254,23 @@ void GameplayWorld::update(
             }
 
             const Vec2 enemyPosition = enemyCenter(enemy);
-            intent.targetVisible = hasLineOfSight(
-                enemyPosition,
-                playerPosition);
+            const bool investigatingNoise=noiseDecoyEnabled_ && noiseDecoy_.investigations().contains(enemy.combatTargetId());
+            const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
+                enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
+            // Unaware actors cannot acquire a player beyond acquisition range;
+            // sound investigators also have an independent navigation goal.
+            // Skip only irrelevant geometry. Ordinary searches and confirmed
+            // pursuit keep their accepted visibility/lose-distance policy.
+            const bool existingRouteNeedsSight=!investigatingNoise &&
+                (enemy.lastKnownTargetPosition().has_value() ||
+                 (enemy.awarenessState()==EnemyAwarenessState::Unaware &&
+                  ((encounter.kind==RaidEncounterKind::Patrol && !encounter.patrolPoints.empty()) ||
+                   (encounter.kind==RaidEncounterKind::Guard && distanceSquared(enemyPosition,encounter.home)>64.0F*64.0F))));
+            const bool skipNoiseSight=noiseDecoyEnabled_ && !existingRouteNeedsSight && outsideAcquisition &&
+                (enemy.awarenessState()==EnemyAwarenessState::Unaware ||
+                 (investigatingNoise && enemy.awarenessState()==EnemyAwarenessState::Searching)) &&
+                enemy.attackPhase()==EnemyAttackPhase::Idle;
+            intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,playerPosition);
             if (encounter.kind == RaidEncounterKind::Ambush &&
                 enemy.awarenessState() == EnemyAwarenessState::Unaware &&
                 distanceSquared(enemyPosition, playerPosition) >
@@ -1260,7 +1280,8 @@ void GameplayWorld::update(
                 intent.targetVisible = false;
             }
             std::optional<Vec2> passiveGoal;
-            if (enemy.awarenessState() == EnemyAwarenessState::Unaware)
+            if (enemy.awarenessState() == EnemyAwarenessState::Unaware &&
+                !noiseDecoy_.investigations().contains(enemy.combatTargetId()))
             {
                 if (encounter.kind == RaidEncounterKind::Patrol &&
                     !encounter.patrolPoints.empty())
@@ -1290,14 +1311,14 @@ void GameplayWorld::update(
                  distanceSquared(enemyPosition, playerPosition) <=
                      enemy.acquireTargetDistance() *
                          enemy.acquireTargetDistance());
-            const std::optional<Vec2> navigationGoal = visibleTargetIsRelevant
+            const auto investigation = noiseInvestigationGoal(enemy, intent.targetVisible, playerPosition);
+            const std::optional<Vec2> navigationGoal = investigation ? investigation : visibleTargetIsRelevant
                 ? std::optional<Vec2>{playerPosition}
                 : enemy.lastKnownTargetPosition().has_value()
                 ? enemy.lastKnownTargetPosition()
                 : passiveGoal;
-            intent.allowUnawareNavigation = passiveGoal.has_value() &&
-                !visibleTargetIsRelevant &&
-                !enemy.lastKnownTargetPosition().has_value();
+            intent.allowUnawareNavigation = investigation.has_value() || (passiveGoal.has_value() &&
+                !visibleTargetIsRelevant && !enemy.lastKnownTargetPosition().has_value());
             if (!navigationGoal.has_value())
             {
                 navigation = EnemyNavigationRuntime{};
@@ -1382,8 +1403,7 @@ void GameplayWorld::update(
                         : navigationField->nextWaypoint(
                               enemyPosition,
                               *intent.reachableGoal,
-                              enemy.navigationGoalTolerance(
-                                  intent.targetVisible));
+                              enemy.navigationGoalTolerance(intent.targetVisible));
                     if (!navigation.waypoint.has_value())
                     {
                         navigation.waypoint = enemyPosition;
@@ -3299,6 +3319,7 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
 {
     for (const auto &death:deaths)
     {
+        noiseDecoy_.forget(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;
         score_+=kScorePerEnemy;
         const auto source=corpseSources_.find(death.id);

@@ -14,6 +14,21 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"Noise Decoy", "声响诱饵"},
+     {"DECOY DETAILS", "诱饵详情"},
+     {"NO CHEST RIG DECOY", "胸挂普通分区中没有声响诱饵"},
+     {"DECOY UNAVAILABLE HERE", "当前活动或动作状态不能投掷诱饵"},
+     {"DECOY INVENTORY CHANGED", "物品已变化，请重新选择诱饵"},
+     {"INVALID DECOY LANDING", "没有合法的诱饵落点"},
+     {"DECOY THROWN", "诱饵已投出"},
+     {"DECOY CANCELLED", "已取消投掷，未消耗诱饵"},
+     {"ACTION CANCELLED | PRESS 4 AGAIN", "已中断原动作；释放后再按4选择诱饵"},
+     {"4 THROWABLES | CHEST RIG", "4 投掷物 | 从胸挂选择"},
+     {"RELEASE 4 TO AIM | RIGHT CLICK / ESC CANCEL", "松开4瞄准；右键或Esc取消"},
+     {"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL", "左键投掷；右键或Esc取消"},
+     {"INVALID DECOY COMMAND", "无效的投掷请求"},
+     {"INVALID DECOY INVENTORY", "诱饵库存状态无效"},
+     {"DECOY REVISION LIMIT", "当前库存无法继续修改"},
      {"LIGHT MOUNT REQUIRED", "需要兼容导轨护木提供独立灯具安装位"},
      {"SUPPLY & RECOVERY", "供应与回收"},
      {"PREVIOUS PAGE", "上一页"},

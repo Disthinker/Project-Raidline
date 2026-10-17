@@ -40,6 +40,7 @@ namespace
         "impact.ground",
         "ambience.base.safe_low",
         "ambience.raid.urban_low",
+        "throwable.noise_decoy.pulse",
     };
 
     bool validRelativeWavePath(const std::filesystem::path &path)

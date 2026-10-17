@@ -1,6 +1,7 @@
 #pragma once
 
 #include "weapon_component_domain.h"
+#include "noise_decoy_domain.h"
 #include "tactical_device_domain.h"
 
 #include <array>
@@ -523,6 +524,9 @@ public:
     [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
     ordinarySurvivorRescuePlan() const;
 
+    [[nodiscard]] bool canSelectNoiseDecoy() const;
+    [[nodiscard]] bool beginNoiseDecoySelection();
+    [[nodiscard]] InventoryReceipt throwNoiseDecoy(AssetInstanceId, Vec2 aim, const CommandContext &);
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
@@ -532,11 +536,15 @@ private:
     bool commitPlayerMelee(GameplayWorld &,bool allow=true);
     bool commitPlayerMelee(BaseWorld &,bool allow=true);
     bool meleeSuppressedUntilRelease_{};
+    bool decoyFireSuppressedUntilRelease_{};
+    void prepareNoiseDecoyInput(GameplayInput &, const GameplayInput &);
     friend struct RaidIndoorVisibilityUiTestAccess;
     friend struct RaidLightConeVisibilityUiTestAccess;
     friend struct TacticalDeviceUiTestAccess;
     friend struct MeleeUiTestAccess;
     friend struct MeleeTestAccess;
+    friend struct NoiseDecoyTestAccess;
+    friend struct NoiseDecoyUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};
     ProfileState profile_;

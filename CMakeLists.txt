@@ -211,6 +211,8 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/noise_decoy_domain.cpp
+    src/noise_decoy_domain.h
     src/melee_attack.cpp
     src/melee_attack.h
     src/base_fortification_domain.cpp
@@ -350,6 +352,9 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/gameplay_world_noise_decoy.cpp
+    src/raid_noise_decoy_runtime.cpp
+    src/raid_noise_decoy_runtime.h
     src/world_melee_runtime.cpp
     src/world_melee_runtime.h
     src/raid_camera.cpp
@@ -418,6 +423,7 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/game_session_noise_decoy.cpp
     src/game_session_melee.cpp
     src/base_defense_checkpoint_writer.cpp
     src/base_defense_checkpoint_writer.h
@@ -451,6 +457,7 @@ target_link_libraries(
 add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
+    src/app_throwable.cpp
     src/app_melee.cpp
     src/app_base_defense.cpp
     src/app_base_fortification.cpp
@@ -547,7 +554,8 @@ function(raidline_add_test target source module)
         GTest::gtest_main
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
-       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest")
+       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest"
+       OR target STREQUAL "NoiseDecoyTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -963,6 +971,8 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 
 raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
 raidline_add_test(WeaponLightTest tests/test_weapon_light.cpp raidline::services)
+raidline_add_test(NoiseDecoyTest tests/test_noise_decoy.cpp raidline::services)
+raidline_add_test(NoiseDecoyUiTest tests/test_noise_decoy_ui.cpp raidline::sdl_client)
 raidline_add_test(MeleeAttackTest tests/test_melee_attack.cpp raidline::services)
 raidline_add_test(MeleeInventoryUiTest tests/test_melee_inventory_ui.cpp raidline::sdl_client)
 raidline_add_test(WeaponLightUiTest tests/test_weapon_light_ui.cpp raidline::sdl_client)

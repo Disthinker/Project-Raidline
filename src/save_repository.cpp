@@ -2888,7 +2888,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 48 && contentVersion == "hospital-raid-theme-content-62") ||
             (schemaVersion >= 49 && contentVersion == "weapon-components-content-63") ||
             (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64") ||
-            (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65");
+            (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65") ||
+            (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
