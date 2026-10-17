@@ -554,7 +554,8 @@ function(raidline_add_test target source module)
         GTest::gtest_main
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
-       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest")
+       OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest"
+       OR target STREQUAL "NoiseDecoyTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
