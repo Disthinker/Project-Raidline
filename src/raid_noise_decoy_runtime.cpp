@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include "raid_space_query.h"
 
 namespace {
 bool finite(Vec2 p) { return std::isfinite(p.x) && std::isfinite(p.y); }
@@ -77,6 +78,36 @@ void RaidNoiseDecoyRuntime::hearPulses(std::span<const NoiseDecoyListener> liste
 {
     if(!pulsesLastUpdate_ || !source_)return;
     const auto p=source_->landing.point;const float r=source_->landing.use.radius;
+    // All listeners share one source. Collect nearby authoritative geometry
+    // once for this pulse; retain the exact existing interior-intersection
+    // predicate for each ray. Nothing survives a pulse or a geometry change.
+    struct Occluder { Rect bounds; float left, right, top, bottom; };
+    std::vector<std::size_t> blockerIndices;
+    const float reach=r+1.0F; // Conservative broad phase, not audible range.
+    index.queryCandidateIndices({{p.x-reach,p.y-reach},{reach*2,reach*2}},blockerIndices);
+    std::vector<Occluder> occluders;
+    occluders.reserve(blockerIndices.size());
+    float coverLeft=std::numeric_limits<float>::infinity(),coverTop=coverLeft;
+    float coverRight=-coverLeft,coverBottom=coverRight;
+    for(const auto id:blockerIndices){
+        const auto &bounds=index.blockerBounds(id);
+        const float right=bounds.position.x+bounds.size.x,bottom=bounds.position.y+bounds.size.y;
+        occluders.push_back({bounds,bounds.position.x,right,bounds.position.y,bottom});
+        coverLeft=std::min(coverLeft,bounds.position.x);coverRight=std::max(coverRight,right);
+        coverTop=std::min(coverTop,bounds.position.y);coverBottom=std::max(coverBottom,bottom);
+    }
+    const auto audibleLineOfSight=[&](Vec2 end){
+        const float left=std::min(p.x,end.x),right=std::max(p.x,end.x);
+        const float top=std::min(p.y,end.y),bottom=std::max(p.y,end.y);
+        if(occluders.empty() || coverRight<left || coverLeft>right || coverBottom<top || coverTop>bottom)return true;
+        // These pointers refer only to this immutable local geometry buffer.
+        const auto *stop=occluders.data()+occluders.size();
+        for(const auto *wall=occluders.data();wall!=stop;++wall){
+            if(wall->right<left || wall->left>right || wall->bottom<top || wall->top>bottom)continue;
+            if(raidSpaceSegmentIntersectsBlockerInterior(p,end,wall->bounds))return false;
+        }
+        return true;
+    };
     const int firstX=static_cast<int>(std::floor((p.x-r)/128)), lastX=static_cast<int>(std::floor((p.x+r)/128));
     const int firstY=static_cast<int>(std::floor((p.y-r)/128)), lastY=static_cast<int>(std::floor((p.y+r)/128));
     const int columns=lastX-firstX+1, rows=lastY-firstY+1;
@@ -98,7 +129,7 @@ void RaidNoiseDecoyRuntime::hearPulses(std::span<const NoiseDecoyListener> liste
     for(const auto &entry:local)binned[offsets[entry.cell]++]=entry.listener;
     for(const auto *listener:binned){
         ++candidatesLastUpdate_;
-        if(distance(p,listener->center)<=r+0.0001F && index.hasLineOfSight(p,listener->center))
+        if(distance(p,listener->center)<=r+0.0001F && audibleLineOfSight(listener->center))
             investigations_.insert_or_assign(listener->id,NoiseInvestigation{source_->landing.space,source_->id,p,listener->home,false});
     }
 }
