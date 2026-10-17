@@ -1,17 +1,175 @@
 # 声响诱饵与投掷入口 v1
 
+<!-- decoy-perf-v2:begin -->
+## 当前：性能修复 v2 本地通过，预先CI验证中
+
+候选 **e970acbc3d71** 通过本地检查。按用户明确批准，提交、推送到现有性能分支，更新PR176验证双平台CI；**v2尚未人工复验，复验前不合并**。
+
+- 真实批准：“同意 v2，允许先提交推送验证CI”；所答问题明确包含“允许先在现有性能分支提交、推送做双平台CI，通过后提供新候选复验，复验前不合并”。
+- `task_id=raid-noise-decoy-v1`；`plan_version=RL-RAID-NOISE-DECOY-PERF-v2`；`candidate_id=RL-RAID-NOISE-DECOY-PERF-v2-local-e970acbc3d71`；`state=local_verified_waiting_remote_ci`；`accepted_candidate_id=null`。
+- 仅新改`src/enemy_squad.cpp`和`tests/test_enemy_squad.cpp`。相邻格信息只在本次调用组织成连续区间，按原输入索引合并候选；不保存跨帧引用，不改攻击名额、预约、轮换、角色、分离参数或活动策略。v1原5路径源码不变。
+- 新增3项独立全量邻居对照/边界/连续成员变化检查；分离方向逐浮点位比较、候选计数一致，攻击权限和角色维持原合同。窗口准星、菜单、搜尸、视野、手电电池、近战和地图权限文件均未修改。
+- 全目标windows-debug构建成功，完整CTest2105/2105、专项118/118通过；原2102项逐名保留。原32/100敌人、220障碍、60Hz、每阶段150有效样本和3ms不变。29张既有位图与v1逐字节一致。
+- 本地100敌人发声P95 1.1865ms、返回0.8727ms；远端结果尚待本轮CI确认。
+- 基线`f5cf32396ad8c17b2109967b04be8d2380d7a9a2`（同一任务已验收v1），main`5eee3fa23f15f0674b87b04776d56850193e6692`；分支`codex/raid-noise-decoy-perf-v1`、PR176。本次后续提交只含2个源码/测试文件及本任务3份文档；CURRENT_STATE只暂存当前块，其他历史不夹带。
+- 源码清单SHA256 `e970acbc3d7130a68cbd7721032f0a0438085a6790f11ef1a5ffcb7c79e25707`，含v1的5路径及v2的2路径；程序SHA256 `e34ba880985536de2066a18d39bc963e77eea2eb610835f764bdac6026c719d3`，路径`E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011\build\windows-debug\Project_Raidline.exe`。程序和源码副本已冻结。清单使用工作区原字节；Git文本按LF提交，规范化行尾后逐文件一致，原工作区CRLF保留。
+
+证据目录：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-perf-v2-20261017`。`freeze.json`绑定源码/程序；`verification.json`、全量和专项日志记录本地结果；准确CI结果另行保存。原v1交付证据在`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-perf-delivery-20261017`，其首轮Windows失败完整保留；没有重跑旧CI。策划此前只读回复发生在v2批准前，不构成批准。
+
+原目录、原分支、其他脏文件和CURRENT_STATE历史保持原字节。v1程序备份`v1-accepted-program.exe`，新候选副本`candidate-program.exe`；未启动游戏、操作真实存档或下一项开发。下方均为历史，v2提案中的“待批准”描述本次用户答复前状态。
+<!-- decoy-perf-v2:end -->
+
+<!-- decoy-perf-delivery:begin -->
+## 性能修复v1交付记录（v2实施前）
+
+用户于2026-10-17明确指示：“声响诱饵性能修复 v1 复验通过，请完成提交、推送和合并。” 本轮交付已复验候选 **c43f44cfa92e**。用户复验结论保留。必要远端检查未通过，不能记为交付完成；不放宽3ms门槛、不循环重试、不修改已验收候选。实际失败与后续方案另行记录。
+
+- `task_id=raid-noise-decoy-v1`；`plan_version=RL-RAID-NOISE-DECOY-PERF-v1`；`candidate_id=RL-RAID-NOISE-DECOY-PERF-v1-local-c43f44cfa92e`；`accepted_candidate_id=RL-RAID-NOISE-DECOY-PERF-v1-local-c43f44cfa92e`；`state=accepted_delivery_blocked`。
+- 功能提交`f5cf32396ad8c17b2109967b04be8d2380d7a9a2`，分支`codex/raid-noise-decoy-perf-v1`，基线`5eee3fa23f15f0674b87b04776d56850193e6692`。仅6个获准路径：3个已验收源码/测试文件和本任务3份文档；CURRENT_STATE只提交当前任务块。
+- 尚未合并。
+- 准确状态及失败日志见本证据目录；尚不能记为交付完成。完整run/job日志、测试数量与SHA256在`pr-ci-evidence.json`和`merge-ci-evidence.json`（后者成功时生成）。
+- 原玩法、32/100敌人、220道障碍、60Hz、每阶段150有效样本和3ms均保留。已验收5路径清单和Debug程序逐字节不变，桌面入口保持同一程序。
+- 原目录分支、HEAD、index、两个目录的无关改动和CURRENT_STATE历史保留；原开发分支保留。未启动游戏、操作真实存档、修改信任/权限或开始下一项开发。不为CI状态追加记账提交。
+
+证据目录：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-perf-delivery-20261017`。`commit.json`、`merge-verified.json`、CI日志和`final-protection.json`分别记录准确提交、普通合并树、运行结果与保护核对。回退可撤销本性能提交，不撤销已验收的诱饵玩法；本候选程序备份为本目录`accepted-program.exe`，修复前程序在实施证据目录`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-perf-20261017\accepted-program.exe`。下方均为历史实施/计划记录，其中“待复验”“待批准”描述当时状态。
+### 本轮未合并的具体原因
+
+[PR #176](https://github.com/Disthinker/Project-Raidline/pull/176)已推送，提交`f5cf32396ad8c17b2109967b04be8d2380d7a9a2`。Windows首轮2101/2102通过，100敌人发声P95 **3.2204ms > 3ms**；Ubuntu2102/2102通过。原基线main仍为`5eee3fa23f15f0674b87b04776d56850193e6692`。已验收结论保留，当前为`accepted_delivery_blocked`，未合并、未重跑、未修改候选。完整日志在本证据目录`pr-ci-failure.json`及两份job日志。
+
+### 待批准方案：RL-RAID-NOISE-DECOY-PERF-v2
+
+**目标。** 保留全部已验收玩法及3ms门槛，继续降低100敌人发声帧耗时。本方案尚未获批，未修改游戏代码。
+
+**本次已确认。** PR176准确提交`f5cf32396ad8c17b2109967b04be8d2380d7a9a2`的首轮CI中，Ubuntu2102/2102通过；Windows2101/2102，唯一失败为100敌人发声阶段P95 **3.2204ms**，150有效样本、原门槛3ms。32敌人及返回阶段未触发计时失败。提交已推送，**未合并**，没有重跑失败CI。
+
+**进一步定位。** 在支持目录复制当前源码，用同一MSVC Debug参数、同一真实世界测试作隔离计时，没有改生产库或程序。本地100敌人分段平均值：敌群协同`decide`约 **1.247ms**，诱饵听觉约 **0.201ms**，导航接线/查询约0.032ms，移动碰撞约0.339ms。前一轮把快照和协同合计为约1.27ms，第二轮单独测到`decide`约1.247ms，确认该本地热点主要来自共享敌群模块。这些是本地平均值，**不是Windows CI的分段结果**；尚未验证v2效果。
+
+`src/enemy_squad.cpp`目前每次构建按格子的hash容器，并为每名敌人收集邻格列表、排序，再依输入顺序累计分离向量。原v1批准范围不包含该共享文件，且明确要求“若主要成本不在下表限定路径或需要改变玩法/共享AI策略，停止扩展并报告，不自行扩大方案”。因此本次只记录方案，等待新的明确批准。
+
+**获批后的具体修改。**
+
+1. 仅在`src/enemy_squad.cpp`替换邻居查询的临时组织方式：将有效成员按格子和原输入序号放入连续缓冲，为每格记录连续区间；查询相邻9格时按原输入序号合并区间，省去每名敌人的候选拷贝和完整排序。缓冲只属于本次调用，不保留跨帧敌人引用。
+2. 保持邻居候选集合、遍历/浮点累加顺序、计数器、分离半径/权重完全一致。攻击名额、预约、轮换游标、角色、支援侧及死亡/移除事实不改；不改变Enemy、EnemyAi、导航预算、碰撞或活动策略。v1已验收的三个源码/测试改动作为同一任务的明确前置，保持不变。
+3. 在`tests/test_enemy_squad.cpp`增加独立朴素邻居对照，以输入顺序全量扫描作为参照；逐项比较分离方向、候选计数，并覆盖负坐标、格边界、重叠、稀疏/密集、非法坐标、死亡/增删及连续更新。既有攻击名额和角色回归继续保留。无需改头文件、存档或资源，也不新增框架。
+
+**允许的文件。** 游戏代码仅`src/enemy_squad.cpp`；回归仅`tests/test_enemy_squad.cpp`；记录仍使用本任务三份文档。其他源文件，尤其原性能测试负载、门槛和调度均不改。若需要再扩大范围，先报告，不实施。
+
+**检查与交付方式，需要本次明确授权。** 获批后连续完成Windows Debug全目标构建、敌群/生命周期/活动及诱饵专项、全注册CTest和原32/100敌人、220障碍、60Hz、每阶段150有效样本的3ms检查。为避免正常游玩复验后才发现云端性能问题，建议本次**允许复验前在现有性能分支提交、推送v2，仅用于PR176准确提交的双平台CI**。双平台CI成功后冻结新候选与程序，提供简短正常游玩复验；**新候选复验前不合并**。CI失败保留证据，不放宽门槛或循环重试。
+
+**分支与回退。** 沿用`codex/raid-noise-decoy-perf-v1`和PR176，以已验收冻结提交`f5cf32396ad8c17b2109967b04be8d2380d7a9a2`作为同一性能任务的显式前置，不引入其他未合并内容。原候选c43f44cfa92e及程序备份保留；v2会有新指纹。回退仅撤销v2两个文件和新构建，不撤销v1或诱饵玩法，不覆盖其他修改、不操作真实存档或启动游戏。
+
+`pending_fix_version=RL-RAID-NOISE-DECOY-PERF-v2`；`pending_fix_state=waiting_plan_approval`；`fix_approval_source=null`；`pre_acceptance_ci_push_authorized=false`。只有用户明确同意上述方案后，才实施与执行新提交/推送；当前交付授权只用于已复验v1。
+
+<!-- decoy-perf-delivery:end -->
+
+<!-- decoy-perf:begin -->
+## 性能修复实施记录（复验前）
+
+候选 **c43f44cfa92e** 已完成。改为在同次发声中收集一次附近障碍，再逐条判断声音是否被遮挡；同时减少调查接线中的重复读取。原玩法、查询判定和3ms门槛保留。请从桌面 **Project Raidline Debug** 进入，按[复验清单](../../acceptance/raid-noise-decoy-v1.md)正常游玩。
+
+- Windows Debug全目标构建成功；诱饵专项 **47/47**、完整注册CTest **2102/2102** 通过。
+- 当前状态 `waiting_human_acceptance`。本候选尚无人工验收；没有追加提交、推送、PR或合并，没有启动游戏、操作真实存档或下一项开发。
+- 原功能已通过PR175合并；该合并提交的Windows CI失败记录仍保留。本修复仅完成本地验证，新的双平台CI待获验收并授权交付后执行，不能把本地通过记为main CI已恢复。
+
+### 批准与候选身份
+
+真实批准原文：“同意 RL-RAID-NOISE-DECOY-PERF-v1，请按方案修复，保留已验收的玩法和3ms性能门槛，完成后提供新候选和复验清单，暂不追加提交、推送或合并。”
+
+`task_id=raid-noise-decoy-v1`；`plan_version=RL-RAID-NOISE-DECOY-PERF-v1`；`candidate_id=RL-RAID-NOISE-DECOY-PERF-v1-local-c43f44cfa92e`；`accepted_candidate_id=null`；`acceptance_source=null`。
+
+- 基线及当前HEAD：`5eee3fa23f15f0674b87b04776d56850193e6692`，原功能已合并main；分支`codex/raid-noise-decoy-perf-v1`。本修复源码仍未提交，须用下方清单和程序指纹识别。
+- 实际开发目录：`E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011`。只修改`src/raid_noise_decoy_runtime.cpp`、`src/gameplay_world.cpp`和`tests/test_noise_decoy.cpp`；获批范围中的另两个源码文件不变。原工作区分支、HEAD、index和旧修改保留。
+- 源码清单SHA256：`c43f44cfa92ec1c57a784232bb5f7e5ed2db55985028eca7f5626216647f48b1`。格式`raidline-scoped-candidate-v1`，包含基线和获批5路径的逐文件SHA256；按JSON排序键、紧凑分隔符编码计算。完整内容在证据目录`candidate.json`。
+- 程序：`E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011\build\windows-debug\Project_Raidline.exe`；SHA256：`558c62efdd39e6eebd63c962ba0548db464b52b99dc24d9a74fffe7444d0e083`。桌面快捷方式目标与工作目录保持此构建位置，无启动参数；说明更新为新候选待验收。
+
+### 修改与保持范围
+
+| 本次修改 | 保持的约束 |
+| --- | --- |
+| 发声时按声源收集一次附近静态障碍，将边界放入本次调用的局部缓冲；每条声音射线先剔除不相交边界，再调用原有精确遮挡函数。 | 没有跨帧缓存、敌人引用或第二套几何；不扩大500声音半径，不改变直线遮挡和同空间规则。 |
+| 调查接线复用同一敌人附属状态和“是否调查中”的查询；没有绑定时省去必定为空的调查目标查询。 | 不改发现、追击、旧记忆、岗位/巡逻恢复、导航刷新预算或稳定ID生命周期。 |
+| 新增原空间索引的听觉结果对照和每次脉冲读取当前几何检查；性能断言标注发声/返回阶段。 | 保留32/100敌人、220道真实障碍、60Hz、160轮含10轮预热、每阶段150有效样本和3ms。没有删测试或更改CMake调度。 |
+
+窗口准星、菜单、搜尸、视野、手电电池、快速近战、地图权限、内容/经济、输入、存档/schema及美术音频文件均未修改。线性清理实测占比很小，本轮没有为其增加索引或持久缓存。
+
+### 检查与证据
+
+| 检查 | 结果 |
+| --- | --- |
+| 分段诊断 | 独立MSVC Debug诊断构建确认重复遮挡查询是诱饵增量热点。逐格重新查索引和逐格筛选的试验更慢，均已排除。诊断副本仅在支持目录，不进入候选程序。 |
+| 等价性 | 3种网格尺寸×6个声源位置，含确定性生成的220道障碍、无资格/非法听众、半径和墙角边界、墙内和地图边界；结果、声源、空间、落点及原岗位逐项与原索引比较。切换几何和声源后无旧缓存残留。 |
+| Windows构建 | x64 VS Developer Shell、UTF-8、windows-debug/Ninja；全目标完成。`build.log`。 |
+| 专项和全量 | `focused.xml/.log`为47/47；`full.xml/.log`为2102/2102。与原2100项逐名核对，无删除、跳过、重复；只新增2项等价性检查。原独占计时调度保留。 |
+| 已验收表现 | 既有视野/手电、诱饵、近战位图与此前已验收输出逐字节一致；旧观察、手电和近战计时保留原门槛并通过。`verification.json`含逐图和计时证据。 |
+| 原工作区保护 | 两个目录全文件清单核对，未授权路径与旧改动逐字节不变；原目录HEAD、两个index和原分支引用保留。开发目录按获批方案切到性能分支后，HEAD仍停留在main基线。CURRENT_STATE只更新当前任务块，任务原历史保留。`final-protection.json`。 |
+
+下表为完整CTest中的真实世界更新时间P95，单位ms；每格150有效样本，不是游戏整体帧耗时。
+
+| 敌人数 | 发声 | 声源结束与返回 |
+| --- | ---: | ---: |
+| 32 | 0.7743 | 0.6488 |
+| 100 | 2.1923 | 1.8567 |
+
+全部低于 **3ms**。专项批次的独立结果也保留在`verification.json`。本地结果不证明GitHub Windows机器已经达标；本轮按要求未推送，远端尚未验证。
+
+证据目录：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-perf-20261017`。含批准前快照、隔离诊断、构建、测试、原程序备份、新候选及保护报告。回退仅撤销本轮3路径与构建，原已验收程序备份为`accepted-program.exe`；不回退原诱饵功能、不覆盖其他修改或真实存档。
+
+下方“原功能交付记录”和“待批准方案”均为历史；本节记录本次真实批准与当前待复验状态。
+<!-- decoy-perf:end -->
+
 <!-- decoy-delivery:begin -->
-## 当前：用户验收通过，推送与合并中
+## 原功能交付记录（性能修复前）
 
-2026-10-17，用户明确指示：“验收通过，请推送然后合并”。本轮只交付已冻结候选 **c0c9fc9a4304**，沿用分支推送、准确PR提交双平台CI、普通合并及合并提交双平台CI的交付方式。
+用户于2026-10-17明确指示：“验收通过，请推送然后合并”。已验收候选 **c0c9fc9a4304** 已通过[PR #175](https://github.com/Disthinker/Project-Raidline/pull/175)普通合并到main，合并提交`5eee3fa23f15f0674b87b04776d56850193e6692`。合并树与已检查的PR head一致；合并后的Windows性能门槛未通过，**尚不能记为交付检查全部完成**。
 
-- `task_id=raid-noise-decoy-v1`；`plan_version=RL-RAID-NOISE-DECOY-v1`；`candidate_id=RL-RAID-NOISE-DECOY-v1-local-c0c9fc9a4304`；`state=accepted_delivery_in_progress`。
-- 最新fetch确认main仍为`05408abbb0edb042e2a15ba4ad445e41a7bda66e`；前置快速近战PR #174已合并，其准确head及合并提交双平台CI成功。没有引入未验收依赖。
-- 原32个候选源码/数据/测试路径和Debug程序指纹核对未变。本地全注册CTest2100项通过；这与本轮用户正常游玩验收分别记录。
-- 提交仅含32个候选路径及本任务三份文档。CURRENT_STATE仅暂存本任务状态块，其他历史修改和所有无关脏文件保留。
-- 原工作区、已验收程序及回滚副本保留。不启动游戏，不操作真实存档，不改信任/权限/模型，不开始下一项开发。
+- 功能提交`357a528644b5a89b508e294d7557a73880b9dbf0`；测试调度补正`6b67e5e3830e2802ac6ad34eaab094eafbda5664`。31个玩法、内容和测试源码路径及已验收Debug程序不变，仅补齐CMake中NoiseDecoyTest的独占运行配置。
+- PR准确head：Ubuntu2100/2100通过；Windows首轮2099/2100、P95为3.5415ms，源码不变重试后2100/2100通过。补正前首轮两端的计时失败也保留。
+- 合并提交CI38996742282：Ubuntu2100/2100通过；Windows2099/2100通过，唯一失败是100敌人密集场景计时P95 **3.4064ms**，原门槛 **3ms**。没有放宽门槛，也没有继续反复重试。
+- 原工作区旧分支、HEAD、index、旧修改及历史正文保留；桌面“Project Raidline Debug”仍为同一已验收程序。未启动游戏、操作真实存档、实施运行时优化或下一项内容任务。
 
-准确提交、推送、PR、合并树和CI证据保存在`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-delivery-20261017`。本提交在main可达且准确提交及合并提交双平台CI成功后才是已交付；不为CI状态追加记账提交。下方实施和计划均为历史，其中“待验收”“待批准”描述当时状态。
+`task_id=raid-noise-decoy-v1`；`plan_version=RL-RAID-NOISE-DECOY-v1`；`candidate_id=RL-RAID-NOISE-DECOY-v1-local-c0c9fc9a4304`；`accepted_candidate_id=RL-RAID-NOISE-DECOY-v1-local-c0c9fc9a4304`；`state=merged_ci_blocked`。
+
+本轮用户已批准并验收的是原功能候选和推送/合并；下方性能修复没有获批。`pending_fix_version=RL-RAID-NOISE-DECOY-PERF-v1`；`pending_fix_state=waiting_plan_approval`；`fix_approval_source=null`。不把现有合并授权当作新修复的实施批准。
+
+### 待批准方案：RL-RAID-NOISE-DECOY-PERF-v1
+
+**目标。** 保留当前玩法和3ms门槛，减少诱饵发声与返回岗位时的重复计算，让Windows密集场景检查可靠达标。完成后提供新候选和简短复验清单，暂不追加提交、推送或合并。
+
+**已确认与尚未确认。** 合并后的失败已在Windows CI复现；测试独占运行配置已补齐，Ubuntu通过，Windows仍有失败。不能把原因全部归于测试并行。源码确认存在按每个调查ID线性扫描存活ID、每帧/脉冲临时vector分配及多次调查查找；尚未证实哪项是主要耗时，需要先分段测量。
+
+**获批后连续完成以下工作：**
+
+1. 在隔离诊断构建中分开测量发声、清理、调查目标和导航接线；明确失败来自发声还是返回阶段。保持现有真实世界更新和场景，不以空闲帧替代。
+2. 按实测仅优化热点：用稳定ID索引减少重复存活扫描，复用临时缓冲，减少同帧重复调查查找。保持敌人死亡/移除、空间切换、声源替换和岗位恢复事实完全一致；不保存跨结构变化的敌人引用。
+3. 若主要成本不在下表限定路径或需要改变玩法/共享AI策略，停止扩展并报告，不自行扩大方案。
+4. 重建所有受影响目标，完成专项、完整CTest及性能回归；冻结新源码/程序指纹，提供正常游玩的简短复验清单，等待用户验收。
+
+| 已检查路径 | 允许的修改 |
+| --- | --- |
+| `src/raid_noise_decoy_runtime.h/.cpp` | 稳定ID清理、临时缓冲和重复查询的等价优化；临时状态仍不进存档。 |
+| `src/gameplay_world_noise_decoy.cpp` | 同帧存活/听众事实收集，减少重复工作，不改变资格和传播条件。 |
+| `src/gameplay_world.cpp` | 仅减少调查接线中的重复查询；不改发现、追击、巡逻和导航刷新预算。 |
+| `tests/test_noise_decoy.cpp` | 增加发声/返回的明确诊断和等价性断言；不删除用例、不削减工作负载或放宽3ms。 |
+
+**保持不变。** 4选择、左键投掷、右键/Esc取消；450投掷范围、0.5秒飞行、500声响半径、6次脉冲、单声源；普通初始敌人的响应资格、视觉发现优先、追击不解除、直线遮挡与同空间限制。窗口准星、菜单、搜尸、视野、手电电池、快速近战和M地图权限全部保留。无新资源、UI、经济、存档/schema或损失政策修改；不改Enemy/EnemyAi及共享导航策略。
+
+**验证与边界。** 原32/100敌人、220道真实遮挡、60Hz、每阶段150有效样本和3ms门槛全部保留；发声及返回都需通过。覆盖稳定ID删除、正常发现、旧记忆、巡逻恢复、重复/拒绝事务和旧已验收行为。Windows Debug全目标及完整注册CTest后提供新候选，自动检查不代替人类验收；新准确head与合并提交双平台CI留待新候选获验收并授权交付后办理。
+
+**分支与回退。** 获批后重新核验最新main，拟从当前合并基线`5eee3fa23f15f0674b87b04776d56850193e6692`建立`codex/raid-noise-decoy-perf-v1`，当前不切分支。只回退本次性能修复路径和新构建，不撤销已验收诱饵功能、不覆盖其他改动；当前程序备份在本交付证据目录`accepted-program.exe`。不操作真实存档。
+
+项目交付技能[Feature Slice Delivery](../../../.agents/skills/raidline-feature-slice-delivery/SKILL.md)明文要求：“New material edits require a new identity and acceptance.” 运行时优化将形成新候选；本次仅完成已批准的交付和只读修复方案，等待用户批准后再实施。
+
+### 证据
+
+证据目录：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-noise-decoy-delivery-20261017`。`commit.json`、`pr-ci-evidence.json`、`merge-verified.json`分别记录准确提交、PR通过结果、合并树与父提交；`merge-ci-failure.json`及两个原生日志记录合并后失败。网络EOF时改用原生GitHub接口读取实际job结果，未把查询失败当成CI结果。`scheduling.json`与旧日志保留补正和所有失败历史。
+
+### 策划同步
+
+原“策划线程”已只读确认已记录本项已验收、已合并与Windows性能检查受阻；未选择下一项、未批准或实施性能修复。请求`RL-NOISE-DECOY-20261017-MERGED-CI-BLOCKED-01`，task`raid-noise-decoy-v1`，version`RL-RAID-NOISE-DECOY-v1`，baseline`5eee3fa23f15f0674b87b04776d56850193e6692`四元组均匹配。
+
+目标线程`019feff4-477c-75c2-bf31-3f09ff1e3891`，turn`01a147db-8cdd-7151-9f8a-38ed1e597229`，message`msg_09394c523a164a07016ad2e8a16428819187601a779025d3a8`；状态`merged_ci_blocked_synced_readonly`。完整回复在本交付证据目录`planner-reply.json`。
+
+下方均为实施与方案历史，其中“待验收”“待批准”描述当时状态；原候选的人类验收不变。
 <!-- decoy-delivery:end -->
 
 <!-- decoy-implementation:begin -->
