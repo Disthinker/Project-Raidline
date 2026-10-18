@@ -61,7 +61,9 @@ struct InventoryPlan
     ProfileRevision revision{};
 };
 
-[[nodiscard]] ProfileValidationResult validateInventoryAssetGraph(const AssetRegistry &assets, const ContentRegistry &content);
+[[nodiscard]] ProfileValidationResult validateInventoryAssetGraph(
+    const AssetRegistry &assets, const ContentRegistry &content,
+    std::uint32_t stashLayoutVersion = 1);
 
 struct RaidSceneContainerAccess
 {

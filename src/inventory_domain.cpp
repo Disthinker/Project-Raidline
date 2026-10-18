@@ -283,6 +283,14 @@ InventoryReceipt applyMove(
         std::get_if<StoredAssetLocation>(&source->location);
     const bool sourceInIntake = sourceStored != nullptr &&
         sourceStored->container == ProfileContainerId::baseIntake();
+    const bool sourceInLegacyOverflow =
+        assetIsLegacyOverflowAsset(candidate, command.instanceId);
+    if (command.destination.container.kind == ProfileContainerKind::LegacyOverflow ||
+        (candidate.pendingRaid && assetIsLegacyOverflowAsset(candidate, command.instanceId)) ||
+        (command.destination.container.kind == ProfileContainerKind::AssetCompartment &&
+         assetIsLegacyOverflowAsset(candidate, command.destination.container.ownerAssetId)))
+        return failure(DomainErrorCode::IllegalDestination,
+                       "legacy items must be withdrawn before use", candidate.revision);
     if (command.destination.container ==
             ProfileContainerId::baseIntake() &&
         !sourceInIntake)
@@ -314,7 +322,10 @@ InventoryReceipt applyMove(
         command.destination.origin.y < 0 ||
         footprint.width <= 0 || footprint.height <= 0 ||
         command.destination.origin.x > destinationSize.width - footprint.width ||
-        command.destination.origin.y > destinationSize.height - footprint.height)
+        command.destination.origin.y > destinationSize.height - footprint.height ||
+        (command.destination.container.kind == ProfileContainerKind::Stash &&
+         candidate.stashLayoutVersion == 1 &&
+         !stashFootprintFitsPage(command.destination.origin, footprint)))
     {
         return failure(
             DomainErrorCode::Capacity,
@@ -345,7 +356,7 @@ InventoryReceipt applyMove(
         definition,
         command.destinationOrientation,
         source->instanceId);
-    if (sourceInIntake && !overlaps.empty())
+    if ((sourceInIntake || sourceInLegacyOverflow) && !overlaps.empty())
     {
         const AssetRecord *target = overlaps.size() == 1
             ? candidate.assets.find(*overlaps.begin())
@@ -358,7 +369,8 @@ InventoryReceipt applyMove(
         {
             return failure(
                 DomainErrorCode::IllegalDestination,
-                "pending allocation cannot swap an asset back into intake",
+                sourceInLegacyOverflow ? "legacy items must be withdrawn before use"
+                    : "pending allocation cannot swap an asset back into intake",
                 candidate.revision);
         }
     }
@@ -498,11 +510,14 @@ InventoryReceipt applyEquip(
     if (const auto *stored =
             std::get_if<StoredAssetLocation>(&source->location);
         stored != nullptr &&
-        stored->container == ProfileContainerId::baseIntake())
+        (stored->container == ProfileContainerId::baseIntake() ||
+         assetIsLegacyOverflowAsset(candidate, command.instanceId)))
     {
         return failure(
             DomainErrorCode::IllegalDestination,
-            "pending allocation must be kept before it can be equipped",
+            assetIsLegacyOverflowAsset(candidate, command.instanceId)
+                ? "legacy items must be withdrawn before use"
+                : "pending allocation must be kept before it can be equipped",
             candidate.revision);
     }
     if (!itemCanEquipInSlot(definition, command.slot))
@@ -579,9 +594,12 @@ InventoryReceipt apply(
 }
 }
 
-ProfileValidationResult validateInventoryAssetGraph(const AssetRegistry &assets, const ContentRegistry &content)
+ProfileValidationResult validateInventoryAssetGraph(
+    const AssetRegistry &assets, const ContentRegistry &content,
+    std::uint32_t stashLayoutVersion)
 {
     ProfileState candidate;
+    candidate.stashLayoutVersion = stashLayoutVersion;
     candidate.assets = assets;
     InventoryReceipt receipt;
     const bool valid = validateCandidate(candidate, content, receipt, false);
@@ -634,6 +652,7 @@ namespace
 bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &command, const RaidSceneContainerAccess *access)
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
+    if (profile.pendingRaid && assetIsLegacyOverflowAsset(profile, sourceId)) return false;
     const auto sourceRoot = raidSceneContainerRoot(profile, sourceId);
     std::optional<AssetInstanceId> destinationRoot;
     if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
@@ -660,6 +679,7 @@ InventoryPlan queryInventory(
     if (!sceneCommandAllowed(profile, command, sceneAccess))
         return {false, DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision};
     ProfileState candidate;
+    candidate.stashLayoutVersion = profile.stashLayoutVersion;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
     const InventoryReceipt receipt = apply(

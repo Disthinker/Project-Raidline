@@ -89,8 +89,10 @@ TEST(WeaponComponentsTest, SchemaRoundTripLegacyDefaultsAndInvalidGraphs)
     const auto loaded = deserializeProfileEnvelope(serializeProfileEnvelope(profile, content().contentVersion()), content());
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    profile.stashLayoutVersion = 0U;
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content().contentVersion(), 48)), std::invalid_argument);
     auto old = makeNewPublishedProfile("legacy", content());
+    old.stashLayoutVersion = 0U;
     for (const auto &definition : {barrel, rail, grip}) static_cast<void>(old.assets.erase(find(old, definition)));
     auto migrated = deserializeProfileEnvelope(serializeProfileEnvelope(old, "hospital-raid-theme-content-62", 48), content());
     ASSERT_TRUE(migrated.profile) << migrated.message;

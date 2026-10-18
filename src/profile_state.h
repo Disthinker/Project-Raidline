@@ -30,7 +30,8 @@ enum class ProfileContainerKind
 {
     Stash,
     BaseIntake,
-    AssetCompartment
+    AssetCompartment,
+    LegacyOverflow
 };
 
 struct ProfileContainerId
@@ -41,6 +42,7 @@ struct ProfileContainerId
 
     [[nodiscard]] static ProfileContainerId stash() noexcept;
     [[nodiscard]] static ProfileContainerId baseIntake() noexcept;
+    [[nodiscard]] static ProfileContainerId legacyOverflow() noexcept;
     [[nodiscard]] static ProfileContainerId compartment(
         AssetInstanceId ownerAssetId,
         std::uint32_t compartmentIndex) noexcept;
@@ -1098,6 +1100,8 @@ struct LastRaidResult
 
 struct ProfileState
 {
+    // 0 is the continuous warehouse used by schema <= 54; 1 has six 8x8 pages.
+    std::uint32_t stashLayoutVersion{1};
     HomeFoundingState homeFounding;
     std::string profileId;
     ProfileRevision revision{1};
@@ -1143,6 +1147,15 @@ struct ProfileValidationResult
     bool valid{};
     std::string message;
 };
+
+[[nodiscard]] bool stashFootprintFitsPage(
+    GridPosition origin, InventoryFootprint footprint) noexcept;
+
+[[nodiscard]] ProfileValidationResult migrateLegacyStashPages(
+    ProfileState &profile, const ContentRegistry &content);
+
+[[nodiscard]] bool assetIsLegacyOverflowAsset(
+    const ProfileState &profile, AssetInstanceId instanceId) noexcept;
 
 struct WarehouseCatalogGrantReceipt
 {

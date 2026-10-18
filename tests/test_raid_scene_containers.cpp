@@ -88,6 +88,7 @@ TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcro
             EXPECT_EQ(legacy.pendingRaid->loot[i].quantity,a.pendingRaid->loot[i].quantity);
             EXPECT_EQ(legacy.pendingRaid->loot[i].definitionId,a.pendingRaid->loot[i].definitionId);
         }
+        legacy.stashLayoutVersion=0;
         const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(legacy,content.contentVersion(),50),content);
         ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_TRUE(boxes(*loaded.profile).empty());
         EXPECT_FALSE(loaded.profile->pendingRaid->startingAssets);
@@ -185,7 +186,8 @@ TEST_F(RaidSceneContainerTest, Schema51RoundtripAndAbnormalRollbackRestoreExactO
     take(firstContent()); ASSERT_TRUE(move(owned,ProfileContainerId::compartment(box,0),{8,7}).succeeded);
     auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(p),profileStateFingerprint(*loaded.profile));
-    EXPECT_THROW(serializeProfileEnvelope(p,content.contentVersion(),50),std::invalid_argument);
+    auto legacy=p;legacy.stashLayoutVersion=0;
+    EXPECT_THROW(serializeProfileEnvelope(legacy,content.contentVersion(),50),std::invalid_argument);
     const auto r=rollbackPendingRaidToBase(*loaded.profile,content); ASSERT_TRUE(r.succeeded)<<r.message;
     EXPECT_EQ(assetHash(loaded.profile->assets),baseline); EXPECT_TRUE(boxes(*loaded.profile).empty());
     EXPECT_TRUE(validateProfileState(*loaded.profile,content).valid);

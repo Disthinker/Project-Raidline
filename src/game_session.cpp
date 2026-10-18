@@ -856,13 +856,7 @@ bool GameSession::finishFirstRaidHints()
 
 bool GameSession::continueProfile()
 {
-    weaponLightBindingRevision_=0; weaponLightBinding_={};
-    lightKeyPending_=false; lightKeyHeldSeconds_=0;
     if (!drainBaseDailyCheckpoint()) return false;
-    baseDefenseWriter_.reset();
-    baseDefenseWorld_ = nullptr;
-    baseDefenseSaveBlocked_ = false;
-    pendingBaseDefenseEnd_.reset();
     if (!saveRepository_.has_value())
     {
         persistenceMessage_ = "persistence is not configured";
@@ -876,7 +870,7 @@ bool GameSession::continueProfile()
         return false;
     }
     ProfileState candidate = std::move(*result.profile);
-    recoveredAbandonedRaid_ = false;
+    const bool requiresStashMigration = candidate.stashLayoutVersion == 0;
     bool profileRequiresSave{};
     bool recoveredPendingRaid{};
     if (candidate.pendingRaid.has_value())
@@ -891,6 +885,24 @@ bool GameSession::continueProfile()
         }
         profileRequiresSave = true;
         recoveredPendingRaid = true;
+    }
+    if (requiresStashMigration)
+    {
+        const ProfileValidationResult migration = migrateLegacyStashPages(
+            candidate, publishedContentRegistry());
+        if (!migration.valid)
+        {
+            persistenceMessage_ = migration.message;
+            return false;
+        }
+        const SaveWriteResult preserved =
+            saveRepository_->preserveStashMigrationSources(result.status);
+        if (!preserved.succeeded)
+        {
+            persistenceMessage_ = preserved.message;
+            return false;
+        }
+        profileRequiresSave = true;
     }
     const bool previousDevelopmentCatalog =
         candidate.committedTransactions.contains(
@@ -928,6 +940,12 @@ bool GameSession::continueProfile()
         }
         persistenceMessage_ = saved.message;
     }
+    weaponLightBindingRevision_=0; weaponLightBinding_={};
+    lightKeyPending_=false; lightKeyHeldSeconds_=0;
+    baseDefenseWriter_.reset();
+    baseDefenseWorld_ = nullptr;
+    baseDefenseSaveBlocked_ = false;
+    pendingBaseDefenseEnd_.reset();
     profile_ = std::move(candidate);
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();

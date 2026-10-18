@@ -222,6 +222,11 @@ bool placementFits(
         return false;
     }
 
+    if (container.kind == ProfileContainerKind::Stash &&
+        profile.stashLayoutVersion == 1 &&
+        !stashFootprintFitsPage(origin, footprint))
+        return false;
+
     for (const AssetRecord *other : assetsInContainer(profile, container))
     {
         if (ignoredAsset.has_value() &&
@@ -426,6 +431,11 @@ ProfileContainerId ProfileContainerId::stash() noexcept
 ProfileContainerId ProfileContainerId::baseIntake() noexcept
 {
     return ProfileContainerId{ProfileContainerKind::BaseIntake, 0, 0};
+}
+
+ProfileContainerId ProfileContainerId::legacyOverflow() noexcept
+{
+    return ProfileContainerId{ProfileContainerKind::LegacyOverflow, 0, 0};
 }
 
 ProfileContainerId ProfileContainerId::compartment(
@@ -696,6 +706,15 @@ InventoryGridSize profileContainerSize(
     const ContentRegistry &content,
     ProfileContainerId container)
 {
+    if (container.kind != ProfileContainerKind::AssetCompartment &&
+        (container.ownerAssetId != 0 || container.compartmentIndex != 0))
+        throw std::out_of_range{"root container identity is invalid"};
+    if (container.kind == ProfileContainerKind::LegacyOverflow)
+    {
+        if (profile.stashLayoutVersion != 1)
+            throw std::out_of_range{"legacy warehouse cannot contain migration overflow"};
+        return kStashSize;
+    }
     if (container.kind == ProfileContainerKind::Stash)
     {
         return kStashSize;
@@ -704,6 +723,8 @@ InventoryGridSize profileContainerSize(
     {
         return kBaseIntakeSize;
     }
+    if (container.kind != ProfileContainerKind::AssetCompartment)
+        throw std::out_of_range{"unknown container kind"};
     const AssetRecord *owner = profile.assets.find(container.ownerAssetId);
     if (owner == nullptr)
     {
@@ -1048,6 +1069,93 @@ std::optional<AssetInstanceId> profileAssetAtCell(
     return std::nullopt;
 }
 
+bool stashFootprintFitsPage(GridPosition origin, InventoryFootprint footprint) noexcept
+{
+    return origin.x >= 0 && origin.y >= 0 &&
+        origin.x < 24 && origin.y < 16 &&
+        footprint.width > 0 && footprint.height > 0 &&
+        footprint.width <= 8 - origin.x % 8 &&
+        footprint.height <= 8 - origin.y % 8;
+}
+
+bool assetIsLegacyOverflowAsset(
+    const ProfileState &profile, AssetInstanceId instanceId) noexcept
+{
+    // Bound the walk without allocating from this noexcept query.
+    for (std::size_t depth = 0; depth <= profile.assets.records().size(); ++depth)
+    {
+        const auto *asset = profile.assets.find(instanceId);
+        if (!asset) return false;
+        if (const auto *stored = std::get_if<StoredAssetLocation>(&asset->location))
+        {
+            if (stored->container.kind == ProfileContainerKind::LegacyOverflow) return true;
+            if (stored->container.kind != ProfileContainerKind::AssetCompartment) return false;
+            instanceId = stored->container.ownerAssetId;
+        }
+        else if (const auto *installed = std::get_if<InstalledMagazineLocation>(&asset->location))
+            instanceId = installed->weaponAssetId;
+        else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset->location))
+            instanceId = component->weaponAssetId;
+        else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
+            instanceId = battery->deviceAssetId;
+        else return false;
+    }
+    return false;
+}
+
+ProfileValidationResult migrateLegacyStashPages(
+    ProfileState &profile, const ContentRegistry &content)
+{
+    if (profile.stashLayoutVersion == 1) return {true, {}};
+    if (profile.stashLayoutVersion != 0 || profile.pendingRaid ||
+        profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return {false, "warehouse migration requires a recovered legacy profile"};
+    const auto before = validateProfileState(profile, content);
+    if (!before.valid) return before;
+    ProfileState candidate = profile;
+    struct Relocation { AssetInstanceId id; GridPosition origin; };
+    std::vector<Relocation> crossed;
+    for (const auto &[id, asset] : candidate.assets.records())
+    {
+        const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
+        if (stored && stored->container == ProfileContainerId::stash() &&
+            !stashFootprintFitsPage(stored->origin,
+                inventoryFootprint(content.item(asset.definitionId), asset.orientation)))
+            crossed.push_back({id, stored->origin});
+    }
+    candidate.stashLayoutVersion = 1;
+    // Remove all crossed roots from placement consideration first. Original
+    // coordinates are nonoverlapping and remain a safe fallback in overflow.
+    for (const auto &move : crossed)
+        candidate.assets.findMutable(move.id)->location =
+            StoredAssetLocation{ProfileContainerId::legacyOverflow(), move.origin};
+    for (const auto &move : crossed)
+    {
+        auto *asset = candidate.assets.findMutable(move.id);
+        const auto &definition = content.item(asset->definitionId);
+        std::optional<GridPosition> destination;
+        const GridPosition pageOrigin{move.origin.x / 8 * 8, move.origin.y / 8 * 8};
+        for (int y = 0; y < 8 && !destination; ++y)
+            for (int x = 0; x < 8 && !destination; ++x)
+            {
+                GridPosition at{pageOrigin.x + x, pageOrigin.y + y};
+                if (profilePlacementFits(candidate, content, ProfileContainerId::stash(),
+                                         at, definition, asset->orientation, asset->instanceId))
+                    destination = at;
+            }
+        if (!destination)
+            destination = findFirstProfileFit(candidate, content, ProfileContainerId::stash(),
+                                              definition, asset->orientation, asset->instanceId);
+        if (destination)
+            asset->location = StoredAssetLocation{ProfileContainerId::stash(), *destination};
+    }
+    ++candidate.revision;
+    const auto after = validateProfileState(candidate, content);
+    if (!after.valid) return after;
+    profile = std::move(candidate);
+    return {true, {}};
+}
+
 std::optional<GridPosition> findFirstProfileFit(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -1058,8 +1166,25 @@ std::optional<GridPosition> findFirstProfileFit(
 {
     try
     {
+        // Migration overflow is never an automatic destination.
+        if (container.kind == ProfileContainerKind::LegacyOverflow)
+            return std::nullopt;
         const InventoryGridSize size =
             profileContainerSize(profile, content, container);
+        if (container.kind == ProfileContainerKind::Stash &&
+            profile.stashLayoutVersion == 1)
+        {
+            for (int page = 0; page < 6; ++page)
+                for (int y = 0; y < 8; ++y)
+                    for (int x = 0; x < 8; ++x)
+                    {
+                        GridPosition origin{(page % 3) * 8 + x, (page / 3) * 8 + y};
+                        if (placementFits(profile, content, container, origin,
+                                          definition, orientation, ignoredAsset))
+                            return origin;
+                    }
+            return std::nullopt;
+        }
         for (int y = 0; y < size.height; ++y)
         {
             for (int x = 0; x < size.width; ++x)
@@ -1115,6 +1240,8 @@ ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content)
 {
+    if (profile.stashLayoutVersion > 1)
+        return {false, "unsupported warehouse layout version"};
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
         return components;
     if (const auto devices = validateTacticalDevices(profile, content); !devices.valid) return devices;
@@ -2307,7 +2434,8 @@ ProfileValidationResult validateProfileState(
         if (raid.startingAssets)
         {
             if (sceneSpaces.size() != 2U) return {false, "Raid scene container snapshot is incomplete"};
-            const auto graph = validateInventoryAssetGraph(*raid.startingAssets, content);
+            const auto graph = validateInventoryAssetGraph(
+                *raid.startingAssets, content, profile.stashLayoutVersion);
             if (!graph.valid) return {false, "Raid scene rollback asset graph is invalid: " + graph.message};
             for (const auto &[id, asset] : raid.startingAssets->records())
             {
@@ -4482,6 +4610,7 @@ ProfileValidationResult validateProfileState(
 std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
 {
     std::uint64_t hash = 1469598103934665603ULL;
+    hashInteger(hash, profile.stashLayoutVersion);
     hashInteger(hash, profile.homeFounding.established ? 1U : 0U);
     hashInteger(hash, profile.homeFounding.hintsDismissed ? 1U : 0U);
     hashInteger(hash, profile.homeFounding.layoutVersion);
@@ -4954,6 +5083,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         if (raid.startingAssets)
         {
             ProfileState baseline;
+            baseline.stashLayoutVersion = profile.stashLayoutVersion;
             baseline.assets = *raid.startingAssets;
             hashInteger(hash, profileStateFingerprint(baseline));
         }

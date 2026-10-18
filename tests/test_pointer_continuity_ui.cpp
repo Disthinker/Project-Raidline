@@ -127,12 +127,12 @@ TEST_F(PointerContinuityUiTest, RaidInventoryDoesNotConsumeUiMotionOnClosingFram
 TEST_F(PointerContinuityUiTest, DetailsAndBackKeepUiCursorUntilReturningToWorld) {
     const auto before = A::aim(*app);
     key(SDL_SCANCODE_TAB); A::frame(*app); ASSERT_TRUE(A::inventory(*app));
-    moveUi({240, 110}); click({240, 110}, SDL_BUTTON_RIGHT); A::frame(*app);
-    expectPoint(cursor(), {240, 110});
-    moveUi({250, 130}); click({250, 130}); A::frame(*app); ASSERT_TRUE(A::details(*app));
-    expectPoint(cursor(), {250, 130});
+    moveUi({240, 150}); click({240, 150}, SDL_BUTTON_RIGHT); A::frame(*app);
+    expectPoint(cursor(), {240, 150});
+    moveUi({250, 170}); click({250, 170}); A::frame(*app); ASSERT_TRUE(A::details(*app));
+    expectPoint(cursor(), {250, 170});
     key(SDL_SCANCODE_ESCAPE); A::frame(*app); ASSERT_FALSE(A::details(*app));
-    ASSERT_TRUE(A::inventory(*app)); expectPoint(cursor(), {250, 130});
+    ASSERT_TRUE(A::inventory(*app)); expectPoint(cursor(), {250, 170});
     key(SDL_SCANCODE_TAB); A::frame(*app); A::frame(*app); expectPoint(A::aim(*app), before);
 }
 TEST_F(PointerContinuityUiTest, FocusReturnDoesNotFeedDesktopCursorIntoAim) {

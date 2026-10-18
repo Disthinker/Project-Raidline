@@ -329,7 +329,8 @@ void UiTextRenderer::renderBox(SDL_Renderer *renderer, const SDL_FRect &bounds,
                 static_cast<int>(std::floor(bounds.h))};
   if (hadClip) {
     SDL_Rect intersection{};
-    SDL_GetRectIntersection(&clip, &previous, &intersection);
+    if (!SDL_GetRectIntersection(&clip, &previous, &intersection))
+      return;
     clip = intersection;
   }
   SDL_SetRenderClipRect(renderer, &clip);

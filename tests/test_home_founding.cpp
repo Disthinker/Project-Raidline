@@ -92,6 +92,7 @@ TEST(HomeFoundingTest, RejectionsAreNonMutating) {
 
 TEST(HomeFoundingTest, LegacySaveKeepsBaseAndExactAssets) {
   auto profile = makeNewAlphaProfile("legacy-home", content);
+  profile.stashLayoutVersion = 0U;
   const auto text =
       serializeProfileEnvelope(profile, content.contentVersion(), 44);
   auto restored = deserializeProfileEnvelope(text, content);
@@ -254,6 +255,7 @@ TEST(HomeFoundingTest, FirstRaidAllOutcomesAndPendingRecoveryKeepChosenPlot) {
 
 TEST(HomeFoundingTest, LegacyPendingRaidRemainsFrozenAfterSchema44Load) {
   auto profile = makeNewAlphaProfile("legacy-pending", content);
+  profile.stashLayoutVersion = 0U;
   ASSERT_TRUE(
       executeDeploy(profile, content,
                     {"old", "old-settle", 101, MapDefinitionId{"map.v0.test"}},
@@ -415,6 +417,7 @@ TEST(HomeFoundingTest,
   EXPECT_FALSE(
       deserializeProfileEnvelope(text.substr(0, text.size() / 2), content)
           .profile);
+  profile.stashLayoutVersion = 0U;
   EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(
                    profile, content.contentVersion(), 44)),
                std::invalid_argument);

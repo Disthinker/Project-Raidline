@@ -140,8 +140,9 @@ TEST(WeaponLightTest, Schema53RoundTripLegacyAndMalformedGraphs) {
     auto p=ready(); on(p); auto b=binding(p); advanceWeaponLight(p,c(),b,true,501.123F);
     const auto json=serializeProfileEnvelope(p,c().contentVersion()); auto result=deserializeProfileEnvelope(json,c());
     ASSERT_TRUE(result.profile)<<result.message; EXPECT_EQ(profileStateFingerprint(p),profileStateFingerprint(*result.profile));
+    p.stashLayoutVersion=0;
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,c().contentVersion(),52)),std::invalid_argument);
-    auto old=makeNewPublishedProfile("legacy",c()); auto migrated=deserializeProfileEnvelope(serializeProfileEnvelope(old,"raid-armored-infected-content-64",52),c());
+    auto old=makeNewPublishedProfile("legacy",c()); old.stashLayoutVersion=0; auto migrated=deserializeProfileEnvelope(serializeProfileEnvelope(old,"raid-armored-infected-content-64",52),c());
     ASSERT_TRUE(migrated.profile)<<migrated.message; EXPECT_EQ(find(*migrated.profile,lamp),0); EXPECT_EQ(find(*migrated.profile,cell),0);
     auto invalid=p; invalid.assets.findMutable(b.batteryAssetId)->location=InstalledDeviceBatteryLocation{find(p,rifle)}; EXPECT_FALSE(validateProfileState(invalid,c()).valid);
     invalid=p; add(invalid,cell); invalid.assets.findMutable(find(invalid,cell))->location=InstalledDeviceBatteryLocation{b.deviceAssetId}; EXPECT_FALSE(validateProfileState(invalid,c()).valid);

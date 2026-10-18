@@ -167,7 +167,9 @@ TEST(BaseDefenseOwnershipTest, Schema48WarningAndActiveRoundTripRejectLegacyWrit
         const auto loaded = deserializeProfileEnvelope(text, content);
         ASSERT_TRUE(loaded.profile) << loaded.message;
         EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(p));
-        EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p, content.contentVersion(), 47)),
+        auto legacy = p;
+        legacy.stashLayoutVersion = 0U;
+        EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(legacy, content.contentVersion(), 47)),
                      std::invalid_argument);
         if (phase == 0) start(p);
     }
@@ -178,6 +180,7 @@ TEST(BaseDefenseOwnershipTest, Schema48WarningAndActiveRoundTripRejectLegacyWrit
 TEST(BaseDefenseOwnershipTest, Legacy47WarningRemainsLegacyAndDoesNotPrepareOnLoad)
 {
     auto p = warning(false);
+    p.stashLayoutVersion = 0U;
     p.baseDefenseWarning.reset();
     SaveFixture save;
     // Explicit legacy envelope exercises migration without synthesizing a warning.

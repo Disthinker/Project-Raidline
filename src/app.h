@@ -23,6 +23,7 @@
 #include "item_definition.h"
 #include "pause_menu.h"
 #include "profile_inventory_interaction.h"
+#include "profile_container_presentation.h"
 #include "raid_pointer_capture.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
@@ -136,6 +137,7 @@ public:
 
 private:
     // Headless event-router regression tests; never runs the game loop.
+    friend struct InventoryPresentationUiTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -204,6 +206,18 @@ private:
     ProfileInventoryInteractionState
         profileInventoryInteraction_;
 
+    ProfileInventoryPresentation profilePresentation_;
+    std::string profilePresentationProfileId_;
+    MousePosition profilePresentationPointer_{};
+    int profileHoverTab_{-1};
+    float profileHoverSeconds_{};
+    bool handleProfilePresentationEvent(const InventoryUiEvent &, bool,
+        std::optional<AssetInstanceId>);
+    void updateProfilePresentationHover(float);
+    void renderProfileInventoryToolbar(bool, bool, std::optional<AssetInstanceId>);
+    void locateProfileInventoryAsset(AssetInstanceId, bool,
+        std::optional<AssetInstanceId>);
+    void describeProfileInventoryDestination(AssetInstanceId, StoredAssetLocation);
     std::vector<InventoryUiEvent>
         pendingInventoryUiEvents_;
 
@@ -555,7 +569,8 @@ private:
         const SDL_FRect &bounds,
         float cellSize,
         Uint8 alpha = 255,
-        bool showWeaponCondition = true);
+        bool showWeaponCondition = true,
+        bool fitImage = true);
     void renderProfileInventory(
         bool includeStash,
         bool inRaid,
