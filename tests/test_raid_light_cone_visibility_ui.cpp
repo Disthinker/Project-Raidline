@@ -8,6 +8,9 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 
 struct RaidLightConeVisibilityUiTestAccess
 {
@@ -204,6 +207,59 @@ struct RaidLightConeVisibilityUiTestAccess
 
 namespace
 {
+// CTest runs individual Google Tests in separate processes. A timestamp alone
+// does not reserve a directory; claim ownership before any save or cleanup.
+std::filesystem::path claimUiSaveDirectory(
+    std::string_view testName, std::uint64_t seed)
+{
+    const auto root = std::filesystem::weakly_canonical(
+        std::filesystem::temp_directory_path());
+    const auto stem = "raidline-cone-ui-" + std::string{testName} + "-" +
+        std::to_string(seed) + "-";
+    for (unsigned attempt = 0; attempt < 128; ++attempt)
+    {
+        const auto candidate = root / (stem + std::to_string(attempt));
+        std::error_code error;
+        if (std::filesystem::create_directory(candidate, error))
+            return candidate;
+        if (error && error != std::errc::file_exists)
+            throw std::filesystem::filesystem_error{
+                "could not claim UI test save directory", candidate, error};
+    }
+    throw std::runtime_error{"UI test save directory attempts exhausted"};
+}
+
+void removeUiSaveDirectory(const std::filesystem::path &path)
+{
+    std::error_code error;
+    const auto root = std::filesystem::weakly_canonical(
+        std::filesystem::temp_directory_path(), error);
+    if (error) return;
+    const auto resolved = std::filesystem::weakly_canonical(path, error);
+    if (error || resolved.parent_path() != root ||
+        !resolved.filename().string().starts_with("raidline-cone-ui-"))
+        return;
+    std::filesystem::remove_all(resolved, error);
+}
+
+TEST(RaidLightConeVisibilityUiDirectoryTest, SameSeedClaimsIndependentOwnedDirectories)
+{
+    const auto seed = static_cast<std::uint64_t>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto first = claimUiSaveDirectory("same-seed", seed);
+    const auto second = claimUiSaveDirectory("same-seed", seed);
+    EXPECT_NE(first, second);
+    EXPECT_TRUE(std::filesystem::is_directory(first));
+    EXPECT_TRUE(std::filesystem::is_directory(second));
+    const auto marker = second / "owner.txt";
+    { std::ofstream output{marker}; output << "second owner"; }
+    removeUiSaveDirectory(first);
+    EXPECT_FALSE(std::filesystem::exists(first));
+    EXPECT_TRUE(std::filesystem::is_directory(second));
+    EXPECT_TRUE(std::filesystem::exists(marker));
+    removeUiSaveDirectory(second);
+}
+
 using A = RaidLightConeVisibilityUiTestAccess;
 class RaidLightConeVisibilityUiTest : public testing::Test
 {
@@ -212,11 +268,10 @@ class RaidLightConeVisibilityUiTest : public testing::Test
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
     AssetInstanceId box{};
-    std::filesystem::path path =
-        std::filesystem::temp_directory_path() /
-        ("raidline-cone-ui-" +
-         std::to_string(
-             std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::path path = claimUiSaveDirectory(
+        testing::UnitTest::GetInstance()->current_test_info()->name(),
+        static_cast<std::uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
     GameSession &session() { return A::flow(*app).gameSession(); }
     void position(Vec2 p)
     {
@@ -226,6 +281,7 @@ class RaidLightConeVisibilityUiTest : public testing::Test
     }
     void SetUp() override
     {
+        SCOPED_TRACE("isolated save directory: " + path.string());
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
         auto profile =
             makeNewAlphaProfile("visibility-ui", publishedContentRegistry());
@@ -233,13 +289,13 @@ class RaidLightConeVisibilityUiTest : public testing::Test
             publishedContentRegistry().item(
                 ItemDefinitionId{"item.container.backpack_expedition"}),
             EquippedAssetLocation{EquipmentSlotKind::Backpack}));
-        ASSERT_TRUE(
-            SaveRepository{path}
-                .save(profile, publishedContentRegistry().contentVersion())
-                .succeeded);
+        const auto saved = SaveRepository{path}.save(
+            profile, publishedContentRegistry().contentVersion());
+        ASSERT_TRUE(saved.succeeded) << saved.message;
         app = std::make_unique<App>();
         A::flow(*app).configurePersistence(path);
-        ASSERT_TRUE(A::flow(*app).continueGame());
+        ASSERT_TRUE(A::flow(*app).continueGame())
+            << A::flow(*app).gameSession().persistenceMessage();
         ASSERT_TRUE(A::flow(*app).deploy(
             MapDefinitionId{"map.raid.frontier_exchange"}));
         A::syntheticRoom(*app);
@@ -265,8 +321,7 @@ class RaidLightConeVisibilityUiTest : public testing::Test
         SDL_DestroySurface(surface);
         app.reset();
         SDL_Quit();
-        std::error_code ec;
-        std::filesystem::remove_all(path, ec);
+        removeUiSaveDirectory(path);
     }
     void key(SDL_Scancode key)
     {
