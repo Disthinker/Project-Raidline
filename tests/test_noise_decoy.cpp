@@ -13,6 +13,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <limits>
+#include <random>
 
 namespace {
 const auto &content(){return publishedContentRegistry();}
@@ -203,6 +204,68 @@ TEST(NoiseDecoyTest, ConsumedItemAndRemainingStackKeepFrozenPendingValidAndRound
     const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(session.profile(),content().contentVersion()),content());ASSERT_TRUE(loaded.profile)<<loaded.message;
     EXPECT_EQ(loaded.profile->assets.find(id)->quantity,2U);EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(session.profile()));
 }
+TEST(NoiseDecoyTest, BatchedHearingMatchesCanonicalSightAcrossGeometryAndBoundaryCases){
+    std::mt19937 random(20261017);
+    std::uniform_int_distribution<int> x(-100,2100),y(-100,1300),extent(2,160),offset(-600,600);
+    std::vector<BallisticBlocker> walls{{1,{{750,0},{30,1200}}},{2,{{0,640},{2000,12}}}};
+    for(int n=0;n<220;++n)walls.push_back({static_cast<std::uint64_t>(n+3),
+        {{static_cast<float>(x(random)),static_cast<float>(y(random))},
+         {static_cast<float>(extent(random)),static_cast<float>(extent(random))}}});
+    std::size_t audible{},occluded{};
+    for(float cellSize:{64.0F,128.0F,256.0F}){
+        const auto geometry=RaidSpaceBlockerIndex::build({2000,1200},walls,cellSize);ASSERT_TRUE(geometry);
+        for(Vec2 source:std::vector<Vec2>{{500,500},{128,128},{1996,1196},{4,4},{1000,250},{256,768}}){
+            SCOPED_TRACE(::testing::Message()<<"cell="<<cellSize<<" source="<<source.x<<','<<source.y);
+            RaidNoiseDecoyRuntime runtime;ASSERT_TRUE(runtime.start(landing(source)));runtime.advance(outdoorRaidSpaceId(),.5F);
+            std::vector<NoiseDecoyListener> listeners;
+            const auto addListener=[&](Vec2 center,bool eligible=true){
+                const auto id=static_cast<CombatTargetId>(listeners.size()+1);
+                listeners.push_back({id,center,{static_cast<float>(id),42},eligible});
+            };
+            for(int n=0;n<600;++n)addListener({source.x+offset(random),source.y+offset(random)},n%11!=0);
+            for(Vec2 delta:std::vector<Vec2>{{0,0},{500,0},{500.00006F,0},{500.01F,0},{-500,0},{0,500},{0,-500}})
+                addListener({source.x+delta.x,source.y+delta.y});
+            // Include exact cell and wall boundaries, including sources inside cover.
+            for(const auto &wall:walls){addListener(wall.bounds.position);
+                addListener({wall.bounds.position.x+wall.bounds.size.x,wall.bounds.position.y+wall.bounds.size.y});}
+            addListener({std::numeric_limits<float>::quiet_NaN(),source.y});
+            listeners.push_back({0,source,{},true});
+            runtime.hearPulses(listeners,*geometry);
+            const float radius=use().radius;
+            for(const auto &listener:listeners){
+                if(!listener.id)continue;
+                const auto p=listener.center;
+                const bool finite=std::isfinite(p.x)&&std::isfinite(p.y);
+                const bool binned=finite && std::floor(p.x/128)>=std::floor((source.x-radius)/128) &&
+                    std::floor(p.x/128)<=std::floor((source.x+radius)/128) &&
+                    std::floor(p.y/128)>=std::floor((source.y-radius)/128) &&
+                    std::floor(p.y/128)<=std::floor((source.y+radius)/128);
+                const bool inRange=listener.eligible && binned && std::hypot(p.x-source.x,p.y-source.y)<=radius+.0001F;
+                const bool expected=inRange && geometry->hasLineOfSight(source,p);
+                const auto actual=runtime.investigations().find(listener.id);
+                ASSERT_EQ(actual!=runtime.investigations().end(),expected)<<"listener="<<listener.id;
+                if(inRange){if(expected)++audible;else ++occluded;}
+                if(expected){const auto &fact=actual->second;EXPECT_EQ(fact.space,outdoorRaidSpaceId());
+                    EXPECT_EQ(fact.source,runtime.source()->id);EXPECT_FALSE(fact.returning);
+                    EXPECT_FLOAT_EQ(fact.point.x,source.x);EXPECT_FLOAT_EQ(fact.point.y,source.y);
+                    EXPECT_FLOAT_EQ(fact.home.x,listener.home.x);EXPECT_FLOAT_EQ(fact.home.y,listener.home.y);}
+            }
+            EXPECT_FALSE(runtime.investigations().contains(0));
+        }
+    }
+    EXPECT_GT(audible,0U);EXPECT_GT(occluded,0U);
+}
+TEST(NoiseDecoyTest, HearingUsesCurrentGeometryOnEveryPulse){
+    const auto blocked=index({{1,{{650,0},{20,1200}}}}),clear=index();
+    const std::vector<NoiseDecoyListener> listeners{{1,{800,250},{900,250},true}};
+    RaidNoiseDecoyRuntime runtime;ASSERT_TRUE(runtime.start(landing()));runtime.advance(outdoorRaidSpaceId(),.5F);
+    runtime.hearPulses(listeners,blocked);EXPECT_TRUE(runtime.investigations().empty());
+    runtime.advance(outdoorRaidSpaceId(),1);runtime.hearPulses(listeners,clear);ASSERT_TRUE(runtime.investigations().contains(1));
+    runtime.forget(1);runtime.advance(outdoorRaidSpaceId(),1);runtime.hearPulses(listeners,blocked);EXPECT_TRUE(runtime.investigations().empty());
+    ASSERT_TRUE(runtime.start(landing({900,250})));runtime.advance(outdoorRaidSpaceId(),.5F);
+    runtime.hearPulses(listeners,blocked);ASSERT_TRUE(runtime.investigations().contains(1));
+    EXPECT_FLOAT_EQ(runtime.investigations().at(1).point.x,900);
+}
 TEST(NoiseDecoyTest, RealPulseAndReturnNavigationKeepThreeMillisecondBudgetFor32And100){
     using Clock=std::chrono::steady_clock;
     for(int count:{32,100}){
@@ -227,7 +290,10 @@ TEST(NoiseDecoyTest, RealPulseAndReturnNavigationKeepThreeMillisecondBudgetFor32
             const auto second=Clock::now();world.update({},1.0F/60.0F);const auto returning=std::chrono::duration<double,std::milli>(Clock::now()-second).count();
             if(n>=10){pulseSamples.push_back(pulse);returnSamples.push_back(returning);}
         }
-        for(auto *samples:{&pulseSamples,&returnSamples}){auto sorted=*samples;std::sort(sorted.begin(),sorted.end());ASSERT_EQ(sorted.size(),150U);EXPECT_LT(sorted[142],3.0)<<count;}
+        for(int phase=0;phase<2;++phase){auto sorted=phase==0?pulseSamples:returnSamples;std::sort(sorted.begin(),sorted.end());ASSERT_EQ(sorted.size(),150U);
+            const std::string name=phase==0?"pulse":"return";
+            RecordProperty("decoy_"+std::to_string(count)+"_"+name+"_p95_ms",std::to_string(sorted[142]));
+            EXPECT_LT(sorted[142],3.0)<<"enemies="<<count<<" phase="<<name<<" samples="<<sorted.size();}
         if(const char *dir=std::getenv("RAIDLINE_DECOY_QA_DIR")){std::filesystem::create_directories(dir);std::ofstream out(std::filesystem::path(dir)/("decoy-"+std::to_string(count)+".csv"));out<<"pulse_ms,return_ms\n";for(std::size_t i=0;i<pulseSamples.size();++i)out<<pulseSamples[i]<<','<<returnSamples[i]<<'\n';}
     }
 }

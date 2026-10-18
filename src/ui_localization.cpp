@@ -1,4 +1,5 @@
 #include "ui_localization.h"
+#include "ui_foundation.h"
 
 #include <array>
 #include <fstream>
@@ -14,6 +15,24 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"ONLY WINDOW SIZES THAT FIT THIS DISPLAY ARE SHOWN", "仅显示当前屏幕可容纳的窗口尺寸"},
+     {"WINDOW SIZE DOES NOT CHANGE WORLD VIEW", "窗口大小只影响显示，不改变游戏视野范围"},
+     {"WINDOW SIZE UNAVAILABLE ON THIS DISPLAY", "此窗口尺寸超出当前屏幕可用范围"},
+     {"WINDOW CHANGE FAILED - PREVIOUS SIZE KEPT", "窗口调整失败，已保留原尺寸"},
+     {"WINDOW CHANGED - SETTINGS SAVE FAILED", "窗口已调整，但设置保存失败；重开后可能恢复原尺寸"},
+     {"WINDOW SIZE UPDATED", "窗口尺寸已更新并保存"},
+     {"SWITCH BETWEEN CHINESE AND ENGLISH", "点击切换中文与英文，也可按 L"},
+     {"ESC RETURNS TO THE PREVIOUS MENU", "按 Esc 返回上一层菜单"},
+     {"NO SAVED GAME. START A NEW GAME.", "暂无可继续的存档，请选择新游戏"},
+     {"CHANGE LANGUAGE AND WINDOW SIZE", "调整语言和窗口尺寸"},
+     {"CREATE A NEW SURVIVOR PROFILE", "创建新的游戏档案"},
+     {"LMB FIRE | RMB AIM | R RELOAD | V MELEE", "左键 射击 | 右键 瞄准 | R 换弹 | V 快速近战"},
+     {"TAB INVENTORY | M MAP | 4 THROWABLES | 5 MED | U LIGHT", "Tab 背包 | M 地图 | 4 投掷 | 5 医疗 | U 手电"},
+     {"PREPARE. SEARCH. RETURN.", "整备 · 搜索 · 归来"},
+     {"CHOOSE HOW TO BEGIN", "选择继续旅程，或开始新游戏"},
+     {"CONFIRM ABANDON DEFENSE", "确认放弃防守"},
+     {"ESC TO CONTINUE", "按 Esc 返回游戏"},
+     {"WINDOW SIZE", "窗口尺寸"},
      {"Noise Decoy", "声响诱饵"},
      {"DECOY DETAILS", "诱饵详情"},
      {"NO CHEST RIG DECOY", "胸挂普通分区中没有声响诱饵"},
@@ -2319,34 +2338,10 @@ std::string localizeUiLabel(UiLanguage language, std::string_view englishText,
   return localized.substr(0, offset);
 }
 
-UiLanguage loadUiLanguage(const std::filesystem::path &settingsPath) noexcept {
-  try {
-    std::ifstream stream{settingsPath};
-    if (!stream) {
-      return UiLanguage::SimplifiedChinese;
-    }
-    nlohmann::json document;
-    stream >> document;
-    const std::string code = document.value("language", "zh-CN");
-    return code == "en-US" ? UiLanguage::English
-                           : UiLanguage::SimplifiedChinese;
-  } catch (...) {
-    return UiLanguage::SimplifiedChinese;
-  }
+UiLanguage loadUiLanguage(const std::filesystem::path &path) noexcept {
+  return loadUiClientSettings(path).language;
 }
-
-bool saveUiLanguage(const std::filesystem::path &settingsPath,
-                    UiLanguage language) noexcept {
-  try {
-    std::filesystem::create_directories(settingsPath.parent_path());
-    std::ofstream stream{settingsPath, std::ios::trunc};
-    if (!stream) {
-      return false;
-    }
-    stream << nlohmann::json{{"language", uiLanguageCode(language)}}.dump(2);
-    stream.flush();
-    return stream.good();
-  } catch (...) {
-    return false;
-  }
+bool saveUiLanguage(const std::filesystem::path &path, UiLanguage language) noexcept {
+  auto settings=loadUiClientSettings(path); settings.language=language;
+  return saveUiClientSettings(path,settings);
 }

@@ -1243,10 +1243,11 @@ void GameplayWorld::update(
             EnemyNavigationIntent &intent = navigationIntents[enemyIndex];
             intent = EnemyNavigationIntent{};
             Enemy &enemy = activeEnemySet[enemyIndex];
+            auto &attachedState = activeEnemySet.state(enemy.combatTargetId());
             EnemyNavigationRuntime &navigation =
-                activeEnemySet.state(activeEnemySet[enemyIndex].combatTargetId()).navigation;
+                attachedState.navigation;
             EnemyEncounterRuntime &encounter =
-                activeEnemySet.state(activeEnemySet[enemyIndex].combatTargetId()).encounter;
+                attachedState.encounter;
             if (enemy.isDead())
             {
                 navigation = EnemyNavigationRuntime{};
@@ -1254,7 +1255,8 @@ void GameplayWorld::update(
             }
 
             const Vec2 enemyPosition = enemyCenter(enemy);
-            const bool investigatingNoise=noiseDecoyEnabled_ && noiseDecoy_.investigations().contains(enemy.combatTargetId());
+            const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(enemy.combatTargetId());
+            const bool investigatingNoise=noiseDecoyEnabled_ && hasNoiseInvestigation;
             const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
                 enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
             // Unaware actors cannot acquire a player beyond acquisition range;
@@ -1281,7 +1283,7 @@ void GameplayWorld::update(
             }
             std::optional<Vec2> passiveGoal;
             if (enemy.awarenessState() == EnemyAwarenessState::Unaware &&
-                !noiseDecoy_.investigations().contains(enemy.combatTargetId()))
+                !hasNoiseInvestigation)
             {
                 if (encounter.kind == RaidEncounterKind::Patrol &&
                     !encounter.patrolPoints.empty())
@@ -1311,7 +1313,9 @@ void GameplayWorld::update(
                  distanceSquared(enemyPosition, playerPosition) <=
                      enemy.acquireTargetDistance() *
                          enemy.acquireTargetDistance());
-            const auto investigation = noiseInvestigationGoal(enemy, intent.targetVisible, playerPosition);
+            const auto investigation = investigatingNoise
+                ? noiseInvestigationGoal(enemy, intent.targetVisible, playerPosition)
+                : std::optional<Vec2>{};
             const std::optional<Vec2> navigationGoal = investigation ? investigation : visibleTargetIsRelevant
                 ? std::optional<Vec2>{playerPosition}
                 : enemy.lastKnownTargetPosition().has_value()

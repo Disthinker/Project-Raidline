@@ -1,3 +1,15 @@
+<!-- ui-decoy-integration-v1:begin -->
+# 当前：UI与诱饵性能整合 v1 联合复验通过，交付中
+
+2026-10-18，用户已验收候选 **5bf87b7d4c85**，并明确要求提交、推送和合并。本轮仅交付该已验收集合，不开始下一项。
+
+- `task_id=ui-decoy-perf-integration`；`plan_version=RL-UI-DECOY-PERF-INTEGRATION-v1`；`state=accepted_delivery_in_progress`；`accepted_candidate_id=RL-UI-DECOY-PERF-INTEGRATION-v1-local-5bf87b7d4c85`。
+- 16项输入、程序、运行文件和入口未变，本地专项169/169、完整2117/2117通过；3ms及原测试负载保留。
+- 按新PR准确提交双平台CI、普通合并树核对及合并提交双平台CI办理，全部通过后再记录为已交付。原候选和入口、其他修改均保留，不启动游戏或操作真实存档。
+
+完整授权和证据见[任务记录](../exec-plans/active/ui-text-foundation-v2.md)。[联合复验清单](../acceptance/ui-decoy-perf-integration-v1.md)保留为历史，无须重复验收。下方为此前状态，当前以上方为准。
+<!-- ui-decoy-integration-v1:end -->
+
 # Project Raidline 当前状态
 
 <!-- current-plan:begin -->
