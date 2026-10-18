@@ -496,6 +496,9 @@ add_library(raidline_sdl_client STATIC
     src/texture.h
     src/ui_localization.cpp
     src/ui_localization.h
+    src/ui_foundation.cpp
+    src/ui_foundation.h
+    src/app_ui_foundation.cpp
     src/ui_text_renderer.cpp
     src/ui_text_renderer.h
 )
@@ -983,3 +986,4 @@ raidline_add_test(ArmoredInfectedTest tests/test_armored_infected.cpp raidline::
 
 raidline_add_test(DeveloperRangeTest tests/test_developer_test_range.cpp raidline::services)
 raidline_add_test(DeveloperRangeUiTest tests/test_developer_range_ui.cpp raidline::sdl_client)
+raidline_add_test(UiFoundationTest tests/test_ui_foundation.cpp raidline::sdl_client)

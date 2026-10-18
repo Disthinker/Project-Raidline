@@ -136,6 +136,7 @@ public:
 
 private:
     // Headless event-router regression tests; never runs the game loop.
+    friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
@@ -178,6 +179,23 @@ private:
     GameAudioOutput gameAudio_;
     UiTextRenderer uiTextRenderer_;
     std::filesystem::path settingsPath_;
+    UiWindowSize uiWindowSize_{};
+    std::optional<std::size_t> pendingUiWindowSize_;
+    float uiClockSeconds_{};
+    float uiHoverStarted_{};
+    int uiHoveredButton_{-1};
+    bool uiPointerInside_{true};
+    bool uiPointerPressed_{};
+    std::string uiHoveredHint_;
+    [[nodiscard]] UiViewport windowUiViewport() const noexcept;
+    [[nodiscard]] UiWindowSize availableUiWindowArea() const noexcept;
+    void applyUiWindowSize(std::size_t index);
+    void renderFoundationMenu(bool paused);
+    void renderFoundationSettings(bool paused);
+    void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
+        bool enabled = true, bool danger = false, bool selected = false,
+        std::string_view hint = {});
+
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
     InventoryInteractionState

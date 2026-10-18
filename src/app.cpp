@@ -1652,7 +1652,8 @@ namespace
     toInventoryUiEvent(
         const SDL_Event &event,
         bool controlPressed,
-        bool shiftPressed) noexcept
+        bool shiftPressed,
+        UiViewport viewport) noexcept
     {
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
             event.button.button == SDL_BUTTON_LEFT &&
@@ -1693,6 +1694,8 @@ namespace
                 SDL_GetMouseState(
                     &pointerX,
                     &pointerY));
+            const auto logical=viewport.toLogical({pointerX,pointerY});
+            pointerX=logical.x; pointerY=logical.y;
 
             return InventoryUiEvent{
                 InventoryQuickTransferEvent{
@@ -1918,10 +1921,18 @@ bool App::initialize()
     gameFlow_.configurePersistence(
         std::filesystem::path{preferencePath});
     settingsPath_ = std::filesystem::path{preferencePath} / "settings.json";
-    uiTextRenderer_.setLanguage(loadUiLanguage(settingsPath_));
+    const auto clientSettings=loadUiClientSettings(settingsPath_);
+    uiTextRenderer_.setLanguage(clientSettings.language);
+    const auto area=availableUiWindowArea();
+    uiWindowSize_=safeUiWindowSize(clientSettings.window,area.width,area.height);
     SDL_free(preferencePath);
 
-    window_ = SDL_CreateWindow("Project Raidline", kWindowWidth, kWindowHeight, 0);
+    window_ = SDL_CreateWindow("Project Raidline", uiWindowSize_.width, uiWindowSize_.height, SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    if (!window_ && (uiWindowSize_.width != 1280 || uiWindowSize_.height != 720))
+    {
+        uiWindowSize_=safeUiWindowSize({1280,720},area.width,area.height);
+        window_=SDL_CreateWindow("Project Raidline",uiWindowSize_.width,uiWindowSize_.height,SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    }
     if (!window_)
     {
         fmt::print("SDL_CreateWindow failed: {}\n", SDL_GetError());
@@ -1938,6 +1949,11 @@ bool App::initialize()
         return false;
     }
 
+    if (!SDL_SetRenderLogicalPresentation(renderer_,kWindowWidth,kWindowHeight,SDL_LOGICAL_PRESENTATION_LETTERBOX))
+    {
+        shutdown();
+        return false;
+    }
     if (!ensureIndoorObservationTargets())
     {
         fmt::print("Indoor observation target creation failed: {}\n", SDL_GetError());
@@ -2429,11 +2445,11 @@ std::optional<MainMenuCommand> App::mainMenuCommandAt(
     const MousePosition point{x, y};
     if (settingsOpen_)
     {
-        if (contains(mainMenuButton(0), point))
+        if (contains(uiSettingsLanguageButton(), point))
         {
             return MainMenuCommand::ToggleLanguage;
         }
-        return contains(mainMenuButton(2), point)
+        return contains(uiSettingsBackButton(), point)
             ? std::optional<MainMenuCommand>{MainMenuCommand::Settings}
             : std::nullopt;
     }
@@ -2463,11 +2479,11 @@ std::optional<PauseMenuCommand> App::pauseMenuCommandAt(
     const MousePosition point{x, y};
     if (pauseMenu_.settingsOpen())
     {
-        if (contains(pauseMenuButton(0), point))
+        if (contains(uiSettingsLanguageButton(), point))
         {
             return PauseMenuCommand::ToggleLanguage;
         }
-        return contains(pauseMenuButton(1), point)
+        return contains(uiSettingsBackButton(), point)
             ? std::optional<PauseMenuCommand>{PauseMenuCommand::Settings}
             : std::nullopt;
     }
@@ -5983,6 +5999,21 @@ void App::processEvents()
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
+        const auto viewport=windowUiViewport();
+        if(event.type==SDL_EVENT_MOUSE_MOTION) {
+            const auto point=viewport.toLogical({event.motion.x,event.motion.y});
+            event.motion.x=point.x; event.motion.y=point.y;
+            event.motion.xrel/=viewport.scale; event.motion.yrel/=viewport.scale;
+            uiPointerInside_=true;
+        } else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP) {
+            const auto point=viewport.toLogical({event.button.x,event.button.y});
+            event.button.x=point.x; event.button.y=point.y;
+            if(event.button.button==SDL_BUTTON_LEFT) uiPointerPressed_=event.type==SDL_EVENT_MOUSE_BUTTON_DOWN;
+        }
+        if(event.type==SDL_EVENT_WINDOW_MOUSE_LEAVE || event.type==SDL_EVENT_WINDOW_FOCUS_LOST) {
+            uiPointerInside_=false; uiPointerPressed_=false; uiHoveredButton_=-1;
+        }
+        if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
         input_.handleEvent(event);
 
         if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED)
@@ -6096,6 +6127,17 @@ void App::processEvents()
             }
         }
 
+        if((gameFlow_.state()==GameFlowState::MainMenu && settingsOpen_) ||
+           (pauseMenu_.isOpen() && pauseMenu_.settingsOpen())) {
+            if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button==SDL_BUTTON_LEFT) {
+                bool sizeClick=false;
+                const auto available=availableUiWindowArea();
+                for(std::size_t i=0;i<kUiWindowSizes.size();++i) if(uiWindowSizeAllowed(kUiWindowSizes[i],available.width,available.height) && uiContains(uiSettingsSizeButton(i),{event.button.x,event.button.y})) {
+                    pendingUiWindowSize_=i; sizeClick=true; break;
+                }
+                if(sizeClick) { input_.suppressPrimaryPointerUntilRelease(); continue; }
+            }
+        }
         if (homeFoundingPrompt_)
         {
             homeFoundingInputBlockedThisFrame_ = true;
@@ -6514,7 +6556,7 @@ void App::processEvents()
                 else if (const auto uiEvent = toInventoryUiEvent(
                              event,
                              input_.isControlPressed(),
-                             input_.isShiftPressed()))
+                             input_.isShiftPressed(), windowUiViewport()))
                 {
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
@@ -6565,7 +6607,7 @@ void App::processEvents()
                 else if (const auto uiEvent = toInventoryUiEvent(
                              event,
                              input_.isControlPressed(),
-                             input_.isShiftPressed()))
+                             input_.isShiftPressed(), windowUiViewport()))
                 {
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
@@ -6581,7 +6623,7 @@ void App::processEvents()
                 toInventoryUiEvent(
                     event,
                     input_.isControlPressed(),
-                    input_.isShiftPressed());
+                    input_.isShiftPressed(), windowUiViewport());
 
             if (uiEvent.has_value())
             {
@@ -6706,6 +6748,9 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if(pendingUiWindowSize_) {const auto index=*pendingUiWindowSize_;pendingUiWindowSize_.reset();applyUiWindowSize(index);}
+
     // Revoke the external view before processing queued clicks or stale drags.
     if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
     {
@@ -10378,15 +10423,13 @@ void App::syncRaidPointerCapture() noexcept
             : raidWorldToScreen(gameFlow_.baseWorld().weaponAimWorldPosition(), baseWorldCameraOffset());
         if (!shouldCapture && windowHasInputFocus_ && window_ != nullptr)
         {
-            int width = kWindowWidth;
-            int height = kWindowHeight;
-            static_cast<void>(SDL_GetWindowSize(window_, &width, &height));
             pointerWorldPosition_ = Vec2{
-                std::clamp(reticle.x, 0.0F, static_cast<float>(std::max(1, width) - 1)),
-                std::clamp(reticle.y, 0.0F, static_cast<float>(std::max(1, height) - 1))};
+                std::clamp(reticle.x, 0.0F, static_cast<float>(kWindowWidth - 1)),
+                std::clamp(reticle.y, 0.0F, static_cast<float>(kWindowHeight - 1))};
             // SDL uses this position when relative mode ends. Warp before
             // releasing capture so its motion cannot enter world aiming.
-            SDL_WarpMouseInWindow(window_, pointerWorldPosition_->x, pointerWorldPosition_->y);
+            const auto windowPoint=windowUiViewport().toWindow(*pointerWorldPosition_);
+            SDL_WarpMouseInWindow(window_, windowPoint.x, windowPoint.y);
         }
         if (SDL_SetWindowRelativeMouseMode(window_, shouldCapture))
         {
@@ -11224,189 +11267,8 @@ void App::renderScreenPrimaryButton(
         SDL_BLENDMODE_NONE);
 }
 
-void App::renderMainMenu()
-{
-    const SDL_FRect panel{
-        kFlowPanelX,
-        kFlowPanelY,
-        kFlowPanelWidth,
-        kFlowPanelHeight};
-
-    SDL_SetRenderDrawBlendMode(
-        renderer_,
-        SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(
-        renderer_,
-        14,
-        24,
-        29,
-        245);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(
-        renderer_,
-        92,
-        154,
-        132,
-        255);
-    SDL_RenderRect(renderer_, &panel);
-
-    SDL_SetRenderDrawColor(
-        renderer_,
-        230,
-        236,
-        232,
-        255);
-    uiTextRenderer_.render(
-        renderer_,
-        564.0F,
-        244.0F,
-        "PROJECT RAIDLINE");
-    uiTextRenderer_.render(renderer_, 548.0F, 278.0F, "CORE EXTRACTION ALPHA");
-
-    if (settingsOpen_)
-    {
-        uiTextRenderer_.render(renderer_, 520.0F, 314.0F, "KEYBOARD & MOUSE");
-        uiTextRenderer_.render(renderer_, 490.0F, 340.0F, "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        uiTextRenderer_.render(renderer_, 466.0F, 364.0F, "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        uiTextRenderer_.render(renderer_, 430.0F, 388.0F, "SHIFT SPRINT  TAB INVENTORY  M TACTICAL MAP  ESC PAUSE/CLOSE");
-        const SDL_FRect language = mainMenuButton(0);
-        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
-        SDL_RenderFillRect(renderer_, &language);
-        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
-        SDL_RenderRect(renderer_, &language);
-        const std::string languageLabel = fmt::format(
-            "LANGUAGE: {}",
-            uiLanguageDisplayName(uiTextRenderer_.language()));
-        uiTextRenderer_.render(
-            renderer_, language.x + 32.0F, language.y + 15.0F,
-            languageLabel.c_str());
-        const SDL_FRect back = mainMenuButton(2);
-        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
-        SDL_RenderFillRect(renderer_, &back);
-        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
-        SDL_RenderRect(renderer_, &back);
-        uiTextRenderer_.render(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
-    }
-    else
-    {
-        const std::array<const char *, 4> labels{
-            "CONTINUE GAME",
-            newGameOverwriteArmed_ ? "CONFIRM NEW GAME" : "NEW GAME",
-            "SETTINGS",
-            "EXIT"};
-        for (std::size_t index = 0; index < labels.size(); ++index)
-        {
-            const SDL_FRect button = mainMenuButton(index);
-            const bool disabled = index == 0 && !gameSession_.hasSavedProfile();
-            SDL_SetRenderDrawColor(
-                renderer_,
-                disabled ? 34 : 42,
-                disabled ? 45 : 102,
-                disabled ? 48 : 82,
-                245);
-            SDL_RenderFillRect(renderer_, &button);
-            SDL_SetRenderDrawColor(
-                renderer_,
-                disabled ? 80 : 132,
-                disabled ? 90 : 225,
-                disabled ? 94 : 176,
-                255);
-            SDL_RenderRect(renderer_, &button);
-            uiTextRenderer_.render(
-                renderer_,
-                button.x + 16.0F,
-                button.y + 17.0F,
-                labels[index]);
-        }
-    }
-
-    if (!uiMessage_.empty())
-    {
-        uiTextRenderer_.render(renderer_, 484.0F, 596.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderPauseMenu()
-{
-    if (!pauseMenu_.isOpen())
-    {
-        return;
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    const SDL_FRect shade{0.0F, 0.0F, 1280.0F, 720.0F};
-    SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 185);
-    SDL_RenderFillRect(renderer_, &shade);
-
-    const SDL_FRect panel{kFlowPanelX, 112.0F, kFlowPanelWidth, 496.0F};
-    SDL_SetRenderDrawColor(renderer_, 14, 24, 29, 250);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 92, 154, 132, 255);
-    SDL_RenderRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 230, 236, 232, 255);
-    uiTextRenderer_.render(renderer_, 600.0F, 160.0F, "PAUSED");
-
-    if (pauseMenu_.settingsOpen())
-    {
-        uiTextRenderer_.render(renderer_, 568.0F, 208.0F, "SETTINGS");
-        uiTextRenderer_.render(
-            renderer_, 452.0F, 238.0F,
-            "WASD MOVE  SHIFT SPRINT  E INTERACT");
-        uiTextRenderer_.render(
-            renderer_, 438.0F, 262.0F,
-            "RAID: LMB FIRE  RMB AIM  R RELOAD  5 MED");
-        uiTextRenderer_.render(
-            renderer_, 448.0F, 286.0F,
-            "TAB INVENTORY  M TACTICAL MAP  F10 DEVELOPER PANEL");
-        const SDL_FRect language = pauseMenuButton(0);
-        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
-        SDL_RenderFillRect(renderer_, &language);
-        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
-        SDL_RenderRect(renderer_, &language);
-        const std::string languageLabel = fmt::format(
-            "LANGUAGE: {}",
-            uiLanguageDisplayName(uiTextRenderer_.language()));
-        uiTextRenderer_.render(
-            renderer_, language.x + 32.0F, language.y + 15.0F,
-            languageLabel.c_str());
-        const SDL_FRect back = pauseMenuButton(1);
-        SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
-        SDL_RenderFillRect(renderer_, &back);
-        SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
-        SDL_RenderRect(renderer_, &back);
-        uiTextRenderer_.render(renderer_, back.x + 122.0F, back.y + 17.0F, "BACK");
-    }
-    else
-    {
-        const std::array<const char *, 4> labels{
-            "CONTINUE GAME",
-            "SETTINGS",
-            "EXIT TO MAIN MENU",
-            "EXIT TO DESKTOP"};
-        for (std::size_t index{}; index < labels.size(); ++index)
-        {
-            const SDL_FRect button = pauseMenuButton(index);
-            SDL_SetRenderDrawColor(renderer_, 42, 102, 82, 245);
-            SDL_RenderFillRect(renderer_, &button);
-            SDL_SetRenderDrawColor(renderer_, 132, 225, 176, 255);
-            SDL_RenderRect(renderer_, &button);
-            uiTextRenderer_.render(
-                renderer_, button.x + 16.0F, button.y + 17.0F,
-                labels[index]);
-        }
-        if (gameSession_.baseDefenseActive())
-        {
-            const auto button = pauseMenuButton(4);
-            SDL_SetRenderDrawColor(renderer_, 102, 56, 46, 255);
-            SDL_RenderFillRect(renderer_, &button);
-            uiTextRenderer_.render(renderer_, button.x+12.0F, button.y+17.0F,
-                baseDefenseAbandonArmed_ ? "CONFIRM ABANDON: PUBLIC SOFT LOSS" : "ABANDON DEFENSE...");
-        }
-        else uiTextRenderer_.render(renderer_, 476.0F, 542.0F,
-                "ESC CONTINUES | RAID EXIT RESTORES GEAR; RESCUES PERSIST");
-    }
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-}
+void App::renderMainMenu() { renderFoundationMenu(false); }
+void App::renderPauseMenu() { if(pauseMenu_.isOpen()) renderFoundationMenu(true); }
 
 void App::renderBaseWorld()
 {
@@ -15227,6 +15089,8 @@ void App::renderProfileInventory(
     float pointerX{};
     float pointerY{};
     static_cast<void>(SDL_GetMouseState(&pointerX, &pointerY));
+    const auto logicalPointer=windowUiViewport().toLogical({pointerX,pointerY});
+    pointerX=logicalPointer.x; pointerY=logicalPointer.y;
     if (const auto hovered = profileAssetHitAt(
             profile,
             MousePosition{pointerX, pointerY},
@@ -19035,6 +18899,9 @@ void App::renderRaidScreen()
 
 void App::render()
 {
+    int outputWidth=1280,outputHeight=720;
+    SDL_GetRenderOutputSize(renderer_,&outputWidth,&outputHeight);
+    uiTextRenderer_.setRasterScale(std::min(outputWidth/1280.0F,outputHeight/720.0F));
     syncRaidPointerCapture();
 
     SDL_SetRenderDrawColor(

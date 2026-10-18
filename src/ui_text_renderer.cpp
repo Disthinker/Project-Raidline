@@ -1,6 +1,7 @@
 #include "ui_text_renderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -161,8 +162,14 @@ bool UiTextRenderer::initialize(SDL_Renderer *renderer) {
 
 void UiTextRenderer::shutdown() noexcept {
   cache_.clear();
+  widths_.clear();
   cacheUseSequence_ = 0U;
 #if defined(_WIN32)
+  for (auto &[size, font] : fonts_) {
+    static_cast<void>(size);
+    DeleteObject(static_cast<HFONT>(font));
+  }
+  fonts_.clear();
   if (platformFont_ != nullptr) {
     DeleteObject(static_cast<HFONT>(platformFont_));
     platformFont_ = nullptr;
@@ -181,65 +188,160 @@ void UiTextRenderer::setLanguage(UiLanguage language) noexcept {
 
 UiLanguage UiTextRenderer::language() const noexcept { return language_; }
 
-void UiTextRenderer::render(SDL_Renderer *renderer, float x, float y,
-                            const char *englishText) {
-  if (renderer == nullptr || englishText == nullptr || *englishText == '\0') {
-    return;
-  }
-  const std::string localized = localizeUiText(language_, englishText);
-#if !defined(_WIN32)
-  SDL_RenderDebugText(renderer, x, y, localized.c_str());
-  return;
+void *UiTextRenderer::fontFor(int pixelSize) {
+#if defined(_WIN32)
+  if (pixelSize == 13)
+    return platformFont_;
+  auto found = fonts_.find(pixelSize);
+  if (found != fonts_.end())
+    return found->second;
+  auto font = CreateFontW(-pixelSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                          CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                          DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+  if (font)
+    fonts_.emplace(pixelSize, font);
+  return font;
 #else
-  if (platformFont_ == nullptr) {
-    SDL_RenderDebugText(renderer, x, y, englishText);
+  static_cast<void>(pixelSize);
+  return nullptr;
+#endif
+}
+void UiTextRenderer::setRasterScale(float scale) {
+  scale = std::clamp(std::isfinite(scale) ? scale : 1.0F, 0.5F, 4.0F);
+  if (std::abs(scale - rasterScale_) < 0.001F)
     return;
+  rasterScale_ = scale;
+  cache_.clear();
+  widths_.clear();
+#if defined(_WIN32)
+  for (auto &[size, font] : fonts_) {
+    static_cast<void>(size);
+    DeleteObject(static_cast<HFONT>(font));
   }
-  Uint8 red{255U};
-  Uint8 green{255U};
-  Uint8 blue{255U};
-  Uint8 alpha{255U};
-  static_cast<void>(
-      SDL_GetRenderDrawColor(renderer, &red, &green, &blue, &alpha));
-  const std::string key = cacheKey(localized, red, green, blue, alpha);
+#endif
+  fonts_.clear();
+}
+float UiTextRenderer::measure(std::string_view text, int size) {
+  if (text.empty())
+    return 0;
+  size = std::clamp(size, 8, 64);
+  const int pixels = static_cast<int>(std::lround(size * rasterScale_));
+  const std::string key = std::to_string(pixels) + ":" + std::string(text);
+  if (auto found = widths_.find(key); found != widths_.end())
+    return found->second;
+  float width{};
+#if defined(_WIN32)
+  HDC device = CreateCompatibleDC(nullptr);
+  auto font = fontFor(pixels);
+  if (device && font) {
+    auto previous = SelectObject(device, static_cast<HFONT>(font));
+    auto wide = utf8ToWide(text);
+    SIZE measured{};
+    if (GetTextExtentPoint32W(device, wide.data(),
+                              static_cast<int>(wide.size()), &measured))
+      width = (measured.cx + 2) / rasterScale_;
+    SelectObject(device, previous);
+  }
+  if (device)
+    DeleteDC(device);
+#else
+  for (unsigned char c : text)
+    if ((c & 0xc0) != 0x80)
+      width += c < 0x80 ? size * 0.6F : static_cast<float>(size);
+#endif
+  if (widths_.size() >= 2048)
+    widths_.clear();
+  widths_.emplace(key, width);
+  return width;
+}
+void UiTextRenderer::render(SDL_Renderer *renderer, float x, float y,
+                            const char *text) {
+  if (!renderer || !text || !*text)
+    return;
+  renderLine(renderer, x, y, localizeUiText(language_, text), 13);
+}
+void UiTextRenderer::renderLine(SDL_Renderer *renderer, float x, float y,
+                                std::string_view localized, int size) {
+  if (!renderer || localized.empty())
+    return;
+#if !defined(_WIN32)
+  const std::string text(localized);
+  SDL_RenderDebugText(renderer, x, y, text.c_str());
+#else
+  const int pixels =
+      static_cast<int>(std::lround(std::clamp(size, 8, 64) * rasterScale_));
+  auto font = fontFor(pixels);
+  if (!font)
+    return;
+  Uint8 red{}, green{}, blue{}, alpha{};
+  SDL_GetRenderDrawColor(renderer, &red, &green, &blue, &alpha);
+  const std::string key = std::to_string(pixels) + ":" +
+                          cacheKey(localized, red, green, blue, alpha);
   ++cacheUseSequence_;
-  if (cacheUseSequence_ == 0U) {
-    for (auto &[cachedKey, cached] : cache_) {
-      static_cast<void>(cachedKey);
-      cached.lastUsedSequence = 0U;
-    }
-    cacheUseSequence_ = 1U;
-  }
   auto found = cache_.find(key);
   if (found == cache_.end()) {
     if (cache_.size() >= kMaximumCachedLabels) {
-      // Dynamic HUD/performance values continuously introduce new strings.
-      // Clearing the complete cache used to recreate every visible label on
-      // one frame, producing a regular GDI/texture-upload hitch. Evict one
-      // least-recently-used entry so the work remains bounded and stable.
-      const auto oldest = std::min_element(
-          cache_.begin(), cache_.end(),
-          [](const auto &left, const auto &right) {
-            return left.second.lastUsedSequence <
-                   right.second.lastUsedSequence;
+      auto oldest = std::min_element(
+          cache_.begin(), cache_.end(), [](const auto &a, const auto &b) {
+            return a.second.lastUsedSequence < b.second.lastUsedSequence;
           });
-      if (oldest != cache_.end()) {
-        cache_.erase(oldest);
-      }
+      cache_.erase(oldest);
     }
-    PlatformRenderedText rendered = createWindowsTextTexture(
-        renderer, platformFont_, localized, red, green, blue, alpha);
-    if (!rendered.texture.valid()) {
+    auto rendered = createWindowsTextTexture(renderer, font, localized, red,
+                                             green, blue, alpha);
+    if (!rendered.texture.valid())
       return;
-    }
-    CachedText cached{std::move(rendered.texture), rendered.width,
-                      rendered.height, cacheUseSequence_};
-    found = cache_.emplace(key, std::move(cached)).first;
-  } else {
+    SDL_SetTextureScaleMode(rendered.texture.get(), SDL_SCALEMODE_LINEAR);
+    found = cache_
+                .emplace(key, CachedText{std::move(rendered.texture),
+                                         rendered.width / rasterScale_,
+                                         rendered.height / rasterScale_,
+                                         cacheUseSequence_})
+                .first;
+  } else
     found->second.lastUsedSequence = cacheUseSequence_;
-  }
   const SDL_FRect destination{x, y, found->second.width, found->second.height};
   SDL_RenderTexture(renderer, found->second.texture.get(), nullptr,
                     &destination);
 #endif
+}
+void UiTextRenderer::renderBox(SDL_Renderer *renderer, const SDL_FRect &bounds,
+                               std::string_view text, UiTextStyle style) {
+  if (!renderer || bounds.w <= 0 || bounds.h <= 0)
+    return;
+  const auto localized = localizeUiText(language_, text);
+  const float lineHeight = style.size * 1.4F;
+  if (bounds.h < lineHeight)
+    return;
+  const int fitting = std::max(1, static_cast<int>(bounds.h / lineHeight));
+  const int limit =
+      style.maximumLines > 0 ? std::min(style.maximumLines, fitting) : fitting;
+  const auto lines = wrapUiText(localized, bounds.w, limit, [&](auto value) {
+    return measure(value, style.size);
+  });
+  const bool hadClip = SDL_RenderClipEnabled(renderer);
+  SDL_Rect previous{};
+  SDL_GetRenderClipRect(renderer, &previous);
+  SDL_Rect clip{static_cast<int>(std::ceil(bounds.x)),
+                static_cast<int>(std::ceil(bounds.y)),
+                static_cast<int>(std::floor(bounds.w)),
+                static_cast<int>(std::floor(bounds.h))};
+  if (hadClip) {
+    SDL_Rect intersection{};
+    SDL_GetRectIntersection(&clip, &previous, &intersection);
+    clip = intersection;
+  }
+  SDL_SetRenderClipRect(renderer, &clip);
+  float y = bounds.y;
+  for (const auto &line : lines) {
+    const float offset =
+        style.align == UiTextAlign::Center  ? (bounds.w - line.width) * 0.5F
+        : style.align == UiTextAlign::Right ? bounds.w - line.width
+                                            : 0;
+    renderLine(renderer, bounds.x + std::max(0.0F, offset), y, line.text,
+               style.size);
+    y += lineHeight;
+  }
+  SDL_SetRenderClipRect(renderer, hadClip ? &previous : nullptr);
 }
