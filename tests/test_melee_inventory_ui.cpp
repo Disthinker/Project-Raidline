@@ -25,7 +25,7 @@ struct MeleeUiTestAccess {
   ASSERT_TRUE(s.executeProfileInventory(InventoryMoveCommand{id,0,{ProfileContainerId::stash(),*fit}},"ui-store-knife").succeeded);}
  static void serviceClick(App &a,MousePosition p){a.handleBasePointerClick({p,false});}
  static std::optional<AssetInstanceId> serviceSelection(const App &a){return a.profileAssetSelection_ ? std::optional{a.profileAssetSelection_->instanceId}:std::nullopt;}
- static void context(App &a){a.handleProfileRightClick({80,480},false);}
+ static void context(App &a){a.handleProfileRightClick({450,540},false);}
  static bool menu(const App &a){return a.profileContextMenu_.has_value();}
  static void firstAction(App &a){ASSERT_TRUE(a.profileContextMenu_);const auto p=a.profileContextMenu_->position;a.handleProfileContextMenuClick({p.x+20,p.y+20},false);}
  static std::optional<AssetInstanceId> selected(const App &a){return a.profileDetailsAsset_;}

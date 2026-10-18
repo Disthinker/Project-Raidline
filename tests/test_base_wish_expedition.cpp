@@ -47,7 +47,10 @@ DeployReceipt deploy(ProfileState &profile, bool frontier = false) {
         {"wish-raid", "wish-settlement", 73419U, MapDefinitionId{frontier ? "map.raid.frontier_exchange" : "map.v0.test"}},
         {profile.revision, "wish:deploy"});
 }
-SaveLoadResult roundTrip(const ProfileState &profile, unsigned schema = 44U) {
+SaveLoadResult roundTrip(const ProfileState &profile) {
+    return deserializeProfileEnvelope(serializeProfileEnvelope(profile, content.contentVersion()), content);
+}
+SaveLoadResult roundTrip(const ProfileState &profile, unsigned schema) {
     return deserializeProfileEnvelope(serializeProfileEnvelope(profile, content.contentVersion(), schema), content);
 }
 }
@@ -218,13 +221,13 @@ TEST(BaseWishExpeditionTest, FailureReturnsZeroAndExpiryDoesNotDeleteCarriedItem
 }
 
 TEST(BaseWishExpeditionTest, Schema44RoundTripsAnd43MigratesWithoutInventedFocus) {
-    auto profile = fresh(); focusFirst(profile);
-    auto loaded = roundTrip(profile); ASSERT_TRUE(loaded.profile) << loaded.message;
+    auto profile = fresh(); profile.stashLayoutVersion = 0U; focusFirst(profile);
+    auto loaded = roundTrip(profile, 44U); ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(*loaded.profile));
     auto legacy = roundTrip(profile, 43U); ASSERT_TRUE(legacy.profile) << legacy.message;
     EXPECT_FALSE(legacy.profile->basePriority.focus);
     ASSERT_TRUE(deploy(profile).succeeded);
-    loaded = roundTrip(profile); ASSERT_TRUE(loaded.profile) << loaded.message;
+    loaded = roundTrip(profile, 44U); ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(*loaded.profile));
     legacy = roundTrip(profile, 43U); ASSERT_TRUE(legacy.profile) << legacy.message;
     EXPECT_FALSE(legacy.profile->pendingRaid->wishFocus);

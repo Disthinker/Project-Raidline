@@ -984,6 +984,12 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 }
                 location["container"] = {{"type", "base_intake"}};
             }
+            else if (stored->container.kind == ProfileContainerKind::LegacyOverflow)
+            {
+                if (schemaVersion < 55)
+                    throw std::invalid_argument{"legacy migration overflow requires schema 55"};
+                location["container"] = {{"type", "legacy_overflow"}};
+            }
             else
             {
                 location["container"] = {
@@ -1288,6 +1294,10 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                 {
                     containerId = ProfileContainerId::baseIntake();
                 }
+                else if (schemaVersion >= 55 && containerType == "legacy_overflow")
+                {
+                    containerId = ProfileContainerId::legacyOverflow();
+                }
                 else if (containerType == "asset_compartment")
                 {
                     containerId = ProfileContainerId::compartment(
@@ -1399,6 +1409,8 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
 
 Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
 {
+    if (schemaVersion < 55 && profile.stashLayoutVersion != 0)
+        throw std::invalid_argument{"independent Stash pages require schema 55"};
     Json assets = assetRegistryValue(profile.assets, schemaVersion);
 
     Json transactions = Json::array();
@@ -1415,6 +1427,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {"next_asset_id", profile.assets.nextAssetId()},
         {"committed_transactions", std::move(transactions)},
         {"assets", std::move(assets)}};
+    if (schemaVersion >= 55)
+        payload["stash_layout_version"] = profile.stashLayoutVersion;
     if (schemaVersion == 1)
     {
         return payload;
@@ -2719,7 +2733,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2911,7 +2925,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2925,6 +2939,10 @@ SaveLoadResult deserializeProfileEnvelope(
         }
 
         ProfileState profile;
+        if (schemaVersion >= 55 && !payload.at("stash_layout_version").is_number_unsigned())
+            return {SaveLoadStatus::Failed, std::nullopt, "warehouse layout marker is invalid"};
+        profile.stashLayoutVersion = schemaVersion >= 55
+            ? payload.at("stash_layout_version").get<std::uint32_t>() : 0U;
         if (schemaVersion >= 45)
         {
             const auto &founding = payload.at("home_founding");
@@ -4768,6 +4786,55 @@ SaveWriteResult SaveRepository::save(
         std::filesystem::remove(backupTemporaryPath_, error);
         return {true, "primary save committed; recovery backup could not be installed"};
     }
+    return {true, {}};
+}
+
+SaveWriteResult SaveRepository::preserveStashMigrationSources(
+    SaveLoadStatus loadedFrom) const
+{
+    if (loadedFrom != SaveLoadStatus::LoadedPrimary &&
+        loadedFrom != SaveLoadStatus::RecoveredBackup)
+        return {false, "migration has no loaded legacy source"};
+
+    const auto preserve = [&](const std::filesystem::path &source,
+                              std::string_view stem) -> SaveWriteResult
+    {
+        const auto bytes = readText(source);
+        if (!bytes) return {false, "legacy migration source could not be read"};
+        const auto snapshot = directory_ /
+            (std::string{stem} + checksum(*bytes) + ".json");
+        std::error_code error;
+        if (std::filesystem::exists(snapshot, error))
+        {
+            const auto existing = readText(snapshot);
+            return existing && *existing == *bytes
+                ? SaveWriteResult{true, {}}
+                : SaveWriteResult{false, "immutable migration backup differs from source"};
+        }
+        if (error) return {false, "migration backup could not be inspected"};
+        // No overwrite option: even a name collision/race must not replace a backup.
+        if (!std::filesystem::copy_file(source, snapshot,
+                std::filesystem::copy_options::none, error) || error)
+            return {false, "legacy migration backup could not be created"};
+        const auto copied = readText(snapshot);
+        if (!copied || *copied != *bytes)
+            return {false, "legacy migration backup failed byte validation"};
+        return {true, {}};
+    };
+
+    std::error_code error;
+    if (std::filesystem::exists(primaryPath_, error))
+    {
+        const auto preserved = preserve(primaryPath_, "profile.pre-stash-pages-v1.");
+        if (!preserved.succeeded) return preserved;
+    }
+    else if (error || loadedFrom == SaveLoadStatus::LoadedPrimary)
+        return {false, "primary migration source could not be inspected"};
+    error.clear();
+    if (std::filesystem::exists(backupPath_, error))
+        return preserve(backupPath_, "profile.backup.pre-stash-pages-v1.");
+    if (error || loadedFrom == SaveLoadStatus::RecoveredBackup)
+        return {false, "recovery migration source could not be inspected"};
     return {true, {}};
 }
 

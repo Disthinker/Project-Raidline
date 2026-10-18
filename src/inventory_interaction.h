@@ -82,7 +82,16 @@ struct InventoryPartialTransferEvent
         const InventoryPartialTransferEvent &) = default;
 };
 
+struct InventoryNavigationEvent
+{
+    MousePosition position{};
+    int pageDelta{};
+    int columns{};
+    int rows{};
+};
+
 using InventoryUiEvent = std::variant<
+    InventoryNavigationEvent,
     InventoryPointerEvent,
     InventoryQuickTransferEvent,
     InventoryRotateEvent,

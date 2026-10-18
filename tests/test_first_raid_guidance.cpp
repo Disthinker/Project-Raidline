@@ -47,6 +47,7 @@ bool contains(const std::vector<std::string> &lines, std::string_view text) {
 TEST(FirstRaidGuidanceTest, LegacySaveIsHiddenAndDoesNotReplay) {
   const auto &content = publishedContentRegistry();
   auto legacy = makeNewAlphaProfile("old-first-guidance", content);
+  legacy.stashLayoutVersion = 0U;
   auto read = deserializeProfileEnvelope(
       serializeProfileEnvelope(legacy, content.contentVersion(), 44), content);
   ASSERT_TRUE(read.profile) << read.message;

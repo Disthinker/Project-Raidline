@@ -47,6 +47,10 @@ public:
         std::string_view contentVersion,
         SaveWriteMetrics *metrics = nullptr) const;
 
+    // Preserve byte-exact, immutable legacy sources before a layout migration.
+    [[nodiscard]] SaveWriteResult preserveStashMigrationSources(
+        SaveLoadStatus loadedFrom) const;
+
     [[nodiscard]] SaveLoadResult load(
         const ContentRegistry &content) const;
 
@@ -64,7 +68,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 54);
+    std::uint32_t schemaVersion = 55);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

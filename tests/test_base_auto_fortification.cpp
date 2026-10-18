@@ -144,6 +144,7 @@ TEST(BaseAutoFortificationTest, RepairChangesEligibilityWithoutRerollAndStaleCom
 TEST(BaseAutoFortificationTest, LegacyAndUnavailableWarningNeverGainDiscount) {
     for (bool legacy : {false, true}) {
         auto p = prepared();
+        p.stashLayoutVersion = 0U;
         if (legacy) p.baseDefenseWarning.reset(); else p.baseDefenseWarning->layout.reset();
         const auto text = serializeProfileEnvelope(p, content.contentVersion(), legacy ? 47 : 48);
         auto loaded = deserializeProfileEnvelope(text, content);

@@ -213,6 +213,7 @@ TEST(BaseFortificationTest, ProfileValidationRejectsBadIdentitySlotsHealthAndRef
 TEST(BaseFortificationTest, Schema47RoundTripKeepsRemnantIdentityAndSchema46MigrationIsEmpty)
 {
     auto legacy = fresh();
+    legacy.stashLayoutVersion = 0U;
     auto old = deserializeProfileEnvelope(
         serializeProfileEnvelope(legacy, "enemy-combat-contract-content-60", 46), content);
     ASSERT_TRUE(old.profile) << old.message;
@@ -318,6 +319,7 @@ TEST(BaseFortificationTest, OldDefenseCheckpointAndWarningRemainRuleOneAfterMigr
     // Explicit legacy input, not the production developer trigger which now
     // freezes a schema-48 warning. Never downgrade a newly prepared event.
     auto profile = makeNewAlphaProfile("old-fortification-warning", content);
+    profile.stashLayoutVersion = 0;
     profile.baseSiege.raidThreatUnits = 100;
     profile.baseSiege.safeUntilWorldMinute = profile.worldClock.elapsedWorldMinutes;
     ASSERT_TRUE(activateBaseSiegeWarningIfEligible(profile));

@@ -15,7 +15,9 @@ std::optional<StoredAssetLocation> returnLocation(const ProfileState &p, const C
                                                 std::optional<StoredAssetLocation> preferred = {})
 {
     const auto &d = c.item(battery.definitionId);
-    if (preferred && profilePlacementFits(p, c, preferred->container, preferred->origin, d, battery.orientation, battery.instanceId)) return preferred;
+    if (preferred && preferred->container.kind != ProfileContainerKind::LegacyOverflow &&
+        !assetIsLegacyOverflowAsset(p, preferred->container.ownerAssetId) &&
+        profilePlacementFits(p, c, preferred->container, preferred->origin, d, battery.orientation, battery.instanceId)) return preferred;
     if (!raid)
     {
         const auto fit = findFirstProfileFit(p, c, ProfileContainerId::stash(), d, battery.orientation, battery.instanceId);

@@ -1,3 +1,46 @@
+# 当前：独立仓库页 v2 已验收，交付中
+
+用户已验收候选 **f7a2af9c01c2**，并明确授权提交、推送和合并。固定桌面入口 **Project Raidline Debug** 保持不变。
+
+- `task_id=ui-inventory-presentation`；`plan_version=RL-UI-INVENTORY-PRESENTATION-v2`；`state=accepted_delivery_in_progress`。
+- accepted_candidate_id：`RL-UI-INVENTORY-PRESENTATION-v2-local-f7a2af9c01c2`。acceptance_source：2026-10-18主控线程直接人类消息“独立仓库页 v2 验收通过，请完成提交、推送和合并。”。
+- 验收源码40路径、程序及入口指纹均已复核；本地2184/2184、核心182/182、原3ms检查有效。只补交付记录，不改已验收程序。
+- 先验证新PR准确提交的Windows/Ubuntu CI，再普通合并，并核对合并树及合并提交双平台CI；不绕过失败门槛，不自动开始下一任务。
+
+[任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)记录范围、批准、候选与交付证据。以下为完整历史，以本节当前状态为准。
+
+# 当前：库存展示 v2 已完成，待验收
+
+候选 **f7a2af9c01c2** 已完成独立仓库页、旧档无损迁移和固定入口。请使用桌面 **Project Raidline Debug**，按[简短验收清单](../acceptance/ui-inventory-presentation-v2.md)正常游玩。
+
+- `task_id=ui-inventory-presentation`；`plan_version=RL-UI-INVENTORY-PRESENTATION-v2`；`state=waiting_human_acceptance`。实施批准已记录，尚无本候选人工验收。
+- 六个独立8×8页、384格。旧合法位置不动，跨页物品迁移，余物只领取；大格、等比图片和既有UI／玩法保留。
+- Windows Debug全目标构建、核心182/182、完整2184/2184通过；原3ms性能最高P95 1.3868ms。
+- 复用原库存目录／分支，HEAD `b09c485`，代码及程序冻结。旧脏工作目录和v1快照保留；未提交、推送、合并、启动游戏或访问真实存档，不开始下一任务。
+
+[开发记录与授权](../exec-plans/active/ui-inventory-presentation-v1.md)保留具体实现、候选指纹及完整验证边界。
+
+<details>
+<summary>历史状态（以当前v2待验收为准）</summary>
+
+# 当前：库存展示 v2 已批准，实施中
+
+独立6页仓库、旧档无损迁移及固定Debug入口。用户已明确批准v2，暂不提交、推送、合并或启动游戏。`state=implementing`。
+
+[任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)保留完整范围、批准原文和v1快照。下方为历史。
+
+<!-- ui-inventory-implementation:begin -->
+# 当前：库存展示 v1 已完成，待验收
+
+候选 **bfb2bd6823e8** 已完成仓库6页、大物品格和图片等比显示。桌面 **Project Raidline 库存验收** 指向独立程序；请使用[简短验收清单](../acceptance/ui-inventory-presentation-v1.md)正常游玩。
+
+- `task_id=ui-inventory-presentation`；`plan_version=RL-UI-INVENTORY-PRESENTATION-v1`；`state=waiting_human_acceptance`。用户已批准实施，尚无本候选人工验收。
+- Windows Debug构建成功；专项93/93、全量2137/2137通过；原32／100敌人诱饵P95最高1.2104ms，原3ms门槛及负载保持。
+- 原存档、已验收UI／玩法与旧程序／入口保留。开发分支 `codex/ui-inventory-presentation-v1` / HEAD `b09c485`，14路径源码与程序冻结；未提交、推送、合并、启动游戏或操作真实存档，不开始下一项开发。
+
+完整授权、候选与检查证据见[任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)。下方为完整历史，以本节为当前状态。
+<!-- ui-inventory-implementation:end -->
+
 <!-- ui-decoy-integration-v1:begin -->
 # 当前：UI与诱饵性能整合 v1 联合复验通过，交付中
 
@@ -685,3 +728,6 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 - 生产 Alpha 只通过 Profile Deploy/Settlement 事务进入 Raid；不得重新引入 Profile 与 V0 库存的资产复制桥。
 - 生产射击不得重新引入可渲染/可碰撞 Projectile 场景实体；武器、伤害、存档和 App 只能消费射击领域值、逻辑飞行投影与 HitResult。
 - 普通命中最终不显示准星 X；爆头/弱点必须由击发准星意图与真实命中部位双重验证的领域结果驱动，App 不得猜测。当前敌人尚无数据化弱点区域，因此只有领域接口预留，不伪造弱点内容。
+
+
+</details>

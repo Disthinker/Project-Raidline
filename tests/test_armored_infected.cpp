@@ -100,6 +100,7 @@ TEST(ArmoredInfectedTest, FrozenArmorRoundTripsAndOldSchemaDoesNotGainArmor) {
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(loaded.profile->pendingRaid->enemies,p.pendingRaid->enemies);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
+    p.stashLayoutVersion=0; // Explicit pre-page legacy fixture.
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),49)),std::invalid_argument);
     // This fixture represents a Raid frozen before either armor or scene
     // storage existed. Do not downgrade a newly generated schema-51 Raid.

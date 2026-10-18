@@ -13,11 +13,12 @@ struct WeaponInventoryUiTestAccess {
     static auto details(App &a) { return a.profileDetailsAsset_; }
     static bool modifying(App &a) { return a.inventoryWeaponComponentsOpen_; }
     static void showStash(App &a) { a.inventoryOverlayState_.openContainerInventory(); }
+    static GridPosition locate(App &a,AssetInstanceId id) { a.locateProfileInventoryAsset(id,true,std::nullopt);return a.profilePresentation_.originFor(ProfileContainerId::stash()); }
     static bool inventory(App &a) { return a.inventoryOverlayState_.isOpen(); }
     static auto weapon(App &a) { return a.componentWeapon_; }
     static const auto &message(App &a) { return a.uiMessage_; }
-    static void raidRightClick(App &a) { a.handleProfileRightClick({240,110},true); }
-    static void raidMenuClick(App &a) { a.handleProfileContextMenuClick({250,180},true); }
+    static void raidRightClick(App &a) { a.handleProfileRightClick({240,150},true); }
+    static void raidMenuClick(App &a) { a.handleProfileContextMenuClick({250,220},true); }
 };
 namespace {
 using A = WeaponInventoryUiTestAccess;
@@ -53,12 +54,12 @@ protected:
     void TearDown() override { app.reset(); SDL_Quit(); std::error_code ec; std::filesystem::remove_all(path,ec); }
     void frame() { A::frame(*app); }
     void tap(float x,float y, Uint8 button=SDL_BUTTON_LEFT) { click(x,y,button); frame(); }
-    void openMenu() { tap(240,110,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon); }
+    void openMenu() { tap(240,150,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon); }
     const ProfileState &profile() { return A::flow(*app).gameSession().profile(); }
 };
 TEST_F(WeaponInventoryUiTest, EquippedWeaponDetailsEscapeAndOutsideClickPreserveInventory) {
     const auto fingerprint=profileStateFingerprint(profile());
-    openMenu(); tap(250,130); ASSERT_EQ(A::details(*app),weapon);
+    openMenu(); tap(250,170); ASSERT_EQ(A::details(*app),weapon);
     EXPECT_FALSE(A::modifying(*app));
     key(SDL_SCANCODE_ESCAPE); frame(); EXPECT_FALSE(A::details(*app)); EXPECT_TRUE(A::inventory(*app));
     openMenu(); tap(600,600); EXPECT_FALSE(A::menu(*app));
@@ -66,14 +67,14 @@ TEST_F(WeaponInventoryUiTest, EquippedWeaponDetailsEscapeAndOutsideClickPreserve
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
 }
 TEST_F(WeaponInventoryUiTest, InventoryModificationInstallsSelectedWeaponAndReturnsWithoutClickThrough) {
-    openMenu(); tap(250,180); ASSERT_TRUE(A::modifying(*app)); EXPECT_EQ(A::weapon(*app),weapon);
+    openMenu(); tap(250,220); ASSERT_TRUE(A::modifying(*app)); EXPECT_EQ(A::weapon(*app),weapon);
     const auto part=find(profile(),"item.component.precision_barrel");
     tap(420,260); // first component after restore-default row
     tap(800,565);
     const auto *location=std::get_if<InstalledWeaponComponentLocation>(&profile().assets.find(part)->location);
     ASSERT_NE(location,nullptr); EXPECT_EQ(location->weaponAssetId,weapon);
     tap(900,105); EXPECT_FALSE(A::modifying(*app)); EXPECT_TRUE(A::inventory(*app));
-    openMenu(); tap(250,180); ASSERT_TRUE(A::modifying(*app));
+    openMenu(); tap(250,220); ASSERT_TRUE(A::modifying(*app));
     key(SDL_SCANCODE_TAB); frame(); EXPECT_FALSE(A::inventory(*app)); EXPECT_FALSE(A::modifying(*app));
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
 }
@@ -85,7 +86,8 @@ TEST_F(WeaponInventoryUiTest, StoredWeaponOpensDetailsFromWarehouseGrid) {
     ASSERT_TRUE(A::flow(*app).gameSession().executeProfileInventory(
         InventoryMoveCommand{weapon,0,{ProfileContainerId::stash(),*origin},ItemOrientation::Degrees0},"store-for-menu").succeeded);
     A::showStash(*app);
-    const float x=668.0F+origin->x*24.0F+4, y=132.0F+origin->y*24.0F+4;
+    const auto view=A::locate(*app,weapon);
+    const float x=668.0F+(origin->x-view.x)*64.0F+4, y=128.0F+(origin->y-view.y)*64.0F+4;
     tap(x,y,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon);
     const auto action=queryProfileContextAction(profile(),content,weapon,false);
     const float menuY=std::clamp(y,16.0F,700.0F-46.0F*(action ? 3 : 2));

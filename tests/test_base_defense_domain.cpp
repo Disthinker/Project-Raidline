@@ -317,6 +317,7 @@ TEST(BaseDefenseDomainTest, RescueOverflowRejectsWithoutPartialState)
 TEST(BaseDefenseDomainTest, Schema46RoundTripsActiveDefenseAndServiceSequences)
 {
     auto p = warningProfile();
+    p.stashLayoutVersion = 0U;
     start(p);
     auto &s = *p.activeBaseDefense;
     s.commandSequence = 17;
@@ -337,6 +338,7 @@ TEST(BaseDefenseDomainTest, Schema46RoundTripsActiveDefenseAndServiceSequences)
 TEST(BaseDefenseDomainTest, Schema45MigrationNeverInventsActiveOrResolvedEvents)
 {
     auto p = warningProfile();
+    p.stashLayoutVersion = 0U;
     p.baseSiege.autoDefensePresetSaved = true;
     auto text = serializeProfileEnvelope(p, publishedContentRegistry().contentVersion(), 45);
     auto loaded = deserializeProfileEnvelope(text, publishedContentRegistry());
@@ -350,6 +352,7 @@ TEST(BaseDefenseDomainTest, Schema45MigrationNeverInventsActiveOrResolvedEvents)
 TEST(BaseDefenseDomainTest, ActiveDefenseCannotBeWrittenToOldSchema)
 {
     auto p = warningProfile();
+    p.stashLayoutVersion = 0U;
     start(p);
     EXPECT_THROW(static_cast<void>(
                      serializeProfileEnvelope(p, publishedContentRegistry().contentVersion(), 45)),

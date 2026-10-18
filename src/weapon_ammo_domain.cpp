@@ -24,6 +24,8 @@ bool mergeOrCreateAmmunition(
     std::optional<std::string> reliefBatchId,
     std::uint32_t quantity)
 {
+    if (destination.kind == ProfileContainerKind::LegacyOverflow)
+        return false;
     const ItemDefinition &definition = content.item(ammunitionId);
     for (const AssetRecord *asset : assetsInContainer(candidate, destination))
     {
@@ -329,6 +331,9 @@ WeaponAmmoReceipt applyFire(
     const ContentRegistry &content,
     const FireWeaponCommand &command)
 {
+    if (assetIsLegacyOverflowAsset(candidate, command.weaponAssetId))
+        return failure(DomainErrorCode::IllegalDestination,
+            "legacy items must be withdrawn before use", candidate.revision);
     AssetRecord *weapon = candidate.assets.findMutable(command.weaponAssetId);
     if (weapon == nullptr)
     {
@@ -459,6 +464,9 @@ WeaponAmmoReceipt inspectFire(
     const ContentRegistry &content,
     const FireWeaponCommand &command)
 {
+    if (assetIsLegacyOverflowAsset(profile, command.weaponAssetId))
+        return failure(DomainErrorCode::IllegalDestination,
+            "legacy items must be withdrawn before use", profile.revision);
     const AssetRecord *weapon = profile.assets.find(command.weaponAssetId);
     if (weapon == nullptr)
     {
@@ -639,6 +647,24 @@ WeaponAmmoReceipt apply(
         [&candidate, &content](const auto &typed)
         {
             using Command = std::decay_t<decltype(typed)>;
+            bool legacy{};
+            if constexpr (requires { typed.weaponAssetId; })
+                legacy = legacy || assetIsLegacyOverflowAsset(candidate, typed.weaponAssetId);
+            if constexpr (requires { typed.magazineAssetId; })
+                legacy = legacy || assetIsLegacyOverflowAsset(candidate, typed.magazineAssetId);
+            if constexpr (requires { typed.ammunitionAssetId; })
+                legacy = legacy || assetIsLegacyOverflowAsset(candidate, typed.ammunitionAssetId);
+            if constexpr (requires { typed.destination.kind; })
+                legacy = legacy || typed.destination.kind == ProfileContainerKind::LegacyOverflow ||
+                    (typed.destination.kind == ProfileContainerKind::AssetCompartment &&
+                     assetIsLegacyOverflowAsset(candidate, typed.destination.ownerAssetId));
+            if constexpr (requires { typed.destination.container; })
+                legacy = legacy || typed.destination.container.kind == ProfileContainerKind::LegacyOverflow ||
+                    (typed.destination.container.kind == ProfileContainerKind::AssetCompartment &&
+                     assetIsLegacyOverflowAsset(candidate, typed.destination.container.ownerAssetId));
+            if (legacy)
+                return failure(DomainErrorCode::IllegalDestination,
+                    "legacy items must be withdrawn before use", candidate.revision);
             if constexpr (std::is_same_v<Command, LoadMagazineCommand>)
                 return applyLoad(candidate, content, typed);
             else if constexpr (std::is_same_v<Command, UnloadMagazineCommand>)
@@ -666,6 +692,7 @@ WeaponAmmoPlan queryWeaponAmmo(
     const WeaponAmmoCommand &command)
 {
     ProfileState candidate;
+    candidate.stashLayoutVersion = profile.stashLayoutVersion;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
     const WeaponAmmoReceipt receipt = apply(candidate, content, command);

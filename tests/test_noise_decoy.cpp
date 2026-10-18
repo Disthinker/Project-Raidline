@@ -69,10 +69,10 @@ TEST(NoiseDecoyTest, UnequippedRigCannotSupplyThrowable){
     EXPECT_FALSE(consumeNoiseDecoy(p,content(),id,{p.revision,"unequipped"}).succeeded);EXPECT_EQ(profileStateFingerprint(p),before);
 }
 TEST(NoiseDecoyTest, Schema54RoundTripKeepsGenericItemAndOldProfileGetsNoGrant){
-    auto p=makeNewPublishedProfile("save54",content());const auto id=add(p,2);
+    auto p=makeNewPublishedProfile("save54",content());p.stashLayoutVersion=0;const auto id=add(p,2);
     const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content().contentVersion(),54),content());ASSERT_TRUE(loaded.profile)<<loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));EXPECT_EQ(loaded.profile->assets.find(id)->quantity,2U);
-    auto old=makeNewPublishedProfile("old54",content());const auto legacy=deserializeProfileEnvelope(serializeProfileEnvelope(old,"quick-melee-self-defense-content-66",54),content());ASSERT_TRUE(legacy.profile)<<legacy.message;
+    auto old=makeNewPublishedProfile("old54",content());old.stashLayoutVersion=0;const auto legacy=deserializeProfileEnvelope(serializeProfileEnvelope(old,"quick-melee-self-defense-content-66",54),content());ASSERT_TRUE(legacy.profile)<<legacy.message;
     EXPECT_EQ(profileStateFingerprint(old),profileStateFingerprint(*legacy.profile));for(const auto &[key,a]:legacy.profile->assets.records())EXPECT_NE(a.definitionId,alpha_content::noiseDecoy);
 }
 TEST(NoiseDecoyTest, PurchaseAndRecycleUseExistingPricesWithoutFreeRestock){

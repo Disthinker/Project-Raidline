@@ -159,6 +159,7 @@ TEST_F(RaidCorpseSearchTest, Schema52RoundTripAndLegacy51NeverRetrofitCorpses)
 {
     expose(); const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
+    p.stashLayoutVersion=0;
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content.contentVersion(),51)),std::invalid_argument);
     legacyCorpses(p); const auto old=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion(),51),content);
     ASSERT_TRUE(old.profile)<<old.message; EXPECT_TRUE(corpses(*old.profile).empty()); EXPECT_EQ(old.profile->pendingRaid->loot,p.pendingRaid->loot);

@@ -742,26 +742,12 @@ namespace
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
-        switch (slot)
-        {
-        case EquipmentSlotKind::PrimaryWeapon:
-            return SDL_FRect{214.0F, 96.0F, 366.0F, 64.0F};
-        case EquipmentSlotKind::SecondaryWeapon:
-            return SDL_FRect{214.0F, 166.0F, 366.0F, 64.0F};
-        case EquipmentSlotKind::Sidearm:
-            return SDL_FRect{214.0F, 236.0F, 172.0F, 58.0F};
-        case EquipmentSlotKind::Helmet:
-            return SDL_FRect{408.0F, 236.0F, 172.0F, 58.0F};
-        case EquipmentSlotKind::BodyArmor:
-            return SDL_FRect{214.0F, 300.0F, 172.0F, 58.0F};
-        case EquipmentSlotKind::ChestRig:
-            return SDL_FRect{408.0F, 300.0F, 172.0F, 58.0F};
-        case EquipmentSlotKind::Backpack:
-            return SDL_FRect{214.0F, 364.0F, 366.0F, 54.0F};
-        case EquipmentSlotKind::QuickMelee:
-            return SDL_FRect{42.0F,448.0F,150.0F,64.0F};
-        }
-        return SDL_FRect{};
+        const auto it = std::find(kProfileEquipmentSlots.begin(),
+                                  kProfileEquipmentSlots.end(), slot);
+        const auto index =
+            static_cast<int>(std::distance(kProfileEquipmentSlots.begin(), it));
+        return SDL_FRect{214.0F + (index % 2) * 202.0F,
+                         136.0F + (index / 2) * 120.0F, 194.0F, 112.0F};
     }
 
     SDL_FRect installedMagazineRect(EquipmentSlotKind slot) noexcept
@@ -814,14 +800,114 @@ namespace
         float y{};
         float cellSize{};
         std::string label;
+        std::optional<SDL_FRect> clip;
+        std::optional<ProfileInventoryViewport> viewport;
     };
 
     std::vector<ProfileGridView> profileGridViews(
-        const ProfileState &profile,
-        bool includeStash,
-        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
+        const ProfileState &profile, bool includeStash,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt,
+        const ProfileInventoryPresentation *presentation = nullptr)
     {
         std::vector<ProfileGridView> result;
+        if (presentation != nullptr)
+        {
+            const auto append =
+                [&](ProfileContainerId container, float x, float y,
+                    InventoryGridSize window, std::string label,
+                    std::optional<SDL_FRect> panelClip = std::nullopt)
+            {
+                ProfileInventoryViewport v{
+                    profileContainerSize(profile, publishedContentRegistry(),
+                                         container),
+                    window,
+                    presentation->originFor(container),
+                    x,
+                    y,
+                    64.0F,
+                    container.kind == ProfileContainerKind::Stash};
+                v.clamp();
+                const auto c = v.clip();
+                SDL_FRect clip{c.x, c.y, c.width, c.height};
+                if (panelClip)
+                {
+                    SDL_FRect intersection{};
+                    if (!SDL_GetRectIntersectionFloat(&clip, &*panelClip,
+                                                      &intersection))
+                        return;
+                    clip = intersection;
+                }
+                result.push_back({container, x - v.origin.x * 64.0F,
+                                  y - v.origin.y * 64.0F, 64.0F,
+                                  std::move(label), clip, v});
+            };
+            if (externalContainerId)
+            {
+                if (const auto *owner =
+                        profile.assets.find(*externalContainerId))
+                {
+                    const auto &d =
+                        publishedContentRegistry().item(owner->definitionId);
+                    if (!d.containerCompartments.empty())
+                    {
+                        const auto index =
+                            std::min(presentation->externalCompartment,
+                                     static_cast<std::uint32_t>(
+                                         d.containerCompartments.size() - 1));
+                        append(ProfileContainerId::compartment(
+                                   *externalContainerId, index),
+                               668, 128, {8, 8},
+                               fmt::format("COMPARTMENT {}", index + 1));
+                    }
+                }
+            }
+            else if (includeStash)
+            {
+                const bool legacyOverflow =
+                    presentation->legacyOverflow &&
+                    !assetsInContainer(profile,
+                                       ProfileContainerId::legacyOverflow())
+                         .empty();
+                const bool returns =
+                    !legacyOverflow && presentation->returns &&
+                    !assetsInContainer(profile,
+                                       ProfileContainerId::baseIntake())
+                         .empty();
+                append(legacyOverflow ? ProfileContainerId::legacyOverflow()
+                       : returns ? ProfileContainerId::baseIntake()
+                               : ProfileContainerId::stash(),
+                       668, 128, {8, 8},
+                       legacyOverflow ? "LEGACY ITEMS (WITHDRAW ONLY)"
+                       : returns ? "UNASSIGNED RETURNS (MOVE TO RECOVER)"
+                               : "STASH");
+            }
+            const auto slot = presentation->tab == ProfileInventoryTab::ChestRig
+                                  ? EquipmentSlotKind::ChestRig
+                                  : EquipmentSlotKind::Backpack;
+            if (presentation->tab != ProfileInventoryTab::Equipment)
+                if (const auto id = equippedAsset(profile, slot))
+                    if (const auto *owner = profile.assets.find(*id))
+                    {
+                        const auto &d = publishedContentRegistry().item(
+                            owner->definitionId);
+                        const auto layout = layoutProfileCompartments(
+                            d, 42, 148, 618, 64,
+                            slot == EquipmentSlotKind::Backpack);
+                        const float scroll =
+                            slot == EquipmentSlotKind::ChestRig
+                                ? std::clamp(presentation->chestScroll, 0,
+                                             static_cast<int>(std::max(
+                                                 0.0F, layout.bottom - 638)))
+                                : 0;
+                        for (const auto &v : layout.placements)
+                            append(ProfileContainerId::compartment(
+                                       *id, static_cast<std::uint32_t>(
+                                                v.compartmentIndex)),
+                                   v.x, v.y - scroll, {9, 8}, v.label,
+                                   SDL_FRect{42, 128, 576, 512});
+                    }
+            return result;
+        }
         if (externalContainerId.has_value())
         {
             const AssetRecord *owner = profile.assets.find(
@@ -1151,46 +1237,52 @@ namespace
     };
 
     std::optional<ProfileAssetHit> profileAssetHitAt(
-        const ProfileState &profile,
-        MousePosition position,
-        bool includeStash,
-        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
+        const ProfileState &profile, MousePosition position, bool includeStash,
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt,
+        const ProfileInventoryPresentation *presentation = nullptr)
     {
-        for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
-        {
-            const auto weapon = equippedAsset(profile, slot);
-            if (!weapon.has_value())
+        if (!presentation ||
+            presentation->tab == ProfileInventoryTab::Equipment)
+            for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
             {
-                continue;
-            }
-            if (const auto magazine = installedMagazine(profile, *weapon);
-                magazine.has_value() &&
-                contains(installedMagazineRect(slot), position))
-            {
-                return ProfileAssetHit{
-                    profile.assets.find(*magazine), installedMagazineRect(slot),
-                    kBasePocketCellSize, GridPosition{}, GridPosition{}};
-            }
-        }
-
-        for (EquipmentSlotKind slot : kProfileEquipmentSlots)
-        {
-            const SDL_FRect bounds = equipmentSlotRect(slot);
-            if (contains(bounds, position))
-            {
-                if (const auto id = equippedAsset(profile, slot))
+                const auto weapon = equippedAsset(profile, slot);
+                if (!weapon.has_value())
                 {
-                    return ProfileAssetHit{
-                        profile.assets.find(*id), bounds,
-                        kBasePocketCellSize, GridPosition{}, GridPosition{}};
+                    continue;
                 }
-                return std::nullopt;
+                if (const auto magazine = installedMagazine(profile, *weapon);
+                    magazine.has_value() &&
+                    contains(installedMagazineRect(slot), position))
+                {
+                    return ProfileAssetHit{profile.assets.find(*magazine),
+                                           installedMagazineRect(slot),
+                                           kBasePocketCellSize, GridPosition{},
+                                           GridPosition{}};
+                }
             }
-        }
+
+        if (!presentation ||
+            presentation->tab == ProfileInventoryTab::Equipment)
+            for (EquipmentSlotKind slot : kProfileEquipmentSlots)
+            {
+                const SDL_FRect bounds = equipmentSlotRect(slot);
+                if (contains(bounds, position))
+                {
+                    if (const auto id = equippedAsset(profile, slot))
+                    {
+                        return ProfileAssetHit{profile.assets.find(*id), bounds,
+                                               kBasePocketCellSize,
+                                               GridPosition{}, GridPosition{}};
+                    }
+                    return std::nullopt;
+                }
+            }
 
         for (const ProfileGridView &view : profileGridViews(
-                 profile, includeStash, externalContainerId))
+                 profile, includeStash, externalContainerId, presentation))
         {
+            if (view.clip && !contains(*view.clip, position))
+                continue;
             InventoryGridSize size{};
             try
             {
@@ -1238,15 +1330,15 @@ namespace
     }
 
     std::optional<SDL_FRect> profileAssetBounds(
-        const ProfileState &profile,
-        const AssetRecord &asset,
+        const ProfileState &profile, const AssetRecord &asset,
         bool includeStash,
-        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt,
+        const ProfileInventoryPresentation *presentation = nullptr)
     {
         if (const auto *stored = std::get_if<StoredAssetLocation>(&asset.location))
         {
             for (const ProfileGridView &view : profileGridViews(
-                     profile, includeStash, externalContainerId))
+                     profile, includeStash, externalContainerId, presentation))
             {
                 if (view.container != stored->container)
                 {
@@ -1283,14 +1375,19 @@ namespace
     SDL_FRect profileGroundContainerPickupRect() noexcept;
 
     std::optional<ProfileDropTarget> profileDropTargetAt(
-        const ProfileState &profile,
-        MousePosition position,
-        bool includeStash,
-        bool allowBaseGround,
-        GridPosition grabOffset,
+        const ProfileState &profile, MousePosition position, bool includeStash,
+        bool allowBaseGround, GridPosition grabOffset,
         std::optional<AssetInstanceId> draggedAssetId,
-        std::optional<AssetInstanceId> externalContainerId = std::nullopt)
+        std::optional<AssetInstanceId> externalContainerId = std::nullopt,
+        const ProfileInventoryPresentation *presentation = nullptr)
     {
+        // Legacy migration storage is a source only, including special item
+        // actions such as loading a magazine displayed in that area.
+        for (const auto &view : profileGridViews(
+                 profile, includeStash, externalContainerId, presentation))
+            if (view.container.kind == ProfileContainerKind::LegacyOverflow &&
+                view.clip && contains(*view.clip, position))
+                return std::nullopt;
         const AssetRecord *dragged = draggedAssetId.has_value()
             ? profile.assets.find(*draggedAssetId)
             : nullptr;
@@ -1306,27 +1403,30 @@ namespace
         }
         if (!externalContainerId.has_value())
         {
-            for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
-            {
-                if (!contains(equipmentSlotRect(slot), position))
+            if (!presentation ||
+                presentation->tab == ProfileInventoryTab::Equipment)
+                for (const EquipmentSlotKind slot : kWeaponEquipmentSlots)
                 {
-                    continue;
-                }
-                if (const auto weapon = equippedAsset(profile, slot))
-                {
-                    if (draggedCategory == ItemCategory::Magazine)
+                    if (!contains(equipmentSlotRect(slot), position))
                     {
-                        return WeaponInstallTarget{*weapon};
+                        continue;
                     }
-                    if (draggedDefinition != nullptr &&
-                        draggedDefinition->weaponMaintenance.has_value())
+                    if (const auto weapon = equippedAsset(profile, slot))
                     {
-                        return WeaponMaintenanceTarget{*weapon};
+                        if (draggedCategory == ItemCategory::Magazine)
+                        {
+                            return WeaponInstallTarget{*weapon};
+                        }
+                        if (draggedDefinition != nullptr &&
+                            draggedDefinition->weaponMaintenance.has_value())
+                        {
+                            return WeaponMaintenanceTarget{*weapon};
+                        }
                     }
                 }
-            }
-            if (const auto hit = profileAssetHitAt(
-                    profile, position, includeStash, externalContainerId);
+            if (const auto hit =
+                    profileAssetHitAt(profile, position, includeStash,
+                                      externalContainerId, presentation);
                 dragged != nullptr && hit.has_value())
             {
                 const ItemCategory category = publishedContentRegistry()
@@ -1356,17 +1456,21 @@ namespace
             }
         }
 
-        for (EquipmentSlotKind slot : kProfileEquipmentSlots)
-        {
-            if (contains(equipmentSlotRect(slot), position))
+        if (!presentation ||
+            presentation->tab == ProfileInventoryTab::Equipment)
+            for (EquipmentSlotKind slot : kProfileEquipmentSlots)
             {
-                return EquipmentSlotTarget{slot};
+                if (contains(equipmentSlotRect(slot), position))
+                {
+                    return EquipmentSlotTarget{slot};
+                }
             }
-        }
 
         for (const ProfileGridView &view : profileGridViews(
-                 profile, includeStash, externalContainerId))
+                 profile, includeStash, externalContainerId, presentation))
         {
+            if (view.clip && !contains(*view.clip, position))
+                continue;
             InventoryGridSize size{};
             try
             {
@@ -1412,7 +1516,7 @@ namespace
 
     SDL_FRect profileBaseGroundDropRect() noexcept
     {
-        return SDL_FRect{800.0F, 612.0F, 348.0F, 42.0F};
+        return SDL_FRect{668.0F, 652.0F, 240.0F, 30.0F};
     }
 
     SDL_FRect profileGroundContainerPickupRect() noexcept
@@ -1655,6 +1759,35 @@ namespace
         bool shiftPressed,
         UiViewport viewport) noexcept
     {
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+            (event.key.scancode == SDL_SCANCODE_PAGEUP ||
+             event.key.scancode == SDL_SCANCODE_PAGEDOWN))
+        {
+            float x{}, y{};
+            SDL_GetMouseState(&x, &y);
+            const auto p = viewport.toLogical({x, y});
+            return InventoryNavigationEvent{
+                {p.x, p.y},
+                event.key.scancode == SDL_SCANCODE_PAGEUP ? -1 : 1,
+                0,
+                0};
+        }
+        if (event.type == SDL_EVENT_MOUSE_WHEEL)
+        {
+            const auto p =
+                viewport.toLogical({event.wheel.mouse_x, event.wheel.mouse_y});
+            const float direction =
+                event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+            const int rows =
+                static_cast<int>(std::round(-event.wheel.y * direction));
+            return InventoryNavigationEvent{
+                {p.x, p.y},
+                0,
+                shiftPressed
+                    ? rows
+                    : static_cast<int>(std::round(-event.wheel.x * direction)),
+                shiftPressed ? 0 : rows};
+        }
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
             event.button.button == SDL_BUTTON_LEFT &&
             (controlPressed || shiftPressed))
@@ -2795,6 +2928,7 @@ void App::closeInventory() noexcept
     profileDetailsAsset_.reset(); deviceBatteryDrag_.reset();
     inventoryInteraction_.reset();
     profileInventoryInteraction_.reset();
+    profilePresentation_ = {};
     profileContextMenu_.reset();
     profileAssetSelection_.reset();
     openedBaseGroundContainerId_.reset();
@@ -4823,6 +4957,9 @@ void App::handleProfileInventoryUiEvent(
         inventoryOverlayState_.showsExternalContainer() &&
         !externalContainerId.has_value();
     const ProfileState &profile = gameSession_.profile();
+    if (handleProfilePresentationEvent(event, includeStash,
+                                       externalContainerId))
+        return;
 
     if (std::holds_alternative<InventoryRotateEvent>(event))
     {
@@ -4843,11 +4980,9 @@ void App::handleProfileInventoryUiEvent(
         {
             return;
         }
-        const auto hit = profileAssetHitAt(
-            profile,
-            *quick.pointerPosition,
-            includeStash,
-            externalContainerId);
+        const auto hit =
+            profileAssetHitAt(profile, *quick.pointerPosition, includeStash,
+                              externalContainerId, &profilePresentation_);
         if (!hit.has_value() || hit->asset == nullptr)
         {
             return;
@@ -4925,7 +5060,14 @@ void App::handleProfileInventoryUiEvent(
                     const InventoryCommand merge = InventoryMoveCommand{asset.instanceId, 0, location, asset.orientation};
                     if (gameSession_.queryRaidSceneContainerInventory(*externalContainerId, merge).canCommit)
                     {
-                        executeProfileDrop({{asset.instanceId, profile.revision, asset.location, 0, asset.orientation}, StoredCellTarget{location}}, true);
+                        const auto id = asset.instanceId;
+                        const auto revision = profile.revision;
+                        executeProfileDrop({{id, revision, asset.location, 0,
+                                             asset.orientation},
+                                            StoredCellTarget{location}},
+                                           true);
+                        if (gameSession_.profile().revision != revision)
+                            describeProfileInventoryDestination(id, location);
                         return;
                     }
                 }
@@ -4984,7 +5126,14 @@ void App::handleProfileInventoryUiEvent(
             }
             if (allowed)
             {
+                const auto revisionBefore = gameSession_.profile().revision;
+                const auto targetLocation =
+                    std::get<StoredCellTarget>(request.target).location;
+                const auto movedId = request.source.instanceId;
                 executeProfileDrop(request, inRaid);
+                if (gameSession_.profile().revision != revisionBefore)
+                    describeProfileInventoryDestination(movedId,
+                                                        targetLocation);
                 return;
             }
         }
@@ -5000,8 +5149,9 @@ void App::handleProfileInventoryUiEvent(
             return;
         }
         profileContextMenu_.reset();
-        const auto hit = profileAssetHitAt(
-            profile, position, includeStash, externalContainerId);
+        const auto hit =
+            profileAssetHitAt(profile, position, includeStash,
+                              externalContainerId, &profilePresentation_);
         if (!hit.has_value() || hit->asset == nullptr)
         {
             return;
@@ -5085,16 +5235,14 @@ void App::handleProfileInventoryUiEvent(
                           ->grabOffsetInCells.y))}
             : GridPosition{};
     const auto target = profileDropTargetAt(
-        profile,
-        pointer.position,
-        includeStash,
-        !inRaid && !externalContainerId.has_value(),
-        grabOffset,
+        profile, pointer.position, includeStash,
+        !inRaid && !externalContainerId.has_value(), grabOffset,
         profileInventoryInteraction_.source().has_value()
-            ? std::optional<AssetInstanceId>{
-                  profileInventoryInteraction_.source()->instanceId}
+            ? std::optional<AssetInstanceId>{profileInventoryInteraction_
+                                                 .source()
+                                                 ->instanceId}
             : std::nullopt,
-        externalContainerId);
+        externalContainerId, &profilePresentation_);
 
     switch (pointer.type)
     {
@@ -5111,6 +5259,16 @@ void App::handleProfileInventoryUiEvent(
         beginPress(pointer.position, false, false);
         break;
     case InventoryPointerEventType::LeftButtonUp:
+        profileInventoryInteraction_.updatePointerPosition(pointer.position,
+                                                           target);
+        if (profileInventoryInteraction_.pointerPhase() ==
+            InventoryPointerPhase::Pressed)
+        {
+            const auto source = profileInventoryInteraction_.source();
+            if (source)
+                locateProfileInventoryAsset(source->instanceId, includeStash,
+                                            externalContainerId);
+        }
         if (const auto request = profileInventoryInteraction_.releasePointer(
                 pointer.position, target))
         {
@@ -5133,8 +5291,9 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     const bool includeStash = !inRaid &&
         inventoryOverlayState_.showsExternalContainer() &&
         !externalContainerId.has_value();
-    const auto hit = profileAssetHitAt(
-        gameSession_.profile(), position, includeStash, externalContainerId);
+    const auto hit =
+        profileAssetHitAt(gameSession_.profile(), position, includeStash,
+                          externalContainerId, &profilePresentation_);
     if (!hit.has_value() || hit->asset == nullptr)
     {
         profileContextMenu_.reset();
@@ -6749,6 +6908,14 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (profilePresentationProfileId_ != gameSession_.profile().profileId)
+    {
+        profilePresentation_ = {};
+        profileHoverTab_ = -1;
+        profileHoverSeconds_ = 0;
+        profilePresentationProfileId_ = gameSession_.profile().profileId;
+    }
+    updateProfilePresentationHover(deltaTime);
     if(pendingUiWindowSize_) {const auto index=*pendingUiWindowSize_;pendingUiWindowSize_.reset();applyUiWindowSize(index);}
 
     // Revoke the external view before processing queued clicks or stale drags.
@@ -6964,7 +7131,8 @@ void App::update(float deltaTime)
             {
                 handleInventoryRotateEvent();
             }
-            else
+            else if (std::holds_alternative<InventoryPartialTransferEvent>(
+                         event))
             {
                 handleInventoryPartialTransferEvent(
                     std::get<InventoryPartialTransferEvent>(event));
@@ -11776,7 +11944,7 @@ void App::renderBaseWorld()
                 halo.w + 6.0F, halo.h + 6.0F};
             SDL_RenderRect(renderer_, &outer);
         }
-        renderProfileAsset(*asset, bounds, cellSize, 255, false);
+        renderProfileAsset(*asset, bounds, cellSize, 255, false, false);
     }
 
     renderBasePlacementPreview();
@@ -14033,12 +14201,9 @@ void App::renderHomeRegionMap()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::renderProfileAsset(
-    const AssetRecord &asset,
-    const SDL_FRect &bounds,
-    float cellSize,
-    Uint8 alpha,
-    bool showWeaponCondition)
+void App::renderProfileAsset(const AssetRecord &asset, const SDL_FRect &bounds,
+                             float cellSize, Uint8 alpha,
+                             bool showWeaponCondition, bool fitImage)
 {
     const ItemDefinition &definition =
         publishedContentRegistry().item(asset.definitionId);
@@ -14060,13 +14225,23 @@ void App::renderProfileAsset(
     if (texture != nullptr && texture->valid())
     {
         SDL_SetTextureAlphaMod(texture->get(), alpha);
-        renderOrientedTexture(
-            renderer_,
-            texture->get(),
-            bounds,
-            static_cast<float>(definition.inventoryWidthCells) * cellSize,
-            static_cast<float>(definition.inventoryHeightCells) * cellSize,
-            asset.orientation);
+        if (fitImage)
+        {
+            float w{}, h{};
+            SDL_GetTextureSize(texture->get(), &w, &h);
+            const auto fit = fitInventoryTexture(
+                w, h, {bounds.x, bounds.y, bounds.w, bounds.h},
+                asset.orientation);
+            const SDL_FRect destination{fit.x, fit.y, fit.width, fit.height};
+            SDL_RenderTextureRotated(
+                renderer_, texture->get(), nullptr, &destination,
+                orientationAngle(asset.orientation), nullptr, SDL_FLIP_NONE);
+        }
+        else
+            renderOrientedTexture(renderer_, texture->get(), bounds,
+                                  definition.inventoryWidthCells * cellSize,
+                                  definition.inventoryHeightCells * cellSize,
+                                  asset.orientation);
         SDL_SetTextureAlphaMod(texture->get(), 255);
     }
     else
@@ -14100,13 +14275,14 @@ void App::renderProfileAsset(
         }
         SDL_RenderFillRect(renderer_, &bounds);
         const std::string shortName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.meleeUse ? "KNIFE" : definition.displayName, 12);
+            uiTextRenderer_.language(),
+            definition.meleeUse ? "KNIFE" : definition.displayName, 120);
         SDL_SetRenderDrawColor(renderer_, 232, 236, 232, 255);
-        uiTextRenderer_.render(
-            renderer_,
-            bounds.x + 3.0F,
-            bounds.y + 4.0F,
-            shortName.c_str());
+        uiTextRenderer_.renderBox(renderer_,
+                                  {bounds.x + 6, bounds.y + 6,
+                                   std::max(0.0F, bounds.w - 12),
+                                   std::max(0.0F, bounds.h - 24)},
+                                  shortName, {18, UiTextAlign::Left, 2});
     }
 
     SDL_SetRenderDrawColor(renderer_, 214, 220, 214, alpha);
@@ -14118,9 +14294,12 @@ void App::renderProfileAsset(
             "D {:.2f}/{:.2f}",
             static_cast<float>(asset.currentDurability) / 100.0F,
             static_cast<float>(asset.currentMaximumDurability) / 100.0F);
-        uiTextRenderer_.render(
-            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
-            condition.c_str());
+        uiTextRenderer_.renderBox(
+            renderer_,
+            {bounds.x + 3, bounds.y + bounds.h - 20,
+             std::max(0.0F, bounds.w - (asset.quantity > 1 ? 42.0F : 6.0F)),
+             20},
+            condition, {13, UiTextAlign::Left, 1});
     }
     else if (showWeaponCondition && definition.armorProtection.has_value())
     {
@@ -14128,9 +14307,12 @@ void App::renderProfileAsset(
             "D {}/{}",
             asset.currentDurability,
             asset.currentMaximumDurability);
-        uiTextRenderer_.render(
-            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
-            condition.c_str());
+        uiTextRenderer_.renderBox(
+            renderer_,
+            {bounds.x + 3, bounds.y + bounds.h - 20,
+             std::max(0.0F, bounds.w - (asset.quantity > 1 ? 42.0F : 6.0F)),
+             20},
+            condition, {13, UiTextAlign::Left, 1});
     }
     else if (definition.weaponMaintenance.has_value() ||
              definition.armorMaintenance.has_value())
@@ -14139,7 +14321,7 @@ void App::renderProfileAsset(
             "KIT {:.2f}",
             static_cast<float>(asset.remainingCharges) / 100.0F);
         uiTextRenderer_.render(
-            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 13.0F,
+            renderer_, bounds.x + 3.0F, bounds.y + bounds.h - 20.0F,
             capacity.c_str());
     }
 }
@@ -14170,7 +14352,8 @@ void App::renderProfileGrid(
         static_cast<float>(size.width) * cellSize,
         static_cast<float>(size.height) * cellSize};
     const bool pendingReturns =
-        container == ProfileContainerId::baseIntake();
+        container == ProfileContainerId::baseIntake() ||
+        container == ProfileContainerId::legacyOverflow();
     SDL_SetRenderDrawColor(
         renderer_,
         pendingReturns ? 34 : 20,
@@ -14219,6 +14402,30 @@ void App::renderProfileGrid(
                 static_cast<float>(footprint.width) * cellSize,
                 static_cast<float>(footprint.height) * cellSize},
             cellSize);
+        if (container.kind != ProfileContainerKind::Stash &&
+            SDL_RenderClipEnabled(renderer_))
+        {
+            SDL_Rect c{};
+            SDL_GetRenderClipRect(renderer_, &c);
+            const SDL_FRect full{
+                x + stored.origin.x * cellSize, y + stored.origin.y * cellSize,
+                footprint.width * cellSize, footprint.height * cellSize};
+            const SDL_FRect clip{
+                static_cast<float>(c.x), static_cast<float>(c.y),
+                static_cast<float>(c.w), static_cast<float>(c.h)};
+            SDL_FRect visible{};
+            if (SDL_GetRectIntersectionFloat(&full, &clip, &visible) &&
+                (visible.w < full.w || visible.h < full.h))
+            {
+                SDL_SetRenderDrawColor(renderer_, 26, 58, 68, 240);
+                const SDL_FRect marker{visible.x + 2, visible.y + 2,
+                                       std::min(60.0F, visible.w - 4), 20};
+                SDL_RenderFillRect(renderer_, &marker);
+                SDL_SetRenderDrawColor(renderer_, 235, 223, 170, 255);
+                uiTextRenderer_.renderBox(renderer_, marker, "CONT.",
+                                          {14, UiTextAlign::Center, 1});
+            }
+        }
     }
 }
 
@@ -14454,9 +14661,8 @@ void App::renderProfileDragFeedback(
                 if constexpr (std::is_same_v<Target, StoredCellTarget>)
                 {
                     for (const ProfileGridView &view : profileGridViews(
-                             profile,
-                             includeStash,
-                             externalContainerId))
+                             profile, includeStash, externalContainerId,
+                             &profilePresentation_))
                     {
                         if (view.container == typedTarget.location.container)
                         {
@@ -14501,14 +14707,28 @@ void App::renderProfileDragFeedback(
                     if (const AssetRecord *targetAsset = profile.assets.find(id))
                     {
                         targetBounds = profileAssetBounds(
-                            profile,
-                            *targetAsset,
-                            includeStash,
-                            externalContainerId);
+                            profile, *targetAsset, includeStash,
+                            externalContainerId, &profilePresentation_);
                     }
                 }
             },
             *target);
+        if (targetBounds && std::holds_alternative<StoredCellTarget>(*target))
+            for (const auto &view :
+                 profileGridViews(profile, includeStash, externalContainerId,
+                                  &profilePresentation_))
+                if (view.container == std::get<StoredCellTarget>(*target)
+                                          .location.container &&
+                    view.clip)
+                {
+                    SDL_FRect visible{};
+                    if (SDL_GetRectIntersectionFloat(&*targetBounds,
+                                                     &*view.clip, &visible))
+                        targetBounds = visible;
+                    else
+                        targetBounds.reset();
+                    break;
+                }
         if (targetBounds.has_value())
         {
             SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, 110);
@@ -14525,13 +14745,11 @@ void App::renderProfileDragFeedback(
         ghost.quantity = *visual->selectedQuantity;
     }
     const SDL_FRect ghostBounds{
-        visual->pointerPosition.x -
-            visual->grabOffsetInCells.x * kBasePocketCellSize,
-        visual->pointerPosition.y -
-            visual->grabOffsetInCells.y * kBasePocketCellSize,
-        static_cast<float>(visual->footprint.width) * kBasePocketCellSize,
-        static_cast<float>(visual->footprint.height) * kBasePocketCellSize};
-    renderProfileAsset(ghost, ghostBounds, kBasePocketCellSize, 150);
+        visual->pointerPosition.x - visual->grabOffsetInCells.x * 64.0F,
+        visual->pointerPosition.y - visual->grabOffsetInCells.y * 64.0F,
+        static_cast<float>(visual->footprint.width) * 64.0F,
+        static_cast<float>(visual->footprint.height) * 64.0F};
+    renderProfileAsset(ghost, ghostBounds, 64.0F, 150);
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, 255);
     SDL_RenderRect(renderer_, &ghostBounds);
     uiTextRenderer_.render(
@@ -14945,8 +15163,8 @@ void App::renderProfileInventory(
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     const bool showRightPanel = includeStash || externalContainerId.has_value();
     const SDL_FRect panel = showRightPanel
-        ? SDL_FRect{20.0F, 50.0F, 1240.0F, 650.0F}
-        : SDL_FRect{20.0F, 50.0F, 590.0F, 650.0F};
+                                ? SDL_FRect{20.0F, 50.0F, 1240.0F, 650.0F}
+                                : SDL_FRect{20.0F, 50.0F, 610.0F, 650.0F};
     SDL_SetRenderDrawColor(renderer_, 12, 20, 24, 244);
     SDL_RenderFillRect(renderer_, &panel);
     SDL_SetRenderDrawColor(renderer_, 102, 156, 168, 255);
@@ -14955,7 +15173,11 @@ void App::renderProfileInventory(
     uiTextRenderer_.render(renderer_, 42.0F, 70.0F, "CHARACTER & LOADOUT");
     if (includeStash)
     {
-        uiTextRenderer_.render(renderer_, 668.0F, 70.0F, "WAREHOUSE");
+        const bool legacyOverflow = profilePresentation_.legacyOverflow &&
+            !assetsInContainer(gameSession_.profile(),
+                               ProfileContainerId::legacyOverflow()).empty();
+        uiTextRenderer_.render(renderer_, 668.0F, 70.0F,
+                              legacyOverflow ? "LEGACY ITEMS" : "WAREHOUSE");
         SDL_RenderLine(renderer_, 630.0F, 68.0F, 630.0F, 678.0F);
     }
     else if (externalContainerId.has_value())
@@ -14986,104 +15208,112 @@ void App::renderProfileInventory(
         }
     }
 
-    const SDL_FRect preview{42.0F, 96.0F, 150.0F, 250.0F};
-    SDL_SetRenderDrawColor(renderer_, 24, 34, 38, 255);
-    SDL_RenderFillRect(renderer_, &preview);
-    SDL_SetRenderDrawColor(renderer_, 78, 108, 112, 255);
-    SDL_RenderRect(renderer_, &preview);
-    renderPlayerPreview(preview);
-
     const ProfileState &profile = gameSession_.profile();
-    for (EquipmentSlotKind slot : kProfileEquipmentSlots)
+    renderProfileInventoryToolbar(includeStash, inRaid, externalContainerId);
+    if (profilePresentation_.tab == ProfileInventoryTab::Equipment)
     {
-        const SDL_FRect bounds = equipmentSlotRect(slot);
-        SDL_SetRenderDrawColor(renderer_, 28, 42, 46, 255);
-        SDL_RenderFillRect(renderer_, &bounds);
-        const bool activeWeapon = inRaid && isWeaponEquipmentSlot(slot) &&
-            gameSession_.activeAlphaWeaponSlot() == slot;
-        SDL_SetRenderDrawColor(
-            renderer_,
-            activeWeapon ? 92 : 96,
-            activeWeapon ? 198 : 126,
-            activeWeapon ? 158 : 132,
-            255);
-        SDL_RenderRect(renderer_, &bounds);
-        uiTextRenderer_.render(
-            renderer_,
-            bounds.x + 7.0F,
-            bounds.y + 7.0F,
-            equipmentSlotLabel(slot));
-        if (const auto id = equippedAsset(profile, slot))
+        const SDL_FRect preview{42.0F, 136.0F, 150.0F, 250.0F};
+        SDL_SetRenderDrawColor(renderer_, 24, 34, 38, 255);
+        SDL_RenderFillRect(renderer_, &preview);
+        SDL_SetRenderDrawColor(renderer_, 78, 108, 112, 255);
+        SDL_RenderRect(renderer_, &preview);
+        renderPlayerPreview(preview);
+
+        for (EquipmentSlotKind slot : kProfileEquipmentSlots)
         {
-            if (const AssetRecord *asset = profile.assets.find(*id))
+            const SDL_FRect bounds = equipmentSlotRect(slot);
+            SDL_SetRenderDrawColor(renderer_, 28, 42, 46, 255);
+            SDL_RenderFillRect(renderer_, &bounds);
+            const bool activeWeapon =
+                inRaid && isWeaponEquipmentSlot(slot) &&
+                gameSession_.activeAlphaWeaponSlot() == slot;
+            SDL_SetRenderDrawColor(renderer_, activeWeapon ? 92 : 96,
+                                   activeWeapon ? 198 : 126,
+                                   activeWeapon ? 158 : 132, 255);
+            SDL_RenderRect(renderer_, &bounds);
+            uiTextRenderer_.render(renderer_, bounds.x + 7.0F, bounds.y + 7.0F,
+                                   equipmentSlotLabel(slot));
+            if (const auto id = equippedAsset(profile, slot))
             {
-                const SDL_FRect itemBounds{
-                    bounds.x + 4.0F, bounds.y + 22.0F,
-                    bounds.w - 8.0F, bounds.h - 26.0F};
-                renderProfileAsset(
-                    *asset,
-                    itemBounds,
-                    kBasePocketCellSize,
-                    255,
-                    false);
-                if (asset->currentMaximumDurability > 0)
+                if (const AssetRecord *asset = profile.assets.find(*id))
                 {
-                    const ItemDefinition &definition =
-                        publishedContentRegistry().item(asset->definitionId);
-                    const std::string durability =
-                        (definition.weaponCondition.has_value() || definition.meleeUse)
-                            ? fmt::format(
-                                  "DUR {:.2f}/{:.2f}",
-                                  static_cast<float>(
-                                      asset->currentDurability) / 100.0F,
-                                  static_cast<float>(
-                                      asset->currentMaximumDurability) /
-                                      100.0F)
-                            : fmt::format(
-                                  "DUR {}/{}",
-                                  asset->currentDurability,
-                                  asset->currentMaximumDurability);
-                    uiTextRenderer_.render(
-                        renderer_,
-                        bounds.x + 7.0F,
-                        bounds.y + bounds.h - 13.0F,
-                        durability.c_str());
-                }
-                if (isWeaponEquipmentSlot(slot))
-                {
-                    const auto magazine = installedMagazine(profile, *id);
-                    const std::string ammo = fmt::format(
-                        "C{} M{}",
-                        asset->chamberedRound.has_value() ? 1 : 0,
-                        magazine.has_value()
-                            ? magazineRoundCount(profile, *magazine)
-                            : 0U);
-                    uiTextRenderer_.render(
-                        renderer_,
-                        bounds.x + bounds.w - 108.0F,
-                        bounds.y + 7.0F,
-                        ammo.c_str());
-                    if (magazine.has_value())
+                    const bool hasMagazine=isWeaponEquipmentSlot(slot) && installedMagazine(profile,*id).has_value();
+                    const SDL_FRect itemBounds{
+                        bounds.x + 4.0F, bounds.y + 22.0F, bounds.w - (hasMagazine?66.0F:8.0F),
+                        bounds.h - (asset->currentMaximumDurability>0?44.0F:26.0F)};
+                    renderProfileAsset(*asset, itemBounds, kBasePocketCellSize,
+                                       255, false);
+                    if (asset->currentMaximumDurability > 0)
                     {
-                        if (const AssetRecord *magazineAsset =
-                                profile.assets.find(*magazine))
+                        const ItemDefinition &definition =
+                            publishedContentRegistry().item(
+                                asset->definitionId);
+                        const std::string durability =
+                            (definition.weaponCondition.has_value() ||
+                             definition.meleeUse)
+                                ? fmt::format(
+                                      "DUR {:.2f}/{:.2f}",
+                                      static_cast<float>(
+                                          asset->currentDurability) /
+                                          100.0F,
+                                      static_cast<float>(
+                                          asset->currentMaximumDurability) /
+                                          100.0F)
+                                : fmt::format("DUR {}/{}",
+                                              asset->currentDurability,
+                                              asset->currentMaximumDurability);
+                        uiTextRenderer_.render(renderer_, bounds.x + 7.0F,
+                                               bounds.y + bounds.h - 20.0F,
+                                               durability.c_str());
+                    }
+                    if (isWeaponEquipmentSlot(slot))
+                    {
+                        const auto magazine = installedMagazine(profile, *id);
+                        const std::string ammo = fmt::format(
+                            "C{} M{}",
+                            asset->chamberedRound.has_value() ? 1 : 0,
+                            magazine.has_value()
+                                ? magazineRoundCount(profile, *magazine)
+                                : 0U);
+                        uiTextRenderer_.render(renderer_,
+                                               bounds.x + bounds.w - 108.0F,
+                                               bounds.y + 7.0F, ammo.c_str());
+                        if (magazine.has_value())
                         {
-                            renderProfileAsset(
-                                *magazineAsset,
-                                installedMagazineRect(slot),
-                                kBasePocketCellSize);
+                            if (const AssetRecord *magazineAsset =
+                                    profile.assets.find(*magazine))
+                            {
+                                renderProfileAsset(*magazineAsset,
+                                                   installedMagazineRect(slot),
+                                                   kBasePocketCellSize);
+                            }
                         }
                     }
                 }
             }
         }
     }
-
     for (const ProfileGridView &view : profileGridViews(
-             profile, includeStash, externalContainerId))
+             profile, includeStash, externalContainerId, &profilePresentation_))
     {
-        renderProfileGrid(
-            view.container, view.x, view.y, view.cellSize, view.label.c_str());
+        SDL_Rect previous{};
+        const bool clipped = SDL_RenderClipEnabled(renderer_);
+        SDL_GetRenderClipRect(renderer_, &previous);
+        if (view.clip)
+        {
+            if (view.clip->x < 630)
+                uiTextRenderer_.renderBox(
+                    renderer_,
+                    {view.clip->x, view.clip->y - 20, view.clip->w, 20},
+                    view.label, {14, UiTextAlign::Left, 1});
+            const SDL_Rect c{
+                static_cast<int>(view.clip->x), static_cast<int>(view.clip->y),
+                static_cast<int>(view.clip->w), static_cast<int>(view.clip->h)};
+            SDL_SetRenderClipRect(renderer_, &c);
+        }
+        renderProfileGrid(view.container, view.x, view.y, view.cellSize,
+                          view.clip ? "" : view.label.c_str());
+        SDL_SetRenderClipRect(renderer_, clipped ? &previous : nullptr);
     }
 
     float pointerX{};
@@ -15092,26 +15322,31 @@ void App::renderProfileInventory(
     const auto logicalPointer=windowUiViewport().toLogical({pointerX,pointerY});
     pointerX=logicalPointer.x; pointerY=logicalPointer.y;
     if (const auto hovered = profileAssetHitAt(
-            profile,
-            MousePosition{pointerX, pointerY},
-            includeStash,
-            externalContainerId);
-        hovered.has_value() && hovered->asset != nullptr)
+            profile, MousePosition{pointerX, pointerY}, includeStash,
+            externalContainerId, &profilePresentation_);
+        hovered.has_value() && hovered->asset != nullptr &&
+        !profileInventoryInteraction_.pointerGestureActive() &&
+        !profileContextMenu_)
     {
         const AssetRecord &asset = *hovered->asset;
         const ItemDefinition &definition =
             publishedContentRegistry().item(asset.definitionId);
-        const SDL_FRect inspection{42.0F, 424.0F, 150.0F, 198.0F};
+        const SDL_FRect inspection{std::clamp(pointerX + 20.0F, 42.0F, 880.0F),
+                                   std::clamp(pointerY + 20.0F, 132.0F, 420.0F),
+                                   340.0F, 218.0F};
         SDL_SetRenderDrawColor(renderer_, 20, 29, 33, 248);
         SDL_RenderFillRect(renderer_, &inspection);
         SDL_SetRenderDrawColor(renderer_, 78, 118, 124, 255);
         SDL_RenderRect(renderer_, &inspection);
         float lineY = inspection.y + 8.0F;
         const std::string displayName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.displayName, 20);
-        uiTextRenderer_.render(
-            renderer_, inspection.x + 6.0F, lineY, displayName.c_str());
-        lineY += 22.0F;
+            uiTextRenderer_.language(), definition.displayName, 100);
+        uiTextRenderer_.renderBox(renderer_, {inspection.x + 6, lineY, 328, 44},
+                                  displayName, {16, UiTextAlign::Left, 2});
+        lineY += 46;
+        renderProfileAsset(asset, {inspection.x + 6, lineY, 328, 64}, 64, 255,
+                           false);
+        lineY += 70;
         const std::string weight = fmt::format(
             "WEIGHT {:.2f} KG",
             static_cast<double>(definition.unitWeightGrams) / 1000.0);
@@ -15180,54 +15415,54 @@ void App::renderProfileInventory(
         }
     }
 
-    const std::string health = fmt::format("HP {}/100", profile.currentHealth);
-    uiTextRenderer_.render(renderer_, 42.0F, 366.0F, health.c_str());
-    const std::string carriedWeight = fmt::format(
-        "CARRIED WEIGHT {:.2f} KG",
-        static_cast<double>(carriedWeightGrams(
-            profile,
-            publishedContentRegistry())) / 1000.0);
-    uiTextRenderer_.render(
-        renderer_, 42.0F, 402.0F, carriedWeight.c_str());
-    const char *bleeding = profile.medicalStatus.bleeding == BleedingSeverity::Heavy
-        ? "HEAVY BLEEDING"
-        : profile.medicalStatus.bleeding == BleedingSeverity::Light
-            ? "LIGHT BLEEDING"
-            : "NO BLEEDING";
-    std::string medical = bleeding;
-    if (hasPain(profile.medicalStatus))
+    if (profilePresentation_.tab == ProfileInventoryTab::Equipment)
     {
-        medical += painIsSuppressed(profile.medicalStatus)
-            ? " | PAIN SUPPRESSED"
-            : " | PAIN";
+        const std::string health =
+            fmt::format("HP {}/100", profile.currentHealth);
+        uiTextRenderer_.render(renderer_, 42.0F, 402.0F, health.c_str());
+        const std::string carriedWeight =
+            fmt::format("CARRIED WEIGHT {:.2f} KG",
+                        static_cast<double>(carriedWeightGrams(
+                            profile, publishedContentRegistry())) /
+                            1000.0);
+        uiTextRenderer_.render(renderer_, 42.0F, 448.0F, carriedWeight.c_str());
+        const char *bleeding =
+            profile.medicalStatus.bleeding == BleedingSeverity::Heavy
+                ? "HEAVY BLEEDING"
+            : profile.medicalStatus.bleeding == BleedingSeverity::Light
+                ? "LIGHT BLEEDING"
+                : "NO BLEEDING";
+        std::string medical = bleeding;
+        if (hasPain(profile.medicalStatus))
+        {
+            medical += painIsSuppressed(profile.medicalStatus)
+                           ? " | PAIN SUPPRESSED"
+                           : " | PAIN";
+        }
+        uiTextRenderer_.render(renderer_, 42.0F, 424.0F, medical.c_str());
     }
-    uiTextRenderer_.render(renderer_, 42.0F, 382.0F, medical.c_str());
-    uiTextRenderer_.render(
-        renderer_, 42.0F, 642.0F,
-        "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
+    uiTextRenderer_.render(renderer_, 42.0F, 646.0F,
+                           "DRAG: MOVE | CTRL: 1 | SHIFT: HALF | R: ROTATE");
     if (!inRaid && !externalContainerId.has_value())
     {
         const SDL_FRect groundDrop = profileBaseGroundDropRect();
-        SDL_SetRenderDrawColor(renderer_, 26, 58, 68, 235);
-        SDL_RenderFillRect(renderer_, &groundDrop);
-        SDL_SetRenderDrawColor(renderer_, 76, 174, 208, 255);
-        SDL_RenderRect(renderer_, &groundDrop);
-        uiTextRenderer_.render(
-            renderer_, groundDrop.x + 18.0F, groundDrop.y + 14.0F,
-            "DROP TO BASE GROUND");
+        renderFoundationButton(3140, groundDrop, "DROP TO BASE GROUND", true,
+                               false, false, "DRAG ITEM HERE TO PLACE");
     }
     uiTextRenderer_.render(
         renderer_, 42.0F, 664.0F,
         inRaid ? "RMB MEDICAL ITEM | TAB/ESC CLOSE"
                : "RMB: ITEM ACTION | TAB/ESC CLOSE");
-    if (!uiMessage_.empty())
+    if (!uiMessage_.empty() && !profilePresentation_.locateAsset)
     {
-        uiTextRenderer_.render(renderer_, showRightPanel ? 668.0F : 350.0F, 664.0F,
-                            uiMessage_.c_str());
+        const SDL_FRect messageBounds=showRightPanel?SDL_FRect{918,652,318,28}:SDL_FRect{42,680,568,19};
+        uiTextRenderer_.renderBox(renderer_,messageBounds,uiMessage_,{13,UiTextAlign::Left,1});
     }
     renderProfileDragFeedback(
         includeStash, inRaid, externalContainerId);
-    if (!profileInventoryInteraction_.pointerGestureActive() && !profileContextMenu_)
+    if (profilePresentation_.tab == ProfileInventoryTab::Equipment &&
+        !profileInventoryInteraction_.pointerGestureActive() &&
+        !profileContextMenu_)
     {
         for (const auto slot : kWeaponEquipmentSlots)
         {
@@ -19396,4 +19631,455 @@ void App::renderProfileWeaponDetails()
         SDL_SetRenderDrawColor(renderer_,230,220,140,210); SDL_RenderFillRect(renderer_,&ghost);
     }
     text(70,646,uiMessage_);
+}
+
+namespace
+{
+SDL_FRect personalInventoryTabRect(int tab)
+{
+    return {42.0F + tab * 192.0F, 94, 184, 32};
+}
+SDL_FRect inventoryPreviousPageRect() { return {668, 94, 108, 28}; }
+SDL_FRect inventoryNextPageRect() { return {1128, 94, 108, 28}; }
+SDL_FRect inventoryReturnsRect() { return {1056, 60, 180, 28}; }
+SDL_FRect inventoryLegacyOverflowRect() { return {824, 60, 224, 28}; }
+SDL_FRect inventoryLocateRect() { return {918, 652, 318, 30}; }
+SDL_FRect inventoryReturnViewRect() { return {980, 94, 140, 28}; }
+} // namespace
+
+void App::locateProfileInventoryAsset(AssetInstanceId id, bool includeStash,
+                                      std::optional<AssetInstanceId> external)
+{
+    const auto &profile = gameSession_.profile();
+    const auto *asset = profile.assets.find(id);
+    if (!asset)
+        return;
+    const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
+    if (!stored)
+        return;
+    for (const auto &view : profileGridViews(profile, includeStash, external,
+                                             &profilePresentation_))
+    {
+        if (view.container != stored->container || !view.viewport)
+            continue;
+        auto viewport = *view.viewport;
+        const auto footprint = inventoryFootprint(
+            publishedContentRegistry().item(asset->definitionId),
+            asset->orientation);
+        const auto bounds = viewport.bounds(stored->origin, footprint);
+        const auto clip = viewport.clip();
+        if (bounds.x >= clip.x && bounds.y >= clip.y &&
+            bounds.x + bounds.width <= clip.x + clip.width &&
+            bounds.y + bounds.height <= clip.y + clip.height)
+            return;
+        if (viewport.isolatedPages)
+            profilePresentation_.returnContainer.reset();
+        else
+        {
+            profilePresentation_.returnContainer = view.container;
+            profilePresentation_.returnOrigin = viewport.origin;
+        }
+        viewport.reveal(stored->origin, footprint);
+        profilePresentation_.remember(view.container, viewport.origin);
+        profileContextMenu_.reset();
+        return;
+    }
+}
+
+void App::describeProfileInventoryDestination(AssetInstanceId id,
+                                              StoredAssetLocation location)
+{
+    const auto &profile = gameSession_.profile();
+    const auto *asset = profile.assets.find(id);
+    if (asset)
+    {
+        if (const auto *stored =
+                std::get_if<StoredAssetLocation>(&asset->location))
+            location = *stored;
+    }
+    else if (const auto target =
+                 profileAssetAtCell(profile, publishedContentRegistry(),
+                                    location.container, location.origin))
+        id = *target;
+    else
+        return;
+    profilePresentation_.locateAsset = id;
+    const auto size = profileContainerSize(profile, publishedContentRegistry(),
+                                           location.container);
+    const bool personal =
+        location.container.kind == ProfileContainerKind::AssetCompartment &&
+        (equippedAsset(profile, EquipmentSlotKind::ChestRig) ==
+             location.container.ownerAssetId ||
+         equippedAsset(profile, EquipmentSlotKind::Backpack) ==
+             location.container.ownerAssetId);
+    const auto width = personal ? 9 : 8;
+    const int page =
+        location.origin.y / 8 * ((size.width + width - 1) / width) +
+        location.origin.x / width + 1;
+    const char *container =
+        location.container.kind == ProfileContainerKind::Stash ? "STASH"
+        : location.container.kind == ProfileContainerKind::LegacyOverflow
+            ? "LEGACY ITEMS"
+        : location.container.kind == ProfileContainerKind::BaseIntake
+            ? "UNASSIGNED RETURNS"
+        : equippedAsset(profile, EquipmentSlotKind::Backpack) ==
+                location.container.ownerAssetId
+            ? "BACKPACK"
+        : equippedAsset(profile, EquipmentSlotKind::ChestRig) ==
+                location.container.ownerAssetId
+            ? "CHEST RIG"
+            : "COMPARTMENT";
+    uiMessage_ = fmt::format("{} | PAGE {} | LOCATE", container, page);
+}
+
+bool App::handleProfilePresentationEvent(
+    const InventoryUiEvent &event, bool includeStash,
+    std::optional<AssetInstanceId> external)
+{
+    const auto &profile = gameSession_.profile();
+    const auto *pointer = std::get_if<InventoryPointerEvent>(&event);
+    const auto *navigation = std::get_if<InventoryNavigationEvent>(&event);
+    if (pointer)
+        profilePresentationPointer_ = pointer->position;
+    if (navigation)
+        profilePresentationPointer_ = navigation->position;
+    const bool press =
+        pointer && pointer->type == InventoryPointerEventType::LeftButtonDown;
+    const auto point = profilePresentationPointer_;
+    const auto refresh = [&]
+    {
+        profileContextMenu_.reset();
+        const auto visual = profileInventoryInteraction_.activeDragVisual();
+        const GridPosition offset =
+            visual ? GridPosition{static_cast<int>(visual->grabOffsetInCells.x),
+                                  static_cast<int>(visual->grabOffsetInCells.y)}
+                   : GridPosition{};
+        const auto source = profileInventoryInteraction_.source();
+        const bool raid = gameFlow_.state() == GameFlowState::Raid;
+        profileInventoryInteraction_.updatePointerPosition(
+            point,
+            profileDropTargetAt(
+                profile, point, includeStash, !raid && !external, offset,
+                source ? std::optional<AssetInstanceId>{source->instanceId}
+                       : std::nullopt,
+                external, &profilePresentation_));
+    };
+    if (press && !profileInventoryInteraction_.pointerGestureActive())
+    {
+        for (int tab = 0; tab < 3; ++tab)
+            if (contains(personalInventoryTabRect(tab), point))
+            {
+                profilePresentation_.tab =
+                    static_cast<ProfileInventoryTab>(tab);
+                refresh();
+                return true;
+            }
+        if (includeStash && contains(inventoryReturnsRect(), point) &&
+            !assetsInContainer(profile, ProfileContainerId::baseIntake())
+                 .empty())
+        {
+            profilePresentation_.legacyOverflow = false;
+            profilePresentation_.returns = !profilePresentation_.returns;
+            refresh();
+            return true;
+        }
+        if (includeStash && contains(inventoryLegacyOverflowRect(), point) &&
+            !assetsInContainer(profile, ProfileContainerId::legacyOverflow())
+                 .empty())
+        {
+            profilePresentation_.returns = false;
+            profilePresentation_.legacyOverflow =
+                !profilePresentation_.legacyOverflow;
+            refresh();
+            return true;
+        }
+        if (external && contains(SDL_FRect{824, 60, 138, 28}, point))
+            if (const auto *owner = profile.assets.find(*external))
+            {
+                const auto count = publishedContentRegistry()
+                                       .item(owner->definitionId)
+                                       .containerCompartments.size();
+                if (count > 1)
+                {
+                    profilePresentation_.externalCompartment =
+                        (profilePresentation_.externalCompartment + 1) % count;
+                    refresh();
+                    return true;
+                }
+            }
+        if (profilePresentation_.returnContainer &&
+            contains(inventoryReturnViewRect(), point))
+        {
+            profilePresentation_.remember(*profilePresentation_.returnContainer,
+                                          profilePresentation_.returnOrigin);
+            profilePresentation_.returnContainer.reset();
+            refresh();
+            return true;
+        }
+        if (profilePresentation_.locateAsset &&
+            contains(inventoryLocateRect(), point))
+        {
+            const auto id = *profilePresentation_.locateAsset;
+            if (const auto *asset = profile.assets.find(id))
+                if (const auto *stored =
+                        std::get_if<StoredAssetLocation>(&asset->location))
+                {
+                    const auto container = stored->container;
+                    if (container.kind == ProfileContainerKind::Stash ||
+                        container.kind == ProfileContainerKind::BaseIntake ||
+                        container.kind == ProfileContainerKind::LegacyOverflow)
+                    {
+                        if (!includeStash)
+                            return true;
+                        profilePresentation_.returns =
+                            container.kind == ProfileContainerKind::BaseIntake;
+                        profilePresentation_.legacyOverflow =
+                            container.kind == ProfileContainerKind::LegacyOverflow;
+                    }
+                    else if (equippedAsset(profile,
+                                           EquipmentSlotKind::Backpack) ==
+                             container.ownerAssetId)
+                        profilePresentation_.tab =
+                            ProfileInventoryTab::Backpack;
+                    else if (equippedAsset(profile,
+                                           EquipmentSlotKind::ChestRig) ==
+                             container.ownerAssetId)
+                        profilePresentation_.tab =
+                            ProfileInventoryTab::ChestRig;
+                    else if (external == container.ownerAssetId)
+                        profilePresentation_.externalCompartment =
+                            container.compartmentIndex;
+                    else
+                        return true;
+                    locateProfileInventoryAsset(id, includeStash, external);
+                    refresh();
+                    return true;
+                }
+            profilePresentation_.locateAsset.reset();
+            return true;
+        }
+    }
+    const auto views = profileGridViews(profile, includeStash, external,
+                                        &profilePresentation_);
+    for (const auto &view : views)
+        if (view.clip && contains(*view.clip, point))
+        {
+            profilePresentation_.lastTarget = view.container;
+            break;
+        }
+    int pageDelta = navigation ? navigation->pageDelta : 0;
+    const bool restorePage = press && (includeStash || external) &&
+                             contains(SDL_FRect{784, 94, 188, 28}, point);
+    if (press && (includeStash || external))
+    {
+        if (contains(inventoryPreviousPageRect(), point))
+            pageDelta = -1;
+        if (contains(inventoryNextPageRect(), point))
+            pageDelta = 1;
+        // Explicit page buttons select the external/right side.
+        if (pageDelta || restorePage)
+            for (const auto &v : views)
+                if (v.clip && v.clip->x >= 668)
+                    profilePresentation_.lastTarget = v.container;
+    }
+    if (!navigation && !pageDelta && !restorePage)
+        return false;
+    if (navigation && !navigation->pageDelta && point.x < 630 &&
+        profilePresentation_.tab == ProfileInventoryTab::ChestRig)
+    {
+        profilePresentation_.chestScroll = std::max(
+            0, profilePresentation_.chestScroll + navigation->rows * 64);
+        refresh();
+        return true;
+    }
+    const ProfileGridView *selected = nullptr;
+    for (const auto &view : views)
+        if (profilePresentation_.lastTarget == view.container)
+            selected = &view;
+    if (!selected)
+        for (const auto &view : views)
+            if (view.clip && view.clip->x >= 668)
+            {
+                selected = &view;
+                break;
+            }
+    if (selected && selected->viewport)
+    {
+        auto viewport = *selected->viewport;
+        if (pageDelta || restorePage)
+            viewport.selectPage(viewport.page() + pageDelta);
+        else
+            viewport.pan(navigation->columns, navigation->rows);
+        profilePresentation_.remember(selected->container, viewport.origin);
+        profilePresentation_.returnContainer.reset();
+        refresh();
+    }
+    return true;
+}
+
+void App::updateProfilePresentationHover(float deltaTime)
+{
+    if (!inventoryOverlayState_.isOpen() || inventoryWeaponComponentsOpen_ ||
+        profileDetailsAsset_ ||
+        !profileInventoryInteraction_.activeDragVisual())
+    {
+        profileHoverTab_ = -1;
+        profileHoverSeconds_ = 0;
+        return;
+    }
+    int tab = -1;
+    for (int index = 0; index < 3; ++index)
+        if (contains(personalInventoryTabRect(index),
+                     profilePresentationPointer_))
+            tab = index;
+    const bool raid = gameFlow_.state() == GameFlowState::Raid;
+    const auto external =
+        raid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
+    if (!raid && !external && inventoryOverlayState_.showsExternalContainer() &&
+        !assetsInContainer(gameSession_.profile(),
+                           ProfileContainerId::baseIntake())
+             .empty() &&
+        contains(inventoryReturnsRect(), profilePresentationPointer_))
+        tab = 3;
+    if (!raid && !external && inventoryOverlayState_.showsExternalContainer() &&
+        !assetsInContainer(gameSession_.profile(),
+                           ProfileContainerId::legacyOverflow())
+             .empty() &&
+        contains(inventoryLegacyOverflowRect(), profilePresentationPointer_))
+        tab = 5;
+    if (external &&
+        contains(SDL_FRect{824, 60, 138, 28}, profilePresentationPointer_))
+        if (const auto *owner = gameSession_.profile().assets.find(*external);
+            owner && publishedContentRegistry()
+                             .item(owner->definitionId)
+                             .containerCompartments.size() > 1)
+            tab = 4;
+    if (tab < 0 ||
+        (tab < 3 && tab == static_cast<int>(profilePresentation_.tab)))
+    {
+        profileHoverTab_ = -1;
+        profileHoverSeconds_ = 0;
+        return;
+    }
+    if (profileHoverTab_ != tab)
+    {
+        profileHoverTab_ = tab;
+        profileHoverSeconds_ = 0;
+    }
+    if (profileHoverSeconds_ < 0)
+        return;
+    profileHoverSeconds_ += std::max(0.0F, deltaTime);
+    if (profileHoverSeconds_ >= 0.35F)
+    {
+        if (tab < 3)
+            profilePresentation_.tab = static_cast<ProfileInventoryTab>(tab);
+        else if (tab == 3)
+        {
+            profilePresentation_.legacyOverflow = false;
+            profilePresentation_.returns = !profilePresentation_.returns;
+        }
+        else if (tab == 5)
+        {
+            profilePresentation_.returns = false;
+            profilePresentation_.legacyOverflow =
+                !profilePresentation_.legacyOverflow;
+        }
+        else if (external)
+        {
+            const auto *owner = gameSession_.profile().assets.find(*external);
+            const auto count = publishedContentRegistry()
+                                   .item(owner->definitionId)
+                                   .containerCompartments.size();
+            profilePresentation_.externalCompartment =
+                (profilePresentation_.externalCompartment + 1) % count;
+        }
+        profileHoverSeconds_ = -1; // One switch per hover; leaving re-arms it.
+        profileContextMenu_.reset();
+        handleProfileInventoryUiEvent(
+            InventoryPointerEvent{InventoryPointerEventType::Motion,
+                                  profilePresentationPointer_},
+            raid);
+    }
+}
+
+void App::renderProfileInventoryToolbar(bool includeStash, bool inRaid,
+                                        std::optional<AssetInstanceId> external)
+{
+    constexpr const char *tabs[]{"EQUIPMENT", "CHEST RIG", "BACKPACK"};
+    for (int tab = 0; tab < 3; ++tab)
+        renderFoundationButton(
+            3100 + tab, personalInventoryTabRect(tab), tabs[tab], true, false,
+            tab == static_cast<int>(profilePresentation_.tab),
+            "DRAG: HOVER TAB TO SWITCH");
+    const auto &profile = gameSession_.profile();
+    if (includeStash && !inRaid &&
+        !assetsInContainer(profile, ProfileContainerId::baseIntake()).empty())
+        renderFoundationButton(
+            3110, inventoryReturnsRect(),
+            profilePresentation_.returns ? "STASH" : "UNASSIGNED RETURNS", true,
+            false, profilePresentation_.returns);
+    if (includeStash && !inRaid &&
+        !assetsInContainer(profile, ProfileContainerId::legacyOverflow()).empty())
+        renderFoundationButton(
+            3112, inventoryLegacyOverflowRect(),
+            profilePresentation_.legacyOverflow ? "RETURN TO STASH"
+                                               : "LEGACY ITEMS",
+            true, false, profilePresentation_.legacyOverflow,
+            "LEGACY ITEMS (WITHDRAW ONLY)");
+    if (external)
+        if (const auto *owner = profile.assets.find(*external))
+        {
+            const auto count = publishedContentRegistry()
+                                   .item(owner->definitionId)
+                                   .containerCompartments.size();
+            renderFoundationButton(
+                3111, {824, 60, 138, 28},
+                fmt::format("COMPARTMENT {}/{}",
+                            profilePresentation_.externalCompartment + 1,
+                            count),
+                count > 1);
+        }
+    for (const auto &view : profileGridViews(profile, includeStash, external,
+                                             &profilePresentation_))
+    {
+        if (!view.viewport || !view.clip || view.clip->x < 668)
+            continue;
+        const auto &v = *view.viewport;
+        renderFoundationButton(3120, inventoryPreviousPageRect(), "PREV",
+                               v.page() > 0);
+        renderFoundationButton(3121, inventoryNextPageRect(), "NEXT",
+                               v.page() + 1 < v.pageCount());
+        const bool locating = !v.isolatedPages &&
+                              (v.origin.x % v.window.width != 0 ||
+                               v.origin.y % v.window.height != 0);
+        const auto text =
+            fmt::format("PAGE {} / {}{}", v.page() + 1, v.pageCount(),
+                        locating ? " | LOCATING" : "");
+        if (!v.isolatedPages)
+            renderFoundationButton(3123, {784, 94, 188, 28}, "", true, false,
+                                   locating, "RESTORE REGULAR PAGE");
+        SDL_SetRenderDrawColor(renderer_, 235, 242, 240, 255);
+        uiTextRenderer_.renderBox(renderer_, {790, 97, 176, 24}, text,
+                                  {14, UiTextAlign::Center, 1});
+        if (!v.isolatedPages &&
+            profilePresentation_.returnContainer == view.container)
+            renderFoundationButton(3122, inventoryReturnViewRect(),
+                                   "RETURN TO PAGE");
+    }
+    if (profilePresentation_.locateAsset)
+        renderFoundationButton(3130, inventoryLocateRect(),
+                               uiMessage_.empty() ? "LOCATE ITEM" : uiMessage_);
+    if (includeStash || external)
+    {
+        const bool warehouse = includeStash &&
+            !(profilePresentation_.returns &&
+              !assetsInContainer(profile, ProfileContainerId::baseIntake()).empty()) &&
+            !(profilePresentation_.legacyOverflow &&
+              !assetsInContainer(profile, ProfileContainerId::legacyOverflow()).empty());
+        uiTextRenderer_.renderBox(
+            renderer_, {668, 680, 568, 19},
+            warehouse ? "PGUP/PGDN: PAGE | WHOLE ITEMS STAY ON ONE PAGE"
+                      : "PGUP/PGDN: PAGE | WHEEL: PAN | SHIFT: HORIZONTAL",
+            {13, UiTextAlign::Left, 1});
+    }
 }

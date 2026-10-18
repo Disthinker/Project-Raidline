@@ -134,10 +134,11 @@ TEST(MeleeAttackTest, NewSlotAndUsedDurabilityRoundTripAndCannotDowngrade){
  auto p=makeNewPublishedProfile("knife-save",content());const auto id=knife(p);p.assets.findMutable(id)->currentDurability=9950;
  const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content().contentVersion()),content());ASSERT_TRUE(loaded.profile)<<loaded.message;
  EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));EXPECT_EQ(equippedAsset(*loaded.profile,EquipmentSlotKind::QuickMelee),id);
+ p.stashLayoutVersion=0;
  EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),53)),std::invalid_argument);
 }
 TEST(MeleeAttackTest, LegacyProfileLoadsWithoutGrantAndWithEmptyMeleeSlot){
- auto p=makeNewPublishedProfile("legacy53",content());const auto encoded=serializeProfileEnvelope(p,"weapon-flashlight-battery-content-65",53);
+ auto p=makeNewPublishedProfile("legacy53",content());p.stashLayoutVersion=0;const auto encoded=serializeProfileEnvelope(p,"weapon-flashlight-battery-content-65",53);
  const auto loaded=deserializeProfileEnvelope(encoded,content());ASSERT_TRUE(loaded.profile)<<loaded.message;EXPECT_FALSE(equippedAsset(*loaded.profile,EquipmentSlotKind::QuickMelee));
  for(const auto &[id,a]:loaded.profile->assets.records())EXPECT_NE(a.definitionId,alpha_content::utilityKnife);
 }
@@ -287,7 +288,8 @@ TEST(MeleeAttackTest, DefenseSavesHealthWearAndRecoveryTogetherAndBlocksFailedDe
  ASSERT_TRUE(loaded.profile->activeBaseDefense);EXPECT_EQ(loaded.profile->assets.find(id)->currentDurability,9950U);
  EXPECT_GT(loaded.profile->activeBaseDefense->meleeRecoverySeconds,.64F);
  EXPECT_EQ(loaded.profile->activeBaseDefense->enemies[0].health,health-4);
- EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(*loaded.profile,content().contentVersion(),53)),std::invalid_argument);
+ auto legacy=*loaded.profile;legacy.stashLayoutVersion=0;
+ EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(legacy,content().contentVersion(),53)),std::invalid_argument);
  ASSERT_TRUE(std::filesystem::create_directory(path/"profile.tmp.json"));EXPECT_FALSE(MeleeTestAccess::flush(s));
  const auto before=baseDefenseCheckpointHash(*flow.baseWorld().baseDefenseCheckpoint());
  flow.updateBase(input,.1F);EXPECT_TRUE(s.baseDefenseSaveBlocked());

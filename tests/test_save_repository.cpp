@@ -96,6 +96,14 @@ std::string testSaveChecksum(std::string_view text)
     return result;
 }
 
+// Old-schema fixtures deliberately retain the pre-page layout contract.
+std::string serializeLegacyProfileEnvelope(
+    ProfileState profile, std::string_view contentVersion, std::uint32_t schema)
+{
+    profile.stashLayoutVersion = 0;
+    return serializeProfileEnvelope(profile, contentVersion, schema);
+}
+
 TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
 {
     const auto &content = publishedContentRegistry();
@@ -172,7 +180,7 @@ TEST(SaveRepositoryTest, Schema39RoundTripsBaseGroundAndSchema38StillLoads)
 
     ProfileState legacy = makeNewAlphaProfile(
         "base-ground-v38", content);
-    const std::string legacyEnvelope = serializeProfileEnvelope(
+    const std::string legacyEnvelope = serializeLegacyProfileEnvelope(
         legacy, content.contentVersion(), 38);
     const SaveLoadResult legacyLoaded = deserializeProfileEnvelope(
         legacyEnvelope, content);
@@ -568,11 +576,12 @@ TEST(SaveRepositoryTest, SchemaV11AcceptsPreviousContentVersions)
         ProfileState profile = makeNewAlphaProfile(
             "save-v11-operations-content-migration",
             publishedContentRegistry());
+        profile.stashLayoutVersion = 0;
         profile.baseResources.pool = BaseResourceBundle{7, 18, 35, 28};
         const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
         const SaveLoadResult loaded = deserializeProfileEnvelope(
-            serializeProfileEnvelope(profile, contentVersion, 11),
+            serializeLegacyProfileEnvelope(profile, contentVersion, 11),
             publishedContentRegistry());
 
         ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
@@ -600,7 +609,7 @@ TEST(SaveRepositoryTest, SchemaV12PersistsPopulationAndMigratesV11Defaults)
 
     profile.basePopulation = BasePopulationState{};
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, "base-paid-medical-content-19", 11),
         publishedContentRegistry());
     ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
@@ -682,7 +691,7 @@ TEST(SaveRepositoryTest, SchemaV13MigratesSchemaV12WithEmptyRescueLedger)
     ProfileState profile = makeNewAlphaProfile(
         "save-v12-rescue-migration", publishedContentRegistry());
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-residents-beds-sleep-content-20",
             12),
@@ -705,7 +714,7 @@ TEST(SaveRepositoryTest, SchemaV10MigratesCurrentBasePriority)
         profile, publishedContentRegistry()));
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-gunsmith-service-content-15",
             10),
@@ -786,7 +795,7 @@ TEST(SaveRepositoryTest, SchemaV9MigratesWithoutBaseServiceJob)
         publishedContentRegistry());
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-travel-time-content-14",
             9),
@@ -807,7 +816,7 @@ TEST(SaveRepositoryTest, SchemaV8AcceptsPreviousContentAndClockState)
     profile.baseResources.resolvedDemandCycleCount = 3U;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-resource-pressure-content-13",
             8),
@@ -840,7 +849,7 @@ TEST(SaveRepositoryTest, SchemaV8PendingRaidMigratesToZeroTravelRollback)
     const BaseResourceState expectedResources = profile.baseResources;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-resource-pressure-content-13",
             8),
@@ -899,7 +908,7 @@ TEST(SaveRepositoryTest, SchemaV7MigratesToInitialClockWithoutReplayingRaids)
     profile.baseResources.lastShortfall = BaseResourceBundle{1, 2, 3, 4};
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             publishedContentRegistry().contentVersion(),
             7),
@@ -958,7 +967,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousMultiWeaponContentVersion)
     ASSERT_TRUE(profile.assets.erase(armorKit));
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "survival-loadout-content-4",
             6),
@@ -979,7 +988,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousArmorMaintenanceContentVersion)
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "survival-loadout-content-5",
             6),
@@ -997,7 +1006,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatAimContentVersion)
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "combat-aim-content-6",
             6),
@@ -1015,7 +1024,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatInputContentVersion)
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "combat-input-content-7",
             6),
@@ -1033,7 +1042,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousCombatBallisticsContentVersion)
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "combat-ballistics-content-8",
             6),
@@ -1051,7 +1060,7 @@ TEST(SaveRepositoryTest, SchemaV6AcceptsPreviousFixedMapsContentVersion)
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-fixed-maps-content-9",
             6),
@@ -1070,7 +1079,7 @@ TEST(SaveRepositoryTest,
                             publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(profile, "raid-pressure-content-10", 6),
+        serializeLegacyProfileEnvelope(profile, "raid-pressure-content-10", 6),
         publishedContentRegistry());
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
@@ -1087,7 +1096,7 @@ TEST(SaveRepositoryTest,
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-control-resource-content-11",
             6),
@@ -1106,7 +1115,7 @@ TEST(SaveRepositoryTest,
         publishedContentRegistry());
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-conditional-extraction-content-12",
             6),
@@ -1125,8 +1134,9 @@ TEST(SaveRepositoryTest, SchemaV1MigratesToCurrentProfileDefaults)
     ProfileState profile = makeNewAlphaProfile(
         "save-v1-migration",
         publishedContentRegistry());
+    profile.stashLayoutVersion = 0;
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
-    const std::string text = serializeProfileEnvelope(
+    const std::string text = serializeLegacyProfileEnvelope(
         profile,
         "core-alpha-content-1",
         1);
@@ -1146,7 +1156,7 @@ TEST(SaveRepositoryTest, SchemaV2MigratesArmorToFullDurability)
     ProfileState profile = makeNewAlphaProfile(
         "save-v2-armor-migration",
         publishedContentRegistry());
-    const std::string text = serializeProfileEnvelope(
+    const std::string text = serializeLegacyProfileEnvelope(
         profile,
         "core-alpha-content-2",
         2);
@@ -1300,7 +1310,7 @@ TEST(SaveRepositoryTest, SchemaV3MigratesMedicalStateToHealthyDefaults)
     ProfileState profile = makeNewAlphaProfile(
         "save-v3-medical-migration",
         publishedContentRegistry());
-    const std::string text = serializeProfileEnvelope(
+    const std::string text = serializeLegacyProfileEnvelope(
         profile,
         "survival-loadout-content-1",
         3);
@@ -1368,7 +1378,7 @@ TEST(SaveRepositoryTest, SchemaV5MigratesNewlyDurablePistolOnly)
     pistol->weaponMalfunction = WeaponMalfunctionType::None;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, "survival-loadout-content-3", 5),
         publishedContentRegistry());
 
@@ -1447,7 +1457,7 @@ TEST(SaveRepositoryTest, SchemaV4MigratesWeaponConditionToFactoryState)
     rifle->weaponMalfunction = WeaponMalfunctionType::Stovepipe;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, "survival-loadout-content-2", 4),
         publishedContentRegistry());
 
@@ -1616,6 +1626,7 @@ TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
     ProfileState profile = makeNewAlphaProfile(
         "save-base-supply-v15",
         publishedContentRegistry());
+    profile.stashLayoutVersion = 0;
     profile.baseConstruction.materialUnits = 7U;
     profile.baseConstruction.activeProject = ActiveBaseConstructionProject{
         BaseConstructionProjectDefinitionId{
@@ -1641,7 +1652,7 @@ TEST(SaveRepositoryTest, SchemaV16RoundTripsResidentMedicalAndSupplyPolicy)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-resident-medical-content-24",
             16),
@@ -1671,6 +1682,7 @@ TEST(SaveRepositoryTest, SchemaV17RoundTripsActiveManufacturingOwnership)
     ProfileState profile = makeNewAlphaProfile(
         "save-manufacturing-v17",
         publishedContentRegistry());
+    profile.stashLayoutVersion = 0;
     const auto addInput = [&](const ItemDefinitionId &definitionId)
     {
         const ItemDefinition &definition =
@@ -1699,7 +1711,7 @@ TEST(SaveRepositoryTest, SchemaV17RoundTripsActiveManufacturingOwnership)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             publishedContentRegistry().contentVersion(),
             17),
@@ -1718,6 +1730,7 @@ TEST(SaveRepositoryTest, SchemaV18RoundTripsMoraleEventAndRaidRollback)
     ProfileState profile = makeNewAlphaProfile(
         "save-morale-v18",
         publishedContentRegistry());
+    profile.stashLayoutVersion = 0;
     profile.baseMorale.pendingFulfilledWishCount = 2U;
     profile.baseMorale.pendingNegativeEventCount = 1U;
     ASSERT_TRUE(executeDeploy(
@@ -1731,7 +1744,7 @@ TEST(SaveRepositoryTest, SchemaV18RoundTripsMoraleEventAndRaidRollback)
         CommandContext{profile.revision, "save-morale-deploy"}).succeeded);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             publishedContentRegistry().contentVersion(),
             18),
@@ -1765,7 +1778,7 @@ TEST(SaveRepositoryTest, SchemaV17MigratesToStableCurrentMoraleEvent)
         profile,
         publishedContentRegistry()));
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-basic-manufacturing-content-25",
             17),
@@ -1786,7 +1799,7 @@ TEST(SaveRepositoryTest, SchemaV18RejectsInvalidMoraleEventSnapshot)
         publishedContentRegistry());
     profile.baseCommunityEvent.cycleIndex = 99U;
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             publishedContentRegistry().contentVersion(),
             18),
@@ -1833,6 +1846,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
 {
     ProfileState profile = makeNewAlphaProfile(
         "save-intelligence-v20", publishedContentRegistry());
+    profile.stashLayoutVersion = 0;
     const MapDefinitionId mapId{"map.v0.test"};
     auto &counts = profile.raidIntelligence.counts[mapId];
     counts[raidIntelligenceCategoryIndex(
@@ -1851,7 +1865,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, publishedContentRegistry().contentVersion(), 20),
         publishedContentRegistry());
 
@@ -1929,11 +1943,12 @@ TEST(SaveRepositoryTest, CurrentSchemaFreezesRoadsInteriorsAndSpatialLayout)
 TEST(SaveRepositoryTest, SchemaV36LoadsPreviousResourceEcologyContent)
 {
     const ContentRegistry &content = publishedContentRegistry();
-    const ProfileState profile = makeNewAlphaProfile(
+    ProfileState profile = makeNewAlphaProfile(
         "save-resource-ecology-content-v45", content);
+    profile.stashLayoutVersion = 0;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-resource-ecology-content-45",
             36U),
@@ -1975,11 +1990,12 @@ TEST(SaveRepositoryTest, CurrentSchemaRejectsOutOfRangeEncounterMember)
 TEST(SaveRepositoryTest, SchemaV37LoadsPreviousEncounterEcologyContent)
 {
     const ContentRegistry &content = publishedContentRegistry();
-    const ProfileState profile = makeNewAlphaProfile(
+    ProfileState profile = makeNewAlphaProfile(
         "save-encounter-ecology-content-v47", content);
+    profile.stashLayoutVersion = 0;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-encounter-ecology-content-47",
             37U),
@@ -1993,11 +2009,12 @@ TEST(SaveRepositoryTest, SchemaV37LoadsPreviousEncounterEcologyContent)
 TEST(SaveRepositoryTest, SchemaV37LoadsEncounterEcologyHardeningContent)
 {
     const ContentRegistry &content = publishedContentRegistry();
-    const ProfileState profile = makeNewAlphaProfile(
+    ProfileState profile = makeNewAlphaProfile(
         "save-encounter-hardening-content-v48", content);
+    profile.stashLayoutVersion = 0;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-encounter-ecology-hardening-content-48",
             37U),
@@ -2013,6 +2030,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-consumer-integration-content-v49", content);
+    profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
         content,
@@ -2035,7 +2053,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-consumer-integration-content-49",
             37U),
@@ -2053,6 +2071,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-loot-identity-content-v50", content);
+    profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
         content,
@@ -2078,7 +2097,7 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-loot-identity-content-50",
             37U),
@@ -2095,6 +2114,7 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-high-risk-crisis-content-v51", content);
+    profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
         content,
@@ -2161,7 +2181,7 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-high-risk-crisis-content-51",
             38U),
@@ -2183,10 +2203,11 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousLoadoutGearContent)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-loadout-gear-content-v54", content);
+    profile.stashLayoutVersion = 0;
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "content-beta-loadout-gear-content-54",
             38U),
@@ -2201,10 +2222,11 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousLootEconomyContent)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-loot-economy-content-v55", content);
+    profile.stashLayoutVersion = 0;
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "content-beta-loot-economy-content-55",
             38U),
@@ -2270,7 +2292,7 @@ TEST(SaveRepositoryTest,
         profile.pendingRaid->spatialLayout;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-frontier-district-layout-content-44",
             35U),
@@ -2395,7 +2417,7 @@ TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
     const RaidGeneratedMapLayout expected = raid.spatialLayout;
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "procedural-playable-outdoor-layout-content-43",
             34U),
@@ -2412,6 +2434,7 @@ TEST(SaveRepositoryTest, SchemaV24RoundTripsLostRaidOwnershipAndReceipt)
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-lost-raid-v24", content);
+    profile.stashLayoutVersion = 0;
     const auto rifle = std::find_if(
         profile.assets.records().begin(),
         profile.assets.records().end(),
@@ -2441,7 +2464,7 @@ TEST(SaveRepositoryTest, SchemaV24RoundTripsLostRaidOwnershipAndReceipt)
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 24),
         content);
 
@@ -2465,12 +2488,13 @@ TEST(SaveRepositoryTest, SchemaV24RoundTripsLostRaidOwnershipAndReceipt)
 TEST(SaveRepositoryTest, SchemaV23MigratesToEmptyLostRecordState)
 {
     const ContentRegistry &content = publishedContentRegistry();
-    const ProfileState profile = makeNewAlphaProfile(
+    ProfileState profile = makeNewAlphaProfile(
         "save-lost-raid-v23-migration", content);
+    profile.stashLayoutVersion = 0;
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-second-representative-location-content-33",
             23),
@@ -2523,7 +2547,7 @@ TEST(SaveRepositoryTest,
         "save-regional-route-v26", content);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 26U),
         content);
 
@@ -2600,7 +2624,7 @@ TEST(SaveRepositoryTest,
                     .succeeded);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 27U),
         content);
 
@@ -2721,6 +2745,7 @@ TEST(SaveRepositoryTest,
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState profile = makeNewAlphaProfile(
         "save-main-base-migration-v30", content);
+    profile.stashLayoutVersion = 0;
     const RegionalBaseSiteDefinitionId greylineSite{
         "regional_base_site.greyline_yard"};
     const RegionalBaseSiteDefinitionId ashworksSite{
@@ -2766,7 +2791,7 @@ TEST(SaveRepositoryTest,
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(profile, content.contentVersion(), 30U),
+        serializeLegacyProfileEnvelope(profile, content.contentVersion(), 30U),
         content);
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
@@ -2845,7 +2870,7 @@ TEST(SaveRepositoryTest,
         "save-base-site-feature-v30", content);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "regional-main-base-migration-content-39",
             30U),
@@ -2870,7 +2895,7 @@ TEST(SaveRepositoryTest,
         "save-main-base-migration-v29", content);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "regional-base-site-clearance-content-38",
             29U),
@@ -2900,7 +2925,7 @@ TEST(SaveRepositoryTest,
         "save-base-site-clearance-v28-migration", content);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "regional-outpost-disruption-content-37",
             28U),
@@ -2990,7 +3015,7 @@ TEST(SaveRepositoryTest,
         "save-recovery-v24-migration", content);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, "regional-loss-record-content-34", 24),
         content);
 
@@ -3080,7 +3105,7 @@ TEST(SaveRepositoryTest, SchemaV25MigratesWithoutRaidSelfRecoveryTarget)
         CommandContext{profile.revision, "save-v25-deploy"}).succeeded);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(profile, content.contentVersion(), 25),
+        serializeLegacyProfileEnvelope(profile, content.contentVersion(), 25),
         content);
 
     ASSERT_TRUE(loaded.profile.has_value()) << loaded.message;
@@ -3117,7 +3142,7 @@ TEST(SaveRepositoryTest, SchemaV24RejectsUnknownLostRecordMap)
             EquipmentSlotKind::PrimaryWeapon};
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 24),
         content);
 
@@ -3217,7 +3242,7 @@ TEST(SaveRepositoryTest,
     profile.pendingRaid->spatialLayout.layoutHash = raidMapLayoutHash(
         profile.pendingRaid->spatialLayout.ballisticBlockers);
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 23),
         content);
 
@@ -3240,7 +3265,7 @@ TEST(SaveRepositoryTest,
     profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-special-location-placement-content-31",
             22),
@@ -3262,7 +3287,7 @@ TEST(SaveRepositoryTest,
     unknown.raidInteriorIntelligence.knownLayouts.insert(
         RaidSpaceDefinitionId{"raid_space.unknown.office"});
     const SaveLoadResult unknownResult = deserializeProfileEnvelope(
-        serializeProfileEnvelope(unknown, content.contentVersion(), 23),
+        serializeLegacyProfileEnvelope(unknown, content.contentVersion(), 23),
         content);
     EXPECT_FALSE(unknownResult.profile.has_value());
 
@@ -3270,7 +3295,7 @@ TEST(SaveRepositoryTest,
         "save-duplicate-interior-intelligence-v23", content);
     valid.raidInteriorIntelligence.knownLayouts.insert(interiorId);
     nlohmann::json envelope = nlohmann::json::parse(
-        serializeProfileEnvelope(valid, content.contentVersion(), 23));
+        serializeLegacyProfileEnvelope(valid, content.contentVersion(), 23));
     envelope["payload"]["raid_interior_intelligence"].push_back(
         interiorId.value());
     envelope["payload_checksum"] = testSaveChecksum(
@@ -3403,7 +3428,7 @@ TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
         raid.spatialLayout.ballisticBlockers);
 
     const SaveLoadResult loaded = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             legacyProfile,
             "raid-interior-spaces-content-30",
             22),
@@ -3438,7 +3463,7 @@ TEST(SaveRepositoryTest, SchemaV21MigratesRootActorsWithoutInteriorState)
         {profile.revision, "save-root-deploy"}).succeeded);
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, "procedural-outdoor-layout-content-29", 21),
         publishedContentRegistry());
     ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
@@ -3459,7 +3484,7 @@ TEST(SaveRepositoryTest, SchemaV19MigratesToEmptyRaidIntelligenceArchive)
         [raidIntelligenceCategoryIndex(RaidIntelligenceCategory::Enemy)] = 3U;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-workforce-facilities-content-27",
             19),
@@ -3490,7 +3515,7 @@ TEST(SaveRepositoryTest, SchemaV15MigratesWithoutRetroactiveResidentInjury)
         BaseResidentProfession::Medical};
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-supply-policy-content-23",
             15),
@@ -3516,7 +3541,7 @@ TEST(SaveRepositoryTest, SchemaV14MigratesToEmptySupplyPolicy)
         BaseSupplyCategory::Food);
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "base-dormitory-expansion-content-22",
             14),
@@ -3535,7 +3560,7 @@ TEST(SaveRepositoryTest, SchemaV13MigratesToDefaultBaseConstruction)
     profile.baseConstruction.materialUnits = 9U;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "raid-ordinary-survivor-rescue-content-21",
             13),
@@ -3594,7 +3619,7 @@ TEST(SaveRepositoryTest, SchemaV31MigratesToSafeEmptySiegeState)
     ProfileState profile = makeNewAlphaProfile(
         "save-siege-v31-migration", content);
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "regional-base-site-feature-content-40",
             31U),
@@ -3618,7 +3643,7 @@ TEST(SaveRepositoryTest, SchemaV32NormalizesHiddenThreatOverflow)
     profile.baseSiege.siteThreatUnits = 20U;
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "regional-base-threat-content-41",
             32U),
@@ -3697,7 +3722,7 @@ TEST(SaveRepositoryTest,
     EXPECT_EQ(current.profile->baseFacilityLayout, profile.baseFacilityLayout);
 
     const SaveLoadResult legacy = deserializeProfileEnvelope(
-        serializeProfileEnvelope(profile, content.contentVersion(), 39U),
+        serializeLegacyProfileEnvelope(profile, content.contentVersion(), 39U),
         content);
     ASSERT_EQ(legacy.status, SaveLoadStatus::LoadedPrimary)
         << legacy.message;
@@ -3727,7 +3752,7 @@ TEST(SaveRepositoryTest,
     }
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile, content.contentVersion(), 40U),
         content);
     ASSERT_EQ(migrated.status, SaveLoadStatus::LoadedPrimary)
@@ -3773,7 +3798,7 @@ TEST(SaveRepositoryTest, SchemaV42RoundTripsHomePerimeterAndV41MigratesEmpty)
     ProfileState legacy = makeNewPublishedProfile(
         "home-perimeter-legacy", content);
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(legacy, content.contentVersion(), 41),
+        serializeLegacyProfileEnvelope(legacy, content.contentVersion(), 41),
         content);
     ASSERT_TRUE(migrated.profile.has_value()) << migrated.message;
     EXPECT_TRUE(migrated.profile->homePerimeter.sites.empty());
@@ -3796,7 +3821,7 @@ TEST(SaveRepositoryTest,
         true};
 
     const SaveLoadResult migrated = deserializeProfileEnvelope(
-        serializeProfileEnvelope(
+        serializeLegacyProfileEnvelope(
             profile,
             "home-region-placeable-storage-content-58",
             42U),
@@ -3836,4 +3861,87 @@ TEST(SaveRepositoryTest, CurrentSchemaRoundTripsMultipleBaseWishes)
     EXPECT_EQ(
         profileStateFingerprint(*loaded.profile),
         profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtrees)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("page-overflow-roundtrip", content);
+    profile.assets = AssetRegistry{};
+    const auto bag = profile.assets.create(content.item(alpha_content::backpack),
+        StoredAssetLocation{ProfileContainerId::legacyOverflow(), {7, 7}});
+    const auto medkit = profile.assets.create(content.item(alpha_content::medkit),
+        StoredAssetLocation{ProfileContainerId::compartment(bag, 0), {0, 0}});
+    profile.assets.findMutable(medkit)->remainingCharges = 2;
+    const auto weapon = profile.assets.create(content.item(alpha_content::rifle),
+        StoredAssetLocation{ProfileContainerId::legacyOverflow(), {7, 0}});
+    profile.assets.findMutable(weapon)->currentDurability = 7560;
+    profile.assets.findMutable(weapon)->chamberedRound =
+        MagazineRoundRecord{alpha_content::ammunition, std::nullopt};
+    const auto magazine = profile.assets.create(content.item(alpha_content::magazine),
+        InstalledMagazineLocation{weapon});
+    profile.assets.findMutable(magazine)->magazineRounds.assign(
+        7, MagazineRoundRecord{alpha_content::ammunition, std::nullopt});
+    profile.assets.setNextAssetIdForLoad(999999U);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const auto text = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto envelope = nlohmann::json::parse(text);
+    EXPECT_EQ(envelope.at("schema_version"), 55U);
+    EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
+    const auto loaded = deserializeProfileEnvelope(text, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), text);
+    EXPECT_EQ(loaded.profile->assets.nextAssetId(), 999999U);
+    EXPECT_EQ(std::get<StoredAssetLocation>(loaded.profile->assets.find(bag)->location).container,
+              ProfileContainerId::legacyOverflow());
+    EXPECT_EQ(std::get<StoredAssetLocation>(loaded.profile->assets.find(medkit)->location).container,
+              ProfileContainerId::compartment(bag, 0));
+    EXPECT_EQ(loaded.profile->assets.find(magazine)->magazineRounds.size(), 7U);
+}
+
+TEST(SaveRepositoryTest, Schema55RequiresLayoutMarkerAndRejectsDowngradeOfNewState)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("page-schema-contract", content);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(
+        profile, content.contentVersion(), 54)), std::invalid_argument);
+    auto envelope = nlohmann::json::parse(serializeProfileEnvelope(profile, content.contentVersion()));
+    envelope["payload"].erase("stash_layout_version");
+    envelope["payload_checksum"] = testSaveChecksum(envelope["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(envelope.dump(), content).profile);
+    envelope["payload"]["stash_layout_version"] = 2U;
+    envelope["payload_checksum"] = testSaveChecksum(envelope["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(envelope.dump(), content).profile);
+
+    envelope["payload"]["stash_layout_version"] = 1.5;
+    envelope["payload_checksum"] = testSaveChecksum(envelope["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(envelope.dump(), content).profile);
+
+    profile.stashLayoutVersion = 0;
+    profile.assets = AssetRegistry{};
+    static_cast<void>(profile.assets.create(content.item(alpha_content::ammunition),
+        StoredAssetLocation{ProfileContainerId::legacyOverflow(), {0, 0}}, 3));
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(
+        profile, content.contentVersion(), 54)), std::invalid_argument);
+}
+
+TEST(SaveRepositoryTest, Schema54LoadsCrossedLegacyCoordinatesWithoutImplicitMigration)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("legacy-crossed-load", content);
+    profile.assets = AssetRegistry{};
+    const auto rifle = profile.assets.create(content.item(alpha_content::rifle),
+        StoredAssetLocation{ProfileContainerId::stash(), {7, 7}});
+    const auto legacy = serializeLegacyProfileEnvelope(profile, content.contentVersion(), 54);
+    const auto loaded = deserializeProfileEnvelope(legacy, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(loaded.profile->stashLayoutVersion, 0U);
+    EXPECT_EQ(loaded.profile->revision, profile.revision);
+    EXPECT_EQ(std::get<StoredAssetLocation>(loaded.profile->assets.find(rifle)->location).origin,
+              (GridPosition{7, 7}));
+    EXPECT_FALSE(stashFootprintFitsPage({7, 7}, inventoryFootprint(
+        content.item(alpha_content::rifle), ItemOrientation::Degrees0)));
+    auto newLayout = *loaded.profile;
+    newLayout.stashLayoutVersion = 1;
+    EXPECT_FALSE(validateProfileState(newLayout, content).valid);
 }
