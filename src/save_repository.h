@@ -33,6 +33,7 @@ struct SaveLoadResult
     SaveLoadStatus status{SaveLoadStatus::NotFound};
     std::optional<ProfileState> profile;
     std::string message;
+    bool migratedChestRigLayout{};
 };
 
 class SaveRepository
@@ -51,6 +52,9 @@ public:
     [[nodiscard]] SaveWriteResult preserveStashMigrationSources(
         SaveLoadStatus loadedFrom) const;
 
+    [[nodiscard]] SaveWriteResult preserveChestRigMigrationSources(
+        SaveLoadStatus loadedFrom) const;
+
     [[nodiscard]] SaveLoadResult load(
         const ContentRegistry &content) const;
 
@@ -58,6 +62,8 @@ public:
     [[nodiscard]] const std::filesystem::path &backupPath() const noexcept;
 
 private:
+    [[nodiscard]] SaveWriteResult preserveLayoutMigrationSources(
+        SaveLoadStatus loadedFrom, std::string_view marker) const;
     std::filesystem::path directory_;
     std::filesystem::path primaryPath_;
     std::filesystem::path backupPath_;
@@ -68,7 +74,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 55);
+    std::uint32_t schemaVersion = 56);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

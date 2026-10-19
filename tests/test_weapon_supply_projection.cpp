@@ -43,7 +43,8 @@ struct Loadout {
   }
 
   StoredAssetLocation pocket(std::uint32_t index) const {
-    return {ProfileContainerId::compartment(rig, index), {0, 0}};
+    static const GridPosition origins[]{{0,0},{1,0},{2,0},{3,0},{0,2},{2,2},{4,0},{4,2}};
+    return {ProfileContainerId::compartment(rig, 0), origins[index]};
   }
 
   AssetInstanceId magazine(AssetLocation location, std::uint32_t count) {
@@ -130,11 +131,11 @@ TEST(WeaponSupplyProjectionTest,
 }
 
 TEST(WeaponSupplyProjectionTest,
-     QuickReloadMatchesMagazineOnlyPocketsNotPackOrGeneralPocket) {
+     QuickReloadMatchesAllWornGeneralRigCellsButNotBackpack) {
   Loadout fixture;
-  const auto quick = fixture.magazine(fixture.pocket(0U), 10U);
+  fixture.magazine(fixture.pocket(0U), 10U);
   fixture.magazine(fixture.pocket(1U), 5U);
-  fixture.magazine(fixture.pocket(4U), 29U);
+  const auto quick = fixture.magazine(fixture.pocket(4U), 29U);
   fixture.magazine(fixture.pack(), 30U);
   const auto readiness = fixture.readiness();
   EXPECT_EQ(readiness.quickReloadMagazineId, quick);
@@ -142,11 +143,11 @@ TEST(WeaponSupplyProjectionTest,
             selectRaidReloadMagazine(fixture.profile, fixture.content,
                                      fixture.weapon));
   EXPECT_TRUE(readiness.quickReloadCanInstall);
-  EXPECT_EQ(readiness.quickReloadMagazineRounds, 10U);
-  EXPECT_EQ(readiness.quickReloadLoadedMagazineCount, 2U);
-  EXPECT_EQ(readiness.quickReloadLoadedRounds, 15U);
-  EXPECT_EQ(readiness.otherLoadedSpareMagazineCount, 2U);
-  EXPECT_EQ(readiness.otherLoadedSpareMagazineRounds, 59U);
+  EXPECT_EQ(readiness.quickReloadMagazineRounds, 29U);
+  EXPECT_EQ(readiness.quickReloadLoadedMagazineCount, 3U);
+  EXPECT_EQ(readiness.quickReloadLoadedRounds, 44U);
+  EXPECT_EQ(readiness.otherLoadedSpareMagazineCount, 1U);
+  EXPECT_EQ(readiness.otherLoadedSpareMagazineRounds, 30U);
   EXPECT_FALSE(readiness.canFireNow);
 }
 

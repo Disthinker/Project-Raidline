@@ -1102,6 +1102,8 @@ struct ProfileState
 {
     // 0 is the continuous warehouse used by schema <= 54; 1 has six 8x8 pages.
     std::uint32_t stashLayoutVersion{1};
+    // 0: historical magazine/tool pockets; 1: continuous general chest grid.
+    std::uint32_t chestRigLayoutVersion{1};
     HomeFoundingState homeFounding;
     std::string profileId;
     ProfileRevision revision{1};

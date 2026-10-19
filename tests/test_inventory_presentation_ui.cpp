@@ -55,7 +55,7 @@ struct InventoryPresentationUiTestAccess
     {
         for (auto &t : a.inventoryItemTextures_)
             t.reset();
-        a.uiTextRenderer_.shutdown();
+        a.playerTexture_.reset();a.uiTextRenderer_.shutdown();
         a.renderer_ = nullptr;
     }
     static void draw(App &a, UiLanguage language)
@@ -67,6 +67,10 @@ struct InventoryPresentationUiTestAccess
     {
         a.inventoryItemTextures_[static_cast<std::size_t>(ItemId::Rifle)] =
             Texture{texture};
+    }
+    static void trimmedTexture(App &a,Texture texture)
+    {
+        a.inventoryItemTextures_[static_cast<std::size_t>(ItemId::Rifle)]=std::move(texture);
     }
     static void drawAsset(App &a, const AssetRecord &asset, Uint8 alpha = 255)
     {
@@ -83,9 +87,11 @@ struct InventoryPresentationUiTestAccess
         for(std::size_t i=0;i<itemCount();++i)
         {
             const auto &definition=publishedContentRegistry().item(legacyItemDefinitionId(static_cast<ItemId>(i)));
-            a.inventoryItemTextures_[i]=Texture{IMG_LoadTexture(a.renderer_,(assets/definition.inventoryTexturePath).string().c_str())};
+            a.inventoryItemTextures_[i]=loadInventoryTexture(a.renderer_,assets/definition.inventoryTexturePath);
             ASSERT_TRUE(a.inventoryItemTextures_[i].valid())<<definition.inventoryTexturePath;
         }
+        a.playerTexture_=loadInventoryTexture(a.renderer_,assets/"characters/protagonist_left_minimal_256x320.png");
+        ASSERT_TRUE(a.playerTexture_.valid());
     }
 };
 namespace
@@ -154,7 +160,7 @@ class InventoryPresentationUiTest : public testing::Test
     }
     void page(int delta)
     {
-        A::event(*app, InventoryNavigationEvent{{700, 140}, delta, 0, 0});
+        A::event(*app, InventoryNavigationEvent{{836.0F, 138.5F}, delta, 0, 0});
     }
     void reload(ProfileState p)
     {
@@ -177,7 +183,7 @@ class InventoryPresentationUiTest : public testing::Test
     }
 };
 TEST_F(InventoryPresentationUiTest,
-       PageAndTabChangesPreserveOriginalProfileAndSavedBytes)
+       PageAndHeaderClicksPreserveOriginalProfileAndSavedBytes)
 {
     const auto fingerprint = profileStateFingerprint(profile());
     const auto read = [&]
@@ -191,14 +197,14 @@ TEST_F(InventoryPresentationUiTest,
     EXPECT_EQ(A::view(*app).originFor(ProfileContainerId::stash()),
               (GridPosition{16, 8}));
     click({450, 110});
-    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Backpack);
+    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
     EXPECT_EQ(read(), bytes);
 }
 TEST_F(InventoryPresentationUiTest,
        StashItemRemainsWholeAndClicksNeverEnterPanningOrReturnMode)
 {
-    A::right(*app, {812, 336});
+    A::right(*app, {934.0F, 310.0F});
     ASSERT_TRUE(A::menu(*app));
     EXPECT_EQ(A::menu(*app)->instanceId, rifle);
     page(1);
@@ -207,11 +213,11 @@ TEST_F(InventoryPresentationUiTest,
               (GridPosition{8, 0}));
     page(-1);
     const auto fingerprint = profileStateFingerprint(profile());
-    click({812, 336});
+    click({934.0F, 310.0F});
     EXPECT_FALSE(A::view(*app).returnContainer);
     EXPECT_EQ(A::view(*app).originFor(ProfileContainerId::stash()),
               (GridPosition{}));
-    A::event(*app, InventoryNavigationEvent{{700, 140}, 0, 1, 1});
+    A::event(*app, InventoryNavigationEvent{{836.0F, 138.5F}, 0, 1, 1});
     EXPECT_EQ(A::view(*app).originFor(ProfileContainerId::stash()),
               (GridPosition{}));
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
@@ -220,8 +226,8 @@ TEST_F(InventoryPresentationUiTest,
        PageDuringDragRetainsSourceGrabAndEscOnlyCancels)
 {
     const auto fingerprint = profileStateFingerprint(profile());
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-    pointer(InventoryPointerEventType::Motion, {824, 348});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+    pointer(InventoryPointerEventType::Motion, {944.5F, 320.5F});
     const auto before = A::gesture(*app).activeDragVisual();
     ASSERT_TRUE(before);
     const auto source = A::gesture(*app).source();
@@ -239,18 +245,18 @@ TEST_F(InventoryPresentationUiTest,
        WholeItemMovesToAnotherPageAndCommitsOnlyOnce)
 {
     const auto revision = profile().revision;
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-    pointer(InventoryPointerEventType::Motion, {824, 348});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+    pointer(InventoryPointerEventType::Motion, {944.5F, 320.5F});
     page(1);
-    pointer(InventoryPointerEventType::Motion, {700, 140});
-    pointer(InventoryPointerEventType::LeftButtonUp, {700, 140});
+    pointer(InventoryPointerEventType::Motion, {836.0F, 138.5F});
+    pointer(InventoryPointerEventType::LeftButtonUp, {836.0F, 138.5F});
     const auto location =
         std::get<StoredAssetLocation>(profile().assets.find(rifle)->location);
     EXPECT_EQ(location.origin, (GridPosition{8, 0})) << A::message(*app);
     EXPECT_EQ(profile().revision, revision + 1);
     EXPECT_TRUE(
         validateProfileState(profile(), publishedContentRegistry()).valid);
-    pointer(InventoryPointerEventType::LeftButtonUp, {700, 140});
+    pointer(InventoryPointerEventType::LeftButtonUp, {836.0F, 138.5F});
     EXPECT_EQ(profile().revision, revision + 1);
 }
 TEST_F(InventoryPresentationUiTest, PageEdgeRejectsWholeAndRotatedFootprints)
@@ -258,13 +264,13 @@ TEST_F(InventoryPresentationUiTest, PageEdgeRejectsWholeAndRotatedFootprints)
     const auto fingerprint = profileStateFingerprint(profile());
     for (bool rotate : {false, true})
     {
-        pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-        pointer(InventoryPointerEventType::Motion, {824, 348});
+        pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+        pointer(InventoryPointerEventType::Motion, {944.5F, 320.5F});
         ASSERT_TRUE(A::gesture(*app).activeDragVisual());
         if (rotate)
             A::event(*app, InventoryRotateEvent{});
-        const MousePosition edge = rotate ? MousePosition{700, 462}
-                                          : MousePosition{1068, 140};
+        const MousePosition edge = rotate ? MousePosition{836.0F, 420.25F}
+                                          : MousePosition{1158.0F, 138.5F};
         pointer(InventoryPointerEventType::Motion, edge);
         pointer(InventoryPointerEventType::LeftButtonUp, edge);
         EXPECT_EQ(profileStateFingerprint(profile()), fingerprint)
@@ -274,21 +280,21 @@ TEST_F(InventoryPresentationUiTest, PageEdgeRejectsWholeAndRotatedFootprints)
     }
 }
 TEST_F(InventoryPresentationUiTest,
-       HoverTabWhileDraggingPreservesSourceAndDoesNotTransfer)
+       HeaderHoverWhileDraggingPreservesSourceWithoutSwitchingPages)
 {
     const auto fingerprint = profileStateFingerprint(profile());
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
     pointer(InventoryPointerEventType::Motion, {450, 110});
     ASSERT_TRUE(A::gesture(*app).activeDragVisual());
     A::hover(*app, .34F);
     EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
     A::hover(*app, .02F);
-    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Backpack);
+    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
     EXPECT_EQ(A::gesture(*app).source()->instanceId, rifle);
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
 }
 TEST_F(InventoryPresentationUiTest,
-       HiddenBackpackCanReceiveQuickTransferAndLocateOffersActualTab)
+       VisibleBackpackReceivesQuickTransferAndLocateKeepsSamePage)
 {
     const auto &c = publishedContentRegistry();
     const auto id = profile().assets.find(loot)->instanceId;
@@ -298,14 +304,14 @@ TEST_F(InventoryPresentationUiTest,
                             id, 0, {ProfileContainerId::stash(), {1, 3}}},
                         "move-loot")
                     .succeeded);
-    A::event(*app, InventoryQuickTransferEvent{MousePosition{736, 324}});
+    A::event(*app, InventoryQuickTransferEvent{MousePosition{867.5F, 299.5F}});
     const auto stored =
         std::get<StoredAssetLocation>(profile().assets.find(id)->location);
     EXPECT_EQ(stored.container.ownerAssetId, bag);
     EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
     EXPECT_EQ(A::view(*app).locateAsset, id);
-    click({1000, 665});
-    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Backpack);
+    click({1032.0F, 615.0F});
+    EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
 }
 TEST_F(InventoryPresentationUiTest,
        QuickTransferUsesOtherWarehousePagesAndCanLocateThem)
@@ -328,14 +334,14 @@ TEST_F(InventoryPresentationUiTest,
     A::open(*app);
     A::view(*app).tab = ProfileInventoryTab::Backpack;
     A::event(*app, InventoryQuickTransferEvent{
-                       MousePosition{42 + 8 * 64 + 4, 148 + 5 * 64 + 4}});
+                       MousePosition{282 + 8 * 56 + 4, 152 + 5 * 56 + 4}});
     const auto stored =
         std::get<StoredAssetLocation>(profile().assets.find(loot)->location);
     EXPECT_EQ(stored.container, ProfileContainerId::stash());
     EXPECT_GE(stored.origin.x, 8);
     EXPECT_EQ(A::view(*app).originFor(ProfileContainerId::stash()),
               (GridPosition{}));
-    click({1000, 665});
+    click({1032.0F, 615.0F});
     EXPECT_GE(A::view(*app).originFor(ProfileContainerId::stash()).x, 1);
 }
 TEST_F(InventoryPresentationUiTest,
@@ -347,13 +353,41 @@ TEST_F(InventoryPresentationUiTest,
     EXPECT_FALSE(A::view(*app).lastTarget);
     EXPECT_FALSE(A::gesture(*app).source());
 }
+TEST_F(InventoryPresentationUiTest, SharedCarriedScrollKeepsSourceGrabAndQuantityUntilCancel)
+{
+    const auto &c=publishedContentRegistry();auto p=profile();
+    p.assets.create(c.item(ItemDefinitionId{"item.container.chest_rig_assault"}),EquippedAssetLocation{EquipmentSlotKind::ChestRig});
+    reload(std::move(p));const auto fingerprint=profileStateFingerprint(profile());
+    A::event(*app,InventoryNavigationEvent{{300,300},0,0,4});
+    EXPECT_EQ(A::view(*app).chestScroll,108);
+    pointer(InventoryPointerEventType::LeftButtonDown,{734,580});
+    pointer(InventoryPointerEventType::Motion,{746,592});
+    const auto before=A::gesture(*app).activeDragVisual();ASSERT_TRUE(before);
+    ASSERT_TRUE(A::gesture(*app).source());EXPECT_EQ(A::gesture(*app).source()->instanceId,loot);
+    A::event(*app,InventoryNavigationEvent{{300,300},0,0,-1});
+    const auto after=A::gesture(*app).activeDragVisual();ASSERT_TRUE(after);
+    EXPECT_EQ(A::view(*app).chestScroll,52);EXPECT_EQ(before->grabOffsetInCells,after->grabOffsetInCells);
+    EXPECT_EQ(A::gesture(*app).source()->instanceId,loot);EXPECT_EQ(profile().assets.find(loot)->quantity,20);
+    A::cancel(*app);EXPECT_EQ(profileStateFingerprint(profile()),fingerprint);
+}
+TEST_F(InventoryPresentationUiTest, WarehouseDragCanReachVisibleBackpackWithoutAnyTabSwitch)
+{
+    pointer(InventoryPointerEventType::LeftButtonDown,{934,310});
+    pointer(InventoryPointerEventType::Motion,{946,322});ASSERT_TRUE(A::gesture(*app).activeDragVisual());
+    pointer(InventoryPointerEventType::Motion,{296,166});
+    pointer(InventoryPointerEventType::LeftButtonUp,{296,166});
+    const auto stored=std::get<StoredAssetLocation>(profile().assets.find(rifle)->location);
+    EXPECT_EQ(stored.container,ProfileContainerId::compartment(bag,0));EXPECT_EQ(stored.origin,(GridPosition{0,0}));
+    EXPECT_EQ(A::view(*app).tab,ProfileInventoryTab::Equipment);
+    EXPECT_TRUE(validateProfileState(profile(),publishedContentRegistry()).valid);
+}
 TEST_F(InventoryPresentationUiTest,
        QuantityAndRotationRemainLockedAcrossNavigationUntilCancelled)
 {
     const auto fingerprint = profileStateFingerprint(profile());
     A::view(*app).tab = ProfileInventoryTab::Backpack;
-    A::event(*app, InventoryPartialTransferEvent{{558, 472}, false, true});
-    pointer(InventoryPointerEventType::Motion, {560, 480});
+    A::event(*app, InventoryPartialTransferEvent{{734.0F, 436.0F}, false, true});
+    pointer(InventoryPointerEventType::Motion, {736.0F, 444.0F});
     ASSERT_TRUE(A::gesture(*app).activeDragVisual());
     EXPECT_EQ(A::gesture(*app).source()->quantity, 10U);
     page(1);
@@ -362,8 +396,8 @@ TEST_F(InventoryPresentationUiTest,
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
     A::view(*app).tab = ProfileInventoryTab::Equipment;
     page(-1);
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-    pointer(InventoryPointerEventType::Motion, {824, 348});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+    pointer(InventoryPointerEventType::Motion, {944.5F, 320.5F});
     A::event(*app, InventoryRotateEvent{});
     ASSERT_TRUE(A::gesture(*app).activeDragVisual());
     const auto orientation = A::gesture(*app).activeDragVisual()->orientation;
@@ -375,8 +409,8 @@ TEST_F(InventoryPresentationUiTest,
 TEST_F(InventoryPresentationUiTest,
        EscWinsOverPageKeyInSameFrameWithoutClosingInventory)
 {
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-    pointer(InventoryPointerEventType::Motion, {824, 348});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+    pointer(InventoryPointerEventType::Motion, {944.5F, 320.5F});
     ASSERT_TRUE(A::gesture(*app).activeDragVisual());
     for (auto code : {SDL_SCANCODE_PAGEDOWN, SDL_SCANCODE_ESCAPE})
     {
@@ -403,14 +437,14 @@ TEST_F(InventoryPresentationUiTest, ReturnsHoverSwitchesOnceWithoutReleasingDrag
     ASSERT_TRUE(SaveRepository{path}.save(p,c.contentVersion()).succeeded);
     app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::open(*app);
     const auto fingerprint=profileStateFingerprint(profile());
-    pointer(InventoryPointerEventType::LeftButtonDown,{812,336});pointer(InventoryPointerEventType::Motion,{1100,74});
+    pointer(InventoryPointerEventType::LeftButtonDown,{934.0F, 310.0F});pointer(InventoryPointerEventType::Motion,{1064.0F, 76.0F});
     A::hover(*app,.36F);EXPECT_TRUE(A::view(*app).returns);A::hover(*app,1.0F);EXPECT_TRUE(A::view(*app).returns);
     EXPECT_EQ(A::gesture(*app).source()->instanceId,rifle);EXPECT_EQ(profileStateFingerprint(profile()),fingerprint);
     A::cancel(*app);EXPECT_TRUE(A::isOpen(*app));EXPECT_EQ(profileStateFingerprint(profile()),fingerprint);
 }
 TEST_F(InventoryPresentationUiTest, LegacyEntryIsHiddenWhenEmptyAndUnavailableInRaid)
 {
-    click({930, 74});
+    click({1190.0F, 76.0F});
     EXPECT_FALSE(A::view(*app).legacyOverflow);
     auto p = profile();
     static_cast<void>(p.assets.create(
@@ -420,12 +454,12 @@ TEST_F(InventoryPresentationUiTest, LegacyEntryIsHiddenWhenEmptyAndUnavailableIn
     const auto fingerprint = profileStateFingerprint(profile());
     for (auto type : {InventoryPointerEventType::LeftButtonDown,
                       InventoryPointerEventType::LeftButtonUp})
-        A::raidEvent(*app, InventoryPointerEvent{type, {930, 74}});
+        A::raidEvent(*app, InventoryPointerEvent{type, {1190.0F, 76.0F}});
     EXPECT_FALSE(A::view(*app).legacyOverflow);
-    click({930, 74});
+    click({1190.0F, 76.0F});
     EXPECT_TRUE(A::view(*app).legacyOverflow);
     // A leftover client tab must not expose the base holding area in Raid.
-    A::raidEvent(*app, InventoryQuickTransferEvent{MousePosition{700, 140}});
+    A::raidEvent(*app, InventoryQuickTransferEvent{MousePosition{836.0F, 138.5F}});
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
 }
 TEST_F(InventoryPresentationUiTest, LegacyStorageIsWithdrawOnlyAndHidesAfterLastWithdrawal)
@@ -435,18 +469,18 @@ TEST_F(InventoryPresentationUiTest, LegacyStorageIsWithdrawOnlyAndHidesAfterLast
         publishedContentRegistry().item(alpha_content::ammunition),
         StoredAssetLocation{ProfileContainerId::legacyOverflow(), {0, 0}}, 1);
     reload(std::move(p));
-    click({930, 74});
+    click({1190.0F, 76.0F});
     ASSERT_TRUE(A::view(*app).legacyOverflow);
     A::view(*app).tab = ProfileInventoryTab::Backpack;
     const auto fingerprint = profileStateFingerprint(profile());
-    pointer(InventoryPointerEventType::LeftButtonDown, {558, 472});
-    pointer(InventoryPointerEventType::Motion, {700, 140});
+    pointer(InventoryPointerEventType::LeftButtonDown, {734.0F, 436.0F});
+    pointer(InventoryPointerEventType::Motion, {836.0F, 138.5F});
     ASSERT_TRUE(A::gesture(*app).activeDragVisual());
-    pointer(InventoryPointerEventType::LeftButtonUp, {700, 140});
+    pointer(InventoryPointerEventType::LeftButtonUp, {836.0F, 138.5F});
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
     EXPECT_FALSE(A::gesture(*app).pointerGestureActive());
     ASSERT_TRUE(A::isOpen(*app));
-    A::event(*app, InventoryQuickTransferEvent{MousePosition{700, 140}});
+    A::event(*app, InventoryQuickTransferEvent{MousePosition{836.0F, 138.5F}});
     ASSERT_NE(profile().assets.find(pending), nullptr);
     EXPECT_EQ(std::get<StoredAssetLocation>(
                   profile().assets.find(pending)->location).container,
@@ -454,7 +488,7 @@ TEST_F(InventoryPresentationUiTest, LegacyStorageIsWithdrawOnlyAndHidesAfterLast
     EXPECT_TRUE(assetsInContainer(profile(),
                                  ProfileContainerId::legacyOverflow()).empty());
     A::view(*app).legacyOverflow = false;
-    click({930, 74});
+    click({1190.0F, 76.0F});
     EXPECT_FALSE(A::view(*app).legacyOverflow);
 }
 TEST_F(InventoryPresentationUiTest, LegacyHoverKeepsDraggedSourceAndContinuousOldItemsCanBeLocated)
@@ -465,8 +499,8 @@ TEST_F(InventoryPresentationUiTest, LegacyHoverKeepsDraggedSourceAndContinuousOl
         StoredAssetLocation{ProfileContainerId::legacyOverflow(), {6, 7}});
     reload(std::move(p));
     const auto fingerprint = profileStateFingerprint(profile());
-    pointer(InventoryPointerEventType::LeftButtonDown, {812, 336});
-    pointer(InventoryPointerEventType::Motion, {930, 74});
+    pointer(InventoryPointerEventType::LeftButtonDown, {934.0F, 310.0F});
+    pointer(InventoryPointerEventType::Motion, {1190.0F, 76.0F});
     A::hover(*app, .36F);
     EXPECT_TRUE(A::view(*app).legacyOverflow);
     A::hover(*app, 1.0F);
@@ -474,11 +508,11 @@ TEST_F(InventoryPresentationUiTest, LegacyHoverKeepsDraggedSourceAndContinuousOl
     ASSERT_TRUE(A::gesture(*app).source());
     EXPECT_EQ(A::gesture(*app).source()->instanceId, rifle);
     A::cancel(*app);
-    A::right(*app, {1070, 600});
+    A::right(*app, {1159.75F, 541.0F});
     ASSERT_TRUE(A::menu(*app));
     EXPECT_EQ(A::menu(*app)->instanceId, oldRifle);
     page(1); // Closes the menu, retaining access to the old item's other cells.
-    click({700, 600});
+    click({836.0F, 541.0F});
     EXPECT_TRUE(A::view(*app).returnContainer);
     EXPECT_EQ(*A::view(*app).returnContainer,
               ProfileContainerId::legacyOverflow());
@@ -519,6 +553,19 @@ TEST_F(InventoryPresentationUiTest,
     static_cast<void>(prepared.assets.create(content.item(ItemDefinitionId{"item.container.chest_rig_assault"}),EquippedAssetLocation{EquipmentSlotKind::ChestRig}));
     static_cast<void>(prepared.assets.create(content.item(alpha_content::rifle),EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon}));
     static_cast<void>(prepared.assets.create(content.item(alpha_content::pistol),EquippedAssetLocation{EquipmentSlotKind::Sidearm}));
+    static_cast<void>(prepared.assets.create(content.item(ItemDefinitionId{"item.weapon.rifle_5_45_service"}),EquippedAssetLocation{EquipmentSlotKind::SecondaryWeapon}));
+    static_cast<void>(prepared.assets.create(content.item(alpha_content::utilityKnife),EquippedAssetLocation{EquipmentSlotKind::QuickMelee}));
+    static_cast<void>(prepared.assets.create(content.item(alpha_content::helmet),EquippedAssetLocation{EquipmentSlotKind::Helmet}));
+    static_cast<void>(prepared.assets.create(content.item(alpha_content::bodyArmor),EquippedAssetLocation{EquipmentSlotKind::BodyArmor}));
+    const auto rig=*equippedAsset(prepared,EquipmentSlotKind::ChestRig);
+    int x=0;
+    for(auto id:{alpha_content::medkit,alpha_content::bandage,alpha_content::tourniquet,alpha_content::painkiller,alpha_content::noiseDecoy})
+        static_cast<void>(prepared.assets.create(content.item(id),StoredAssetLocation{ProfileContainerId::compartment(rig,0),{x++,0}}));
+    for(int row=0;row<3;++row)for(auto id:{alpha_content::lootCola,alpha_content::lootScrap,alpha_content::lootElectronics,alpha_content::ammunition,alpha_content::medkit,alpha_content::weaponMaintenanceKit,alpha_content::armorMaintenanceKit}) {
+        const auto &d=content.item(id);const auto fit=findFirstProfileFit(prepared,content,ProfileContainerId::stash(),d,ItemOrientation::Degrees0);
+        ASSERT_TRUE(fit);static_cast<void>(prepared.assets.create(d,StoredAssetLocation{ProfileContainerId::stash(),*fit}));
+    }
+
     ASSERT_TRUE(validateProfileState(prepared,content).valid)<<validateProfileState(prepared,content).message;
     ASSERT_TRUE(SaveRepository{path}.save(prepared,content.contentVersion()).succeeded);
     app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::open(*app);
@@ -531,7 +578,8 @@ TEST_F(InventoryPresentationUiTest,
              {UiLanguage::English, UiLanguage::SimplifiedChinese})
             for (int tab = 0; tab < 3; ++tab)
             {
-                A::view(*app).tab = static_cast<ProfileInventoryTab>(tab);
+                A::view(*app).chestScroll=tab==1?maximumProfileCarriedScroll(profile(),content):0;
+                A::view(*app).remember(ProfileContainerId::stash(),tab==2?GridPosition{8,0}:GridPosition{});
                 SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 ASSERT_TRUE(SDL_RenderClear(renderer));
                 A::draw(*app, language);
@@ -598,6 +646,26 @@ TEST_F(InventoryPresentationUiTest,
                 .08F);
     EXPECT_GT(top, 110);
     EXPECT_LT(bottom, 202);
+}
+TEST_F(InventoryPresentationUiTest, TransparentPaddingIsRemovedOnlyForDrawingAndSourceFileStaysIntact)
+{
+    render();auto *sample=SDL_CreateSurface(128,64,SDL_PIXELFORMAT_RGBA32);ASSERT_NE(sample,nullptr);
+    ASSERT_TRUE(SDL_FillSurfaceRect(sample,nullptr,SDL_MapSurfaceRGBA(sample,0,0,0,0)));
+    const SDL_Rect visible{16,20,96,24};ASSERT_TRUE(SDL_FillSurfaceRect(sample,&visible,SDL_MapSurfaceRGBA(sample,255,0,0,255)));
+    const auto file=path/"padded-item.png";const auto utf8=file.u8string();
+    ASSERT_TRUE(IMG_SavePNG(sample,reinterpret_cast<const char *>(utf8.c_str())));SDL_DestroySurface(sample);
+    const auto bytes=[&] {std::ifstream in(file,std::ios::binary);return std::string{std::istreambuf_iterator<char>{in},{}};};
+    const auto original=bytes();auto texture=loadInventoryTexture(renderer,file);ASSERT_TRUE(texture.valid());
+    const auto source=texture.contentBounds();EXPECT_FLOAT_EQ(source.x,16);EXPECT_FLOAT_EQ(source.y,20);
+    EXPECT_FLOAT_EQ(source.w,96);EXPECT_FLOAT_EQ(source.h,24);A::trimmedTexture(*app,std::move(texture));
+    SDL_SetRenderDrawColor(renderer,0,0,0,255);SDL_RenderClear(renderer);A::drawAsset(*app,*profile().assets.find(rifle));SDL_RenderPresent(renderer);
+    int left=300,right=0,top=220,bottom=0;
+    for(int y=100;y<212;++y)for(int x=100;x<294;++x) {
+        Uint8 r,g,b,a;SDL_ReadSurfacePixel(surface,x,y,&r,&g,&b,&a);
+        if(r>240 && g<10 && b<10) {left=std::min(left,x);right=std::max(right,x);top=std::min(top,y);bottom=std::max(bottom,y);}
+    }
+    ASSERT_GT(right,left);EXPECT_GE(right-left+1,190);EXPECT_NEAR(static_cast<float>(right-left+1)/(bottom-top+1),4,.1);
+    EXPECT_EQ(bytes(),original);
 }
 TEST_F(InventoryPresentationUiTest,
        LegacyHoldingAndReturnEntriesRenderInChineseAtEveryWindowSize)

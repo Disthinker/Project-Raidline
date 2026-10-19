@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "chest_rig_layout_migration.h"
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
 #include "profile_state.h"
@@ -176,14 +177,9 @@ bool containerAccepts(
     }
     const ItemDefinition &ownerDefinition =
         content.item(owner->definitionId);
-    if (container.compartmentIndex >=
-        ownerDefinition.containerCompartments.size())
-    {
-        return false;
-    }
-
-    const ContainerCompartmentDefinition &compartment =
-        ownerDefinition.containerCompartments[container.compartmentIndex];
+    ContainerCompartmentDefinition compartment;
+    try { compartment = profileCompartmentDefinition(profile,ownerDefinition,container.compartmentIndex); }
+    catch (...) { return false; }
     return compartment.pocketKind == ContainerPocketKind::General ||
            item.category == ItemCategory::Magazine;
 }
@@ -731,12 +727,8 @@ InventoryGridSize profileContainerSize(
         throw std::out_of_range{"container owner does not exist"};
     }
     const ItemDefinition &definition = content.item(owner->definitionId);
-    if (container.compartmentIndex >= definition.containerCompartments.size())
-    {
-        throw std::out_of_range{"container compartment does not exist"};
-    }
-    const auto &compartment =
-        definition.containerCompartments[container.compartmentIndex];
+    const auto compartment = profileCompartmentDefinition(
+        profile, definition, container.compartmentIndex);
     return InventoryGridSize{compartment.width, compartment.height};
 }
 
@@ -1240,6 +1232,8 @@ ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content)
 {
+    if (profile.chestRigLayoutVersion > 1)
+        return {false, "unsupported chest rig layout version"};
     if (profile.stashLayoutVersion > 1)
         return {false, "unsupported warehouse layout version"};
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
@@ -2435,7 +2429,7 @@ ProfileValidationResult validateProfileState(
         {
             if (sceneSpaces.size() != 2U) return {false, "Raid scene container snapshot is incomplete"};
             const auto graph = validateInventoryAssetGraph(
-                *raid.startingAssets, content, profile.stashLayoutVersion);
+                *raid.startingAssets, content, profile.stashLayoutVersion, profile.chestRigLayoutVersion);
             if (!graph.valid) return {false, "Raid scene rollback asset graph is invalid: " + graph.message};
             for (const auto &[id, asset] : raid.startingAssets->records())
             {
@@ -4611,6 +4605,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
 {
     std::uint64_t hash = 1469598103934665603ULL;
     hashInteger(hash, profile.stashLayoutVersion);
+    hashInteger(hash, profile.chestRigLayoutVersion);
     hashInteger(hash, profile.homeFounding.established ? 1U : 0U);
     hashInteger(hash, profile.homeFounding.hintsDismissed ? 1U : 0U);
     hashInteger(hash, profile.homeFounding.layoutVersion);
@@ -5084,6 +5079,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             ProfileState baseline;
             baseline.stashLayoutVersion = profile.stashLayoutVersion;
+            baseline.chestRigLayoutVersion = profile.chestRigLayoutVersion;
             baseline.assets = *raid.startingAssets;
             hashInteger(hash, profileStateFingerprint(baseline));
         }

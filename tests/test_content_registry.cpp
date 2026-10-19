@@ -125,7 +125,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-noise-decoy-content-67");
+        "ui-unified-chest-rig-content-68");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -659,10 +659,10 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         ItemDefinitionId{"item.container.chest_rig_small"});
     EXPECT_EQ(chestRig.id, ItemId::Count);
     EXPECT_EQ(chestRig.equipmentSlot, EquipmentSlotKind::ChestRig);
-    ASSERT_EQ(chestRig.containerCompartments.size(), 4U);
+    ASSERT_EQ(chestRig.containerCompartments.size(), 1U);
     EXPECT_EQ(
         chestRig.containerCompartments.front().pocketKind,
-        ContainerPocketKind::MagazineOnly);
+        ContainerPocketKind::General);
 
     const ItemDefinition &helmet = registry.item(alpha_content::helmet);
     ASSERT_TRUE(helmet.armorProtection.has_value());

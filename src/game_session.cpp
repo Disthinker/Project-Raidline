@@ -872,6 +872,12 @@ bool GameSession::continueProfile()
     ProfileState candidate = std::move(*result.profile);
     const bool requiresStashMigration = candidate.stashLayoutVersion == 0;
     bool profileRequiresSave{};
+    if (result.migratedChestRigLayout)
+    {
+        const auto preserved = saveRepository_->preserveChestRigMigrationSources(result.status);
+        if (!preserved.succeeded) { persistenceMessage_ = preserved.message; return false; }
+        profileRequiresSave = true;
+    }
     bool recoveredPendingRaid{};
     if (candidate.pendingRaid.has_value())
     {

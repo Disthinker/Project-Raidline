@@ -138,7 +138,7 @@ TEST(LoadoutProgressionTest, ProjectionReportsEachRealLoadoutGap)
     static_cast<void>(profile.assets.create(
         content.item(ItemDefinitionId{"item.ammunition.9mm_basic"}),
         StoredAssetLocation{
-            ProfileContainerId::compartment(rig, 2U), GridPosition{}},
+            ProfileContainerId::compartment(rig, 0U), GridPosition{2,0}},
         29U));
 
     const LoadoutReadinessProjection projection = projectLoadoutReadiness(

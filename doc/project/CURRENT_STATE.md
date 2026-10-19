@@ -1,4 +1,89 @@
+# 当前：同页配装与八分区轮盘 v2 已验收，交付中
+
+用户已验收候选 **571c8b0fb04c**，明确要求提交、推送和合并。固定桌面 **Project Raidline Debug** 保持该已验收程序。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v2`；`state=accepted_delivery_in_progress`。
+- `candidate_id=RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`；`accepted_candidate_id=RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`；`acceptance_source=2026-10-19主控线程直接人类原文：同页配装与八分区轮盘 v2 验收通过，请完成提交、推送和合并。`。
+- 49项源码／测试／内容定义及程序指纹已与冻结候选逐项核对一致。本地完整回归2253/2253和原四项3ms检查通过；无源码变化，不重复无变化的本地测试。
+- 仅提交本任务49项实现文件及3份任务文档；保留其他未提交修改。准确提交的Windows／Ubuntu CI通过后普通合并，核对合并树及合并提交CI；不绕过失败。
+- 开发分支`codex/ui-quick-wheel-v1`，已验收main基线`241ca568`。不启动游戏、访问真实存档或开始下一项开发。[任务记录](../exec-plans/active/ui-quick-wheel-v1.md)保留交付证据。
+
+<details>
+<summary>已验收候选及实施历史</summary>
+
+# 当前：同页配装与八分区轮盘 v2，待验收
+
+**候选 571c8b0fb04c 已完成。** 继续使用桌面 **Project Raidline Debug**，按[简短验收清单](../acceptance/ui-quick-wheel-v1.md)确认同页布局、胸挂混放和八区轮盘。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v2`；`state=waiting_human_acceptance`。
+- `candidate_id=RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`；`accepted_candidate_id=无`；用户批准实施原文：“同意新版方案，请进行下一步开发”；尚无人类验收。
+- 本地Windows Debug构建和完整回归 **2253/2253通过**，原四项3ms负载和门槛保持；三档窗口／中英文54张预览已检查，实际游玩未代做。
+- 复用开发目录`Project Raidline-ui-inventory-presentation-v1`、分支`codex/ui-quick-wheel-v1`，HEAD仍为已验收main`241ca568`。候选以冻结源码及程序识别；原v1、五个工作区无关修改和固定入口保留。
+- 已冻结，下一步等待本候选验收。未提交、推送、合并、启动游戏或访问真实存档；不启动下一任务。[任务记录](../exec-plans/active/ui-quick-wheel-v1.md)记录具体范围和验证边界。
+
+<details>
+<summary>实施、选题与前序交付历史（当前状态以文首为准）</summary>
+
+## 原v1完成状态（历史，尚未验收）
+
+# 当前：快捷轮盘 v1 已完成，待用户验收
+
+候选 **ee06833595e8** 已完成医疗／投掷快捷轮盘显示统一。**继续用桌面 Project Raidline Debug，按[验收清单](../acceptance/ui-quick-wheel-v1.md)确认。** 原操作、原存档和固定入口保持，暂不提交、推送或合并。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v1`；`state=waiting_human_acceptance`。
+- `candidate_id=RL-UI-QUICK-WHEEL-v1-local-ee06833595e8`；`accepted_candidate_id=无`；`acceptance_source=无`。实际实施批准是2026-10-19主控线程人类原文，见[任务记录](../exec-plans/active/ui-quick-wheel-v1.md)。
+- 完整回归 **2232/2232**，新增24项；原3ms性能负载和门槛保持且检查通过。三档窗口、中英文共30张离屏预览；正常游玩未代做。
+- 复用分支 `codex/ui-quick-wheel-v1`，HEAD基线 `241ca56`；未提交候选以冻结源码指纹和程序识别，不能把旧HEAD当作本次候选提交。五个工作区的原无关修改及其他分支保留。
+
+
+
+# 当前：快捷轮盘显示统一 v1 实施中
+
+用户已批准 **RL-UI-QUICK-WHEEL-v1**。本次统一“4 投掷”和“5 医疗”的显示、中文提示与选中反馈，保留各自操作、原存档、固定测试入口和3ms门槛；暂不提交、推送或合并。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v1`；`state=in_progress`。
+- `approval_source=2026-10-19主控线程直接人类批准`；`candidate_id=无`；`accepted_candidate_id=无`。
+- 复用开发目录分支 `codex/ui-quick-wheel-v1`，基线main `241ca56`。构建与测试进行后再记录实际结果，尚无新候选可验收。
+- [任务记录](../exec-plans/active/ui-quick-wheel-v1.md)保留具体范围、真实批准与保护证据。
+
+<details>
+<summary>选题与前序交付历史</summary>
+
+# 当前：快捷轮盘显示统一 v1，待批准
+
+下一项方案为 **RL-UI-QUICK-WHEEL-v1**：统一“4 投掷”和“5 医疗”的物品显示、中文提示与选中反馈。医疗松开5尝试使用；投掷松开4只进入瞄准，再左键投出。原选择、消耗、准星、存档及3ms门槛保持。
+
+**下一步：用户确认具体方案后实施。** 策划已只读给出建议，主控已核查代码；尚未修改游戏、构建、测试、启动程序或进行新的Git交付。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v1`；`state=waiting_plan_approval`。
+- `approval_source=无`；`candidate_id=无`；`accepted_candidate_id=无`。本轮“请继续下一步开发”触发选题，不替代新版本批准。
+- 已验收基线仍是main `241ca56`／PR180，上一项已交付；原桌面「Project Raidline Debug」仍指向已验收程序。
+- [具体方案](../exec-plans/active/ui-quick-wheel-v1.md)包含范围、保留行为、验证与策划回复证据。
+
+<details>
+<summary>上一项交付和历史（当前任务以文首为准）</summary>
+
+# 当前：物品菜单与悬浮信息 v1 已交付
+
+候选 **2f83b46cdd4d** 已由用户验收，并完成提交、推送和普通合并。[PR180](https://github.com/Disthinker/Project-Raidline/pull/180)，最新main **241ca56**。桌面「Project Raidline Debug」继续使用同一已验收程序。
+
+- `task_id=ui-item-context`；`plan_version=RL-UI-ITEM-CONTEXT-v1`；`state=delivered`。candidate_id与accepted_candidate_id均为`RL-UI-ITEM-CONTEXT-v1-local-2f83b46cdd4d`。
+- 提交 `a30d4c0` 已推送，合并树与该已测试提交一致。PR准确head及合并提交的Windows／Ubuntu均各 **2208/2208**、首轮通过；原3ms负载及门槛未变。
+- 冻结12项源码、程序、运行资源和固定入口保持；旧工作目录及无关未提交内容保留。没有启动游戏、操作真实存档或开始下一任务。
+- 策划已在原线程只读确认交付，状态为 `delivery_synced_readonly`；未安排或启动下一开发。
+
+[任务记录](../exec-plans/active/ui-item-context-v1.md)保留实际人类授权、Git／CI和保护证据。
+
+<details>
+<summary>验收、实施及前序交付历史（以文首已交付为准）</summary>
+
+# 当前：物品菜单 v1 已合并，等待合并CI
+
+用户验收候选2f83b46cdd4d已提交、推送并普通合并[PR180](https://github.com/Disthinker/Project-Raidline/pull/180)。最新main `241ca56`，合并树等于已验收提交树。准确提交双平台CI各2208/2208首轮通过；合并提交CI `39183737943` 进行中。`state=accepted_delivery_in_progress`，尚未宣称最后CI完成。固定程序／入口及其他未提交修改保持，不启动游戏或下一项开发。以下为历史。
+
 # 当前：物品菜单与悬浮信息 v1 已验收，交付中
+
+提交 `a30d4c0` 已推送，[PR180](https://github.com/Disthinker/Project-Raidline/pull/180) 双平台CI `39181740553` 进行中；PR测试合并树与已验收提交树一致。固定程序和入口保持。
 
 用户于2026-10-19验收候选 **2f83b46cdd4d**，明确要求提交、推送和合并。游戏程序和固定桌面Debug入口保持已验收版本。
 
@@ -984,6 +1069,16 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
+
+</details>
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

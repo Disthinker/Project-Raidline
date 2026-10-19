@@ -43,7 +43,7 @@ bool quickPocket(const EquippedRig &rig, const AssetRecord &asset) {
              rig.definition->containerCompartments.size() &&
          rig.definition
                  ->containerCompartments[stored->container.compartmentIndex]
-                 .pocketKind == ContainerPocketKind::MagazineOnly;
+                 .pocketKind == ContainerPocketKind::General;
 }
 
 bool hasSuggestion(const WeaponSupplyReadiness &readiness,
@@ -74,7 +74,7 @@ RigMoveSearch moveToRig(const ProfileState &profile,
   for (std::size_t index{};
        index < rig.definition->containerCompartments.size(); ++index) {
     if (rig.definition->containerCompartments[index].pocketKind !=
-        ContainerPocketKind::MagazineOnly)
+        ContainerPocketKind::General)
       continue;
     const ProfileContainerId pocket = ProfileContainerId::compartment(
         rig.id, static_cast<std::uint32_t>(index));

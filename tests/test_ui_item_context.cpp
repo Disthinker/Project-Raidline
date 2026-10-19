@@ -161,7 +161,7 @@ protected:
 
 TEST_F(UiItemContextTest, DetailsExecuteOnMatchingReleaseOnceWithoutMutatingProfile) {
     const auto before = profileStateFingerprint(profile());
-    A::right(*app, {240, 150}); const auto p = row(UiItemAction::WeaponDetails);
+    A::right(*app, {63.093F, 378.0F}); const auto p = row(UiItemAction::WeaponDetails);
     pointer(InventoryPointerEventType::LeftButtonDown, p);
     EXPECT_FALSE(A::details(*app)); EXPECT_FALSE(A::gesture(*app));
     pointer(InventoryPointerEventType::LeftButtonDown, p);
@@ -173,7 +173,7 @@ TEST_F(UiItemContextTest, DetailsExecuteOnMatchingReleaseOnceWithoutMutatingProf
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
 }
 TEST_F(UiItemContextTest, ReleaseOutsideOrOnAnotherRowDoesNotExecute) {
-    A::right(*app, {240, 150});
+    A::right(*app, {63.093F, 378.0F});
     const auto first = row(UiItemAction::WeaponDetails);
     pointer(InventoryPointerEventType::LeftButtonDown, first);
     pointer(InventoryPointerEventType::LeftButtonUp, row(UiItemAction::ModifyWeapon));
@@ -184,16 +184,16 @@ TEST_F(UiItemContextTest, ReleaseOutsideOrOnAnotherRowDoesNotExecute) {
 }
 TEST_F(UiItemContextTest, OutsideClickIsConsumedEvenOverAnotherItem) {
     const auto before = profileStateFingerprint(profile());
-    A::right(*app, {240, 150}); click({804, 340});
+    A::right(*app, {63.093F, 378.0F}); click({927.0F, 313.5F});
     EXPECT_FALSE(A::menu(*app)); EXPECT_FALSE(A::gesture(*app));
     EXPECT_FALSE(A::guard(*app)); EXPECT_EQ(profileStateFingerprint(profile()), before);
-    pointer(InventoryPointerEventType::LeftButtonDown, {804, 340});
+    pointer(InventoryPointerEventType::LeftButtonDown, {927.0F, 313.5F});
     EXPECT_TRUE(A::gesture(*app));
 }
 TEST_F(UiItemContextTest, MenuBlocksQuickTransferAndPartialClickCannotStartDrag) {
     const auto before = profileStateFingerprint(profile());
-    A::right(*app, {240, 150});
-    A::event(*app, InventoryQuickTransferEvent{MousePosition{804, 340}});
+    A::right(*app, {63.093F, 378.0F});
+    A::event(*app, InventoryQuickTransferEvent{MousePosition{927.0F, 313.5F}});
     EXPECT_EQ(profileStateFingerprint(profile()), before);
     const auto p = row(UiItemAction::WeaponDetails);
     A::event(*app, InventoryPartialTransferEvent{p, true, false});
@@ -202,22 +202,22 @@ TEST_F(UiItemContextTest, MenuBlocksQuickTransferAndPartialClickCannotStartDrag)
     EXPECT_EQ(A::details(*app), rifle);
 }
 TEST_F(UiItemContextTest, EscapeCancelsHeldActionAndConsumesItsRelease) {
-    A::right(*app, {240, 150}); const auto p = row(UiItemAction::WeaponDetails);
+    A::right(*app, {63.093F, 378.0F}); const auto p = row(UiItemAction::WeaponDetails);
     pointer(InventoryPointerEventType::LeftButtonDown, p); A::cancel(*app);
     EXPECT_FALSE(A::menu(*app)); EXPECT_TRUE(A::inventory(*app));
-    pointer(InventoryPointerEventType::LeftButtonUp, {804, 340});
+    pointer(InventoryPointerEventType::LeftButtonUp, {927.0F, 313.5F});
     EXPECT_FALSE(A::guard(*app)); EXPECT_FALSE(A::details(*app)); EXPECT_FALSE(A::gesture(*app));
 }
-TEST_F(UiItemContextTest, PageNavigationAndTabSelectionDoNotKeepOldMenuOrHover) {
-    A::point(*app, {804, 340}, .5F); ASSERT_TRUE(A::hover(*app).visible());
-    A::right(*app, {240, 150}); EXPECT_FALSE(A::hover(*app).visible());
-    A::event(*app, InventoryNavigationEvent{{700, 140}, 1, 0, 0});
+TEST_F(UiItemContextTest, PageAndCarriedScrollDoNotKeepOldMenuOrHover) {
+    A::point(*app, {927.0F, 313.5F}, .5F); ASSERT_TRUE(A::hover(*app).visible());
+    A::right(*app, {63.093F, 378.0F}); EXPECT_FALSE(A::hover(*app).visible());
+    A::event(*app, InventoryNavigationEvent{{836.0F, 138.5F}, 1, 0, 0});
     EXPECT_FALSE(A::menu(*app)); A::tick(*app, 0); EXPECT_FALSE(A::hover(*app).visible());
-    click({450, 110}); EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Backpack);
+    A::event(*app, InventoryNavigationEvent{{300,300},0,1,0}); EXPECT_EQ(A::view(*app).tab, ProfileInventoryTab::Equipment);
     EXPECT_FALSE(A::hover(*app).visible());
 }
 TEST_F(UiItemContextTest, MovedTargetCannotExecuteStaleMenu) {
-    A::right(*app, {240, 150}); const auto p = row(UiItemAction::WeaponDetails);
+    A::right(*app, {63.093F, 378.0F}); const auto p = row(UiItemAction::WeaponDetails);
     pointer(InventoryPointerEventType::LeftButtonDown, p);
     const auto &c = publishedContentRegistry();
     const auto fit = findFirstProfileFit(profile(), c, ProfileContainerId::stash(),
@@ -232,14 +232,14 @@ TEST_F(UiItemContextTest, MovedTargetCannotExecuteStaleMenu) {
 }
 TEST_F(UiItemContextTest, EmptyMagazineAffordanceAndDomainFailureArePreserved) {
     const auto before = profileStateFingerprint(profile());
-    A::right(*app, {992, 140});
+    A::right(*app, {1091.5F, 138.5F});
     ASSERT_TRUE(A::menu(*app));
     click(row(UiItemAction::UnloadMagazine));
     EXPECT_FALSE(A::menu(*app)); EXPECT_FALSE(A::message(*app).empty());
     EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
 TEST_F(UiItemContextTest, MedicalActionRunsOnlyAfterReleaseAndCannotRepeat) {
-    A::right(*app, {680, 140}); const auto p = row(UiItemAction::UseMedical);
+    A::right(*app, {818.5F, 138.5F}); const auto p = row(UiItemAction::UseMedical);
     const auto before = profileStateFingerprint(profile());
     pointer(InventoryPointerEventType::LeftButtonDown, p);
     EXPECT_EQ(profileStateFingerprint(profile()), before);
@@ -250,45 +250,45 @@ TEST_F(UiItemContextTest, MedicalActionRunsOnlyAfterReleaseAndCannotRepeat) {
     EXPECT_EQ(profileStateFingerprint(profile()), after);
 }
 TEST_F(UiItemContextTest, HoverDelayAndStableAnchorSurviveMotionInsideItem) {
-    A::point(*app, {804, 340}); A::tick(*app, .39F);
+    A::point(*app, {927.0F, 313.5F}); A::tick(*app, .39F);
     EXPECT_FALSE(A::hover(*app).visible());
     const auto anchor = A::hover(*app).anchor;
-    A::point(*app, {810, 350}, .02F); EXPECT_TRUE(A::hover(*app).visible());
+    A::point(*app, {932.25F, 322.25F}, .02F); EXPECT_TRUE(A::hover(*app).visible());
     EXPECT_EQ(A::hover(*app).instanceId, ammo);
     EXPECT_FLOAT_EQ(A::hover(*app).anchor.x, anchor.x);
-    A::point(*app, {992, 140}); EXPECT_FALSE(A::hover(*app).visible());
+    A::point(*app, {1091.5F, 138.5F}); EXPECT_FALSE(A::hover(*app).visible());
     EXPECT_EQ(A::hover(*app).instanceId, magazine);
 }
 TEST_F(UiItemContextTest, DragMenuFocusLossAndCloseHideHoverImmediately) {
-    A::point(*app, {804, 340}, .5F); ASSERT_TRUE(A::hover(*app).visible());
-    pointer(InventoryPointerEventType::LeftButtonDown, {804, 340});
+    A::point(*app, {927.0F, 313.5F}, .5F); ASSERT_TRUE(A::hover(*app).visible());
+    pointer(InventoryPointerEventType::LeftButtonDown, {927.0F, 313.5F});
     A::tick(*app, .5F); EXPECT_FALSE(A::hover(*app).visible());
-    A::right(*app, {240, 150}); EXPECT_FALSE(A::menu(*app));
-    A::cancel(*app); A::point(*app, {240, 150}, .5F);
+    A::right(*app, {63.093F, 378.0F}); EXPECT_FALSE(A::menu(*app));
+    A::cancel(*app); A::point(*app, {63.093F, 378.0F}, .5F);
     ASSERT_TRUE(A::hover(*app).visible()); A::focus(*app, false); A::tick(*app, 0);
     EXPECT_FALSE(A::hover(*app).visible());
-    A::focus(*app, true); A::point(*app, {240, 150}, .5F); A::close(*app);
+    A::focus(*app, true); A::point(*app, {63.093F, 378.0F}, .5F); A::close(*app);
     EXPECT_FALSE(A::hover(*app).visible()); EXPECT_FALSE(A::menu(*app));
 }
 TEST_F(UiItemContextTest, LanguageChangeInvalidatesMeasuredMenuAndHover) {
-    A::right(*app, {240, 150}); A::text(*app).setLanguage(UiLanguage::English);
+    A::right(*app, {63.093F, 378.0F}); A::text(*app).setLanguage(UiLanguage::English);
     A::tick(*app, 0); EXPECT_FALSE(A::menu(*app));
-    A::point(*app, {804, 340}, .5F); ASSERT_TRUE(A::hover(*app).visible());
+    A::point(*app, {927.0F, 313.5F}, .5F); ASSERT_TRUE(A::hover(*app).visible());
     A::text(*app).setLanguage(UiLanguage::SimplifiedChinese); A::tick(*app, 0);
     EXPECT_FALSE(A::hover(*app).visible());
 }
 TEST_F(UiItemContextTest, FocusLossDuringMenuPressDoesNotSwallowTheNextFreshClick) {
-    A::right(*app, {240, 150});
+    A::right(*app, {63.093F, 378.0F});
     pointer(InventoryPointerEventType::LeftButtonDown, row(UiItemAction::WeaponDetails));
     A::focus(*app, false); A::tick(*app, 0);
     EXPECT_FALSE(A::menu(*app)); EXPECT_FALSE(A::guard(*app));
-    A::focus(*app, true); A::right(*app, {240, 150});
+    A::focus(*app, true); A::right(*app, {63.093F, 378.0F});
     ASSERT_TRUE(A::menu(*app)); click(row(UiItemAction::WeaponDetails));
     EXPECT_EQ(A::details(*app), rifle);
 }
 TEST_F(UiItemContextTest, WeaponCardContainsEverySupplyLineAndOneImageWithoutProfileWrites) {
     drawSetup(); const auto before = profileStateFingerprint(profile());
-    A::point(*app, {240, 150}, .6F); A::drawCard(*app);
+    A::point(*app, {63.093F, 378.0F}, .6F); A::drawCard(*app);
     const auto lines = A::supply(*app, rifle);
     ASSERT_FALSE(lines.empty());
     for (const auto &line : lines)
@@ -301,12 +301,12 @@ TEST_F(UiItemContextTest, WeaponCardContainsEverySupplyLineAndOneImageWithoutPro
     EXPECT_EQ(A::text(*app).cachedLabelCount(), labels);
 }
 TEST_F(UiItemContextTest, DrawingRestoresClipBlendScaleAndColour) {
-    drawSetup(); A::point(*app, {240, 150}, .6F);
+    drawSetup(); A::point(*app, {63.093F, 378.0F}, .6F);
     SDL_Rect clip{0, 0, 1260, 700}; SDL_SetRenderClipRect(renderer, &clip);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
     SDL_SetRenderDrawColor(renderer, 11, 22, 33, 44);
     float x{}, y{}; SDL_GetRenderScale(renderer, &x, &y);
-    A::drawCard(*app); A::right(*app, {240, 150}); A::drawMenu(*app);
+    A::drawCard(*app); A::right(*app, {63.093F, 378.0F}); A::drawMenu(*app);
     SDL_Rect after{}; SDL_GetRenderClipRect(renderer, &after);
     EXPECT_EQ(after.x, clip.x); EXPECT_EQ(after.w, clip.w); EXPECT_EQ(after.h, clip.h);
     SDL_BlendMode blend{}; SDL_GetRenderDrawBlendMode(renderer, &blend); EXPECT_EQ(blend, SDL_BLENDMODE_ADD);
@@ -344,9 +344,9 @@ TEST_F(UiItemContextTest, MenuAndHoverDoNotWriteTheIsolatedSave) {
         return files;
     };
     const auto before = bytes(); ASSERT_FALSE(before.empty());
-    A::point(*app, {240, 150}, .6F); A::right(*app, {240, 150}); A::cancel(*app);
-    A::event(*app, InventoryNavigationEvent{{700, 140}, 1, 0, 0});
-    A::point(*app, {804, 340}, 1); A::close(*app);
+    A::point(*app, {63.093F, 378.0F}, .6F); A::right(*app, {63.093F, 378.0F}); A::cancel(*app);
+    A::event(*app, InventoryNavigationEvent{{836.0F, 138.5F}, 1, 0, 0});
+    A::point(*app, {927.0F, 313.5F}, 1); A::close(*app);
     EXPECT_EQ(bytes(), before);
 }
 TEST_F(UiItemContextTest, WeaponDurabilityUsesTheAcceptedEquipmentDisplayUnits) {
@@ -365,7 +365,7 @@ TEST_F(UiItemContextTest, SoftwarePreviewUsesAllThreeWindowScalesAndBothLanguage
             drawSetup(size.width, size.height); A::loadArt(*app);
             A::text(*app).setLanguage(language);
             SDL_SetRenderDrawColor(renderer, 8, 12, 18, 255); SDL_RenderClear(renderer);
-            A::point(*app, {240, 150}); A::tick(*app, .6F); A::drawInventory(*app);
+            A::point(*app, {63.093F, 378.0F}); A::tick(*app, .6F); A::drawInventory(*app);
             SDL_RenderPresent(renderer);
             const auto save = [&](const char *kind) {
 #if defined(_WIN32)
@@ -383,7 +383,7 @@ TEST_F(UiItemContextTest, SoftwarePreviewUsesAllThreeWindowScalesAndBothLanguage
                 }
             };
             save("weapon-card");
-            A::right(*app, {240, 150}); ASSERT_TRUE(A::menu(*app));
+            A::right(*app, {63.093F, 378.0F}); ASSERT_TRUE(A::menu(*app));
             auto &menu = *A::menu(*app);
             menu.layout = layoutUiItemContext({1279, 719}, menu.layout.title.text,
                 menu.actions, language,

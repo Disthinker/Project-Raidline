@@ -7,20 +7,12 @@
 
 TEST(ProfileContainerPresentationTest, UsesEveryDefinedChestRigCompartment)
 {
-    const ItemDefinition &definition = publishedContentRegistry().item(
-        ItemDefinitionId{"item.container.chest_rig_assault"});
-
-    const ProfileCompartmentLayout layout = layoutProfileCompartments(
-        definition, 214.0F, 442.0F, 580.0F, 20.0F, false);
-
-    ASSERT_EQ(
-        layout.placements.size(),
-        definition.containerCompartments.size());
-    EXPECT_EQ(layout.placements.front().label, "MAG 1");
-    EXPECT_EQ(layout.placements[3].label, "MAG 4");
-    EXPECT_EQ(layout.placements[4].label, "UTIL 1");
-    EXPECT_EQ(layout.placements.back().label, "UTIL 4");
-    EXPECT_LE(layout.bottom, 506.0F);
+    for(auto name:{"small","patrol","assault"}) {
+        const auto &d=publishedContentRegistry().item(ItemDefinitionId{"item.container.chest_rig_"+std::string{name}});
+        const auto l=layoutProfileCompartments(d,282,152,786,56,false);
+        ASSERT_EQ(l.placements.size(),1);EXPECT_EQ(l.placements.front().compartmentIndex,0);
+        EXPECT_LE(l.bottom,632);EXPECT_EQ(d.containerCompartments.front().pocketKind,ContainerPocketKind::General);
+    }
 }
 
 TEST(ProfileContainerPresentationTest, BackpackUsesOneContinuousNamedGrid)

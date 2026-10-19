@@ -134,8 +134,8 @@ TEST(UiLocalizationTest, FirstRaidSupplyCountersAreCompletelyReadable) {
                      "R 换弹候选：15 发 | 无法安装"},
            std::pair{"OTHER LOADED SPARES 2 / 60 ROUNDS | NOT R-READY",
                      "其他已压弹备用匣 2 / 60 发 | 无法通过 R 快速换弹"},
-           std::pair{"R CANDIDATE: NONE | USE CHEST RIG MAGAZINE POCKETS",
-                     "R 换弹候选：无 | 请使用胸挂的弹匣分区"}}) {
+           std::pair{"R CANDIDATE: NONE | USE WORN CHEST RIG",
+                     "R 换弹候选：无 | 将弹匣放入胸挂"}}) {
     EXPECT_EQ(localizeUiText(UiLanguage::English, english), english);
     EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, english), chinese);
   }

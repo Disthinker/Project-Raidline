@@ -1,4 +1,5 @@
 #include "save_repository.h"
+#include "chest_rig_layout_migration.h"
 #include "alpha_content_ids.h"
 #include "base_fortification_serialization.h"
 #include "base_defense_serialization.h"
@@ -1429,6 +1430,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         {"assets", std::move(assets)}};
     if (schemaVersion >= 55)
         payload["stash_layout_version"] = profile.stashLayoutVersion;
+    if (schemaVersion >= 56)
+        payload["chest_rig_layout_version"] = profile.chestRigLayoutVersion;
     if (schemaVersion == 1)
     {
         return payload;
@@ -2733,11 +2736,12 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
-    Json payload = profilePayload(profile, schemaVersion);
+    const auto legacy = schemaVersion < 56 ? std::optional<ProfileState>{legacyChestRigSnapshot(profile)} : std::nullopt;
+    Json payload = profilePayload(legacy ? *legacy : profile, schemaVersion);
     const std::string payloadText = payload.dump();
     Json envelope{
         {"schema_version", schemaVersion},
@@ -2903,7 +2907,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 49 && contentVersion == "weapon-components-content-63") ||
             (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64") ||
             (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65") ||
-            (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66");
+            (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66") ||
+            (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2925,7 +2930,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2939,6 +2944,12 @@ SaveLoadResult deserializeProfileEnvelope(
         }
 
         ProfileState profile;
+        if (schemaVersion >= 56 && !payload.at("chest_rig_layout_version").is_number_unsigned())
+            return {SaveLoadStatus::Failed, std::nullopt, "chest rig layout marker is invalid"};
+        profile.chestRigLayoutVersion = schemaVersion >= 56
+            ? payload.at("chest_rig_layout_version").get<std::uint32_t>() : 0U;
+        if (schemaVersion >= 56 && profile.chestRigLayoutVersion != 1)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported chest rig layout version"};
         if (schemaVersion >= 55 && !payload.at("stash_layout_version").is_number_unsigned())
             return {SaveLoadStatus::Failed, std::nullopt, "warehouse layout marker is invalid"};
         profile.stashLayoutVersion = schemaVersion >= 55
@@ -4620,7 +4631,10 @@ SaveLoadResult deserializeProfileEnvelope(
         {
             return {SaveLoadStatus::Failed, std::nullopt, validation.message};
         }
-        return {SaveLoadStatus::LoadedPrimary, std::move(profile), {}};
+        const bool migratedChestRig = profile.chestRigLayoutVersion == 0;
+        const auto migration = migrateLegacyChestRigLayout(profile, content);
+        if (!migration.valid) return {SaveLoadStatus::Failed, std::nullopt, migration.message};
+        return {SaveLoadStatus::LoadedPrimary, std::move(profile), {}, migratedChestRig};
     }
     catch (const std::exception &error)
     {
@@ -4789,8 +4803,12 @@ SaveWriteResult SaveRepository::save(
     return {true, {}};
 }
 
-SaveWriteResult SaveRepository::preserveStashMigrationSources(
-    SaveLoadStatus loadedFrom) const
+SaveWriteResult SaveRepository::preserveStashMigrationSources(SaveLoadStatus status) const
+{ return preserveLayoutMigrationSources(status, "stash-pages-v1"); }
+SaveWriteResult SaveRepository::preserveChestRigMigrationSources(SaveLoadStatus status) const
+{ return preserveLayoutMigrationSources(status, "chest-rig-v2"); }
+SaveWriteResult SaveRepository::preserveLayoutMigrationSources(
+    SaveLoadStatus loadedFrom, std::string_view marker) const
 {
     if (loadedFrom != SaveLoadStatus::LoadedPrimary &&
         loadedFrom != SaveLoadStatus::RecoveredBackup)
@@ -4825,14 +4843,14 @@ SaveWriteResult SaveRepository::preserveStashMigrationSources(
     std::error_code error;
     if (std::filesystem::exists(primaryPath_, error))
     {
-        const auto preserved = preserve(primaryPath_, "profile.pre-stash-pages-v1.");
+        const auto preserved = preserve(primaryPath_, "profile.pre-" + std::string{marker} + ".");
         if (!preserved.succeeded) return preserved;
     }
     else if (error || loadedFrom == SaveLoadStatus::LoadedPrimary)
         return {false, "primary migration source could not be inspected"};
     error.clear();
     if (std::filesystem::exists(backupPath_, error))
-        return preserve(backupPath_, "profile.backup.pre-stash-pages-v1.");
+        return preserve(backupPath_, "profile.backup.pre-" + std::string{marker} + ".");
     if (error || loadedFrom == SaveLoadStatus::RecoveredBackup)
         return {false, "recovery migration source could not be inspected"};
     return {true, {}};

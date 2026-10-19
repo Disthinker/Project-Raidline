@@ -693,6 +693,7 @@ WeaponAmmoPlan queryWeaponAmmo(
 {
     ProfileState candidate;
     candidate.stashLayoutVersion = profile.stashLayoutVersion;
+    candidate.chestRigLayoutVersion = profile.chestRigLayoutVersion;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
     const WeaponAmmoReceipt receipt = apply(candidate, content, command);

@@ -17,7 +17,7 @@ struct WeaponInventoryUiTestAccess {
     static bool inventory(App &a) { return a.inventoryOverlayState_.isOpen(); }
     static auto weapon(App &a) { return a.componentWeapon_; }
     static const auto &message(App &a) { return a.uiMessage_; }
-    static void raidRightClick(App &a) { a.handleProfileRightClick({240,150},true); }
+    static void raidRightClick(App &a) { a.handleProfileRightClick({64,382},true); }
     static MousePosition actionPoint(App &a, UiItemAction action) {
         for (std::size_t i=0;i<a.profileContextMenu_->actions.size();++i)
             if(a.profileContextMenu_->actions[i].id==action) {
@@ -66,7 +66,7 @@ protected:
     void TearDown() override { app.reset(); SDL_Quit(); std::error_code ec; std::filesystem::remove_all(path,ec); }
     void frame() { A::frame(*app); }
     void tap(float x,float y, Uint8 button=SDL_BUTTON_LEFT) { click(x,y,button); frame(); }
-    void openMenu() { tap(240,150,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon); }
+    void openMenu() { tap(64,382,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon); }
     void choose(UiItemAction action) { const auto p=A::actionPoint(*app,action);tap(p.x,p.y); }
     const ProfileState &profile() { return A::flow(*app).gameSession().profile(); }
 };
@@ -100,7 +100,7 @@ TEST_F(WeaponInventoryUiTest, StoredWeaponOpensDetailsFromWarehouseGrid) {
         InventoryMoveCommand{weapon,0,{ProfileContainerId::stash(),*origin},ItemOrientation::Degrees0},"store-for-menu").succeeded);
     A::showStash(*app);
     const auto view=A::locate(*app,weapon);
-    const float x=668.0F+(origin->x-view.x)*64.0F+4, y=128.0F+(origin->y-view.y)*64.0F+4;
+    const float x=808.0F+(origin->x-view.x)*56.0F+4, y=128.0F+(origin->y-view.y)*56.0F+4;
     tap(x,y,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon);
     choose(UiItemAction::WeaponDetails);
     EXPECT_EQ(A::details(*app),weapon);

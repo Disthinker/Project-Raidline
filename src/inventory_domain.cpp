@@ -596,10 +596,11 @@ InventoryReceipt apply(
 
 ProfileValidationResult validateInventoryAssetGraph(
     const AssetRegistry &assets, const ContentRegistry &content,
-    std::uint32_t stashLayoutVersion)
+    std::uint32_t stashLayoutVersion, std::uint32_t chestRigLayoutVersion)
 {
     ProfileState candidate;
     candidate.stashLayoutVersion = stashLayoutVersion;
+    candidate.chestRigLayoutVersion = chestRigLayoutVersion;
     candidate.assets = assets;
     InventoryReceipt receipt;
     const bool valid = validateCandidate(candidate, content, receipt, false);
@@ -680,6 +681,7 @@ InventoryPlan queryInventory(
         return {false, DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision};
     ProfileState candidate;
     candidate.stashLayoutVersion = profile.stashLayoutVersion;
+    candidate.chestRigLayoutVersion = profile.chestRigLayoutVersion;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
     const InventoryReceipt receipt = apply(
