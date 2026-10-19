@@ -301,6 +301,7 @@ add_library(raidline_domain STATIC
     src/medical_domain.h
     src/medical_types.h
     src/profile_state.cpp
+    src/chest_rig_layout_migration.cpp
     src/profile_state.h
     src/recovery_task_domain.cpp
     src/recovery_task_domain.h
@@ -501,6 +502,9 @@ add_library(raidline_sdl_client STATIC
     src/app_ui_foundation.cpp
     src/ui_item_context_presentation.cpp
     src/ui_item_context_presentation.h
+    src/ui_quick_wheel_backdrop.cpp
+    src/ui_quick_wheel_presentation.cpp
+    src/ui_quick_wheel_presentation.h
     src/ui_text_renderer.cpp
     src/ui_text_renderer.h
 )
@@ -928,6 +932,14 @@ raidline_add_test(
     SaveRepositoryTest
     tests/test_save_repository.cpp
     raidline::services)
+raidline_add_test(
+    ChestRigLayoutTest
+    tests/test_chest_rig_layout.cpp
+    raidline::services)
+raidline_add_test(
+    QuickWheelBackdropTest
+    tests/test_quick_wheel_backdrop.cpp
+    raidline::sdl_client)
 file(TO_CMAKE_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     RAIDLINE_SOURCE_ASSET_DIR)
@@ -991,4 +1003,5 @@ raidline_add_test(DeveloperRangeUiTest tests/test_developer_range_ui.cpp raidlin
 raidline_add_test(UiFoundationTest tests/test_ui_foundation.cpp raidline::sdl_client)
 raidline_add_test(InventoryPresentationUiTest tests/test_inventory_presentation_ui.cpp raidline::sdl_client)
 raidline_add_test(UiItemContextTest tests/test_ui_item_context.cpp raidline::sdl_client)
+raidline_add_test(UiQuickWheelTest tests/test_ui_quick_wheel.cpp raidline::sdl_client)
 raidline_add_test(StashPagesTest tests/test_stash_pages.cpp raidline::domain)

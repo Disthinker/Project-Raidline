@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-noise-decoy-content-67",
+  "content_version": "ui-unified-chest-rig-content-68",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -1056,12 +1056,7 @@
       "inventory_texture": "items/inventory/unpublished_chest_rig.png",
       "world_texture": "items/world/unpublished_chest_rig.png",
       "equipment_slot": "chest_rig",
-      "container_compartments": [
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 1, "pocket": "general"},
-        {"width": 1, "height": 1, "pocket": "general"}
-      ],
+      "container_compartments": [{"width": 3, "height": 2, "pocket": "general"}],
       "market_buy_price": 100,
       "market_recycle_price": 25
     },
@@ -1080,14 +1075,7 @@
       "inventory_texture": "items/inventory/unpublished_chest_rig_patrol.png",
       "world_texture": "items/world/unpublished_chest_rig_patrol.png",
       "equipment_slot": "chest_rig",
-      "container_compartments": [
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 2, "height": 1, "pocket": "general"},
-        {"width": 2, "height": 1, "pocket": "general"}
-      ],
+      "container_compartments": [{"width": 4, "height": 3, "pocket": "general"}],
       "market_recycle_price": 45
     },
     {
@@ -1105,16 +1093,7 @@
       "inventory_texture": "items/inventory/unpublished_chest_rig_assault.png",
       "world_texture": "items/world/unpublished_chest_rig_assault.png",
       "equipment_slot": "chest_rig",
-      "container_compartments": [
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 1, "height": 2, "pocket": "magazine_only"},
-        {"width": 2, "height": 2, "pocket": "general"},
-        {"width": 2, "height": 2, "pocket": "general"},
-        {"width": 1, "height": 2, "pocket": "general"},
-        {"width": 1, "height": 2, "pocket": "general"}
-      ],
+      "container_compartments": [{"width": 5, "height": 4, "pocket": "general"}],
       "market_recycle_price": 90
     },
     {

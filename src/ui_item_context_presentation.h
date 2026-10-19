@@ -13,6 +13,7 @@ struct UiItemActionEntry {
     UiItemAction id{};
     std::string label;
 };
+[[nodiscard]] std::string compactUiItemName(const ItemDefinition &, UiLanguage);
 [[nodiscard]] std::vector<UiItemActionEntry> projectUiItemActions(
     const ProfileState &, const ContentRegistry &, AssetInstanceId, bool inRaid);
 [[nodiscard]] std::vector<std::string> projectUiItemSummary(

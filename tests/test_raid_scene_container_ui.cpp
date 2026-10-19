@@ -21,13 +21,13 @@ struct RaidSceneContainerUiTestAccess {
         ASSERT_TRUE(a.profileInventoryInteraction_.beginPointerPress({id,p.revision,asset->location,0,asset->orientation},pos,pos,{680,140},{asset->orientation,footprint,true,{0,0}}));
         a.profileInventoryInteraction_.updatePointerPosition({720,190}, std::nullopt);
     }
-    static void bagTab(App &a) { a.profilePresentation_.tab=ProfileInventoryTab::Backpack; }
+    static void bagTab(App &a) { static_cast<void>(a); /* Backpack is already on the shared page. */ }
     static void quick(App &a, MousePosition pos) { a.handleProfileInventoryUiEvent(InventoryQuickTransferEvent{pos}, true); }
     static bool renderer(App &a, SDL_Renderer *r) { a.renderer_=r; return a.uiTextRenderer_.initialize(r); }
     static void paint(App &a, UiLanguage lang) { a.uiTextRenderer_.setLanguage(lang); a.renderInventoryOverlay(); }
     static void expectedCorpseTitle(App &a) {
-        SDL_SetRenderDrawColor(a.renderer_, 230, 230, 210, 255);
-        a.uiTextRenderer_.render(a.renderer_, 668, 70, "尸体");
+        SDL_SetRenderDrawColor(a.renderer_,216,228,224,255);
+        a.uiTextRenderer_.renderBox(a.renderer_,{808,64,190,24},"尸体",{16,UiTextAlign::Left,1});
     }
     static void detach(App &a) { a.uiTextRenderer_.shutdown(); a.renderer_=nullptr; }
 };
@@ -102,9 +102,9 @@ TEST_F(RaidSceneContainerUiTest, CorpseActualQuickTransferDepositAndBilingualTit
     corpse();open();
     const auto item=assetsInContainer(session().profile(),ProfileContainerId::compartment(box,0)).front()->instanceId;
     const auto initial=std::get<StoredAssetLocation>(session().profile().assets.find(item)->location).origin;
-    A::quick(*app,{668+initial.x*64.0F+4,128+initial.y*64.0F+4}); ASSERT_TRUE(assetIsCarried(session().profile(),item));
+    A::quick(*app,{808+initial.x*56.0F+4,128+initial.y*56.0F+4}); ASSERT_TRUE(assetIsCarried(session().profile(),item));
     const auto carried=std::get<StoredAssetLocation>(session().profile().assets.find(item)->location);
-    A::bagTab(*app); A::quick(*app,{42+carried.origin.x*64.0F+4,148+carried.origin.y*64.0F+4}); EXPECT_EQ(raidSceneContainerRoot(session().profile(),item),box);
+    A::bagTab(*app); A::quick(*app,{282+carried.origin.x*56.0F+4,152+carried.origin.y*56.0F+4}); EXPECT_EQ(raidSceneContainerRoot(session().profile(),item),box);
     surface=SDL_CreateSurface(1280,720,SDL_PIXELFORMAT_RGBA32);ASSERT_NE(surface,nullptr);
     renderer=SDL_CreateSoftwareRenderer(surface);ASSERT_NE(renderer,nullptr);ASSERT_TRUE(A::renderer(*app,renderer));
     for(auto language:{UiLanguage::English,UiLanguage::SimplifiedChinese})
@@ -134,11 +134,11 @@ TEST_F(RaidSceneContainerUiTest, CorpseChineseGridTitleMatchesReadableReferenceW
 
     const auto titleMask = [&]() {
         std::vector<bool> mask;
-        for (int y = 70; y < 90; ++y) {
-            for (int x = 668; x < 824; ++x) {
+        for (int y = 64; y < 88; ++y) {
+            for (int x = 808; x < 998; ++x) {
                 Uint8 r{}, g{}, b{}, alpha{};
                 EXPECT_TRUE(SDL_ReadSurfacePixel(surface, x, y, &r, &g, &b, &alpha));
-                mask.push_back(r == 230 && g == 230 && b == 210);
+                mask.push_back(r == 216 && g == 228 && b == 224);
             }
         }
         return mask;
@@ -214,13 +214,13 @@ TEST_F(RaidSceneContainerUiTest, QuickTransferUsesTheActualExternalGridAndSuppor
     const auto definition=asset->definitionId;
     const auto boxedQuantity=[&] { std::uint32_t total{}; for (const auto *a:assetsInContainer(session().profile(),ProfileContainerId::compartment(box,0))) if (a->definitionId==definition) total+=a->quantity; return total; };
     const auto originalQuantity=boxedQuantity();
-    A::quick(*app,{668+origin.x*64.0F+4,128+origin.y*64.0F+4});
+    A::quick(*app,{808+origin.x*56.0F+4,128+origin.y*56.0F+4});
     EXPECT_TRUE(assetIsCarried(session().profile(),item));
     const auto *after=session().profile().assets.find(item); ASSERT_NE(after,nullptr);
     const auto stored=std::get<StoredAssetLocation>(after->location);
     EXPECT_EQ(stored.container.ownerAssetId,bag);
     // Depositing a carried item uses the same transaction consumer.
-    A::bagTab(*app); A::quick(*app,{42+stored.origin.x*64.0F+4,148+stored.origin.y*64.0F+4});
+    A::bagTab(*app); A::quick(*app,{282+stored.origin.x*56.0F+4,152+stored.origin.y*56.0F+4});
     EXPECT_FALSE(assetIsCarried(session().profile(),item));
     EXPECT_EQ(boxedQuantity(),originalQuantity);
     if (session().profile().assets.find(item)) EXPECT_EQ(raidSceneContainerRoot(session().profile(),item),box);

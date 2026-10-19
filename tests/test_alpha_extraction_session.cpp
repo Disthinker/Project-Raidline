@@ -876,8 +876,8 @@ void prepareArmedLoadout(GameSession &session)
         InventoryMoveCommand{
             magazines[1], 0,
             StoredAssetLocation{
-                ProfileContainerId::compartment(chests[0], 1),
-                GridPosition{0, 0}},
+                ProfileContainerId::compartment(chests[0], 0),
+                GridPosition{1, 0}},
             ItemOrientation::Degrees0},
         "alpha-pocket-mag-1").succeeded);
     ASSERT_TRUE(session.executeProfileWeaponAmmo(
@@ -1905,8 +1905,8 @@ TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)
             medkit,
             0,
             StoredAssetLocation{
-                ProfileContainerId::compartment(chest, 2),
-                GridPosition{0, 0}},
+                ProfileContainerId::compartment(chest, 0),
+                GridPosition{2, 0}},
             ItemOrientation::Degrees0},
         "carry-continuous-medkit").succeeded);
 

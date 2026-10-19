@@ -70,6 +70,8 @@ TEST(NoiseDecoyTest, UnequippedRigCannotSupplyThrowable){
 }
 TEST(NoiseDecoyTest, Schema54RoundTripKeepsGenericItemAndOldProfileGetsNoGrant){
     auto p=makeNewPublishedProfile("save54",content());p.stashLayoutVersion=0;const auto id=add(p,2);
+    const auto rig=*equippedAsset(p,EquipmentSlotKind::ChestRig);
+    p.assets.findMutable(id)->location=StoredAssetLocation{ProfileContainerId::compartment(rig,0),{2,0}};
     const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content().contentVersion(),54),content());ASSERT_TRUE(loaded.profile)<<loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));EXPECT_EQ(loaded.profile->assets.find(id)->quantity,2U);
     auto old=makeNewPublishedProfile("old54",content());old.stashLayoutVersion=0;const auto legacy=deserializeProfileEnvelope(serializeProfileEnvelope(old,"quick-melee-self-defense-content-66",54),content());ASSERT_TRUE(legacy.profile)<<legacy.message;

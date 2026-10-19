@@ -22,23 +22,18 @@ void App::updateThrowableInput(GameplayInput &input)
     else if(wasModal && cancel){cancelThrowableUi();uiMessage_="DECOY CANCELLED";}
     else if(input_.wasActionJustPressed(GameAction::SelectThrowable) && !wasModal){
         if(gameSession_.beginNoiseDecoySelection()){
-            throwableWheelOptions_=chestRigNoiseDecoys(gameSession_.profile(),publishedContentRegistry());
-            throwableWheelSelected_=0;throwableWheelOpen_=!throwableWheelOptions_.empty();
-            if(!throwableWheelOpen_)uiMessage_="NO CHEST RIG DECOY";
-            else {opened=true;uiMessage_.clear();}
+            throwableWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),UiQuickWheelKind::Throwable);
+            throwableWheelSelected_=0;quickWheelPage_=0;wheelPointerOffset_={};pendingRelativeAimMotion_={};
+            throwableWheelOpen_=true;opened=true;uiMessage_.clear();
         }else uiMessage_=gameSession_.persistenceMessage();
         // The selection edge also interrupts the old F interaction and cannot fire.
         input.throwableModal=true;
     }
     if(throwableWheelOpen_){
-        if(pointerWorldPosition_ && throwableWheelOptions_.size()>1){
-            const float dx=pointerWorldPosition_->x-640,dy=pointerWorldPosition_->y-360;
-            if(dx*dx+dy*dy>900){const float angle=std::atan2(dy,dx)+3.14159265359F;
-                const float sector=6.28318530718F/throwableWheelOptions_.size();
-                throwableWheelSelected_=static_cast<std::size_t>(std::floor((angle+sector/2)/sector))%throwableWheelOptions_.size();}
-        }
+        if(const auto sector=quickWheelSector(wheelPointerOffset_))throwableWheelSelected_=quickWheelPage_*8+*sector;
         if(!opened && input_.wasActionJustReleased(GameAction::SelectThrowable)){
-            selectedThrowable_=throwableWheelOptions_[throwableWheelSelected_];
+            if(throwableWheelSelected_<throwableWheelOptions_.size())selectedThrowable_=throwableWheelOptions_[throwableWheelSelected_];
+            else selectedThrowable_.reset();
             throwableWheelOpen_=false;throwableWheelOptions_.clear();
             input_.suppressPrimaryPointerUntilRelease();
         }
@@ -64,17 +59,10 @@ void App::renderThrowableUi()
         inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_)return;
     const auto text=[&](float x,float y,const std::string &s){SDL_SetRenderDrawColor(renderer_,235,232,207,255);uiTextRenderer_.render(renderer_,x,y,s.c_str());};
     if(throwableWheelOpen_){
-        SDL_SetRenderDrawColor(renderer_,24,33,35,245);const SDL_FRect panel{340,215,600,285};SDL_RenderFillRect(renderer_,&panel);
-        text(365,240,"4 THROWABLES | CHEST RIG");text(365,455,"RELEASE 4 TO AIM | RIGHT CLICK / ESC CANCEL");
-        if(throwableWheelSelected_<throwableWheelOptions_.size()){
-            const auto *asset=gameSession_.profile().assets.find(throwableWheelOptions_[throwableWheelSelected_]);
-            if(asset){const auto &definition=publishedContentRegistry().item(asset->definitionId);
-                const SDL_FRect slot{570,305,68,68};renderProfileAsset(*asset,slot,68,255,false);
-                text(655,315,definition.displayName);text(655,350,fmt::format("数量 {}",asset->quantity));}
-        }
+        renderQuickWheel(UiQuickWheelKind::Throwable, throwableWheelOptions_, throwableWheelSelected_);
     }else if(selectedThrowable_)text(16,592,"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL");
     else if(!medicalWheelOpen_)text(16,692,"4 THROWABLES | CHEST RIG");
-    if(!uiMessage_.empty() && (uiMessage_.find("DECOY")!=std::string::npos || uiMessage_.find("PRESS 4")!=std::string::npos))
+    if(!throwableWheelOpen_ && !medicalWheelOpen_ && !uiMessage_.empty() && (uiMessage_.find("DECOY")!=std::string::npos || uiMessage_.find("PRESS 4")!=std::string::npos))
         text(16,570,uiMessage_);
 }
 void App::renderNoiseDecoyWorld()
@@ -111,7 +99,7 @@ void App::renderProfileDecoyDetails(const AssetRecord &asset,const ItemDefinitio
     const auto text=[&](float x,float y,const std::string &s){SDL_SetRenderDrawColor(renderer_,232,225,201,255);uiTextRenderer_.render(renderer_,x,y,s.c_str());};
     text(70,100,"DECOY DETAILS");text(866,100,"BACK TO INVENTORY");text(70,155,definition.displayName);
     text(70,215,fmt::format("数量 {} | 单个重量 {} 克 | 1 × 1 格",asset.quantity,definition.unitWeightGrams));
-    text(70,270,"放入胸挂普通分区；按住4选择，松开瞄准，左键投掷。");
+    text(70,270,"放入胸挂；按住4选择，松开瞄准，左键投掷。");
     text(70,315,"右键或Esc取消；只有确认投掷成功才消耗一个。");
     text(70,360,"投掷450，吸引500，持续6秒；声音不穿墙、不跨空间。");
     text(70,405,"引开未发现你的普通感染者；不会解除正在进行的追击。");

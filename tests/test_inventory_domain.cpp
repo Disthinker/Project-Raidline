@@ -233,38 +233,16 @@ TEST(InventoryDomainTest, ContentBetaChestRigsAndBackpacksUseDefinedStructure)
         InventoryEquipCommand{expedition, EquipmentSlotKind::Backpack},
         CommandContext{profile.revision, "equip-expedition-pack"}).succeeded);
 
-    for (std::uint32_t index = 0; index < 4U; ++index)
-    {
-        const StoredAssetLocation target{
-            ProfileContainerId::compartment(rig, index),
-            GridPosition{0, 0}};
-        EXPECT_TRUE(queryInventory(
-            profile,
-            content,
-            InventoryMoveCommand{
-                magazine, 0U, target, ItemOrientation::Degrees0}).canCommit)
-            << index;
-        EXPECT_FALSE(queryInventory(
-            profile,
-            content,
-            InventoryMoveCommand{
-                medkit, 0U, target, ItemOrientation::Degrees0}).canCommit)
-            << index;
+    const auto &rigDefinition=content.item(profile.assets.find(rig)->definitionId);
+    ASSERT_EQ(rigDefinition.containerCompartments.size(),1);
+    EXPECT_EQ(profileContainerSize(profile,content,ProfileContainerId::compartment(rig,0)),(InventoryGridSize{5,4}));
+    for (int x=0;x<5;++x) {
+        const StoredAssetLocation target{ProfileContainerId::compartment(rig,0),{x,0}};
+        EXPECT_TRUE(queryInventory(profile,content,InventoryMoveCommand{magazine,0U,target,ItemOrientation::Degrees0}).canCommit)<<x;
+        EXPECT_TRUE(queryInventory(profile,content,InventoryMoveCommand{medkit,0U,target,ItemOrientation::Degrees0}).canCommit)<<x;
     }
-    for (std::uint32_t index = 4; index < 8U; ++index)
-    {
-        EXPECT_TRUE(queryInventory(
-            profile,
-            content,
-            InventoryMoveCommand{
-                medkit,
-                0U,
-                StoredAssetLocation{
-                    ProfileContainerId::compartment(rig, index),
-                    GridPosition{0, 0}},
-                ItemOrientation::Degrees0}).canCommit)
-            << index;
-    }
+    EXPECT_FALSE(queryInventory(profile,content,InventoryMoveCommand{medkit,0U,
+        {ProfileContainerId::compartment(rig,1),{0,0}},ItemOrientation::Degrees0}).canCommit);
     EXPECT_TRUE(queryInventory(
         profile,
         content,

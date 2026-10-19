@@ -5,6 +5,43 @@
 #include <cmath>
 #include <fmt/format.h>
 
+std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
+    struct Name {std::string_view id,en,zh;};
+    static constexpr Name names[]{
+        {"item.protective_gear.helmet_basic","Helmet","头盔"},
+        {"item.protective_gear.body_armor_basic","Armor","护甲"},
+        {"item.maintenance.weapon_kit_basic","Gun kit","枪械工具"},
+        {"item.maintenance.armor_kit_basic","Armor kit","防具工具"},
+        {"item.container.backpack_small","Pack","背包"},
+        {"item.container.backpack_field","Field pack","野战背包"},
+        {"item.container.backpack_expedition","Exp. pack","远征背包"},
+        {"item.weapon.pistol_basic","Pistol","手枪"},
+        {"item.weapon.rifle_basic","Rifle","步枪"},
+        {"item.weapon.carbine_5_45_compact","5.45 Carbine","5.45卡宾"},
+        {"item.weapon.rifle_5_45_service","5.45 Rifle","5.45步枪"},
+        {"item.weapon.dmr_7_62x51_service","7.62 DMR","7.62精确"},
+        {"item.weapon.lmg_7_62x51_service","7.62 LMG","7.62机枪"},
+        {"item.weapon.utility_knife","Knife","匕首"},
+        {"item.ammunition.9mm_basic","9mm S","9mm标"},
+        {"item.ammunition.9mm_enhanced","9mm E","9mm强"},
+        {"item.ammunition.5_45x39_standard","5.45 S","5.45标"},
+        {"item.ammunition.5_45x39_enhanced","5.45 E","5.45强"},
+        {"item.ammunition.7_62x51_standard","7.62 S","7.62标"},
+        {"item.ammunition.7_62x51_enhanced","7.62 E","7.62强"},
+        {"item.medical.medkit_alpha","Medkit","医疗包"},
+        {"item.medical.bandage_basic","Bandage","绷带"},
+        {"item.medical.tourniquet_basic","Tourniquet","止血带"},
+        {"item.medical.painkiller_basic","Painkiller","止痛药"},
+        {"item.throwable.noise_decoy","Decoy","诱饵"},
+        {"item.container.chest_rig_small","Light rig","小胸挂"},
+        {"item.container.chest_rig_patrol","Patrol rig","巡逻胸挂"},
+        {"item.container.chest_rig_assault","Assault rig","突击胸挂"}
+    };
+    for(const auto &name:names)if(d.definitionId.value()==name.id)
+        return std::string{language==UiLanguage::SimplifiedChinese?name.zh:name.en};
+    return localizeUiText(language,d.displayName);
+}
+
 std::vector<UiItemActionEntry> projectUiItemActions(
     const ProfileState &profile, const ContentRegistry &content,
     AssetInstanceId id, bool inRaid) {
@@ -80,7 +117,7 @@ std::vector<std::string> projectUiItemSummary(
             else ++general;
         }
         lines.push_back(fmt::format("CAPACITY {} CELLS", cells));
-        lines.push_back(fmt::format("POCKETS {} MAG / {} UTIL", magazine, general));
+        if(magazine) lines.push_back(fmt::format("POCKETS {} MAG / {} UTIL", magazine, general));
     }
     if (definition.medicalUse)
         lines.push_back(fmt::format("REMAINING USES {}", asset.remainingCharges));
@@ -220,7 +257,7 @@ std::vector<std::string> projectUiWeaponSupplyLines(
           ? fmt::format(
                 "R CANDIDATE: {} ROUNDS | {}", weapon.quickReloadMagazineRounds,
                 weapon.quickReloadCanInstall ? "CAN RELOAD" : "CANNOT INSTALL")
-          : "R CANDIDATE: NONE | USE CHEST RIG MAGAZINE POCKETS");
+          : "R CANDIDATE: NONE | USE WORN CHEST RIG");
   lines.push_back(
       fmt::format("OTHER LOADED SPARES {} / {} ROUNDS | NOT R-READY",
                   weapon.otherLoadedSpareMagazineCount,
@@ -243,7 +280,7 @@ std::vector<std::string> projectUiWeaponSupplyLines(
                  : "RIGHT-CLICK THE WEAPON AND CHOOSE CHAMBER");
       break;
     case WeaponSupplySuggestionKind::MoveSpareToChestRig:
-      lines.emplace_back("MOVE A LOADED SPARE TO A CHEST RIG MAGAZINE POCKET");
+      lines.emplace_back("MOVE A LOADED SPARE TO THE CHEST RIG");
       break;
     case WeaponSupplySuggestionKind::ClearMalfunction:
       lines.emplace_back("CLOSE TAB; TRY FIRE, THEN SHAKE THE MOUSE TO CLEAR");

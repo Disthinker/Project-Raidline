@@ -3,6 +3,72 @@
 #include <cmath>
 #include <fmt/format.h>
 
+void App::renderQuickWheel(UiQuickWheelKind kind,
+                          const std::vector<AssetInstanceId> &ids,
+                          std::size_t selected) {
+  if(!renderer_)return;
+  quickWheelProjection_.refresh(gameSession_.profile(),publishedContentRegistry(),ids,kind);
+  const auto language=uiTextRenderer_.language();
+  if(quickWheelLayoutGeneration_!=quickWheelProjection_.generation || quickWheelLayout_.selected!=selected ||
+     quickWheelLayout_.page!=quickWheelPage_ || quickWheelLayoutLanguage_!=language) {
+    quickWheelLayout_=layoutUiQuickWheel(quickWheelProjection_.entries,selected,kind,language,
+        [&](auto t,int n){return uiTextRenderer_.measure(t,n);},quickWheelPage_);
+    quickWheelLayoutGeneration_=quickWheelProjection_.generation;quickWheelLayoutLanguage_=language;
+  }
+  const auto &entries=quickWheelProjection_.entries;
+  const auto &layout=quickWheelLayout_;
+  if(quickWheelVisualIndex_!=selected || quickWheelEmphasis_.kind!=kind) {
+    quickWheelVisualIndex_=selected;quickWheelEmphasis_.kind=kind;quickWheelEmphasis_.started=uiClockSeconds_;
+  }
+  const float emphasis=quickWheelEmphasis_.amount(uiClockSeconds_);
+  SDL_BlendMode blend;SDL_GetRenderDrawBlendMode(renderer_,&blend);
+  Uint8 red,green,blue,alpha;SDL_GetRenderDrawColor(renderer_,&red,&green,&blue,&alpha);
+  SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
+  constexpr float pi=3.14159265358979323846F;
+  for(std::size_t sector=0;sector<8;++sector) {
+    const auto index=quickWheelPage_*8+sector;
+    const bool active=index==selected,occupied=index<entries.size();
+    const float zoom=active?1+emphasis*.065F:1;
+    const float inner=88*zoom,outer=230*zoom;
+    const float center=-pi/2+sector*pi/4;
+    const float begin=center-pi/8+.018F,end=center+pi/8-.018F;
+    const float pulse=.5F+.5F*std::sin(uiClockSeconds_*2.2F);
+    const float intensity=active?.7F+.12F*emphasis+.04F*pulse:occupied?.42F:.18F;
+    std::vector<SDL_Vertex> vertices;vertices.reserve(24*6);
+    const auto point=[&](float radius,float angle){return SDL_FPoint{640+std::cos(angle)*radius,360+std::sin(angle)*radius};};
+    const SDL_FColor inside{.12F+intensity*.16F,.18F+intensity*.38F,.20F+intensity*.3F,active?.92F:.82F};
+    const SDL_FColor outside{.08F+intensity*.07F,.12F+intensity*.18F,.15F+intensity*.14F,active?.88F:.7F};
+    for(int step=0;step<24;++step) {
+      const float a=begin+(end-begin)*step/24,b=begin+(end-begin)*(step+1)/24;
+      const SDL_Vertex ia{point(inner,a),inside,{0,0}},ib{point(inner,b),inside,{0,0}},
+        oa{point(outer,a),outside,{0,0}},ob{point(outer,b),outside,{0,0}};
+      for(auto v:{ia,oa,ob,ia,ob,ib})vertices.push_back(v);
+    }
+    SDL_RenderGeometry(renderer_,nullptr,vertices.data(),static_cast<int>(vertices.size()),nullptr,0);
+    if(active) {
+      SDL_SetRenderDrawColor(renderer_,122,202,178,235);
+      auto last=point(outer,begin);
+      for(int step=1;step<=24;++step) {const auto next=point(outer,begin+(end-begin)*step/24);SDL_RenderLine(renderer_,last.x,last.y,next.x,next.y);last=next;}
+    }
+    if(!occupied)continue;
+    const auto &entry=entries[index];auto image=layout.markers[sector];
+    image.x=640+(image.x+image.w/2-640)*zoom-image.w*zoom/2;
+    image.y=360+(image.y+image.h/2-360)*zoom-image.h*zoom/2;
+    image.w*=zoom;image.h*=zoom;
+    if(const auto *asset=gameSession_.profile().assets.find(entry.instanceId))renderProfileAsset(*asset,image,56,entry.usable?255:150,false,true,false);
+    SDL_SetRenderDrawColor(renderer_,entry.usable?224:150,entry.usable?236:155,entry.usable?229:156,255);
+    const auto count=kind==UiQuickWheelKind::Medical?fmt::format("×{} · {}{}",entry.quantity,entry.remainingUses,language==UiLanguage::SimplifiedChinese?"次":" uses"):
+        fmt::format("×{}",entry.quantity);
+    uiTextRenderer_.renderBox(renderer_,{image.x-27,image.y+image.h+2,image.w+54,18},count,{12,UiTextAlign::Center,1});
+    if(!entry.usable) {SDL_SetRenderDrawColor(renderer_,219,154,122,255);SDL_RenderPoint(renderer_,image.x+image.w+5,image.y+4);}
+  }
+  if(!layout.range.text.empty()) {
+    SDL_SetRenderDrawColor(renderer_,180,204,196,255);
+    uiTextRenderer_.renderBox(renderer_,layout.range.bounds,layout.range.text,{12,UiTextAlign::Center,1});
+  }
+  SDL_SetRenderDrawBlendMode(renderer_,blend);SDL_SetRenderDrawColor(renderer_,red,green,blue,alpha);
+}
+
 namespace {
 void color(SDL_Renderer *r, SDL_Color c) {
   SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
@@ -161,7 +227,7 @@ void App::renderFoundationButton(int id, SDL_FRect bounds,
                             {(bounds.x + 12) / zoom,
                              (bounds.y + bounds.h * 0.5F) / zoom - 12.6F,
                              (bounds.w - 24) / zoom, 25.2F},
-                            label, {18, UiTextAlign::Center, 1});
+                            label, {id>=3100 && id<3150?14:18, UiTextAlign::Center, 1});
   SDL_SetRenderScale(renderer_, scaleX, scaleY);
   if (hover && uiClockSeconds_ - uiHoverStarted_ >= 0.4F)
     uiHoveredHint_ = hint;

@@ -78,6 +78,18 @@ struct ProfileInventoryPresentation
     void remember(ProfileContainerId container, GridPosition origin);
 };
 
+inline constexpr float kProfileItemCell = 56.0F;
+inline constexpr InventoryScreenRect kProfileCarriedClip{282,128,504,504};
+[[nodiscard]] InventoryScreenRect profileEquipmentBounds(EquipmentSlotKind) noexcept;
+struct ProfileCarriedGrid {
+    ProfileContainerId container;
+    InventoryScreenRect bounds;
+    std::string label;
+};
+[[nodiscard]] int maximumProfileCarriedScroll(const ProfileState &, const ContentRegistry &);
+[[nodiscard]] std::vector<ProfileCarriedGrid> layoutProfileCarriedGrids(
+    const ProfileState &, const ContentRegistry &, int scroll);
+
 // The returned rectangle describes the unrotated texture before center
 // rotation.
 [[nodiscard]] InventoryScreenRect

@@ -124,8 +124,8 @@ TEST(RaidActionTest, ReloadSelectsFullestCompatibleChestMagazine)
         InventoryMoveCommand{
             magazines[1], 0,
             StoredAssetLocation{
-                ProfileContainerId::compartment(chests.front(), 1),
-                GridPosition{0, 0}},
+                ProfileContainerId::compartment(chests.front(), 0),
+                GridPosition{1, 0}},
             ItemOrientation::Degrees0},
         "pocket-mag-1");
     ASSERT_TRUE(executeWeaponAmmo(
@@ -172,8 +172,8 @@ TEST(RaidActionTest, RaidHealRequiresCarriedMedkitAndConsumesOneCharge)
         InventoryMoveCommand{
             medkits[0], 0,
             StoredAssetLocation{
-                ProfileContainerId::compartment(chests.front(), 2),
-                GridPosition{0, 0}},
+                ProfileContainerId::compartment(chests.front(), 0),
+                GridPosition{2, 0}},
             ItemOrientation::Degrees0},
         "pocket-medkit");
     EXPECT_EQ(selectQuickMedkit(profile, publishedContentRegistry()), medkits[0]);

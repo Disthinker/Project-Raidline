@@ -5,6 +5,52 @@
 #include <utility>
 #include <cmath>
 
+InventoryScreenRect profileEquipmentBounds(EquipmentSlotKind slot) noexcept {
+    switch (slot) {
+    case EquipmentSlotKind::PrimaryWeapon:return {32,370,232,64};
+    case EquipmentSlotKind::SecondaryWeapon:return {32,444,232,64};
+    case EquipmentSlotKind::Sidearm:return {32,520,100,58};
+    case EquipmentSlotKind::QuickMelee:return {142,520,122,58};
+    case EquipmentSlotKind::Helmet:return {32,140,58,58};
+    case EquipmentSlotKind::BodyArmor:return {206,170,58,96};
+    case EquipmentSlotKind::ChestRig:return {32,278,58,58};
+    case EquipmentSlotKind::Backpack:return {206,278,58,58};
+    }
+    return {};
+}
+namespace {
+std::vector<ProfileCarriedGrid> carriedGrids(const ProfileState &profile,const ContentRegistry &content) {
+    std::vector<ProfileCarriedGrid> result;
+    float y=kProfileCarriedClip.y+24;
+    for (auto slot:{EquipmentSlotKind::ChestRig,EquipmentSlotKind::Backpack}) {
+        const auto id=equippedAsset(profile,slot);if(!id)continue;
+        const auto *owner=profile.assets.find(*id);if(!owner)continue;
+        const auto &d=content.item(owner->definitionId);
+        for (std::uint32_t index=0;index<d.containerCompartments.size();++index) {
+            const auto &p=d.containerCompartments[index];
+            result.push_back({ProfileContainerId::compartment(*id,index),
+                {kProfileCarriedClip.x,y,p.width*kProfileItemCell,p.height*kProfileItemCell},
+                slot==EquipmentSlotKind::ChestRig?"CHEST RIG":"BACKPACK"});
+            y+=p.height*kProfileItemCell+28;
+        }
+    }
+    return result;
+}
+}
+int maximumProfileCarriedScroll(const ProfileState &profile,const ContentRegistry &content) {
+    const auto grids=carriedGrids(profile,content);
+    if(grids.empty())return 0;
+    const auto &last=grids.back().bounds;
+    return static_cast<int>(std::max(0.0F,last.y+last.height-kProfileCarriedClip.y-kProfileCarriedClip.height));
+}
+std::vector<ProfileCarriedGrid> layoutProfileCarriedGrids(
+    const ProfileState &profile,const ContentRegistry &content,int scroll) {
+    auto grids=carriedGrids(profile,content);
+    const int offset=std::clamp(scroll,0,maximumProfileCarriedScroll(profile,content));
+    for(auto &g:grids)g.bounds.y-=offset;
+    return grids;
+}
+
 ProfileCompartmentLayout
 layoutProfileCompartments(const ItemDefinition &definition, float startX,
                           float startY, float maximumX, float cellSize,
@@ -42,6 +88,9 @@ layoutProfileCompartments(const ItemDefinition &definition, float startX,
         {
             label = "BACKPACK";
         }
+        else if (definition.containerCompartments.size()==1 &&
+                 itemCanEquipInSlot(definition,EquipmentSlotKind::ChestRig))
+            label="CHEST RIG";
         else if (compartment.pocketKind == ContainerPocketKind::MagazineOnly)
         {
             label = "MAG " + std::to_string(++magazineIndex);

@@ -28,6 +28,8 @@
 #include "texture.h"
 #include "ui_text_renderer.h"
 #include "ui_item_context_presentation.h"
+#include "ui_quick_wheel_presentation.h"
+#include "ui_quick_wheel_backdrop.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -149,6 +151,7 @@ private:
     // Headless event-router regression tests; never runs the game loop.
     friend struct InventoryPresentationUiTestAccess;
     friend struct UiItemContextTestAccess;
+    friend struct UiQuickWheelTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -187,6 +190,10 @@ private:
     std::optional<Vec2> worldAimPointerAnchor_;
     bool systemCursorHidden_{false};
     bool relativeMouseModeActive_{false};
+    bool wheelPointerCaptureActive_{};
+    Vec2 wheelPointerOffset_{};
+    std::size_t quickWheelPage_{};
+    std::size_t quickWheelVisualIndex_{static_cast<std::size_t>(-1)};
     bool windowHasInputFocus_{true};
     Vec2 pendingRelativeAimMotion_{};
     GameAudioOutput gameAudio_;
@@ -208,6 +215,14 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {});
+    void renderQuickWheel(UiQuickWheelKind, const std::vector<AssetInstanceId> &, std::size_t);
+    UiQuickWheelBackdrop quickWheelBackdrop_;
+    UiQuickWheelProjection quickWheelProjection_;
+    UiQuickWheelLayout quickWheelLayout_;
+    UiQuickWheelEmphasis quickWheelEmphasis_;
+    std::uint64_t quickWheelLayoutGeneration_{};
+    UiLanguage quickWheelLayoutLanguage_{};
+    UiWindowSize quickWheelLayoutWindow_{};
 
 
     // 只保存 UI 交互状态，不拥有 ItemInstance。
@@ -602,7 +617,7 @@ private:
         float cellSize,
         Uint8 alpha = 255,
         bool showWeaponCondition = true,
-        bool fitImage = true);
+        bool fitImage = true, bool showQuantity = true);
     void renderProfileInventory(
         bool includeStash,
         bool inRaid,

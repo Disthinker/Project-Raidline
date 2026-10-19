@@ -139,11 +139,6 @@ std::optional<AssetInstanceId> selectRaidReloadMagazine(
              index < chestDefinition.containerCompartments.size();
              ++index)
         {
-            if (chestDefinition.containerCompartments[index].pocketKind !=
-                ContainerPocketKind::MagazineOnly)
-            {
-                continue;
-            }
             for (const AssetRecord *asset : assetsInContainer(
                      profile,
                      ProfileContainerId::compartment(
