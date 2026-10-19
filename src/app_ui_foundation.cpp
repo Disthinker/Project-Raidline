@@ -93,7 +93,7 @@ void App::applyUiWindowSize(std::size_t index) {
   inventoryInteraction_.cancelPointerGesture();
   profileInventoryInteraction_.cancelPointerGesture();
   profileAssetSelection_.reset();
-  profileContextMenu_.reset();
+  clearProfileItemContext();
   pendingInventoryUiEvents_.clear();
   pendingProfileRightClicks_.clear();
   pendingBaseClicks_.clear();

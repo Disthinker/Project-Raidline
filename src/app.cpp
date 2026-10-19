@@ -1505,15 +1505,6 @@ namespace
         const char *label{"BLOCKED"};
     };
 
-    SDL_FRect profileContextActionRect(MousePosition anchor, std::size_t row = 0, std::size_t rows = 1) noexcept
-    {
-        return SDL_FRect{
-            std::clamp(anchor.x, 16.0F, 1000.0F),
-            std::clamp(anchor.y, 16.0F, 700.0F - 46.0F * rows) + 46.0F * row,
-            264.0F,
-            46.0F};
-    }
-
     SDL_FRect profileBaseGroundDropRect() noexcept
     {
         return SDL_FRect{668.0F, 652.0F, 240.0F, 30.0F};
@@ -1522,63 +1513,6 @@ namespace
     SDL_FRect profileGroundContainerPickupRect() noexcept
     {
         return SDL_FRect{974.0F, 68.0F, 174.0F, 36.0F};
-    }
-
-    std::optional<const char *> profileContextActionLabel(
-        const ProfileState &profile,
-        const AssetRecord &asset,
-        bool inRaid)
-    {
-        const auto action = queryProfileContextAction(
-            profile,
-            publishedContentRegistry(),
-            asset.instanceId,
-            inRaid);
-        if (!action.has_value())
-        {
-            return std::nullopt;
-        }
-        switch (*action)
-        {
-        case ProfileContextActionKind::UnloadMagazine:
-            return inRaid
-                ? "UNLOAD MAGAZINE (3 SEC)"
-                : "UNLOAD ALL TO STASH";
-        case ProfileContextActionKind::UseMedkit:
-        {
-            const MedicalUsePlan plan = queryMedicalUse(
-                profile,
-                publishedContentRegistry(),
-                asset.instanceId,
-                inRaid ? MedicalAccess::CarriedOnly : MedicalAccess::AnyOwned);
-            switch (plan.effect)
-            {
-            case MedicalUseEffect::RestoreHealth:
-                return inRaid ? "USE MEDKIT (5 SEC)" : "USE MEDKIT";
-            case MedicalUseEffect::StopLightBleeding:
-                return inRaid ? "APPLY BANDAGE (2 SEC)" : "APPLY BANDAGE";
-            case MedicalUseEffect::StopAnyBleeding:
-                return inRaid ? "APPLY TOURNIQUET (4 SEC)" : "APPLY TOURNIQUET";
-            case MedicalUseEffect::SuppressPain:
-                return inRaid ? "TAKE PAINKILLER (2 SEC)" : "TAKE PAINKILLER";
-            }
-            return std::nullopt;
-        }
-        case ProfileContextActionKind::ChamberWeapon:
-            return "CHAMBER ROUND";
-        }
-        return std::nullopt;
-    }
-
-    std::vector<const char *> profileContextLabels(const ProfileState &profile, const AssetRecord &asset, bool inRaid)
-    {
-        std::vector<const char *> labels;
-        if (publishedContentRegistry().item(asset.definitionId).weaponUse)
-            labels = {"WEAPON DETAILS", "MODIFY WEAPON"};
-        if (publishedContentRegistry().item(asset.definitionId).meleeUse) labels={"MELEE DETAILS"};
-        if (publishedContentRegistry().item(asset.definitionId).noiseDecoyUse) labels={"DECOY DETAILS"};
-        if (const auto action = profileContextActionLabel(profile, asset, inRaid)) labels.push_back(*action);
-        return labels;
     }
 
     double orientationAngle(
@@ -2679,7 +2613,7 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         deactivateBaseBuildCamera();
         selectedBasePlacedAssetId_.reset();
         selectedBaseFixedFacility_.reset();
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         if (gameFlow_.returnToMainMenu())
         {
             pauseMenu_.close();
@@ -2786,6 +2720,7 @@ void App::toggleLanguage()
 {
     const UiLanguage language = toggledUiLanguage(uiTextRenderer_.language());
     uiTextRenderer_.setLanguage(language);
+    clearProfileItemContext();
     if (!saveUiLanguage(settingsPath_, language))
     {
         uiMessage_ = "LANGUAGE CHANGED - SETTINGS SAVE FAILED";
@@ -2929,7 +2864,7 @@ void App::closeInventory() noexcept
     inventoryInteraction_.reset();
     profileInventoryInteraction_.reset();
     profilePresentation_ = {};
-    profileContextMenu_.reset();
+    clearProfileItemContext();
     profileAssetSelection_.reset();
     openedBaseGroundContainerId_.reset();
     openedRaidSceneContainerId_.reset();
@@ -2949,7 +2884,7 @@ void App::handleInventoryCancel()
     }
     if (profileContextMenu_.has_value())
     {
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         return;
     }
     if (profileInventoryInteraction_.pointerGestureActive())
@@ -4930,6 +4865,29 @@ void App::handleProfileInventoryUiEvent(
     const InventoryUiEvent &event,
     bool inRaid)
 {
+    if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event)) {
+        profilePresentationPointer_ = pointer->position;
+        if (profileMenuReleaseGuard_) {
+            if (pointer->type == InventoryPointerEventType::LeftButtonUp)
+                profileMenuReleaseGuard_ = false;
+            return;
+        }
+    } else if (profileMenuReleaseGuard_ &&
+               !std::holds_alternative<InventoryNavigationEvent>(event)) return;
+    if (profileContextMenu_) {
+        if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event)) {
+            handleProfileContextMenuPointer(*pointer, inRaid);
+            return;
+        }
+        if (const auto *partial = std::get_if<InventoryPartialTransferEvent>(&event)) {
+            handleProfileContextMenuPointer(
+                {InventoryPointerEventType::LeftButtonDown, partial->pointerPosition}, inRaid);
+            return;
+        }
+        if (std::holds_alternative<InventoryNavigationEvent>(event))
+            clearProfileItemContext();
+        else return; // F / rotate cannot operate through a menu.
+    }
     if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_)
     {
         if (profileDetailsAsset_)
@@ -5148,7 +5106,7 @@ void App::handleProfileInventoryUiEvent(
         {
             return;
         }
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         const auto hit =
             profileAssetHitAt(profile, position, includeStash,
                               externalContainerId, &profilePresentation_);
@@ -5251,11 +5209,6 @@ void App::handleProfileInventoryUiEvent(
             pointer.position, target);
         break;
     case InventoryPointerEventType::LeftButtonDown:
-        if (profileContextMenu_.has_value())
-        {
-            handleProfileContextMenuClick(pointer.position, inRaid);
-            return;
-        }
         beginPress(pointer.position, false, false);
         break;
     case InventoryPointerEventType::LeftButtonUp:
@@ -5280,7 +5233,7 @@ void App::handleProfileInventoryUiEvent(
 
 void App::handleProfileRightClick(MousePosition position, bool inRaid)
 {
-    if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_) return;
+    if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_ || profileMenuReleaseGuard_) return;
     if (profileInventoryInteraction_.pointerGestureActive())
     {
         return;
@@ -5296,7 +5249,7 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
                           externalContainerId, &profilePresentation_);
     if (!hit.has_value() || hit->asset == nullptr)
     {
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         return;
     }
     if (externalContainerId.has_value())
@@ -5308,19 +5261,34 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
                 ProfileContainerKind::AssetCompartment &&
             stored->container.ownerAssetId == *externalContainerId)
         {
-            profileContextMenu_.reset();
+            clearProfileItemContext();
             uiMessage_ = "MOVE ITEM TO CARRIED INVENTORY FIRST";
             return;
         }
     }
-    if (profileContextLabels(gameSession_.profile(), *hit->asset, inRaid).empty())
+    const auto actions = projectUiItemActions(gameSession_.profile(),
+        publishedContentRegistry(), hit->asset->instanceId, inRaid);
+    if (actions.empty())
     {
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         return;
     }
-    profileContextMenu_ = ProfileContextMenu{
-        hit->asset->instanceId,
-        position};
+    clearProfileItemContext();
+    profilePresentationPointer_ = position;
+    ProfileContextMenu menu;
+    menu.instanceId = hit->asset->instanceId;
+    menu.position = position;
+    menu.source = {hit->asset->instanceId, gameSession_.profile().revision,
+                   hit->asset->location, 0, hit->asset->orientation};
+    menu.profileId = gameSession_.profile().profileId;
+    menu.inRaid = inRaid;
+    menu.language = uiTextRenderer_.language();
+    menu.actions = actions;
+    menu.layout = layoutUiItemContext({position.x, position.y},
+        publishedContentRegistry().item(hit->asset->definitionId).displayName,
+        actions, menu.language,
+        [&](auto value, int size) { return uiTextRenderer_.measure(value, size); });
+    profileContextMenu_ = std::move(menu);
 }
 
 void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
@@ -5591,14 +5559,8 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
         request.target);
 }
 
-void App::executeProfileContextAction(bool inRaid)
+void App::executeProfileContextAction(AssetInstanceId id, bool inRaid)
 {
-    if (!profileContextMenu_.has_value())
-    {
-        return;
-    }
-    const AssetInstanceId id = profileContextMenu_->instanceId;
-    profileContextMenu_.reset();
     const AssetRecord *asset = gameSession_.profile().assets.find(id);
     if (asset == nullptr)
     {
@@ -6195,7 +6157,7 @@ void App::processEvents()
             }
             inventoryInteraction_.cancelPointerGesture();
             profileInventoryInteraction_.cancelPointerGesture();
-            profileContextMenu_.reset();
+            clearProfileItemContext();
             medicalWheelOpen_ = false;
             medicalWheelOptions_.clear();
             developerWeaponPanelOpen_ = false;
@@ -6419,7 +6381,7 @@ void App::processEvents()
                     medicalWheelOpen_ = false;
                     medicalWheelOptions_.clear();
                     tacticalMapOpen_ = false;
-                    profileContextMenu_.reset();
+                    clearProfileItemContext();
                     uiMessage_ = "DEVELOPER RUNTIME PANEL OPEN";
                 }
                 else
@@ -6916,6 +6878,7 @@ void App::update(float deltaTime)
         profilePresentationProfileId_ = gameSession_.profile().profileId;
     }
     updateProfilePresentationHover(deltaTime);
+    updateProfileItemContext(deltaTime);
     if(pendingUiWindowSize_) {const auto index=*pendingUiWindowSize_;pendingUiWindowSize_.reset();applyUiWindowSize(index);}
 
     // Revoke the external view before processing queued clicks or stale drags.
@@ -7257,7 +7220,7 @@ void App::update(float deltaTime)
         if (const auto container = gameSession_.nearbyRaidSceneContainer())
         {
             profileInventoryInteraction_.reset();
-            profileContextMenu_.reset();
+            clearProfileItemContext();
             openedRaidSceneContainerId_ = container;
             inventoryOverlayState_.openContainerInventory();
             input_.suppressPrimaryPointerUntilRelease();
@@ -14759,30 +14722,6 @@ void App::renderProfileDragFeedback(
         feedback.label);
 }
 
-void App::renderProfileContextMenu(bool inRaid)
-{
-    if (!profileContextMenu_.has_value())
-    {
-        return;
-    }
-    const AssetRecord *asset = gameSession_.profile().assets.find(
-        profileContextMenu_->instanceId);
-    if (asset == nullptr)
-    {
-        return;
-    }
-    const auto labels = profileContextLabels(gameSession_.profile(), *asset, inRaid);
-    for (std::size_t row = 0; row < labels.size(); ++row)
-    {
-        const auto bounds = profileContextActionRect(profileContextMenu_->position, row, labels.size());
-        SDL_SetRenderDrawColor(renderer_, 24, 34, 38, 250);
-        SDL_RenderFillRect(renderer_, &bounds);
-        SDL_SetRenderDrawColor(renderer_, 118, 188, 190, 255);
-        SDL_RenderRect(renderer_, &bounds);
-        uiTextRenderer_.render(renderer_, bounds.x + 12, bounds.y + 16, labels[row]);
-    }
-}
-
 void App::renderMedicalWheel()
 {
     if (!medicalWheelOpen_ || medicalWheelOptions_.empty())
@@ -15316,105 +15255,6 @@ void App::renderProfileInventory(
         SDL_SetRenderClipRect(renderer_, clipped ? &previous : nullptr);
     }
 
-    float pointerX{};
-    float pointerY{};
-    static_cast<void>(SDL_GetMouseState(&pointerX, &pointerY));
-    const auto logicalPointer=windowUiViewport().toLogical({pointerX,pointerY});
-    pointerX=logicalPointer.x; pointerY=logicalPointer.y;
-    if (const auto hovered = profileAssetHitAt(
-            profile, MousePosition{pointerX, pointerY}, includeStash,
-            externalContainerId, &profilePresentation_);
-        hovered.has_value() && hovered->asset != nullptr &&
-        !profileInventoryInteraction_.pointerGestureActive() &&
-        !profileContextMenu_)
-    {
-        const AssetRecord &asset = *hovered->asset;
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset.definitionId);
-        const SDL_FRect inspection{std::clamp(pointerX + 20.0F, 42.0F, 880.0F),
-                                   std::clamp(pointerY + 20.0F, 132.0F, 420.0F),
-                                   340.0F, 218.0F};
-        SDL_SetRenderDrawColor(renderer_, 20, 29, 33, 248);
-        SDL_RenderFillRect(renderer_, &inspection);
-        SDL_SetRenderDrawColor(renderer_, 78, 118, 124, 255);
-        SDL_RenderRect(renderer_, &inspection);
-        float lineY = inspection.y + 8.0F;
-        const std::string displayName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.displayName, 100);
-        uiTextRenderer_.renderBox(renderer_, {inspection.x + 6, lineY, 328, 44},
-                                  displayName, {16, UiTextAlign::Left, 2});
-        lineY += 46;
-        renderProfileAsset(asset, {inspection.x + 6, lineY, 328, 64}, 64, 255,
-                           false);
-        lineY += 70;
-        const std::string weight = fmt::format(
-            "WEIGHT {:.2f} KG",
-            static_cast<double>(definition.unitWeightGrams) / 1000.0);
-        uiTextRenderer_.render(
-            renderer_, inspection.x + 6.0F, lineY, weight.c_str());
-        lineY += 20.0F;
-        if (definition.armorProtection.has_value())
-        {
-            const ArmorProtectionDefinition &armor =
-                *definition.armorProtection;
-            const char *material = armor.material == ArmorMaterial::Soft
-                ? "SOFT"
-                : armor.material == ArmorMaterial::Composite
-                    ? "COMPOSITE"
-                    : "METAL";
-            const std::string protection = fmt::format(
-                "PROTECTION {} | {}",
-                armor.protectionRequirement,
-                material);
-            uiTextRenderer_.render(
-                renderer_, inspection.x + 6.0F, lineY,
-                protection.c_str());
-            lineY += 20.0F;
-            const std::string durability = fmt::format(
-                "DURABILITY {}/{}",
-                asset.currentDurability,
-                asset.currentMaximumDurability);
-            uiTextRenderer_.render(
-                renderer_, inspection.x + 6.0F, lineY,
-                durability.c_str());
-        }
-        else if (!definition.containerCompartments.empty())
-        {
-            std::uint32_t totalCells{};
-            std::size_t magazinePockets{};
-            std::size_t generalPockets{};
-            for (const ContainerCompartmentDefinition &compartment :
-                 definition.containerCompartments)
-            {
-                totalCells += static_cast<std::uint32_t>(
-                    compartment.width * compartment.height);
-                if (compartment.pocketKind ==
-                    ContainerPocketKind::MagazineOnly)
-                {
-                    ++magazinePockets;
-                }
-                else
-                {
-                    ++generalPockets;
-                }
-            }
-            const std::string capacity = fmt::format(
-                "CAPACITY {} CELLS",
-                totalCells);
-            uiTextRenderer_.render(
-                renderer_, inspection.x + 6.0F, lineY,
-                capacity.c_str());
-            lineY += 20.0F;
-            const std::string pockets = fmt::format(
-                "POCKETS {} MAG / {} UTIL",
-                magazinePockets,
-                generalPockets);
-            uiTextRenderer_.render(
-                renderer_, inspection.x + 6.0F, lineY,
-                pockets.c_str());
-        }
-    }
-
     if (profilePresentation_.tab == ProfileInventoryTab::Equipment)
     {
         const std::string health =
@@ -15460,17 +15300,8 @@ void App::renderProfileInventory(
     }
     renderProfileDragFeedback(
         includeStash, inRaid, externalContainerId);
-    if (profilePresentation_.tab == ProfileInventoryTab::Equipment &&
-        !profileInventoryInteraction_.pointerGestureActive() &&
-        !profileContextMenu_)
-    {
-        for (const auto slot : kWeaponEquipmentSlots)
-        {
-            if (contains(equipmentSlotRect(slot), MousePosition{pointerX, pointerY}))
-                if (const auto weapon = equippedAsset(profile, slot))
-                    renderWeaponSupplyTooltip(*weapon, MousePosition{pointerX, pointerY}, includeStash, inRaid);
-        }
-    }
+    updateProfileItemContext(0);
+    renderProfileItemCard(includeStash, inRaid);
     renderProfileContextMenu(inRaid);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
@@ -19455,49 +19286,6 @@ const WeaponComponentPlan &App::weaponComponentPreview()
 }
 
 
-void App::handleProfileContextMenuClick(MousePosition position, bool inRaid)
-{
-    if (!profileContextMenu_) return;
-    const auto menu = *profileContextMenu_;
-    const auto &profile = gameSession_.profile();
-    const auto *asset = profile.assets.find(menu.instanceId);
-    if (!asset) { profileContextMenu_.reset(); return; }
-    const auto labels = profileContextLabels(profile, *asset, inRaid);
-    for (std::size_t row = 0; row < labels.size(); ++row)
-    {
-        if (!contains(profileContextActionRect(menu.position, row, labels.size()), position)) continue;
-        if ((publishedContentRegistry().item(asset->definitionId).meleeUse || publishedContentRegistry().item(asset->definitionId).noiseDecoyUse) && row==0)
-        {
-            profileContextMenu_.reset();profileInventoryInteraction_.reset();
-            input_.suppressPrimaryPointerUntilRelease();uiMessage_.clear();profileDetailsAsset_=asset->instanceId;return;
-        }
-        if (publishedContentRegistry().item(asset->definitionId).weaponUse && row < 2)
-        {
-            profileContextMenu_.reset();
-            profileInventoryInteraction_.reset();
-            input_.suppressPrimaryPointerUntilRelease();
-            uiMessage_.clear();
-            if (row == 0) { profileDetailsAsset_ = asset->instanceId; return; }
-            if ((inRaid && !gameSession_.developerRangeAtConsole()) || profile.pendingRaid || profile.activeBaseDefense)
-            { uiMessage_ = "MODIFICATION REQUIRES BASE"; return; }
-            const auto weapons = componentWeapons(profile);
-            const auto found = std::find(weapons.begin(), weapons.end(), asset->instanceId);
-            if (found == weapons.end())
-            { uiMessage_ = "UNSUPPORTED WEAPON PLATFORM"; return; }
-            componentWeapon_ = asset->instanceId;
-            componentWeaponPage_ = static_cast<std::size_t>(found - weapons.begin()) / 6;
-            componentChoice_ = 0;
-            componentChoicePage_ = 0;
-            componentSlot_ = WeaponComponentSlot::Barrel;
-            componentPreview_.reset();
-            inventoryWeaponComponentsOpen_ = true;
-            return;
-        }
-        executeProfileContextAction(inRaid);
-        return;
-    }
-    profileContextMenu_.reset();
-}
 
 namespace
 {
@@ -19681,7 +19469,7 @@ void App::locateProfileInventoryAsset(AssetInstanceId id, bool includeStash,
         }
         viewport.reveal(stored->origin, footprint);
         profilePresentation_.remember(view.container, viewport.origin);
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         return;
     }
 }
@@ -19748,7 +19536,7 @@ bool App::handleProfilePresentationEvent(
     const auto point = profilePresentationPointer_;
     const auto refresh = [&]
     {
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         const auto visual = profileInventoryInteraction_.activeDragVisual();
         const GridPosition offset =
             visual ? GridPosition{static_cast<int>(visual->grabOffsetInCells.x),
@@ -19994,7 +19782,7 @@ void App::updateProfilePresentationHover(float deltaTime)
                 (profilePresentation_.externalCompartment + 1) % count;
         }
         profileHoverSeconds_ = -1; // One switch per hover; leaving re-arms it.
-        profileContextMenu_.reset();
+        clearProfileItemContext();
         handleProfileInventoryUiEvent(
             InventoryPointerEvent{InventoryPointerEventType::Motion,
                                   profilePresentationPointer_},
@@ -20081,5 +19869,285 @@ void App::renderProfileInventoryToolbar(bool includeStash, bool inRaid,
             warehouse ? "PGUP/PGDN: PAGE | WHOLE ITEMS STAY ON ONE PAGE"
                       : "PGUP/PGDN: PAGE | WHEEL: PAN | SHIFT: HORIZONTAL",
             {13, UiTextAlign::Left, 1});
+    }
+}
+
+namespace {
+bool sameItemContextView(const ProfileInventoryPresentation &a,
+                         const ProfileInventoryPresentation &b) {
+    return a.tab == b.tab && a.returns == b.returns &&
+        a.legacyOverflow == b.legacyOverflow &&
+        a.externalCompartment == b.externalCompartment &&
+        a.chestScroll == b.chestScroll && a.positions.size() == b.positions.size() &&
+        std::equal(a.positions.begin(), a.positions.end(), b.positions.begin(),
+            [](const auto &x, const auto &y) {
+                return x.container == y.container && x.origin == y.origin;
+            });
+}
+struct ItemContextRenderState {
+    SDL_Renderer *renderer;
+    SDL_BlendMode blend{};
+    Uint8 r{}, g{}, b{}, a{};
+    float x{1}, y{1};
+    bool clipped{};
+    SDL_Rect clip{};
+    explicit ItemContextRenderState(SDL_Renderer *value) : renderer(value) {
+        SDL_GetRenderDrawBlendMode(renderer, &blend);
+        SDL_GetRenderDrawColor(renderer, &r, &g, &b, &a);
+        SDL_GetRenderScale(renderer, &x, &y);
+        clipped = SDL_RenderClipEnabled(renderer);
+        SDL_GetRenderClipRect(renderer, &clip);
+    }
+    ~ItemContextRenderState() {
+        SDL_SetRenderScale(renderer, x, y);
+        SDL_SetRenderClipRect(renderer, clipped ? &clip : nullptr);
+        SDL_SetRenderDrawBlendMode(renderer, blend);
+        SDL_SetRenderDrawColor(renderer, r, g, b, a);
+    }
+};
+}
+
+void App::clearProfileItemHover() noexcept {
+    profileItemHover_ = {};
+    profileItemHoverSource_.reset();
+    profileItemLastPointer_.reset();
+    profileItemView_.reset();
+    profileItemProfile_.clear();
+    profileItemCardValid_ = false;
+}
+void App::clearProfileItemContext() noexcept {
+    if (profileContextMenu_ && profileContextMenu_->press.held) {
+        profileMenuReleaseGuard_ = true;
+        input_.suppressPrimaryPointerUntilRelease();
+    }
+    profileContextMenu_.reset();
+    clearProfileItemHover();
+}
+bool App::profileContextMenuValid(bool inRaid) const {
+    if (!profileContextMenu_) return false;
+    const auto &menu = *profileContextMenu_;
+    const auto *asset = gameSession_.profile().assets.find(menu.instanceId);
+    return menu.inRaid == inRaid &&
+        asset && asset->orientation == menu.source.orientation &&
+        menu.profileId == gameSession_.profile().profileId &&
+        menu.language == uiTextRenderer_.language() &&
+        profileDragSourceMatches(gameSession_.profile(), menu.source) &&
+        windowHasInputFocus_ && uiPointerInside_;
+}
+void App::handleProfileContextMenuPointer(const InventoryPointerEvent &event,
+                                         bool inRaid) {
+    if (!profileContextMenuValid(inRaid)) {
+        if (event.type == InventoryPointerEventType::LeftButtonDown)
+            profileMenuReleaseGuard_ = true;
+        if (event.type == InventoryPointerEventType::LeftButtonUp && profileContextMenu_)
+            profileContextMenu_->press = {};
+        clearProfileItemContext();
+        if (event.type == InventoryPointerEventType::LeftButtonUp)
+            profileMenuReleaseGuard_ = false;
+        return;
+    }
+    const auto row = profileContextMenu_->layout.rowAt({event.position.x, event.position.y});
+    const auto action = row ? std::optional{profileContextMenu_->actions[*row].id} : std::nullopt;
+    if (event.type == InventoryPointerEventType::LeftButtonDown) {
+        profileContextMenu_->press.down(action);
+        input_.suppressPrimaryPointerUntilRelease();
+        if (!action && !contains(profileContextMenu_->layout.panel, event.position))
+            clearProfileItemContext();
+    } else if (event.type == InventoryPointerEventType::LeftButtonUp) {
+        handleProfileContextMenuClick(event.position, inRaid);
+    }
+}
+void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
+    if (!profileContextMenuValid(inRaid)) {
+        if (profileContextMenu_) profileContextMenu_->press = {};
+        clearProfileItemContext(); profileMenuReleaseGuard_ = false; return;
+    }
+    const auto row = profileContextMenu_->layout.rowAt({position.x, position.y});
+    const auto released = row ? std::optional{profileContextMenu_->actions[*row].id} : std::nullopt;
+    const auto chosen = profileContextMenu_->press.up(released);
+    if (!chosen) return;
+    const AssetInstanceId id = profileContextMenu_->instanceId;
+    const auto sourcePoint = profileContextMenu_->position;
+    const auto external = inRaid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
+    const bool stash = !inRaid && inventoryOverlayState_.showsExternalContainer() && !external;
+    const auto hit = profileAssetHitAt(gameSession_.profile(), sourcePoint, stash,
+                                     external, &profilePresentation_);
+    const auto actions = projectUiItemActions(gameSession_.profile(),
+        publishedContentRegistry(), id, inRaid);
+    const bool stillAvailable = hit && hit->asset && hit->asset->instanceId == id &&
+        std::any_of(actions.begin(), actions.end(),
+            [&](const auto &entry) { return entry.id == *chosen; });
+    clearProfileItemContext();
+    input_.suppressPrimaryPointerUntilRelease();
+    if (!stillAvailable) { uiMessage_ = "ITEM ACTION NO LONGER AVAILABLE"; return; }
+    profileInventoryInteraction_.reset();
+    uiMessage_.clear();
+    switch (*chosen) {
+    case UiItemAction::WeaponDetails:
+    case UiItemAction::MeleeDetails:
+    case UiItemAction::DecoyDetails:
+        profileDetailsAsset_ = id;
+        return;
+    case UiItemAction::ModifyWeapon: {
+        const auto &profile = gameSession_.profile();
+        if ((inRaid && !gameSession_.developerRangeAtConsole()) ||
+            profile.pendingRaid || profile.activeBaseDefense) {
+            uiMessage_ = "MODIFICATION REQUIRES BASE"; return;
+        }
+        const auto weapons = componentWeapons(profile);
+        const auto found = std::find(weapons.begin(), weapons.end(), id);
+        if (found == weapons.end()) { uiMessage_ = "UNSUPPORTED WEAPON PLATFORM"; return; }
+        componentWeapon_ = id;
+        componentWeaponPage_ = static_cast<std::size_t>(found - weapons.begin()) / 6;
+        componentChoice_ = 0; componentChoicePage_ = 0;
+        componentSlot_ = WeaponComponentSlot::Barrel;
+        componentPreview_.reset(); inventoryWeaponComponentsOpen_ = true;
+        return;
+    }
+    case UiItemAction::UnloadMagazine:
+    case UiItemAction::UseMedical:
+    case UiItemAction::ChamberRound:
+        executeProfileContextAction(id, inRaid);
+        return;
+    }
+}
+
+void App::updateProfileItemContext(float seconds) {
+    const bool raid = gameFlow_.state() == GameFlowState::Raid;
+    const bool active = inventoryOverlayState_.isOpen() ||
+        (gameFlow_.state() == GameFlowState::Base &&
+         gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage);
+    if (!active || !windowHasInputFocus_ || !uiPointerInside_ || pauseMenu_.isOpen() ||
+        inventoryWeaponComponentsOpen_ || profileDetailsAsset_ ||
+        developerRangePanelOpen_ || developerWeaponPanelOpen_ || tacticalMapOpen_) {
+        clearProfileItemContext();
+        if ((!active && !uiPointerPressed_) || !windowHasInputFocus_ || !uiPointerInside_)
+            profileMenuReleaseGuard_ = false;
+        return;
+    }
+    if (profileContextMenu_) {
+        if (!profileContextMenuValid(raid)) clearProfileItemContext();
+        clearProfileItemHover();
+        return;
+    }
+    if (profileInventoryInteraction_.pointerGestureActive() || profileMenuReleaseGuard_ ||
+        !pointerWorldPosition_) { clearProfileItemHover(); return; }
+    const auto &profile = gameSession_.profile();
+    const auto external = raid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
+    const bool stash = !raid && inventoryOverlayState_.showsExternalContainer() && !external;
+    const bool contextChanged = !profileItemView_ ||
+        !sameItemContextView(*profileItemView_, profilePresentation_) ||
+        profileItemProfile_ != profile.profileId ||
+        profileItemLanguage_ != uiTextRenderer_.language() ||
+        profileItemExternal_ != external || profileItemIncludesStash_ != stash ||
+        profileItemInRaid_ != raid;
+    if (contextChanged) {
+        clearProfileItemHover();
+        profileItemView_ = profilePresentation_;
+        profileItemProfile_ = profile.profileId;
+        profileItemLanguage_ = uiTextRenderer_.language();
+        profileItemExternal_ = external;
+        profileItemIncludesStash_ = stash; profileItemInRaid_ = raid;
+    }
+    const auto point = *pointerWorldPosition_;
+    const bool changed = !profileItemLastPointer_ ||
+        profileItemLastPointer_->x != point.x || profileItemLastPointer_->y != point.y ||
+        profileItemHitRevision_ != profile.revision;
+    if (changed) {
+        // Hit-test only on actual pointer/content/view changes. A stationary
+        // hover does not rescan the warehouse or rebuild its information.
+        const auto hit = profileAssetHitAt(profile, {point.x, point.y}, stash,
+                                          external, &profilePresentation_);
+        const auto id = hit && hit->asset ? hit->asset->instanceId : 0;
+        if (id != profileItemHover_.instanceId ||
+            (profileItemHoverSource_ && !profileDragSourceMatches(profile, *profileItemHoverSource_))) {
+            profileItemHover_ = {};
+            profileItemCardValid_ = false;
+        }
+        profileItemHover_.update(id, hit ? hit->bounds : SDL_FRect{}, 0);
+        profileItemHoverSource_ = id ? std::optional{ProfileDragSource{
+            id, profile.revision, hit->asset->location, 0, hit->asset->orientation}} : std::nullopt;
+        profileItemLastPointer_ = point;
+        profileItemHitRevision_ = profile.revision;
+    }
+    profileItemHover_.update(profileItemHover_.instanceId, profileItemHover_.anchor, seconds);
+}
+
+void App::renderProfileItemCard(bool includeStash, bool inRaid) {
+    if (!renderer_ || !profileItemHover_.visible() || profileContextMenu_ ||
+        !profileItemHoverSource_ ||
+        !profileDragSourceMatches(gameSession_.profile(), *profileItemHoverSource_)) return;
+    const auto &profile = gameSession_.profile();
+    const auto *asset = profile.assets.find(profileItemHover_.instanceId);
+    if (!asset) return;
+    if (!profileItemCardValid_ || profileItemCardRevision_ != profile.revision ||
+        profileItemCardWeaponSlot_ != gameSession_.activeAlphaWeaponSlot()) {
+        const auto &definition = publishedContentRegistry().item(asset->definitionId);
+        const auto summary = projectUiItemSummary(*asset, definition);
+        const auto supply = definition.weaponUse
+            ? weaponSupplyTooltipLines(asset->instanceId, includeStash, inRaid)
+            : std::vector<std::string>{};
+        profileItemCard_ = layoutUiItemCard(profileItemHover_.anchor,
+            definition.displayName, summary, supply, uiTextRenderer_.language(),
+            [&](auto text, int size) { return uiTextRenderer_.measure(text, size); });
+        profileItemCardRevision_ = profile.revision;
+        profileItemCardWeaponSlot_ = gameSession_.activeAlphaWeaponSlot();
+        profileItemCardValid_ = true;
+    }
+    const ItemContextRenderState saved(renderer_);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    // Fade the surface only: text colour stays stable and its cached textures
+    // do not get regenerated once per animation frame.
+    SDL_SetRenderDrawColor(renderer_, 18, 24, 33,
+        static_cast<Uint8>(210 + 40 * profileItemHover_.fade()));
+    SDL_RenderFillRect(renderer_, &profileItemCard_.panel);
+    SDL_SetRenderDrawColor(renderer_, 113, 191, 179, 255);
+    SDL_RenderRect(renderer_, &profileItemCard_.panel);
+    renderProfileAsset(*asset, profileItemCard_.image, 64, 255, false);
+    for (std::size_t i = 0; i < profileItemCard_.text.size(); ++i) {
+        const auto &block = profileItemCard_.text[i];
+        SDL_SetRenderDrawColor(renderer_, i == 0 ? 232 : 200,
+            i == 0 ? 237 : 211, i == 0 ? 242 : 220, 255);
+        uiTextRenderer_.renderBox(renderer_, block.bounds, block.text,
+                                  {block.size, UiTextAlign::Left, 0});
+    }
+}
+
+void App::renderProfileContextMenu(bool inRaid) {
+    if (!renderer_ || !profileContextMenu_) return;
+    if (!profileContextMenuValid(inRaid)) { clearProfileItemContext(); return; }
+    const ItemContextRenderState saved(renderer_);
+    auto &menu = *profileContextMenu_;
+    const auto row = menu.layout.rowAt({profilePresentationPointer_.x, profilePresentationPointer_.y});
+    if (row != menu.hoveredRow) { menu.hoveredRow = row; menu.hoverStarted = uiClockSeconds_; }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 18, 24, 33, 250);
+    SDL_RenderFillRect(renderer_, &menu.layout.panel);
+    SDL_SetRenderDrawColor(renderer_, 62, 77, 94, 255);
+    SDL_RenderRect(renderer_, &menu.layout.panel);
+    SDL_SetRenderDrawColor(renderer_, 232, 237, 242, 255);
+    uiTextRenderer_.renderBox(renderer_, menu.layout.title.bounds, menu.layout.title.text,
+                              {18, UiTextAlign::Left, 0});
+    for (std::size_t i = 0; i < menu.layout.rows.size(); ++i) {
+        const auto &block = menu.layout.rows[i];
+        const bool hovered = row == i;
+        const bool pressed = menu.press.held && menu.press.action == menu.actions[i].id;
+        const float amount = hovered ? uiHoverAmount(uiClockSeconds_ - menu.hoverStarted) : 0;
+        SDL_SetRenderDrawColor(renderer_, pressed ? 25 : static_cast<Uint8>(37 + 12 * amount),
+            pressed ? 36 : static_cast<Uint8>(50 + 15 * amount),
+            pressed ? 46 : static_cast<Uint8>(65 + 17 * amount), 255);
+        SDL_RenderFillRect(renderer_, &block.bounds);
+        if (hovered) {
+            SDL_SetRenderDrawColor(renderer_, 113, 191, 179, 255);
+            SDL_RenderRect(renderer_, &block.bounds);
+        }
+        SDL_SetRenderDrawColor(renderer_, 232, 237, 242, 255);
+        const float zoom = 1 + .025F * amount;
+        SDL_SetRenderScale(renderer_, saved.x * zoom, saved.y * zoom);
+        uiTextRenderer_.renderBox(renderer_,
+            {(block.bounds.x + 12) / zoom, (block.bounds.y + 8) / zoom,
+             (block.bounds.w - 24) / zoom, (block.bounds.h - 16) / zoom},
+            block.text, {18, UiTextAlign::Left, 0});
+        SDL_SetRenderScale(renderer_, saved.x, saved.y);
     }
 }

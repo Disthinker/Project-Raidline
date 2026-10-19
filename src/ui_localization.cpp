@@ -15,6 +15,10 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"ITEM ACTION NO LONGER AVAILABLE", "物品状态已变化，请重新打开菜单"},
+     {"REMAINING USES ", "剩余次数 "},
+     {"QUANTITY ", "数量 "},
+     {"ITEM SIZE ", "占格 "},
      {"ONLY WINDOW SIZES THAT FIT THIS DISPLAY ARE SHOWN", "仅显示当前屏幕可容纳的窗口尺寸"},
      {"WINDOW SIZE DOES NOT CHANGE WORLD VIEW", "窗口大小只影响显示，不改变游戏视野范围"},
      {"WINDOW SIZE UNAVAILABLE ON THIS DISPLAY", "此窗口尺寸超出当前屏幕可用范围"},
