@@ -187,33 +187,6 @@ namespace
             42.0F};
     }
 
-    SDL_FRect baseReliefButton() noexcept
-    {
-        return SDL_FRect{100.0F, 554.0F, 250.0F, 48.0F};
-    }
-
-    SDL_FRect baseRecycleButton() noexcept
-    {
-        return SDL_FRect{650.0F, 554.0F, 220.0F, 48.0F};
-    }
-
-    SDL_FRect baseGunsmithButton() noexcept
-    {
-        return SDL_FRect{890.0F, 554.0F, 280.0F, 48.0F};
-    }
-
-    std::vector<const AssetRecord *> baseSupplyStashAssets(const ProfileState &profile)
-    {
-        auto items=assetsInContainer(profile,ProfileContainerId::stash());
-        // The existing service panel has twelve rows. Newly purchased knives
-        // must be selectable there even when the legacy catalog fills Stash.
-        // All other items retain their previous relative order.
-        std::stable_partition(items.begin(),items.end(),[](const AssetRecord *asset){
-            return publishedContentRegistry().item(asset->definitionId).meleeUse.has_value();
-        });
-        return items;
-    }
-
     SDL_FRect baseMedicalServiceButton() noexcept
     {
         return SDL_FRect{700.0F, 250.0F, 300.0F, 48.0F};
@@ -2951,6 +2924,7 @@ void App::updateBase(float deltaTime)
     {
         openedBaseGroundContainerId_.reset();
         gameFlow_.closeBaseFacility();
+        resetBaseSupplyUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
@@ -3022,6 +2996,7 @@ void App::updateBase(float deltaTime)
                 return;
             }
             gameFlow_.closeBaseFacility();
+            resetBaseSupplyUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -3036,6 +3011,10 @@ void App::updateBase(float deltaTime)
             profileAssetSelection_->orientation = rotatedClockwise(
                 profileAssetSelection_->orientation);
         }
+        // Move the queue: closing the panel may clear its member queue.
+        auto supplyEvents = std::move(pendingSupplyEvents_);
+        pendingSupplyEvents_.clear();
+        for (const auto &event : supplyEvents) handleBaseSupplyEvent(event);
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
             handleBasePointerClick(click);
@@ -4169,157 +4148,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::Supply)
     {
-        if (contains(SDL_FRect{860, 92, 340, 32}, click.position))
-        {
-            weaponComponentsOpen_ = !weaponComponentsOpen_;
-            componentWeapon_ = 0;
-            componentChoice_ = 0;
-            componentWeaponPage_ = componentChoicePage_ = 0;
-            uiMessage_.clear();
-            return;
-        }
-        if (weaponComponentsOpen_)
-        {
-            handleWeaponComponentsClick(click.position);
-            return;
-        }
-
-        const auto &supply =
-            publishedContentRegistry().fixedSupplyItemIds();
-        for (std::size_t index = 0; index < supply.size(); ++index)
-        {
-            const SDL_FRect row{
-                76.0F + static_cast<float>(index / 7U) * 140.0F,
-                164.0F + static_cast<float>(index % 7U) * 46.0F,
-                132.0F,
-                40.0F};
-            if (!contains(row, click.position))
-            {
-                continue;
-            }
-            const ItemDefinition &definition =
-                publishedContentRegistry().item(supply[index]);
-            const std::uint32_t quantity =
-                definition.category == ItemCategory::Ammunition ? 30U : 1U;
-            const EconomyReceipt receipt =
-                gameSession_.executeProfileEconomy(
-                    PurchaseCommand{supply[index], quantity},
-                    nextProfileTransactionId("purchase"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format("PURCHASED | CURRENCY {}", gameSession_.profile().currency)
-                : receipt.message;
-            gameAudio_.play(
-                receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-            return;
-        }
-
-        std::size_t rowIndex{};
-        for (const AssetRecord *asset : baseSupplyStashAssets(gameSession_.profile()))
-        {
-            if (rowIndex >= 12)
-            {
-                break;
-            }
-            const SDL_FRect row{
-                650.0F,
-                164.0F + static_cast<float>(rowIndex) * 30.0F,
-                500.0F,
-                26.0F};
-            if (contains(row, click.position))
-            {
-                profileAssetSelection_ = ProfileAssetSelection{
-                    asset->instanceId,
-                    0,
-                    asset->orientation};
-                uiMessage_ = "STASH ITEM SELECTED";
-                return;
-            }
-            ++rowIndex;
-        }
-
-        const SDL_FRect gunsmithButton = baseGunsmithButton();
-        if (contains(gunsmithButton, click.position))
-        {
-            if (gameSession_.profile().gunsmithMaintenanceJob.has_value())
-            {
-                const GunsmithCollectionReceipt receipt =
-                    gameSession_.collectBaseGunsmithMaintenance(
-                        nextProfileTransactionId("collect-gunsmith"));
-                uiMessage_ = receipt.succeeded
-                    ? "SERVICED WEAPON COLLECTED"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-                if (receipt.succeeded)
-                {
-                    profileAssetSelection_.reset();
-                }
-                return;
-            }
-            if (!profileAssetSelection_.has_value())
-            {
-                uiMessage_ = "SELECT A STASH WEAPON";
-                gameAudio_.play(SoundEventId::UiDeny);
-                return;
-            }
-            const GunsmithMaintenanceReceipt receipt =
-                gameSession_.executeBaseGunsmithMaintenance(
-                    profileAssetSelection_->instanceId,
-                    nextProfileTransactionId("start-gunsmith"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format(
-                    "WEAPON FULLY SERVICED | PAID {}",
-                    receipt.currencyPaid)
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
-            return;
-        }
-
-        const SDL_FRect recycleButton = baseRecycleButton();
-        if (contains(recycleButton, click.position) &&
-            profileAssetSelection_.has_value())
-        {
-            const EconomyReceipt receipt = gameSession_.executeProfileEconomy(
-                RecycleCommand{profileAssetSelection_->instanceId},
-                nextProfileTransactionId("recycle"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format("RECYCLED | CURRENCY {}", gameSession_.profile().currency)
-                : receipt.message;
-            gameAudio_.play(
-                receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
-            return;
-        }
-
-        const SDL_FRect reliefButton = baseReliefButton();
-        if (contains(reliefButton, click.position))
-        {
-            const std::string batchId = nextProfileTransactionId("relief-batch");
-            const EconomyReceipt receipt = gameSession_.executeProfileEconomy(
-                ClaimReliefCommand{batchId},
-                nextProfileTransactionId("claim-relief"));
-            uiMessage_ = receipt.succeeded
-                ? "RELIEF BATCH ADDED TO STASH"
-                : receipt.message;
-            gameAudio_.play(
-                receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-        }
+        // Supply owns down/up gestures; legacy down-only callbacks cannot trade.
         return;
     }
 
@@ -5917,6 +5746,7 @@ void App::processEvents()
     pendingInventoryUiEvents_.clear();
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
+    pendingSupplyEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
@@ -5974,6 +5804,8 @@ void App::processEvents()
                 static_cast<void>(SDL_ShowCursor());
                 systemCursorHidden_ = false;
             }
+            supplyUi_.press.reset();
+            pendingSupplyEvents_.clear();
             inventoryInteraction_.cancelPointerGesture();
             profileInventoryInteraction_.cancelPointerGesture();
             clearProfileItemContext();
@@ -6506,6 +6338,22 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Supply)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingSupplyEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiBaseSupplyEventKind::Down : UiBaseSupplyEventKind::Up, {event.button.x,event.button.y}});
+                }
+                else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingSupplyEvents_.push_back({UiBaseSupplyEventKind::Move, {event.motion.x,event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL)
+                {
+                    const float direction=event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED?-1.0F:1.0F;
+                    const int delta=event.wheel.y*direction>0?-1:event.wheel.y*direction<0?1:0;
+                    pendingSupplyEvents_.push_back({UiBaseSupplyEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x,event.wheel.mouse_y}),delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility().has_value() &&
                 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
@@ -6694,6 +6542,14 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Supply)
+    {
+        if (supplyRowsRevision_ || supplyUi_.selection || supplyUi_.press || weaponComponentsOpen_) resetBaseSupplyUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_)
+    {
+        supplyUi_.press.reset(); pendingSupplyEvents_.clear();
+    }
     if (profilePresentationProfileId_ != gameSession_.profile().profileId)
     {
         profilePresentation_ = {};
@@ -14987,197 +14843,6 @@ void App::renderAlphaRaidLoot()
             SDL_RenderRect(renderer_, &destination);
         }
         renderItemQuantityBadge(renderer_, destination, asset->quantity);
-    }
-}
-
-void App::renderBaseSupply()
-{
-    if (weaponComponentsOpen_) { renderWeaponComponents(); return; }
-    const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 600.0F};
-    SDL_SetRenderDrawColor(renderer_, 24, 25, 18, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 170, 154, 94, 255);
-    SDL_RenderRect(renderer_, &panel);
-    const SDL_FRect modifyButton{860, 92, 340, 32};
-    SDL_SetRenderDrawColor(renderer_, 58, 86, 90, 255);
-    SDL_RenderFillRect(renderer_, &modifyButton);
-    SDL_SetRenderDrawColor(renderer_, 235, 230, 200, 255);
-    uiTextRenderer_.render(renderer_, 876, 100, "GUNSMITH - COMPONENTS");
-    const std::string currency = fmt::format(
-        "SUPPLY & RECOVERY | CURRENCY {}",
-        gameSession_.profile().currency);
-    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
-    uiTextRenderer_.render(renderer_, 96.0F, 100.0F, currency.c_str());
-    const BaseOperationalProjection operations = projectBaseOperations(
-        gameSession_.profile().baseResources,
-        publishedContentRegistry().baseOperations(),
-        populationAdjustedDailyDemand(
-            gameSession_.profile().basePopulation));
-    const std::string operationsStatus = fmt::format(
-        "BASE OPERATIONS {} | LIMITING {}",
-        baseOperationalTierName(operations.tier),
-        baseResourceKindName(operations.limitingResource));
-    SDL_SetRenderDrawColor(renderer_, 224, 214, 174, 255);
-    uiTextRenderer_.render(
-        renderer_, 96.0F, 122.0F, operationsStatus.c_str());
-
-    const auto &supply =
-        publishedContentRegistry().fixedSupplyItemIds();
-    for (std::size_t index = 0; index < supply.size(); ++index)
-    {
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(supply[index]);
-        const SDL_FRect row{
-            76.0F + static_cast<float>(index / 7U) * 140.0F,
-            164.0F + static_cast<float>(index % 7U) * 46.0F,
-            132.0F,
-            40.0F};
-        SDL_SetRenderDrawColor(renderer_, 62, 62, 38, 255);
-        SDL_RenderFillRect(renderer_, &row);
-        SDL_SetRenderDrawColor(renderer_, 174, 158, 92, 255);
-        SDL_RenderRect(renderer_, &row);
-        const std::uint32_t quantity =
-            definition.category == ItemCategory::Ammunition ? 30U : 1U;
-        const std::string supplyName = localizeUiLabel(
-            uiTextRenderer_.language(), definition.displayName, 14);
-        const std::string label = fmt::format(
-            "BUY X{} | {}", quantity, definition.marketBuyPrice * quantity);
-        SDL_SetRenderDrawColor(renderer_, 232, 224, 178, 255);
-        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 3.0F, supplyName.c_str());
-        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 23.0F, label.c_str());
-    }
-
-    SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
-    uiTextRenderer_.render(renderer_, 650.0F, 138.0F, "STASH - SELECT AN ITEM");
-    std::size_t rowIndex{};
-    for (const AssetRecord *asset : baseSupplyStashAssets(gameSession_.profile()))
-    {
-        if (rowIndex >= 12) break;
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(asset->definitionId);
-        const SDL_FRect row{
-            650.0F,
-            164.0F + static_cast<float>(rowIndex) * 30.0F,
-            500.0F,
-            26.0F};
-        SDL_SetRenderDrawColor(renderer_, 42, 44, 34, 255);
-        SDL_RenderFillRect(renderer_, &row);
-        const bool selected = profileAssetSelection_.has_value() &&
-            profileAssetSelection_->instanceId == asset->instanceId;
-        if (selected)
-        {
-            SDL_SetRenderDrawColor(renderer_, 245, 214, 90, 255);
-            SDL_RenderRect(renderer_, &row);
-        }
-        const auto componentValue = installedWeaponComponentRecycleValue(gameSession_.profile(), publishedContentRegistry(), asset->instanceId);
-        const std::string label = fmt::format(
-            "{} x{} | RECYCLE {}{}{}",
-            definition.displayName,
-            asset->quantity,
-            definition.marketRecyclePrice * asset->quantity + componentValue,
-            componentValue ? " | INCLUDES COMPONENTS" : "",
-            asset->reliefBatchId.has_value() ? " | RELIEF-LOCKED" : "");
-        SDL_SetRenderDrawColor(
-            renderer_,
-            selected ? 255 : 218,
-            selected ? 231 : 214,
-            selected ? 116 : 190,
-            255);
-        uiTextRenderer_.render(renderer_, row.x + 6.0F, row.y + 9.0F, label.c_str());
-        ++rowIndex;
-    }
-
-    const ProfileState &profile = gameSession_.profile();
-    const SDL_FRect reliefButton = baseReliefButton();
-    const bool eligible = isReliefEligible(
-        gameSession_.profile(),
-        publishedContentRegistry());
-    SDL_SetRenderDrawColor(renderer_, eligible ? 68 : 42, eligible ? 104 : 48, 60, 255);
-    SDL_RenderFillRect(renderer_, &reliefButton);
-    SDL_SetRenderDrawColor(renderer_, 228, 232, 214, 255);
-    uiTextRenderer_.render(
-        renderer_, reliefButton.x + 24.0F, reliefButton.y + 18.0F,
-        eligible ? "CLAIM RELIEF BATCH" : "RELIEF NOT REQUIRED");
-
-    const SDL_FRect recycleButton = baseRecycleButton();
-    SDL_SetRenderDrawColor(renderer_, 92, 66, 44, 255);
-    SDL_RenderFillRect(renderer_, &recycleButton);
-    SDL_SetRenderDrawColor(renderer_, 238, 224, 202, 255);
-    uiTextRenderer_.render(renderer_, recycleButton.x + 26.0F, recycleButton.y + 18.0F, "RECYCLE SELECTED");
-
-    const SDL_FRect gunsmithButton = baseGunsmithButton();
-    std::string gunsmithStatus;
-    const char *gunsmithLabel = "START FULL MAINTENANCE";
-    bool gunsmithAvailable{};
-    if (profile.gunsmithMaintenanceJob.has_value())
-    {
-        const GunsmithMaintenanceJob &job =
-            *profile.gunsmithMaintenanceJob;
-        const AssetRecord *weapon = profile.assets.find(job.weaponAssetId);
-        const std::string weaponName = weapon == nullptr
-            ? "UNKNOWN WEAPON"
-            : publishedContentRegistry().item(
-                weapon->definitionId).displayName;
-        const GunsmithCollectionPlan plan = queryGunsmithCollection(
-            profile, publishedContentRegistry());
-        gunsmithAvailable = plan.canCommit;
-        if (plan.canCommit)
-        {
-            gunsmithStatus = fmt::format(
-                "GUNSMITH READY | {}", weaponName);
-            gunsmithLabel = "COLLECT SERVICED WEAPON";
-        }
-        else
-        {
-            gunsmithStatus = "GUNSMITH READY | STASH SPACE REQUIRED";
-            gunsmithLabel = "COLLECT - STASH BLOCKED";
-        }
-    }
-    else if (profileAssetSelection_.has_value())
-    {
-        const GunsmithMaintenancePlan plan = queryGunsmithMaintenance(
-            profile,
-            publishedContentRegistry(),
-            StartGunsmithMaintenanceCommand{
-                profileAssetSelection_->instanceId});
-        gunsmithAvailable = plan.canCommit;
-        gunsmithStatus = plan.canCommit
-            ? fmt::format(
-                "GUNSMITH QUOTE {} | INSTANT | FULL FACTORY CONDITION",
-                plan.quotedCurrency)
-            : plan.message;
-    }
-    else
-    {
-        gunsmithStatus = "GUNSMITH | SELECT A DAMAGED STASH WEAPON";
-    }
-    SDL_SetRenderDrawColor(
-        renderer_,
-        gunsmithAvailable ? 58 : 42,
-        gunsmithAvailable ? 92 : 48,
-        gunsmithAvailable ? 112 : 52,
-        255);
-    SDL_RenderFillRect(renderer_, &gunsmithButton);
-    SDL_SetRenderDrawColor(renderer_, 228, 232, 220, 255);
-    uiTextRenderer_.render(
-        renderer_,
-        gunsmithButton.x + 18.0F,
-        gunsmithButton.y + 18.0F,
-        gunsmithLabel);
-    SDL_SetRenderDrawColor(
-        renderer_,
-        gunsmithAvailable ? 184 : 214,
-        gunsmithAvailable ? 222 : 204,
-        gunsmithAvailable ? 236 : 174,
-        255);
-    uiTextRenderer_.render(
-        renderer_, 650.0F, 532.0F, gunsmithStatus.c_str());
-    SDL_SetRenderDrawColor(renderer_, 206, 202, 178, 255);
-    uiTextRenderer_.render(renderer_, 96.0F, 630.0F, "ESC CLOSE");
-    if (!uiMessage_.empty())
-    {
-        SDL_SetRenderDrawColor(renderer_, 236, 220, 150, 255);
-        uiTextRenderer_.render(renderer_, 470.0F, 630.0F, uiMessage_.c_str());
     }
 }
 

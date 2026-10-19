@@ -15,6 +15,23 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"SELECTING DOES NOT TRADE | ESC CLOSE", "选择不交易 · Esc关闭"},
+     {"SELECT THEN PURCHASE | DELIVERED TO STASH", "确认后购买，自动放入仓库"},
+     {"SELECT AN ITEM TO VIEW DETAILS", "选择物品，查看详情与报价"},
+     {"RECYCLE WHOLE ITEM OR STACK", "回收整件物品或整组物品"},
+     {"HELD MAINTENANCE WEAPON", "待领取的维护武器"},
+     {"GUNSMITH READY | COLLECT TO STASH", "维护已完成，请领取到仓库"},
+     {"NO ITEMS IN THIS LIST", "暂无物品"},
+     {"TOTAL —", "总计 —"},
+     {"TOTAL ", "总计 "},
+     {"MAINT.", "维护"},
+     {"CLOSE SUPPLY", "关闭"},
+     {"WEAPON COMPONENTS", "武器改装"},
+     {"BUY SELECTED ITEM", "购买所选物品"},
+     {"Stash cannot hold the purchase", "仓库空间不足，无法放入本次购买的全部物品"},
+     {"currency would overflow", "货币已达上限，无法完成回收"},
+     {"SUPPLY OPERATIONS HELP", "运营只影响基地资源；购买与维护费用、维护速度保持原规则"},
+
      {"RIGHT CLICK / ESC CANCEL | SELECTION DOES NOT CONSUME ITEMS", "右键或Esc取消；选择时不会消耗物品"},
      {"ESC CANCEL | SELECTION DOES NOT CONSUME ITEMS", "Esc取消；选择时不会消耗物品"},
      {"RELEASE 4 TO AIM, THEN LEFT CLICK TO THROW", "松开4进入瞄准，再按左键投掷"},
@@ -177,7 +194,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"BACK TO INVENTORY", "返回背包"},
      {"INCLUDES COMPONENTS", "含已装组件"},
      {"GUNSMITH - COMPONENTS", "枪匠 — 武器组件"},
-     {"BACK TO SUPPLY", "返回供应与维护"},
+     {"BACK TO SUPPLY", "返回供应与回收"},
      {"SELECT WEAPON", "选择武器"},
      {"SELECT COMPONENT OR RESTORE DEFAULT", "选择组件或恢复默认结构"},
      {"RESTORE DEFAULT", "恢复默认结构"},
@@ -2328,7 +2345,8 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"EQUIPMENT", "装备"},
      {"PREV", "上一页"},
      {"NEXT", "下一页"},
-     {"RESTORE REGULAR PAGE", "点击恢复规则分页位置"}});
+     {"RESTORE REGULAR PAGE", "点击恢复规则分页位置"},
+     {"WEAPON MAINTENANCE", "武器维护"}});
 
 void replaceAll(std::string &text, std::string_view source,
                 std::string_view destination) {
