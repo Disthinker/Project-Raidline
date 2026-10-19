@@ -30,6 +30,7 @@
 #include "ui_item_context_presentation.h"
 #include "ui_quick_wheel_presentation.h"
 #include "ui_quick_wheel_backdrop.h"
+#include "ui_base_supply_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -152,6 +153,7 @@ private:
     friend struct InventoryPresentationUiTestAccess;
     friend struct UiItemContextTestAccess;
     friend struct UiQuickWheelTestAccess;
+    friend struct UiBaseSupplyTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -214,7 +216,23 @@ private:
     void renderFoundationSettings(bool paused);
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
-        std::string_view hint = {});
+        std::string_view hint = {}, int fontSize = 0);
+    UiBaseSupplyState supplyUi_;
+    std::vector<UiBaseSupplyEvent> pendingSupplyEvents_;
+    std::vector<UiBaseSupplyRow> supplyRows_;
+    std::optional<ProfileRevision> supplyRowsRevision_;
+    std::string supplyRowsProfile_;
+    UiLanguage supplyRowsLanguage_{};
+    UiBaseSupplyTab supplyRowsTab_{};
+    std::optional<UiBaseSupplyKey> supplyRowsSelection_;
+    bool supplyReliefEligible_{};
+    std::optional<GunsmithMaintenancePlan> supplyMaintenancePlan_;
+    std::optional<GunsmithCollectionPlan> supplyCollectionPlan_;
+    void refreshBaseSupplyRows(bool force = false);
+    void resetBaseSupplyUi();
+    void handleBaseSupplyEvent(const UiBaseSupplyEvent &);
+    void executeBaseSupplyAction();
+    void renderBaseSupplyImage(const ItemDefinitionId &, const SDL_FRect &);
     void renderQuickWheel(UiQuickWheelKind, const std::vector<AssetInstanceId> &, std::size_t);
     UiQuickWheelBackdrop quickWheelBackdrop_;
     UiQuickWheelProjection quickWheelProjection_;

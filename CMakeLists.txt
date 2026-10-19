@@ -500,6 +500,9 @@ add_library(raidline_sdl_client STATIC
     src/ui_foundation.cpp
     src/ui_foundation.h
     src/app_ui_foundation.cpp
+    src/app_ui_base_supply.cpp
+    src/ui_base_supply_presentation.cpp
+    src/ui_base_supply_presentation.h
     src/ui_item_context_presentation.cpp
     src/ui_item_context_presentation.h
     src/ui_quick_wheel_backdrop.cpp
@@ -1004,4 +1007,5 @@ raidline_add_test(UiFoundationTest tests/test_ui_foundation.cpp raidline::sdl_cl
 raidline_add_test(InventoryPresentationUiTest tests/test_inventory_presentation_ui.cpp raidline::sdl_client)
 raidline_add_test(UiItemContextTest tests/test_ui_item_context.cpp raidline::sdl_client)
 raidline_add_test(UiQuickWheelTest tests/test_ui_quick_wheel.cpp raidline::sdl_client)
+raidline_add_test(UiBaseSupplyTest tests/test_ui_base_supply.cpp raidline::sdl_client)
 raidline_add_test(StashPagesTest tests/test_stash_pages.cpp raidline::domain)

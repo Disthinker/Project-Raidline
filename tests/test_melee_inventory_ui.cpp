@@ -23,8 +23,8 @@ struct MeleeUiTestAccess {
  static void storeKnife(App &a,AssetInstanceId id){auto &s=a.gameSession_;const auto &c=publishedContentRegistry();
   const auto fit=findFirstProfileFit(s.profile(),c,ProfileContainerId::stash(),c.item(alpha_content::utilityKnife),ItemOrientation::Degrees0);ASSERT_TRUE(fit);
   ASSERT_TRUE(s.executeProfileInventory(InventoryMoveCommand{id,0,{ProfileContainerId::stash(),*fit}},"ui-store-knife").succeeded);}
- static void serviceClick(App &a,MousePosition p){a.handleBasePointerClick({p,false});}
- static std::optional<AssetInstanceId> serviceSelection(const App &a){return a.profileAssetSelection_ ? std::optional{a.profileAssetSelection_->instanceId}:std::nullopt;}
+ static void serviceClick(App &a,MousePosition p){a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Down,{p.x,p.y}});a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Up,{p.x,p.y}});}
+ static std::optional<AssetInstanceId> serviceSelection(const App &a){return a.supplyUi_.selection ? std::optional{a.supplyUi_.selection->instanceId}:std::nullopt;}
  static void context(App &a){a.handleProfileRightClick({178,540},false);}
  static bool menu(const App &a){return a.profileContextMenu_.has_value();}
  static void firstAction(App &a){ASSERT_TRUE(a.profileContextMenu_);
@@ -72,9 +72,9 @@ TEST_F(MeleeInventoryUiTest, RangePanelShowsChineseUtilityKnifeChoice){
 TEST_F(MeleeInventoryUiTest, SupplyCanSelectAndRepairNewKnifeBeyondLegacyTwelveRows){
  A::storeKnife(*app,id);ASSERT_GT(assetsInContainer(A::flow(*app).gameSession().profile(),ProfileContainerId::stash()).size(),12U);
  ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));
- A::serviceClick(*app,{680,175});ASSERT_EQ(A::serviceSelection(*app),id);
+ A::serviceClick(*app,{460,158});A::serviceClick(*app,{100,210});ASSERT_EQ(A::serviceSelection(*app),id);
  A::supply(*app);save("melee-supply-knife-zh.bmp");const auto currency=A::flow(*app).gameSession().profile().currency;
- A::serviceClick(*app,{950,575});const auto &p=A::flow(*app).gameSession().profile();
+ A::serviceClick(*app,{1050,570});const auto &p=A::flow(*app).gameSession().profile();
  EXPECT_EQ(p.assets.find(id)->currentDurability,10000U);EXPECT_EQ(p.currency,currency-21U);EXPECT_FALSE(p.gunsmithMaintenanceJob);
 }
 TEST_F(MeleeInventoryUiTest, BaseMapPreventsVUntilARealReleaseAndNewPress){

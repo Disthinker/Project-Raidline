@@ -1,12 +1,26 @@
-# 当前：同页配装与八分区轮盘 v2 已验收，交付中
+# 当前：供应与回收界面 v1 已验收，交付进行中
 
-用户已验收候选 **571c8b0fb04c**，明确要求提交、推送和合并。固定桌面 **Project Raidline Debug** 保持该已验收程序。
+用户已验收候选 **536582b5da36**，并明确授权提交、推送和合并。当前只交付本任务，保留原桌面 **Project Raidline Debug**、程序和其他未提交修改。
 
-- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v2`；`state=accepted_delivery_in_progress`。
-- `candidate_id=RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`；`accepted_candidate_id=RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`；`acceptance_source=2026-10-19主控线程直接人类原文：同页配装与八分区轮盘 v2 验收通过，请完成提交、推送和合并。`。
-- 49项源码／测试／内容定义及程序指纹已与冻结候选逐项核对一致。本地完整回归2253/2253和原四项3ms检查通过；无源码变化，不重复无变化的本地测试。
-- 仅提交本任务49项实现文件及3份任务文档；保留其他未提交修改。准确提交的Windows／Ubuntu CI通过后普通合并，核对合并树及合并提交CI；不绕过失败。
-- 开发分支`codex/ui-quick-wheel-v1`，已验收main基线`241ca568`。不启动游戏、访问真实存档或开始下一项开发。[任务记录](../exec-plans/active/ui-quick-wheel-v1.md)保留交付证据。
+- `task_id=ui-base-supply`；`plan_version=RL-UI-BASE-SUPPLY-v1`；`state=accepted_delivery_in_progress`。
+- `candidate_id=RL-UI-BASE-SUPPLY-v1-local-536582b5da36`；`accepted_candidate_id=RL-UI-BASE-SUPPLY-v1-local-536582b5da36`。
+- `acceptance_source=2026-10-19主控线程直接人类指示`；原文：“供应与回收 v1 验收通过，请完成提交、推送和合并。”
+- 已验收源码与程序未变；Windows本地完整2281/2281及28项定向通过，原四项3ms门槛保持。接下来核对准确提交双平台CI、普通合并树和主线CI；尚未声称远端已完成。
+- 分支 `codex/ui-base-supply-v1`，已验收基线 main `5a834e4`。不启动游戏或下一项开发。
+
+<details>
+<summary>上一项已交付状态与历史</summary>
+
+# 当前：同页配装与八分区轮盘 v2 已交付
+
+用户验收的候选 **571c8b0fb04c** 已完成提交、推送和普通合并。[PR181](https://github.com/Disthinker/Project-Raidline/pull/181)，最新main **5a834e4**。桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- `task_id=ui-quick-wheel`；`plan_version=RL-UI-QUICK-WHEEL-v2`；`state=delivered`；candidate_id和accepted_candidate_id均为`RL-UI-QUICK-WHEEL-v2-local-571c8b0fb04c`。
+- 提交`baa51d4`已推送；合并提交`5a834e4`具有两个原始父提交，合并树等于已验收提交树。准确PR及合并提交的Windows／Ubuntu最终均各 **2253/2253**；原四项3ms负载和门槛保持。
+- PR双平台及主线Ubuntu首轮通过；主线Windows首次在5秒测试发现阶段超时，未执行测试，保持代码及门槛原样重跑一次后通过。首次失败和恢复记录均保留，不称主线首轮全绿。
+- 固定程序、入口、资源及无关修改保留。没有启动游戏、访问真实存档或开始下一任务；策划已在既有原线程只读确认交付（delivery_synced_readonly）；未安排或启动下一开发。
+
+[任务记录](../exec-plans/active/ui-quick-wheel-v1.md)保留真实人类授权、Git／CI及保护证据。
 
 <details>
 <summary>已验收候选及实施历史</summary>
@@ -1087,3 +1101,10 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 </details>
 
 </details>
+
+</details>
+
+
+## 2026-10-19 供应与回收界面 v1
+
+当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。

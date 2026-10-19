@@ -184,7 +184,7 @@ void App::applyUiWindowSize(std::size_t index) {
 void App::renderFoundationButton(int id, SDL_FRect bounds,
                                  std::string_view label, bool enabled,
                                  bool danger, bool selected,
-                                 std::string_view hint) {
+                                 std::string_view hint, int fontSize) {
   const bool hover = windowHasInputFocus_ && uiPointerInside_ &&
                      pointerWorldPosition_ &&
                      uiContains(bounds, *pointerWorldPosition_);
@@ -227,7 +227,7 @@ void App::renderFoundationButton(int id, SDL_FRect bounds,
                             {(bounds.x + 12) / zoom,
                              (bounds.y + bounds.h * 0.5F) / zoom - 12.6F,
                              (bounds.w - 24) / zoom, 25.2F},
-                            label, {id>=3100 && id<3150?14:18, UiTextAlign::Center, 1});
+                            label, {fontSize ? fontSize : (id>=3100 && id<3150?14:18), UiTextAlign::Center, 1});
   SDL_SetRenderScale(renderer_, scaleX, scaleY);
   if (hover && uiClockSeconds_ - uiHoverStarted_ >= 0.4F)
     uiHoveredHint_ = hint;
