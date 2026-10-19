@@ -27,6 +27,7 @@
 #include "raid_pointer_capture.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
+#include "ui_item_context_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -56,6 +57,15 @@ struct ProfileContextMenu
 {
     AssetInstanceId instanceId{};
     MousePosition position{};
+    ProfileDragSource source;
+    std::string profileId;
+    bool inRaid{};
+    UiLanguage language{};
+    std::vector<UiItemActionEntry> actions;
+    UiItemContextLayout layout;
+    UiItemMenuPress press;
+    std::optional<std::size_t> hoveredRow;
+    float hoverStarted{};
 };
 
 struct BasePlacementState
@@ -138,6 +148,7 @@ public:
 private:
     // Headless event-router regression tests; never runs the game loop.
     friend struct InventoryPresentationUiTestAccess;
+    friend struct UiItemContextTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -226,6 +237,27 @@ private:
 
     std::optional<ProfileAssetSelection> profileAssetSelection_;
     std::optional<ProfileContextMenu> profileContextMenu_;
+    bool profileMenuReleaseGuard_{};
+    UiItemHoverState profileItemHover_;
+    std::optional<ProfileDragSource> profileItemHoverSource_;
+    std::optional<Vec2> profileItemLastPointer_;
+    std::optional<ProfileInventoryPresentation> profileItemView_;
+    ProfileRevision profileItemHitRevision_{};
+    std::string profileItemProfile_;
+    UiLanguage profileItemLanguage_{};
+    std::optional<AssetInstanceId> profileItemExternal_;
+    bool profileItemIncludesStash_{};
+    bool profileItemInRaid_{};
+    UiItemCardLayout profileItemCard_;
+    bool profileItemCardValid_{};
+    ProfileRevision profileItemCardRevision_{};
+    EquipmentSlotKind profileItemCardWeaponSlot_{};
+    void clearProfileItemContext() noexcept;
+    void clearProfileItemHover() noexcept;
+    void updateProfileItemContext(float);
+    bool profileContextMenuValid(bool inRaid) const;
+    void handleProfileContextMenuPointer(const InventoryPointerEvent &, bool);
+    void renderProfileItemCard(bool includeStash, bool inRaid);
     std::optional<AssetInstanceId> openedBaseGroundContainerId_;
     std::optional<AssetInstanceId> openedRaidSceneContainerId_;
     std::optional<BasePlacementState> basePlacementState_;
@@ -346,7 +378,7 @@ private:
         bool inRaid);
     void handleProfileRightClick(MousePosition position, bool inRaid);
     void executeProfileDrop(const ProfileDropRequest &request, bool inRaid);
-    void executeProfileContextAction(bool inRaid);
+    void executeProfileContextAction(AssetInstanceId, bool inRaid);
     void openMedicalWheel();
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
@@ -581,8 +613,8 @@ private:
         std::optional<AssetInstanceId> externalContainerId);
     void renderProfileContextMenu(bool inRaid);
     const WeaponSupplyProjection &weaponSupply(bool includeStash);
-    void renderWeaponSupplyTooltip(
-        AssetInstanceId weaponId, MousePosition pointer, bool includeStash, bool inRaid);
+    std::vector<std::string> weaponSupplyTooltipLines(
+        AssetInstanceId weaponId, bool includeStash, bool inRaid);
     void renderFirstRaidHints();
     void renderFirstRaidHintCard(
         const std::vector<std::string> &lines, float x, float y, float width);

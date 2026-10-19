@@ -16,6 +16,10 @@ struct PointerContinuityUiTestAccess {
         a.processEvents(); a.update(deltaTime); a.syncRaidPointerCapture();
         a.pendingRelativeAimMotion_ = {}; a.input_.endFrame();
     }
+    static Vec2 detailsPoint(App &a) {
+        const auto r=a.profileContextMenu_->layout.rows.front().bounds;
+        return {r.x+r.w/2,r.y+r.h/2};
+    }
     static void capture(App &a) { a.syncRaidPointerCapture(); }
     static bool captured(const App &a) { return a.relativeMouseModeActive_; }
     static Vec2 aim(App &a) {
@@ -129,10 +133,11 @@ TEST_F(PointerContinuityUiTest, DetailsAndBackKeepUiCursorUntilReturningToWorld)
     key(SDL_SCANCODE_TAB); A::frame(*app); ASSERT_TRUE(A::inventory(*app));
     moveUi({240, 150}); click({240, 150}, SDL_BUTTON_RIGHT); A::frame(*app);
     expectPoint(cursor(), {240, 150});
-    moveUi({250, 170}); click({250, 170}); A::frame(*app); ASSERT_TRUE(A::details(*app));
-    expectPoint(cursor(), {250, 170});
+    const auto target=A::detailsPoint(*app);
+    moveUi(target); click(target); A::frame(*app); ASSERT_TRUE(A::details(*app));
+    expectPoint(cursor(), target);
     key(SDL_SCANCODE_ESCAPE); A::frame(*app); ASSERT_FALSE(A::details(*app));
-    ASSERT_TRUE(A::inventory(*app)); expectPoint(cursor(), {250, 170});
+    ASSERT_TRUE(A::inventory(*app)); expectPoint(cursor(), target);
     key(SDL_SCANCODE_TAB); A::frame(*app); A::frame(*app); expectPoint(A::aim(*app), before);
 }
 TEST_F(PointerContinuityUiTest, FocusReturnDoesNotFeedDesktopCursorIntoAim) {

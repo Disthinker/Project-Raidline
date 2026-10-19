@@ -18,7 +18,19 @@ struct WeaponInventoryUiTestAccess {
     static auto weapon(App &a) { return a.componentWeapon_; }
     static const auto &message(App &a) { return a.uiMessage_; }
     static void raidRightClick(App &a) { a.handleProfileRightClick({240,150},true); }
-    static void raidMenuClick(App &a) { a.handleProfileContextMenuClick({250,220},true); }
+    static MousePosition actionPoint(App &a, UiItemAction action) {
+        for (std::size_t i=0;i<a.profileContextMenu_->actions.size();++i)
+            if(a.profileContextMenu_->actions[i].id==action) {
+                const auto r=a.profileContextMenu_->layout.rows[i].bounds;
+                return {r.x+r.w/2,r.y+r.h/2};
+            }
+        ADD_FAILURE()<<"Missing menu action";return {};
+    }
+    static void raidMenuClick(App &a) {
+        const auto p=actionPoint(a,UiItemAction::ModifyWeapon);
+        a.handleProfileInventoryUiEvent(InventoryPointerEvent{InventoryPointerEventType::LeftButtonDown,p},true);
+        a.handleProfileInventoryUiEvent(InventoryPointerEvent{InventoryPointerEventType::LeftButtonUp,p},true);
+    }
 };
 namespace {
 using A = WeaponInventoryUiTestAccess;
@@ -55,11 +67,12 @@ protected:
     void frame() { A::frame(*app); }
     void tap(float x,float y, Uint8 button=SDL_BUTTON_LEFT) { click(x,y,button); frame(); }
     void openMenu() { tap(240,150,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon); }
+    void choose(UiItemAction action) { const auto p=A::actionPoint(*app,action);tap(p.x,p.y); }
     const ProfileState &profile() { return A::flow(*app).gameSession().profile(); }
 };
 TEST_F(WeaponInventoryUiTest, EquippedWeaponDetailsEscapeAndOutsideClickPreserveInventory) {
     const auto fingerprint=profileStateFingerprint(profile());
-    openMenu(); tap(250,170); ASSERT_EQ(A::details(*app),weapon);
+    openMenu(); choose(UiItemAction::WeaponDetails); ASSERT_EQ(A::details(*app),weapon);
     EXPECT_FALSE(A::modifying(*app));
     key(SDL_SCANCODE_ESCAPE); frame(); EXPECT_FALSE(A::details(*app)); EXPECT_TRUE(A::inventory(*app));
     openMenu(); tap(600,600); EXPECT_FALSE(A::menu(*app));
@@ -67,14 +80,14 @@ TEST_F(WeaponInventoryUiTest, EquippedWeaponDetailsEscapeAndOutsideClickPreserve
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
 }
 TEST_F(WeaponInventoryUiTest, InventoryModificationInstallsSelectedWeaponAndReturnsWithoutClickThrough) {
-    openMenu(); tap(250,220); ASSERT_TRUE(A::modifying(*app)); EXPECT_EQ(A::weapon(*app),weapon);
+    openMenu(); choose(UiItemAction::ModifyWeapon); ASSERT_TRUE(A::modifying(*app)); EXPECT_EQ(A::weapon(*app),weapon);
     const auto part=find(profile(),"item.component.precision_barrel");
     tap(420,260); // first component after restore-default row
     tap(800,565);
     const auto *location=std::get_if<InstalledWeaponComponentLocation>(&profile().assets.find(part)->location);
     ASSERT_NE(location,nullptr); EXPECT_EQ(location->weaponAssetId,weapon);
     tap(900,105); EXPECT_FALSE(A::modifying(*app)); EXPECT_TRUE(A::inventory(*app));
-    openMenu(); tap(250,220); ASSERT_TRUE(A::modifying(*app));
+    openMenu(); choose(UiItemAction::ModifyWeapon); ASSERT_TRUE(A::modifying(*app));
     key(SDL_SCANCODE_TAB); frame(); EXPECT_FALSE(A::inventory(*app)); EXPECT_FALSE(A::modifying(*app));
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
 }
@@ -89,9 +102,7 @@ TEST_F(WeaponInventoryUiTest, StoredWeaponOpensDetailsFromWarehouseGrid) {
     const auto view=A::locate(*app,weapon);
     const float x=668.0F+(origin->x-view.x)*64.0F+4, y=128.0F+(origin->y-view.y)*64.0F+4;
     tap(x,y,SDL_BUTTON_RIGHT); ASSERT_TRUE(A::menu(*app)); EXPECT_EQ(A::menu(*app)->instanceId,weapon);
-    const auto action=queryProfileContextAction(profile(),content,weapon,false);
-    const float menuY=std::clamp(y,16.0F,700.0F-46.0F*(action ? 3 : 2));
-    tap(std::clamp(x,16.0F,1000.0F)+10,menuY+10);
+    choose(UiItemAction::WeaponDetails);
     EXPECT_EQ(A::details(*app),weapon);
     tap(900,105); EXPECT_FALSE(A::details(*app)); EXPECT_TRUE(A::inventory(*app));
 }

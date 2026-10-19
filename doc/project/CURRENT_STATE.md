@@ -1,3 +1,68 @@
+# 当前：物品菜单与悬浮信息 v1 已验收，交付中
+
+用户于2026-10-19验收候选 **2f83b46cdd4d**，明确要求提交、推送和合并。游戏程序和固定桌面Debug入口保持已验收版本。
+
+- `task_id=ui-item-context`；`plan_version=RL-UI-ITEM-CONTEXT-v1`；`state=accepted_delivery_in_progress`。
+- `candidate_id`与`accepted_candidate_id`均为`RL-UI-ITEM-CONTEXT-v1-local-2f83b46cdd4d`；人类验收原文：“验收通过，请提交推送合并”。
+- 交付冻结候选12项源码／测试／CMake及3份本任务文档；其他未提交文件继续保留。原本地完整回归2208/2208证据与验收版本一致，不重复无变化的本地C++周期。
+- 新PR的准确提交双平台CI通过后普通合并，再验证合并树一致及合并提交CI；保留原3ms门槛，不绕过失败或用重跑覆盖失败历史。
+- 不启动游戏、不改真实存档、信任／权限／模型，不启动下一项开发。[任务记录](../exec-plans/active/ui-item-context-v1.md)保留完整证据。
+
+<details>
+<summary>本次实施和前序记录（以文首状态为准）</summary>
+
+# 当前：物品菜单与悬浮信息 v1，待验收
+
+**RL-UI-ITEM-CONTEXT-v1** 已完成。候选 **2f83b46cdd4d**；继续使用桌面「Project Raidline Debug」，按[简短验收清单](../acceptance/ui-item-context-v1.md)正常游玩确认。
+
+- `task_id=ui-item-context`；`plan_version=RL-UI-ITEM-CONTEXT-v1`；`state=waiting_human_acceptance`；`candidate_id=RL-UI-ITEM-CONTEXT-v1-local-2f83b46cdd4d`。
+- 右键菜单统一标题、悬停和按压；同项按下／松开确认一次。物品悬停后只显示一张卡，保留全部原武器供弹提示。
+- 原独立仓库页、图片比例、存档、玩法、准星及固定入口保留。Debug全目标构建及完整回归2208/2208通过，原3ms门槛和负载不变；三档窗口／中英文离屏检查通过。
+- 分支 `codex/ui-item-context-v1`，依赖主线 `df45709`；本片仍未提交，远端CI未运行。没有推送、合并、启动游戏或操作真实玩家存档。
+- 已有用户批准实施；尚无人类验收。候选已冻结，下一步等待本次反馈。[任务记录](../exec-plans/active/ui-item-context-v1.md)保留准确源码／程序指纹、实际授权与检查边界。
+
+<details>
+<summary>实施、批准及上一项交付历史</summary>
+
+# 当前：物品右键菜单与悬浮信息统一 v1，实施中
+
+用户已批准 **RL-UI-ITEM-CONTEXT-v1**；按[已批准方案](../exec-plans/active/ui-item-context-v1.md)实施，完成后提供候选及简短验收清单。
+
+- `task_id=ui-item-context`；`plan_version=RL-UI-ITEM-CONTEXT-v1`；`state=implementing`；`candidate_id=无`。
+- 实施在复用的库存工作目录、`codex/ui-item-context-v1` 分支，基线为已验收主线 `df45709`。原根旧分支和其他未提交内容保留。
+- 保留原存档、已验收UI及玩法、桌面固定Debug入口与3ms门槛；本轮不提交、推送、合并或替用户启动游戏。
+
+<details>
+<summary>上一项交付和本次方案历史</summary>
+
+# 当前：物品右键菜单与悬浮信息统一 v1，待批准
+
+策划已指定下一项 **RL-UI-ITEM-CONTEXT-v1**，主控已核查实际代码并完成[具体方案](../exec-plans/active/ui-item-context-v1.md)。本轮只规划，下一步等用户批准该版本后再实施。
+
+- `task_id=ui-item-context`；`plan_version=RL-UI-ITEM-CONTEXT-v1`；`state=waiting_plan_approval`；`approval_source=无`；`candidate_id=无`。
+- 拟统一基地／突袭库存的物品右键菜单与悬浮信息卡，补足悬停、按压和边缘布局；现有武器供弹提示合并展示，物品操作权限保持。
+- 拟将右键操作改为同一行内按下、松开确认一次；点外部只关闭，不穿透。其余已验收输入、玩法、独立仓库页、原存档及3ms合同保留。
+- 已有“策划线程”原生回复已核验：`MAIN-UI-NEXT-PLAN-20261018-01 / ui-next-optimization / UI-NEXT-PLANNING-v1 / df45709c7cbd961e93a5e752c80277a7530262bb`。策划建议不等于实施批准。
+- 本轮仅更新根目录这份状态和新方案；代码、已验收程序、固定Debug入口及其他未提交修改保持，没有构建、启动游戏、新建分支或Git交付。
+
+## 上一项：独立仓库页 v2 已交付，CI收尾通过
+
+候选 **f7a2af9c01c2** 已验收并完成Git交付与CI收尾。桌面 **Project Raidline Debug** 保持原已验收程序。
+
+- `task_id=ui-inventory-presentation`；`plan_version=RL-UI-INVENTORY-PRESENTATION-v2`；`state=delivered`。实际人类验收原文保留在任务记录。
+- [功能PR178](https://github.com/Disthinker/Project-Raidline/pull/178)与[测试收尾PR179](https://github.com/Disthinker/Project-Raidline/pull/179)均已普通合并，最新main `df45709`；合并树与已测试提交一致。
+- 最新准确提交与合并提交的Windows/Ubuntu均各2185/2185通过，原3ms门槛保持。原CI两项准备存档失败及诊断限制如实留档。
+- 已验收40路径、游戏程序／入口、旧工作目录和无关未提交修改保留；没有启动游戏或下一项开发。
+
+[任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)包含完整授权、CI原始记录与回退证据。
+
+<details>
+<summary>批准、实施及原CI失败历史（以当前已交付为准）</summary>
+
+# 独立仓库页 v2 测试收尾已合并，等待最后CI
+
+功能PR178、测试补强PR179均已普通合并，最新main df45709，合并树与d873361已测试提交一致。测试补强准确提交双平台均2185/2185通过，最新合并CI 39136049313进行中。原ea8d352的Windows失败历史保留，已验收游戏程序不变。state=accepted_delivery_in_progress。以下为历史。
+
 # 独立仓库页 v2：测试隔离补强完成，等待远端验证
 
 已验收程序f7a2af9c01c2不变；原功能PR178已合并。其准确提交双平台2184/2184通过，但合并后Windows 2182/2184，Ubuntu 2184/2184。两项失败均在视野UI测试准备存档时，原断言未记录原因；原失败保留，未重跑覆盖。
@@ -69,6 +134,18 @@ PR #178已普通合并，提交ea8d352；合并树与已验收功能提交fcecf2
 
 [任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)保留完整范围、批准原文和v1快照。下方为历史。
 
+<!-- isolated-pages-v2-state:begin -->
+# 当前：库存展示 v2 修订方案待批准
+
+用户要求仓库各页真正隔离，并反馈每轮新入口造成混淆。v1跨页方案未获本轮人工验收，旧候选 `bfb2bd6823e8` 保持冻结，不提交、推送或合并。
+
+- `task_id=ui-inventory-presentation`；`plan_version=RL-UI-INVENTORY-PRESENTATION-v2`；`state=waiting_plan_approval`。仅完成修订设计，v2无实施批准或新候选。
+- 建议6个独立8×8页、总384格，领域规则禁止跨页。旧档只迁移跨页物品，放不下的旧物进入只领取的待整理区；大格和等比图片保留。未来统一固定桌面入口，复用当前库存开发目录，不再为每次修订新增入口／完整代码目录。
+- 本轮只读检查及文档记录；原五工作区、v1源码／程序／运行资源／当前入口不变。没有构建、测试、真实存档迁移或Git交付操作。
+
+[具体v2方案及旧档影响](../exec-plans/active/ui-inventory-presentation-v1.md)。当前以上方为准，下方保留完整历史。
+<!-- isolated-pages-v2-state:end -->
+
 <!-- ui-inventory-implementation:begin -->
 # 当前：库存展示 v1 已完成，待验收
 
@@ -81,33 +158,81 @@ PR #178已普通合并，提交ea8d352；合并树与已验收功能提交fcecf2
 完整授权、候选与检查证据见[任务记录](../exec-plans/active/ui-inventory-presentation-v1.md)。下方为完整历史，以本节为当前状态。
 <!-- ui-inventory-implementation:end -->
 
+<!-- ui-inventory-presentation-v1:begin -->
+# 当前：库存展示 v1 方案待批准
+
+用户于2026-10-18要求策划安排下一步UI优化并给出具体方案，优先仓库分页、大物品格和装备图片等比显示。**本轮只完成策划与代码核查，尚未获批实施。**
+
+- 单一任务 `ui-inventory-presentation` / `RL-UI-INVENTORY-PRESENTATION-v1` / `state=waiting_plan_approval`；`approval_source`、本任务候选及人工验收均无。
+- 方案：仓库保留24×16共384格，显示为6页8×8；统一64逻辑像素格，左侧切换装备／胸挂／背包；跨页物品可整件定位和拖动，装备／网格／虚像图片保持原比例。容量、原坐标、存档与玩法规则不变。
+- 策划PLANNING-02已按真实目标及request/task/version/baseline核对，正式回复为待人类批准的建议；前次无关回复不作为本任务结果。
+- 已核查main仍为PR177合并后的 `b09c48542b46512b13c72f63af8d79892b069f82`，现有整合源码与其同树。批准后再从当时已验收main建立隔离分支；当前没有新代码、分支、构建、测试、提交、推送、合并或游戏启动。
+- 原四个工作区、全部未提交修改、三个既有程序／运行资源／桌面入口保留。本轮游戏目录只增加[具体待审批方案](../exec-plans/active/ui-inventory-presentation-v1.md)及本状态入口。
+
+下方完整保留此前交付与历史记录；本任务以本节和上述方案为准，旧任务已交付状态不变。
+<!-- ui-inventory-presentation-v1:end -->
+
 <!-- ui-decoy-integration-v1:begin -->
-# 当前：UI与诱饵性能整合 v1 联合复验通过，交付中
+# 当前：UI与诱饵性能整合 v1 已验收并交付
 
-2026-10-18，用户已验收候选 **5bf87b7d4c85**，并明确要求提交、推送和合并。本轮仅交付该已验收集合，不开始下一项。
+候选 **5bf87b7d4c85** 已通过用户联合复验，并完成提交、推送和普通合并。**本轮不开始下一项开发。**
 
-- `task_id=ui-decoy-perf-integration`；`plan_version=RL-UI-DECOY-PERF-INTEGRATION-v1`；`state=accepted_delivery_in_progress`；`accepted_candidate_id=RL-UI-DECOY-PERF-INTEGRATION-v1-local-5bf87b7d4c85`。
-- 16项输入、程序、运行文件和入口未变，本地专项169/169、完整2117/2117通过；3ms及原测试负载保留。
-- 按新PR准确提交双平台CI、普通合并树核对及合并提交双平台CI办理，全部通过后再记录为已交付。原候选和入口、其他修改均保留，不启动游戏或操作真实存档。
+- 功能提交 `e41ebea1d1a04e331cc0a967b65f19e9fc468164`；[PR177](https://github.com/Disthinker/Project-Raidline/pull/177)；main合并提交 `b09c48542b46512b13c72f63af8d79892b069f82`。
+- 准确提交CI `39112153044` 与合并提交CI `39113511470` 的Windows/Ubuntu均各2117/2117首轮通过；合并树与已验收提交树完全一致。原3ms及负载保留。
+- `task_id=ui-decoy-perf-integration`；`plan_version=RL-UI-DECOY-PERF-INTEGRATION-v1`；`state=delivered`。20路径仅含验收集合及任务文档；旧PR176因同内容已交付而关闭，未单独合并。
+- 桌面 **Project Raidline 整合复验** 仍是本次已验收程序。原UI验收、Debug程序/入口、其他工作区分支和未提交修改保留。未启动游戏或操作真实存档。
 
-完整授权和证据见[任务记录](../exec-plans/active/ui-text-foundation-v2.md)。[联合复验清单](../acceptance/ui-decoy-perf-integration-v1.md)保留为历史，无须重复验收。下方为此前状态，当前以上方为准。
+完整授权、提交/CI/回滚证据见[任务记录](../exec-plans/active/ui-text-foundation-v2.md)；[复验清单](../acceptance/ui-decoy-perf-integration-v1.md)保留为历史。下方是先前状态，当前以上方为准。
 <!-- ui-decoy-integration-v1:end -->
+
+<!-- ui-foundation-v2:begin -->
+# 当前：UI基础 v2 已验收；诱饵性能整合方案待批准
+
+2026-10-18，用户验收UI候选 **c0e7b3a8cd00**，要求先给出剩余诱饵性能处理方案，**暂不提交、推送或合并**。UI源码、程序与桌面入口保持冻结。
+
+- UI任务为 `accepted_delivery_blocked`。UI专项12/12；最终完整回归原批次2110/2112，一项0xc0000043退出单次复跑通过、原因未明；100敌人诱饵P95 **3.5805ms > 3ms**仍未通过。
+- 既有诱饵v2 **e970acbc3d71** 的准确提交CI首轮Windows/Ubuntu各2105/2105通过，但仍待人工复验、未合并。UI基线没有带入这份性能修复；本轮UI验收不覆盖诱饵v2。
+- 建议 **RL-UI-DECOY-PERF-INTEGRATION-v1**：批准后在第三个隔离目录组合已验收UI和现有5文件性能补丁，重新构建、全量检查及3ms验证，再提供简短联合复验。当前 `waiting_plan_approval`，尚未实施。
+- 现有 **Project Raidline UI验收** 和 **Project Raidline Debug** 入口均不改。本轮不改游戏代码、不构建、不重跑测试、不启动游戏。
+
+范围、授权来源和证据见[UI任务与性能处理方案](../exec-plans/active/ui-text-foundation-v2.md)。下方原任务历史字节保留，最新状态以上方为准。
+<!-- ui-foundation-v2:end -->
 
 # Project Raidline 当前状态
 
 <!-- current-plan:begin -->
-## 当前：声响诱饵 v1 验收通过，交付中
+## 当前：声响诱饵性能修复 v2 CI通过，待复验
 
-2026-10-17，用户已验收候选 **c0c9fc9a4304** 并要求推送、合并。本轮只交付该候选，保留窗口准星、菜单、搜尸、视野、手电电池、快速近战和地图权限。
+新候选 **e970acbc3d71** 已完成 **RL-RAID-NOISE-DECOY-PERF-v2**。本地全目标构建、完整CTest2105/2105、专项118/118通过；准确提交的Windows/Ubuntu CI各2105/2105首轮通过。原3ms门槛和全部测试负载保留。
 
-- 本地Windows Debug全目标构建与完整CTest **2100/2100通过**；32个候选源码路径及程序指纹核对未变，桌面入口仍指向同一已验收程序。
-- 按准确PR提交双平台CI、普通合并、合并树核对及合并提交双平台CI办理；全部完成后才记为已交付。
-- 原目录旧分支、HEAD、index和其他未提交修改保留。不启动游戏，不操作真实存档，不开始下一项开发。
-
-准确提交与交付证据见[任务记录](../exec-plans/active/raid-noise-decoy-v1.md)；[试玩清单](../acceptance/raid-noise-decoy-v1.md)保留为历史，无须重复验收。
+- 入口：桌面 **Project Raidline Debug**，使用[复验清单](../acceptance/raid-noise-decoy-v1.md)正常游玩。
+- 按用户预先授权已提交、推送`b4475f8`至[草稿PR #176](https://github.com/Disthinker/Project-Raidline/pull/176)。**v2尚未人工复验，未合并**；不沿用v1验收。main仍为`5eee3fa`。
+- 原目录、v1冻结候选、失败CI和其他修改保留；未启动游戏、操作真实存档或下一项开发。完整授权、源码/程序指纹和CI证据见[任务记录](../exec-plans/active/raid-noise-decoy-v1.md)。
 <!-- current-plan:end -->
 
-## 上一项交付时记录（历史）：边境交换站搜尸中文修正版
+<!-- indoor-delivery:begin -->
+## 上一项交付：室内双层视野 v1 已验收并合并
+
+候选 **595cc7c1c5d6** 已通过用户验收，[PR #171](https://github.com/Disthinker/Project-Raidline/pull/171)已普通合并到main。三个室内的遮挡显隐与取物视线复核完成，窗口准星、菜单、搜尸和M地图权限保留。
+
+- 提交 `79d164e`，合并 `7c8723b`；准确PR head与合并提交的Windows/Ubuntu各1944项通过，合并树一致。
+- 桌面 **Project Raidline Debug** 为同一已验收程序。原代码、工作区分支与其他未提交修改保留，不启动游戏、操作真实存档或下一项开发。
+- 完整交付及检查证据见[任务记录](../exec-plans/active/raid-indoor-visibility-v1.md)；[试玩清单](../acceptance/raid-indoor-visibility-v1.md)保留为历史验收步骤，无须重复验收。
+<!-- indoor-delivery:end -->
+
+<!-- delivery-status:begin -->
+## 最新交付：边境交换站搜尸中文修正版
+
+用户已验收中文修正版 **03f42d4333a9**；[PR #170](https://github.com/Disthinker/Project-Raidline/pull/170)于2026-10-14普通合并。搜尸和中文显示已交付到main，其他未提交修改保留。
+
+- PR的Windows/Ubuntu各1924项通过；合并提交CI：**Windows/Ubuntu均success**。
+- 这是上一项已完成交付；当前室内视野候选见上方。
+- 桌面 **Project Raidline Debug** 现为上方室内视野待验收候选；搜尸交付与main状态不变。
+
+准确提交和CI证据见[任务记录](../exec-plans/active/raid-corpse-search-v1.md)。下方均为历史，不覆盖本节。
+<!-- delivery-status:end -->
+
+## 提交时记录（历史）
 
 用户于2026-10-13明确验收当前中文修正版，并要求提交与合并。本次只交付搜尸功能、中文修正和对应任务文档；其他未提交代码和配置保持原样。
 
@@ -139,40 +264,127 @@ PR #178已普通合并，提交ea8d352；合并树与已验收功能提交fcecf2
 - 基线 `f6a288b4da7579814b69a682dde9652812543528` / 独立分支 `codex/raid-corpse-search-v1`，开发 worktree `E:\WorkPlace\Projects\C\Project Raidline-collaboration-delivery-20261011`；原目录旧鼠标分支/HEAD与其他未提交修改原字节保留。三个试点、三份原ordinary结果、独立尸体根、schema52/rules30/content64沿用[已批准计划](../exec-plans/active/raid-corpse-search-v1.md)。新候选完成前无本片验证/人工验收。
 - 合并后CI38145513346首轮Windows旧临时保存用例失败，Ubuntu成功；失败job已重跑，单独记录，不写成通过。以下为审批前/交付历史。
 
-## 2026-10-11 最新入口：窗口锚定 v2 已通过用户验收，交付中
+## 2026-10-11 当前下一项：Frontier 资源守卫尸体搜索试点（待方案审批）
 
+- 用户已要求 v2 合并后下一项。上一窗口锚定已交付 PR #169 / main `f6a288b4da7579814b69a682dde9652812543528`，准确 head Windows/Ubuntu各1898/1898、合并树一致；main CI `38145513346` 独立在运行，不据此宣称通过。原工作区代码、其他脏文件、历史、branch/HEAD/index均保留。
+- 策划 NEXT-01 正式选题与 DELIVER-02 合并后确认均已核对四元组和真实目标；单一任务为 Frontier 三组已有资源护甲守卫的尸体搜索。只划转三份现有 ordinary Loot，不增奖励/重抽；不做压力波掉落、剥甲、AI、尸体破坏或正式美术。
+- task `raid-corpse-search-v1` / plan **`RL-RAID-CORPSE-SEARCH-v1`** / baseline `f6a288b4da7579814b69a682dde9652812543528` / state **待计划审批**；[具体计划](../exec-plans/active/raid-corpse-search-v1.md) 已完成真实路径/独立尸体根/冻结绑定/复用格子/终局与schema兼容调查，等待本版本明确批准。策划建议、下一项请求与 CI 均不补足具体方案批准。
+- 尚未实施下一项代码、产资源、构建新候选或提交新任务；原游戏目录仍为保留的鼠标开发分支 `codex/pointer-aim-continuity-v1` / HEAD `d391278`，干净隔离交付checkout在已接受main。批准后从最新已接受主线开始独立分支，不叠加旧在制分支。以下保留交付与旧过程记录。
+
+## 2026-10-11 最新交付：窗口锚定 v2 已验收合并
+
+- 已交付提交 `8fad7d297de07c2ea886c10a4c338cdc1d9acba1`，PR #169，普通合并 main `f6a288b4da7579814b69a682dde9652812543528`；准确 head 的 Windows/Ubuntu CI `38144550734` 均 **1898/1898**，合并树与验收提交一致；隔离本地 main 已快进。合并提交自身 main CI `38145513346` 当前 `in_progress` / `结果未出`，不以 PR CI 替代。以下‘交付中’为提交时记录。
 - task `pointer-aim-continuity-v1` / plan `RL-POINTER-WINDOW-ANCHOR-v2`；用户明确“窗口锚定 v2 验收通过，请完成提交与合并，启动下一项开发。”。已验收候选 `RL-POINTER-WINDOW-ANCHOR-v2-local-cfff4c1d7de2`，源码清单摘要 `cfff4c1d7de2f1ad93fabd0e7a4913a04f39667c1907db481df7aa98c256c2eb`，准星窗口锚定/限位及菜单接续验收通过；原 v1 失败历史保留。
 - Windows Debug 全目标构建与最终 1898/1898 CTest、定向 57+1 项通过；候选源码/构建 hash 核对未变。交付从已验收 main `772fba0d3068a69bb207566d21a01913eb224451` 的干净 checkout，分支 `codex/pointer-window-anchor-v2`，仅 15 个代码/测试/CMake 路径与[本任务计划](../exec-plans/active/pointer-aim-continuity-v1.md)、本入口记录；其他脏文件及原工作区 HEAD/branch/index 保留。
 - 本入口随候选提交。该提交在 main 可达时为已交付，尚未合入时为交付中；准确 commit/PR/Windows 与 Ubuntu CI/普通合并需按实际 Git/PR 查询，不能从文档推断。无 CI 专用补提交，不启动游戏，不改信任/权限。
-- 用户已要求下一项；合并后按现有三线程链路向策划请求单一任务，主控调查并提出具体版本计划。没有该新任务的明确方案批准前，不编辑游戏代码/生产资产/提交新任务。以下旧状态均为历史，不覆盖本入口。
+- 用户已要求下一项；CI 等待期间已通过现有三线程原生入口只读请求策划单一任务（`RL-POINTER-V2-20261011-NEXT-01`，baseline `8fad7d2`）；主控在交付完成后核对最终 main 并提出具体版本计划。没有该新任务的明确方案批准前，不编辑游戏代码/生产资产/提交新任务。以下旧状态均为历史，不覆盖本入口。
 
 ## 2026-10-11 当前入口：三线程协作配置维护 v1
 
-- 最新协作规则 `RL-COLLAB-20261011-v1`；本次用户直接授权配置维护，不是游戏开发或资产生产。[维护任务](../exec-plans/active/collaboration-maintenance-v1.md) 记录方案/候选/真实授权及验证；用户现已验收并明确授权本轮提交与合并。该配置提交在 `main` 可达时为已交付，尚在交付分支且未合入时为交付中，恢复时以真实 Git/PR 记录核对；不含鼠标修复，暂不启动下一项开发。格式/引用/加载、原三角色重读、两条真实通信通过；15 个隔离模型场景符合要求、辅助脚本 5/5，通过事实与未验证边界见[维护报告](../engineering/COLLABORATION_MAINTENANCE_2026-10-11.md)。
+- 最新协作规则 `RL-COLLAB-20261011-v1`；本次用户直接授权配置维护，不是游戏开发或资产生产。[维护任务](../exec-plans/active/collaboration-maintenance-v1.md) 记录方案/候选/真实授权及验证；已交付；配置提交 `c24aae1f960b988ce7de144f488ddc5ce8d67f40`，[PR #168](https://github.com/Disthinker/Project-Raidline/pull/168)，CI `38137564434` success；main merge `772fba0d3068a69bb207566d21a01913eb224451`，本地 main 已快进。鼠标修复未纳入，暂不启动下一项开发。格式/引用/加载、原三角色重读、两条真实通信通过；15 个隔离模型场景符合要求、辅助脚本 5/5，通过事实与未验证边界见[维护报告](../engineering/COLLABORATION_MAINTENANCE_2026-10-11.md)。
 - 现有三个持久线程/角色及原生通信入口见 [THREADS](../coordination/THREADS.md)。恢复会话先查当前任务状态；“继续/下一项”不补缺失的计划批准、Bug 方案批准或人工验收。
-- **独立保留的游戏在制项**：原游戏工作区的鼠标/准星修复本地完成，仍待用户正常游玩验收，未提交、无本片远端 CI。本次配置维护不追认它的新计划批准或人工验收，不交付它；旧实施授权来自其当时真实用户指示。主线历史记录保留。
+- **独立保留的游戏在制项**：用户实机复验鼠标/准星修复未通过；菜单开关通过，建筑切换跳点未通过。窗口锚定修正方案 v2 已按用户批准完成本地修正和自动化，待用户复验；不提交/合并。本次已交付配置不追认鼠标批准/验收，其他历史记录保留。
 
-## 2026-09-29 最新覆盖：护甲感染者与独立战斗测试场已通过用户验收
+## 2026-10-11 当前候选：窗口锚定修正方案 v2（待用户复验）
 
-- 当前切片从已接受主线 `9c96802` 开发；用户明确“验收通过，请合并”。
-- Frontier 三组资源守卫各替换一名躯干护甲感染者，保留原人数/生命/速度/攻击；头腿绕甲、独立护甲耐久和每发弹药穿甲参数接线已完成。schema/content/Raid rules 为 50/64/29，旧快照不补甲。
-- 基地 F10 进入 2048×1280 独立测试场；控制台 F8 选择临时枪械、弹药、防具和补给，三个固定点可重置普通/护甲敌人。退出、放弃或死亡恢复原基地会话，测试状态不写入正式存档。
-- 已修复测试场面板文字与底色相同，以及鼠标被战斗捕获隐藏的问题；窗口焦点、面板开关、点击与文字像素有专项回归。
-- Windows 最终全目标构建和 CTest 1852/1852 通过（101.84 秒）；用户验收与自动化是独立证据。提交、双平台 CI 和合并结果以本切片 PR 为准。
-- 实施/兼容/回滚记录见[当前计划](../exec-plans/active/raid-armored-infected-v1.md)。原有未提交指令维护不包含在本片交付中；以下旧状态是历史记录，不覆盖本节事实。
+- 同一 task `pointer-aim-continuity-v1`；state **待用户验收**，plan `RL-POINTER-WINDOW-ANCHOR-v2`。真实用户已批准本版本，要求保留菜单行为、提供复验清单、暂不提交或合并。原 v1 用户确认菜单开关通过，建筑切换失败；该失败记录保留。
+- 已将实际准星、控制目标与输入基准按相机变化转换，在建筑切换/移动的当前帧击发前同步；窗口严格限位取代 48 像素越界，反向输入立即生效。小地图允许窗口内空白位置，地图/弹道边界保持原规则。共用菜单捕获函数逐字节保留，基地跟随镜头同步同一合同，建造镜头沿用原路径。[v2 完成记录与一次复验清单](../exec-plans/active/pointer-aim-continuity-v1.md)。
+- 冻结本地候选 `RL-POINTER-WINDOW-ANCHOR-v2-local-cfff4c1d7de2`；15 路径 SHA256 清单及 Debug 程序 hash 见支持工作区 `tmp/pointer-window-anchor-v2-20261011/candidate-v2.json`。分支仍 `codex/pointer-aim-continuity-v1` / HEAD `d391278a844f45c41cd624bdd4a17f797fc832f9`，index 未变；本片不提交/推送/PR/合并，无本片远端 CI。配置 main `772fba0` 的独立 CI `38138542850` success 属于此前配置，不代替鼠标修复证据。
+- Windows Debug 全目标构建完成，修正前 3 项新回归如预期失败；修正后定向 **57/57 + 1/1 = 58**，最终完整 CTest **1898/1898**（127.25 秒），v2 净新增 9 项。本片 whitespace 与候选 hash 检查通过；日志 `build/windows-debug/pointer-v2-*.log`。其他脏文件、v1 计划和以下历史正文逐字节保留；schema/content/rules 仍 **51/64/29**。
+- 未启动游戏、未操作用户存档、未修改信任/权限，正常游玩未验收。下一步仅由用户用 `build/windows-debug/Project_Raidline.exe` 复验窗口锚点、建筑首帧/下一帧、四角/后坐力以及菜单接续；不启动其他开发。
+
+## 2026-10-11 当前开发：鼠标与准星位置连续性修复 v1
+
+- 场景容器及已验收信号撤离依赖已由用户正常游玩验收并授权合并；[PR #167](https://github.com/Disthinker/Project-Raidline/pull/167) head `393663b` 的 Windows/Ubuntu CI 均 **1879/1879** 通过，普通合并至 main `d391278a844f45c41cd624bdd4a17f797fc832f9`，合并树与验收 head 一致。合并提交自身 main CI `38122471061` 已触发，结果尚待确认。
+- 用户追加建筑/菜单鼠标重置缺陷，策划安排本项独立修复；当前 `codex/pointer-aim-continuity-v1` 从上述准确 main 建立。共用指针释放接续当前准星屏幕位置，界面移动不改变世界瞄准输入基准；重新捕获清除暂存位移/已消费点击。进出建筑平移瞄准到新玩家原点，新空间第一帧重接输入基准，保持原相对方向/距离并沿用合法边界限位。
+- Windows Debug 全目标重建成功；定向 **35/35** 通过，新增 **10** 项真实 SDL/App 事件路径和 GameplayWorld 回归，涵盖 Base/Raid 背包、详情返回、暂停/设置、焦点恢复、关闭点击、测试场、建筑/场景容器与边界。最终完整 CTest **1889/1889**（138.77 秒）通过，日志 `build/windows-debug/pointer-full.log`；本片 whitespace 检查通过。[范围与复验清单](../exec-plans/active/pointer-aim-continuity-v1.md)。
+- 本修复未提交/推送/新建 PR，待用户正常游玩复验；未启动游戏，未修改信任/权限。schema/content/rules 仍为 **51/64/29**。原有未提交维护/历史文件逐字节保留，CURRENT_STATE 原历史正文保留；以下为历史过程记录。
+
+## 2026-10-06 当前开发：Raid 场景容器搜索与取舍 v1
+
+- 用户验收信号撤离；保存为本地提交 `9545ac4`，无推送/PR/合并。远端 main 仍为 `cb522c0`。信号实现最后全量 1864/1864 通过；下方待验收/未提交描述为历史。
+- 当前 `codex/raid-scene-containers-v1` 从上述已验收本地依赖建立，Frontier 办公室与货运装卸间各一个固定场景容器；各自迁入两个原有 Loot 结果。F 近距开箱、拖放/旋转/堆叠/交换/快捷转移/放回与持续模拟已接通，离范围或切空间关闭箱格子并清除拖拽。成功只带回携带物，失败不记录场景余物，异常回滚恢复出战前资产；旧冻结 Raid 不补箱。schema/content/Raid rules 为 51/64/29。
+- Windows Debug 全目标构建及最终完整 CTest **1879/1879**（102.51 秒）通过，新增 15 项回归，包括实际 F 入口、指针捕获策略和中英文文字像素；原旧存档夹具继续验证历史冻结边界。[实施与正常游玩验收清单](../exec-plans/active/raid-scene-containers-v1.md)。本片代码未提交/推送/PR，无远端 CI，未启动游戏，待用户正常游玩验收。
+- 原有维护、历史及支持工作区文件保留；不启动游戏，不修改权限，不自动合并。
 
 
-最后核对：2026-09-27。
+## 2026-10-05 主控接管修正：信号撤离待用户验收
+
+- 用户明确“继续下一步任务”；已修复控制结束帧漏中断、抓咬当帧中断延迟，以及 HUD 可呼叫提示与换弹/治疗/背包/寻回/室内入口门禁不一致。
+- Windows Debug 全目标构建成功；专项 51/51、完整 CTest 1864/1864（115.75 秒）通过。新增 4 项回归并扩展既有消费者测试；详见[本片计划](../exec-plans/active/signal-extraction-call-v1.md)。下方 1860 项结果属于修正前版本。
+- 当前 codex/signal-extraction-call-v1，HEAD cb522c0，全部本片代码未提交；无本片远端 CI、未启动游戏。原有维护修改保留。下一步为用户正常游玩验收，特别确认引敌距离与等待时长的防守压力；本轮未改变数值、失败政策或资源范围。
+
+
+## 2026-10-05 本地开发：信号撤离主动呼叫与引敌 v1
+
+- 分支 `codex/signal-extraction-call-v1`，基线已验收 main `cb522c0`；fetch 后远端一致，基线 main CI 36594256706 已确认 success。
+- 高危现有信号区改为按 F 主动呼叫；每次接受只对本空间 1200 世界单位内存活敌人发送一次声音刺激，不向范围外遭遇组广播、不刷怪。等待可移动/射击/治疗，离区或受控中断后须重呼，普通受伤不直接打断。双语提示区分呼叫、进行中和中断。
+- 普通/条件撤离、地图快照、资产/结算与异常退出回滚不改；不升级 schema/content，不改美术/音频/manifest。道路任意合法位置呼叫仍未实现，不把固定区当最终设计。
+- 已完成 Windows Debug 全目标构建、35/35 定向回归与完整 CTest 1860/1860（99.78 秒），本片 diff whitespace 检查通过。未提交/推送/新建 PR，本片无远端 CI，未启动游戏；正常游玩验收待用户执行。原有指令维护等未提交改动保留。
+- [本片实施与验收计划](../exec-plans/active/signal-extraction-call-v1.md)。下方是已合入版本与历史交付记录。
+
+## 2026-09-29 最新交付：护甲感染者与独立战斗测试场已验收合并
+
+- 用户复验测试场文字/鼠标修复后明确“验收通过，请合并”；[PR #166](https://github.com/Disthinker/Project-Raidline/pull/166) 已普通合并至 main `cb522c0bbf62b8ea3fb5a212a5a2c84db71939a5`，文件树与验收提交 `a86c759ff554eddfafec85f0b2df6abdac901ec8` 完全一致。
+- 本片包含 Frontier 躯干护甲感染者、每发弹药穿甲接线、护甲耐久/破损和头腿绕甲，以及独立枪械/敌人测试场、临时装备发放和固定点刷怪。测试场文字/鼠标修复已包含；退出恢复原基地会话。schema/content/Raid rules 为 50/64/29。
+- Windows 最终全目标构建成功，完整 CTest 1852/1852（101.84 秒）；验收提交的 [PR CI 36592613505](https://github.com/Disthinker/Project-Raidline/actions/runs/36592613505) Windows/Ubuntu 均 1852/1852 通过。
+- 合并提交自身 [main CI 36594256706](https://github.com/Disthinker/Project-Raidline/actions/runs/36594256706) 已触发，最终结果尚未确认，不以 PR CI 代替。
+- 本地已切回最新 main；原有未提交指令维护及历史记录保留，未纳入本片提交。代理未启动游戏。下方待验收/未提交和旧计数均为开发过程记录，以本节为准；后续开发范围待用户另行下达。
+
+
+最后核对：2026-09-29。
 
 ## Git 与交付基线
 
-### 2026-09-27 武器组件与改枪成长 v1：用户验收通过
+### 2026-09-29 追加开发：独立枪械与敌人测试场
+
+- 用户明确要求测试地图和发放/刷怪面板，作为当前护甲切片的直接测试入口，继续 `codex/raid-armored-infected-v1`；基线仍是 `9c96802`，未提交。
+- 基地 **F10 → 进入战斗测试场**；固定 2048×1280 场地，三处敌人刷新点、两处掩体和补给控制台。入场自动打开面板，控制台附近 **F8** 重开，打开时暂停战斗。
+- 可选择已发布枪械、兼容弹药与防弹衣；发放已装填测试套装及额外补给。选择普通/护甲敌人、刷新点和 1/3/5 数量；刷新清理旧目标与弹道。控制台附近可通过背包右键改装，F10 继续支持参数调试。
+- 测试场会话没有存档仓库或 pending Raid，原基地会话被完整挂起；退出、放弃或死亡后恢复，不回流测试资产/损耗/奖励。进入前先完成基地检查点，禁止活动 Raid/基地战斗中进入。
+- 新增 7 项测试，Windows 全目标构建成功；完整 CTest **1850/1850** 通过（106.49 秒），中文界面专项 63/63 通过。未启动游戏，实机排版、手感仍待用户确认；未提交、推送、合并或运行本片远端 CI。
+- 用户复验发现测试场面板无字、鼠标隐藏：已修复文字沿用背景绘制色，以及测试场面板漏接鼠标捕获/瞄准遮挡判断。Windows 全目标重建成功，修复后专项 **45/45** 通过；新增 2 项实际离屏中英文文字像素与面板开关输入回归。此前全量 1850/1850 属于修复前版本，本次未重跑全量或启动游戏，待用户重启新版复验。
+- [实施记录与验收步骤](../exec-plans/active/raid-armored-infected-v1.md)。下方 1843 项结果属于追加测试场之前的护甲实现。
+
+### 2026-09-29 当前开发：Raid 护甲感染者与弹药取舍 v1（本地完成，待验收）
+
+- 用户授权继续下一步，按策划建议从已接受 main `9c96802` 建立 `codex/raid-armored-infected-v1`。已 fetch 核对主线；HEAD 尚为该基线，新实现未提交。
+- Frontier 三个资源守卫组各替换一名躯干护甲感染者，总人数、生命、速度、攻击及 Loot 保持原有配置。修复每发弹药穿甲参数接线，头/腿绕甲、胸甲独立耐久和破损失效已接通。
+- 背心/破损标识、减伤与破损反馈、既有敌情档案的防护类型提示已接入；旧快照不补甲，空间切换保留耐久，异常退出沿用 Raid 前档回滚。schema/content/Raid rules 为 50/64/29。
+- Windows 全目标构建成功，完整 CTest **1843/1843** 通过（新增 12 项专项）；8 种种子对照确认数量、位置与 Loot 未变。未运行新版本远端 CI，未启动游戏；正常游玩、视觉可读性与平衡尚未验收。
+- 详见[护甲感染者计划与一次游玩验收清单](../exec-plans/active/raid-armored-infected-v1.md)。已保留指令维护和旧交付记录，未提交、推送或合并本片；下一步由用户正常游玩验收。
+### 2026-09-27 武器组件与改枪成长 v1：已验收合并
 
 - 基线为医院已接受主线 `e29996b`；本片分支 `codex/weapon-components-v1`。
 - 单平台三组件、背包/仓库右键详情与改装、内容包补领、Loot、实际射击属性、保存及整枪寻回闭环已完成。
 - schema/content/Raid rules 为 49/63/29；Windows 本地全目标构建和 CTest 1831/1831 通过。
-- 用户已明确“验收通过，请合并”；正在执行提交、PR 与精确 Windows/Ubuntu CI 门禁，通过后合并。
+- 用户明确“验收通过，请合并”；[PR #165](https://github.com/Disthinker/Project-Raidline/pull/165) 已普通合并至 main `9c9680240b5a65142c33b03a0d895b54855079b5`。
+- 验收提交 `323a81b` 的 [CI 36294353875](https://github.com/Disthinker/Project-Raidline/actions/runs/36294353875) Windows/Ubuntu 均 1831/1831 通过；合并树与验收提交完全一致。
+- 合并提交自身 [CI 36294962019](https://github.com/Disthinker/Project-Raidline/actions/runs/36294962019) 已确认 Windows/Ubuntu 均成功；该结果独立于 PR CI。
 - 详见[改枪计划](../exec-plans/active/weapon-components-v1.md)。既有指令维护不包含在本次交付中。
+
+### 2026-09-27 当前开发：武器组件与改枪成长 v1
+
+- 用户同意策划的单平台三组件范围，分支 `codex/weapon-components-v1` 来自已接受 main `e29996b`。
+- 本地已接组件定义/资产关系、枪匠原子改装、有效射击属性、Loot、保存与寻回；
+  schema/content/Raid rules 为 49/63/29。尚未提交、远端 CI 或用户验收，不属于已接受主线。
+- 前一轮 Windows 构建和 CTest 1825/1825 通过后，用户反馈背包入口和旧存档内容包缺失；
+  已补枪械右键详情/改装、返回背包及开发内容包版本补领。返工后 Windows 全目标构建成功、CTest 1831/1831 通过；界面实机与正常游玩未验证。
+- 实施与验证进度见[改枪计划](../exec-plans/active/weapon-components-v1.md)；原指令维护和医院收尾修改保留。
+
+### 2026-09-27 当前覆盖：医院已验收合并
+
+- 用户于 2026-09-26 明确“验收通过，请合并”；[PR #164](https://github.com/Disthinker/Project-Raidline/pull/164)
+  已普通合并至 main `e29996b14e8be4adeac0466b5a8c8e29b0b50779`，完整文件树与验收提交 `4bbc0c4` 一致。
+- 验收提交的 Windows/Ubuntu CI 均为 1815/1815；合并提交自己的
+  [CI 36248518775](https://github.com/Disthinker/Project-Raidline/actions/runs/36248518775)
+  双平台构建和测试亦已成功。本地交付前增量构建无待编译内容，医院/镜头/空间查询 33/33 通过。
+- 医院地图、医疗 Loot 与既有消费者、室内跟随镜头、未购图移动局部地图及购图完整布局已收束；
+  schema/content/Raid rules 保持 48/62/29。用户验收是独立证据，不由自动化推导。
+- 合并后的[下一阶段策划评审](../handoffs/hospital-closeout-next-stage-2026-09-27.md)已完成；后续用户同意的改枪范围见上方当前开发记录。
+  正式资源、NPC、导航及第三主题没有自动重开。现有未提交指令维护不包含在上述主线提交中。
+
+以下为历史实施与验收前记录；其中 Draft、待 CI、待复验及旧主线描述不覆盖以上当前事实。
 
 - 2026-09-13 室内验收返工：修复医院镜头不跟随；按用户修订，未购建筑图时 M 仍显示
   随玩家移动的局部窗口，其余黑色、不累计揭图；已购图显示完整静态布局。沿用 Draft #164。
@@ -769,5 +981,14 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 - 生产射击不得重新引入可渲染/可碰撞 Projectile 场景实体；武器、伤害、存档和 App 只能消费射击领域值、逻辑飞行投影与 HitResult。
 - 普通命中最终不显示准星 X；爆头/弱点必须由击发准星意图与真实命中部位双重验证的领域结果驱动，App 不得猜测。当前敌人尚无数据化弱点区域，因此只有领域接口预留，不伪造弱点内容。
 
+
+</details>
+
+
+</details>
+
+</details>
+
+</details>
 
 </details>
