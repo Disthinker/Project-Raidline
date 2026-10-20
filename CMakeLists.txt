@@ -501,6 +501,9 @@ add_library(raidline_sdl_client STATIC
     src/ui_foundation.h
     src/app_ui_foundation.cpp
     src/app_ui_weapon_components.cpp
+    src/app_ui_base_workshop.cpp
+    src/ui_base_workshop_presentation.cpp
+    src/ui_base_workshop_presentation.h
     src/app_ui_base_medical.cpp
     src/ui_base_medical_presentation.cpp
     src/ui_base_medical_presentation.h
@@ -1017,3 +1020,5 @@ raidline_add_test(UiBaseSupplyTest tests/test_ui_base_supply.cpp raidline::sdl_c
 raidline_add_test(UiWeaponComponentsTest tests/test_ui_weapon_components.cpp raidline::sdl_client)
 raidline_add_test(UiBaseMedicalTest tests/test_ui_base_medical.cpp raidline::sdl_client)
 raidline_add_test(StashPagesTest tests/test_stash_pages.cpp raidline::domain)
+
+raidline_add_test(UiBaseWorkshopTest tests/test_ui_base_workshop.cpp raidline::sdl_client)

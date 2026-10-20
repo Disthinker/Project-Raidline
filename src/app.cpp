@@ -677,21 +677,6 @@ namespace
             32.0F};
     }
 
-    SDL_FRect baseManufacturingButton() noexcept
-    {
-        return SDL_FRect{700.0F, 520.0F, 340.0F, 56.0F};
-    }
-
-    SDL_FRect baseManufacturingRecipeButton(
-        std::size_t index) noexcept
-    {
-        return SDL_FRect{
-            170.0F,
-            210.0F + static_cast<float>(index) * 48.0F,
-            380.0F,
-            40.0F};
-    }
-
     SDL_FRect baseFacilityStaffingButton() noexcept
     {
         return SDL_FRect{170.0F, 530.0F, 240.0F, 42.0F};
@@ -2995,6 +2980,7 @@ void App::updateBase(float deltaTime)
             gameFlow_.closeBaseFacility();
             resetBaseSupplyUi();
             resetBaseMedicalUi();
+            resetBaseWorkshopUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -3013,8 +2999,11 @@ void App::updateBase(float deltaTime)
         auto supplyEvents = std::move(pendingSupplyEvents_);
         pendingSupplyEvents_.clear();
         for (const auto &event : supplyEvents) handleBaseSupplyEvent(event);
+        auto workshopEvents = std::move(pendingWorkshopEvents_);
+        pendingWorkshopEvents_.clear();
+        for (const auto &event : workshopEvents) handleBaseWorkshopEvent(event);
         auto medicalEvents = std::move(pendingMedicalEvents_);
-        pendingMedicalEvents_.clear();
+        pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear();
         for (const auto &event : medicalEvents) handleBaseMedicalEvent(event);
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
@@ -3828,137 +3817,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         return;
     }
 
-    if (*facility == BaseFacilityKind::Workshop)
-    {
-        const BaseFacilityDefinitionId workshop{
-            "base_facility.workshop"};
-        if (!baseFacilityInstalled(gameSession_.profile(), workshop))
-        {
-            uiMessage_ =
-                "WORKSHOP IS IN FACILITY RESERVE | PLACE IT FROM BASE BUILD OWNED PAGE";
-            gameAudio_.play(SoundEventId::UiDeny);
-            return;
-        }
-        if (contains(baseFacilityStaffingButton(), click.position))
-        {
-            const bool assigned = gameSession_.profile().baseWorkforce
-                .workshopWorker.has_value();
-            const BaseWorkforceReceipt receipt = assigned
-                ? gameSession_.executeClearBaseWorker(
-                    BaseFacilityStaffingKind::Workshop,
-                    nextProfileTransactionId("clear-workshop-worker"))
-                : gameSession_.executeAssignBestBaseWorker(
-                    BaseFacilityStaffingKind::Workshop,
-                    nextProfileTransactionId("assign-workshop-worker"));
-            uiMessage_ = receipt.succeeded
-                ? assigned ? "WORKSHOP WORKER CLEARED"
-                           : "WORKSHOP WORKER ASSIGNED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        if (contains(baseFacilityUpgradeButton(), click.position))
-        {
-            const auto &projects =
-                publishedContentRegistry().baseConstructionProjects();
-            const auto found = std::find_if(
-                projects.begin(), projects.end(),
-                [](const BaseConstructionProjectDefinition &project)
-                {
-                    return project.target ==
-                        BaseFacilityUpgradeTarget::Workshop;
-                });
-            if (found == projects.end())
-            {
-                uiMessage_ = "NO WORKSHOP UPGRADE PUBLISHED";
-                gameAudio_.play(SoundEventId::UiDeny);
-                return;
-            }
-            const auto &active = gameSession_.profile()
-                .baseConstruction.activeProject;
-            const bool matchingActive = active.has_value() &&
-                active->definitionId == found->id;
-            const BaseConstructionReceipt receipt = matchingActive
-                ? gameSession_.executeCancelBaseConstruction(
-                    found->id,
-                    nextProfileTransactionId("cancel-workshop-upgrade"))
-                : gameSession_.executeStartBaseConstruction(
-                    found->id,
-                    nextProfileTransactionId("start-workshop-upgrade"));
-            uiMessage_ = receipt.succeeded
-                ? matchingActive ? "WORKSHOP UPGRADE CANCELLED"
-                                 : "WORKSHOP UPGRADE STARTED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        const ProfileState &profile = gameSession_.profile();
-        const auto &recipes =
-            publishedContentRegistry().baseManufacturingRecipes();
-        if (recipes.empty())
-        {
-            uiMessage_ = "NO PUBLISHED MANUFACTURING RECIPE";
-            gameAudio_.play(SoundEventId::UiDeny);
-            return;
-        }
-        if (!profile.baseManufacturing.activeOrder.has_value())
-        {
-            for (std::size_t index{}; index < recipes.size(); ++index)
-            {
-                if (!contains(
-                        baseManufacturingRecipeButton(index),
-                        click.position))
-                {
-                    continue;
-                }
-                selectedBaseManufacturingRecipeIndex_ = index;
-                uiMessage_ = "MANUFACTURING RECIPE SELECTED";
-                gameAudio_.play(SoundEventId::UiConfirm);
-                return;
-            }
-        }
-        if (!contains(baseManufacturingButton(), click.position))
-        {
-            return;
-        }
-        BaseManufacturingReceipt receipt;
-        if (!profile.baseManufacturing.activeOrder.has_value())
-        {
-            const std::size_t selectedIndex = std::min(
-                selectedBaseManufacturingRecipeIndex_,
-                recipes.size() - 1U);
-            receipt = gameSession_.executeStartBaseManufacturing(
-                recipes[selectedIndex].id,
-                nextProfileTransactionId("start-base-manufacturing"));
-            uiMessage_ = receipt.succeeded
-                ? "MANUFACTURING STARTED"
-                : receipt.message;
-        }
-        else if (profile.baseManufacturing.activeOrder->outputReady)
-        {
-            receipt = gameSession_.executeCollectBaseManufacturing(
-                nextProfileTransactionId("collect-base-manufacturing"));
-            uiMessage_ = receipt.succeeded
-                ? "MANUFACTURED ITEM COLLECTED"
-                : receipt.message;
-        }
-        else
-        {
-            receipt = gameSession_.executeCancelBaseManufacturing(
-                nextProfileTransactionId("cancel-base-manufacturing"));
-            uiMessage_ = receipt.succeeded
-                ? "MANUFACTURING CANCELLED | INPUTS RETURNED"
-                : receipt.message;
-        }
-        gameAudio_.play(receipt.succeeded
-            ? SoundEventId::UiConfirm
-            : SoundEventId::UiDeny);
-        return;
-    }
+    // Workshop owns the native down/up queue.
+    if (*facility == BaseFacilityKind::Workshop) return;
 
     // Medical owns its down/up queue; the legacy down-only adapter must
     // never execute the same transaction through a second route.
@@ -5669,7 +5529,7 @@ void App::processEvents()
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
     pendingSupplyEvents_.clear();
-    pendingMedicalEvents_.clear();
+    pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
@@ -5699,7 +5559,7 @@ void App::processEvents()
         if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
         input_.handleEvent(event);
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
         }
         if((medicalWheelOpen_ || throwableWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
             const auto count=medicalWheelOpen_?medicalWheelOptions_.size():throwableWheelOptions_.size();
@@ -5731,7 +5591,7 @@ void App::processEvents()
                 systemCursorHidden_ = false;
             }
             supplyUi_.press.reset();
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
             pendingSupplyEvents_.clear();
@@ -6267,6 +6127,19 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Workshop)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingWorkshopEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiWorkshopEventKind::Down : UiWorkshopEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingWorkshopEvents_.push_back({UiWorkshopEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingWorkshopEvents_.push_back({UiWorkshopEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Medical)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
@@ -6484,11 +6357,18 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Workshop) {
+        if (workshopProjectionRevision_ || workshopUi_.press || !pendingWorkshopEvents_.empty()) resetBaseWorkshopUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
+        workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+    }
+
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Medical) {
         if (medicalProjectionRevision_ || medicalUi_.press || !pendingMedicalEvents_.empty()) resetBaseMedicalUi();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
-        medicalUi_.press.reset(); pendingMedicalEvents_.clear();
+        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_ ||
         (!inventoryWeaponComponentsOpen_ && !weaponComponentsOpen_)) componentPress_.reset();
@@ -15548,260 +15428,6 @@ void App::renderBaseDormitory()
             renderer_, button.x + 44.0F, button.y + 20.0F, labels[index]);
     }
     SDL_SetRenderDrawColor(renderer_, 194, 204, 218, 255);
-    uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
-    if (!uiMessage_.empty())
-    {
-        SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
-        uiTextRenderer_.render(
-            renderer_, 420.0F, 610.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderBaseWorkshop()
-{
-    const SDL_FRect panel{120.0F, 90.0F, 1040.0F, 560.0F};
-    SDL_SetRenderDrawColor(renderer_, 30, 27, 22, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 176, 142, 92, 255);
-    SDL_RenderRect(renderer_, &panel);
-
-    const ProfileState &profile = gameSession_.profile();
-    const BaseFacilityDefinitionId workshopFacility{
-        "base_facility.workshop"};
-    if (!baseFacilityInstalled(profile, workshopFacility))
-    {
-        SDL_SetRenderDrawColor(renderer_, 232, 222, 196, 255);
-        uiTextRenderer_.render(
-            renderer_, 170.0F, 128.0F,
-            "WORKSHOP & PRODUCTION | FACILITY RESERVE");
-        uiTextRenderer_.render(
-            renderer_, 170.0F, 200.0F,
-            "WORKSHOP IS PACKED | PRODUCTION AND UPGRADES ARE PAUSED");
-        uiTextRenderer_.render(
-            renderer_, 170.0F, 228.0F,
-            "INSTALL IT FREE ON THE REGIONAL PAGE TO RESUME EXACT PROGRESS");
-        uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
-        return;
-    }
-    const auto &recipes =
-        publishedContentRegistry().baseManufacturingRecipes();
-    if (recipes.empty())
-    {
-        uiTextRenderer_.render(
-            renderer_, 170.0F, 200.0F,
-            "NO PUBLISHED MANUFACTURING RECIPE");
-        return;
-    }
-    const std::size_t selectedIndex = std::min(
-        selectedBaseManufacturingRecipeIndex_,
-        recipes.size() - 1U);
-    const BaseManufacturingRecipeDefinition *recipe =
-        &recipes[selectedIndex];
-    if (profile.baseManufacturing.activeOrder.has_value())
-    {
-        const auto activeRecipe = std::find_if(
-            recipes.begin(), recipes.end(),
-            [&profile](const BaseManufacturingRecipeDefinition &candidate)
-            {
-                return candidate.id ==
-                    profile.baseManufacturing.activeOrder
-                        ->recipeDefinitionId;
-            });
-        if (activeRecipe != recipes.end())
-        {
-            recipe = &*activeRecipe;
-        }
-    }
-    const BaseManufacturingProjection projection =
-        projectBaseManufacturing(profile);
-    SDL_SetRenderDrawColor(renderer_, 232, 222, 196, 255);
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 128.0F,
-        "WORKSHOP & PRODUCTION | TEXT/GEOMETRY PLACEHOLDER");
-
-    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
-    const std::string worker = fmt::format(
-        "WORKSHOP LEVEL {} | ASSIGNED {} | GENERAL FALLBACK IS 50% SLOWER",
-        profile.baseConstruction.workshopLevel,
-        workforce.workshopWorker.has_value()
-            ? baseResidentProfessionName(*workforce.workshopWorker)
-            : "EMPTY");
-    uiTextRenderer_.render(renderer_, 170.0F, 164.0F, worker.c_str());
-
-    uiTextRenderer_.render(renderer_, 170.0F, 192.0F, "SELECT RECIPE");
-    for (std::size_t index{}; index < recipes.size(); ++index)
-    {
-        const SDL_FRect recipeButton =
-            baseManufacturingRecipeButton(index);
-        const bool selected = recipes[index].id == recipe->id;
-        SDL_SetRenderDrawColor(
-            renderer_, selected ? 82 : 48,
-            selected ? 92 : 54,
-            selected ? 68 : 50, 255);
-        SDL_RenderFillRect(renderer_, &recipeButton);
-        SDL_SetRenderDrawColor(renderer_, 176, 142, 92, 255);
-        SDL_RenderRect(renderer_, &recipeButton);
-        uiTextRenderer_.render(
-            renderer_, recipeButton.x + 14.0F,
-            recipeButton.y + 12.0F,
-            recipes[index].displayName.c_str());
-    }
-
-    float y = 210.0F;
-    uiTextRenderer_.render(renderer_, 590.0F, y, "REQUIRED INPUTS");
-    for (const BaseManufacturingInputDefinition &input : recipe->inputs)
-    {
-        const ItemDefinition &definition =
-            publishedContentRegistry().item(input.itemDefinitionId);
-        const std::string row = fmt::format(
-            "{} x{}", definition.displayName, input.quantity);
-        y += 30.0F;
-        uiTextRenderer_.render(renderer_, 610.0F, y, row.c_str());
-    }
-    const ItemDefinition &outputDefinition =
-        publishedContentRegistry().item(recipe->outputItemDefinitionId);
-    const std::uint32_t moraleDuration = applyBaseMoraleDurationPercent(
-        recipe->durationMinutes,
-        profile.baseMorale.tier,
-        publishedContentRegistry().baseMorale());
-    const std::uint32_t staffedDuration = workforce.workshopWorker.has_value()
-        ? applyBaseFacilityTaskDuration(
-            moraleDuration,
-            BaseFacilityStaffingKind::Workshop,
-            *workforce.workshopWorker,
-            profile.baseConstruction.workshopLevel,
-            publishedContentRegistry().baseWorkforce())
-        : 0U;
-    const std::uint32_t adjustedDuration = staffedDuration == 0U
-        ? 0U
-        : applyActiveBaseSiteManufacturingDuration(
-            staffedDuration, profile, publishedContentRegistry());
-    const std::uint32_t sitePercent =
-        activeBaseSiteManufacturingDurationPercent(
-            profile, publishedContentRegistry());
-    const std::string output = fmt::format(
-        "OUTPUT {} x{}",
-        outputDefinition.displayName,
-        recipe->outputQuantity);
-    const std::string timing = fmt::format(
-        "{} WORKER | BASE {}H | SITE {}% | CURRENT {}H {:02}M",
-        recipe->workerCount,
-        recipe->durationMinutes / kWorldMinutesPerHour,
-        sitePercent,
-        adjustedDuration / kWorldMinutesPerHour,
-        adjustedDuration % kWorldMinutesPerHour);
-    uiTextRenderer_.render(renderer_, 590.0F, 338.0F, output.c_str());
-    uiTextRenderer_.render(renderer_, 590.0F, 368.0F, timing.c_str());
-
-    std::string status;
-    const char *buttonLabel{};
-    bool available{};
-    if (!projection.orderPresent)
-    {
-        const BaseManufacturingStartPlan plan =
-            queryStartBaseManufacturing(
-                profile,
-                publishedContentRegistry(),
-                StartBaseManufacturingCommand{recipe->id});
-        status = plan.canCommit
-            ? "WORKSHOP READY | INPUTS REMAIN IN OWNED INVENTORY UNTIL START"
-            : plan.message;
-        buttonLabel = plan.canCommit
-            ? "START PRODUCTION"
-            : "PRODUCTION REQUIREMENTS NOT MET";
-        available = plan.canCommit;
-    }
-    else if (projection.outputReady)
-    {
-        const BaseManufacturingReturnPlan plan =
-            queryCollectBaseManufacturing(
-                profile, publishedContentRegistry());
-        status = "OUTPUT READY | WORKER RELEASED";
-        buttonLabel = plan.canCommit
-            ? "COLLECT TO STASH"
-            : "OUTPUT READY | STASH SPACE REQUIRED";
-        available = plan.canCommit;
-    }
-    else
-    {
-        status = fmt::format(
-            "PRODUCTION ACTIVE | {}H {:02}M LEFT | {} WORKER COMMITTED",
-            projection.remainingMinutes / kWorldMinutesPerHour,
-            projection.remainingMinutes % kWorldMinutesPerHour,
-            projection.committedWorkers);
-        const BaseManufacturingReturnPlan plan =
-            queryCancelBaseManufacturing(
-                profile, publishedContentRegistry());
-        buttonLabel = plan.canCommit
-            ? "CANCEL & RETURN INPUTS"
-            : "CANCEL BLOCKED | STASH SPACE REQUIRED";
-        available = plan.canCommit;
-    }
-    uiTextRenderer_.render(renderer_, 170.0F, 440.0F, status.c_str());
-
-    const SDL_FRect button = baseManufacturingButton();
-    SDL_SetRenderDrawColor(
-        renderer_, available ? 92 : 54,
-        available ? 104 : 58,
-        available ? 72 : 56, 255);
-    SDL_RenderFillRect(renderer_, &button);
-    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
-    SDL_RenderRect(renderer_, &button);
-    uiTextRenderer_.render(
-        renderer_, button.x + 28.0F, button.y + 20.0F, buttonLabel);
-
-    const SDL_FRect staffingButton = baseFacilityStaffingButton();
-    SDL_SetRenderDrawColor(renderer_, 58, 76, 64, 255);
-    SDL_RenderFillRect(renderer_, &staffingButton);
-    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
-    SDL_RenderRect(renderer_, &staffingButton);
-    uiTextRenderer_.render(
-        renderer_, staffingButton.x + 24.0F, staffingButton.y + 14.0F,
-        workforce.workshopWorker.has_value()
-            ? "CLEAR WORKSHOP WORKER"
-            : "ASSIGN BEST WORKER");
-
-    const auto &projects =
-        publishedContentRegistry().baseConstructionProjects();
-    const auto upgrade = std::find_if(
-        projects.begin(), projects.end(),
-        [](const BaseConstructionProjectDefinition &candidate)
-        {
-            return candidate.target == BaseFacilityUpgradeTarget::Workshop;
-        });
-    const SDL_FRect upgradeButton = baseFacilityUpgradeButton();
-    bool upgradeAvailable{};
-    std::string upgradeLabel = "NO WORKSHOP UPGRADE";
-    if (upgrade != projects.end())
-    {
-        const auto &active = profile.baseConstruction.activeProject;
-        const bool matchingActive = active.has_value() &&
-            active->definitionId == upgrade->id;
-        const BaseConstructionPlan plan = matchingActive
-            ? queryCancelBaseConstruction(
-                profile,
-                publishedContentRegistry(),
-                CancelBaseConstructionCommand{upgrade->id})
-            : queryStartBaseConstruction(
-                profile,
-                publishedContentRegistry(),
-                StartBaseConstructionCommand{upgrade->id});
-        upgradeAvailable = plan.canCommit;
-        upgradeLabel = matchingActive
-            ? "CANCEL WORKSHOP UPGRADE"
-            : profile.baseConstruction.workshopLevel >= upgrade->targetLevel
-                ? "WORKSHOP LEVEL 2 COMPLETE"
-                : "UPGRADE WORKSHOP TO LEVEL 2";
-    }
-    SDL_SetRenderDrawColor(
-        renderer_, upgradeAvailable ? 72 : 48,
-        upgradeAvailable ? 86 : 52, 64, 255);
-    SDL_RenderFillRect(renderer_, &upgradeButton);
-    SDL_SetRenderDrawColor(renderer_, 206, 184, 132, 255);
-    SDL_RenderRect(renderer_, &upgradeButton);
-    uiTextRenderer_.render(
-        renderer_, upgradeButton.x + 20.0F, upgradeButton.y + 14.0F,
-        upgradeLabel.c_str());
     uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
     if (!uiMessage_.empty())
     {

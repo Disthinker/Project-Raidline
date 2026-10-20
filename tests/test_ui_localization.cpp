@@ -1399,3 +1399,11 @@ TEST(UiLocalizationTest, IndoorObservationCountersAndAccessLossAreFullyChinese) 
   EXPECT_EQ(localizeUiText(UiLanguage::English,"Visible Enemies: 2/2"),
             "Visible Enemies: 2/2");
 }
+
+TEST(UiLocalizationTest, WorkshopProductionStatesAndRulesAreCompleteChinese) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"CLOSE WORKSHOP"),"关闭");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"PRODUCTION OUTPUT WAITING"),"产物待领取");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"RESERVE ON START - COMPLETE USING WORLD TIME"),"开始时预留材料，随世界时间完成");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"AUTO STASH ON COMPLETION - COLLECT ONLY WHEN FULL"),"完成后自动入库；满仓时等待领取");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN"),"生产方案已变化，请核对后重新点击");
+}

@@ -33,6 +33,7 @@
 #include "ui_base_supply_presentation.h"
 #include "ui_weapon_components_presentation.h"
 #include "ui_base_medical_presentation.h"
+#include "ui_base_workshop_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -158,6 +159,7 @@ private:
     friend struct UiBaseSupplyTestAccess;
     friend struct UiWeaponComponentsTestAccess;
     friend struct UiBaseMedicalTestAccess;
+    friend struct UiBaseWorkshopTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -221,6 +223,16 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
+    UiWorkshopState workshopUi_;
+    UiWorkshopProjection workshopProjection_;
+    std::optional<ProfileRevision> workshopProjectionRevision_;
+    UiLanguage workshopProjectionLanguage_{};
+    std::uint64_t workshopProjectionGeneration_{};
+    std::string workshopFeedback_;
+    std::vector<UiWorkshopEvent> pendingWorkshopEvents_;
+    void resetBaseWorkshopUi();
+    void refreshBaseWorkshopUi(bool force = false);
+    void handleBaseWorkshopEvent(const UiWorkshopEvent &);
     UiBaseSupplyState supplyUi_;
     UiBaseMedicalState medicalUi_;
     UiBaseMedicalProjection medicalProjection_;
@@ -345,7 +357,6 @@ private:
     bool baseWishFocusFilter_{};
     std::size_t selectedBasePriorityIndex_{};
     std::set<AssetInstanceId> selectedBasePriorityAssetIds_;
-    std::size_t selectedBaseManufacturingRecipeIndex_{};
     std::string uiMessage_;
     WeaponSupplyProjection weaponSupplyCache_;
     std::string weaponSupplyCacheProfileId_;
