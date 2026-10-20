@@ -1407,3 +1407,23 @@ TEST(UiLocalizationTest, WorkshopProductionStatesAndRulesAreCompleteChinese) {
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"AUTO STASH ON COMPLETION - COLLECT ONLY WHEN FULL"),"完成后自动入库；满仓时等待领取");
   EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,"PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN"),"生产方案已变化，请核对后重新点击");
 }
+
+TEST(UiLocalizationTest, DormitoryRestPreviewAndResultsAreCompleteChinese) {
+    const auto cn=UiLanguage::SimplifiedChinese;
+    for(const char *key : {"DAY {}","CANCEL & REFUND","all Base facility staffing slots are already filled",
+        "RESIDENT PROFESSIONS","RESIDENT TOTAL","AVAILABLE / REQUIRED MATERIAL",
+        "PEOPLE AND EXPANSION","REST TAB","BED CAPACITY","AVAILABLE WORKERS",
+        "RESIDENTS AND JOBS","FOOD AND DAILY NEEDS","PUBLIC FOOD STOCK","NEXT DAILY SETTLEMENT",
+        "FOOD SUMMARY IS NOT A SURVIVAL FORECAST","WORKSHOP JOB","MEDICAL JOB","FILLS ONLY ELIGIBLE VACANT JOBS",
+        "CONSTRUCTION SLOT OCCUPIED","DORMITORY EXPANSION","AUTO FILL JOBS","FOOD SUMMARY","HIDE FOOD SUMMARY",
+        "REST DURATION","REST PREVIEW","CURRENT TIME","ARRIVAL TIME","DAILY SETTLEMENTS CROSSED",
+        "CHOOSE REST DURATION FIRST","REST ADVANCES TIME - DOES NOT HEAL PLAYER","DAILY NEEDS USE EXISTING AUTHORIZED SUPPLIES",
+        "START REST","REST COMPLETE","REST HOURS UNIT","DAILY SETTLEMENTS","VACANT JOBS FILLED","SOME JOBS REMAIN VACANT",
+        "NO DORMITORY PROJECT","DORMITORY PLAN CHANGED - CHECK AND CLICK AGAIN","REST UNAVAILABLE","COMMITTED MATERIAL","EXPANSION DURATION"}) {
+        EXPECT_NE(localizeUiText(cn,key),key) << key;
+        EXPECT_EQ(localizeUiText(UiLanguage::English,key),key);
+    }
+    EXPECT_EQ(localizeUiText(cn,"DORMITORY & REST"),"宿舍与休息");
+    EXPECT_EQ(localizeUiText(cn,"CLOSE DORMITORY"),"关闭");
+    EXPECT_EQ(localizeUiText(cn,"DAY {}"),"第{}天");
+}

@@ -191,19 +191,7 @@ namespace
 
 
 
-    SDL_FRect baseRestButton(std::size_t index) noexcept
-    {
-        return SDL_FRect{
-            170.0F + static_cast<float>(index) * 310.0F,
-            550.0F,
-            220.0F,
-            50.0F};
-    }
 
-    SDL_FRect baseConstructionButton() noexcept
-    {
-        return SDL_FRect{710.0F, 400.0F, 340.0F, 48.0F};
-    }
 
     SDL_FRect baseBuildBarBounds() noexcept
     {
@@ -687,10 +675,6 @@ namespace
         return SDL_FRect{430.0F, 530.0F, 240.0F, 42.0F};
     }
 
-    SDL_FRect baseWorkforceAutoFillButton() noexcept
-    {
-        return SDL_FRect{170.0F, 400.0F, 300.0F, 48.0F};
-    }
 
     SDL_FRect equipmentSlotRect(EquipmentSlotKind slot) noexcept
     {
@@ -2907,6 +2891,7 @@ void App::updateBase(float deltaTime)
         gameFlow_.closeBaseFacility();
         resetBaseSupplyUi();
         resetBaseMedicalUi();
+        resetBaseDormitoryUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
@@ -2981,6 +2966,7 @@ void App::updateBase(float deltaTime)
             resetBaseSupplyUi();
             resetBaseMedicalUi();
             resetBaseWorkshopUi();
+            resetBaseDormitoryUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -3002,6 +2988,9 @@ void App::updateBase(float deltaTime)
         auto workshopEvents = std::move(pendingWorkshopEvents_);
         pendingWorkshopEvents_.clear();
         for (const auto &event : workshopEvents) handleBaseWorkshopEvent(event);
+        auto dormitoryEvents = std::move(pendingDormitoryEvents_);
+        pendingDormitoryEvents_.clear();
+        for (const auto &event : dormitoryEvents) handleBaseDormitoryEvent(event);
         auto medicalEvents = std::move(pendingMedicalEvents_);
         pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear();
         for (const auto &event : medicalEvents) handleBaseMedicalEvent(event);
@@ -3824,100 +3813,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
     // never execute the same transaction through a second route.
     if (*facility == BaseFacilityKind::Medical) return;
 
-    if (*facility == BaseFacilityKind::Dormitory)
-    {
-        if (contains(baseWorkforceAutoFillButton(), click.position))
-        {
-            const BaseWorkforceReceipt receipt =
-                gameSession_.executeAutoFillBaseWorkers(
-                    nextProfileTransactionId("autofill-base-workers"));
-            uiMessage_ = receipt.succeeded
-                ? "BASE FACILITY WORKERS AUTO-FILLED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        const auto &projects =
-            publishedContentRegistry().baseConstructionProjects();
-        const auto found = std::find_if(
-            projects.begin(), projects.end(),
-            [](const BaseConstructionProjectDefinition &candidate)
-            {
-                return candidate.target ==
-                    BaseFacilityUpgradeTarget::Dormitory;
-            });
-        if (found == projects.end())
-        {
-            return;
-        }
-        const BaseConstructionProjectDefinition &project = *found;
-        if (contains(baseConstructionButton(), click.position))
-        {
-            const auto &activeProject = gameSession_.profile()
-                .baseConstruction.activeProject;
-            const bool active = activeProject.has_value() &&
-                activeProject->definitionId == project.id;
-            if (activeProject.has_value() && !active)
-            {
-                uiMessage_ = "ANOTHER BASE CONSTRUCTION PROJECT IS ACTIVE";
-                gameAudio_.play(SoundEventId::UiDeny);
-                return;
-            }
-            if (!active)
-            {
-                const BaseConstructionPlan plan = queryStartBaseConstruction(
-                    gameSession_.profile(),
-                    publishedContentRegistry(),
-                    StartBaseConstructionCommand{project.id});
-                if (!plan.canCommit)
-                {
-                    uiMessage_ = plan.message;
-                    gameAudio_.play(SoundEventId::UiDeny);
-                    return;
-                }
-            }
-            const BaseConstructionReceipt receipt = active
-                ? gameSession_.executeCancelBaseConstruction(
-                    project.id,
-                    nextProfileTransactionId("cancel-base-construction"))
-                : gameSession_.executeStartBaseConstruction(
-                    project.id,
-                    nextProfileTransactionId("start-base-construction"));
-            uiMessage_ = receipt.succeeded
-                ? active
-                    ? "CONSTRUCTION CANCELLED | MATERIAL REFUNDED"
-                    : "DORMITORY EXPANSION STARTED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        constexpr std::array<std::uint32_t, 3> restHours{1U, 6U, 12U};
-        for (std::size_t index{}; index < restHours.size(); ++index)
-        {
-            if (!contains(baseRestButton(index), click.position))
-            {
-                continue;
-            }
-            const BaseRestReceipt receipt = gameSession_.executeBaseRest(
-                restHours[index],
-                nextProfileTransactionId("base-rest"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format(
-                    "RESTED {}H | DAILY CYCLES {}",
-                    restHours[index],
-                    receipt.dailyCyclesResolved)
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        return;
-    }
+    // Dormitory owns its native down/up queue; no legacy command adapter.
+    if (*facility == BaseFacilityKind::Dormitory) return;
 
     if (*facility == BaseFacilityKind::Supply)
     {
@@ -5529,7 +5426,7 @@ void App::processEvents()
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
     pendingSupplyEvents_.clear();
-    pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear();
+    pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear(); pendingDormitoryEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
@@ -5559,7 +5456,7 @@ void App::processEvents()
         if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
         input_.handleEvent(event);
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
         }
         if((medicalWheelOpen_ || throwableWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
             const auto count=medicalWheelOpen_?medicalWheelOptions_.size():throwableWheelOptions_.size();
@@ -5591,7 +5488,7 @@ void App::processEvents()
                 systemCursorHidden_ = false;
             }
             supplyUi_.press.reset();
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
             pendingSupplyEvents_.clear();
@@ -6127,6 +6024,19 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Dormitory)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingDormitoryEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiDormitoryEventKind::Down : UiDormitoryEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingDormitoryEvents_.push_back({UiDormitoryEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingDormitoryEvents_.push_back({UiDormitoryEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Workshop)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
@@ -6357,6 +6267,12 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Dormitory) {
+        if (dormitoryProjectionRevision_ || dormitoryUi_.press || !pendingDormitoryEvents_.empty()) resetBaseDormitoryUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
+        dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
+    }
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Workshop) {
         if (workshopProjectionRevision_ || workshopUi_.press || !pendingWorkshopEvents_.empty()) resetBaseWorkshopUi();
     }
@@ -6368,7 +6284,7 @@ void App::update(float deltaTime)
         if (medicalProjectionRevision_ || medicalUi_.press || !pendingMedicalEvents_.empty()) resetBaseMedicalUi();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
-        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_ ||
         (!inventoryWeaponComponentsOpen_ && !weaponComponentsOpen_)) componentPress_.reset();
@@ -15240,200 +15156,6 @@ void App::renderBaseAllocation()
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(renderer_, 250.0F, 684.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderBaseDormitory()
-{
-    const SDL_FRect panel{120.0F, 90.0F, 1040.0F, 560.0F};
-    SDL_SetRenderDrawColor(renderer_, 22, 28, 36, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 132, 144, 174, 255);
-    SDL_RenderRect(renderer_, &panel);
-
-    const ProfileState &profile = gameSession_.profile();
-    const BasePopulationProjection population = projectBasePopulation(
-        profile.basePopulation);
-    const BaseResourceBundle demand = populationAdjustedDailyDemand(
-        profile.basePopulation);
-    const WorldClockProjection clock = gameSession_.worldClockProjection();
-    SDL_SetRenderDrawColor(renderer_, 224, 232, 242, 255);
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 128.0F,
-        "DORMITORY & REST | AGGREGATED RESIDENTS");
-
-    const std::string residents = fmt::format(
-        "ORDINARY RESIDENTS {} | INJURED {} | HEALTHY {} | BEDS {} | BED SHORTFALL {}",
-        population.ordinaryResidents,
-        population.injuredResidents,
-        population.healthyResidents,
-        population.bedCapacity,
-        population.bedShortfall);
-    uiTextRenderer_.render(renderer_, 170.0F, 194.0F, residents.c_str());
-    const std::string rations = fmt::format(
-        "DAILY RATIONS {} | RESERVE {} | NEXT NEED IN {}H {:02}M",
-        demand.food,
-        profile.baseResources.pool.food,
-        clock.minutesUntilNextDay / kWorldMinutesPerHour,
-        clock.minutesUntilNextDay % kWorldMinutesPerHour);
-    uiTextRenderer_.render(renderer_, 170.0F, 236.0F, rations.c_str());
-    const std::string time = fmt::format(
-        "DAY {} {:02}:{:02} {}",
-        clock.day,
-        clock.hour,
-        clock.minute,
-        worldTimeOfDayName(clock.timeOfDay));
-    uiTextRenderer_.render(renderer_, 170.0F, 278.0F, time.c_str());
-
-    SDL_SetRenderDrawColor(
-        renderer_,
-        population.bedShortfall > 0U ? 224 : 166,
-        population.bedShortfall > 0U ? 164 : 214,
-        population.bedShortfall > 0U ? 124 : 194,
-        255);
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 316.0F,
-        population.bedShortfall > 0U
-            ? "OVERCROWDED | SHORTAGE IS NON-BLOCKING"
-            : "BED CAPACITY AVAILABLE");
-    const BaseConstructionProjection construction = projectBaseConstruction(
-        profile,
-        publishedContentRegistry());
-    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
-    const auto &projects =
-        publishedContentRegistry().baseConstructionProjects();
-    const auto dormitoryProject = std::find_if(
-        projects.begin(), projects.end(),
-        [](const BaseConstructionProjectDefinition &candidate)
-        {
-            return candidate.target == BaseFacilityUpgradeTarget::Dormitory;
-        });
-    if (dormitoryProject == projects.end())
-    {
-        return;
-    }
-    const BaseConstructionProjectDefinition &project = *dormitoryProject;
-    SDL_SetRenderDrawColor(renderer_, 184, 194, 210, 255);
-    const std::string professions = fmt::format(
-        "PROFESSIONS | GENERAL {} | MEDICAL {} | ENGINEERING {} | COMBAT {}",
-        workforce.residentsByProfession[baseProfessionIndex(
-            BaseResidentProfession::General)],
-        workforce.residentsByProfession[baseProfessionIndex(
-            BaseResidentProfession::Medical)],
-        workforce.residentsByProfession[baseProfessionIndex(
-            BaseResidentProfession::Engineering)],
-        workforce.residentsByProfession[baseProfessionIndex(
-            BaseResidentProfession::Combat)]);
-    uiTextRenderer_.render(renderer_, 170.0F, 346.0F, professions.c_str());
-    const std::string staffing = fmt::format(
-        "STAFFING | WORKSHOP {} | MEDICAL {} | UNASSIGNED {}",
-        workforce.workshopWorker.has_value()
-            ? baseResidentProfessionName(*workforce.workshopWorker)
-            : "EMPTY",
-        workforce.medicalWorker.has_value()
-            ? baseResidentProfessionName(*workforce.medicalWorker)
-            : "EMPTY",
-        workforce.availableResidents);
-    uiTextRenderer_.render(renderer_, 170.0F, 370.0F, staffing.c_str());
-    const std::string constructionSummary = fmt::format(
-        "DORMITORY LEVEL {} | BUILDING MATERIAL {}/{} | WORKERS {}/{} AVAILABLE",
-        construction.dormitoryLevel,
-        construction.materialUnits,
-        construction.maximumMaterialUnits,
-        construction.availableWorkers,
-        construction.totalWorkers);
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 466.0F, constructionSummary.c_str());
-
-    std::string projectStatus;
-    bool constructionAvailable{};
-    const char *constructionLabel{};
-    if (construction.activeProjectId.has_value() &&
-        construction.activeProjectId == project.id)
-    {
-        projectStatus = fmt::format(
-            "EXPANSION IN PROGRESS | {}H {:02}M LEFT | {} WORKERS COMMITTED",
-            construction.remainingMinutes / kWorldMinutesPerHour,
-            construction.remainingMinutes % kWorldMinutesPerHour,
-            construction.committedWorkers);
-        constructionAvailable = true;
-        constructionLabel = "CANCEL & REFUND MATERIAL";
-    }
-    else if (construction.activeProjectId.has_value())
-    {
-        projectStatus = "ANOTHER BASE CONSTRUCTION PROJECT IS ACTIVE";
-        constructionLabel = "DORMITORY EXPANSION BLOCKED";
-    }
-    else if (construction.dormitoryLevel >= project.targetLevel)
-    {
-        projectStatus = "DORMITORY EXPANSION COMPLETE";
-        constructionLabel = "NO FURTHER PROJECT";
-    }
-    else
-    {
-        const BaseConstructionPlan plan = queryStartBaseConstruction(
-            profile,
-            publishedContentRegistry(),
-            StartBaseConstructionCommand{project.id});
-        constructionAvailable = plan.canCommit;
-        projectStatus = fmt::format(
-            "NEXT: LEVEL {} / {} BEDS | COST {} MATERIAL / {} WORKERS / {}H",
-            project.targetLevel,
-            project.bedCapacityAfter,
-            project.materialCost,
-            project.workerCount,
-            project.durationMinutes / kWorldMinutesPerHour);
-        constructionLabel = plan.canCommit
-            ? "START DORMITORY EXPANSION"
-            : "EXPANSION REQUIREMENTS NOT MET";
-    }
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 490.0F, projectStatus.c_str());
-    const SDL_FRect autoFillButton = baseWorkforceAutoFillButton();
-    SDL_SetRenderDrawColor(renderer_, 58, 86, 106, 255);
-    SDL_RenderFillRect(renderer_, &autoFillButton);
-    SDL_SetRenderDrawColor(renderer_, 170, 188, 216, 255);
-    SDL_RenderRect(renderer_, &autoFillButton);
-    uiTextRenderer_.render(
-        renderer_, autoFillButton.x + 34.0F,
-        autoFillButton.y + 17.0F,
-        "AUTO-FILL EMPTY FACILITY JOBS");
-    const SDL_FRect constructionButton = baseConstructionButton();
-    SDL_SetRenderDrawColor(
-        renderer_, constructionAvailable ? 66 : 52,
-        constructionAvailable ? 102 : 58,
-        constructionAvailable ? 124 : 64, 255);
-    SDL_RenderFillRect(renderer_, &constructionButton);
-    SDL_SetRenderDrawColor(renderer_, 170, 188, 216, 255);
-    SDL_RenderRect(renderer_, &constructionButton);
-    uiTextRenderer_.render(
-        renderer_, constructionButton.x + 28.0F,
-        constructionButton.y + 22.0F,
-        constructionLabel);
-
-    uiTextRenderer_.render(
-        renderer_, 170.0F, 518.0F,
-        "REST ADVANCES WORLD TIME AND DAILY NEEDS | MAXIMUM 12H");
-
-    constexpr std::array<const char *, 3> labels{
-        "REST 1 HOUR", "REST 6 HOURS", "REST 12 HOURS"};
-    for (std::size_t index{}; index < labels.size(); ++index)
-    {
-        const SDL_FRect button = baseRestButton(index);
-        SDL_SetRenderDrawColor(renderer_, 52, 66, 84, 255);
-        SDL_RenderFillRect(renderer_, &button);
-        SDL_SetRenderDrawColor(renderer_, 160, 178, 210, 255);
-        SDL_RenderRect(renderer_, &button);
-        uiTextRenderer_.render(
-            renderer_, button.x + 44.0F, button.y + 20.0F, labels[index]);
-    }
-    SDL_SetRenderDrawColor(renderer_, 194, 204, 218, 255);
-    uiTextRenderer_.render(renderer_, 170.0F, 610.0F, "ESC CLOSE");
-    if (!uiMessage_.empty())
-    {
-        SDL_SetRenderDrawColor(renderer_, 230, 218, 154, 255);
-        uiTextRenderer_.render(
-            renderer_, 420.0F, 610.0F, uiMessage_.c_str());
     }
 }
 

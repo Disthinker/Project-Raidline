@@ -1,3 +1,62 @@
+# 当前：宿舍与休息界面 v1 已验收，正在交付
+
+用户已验收候选 **4f56407eca6e**，并明确授权提交、推送和合并。当前只交付这一候选；不启动下一项开发。
+
+- task_id：ui-base-dormitory；plan_version：RL-UI-BASE-DORMITORY-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id与accepted_candidate_id均为RL-UI-BASE-DORMITORY-v1-local-4f56407eca6e；acceptance_source：2026-10-20主控线程直接人类原文“宿舍与休息界面 v1 验收通过，请完成提交、推送和合并。”。
+- 本地完整2386/2386和专项30/30通过，原3ms负载与门槛保持。验收源码、程序、固定入口、运行资源及原有修改核对保持。
+- 正在完成准确提交和合并提交的双平台CI；Git与最终结果见[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)。
+
+<details>
+<summary>验收、实施与前序历史</summary>
+
+# 当前：宿舍与休息界面 v1，待验收
+
+**候选4f56407eca6e已完成并冻结。** 人口与扩建、休息分为两个标签；休息先预览再确认，原岗位、建设、时间和存档规则保持。
+
+继续打开桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-base-dormitory-v1.md)验收。原固定入口保持，上一验收程序有检查点。
+
+- task_id：ui-base-dormitory；plan_version：RL-UI-BASE-DORMITORY-v1；state：waiting_human_acceptance；approval_source：2026-10-20主控直接人类批准。
+- candidate_id：RL-UI-BASE-DORMITORY-v1-local-4f56407eca6e；accepted_candidate_id、acceptance_source：无；pending_request：无。
+- Windows Debug全目标构建、完整2386/2386及专项30/30通过；原5项3ms检查保持；三档窗口中英文72张离屏图与6张总览图已检查。
+- 分支codex/ui-base-dormitory-v1，HEAD4cebec2仅为基线；源码／程序由冻结指纹识别。未提交、推送或合并，尚无新远端CI。[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)。
+
+<details><summary>实施、规划及前序历史</summary>
+
+# 当前：宿舍与休息界面 v1，实施中
+
+用户已批准 **RL-UI-BASE-DORMITORY-v1**。正在拆分居民与扩建、休息标签，并接入休息预览与明确确认；保留原规则、存档、固定入口和3ms门槛。
+
+- task_id：ui-base-dormitory；state：in_progress；approval_source：2026-10-20主控直接人类批准，完整原文见任务记录。
+- 分支codex/ui-base-dormitory-v1，HEAD4cebec2；candidate_id、accepted_candidate_id、acceptance_source：无；pending_request：无。
+- 暂不提交、推送或合并；不启动游戏或接触真实存档。[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)。
+
+<details><summary>规划及前序历史</summary>
+
+# 当前：宿舍与休息界面 v1，待批准
+
+策划建议下一项做 **RL-UI-BASE-DORMITORY-v1**：人口与扩建、休息分为两个标签；选时长后先看预览，再明确开始休息。原居民、岗位、建设与时间规则保持。
+
+请查看[具体开发方案](../exec-plans/active/ui-base-dormitory-v1.md)。用户尚未批准实施；当前只做只读核查和计划记录。
+
+- task_id：ui-base-dormitory；plan_version：RL-UI-BASE-DORMITORY-v1；state：awaiting_plan_approval；approval_source：无。
+- candidate_id、accepted_candidate_id、acceptance_source：无；pending_request：无。原策划有效回复与请求已记录在计划中。
+- 已交付基线为工坊PR185，main4cebec2；原固定程序入口、已验收行为与未提交修改保持。未切分支、修改源码、构建、启动游戏或执行新的Git交付。
+
+<details><summary>已交付任务与历史</summary>
+
+# 当前：工坊与生产界面 v1 已交付
+
+已验收候选 **4776679498cf** 已完成提交、推送和普通合并。[PR185](https://github.com/Disthinker/Project-Raidline/pull/185)，main **4cebec2**。原桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- task_id：ui-base-workshop；plan_version：RL-UI-BASE-WORKSHOP-v1；state：delivered；candidate_id与accepted_candidate_id均为RL-UI-BASE-WORKSHOP-v1-local-4776679498cf。
+- 提交9353584已推送；合并提交具有两个原始父提交，合并树等于已验收提交树。准确PR及main的Windows／Ubuntu均各 **2356/2356**；PR和主线双平台均首轮通过，3ms负载和门槛保持。
+- 只交付12项已验收文件；11份无关历史文档、五工作区原改动、资源、存档与固定入口保持。没有启动游戏或开始下一项开发。
+- 策划已在原持久线程只读确认交付；未安排或启动下一开发。[任务记录](../exec-plans/active/ui-base-workshop-v1.md)保留真实授权、Git／CI和保护证据。
+
+<details>
+<summary>验收、实施与前序交付历史</summary>
+
 # 当前：工坊与生产界面 v1 已验收，正在交付
 
 用户已验收候选 **4776679498cf**，并明确授权提交、推送和合并。当前只交付这一候选；不启动下一项开发。
@@ -5,7 +64,7 @@
 - task_id：ui-base-workshop；plan_version：RL-UI-BASE-WORKSHOP-v1；state：accepted_pending_delivery；pending_request：无。
 - candidate_id与accepted_candidate_id均为RL-UI-BASE-WORKSHOP-v1-local-4776679498cf；acceptance_source：2026-10-20主控线程直接人类原文“工坊与生产界面 v1 验收通过，请完成提交、推送和合并。”。
 - 本地完整2356/2356和专项24/24通过，原3ms负载与门槛保持。验收源码、程序、固定入口、运行资源及原有修改核对保持。
-- 正在完成准确提交和合并提交的双平台CI；Git与最终结果见[任务记录](../exec-plans/active/ui-base-workshop-v1.md)。
+- 已提交并推送9353584，[PR185](https://github.com/Disthinker/Project-Raidline/pull/185)已普通合并为4cebec2；合并树等于验收提交树。准确PR双平台各2356/2356通过，准确main CI 39416975637运行中；最终交付检查尚未结束。[任务记录](../exec-plans/active/ui-base-workshop-v1.md)保留证据。
 
 <details>
 <summary>验收、实施与前序历史</summary>
@@ -1282,6 +1341,16 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

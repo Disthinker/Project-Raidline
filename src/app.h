@@ -34,6 +34,7 @@
 #include "ui_weapon_components_presentation.h"
 #include "ui_base_medical_presentation.h"
 #include "ui_base_workshop_presentation.h"
+#include "ui_base_dormitory_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -160,6 +161,7 @@ private:
     friend struct UiWeaponComponentsTestAccess;
     friend struct UiBaseMedicalTestAccess;
     friend struct UiBaseWorkshopTestAccess;
+    friend struct UiBaseDormitoryTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -223,6 +225,16 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
+    UiDormitoryState dormitoryUi_;
+    UiDormitoryProjection dormitoryProjection_;
+    std::optional<ProfileRevision> dormitoryProjectionRevision_;
+    UiLanguage dormitoryProjectionLanguage_{};
+    std::uint64_t dormitoryProjectionGeneration_{};
+    std::string dormitoryFeedback_;
+    std::vector<UiDormitoryEvent> pendingDormitoryEvents_;
+    void resetBaseDormitoryUi();
+    void refreshBaseDormitoryUi(bool force = false);
+    void handleBaseDormitoryEvent(const UiDormitoryEvent &);
     UiWorkshopState workshopUi_;
     UiWorkshopProjection workshopProjection_;
     std::optional<ProfileRevision> workshopProjectionRevision_;
