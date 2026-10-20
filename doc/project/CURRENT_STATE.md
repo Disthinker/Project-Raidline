@@ -1,3 +1,67 @@
+# 当前：资源分配与需求界面 v1 已验收，正在交付
+
+用户已验收候选 **429a674f5e9f**，并明确授权提交、推送和合并。本轮只交付这一候选，不启动下一项开发。
+
+- task_id：ui-base-allocation；plan_version：RL-UI-BASE-ALLOCATION-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id与accepted_candidate_id均为RL-UI-BASE-ALLOCATION-v1-local-429a674f5e9f；acceptance_source：2026-10-21主控直接人类原文“资源分配与需求界面 v1 验收通过，请完成提交、推送和合并。”。
+- 已核对冻结源码、程序、固定入口、运行资源及所有无关修改。Windows完整2424/2424、专项38/38与原5项3ms检查通过；准确PR及main双平台CI待执行。
+- 分支codex/ui-base-allocation-v1，基线6e8f6f082f7b860f3f5990b1f7ba508411e5b0bd。交付仅含已验收的9项源码／构建／测试和3项记录；保留15份无关原脏文档。[任务记录](../exec-plans/active/ui-base-allocation-v1.md)。
+
+<details>
+<summary>验收前与历史记录</summary>
+
+# 当前：资源分配与需求界面 v1 待验收
+
+**候选 429a674f5e9f 已完成并冻结。** “概览、自动供给、基地愿望、加工建材”分为四个标签，授权和实际消耗分开操作，沿用原有规则。
+
+继续使用桌面 **Project Raidline Debug** 和原存档，按[简短试玩清单](../acceptance/ui-base-allocation-v1.md)验收。
+
+- task_id：ui-base-allocation；plan_version：RL-UI-BASE-ALLOCATION-v1；state：waiting_human_acceptance；pending_request：无。
+- candidate_id：RL-UI-BASE-ALLOCATION-v1-local-429a674f5e9f；accepted_candidate_id、acceptance_source：无；approval_source：本轮主控直接人类批准，完整原文见任务记录。
+- Windows Debug全目标构建、完整2424/2424与专项38/38通过，原2386项及5项3ms负载／门槛保持；84张离屏图已检查。
+- 分支codex/ui-base-allocation-v1，baseline／HEAD 6e8f6f082f7b860f3f5990b1f7ba508411e5b0bd；未提交源码和程序由冻结指纹识别。原修改、运行资源和固定入口保持，旧程序有检查点。
+- 未启动游戏、访问真实存档、提交、推送、合并或运行新远端CI。等待人工验收，不启动下一项。[任务记录](../exec-plans/active/ui-base-allocation-v1.md)。
+
+<details>
+<summary>方案与前序历史</summary>
+
+# 当前：资源分配与需求界面 v1 待批准
+
+策划已指定下一项 **RL-UI-BASE-ALLOCATION-v1**，主控已核查实际代码，方案待用户批准，尚未实施。
+
+页面拟拆成“概览、自动供给、基地愿望、加工建材”，让授权和实际扣物各自清楚。具体范围、原规则和验收办法见[开发方案](../exec-plans/active/ui-base-allocation-v1.md)。
+
+- task_id：ui-base-allocation；plan_version：RL-UI-BASE-ALLOCATION-v1；state：waiting_plan_approval；approval_source：无实施批准；candidate_id／accepted_candidate_id／acceptance_source：无。
+- baseline：main 6e8f6f082f7b860f3f5990b1f7ba508411e5b0bd，tree e44ac7f97ce33b73fa23435abde987507d3e2edf。原策划回复已核对四元组，pending_request为空。
+- 宿舍与休息v1已交付；实际代码与原程序、固定桌面入口和无关修改保持。本轮没有游戏源码修改、新构建、游戏启动、提交、推送或合并。
+
+<details>
+<summary>选题协调与已交付历史</summary>
+
+# 当前：下一项UI优化待策划
+
+宿舍与休息界面v1已完整交付。用户现要求安排下一项UI优化；本轮只做选题和具体方案，尚未批准实施。
+
+- task_id：ui-optimization-next；plan_version：RL-UI-NEXT-20261020-v2；state：awaiting_planner；approval_source：仅本次协调请求，无实现批准。
+- baseline：main 6e8f6f082f7b860f3f5990b1f7ba508411e5b0bd; tree e44ac7f97ce33b73fa23435abde987507d3e2edf；pending_request：MAIN-UI-NEXT-20261020-AFTER-DORMITORY-01；目标原策划线程019feff4-477c-75c2-bf31-3f09ff1e3891。
+- 实际代码仍为已验收宿舍候选，固定入口及所有原改动保持；不修改游戏源码、不运行游戏、不提交、推送或合并。
+- 当前请求与结果先记入[宿舍任务的独立协调节](../exec-plans/active/ui-base-dormitory-v1.md)，选题确认后另立可审批计划。
+
+<details>
+<summary>已交付状态与历史</summary>
+
+# 当前：宿舍与休息界面 v1 已交付
+
+已验收候选 **4f56407eca6e** 已完成提交、推送和普通合并。[PR186](https://github.com/Disthinker/Project-Raidline/pull/186)，main **6e8f6f0**。原桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- task_id：ui-base-dormitory；plan_version：RL-UI-BASE-DORMITORY-v1；state：delivered；candidate_id与accepted_candidate_id均为RL-UI-BASE-DORMITORY-v1-local-4f56407eca6e。
+- 提交6f69ade已推送；合并提交具有两个原始父提交，合并树等于已验收提交树。准确PR及main的Windows／Ubuntu均各 **2386/2386**；PR和主线双平台均首轮通过，3ms负载和门槛保持。
+- 只交付12项已验收文件；13份无关历史文档、五工作区原改动、资源、存档与固定入口保持。没有启动游戏或开始下一项开发。
+- 策划已在原持久线程只读确认交付；未安排或启动下一开发。[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)保留真实授权、Git／CI和保护证据。
+
+<details>
+<summary>验收、实施与前序交付历史</summary>
+
 # 当前：宿舍与休息界面 v1 已验收，正在交付
 
 用户已验收候选 **4f56407eca6e**，并明确授权提交、推送和合并。当前只交付这一候选；不启动下一项开发。
@@ -5,7 +69,7 @@
 - task_id：ui-base-dormitory；plan_version：RL-UI-BASE-DORMITORY-v1；state：accepted_pending_delivery；pending_request：无。
 - candidate_id与accepted_candidate_id均为RL-UI-BASE-DORMITORY-v1-local-4f56407eca6e；acceptance_source：2026-10-20主控线程直接人类原文“宿舍与休息界面 v1 验收通过，请完成提交、推送和合并。”。
 - 本地完整2386/2386和专项30/30通过，原3ms负载与门槛保持。验收源码、程序、固定入口、运行资源及原有修改核对保持。
-- 正在完成准确提交和合并提交的双平台CI；Git与最终结果见[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)。
+- 已提交并推送6f69ade，[PR186](https://github.com/Disthinker/Project-Raidline/pull/186)已普通合并为6e8f6f0；合并树等于验收提交树。准确PR双平台各2386/2386通过，准确main CI 39440490313运行中；最终交付检查尚未结束。[任务记录](../exec-plans/active/ui-base-dormitory-v1.md)保留证据。
 
 <details>
 <summary>验收、实施与前序历史</summary>
@@ -1341,6 +1405,16 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 
