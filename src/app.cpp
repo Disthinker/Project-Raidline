@@ -2892,6 +2892,7 @@ void App::updateBase(float deltaTime)
         resetBaseSupplyUi();
         resetBaseMedicalUi();
         resetBaseDormitoryUi();
+        resetBaseAllocationUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
@@ -2967,6 +2968,7 @@ void App::updateBase(float deltaTime)
             resetBaseMedicalUi();
             resetBaseWorkshopUi();
             resetBaseDormitoryUi();
+        resetBaseAllocationUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -2981,6 +2983,9 @@ void App::updateBase(float deltaTime)
             profileAssetSelection_->orientation = rotatedClockwise(
                 profileAssetSelection_->orientation);
         }
+        auto allocationEvents = std::move(pendingAllocationEvents_);
+        pendingAllocationEvents_.clear();
+        for (const auto &event : allocationEvents) handleBaseAllocationEvent(event);
         // Move the queue: closing the panel may clear its member queue.
         auto supplyEvents = std::move(pendingSupplyEvents_);
         pendingSupplyEvents_.clear();
@@ -3534,277 +3539,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         return;
     }
 
-    if (*facility == BaseFacilityKind::Allocation)
-    {
-        const auto focus = gameSession_.profile().basePriority.focus;
-        if (!focus) baseWishFocusFilter_ = false;
-        const std::vector<BasePriorityProjection> wishes =
-            projectBasePriorities(
-                gameSession_.profile(), publishedContentRegistry());
-        if (selectedBasePriorityIndex_ >= wishes.size())
-        {
-            selectedBasePriorityIndex_ = 0U;
-            selectedBasePriorityAssetIds_.clear();
-        }
-        for (std::size_t index{}; index < wishes.size(); ++index)
-        {
-            const SDL_FRect wishRow{
-                650.0F,
-                156.0F + static_cast<float>(index) * 44.0F,
-                500.0F,
-                38.0F};
-            if (contains(wishRow, click.position))
-            {
-                selectedBasePriorityIndex_ = index;
-                baseWishFocusFilter_ = false;
-                selectedBasePriorityAssetIds_.clear();
-                selectedBaseSupplyCategory_ = wishes[index].category;
-                baseSupplyPage_ = 0U;
-                profileAssetSelection_.reset();
-                uiMessage_ = wishes[index].fulfilled
-                    ? "BASE WISH ALREADY FULFILLED"
-                    : "BASE WISH SELECTED | CHOOSE CONTRIBUTION ITEMS";
-                return;
-            }
-        }
-        const SDL_FRect focusButton{80.0F, 626.0F, 148.0F, 30.0F};
-        const SDL_FRect cancelFocusButton{236.0F, 626.0F, 148.0F, 30.0F};
-        const SDL_FRect filterButton{392.0F, 626.0F, 148.0F, 30.0F};
-        if (contains(focusButton, click.position) || contains(cancelFocusButton, click.position))
-        {
-            std::optional<BaseWishInstanceId> nextFocus;
-            if (contains(focusButton, click.position))
-            {
-                if (wishes.empty()) return;
-                nextFocus = BaseWishInstanceId{gameSession_.profile().basePriority.cycleIndex,
-                    wishes[selectedBasePriorityIndex_].definitionId};
-            }
-            const auto receipt = gameSession_.executeBaseWishFocus(nextFocus,
-                nextProfileTransactionId("wish-focus"));
-            uiMessage_ = receipt.succeeded ? "WISH FOCUS SAVED" : receipt.message;
-            if (receipt.succeeded) baseWishFocusFilter_ = false;
-            gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-            return;
-        }
-        if (contains(filterButton, click.position))
-        {
-            if (!focus) { uiMessage_ = "No active wish focus"; return; }
-            baseWishFocusFilter_ = !baseWishFocusFilter_;
-            selectedBaseSupplyCategory_ = publishedContentRegistry().basePriority(focus->definitionId).category;
-            const auto focused = std::find_if(wishes.begin(), wishes.end(),
-                [&](const auto &wish) { return wish.definitionId == focus->definitionId; });
-            selectedBasePriorityIndex_ = static_cast<std::size_t>(focused - wishes.begin());
-            selectedBasePriorityAssetIds_.clear();
-            profileAssetSelection_.reset();
-            baseSupplyPage_ = 0U;
-            return;
-        }
-        constexpr std::array<BaseSupplyCategory, 4> categories{
-            BaseSupplyCategory::Food,
-            BaseSupplyCategory::Medical,
-            BaseSupplyCategory::Recreation,
-            BaseSupplyCategory::Security};
-        for (std::size_t index{}; index < categories.size(); ++index)
-        {
-            const SDL_FRect tab{
-                650.0F + static_cast<float>(index) * 126.0F,
-                300.0F,
-                120.0F,
-                34.0F};
-            if (contains(tab, click.position))
-            {
-                baseWishFocusFilter_ = false;
-                selectedBaseSupplyCategory_ = categories[index];
-                baseSupplyPage_ = 0U;
-                profileAssetSelection_.reset();
-                selectedBasePriorityAssetIds_.clear();
-                uiMessage_.clear();
-                return;
-            }
-        }
-
-        const auto allocation = baseSupplyDefinitions(
-            gameSession_.profile(), selectedBaseSupplyCategory_, baseWishFocusFilter_);
-        constexpr std::size_t entriesPerPage{5U};
-        const std::size_t pageCount = allocation.empty()
-            ? 1U
-            : 1U + (allocation.size() - 1U) / entriesPerPage;
-        baseSupplyPage_ = std::min(baseSupplyPage_, pageCount - 1U);
-        const SDL_FRect previousPage{650.0F, 540.0F, 64.0F, 18.0F};
-        const SDL_FRect nextPage{1086.0F, 540.0F, 64.0F, 18.0F};
-        if (contains(previousPage, click.position))
-        {
-            if (baseSupplyPage_ > 0U)
-                --baseSupplyPage_;
-            return;
-        }
-        if (contains(nextPage, click.position))
-        {
-            if (baseSupplyPage_ + 1U < pageCount)
-                ++baseSupplyPage_;
-            return;
-        }
-        const std::size_t first = baseSupplyPage_ * entriesPerPage;
-        for (std::size_t visibleIndex{};
-             visibleIndex < entriesPerPage &&
-             first + visibleIndex < allocation.size();
-             ++visibleIndex)
-        {
-            const std::size_t index = first + visibleIndex;
-            const SDL_FRect row{
-                650.0F,
-                344.0F + static_cast<float>(visibleIndex) * 40.0F,
-                500.0F,
-                34.0F};
-            if (contains(row, click.position))
-            {
-                const BaseSupplyDefinitionProjection &projection =
-                    allocation[index];
-                if (projection.firstAssetId.has_value())
-                {
-                    const AssetRecord *asset = gameSession_.profile().assets.find(
-                        *projection.firstAssetId);
-                    profileAssetSelection_ = asset == nullptr
-                        ? std::nullopt
-                        : std::optional<ProfileAssetSelection>{
-                              ProfileAssetSelection{
-                                  asset->instanceId, 0, asset->orientation}};
-                }
-                else
-                {
-                    profileAssetSelection_.reset();
-                }
-                const SDL_FRect check{
-                    row.x + 8.0F, row.y + 7.0F, 20.0F, 20.0F};
-                if (!contains(check, click.position))
-                {
-                    if (wishes.empty() ||
-                        wishes[selectedBasePriorityIndex_].fulfilled ||
-                        wishes[selectedBasePriorityIndex_].category !=
-                            selectedBaseSupplyCategory_ ||
-                        projection.assetIds.empty())
-                    {
-                        uiMessage_ = projection.assetIds.empty()
-                            ? "SUPPLY RULE HAS NO CURRENT ITEM"
-                            : "SELECT AN ACTIVE WISH WITH THIS CATEGORY";
-                        return;
-                    }
-                    const bool allSelected = std::all_of(
-                        projection.assetIds.begin(),
-                        projection.assetIds.end(),
-                        [this](AssetInstanceId id) {
-                            return selectedBasePriorityAssetIds_.contains(id);
-                        });
-                    for (AssetInstanceId id : projection.assetIds)
-                    {
-                        if (allSelected)
-                            selectedBasePriorityAssetIds_.erase(id);
-                        else
-                            selectedBasePriorityAssetIds_.insert(id);
-                    }
-                    uiMessage_ = allSelected
-                        ? "WISH CONTRIBUTION ITEMS REMOVED"
-                        : "WISH CONTRIBUTION ITEMS SELECTED";
-                    return;
-                }
-                const std::optional<BaseSupplyCategory> next =
-                    projection.assignedToSelectedCategory
-                        ? std::nullopt
-                        : std::optional<BaseSupplyCategory>{
-                              selectedBaseSupplyCategory_};
-                const BaseSupplyAssignmentReceipt receipt =
-                    gameSession_.executeBaseSupplyAssignment(
-                        projection.definition->definitionId,
-                        next,
-                        nextProfileTransactionId("base-supply-policy"));
-                uiMessage_ = receipt.succeeded
-                    ? (next.has_value()
-                        ? "AUTOMATIC BASE SUPPLY ENABLED"
-                        : "AUTOMATIC BASE SUPPLY DISABLED")
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-                return;
-            }
-        }
-
-        const SDL_FRect materialButton{650.0F, 604.0F, 230.0F, 42.0F};
-        const SDL_FRect priorityButton{920.0F, 604.0F, 230.0F, 42.0F};
-        if (!contains(materialButton, click.position) &&
-            !contains(priorityButton, click.position))
-        {
-            return;
-        }
-        if (contains(priorityButton, click.position))
-        {
-            if (wishes.empty() ||
-                selectedBasePriorityIndex_ >= wishes.size())
-            {
-                uiMessage_ = "BASE WISH IS NOT AVAILABLE";
-                return;
-            }
-            const BasePriorityReceipt receipt =
-                gameSession_.executeBasePrioritySubmission(
-                    wishes[selectedBasePriorityIndex_].definitionId,
-                    std::vector<AssetInstanceId>{
-                        selectedBasePriorityAssetIds_.begin(),
-                        selectedBasePriorityAssetIds_.end()},
-                    nextProfileTransactionId("fulfill-base-priority"));
-            uiMessage_ = receipt.succeeded
-                ? "BASE WISH FULFILLED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-                selectedBasePriorityAssetIds_.clear();
-            }
-            return;
-        }
-        if (!profileAssetSelection_.has_value())
-        {
-            uiMessage_ = "SELECT AN OWNED SUPPLY ITEM FIRST";
-            gameAudio_.play(SoundEventId::UiDeny);
-            return;
-        }
-        const AssetInstanceId selectedId =
-            profileAssetSelection_->instanceId;
-        const AssetRecord *selected =
-            gameSession_.profile().assets.find(selectedId);
-        if (selected == nullptr ||
-            !assetIsBaseAccessible(
-                gameSession_.profile(), selected->instanceId))
-        {
-            profileAssetSelection_.reset();
-            uiMessage_ = "SELECT AN OWNED SUPPLY ITEM FIRST";
-            return;
-        }
-        if (contains(materialButton, click.position))
-        {
-            const ConstructionMaterialReceipt receipt =
-                gameSession_.executeConstructionMaterialContribution(
-                    selectedId,
-                    nextProfileTransactionId(
-                        "process-construction-material"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format(
-                    "ITEM PROCESSED | CONSTRUCTION MATERIAL +{}",
-                    receipt.materialUnits)
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
-            return;
-        }
-        return;
-    }
+    // Allocation owns its native down/up queue; no down-only transaction route.
+    if (*facility == BaseFacilityKind::Allocation) return;
 
     // Workshop owns the native down/up queue.
     if (*facility == BaseFacilityKind::Workshop) return;
@@ -5426,6 +5162,7 @@ void App::processEvents()
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
     pendingSupplyEvents_.clear();
+    pendingAllocationEvents_.clear();
     pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear(); pendingDormitoryEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
@@ -5455,8 +5192,11 @@ void App::processEvents()
         }
         if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
         input_.handleEvent(event);
+        if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+            allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+        }
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
         }
         if((medicalWheelOpen_ || throwableWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
             const auto count=medicalWheelOpen_?medicalWheelOptions_.size():throwableWheelOptions_.size();
@@ -5488,7 +5228,7 @@ void App::processEvents()
                 systemCursorHidden_ = false;
             }
             supplyUi_.press.reset();
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
             pendingSupplyEvents_.clear();
@@ -6024,6 +5764,19 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Allocation)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingAllocationEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiAllocationEventKind::Down : UiAllocationEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingAllocationEvents_.push_back({UiAllocationEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingAllocationEvents_.push_back({UiAllocationEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Dormitory)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
@@ -6267,6 +6020,14 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Allocation) {
+        if (allocationProjectionRevision_ || allocationUi_.press || !pendingAllocationEvents_.empty()) resetBaseAllocationUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || developerWeaponPanelBlocksGameplayThisFrame_ ||
+        inventoryOverlayState_.isOpen() || !windowHasInputFocus_ || baseSiegeWarningVisible() ||
+        gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked() || baseDefenseResultVisible_) {
+        allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+    }
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Dormitory) {
         if (dormitoryProjectionRevision_ || dormitoryUi_.press || !pendingDormitoryEvents_.empty()) resetBaseDormitoryUi();
     }
@@ -6284,7 +6045,7 @@ void App::update(float deltaTime)
         if (medicalProjectionRevision_ || medicalUi_.press || !pendingMedicalEvents_.empty()) resetBaseMedicalUi();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
-        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear();
+        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_ ||
         (!inventoryWeaponComponentsOpen_ && !weaponComponentsOpen_)) componentPress_.reset();
@@ -14722,7 +14483,7 @@ void App::refreshDeveloperPerformanceOverlay()
         pacing, simulation, navigation, collision};
 }
 
-void App::renderBaseAllocation()
+void App::renderBaseKitchenWater()
 {
     if (!gameSession_.profile().basePriority.focus) baseWishFocusFilter_ = false;
     const SDL_FRect panel{40.0F, 70.0F, 1200.0F, 636.0F};
@@ -16154,7 +15915,7 @@ void App::renderBase()
             renderBaseDormitory();
             break;
         case BaseFacilityKind::KitchenWater:
-            renderBaseAllocation();
+            renderBaseKitchenWater();
             break;
         case BaseFacilityKind::Workshop:
             renderBaseWorkshop();

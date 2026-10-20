@@ -1427,3 +1427,22 @@ TEST(UiLocalizationTest, DormitoryRestPreviewAndResultsAreCompleteChinese) {
     EXPECT_EQ(localizeUiText(cn,"CLOSE DORMITORY"),"关闭");
     EXPECT_EQ(localizeUiText(cn,"DAY {}"),"第{}天");
 }
+
+TEST(UiLocalizationTest, AllocationTabsAndExplicitConsumptionControlsAreChinese) {
+    for (const auto key : {"ALLOCATION OVERVIEW", "AUTO SUPPLY", "BASE WISHES", "BUILD MATERIALS",
+        "ALLOW AUTO USE", "STOP AUTO USE", "CONFIRM WISH ITEMS", "CONFIRM PROCESSING",
+        "WHOLE STACKS - EXCESS IS NOT RETURNED", "TYPE POLICY - ITEMS STAY PUT UNTIL DAILY USE",
+        "ESTIMATE USES CURRENT STOCK AND AUTHORIZATION ONLY", "LAST DAILY GAP",
+        "ALLOCATION MORALE LOW", "ALLOCATION MORALE HIGH", "ALLOCATION MORALE STABLE",
+        "ALLOCATION TREND FALLING", "ALLOCATION TREND RISING", "ALLOCATION TREND STEADY"}) {
+        EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, key), key) << key;
+        EXPECT_EQ(localizeUiText(UiLanguage::English, key), key);
+    }
+}
+TEST(UiLocalizationTest, AllocationFailuresKeepTheFullReasonAndExistingEntryName) {
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "ALLOCATION & NEEDS"), "资源分配与需求");
+    for (const auto key : {"selected items do not provide enough contribution",
+        "a non-empty container cannot become construction material", "Wish focus is no longer active",
+        "ALLOCATION PLAN CHANGED - CHECK AND CLICK AGAIN", "Base construction material storage is full"})
+        EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, key), key) << key;
+}

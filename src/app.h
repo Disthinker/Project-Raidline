@@ -35,6 +35,7 @@
 #include "ui_base_medical_presentation.h"
 #include "ui_base_workshop_presentation.h"
 #include "ui_base_dormitory_presentation.h"
+#include "ui_base_allocation_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -162,6 +163,7 @@ private:
     friend struct UiBaseMedicalTestAccess;
     friend struct UiBaseWorkshopTestAccess;
     friend struct UiBaseDormitoryTestAccess;
+    friend struct UiBaseAllocationTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -225,6 +227,15 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
+    UiAllocationState allocationUi_;
+    UiAllocationProjection allocationProjection_;
+    std::optional<ProfileRevision> allocationProjectionRevision_;
+    std::string allocationViewKey_, allocationFeedback_;
+    std::uint64_t allocationProjectionGeneration_{};
+    std::vector<UiAllocationEvent> pendingAllocationEvents_;
+    void resetBaseAllocationUi();
+    void refreshBaseAllocationUi(bool force = false);
+    void handleBaseAllocationEvent(const UiAllocationEvent &);
     UiDormitoryState dormitoryUi_;
     UiDormitoryProjection dormitoryProjection_;
     std::optional<ProfileRevision> dormitoryProjectionRevision_;
@@ -650,6 +661,7 @@ private:
     void handleWeaponComponentsEvent(UiComponentEventKind, Vec2, int delta = 0);
     void renderBaseSupply();
     void renderBaseAllocation();
+    void renderBaseKitchenWater();
     void renderBaseMedicalService();
     void renderBaseDormitory();
     void renderBaseWorkshop();
