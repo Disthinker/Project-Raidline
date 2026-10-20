@@ -223,7 +223,7 @@ TEST_F(UiBaseSupplyTest, FullStashPreservesLegacyHeldWeaponAndJob) {
 }
 TEST_F(UiBaseSupplyTest, ComponentRoundTripClearsSelectionAndDoesNotTrade) {
     select(alpha_content::ammunition);const auto before=profileStateFingerprint(profile());control(Control::Components);ASSERT_TRUE(A::components(*app));
-    draw("components");click({860,92,340,32});EXPECT_FALSE(A::components(*app));EXPECT_FALSE(A::state(*app).selection);
+    draw("components");click(uiComponentControl(UiComponentControl::Back));EXPECT_FALSE(A::components(*app));EXPECT_FALSE(A::state(*app).selection);
     pointer(center(uiBaseSupplyControlRect(Control::Main)),false);A::frame(*app);EXPECT_EQ(profileStateFingerprint(profile()),before);
 }
 TEST_F(UiBaseSupplyTest, InstalledComponentsAreIncludedInWholeWeaponRecycleValueOnce) {

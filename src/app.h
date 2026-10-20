@@ -31,6 +31,7 @@
 #include "ui_quick_wheel_presentation.h"
 #include "ui_quick_wheel_backdrop.h"
 #include "ui_base_supply_presentation.h"
+#include "ui_weapon_components_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -154,6 +155,7 @@ private:
     friend struct UiItemContextTestAccess;
     friend struct UiQuickWheelTestAccess;
     friend struct UiBaseSupplyTestAccess;
+    friend struct UiWeaponComponentsTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -591,12 +593,26 @@ private:
     WeaponComponentSlot componentSlot_{WeaponComponentSlot::Barrel};
     std::size_t componentWeaponPage_{};
     std::size_t componentChoicePage_{};
+    bool componentActionSelected_{};
+    std::optional<UiComponentHit> componentPress_;
+    int componentDetailScroll_{};
+    UiWeaponComponentsProjection componentRows_;
+    std::optional<ProfileRevision> componentRowsRevision_;
+    std::string componentRowsProfile_;
+    AssetInstanceId componentRowsWeapon_{};
+    WeaponComponentSlot componentRowsSlot_{};
+    UiLanguage componentRowsLanguage_{};
     std::optional<WeaponComponentPlan> componentPreview_;
     WeaponComponentCommand componentPreviewCommand_;
     std::string componentPreviewProfile_;
     const WeaponComponentPlan &weaponComponentPreview();
     void renderWeaponComponents();
-    void handleWeaponComponentsClick(MousePosition position);
+    void clearWeaponComponentAction();
+    void resetWeaponComponentsUi();
+    bool openWeaponComponentsUi(AssetInstanceId id = 0);
+    void closeWeaponComponentsUi();
+    void refreshWeaponComponents(bool force = false);
+    void handleWeaponComponentsEvent(UiComponentEventKind, Vec2, int delta = 0);
     void renderBaseSupply();
     void renderBaseAllocation();
     void renderBaseMedicalService();

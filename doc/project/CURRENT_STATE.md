@@ -1,12 +1,68 @@
-# 当前：供应与回收界面 v1 已验收，交付进行中
+# 当前：武器组件改装界面 v1 已验收，正在交付
 
-用户已验收候选 **536582b5da36**，并明确授权提交、推送和合并。当前只交付本任务，保留原桌面 **Project Raidline Debug**、程序和其他未提交修改。
+用户已验收候选 **b78d1d0595b6**，并明确授权提交、推送和合并。当前正核对并交付这一个候选；不会启动下一项开发。
 
-- `task_id=ui-base-supply`；`plan_version=RL-UI-BASE-SUPPLY-v1`；`state=accepted_delivery_in_progress`。
-- `candidate_id=RL-UI-BASE-SUPPLY-v1-local-536582b5da36`；`accepted_candidate_id=RL-UI-BASE-SUPPLY-v1-local-536582b5da36`。
-- `acceptance_source=2026-10-19主控线程直接人类指示`；原文：“供应与回收 v1 验收通过，请完成提交、推送和合并。”
-- 已验收源码与程序未变；Windows本地完整2281/2281及28项定向通过，原四项3ms门槛保持。接下来核对准确提交双平台CI、普通合并树和主线CI；尚未声称远端已完成。
-- 分支 `codex/ui-base-supply-v1`，已验收基线 main `5a834e4`。不启动游戏或下一项开发。
+- task_id：ui-weapon-components；plan_version：RL-UI-WEAPON-COMPONENTS-v1；state：accepted_pending_delivery。
+- candidate_id与accepted_candidate_id均为RL-UI-WEAPON-COMPONENTS-v1-local-b78d1d0595b6；acceptance_source：2026-10-20主控线程直接人类原文“武器改装界面 v1 验收通过，请完成提交、推送和合并。”。
+- 本地完整2306/2306、最终改装专项25/25和原3ms检查通过。源码、已验收程序、资源、固定入口及无关修改核对保持。
+- 当前尚未完成本次Git交付与新远端CI，不能记为已合并。[任务记录](../exec-plans/active/ui-weapon-components-v1.md)保留授权与交付证据。
+
+<details>
+<summary>冻结候选、实施和前序交付历史</summary>
+
+# 当前：武器组件改装界面统一 v1，待验收
+
+**候选 b78d1d0595b6 已完成并冻结。** 三栏改装页统一两个原入口；先选操作、看属性和完整返还清单，再明确确认，浏览不自动拆件。
+
+继续打开桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-weapon-components-v1.md)复验。原存档、玩法、已验收UI和入口保持，暂不提交、推送或合并。
+
+- task_id：ui-weapon-components；plan_version：RL-UI-WEAPON-COMPONENTS-v1；state：waiting_human_acceptance。
+- approval_source：2026-10-20主控线程直接人类批准；candidate_id：RL-UI-WEAPON-COMPONENTS-v1-local-b78d1d0595b6；accepted_candidate_id、acceptance_source均为无。
+- Windows Debug全目标构建、完整 **2306/2306** 和最终改装专项 **25/25** 通过；原2281项及3ms负载／门槛保持。三档窗口和中英文63张离屏图已检查；正常游玩未代做。
+- 分支codex/ui-weapon-components-v1，HEAD038a073是基线；未提交候选以冻结源码与程序识别。五工作区原修改、原资源与固定入口核对通过，旧程序另有检查点。
+- 未启动游戏、未访问真实存档；未提交、推送、合并，也没有新远端CI或下一任务。具体指纹、实际授权和检查边界见[任务记录](../exec-plans/active/ui-weapon-components-v1.md)。
+
+<details>
+<summary>实施、规划及前序交付历史</summary>
+
+# 当前：武器组件改装界面统一 v1，实施中
+
+用户已批准 **RL-UI-WEAPON-COMPONENTS-v1**。正在实施统一改装页、明确选择与预览、完整拆卸返还和一次确认；保留原规则、存档、固定入口及3ms门槛，暂不提交、推送或合并。
+
+- task_id：ui-weapon-components；plan_version：RL-UI-WEAPON-COMPONENTS-v1；state：in_progress。
+- approval_source：2026-10-20主控线程直接人类批准，原文见[任务记录](../exec-plans/active/ui-weapon-components-v1.md)。candidate_id、accepted_candidate_id和acceptance_source均为无。
+- 实际分支codex/ui-weapon-components-v1，基于已验收main038a073；继续复用原开发目录和桌面Project Raidline Debug。
+- 正在开发与验证，尚无新候选可验收。没有启动游戏或访问真实存档；五工作区原修改及上一已验收程序均有保护检查点。
+
+<details>
+<summary>规划及前序交付历史</summary>
+
+# 当前：武器组件改装界面统一 v1，待批准
+
+策划已选定 **RL-UI-WEAPON-COMPONENTS-v1**，主控已核查代码：统一两个改装入口，先看当前装配、属性变化和完整返还清单，再明确确认。尚未选择操作时不自动恢复默认结构。
+
+**下一步：用户批准方案后再实施。** 当前仍使用已验收的供应与回收v1程序及原桌面 **Project Raidline Debug**。
+
+- task_id：ui-weapon-components；plan_version：RL-UI-WEAPON-COMPONENTS-v1；state：waiting_plan_approval。
+- approval_source：无；本轮人类原文“请协调策划线程给出下一步优化方案”仅授权协调与规划。candidate_id、accepted_candidate_id、acceptance_source均为无。
+- 已验收基线main **038a073**（PR182），准确PR及主线双平台各2281/2281首轮通过。实际源码HEAD **713acfe**与main树相等；本轮fetch复核无变化。
+- 原策划线程有效回复四元组已核对，pending_request：无。游戏源码、程序、入口、资源、存档和五个相关工作区原修改保持；本轮未构建、测试、启动游戏或进行提交／推送／合并。
+
+[具体方案](../exec-plans/active/ui-weapon-components-v1.md)列明界面、操作、范围、验收及策划证据。保留已验收UI／玩法、原存档、固定入口和原四项3ms负载与门槛。
+
+<details>
+<summary>上一项已交付状态与历史</summary>
+
+# 当前：供应与回收界面 v1 已交付
+
+用户验收的候选 **536582b5da36** 已完成提交、推送和普通合并。[PR182](https://github.com/Disthinker/Project-Raidline/pull/182)，main **038a073**。桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- `task_id=ui-base-supply`；`plan_version=RL-UI-BASE-SUPPLY-v1`；`state=delivered`；candidate_id和accepted_candidate_id均为`RL-UI-BASE-SUPPLY-v1-local-536582b5da36`。
+- 提交`713acfe`已推送；普通合并提交`038a073`具有原始两个父提交，合并树等于已验收提交树。准确PR及合并提交的Windows／Ubuntu均各 **2281/2281**，均首轮通过；原四项3ms门槛保持。
+- 本任务13项文件交付；5份无关历史文档及其他工作区修改保留，旧文档换行恢复已核对。没有启动游戏、访问真实存档或开始下一任务。
+- 策划已在原持久线程只读确认交付（delivery_synced_readonly）；未安排或启动下一任务、未生产新资源。
+
+[任务记录](../exec-plans/active/ui-base-supply-v1.md)保留实际人类授权、候选指纹、Git／CI和保护证据。
 
 <details>
 <summary>上一项已交付状态与历史</summary>
@@ -1108,3 +1164,11 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
+
+</details>

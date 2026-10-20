@@ -5,7 +5,6 @@
 namespace {
 using Control = UiBaseSupplyControl;
 using Tab = UiBaseSupplyTab;
-constexpr SDL_FRect componentBack{860, 92, 340, 32};
 const char *tabName(Tab tab) {
     switch (tab) {
     case Tab::Purchase: return "BUY";
@@ -36,6 +35,7 @@ void App::refreshBaseSupplyRows(bool force) {
 }
 void App::resetBaseSupplyUi() {
     supplyUi_.reset(); pendingSupplyEvents_.clear(); supplyRows_.clear(); supplyRowsRevision_.reset();
+    if (weaponComponentsOpen_) resetWeaponComponentsUi();
     weaponComponentsOpen_ = false;
 }
 void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
@@ -44,16 +44,10 @@ void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
         supplyUi_.press.reset(); return;
     }
     if (weaponComponentsOpen_) {
-        if (event.kind == UiBaseSupplyEventKind::Down) {
-            supplyUi_.press.reset();
-            if (uiContains(componentBack, event.position)) supplyUi_.press = UiBaseSupplyHit{Control::Components};
-            else handleWeaponComponentsClick({event.position.x, event.position.y});
-        } else if (event.kind == UiBaseSupplyEventKind::Up) {
-            const bool back = supplyUi_.press && supplyUi_.press->control == Control::Components && uiContains(componentBack, event.position);
-            supplyUi_.press.reset();
-            if (back) { weaponComponentsOpen_ = false; supplyUi_.selection.reset(); supplyRowsRevision_.reset(); uiMessage_.clear(); }
-        } else if (event.kind == UiBaseSupplyEventKind::Move && !uiContains(componentBack, event.position)) supplyUi_.press.reset();
-        else if (event.kind == UiBaseSupplyEventKind::Wheel) supplyUi_.press.reset();
+        const auto kind = event.kind == UiBaseSupplyEventKind::Down ? UiComponentEventKind::Down :
+            event.kind == UiBaseSupplyEventKind::Up ? UiComponentEventKind::Up :
+            event.kind == UiBaseSupplyEventKind::Move ? UiComponentEventKind::Move : UiComponentEventKind::Wheel;
+        handleWeaponComponentsEvent(kind, event.position, event.pageDelta);
         return;
     }
     // Input is infrequent; re-read sources even if an outside caller failed to bump revision.
@@ -86,8 +80,7 @@ void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
     case Control::Close:
         gameFlow_.closeBaseFacility(); resetBaseSupplyUi(); uiMessage_.clear(); input_.suppressPrimaryPointerUntilRelease(); break;
     case Control::Components:
-        supplyUi_.selection.reset(); weaponComponentsOpen_ = true; componentWeapon_ = componentChoice_ = 0;
-        componentWeaponPage_ = componentChoicePage_ = 0; uiMessage_.clear(); break;
+        supplyUi_.selection.reset(); openWeaponComponentsUi(); weaponComponentsOpen_ = true; break;
     case Control::Relief: {
         if (!isReliefEligible(gameSession_.profile(), publishedContentRegistry())) return;
         const auto receipt = gameSession_.executeProfileEconomy(ClaimReliefCommand{nextProfileTransactionId("relief-batch")}, nextProfileTransactionId("claim-relief"));
