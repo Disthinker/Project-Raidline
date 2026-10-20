@@ -82,11 +82,11 @@ TEST_F(WeaponInventoryUiTest, EquippedWeaponDetailsEscapeAndOutsideClickPreserve
 TEST_F(WeaponInventoryUiTest, InventoryModificationInstallsSelectedWeaponAndReturnsWithoutClickThrough) {
     openMenu(); choose(UiItemAction::ModifyWeapon); ASSERT_TRUE(A::modifying(*app)); EXPECT_EQ(A::weapon(*app),weapon);
     const auto part=find(profile(),"item.component.precision_barrel");
-    tap(420,260); // first component after restore-default row
-    tap(800,565);
+    const auto row=uiComponentChoiceRow(1); tap(row.x+row.w/2,row.y+row.h/2);
+    const auto confirm=uiComponentControl(UiComponentControl::Confirm); tap(confirm.x+confirm.w/2,confirm.y+confirm.h/2);
     const auto *location=std::get_if<InstalledWeaponComponentLocation>(&profile().assets.find(part)->location);
     ASSERT_NE(location,nullptr); EXPECT_EQ(location->weaponAssetId,weapon);
-    tap(900,105); EXPECT_FALSE(A::modifying(*app)); EXPECT_TRUE(A::inventory(*app));
+    const auto back=uiComponentControl(UiComponentControl::Back); tap(back.x+back.w/2,back.y+back.h/2); EXPECT_FALSE(A::modifying(*app)); EXPECT_TRUE(A::inventory(*app));
     openMenu(); choose(UiItemAction::ModifyWeapon); ASSERT_TRUE(A::modifying(*app));
     key(SDL_SCANCODE_TAB); frame(); EXPECT_FALSE(A::inventory(*app)); EXPECT_FALSE(A::modifying(*app));
     EXPECT_FALSE(A::flow(*app).baseWorld().shotFiredLastUpdate());
