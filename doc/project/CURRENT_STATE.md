@@ -1,3 +1,61 @@
+# 当前：工坊与生产界面 v1 已验收，正在交付
+
+用户已验收候选 **4776679498cf**，并明确授权提交、推送和合并。当前只交付这一候选；不启动下一项开发。
+
+- task_id：ui-base-workshop；plan_version：RL-UI-BASE-WORKSHOP-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id与accepted_candidate_id均为RL-UI-BASE-WORKSHOP-v1-local-4776679498cf；acceptance_source：2026-10-20主控线程直接人类原文“工坊与生产界面 v1 验收通过，请完成提交、推送和合并。”。
+- 本地完整2356/2356和专项24/24通过，原3ms负载与门槛保持。验收源码、程序、固定入口、运行资源及原有修改核对保持。
+- 正在完成准确提交和合并提交的双平台CI；Git与最终结果见[任务记录](../exec-plans/active/ui-base-workshop-v1.md)。
+
+<details>
+<summary>验收、实施与前序历史</summary>
+
+# 当前：工坊与生产界面 v1，待验收
+
+**候选4776679498cf已完成并冻结。** 配方、材料和订单状态分区显示，取消独立操作；保留完成后自动入库、满仓领取和原生产规则。
+
+继续打开桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-base-workshop-v1.md)验收。原存档和入口保持，原验收程序有检查点。
+
+- task_id：ui-base-workshop；plan_version：RL-UI-BASE-WORKSHOP-v1；state：waiting_human_acceptance；approval_source：2026-10-20直接人类批准；accepted_candidate_id、acceptance_source：无。
+- candidate_id：RL-UI-BASE-WORKSHOP-v1-local-4776679498cf；Windows Debug全目标构建、完整2356/2356与专项24/24通过，原5项3ms检查保持；54张离屏图与6张总览图已检查。
+- 分支codex/ui-base-workshop-v1，HEADe5acabd仅为基线；源码与程序由冻结指纹识别。原修改、资源、DLL及唯一固定入口保持。
+- 未启动游戏、访问真实存档、提交、推送或合并；本候选尚无新远端CI。[任务记录](../exec-plans/active/ui-base-workshop-v1.md)保留详细证据。
+
+<details><summary>实施、规划及前序历史</summary>
+
+# 当前：工坊与生产界面 v1，实施中
+
+用户已批准 **RL-UI-BASE-WORKSHOP-v1**。正在统一配方、材料、订单状态和点击反馈；保留自动入库、满仓领取、原存档、固定入口及3ms门槛。
+
+- task_id：ui-base-workshop；state：in_progress；approval_source：2026-10-20直接人类批准“同意该方案，请按其进行下一步开发”。
+- 分支codex/ui-base-workshop-v1，HEADe5acabd；新候选尚未完成。[任务记录](../exec-plans/active/ui-base-workshop-v1.md)。
+- 暂不提交、推送或合并；不启动游戏或接触真实存档。原桌面Project Raidline Debug保持。
+
+<details><summary>规划及前序历史</summary>
+
+# 当前：工坊与生产界面 v1，待批准
+
+策划建议下一项做 **RL-UI-BASE-WORKSHOP-v1**：分开配方、材料与订单状态，取消操作独立显示，保留完成后自动入库和满仓领取。[具体方案](../exec-plans/active/ui-base-workshop-v1.md)已完成代码核查，**尚未实施**。
+
+- task_id：ui-base-workshop；plan_version：RL-UI-BASE-WORKSHOP-v1；state：waiting_plan_approval；approval_source：无；本任务尚无新候选。
+- 已验收主线仍为e5acabd（PR184），原桌面 **Project Raidline Debug**、存档、UI／玩法及3ms门槛保持。
+- 原策划线程及请求四元组已核对，pending_request：无。本轮只更新规划文档；未改代码、构建、运行游戏或执行新提交／推送／合并。
+
+<details>
+<summary>上一项交付与前序历史</summary>
+
+# 当前：基地医疗服务界面 v1 已交付
+
+已验收候选 **ca3193985573** 已完成提交、推送和普通合并。[PR184](https://github.com/Disthinker/Project-Raidline/pull/184)，main **e5acabd**。原桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- task_id：ui-base-medical；plan_version：RL-UI-BASE-MEDICAL-v1；state：delivered；candidate_id与accepted_candidate_id均为RL-UI-BASE-MEDICAL-v1-local-ca3193985573。
+- 提交765ab58已推送；合并提交具有两个原始父提交，合并树等于已验收提交树。准确PR及main的Windows／Ubuntu均各 **2332/2332**；PR和主线双平台均首轮通过，3ms负载和门槛保持。
+- 只交付12项已验收文件；9份无关历史文档、五工作区原改动、资源、存档与固定入口保持。没有启动游戏或开始下一项开发。
+- 策划已在原持久线程只读确认交付；未安排或启动下一开发。[任务记录](../exec-plans/active/ui-base-medical-v1.md)保留真实授权、Git／CI和保护证据。
+
+<details>
+<summary>验收、实施与前序交付历史</summary>
+
 # 当前：基地医疗服务界面 v1 已验收，正在交付
 
 用户已验收候选 **ca3193985573**，并明确授权提交、推送和合并。当前只交付这一候选；不启动下一项开发。
@@ -5,7 +63,7 @@
 - task_id：ui-base-medical；plan_version：RL-UI-BASE-MEDICAL-v1；state：accepted_pending_delivery；pending_request：无。
 - candidate_id与accepted_candidate_id均为RL-UI-BASE-MEDICAL-v1-local-ca3193985573；acceptance_source：2026-10-20主控线程直接人类原文“验收通过，请完成提交、推送和合并。”。
 - 本地完整2332/2332和专项26/26通过，原3ms负载与门槛保持。验收源码、程序、固定入口、运行资源及原有修改核对保持。
-- 正在完成准确提交和合并提交的双平台CI；Git与最终结果见[任务记录](../exec-plans/active/ui-base-medical-v1.md)。
+- 已提交并推送765ab58，[PR184](https://github.com/Disthinker/Project-Raidline/pull/184)已普通合并为e5acabd；合并树等于验收提交树。准确PR双平台各2332/2332通过，准确main CI 39390626178运行中；最终交付检查尚未结束。[任务记录](../exec-plans/active/ui-base-medical-v1.md)保留证据。
 
 <details>
 <summary>验收、实施与前序历史</summary>
@@ -1224,6 +1282,16 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

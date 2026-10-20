@@ -15,6 +15,23 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN", "生产方案已变化，请核对后重新点击"},
+     {"CLOSE WORKSHOP", "关闭"},
+     {"WORKERS COMMITTED", "占用人员"},
+     {"WORKERS REQUIRED", "所需人员"},
+     {"PRODUCTION PREPARATION", "准备生产"},
+     {"PRODUCTION OUTPUT WAITING", "产物待领取"},
+     {"WORKSHOP PAUSED IN RESERVE", "工坊已收入储备 · 暂停"},
+     {"RESERVED MATERIALS", "已预留材料"},
+     {"MATERIALS CONSUMED - OUTPUT IS KEPT", "材料已消耗，产物仍保留"},
+     {"AUTO STASH ON COMPLETION - COLLECT ONLY WHEN FULL", "完成后自动入库；满仓时等待领取"},
+     {"RESERVE ON START - COMPLETE USING WORLD TIME", "开始时预留材料，随世界时间完成"},
+     {"WORKSHOP UPGRADE IN PROGRESS", "工坊升级中"},
+     {"the assigned workshop worker is not healthy", "工坊岗位人员当前受伤"},
+     {"no processing manufacturing order can be cancelled", "当前没有可取消的生产订单"},
+     {"no manufacturing output is ready", "当前没有待领取的生产物品"},
+     {"manufacturing recipe does not exist", "生产配方不存在"},
+     {"the workshop is stored in the facility reserve", "工坊已收入设施储备"},
      {"TREATMENT PLAN CHANGED - CHECK AND CLICK AGAIN", "方案已变化，请核对后重新点击"},
      {"CURRENCY ONLY - NO PERSONAL MEDICINE - IMMEDIATE", "仅扣货币 · 不消耗个人药品 · 即时完成"},
      {"AUTHORIZED MEDICAL ITEMS ONLY - DEDUCTED ON START", "仅使用已授权医疗物资 · 开始时扣除"},
