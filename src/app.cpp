@@ -187,15 +187,9 @@ namespace
             42.0F};
     }
 
-    SDL_FRect baseMedicalServiceButton() noexcept
-    {
-        return SDL_FRect{700.0F, 250.0F, 300.0F, 48.0F};
-    }
 
-    SDL_FRect baseResidentTreatmentButton() noexcept
-    {
-        return SDL_FRect{700.0F, 474.0F, 300.0F, 48.0F};
-    }
+
+
 
     SDL_FRect baseRestButton(std::size_t index) noexcept
     {
@@ -2927,6 +2921,7 @@ void App::updateBase(float deltaTime)
         openedBaseGroundContainerId_.reset();
         gameFlow_.closeBaseFacility();
         resetBaseSupplyUi();
+        resetBaseMedicalUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
@@ -2999,6 +2994,7 @@ void App::updateBase(float deltaTime)
             }
             gameFlow_.closeBaseFacility();
             resetBaseSupplyUi();
+            resetBaseMedicalUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -3017,6 +3013,9 @@ void App::updateBase(float deltaTime)
         auto supplyEvents = std::move(pendingSupplyEvents_);
         pendingSupplyEvents_.clear();
         for (const auto &event : supplyEvents) handleBaseSupplyEvent(event);
+        auto medicalEvents = std::move(pendingMedicalEvents_);
+        pendingMedicalEvents_.clear();
+        for (const auto &event : medicalEvents) handleBaseMedicalEvent(event);
         for (const BasePointerClick &click : pendingBaseClicks_)
         {
             handleBasePointerClick(click);
@@ -3961,97 +3960,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
         return;
     }
 
-    if (*facility == BaseFacilityKind::Medical)
-    {
-        if (contains(baseFacilityStaffingButton(), click.position))
-        {
-            const bool assigned = gameSession_.profile().baseWorkforce
-                .medicalWorker.has_value();
-            const BaseWorkforceReceipt receipt = assigned
-                ? gameSession_.executeClearBaseWorker(
-                    BaseFacilityStaffingKind::Medical,
-                    nextProfileTransactionId("clear-medical-worker"))
-                : gameSession_.executeAssignBestBaseWorker(
-                    BaseFacilityStaffingKind::Medical,
-                    nextProfileTransactionId("assign-medical-worker"));
-            uiMessage_ = receipt.succeeded
-                ? assigned ? "MEDICAL WORKER CLEARED"
-                           : "MEDICAL WORKER ASSIGNED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        if (contains(baseFacilityUpgradeButton(), click.position))
-        {
-            const auto &projects =
-                publishedContentRegistry().baseConstructionProjects();
-            const auto found = std::find_if(
-                projects.begin(), projects.end(),
-                [](const BaseConstructionProjectDefinition &project)
-                {
-                    return project.target == BaseFacilityUpgradeTarget::Medical;
-                });
-            if (found == projects.end())
-            {
-                uiMessage_ = "NO MEDICAL UPGRADE PUBLISHED";
-                gameAudio_.play(SoundEventId::UiDeny);
-                return;
-            }
-            const auto &active = gameSession_.profile()
-                .baseConstruction.activeProject;
-            const bool matchingActive = active.has_value() &&
-                active->definitionId == found->id;
-            const BaseConstructionReceipt receipt = matchingActive
-                ? gameSession_.executeCancelBaseConstruction(
-                    found->id,
-                    nextProfileTransactionId("cancel-medical-upgrade"))
-                : gameSession_.executeStartBaseConstruction(
-                    found->id,
-                    nextProfileTransactionId("start-medical-upgrade"));
-            uiMessage_ = receipt.succeeded
-                ? matchingActive ? "MEDICAL UPGRADE CANCELLED"
-                                 : "MEDICAL UPGRADE STARTED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-            return;
-        }
-        if (contains(baseMedicalServiceButton(), click.position))
-        {
-            const BaseMedicalServiceReceipt receipt =
-                gameSession_.executeBasePaidMedicalService(
-                    nextProfileTransactionId("base-paid-medical"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format(
-                    "PLAYER FULLY TREATED | PAID {}",
-                    receipt.currencyPaid)
-                : receipt.message;
-            if (!receipt.succeeded)
-            {
-                gameAudio_.play(SoundEventId::UiDeny);
-            }
-            return;
-        }
-        if (contains(baseResidentTreatmentButton(), click.position))
-        {
-            const ResidentTreatmentReceipt receipt =
-                gameSession_.executeStartResidentTreatment(
-                    nextProfileTransactionId("resident-treatment"));
-            uiMessage_ = receipt.succeeded
-                ? fmt::format(
-                    "RESIDENT TREATMENT STARTED | READY IN {} MIN",
-                    receipt.completionWorldMinute -
-                        gameSession_.profile().worldClock.elapsedWorldMinutes)
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
-        }
-        return;
-    }
+    // Medical owns its down/up queue; the legacy down-only adapter must
+    // never execute the same transaction through a second route.
+    if (*facility == BaseFacilityKind::Medical) return;
 
     if (*facility == BaseFacilityKind::Dormitory)
     {
@@ -5758,6 +5669,7 @@ void App::processEvents()
     pendingProfileRightClicks_.clear();
     pendingBaseClicks_.clear();
     pendingSupplyEvents_.clear();
+    pendingMedicalEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
@@ -5786,6 +5698,9 @@ void App::processEvents()
         }
         if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
         input_.handleEvent(event);
+        if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear();
+        }
         if((medicalWheelOpen_ || throwableWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
             const auto count=medicalWheelOpen_?medicalWheelOptions_.size():throwableWheelOptions_.size();
             const int pages=static_cast<int>(std::max<std::size_t>(1,(count+7)/8));
@@ -5816,6 +5731,7 @@ void App::processEvents()
                 systemCursorHidden_ = false;
             }
             supplyUi_.press.reset();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
             pendingSupplyEvents_.clear();
@@ -6351,6 +6267,19 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Medical)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingMedicalEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiBaseMedicalEventKind::Down : UiBaseMedicalEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingMedicalEvents_.push_back({UiBaseMedicalEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingMedicalEvents_.push_back({UiBaseMedicalEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Supply)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT)
@@ -6555,6 +6484,12 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Medical) {
+        if (medicalProjectionRevision_ || medicalUi_.press || !pendingMedicalEvents_.empty()) resetBaseMedicalUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
+        medicalUi_.press.reset(); pendingMedicalEvents_.clear();
+    }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_ ||
         (!inventoryWeaponComponentsOpen_ && !weaponComponentsOpen_)) componentPress_.reset();
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Supply)
@@ -15425,249 +15360,6 @@ void App::renderBaseAllocation()
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(renderer_, 250.0F, 684.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderBaseMedicalService()
-{
-    const SDL_FRect panel{180.0F, 76.0F, 920.0F, 570.0F};
-    SDL_SetRenderDrawColor(renderer_, 20, 29, 30, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 118, 186, 178, 255);
-    SDL_RenderRect(renderer_, &panel);
-
-    const ProfileState &profile = gameSession_.profile();
-    const BaseMedicalServicePlan playerPlan = queryBaseMedicalService(
-        profile,
-        publishedContentRegistry());
-    const ResidentTreatmentPlan residentPlan = queryStartResidentTreatment(
-        profile,
-        publishedContentRegistry());
-    const BaseResidentMedicalProjection residents =
-        projectBaseResidentMedical(profile);
-    const char *bleeding =
-        profile.medicalStatus.bleeding == BleedingSeverity::Heavy
-        ? "HEAVY BLEEDING"
-        : profile.medicalStatus.bleeding == BleedingSeverity::Light
-            ? "LIGHT BLEEDING"
-            : "NO BLEEDING";
-    const char *pain = hasPain(profile.medicalStatus)
-        ? (painIsSuppressed(profile.medicalStatus)
-            ? "PAIN SUPPRESSED"
-            : "PAIN ACTIVE")
-        : "NO INJURY PAIN";
-
-    SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
-    uiTextRenderer_.render(
-        renderer_, 220.0F, 108.0F,
-        "MEDICAL SERVICE | TEXT/GEOMETRY PLACEHOLDER");
-    const std::string currency = fmt::format(
-        "CURRENCY {}",
-        profile.currency);
-    uiTextRenderer_.render(
-        renderer_, 900.0F, 108.0F, currency.c_str());
-
-    const std::string playerStatus = fmt::format(
-        "PLAYER SERVICE | HEALTH {}/100 | {} | {}",
-        profile.currentHealth,
-        bleeding,
-        pain);
-    uiTextRenderer_.render(renderer_, 230.0F, 164.0F, playerStatus.c_str());
-    const std::string painkiller = fmt::format(
-        "PAINKILLER REMAINING {} SEC",
-        profile.medicalStatus.painkillerRemainingMs / 1000U);
-    uiTextRenderer_.render(
-        renderer_, 230.0F, 194.0F, painkiller.c_str());
-
-    std::string status;
-    if (playerPlan.quotedCurrency > 0)
-    {
-        status = fmt::format(
-            "TREATMENT QUOTE {} | HP {} + INJURY {} | {}",
-            playerPlan.quotedCurrency,
-            playerPlan.healthCost,
-            playerPlan.injuryCost,
-            playerPlan.canCommit ? "READY" : "INSUFFICIENT CURRENCY");
-    }
-    else
-    {
-        status = playerPlan.message;
-    }
-    SDL_SetRenderDrawColor(
-        renderer_,
-        playerPlan.canCommit ? 176 : 218,
-        playerPlan.canCommit ? 232 : 190,
-        playerPlan.canCommit ? 216 : 150,
-        255);
-    uiTextRenderer_.render(renderer_, 230.0F, 224.0F, status.c_str());
-
-    const SDL_FRect button = baseMedicalServiceButton();
-    SDL_SetRenderDrawColor(
-        renderer_,
-        playerPlan.canCommit ? 48 : 42,
-        playerPlan.canCommit ? 104 : 50,
-        playerPlan.canCommit ? 94 : 52,
-        255);
-    SDL_RenderFillRect(renderer_, &button);
-    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
-    SDL_RenderRect(renderer_, &button);
-    uiTextRenderer_.render(
-        renderer_,
-        button.x + 54.0F,
-        button.y + 17.0F,
-        playerPlan.canCommit ? "PAY & TREAT" : "TREATMENT UNAVAILABLE");
-
-    SDL_SetRenderDrawColor(renderer_, 94, 130, 124, 255);
-    const SDL_FRect divider{220.0F, 326.0F, 840.0F, 1.0F};
-    SDL_RenderFillRect(renderer_, &divider);
-    const BaseWorkforceProjection workforce = projectBaseWorkforce(profile);
-    const std::string facility = fmt::format(
-        "MEDICAL LEVEL {} | ASSIGNED {} | GENERAL FALLBACK IS 50% SLOWER",
-        profile.baseConstruction.medicalLevel,
-        workforce.medicalWorker.has_value()
-            ? baseResidentProfessionName(*workforce.medicalWorker)
-            : "EMPTY");
-    uiTextRenderer_.render(renderer_, 230.0F, 334.0F, facility.c_str());
-    const std::string residentStatus = fmt::format(
-        "RESIDENT CARE | RESIDENTS {} | INJURED {} | HEALTHY {}",
-        residents.ordinaryResidents,
-        residents.injuredResidents,
-        residents.healthyResidents);
-    SDL_SetRenderDrawColor(renderer_, 224, 240, 234, 255);
-    uiTextRenderer_.render(
-        renderer_, 230.0F, 366.0F, residentStatus.c_str());
-
-    std::string residentDetail;
-    if (residents.treatmentActive)
-    {
-        residentDetail = fmt::format(
-            "TREATMENT ACTIVE | READY IN {} H {} MIN",
-            residents.remainingMinutes / kWorldMinutesPerHour,
-            residents.remainingMinutes % kWorldMinutesPerHour);
-    }
-    else if (residentPlan.canCommit)
-    {
-        std::string supplies;
-        for (std::size_t index{}; index < residentPlan.supplies.size(); ++index)
-        {
-            const ResidentMedicalSupplySelection &selection =
-                residentPlan.supplies[index];
-            if (index != 0U)
-            {
-                supplies += " + ";
-            }
-            supplies += fmt::format(
-                "{} x{}",
-                publishedContentRegistry().item(selection.definitionId)
-                    .displayName,
-                selection.quantity);
-        }
-        residentDetail = fmt::format(
-            "AUTHORIZED SUPPLIES {} | CONTRIBUTION {}/{} | {} MIN",
-            supplies,
-            residentPlan.plannedContribution,
-            residentPlan.requiredContribution,
-            residentPlan.durationMinutes);
-    }
-    else
-    {
-        residentDetail = residentPlan.message;
-    }
-    SDL_SetRenderDrawColor(
-        renderer_,
-        residentPlan.canCommit ? 176 : 218,
-        residentPlan.canCommit ? 232 : 190,
-        residentPlan.canCommit ? 216 : 150,
-        255);
-    uiTextRenderer_.render(
-        renderer_, 230.0F, 408.0F, residentDetail.c_str());
-    uiTextRenderer_.render(
-        renderer_, 230.0F, 436.0F,
-        "USES ONLY ITEMS ASSIGNED TO MEDICAL SUPPLY | CONSUMED ON START");
-
-    const SDL_FRect residentButton = baseResidentTreatmentButton();
-    SDL_SetRenderDrawColor(
-        renderer_,
-        residentPlan.canCommit ? 48 : 42,
-        residentPlan.canCommit ? 104 : 50,
-        residentPlan.canCommit ? 94 : 52,
-        255);
-    SDL_RenderFillRect(renderer_, &residentButton);
-    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
-    SDL_RenderRect(renderer_, &residentButton);
-    uiTextRenderer_.render(
-        renderer_,
-        residentButton.x + 42.0F,
-        residentButton.y + 17.0F,
-        residentPlan.canCommit
-            ? "START RESIDENT TREATMENT"
-            : residents.treatmentActive
-                ? "RESIDENT TREATMENT ACTIVE"
-                : "RESIDENT TREATMENT UNAVAILABLE");
-
-    const SDL_FRect staffingButton = baseFacilityStaffingButton();
-    SDL_SetRenderDrawColor(renderer_, 42, 76, 70, 255);
-    SDL_RenderFillRect(renderer_, &staffingButton);
-    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
-    SDL_RenderRect(renderer_, &staffingButton);
-    uiTextRenderer_.render(
-        renderer_, staffingButton.x + 24.0F, staffingButton.y + 14.0F,
-        workforce.medicalWorker.has_value()
-            ? "CLEAR MEDICAL WORKER"
-            : "ASSIGN BEST WORKER");
-
-    const auto &projects =
-        publishedContentRegistry().baseConstructionProjects();
-    const auto upgrade = std::find_if(
-        projects.begin(), projects.end(),
-        [](const BaseConstructionProjectDefinition &candidate)
-        {
-            return candidate.target == BaseFacilityUpgradeTarget::Medical;
-        });
-    const SDL_FRect upgradeButton = baseFacilityUpgradeButton();
-    bool upgradeAvailable{};
-    std::string upgradeLabel = "NO MEDICAL UPGRADE";
-    if (upgrade != projects.end())
-    {
-        const auto &active = profile.baseConstruction.activeProject;
-        const bool matchingActive = active.has_value() &&
-            active->definitionId == upgrade->id;
-        const BaseConstructionPlan plan = matchingActive
-            ? queryCancelBaseConstruction(
-                profile,
-                publishedContentRegistry(),
-                CancelBaseConstructionCommand{upgrade->id})
-            : queryStartBaseConstruction(
-                profile,
-                publishedContentRegistry(),
-                StartBaseConstructionCommand{upgrade->id});
-        upgradeAvailable = plan.canCommit;
-        upgradeLabel = matchingActive
-            ? "CANCEL MEDICAL UPGRADE"
-            : profile.baseConstruction.medicalLevel >= upgrade->targetLevel
-                ? "MEDICAL LEVEL 2 COMPLETE"
-                : "UPGRADE MEDICAL TO LEVEL 2";
-    }
-    SDL_SetRenderDrawColor(
-        renderer_, upgradeAvailable ? 54 : 42,
-        upgradeAvailable ? 90 : 52,
-        upgradeAvailable ? 82 : 54, 255);
-    SDL_RenderFillRect(renderer_, &upgradeButton);
-    SDL_SetRenderDrawColor(renderer_, 206, 236, 228, 255);
-    SDL_RenderRect(renderer_, &upgradeButton);
-    uiTextRenderer_.render(
-        renderer_, upgradeButton.x + 20.0F, upgradeButton.y + 14.0F,
-        upgradeLabel.c_str());
-
-    SDL_SetRenderDrawColor(renderer_, 190, 208, 202, 255);
-    uiTextRenderer_.render(
-        renderer_, 230.0F, 590.0F,
-        "CURRENCY ONLY | PERSONAL MEDICAL ITEMS ARE NOT CONSUMED | ESC CLOSE");
-    if (!uiMessage_.empty())
-    {
-        SDL_SetRenderDrawColor(renderer_, 228, 220, 156, 255);
-        uiTextRenderer_.render(
-            renderer_, 230.0F, 608.0F, uiMessage_.c_str());
     }
 }
 

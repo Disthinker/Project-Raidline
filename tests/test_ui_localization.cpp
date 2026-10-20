@@ -592,6 +592,19 @@ TEST(UiLocalizationTest, ChineseTranslatesPaidBaseMedicalService) {
             "货币不足，无法使用玩家医疗服务");
 }
 
+TEST(UiLocalizationTest, MedicalUiKeepsCostsAndAuthorizedMaterialsClearInChinese) {
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "CLOSE MEDICAL"), "关闭");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "PERSONAL TREATMENT"), "个人治疗");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "THIS TREATMENT: 1 RESIDENT"), "本次治疗1人");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "CURRENCY ONLY - NO PERSONAL MEDICINE - IMMEDIATE"), "仅扣货币 · 不消耗个人药品 · 即时完成");
+  EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "AUTHORIZED MEDICAL ITEMS ONLY - DEDUCTED ON START"), "仅使用已授权医疗物资 · 开始时扣除");
+  for (const auto *reason : {"no injured resident requires treatment", "the medical facility has no assigned worker",
+       "the assigned medical worker is not healthy", "insufficient authorized medical supplies", "resident treatment is already active"}) {
+    EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, reason), reason);
+    EXPECT_EQ(localizeUiText(UiLanguage::English, reason), reason);
+  }
+}
+
 TEST(UiLocalizationTest, ChineseTranslatesDormitoryPopulationAndRest) {
   const std::string population = localizeUiText(
       UiLanguage::SimplifiedChinese,
