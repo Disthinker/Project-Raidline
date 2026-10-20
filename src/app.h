@@ -32,6 +32,7 @@
 #include "ui_quick_wheel_backdrop.h"
 #include "ui_base_supply_presentation.h"
 #include "ui_weapon_components_presentation.h"
+#include "ui_base_medical_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -156,6 +157,7 @@ private:
     friend struct UiQuickWheelTestAccess;
     friend struct UiBaseSupplyTestAccess;
     friend struct UiWeaponComponentsTestAccess;
+    friend struct UiBaseMedicalTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -220,6 +222,16 @@ private:
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
     UiBaseSupplyState supplyUi_;
+    UiBaseMedicalState medicalUi_;
+    UiBaseMedicalProjection medicalProjection_;
+    std::optional<ProfileRevision> medicalProjectionRevision_;
+    UiLanguage medicalProjectionLanguage_{};
+    std::uint64_t medicalProjectionGeneration_{};
+    std::string medicalFeedback_;
+    std::vector<UiBaseMedicalEvent> pendingMedicalEvents_;
+    void resetBaseMedicalUi();
+    void refreshBaseMedicalUi(bool force = false);
+    void handleBaseMedicalEvent(const UiBaseMedicalEvent &);
     std::vector<UiBaseSupplyEvent> pendingSupplyEvents_;
     std::vector<UiBaseSupplyRow> supplyRows_;
     std::optional<ProfileRevision> supplyRowsRevision_;
