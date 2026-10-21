@@ -1,3 +1,41 @@
+# 当前：对局出击界面 v1 已验收，交付中
+
+**候选 992a71d67b10 已由用户验收通过。** 正在完成本任务的提交、推送与普通PR合并；仍使用桌面 **Project Raidline Debug** 和同一验收程序。
+
+- task_id：ui-base-deployment；plan_version：RL-UI-BASE-DEPLOYMENT-v1；state：delivering；pending_request：无。
+- candidate_id、accepted_candidate_id均为RL-UI-BASE-DEPLOYMENT-v1-local-992a71d67b10；acceptance_source：2026-10-21主控直接人类原文“对局出击界面 v1 验收通过，请完成提交、推送和合并。”。
+- 已复核候选源码、程序、固定入口及完整2467/2467、专项43/43和原5项3ms证据。只交付10项源码／构建／测试与3项记录，17份无关文档不纳入。
+- baseline 8804720bc3927467733503fdf34400c03f150065；分支codex/ui-base-deployment-v1。本提交前Git交付和新候选远端CI尚未完成，实际结果由[任务记录](../exec-plans/active/ui-base-deployment-v1.md)继续记录。
+- 不启动下一项，不启动游戏、访问真实存档或改动已验收程序。
+
+<details>
+<summary>选题协调与已交付历史</summary>
+
+# 当前：下一项UI优化待策划
+
+资源分配与需求界面v1已交付。用户要求安排下一项UI优化；本轮只协调选题、核查代码和准备具体方案，尚无实施批准。
+
+- task_id：ui-optimization-next；plan_version：RL-UI-NEXT-20261021-v1；state：awaiting_planner；approval_source：仅本次协调请求，无新任务实施批准。
+- baseline：main 8804720bc3927467733503fdf34400c03f150065; tree ef8d6ab5254b094523ebc6b4d49cb07c093adb83；pending_request：MAIN-UI-NEXT-20261021-AFTER-ALLOCATION-01；目标原策划线程019feff4-477c-75c2-bf31-3f09ff1e3891。
+- 实际代码、验收程序、固定入口及18份原未提交文档保持。不切分支、不改游戏源码、不构建、不运行游戏、不提交、推送或合并。
+- 请求与结果记在[前任务的独立协调节](../exec-plans/active/ui-base-allocation-v1.md)；选题确认后另立可审批计划。
+
+<details>
+<summary>已交付与历史记录</summary>
+
+# 当前：资源分配与需求界面 v1 已交付
+
+已验收候选 **429a674f5e9f** 已完成提交、推送和普通合并。[PR187](https://github.com/Disthinker/Project-Raidline/pull/187)，main **8804720**。原桌面 **Project Raidline Debug** 继续使用同一已验收程序。
+
+- task_id：ui-base-allocation；plan_version：RL-UI-BASE-ALLOCATION-v1；state：delivered；pending_request：无。
+- candidate_id与accepted_candidate_id均为RL-UI-BASE-ALLOCATION-v1-local-429a674f5e9f；acceptance_source：2026-10-21主控直接人类原文“资源分配与需求界面 v1 验收通过，请完成提交、推送和合并。”。
+- 提交83e6f13已推送；普通合并的两个父提交及合并树已核对，树等于验收提交。准确PR与main的Windows／Ubuntu均各2424/2424，原5项3ms负载与门槛保持。
+- 仅交付12项已验收文件；15份无关脏文档、五工作区原修改、原存档规则与固定入口保持。未启动游戏或下一项开发。
+- 策划已在原持久线程只读确认交付；未安排或启动下一开发。[任务记录](../exec-plans/active/ui-base-allocation-v1.md)保留真实授权、Git／CI及保护证据。
+
+<details>
+<summary>验收、交付与前序历史</summary>
+
 # 当前：资源分配与需求界面 v1 已验收，正在交付
 
 用户已验收候选 **429a674f5e9f**，并明确授权提交、推送和合并。本轮只交付这一候选，不启动下一项开发。
@@ -6,6 +44,8 @@
 - candidate_id与accepted_candidate_id均为RL-UI-BASE-ALLOCATION-v1-local-429a674f5e9f；acceptance_source：2026-10-21主控直接人类原文“资源分配与需求界面 v1 验收通过，请完成提交、推送和合并。”。
 - 已核对冻结源码、程序、固定入口、运行资源及所有无关修改。Windows完整2424/2424、专项38/38与原5项3ms检查通过；准确PR及main双平台CI待执行。
 - 分支codex/ui-base-allocation-v1，基线6e8f6f082f7b860f3f5990b1f7ba508411e5b0bd。交付仅含已验收的9项源码／构建／测试和3项记录；保留15份无关原脏文档。[任务记录](../exec-plans/active/ui-base-allocation-v1.md)。
+
+- 交付进度：[PR187](https://github.com/Disthinker/Project-Raidline/pull/187)已普通合并为8804720，合并树等于已验收提交树。准确PR双平台各2424/2424通过，准确main CI 39459173253运行中；交付检查尚未结束。固定入口与验收程序保持。
 
 <details>
 <summary>验收前与历史记录</summary>
@@ -1405,6 +1445,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

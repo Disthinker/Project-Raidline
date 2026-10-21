@@ -90,10 +90,10 @@ void App::renderFirstRaidHints() {
   if (gameFlow_.state() == GameFlowState::Base) {
     if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
         !lostRaidRecordsOpen_ && !regionalOperationsOpen_) {
-      lines = projectFirstRaidMapBriefing(selectedRaidMap());
-      lines.emplace_back(
-          "GEAR WARNINGS ARE ADVISORY; CONFIRM AGAIN TO DEPLOY | H HIDE HINTS");
-      renderFirstRaidHintCard(lines, 320.0F, 38.0F, 850.0F);
+      // Map difficulty and warnings are already in the deployment briefing.
+      // Keep the existing hide action visible without covering its controls.
+      renderFirstRaidHintCard({"FIRST RAID GUIDANCE | H HIDE HINTS"},
+                             40.0F, 12.0F, 1200.0F);
       return;
     }
     if (gameFlow_.activeBaseFacility())
