@@ -36,6 +36,7 @@
 #include "ui_base_workshop_presentation.h"
 #include "ui_base_dormitory_presentation.h"
 #include "ui_base_allocation_presentation.h"
+#include "ui_base_deployment_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -164,6 +165,7 @@ private:
     friend struct UiBaseWorkshopTestAccess;
     friend struct UiBaseDormitoryTestAccess;
     friend struct UiBaseAllocationTestAccess;
+    friend struct UiBaseDeploymentTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -227,6 +229,17 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
+    UiDeploymentState deploymentUi_;
+    UiDeploymentProjection deploymentProjection_;
+    std::optional<ProfileRevision> deploymentProjectionRevision_;
+    std::string deploymentViewKey_, deploymentFeedback_;
+    std::uint64_t deploymentProjectionGeneration_{};
+    std::vector<UiDeploymentEvent> pendingDeploymentEvents_;
+    bool deploymentConfirmConsumedThisFrame_{};
+    void resetBaseDeploymentUi();
+    void refreshBaseDeploymentUi(bool force = false);
+    void handleBaseDeploymentEvent(const UiDeploymentEvent &);
+    bool handleBaseDeploymentConfirm();
     UiAllocationState allocationUi_;
     UiAllocationProjection allocationProjection_;
     std::optional<ProfileRevision> allocationProjectionRevision_;

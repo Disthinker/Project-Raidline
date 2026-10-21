@@ -1446,3 +1446,27 @@ TEST(UiLocalizationTest, AllocationFailuresKeepTheFullReasonAndExistingEntryName
         "ALLOCATION PLAN CHANGED - CHECK AND CLICK AGAIN", "Base construction material storage is full"})
         EXPECT_NE(localizeUiText(UiLanguage::SimplifiedChinese, key), key) << key;
 }
+
+TEST(UiLocalizationTest, DeploymentKeepsExplicitPaymentRiskAndOriginalChineseEntry) {
+    const auto cn = UiLanguage::SimplifiedChinese;
+    EXPECT_EQ(localizeUiText(cn, "RAID DEPLOYMENT"), "对局出击");
+    EXPECT_EQ(localizeUiText(cn, "BUY AND SELECT"), "购买并选用");
+    EXPECT_EQ(localizeUiText(cn, "INTEL STOCK"), "持有");
+    EXPECT_EQ(localizeUiText(cn, "CLOSE"), "关闭");
+    EXPECT_EQ(localizeUiText(cn, "PERMANENTLY KNOWN"), "已永久掌握");
+    EXPECT_EQ(localizeUiText(cn, "CONFIRM DEPLOY AGAIN"), "再次确认出击");
+    for (const auto key : {"REGIONS", "LOST ITEMS", "DETAILS", "COLLAPSE",
+        "Fast 9mm recovery loadout with light protection and compact storage.",
+        "General 5.45 fighting loadout with balanced protection and supply capacity.",
+        "7.62 precision or support-fire loadout for high-risk objectives.",
+        "ACTION BRIEFING", "PREPARATION SUMMARY", "ACTUAL FIRE READINESS",
+        "LOADOUT REFERENCE", "REFERENCE ONLY - DOES NOT CHANGE EQUIPMENT OR MAP",
+        "ONE USE PER SELECTED RAID - PURCHASE IS NOT REFUNDED ON CLOSE",
+        "PERMANENT PURCHASE - NO RAID SELECTION REQUIRED", "RECORDS EXPIRING AFTER THIS RAID",
+        "DEPLOYMENT CHANGED - REVIEW AND CLICK AGAIN", "VIEWING INTELLIGENCE DOES NOT PURCHASE IT",
+        "CANNOT FIRE NOW | CHECK WEAPON IN TAB INVENTORY", "NO SELF RECOVERY TARGET",
+        "RAID RECOVERY TARGET IS NO LONGER AVAILABLE"}) {
+        EXPECT_NE(localizeUiText(cn, key), key) << key;
+        EXPECT_EQ(localizeUiText(UiLanguage::English, key), key);
+    }
+}

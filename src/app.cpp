@@ -1970,7 +1970,7 @@ bool App::handleScreenConfirm()
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
             !lostRaidRecordsOpen_ &&
             !regionalOperationsOpen_ &&
-            tryDeployFromBase();
+            handleBaseDeploymentConfirm();
         break;
     case GameFlowState::Raid:
         break;
@@ -2893,6 +2893,7 @@ void App::updateBase(float deltaTime)
         resetBaseMedicalUi();
         resetBaseDormitoryUi();
         resetBaseAllocationUi();
+        resetBaseDeploymentUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
         selectedLostRaidRecordId_.reset();
@@ -2969,6 +2970,7 @@ void App::updateBase(float deltaTime)
             resetBaseWorkshopUi();
             resetBaseDormitoryUi();
         resetBaseAllocationUi();
+        resetBaseDeploymentUi();
             profileAssetSelection_.reset();
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
@@ -2983,6 +2985,9 @@ void App::updateBase(float deltaTime)
             profileAssetSelection_->orientation = rotatedClockwise(
                 profileAssetSelection_->orientation);
         }
+        auto deploymentEvents = std::move(pendingDeploymentEvents_);
+        pendingDeploymentEvents_.clear();
+        for (const auto &event : deploymentEvents) handleBaseDeploymentEvent(event);
         auto allocationEvents = std::move(pendingAllocationEvents_);
         pendingAllocationEvents_.clear();
         for (const auto &event : allocationEvents) handleBaseAllocationEvent(event);
@@ -3460,82 +3465,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             }
             return;
         }
-        if (contains(raidLostRecordsButton(), click.position))
-        {
-            lostRaidRecordsOpen_ = true;
-            selectedLostRaidRecordId_.reset();
-            deploymentWarningArmed_ = false;
-            uiMessage_.clear();
-            return;
-        }
-        if (contains(raidRegionalOperationsButton(), click.position))
-        {
-            regionalOperationsOpen_ = true;
-            lostRaidRecordsOpen_ = false;
-            deploymentWarningArmed_ = false;
-            uiMessage_.clear();
-            return;
-        }
-        if (contains(raidMapPreviousButton(), click.position))
-        {
-            cycleSelectedRaidMap(-1);
-            return;
-        }
-        if (contains(raidMapNextButton(), click.position))
-        {
-            cycleSelectedRaidMap(1);
-            return;
-        }
-        for (std::size_t index = 0;
-             index < kRaidIntelligenceCategoryCount;
-             ++index)
-        {
-            if (contains(raidIntelligenceButton(index), click.position))
-            {
-                handleRaidIntelligenceSelection(
-                    static_cast<RaidIntelligenceCategory>(index));
-                return;
-            }
-        }
-        for (std::size_t index{}; index < selectedRaidMap().interiors.size();
-             ++index)
-        {
-            if (contains(
-                    raidIntelligenceButton(
-                        kRaidIntelligenceCategoryCount + index),
-                    click.position))
-            {
-                handleRaidInteriorIntelligencePurchase(
-                    selectedRaidMap().interiors[index].id);
-                return;
-            }
-        }
-        const auto &archetypes =
-            publishedContentRegistry().loadoutArchetypes();
-        for (std::size_t index{}; index < archetypes.size(); ++index)
-        {
-            if (contains(loadoutArchetypeButton(index), click.position))
-            {
-                selectedLoadoutArchetypeIndex_ = index;
-                uiMessage_ =
-                    "LOADOUT ROLE SELECTED | REVIEW REAL GAPS BELOW";
-                return;
-            }
-        }
-        if (screenPrimaryButtonContains(click.position.x, click.position.y))
-        {
-            if (!tryDeployFromBase())
-            {
-                if (uiMessage_.empty())
-                {
-                    uiMessage_ = "DEPLOYMENT IS NOT AVAILABLE";
-                }
-            }
-            else
-            {
-                profileAssetSelection_.reset();
-            }
-        }
+        // Ordinary deployment input is owned by the native down/up queue.
         return;
     }
 
@@ -5157,6 +5087,7 @@ void App::processEvents()
 {
     syncBaseSiegeWarningUi();
     pendingSiegeWarningAction_.reset();
+    pendingDeploymentEvents_.clear();
     siegeWarningBlocksGameplayThisFrame_ = baseSiegeWarningVisible();
     pendingInventoryUiEvents_.clear();
     pendingProfileRightClicks_.clear();
@@ -5191,6 +5122,15 @@ void App::processEvents()
             uiPointerInside_=false; uiPointerPressed_=false; uiHoveredButton_=-1;
         }
         if(event.type==SDL_EVENT_WINDOW_MOUSE_ENTER) uiPointerInside_=true;
+        if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE ||
+            event.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
+            event.type == SDL_EVENT_WINDOW_RESIZED ||
+            event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            deploymentUi_.press.reset();
+            pendingDeploymentEvents_.clear();
+            if (deploymentUi_.confirmationKey) deploymentWarningArmed_ = false;
+            deploymentUi_.confirmationKey.reset();
+        }
         input_.handleEvent(event);
         if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
             allocationUi_.press.reset(); pendingAllocationEvents_.clear();
@@ -5764,6 +5704,20 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+                     !regionalOperationsOpen_ && !lostRaidRecordsOpen_)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingDeploymentEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiDeploymentEventKind::Down : UiDeploymentEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingDeploymentEvents_.push_back({UiDeploymentEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingDeploymentEvents_.push_back({UiDeploymentEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Allocation)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
@@ -6020,6 +5974,21 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    deploymentConfirmConsumedThisFrame_ = false;
+    if (gameFlow_.state() != GameFlowState::Base ||
+        gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate ||
+        regionalOperationsOpen_ || lostRaidRecordsOpen_) {
+        if (deploymentProjectionRevision_ || deploymentUi_.press ||
+            deploymentUi_.confirmationKey || !pendingDeploymentEvents_.empty())
+            resetBaseDeploymentUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || developerWeaponPanelBlocksGameplayThisFrame_ ||
+        inventoryOverlayState_.isOpen() || !windowHasInputFocus_ || baseSiegeWarningVisible() ||
+        gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked() || baseDefenseResultVisible_) {
+        deploymentUi_.press.reset(); pendingDeploymentEvents_.clear();
+        if (deploymentUi_.confirmationKey) deploymentWarningArmed_ = false;
+        deploymentUi_.confirmationKey.reset();
+    }
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Allocation) {
         if (allocationProjectionRevision_ || allocationUi_.press || !pendingAllocationEvents_.empty()) resetBaseAllocationUi();
     }
@@ -6183,6 +6152,9 @@ void App::update(float deltaTime)
             !siegeWarningBlocksGameplayThisFrame_ &&
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate)
         {
+            // Enter and a queued pointer release share one explicit intention.
+            pendingDeploymentEvents_.clear();
+            deploymentUi_.press.reset();
             static_cast<void>(handleScreenConfirm());
             return;
         }
@@ -14917,308 +14889,6 @@ void App::renderBaseKitchenWater()
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(renderer_, 250.0F, 684.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderBaseDeployment()
-{
-    if (regionalOperationsOpen_)
-    {
-        renderRegionalOperations();
-        return;
-    }
-    if (lostRaidRecordsOpen_)
-    {
-        renderLostRaidRecords();
-        return;
-    }
-    const SDL_FRect panel{kFlowPanelX, kFlowPanelY, kFlowPanelWidth, kFlowPanelHeight};
-    SDL_SetRenderDrawColor(renderer_, 28, 18, 18, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
-    SDL_RenderRect(renderer_, &panel);
-    uiTextRenderer_.render(renderer_, 560.0F, 190.0F, "RAID DEPLOYMENT");
-
-    const SDL_FRect regionalButton = raidRegionalOperationsButton();
-    SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
-    SDL_RenderFillRect(renderer_, &regionalButton);
-    SDL_SetRenderDrawColor(renderer_, 126, 166, 142, 255);
-    SDL_RenderRect(renderer_, &regionalButton);
-    uiTextRenderer_.render(
-        renderer_, regionalButton.x + 16.0F,
-        regionalButton.y + 10.0F, "REGIONAL ROUTES");
-
-    const MapDefinition &map = selectedRaidMap();
-    const SDL_FRect previous = raidMapPreviousButton();
-    const SDL_FRect next = raidMapNextButton();
-    SDL_SetRenderDrawColor(renderer_, 68, 54, 52, 255);
-    SDL_RenderFillRect(renderer_, &previous);
-    SDL_RenderFillRect(renderer_, &next);
-    SDL_SetRenderDrawColor(renderer_, 180, 102, 92, 255);
-    SDL_RenderRect(renderer_, &previous);
-    SDL_RenderRect(renderer_, &next);
-    uiTextRenderer_.render(renderer_, previous.x + 22.0F, previous.y + 16.0F, "<");
-    uiTextRenderer_.render(renderer_, next.x + 22.0F, next.y + 16.0F, ">");
-    const std::string mapLabel = fmt::format(
-        "MAP {}/{} | {}",
-        selectedRaidMapIndex_ % publishedContentRegistry().maps().size() + 1U,
-        publishedContentRegistry().maps().size(),
-        map.displayName);
-    uiTextRenderer_.render(renderer_, 492.0F, 232.0F, mapLabel.c_str());
-    uiTextRenderer_.render(renderer_, 492.0F, 250.0F, map.routeProfile.c_str());
-    const std::string danger = fmt::format(
-        "DIFFICULTY {} | {}",
-        map.operationBriefing.difficulty,
-        map.operationBriefing.warning);
-    uiTextRenderer_.render(renderer_, 410.0F, 270.0F, danger.c_str());
-
-    const ProfileState &profile = gameSession_.profile();
-    if (const auto travel = gameSession_.raidTravelPreview(map.id))
-    {
-        const std::string timing = fmt::format(
-            "DEPART DAY {} {:02}:{:02} -> ARRIVE DAY {} {:02}:{:02} {} | {} MIN",
-            travel->departure.day,
-            travel->departure.hour,
-            travel->departure.minute,
-            travel->arrival.day,
-            travel->arrival.hour,
-            travel->arrival.minute,
-            worldTimeOfDayName(travel->arrival.timeOfDay),
-            travel->outboundMinutes);
-        std::string routeLabel;
-        for (const RegionRouteDefinitionId &routeId : travel->routeIds)
-        {
-            if (!routeLabel.empty())
-            {
-                routeLabel += " > ";
-            }
-            routeLabel += publishedContentRegistry()
-                .regionRoute(routeId).displayName;
-        }
-        const std::string returnTiming = fmt::format(
-            "ROUTE {}{} | RETURN {} MIN | FAILURE {} MIN",
-            routeLabel,
-            travel->usesOnlineOutpost ? " [OUTPOST]" : "",
-            travel->returnMinutes,
-            travel->failureRegroupMinutes);
-        uiTextRenderer_.render(renderer_, 410.0F, 290.0F, timing.c_str());
-        uiTextRenderer_.render(
-            renderer_, 478.0F, 308.0F, returnTiming.c_str());
-    }
-
-    constexpr std::array<const char *, kRaidIntelligenceCategoryCount>
-        intelligenceLabels{"TRANSPORT MAP", "RESOURCE MANIFEST", "ENEMY DOSSIER"};
-    for (std::size_t index = 0;
-         index < kRaidIntelligenceCategoryCount;
-         ++index)
-    {
-        const auto category = static_cast<RaidIntelligenceCategory>(index);
-        const std::uint32_t owned = profile.raidIntelligence.count(
-            map.id, category);
-        const bool selected = selectedRaidIntelligence_.has(category);
-        const SDL_FRect button = raidIntelligenceButton(index);
-        if (selected)
-        {
-            SDL_SetRenderDrawColor(renderer_, 48, 98, 126, 255);
-        }
-        else if (owned > 0U)
-        {
-            SDL_SetRenderDrawColor(renderer_, 48, 82, 62, 255);
-        }
-        else
-        {
-            SDL_SetRenderDrawColor(renderer_, 58, 50, 48, 255);
-        }
-        SDL_RenderFillRect(renderer_, &button);
-        SDL_SetRenderDrawColor(
-            renderer_, selected ? 96 : 180, selected ? 180 : 102,
-            selected ? 220 : 92, 255);
-        SDL_RenderRect(renderer_, &button);
-        const std::string label = fmt::format(
-            "{} | OWN {} | {} {}",
-            intelligenceLabels[index],
-            owned,
-            selected ? "SELECTED" : owned > 0U ? "SELECT" : "BUY",
-            selected || owned > 0U
-                ? 0U
-                : map.operationBriefing.price(category));
-        uiTextRenderer_.render(
-            renderer_, button.x + 10.0F, button.y + 11.0F, label.c_str());
-    }
-    for (std::size_t index{}; index < map.interiors.size(); ++index)
-    {
-        const RaidInteriorDefinition &interior = map.interiors[index];
-        const bool known =
-            profile.raidInteriorIntelligence.knows(interior.id);
-        const SDL_FRect button = raidIntelligenceButton(
-            kRaidIntelligenceCategoryCount + index);
-        SDL_SetRenderDrawColor(
-            renderer_, known ? 42 : 58, known ? 88 : 50,
-            known ? 76 : 48, 255);
-        SDL_RenderFillRect(renderer_, &button);
-        SDL_SetRenderDrawColor(
-            renderer_, known ? 116 : 180, known ? 210 : 102,
-            known ? 174 : 92, 255);
-        SDL_RenderRect(renderer_, &button);
-        const std::string label = known
-            ? fmt::format(
-                  "INTERIOR PLAN | {} | PERMANENTLY KNOWN",
-                  interior.displayName)
-            : fmt::format(
-                  "INTERIOR PLAN | {} | BUY {}",
-                  interior.displayName,
-                  interior.intelligencePrice);
-        uiTextRenderer_.render(
-            renderer_, button.x + 10.0F, button.y + 11.0F,
-            label.c_str());
-    }
-
-    const ContentRegistry &content = publishedContentRegistry();
-    const auto loadouts = projectAllLoadoutReadiness(profile, content);
-    selectedLoadoutArchetypeIndex_ = loadouts.empty()
-        ? 0U
-        : selectedLoadoutArchetypeIndex_ % loadouts.size();
-    for (std::size_t index{}; index < loadouts.size(); ++index)
-    {
-        const LoadoutReadinessProjection &loadout = loadouts[index];
-        const SDL_FRect button = loadoutArchetypeButton(index);
-        const bool selected = index == selectedLoadoutArchetypeIndex_;
-        SDL_SetRenderDrawColor(
-            renderer_,
-            selected ? 48 : loadout.ready() ? 42 : 68,
-            selected ? 88 : loadout.ready() ? 82 : 54,
-            selected ? 112 : loadout.ready() ? 62 : 52,
-            255);
-        SDL_RenderFillRect(renderer_, &button);
-        SDL_SetRenderDrawColor(
-            renderer_,
-            selected ? 108 : loadout.ready() ? 102 : 170,
-            selected ? 188 : loadout.ready() ? 184 : 112,
-            selected ? 220 : loadout.ready() ? 132 : 96,
-            255);
-        SDL_RenderRect(renderer_, &button);
-        const std::string label = fmt::format(
-            "{} | {} | AMMO {}/{}",
-            loadout.displayName,
-            loadout.ready() ? "READY" : "GAPS",
-            loadout.compatibleRoundCount,
-            loadout.minimumCompatibleRounds);
-        uiTextRenderer_.render(
-            renderer_, button.x + 10.0F, button.y + 11.0F, label.c_str());
-    }
-
-    if (!loadouts.empty())
-    {
-        const LoadoutReadinessProjection &selected =
-            loadouts[selectedLoadoutArchetypeIndex_];
-        std::string gaps;
-        const auto appendGap = [&](const char *label)
-        {
-            if (!gaps.empty())
-            {
-                gaps += ", ";
-            }
-            gaps += label;
-        };
-        for (const LoadoutReadinessIssue issue : selected.issues)
-        {
-            switch (issue)
-            {
-            case LoadoutReadinessIssue::Weapon:
-                appendGap("WEAPON");
-                break;
-            case LoadoutReadinessIssue::CompatibleAmmunition:
-                appendGap("CARRIED AMMO");
-                break;
-            case LoadoutReadinessIssue::BodyArmor:
-                appendGap("BODY ARMOR");
-                break;
-            case LoadoutReadinessIssue::ChestRig:
-                appendGap("CHEST RIG");
-                break;
-            case LoadoutReadinessIssue::Backpack:
-                appendGap("BACKPACK");
-                break;
-            }
-        }
-        const std::string target = fmt::format(
-            "ROLE TARGET | {}{}",
-            selected.recommendedMapDisplayName,
-            selected.recommendsHighRisk ? " | HIGH-RISK" : "");
-        const std::string gapLine = selected.ready()
-            ? "ROLE READY | EQUIPMENT AND CARRIED AMMO MATCH"
-            : "MISSING | " + gaps;
-        uiTextRenderer_.render(renderer_, 800.0F, 458.0F, target.c_str());
-        uiTextRenderer_.render(renderer_, 800.0F, 478.0F, gapLine.c_str());
-    }
-
-    const bool capable = weaponSupply(false).anyWeaponCanFire;
-    uiTextRenderer_.render(renderer_, 800.0F, 520.0F,
-        capable ? "FIRE READY NOW | NOT THE SAME AS ROLE READY"
-                : "CANNOT FIRE NOW | CHECK WEAPON IN TAB INVENTORY");
-    if (!capable)
-    {
-        uiTextRenderer_.render(
-            renderer_, 800.0F, 540.0F,
-            "WARNING: UNSAFE DEPLOY REQUIRES SECOND CONFIRMATION");
-    }
-    if (selectedRaidSelfRecoveryRecordId_.has_value())
-    {
-        const auto records = gameSession_.lostRaidRecordProjections();
-        const auto target = std::find_if(
-            records.begin(), records.end(),
-            [&](const LostRaidRecordProjection &record)
-            {
-                return record.recordId ==
-                    *selectedRaidSelfRecoveryRecordId_;
-            });
-        const std::string targetText = target == records.end()
-            ? "RAID RECOVERY TARGET IS NO LONGER AVAILABLE"
-            : fmt::format(
-                  "RAID RECOVERY | {} | {} ASSETS | RESERVE SPACE",
-                  target->mapDisplayName,
-                  target->assets.size());
-        uiTextRenderer_.render(
-            renderer_, 666.0F, 500.0F, targetText.c_str());
-    }
-    const LostRaidAgingPreview aging = gameSession_.lostRaidAgingPreview();
-    const SDL_FRect recordsButton = raidLostRecordsButton();
-    SDL_SetRenderDrawColor(
-        renderer_,
-        aging.recordsExpiringOnNextSettlement > 0U ? 104 : 54,
-        aging.recordsExpiringOnNextSettlement > 0U ? 62 : 70,
-        58, 255);
-    SDL_RenderFillRect(renderer_, &recordsButton);
-    SDL_SetRenderDrawColor(renderer_, 190, 132, 102, 255);
-    SDL_RenderRect(renderer_, &recordsButton);
-    const std::string recordsLabel = fmt::format(
-        "LOST RECORDS {} | OPEN",
-        aging.activeRecordCount);
-    uiTextRenderer_.render(
-        renderer_, recordsButton.x + 18.0F, recordsButton.y + 13.0F,
-        recordsLabel.c_str());
-    if (aging.recordsExpiringOnNextSettlement > 0U)
-    {
-        const std::string expiry = fmt::format(
-            "WARNING: {} RECORD(S) EXPIRE AFTER NEXT RAID SETTLEMENT",
-            aging.recordsExpiringOnNextSettlement);
-        uiTextRenderer_.render(renderer_, 700.0F, 560.0F, expiry.c_str());
-    }
-    renderScreenPrimaryButton(
-        deploymentWarningArmed_ ? "CONFIRM UNSAFE DEPLOY" : "DEPLOY ALPHA RAID");
-    uiTextRenderer_.render(renderer_, 420.0F, 590.0F, "CLICK INTELLIGENCE TO BUY/SELECT | ENTER DEPLOY | ESC CLOSE");
-    if (profile.basePriority.focus)
-    {
-        const SDL_FRect focusPanel{360.0F, 615.0F, 820.0F, 84.0F};
-        SDL_SetRenderDrawColor(renderer_, 20, 35, 31, 248);
-        SDL_RenderFillRect(renderer_, &focusPanel);
-        SDL_SetRenderDrawColor(renderer_, 222, 234, 206, 255);
-        const auto relevance = projectBaseWishExpeditionRelevance(profile, content, map.id);
-        const std::string focusLabel = "EXPEDITION FOCUS | " + content.basePriority(
-            profile.basePriority.focus->definitionId).displayName;
-        uiTextRenderer_.render(renderer_, 378.0F, 627.0F, focusLabel.c_str());
-        uiTextRenderer_.render(renderer_, 378.0F, 649.0F, baseWishRelevanceName(relevance.relevance));
-        uiTextRenderer_.render(renderer_, 378.0F, 673.0F, relevance.reason.c_str());
     }
 }
 
