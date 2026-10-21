@@ -552,18 +552,47 @@ TEST_F(UiBaseDeploymentTest, ActionBindingIncludesCatalogPriceAndStableCategoryO
 }
 
 TEST_F(UiBaseDeploymentTest, OwnedNumbersPricesAndSecondLinesActuallyRenderWithinTextBounds) {
+    const auto paintedAdvance = [&](std::string_view text, int size) {
+#if defined(_WIN32)
+        return A::text(*app).measure(text, size);
+#else
+        // Layout uses estimated widths, while SDL's debug font advances one
+        // fixed cell per UTF-8 codepoint, including unsupported characters.
+        static_cast<void>(size);
+        return static_cast<float>(std::count_if(text.begin(), text.end(),
+            [](unsigned char byte) { return (byte & 0xC0U) != 0x80U; }) *
+            SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE);
+#endif
+    };
+#if !defined(_WIN32)
+    const auto verifyDebugDigits = [&](Vec2 origin, std::string_view digits, SDL_FRect clip) {
+        constexpr float cell = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE;
+        EXPECT_GE(origin.x, clip.x);
+        EXPECT_GE(origin.y, clip.y);
+        EXPECT_LE(origin.x + cell * digits.size(), clip.x + clip.w);
+        EXPECT_LE(origin.y + cell, clip.y + clip.h);
+        for (std::size_t i = 0; i < digits.size(); ++i)
+            EXPECT_GT(bright({origin.x + cell * i, origin.y, cell, cell}), 4)
+                << "missing digit " << i << " of " << digits;
+    };
+#endif
     for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
         A::text(*app).setLanguage(language); A::state(*app).tab = T::Intelligence;
         profile().raidIntelligence.counts[A::selectedMap(*app).id][0] = 12; ++profile().revision; A::refresh(*app); draw();
         const auto row = uiDeploymentIntelligenceRect(0);
         const auto ownedPrefix = localizeUiText(language, "INTEL STOCK") + " ";
-        const auto numberX = row.x + 12 + A::text(*app).measure(ownedPrefix, 12);
+        const auto numberX = row.x + 12 + paintedAdvance(ownedPrefix, 12);
         EXPECT_GT(bright({numberX, row.y + 33, 28, 17}), 4) << "owned count cannot disappear when its text box is shorter than the font line";
         const auto action = uiDeploymentIntelligenceRect(1, true); const auto &quote = A::projection(*app).intelligence[1]; ASSERT_TRUE(quote.price);
         const auto prefix = localizeUiText(language, "BUY AND SELECT") + " ¥";
         const auto label = prefix + std::to_string(*quote.price);
-        const auto priceX = action.x + 12 + (action.w - 24 - A::text(*app).measure(label, 14)) / 2 + A::text(*app).measure(prefix, 14);
+        const auto priceX = action.x + 12 + (action.w - 24 - A::text(*app).measure(label, 14)) / 2 + paintedAdvance(prefix, 14);
         EXPECT_GT(bright({priceX, action.y + action.h / 2 - 12.6F, 36, 25.2F}), 4);
+#if !defined(_WIN32)
+        verifyDebugDigits({numberX, row.y + 33}, "12", {row.x + 12, row.y + 33, row.w - 24, 17});
+        verifyDebugDigits({priceX, action.y + action.h / 2 - 12.6F}, std::to_string(*quote.price),
+            {action.x + 12, action.y + action.h / 2 - 12.6F, action.w - 24, 25.2F});
+#endif
         A::state(*app).tab = T::Briefing; A::refresh(*app); draw();
         EXPECT_GT(bright({310, 187, 501, 21}), 12) << "briefing second line";
         EXPECT_GT(bright({872, 209, 327, 21}), 12) << "actual fire readiness second line";
