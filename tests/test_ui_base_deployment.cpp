@@ -1,6 +1,7 @@
 #include "app.h"
 #include "alpha_content_ids.h"
 #include "ui_base_deployment_presentation.h"
+#include "ui_lost_recovery_presentation.h"
 
 #include <algorithm>
 #include <array>
@@ -46,10 +47,6 @@ struct UiBaseDeploymentTestAccess {
     static void closeInventory(App &a) { a.closeInventory(); }
     static SDL_FRect oldRegional(App &a) { return a.raidRegionalOperationsButton(); }
     static SDL_FRect oldLost(App &a) { return a.raidLostRecordsButton(); }
-    static SDL_FRect oldLostRow(App &a, std::size_t i) { return a.lostRaidRecordRow(i); }
-    static SDL_FRect oldSelfRecovery(App &a) { return a.recoveryTaskSecondaryButton(); }
-    static SDL_FRect oldRecoveryPrimary(App &a) { return a.recoveryTaskPrimaryButton(); }
-    static SDL_FRect oldRecoveryCancel(App &a) { return a.recoveryTaskCancelButton(); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
     }
@@ -478,7 +475,8 @@ TEST_F(UiBaseDeploymentTest, LostSubpageSetsItsOriginalTargetAndSynchronizesTheM
     const auto &targetMap = content.maps()[targetIndex]; const auto id = lostRecord(targetIndex, false);
     const auto fp = profileStateFingerprint(profile());
     control(C::LostRecords); ASSERT_TRUE(A::lost(*app));
-    A::legacy(*app, center(A::oldLostRow(*app, 0))); A::legacy(*app, center(A::oldSelfRecovery(*app)));
+    click(center(uiLostRecoveryRecordRect(0)));
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::SelfRecovery)));
     ASSERT_FALSE(A::lost(*app)); ASSERT_EQ(A::recovery(*app), id); A::refresh(*app);
     const auto &p = A::projection(*app);
     EXPECT_EQ(A::selectedMap(*app).id, targetMap.id); EXPECT_EQ(p.selectedMapId, targetMap.id);
@@ -492,10 +490,14 @@ TEST_F(UiBaseDeploymentTest, LostSubpageSetsItsOriginalTargetAndSynchronizesTheM
 
 TEST_F(UiBaseDeploymentTest, OriginalSubpageHotspotsAreNotInterceptedByTheNewPage) {
     const auto id = lostRecord(0, false); control(C::LostRecords); ASSERT_TRUE(A::lost(*app));
-    A::legacy(*app, center(A::oldLostRow(*app, 0))); A::legacy(*app, center(A::oldRecoveryPrimary(*app)));
+    click(center(uiLostRecoveryRecordRect(0)));
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::Start)));
     ASSERT_TRUE(profile().recoveryTask); EXPECT_EQ(profile().recoveryTask->sourceRecord.recordId, id);
-    A::legacy(*app, center(A::oldRecoveryCancel(*app))); EXPECT_FALSE(profile().recoveryTask);
-    A::legacy(*app, center(A::oldLost(*app))); ASSERT_FALSE(A::lost(*app)); control(C::Regional); ASSERT_TRUE(A::regional(*app));
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::Task)));
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::Cancel)));
+    ASSERT_TRUE(profile().recoveryTask);
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::ConfirmCancel))); EXPECT_FALSE(profile().recoveryTask);
+    click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::Close))); ASSERT_FALSE(A::lost(*app)); control(C::Regional); ASSERT_TRUE(A::regional(*app));
     A::legacy(*app, center(A::oldRegional(*app))); EXPECT_FALSE(A::regional(*app));
 }
 

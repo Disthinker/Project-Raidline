@@ -1,12 +1,58 @@
-# 当前：对局出击界面 v1 已验收，交付中
+# 当前：失物记录与寻回界面 v1 已验收，正在交付
 
-**候选 992a71d67b10 已由用户验收通过。** 正在完成本任务的提交、推送与普通PR合并；仍使用桌面 **Project Raidline Debug** 和同一验收程序。
+用户已验收候选 **1b0c6c638de5**，并明确授权提交、推送和合并。本轮只交付这一候选，不启动下一项开发。
 
-- task_id：ui-base-deployment；plan_version：RL-UI-BASE-DEPLOYMENT-v1；state：delivering；pending_request：无。
-- candidate_id、accepted_candidate_id均为RL-UI-BASE-DEPLOYMENT-v1-local-992a71d67b10；acceptance_source：2026-10-21主控直接人类原文“对局出击界面 v1 验收通过，请完成提交、推送和合并。”。
-- 已复核候选源码、程序、固定入口及完整2467/2467、专项43/43和原5项3ms证据。只交付10项源码／构建／测试与3项记录，17份无关文档不纳入。
-- baseline 8804720bc3927467733503fdf34400c03f150065；分支codex/ui-base-deployment-v1。本提交前Git交付和新候选远端CI尚未完成，实际结果由[任务记录](../exec-plans/active/ui-base-deployment-v1.md)继续记录。
-- 不启动下一项，不启动游戏、访问真实存档或改动已验收程序。
+- task_id：ui-lost-recovery；plan_version：RL-UI-LOST-RECOVERY-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id 与 accepted_candidate_id：RL-UI-LOST-RECOVERY-v1-local-1b0c6c638de5；acceptance_source：2026-10-22 主控直接人类原文“验收通过，请完成提交、推送和合并。”。
+- 冻结源码、程序、入口及原修改已核对。Windows本地完整2507/2507、专项154/154和原五项3ms通过；本次准确提交的PR与main双平台CI待执行。
+- 分支codex/ui-lost-recovery-v1，baseline／HEAD58a2ac27c8d366ba3796d92d77c819b370518408。只交付12项源码／测试／构建与3项记录，保留19份无关脏文档和五工作区原修改。
+- [任务记录](../exec-plans/active/ui-lost-recovery-v1.md)保留验收来源、实际Git／CI进度和保护证据。未启动游戏或访问真实存档。
+
+<details>
+<summary>验收前与历史记录</summary>
+
+# 当前：行动失物记录与寻回界面 v1 待验收
+
+**候选 1b0c6c638de5 已完成并冻结。** “失物记录、NPC 委托”分为两个标签，完整清单、费用、游戏内时间与保留机会清楚对应，沿用原寻回规则。
+
+继续打开原桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-lost-recovery-v1.md)验收。
+
+- task_id：ui-lost-recovery；plan_version：RL-UI-LOST-RECOVERY-v1；state：waiting_human_acceptance；pending_request：无。
+- candidate_id：RL-UI-LOST-RECOVERY-v1-local-1b0c6c638de5；accepted_candidate_id、acceptance_source：无。approval_source：2026-10-22主控直接人类原文“同意该方案，请实施开发”，对应本方案。
+- Windows Debug全目标构建、专项154/154、完整2507/2507及原五项3ms通过，原2467项全部保留。66张中英文三档离屏图已复查。
+- 分支codex/ui-lost-recovery-v1；baseline／HEAD 58a2ac27c8d366ba3796d92d77c819b370518408；未提交工作由源码与程序指纹识别。
+- 原存档规则、运行资源、固定入口、19份无关脏文档及五工作区原修改保持。未启动游戏、访问真实存档、提交、推送或合并；未运行新远端CI。等待本候选人工验收。
+- [任务记录](../exec-plans/active/ui-lost-recovery-v1.md)保留实际范围、检查和回滚证据。
+
+<details>
+<summary>方案与前序历史</summary>
+
+# 当前：行动失物记录与寻回界面 v1 待批准
+
+策划已指定 **RL-UI-LOST-RECOVERY-v1**，主控已核查真实代码。拟把旧失物页整理为“失物记录、NPC 委托”两个标签，分开显示物品、费用、游戏内等待时间和保留机会。
+
+具体页面、保留规则和验收办法见[开发方案](../exec-plans/active/ui-lost-recovery-v1.md)。本轮尚未实施，等待用户批准；前一“对局出击界面 v1”保持已交付。
+
+- task_id：ui-lost-recovery；plan_version：RL-UI-LOST-RECOVERY-v1；state：waiting_plan_approval；pending_request：无。
+- approval_source：无实施批准。本轮直接人类原文“请协调策划线程安排下一步具体开发方案。”，仅授权协调与方案准备。
+- candidate_id、accepted_candidate_id、acceptance_source：无。原已验收程序、桌面 Project Raidline Debug、源码与其他未提交修改保持。
+- 策划原生请求 MAIN-UI-NEXT-20261022-AFTER-DEPLOYMENT-01 已收到完整匹配结果；实际主线58a2ac2与当前47f8343树相同。基线合并后双平台CI通过，不是本片验证结果。
+- 本轮只做只读核查和计划记录；未切分支、构建、测试、启动游戏、访问真实存档、提交、推送或合并。
+
+<details>
+<summary>已交付与前序历史</summary>
+
+# 当前：对局出击界面 v1 已交付
+
+用户已验收候选 **992a71d67b10**。已提交并推送`47f8343`，已创建[PR188](https://github.com/Disthinker/Project-Raidline/pull/188)。普通合并为`58a2ac2`。
+
+- task_id：ui-base-deployment；plan_version：RL-UI-BASE-DEPLOYMENT-v1；state：delivered；pending_request：无。
+- candidate_id与accepted_candidate_id均为RL-UI-BASE-DEPLOYMENT-v1-local-992a71d67b10；acceptance_source：2026-10-21主控直接人类原文“对局出击界面 v1 验收通过，请完成提交、推送和合并。”。
+- Windows／Ubuntu CI各2467/2467通过，原5项3ms检查通过。 合并后main双平台各2467/2467通过。
+- 仅交付13项。已验收运行代码／程序、桌面 **Project Raidline Debug**、运行资源、原存档规则及17份无关文档保持；不启动下一项。
+- 完整验证、Git和后续协调证据见[任务记录](../exec-plans/active/ui-base-deployment-v1.md)。未启动游戏或访问真实存档。
+
+策划已只读确认本次交付；本轮未安排或启动下一任务。
 
 <details>
 <summary>选题协调与已交付历史</summary>
@@ -1445,6 +1491,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

@@ -37,6 +37,7 @@
 #include "ui_base_dormitory_presentation.h"
 #include "ui_base_allocation_presentation.h"
 #include "ui_base_deployment_presentation.h"
+#include "ui_lost_recovery_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -166,6 +167,7 @@ private:
     friend struct UiBaseDormitoryTestAccess;
     friend struct UiBaseAllocationTestAccess;
     friend struct UiBaseDeploymentTestAccess;
+    friend struct UiLostRecoveryTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -229,6 +231,15 @@ private:
     void renderFoundationButton(int id, SDL_FRect bounds, std::string_view label,
         bool enabled = true, bool danger = false, bool selected = false,
         std::string_view hint = {}, int fontSize = 0);
+    UiLostRecoveryState lostRecoveryUi_;
+    UiLostRecoveryProjection lostRecoveryProjection_;
+    std::optional<ProfileRevision> lostRecoveryProjectionRevision_;
+    std::string lostRecoveryViewKey_, lostRecoveryFeedback_;
+    std::uint64_t lostRecoveryProjectionGeneration_{};
+    std::vector<UiLostRecoveryEvent> pendingLostRecoveryEvents_;
+    void resetLostRecoveryUi();
+    void refreshLostRecoveryUi(bool force = false);
+    void handleLostRecoveryEvent(const UiLostRecoveryEvent &);
     UiDeploymentState deploymentUi_;
     UiDeploymentProjection deploymentProjection_;
     std::optional<ProfileRevision> deploymentProjectionRevision_;
@@ -382,7 +393,6 @@ private:
     bool deploymentWarningArmed_{};
     bool lostRaidRecordsOpen_{};
     bool regionalOperationsOpen_{};
-    std::optional<std::string> selectedLostRaidRecordId_;
     std::optional<std::string> selectedRaidSelfRecoveryRecordId_;
     std::size_t selectedRaidMapIndex_{};
     std::size_t selectedLoadoutArchetypeIndex_{};
@@ -568,12 +578,6 @@ private:
     [[nodiscard]] SDL_FRect baseAutoDefenseButton() const noexcept;
     [[nodiscard]] SDL_FRect regionalOutpostActionButton(
         std::size_t index) const noexcept;
-    [[nodiscard]] SDL_FRect lostRaidRecordRow(
-        std::size_t index) const noexcept;
-    [[nodiscard]] SDL_FRect recoveryTaskPrimaryButton() const noexcept;
-    [[nodiscard]] SDL_FRect recoveryTaskSecondaryButton() const noexcept;
-    [[nodiscard]] SDL_FRect recoveryTaskCancelButton() const noexcept;
-
     void processEvents();
     void update(float deltaTime);
 
