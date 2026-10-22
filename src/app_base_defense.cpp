@@ -125,7 +125,7 @@ bool App::updateBaseSiegeWarning(float deltaTime)
         gameFlow_.closeBaseFacility();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
-        selectedLostRaidRecordId_.reset();
+        resetLostRecoveryUi();
         profileContextMenu_.reset();
     }
     if (wasVisible || visible || action || siegeWarningBlocksGameplayThisFrame_)

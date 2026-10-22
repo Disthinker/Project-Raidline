@@ -204,7 +204,7 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
         deploymentWarningArmed_ = false;
         regionalOperationsOpen_ = control == C::Regional;
         lostRaidRecordsOpen_ = control == C::LostRecords;
-        if (lostRaidRecordsOpen_) selectedLostRaidRecordId_.reset();
+        if (lostRaidRecordsOpen_) resetLostRecoveryUi();
         uiMessage_.clear();
         input_.suppressPrimaryPointerUntilRelease();
         return;

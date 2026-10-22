@@ -1470,3 +1470,16 @@ TEST(UiLocalizationTest, DeploymentKeepsExplicitPaymentRiskAndOriginalChineseEnt
         EXPECT_EQ(localizeUiText(UiLanguage::English, key), key);
     }
 }
+
+TEST(UiLocalizationTest, LostRecoveryKeepsPricesTimeCapacityAndCancellationClear) {
+    const auto cn = UiLanguage::SimplifiedChinese;
+    EXPECT_EQ(localizeUiText(cn, "LOST RAID RECORDS & RECOVERY"), "行动失物记录与寻回");
+    EXPECT_EQ(localizeUiText(cn, "FINAL OPPORTUNITY"), "最后机会");
+    EXPECT_EQ(localizeUiText(cn, "CONFIRM CANCEL - NO REFUND"), "确认取消（不退款）");
+    EXPECT_EQ(localizeUiText(cn, "CONFIRM CANCEL"), "确认取消");
+    EXPECT_EQ(localizeUiText(cn, "Stash has no room for recovered assets"), "仓库空间不足，请整理后重新领取");
+    for (const auto key : {"CREATED", "UNTIL FINAL OPPORTUNITY", "RAID SETTLEMENTS", "HIGH TENDENCY", "LOW TENDENCY", "TIME REMAINING", "RECOVERY RESULT", "NPC COMMISSION", "RECORD DETAILS", "RECOVERY OPTIONS", "NPC SERVICE FEE", "GAME TIME", "COMMISSION NPC", "SET RECOVERY TARGET", "CLEAR RECOVERY TARGET", "CONFIRM CANCEL - NO REFUND", "KEEP TASK", "NO NPC COMMISSION", "COMMISSION ACTIVE", "READY TO COLLECT", "READ-ONLY ITEMS", "ENTRIES", "TOTAL QUANTITY", "RECOVERY CHANGED - REVIEW AND CLICK AGAIN", "NPC RESULT IS SHOWN ONLY WHEN READY", "NO REFUND - THE RECORD AND ALL ITS ASSETS WILL BE RESTORED", "GAME TIME PAUSES ON THIS PAGE", "GAME TIME ADVANCES THROUGH REST OR RAIDS", "RESERVE STASH SPACE BEFORE COLLECTION", "NPC RECOVERY TENDENCY IS NOT A GUARANTEE", "recovery task is unavailable during a Raid", "only one recovery task may be active", "lost Raid record does not exist", "recovery task identity cannot advance", "insufficient currency for recovery task", "recovery completion time would overflow", "no recovery task is active", "recovery task is not ready for collection", "Stash has no room for recovered assets"}) {
+        EXPECT_NE(localizeUiText(cn, key), key) << key;
+        EXPECT_EQ(localizeUiText(UiLanguage::English, key), key);
+    }
+}
