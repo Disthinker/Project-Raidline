@@ -39,6 +39,7 @@
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
 #include "ui_regional_operations_presentation.h"
+#include "ui_raid_result_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -170,6 +171,7 @@ private:
     friend struct UiBaseDeploymentTestAccess;
     friend struct UiLostRecoveryTestAccess;
     friend struct UiRegionalOperationsTestAccess;
+    friend struct UiRaidResultTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -253,6 +255,20 @@ private:
     void updateRegionalOperationsUi();
     void handleRegionalOperationsEvent(const UiRegionalOperationsEvent &);
     void openRegionalConstruction(bool reserve);
+    UiRaidResultState raidResultUi_;
+    UiRaidResultProjection raidResultProjection_;
+    std::string raidResultProjectionKey_, raidResultViewKey_, raidResultFeedback_;
+    std::uint64_t raidResultProjectionGeneration_{};
+    std::vector<UiRaidResultEvent> pendingRaidResultEvents_;
+    bool raidResultConfirmRequested_{};
+    bool raidResultConfirmConsumedThisFrame_{};
+    bool raidResultInputCancelledThisFrame_{};
+    void resetRaidResultUi();
+    void refreshRaidResultUi(bool force = false);
+    void handleRaidResultEvent(const UiRaidResultEvent &);
+    void updateRaidResultUi(float deltaTime);
+    bool handleRaidResultConfirm();
+    void renderRaidResult();
     UiDeploymentState deploymentUi_;
     UiDeploymentProjection deploymentProjection_;
     std::optional<ProfileRevision> deploymentProjectionRevision_;

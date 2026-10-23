@@ -1,13 +1,92 @@
-# 当前：区域路线与基地行动界面 v1 已验收，正在交付
+# 当前：对局结果界面 v1 已验收，正在交付
 
-用户已验收候选 **112b77113765**，并授权提交、推送和合并。当前正在交付；本轮不启动下一项开发。
+用户已验收候选 **fc00d531a705**，并授权提交、推送和合并。当前正在交付；本轮不启动下一项开发。
 
 本轮不安排或启动下一任务。
 
-- task_id：ui-regional-operations；plan_version：RL-UI-REGIONAL-OPERATIONS-v1；state：accepted_pending_delivery；pending_request：无。
+- 交付范围：结果标题、8条分页带回记录、按需详情和固定返营按钮，原结算与存档规则保持。
+- 保留原桌面 **Project Raidline Debug**；已验收程序与其他工作区修改未变。
+- Windows本地2594/2594通过；PR与合并后main的双平台CI分别核验。
+
+<details>
+<summary>授权、版本与保护证据</summary>
+
+- task_id：ui-raid-result；plan_version：RL-UI-RAID-RESULT-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id 与 accepted_candidate_id：RL-UI-RAID-RESULT-v1-local-fc00d531a705；acceptance_source：2026-10-23主控直接人类原文“对局结果界面 v1 验收通过，请完成提交、推送和合并。”。
+- 仅交付12项；23份无关脏文档及五工作区其他修改保持。程序、资源与固定入口未变，未启动游戏。
+- [任务记录](../exec-plans/active/ui-raid-result-v1.md)保留Git、双平台CI与保护证据。
+
+</details>
+
+<details>
+<summary>验收候选与前序历史</summary>
+
+以下待验收文字属于历史阶段，当前以上方为准。
+
+# 当前：对局结果界面统一 v1 待验收
+
+**候选 fc00d531a705 已完成并冻结。** 结果标题、8条分页带回记录、可滚动详情和固定返营按钮已统一。保留原结算、损失、救援检查点和返营保存规则。
+
+继续使用原桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-raid-result-v1.md)验收。
+
+- Windows Debug全目标构建、专项223/223、完整2594/2594、原五项3ms通过；原2548项全保留，新增46项，78张中英文三尺寸离屏图已审查。
+- 未提交、推送或合并；未运行新远端CI。程序、源码和入口已识别，其他工作区修改保持。
+- [任务记录](../exec-plans/active/ui-raid-result-v1.md)保留授权、实际范围和完整验证。
+
+<details>
+<summary>任务身份与验收边界</summary>
+
+- task_id：ui-raid-result；plan_version：RL-UI-RAID-RESULT-v1；state：waiting_human_acceptance；pending_request：无。
+- approval_source：2026-10-23主控直接人类原文“同意该方案，请进行开发”，明确对应上一轮RL-UI-RAID-RESULT-v1方案。candidate_id：RL-UI-RAID-RESULT-v1-local-fc00d531a705；accepted_candidate_id、acceptance_source：无本候选验收。
+- 实施分支codex/ui-raid-result-v1；baseline／HEAD 07f6561fc1c6d2707ddbc3ae81017b5974193a5b，未提交新代码以源码／程序指纹识别，不能把HEAD当成包含本片。
+- 原存档规则、资源、固定入口和五工作区其他修改保持。未启动游戏、读取真实存档、生产资产或修改信任／权限／模型。
+
+</details>
+
+<details>
+<summary>已批准方案与前序历史</summary>
+
+以下待批准文字属于历史状态，当前以上方为准。
+
+# 当前：对局结果界面统一 v1 待批准
+
+策划已指定 **RL-UI-RAID-RESULT-v1**，主控已核查真实代码。拟统一结果标题、完整带回清单、摘要详情和返营操作，沿用原结算、损失与保存规则。
+
+具体内容见[开发方案](../exec-plans/active/ui-raid-result-v1.md)。**尚未实施，等待用户批准。** 区域路线与基地行动界面v1保持已交付。
+
+<details>
+<summary>任务状态与本轮边界</summary>
+
+- task_id：ui-raid-result；plan_version：RL-UI-RAID-RESULT-v1；state：waiting_plan_approval；pending_request：无。
+- approval_source：无实施批准。2026-10-23主控直接人类原文“请协调策划线程安排下一步UI优化任务，并给出具体开发方案。”，仅授权协调和准备方案。
+- candidate_id、accepted_candidate_id、acceptance_source：无新候选。已验收源码、程序、资源、固定桌面Project Raidline Debug、存档规则及其他本地修改保持。
+- 已收到原策划完整匹配结果，request_id MAIN-UI-NEXT-20261023-AFTER-REGIONAL-OPERATIONS-01。main 07f6561fc1c6d2707ddbc3ae81017b5974193a5b与当前5744acd8eaf97eb150fe34ad069d05d015de0451同树；双平台2548/2548及五项3ms是已交付依赖的检查，不是新方案证据。
+- 本轮只读核查和写计划；未切分支、构建、测试、启动游戏、访问真实存档、提交、推送或合并。
+
+</details>
+
+<details>
+<summary>已交付与前序历史</summary>
+
+# 当前：区域路线与基地行动界面 v1 已交付
+
+已提交并推送`5744acd`，[PR190](https://github.com/Disthinker/Project-Raidline/pull/190)已普通合并为`07f6561`。PR与合并后main的Windows／Ubuntu均各2548/2548通过，原五项3ms全部通过。
+
+策划已只读确认交付；本轮未安排或启动下一任务。
+
+- 交付范围：三个区域标签、列表详情与独立操作；原费用、时间、资格、风险确认和保存规则保持。
+- 保留原桌面 **Project Raidline Debug**；验收程序与其他修改未变。
+- Windows本地2548/2548通过；PR与合并后main的双平台CI分别核验。
+
+<details>
+<summary>授权、版本、验证与保护证据</summary>
+
+- task_id：ui-regional-operations；plan_version：RL-UI-REGIONAL-OPERATIONS-v1；state：delivered；pending_request：无。
 - candidate_id 与 accepted_candidate_id：RL-UI-REGIONAL-OPERATIONS-v1-local-112b77113765；acceptance_source：2026-10-23 主控直接人类原文“区域路线与基地行动界面 v1 验收通过，请完成提交、推送和合并。”。
 - 仅交付13项；21份无关脏文档及五工作区其他修改保持。已验收程序、资源、存档规则和桌面 **Project Raidline Debug** 未变；未启动游戏。
 - [任务记录](../exec-plans/active/ui-regional-operations-v1.md)保留验收、Git、双平台CI和保护证据。
+
+</details>
 
 <details>
 <summary>验收候选与前序历史</summary>
@@ -1546,6 +1625,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 
